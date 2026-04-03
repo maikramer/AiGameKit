@@ -15,6 +15,7 @@ Em vez disso, descrevemos positivamente o que queremos:
 
 from __future__ import annotations
 
+import random
 import re
 
 # ---------------------------------------------------------------------------
@@ -149,3 +150,49 @@ def create_optimized_prompt(prompt: str, aggressive: bool = True) -> str:
     clean = sanitize_prompt(prompt)
     enhanced = enhance_prompt_for_clean_base(clean, aggressive=aggressive)
     return enhanced
+
+
+# ---------------------------------------------------------------------------
+# Modificadores de prompt para retry — palavras neutras que geram imagens
+# levemente diferentes sem alterar o estilo ou o objeto descrito.
+# ---------------------------------------------------------------------------
+RETRY_PROMPT_MODIFIERS: tuple[str, ...] = (
+    "high quality",
+    "beautiful",
+    "nice",
+    "detailed",
+    "clean",
+    "polished",
+    "crisp",
+    "sharp",
+    "well crafted",
+    "professional",
+    "elegant",
+    "refined",
+    "pristine",
+    "fine",
+    "premium",
+)
+
+
+def modify_prompt_for_retry(prompt: str, attempt: int, *, rng: random.Random | None = None) -> str:
+    """Adiciona um modificador neutro ao prompt para gerar uma imagem levemente diferente.
+
+    Usa ``attempt`` como índice (com shuffle determinístico por seed) para
+    garantir que cada retry usa um modificador diferente.
+    """
+    if rng is None:
+        rng = random.Random(42)
+
+    mods = list(RETRY_PROMPT_MODIFIERS)
+    rng.shuffle(mods)
+
+    idx = (attempt - 1) % len(mods)
+    modifier = mods[idx]
+
+    prompt_lower = prompt.lower()
+    if modifier.lower() in prompt_lower:
+        idx = (idx + 1) % len(mods)
+        modifier = mods[idx]
+
+    return f"{modifier} {prompt}"

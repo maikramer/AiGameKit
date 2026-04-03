@@ -243,6 +243,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Desliga pós-processo: maior componente conexa + merge de vértices (ilhas/pés soltos).",
 )
 @click.option(
+    "--no-remove-plates",
+    "no_remove_plates",
+    is_flag=True,
+    default=False,
+    help=(
+        "Desliga remoção automática de backing plates (artefatos de chão na base). "
+        "Por defeito, placas são detectadas e removidas com reparo pymeshlab + fillet."
+    ),
+)
+@click.option(
     "--no-ground-shadow-removal",
     "no_ground_shadow_removal",
     is_flag=True,
@@ -397,6 +407,7 @@ def generate(
     preset,
     mc_level,
     no_mesh_repair,
+    no_remove_plates,
     no_ground_shadow_removal,
     ground_shadow_aggressive,
     ground_shadow_very_aggressive,
@@ -485,6 +496,8 @@ def generate(
         rep += f", remesh(res={remesh_resolution})"
     if mesh_smooth > 0 and not no_mesh_repair:
         rep += f", smooth={mesh_smooth}"
+    if not no_remove_plates:
+        rep += ", anti-placa (detect+cut+fillet)"
     info_table.add_row("[bold]Pós-mesh[/bold]", rep)
     info_table.add_row("[bold]Formato[/bold]", output_format.upper())
     info_table.add_row(
@@ -662,6 +675,21 @@ def generate(
                         remesh=remesh,
                         remesh_resolution=remesh_resolution,
                     )
+
+                if not no_remove_plates:
+                    from .utils.mesh_repair import remove_backing_plates
+
+                    result, plate_info = remove_backing_plates(result)
+                    if plate_info["plates_removed"] > 0:
+                        console.print(
+                            f"[dim]Placas removidas: {plate_info['plates_removed']}, "
+                            f"componentes: {plate_info['components_removed']}[/dim]"
+                        )
+                    if plate_info["needs_discard"]:
+                        console.print(
+                            "[yellow]Aviso: mesh tem placa conectada irrecuperável "
+                            "(considere regenerar com seed diferente)[/yellow]"
+                        )
 
                 from .utils.export import save_mesh
 

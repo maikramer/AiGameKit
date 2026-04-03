@@ -1571,6 +1571,419 @@ def mesh_quality_check(
     return result
 
 
+def _detect_artifact_plates(
+    mesh: trimesh.Trimesh,
+    *,
+    plate_coverage_threshold: float = 0.7,
+    band_frac: float = 0.10,
+    normal_align: float = 0.7,
+    min_thin_concentration: float = 0.35,
+) -> list[dict]:
+    """Detecta backing plates de artefato nos extremos de cada eixo do bbox.
+
+    Só retorna placas que são artefatos de geração (image-to-3D), não
+    superfícies legítimas (ex.: tampo de mesa). A distinção é feita pela
+    concentração de faces numa camada fina (2% da altura) no extremo:
+    artefatos empacotam >35% de todas as faces nessa camada, superfícies
+    legítimas distribuem faces de forma proporcional (~20%).
+    """
+    if len(mesh.faces) == 0:
+        return []
+
+    normals = mesh.face_normals
+    areas = mesh.area_faces
+    centers = mesh.triangles_center
+    bounds = mesh.bounds
+    extents = mesh.extents
+    n_total = len(mesh.faces)
+
+    plates: list[dict] = []
+    ax_names = ["X", "Y", "Z"]
+
+    for ax in range(3):
+        lo = float(bounds[0, ax])
+        hi = float(bounds[1, ax])
+        h = hi - lo
+        if h < 1e-8:
+            continue
+
+        other = [i for i in range(3) if i != ax]
+        cross_area = float(extents[other[0]] * extents[other[1]])
+        if cross_area < 1e-12:
+            continue
+
+        for side_label, band_lo, band_hi in [
+            ("min", lo, lo + band_frac * h),
+            ("max", hi - band_frac * h, hi),
+        ]:
+            in_band = (centers[:, ax] >= band_lo) & (centers[:, ax] <= band_hi)
+            aligned = np.abs(normals[:, ax]) >= normal_align
+            flat_area = float(areas[in_band & aligned].sum())
+            coverage = flat_area / cross_area
+
+            if coverage <= plate_coverage_threshold:
+                continue
+
+            if side_label == "min":
+                thin_lo, thin_hi = lo, lo + 0.02 * h
+            else:
+                thin_lo, thin_hi = hi - 0.02 * h, hi
+            in_thin = (centers[:, ax] >= thin_lo) & (centers[:, ax] <= thin_hi)
+            thin_conc = int(np.count_nonzero(in_thin)) / n_total
+
+            if thin_conc < min_thin_concentration:
+                continue
+
+            plates.append(
+                {
+                    "axis": ax,
+                    "axis_name": ax_names[ax],
+                    "side": side_label,
+                    "coverage": round(coverage, 3),
+                    "thin_concentration": round(thin_conc, 3),
+                    "band_lo": band_lo,
+                    "band_hi": band_hi,
+                }
+            )
+
+    return plates
+
+
+def _find_plate_boundary(
+    mesh: trimesh.Trimesh,
+    ax: int,
+    side: str,
+    *,
+    layer_frac: float = 0.01,
+    normal_align: float = 0.85,
+    min_horizontal_pct: float = 0.70,
+    max_layers: int = 15,
+) -> float | None:
+    """Avança camada a camada desde o extremo até a fronteira da placa."""
+    bounds = mesh.bounds
+    lo = float(bounds[0, ax])
+    hi = float(bounds[1, ax])
+    h = hi - lo
+    if h < 1e-8:
+        return None
+
+    layer_depth = layer_frac * h
+    centers = mesh.triangles_center
+    normals = mesh.face_normals
+    n_axis = np.abs(normals[:, ax])
+
+    cut_coord = None
+    for layer_i in range(max_layers):
+        if side == "min":
+            layer_lo = lo + layer_i * layer_depth
+            layer_hi = lo + (layer_i + 1) * layer_depth
+        else:
+            layer_hi = hi - layer_i * layer_depth
+            layer_lo = hi - (layer_i + 1) * layer_depth
+
+        in_layer = (centers[:, ax] >= layer_lo) & (centers[:, ax] <= layer_hi)
+        n_in = int(np.count_nonzero(in_layer))
+        if n_in == 0:
+            continue
+
+        pct = int(np.count_nonzero(in_layer & (n_axis >= normal_align))) / n_in
+        if pct >= min_horizontal_pct:
+            cut_coord = layer_hi if side == "min" else layer_lo
+        else:
+            break
+
+    return cut_coord
+
+
+def _dilate_face_selection(mesh: trimesh.Trimesh, mask: np.ndarray, iterations: int = 2) -> np.ndarray:
+    """Expande seleção de faces por adjacência."""
+    result = mask.copy()
+    adj = mesh.face_adjacency
+    for _ in range(iterations):
+        new_mask = result.copy()
+        for a, b in adj:
+            a, b = int(a), int(b)
+            if result[a] and not result[b]:
+                new_mask[b] = True
+            elif result[b] and not result[a]:
+                new_mask[a] = True
+        if np.array_equal(new_mask, result):
+            break
+        result = new_mask
+    return result
+
+
+def _cut_plate_faces(
+    mesh: trimesh.Trimesh,
+    plates: list[dict],
+    *,
+    margin_frac: float = 0.06,
+    dilate_iters: int = 2,
+    min_remaining_faces: int = 1000,
+) -> trimesh.Trimesh:
+    """Remove faces das placas + margem para cortar a interface."""
+    if not plates or len(mesh.faces) == 0:
+        return mesh
+
+    m = mesh.copy()
+    centers = m.triangles_center
+    bounds = m.bounds
+    remove_mask = np.zeros(len(m.faces), dtype=bool)
+
+    for plate in plates:
+        ax = plate["axis"]
+        side = plate["side"]
+        h = float(bounds[1, ax] - bounds[0, ax])
+        margin = margin_frac * h
+
+        cut = _find_plate_boundary(m, ax, side)
+        if cut is None:
+            cut = plate["band_hi"] if side == "min" else plate["band_lo"]
+
+        spatial_mask = centers[:, ax] <= cut + margin if side == "min" else centers[:, ax] >= cut - margin
+
+        remove_mask |= _dilate_face_selection(m, spatial_mask, iterations=dilate_iters)
+
+    n_remove = int(np.count_nonzero(remove_mask))
+    n_remaining = len(m.faces) - n_remove
+    if n_remove == 0 or n_remaining < min_remaining_faces:
+        return mesh
+
+    keep = ~remove_mask
+    sub = m.submesh([np.where(keep)[0]], append=True, only_watertight=False)
+    if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+        sub.remove_unreferenced_vertices()
+        parts = sub.split(only_watertight=False)
+        if len(parts) > 1:
+            main_size = max(len(p.faces) for p in parts)
+            significant = [p for p in parts if len(p.faces) >= max(500, int(main_size * 0.03))]
+            if significant:
+                sub = trimesh.util.concatenate(significant)
+                sub.remove_unreferenced_vertices()
+        return sub
+
+    return mesh
+
+
+def _repair_plate_holes(
+    mesh: trimesh.Trimesh,
+    *,
+    max_hole_size: int = 500,
+    taubin_steps: int = 3,
+    fillet_dilations: int = 4,
+    fillet_smooth_steps: int = 12,
+) -> trimesh.Trimesh:
+    """Fecha buracos do corte de placa com fillet suavizado."""
+    import tempfile
+    from pathlib import Path
+
+    import pymeshlab
+
+    m = mesh
+    boundary_before = _boundary_edge_count(m)
+    if boundary_before <= 0:
+        return m
+
+    with tempfile.TemporaryDirectory(prefix="plate_repair_") as tmpdir:
+        in_ply = str(Path(tmpdir) / "in.ply")
+        out_ply = str(Path(tmpdir) / "out.ply")
+        m.export(in_ply)
+
+        ms = pymeshlab.MeshSet()
+        ms.load_new_mesh(in_ply)
+
+        ms.meshing_repair_non_manifold_edges()
+        ms.meshing_repair_non_manifold_vertices()
+        ms.meshing_remove_duplicate_faces()
+        ms.meshing_remove_duplicate_vertices()
+        ms.meshing_remove_null_faces()
+        ms.meshing_remove_unreferenced_vertices()
+
+        n_before_close = ms.current_mesh().face_number()
+        ms.meshing_close_holes(maxholesize=max_hole_size)
+        n_after_close = ms.current_mesh().face_number()
+        n_patch = n_after_close - n_before_close
+
+        if n_patch > 0 and fillet_smooth_steps > 0:
+            ms.compute_selection_by_condition_per_face(condselect=f"(fi >= {n_before_close})")
+            ms.compute_selection_transfer_face_to_vertex()
+            for _ in range(fillet_dilations):
+                ms.apply_selection_dilatation()
+            ms.compute_selection_transfer_vertex_to_face()
+
+            diag = ms.current_mesh().bounding_box().diagonal()
+            target_edge = diag / 180
+            ms.meshing_isotropic_explicit_remeshing(
+                iterations=3,
+                targetlen=pymeshlab.PureValue(target_edge),
+                adaptive=True,
+                selectedonly=True,
+                checksurfdist=True,
+                maxsurfdist=pymeshlab.PureValue(target_edge * 0.5),
+            )
+
+            ms.compute_selection_by_condition_per_face(condselect=f"(fi >= {n_before_close})")
+            ms.compute_selection_transfer_face_to_vertex()
+            for _ in range(fillet_dilations):
+                ms.apply_selection_dilatation()
+
+            ms.apply_coord_taubin_smoothing(
+                stepsmoothnum=fillet_smooth_steps,
+                lambda_=0.5,
+                mu=-0.53,
+                selected=True,
+            )
+
+        if taubin_steps > 0:
+            ms.apply_coord_taubin_smoothing(
+                stepsmoothnum=taubin_steps,
+                lambda_=0.5,
+                mu=-0.53,
+            )
+
+        ms.save_current_mesh(out_ply)
+        m_new = trimesh.load(out_ply, force="mesh")
+        if len(m_new.faces) > 0:
+            m = m_new
+
+    boundary_after = _boundary_edge_count(m)
+    if boundary_after > 0:
+        with contextlib.suppress(Exception):
+            m = make_watertight(m)
+
+    with contextlib.suppress(Exception):
+        trimesh_repair.fix_normals(m, multibody=True)
+
+    return m
+
+
+def _plate_component_score(part: trimesh.Trimesh) -> float:
+    """Pontua o quão "placa" uma componente parece (0 = não-placa, 1 = placa pura)."""
+    e = sorted(float(x) for x in part.extents)
+    if e[2] < 1e-9:
+        return 1.0
+    flat_ratio = e[0] / e[2]
+    flatness_score = max(0.0, 1.0 - flat_ratio / 0.15)
+
+    normals = part.face_normals
+    areas = part.area_faces
+    total_area = float(areas.sum())
+    align_max = 0.0
+    if total_area > 0:
+        for ax in range(3):
+            aligned = float(areas[np.abs(normals[:, ax]) >= 0.7].sum()) / total_area
+            align_max = max(align_max, aligned)
+    alignment_score = max(0.0, (align_max - 0.55) / 0.45)
+
+    bbox_vol = float(e[0] * e[1] * e[2])
+    if bbox_vol > 1e-12:
+        try:
+            ch_vol = float(part.convex_hull.volume)
+        except Exception:
+            ch_vol = 0.0
+        vol_eff = ch_vol / bbox_vol
+    else:
+        vol_eff = 1.0
+    vol_score = max(0.0, (vol_eff - 0.5) / 0.5)
+
+    return (flatness_score * 0.5) + (alignment_score * 0.35) + (vol_score * 0.15)
+
+
+def _remove_disconnected_plate_components(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, int]:
+    """Remove componentes desconexas que parecem placas (ex.: placas em "+")."""
+    parts = mesh.split(only_watertight=False)
+    if len(parts) <= 1:
+        return mesh, 0
+
+    scored = [(p, _plate_component_score(p)) for p in parts]
+    scored.sort(key=lambda x: x[1])
+
+    kept: list[trimesh.Trimesh] = []
+    n_removed = 0
+    for p, score in scored:
+        e = sorted(float(x) for x in p.extents)
+        flat_ratio = e[0] / e[2] if e[2] > 1e-9 else 0
+        is_plate = (flat_ratio < 0.05 and score > 0.4) or score > 0.7 or flat_ratio < 0.02
+        if is_plate and len(kept) > 0:
+            n_removed += 1
+        else:
+            kept.append(p)
+
+    if not kept:
+        kept = [scored[0][0]]
+
+    if n_removed > 0:
+        result = kept[0] if len(kept) == 1 else trimesh.util.concatenate(kept)
+        result.remove_unreferenced_vertices()
+        return result, n_removed
+    return mesh, 0
+
+
+def remove_backing_plates(
+    mesh: trimesh.Trimesh,
+    *,
+    plate_coverage_threshold: float = 0.7,
+    min_thin_concentration: float = 0.35,
+    margin_frac: float = 0.06,
+    fillet_smooth_steps: int = 12,
+    fillet_dilations: int = 4,
+) -> tuple[trimesh.Trimesh, dict]:
+    """Remove backing plates de artefato e repara a mesh.
+
+    Pipeline completa:
+    1. Detecta placas de artefato (concentração de faces no extremo)
+    2. Corta faces da placa + margem para remover interface
+    3. Repara buracos com pymeshlab (fillet suavizado)
+    4. Remove componentes desconexas que ainda parecem placas
+    5. Verifica se restam placas conectadas (irrecuperável)
+
+    Returns:
+        Tupla ``(mesh, info)`` onde ``info`` contém:
+        - ``plates_detected``: int
+        - ``plates_removed``: int
+        - ``components_removed``: int
+        - ``needs_discard``: bool (placa conectada em outro eixo)
+    """
+    info: dict = {
+        "plates_detected": 0,
+        "plates_removed": 0,
+        "components_removed": 0,
+        "needs_discard": False,
+    }
+
+    plates = _detect_artifact_plates(
+        mesh,
+        plate_coverage_threshold=plate_coverage_threshold,
+        min_thin_concentration=min_thin_concentration,
+    )
+    info["plates_detected"] = len(plates)
+
+    if not plates:
+        return mesh, info
+
+    cleaned = _cut_plate_faces(mesh, plates, margin_frac=margin_frac)
+    info["plates_removed"] = len(plates)
+
+    repaired = _repair_plate_holes(
+        cleaned,
+        fillet_smooth_steps=fillet_smooth_steps,
+        fillet_dilations=fillet_dilations,
+    )
+
+    repaired, n_comp = _remove_disconnected_plate_components(repaired)
+    info["components_removed"] = n_comp
+
+    if n_comp > 0 and not repaired.is_watertight:
+        repaired = _repair_plate_holes(repaired, fillet_smooth_steps=0)
+
+    original_keys = {(p["axis"], p["side"]) for p in plates}
+    residual = _detect_artifact_plates(repaired, plate_coverage_threshold=plate_coverage_threshold)
+    new_plates = [rp for rp in residual if (rp["axis"], rp["side"]) not in original_keys]
+    info["needs_discard"] = len(new_plates) > 0
+
+    return repaired, info
+
+
 def repair_mesh(
     mesh: trimesh.Trimesh,
     *,

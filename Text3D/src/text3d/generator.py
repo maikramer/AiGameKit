@@ -243,26 +243,36 @@ class HunyuanTextTo3DGenerator:
         on_retry: Any = None,
         **kwargs: Any,
     ) -> trimesh.Trimesh | tuple[trimesh.Trimesh, Image.Image]:
-        """Generate com verificação de qualidade e retry automático.
+        """Generate com verificação de qualidade, remoção de placas e retry.
 
-        Gera mesh, verifica se tem backing plates/flat cutouts. Se falhar,
-        regenera com seed diferente até ``max_retries`` tentativas.
+        Fluxo por tentativa:
+        1. Gera mesh (com prompt modificado a cada retry + seed nova)
+        2. ``mesh_quality_check`` — se PASS, usa esta mesh
+        3. Se FAIL por placas: tenta ``remove_backing_plates``
+           - Se funcionar (not needs_discard): aceita como candidata
+           - Se irrecuperável: descarta e faz retry
+        4. Antes do retry: muda seed + adiciona modificador neutro ao prompt
 
         ``on_retry``: callback(attempt, seed, quality_report) chamado a cada retry.
         Retorna a melhor mesh encontrada (ou a última se todas falharem).
         """
-        from .utils.mesh_repair import mesh_quality_check
+        import random as _random
+
+        from .utils.mesh_repair import mesh_quality_check, remove_backing_plates
+        from .utils.prompt_enhance import modify_prompt_for_retry
 
         best_mesh = None
         best_image = None
         best_score: float = -1.0
         seed = t2d_seed
+        current_prompt = prompt
+        rng = _random.Random(seed or 42)
 
         for attempt in range(1, max_retries + 1):
             self._log(f"Tentativa {attempt}/{max_retries} (seed={seed})")
 
             result = self.generate(
-                prompt,
+                current_prompt,
                 t2d_seed=seed,
                 return_reference_image=True,
                 **kwargs,
@@ -281,6 +291,27 @@ class HunyuanTextTo3DGenerator:
                 f"issues={quality['issues']})"
             )
 
+            if not quality["passed"] and quality["plate_axes"]:
+                self._log("  Tentando remoção de placas...")
+                repaired, plate_info = remove_backing_plates(mesh)
+                if plate_info["plates_removed"] > 0 and not plate_info["needs_discard"]:
+                    self._log(
+                        f"  Placas removidas: {plate_info['plates_removed']}, "
+                        f"componentes removidas: {plate_info['components_removed']}"
+                    )
+                    mesh = repaired
+                    quality = mesh_quality_check(mesh)
+                    score = quality["flatness_ratio"]
+                    if quality["passed"]:
+                        score += 1.0
+                    self._log(
+                        f"  Após remoção: {'PASS' if quality['passed'] else 'FAIL'} "
+                        f"(flatness={quality['flatness_ratio']:.3f})"
+                    )
+                elif plate_info["needs_discard"]:
+                    self._log("  Mesh irrecuperável (placa conectada em outro eixo)")
+                    score = -0.5
+
             if score > best_score:
                 best_score = score
                 best_mesh = mesh
@@ -290,13 +321,12 @@ class HunyuanTextTo3DGenerator:
                 break
 
             if attempt < max_retries:
-                import random
-
                 old_seed = seed
-                seed = random.randint(0, 2**31)
+                seed = _random.randint(0, 2**31)
+                current_prompt = modify_prompt_for_retry(prompt, attempt, rng=rng)
                 if on_retry:
                     on_retry(attempt, seed, quality)
-                self._log(f"  Retry: seed {old_seed} → {seed}")
+                self._log(f"  Retry: seed {old_seed} → {seed}, prompt: {current_prompt[:80]}...")
 
         if return_reference_image:
             return best_mesh, best_image  # type: ignore[return-value]
