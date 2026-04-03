@@ -15,8 +15,7 @@ from typing import Any
 def is_xformers_available() -> bool:
     """Verifica se xformers está instalado."""
     try:
-        import xformers
-        import xformers.ops
+        import xformers  # noqa: F401
 
         return True
     except ImportError:
@@ -48,7 +47,7 @@ def enable_xformers_memory_efficient_attention(
                 model.enable_xformers_memory_efficient_attention()
             return True
     except Exception as e:
-        warnings.warn(f"xformers não pôde ser habilitado: {e}")
+        warnings.warn(f"xformers não pôde ser habilitado: {e}", stacklevel=2)
 
     return False
 
@@ -65,17 +64,16 @@ def set_sdpa_backend(
         enable_math_fallback: Permitir fallback para math backend
     """
     try:
-        import torch
         import torch.nn.attention as attention
 
         # PyTorch 2.2+
         if hasattr(attention, "sdpa_kernel"):
             if backend == "flash_attention_2":
-                attention.set_sdpa_backend(attention.SDPABackend.FLASH_ATTENTION)
+                attention.sdpa_kernel([attention.SDPBackend.FLASH_ATTENTION])
             elif backend == "mem_efficient":
-                attention.set_sdpa_backend(attention.SDPABackend.EFFICIENT_ATTENTION)
+                attention.sdpa_kernel([attention.SDPBackend.EFFICIENT_ATTENTION])
             elif backend == "math":
-                attention.set_sdpa_backend(attention.SDPABackend.MATH)
+                attention.sdpa_kernel([attention.SDPBackend.MATH])
     except Exception:
         pass
 
@@ -93,11 +91,11 @@ def get_optimal_dtype_for_gpu(gpu_name: str = "") -> str:
     gpu_lower = gpu_name.lower()
 
     # RTX 40 series (Ada Lovelace) - BF16 tem melhor performance
-    if "rtx 40" in gpu_lower or "rtx 4050" in gpu_lower or "rtx 4060" in gpu_lower or "rtx 4070" in gpu_lower or "rtx 4080" in gpu_lower or "rtx 4090" in gpu_lower:
+    if "rtx 40" in gpu_lower:
         return "bfloat16"
 
     # RTX 30 series (Ampere) - BF16 também bom
-    if "rtx 30" in gpu_lower or "rtx 3050" in gpu_lower or "rtx 3060" in gpu_lower or "rtx 3070" in gpu_lower or "rtx 3080" in gpu_lower or "rtx 3090" in gpu_lower:
+    if "rtx 30" in gpu_lower:
         return "bfloat16"
 
     # GPUs mais antigas - FP16 é mais seguro
@@ -114,7 +112,9 @@ def configure_cuda_for_6gb() -> None:
     Deve ser chamada antes de inicializar PyTorch CUDA.
     """
     # Expandable segments: essencial para evitar OOM
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = (
+        "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6"
+    )
 
     # Desativar caching de memória para operações cuDNN (economiza VRAM)
     os.environ["CUDNN_DETERMINISTIC"] = "1"
@@ -125,7 +125,9 @@ def configure_cuda_for_6gb() -> None:
 
 def configure_cuda_for_4gb() -> None:
     """Configurações ainda mais agressivas para 4GB VRAM."""
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True,max_split_size_mb:32,garbage_collection_threshold:0.8"
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = (
+        "expandable_segments:True,max_split_size_mb:32,garbage_collection_threshold:0.8"
+    )
     os.environ["CUDNN_DETERMINISTIC"] = "1"
     os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
@@ -303,10 +305,8 @@ def get_recommended_batch_size(vram_gb: float, image_size: int = 512) -> int:
     # Multiplicador baseado na resolução
     size_multiplier = (image_size / 512) ** 2
 
-    if vram_gb <= 4:
+    if vram_gb <= 6:
         return 1
-    elif vram_gb <= 6:
-        return 1 if size_multiplier > 1 else 1
     elif vram_gb <= 8:
         return 1 if size_multiplier > 2 else 2
     elif vram_gb <= 12:
@@ -322,7 +322,7 @@ class RTX4050Optimizer:
     Aplica todas as otimizações necessárias para esta GPU.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.vram_gb = 6.0
         self.dtype = "bfloat16"
         self.compute_capability = (8, 9)  # Ada Lovelace
@@ -365,7 +365,7 @@ class RTX4050Optimizer:
             enable_sequential_offloading_optimized(pipe)
 
         except Exception as e:
-            warnings.warn(f"Erro ao aplicar otimizações RTX 4050: {e}")
+            warnings.warn(f"Erro ao aplicar otimizações RTX 4050: {e}", stacklevel=2)
 
 
 def detect_gpu_and_optimize() -> dict[str, Any]:

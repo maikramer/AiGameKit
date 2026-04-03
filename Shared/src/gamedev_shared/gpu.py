@@ -17,7 +17,7 @@ import sys
 import time
 import types
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 
 def _torch() -> types.ModuleType:
@@ -25,7 +25,7 @@ def _torch() -> types.ModuleType:
     try:
         import torch
 
-        return cast(types.ModuleType, torch)
+        return torch
     except ImportError:
         raise ImportError("torch não está instalado. Instale com: pip install gamedev-shared[gpu]") from None
 

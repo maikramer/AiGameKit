@@ -1,11 +1,12 @@
-"""Sessão de profiling com spans aninháveis e exportação JSONL."""
+"""Sessão de profiling com spans aninháveis e exportação JSONL + SQLite."""
 
 from __future__ import annotations
 
 import contextvars
+import os
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,10 @@ class ProfilerSession:
     """
     Agrupa spans com métricas de tempo, CPU, RAM e (opcionalmente) CUDA.
 
+    Quando ``GAMEDEV_PERF_DB`` está definido ou o módulo
+    :mod:`gamedev_shared.perfstore` está disponível, os spans também são
+    gravados automaticamente num banco SQLite local.
+
     Uso::
 
         with ProfilerSession("part3d", log_path=Path("run.jsonl")) as s:
@@ -37,6 +42,9 @@ class ProfilerSession:
         log_path: Path | str | None = None,
         enabled: bool | None = None,
         cli_profile: bool = False,
+        quantization_mode: str = "",
+        model_id: str = "",
+        params: dict[str, Any] | None = None,
     ) -> None:
         self.tool_name = tool_name
         if enabled is not None:
@@ -47,6 +55,10 @@ class ProfilerSession:
         self.log_path: Path | None = Path(log_path) if log_path else (Path(env_log) if env_log else None)
         self._events: list[dict[str, Any]] = []
         self._token: contextvars.Token[ProfilerSession | None] | None = None
+        self._perf_recorder: Any = None
+        self._quantization_mode = quantization_mode
+        self._model_id = model_id
+        self._params = params or {}
 
     @property
     def enabled(self) -> bool:
@@ -55,14 +67,35 @@ class ProfilerSession:
     def __enter__(self) -> ProfilerSession:
         if self._enabled:
             self._token = _active_session.set(self)
+            self._init_perf_recorder()
         return self
 
     def __exit__(self, *args: object) -> None:
+        if self._perf_recorder is not None:
+            with suppress(Exception):
+                self._perf_recorder.__exit__(*args)
+            self._perf_recorder = None
         if self._token is not None:
             _active_session.reset(self._token)
             self._token = None
         if self._enabled and self._events:
             print_summary_table(self._events)
+
+    def _init_perf_recorder(self) -> None:
+        if os.environ.get("GAMEDEV_PERF_DB", "").strip() == "off":
+            return
+        try:
+            from gamedev_shared.perfstore.recorder import PerfRecorder
+
+            self._perf_recorder = PerfRecorder(
+                self.tool_name,
+                quantization_mode=self._quantization_mode,
+                model_id=self._model_id,
+                params=self._params,
+            )
+            self._perf_recorder.__enter__()
+        except Exception:
+            self._perf_recorder = None
 
     @contextmanager
     def span(self, name: str, *, sync_cuda: bool = False) -> Iterator[None]:
@@ -108,6 +141,47 @@ class ProfilerSession:
             if self.log_path is not None:
                 append_jsonl(self.log_path, ev)
 
+            if self._perf_recorder is not None:
+                try:
+                    from gamedev_shared.perfstore.models import SpanRecord
+
+                    span = SpanRecord(
+                        run_id=self._perf_recorder.run_id or 0,
+                        span_name=name,
+                        duration_ms=round(duration_ms, 3),
+                        cuda_allocated_before_mb=(
+                            round(c0.allocated_bytes / (1024 * 1024), 1) if c0.allocated_bytes else None
+                        ),
+                        cuda_allocated_after_mb=(
+                            round(c1.allocated_bytes / (1024 * 1024), 1) if c1.allocated_bytes else None
+                        ),
+                        cuda_allocated_delta_mb=(
+                            round((c1.allocated_bytes - c0.allocated_bytes) / (1024 * 1024), 1)
+                            if c0.allocated_bytes and c1.allocated_bytes
+                            else None
+                        ),
+                        cuda_reserved_before_mb=(
+                            round(c0.reserved_bytes / (1024 * 1024), 1) if c0.reserved_bytes else None
+                        ),
+                        cuda_reserved_after_mb=(
+                            round(c1.reserved_bytes / (1024 * 1024), 1) if c1.reserved_bytes else None
+                        ),
+                        cuda_peak_after_mb=(
+                            round(c1.peak_allocated_bytes / (1024 * 1024), 1) if c1.peak_allocated_bytes else None
+                        ),
+                        cuda_free_after_mb=round(c1.free_bytes / (1024 * 1024), 1) if c1.free_bytes else None,
+                        cuda_total_mb=round(c1.total_bytes / (1024 * 1024), 1) if c1.total_bytes else None,
+                        rss_before_mb=round(r0.rss_bytes / (1024 * 1024), 1) if r0.rss_bytes else None,
+                        rss_after_mb=round(r1.rss_bytes / (1024 * 1024), 1) if r1.rss_bytes else None,
+                        rss_delta_mb=round(rss_delta / (1024 * 1024), 1) if rss_delta else None,
+                        cpu_user_delta_s=round(du, 6) if du else None,
+                        cpu_system_delta_s=round(ds, 6) if ds else None,
+                        parent_tool=env_profile_tool() or "",
+                    )
+                    self._perf_recorder._ensure_db().insert_span(span)
+                except Exception:
+                    pass
+
     def _build_event(
         self,
         *,
@@ -142,10 +216,9 @@ class ProfilerSession:
 
         ev["cuda_before"] = c0.to_dict()
         ev["cuda_after"] = c1.to_dict()
-        if c0.available and c1.available:
-            if c0.allocated_bytes is not None and c1.allocated_bytes is not None:
-                dab = c1.allocated_bytes - c0.allocated_bytes
-                ev["cuda_allocated_delta_mb"] = round(dab / (1024 * 1024), 4)
+        if c0.available and c1.available and c0.allocated_bytes is not None and c1.allocated_bytes is not None:
+            dab = c1.allocated_bytes - c0.allocated_bytes
+            ev["cuda_allocated_delta_mb"] = round(dab / (1024 * 1024), 4)
         return ev
 
     @property

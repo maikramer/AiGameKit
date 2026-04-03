@@ -35,16 +35,14 @@ class TestResourceSnapshot:
 
 class TestProfilerSession:
     def test_disabled_no_events(self):
-        with ProfilerSession("test", enabled=False) as s:
-            with s.span("a"):
-                pass
+        with ProfilerSession("test", enabled=False) as s, s.span("a"):
+            pass
         assert s.events == []
 
     def test_enabled_records_span(self, tmp_path: Path):
         log = tmp_path / "p.jsonl"
-        with ProfilerSession("unit", enabled=True, log_path=log) as s:
-            with s.span("sleepy"):
-                pass
+        with ProfilerSession("unit", enabled=True, log_path=log) as s, s.span("sleepy"):
+            pass
         assert len(s.events) == 1
         ev = s.events[0]
         assert ev["tool"] == "unit"
@@ -58,10 +56,13 @@ class TestProfilerSession:
         assert data["span"] == "sleepy"
 
     def test_profile_span_nested(self, tmp_path: Path):
-        with ProfilerSession("unit", enabled=True, log_path=tmp_path / "x.jsonl") as s:
-            with s.span("outer"):
-                with profile_span("inner"):
-                    pass
+        # ruff: noqa: SIM117
+        with (
+            ProfilerSession("unit", enabled=True, log_path=tmp_path / "x.jsonl") as s,
+            s.span("outer"),
+        ):
+            with profile_span("inner"):
+                pass
         names = [e["span"] for e in s.events]
         assert "outer" in names
         assert "inner" in names

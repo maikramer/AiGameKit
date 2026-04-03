@@ -2,6 +2,7 @@
 Módulo de quantização compartilhado para otimização de VRAM.
 
 Suporta:
+- SDNQ (SD.Next Quantization) — centralized in ``gamedev_shared.sdnq``
 - bitsandbytes (4-bit NF4/FP4, 8-bit)
 - torchao (quantização nativa PyTorch)
 - optimum-quanto (quanto)
@@ -17,7 +18,7 @@ from typing import Any
 def is_bitsandbytes_available() -> bool:
     """Verifica se bitsandbytes está instalado."""
     try:
-        import bitsandbytes as bnb
+        import bitsandbytes  # noqa: F401
 
         return True
     except ImportError:
@@ -27,7 +28,7 @@ def is_bitsandbytes_available() -> bool:
 def is_torchao_available() -> bool:
     """Verifica se torchao está instalado."""
     try:
-        import torchao
+        import torchao  # noqa: F401
 
         return True
     except ImportError:
@@ -37,11 +38,18 @@ def is_torchao_available() -> bool:
 def is_quanto_available() -> bool:
     """Verifica se optimum-quanto está instalado."""
     try:
-        from optimum import quanto
+        from optimum import quanto  # noqa: F401
 
         return True
     except ImportError:
         return False
+
+
+def is_sdnq_available() -> bool:
+    """Verifica se SDNQ (SD.Next Quantization) está instalado."""
+    from gamedev_shared.sdnq import is_available as _sdnq_available
+
+    return _sdnq_available()
 
 
 def get_gpu_compute_capability() -> tuple[int, int] | None:
@@ -82,60 +90,66 @@ def get_quantization_config(
     """
     mode = quantization_mode.lower().strip()
 
-    if mode == "none" or mode == "auto" and not is_bitsandbytes_available():
+    if mode == "none" or (mode == "auto" and not is_bitsandbytes_available()):
         return None
 
     # FP8 para GPUs RTX 40 series
-    if mode == "fp8" or (mode == "auto" and supports_fp8()):
-        if supports_fp8():
-            return {
-                "type": "fp8",
-                "compute_dtype": compute_dtype,
-            }
+    if (mode == "fp8" or (mode == "auto" and supports_fp8())) and supports_fp8():
+        return {
+            "type": "fp8",
+            "compute_dtype": compute_dtype,
+        }
 
     # bitsandbytes 4-bit
-    if mode == "int4" or mode == "4bit":
-        if is_bitsandbytes_available():
-            from transformers import BitsAndBytesConfig
+    if (mode == "int4" or mode == "4bit") and is_bitsandbytes_available():
+        from transformers import BitsAndBytesConfig
 
-            return {
-                "type": "bitsandbytes-4bit",
-                "config": BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=getattr(__import__("torch"), compute_dtype),
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_use_double_quant=True,
-                ),
-            }
+        return {
+            "type": "bitsandbytes-4bit",
+            "config": BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=getattr(__import__("torch"), compute_dtype),
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_use_double_quant=True,
+            ),
+        }
 
     # bitsandbytes 8-bit
-    if mode == "int8" or mode == "8bit" or mode == "auto":
-        if is_bitsandbytes_available():
-            from transformers import BitsAndBytesConfig
+    if (mode == "int8" or mode == "8bit" or mode == "auto") and is_bitsandbytes_available():
+        from transformers import BitsAndBytesConfig
 
-            return {
-                "type": "bitsandbytes-8bit",
-                "config": BitsAndBytesConfig(load_in_8bit=True),
-            }
+        return {
+            "type": "bitsandbytes-8bit",
+            "config": BitsAndBytesConfig(load_in_8bit=True),
+        }
 
     # quanto int8
-    if mode == "quanto-int8":
-        if is_quanto_available():
-            from optimum import quanto
+    if mode == "quanto-int8" and is_quanto_available():
+        from optimum import quanto
 
-            return {
-                "type": "quanto-int8",
-                "config": quanto.qfloat8,
-            }
+        return {
+            "type": "quanto-int8",
+            "config": quanto.qfloat8,
+        }
 
     # quanto int4
-    if mode == "quanto-int4":
-        if is_quanto_available():
-            from optimum import quanto
+    if mode == "quanto-int4" and is_quanto_available():
+        from optimum import quanto
 
+        return {
+            "type": "quanto-int4",
+            "config": quanto.qint4,
+        }
+
+    # SDNQ — delegate to centralized module
+    if mode.startswith("sdnq"):
+        from gamedev_shared.sdnq import PRESETS, create_config
+
+        if is_sdnq_available() and mode in PRESETS:
+            config = create_config(mode)
             return {
-                "type": "quanto-int4",
-                "config": quanto.qint4,
+                "type": mode,
+                "config": config,
             }
 
     return None
@@ -159,7 +173,6 @@ def apply_torchao_quantization(
         return model
 
     try:
-        import torch
         from torchao.quantization import (
             int4_weight_only,
             int8_dynamic_activation_int8_weight,
@@ -189,6 +202,9 @@ def get_suggested_quantization_for_vram(
     """
     Sugere modo de quantização baseado na VRAM disponível.
 
+    Prefers SDNQ uint8 for most cases (best tested), falls back to int4
+    for low VRAM.
+
     Args:
         vram_gb: VRAM disponível em GB
         model_size_gb: Tamanho do modelo em GB (FP32)
@@ -196,22 +212,20 @@ def get_suggested_quantization_for_vram(
     Returns:
         Modo de quantização sugerido
     """
-    # Modelo FP16 é ~metade do FP32
-    fp16_size = model_size_gb / 2
+    from gamedev_shared.sdnq import suggest_preset_for_vram
 
-    # Margem de segurança para ativações e overhead
+    fp16_size = model_size_gb / 2
     required_vram = fp16_size * 1.5
 
     if vram_gb >= required_vram:
         return "none"
-    elif vram_gb >= required_vram * 0.6 and supports_fp8():
+    if is_sdnq_available():
+        return suggest_preset_for_vram(vram_gb)
+    if vram_gb >= required_vram * 0.6 and supports_fp8():
         return "fp8"
-    elif vram_gb >= required_vram * 0.5:
+    if vram_gb >= required_vram * 0.5:
         return "int8"
-    elif vram_gb >= required_vram * 0.35:
-        return "int4"
-    else:
-        return "int4"  # Máxima compressão
+    return "int4"
 
 
 def format_quantization_info(quant_config: dict[str, Any] | None) -> str:
@@ -227,6 +241,9 @@ def format_quantization_info(quant_config: dict[str, Any] | None) -> str:
         "bitsandbytes-8bit": "BitsAndBytes 8-bit",
         "quanto-int8": "Quanto INT8",
         "quanto-int4": "Quanto INT4",
+        "sdnq-int8": "SDNQ INT8 (modern)",
+        "sdnq-uint8": "SDNQ UINT8 (modern unsigned)",
+        "sdnq-int4": "SDNQ INT4 (modern aggressive)",
     }
 
     return descriptions.get(qtype, f"Quantização: {qtype}")
@@ -257,7 +274,10 @@ def enable_vae_optimizations(
 
     if enable_tiling and hasattr(vae, "enable_tiling"):
         if tile_sample_min_size:
-            vae.enable_tiling(tile_sample_min_size=tile_sample_min_size)
+            try:
+                vae.enable_tiling(tile_sample_min_size=tile_sample_min_size)
+            except TypeError:
+                vae.enable_tiling()
         else:
             vae.enable_tiling()
 

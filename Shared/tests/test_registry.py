@@ -27,6 +27,7 @@ class TestToolSpec:
         assert "animator3d" in TOOLS
         assert "part3d" in TOOLS
         assert "paint3d" in TOOLS
+        assert "gamedevlab" in TOOLS
         assert "materialize" in TOOLS
 
     def test_text2sound_is_python(self):
@@ -52,6 +53,14 @@ class TestToolSpec:
     def test_gameassets_no_pytorch(self):
         spec = TOOLS["gameassets"]
         assert spec.needs_pytorch is False
+
+    def test_gamedevlab_is_python(self):
+        spec = TOOLS["gamedevlab"]
+        assert spec.kind == ToolKind.PYTHON
+        assert spec.cli_name == "gamedev-lab"
+        assert spec.python_module == "gamedev_lab"
+        assert spec.needs_pytorch is False
+        assert spec.folder == "GameDevLab"
 
     def test_texture2d_no_pytorch(self):
         spec = TOOLS["texture2d"]
@@ -156,3 +165,9 @@ class TestGetTool:
         spec1 = get_tool("gameassets")
         spec2 = get_tool("GameAssets")
         assert spec1.name == spec2.name
+
+    def test_gamedevlab_variants(self):
+        spec1 = get_tool("gamedevlab")
+        spec2 = get_tool("GameDevLab")
+        assert spec1.name == spec2.name
+        assert spec1.cli_name == "gamedev-lab"

@@ -80,6 +80,16 @@ TOOLS: dict[str, ToolSpec] = {
         min_python=(3, 10),
         needs_pytorch=False,
     ),
+    "gamedevlab": ToolSpec(
+        name="GameDevLab",
+        kind=ToolKind.PYTHON,
+        folder="GameDevLab",
+        cli_name="gamedev-lab",
+        python_module="gamedev_lab",
+        description="Laboratório: debug 3D, bancadas de quantização, profiling",
+        min_python=(3, 10),
+        needs_pytorch=False,
+    ),
     "text2sound": ToolSpec(
         name="Text2Sound",
         kind=ToolKind.PYTHON,

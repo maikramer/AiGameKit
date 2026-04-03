@@ -61,18 +61,20 @@ class TestGetToolBin:
     def test_unknown_tool(self):
         assert get_tool_bin("naoexiste") is None
 
-    def test_skymap2d_rigging3d_gameassets(self):
+    def test_skymap2d_rigging3d_gameassets_gamedevlab(self):
         with patch.dict(
             os.environ,
             {
                 "SKYMAP2D_BIN": "/x/skymap2d",
                 "RIGGING3D_BIN": "/x/rigging3d",
                 "GAMEASSETS_BIN": "/x/gameassets",
+                "GAMEDEVLAB_BIN": "/x/gamedev-lab",
             },
         ):
             assert get_tool_bin("skymap2d") == "/x/skymap2d"
             assert get_tool_bin("rigging3d") == "/x/rigging3d"
             assert get_tool_bin("gameassets") == "/x/gameassets"
+            assert get_tool_bin("gamedevlab") == "/x/gamedev-lab"
 
 
 class TestToolBins:
@@ -84,4 +86,5 @@ class TestToolBins:
         assert TOOL_BINS["skymap2d"] == "SKYMAP2D_BIN"
         assert TOOL_BINS["rigging3d"] == "RIGGING3D_BIN"
         assert TOOL_BINS["gameassets"] == "GAMEASSETS_BIN"
+        assert TOOL_BINS["gamedevlab"] == "GAMEDEVLAB_BIN"
         assert TOOL_BINS["materialize"] == "MATERIALIZE_BIN"

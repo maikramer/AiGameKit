@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,16 +69,12 @@ def cuda_memory_snapshot(device_index: int = 0) -> CudaMemorySnapshot:
         )
 
     idx = min(device_index, torch.cuda.device_count() - 1)
-    try:
+    with contextlib.suppress(Exception):
         torch.cuda.set_device(idx)
-    except Exception:
-        pass
 
     name = None
-    try:
+    with contextlib.suppress(Exception):
         name = torch.cuda.get_device_name(idx)
-    except Exception:
-        pass
 
     allocated = reserved = peak = free_b = total_b = None
     try:

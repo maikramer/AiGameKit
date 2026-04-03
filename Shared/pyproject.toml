@@ -29,6 +29,7 @@ quantization = [
     "bitsandbytes>=0.45.0",
     "torchao>=0.10.0",
     "optimum-quanto>=0.2.0",
+    "sdnq>=0.1.0",  # Quantização moderna SDNQ
 ]
 low_vram = [
     "xformers>=0.0.28; sys_platform != 'darwin'",

@@ -35,7 +35,8 @@ class Text3DPostInstall:
         models_dir = self._i.project_root / "models"
 
         if not self._i.skip_models:
-            log.info("Text2D (FLUX/SDNQ) e Hunyuan3D-2mini vêm do Hugging Face na primeira execução.")
+            log.info("Text2D (FLUX/SDNQ) e Hunyuan3D-2.1 vêm do Hugging Face na primeira execução.")
+            log.info("Quantização SDNQ int4 do DiT é automática em runtime (sem passo extra).")
             log.info(f"Cache típico: {hf_cache}")
             log.info("Opcional: huggingface-cli login (modelos gated / quotas)")
 
