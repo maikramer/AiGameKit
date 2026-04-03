@@ -22,6 +22,7 @@ import trimesh
 from PIL import Image
 
 from gamedev_shared.gpu import clear_cuda_memory
+from gamedev_shared.sdnq import is_available as _sdnq_available
 
 from . import defaults as _defaults
 from .hy3d21_paths import (
@@ -63,10 +64,7 @@ def check_paint_rasterizer_available() -> None:
 
 
 def check_hunyuan3d21_environment() -> tuple[bool, str]:
-    """
-    Verifica código vendored e peso Real-ESRGAN.
-    Devolve (ok, mensagem ou caminho do hy3dpaint).
-    """
+    """Verifica código vendored e peso Real-ESRGAN. Devolve (ok, mensagem)."""
     root = resolve_hy3dpaint_root()
     if not (root / "textureGenPipeline.py").is_file():
         return False, f"Código hy3dpaint em falta: {root / 'textureGenPipeline.py'}"
@@ -87,42 +85,18 @@ def apply_hunyuan_paint(
     view_resolution: int = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION,
     use_remesh: bool = True,
     verbose: bool = False,
-    quantization_mode: str = "auto",
-    use_tiny_vae: bool = False,
-    enable_vae_slicing: bool = True,
-    enable_vae_tiling: bool = True,
-    vae_tile_size: int = 256,
-    enable_torch_compile: bool = False,
-    enable_attention_slicing: bool = True,
-    use_xformers: bool = True,
-    dtype: str = "float16",
+    enable_vae_slicing: bool = _defaults.DEFAULT_ENABLE_VAE_SLICING,
+    enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
+    vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
 ) -> trimesh.Trimesh:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
 
-    Otimizações de VRAM disponíveis:
-    - Quantização 4-bit/8-bit via bitsandbytes ou quanto
-    - Tiny VAE (TAESD) para reduzir VRAM do VAE
-    - VAE slicing/tiling para imagens grandes
-    - torch.compile para acelerar inferência
-    - Attention slicing para reduzir pico de VRAM
-    - xformers memory efficient attention
-    - BF16 dtype para RTX 40 series
+    SDNQ uint8 é aplicado automaticamente ao UNet quando disponível (``gamedev_shared.sdnq``).
+    Sem SDNQ, o pipeline usa qint8 pré-quantizado do upstream ou FP16.
     """
     from gamedev_shared.profiler import profile_span
-
-    from gamedev_shared.low_vram_optimizations import (
-        enable_xformers_memory_efficient_attention,
-        get_optimal_dtype_for_gpu,
-        is_xformers_available,
-    )
-    from gamedev_shared.quantization import (
-        apply_torch_compile,
-        enable_attention_optimizations,
-        enable_vae_optimizations,
-        format_quantization_info,
-        get_quantization_config,
-    )
+    from gamedev_shared.quantization import enable_vae_optimizations
 
     with profile_span("paint_check_env"):
         check_paint_rasterizer_available()
@@ -137,23 +111,11 @@ def apply_hunyuan_paint(
 
     from .hy3dpaint.textureGenPipeline import Hunyuan3DPaintConfig, Hunyuan3DPaintPipeline
 
-    # Obter configuração de quantização
-    quant_config = get_quantization_config(quantization_mode)
-
-    # Detectar dtype ótimo se não especificado explicitamente
-    if dtype == "auto" and torch.cuda.is_available():
-        gpu_name = torch.cuda.get_device_properties(0).name
-        dtype = get_optimal_dtype_for_gpu(gpu_name)
-        if verbose:
-            print(f"[Paint 2.1] Dtype ótimo detectado para {gpu_name}: {dtype}")
-
     if verbose:
         print(
             f"[Paint 2.1] hy3dpaint={hy3dpaint_root}\n"
             f"  repo={model_repo} weights_subfolder={subfolder} offload={paint_cpu_offload} "
-            f"max_views={max_num_view} res={view_resolution}\n"
-            f"  dtype={dtype} quantização={format_quantization_info(quant_config)} "
-            f"tiny_vae={use_tiny_vae} compile={enable_torch_compile} xformers={use_xformers}"
+            f"max_views={max_num_view} res={view_resolution}"
         )
 
     clear_cuda_memory()
@@ -189,33 +151,24 @@ def apply_hunyuan_paint(
             if paint_cpu_offload and torch.cuda.is_available():
                 config.render_size = 1024
                 config.texture_size = 2048
-            elif not paint_cpu_offload and torch.cuda.is_available():
-                pass
-            else:
+            elif not torch.cuda.is_available():
                 config.render_size = min(config.render_size, 1024)
                 config.texture_size = min(config.texture_size, 2048)
-
-            if quant_config:
-                config.quantization_config = quant_config
-
-            if use_tiny_vae:
-                config.use_tiny_vae = True
-                config.tiny_vae_repo = "madebyollin/taesdxl"
 
         with profile_span("paint_load_pipeline"):
             pipe = Hunyuan3DPaintPipeline(config)
 
         with profile_span("paint_optimize_pipeline"):
             try:
-                # xformers (prioridade máxima para economia de VRAM)
-                if use_xformers and is_xformers_available():
-                    if verbose:
-                        print("[Paint 2.1] Habilitando xformers memory efficient attention...")
-                    if enable_xformers_memory_efficient_attention(pipe):
-                        if verbose:
-                            print("[Paint 2.1] xformers ativo")
+                if _sdnq_available() and pipe.unet is not None:
+                    from gamedev_shared.sdnq import quantize_model
 
-                if hasattr(pipe, "vae") and pipe.vae is not None:
+                    if verbose:
+                        print("[Paint 2.1] Aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                    pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
+                elif verbose:
+                    print("[Paint 2.1] SDNQ indisponivel — UNet em FP16/qint8")
+                if pipe.vae is not None:
                     enable_vae_optimizations(
                         pipe.vae,
                         enable_slicing=enable_vae_slicing,
@@ -224,18 +177,6 @@ def apply_hunyuan_paint(
                     )
                     if verbose and enable_vae_tiling:
                         print(f"[Paint 2.1] VAE tiling ativo (tile_size={vae_tile_size})")
-
-                if enable_attention_slicing and not (use_xformers and is_xformers_available()):
-                    enable_attention_optimizations(pipe, enable_slicing=True)
-
-                if enable_torch_compile and hasattr(pipe, "unet") and pipe.unet is not None:
-                    if verbose:
-                        print("[Paint 2.1] Aplicando torch.compile ao UNet...")
-                    pipe.unet = apply_torch_compile(
-                        pipe.unet,
-                        mode=_defaults.DEFAULT_TORCH_COMPILE_MODE,
-                        fullgraph=False,
-                    )
             except Exception as e:
                 if verbose:
                     print(f"[Paint 2.1] Aviso: otimizações opcionais falharam: {e}")
@@ -277,15 +218,9 @@ def paint_file_to_file(
     view_resolution: int | None = None,
     use_remesh: bool = True,
     verbose: bool = False,
-    quantization_mode: str = "auto",
-    use_tiny_vae: bool = False,
-    enable_vae_slicing: bool = True,
-    enable_vae_tiling: bool = True,
-    vae_tile_size: int = 256,
-    enable_torch_compile: bool = False,
-    enable_attention_slicing: bool = True,
-    use_xformers: bool = True,
-    dtype: str = "float16",
+    enable_vae_slicing: bool = _defaults.DEFAULT_ENABLE_VAE_SLICING,
+    enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
+    vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
 ) -> Path:
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
@@ -308,15 +243,9 @@ def paint_file_to_file(
         view_resolution=vres,
         use_remesh=use_remesh,
         verbose=verbose,
-        quantization_mode=quantization_mode,
-        use_tiny_vae=use_tiny_vae,
         enable_vae_slicing=enable_vae_slicing,
         enable_vae_tiling=enable_vae_tiling,
         vae_tile_size=vae_tile_size,
-        enable_torch_compile=enable_torch_compile,
-        enable_attention_slicing=enable_attention_slicing,
-        use_xformers=use_xformers,
-        dtype=dtype,
     )
 
     output_path = Path(output_path)

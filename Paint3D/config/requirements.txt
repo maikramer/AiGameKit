@@ -28,6 +28,10 @@ pymeshlab>=2022.2
 xatlas>=0.0.9
 scipy>=1.10.0
 optimum-quanto>=0.2.0
+bitsandbytes>=0.45.0
+torchao>=0.10.0; sys_platform != 'darwin'
+xformers>=0.0.28; sys_platform == 'linux'
+sdnq>=0.1.0
 # API Blender (conversão OBJ→GLB em mesh_utils); PyPI alinha com Blender 5.1
 bpy==5.1.0
 # basicsr / realesrgan PyPI: build quebrado no Python 3.13 (basicsr setup KeyError __version__);
@@ -40,3 +44,5 @@ gamedev-shared @ file:../Shared
 
 # nvdiffrast: instalado separadamente com --no-build-isolation (requer PyTorch).
 # O instalador universal trata este passo automaticamente.
+# instalação manual:
+# git+https://github.com/NVlabs/nvdiffrast.git#egg=nvdiffrast
