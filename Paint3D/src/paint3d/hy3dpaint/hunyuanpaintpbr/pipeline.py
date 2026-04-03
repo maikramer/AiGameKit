@@ -637,7 +637,7 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
 
                 # predict the noise residual
 
-                noise_pred = self.unet(
+                unet_output = self.unet(
                     latent_model_input,
                     t,
                     encoder_hidden_states=prompt_embeds,
@@ -646,7 +646,31 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
                     added_cond_kwargs=added_cond_kwargs,
                     return_dict=False,
                     **kwargs,
-                )[0]
+                )
+
+                # DEBUG: Diagnostic para entender formato do retorno com SDNQ
+                if not isinstance(unet_output, (tuple, list)):
+                    raise RuntimeError(
+                        f"UNet output unexpected type: {type(unet_output).__name__}. "
+                        f"Expected tuple/list. Shape: {getattr(unet_output, 'shape', 'N/A')}"
+                    )
+                if len(unet_output) == 0:
+                    raise RuntimeError("UNet returned empty tuple/list")
+
+                noise_pred = unet_output[0]
+
+                # DEBUG: Verificar formato do noise_pred
+                if not isinstance(noise_pred, torch.Tensor):
+                    raise RuntimeError(f"noise_pred is not a tensor: {type(noise_pred).__name__}")
+
+                # DEBUG: Verificar se shape é compatível com chunk(3)
+                if noise_pred.shape[0] % 3 != 0:
+                    raise RuntimeError(
+                        f"noise_pred batch size {noise_pred.shape[0]} not divisible by 3. "
+                        f"Full shape: {noise_pred.shape}. "
+                        f"Expected multiple of 3 for classifier-free guidance."
+                    )
+
                 latents = rearrange(latents, "b n_pbr n c h w -> (b n_pbr n) c h w")
                 # perform guidance
                 if self.do_classifier_free_guidance:

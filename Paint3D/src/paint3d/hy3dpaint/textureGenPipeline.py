@@ -83,6 +83,33 @@ class Hunyuan3DPaintPipeline:
         self.view_processor = ViewProcessor(self.config, self.render)
         self.load_models()
 
+    @property
+    def multiview_pipeline(self):
+        mv = self.models.get("multiview_model")
+        return getattr(mv, "pipeline", None)
+
+    @property
+    def vae(self):
+        pipe = self.multiview_pipeline
+        return getattr(pipe, "vae", None) if pipe is not None else None
+
+    @property
+    def unet(self):
+        pipe = self.multiview_pipeline
+        return getattr(pipe, "unet", None) if pipe is not None else None
+
+    @unet.setter
+    def unet(self, value):
+        pipe = self.multiview_pipeline
+        if pipe is not None:
+            pipe.unet = value
+
+    def enable_attention_slicing(self, *args, **kwargs):
+        pipe = self.multiview_pipeline
+        if pipe is not None and hasattr(pipe, "enable_attention_slicing"):
+            return pipe.enable_attention_slicing(*args, **kwargs)
+        return None
+
     def load_models(self):
         torch.cuda.empty_cache()
         # Multiview (diffusers) primeiro: pico de VRAM; Real-ESRGAN depois (ou CPU se low_vram).

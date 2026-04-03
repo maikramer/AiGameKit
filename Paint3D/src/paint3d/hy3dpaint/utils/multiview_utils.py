@@ -12,16 +12,17 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import inspect
 import os
-import torch
 import random
-import numpy as np
-from PIL import Image
 from typing import List
+
 import huggingface_hub
+import numpy as np
+import torch
+from diffusers import DDIMScheduler, DiffusionPipeline, EulerAncestralDiscreteScheduler, UniPCMultistepScheduler
 from omegaconf import OmegaConf
-from diffusers import DiffusionPipeline
-from diffusers import EulerAncestralDiscreteScheduler, DDIMScheduler, UniPCMultistepScheduler
+from PIL import Image
 
 
 class multiviewDiffusionNet:
@@ -34,9 +35,7 @@ class multiviewDiffusionNet:
         self.cfg = cfg
         self.mode = self.cfg.model.params.stable_diffusion_config.custom_pipeline[2:]
 
-        weights_subfolder = getattr(
-            config, "multiview_weights_subfolder", "hunyuan3d-paintpbr-v2-1"
-        )
+        weights_subfolder = getattr(config, "multiview_weights_subfolder", "hunyuan3d-paintpbr-v2-1")
         model_path = huggingface_hub.snapshot_download(
             repo_id=config.multiview_pretrained_path,
             allow_patterns=[f"{weights_subfolder}/*"],
@@ -49,18 +48,21 @@ class multiviewDiffusionNet:
             torch_dtype=torch.float16,
         )
 
-        pipeline.scheduler = UniPCMultistepScheduler.from_config(
-            pipeline.scheduler.config, timestep_spacing="trailing"
-        )
+        pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config, timestep_spacing="trailing")
         pipeline.set_progress_bar_config(disable=True)
         pipeline.eval()
-        setattr(pipeline, "view_size", cfg.model.params.get("view_size", 320))
+        pipeline.view_size = cfg.model.params.get("view_size", 320)
+
+        explicit_quant = getattr(config, "quantization_config", None)
+        explicit_quant_type = None
+        if isinstance(explicit_quant, dict):
+            explicit_quant_type = explicit_quant.get("type")
 
         # --- Quantização pré-computada (qint8 via optimum-quanto) ---
         self._unet_quantized = False
-        from paint3d.utils.unet_quantization import want_quantized_unet, load_unet_quantized
+        from paint3d.utils.unet_quantization import load_unet_quantized, want_quantized_unet
 
-        if want_quantized_unet(self.device, model_path):
+        if explicit_quant_type is None and want_quantized_unet(self.device, model_path):
             try:
                 if load_unet_quantized(pipeline, model_path):
                     self._unet_quantized = True
@@ -69,6 +71,63 @@ class multiviewDiffusionNet:
                     print("[Paint 2.1] Artefactos qint8 em falta; UNet FP16.")
             except Exception as e:
                 print(f"[Paint 2.1] AVISO: requantize falhou ({e}); UNet FP16.")
+
+        if explicit_quant_type is not None:
+            try:
+                if explicit_quant_type.startswith("sdnq"):
+                    from sdnq import sdnq_post_load_quant
+
+                    supported = set(inspect.signature(sdnq_post_load_quant).parameters.keys()) - {"model"}
+                    sdnq_kwargs = {
+                        key: value for key, value in vars(explicit_quant["config"]).items() if key in supported
+                    }
+
+                    # IMPORTANTE: Excluir módulos que não devem ser quantizados
+                    # para evitar problemas com o pipeline customizado
+                    modules_to_skip = [
+                        # Módulos de entrada/saída que afetam shape
+                        "conv_in",
+                        "conv_out",
+                        "conv_shortcut",
+                        # Time embedding pode causar problemas
+                        "time_emb",
+                        # Projetações de condicionamento
+                        "cond_proj",
+                        "context_embedder",
+                        # Módulos do wrapper UNet2p5D
+                        "image_proj_model_dino",
+                        "learned_text_clip",
+                    ]
+
+                    # Mesclar com módulos já existentes na config
+                    existing_skip = sdnq_kwargs.get("modules_to_not_convert", []) or []
+                    sdnq_kwargs["modules_to_not_convert"] = list(existing_skip) + modules_to_skip
+
+                    print(f"[Paint 2.1] Aplicando SDNQ (excluindo: {modules_to_skip})...")
+                    pipeline.unet = sdnq_post_load_quant(pipeline.unet, **sdnq_kwargs)
+                    self._unet_quantized = True
+                    print(f"[Paint 2.1] UNet quantizado com {explicit_quant_type}.")
+                elif explicit_quant_type in ("quanto-int8", "quanto-int4"):
+                    from optimum.quanto.quantize import freeze, quantize
+
+                    quantize(pipeline.unet, weights=explicit_quant["config"], activations=None)
+                    freeze(pipeline.unet)
+                    self._unet_quantized = True
+                    print(f"[Paint 2.1] UNet quantizado com {explicit_quant_type}.")
+                else:
+                    print(f"[Paint 2.1] Quantização explícita não suportada neste pipeline: {explicit_quant_type}")
+            except Exception as e:
+                print(f"[Paint 2.1] AVISO: quantização explícita {explicit_quant_type} falhou ({e}); UNet original.")
+
+        if getattr(config, "use_tiny_vae", False):
+            try:
+                from diffusers import AutoencoderTiny
+
+                tiny_vae_repo = getattr(config, "tiny_vae_repo", "madebyollin/taesdxl")
+                pipeline.vae = AutoencoderTiny.from_pretrained(tiny_vae_repo, torch_dtype=torch.float16)
+                print(f"[Paint 2.1] TinyVAE carregado de {tiny_vae_repo}.")
+            except Exception as e:
+                print(f"[Paint 2.1] AVISO: TinyVAE falhou ({e}); VAE original mantido.")
 
         self.pipeline = pipeline.to(self.device)
 

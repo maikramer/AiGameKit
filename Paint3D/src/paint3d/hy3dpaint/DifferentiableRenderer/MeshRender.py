@@ -36,6 +36,7 @@ except:
 
 try:
     from .mesh_inpaint_processor import meshVerticeInpaint  # , meshVerticeColor
+
     _HAS_VERTEX_INPAINT = True
 except Exception:
     _HAS_VERTEX_INPAINT = False
