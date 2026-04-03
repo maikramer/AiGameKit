@@ -1,11 +1,11 @@
 # GameDev monorepo — common tasks for Python packages (ruff, pytest, mypy) and Rust (Materialize).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text2Sound
+PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text2Sound GameDevLab
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-materialize test-rust clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-materialize test-rust clean typecheck check install-hooks
 
 # Run pytest in directory $(1): prefer .venv (Windows or Unix), else system python.
 define run-pytest
@@ -65,6 +65,9 @@ test-texture2d: ## pytest only in Texture2D/
 
 test-text2sound: ## pytest only in Text2Sound/
 	$(call run-pytest,Text2Sound)
+
+test-gamedevlab: ## pytest only in GameDevLab/
+	$(call run-pytest,GameDevLab)
 
 test-materialize: ## cargo test in Materialize/
 	cd Materialize && cargo test

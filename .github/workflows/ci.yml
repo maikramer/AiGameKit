@@ -73,6 +73,13 @@ jobs:
           - package: Text2Sound
             python-version: "3.12"
             install_cmd: cd Shared && pip install -e . && cd ../Text2Sound && pip install -e '.[dev]'
+          # Light packages — GameDevLab
+          - package: GameDevLab
+            python-version: "3.10"
+            install_cmd: cd Shared && pip install -e . && cd ../GameDevLab && pip install -e '.[dev]'
+          - package: GameDevLab
+            python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../GameDevLab && pip install -e '.[dev]'
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"
