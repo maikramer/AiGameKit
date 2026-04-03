@@ -42,26 +42,20 @@ def _torch_dtype_for(device: str) -> torch.dtype:
 def _register_sdnq() -> tuple[Any, Any]:
     """Importa SDNQ e devolve (triton_is_available, apply_sdnq_options_to_model)."""
     try:
-        import sdnq  # noqa: F401 — registo diffusers/transformers
-        from sdnq import SDNQConfig  # noqa: F401 — registo de config
+        from sdnq import SDNQConfig  # noqa: F401 — registo diffusers/transformers
         from sdnq.common import use_torch_compile as triton_is_available
         from sdnq.loader import apply_sdnq_options_to_model
+
+        return triton_is_available, apply_sdnq_options_to_model
     except ImportError as e:
         raise ImportError("O pacote 'sdnq' é necessário para o modelo SDNQ. Instale com: pip install sdnq") from e
-    return triton_is_available, apply_sdnq_options_to_model
 
 
 def _maybe_apply_quantized_matmul(pipe: Any, triton_is_available: Any, apply_fn: Any) -> None:
-    if not triton_is_available:
-        return
-    cuda_ok = torch.cuda.is_available()
-    xpu_ok = bool(getattr(torch, "xpu", None)) and torch.xpu.is_available()
-    if not (cuda_ok or xpu_ok):
-        return
-    for name in ("transformer", "text_encoder", "text_encoder_2"):
-        mod = getattr(pipe, name, None)
-        if mod is not None:
-            setattr(pipe, name, apply_fn(mod, use_quantized_matmul=True))
+    """Apply SDNQ quantized matmul to pipeline sub-modules (via shared helper)."""
+    from gamedev_shared.sdnq import apply_quantized_matmul
+
+    apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
 
 
 class KleinFluxGenerator:

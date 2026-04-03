@@ -104,6 +104,11 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     is_flag=True,
     help="Logs detalhados (ou use: text2d -v generate ...)",
 )
+@click.option(
+    "--profile",
+    is_flag=True,
+    help="Medir tempos, CPU, RAM e VRAM (JSONL opcional: GAMEDEV_PROFILE_LOG).",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -118,8 +123,12 @@ def generate_cmd(
     low_vram: bool,
     model_id: str | None,
     verbose_flag: bool,
+    profile: bool,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
+    from gamedev_shared.profiler import ProfilerSession
+    from gamedev_shared.profiler.env import env_profile_log_path
+
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
     table = Table(show_header=False, box=box.SIMPLE)
@@ -132,63 +141,80 @@ def generate_cmd(
 
     device = "cpu" if cpu else None
     low = low_vram or cpu
+    resolved_model = model_id or default_model_id()
+
+    log_p = env_profile_log_path()
+    prof_log = Path(log_p) if log_p else None
+    t_start = time.time()
 
     try:
-        gen = KleinFluxGenerator(
-            device=device,
-            low_vram=low,
-            verbose=verbose,
-            model_id=model_id,
-        )
-
-        # O trabalho pesado é from_pretrained (rede/disco), não o __init__
-        with console.status(
-            "[bold yellow]1/2 — Download HF + carregamento de pesos "
-            "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 3/3)",
-            spinner="dots",
-        ):
-            gen.warmup()
-
-        if output is None:
-            ensure_dirs()
-            ts = int(time.time())
-            safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
-            output = str(DEFAULT_IMAGE_DIR / f"{safe}_{ts}.png")
-        out_path = Path(output)
-
-        start = time.time()
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]2/2 — Inferência na GPU...", total=None)
-            image = gen.generate(
-                prompt=prompt,
-                height=height,
-                width=width,
-                guidance_scale=guidance_scale,
-                num_inference_steps=steps,
-                seed=seed,
+        with ProfilerSession(
+            "text2d",
+            log_path=prof_log,
+            cli_profile=profile,
+            model_id=resolved_model,
+            params={"width": width, "height": height, "steps": steps, "guidance_scale": guidance_scale, "seed": seed},
+        ) as prof:
+            gen = KleinFluxGenerator(
+                device=device,
+                low_vram=low,
+                verbose=verbose,
+                model_id=model_id,
             )
-            progress.update(task, description="[green]Concluído")
 
-        ext = out_path.suffix.lower().lstrip(".")
-        img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
-        KleinFluxGenerator.save_image(
-            image,
-            out_path,
-            image_format=img_format if img_format == "JPEG" else "PNG",
-        )
+            with (
+                prof.span("warmup"),
+                console.status(
+                    "[bold yellow]1/2 — Download HF + carregamento de pesos "
+                    "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 3/3)",
+                    spinner="dots",
+                ),
+            ):
+                gen.warmup()
 
-        elapsed = time.time() - start
+            if output is None:
+                ensure_dirs()
+                ts = int(time.time())
+                safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
+                output = str(DEFAULT_IMAGE_DIR / f"{safe}_{ts}.png")
+            out_path = Path(output)
+
+            with (
+                prof.span("generate", sync_cuda=True),
+                Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                ) as progress,
+            ):
+                task = progress.add_task("[cyan]2/2 — Inferência na GPU...", total=None)
+                image = gen.generate(
+                    prompt=prompt,
+                    height=height,
+                    width=width,
+                    guidance_scale=guidance_scale,
+                    num_inference_steps=steps,
+                    seed=seed,
+                )
+                progress.update(task, description="[green]Concluído")
+
+            with prof.span("save"):
+                ext = out_path.suffix.lower().lstrip(".")
+                img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
+                KleinFluxGenerator.save_image(
+                    image,
+                    out_path,
+                    image_format=img_format if img_format == "JPEG" else "PNG",
+                )
+
+        elapsed = time.time() - t_start
         try:
             sz = format_bytes(out_path.stat().st_size)
         except OSError:
             sz = "?"
         console.print(Rule("[bold green]Resultado", style="green"))
         console.print(f"[bold green]✓[/bold green] Imagem: [cyan]{out_path.resolve()}[/cyan] [dim]({sz})[/dim]")
-        console.print(f"[dim]Tempo de inferência + gravação: {elapsed:.1f}s[/dim]")
+        console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
     except ImportError as e:
         console.print(f"\n[bold red]✗[/bold red] {e}")
         sys.exit(1)
