@@ -27,6 +27,12 @@ dependencies = [
     "optimum-quanto>=0.2.0",
     "bitsandbytes>=0.45.0",
     "torchao>=0.10.0; sys_platform != 'darwin'",
+    "omegaconf>=2.3.0",      # Necessário para X-Part HF Space
+    "einops>=0.8.0",         # Necessário para partformer_dit.py
+    "scikit-image>=0.24.0",  # Necessário para surface_extractors (skimage.measure)
+    "addict>=2.4.0",         # Necessário para sonata/model.py
+    "spconv-cu121>=2.3.0",   # Necessário para sonata (sparse convolution)
+    "sdnq>=0.1.0",           # Quantização moderna SDNQ
     "gamedev-shared @ file:../Shared",
 ]
 classifiers = [

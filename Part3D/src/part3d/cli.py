@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 from pathlib import Path
@@ -62,10 +61,10 @@ def main() -> None:
 @click.option(
     "--quantization",
     "-q",
-    type=click.Choice(["auto", "none", "int8", "int4", "torchao-int8", "torchao-int4"], case_sensitive=False),
+    type=click.Choice(["auto", "none", "int8", "int4"], case_sensitive=False),
     default=_d.DEFAULT_QUANTIZATION_MODE,
     show_default=True,
-    help="Modo de quantização para DiT: auto (detecta VRAM), int8/int4 (bitsandbytes), torchao-*.",
+    help="Modo de quantização: auto (detecta VRAM), int8/int4 (bitsandbytes).",
 )
 @click.option(
     "--no-quantize-dit",
@@ -76,7 +75,7 @@ def main() -> None:
     "--torch-compile/--no-torch-compile",
     default=_d.DEFAULT_TORCH_COMPILE,
     show_default=True,
-    help="Compilar DiT com torch.compile para speedup.",
+    help="Compilar DiT com torch.compile.",
 )
 @click.option(
     "--no-attention-slicing",
@@ -84,14 +83,9 @@ def main() -> None:
     help="Desactivar attention slicing.",
 )
 @click.option(
-    "--low-vram-mode",
-    is_flag=True,
-    help="Ativa todas as otimizações para GPUs com <6GB VRAM (int4, compile, slicing).",
-)
-@click.option(
     "--profile",
     is_flag=True,
-    help="Medir tempos, CPU, RAM e VRAM (JSONL opcional: GAMEDEV_PROFILE_LOG).",
+    help="Medir tempos, CPU, RAM e VRAM.",
 )
 def decompose(
     mesh_path: str,
@@ -110,7 +104,6 @@ def decompose(
     no_quantize_dit: bool,
     torch_compile: bool,
     no_attention_slicing: bool,
-    low_vram_mode: bool,
     profile: bool,
 ) -> None:
     """Decompõe uma mesh 3D em partes semânticas.
@@ -123,28 +116,9 @@ def decompose(
     from gamedev_shared.quantization import (
         format_quantization_info,
         get_quantization_config,
-        suggest_environment_variables,
     )
 
-    # Aplicar low-vram-mode se solicitado
-    if low_vram_mode:
-        quantization = "int4"
-        torch_compile = True
-        no_attention_slicing = False
-        no_cpu_offload = False
-
-    # Configurar variáveis de ambiente para otimização de memória
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-            env_vars = suggest_environment_variables(vram_gb)
-            for key, value in env_vars.items():
-                if key not in os.environ:
-                    os.environ[key] = value
-    except Exception:
-        pass
+    ensure_pytorch_cuda_alloc_conf()
 
     ensure_pytorch_cuda_alloc_conf()
 
@@ -228,8 +202,9 @@ def decompose(
             out["num_chunks"] = num_chunks
         return out
 
-    with ProfilerSession("part3d", log_path=prof_log, cli_profile=profile):
-        with Part3DPipeline(
+    with (
+        ProfilerSession("part3d", log_path=prof_log, cli_profile=profile),
+        Part3DPipeline(
             device=device,
             cpu_offload=not no_cpu_offload,
             verbose=verbose,
@@ -238,11 +213,30 @@ def decompose(
             quantize_dit=not no_quantize_dit,
             enable_torch_compile=torch_compile,
             enable_attention_slicing=not no_attention_slicing,
-        ) as pipe:
-            if segment_only:
-                mesh = trimesh.load(mesh_path, force="mesh", process=False)
-                _aabb, face_ids, clean_mesh = pipe.segment(mesh, seed=seed)
+        ) as pipe,
+    ):
+        if segment_only:
+            mesh = trimesh.load(mesh_path, force="mesh", process=False)
+            _aabb, face_ids, clean_mesh = pipe.segment(mesh, seed=seed)
 
+            color_map = {}
+            for uid in np.unique(face_ids):
+                if uid < 0:
+                    continue
+                color_map[uid] = np.random.randint(0, 255, size=3)
+
+            face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
+            clean_mesh.visual.face_colors = face_colors
+            clean_mesh.export(output_segmented)
+            console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
+
+        else:
+            parts_scene, face_ids, clean_mesh = pipe(mesh_path, seed=seed, **_gen_kwargs())
+
+            # Verificar se a cena tem conteúdo antes de exportar
+            if not parts_scene.geometry:
+                console.print("[yellow]⚠ Aviso: Nenhuma parte detectada. A usar modo segment_only como fallback.[/]")
+                # Fallback: gerar apenas mesh segmentada sem GLB multi-parte
                 color_map = {}
                 for uid in np.unique(face_ids):
                     if uid < 0:
@@ -254,43 +248,25 @@ def decompose(
                 clean_mesh.export(output_segmented)
                 console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
 
+                # Criar GLB vazio de partes (placeholder) para não quebrar pipeline
+                placeholder = trimesh.Scene()
+                placeholder.export(output_path)
+                console.print(f"[dim]Partes (placeholder vazio):[/] {output_path}")
             else:
-                parts_scene, face_ids, clean_mesh = pipe(mesh_path, seed=seed, **_gen_kwargs())
+                parts_scene.export(output_path)
+                console.print(f"[green]Partes gravadas em:[/] {output_path}")
 
-                # Verificar se a cena tem conteúdo antes de exportar
-                if not parts_scene.geometry:
-                    console.print("[yellow]⚠ Aviso: Nenhuma parte detectada. A usar modo segment_only como fallback.[/]")
-                    # Fallback: gerar apenas mesh segmentada sem GLB multi-parte
-                    color_map = {}
-                    for uid in np.unique(face_ids):
-                        if uid < 0:
-                            continue
-                        color_map[uid] = np.random.randint(0, 255, size=3)
+                # Gravar segmentação também
+                color_map = {}
+                for uid in np.unique(face_ids):
+                    if uid < 0:
+                        continue
+                    color_map[uid] = np.random.randint(0, 255, size=3)
 
-                    face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
-                    clean_mesh.visual.face_colors = face_colors
-                    clean_mesh.export(output_segmented)
-                    console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
-
-                    # Criar GLB vazio de partes (placeholder) para não quebrar pipeline
-                    placeholder = trimesh.Scene()
-                    placeholder.export(output_path)
-                    console.print(f"[dim]Partes (placeholder vazio):[/] {output_path}")
-                else:
-                    parts_scene.export(output_path)
-                    console.print(f"[green]Partes gravadas em:[/] {output_path}")
-
-                    # Gravar segmentação também
-                    color_map = {}
-                    for uid in np.unique(face_ids):
-                        if uid < 0:
-                            continue
-                        color_map[uid] = np.random.randint(0, 255, size=3)
-
-                    face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
-                    clean_mesh.visual.face_colors = face_colors
-                    clean_mesh.export(output_segmented)
-                    console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
+                face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
+                clean_mesh.visual.face_colors = face_colors
+                clean_mesh.export(output_segmented)
+                console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
 
     elapsed = time.time() - t_start
     console.print(f"\n[bold green]Concluído em {elapsed:.1f}s[/]")

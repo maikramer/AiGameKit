@@ -25,13 +25,13 @@ import torch
 import trimesh
 from tqdm import tqdm
 
+from gamedev_shared.profiler import profile_span
+
 from . import defaults as _d
 from .utils.autotune import autotune_generate, autotune_segment, get_max_parts_for_vram, get_vram_gb
 from .utils.dit_quantization import load_dit_quantized, want_quantized_dit
 from .utils.flash_attn_shim import install_shim as _install_flash_shim
 from .utils.memory import clear_cuda_memory, format_bytes
-
-from gamedev_shared.profiler import profile_span
 
 # Injetar shim de flash_attn ANTES de qualquer import do XPart/Sonata
 _install_flash_shim()
@@ -239,10 +239,23 @@ class Part3DPipeline:
             try:
                 from gamedev_shared.quantization import apply_torchao_quantization
 
-                self._model = apply_torchao_quantization(self._model, mode=self.quantization_mode.replace("torchao-", "") + "_weight_only")
+                self._model = apply_torchao_quantization(
+                    self._model, mode=self.quantization_mode.replace("torchao-", "") + "_weight_only"
+                )
                 self._log("  DiT quantizado com torchao")
             except Exception as e:
                 self._log(f"  AVISO: torchao quantização falhou ({e})")
+
+        # Aplicar quantização via SDNQ se solicitado
+        if self.quantize_dit and self.quantization_mode.startswith("sdnq"):
+            self._log(f"A aplicar quantização SDNQ ({self.quantization_mode}) ao DiT...")
+            try:
+                from gamedev_shared.sdnq import quantize_model
+
+                self._model = quantize_model(self._model, preset=self.quantization_mode)
+                self._log("  DiT quantizado com SDNQ")
+            except Exception as e:
+                self._log(f"  AVISO: SDNQ quantização falhou ({e})")
 
         # Aplicar torch.compile se solicitado
         if self.enable_torch_compile:
