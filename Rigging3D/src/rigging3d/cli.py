@@ -10,9 +10,10 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+from gamedev_shared.profiler.session import ProfilerSession
 from rich.console import Console
 
-from . import __version__
+from . import __version__  # noqa: F401 — used by @click.version_option
 from .cli_rich import click  # noqa: F401 — rich-click antes dos comandos
 
 console = Console()
@@ -103,6 +104,7 @@ def _make_env(
     extra: dict[str, str] | None = None,
     *,
     python_bin: str | None = None,
+    propagate_profile: bool = False,
 ) -> dict[str, str]:
     merged = {**os.environ, **(extra or {})}
     root_s = str(root)
@@ -117,6 +119,8 @@ def _make_env(
         merged.setdefault("PYOPENGL_PLATFORM", "egl")
         merged.setdefault("__NV_PRIME_RENDER_OFFLOAD", "1")
         merged.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
+    if propagate_profile:
+        merged["GAMEDEV_PROFILE"] = "1"
     return merged
 
 
@@ -126,8 +130,11 @@ def _run(
     root: Path,
     env: dict[str, str] | None = None,
     python_bin: str | None = None,
+    propagate_profile: bool = False,
 ) -> int:
-    return subprocess.run(cmd, cwd=str(root), env=_make_env(root, env, python_bin=python_bin)).returncode
+    return subprocess.run(
+        cmd, cwd=str(root), env=_make_env(root, env, python_bin=python_bin, propagate_profile=propagate_profile)
+    ).returncode
 
 
 def _run_bash(
@@ -136,6 +143,7 @@ def _run_bash(
     args: Sequence[str],
     *,
     python_bin: str | None = None,
+    propagate_profile: bool = False,
 ) -> int:
     bash = _find_bash()
     if not bash:
@@ -143,7 +151,7 @@ def _run_bash(
     full = root / script
     if not full.is_file():
         raise FileNotFoundError(f"Script em falta: {full}")
-    return _run([bash, _shell_path(full), *args], root=root, python_bin=python_bin)
+    return _run([bash, _shell_path(full), *args], root=root, python_bin=python_bin, propagate_profile=propagate_profile)
 
 
 def _run_module(
@@ -178,10 +186,19 @@ def _run_module(
     envvar="RIGGING3D_PYTHON",
     help="Interpretador Python (conda/venv).",
 )
+@click.option(
+    "--profiler",
+    "profiler_flag",
+    is_flag=True,
+    help="Gravar métricas de performance (perf DB).",
+)
 @click.pass_context
-def cli(ctx: click.Context, root: Path | None, python_cmd: str | None) -> None:
+def cli(ctx: click.Context, root: Path | None, python_cmd: str | None, profiler_flag: bool) -> None:
     """Rigging3D — auto-rigging 3D (skeleton, skinning, merge)."""
     ctx.ensure_object(dict)
+    ctx.obj["PROFILER"] = profiler_flag
+    if profiler_flag:
+        os.environ["GAMEDEV_PROFILE"] = "1"
 
 
 def _ctx_root_py(ctx: click.Context) -> tuple[Path, str]:
@@ -191,6 +208,13 @@ def _ctx_root_py(ctx: click.Context) -> tuple[Path, str]:
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
     return root, _resolve_python(p.get("python_cmd"))
+
+
+def _ctx_profiler(ctx: click.Context) -> bool:
+    parent = ctx.parent
+    if parent is None:
+        return False
+    return bool(parent.obj.get("PROFILER"))
 
 
 # --- skeleton ---
@@ -385,6 +409,7 @@ def pipeline_cmd(
     """Encadeia skeleton → skin → merge até um GLB rigado."""
     root, py = _ctx_root_py(ctx)
     _require_bash()
+    do_profile = _ctx_profiler(ctx)
 
     cleanup: Path | None = None
     if work_dir is None:
@@ -394,67 +419,74 @@ def pipeline_cmd(
         wd = work_dir
         wd.mkdir(parents=True, exist_ok=True)
 
-    actual_mesh = mesh
-    if not no_prep:
-        prepped = wd / "_prepped.glb"
-        console.print("[dim]Preparando mesh (remesh + repair)...[/dim]")
-        if _prep_mesh_for_rigging(mesh, prepped, py):
-            actual_mesh = prepped
-        else:
-            console.print("[yellow]Prep falhou; a usar mesh original.[/yellow]")
+    with ProfilerSession(
+        "rigging3d",
+        cli_profile=do_profile,
+        params={"seed": seed, "smooth_iterations": smooth_iterations, "groups_per_vertex": groups_per_vertex},
+    ):
+        actual_mesh = mesh
+        if not no_prep:
+            prepped = wd / "_prepped.glb"
+            console.print("[dim]Preparando mesh (remesh + repair)...[/dim]")
+            if _prep_mesh_for_rigging(mesh, prepped, py):
+                actual_mesh = prepped
+            else:
+                console.print("[yellow]Prep falhou; a usar mesh original.[/yellow]")
 
-    skel = wd / "_skeleton.glb"
-    skin = wd / "_skin.glb"
-    try:
-        rc = _run_bash(
-            root,
-            "launch/inference/generate_skeleton.sh",
-            ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel), "--seed", str(seed)],
-            python_bin=py,
-        )
-        if rc != 0 or not skel.is_file() or skel.stat().st_size == 0:
-            raise click.ClickException(
-                f"skeleton falhou (código {rc} ou GLB em falta). Confirma deps inferência, pesos HF e logs acima."
+        skel = wd / "_skeleton.glb"
+        skin = wd / "_skin.glb"
+        try:
+            rc = _run_bash(
+                root,
+                "launch/inference/generate_skeleton.sh",
+                ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel), "--seed", str(seed)],
+                python_bin=py,
+                propagate_profile=do_profile,
             )
+            if rc != 0 or not skel.is_file() or skel.stat().st_size == 0:
+                raise click.ClickException(
+                    f"skeleton falhou (código {rc} ou GLB em falta). Confirma deps inferência, pesos HF e logs acima."
+                )
 
-        rc = _run_bash(
-            root,
-            "launch/inference/generate_skin.sh",
-            ["--input", _shell_path(skel), "--output", _shell_path(skin), "--seed", str(seed)],
-            python_bin=py,
-        )
-        if rc != 0 or not skin.is_file() or skin.stat().st_size == 0:
-            raise click.ClickException(
-                f"skin falhou (código {rc} ou GLB em falta). Confirma spconv, VRAM e logs acima."
+            rc = _run_bash(
+                root,
+                "launch/inference/generate_skin.sh",
+                ["--input", _shell_path(skel), "--output", _shell_path(skin), "--seed", str(seed)],
+                python_bin=py,
+                propagate_profile=do_profile,
             )
+            if rc != 0 or not skin.is_file() or skin.stat().st_size == 0:
+                raise click.ClickException(
+                    f"skin falhou (código {rc} ou GLB em falta). Confirma spconv, VRAM e logs acima."
+                )
 
-        merge_env = {
-            "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
-            "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
-        }
-        rc = _run_module(
-            root,
-            py,
-            "src.inference.merge",
-            [
-                "--require_suffix=obj,fbx,FBX,dae,glb,gltf,vrm",
-                "--num_runs=1",
-                "--id=0",
-                f"--source={_shell_path(skin)}",
-                f"--target={_shell_path(mesh)}",
-                f"--output={_shell_path(out)}",
-            ],
-            env=merge_env,
-        )
-        if not out.is_file() or out.stat().st_size == 0:
-            raise click.ClickException(
-                f"merge falhou (código {rc} ou GLB vazio). Confirma bpy/open3d e caminhos acima."
+            merge_env = {
+                "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
+                "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
+            }
+            rc = _run_module(
+                root,
+                py,
+                "src.inference.merge",
+                [
+                    "--require_suffix=obj,fbx,FBX,dae,glb,gltf,vrm",
+                    "--num_runs=1",
+                    "--id=0",
+                    f"--source={_shell_path(skin)}",
+                    f"--target={_shell_path(mesh)}",
+                    f"--output={_shell_path(out)}",
+                ],
+                env=merge_env,
             )
-        if rc != 0:
-            console.print(f"[yellow]merge rc={rc}, output={out.stat().st_size}B- prosseguindo.[/yellow]")
-    finally:
-        if cleanup is not None and not keep_temp:
-            shutil.rmtree(cleanup, ignore_errors=True)
+            if not out.is_file() or out.stat().st_size == 0:
+                raise click.ClickException(
+                    f"merge falhou (código {rc} ou GLB vazio). Confirma bpy/open3d e caminhos acima."
+                )
+            if rc != 0:
+                console.print(f"[yellow]merge rc={rc}, output={out.stat().st_size}B- prosseguindo.[/yellow]")
+        finally:
+            if cleanup is not None and not keep_temp:
+                shutil.rmtree(cleanup, ignore_errors=True)
 
     console.print(f"[green]Pipeline concluído:[/green] {out}")
 
