@@ -1,5 +1,0 @@
-id,idea,kind,generate_3d,generate_audio,generate_rig,generate_parts,image_source,part3d_steps,part3d_octree_resolution,part3d_segment_only
-boa_mesa/tigela_ceramica,"tigela de cerâmica artesanal com padrão floral mediterrânico, esmalte brilhante turquesa e coral saturado, reflexos especulares suaves, objeto de mesa isolado, vista tres-quartos",prop,true,false,false,true,,50,256,true
-personagens/guardiao_floresta,"guardião humanoide elegante, túnica verde esmeralda com bordados dourados, pele realista estilizada, proporções heroicas, corpo inteiro em pose neutra de pé adequada a auto-rigging, fundo cinza neutro",character,true,false,true,false,,50,256,true
-personagens/gnomo_ferreiro,"gnomo ferreiro estilizado, avental de couro com rebites cobre e vermelho, martelo grande na mão, barba ruiva, botas grossas, paleta saturada estilo jogo casual AA, T-pose relaxada",character,true,false,true,true,,50,256,true
-mercado/toldo_listrado,"estrutura de toldo de mercado portátil, tecido listrado vermelho-creme e cortinas amarelas, madeira envernizada escura, ferragens latão polido, objeto de cenário isolado",environment,true,false,false,true,,50,256,true

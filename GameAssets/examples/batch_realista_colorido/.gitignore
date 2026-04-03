@@ -1,9 +1,0 @@
-# Saídas do batch (não versionar)
-images/
-meshes/
-audio/
-.gameassets_batch.lock
-batch_run.jsonl
-batch_console.log
-gameassets_profile.jsonl
-*_profile.jsonl
