@@ -2,7 +2,7 @@
 """
 Text3D - CLI Principal
 
-Text-to-3D: Text2D (texto → imagem) + Hunyuan3D-2mini (imagem → mesh).
+Text-to-3D: Text2D (texto → imagem) + Hunyuan3D-2.1 SDNQ INT4 (imagem → mesh).
 """
 
 import math
@@ -70,7 +70,7 @@ def ensure_dirs():
 @click.pass_context
 def cli(ctx, verbose):
     """
-    Text3D — mesh 3D a partir de texto (só geometria: Text2D → Hunyuan3D-2mini → repair → remesh).
+    Text3D — mesh 3D a partir de texto (só geometria: Text2D → Hunyuan3D-2.1 SDNQ INT4 → repair → remesh).
 
     Textura e PBR: usa o CLI **paint3d** ou um batch **gameassets** com perfil text3d.texture.
 
@@ -287,7 +287,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--model-subfolder",
     default=_defaults.DEFAULT_SUBFOLDER,
     show_default=True,
-    help="Subpasta do modelo Hunyuan3D shape (ex.: hunyuan3d-dit-v2-mini-turbo).",
+    help="Subpasta do modelo Hunyuan3D shape (ex.: hunyuan3d-dit-v2-1).",
+)
+@click.option(
+    "--sdnq-preset",
+    default=HunyuanTextTo3DGenerator.DEFAULT_SDNQ_PRESET,
+    show_default=True,
+    type=click.Choice(["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-fp8", "none"]),
+    help="Preset SDNQ para quantização do DiT (none = sem quantização, mais VRAM).",
 )
 @click.option(
     "-v",
@@ -361,6 +368,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "flat cutouts) e regenera com seed aleatória se falhar. 1 = sem retry."
     ),
 )
+@click.option(
+    "--profile",
+    "prof_profile",
+    is_flag=True,
+    help="Medir tempos, CPU, RAM e VRAM (JSONL: GAMEDEV_PROFILE_LOG; SQLite automático).",
+)
 @click.pass_context
 def generate(
     ctx,
@@ -394,13 +407,18 @@ def generate(
     allow_shared_gpu,
     gpu_kill_others,
     model_subfolder,
+    sdnq_preset,
     export_origin,
     export_rotation_x_deg,
     save_reference_image,
     no_prompt_optimize,
     max_retries,
+    prof_profile,
 ):
     """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
+    from gamedev_shared.profiler import ProfilerSession
+    from gamedev_shared.profiler.env import env_profile_log_path
+
     verbose = bool(ctx.obj.get("VERBOSE")) or generate_verbose
 
     if preset is not None:
@@ -478,166 +496,190 @@ def generate(
 
     console.print(Panel(info_table, title="[bold green]Configuração", border_style="green"))
 
+    prof_log_p = env_profile_log_path()
+    prof_log = Path(prof_log_p) if prof_log_p else None
+    prof_params = {
+        "preset": preset,
+        "steps": steps,
+        "guidance": guidance,
+        "octree_resolution": octree_resolution,
+        "num_chunks": num_chunks,
+        "mesh_smooth": mesh_smooth,
+        "remesh": remesh,
+        "remesh_resolution": remesh_resolution,
+        "model_subfolder": model_subfolder,
+        "from_image": bool(from_image),
+    }
+
     try:
-        if export_rotation_x_deg is not None:
-            _defaults.set_export_rotation_x_rad_override(math.radians(float(export_rotation_x_deg)))
-        try:
-            with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
-                generator = HunyuanTextTo3DGenerator(
-                    device="cpu" if cpu else None,
-                    low_vram_mode=low_vram,
-                    verbose=verbose,
-                    hunyuan_subfolder=model_subfolder,
-                )
-
-            if output is None:
-                ensure_dirs()
-                timestamp = int(time.time())
-                if from_image:
-                    stem = Path(from_image).stem[:30]
-                    safe = "".join(c if c.isalnum() else "_" for c in stem)
-                else:
-                    safe = "".join(c if c.isalnum() else "_" for c in prompt[:30])
-                output = DEFAULT_MESH_DIR / f"{safe}_{timestamp}.{output_format}"
-            else:
-                output = Path(output)
-
-            start_time = time.time()
-
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-            ) as progress:
-                if from_image:
-                    if max_retries > 1:
-                        task = progress.add_task(
-                            f"[cyan]Hunyuan3D imagem → mesh (até {max_retries} tentativas)...",
-                            total=None,
-                        )
-
-                        def _on_retry_img(attempt, new_seed, quality):
-                            issues = ", ".join(quality.get("issues", []))
-                            console.print(f"[yellow]Tentativa {attempt} falhou: {issues}. Retry...[/yellow]")
-
-                        result = generator.generate_from_image_with_quality_check(
-                            from_image,
-                            max_retries=max_retries,
-                            hy_seed=seed,
-                            on_retry=_on_retry_img,
-                            num_inference_steps=steps,
-                            guidance_scale=guidance,
-                            octree_resolution=octree_resolution,
-                            num_chunks=num_chunks,
-                            mc_level=mc_level,
-                        )
-                    else:
-                        task = progress.add_task("[cyan]Hunyuan3D (imagem → mesh)...", total=None)
-                        result = generator.generate_from_image(
-                            from_image,
-                            num_inference_steps=steps,
-                            guidance_scale=guidance,
-                            octree_resolution=octree_resolution,
-                            num_chunks=num_chunks,
-                            hy_seed=seed,
-                            mc_level=mc_level,
-                        )
-                else:
-                    _gen_kwargs = dict(
-                        t2d_width=image_width,
-                        t2d_height=image_height,
-                        t2d_steps=t2d_steps,
-                        t2d_guidance=t2d_guidance,
-                        text2d_model_id=text2d_model_id,
-                        num_inference_steps=steps,
-                        guidance_scale=guidance,
-                        octree_resolution=octree_resolution,
-                        num_chunks=num_chunks,
-                        hy_seed=seed,
-                        mc_level=mc_level,
-                        t2d_full_gpu=t2d_full_gpu,
-                        optimize_prompt=not no_prompt_optimize,
+        with ProfilerSession(
+            "text3d",
+            log_path=prof_log,
+            cli_profile=prof_profile,
+            model_id=model_subfolder,
+            params=prof_params,
+        ) as _prof:
+            if export_rotation_x_deg is not None:
+                _defaults.set_export_rotation_x_rad_override(math.radians(float(export_rotation_x_deg)))
+            try:
+                with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
+                    generator = HunyuanTextTo3DGenerator(
+                        device="cpu" if cpu else None,
+                        low_vram_mode=low_vram,
+                        verbose=verbose,
+                        hunyuan_subfolder=model_subfolder,
+                        sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
                     )
 
-                    if max_retries > 1:
-                        task = progress.add_task(
-                            f"[cyan]Text2D → Hunyuan3D (até {max_retries} tentativas)...",
-                            total=None,
-                        )
+                if output is None:
+                    ensure_dirs()
+                    timestamp = int(time.time())
+                    if from_image:
+                        stem = Path(from_image).stem[:30]
+                        safe = "".join(c if c.isalnum() else "_" for c in stem)
+                    else:
+                        safe = "".join(c if c.isalnum() else "_" for c in prompt[:30])
+                    output = DEFAULT_MESH_DIR / f"{safe}_{timestamp}.{output_format}"
+                else:
+                    output = Path(output)
 
-                        def _on_retry(attempt, new_seed, quality):
-                            issues = ", ".join(quality.get("issues", []))
-                            console.print(
-                                f"[yellow]  Tentativa {attempt} falhou: {issues}. Retry com seed {new_seed}...[/yellow]"
+                start_time = time.time()
+
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                ) as progress:
+                    if from_image:
+                        if max_retries > 1:
+                            task = progress.add_task(
+                                f"[cyan]Hunyuan3D imagem → mesh (até {max_retries} tentativas)...",
+                                total=None,
                             )
 
-                        result, ref_img = generator.generate_with_quality_check(
-                            prompt=prompt,
-                            max_retries=max_retries,
-                            t2d_seed=seed,
-                            return_reference_image=True,
-                            on_retry=_on_retry,
-                            **_gen_kwargs,
-                        )
+                            def _on_retry_img(attempt, new_seed, quality):
+                                issues = ", ".join(quality.get("issues", []))
+                                console.print(f"[yellow]Tentativa {attempt} falhou: {issues}. Retry...[/yellow]")
+
+                            result = generator.generate_from_image_with_quality_check(
+                                from_image,
+                                max_retries=max_retries,
+                                hy_seed=seed,
+                                on_retry=_on_retry_img,
+                                num_inference_steps=steps,
+                                guidance_scale=guidance,
+                                octree_resolution=octree_resolution,
+                                num_chunks=num_chunks,
+                                mc_level=mc_level,
+                            )
+                        else:
+                            task = progress.add_task("[cyan]Hunyuan3D (imagem → mesh)...", total=None)
+                            result = generator.generate_from_image(
+                                from_image,
+                                num_inference_steps=steps,
+                                guidance_scale=guidance,
+                                octree_resolution=octree_resolution,
+                                num_chunks=num_chunks,
+                                hy_seed=seed,
+                                mc_level=mc_level,
+                            )
                     else:
-                        task = progress.add_task("[cyan]Text2D → Hunyuan3D...", total=None)
-                        result, ref_img = generator.generate(
-                            prompt=prompt,
-                            t2d_seed=seed,
-                            return_reference_image=True,
-                            **_gen_kwargs,
+                        _gen_kwargs = dict(
+                            t2d_width=image_width,
+                            t2d_height=image_height,
+                            t2d_steps=t2d_steps,
+                            t2d_guidance=t2d_guidance,
+                            text2d_model_id=text2d_model_id,
+                            num_inference_steps=steps,
+                            guidance_scale=guidance,
+                            octree_resolution=octree_resolution,
+                            num_chunks=num_chunks,
+                            hy_seed=seed,
+                            mc_level=mc_level,
+                            t2d_full_gpu=t2d_full_gpu,
+                            optimize_prompt=not no_prompt_optimize,
                         )
 
-                    if save_reference_image:
-                        out_png = output.parent / f"{output.stem}_text2d.png"
-                        out_png.parent.mkdir(parents=True, exist_ok=True)
-                        ref_img.save(str(out_png), format="PNG")
-                        console.print(f"[dim]Imagem Text2D (rede Hunyuan): [cyan]{out_png.resolve()}[/cyan][/dim]")
+                        if max_retries > 1:
+                            task = progress.add_task(
+                                f"[cyan]Text2D → Hunyuan3D (até {max_retries} tentativas)...",
+                                total=None,
+                            )
 
-                progress.update(task, description="[green]Concluído")
+                            def _on_retry(attempt, new_seed, quality):
+                                issues = ", ".join(quality.get("issues", []))
+                                console.print(
+                                    f"[yellow]  Tentativa {attempt} falhou: {issues}."
+                                    f" Retry com seed {new_seed}...[/yellow]"
+                                )
 
-            if save_reference_image and from_image:
-                import shutil
+                            result, ref_img = generator.generate_with_quality_check(
+                                prompt=prompt,
+                                max_retries=max_retries,
+                                t2d_seed=seed,
+                                return_reference_image=True,
+                                on_retry=_on_retry,
+                                **_gen_kwargs,
+                            )
+                        else:
+                            task = progress.add_task("[cyan]Text2D → Hunyuan3D...", total=None)
+                            result, ref_img = generator.generate(
+                                prompt=prompt,
+                                t2d_seed=seed,
+                                return_reference_image=True,
+                                **_gen_kwargs,
+                            )
 
-                src = Path(from_image)
-                out_copy = output.parent / f"{output.stem}_input{src.suffix.lower() or '.png'}"
-                out_copy.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(from_image, out_copy)
-                console.print(f"[dim]Imagem de entrada copiada: [cyan]{out_copy.resolve()}[/cyan][/dim]")
+                        if save_reference_image:
+                            out_png = output.parent / f"{output.stem}_text2d.png"
+                            out_png.parent.mkdir(parents=True, exist_ok=True)
+                            ref_img.save(str(out_png), format="PNG")
+                            console.print(f"[dim]Imagem Text2D (rede Hunyuan): [cyan]{out_png.resolve()}[/cyan][/dim]")
 
-            if not no_mesh_repair:
-                from .utils.mesh_repair import repair_mesh
+                    progress.update(task, description="[green]Concluído")
 
-                result = repair_mesh(
-                    result,
-                    keep_largest=True,
-                    merge_vertices=True,
-                    remove_ground_shadow=not no_ground_shadow_removal,
-                    ground_artifact_mesh_space="hunyuan",
-                    ground_shadow_aggressive=ground_shadow_aggressive and not ground_shadow_very_aggressive,
-                    ground_shadow_very_aggressive=ground_shadow_very_aggressive,
-                    smooth_iterations=max(0, mesh_smooth),
-                    remesh=remesh,
-                    remesh_resolution=remesh_resolution,
-                )
+                if save_reference_image and from_image:
+                    import shutil
 
-            from .utils.export import save_mesh
+                    src = Path(from_image)
+                    out_copy = output.parent / f"{output.stem}_input{src.suffix.lower() or '.png'}"
+                    out_copy.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(from_image, out_copy)
+                    console.print(f"[dim]Imagem de entrada copiada: [cyan]{out_copy.resolve()}[/cyan][/dim]")
 
-            mesh_path = save_mesh(result, output, format=output_format, origin_mode=export_origin)
-            mp = Path(mesh_path).resolve()
-            try:
-                sz = format_bytes(mp.stat().st_size)
-            except OSError:
-                sz = "?"
-            console.print(Rule("[bold green]Resultado", style="green"))
-            console.print(f"[bold green]✓[/bold green] Mesh: [cyan]{mp}[/cyan] [dim]({sz})[/dim]")
+                if not no_mesh_repair:
+                    from .utils.mesh_repair import repair_mesh
 
-            elapsed = time.time() - start_time
-            console.print(f"\n[dim]Tempo total: {elapsed:.1f}s[/dim]")
-            console.print("[bold green]Sucesso.[/bold green]")
+                    result = repair_mesh(
+                        result,
+                        keep_largest=True,
+                        merge_vertices=True,
+                        remove_ground_shadow=not no_ground_shadow_removal,
+                        ground_artifact_mesh_space="hunyuan",
+                        ground_shadow_aggressive=ground_shadow_aggressive and not ground_shadow_very_aggressive,
+                        ground_shadow_very_aggressive=ground_shadow_very_aggressive,
+                        smooth_iterations=max(0, mesh_smooth),
+                        remesh=remesh,
+                        remesh_resolution=remesh_resolution,
+                    )
 
-        finally:
-            _defaults.set_export_rotation_x_rad_override(None)
+                from .utils.export import save_mesh
+
+                mesh_path = save_mesh(result, output, format=output_format, origin_mode=export_origin)
+                mp = Path(mesh_path).resolve()
+                try:
+                    sz = format_bytes(mp.stat().st_size)
+                except OSError:
+                    sz = "?"
+                console.print(Rule("[bold green]Resultado", style="green"))
+                console.print(f"[bold green]✓[/bold green] Mesh: [cyan]{mp}[/cyan] [dim]({sz})[/dim]")
+
+                elapsed = time.time() - start_time
+                console.print(f"\n[dim]Tempo total: {elapsed:.1f}s[/dim]")
+                console.print("[bold green]Sucesso.[/bold green]")
+
+            finally:
+                _defaults.set_export_rotation_x_rad_override(None)
     except Exception as e:
         console.print(f"\n[bold red]✗ Erro:[/bold red] {e!s}")
         if verbose:
@@ -968,8 +1010,8 @@ def models():
         "Pacote text2d no monorepo",
     )
     table.add_row(
-        "Hunyuan3D-2mini",
-        "Image-to-3D (subpasta hunyuan3d-dit-v2-mini)",
+        "Hunyuan3D-2.1",
+        "Image-to-3D (subpasta hunyuan3d-dit-v2-1, SDNQ INT4)",
         "hy3dgen; licença Tencent Hunyuan Community",
     )
     table.add_row(

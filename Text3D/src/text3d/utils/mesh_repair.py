@@ -1661,7 +1661,7 @@ def repair_mesh(
     with contextlib.suppress(Exception):
         m = remove_plate_components(m)
 
-    # 7b. Keep best component
+    # 8b. Keep best component
     if keep_largest:
         m = keep_largest_component(m)
 

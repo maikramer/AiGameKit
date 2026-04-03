@@ -1,7 +1,9 @@
 """
-Text3D — Text-to-3D via Text2D (texto → imagem) e Hunyuan3D-2mini (imagem → mesh).
+Text3D — Text-to-3D via Text2D (texto → imagem) e Hunyuan3D-2.1 (imagem → mesh).
 
 Fluxo: KleinFluxGenerator → unload explícito → Hunyuan3DDiTFlowMatchingPipeline.
+O DiT v2.1 é quantizado com SDNQ int4 em runtime (post-load, em CPU) para caber em ~6GB VRAM.
+Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguos do SDNQ int4.
 """
 
 from __future__ import annotations
@@ -34,15 +36,18 @@ def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:
 
 class HunyuanTextTo3DGenerator:
     """
-    Gera mesh 3D a partir de texto: primeiro Text2D, depois Hunyuan3D-2mini (image-to-3D).
+    Gera mesh 3D a partir de texto: primeiro Text2D, depois Hunyuan3D-2.1 (image-to-3D).
 
-    Por defeito os parâmetros de shape seguem ``text3d.defaults`` (perfil ~6GB VRAM em CUDA).
+    Por defeito os parâmetros de shape seguem ``text3d.defaults`` (perfil ~6-8GB VRAM em CUDA).
+    O DiT v2.1 é quantizado com SDNQ int4 em runtime (post-load) para reduzir VRAM (~3 GB vs ~5.8 GB fp16).
+    Pre-quantização (save/load de state_dict) não funciona — tensores SVD são não-contíguos.
     Com ``low_vram_mode=True`` e CUDA, o Hunyuan corre em CPU (lento, último recurso).
     O modelo 2D é sempre descarregado antes de carregar o Hunyuan.
     """
 
-    DEFAULT_HF_ID = "tencent/Hunyuan3D-2mini"
-    DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-mini"
+    DEFAULT_HF_ID = "tencent/Hunyuan3D-2.1"
+    DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-1"
+    DEFAULT_SDNQ_PRESET = "sdnq-int4"
 
     def __init__(
         self,
@@ -52,12 +57,14 @@ class HunyuanTextTo3DGenerator:
         cache_dir: str | None = None,
         hunyuan_model_id: str = DEFAULT_HF_ID,
         hunyuan_subfolder: str = DEFAULT_SUBFOLDER,
+        sdnq_preset: str = DEFAULT_SDNQ_PRESET,
     ):
         self.verbose = verbose
         self.low_vram_mode = low_vram_mode
         self.cache_dir = cache_dir
         self.hunyuan_model_id = hunyuan_model_id
         self.hunyuan_subfolder = hunyuan_subfolder
+        self.sdnq_preset = sdnq_preset
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -93,19 +100,24 @@ class HunyuanTextTo3DGenerator:
         from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline
 
         hunyuan_device = self.device
+        wants_quant = bool(self.sdnq_preset) and hunyuan_device == "cuda"
+
         if self.low_vram_mode and self.device == "cuda":
             hunyuan_device = "cpu"
+            wants_quant = False
             self._log(
                 "low_vram: Hunyuan3D em CPU (evita OOM; muito mais lento). "
-                "Preferir low_vram=false com turbo em GPU (~6GB) ou fechar outras apps."
+                "Preferir low_vram=false com SDNQ + CPU offload em GPU (~6GB)."
             )
 
-        dtype = torch.float16 if hunyuan_device == "cuda" else torch.float32
+        load_device = "cpu"
+        load_dtype = torch.float16
+
         kwargs: dict = {
             "subfolder": self.hunyuan_subfolder,
-            "use_safetensors": True,
-            "device": hunyuan_device,
-            "dtype": dtype,
+            "use_safetensors": False,
+            "device": load_device,
+            "dtype": load_dtype,
         }
         if self.cache_dir:
             kwargs["cache_dir"] = self.cache_dir
@@ -113,6 +125,24 @@ class HunyuanTextTo3DGenerator:
         self._log(f"A carregar Hunyuan3DDiTFlowMatchingPipeline ({self.hunyuan_model_id})...")
         _clear_cuda_cache()
         pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(self.hunyuan_model_id, **kwargs)
+
+        if wants_quant:
+            self._log(f"A quantizar DiT com SDNQ preset={self.sdnq_preset} (post-load)...")
+            from gamedev_shared.sdnq import is_available as _sdnq_ok
+            from gamedev_shared.sdnq import quantize_model
+
+            if _sdnq_ok():
+                pipe.model = quantize_model(
+                    pipe.model,
+                    preset=self.sdnq_preset,
+                    quantization_device="cpu",
+                    return_device="cpu",
+                    use_quantized_matmul=False,
+                )
+                self._log(f"SDNQ {self.sdnq_preset} aplicado ao DiT (CPU).")
+            else:
+                wants_quant = False
+                self._log("SDNQ não disponível — a correr sem quantização (VRAM elevada).")
 
         if hunyuan_device == "cuda":
             _clear_cuda_cache()
@@ -144,7 +174,7 @@ class HunyuanTextTo3DGenerator:
         optimize_prompt: bool = True,
     ) -> trimesh.Trimesh | tuple[trimesh.Trimesh, Image.Image]:
         """
-        Text-to-3D: gera imagem com Text2D, descarrega Text2D, gera mesh com Hunyuan3D-2mini.
+        Text-to-3D: gera imagem com Text2D, descarrega Text2D, gera mesh com Hunyuan3D-2.1.
 
         Com ``return_reference_image=True`` devolve ``(mesh, imagem_pil)`` para Hunyuan3D-Paint.
         Com ``optimize_prompt=True`` melhora o prompt para evitar placas/sombras na base.
@@ -339,7 +369,7 @@ class HunyuanTextTo3DGenerator:
         if isinstance(image, (str, Path)):
             image = Image.open(image).convert("RGB")
 
-        self._log("Fase 2: Hunyuan3D-2mini (imagem → mesh)")
+        self._log("Fase 2: Hunyuan3D-2.1 (imagem → mesh)")
         pipe = self._load_hunyuan()
 
         pd = getattr(pipe, "device", self.device)

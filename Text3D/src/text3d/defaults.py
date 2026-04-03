@@ -84,8 +84,8 @@ DEFAULT_T2D_GUIDANCE = 1.0
 # Desliga com t2d_full_gpu=True (CLI --t2d-full-gpu) em GPUs grandes.
 DEFAULT_T2D_CPU_OFFLOAD = True
 
-# --- Hunyuan3D-2mini (shape) — mesmo perfil que o CLI usa por defeito ---
-DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-mini"
+# --- Hunyuan3D-2.1 (shape) — mesmo perfil que o CLI usa por defeito ---
+DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-1"
 
 DEFAULT_HY_STEPS = 24
 DEFAULT_HY_GUIDANCE = 5.0

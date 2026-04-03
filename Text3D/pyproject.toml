@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "text3d"
 version = "0.1.0"
-description = "Text-to-3D com Text2D + Hunyuan3D-2mini (pouca VRAM)"
+description = "Text-to-3D com Text2D + Hunyuan3D-2.1 SDNQ INT4"
 readme = "README.md"
 authors = [{ name = "Text3D Project" }]
 requires-python = ">=3.10"
@@ -28,6 +28,7 @@ dependencies = [
     "tqdm>=4.66.0",
     "pydantic>=2.0.0",
     "pymeshlab>=2023.12",
+    "sdnq>=0.1.0",
     "gamedev-shared @ file:../Shared",
     "text2d @ file:../Text2D",
     "hy3dgen @ git+https://github.com/Tencent-Hunyuan/Hunyuan3D-2.git",
