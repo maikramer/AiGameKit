@@ -41,25 +41,53 @@ def _look_at(camera, target: tuple[float, float, float]) -> None:
     camera.rotation_euler = rot_quat.to_euler()
 
 
-def _setup_render(resolution: int) -> None:
+def _setup_render(
+    resolution: int,
+    *,
+    engine: str = "workbench",
+    film_transparent: bool = True,
+    workbench_light: str = "STUDIO",
+) -> None:
     bpy = _bpy()
     scene = bpy.context.scene
-    scene.render.engine = "BLENDER_WORKBENCH"
-    scene.render.film_transparent = True
-    scene.display.shading.background_type = "VIEWPORT"
-    scene.display.shading.light = "STUDIO"
-    scene.display.shading.color_type = "MATERIAL"
+    eng = (engine or "workbench").lower().strip()
+    if eng == "eevee":
+        # Blender 5.x: EEVEE Next; 3.x/4.x: BLENDER_EEVEE
+        for candidate in ("BLENDER_EEVEE_NEXT", "BLENDER_EEVEE"):
+            try:
+                scene.render.engine = candidate
+                break
+            except (TypeError, ValueError):
+                continue
+        else:
+            scene.render.engine = "BLENDER_WORKBENCH"
+    else:
+        scene.render.engine = "BLENDER_WORKBENCH"
+    scene.render.film_transparent = film_transparent
     scene.render.resolution_x = resolution
     scene.render.resolution_y = resolution
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"
+    if scene.render.engine == "BLENDER_WORKBENCH":
+        scene.display.shading.background_type = "VIEWPORT"
+        scene.display.shading.light = workbench_light if workbench_light in ("FLAT", "STUDIO", "MATCAP") else "STUDIO"
+        scene.display.shading.color_type = "MATERIAL"
 
 
-def _add_camera(location: tuple[float, float, float], target: tuple[float, float, float]) -> Any:
+def _add_camera(
+    location: tuple[float, float, float],
+    target: tuple[float, float, float],
+    *,
+    ortho: bool = False,
+) -> Any:
     bpy = _bpy()
     bpy.ops.object.camera_add(location=location)
     camera = bpy.context.object
-    camera.data.angle = math.radians(40.0)
+    if ortho:
+        camera.data.type = "ORTHO"
+        camera.data.ortho_scale = 5.0
+    else:
+        camera.data.angle = math.radians(40.0)
     camera.data.clip_start = 0.01
     camera.data.clip_end = 100.0
     _look_at(camera, target)
@@ -91,6 +119,10 @@ def _auto_frame_camera(camera) -> None:
     direction = Vector(center) - cam_loc
     dist = direction.length
     if dist < 0.01:
+        return
+
+    if camera.data.type == "ORTHO":
+        camera.data.ortho_scale = max(float(extent) * 1.4, 0.25)
         return
 
     needed_dist = extent / (2 * math.tan(camera.data.angle / 2))
@@ -149,6 +181,9 @@ def render_screenshots(
     show_bones: bool = False,
     frame: int | None = None,
     frames: list[int] | None = None,
+    engine: str = "workbench",
+    ortho: bool = False,
+    film_transparent: bool = True,
 ) -> dict[str, Any]:
     """Importa GLB/FBX, renderiza vistas e devolve report JSON.
 
@@ -170,7 +205,7 @@ def render_screenshots(
         frame_indices = [None]
 
     _show_armature_wireframe(show_bones)
-    _setup_render(resolution)
+    _setup_render(resolution, engine=engine, film_transparent=film_transparent)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     views = views or DEFAULT_VIEWS
@@ -185,7 +220,7 @@ def render_screenshots(
             if preset is None:
                 continue
             loc, target = preset
-            camera = _add_camera(loc, target)
+            camera = _add_camera(loc, target, ortho=ortho)
             _auto_frame_camera(camera)
 
             if use_frame_list and fi is not None:
@@ -209,6 +244,9 @@ def render_screenshots(
         "show_bones": show_bones,
         "frame": frame,
         "frames": frames,
+        "engine": engine,
+        "ortho": ortho,
+        "film_transparent": film_transparent,
     }
 
     report_path = output_dir / "report.json"
@@ -224,6 +262,9 @@ def render_weight_heatmap(
     *,
     views: list[str] | None = None,
     resolution: int = 512,
+    engine: str = "workbench",
+    ortho: bool = False,
+    film_transparent: bool = True,
 ) -> dict[str, Any]:
     """Renderiza heatmap de pesos de um osso especifico."""
     from . import bpy_ops
@@ -259,7 +300,7 @@ def render_weight_heatmap(
 
         obj.data.update()
 
-    _setup_render(resolution)
+    _setup_render(resolution, engine=engine, film_transparent=film_transparent)
     bpy.context.scene.display.shading.color_type = "VERTEX"
     _show_armature_wireframe(True)
 
@@ -272,7 +313,7 @@ def render_weight_heatmap(
         if preset is None:
             continue
         loc, target = preset
-        camera = _add_camera(loc, target)
+        camera = _add_camera(loc, target, ortho=ortho)
         _auto_frame_camera(camera)
 
         out_path = output_dir / f"weights_{bone_name}_{view_name}.png"

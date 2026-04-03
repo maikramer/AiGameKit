@@ -760,6 +760,20 @@ def cmd_list_clips(input_path: Path) -> None:
     type=str,
     help="Varios frames separados por virgula (ex.: 1,36,72) — gera view_fNNNN.png por vista.",
 )
+@click.option(
+    "--engine",
+    type=click.Choice(["workbench", "eevee"]),
+    default="workbench",
+    show_default=True,
+    help="Motor de render: Workbench (rapido) ou EEVEE (materiais).",
+)
+@click.option("--ortho", is_flag=True, help="Camera ortografica (comparacoes de escala).")
+@click.option(
+    "--no-transparent-film",
+    "no_transparent_film",
+    is_flag=True,
+    help="Desactivar filme transparente (fundo opaco).",
+)
 def cmd_screenshot(
     input_path: Path,
     output_dir: Path | None,
@@ -768,6 +782,9 @@ def cmd_screenshot(
     show_bones: bool,
     frame: int | None,
     frame_list: str | None,
+    engine: str,
+    ortho: bool,
+    no_transparent_film: bool,
 ) -> None:
     """Gera screenshots multi-angulo de um modelo 3D (debug para agentes IA)."""
     _require_bpy()
@@ -788,6 +805,9 @@ def cmd_screenshot(
         show_bones=show_bones,
         frame=None if frames_parsed else frame,
         frames=frames_parsed,
+        engine=engine,
+        ortho=ortho,
+        film_transparent=not no_transparent_film,
     )
 
     sys.stdout.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
@@ -801,8 +821,29 @@ def cmd_screenshot(
     "--views", default=",".join(["front", "three_quarter", "right", "back"]), show_default=True, help="Vistas."
 )
 @click.option("--resolution", "-r", default=512, show_default=True, type=int, help="Resolucao em px.")
+@click.option(
+    "--engine",
+    type=click.Choice(["workbench", "eevee"]),
+    default="workbench",
+    show_default=True,
+    help="Motor de render (heatmap usa o mesmo motor).",
+)
+@click.option("--ortho", is_flag=True, help="Camera ortografica.")
+@click.option(
+    "--no-transparent-film",
+    "no_transparent_film",
+    is_flag=True,
+    help="Desactivar filme transparente.",
+)
 def cmd_inspect_rig(
-    input_path: Path, output_dir: Path | None, show_weights: str | None, views: str, resolution: int
+    input_path: Path,
+    output_dir: Path | None,
+    show_weights: str | None,
+    views: str,
+    resolution: int,
+    engine: str,
+    ortho: bool,
+    no_transparent_film: bool,
 ) -> None:
     """Inspeciona rig: screenshots com ossos visiveis e/ou heatmap de pesos (debug IA)."""
     _require_bpy()
@@ -812,12 +853,29 @@ def cmd_inspect_rig(
         output_dir = input_path.parent / f"{input_path.stem}_debug"
 
     view_list = [v.strip() for v in views.split(",") if v.strip()]
+    ft = not no_transparent_film
 
-    report = render_screenshots(input_path, output_dir, views=view_list, resolution=resolution, show_bones=True)
+    report = render_screenshots(
+        input_path,
+        output_dir,
+        views=view_list,
+        resolution=resolution,
+        show_bones=True,
+        engine=engine,
+        ortho=ortho,
+        film_transparent=ft,
+    )
 
     if show_weights:
         weight_report = render_weight_heatmap(
-            input_path, output_dir, show_weights, views=view_list, resolution=resolution
+            input_path,
+            output_dir,
+            show_weights,
+            views=view_list,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            film_transparent=ft,
         )
         report["weight_heatmap"] = weight_report.get("weight_heatmap")
 

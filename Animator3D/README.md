@@ -46,6 +46,8 @@ animator3d wave-idle rigged.glb animated.glb --bone mixamorig:Spine
 |---------|-------------|
 | `check` | Verifies `bpy` and prints Blender version |
 | `inspect` | Imports and lists armatures, bone sample, actions |
+| `screenshot` | Multi-view PNG renders (Workbench default; `--engine eevee`, `--ortho`, `--no-transparent-film`) |
+| `inspect-rig` | Rig views with bones visible; optional weight heatmap (`--show-weights`) |
 | `export` | Re-exports (import/export roundtrip test) |
 | `wave-idle` | Test animation (oscillation on one bone) and export |
 
