@@ -16,6 +16,10 @@ CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu j
   - `MATERIALIZE_BIN` — opcional; **mapas PBR a partir da difusa** com Texture2D + `texture2d.materialize` (ver [Materialize](../Materialize) e [Text3D/docs/PBR_MATERIALIZE.md](../Text3D/docs/PBR_MATERIALIZE.md))
   - `PART3D_BIN` — executável `part3d` ([Part3D](../Part3D)) com **`--with-parts`** e coluna **`generate_parts=true`** no CSV (decomposição semântica após o GLB do Text3D)
 
+## Debug / laboratório
+
+Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), não no `gameassets`.
+
 ## Instalação
 
 ### Oficial (monorepo)

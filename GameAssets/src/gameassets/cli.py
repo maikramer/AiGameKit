@@ -19,6 +19,8 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from gamedev_shared.profiler.session import ProfilerSession
+
 from . import __version__
 from .batch_guard import batch_directory_lock, query_gpu_free_mib, subprocess_gpu_env
 from .cli_rich import click
@@ -1263,7 +1265,24 @@ def batch_cmd(
         plog = profile_tools_log or (manifest_path.parent / "gameassets_profile.jsonl")
         child_env["GAMEDEV_PROFILE_LOG"] = str(plog.resolve())
 
-    with batch_directory_lock(manifest_path, skip=skip_batch_lock):
+    _batch_params = {
+        "rows": len(rows),
+        "with_3d": with_3d,
+        "with_rig": with_rig,
+        "with_parts": with_parts,
+        "skip_text2d": skip_text2d,
+        "skip_audio": skip_audio,
+        "dry_run": dry_run,
+    }
+
+    with (
+        ProfilerSession(
+            "gameassets",
+            cli_profile=profile_tools,
+            params=_batch_params,
+        ),
+        batch_directory_lock(manifest_path, skip=skip_batch_lock),
+    ):
         batch_tmp = Path(tempfile.mkdtemp(prefix="gameassets_"))
         try:
             with Progress(

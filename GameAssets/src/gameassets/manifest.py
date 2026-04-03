@@ -63,21 +63,23 @@ def _parse_int(value: str | None) -> int | None:
 
 
 def load_manifest(path: Path) -> list[ManifestRow]:
-    """Lê CSV: id, idea; opcionais kind, generate_3d, image_source, generate_audio, generate_rig, generate_parts, part3d_steps, part3d_octree_resolution, part3d_segment_only."""
+    """Lê CSV: id, idea; opcionais kind, generate_3d, image_source, generate_audio,
+    generate_rig, generate_parts, part3d_steps, part3d_octree_resolution,
+    part3d_segment_only."""
     rows: list[ManifestRow] = []
     import io
+
     with path.open("r", encoding="utf-8", newline="") as f:
         # Skip comment lines (starting with #) and blank lines before the header
         lines = []
         header_found = False
         for line in f:
             stripped = line.lstrip()
-            if not header_found:
-                if stripped.startswith('#') or not stripped:
-                    continue
+            if not header_found and (stripped.startswith("#") or not stripped):
+                continue
             header_found = True
             lines.append(line)
-        reader = csv.DictReader(io.StringIO(''.join(lines)))
+        reader = csv.DictReader(io.StringIO("".join(lines)))
         if not reader.fieldnames:
             raise ValueError("CSV vazio ou sem cabeçalhos")
         fields = {h.strip().lower(): h for h in reader.fieldnames if h}

@@ -38,7 +38,7 @@ class Text3DProfile:
     phased_batch: bool = False
     # GPU pura: Text2D inteiro na GPU; no paint3d activa --paint-full-gpu quando aplicável.
     full_gpu: bool = False
-    # Subpasta do modelo Hunyuan3D shape (ex.: hunyuan3d-dit-v2-mini-turbo para modo turbo)
+    # Subpasta do modelo Hunyuan3D shape (ex.: hunyuan3d-dit-v2-1)
     model_subfolder: str | None = None
     # --- Paint3D texture options (aplicáveis quando texture=true) ---
     # Número de vistas multiview para texturização (menos = mais rápido; padrão 4)
@@ -398,8 +398,20 @@ class GameProfile:
             # Paint3D otimizações de VRAM
             paint_quant = raw_t3.get("paint_quantization")
             paint_quant_s = str(paint_quant).strip().lower() if paint_quant not in (None, "") else None
-            if paint_quant_s and paint_quant_s not in ("auto", "none", "fp8", "int8", "int4", "quanto-int8", "quanto-int4"):
-                raise ValueError("text3d.paint_quantization deve ser: auto, none, fp8, int8, int4, quanto-int8, quanto-int4")
+            valid_quant_modes = (
+                "auto",
+                "none",
+                "fp8",
+                "int8",
+                "int4",
+                "quanto-int8",
+                "quanto-int4",
+                "sdnq-int8",
+                "sdnq-uint8",
+                "sdnq-int4",
+            )
+            if paint_quant_s and paint_quant_s not in valid_quant_modes:
+                raise ValueError(f"text3d.paint_quantization deve ser um de: {', '.join(valid_quant_modes)}")
             t3 = Text3DProfile(
                 preset=pr,
                 low_vram=bool(raw_t3.get("low_vram", False)),
@@ -457,8 +469,19 @@ class GameProfile:
             # Part3D otimizações de VRAM
             p3_quant = raw_p3.get("quantization")
             p3_quant_s = str(p3_quant).strip().lower() if p3_quant not in (None, "") else None
-            if p3_quant_s and p3_quant_s not in ("auto", "none", "int8", "int4", "torchao-int8", "torchao-int4"):
-                raise ValueError("part3d.quantization deve ser: auto, none, int8, int4, torchao-int8, torchao-int4")
+            valid_p3_quants = (
+                "auto",
+                "none",
+                "int8",
+                "int4",
+                "torchao-int8",
+                "torchao-int4",
+                "sdnq-int8",
+                "sdnq-uint8",
+                "sdnq-int4",
+            )
+            if p3_quant_s and p3_quant_s not in valid_p3_quants:
+                raise ValueError(f"part3d.quantization deve ser um de: {', '.join(valid_p3_quants)}")
             p3 = Part3DProfile(
                 octree_resolution=oc_i,
                 steps=st_i,
