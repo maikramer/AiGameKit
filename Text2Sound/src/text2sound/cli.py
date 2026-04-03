@@ -26,6 +26,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from gamedev_shared.hf import get_hf_token, hf_home_display_rich
+from gamedev_shared.profiler.session import ProfilerSession, profile_span
 
 from .audio_processor import SUPPORTED_FORMATS, save_audio
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
@@ -248,6 +249,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     is_flag=True,
     help="Logs detalhados",
 )
+@click.option(
+    "--profiler",
+    "profiler_flag",
+    is_flag=True,
+    help="Gravar métricas de performance (perf DB + JSONL)",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -267,6 +274,7 @@ def generate_cmd(
     model_id: str | None,
     half_precision: bool | None,
     verbose_flag: bool,
+    profiler_flag: bool,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -325,99 +333,116 @@ def generate_cmd(
         table.add_row("[bold]Preset[/bold]", preset)
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
-    try:
-        gen = AudioGenerator.get_instance(
-            model_id=resolved_model_id,
-            half_precision=half_precision,
-        )
-
-        if output is None:
-            ensure_dirs()
-            out_path = generate_output_path(prompt, DEFAULT_AUDIO_DIR, fmt)
-        else:
-            out_path = Path(output)
-
-        start = time.time()
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("[cyan]Carregando modelo...", total=None)
-            with _quiet_third_party_tqdm(verbose):
-                gen.load()
-            progress.update(task, description="[cyan]Gerando áudio...")
-
-            with _quiet_third_party_tqdm(verbose):
-                result = gen.generate(
-                    prompt=prompt,
-                    duration=duration,
-                    steps=steps,
-                    cfg_scale=cfg_scale,
-                    seed=effective_seed,
-                    sigma_min=sigma_min,
-                    sigma_max=sigma_max,
-                    sampler_type=sampler,
-                )
-
-            progress.update(task, description="[cyan]Processando e gravando...")
-
-            metadata = {
-                "prompt": prompt,
-                "profile": profile,
-                "model_id": resolved_model_id,
-                "duration": duration,
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "seed": seed,
-                "seed_effective": effective_seed,
-                "sampler": sampler,
-                "sigma_min": sigma_min,
-                "sigma_max": sigma_max,
-                "trim": trim,
-                "half_precision": half_precision,
-                "half_precision_effective": gen.half_precision,
-                "format": fmt,
-                "sample_rate": result.sample_rate,
-                "device": result.device,
-                "text2sound_version": _CLI_VERSION,
-            }
-            if preset and preset != "None":
-                metadata["preset"] = preset
-
-            saved = save_audio(
-                audio=result.audio,
-                sample_rate=result.sample_rate,
-                output_path=out_path,
-                fmt=fmt,
-                trim=trim,
-                metadata=metadata,
+    _prof_params = {
+        "profile": profile,
+        "duration": duration,
+        "steps": steps,
+        "cfg_scale": cfg_scale,
+        "sampler": sampler,
+        "sigma_min": sigma_min,
+        "sigma_max": sigma_max,
+        "trim": trim,
+    }
+    with ProfilerSession(
+        "text2sound",
+        cli_profile=profiler_flag,
+        model_id=resolved_model_id,
+        params=_prof_params,
+    ):
+        try:
+            gen = AudioGenerator.get_instance(
+                model_id=resolved_model_id,
+                half_precision=half_precision,
             )
 
-            progress.update(task, description="[green]Concluído")
+            if output is None:
+                ensure_dirs()
+                out_path = generate_output_path(prompt, DEFAULT_AUDIO_DIR, fmt)
+            else:
+                out_path = Path(output)
 
-        elapsed = time.time() - start
-        try:
-            sz = format_bytes(saved.stat().st_size)
-        except OSError:
-            sz = "?"
+            start = time.time()
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("[cyan]Carregando modelo...", total=None)
+                with profile_span("load"), _quiet_third_party_tqdm(verbose):
+                    gen.load()
+                progress.update(task, description="[cyan]Gerando áudio...")
 
-        console.print(Rule("[bold green]Resultado", style="green"))
-        console.print(f"[bold green]\u2713[/bold green] Áudio: [cyan]{saved.resolve()}[/cyan] [dim]({sz})[/dim]")
-        console.print(
-            f"[dim]Sample rate: {result.sample_rate} Hz · "
-            f"Duração: {format_duration(duration)} · "
-            f"Seed: {effective_seed}[/dim]"
-        )
-        console.print(f"[dim]Tempo: {elapsed:.1f}s[/dim]")
+                with profile_span("generate"), _quiet_third_party_tqdm(verbose):
+                    result = gen.generate(
+                        prompt=prompt,
+                        duration=duration,
+                        steps=steps,
+                        cfg_scale=cfg_scale,
+                        seed=effective_seed,
+                        sigma_min=sigma_min,
+                        sigma_max=sigma_max,
+                        sampler_type=sampler,
+                    )
 
-    except click.ClickException:
-        raise
-    except Exception as e:
-        console.print(f"\n[bold red]\u2717 Erro:[/bold red] {e}")
-        if verbose:
-            console.print_exception()
-        sys.exit(1)
+                progress.update(task, description="[cyan]Processando e gravando...")
+
+                metadata = {
+                    "prompt": prompt,
+                    "profile": profile,
+                    "model_id": resolved_model_id,
+                    "duration": duration,
+                    "steps": steps,
+                    "cfg_scale": cfg_scale,
+                    "seed": seed,
+                    "seed_effective": effective_seed,
+                    "sampler": sampler,
+                    "sigma_min": sigma_min,
+                    "sigma_max": sigma_max,
+                    "trim": trim,
+                    "half_precision": half_precision,
+                    "half_precision_effective": gen.half_precision,
+                    "format": fmt,
+                    "sample_rate": result.sample_rate,
+                    "device": result.device,
+                    "text2sound_version": _CLI_VERSION,
+                }
+                if preset and preset != "None":
+                    metadata["preset"] = preset
+
+                with profile_span("save"):
+                    saved = save_audio(
+                        audio=result.audio,
+                        sample_rate=result.sample_rate,
+                        output_path=out_path,
+                        fmt=fmt,
+                        trim=trim,
+                        metadata=metadata,
+                    )
+
+                progress.update(task, description="[green]Concluído")
+
+            elapsed = time.time() - start
+            try:
+                sz = format_bytes(saved.stat().st_size)
+            except OSError:
+                sz = "?"
+
+            console.print(Rule("[bold green]Resultado", style="green"))
+            console.print(f"[bold green]\u2713[/bold green] Áudio: [cyan]{saved.resolve()}[/cyan] [dim]({sz})[/dim]")
+            console.print(
+                f"[dim]Sample rate: {result.sample_rate} Hz · "
+                f"Duração: {format_duration(duration)} · "
+                f"Seed: {effective_seed}[/dim]"
+            )
+            console.print(f"[dim]Tempo: {elapsed:.1f}s[/dim]")
+
+        except click.ClickException:
+            raise
+        except Exception as e:
+            console.print(f"\n[bold red]\u2717 Erro:[/bold red] {e}")
+            if verbose:
+                console.print_exception()
+            sys.exit(1)
 
 
 @cli.command("batch")
