@@ -26,6 +26,7 @@ Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures an
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**UniRig**](https://github.com/VAST-AI-Research/UniRig) (skeleton + skinning + merge); CUDA GPU; Python **3.11**, **bpy** 5.0.x (Open3D). |
 | [**Animator3D**](Animator3D/) | **animator3d** — animation with **bpy** 5.1 (Blender 5.1); Python **3.13**; inspection, test keyframes, GLB/FBX export after rigging. |
 | [**Materialize**](Materialize/) | **PBR maps** CLI (Rust/wgpu): normal, AO, metallic, smoothness from a diffuse texture. |
+| [**GameDevLab**](GameDevLab/) | **Lab CLI**: debug 3D, quantization benches, profiling, pipeline optimization. |
 
 Each project has its own `README`, setup, requirements, and license. Portuguese: [`README_PT.md`](README_PT.md) (root) and per-package `README_PT.md` where provided.
 
@@ -44,6 +45,7 @@ GameDev/
   Text2Sound/        ← text2sound (pip) — depends on Shared; Stable Audio Open 1.0
   Rigging3D/         ← rigging3d (pip) — Shared; inference Py 3.11 + bpy 5.0.x
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.1 (animation)
+  GameDevLab/        ← gamedev-lab (pip) — depends on Shared; debug 3D, benches, profiling
   Materialize/       ← materialize-cli (cargo) — Python installer uses Shared
 ```
 
@@ -86,6 +88,7 @@ The monorepo includes a unified installer for every registered tool:
 ./install.sh paint3d                    # Paint3D (texturing + nvdiffrast)
 ./install.sh rigging3d                  # Rigging3D (bundled UniRig + PyTorch/CUDA via installer)
 ./install.sh animator3d                 # Animator3D (bpy / animation; no PyTorch)
+./install.sh gamedevlab                 # GameDevLab (debug 3D, benches, profiling)
 ./install.sh all                        # Install everything present
 
 # Windows PowerShell (recommended on Windows: script detects `python` and passes it to the installer)
@@ -101,6 +104,7 @@ The monorepo includes a unified installer for every registered tool:
 .\install.ps1 paint3d
 .\install.ps1 rigging3d
 .\install.ps1 animator3d
+.\install.ps1 gamedevlab
 .\install.ps1 all
 
 # Windows CMD (same: `install.bat` passes the interpreter to the installer)
@@ -169,6 +173,9 @@ cd ../Animator3D && python3.13 -m venv .venv && source .venv/bin/activate && pip
 
 # 12. Materialize (Rust — needs cargo)
 cd ../Materialize && ./install.sh
+
+# 13. GameDevLab (debug 3D, benches, profiling; no PyTorch required)
+cd ../GameDevLab && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && gamedev-lab --help
 ```
 
 Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md](docs/NEW_TOOLS.md) (registering new tools), [Shared/README.md](Shared/README.md), and each package README.
@@ -177,7 +184,7 @@ Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md]
 
 | Component | License | Note |
 |-----------|---------|------|
-| Monorepo code (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, Shared) | MIT | See `LICENSE` in each folder |
+| Monorepo code (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, Shared) | MIT | See `LICENSE` in each folder |
 | Materialize CLI (Rust) | MIT | [Materialize/LICENSE](Materialize/LICENSE) |
 | FLUX.2 Klein 4B (official, BF16) | Apache 2.0 | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — commercial use allowed per model card; more VRAM than SDNQ |
 | FLUX.2 Klein 4B SDNQ (Text2D default) | FLUX Non-Commercial (HF metadata) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declares `flux-non-commercial-license`; **not** the same as the official Apache 2.0 checkpoint. For commercial products prefer `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` or a BFL agreement |
@@ -202,6 +209,7 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `TEXTURE2D_BIN` | GameAssets | Path to `texture2d` |
 | `TEXT2SOUND_BIN` | GameAssets | Path to `text2sound` |
 | `MATERIALIZE_BIN` | GameAssets, Text3D | Path to `materialize` |
+| `GAMEDEVLAB_BIN` | GameAssets | Path to `gamedev-lab` |
 | `TEXT2D_MODEL_ID` | Text2D | HF model override for Text2D |
 | `TEXTURE2D_MODEL_ID` | Texture2D | HF model override for Texture2D |
 | `SKYMAP2D_MODEL_ID` | Skymap2D | HF model override for Skymap2D |
@@ -239,6 +247,7 @@ make fmt-check       # Check formatting without writing
 make test            # Pytest all packages + Cargo test
 make test-shared     # Pytest Shared only
 make test-text2d     # Pytest Text2D only
+make test-gamedevlab # Pytest GameDevLab only
 make typecheck       # MyPy on Shared/src
 make check           # lint + fmt-check + typecheck + test (full CI)
 make clean           # Remove __pycache__, caches, builds
