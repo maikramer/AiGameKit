@@ -16,18 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Run linting
-        run: |
-          uv pip install ruff pre-commit
-          uv run ruff check .
-          uv run ruff format --check .
-          uv run pre-commit run --all-files
+      - name: Install tools
+        run: pip install ruff pre-commit
+      - name: Ruff check
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Run pre-commit
+        run: pre-commit run --all-files
 
   test-python:
     name: pytest (${{ matrix.package }}, Python ${{ matrix.python-version }})
@@ -39,51 +38,64 @@ jobs:
           # Light packages — 3.10 + 3.12
           - package: Shared
             python-version: "3.10"
+            install_cmd: cd Shared && pip install -e '.[dev]'
           - package: Shared
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e '.[dev]'
           - package: GameAssets
             python-version: "3.10"
+            install_cmd: cd Shared && pip install -e . && cd ../GameAssets && pip install -e '.[dev]'
           - package: GameAssets
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../GameAssets && pip install -e '.[dev]'
           - package: Texture2D
             python-version: "3.10"
+            install_cmd: cd Shared && pip install -e . && cd ../Texture2D && pip install -e '.[dev]'
           - package: Texture2D
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../Texture2D && pip install -e '.[dev]'
           - package: Skymap2D
             python-version: "3.10"
+            install_cmd: cd Shared && pip install -e . && cd ../Skymap2D && pip install -e '.[dev]'
           - package: Skymap2D
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../Skymap2D && pip install -e '.[dev]'
           # Rigging3D — requires-python >=3.11,<3.12
           - package: Rigging3D
             python-version: "3.11"
+            install_cmd: cd Shared && pip install -e . && cd ../Rigging3D && pip install -e '.[dev]'
           # Torch on CPU (single Python to keep CI time reasonable)
           - package: Part3D
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../Part3D && pip install -e '.[dev]'
           - package: Text2Sound
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../Text2Sound && pip install -e '.[dev]'
           # Light packages — GameDevLab
           - package: GameDevLab
             python-version: "3.10"
+            install_cmd: cd Shared && pip install -e . && cd ../GameDevLab && pip install -e '.[dev]'
           - package: GameDevLab
             python-version: "3.12"
+            install_cmd: cd Shared && pip install -e . && cd ../GameDevLab && pip install -e '.[dev]'
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"
+            install_cmd: cd Shared && pip install -e . && cd ../Animator3D && pip install -e '.[dev]'
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install packages
-        run: |
-          uv pip install -e Shared/.[dev]
-          uv pip install -e ${{ matrix.package }}/.[dev]
+          cache: pip
+          cache-dependency-path: |
+            Shared/pyproject.toml
+            ${{ matrix.package }}/pyproject.toml
+      - name: Install package (Shared + target)
+        run: ${{ matrix.install_cmd }}
       - name: Run pytest
-        run: pytest -v --tb=short
         working-directory: ${{ matrix.package }}
+        run: pytest -v --tb=short
 
   test-rust:
     name: cargo (Materialize)
@@ -116,15 +128,17 @@ jobs:
             module: text3d
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install packages
-        run: |
-          uv pip install -e Shared/
-          uv pip install -e ${{ matrix.dir }}/
+          cache: pip
+          cache-dependency-path: |
+            Shared/pyproject.toml
+            ${{ matrix.dir }}/pyproject.toml
+      - name: Install Shared
+        run: cd Shared && pip install -e .
+      - name: Install package (editable)
+        working-directory: ${{ matrix.dir }}
+        run: pip install -e .
       - name: Import check
         run: python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
