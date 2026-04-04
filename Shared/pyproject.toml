@@ -37,7 +37,7 @@ low_vram = [
 profiler = [
     "psutil>=5.9.0",
 ]
-dev = ["pytest>=7.4.0", "pytest-cov>=4.0.0", "ruff>=0.11.0", "mypy>=1.10.0", "sdnq>=0.1.0"]
+dev = ["pytest>=7.4.0", "pytest-cov>=4.0.0", "ruff>=0.11.0", "mypy>=1.10.0"]
 
 [project.scripts]
 gamedev-install = "gamedev_shared.installer.unified:main"

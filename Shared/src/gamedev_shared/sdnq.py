@@ -146,11 +146,11 @@ def create_config(
         ImportError: If ``sdnq`` is not installed.
         KeyError: If preset name is unknown.
     """
-    from sdnq import SDNQConfig
-    from sdnq.common import use_torch_compile
-
     if preset not in PRESETS:
         raise KeyError(f"Unknown SDNQ preset: {preset!r}. Available: {', '.join(PRESETS)}")
+
+    from sdnq import SDNQConfig
+    from sdnq.common import use_torch_compile
 
     p = PRESETS[preset]
 
