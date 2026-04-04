@@ -39,7 +39,7 @@ jobs:
             python-version: "3.10"
           - package: Shared
             python-version: "3.12"
-          # Other packages need Shared installed first via path
+          # Other packages need Shared installed first via absolute path
           - package: GameAssets
             python-version: "3.10"
           - package: GameAssets
@@ -73,12 +73,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install Shared (editable, by path)
-        run: pip install --upgrade pip && pip install -e ./Shared/.[dev]
+      - name: Get repo path
+        id: repo
+        run: echo "path=$(pwd)" >> $GITHUB_OUTPUT
+      - name: Install Shared (editable, by absolute path)
+        run: pip install --upgrade pip && pip install -e ${{ steps.repo.outputs.path }}/Shared/.[dev]
       - name: Install package and run tests
         run: |
-          pip install -e .[dev]
+          pip install -e ${{ steps.repo.outputs.path }}/${{ matrix.package }}/.[dev]
           pytest -v --tb=short
+        working-directory: ${{ steps.repo.outputs.path }}/${{ matrix.package }}
 
   test-rust:
     name: cargo (Materialize)
@@ -114,9 +118,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Get repo path
+        id: repo
+        run: echo "path=$(pwd)" >> $GITHUB_OUTPUT
       - name: Install Shared
-        run: pip install --upgrade pip && pip install -e ./Shared/
+        run: pip install --upgrade pip && pip install -e ${{ steps.repo.outputs.path }}/Shared/
       - name: Install package and check import
         run: |
-          pip install -e ./${{ matrix.dir }}/
+          pip install -e ${{ steps.repo.outputs.path }}/${{ matrix.dir }}/
           python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
