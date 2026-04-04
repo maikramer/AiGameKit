@@ -70,4 +70,9 @@ Paint3D/src/paint3d/hy3dpaint/utils/realesrgan_weights/
 *_test*/
 *_demo_*/
 *_demo*/
-*demo_*/
+*demo_*/.venv
+.venv312
+__pycache__
+*.egg-info
+build
+dist
