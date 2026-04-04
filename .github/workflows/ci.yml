@@ -16,19 +16,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install ruff
-        run: python -m pip install ruff
+      - uses: astral-sh/setup-uv@v4
       - name: Ruff check
-        run: ruff check .
+        run: uv run --python 3.12 ruff check .
       - name: Ruff format
-        run: ruff format --check .
-      - name: Install pre-commit
-        run: pip install pre-commit
+        run: uv run --python 3.12 ruff format --check .
       - name: Run pre-commit
-        run: pre-commit run --all-files
+        run: uv run --python 3.12 pre-commit run --all-files
 
   test-python:
     name: pytest (${{ matrix.package }}, Python ${{ matrix.python-version }})
@@ -40,64 +34,63 @@ jobs:
           # Light packages — 3.10 + 3.12
           - package: Shared
             python-version: "3.10"
-            install_cmd: cd Shared && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev]
           - package: Shared
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev]
           - package: GameAssets
             python-version: "3.10"
-            install_cmd: cd Shared && pip install -e . && cd ../GameAssets && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e GameAssets/.[dev]
           - package: GameAssets
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e . && cd ../GameAssets && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e GameAssets/.[dev]
           - package: Texture2D
             python-version: "3.10"
-            install_cmd: cd Shared && pip install -e . && cd ../Texture2D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Texture2D/.[dev]
           - package: Texture2D
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e . && cd ../Texture2D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Texture2D/.[dev]
           - package: Skymap2D
             python-version: "3.10"
-            install_cmd: cd Shared && pip install -e . && cd ../Skymap2D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Skymap2D/.[dev]
           - package: Skymap2D
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e . && cd ../Skymap2D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Skymap2D/.[dev]
           # Rigging3D — requires-python >=3.11,<3.12
           - package: Rigging3D
             python-version: "3.11"
-            install_cmd: cd Shared && pip install -e . && cd ../Rigging3D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Rigging3D/.[dev]
           # Torch on CPU (single Python to keep CI time reasonable)
           - package: Part3D
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e . && cd ../Part3D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Part3D/.[dev]
           - package: Text2Sound
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e . && cd ../Text2Sound && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Text2Sound/.[dev]
           # Light packages — GameDevLab
           - package: GameDevLab
             python-version: "3.10"
-            install_cmd: cd Shared && pip install -e . && cd ../GameDevLab && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e GameDevLab/.[dev]
           - package: GameDevLab
             python-version: "3.12"
-            install_cmd: cd Shared && pip install -e . && cd ../GameDevLab && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e GameDevLab/.[dev]
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"
-            install_cmd: cd Shared && pip install -e . && cd ../Animator3D && pip install -e '.[dev]'
+            install: uv pip install -e Shared/.[dev] && uv pip install -e Animator3D/.[dev]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v4
         with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
-          cache-dependency-path: |
-            Shared/pyproject.toml
-            ${{ matrix.package }}/pyproject.toml
-      - name: Install package (Shared + target)
-        run: ${{ matrix.install_cmd }}
+          enable-cache: true
+      - name: Create venv and install
+        run: |
+          uv venv --python ${{ matrix.python-version }}
+          uv pip install -e Shared/.[dev]
+          uv pip install -e ${{ matrix.package }}/.[dev]
       - name: Run pytest
-        working-directory: ${{ matrix.package }}
         run: pytest -v --tb=short
+        working-directory: ${{ matrix.package }}
 
   test-rust:
     name: cargo (Materialize)
@@ -130,17 +123,12 @@ jobs:
             module: text3d
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v4
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: |
-            Shared/pyproject.toml
-            ${{ matrix.dir }}/pyproject.toml
+          enable-cache: true
       - name: Install Shared
-        run: cd Shared && pip install -e .
+        run: uv pip install -e Shared/
       - name: Install package (editable)
-        working-directory: ${{ matrix.dir }}
-        run: pip install -e .
+        run: uv pip install -e ${{ matrix.dir }}/
       - name: Import check
         run: python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
