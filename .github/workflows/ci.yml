@@ -1,31 +1,130 @@
+# CI for the GameDev monorepo.
+# Text2D, Text3D, and Paint3D are not in the pytest matrix: heavy PyTorch / git deps; see smoke-heavy.
+
 name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
-  smoke-heavy:
+  lint:
+    name: ruff (lint + format)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: pip install --upgrade pip && pip install ruff pre-commit
+      - name: Ruff check
+        run: ruff check .
+      - name: Ruff format
+        run: ruff format --check .
+      - name: Run pre-commit
+        run: pre-commit run --all-files
 
+  test-python:
+    name: pytest (${{ matrix.package }}, Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Shared only (no inter-package dependencies)
+          - package: Shared
+            python-version: "3.10"
+          - package: Shared
+            python-version: "3.12"
+          # Other packages need Shared installed first via absolute path
+          - package: GameAssets
+            python-version: "3.10"
+          - package: GameAssets
+            python-version: "3.12"
+          - package: Texture2D
+            python-version: "3.10"
+          - package: Texture2D
+            python-version: "3.12"
+          - package: Skymap2D
+            python-version: "3.10"
+          - package: Skymap2D
+            python-version: "3.12"
+          # Rigging3D — requires-python >=3.11,<3.12
+          - package: Rigging3D
+            python-version: "3.11"
+          # Torch on CPU (single Python to keep CI time reasonable)
+          - package: Part3D
+            python-version: "3.12"
+          - package: Text2Sound
+            python-version: "3.12"
+          # GameDevLab
+          - package: GameDevLab
+            python-version: "3.10"
+          - package: GameDevLab
+            python-version: "3.12"
+          # bpy wheel (cp313)
+          - package: Animator3D
+            python-version: "3.13"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Get repo path
+        id: repo
+        run: echo "path=$(pwd)" >> $GITHUB_OUTPUT
+      - name: Install Shared (editable, by absolute path)
+        run: pip install --upgrade pip && pip install -e ${{ steps.repo.outputs.path }}/Shared/.[dev]
+      - name: Install package and run tests
+        run: |
+          pip install -e ${{ steps.repo.outputs.path }}/${{ matrix.package }}/.[dev]
+          pytest -v --tb=short
+        working-directory: ${{ steps.repo.outputs.path }}/${{ matrix.package }}
+
+  test-rust:
+    name: cargo (Materialize)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: rustfmt
+        run: cargo fmt --all --manifest-path Materialize/Cargo.toml -- --check
+      - name: Clippy
+        run: cargo clippy --manifest-path Materialize/Cargo.toml -- -D warnings
+      - name: Tests
+        run: cargo test --manifest-path Materialize/Cargo.toml
+
+  # Smoke: editable install + import do pacote (nomes de módulo reais).
+  # Paint3D excluded: has bpy (huge) + pytorch deps, too heavy for CI.
+  smoke-heavy:
+    continue-on-error: true
+    name: smoke (${{ matrix.dir }} → ${{ matrix.module }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: Text2D
+            module: text2d
+          - dir: Text3D
+            module: text3d
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Get repo path
+        id: repo
+        run: echo "path=$(pwd)" >> $GITHUB_OUTPUT
       - name: Install Shared
+        run: pip install --upgrade pip && pip install -e ${{ steps.repo.outputs.path }}/Shared/
+      - name: Install package and check import
         run: |
-          cd path/to/Shared
-          npm install
-
-      - name: Install Text2D
-        run: |
-          cd path/to/Text2D
-          npm install
-
-      - name: Install Text3D
-        run: |
-          cd path/to/Text3D
-          npm install
-
-      - name: Run tests
-        run: npm test
+          pip install -e ${{ steps.repo.outputs.path }}/${{ matrix.dir }}/
+          python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
