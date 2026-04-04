@@ -7,9 +7,12 @@ import tempfile
 
 import pytest
 
-pytest.importorskip("numpy")
-
-from rigging3d.unirig.src.data.extract import _stem_from_input_path, get_files  # type: ignore
+try:
+    from rigging3d.unirig.src.data.extract import _stem_from_input_path, get_files  # type: ignore
+except ImportError as exc:
+    if "bpy" in str(exc):
+        pytest.skip("bpy not available", allow_module_level=True)
+    raise
 
 
 def test_stem_from_input_path() -> None:

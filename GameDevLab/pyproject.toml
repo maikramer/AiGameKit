@@ -39,7 +39,7 @@ bench = [
     "xformers>=0.0.28",  # Memory efficient attention
     "accelerate>=0.34.0",  # Otimizações de modelo
 ]
-dev = ["pytest>=7.4.0", "ruff>=0.11.0"]
+dev = ["pytest>=7.4.0", "ruff>=0.11.0", "trimesh>=4.0.0"]
 
 [project.scripts]
 gamedev-lab = "gamedev_lab.cli:main"
