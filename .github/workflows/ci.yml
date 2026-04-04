@@ -80,7 +80,7 @@ jobs:
         run: pip install --upgrade pip && pip install -e ${{ steps.repo.outputs.path }}/Shared/.[dev]
       - name: Install package and run tests
         run: |
-          pip install -e ${{ steps.repo.outputs.path }}/${{ matrix.package }}/.[dev]
+          pip install --no-deps -e ${{ steps.repo.outputs.path }}/${{ matrix.package }}/.[dev]
           pytest -v --tb=short
         working-directory: ${{ steps.repo.outputs.path }}/${{ matrix.package }}
 
