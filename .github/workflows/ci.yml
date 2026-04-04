@@ -17,12 +17,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
-      - name: Ruff check
-        run: uv run --python 3.12 ruff check .
-      - name: Ruff format
-        run: uv run --python 3.12 ruff format --check .
-      - name: Run pre-commit
-        run: uv run --python 3.12 pre-commit run --all-files
+        with:
+          enable-cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run linting
+        run: |
+          uv pip install ruff pre-commit
+          uv run ruff check .
+          uv run ruff format --check .
+          uv run pre-commit run --all-files
 
   test-python:
     name: pytest (${{ matrix.package }}, Python ${{ matrix.python-version }})
@@ -34,58 +39,46 @@ jobs:
           # Light packages — 3.10 + 3.12
           - package: Shared
             python-version: "3.10"
-            install: uv pip install -e Shared/.[dev]
           - package: Shared
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev]
           - package: GameAssets
             python-version: "3.10"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e GameAssets/.[dev]
           - package: GameAssets
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e GameAssets/.[dev]
           - package: Texture2D
             python-version: "3.10"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Texture2D/.[dev]
           - package: Texture2D
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Texture2D/.[dev]
           - package: Skymap2D
             python-version: "3.10"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Skymap2D/.[dev]
           - package: Skymap2D
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Skymap2D/.[dev]
           # Rigging3D — requires-python >=3.11,<3.12
           - package: Rigging3D
             python-version: "3.11"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Rigging3D/.[dev]
           # Torch on CPU (single Python to keep CI time reasonable)
           - package: Part3D
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Part3D/.[dev]
           - package: Text2Sound
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Text2Sound/.[dev]
           # Light packages — GameDevLab
           - package: GameDevLab
             python-version: "3.10"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e GameDevLab/.[dev]
           - package: GameDevLab
             python-version: "3.12"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e GameDevLab/.[dev]
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"
-            install: uv pip install -e Shared/.[dev] && uv pip install -e Animator3D/.[dev]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
-      - name: Create venv and install
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install packages
         run: |
-          uv venv --python ${{ matrix.python-version }}
           uv pip install -e Shared/.[dev]
           uv pip install -e ${{ matrix.package }}/.[dev]
       - name: Run pytest
@@ -126,9 +119,12 @@ jobs:
       - uses: astral-sh/setup-uv@v4
         with:
           enable-cache: true
-      - name: Install Shared
-        run: uv pip install -e Shared/
-      - name: Install package (editable)
-        run: uv pip install -e ${{ matrix.dir }}/
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install packages
+        run: |
+          uv pip install -e Shared/
+          uv pip install -e ${{ matrix.dir }}/
       - name: Import check
         run: python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
