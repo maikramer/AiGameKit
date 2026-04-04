@@ -1,5 +1,4 @@
 # CI for the GameDev monorepo.
-# Mirrors install.sh behavior: creates venv with `uv venv`, then installs with `uv pip install -e`.
 # Text2D, Text3D, and Paint3D are not in the pytest matrix: heavy PyTorch / git deps; see smoke-heavy.
 
 name: CI
@@ -16,18 +15,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
         with:
-          enable-cache: true
-          install-python: true
+          python-version: "3.12"
       - name: Install tools
-        run: uv pip install ruff pre-commit
+        run: pip install --upgrade pip && pip install ruff pre-commit
       - name: Ruff check
-        run: uv run ruff check .
+        run: ruff check .
       - name: Ruff format
-        run: uv run ruff format --check .
+        run: ruff format --check .
       - name: Run pre-commit
-        run: uv run pre-commit run --all-files
+        run: pre-commit run --all-files
 
   test-python:
     name: pytest (${{ matrix.package }}, Python ${{ matrix.python-version }})
@@ -39,64 +37,48 @@ jobs:
           # Light packages — 3.10 + 3.12
           - package: Shared
             python-version: "3.10"
-            needs_gpu: false
           - package: Shared
             python-version: "3.12"
-            needs_gpu: false
           - package: GameAssets
             python-version: "3.10"
-            needs_gpu: false
           - package: GameAssets
             python-version: "3.12"
-            needs_gpu: false
           - package: Texture2D
             python-version: "3.10"
-            needs_gpu: false
           - package: Texture2D
             python-version: "3.12"
-            needs_gpu: false
           - package: Skymap2D
             python-version: "3.10"
-            needs_gpu: false
           - package: Skymap2D
             python-version: "3.12"
-            needs_gpu: false
           # Rigging3D — requires-python >=3.11,<3.12
           - package: Rigging3D
             python-version: "3.11"
-            needs_gpu: false
           # Torch on CPU (single Python to keep CI time reasonable)
           - package: Part3D
             python-version: "3.12"
-            needs_gpu: false
           - package: Text2Sound
             python-version: "3.12"
-            needs_gpu: false
           # Light packages — GameDevLab
           - package: GameDevLab
             python-version: "3.10"
-            needs_gpu: false
           - package: GameDevLab
             python-version: "3.12"
-            needs_gpu: false
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"
-            needs_gpu: false
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
         with:
-          enable-cache: true
-          install-python: true
-      - name: Create venv and install (mirrors install.sh)
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
         run: |
-          uv venv --python ${{ matrix.python-version }} .venv
-          uv pip install -e Shared/.[dev]
-          uv pip install -e ${{ matrix.package }}/.[dev]
+          pip install --upgrade pip
+          pip install -e Shared/.[dev]
+          pip install -e ${{ matrix.package }}/.[dev]
       - name: Run pytest
-        run: |
-          .venv/bin/python -m pytest -v --tb=short
+        run: pytest -v --tb=short
         working-directory: ${{ matrix.package }}
 
   test-rust:
@@ -130,15 +112,13 @@ jobs:
             module: text3d
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-python@v5
         with:
-          enable-cache: true
-          install-python: true
-      - name: Install packages (mirrors install.sh)
+          python-version: "3.12"
+      - name: Install packages
         run: |
-          uv venv --python 3.12 .venv
-          uv pip install -e Shared/
-          uv pip install -e ${{ matrix.dir }}/
+          pip install --upgrade pip
+          pip install -e Shared/
+          pip install -e ${{ matrix.dir }}/
       - name: Import check
-        run: |
-          .venv/bin/python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
+        run: python -c "import importlib; importlib.import_module('${{ matrix.module }}'); print('import OK:', '${{ matrix.module }}')"
