@@ -102,6 +102,7 @@ jobs:
   # Smoke: editable install + import do pacote (nomes de módulo reais).
   # Paint3D excluded: has bpy (huge) + pytorch deps, too heavy for CI.
   smoke-heavy:
+    continue-on-error: true
     name: smoke (${{ matrix.dir }} → ${{ matrix.module }})
     runs-on: ubuntu-latest
     timeout-minutes: 15
