@@ -1,11 +1,12 @@
-"""rich-click como `click` — mesmo padrão que Rigging3D."""
+"""Configuração Rich + rich-click para o CLI Animator3D."""
 
 from __future__ import annotations
 
-import rich_click as click
+from typing import Final
 
-click.rich_click.USE_RICH_MARKUP = True
-click.rich_click.USE_MARKDOWN = True
-click.rich_click.SHOW_ARGUMENTS = True
+from gamedev_shared.cli_rich import setup_rich_click_module
 
-__all__ = ["click"]
+_HEADER: Final = "[bold cyan]Animator3D[/bold cyan] — animação 3D via Blender (bpy)"
+_FOOTER: Final = "[dim]README · BLENDER_COMMAND · ANIMATOR3D_ROOT[/dim]"
+
+click, RICH_CLICK = setup_rich_click_module(header=_HEADER, footer=_FOOTER)

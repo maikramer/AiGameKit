@@ -25,7 +25,7 @@ def _torch() -> types.ModuleType:
     try:
         import torch
 
-        return torch
+        return torch  # type: ignore[no-any-return]
     except ImportError:
         raise ImportError("torch não está instalado. Instale com: pip install gamedev-shared[gpu]") from None
 

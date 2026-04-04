@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.json import JSON
 
 from . import __version__
-from .cli_rich import click  # noqa: F401 — rich-click
+from .cli_rich import click
 
 console = Console()
 

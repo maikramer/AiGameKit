@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Instalador Text2D — usa o instalador unificado do monorepo.
+Instalador Paint3D — usa o instalador unificado do monorepo.
 
 Uso:
-  ./install.sh text2d
+  ./install.sh paint3d
   python3 scripts/installer.py
-  gamedev-install text2d
+  gamedev-install paint3d
 """
 
 from __future__ import annotations
@@ -27,16 +27,18 @@ from gamedev_shared.installer.unified import install_tool
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Instalador Text2D",
+        description="Instalador Paint3D",
         epilog="""
-Forma oficial: ./install.sh text2d
+Forma oficial: ./install.sh paint3d
+
+Nota: Paint3D requer nvdiffrast e extras (Real-ESRGAN, etc.).
 
 Exemplos:
-  ./install.sh text2d
+  ./install.sh paint3d
   python3 scripts/installer.py --force
 """,
     )
-    parser.add_argument("--prefix", default="/usr/local", help="Diretório de instalação")
+    parser.add_argument("--prefix", default=str(Path.home() / ".local"), help="Diretório de instalação")
     parser.add_argument("--python", default=None, help="Comando Python")
     parser.add_argument("--use-venv", action="store_true", help="Usar virtualenv")
     parser.add_argument("--skip-deps", action="store_true", help="Pular dependências")
@@ -45,7 +47,7 @@ Exemplos:
     args = parser.parse_args()
 
     success = install_tool(
-        "text2d",
+        "paint3d",
         monorepo=_monorepo_root,
         install_prefix=Path(args.prefix),
         python_cmd=args.python,

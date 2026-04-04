@@ -15,9 +15,9 @@ from rich.rule import Rule
 from rich.table import Table
 
 from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.skill_install import install_my_skill
 
 from .cli_rich import click
-from .cursor_skill_install import install_agent_skill
 from .generator import KleinFluxGenerator, default_model_id
 from .utils.memory import format_bytes, get_system_info
 
@@ -59,7 +59,7 @@ def skill_group() -> None:
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/text2d/."""
     try:
-        dest = install_agent_skill(target, force=force)
+        dest = install_my_skill(vars(), target, force=force)
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except FileExistsError as e:

@@ -6,13 +6,8 @@ import sys
 import time
 from pathlib import Path
 
-import click
-import rich_click as rclick
-
 from . import defaults as _d
-
-rclick.rich_click.USE_RICH_MARKUP = True
-rclick.rich_click.SHOW_ARGUMENTS = True
+from .cli_rich import click
 
 
 @click.group()

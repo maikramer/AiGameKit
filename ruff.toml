@@ -45,6 +45,11 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 "**/utils/pipeline_utils.py" = ["B007", "E501", "E402"]
 "**/utils/realesrgan_infer.py" = ["E501", "E402"]
 "**/textureGenPipeline.py" = ["E402", "F401"]
+# Experiments (research code)
+"experiments/**" = ["I001", "SIM108"]
+# Animator3D / Rigging3D - minor style issues
+"Animator3D/**" = ["B007", "RUF059", "RUF100", "I001"]
+"Rigging3D/**" = ["RUF100", "SIM102", "I001"]
 
 [format]
 quote-style = "double"

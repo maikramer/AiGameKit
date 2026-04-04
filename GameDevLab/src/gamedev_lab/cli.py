@@ -13,6 +13,7 @@ from typing import Any
 from rich.console import Console
 
 from gamedev_lab import __version__
+from gamedev_lab.cli_rich import click
 from gamedev_lab.compare_inspect import diff_inspect
 from gamedev_lab.debug_tools import (
     extract_json_from_output,
@@ -21,15 +22,6 @@ from gamedev_lab.debug_tools import (
     run_cmd,
 )
 from gamedev_lab.validate_rules import evaluate_inspect_rules, load_rules_file
-from gamedev_shared.cli_rich import setup_rich_click_module
-
-click, _RICH = setup_rich_click_module(
-    header="[bold cyan]GameDevLab[/bold cyan] — debug 3D, bancadas de quantização, profiling",
-    footer=(
-        "[dim]ANIMATOR3D_BIN / PART3D_BIN / GAMEASSETS_BIN se não estiverem no PATH "
-        "· GAMEDEV_ROOT para raiz do monorepo · GAMEDEV_PERF_DB para perf DB[/dim]"
-    ),
-)
 
 console = Console()
 console_err = Console(file=sys.stderr)

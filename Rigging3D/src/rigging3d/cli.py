@@ -13,8 +13,8 @@ from pathlib import Path
 from gamedev_shared.profiler.session import ProfilerSession
 from rich.console import Console
 
-from . import __version__  # noqa: F401 — used by @click.version_option
-from .cli_rich import click  # noqa: F401 — rich-click antes dos comandos
+from . import __version__
+from .cli_rich import click
 
 console = Console()
 

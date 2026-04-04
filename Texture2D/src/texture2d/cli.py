@@ -57,10 +57,10 @@ def skill_group() -> None:
 @click.option("--force", is_flag=True, help="Sobrescrever SKILL.md existente")
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/texture2d/."""
-    from .cursor_skill_install import install_agent_skill
+    from gamedev_shared.skill_install import install_my_skill
 
     try:
-        dest = install_agent_skill(target, force=force)
+        dest = install_my_skill(vars(), target, force=force)
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except FileExistsError as e:

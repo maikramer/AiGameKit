@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Instalador Text2D — usa o instalador unificado do monorepo.
+Instalador GameAssets — usa o instalador unificado do monorepo.
 
 Uso:
-  ./install.sh text2d
+  ./install.sh gameassets
   python3 scripts/installer.py
-  gamedev-install text2d
+  gamedev-install gameassets
 """
 
 from __future__ import annotations
@@ -27,12 +27,13 @@ from gamedev_shared.installer.unified import install_tool
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Instalador Text2D",
+        description="Instalador GameAssets",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-Forma oficial: ./install.sh text2d
+Forma oficial: ./install.sh gameassets
 
 Exemplos:
-  ./install.sh text2d
+  ./install.sh gameassets
   python3 scripts/installer.py --force
 """,
     )
@@ -45,7 +46,7 @@ Exemplos:
     args = parser.parse_args()
 
     success = install_tool(
-        "text2d",
+        "gameassets",
         monorepo=_monorepo_root,
         install_prefix=Path(args.prefix),
         python_cmd=args.python,

@@ -20,10 +20,10 @@ from rich.rule import Rule
 from rich.table import Table
 
 from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.skill_install import install_my_skill
 
 from . import defaults as _defaults
 from .cli_rich import click
-from .cursor_skill_install import install_agent_skill
 from .generator import HunyuanTextTo3DGenerator
 from .utils.env import ensure_pytorch_cuda_alloc_conf
 from .utils.memory import (
@@ -106,7 +106,7 @@ def skill_group() -> None:
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/text3d/."""
     try:
-        dest = install_agent_skill(target, force=force)
+        dest = install_my_skill(vars(), target, force=force)
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except FileExistsError as e:

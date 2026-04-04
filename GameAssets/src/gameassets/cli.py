@@ -20,11 +20,11 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from rich.table import Table
 
 from gamedev_shared.profiler.session import ProfilerSession
+from gamedev_shared.skill_install import install_my_skill
 
 from . import __version__
 from .batch_guard import batch_directory_lock, query_gpu_free_mib, subprocess_gpu_env
 from .cli_rich import click
-from .cursor_skill_install import install_agent_skill
 from .manifest import ManifestRow, effective_image_source, load_manifest
 from .presets import get_preset, load_presets_bundle
 from .profile import (
@@ -585,7 +585,7 @@ def skill_group() -> None:
 def skill_install_cmd(target: Path, force: bool) -> None:
     """Copia SKILL.md para .cursor/skills/gameassets/."""
     try:
-        dest = install_agent_skill(target, force=force)
+        dest = install_my_skill(vars(), target, force=force)
     except FileNotFoundError as e:
         raise click.ClickException(str(e)) from e
     except FileExistsError as e:

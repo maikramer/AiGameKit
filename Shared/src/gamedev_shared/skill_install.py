@@ -5,8 +5,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .installer.registry import try_find_monorepo_root
-
 
 def resolve_skill_source(
     tool_name: str,
@@ -25,6 +23,8 @@ def resolve_skill_source(
     Raises:
         FileNotFoundError: Skill não encontrada em nenhuma localização.
     """
+    from .installer.registry import try_find_monorepo_root
+
     gamedev = try_find_monorepo_root(package_dir)
     if gamedev is not None:
         cand = gamedev / ".cursor" / "create-skill" / tool_name
@@ -73,3 +73,35 @@ def install_agent_skill(
         raise FileExistsError(str(dest_file))
     shutil.copy2(src / "SKILL.md", dest_file)
     return dest_file
+
+
+def install_my_skill(caller_vars: dict, target_root: Path, *, force: bool = False) -> Path:
+    """Instala a skill da ferramenta que chamou.
+
+    Args:
+        caller_vars: ``vars()`` do módulo que faz a chamada.
+        target_root: Raiz do project.
+        force: Sobrescrever se já existir.
+
+    Returns:
+        Caminho do ficheiro instalado.
+
+    Exemplo de uso no CLI::
+
+        from gamedev_shared.Skill_install import install_my_skill
+
+        # No CLI da ferramenta (text3d/cli.py)
+        install_my_skill(vars(), target_root=project_root)
+
+    O tool name é detectado automaticamente a partir do ``__package__`` do caller.
+    """
+    package = caller_vars.get("__package__", "")
+    tool_name = package.rsplit(".", 1)[-1] if "." in package else package
+    if not tool_name:
+        raise ValueError("Could not determine tool name from __package__")
+
+    # Obter package_dir a partir do ficheiro do módulo
+    module_file = caller_vars.get("__file__", "")
+    package_dir = Path(module_file).resolve().parent if module_file else Path.cwd()
+
+    return install_agent_skill(tool_name, package_dir, target_root, force=force)
