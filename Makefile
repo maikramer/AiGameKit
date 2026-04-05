@@ -7,13 +7,13 @@ PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text
 
 .PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-materialize test-rust clean typecheck check install-hooks
 
-# Run pytest in directory $(1): prefer .venv (Windows or Unix), else system python.
+# Prefer .venv only if pytest is installed there; else python3, then python.
 define run-pytest
-	cd $(1) && if [ -f .venv/Scripts/python.exe ]; then .venv/Scripts/python.exe -m pytest; elif [ -f .venv/bin/python ]; then .venv/bin/python -m pytest; else python -m pytest; fi
+	cd $(1) && if [ -f .venv/Scripts/python.exe ] && .venv/Scripts/python.exe -c "import pytest" 2>/dev/null; then .venv/Scripts/python.exe -m pytest; elif [ -f .venv/bin/python ] && .venv/bin/python -c "import pytest" 2>/dev/null; then .venv/bin/python -m pytest; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi
 endef
 
 define run-mypy-shared
-	cd Shared && if [ -f .venv/Scripts/python.exe ]; then .venv/Scripts/python.exe -m mypy src --ignore-missing-imports; elif [ -f .venv/bin/python ]; then .venv/bin/python -m mypy src --ignore-missing-imports; else python -m mypy src --ignore-missing-imports; fi
+	cd Shared && if [ -f .venv/Scripts/python.exe ]; then .venv/Scripts/python.exe -m mypy src --ignore-missing-imports; elif [ -f .venv/bin/python ]; then .venv/bin/python -m mypy src --ignore-missing-imports; elif command -v python3 >/dev/null 2>&1; then python3 -m mypy src --ignore-missing-imports; else python -m mypy src --ignore-missing-imports; fi
 endef
 
 help: ## List all targets (default)
@@ -37,7 +37,7 @@ test: ## pytest in each Python project; cargo test in Materialize/
 	@for d in $(PYTHON_PROJECTS); do \
 		echo "==> pytest $$d"; \
 		cd "$(CURDIR)/$$d" || exit 1; \
-		if [ -f .venv/Scripts/python.exe ]; then .venv/Scripts/python.exe -m pytest; elif [ -f .venv/bin/python ]; then .venv/bin/python -m pytest; else python -m pytest; fi || exit 1; \
+		if [ -f .venv/Scripts/python.exe ] && .venv/Scripts/python.exe -c "import pytest" 2>/dev/null; then .venv/Scripts/python.exe -m pytest; elif [ -f .venv/bin/python ] && .venv/bin/python -c "import pytest" 2>/dev/null; then .venv/bin/python -m pytest; elif command -v python3 >/dev/null 2>&1; then python3 -m pytest; else python -m pytest; fi || exit 1; \
 		cd "$(CURDIR)"; \
 	done
 	cd Materialize && cargo test

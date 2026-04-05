@@ -38,9 +38,7 @@ def test_maybe_apply_quantized_matmul_no_triton() -> None:
     from text2d.generator import _maybe_apply_quantized_matmul
 
     pipe = MagicMock()
-    apply_fn = MagicMock()
-    _maybe_apply_quantized_matmul(pipe, False, apply_fn)
-    apply_fn.assert_not_called()
+    _maybe_apply_quantized_matmul(pipe, False)
 
 
 def test_maybe_apply_quantized_matmul_no_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -50,26 +48,26 @@ def test_maybe_apply_quantized_matmul_no_cuda(monkeypatch: pytest.MonkeyPatch) -
 
     monkeypatch.setattr(torch, "cuda", MagicMock(is_available=lambda: False))
     pipe = MagicMock()
-    apply_fn = MagicMock()
-    _maybe_apply_quantized_matmul(pipe, True, apply_fn)
-    apply_fn.assert_not_called()
+    _maybe_apply_quantized_matmul(pipe, True)
 
 
 def test_maybe_apply_quantized_matmul_applies_to_modules(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sdnq.loader
     import torch
 
     from text2d.generator import _maybe_apply_quantized_matmul
 
     monkeypatch.setattr(torch, "cuda", MagicMock(is_available=lambda: True))
+    apply_loader = MagicMock(side_effect=lambda m, **kw: m)
+    monkeypatch.setattr(sdnq.loader, "apply_sdnq_options_to_model", apply_loader)
     tr = MagicMock()
     te = MagicMock()
     pipe = MagicMock()
     pipe.transformer = tr
     pipe.text_encoder = te
     pipe.text_encoder_2 = None
-    apply_fn = MagicMock(side_effect=lambda m, **kw: m)
-    _maybe_apply_quantized_matmul(pipe, True, apply_fn)
-    assert apply_fn.call_count >= 2
+    _maybe_apply_quantized_matmul(pipe, True)
+    assert apply_loader.call_count >= 2
 
 
 def test_klein_init_forces_cpu(monkeypatch: pytest.MonkeyPatch) -> None:

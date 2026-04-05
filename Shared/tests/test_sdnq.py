@@ -133,6 +133,35 @@ class TestApplyQuantizedMatmul:
         apply_quantized_matmul(pipe, enabled=False)
         pipe.assert_not_called()
 
+    def test_skips_modules_when_triton_missing(self):
+        from gamedev_shared.sdnq import apply_quantized_matmul
+
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = MagicMock()  # type: ignore[attr-defined]
+        fake_torch.cuda.is_available = MagicMock(return_value=True)  # type: ignore[attr-defined]
+        fake_torch.xpu = MagicMock()  # type: ignore[attr-defined]
+        fake_torch.xpu.is_available = MagicMock(return_value=False)  # type: ignore[attr-defined]
+
+        fake_loader = types.ModuleType("sdnq.loader")
+
+        def _apply(_mod, **kw):
+            raise RuntimeError("SDNQ Quantized MatMul requires a working Triton install.")
+
+        fake_loader.apply_sdnq_options_to_model = _apply  # type: ignore[attr-defined]
+
+        tr = MagicMock()
+        te = MagicMock()
+        pipe = MagicMock()
+        pipe.transformer = tr
+        pipe.text_encoder = te
+        pipe.text_encoder_2 = None
+
+        with patch.dict(sys.modules, {"torch": fake_torch, "sdnq.loader": fake_loader}):
+            apply_quantized_matmul(pipe, enabled=True)
+
+        assert pipe.transformer is tr
+        assert pipe.text_encoder is te
+
 
 class TestEstimateVramMb:
     def test_fp16_baseline(self):

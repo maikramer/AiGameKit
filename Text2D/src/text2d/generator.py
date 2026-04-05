@@ -51,7 +51,7 @@ def _register_sdnq() -> tuple[Any, Any]:
         raise ImportError("O pacote 'sdnq' é necessário para o modelo SDNQ. Instale com: pip install sdnq") from e
 
 
-def _maybe_apply_quantized_matmul(pipe: Any, triton_is_available: Any, apply_fn: Any) -> None:
+def _maybe_apply_quantized_matmul(pipe: Any, triton_is_available: Any) -> None:
     """Apply SDNQ quantized matmul to pipeline sub-modules (via shared helper)."""
     from gamedev_shared.sdnq import apply_quantized_matmul
 
@@ -115,7 +115,7 @@ class KleinFluxGenerator:
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
-        triton_is_available, apply_sdnq_options_to_model = _register_sdnq()
+        triton_is_available, _ = _register_sdnq()
 
         from diffusers import Flux2KleinPipeline
 
@@ -130,7 +130,7 @@ class KleinFluxGenerator:
         pipe = Flux2KleinPipeline.from_pretrained(self.model_id, **kwargs)
 
         self._status("Passo 2/3 — SDNQ (matmul quantizado opcional via Triton)")
-        _maybe_apply_quantized_matmul(pipe, triton_is_available, apply_sdnq_options_to_model)
+        _maybe_apply_quantized_matmul(pipe, triton_is_available)
 
         if self.device == "cpu":
             mode_label = "cpu"
