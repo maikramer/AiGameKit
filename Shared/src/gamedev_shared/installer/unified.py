@@ -53,6 +53,12 @@ class _ToolPythonInstaller(PythonProjectInstaller):
         self._monorepo_root = monorepo
 
     def check_python(self, min_version: tuple[int, int] = (3, 10)) -> bool:
+        if self._use_uv:
+            self.logger.info(
+                f"uv disponível — Python {self.spec.min_python[0]}.{self.spec.min_python[1]}+ "
+                "será provisionado automaticamente ao criar o venv."
+            )
+            return True
         return super().check_python(min_version=self.spec.min_python)
 
     def install_in_venv(self) -> None:
