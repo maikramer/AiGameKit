@@ -107,7 +107,7 @@ def install_rigging_inference_extras(
 
     logger.step("Instalando rigging3d[inference]...")
     subprocess.run(
-        [*pip_cmd, "-e", f"{root}[inference]"],
+        [python, "-m", "pip", "install", "-e", f"{root}[inference]", "--no-deps"],
         check=True,
         cwd=str(root),
     )

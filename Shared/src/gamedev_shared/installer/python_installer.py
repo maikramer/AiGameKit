@@ -118,7 +118,7 @@ class PythonProjectInstaller(BaseInstaller):
             self.logger.step(f"Criando ambiente virtual com uv (Python {py_version}) em {self.venv_dir}...")
             try:
                 subprocess.run(
-                    [uv_cmd(), "venv", str(self.venv_dir), "--python", py_version],
+                    [uv_cmd(), "venv", str(self.venv_dir), "--python", py_version, "--seed"],
                     check=True,
                 )
             except subprocess.CalledProcessError as e:
@@ -165,6 +165,11 @@ class PythonProjectInstaller(BaseInstaller):
 
         if self._use_uv:
             self.logger.info("Usando uv para instalar dependências (mais rápido)")
+            subprocess.run(
+                [uv_cmd(), "pip", "install", "--python", python, "pip", "setuptools>=68,<82", "wheel"],
+                check=True,
+                cwd=_root,
+            )
         else:
             subprocess.run(
                 [python, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
@@ -199,7 +204,7 @@ class PythonProjectInstaller(BaseInstaller):
 
         self.logger.info("Instalando pacote em modo editável...")
         subprocess.run(
-            [*pip_cmd, "-e", str(self.project_root)],
+            [python, "-m", "pip", "install", "-e", str(self.project_root), "--no-deps"],
             check=True,
             cwd=_root,
         )
@@ -237,8 +242,11 @@ class PythonProjectInstaller(BaseInstaller):
             self.logger.warn(f"Ficheiro em falta: {self.requirements_file}")
 
         self.logger.info(f"Instalando pacote {self.cli_name} em modo editável...")
+        editable_cmd = [*pip_cmd, "-e", str(self.project_root)]
+        if self._use_uv:
+            editable_cmd.append("--no-deps")
         subprocess.run(
-            [*pip_cmd, "-e", str(self.project_root)],
+            editable_cmd,
             check=True,
             cwd=_root,
         )

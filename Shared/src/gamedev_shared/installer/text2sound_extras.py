@@ -51,5 +51,9 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
     subprocess.run([*pip_cmd, "-r", str(sat_deps)], check=True, cwd=_root)
 
     inst.logger.info("Instalando pacote em modo editável...")
-    subprocess.run([*pip_cmd, "-e", str(inst.project_root)], check=True, cwd=_root)
+    subprocess.run(
+        [str(inst.venv_python), "-m", "pip", "install", "-e", str(inst.project_root), "--no-deps"],
+        check=True,
+        cwd=_root,
+    )
     inst.logger.success("Instalado no venv")
