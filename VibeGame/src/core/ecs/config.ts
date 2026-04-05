@@ -102,11 +102,11 @@ export class ConfigRegistry {
   }
 
   getDefaults(componentName: string): Record<string, number> {
-    return this.componentDefaults[componentName] || {};
+    return this.componentDefaults[toKebabCase(componentName)] || {};
   }
 
   getShorthands(componentName: string): Record<string, ShorthandMapping> {
-    return this.componentShorthands[componentName] || {};
+    return this.componentShorthands[toKebabCase(componentName)] || {};
   }
 
   getAllShorthands(): ComponentShorthands {
@@ -114,7 +114,7 @@ export class ConfigRegistry {
   }
 
   getEnums(componentName: string): Record<string, EnumMapping> {
-    return this.componentEnums[componentName] || {};
+    return this.componentEnums[toKebabCase(componentName)] || {};
   }
 
   getValidations(): ValidationRule[] {
@@ -122,16 +122,16 @@ export class ConfigRegistry {
   }
 
   shouldSkip(componentName: string, propertyName: string): boolean {
-    const skip = this.skipProperties[componentName];
+    const skip = this.skipProperties[toKebabCase(componentName)];
     return skip ? skip.has(propertyName) : false;
   }
 
   getAdapter(componentName: string, propertyName: string): Adapter | undefined {
-    return this.adapters[componentName]?.[propertyName];
+    return this.adapters[toKebabCase(componentName)]?.[propertyName];
   }
 
   getAdapterProperties(componentName: string): string[] {
-    const componentAdapters = this.adapters[componentName];
+    const componentAdapters = this.adapters[toKebabCase(componentName)];
     return componentAdapters ? Object.keys(componentAdapters) : [];
   }
 }

@@ -254,6 +254,48 @@ export const cameraRecipeSchema = z
   })
   .strict();
 
+export const followCameraComponentSchema = z
+  .object({
+    'target-distance': numberSchema.optional(),
+    'min-distance': numberSchema.optional(),
+    'max-distance': numberSchema.optional(),
+    'min-pitch': numberSchema.optional(),
+    'max-pitch': numberSchema.optional(),
+    'target-pitch': numberSchema.optional(),
+    'target-yaw': numberSchema.optional(),
+    smoothness: numberSchema.optional(),
+    'yaw-smoothness': numberSchema.optional(),
+    'zoom-sensitivity': numberSchema.optional(),
+    'auto-rotate': booleanSchema.optional(),
+    'auto-rotate-delay': numberSchema.optional(),
+    'allow-manual-orbit': booleanSchema.optional(),
+    sensitivity: numberSchema.optional(),
+  })
+  .strict();
+
+export const followCameraRecipeSchema = z
+  .object({
+    'target-distance': numberSchema.optional(),
+    'min-distance': numberSchema.optional(),
+    'max-distance': numberSchema.optional(),
+    'target-pitch': numberSchema.optional(),
+    'target-yaw': numberSchema.optional(),
+    smoothness: numberSchema.optional(),
+    'yaw-smoothness': numberSchema.optional(),
+    'auto-rotate': booleanSchema.optional(),
+    'auto-rotate-delay': numberSchema.optional(),
+    'allow-manual-orbit': booleanSchema.optional(),
+    sensitivity: numberSchema.optional(),
+
+    transform: z.union([z.string(), transformComponentSchema]).optional(),
+    'follow-camera': z
+      .union([z.string(), followCameraComponentSchema])
+      .optional(),
+
+    id: z.string().optional(),
+  })
+  .strict();
+
 export const worldRecipeSchema = z
   .object({
     canvas: z.string().optional(),
@@ -339,6 +381,8 @@ export const recipeSchemas = {
   'kinematic-part': kinematicPartRecipeSchema,
   player: playerRecipeSchema,
   camera: cameraRecipeSchema,
+  'orbit-camera': cameraRecipeSchema,
+  'follow-camera': followCameraRecipeSchema,
   world: worldRecipeSchema,
   tween: tweenElementSchema,
   pause: pauseElementSchema,

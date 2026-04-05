@@ -7,8 +7,23 @@ export * from './core';
 export type { BuilderOptions };
 export type { GameRuntime } from './runtime';
 export { loadGltfToScene } from './extras/gltf-bridge';
+export { GltfAnimator } from './extras/gltf-animator';
+export type { GltfAnimatorOptions } from './extras/gltf-animator';
 export { applyEquirectSkyEnvironment } from './extras/sky-env';
 export type { EquirectSkyOptions } from './extras/sky-env';
+
+export { Player } from './plugins/player';
+export {
+  FollowCamera,
+  FollowCameraPlugin,
+  ZOOM_PRESETS,
+} from './plugins/follow-camera';
+export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
+export { getScene } from './plugins/rendering';
+export { Renderer } from './plugins/rendering';
+export { Transform, WorldTransform } from './plugins/transforms';
+export { AnimatedCharacter, HasAnimator } from './plugins/animation';
+export { isKeyDown } from './plugins/input';
 
 let globalBuilder: GameBuilder | null = null;
 

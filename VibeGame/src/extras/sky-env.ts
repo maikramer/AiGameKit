@@ -40,7 +40,6 @@ export async function applyEquirectSkyEnvironment(
   const rt = pmrem.fromEquirectangular(tex);
   const envMap = rt.texture;
   tex.dispose();
-  rt.dispose();
   pmrem.dispose();
   scene.environment = envMap;
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { loadGltfToScene } from '../../extras/gltf-bridge';
+import { getScene } from '../rendering';
 import { Transform } from '../transforms/components';
 import { GltfPending } from './components';
 import { getGltfUrl, isGltfInFlight, setGltfInFlight } from './context';
@@ -41,6 +42,9 @@ function applyTransformToGroup(group: THREE.Object3D, eid: number): void {
 export const GltfXmlLoadSystem: System = {
   group: 'setup',
   update: (state) => {
+    const scene = getScene(state);
+    if (!scene) return;
+
     for (const eid of gltfLoadQuery(state.world)) {
       if (GltfPending.loaded[eid]) {
         continue;

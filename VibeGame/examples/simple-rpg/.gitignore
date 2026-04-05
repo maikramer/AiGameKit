@@ -1,0 +1,9 @@
+node_modules/
+dist/
+bun.lock
+
+# Generated assets (from gameassets batch + handoff)
+public/assets/models/*.glb
+public/assets/audio/*.wav
+public/assets/sky/sky.png
+public/assets/textures/*.png

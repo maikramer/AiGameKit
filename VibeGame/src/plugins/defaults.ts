@@ -1,5 +1,6 @@
 import type { Plugin } from '../core';
 import { AnimationPlugin } from './animation/plugin';
+import { FollowCameraPlugin } from './follow-camera/plugin';
 import { GltfXmlPlugin } from './gltf-xml/plugin';
 import { InputPlugin } from './input/plugin';
 import { OrbitCameraPlugin } from './orbit-camera/plugin';
@@ -19,6 +20,7 @@ export const DefaultPlugins: Plugin[] = [
   InputPlugin,
   PhysicsPlugin,
   RenderingPlugin,
+  FollowCameraPlugin,
   OrbitCameraPlugin,
   PlayerPlugin,
   StartupPlugin,

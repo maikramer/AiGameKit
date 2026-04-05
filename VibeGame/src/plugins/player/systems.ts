@@ -1,4 +1,5 @@
 import { defineQuery, type System } from '../../core';
+import { FollowCamera } from '../follow-camera';
 import { InputState } from '../input';
 import { OrbitCamera } from '../orbit-camera';
 import { Body, CharacterController, CharacterMovement } from '../physics';
@@ -14,6 +15,7 @@ const playerMovementQuery = defineQuery([
   InputState,
 ]);
 const orbitCameraQuery = defineQuery([OrbitCamera]);
+const followCameraQuery = defineQuery([FollowCamera]);
 const playerGroundedQuery = defineQuery([
   Player,
   CharacterMovement,
@@ -23,15 +25,20 @@ const playerGroundedQuery = defineQuery([
 ]);
 const playersQuery = defineQuery([Player]);
 
+function resolveCameraYaw(world: import('bitecs').IWorld): number {
+  const followCams = followCameraQuery(world);
+  if (followCams.length > 0) return FollowCamera.currentYaw[followCams[0]];
+  const orbitCams = orbitCameraQuery(world);
+  if (orbitCams.length > 0) return OrbitCamera.currentYaw[orbitCams[0]];
+  return 0;
+}
+
 export const PlayerMovementSystem: System = {
   group: 'fixed',
   update: (state) => {
     const playerEntities = playerMovementQuery(state.world);
 
-    const cameraEntities = orbitCameraQuery(state.world);
-    const cameraEntity = cameraEntities.length > 0 ? cameraEntities[0] : null;
-    const cameraYaw =
-      cameraEntity !== null ? OrbitCamera.currentYaw[cameraEntity] : 0;
+    const cameraYaw = resolveCameraYaw(state.world);
     const deltaTime = state.time.fixedDeltaTime;
 
     for (const entity of playerEntities) {
@@ -168,14 +175,23 @@ export const PlayerCameraLinkingSystem: System = {
   group: 'simulation',
   update: (state) => {
     const players = playersQuery(state.world);
-    const cameras = orbitCameraQuery(state.world);
+
+    const followCams = followCameraQuery(state.world);
+    const orbitCams = orbitCameraQuery(state.world);
 
     for (const player of players) {
-      if (Player.cameraEntity[player] === 0 && cameras.length > 0) {
-        const camera = cameras[0];
-        Player.cameraEntity[player] = camera;
-        OrbitCamera.target[camera] = player;
-        OrbitCamera.inputSource[camera] = player;
+      if (Player.cameraEntity[player] !== 0) continue;
+
+      if (followCams.length > 0) {
+        const cam = followCams[0];
+        Player.cameraEntity[player] = cam;
+        FollowCamera.target[cam] = player;
+        FollowCamera.inputSource[cam] = player;
+      } else if (orbitCams.length > 0) {
+        const cam = orbitCams[0];
+        Player.cameraEntity[player] = cam;
+        OrbitCamera.target[cam] = player;
+        OrbitCamera.inputSource[cam] = player;
       }
     }
   },

@@ -10,6 +10,7 @@ export {
   handleMouseMove,
   handleMouseDown,
   handleMouseUp,
+  isKeyDown,
   setTargetCanvas,
   setFocusedCanvas,
   getFocusedCanvas,

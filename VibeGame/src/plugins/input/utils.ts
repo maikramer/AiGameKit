@@ -350,3 +350,7 @@ export function consumeSecondary(): boolean {
 export function getFocusedCanvas(): HTMLCanvasElement | null {
   return focusedCanvas;
 }
+
+export function isKeyDown(code: string): boolean {
+  return inputData.keys.has(code);
+}

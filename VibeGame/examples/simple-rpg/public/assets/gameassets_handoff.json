@@ -1,0 +1,68 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-05T22:20:53.679500+00:00",
+  "public_dir": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public",
+  "assets_base_url": "/assets",
+  "rows": [
+    {
+      "id": "hero",
+      "public_id": "hero",
+      "model": {
+        "kind": "rigged",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/hero_rigged.glb",
+        "url": "/assets/models/hero.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/hero.glb"
+      }
+    },
+    {
+      "id": "wooden_crate",
+      "public_id": "wooden_crate",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/wooden_crate.glb",
+        "url": "/assets/models/wooden_crate.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/wooden_crate.glb"
+      }
+    },
+    {
+      "id": "crystal_blue",
+      "public_id": "crystal_blue",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/crystal_blue.glb",
+        "url": "/assets/models/crystal_blue.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/crystal_blue.glb"
+      }
+    },
+    {
+      "id": "stone_pillar",
+      "public_id": "stone_pillar",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/stone_pillar.glb",
+        "url": "/assets/models/stone_pillar.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/stone_pillar.glb"
+      }
+    },
+    {
+      "id": "tree_lowpoly",
+      "public_id": "tree_lowpoly",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/tree_lowpoly.glb",
+        "url": "/assets/models/tree_lowpoly.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/tree_lowpoly.glb"
+      }
+    },
+    {
+      "id": "collect_sfx",
+      "public_id": "collect_sfx",
+      "audio": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/audio/collect_sfx.wav",
+        "url": "/assets/audio/collect_sfx.wav",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio/collect_sfx.wav"
+      }
+    }
+  ],
+  "manifest_path": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/gameassets_handoff.json"
+}
