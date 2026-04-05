@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _PAINT3D_ROOT = Path(__file__).resolve().parents[1]
 _SRC = _PAINT3D_ROOT / "src"
 _SHARED_SRC = _PAINT3D_ROOT.parent / "Shared" / "src"
@@ -21,6 +23,7 @@ def _paint3d_env() -> dict[str, str]:
 
 
 def test_paint3d_help():
+    pytest.importorskip("torch")
     r = subprocess.run(
         [sys.executable, "-m", "paint3d", "--help"],
         capture_output=True,
@@ -38,6 +41,7 @@ def test_paint3d_help():
 
 
 def test_paint3d_version():
+    pytest.importorskip("torch")
     r = subprocess.run(
         [sys.executable, "-m", "paint3d", "--version"],
         capture_output=True,

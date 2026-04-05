@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import pytest
+
+pytest.importorskip("trimesh")
+
 import numpy as np
 import trimesh
 
