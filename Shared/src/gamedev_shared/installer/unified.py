@@ -45,6 +45,7 @@ class _ToolPythonInstaller(PythonProjectInstaller):
             skip_models=skip_models,
             force=force,
             skip_pytorch=not spec.needs_pytorch,
+            min_python=spec.min_python,
         )
         self.spec = spec
         self.skip_env_config = skip_env_config
@@ -52,6 +53,12 @@ class _ToolPythonInstaller(PythonProjectInstaller):
         self._monorepo_root = monorepo
 
     def check_python(self, min_version: tuple[int, int] = (3, 10)) -> bool:
+        if self._use_uv:
+            self.logger.info(
+                f"uv disponível — Python {self.spec.min_python[0]}.{self.spec.min_python[1]}+ "
+                "será provisionado automaticamente ao criar o venv."
+            )
+            return True
         return super().check_python(min_version=self.spec.min_python)
 
     def install_in_venv(self) -> None:
@@ -174,20 +181,30 @@ def _install_nvdiffrast(venv_python: Path, project_root: Path, logger: Logger) -
     """Instala nvdiffrast com --no-build-isolation (requer PyTorch pré-instalado no venv)."""
     import subprocess
 
+    from .base import has_uv, uv_cmd
+
     logger.step("Instalando nvdiffrast (--no-build-isolation)...")
     try:
-        subprocess.run(
-            [
+        if has_uv():
+            cmd = [
+                uv_cmd(),
+                "pip",
+                "install",
+                "--python",
+                str(venv_python),
+                "git+https://github.com/NVlabs/nvdiffrast.git",
+                "--no-build-isolation",
+            ]
+        else:
+            cmd = [
                 str(venv_python),
                 "-m",
                 "pip",
                 "install",
                 "git+https://github.com/NVlabs/nvdiffrast.git",
                 "--no-build-isolation",
-            ],
-            check=True,
-            cwd=str(project_root),
-        )
+            ]
+        subprocess.run(cmd, check=True, cwd=str(project_root))
         logger.success("nvdiffrast instalado")
         return True
     except subprocess.CalledProcessError as e:
@@ -306,18 +323,22 @@ def install_all(
 
     for spec in tools:
         logger.header(f"→ {spec.name}")
-        ok = install_tool(
-            spec.cli_name,
-            monorepo=monorepo,
-            install_prefix=install_prefix,
-            python_cmd=python_cmd,
-            use_venv=use_venv,
-            skip_deps=skip_deps,
-            skip_models=skip_models,
-            force=force,
-            skip_env_config=skip_env_config,
-            text2d_venv_only=text2d_venv_only,
-        )
+        try:
+            ok = install_tool(
+                spec.cli_name,
+                monorepo=monorepo,
+                install_prefix=install_prefix,
+                python_cmd=python_cmd,
+                use_venv=use_venv,
+                skip_deps=skip_deps,
+                skip_models=skip_models,
+                force=force,
+                skip_env_config=skip_env_config,
+                text2d_venv_only=text2d_venv_only,
+            )
+        except Exception as exc:
+            logger.error(f"{spec.name}: excepção não tratada — {exc}")
+            ok = False
         results[spec.name] = ok
 
     logger.header("Resumo")

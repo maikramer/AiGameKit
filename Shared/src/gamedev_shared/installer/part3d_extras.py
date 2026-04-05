@@ -12,6 +12,7 @@ import subprocess
 from pathlib import Path
 
 from ..logging import Logger
+from .base import has_uv, uv_cmd
 from .python_installer import PythonProjectInstaller
 
 # Nome pip → módulo Python
@@ -50,10 +51,11 @@ def ensure_part3d_torch_geometric_extras(venv_python: Path, logger: Logger) -> b
 
         logger.info(f"  A instalar {pip_name}… (pode compilar vários minutos; não cancele o pip.)")
         try:
-            subprocess.run(
-                [python, "-m", "pip", "install", pip_name, "--no-build-isolation"],
-                check=True,
-            )
+            if has_uv():
+                cmd = [uv_cmd(), "pip", "install", "--python", python, pip_name, "--no-build-isolation"]
+            else:
+                cmd = [python, "-m", "pip", "install", pip_name, "--no-build-isolation"]
+            subprocess.run(cmd, check=True)
         except subprocess.CalledProcessError as e:
             logger.error(f"  pip falhou ao instalar {pip_name}: {e}")
             logger.info(f"  Tente manualmente: {python} -m pip install {pip_name} --no-build-isolation")

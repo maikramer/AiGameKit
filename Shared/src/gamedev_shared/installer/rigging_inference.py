@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from ..logging import Logger
+from .base import has_uv, uv_cmd
 
 _TORCH_INFO_SCRIPT = """
 import torch, sys
@@ -37,6 +38,8 @@ _DEFAULT_CUDA_INDEX = "https://download.pytorch.org/whl/cu130"
 
 
 def _pip_list(python: str) -> list[str]:
+    if has_uv():
+        return [uv_cmd(), "pip", "install", "--python", python]
     return [python, "-m", "pip", "install"]
 
 
@@ -104,7 +107,7 @@ def install_rigging_inference_extras(
 
     logger.step("Instalando rigging3d[inference]...")
     subprocess.run(
-        [*pip_cmd, "-e", f"{root}[inference]"],
+        [python, "-m", "pip", "install", "-e", f"{root}[inference]", "--no-deps"],
         check=True,
         cwd=str(root),
     )
