@@ -67,14 +67,38 @@ Avoid pasting large generated assets into the chat; **link paths** under `public
 | Batch plan JSON for agents | `gameassets batch --dry-run --dry-run-json plan.json` |
 | Declarative GLB | `<gltf-load url="/assets/models/foo.glb"></gltf-load>` in world XML |
 
-## 5. Further R&D (optional)
+## 5. `gameassets dream` — idea-to-game in one command
+
+The `dream` command closes the last manual gap: it takes a **natural-language description** of a game, calls an **LLM** to plan assets and scene layout, then runs **batch + skymap + handoff** and scaffolds a **playable Vite project** with VibeGame.
+
+```bash
+gameassets dream "platformer 3D com cristais num mundo de nuvens, estilo lowpoly" --dry-run
+```
+
+| Phase | What happens |
+|-------|--------------|
+| 1. Plan | LLM generates `dream_plan.json` (title, genre, assets, scene placements, sky prompt) |
+| 2. Emit | Converts plan into `game.yaml`, `manifest.csv`, `world.xml`, `main.ts`, `index.html` |
+| 3. Batch | `gameassets batch --with-3d --with-rig` on the emitted profile/manifest |
+| 4. Sky | `skymap2d generate` from the sky prompt (equirect PNG) |
+| 5. Handoff | `gameassets handoff --public-dir <project>/public` |
+| 6. Scaffold | Creates `package.json`, `vite.config.ts`, copies emitted `main.ts` + `index.html` |
+
+`--dry-run` stops after phase 2 (no GPU), so you can review/edit files before running batch.
+
+Providers: `--llm-provider openai` (default), `huggingface`, or `stdin`. Falls back to a minimal plan if no LLM is available.
+
+Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context).
+
+## 6. Further R&D (optional)
 
 | Priority | Idea |
 |----------|------|
 | Medium | Zip/tar of `public/assets` for CI artefacts |
 | Low | `gameassets resume --dry-run-json` parity with `batch` |
+| Low | Multi-turn LLM refinement in `dream` (iterate on plan before generating) |
 
-## 6. References
+## 7. References
 
 - [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) — folder layout and web contract  
 - [VibeGame README — GLB handoff](../VibeGame/README.md)  

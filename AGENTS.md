@@ -12,7 +12,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 |-----------|----------|--------------|-------------|
 | `Shared/` | Python | `gamedev-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
 | `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ) |
-| `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-2mini) |
+| `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-2.1 SDNQ) |
 | `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1) |
 | `Part3D/` | Python | `part3d` | Semantic 3D parts |
 | `GameAssets/` | Python | `gameassets` | Batch asset generation |
@@ -107,6 +107,8 @@ Formatting: Prettier (`make fmt-vibegame` / `make fmt-check-vibegame`, or `bun r
 This runs `bun install --frozen-lockfile` and `bun run build` in `VibeGame/`, then installs `vibegame` into `~/.local/bin` (wrapper → `scripts/vibegame-cli.mjs`). Subcommands: `vibegame create <name>`, `vibegame --version`.
 
 **GLB handoff (Text3D / Paint3D / GameAssets → browser):** export `loadGltfToScene` from `vibegame` (see `VibeGame/src/extras/gltf-bridge.ts`), or declarative `<gltf-load url="…">` in world XML (`VibeGame/src/plugins/gltf-xml/`). Equirect sky → PMREM: `applyEquirectSkyEnvironment` (`VibeGame/src/extras/sky-env.ts`). Pack to `public/`: `gameassets handoff --public-dir …`. End-to-end layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Example: [`VibeGame/examples/monorepo-game/`](VibeGame/examples/monorepo-game/). Animator3D after rig: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md). AI workflow: [`docs/ZERO_TO_GAME_AI.md`](docs/ZERO_TO_GAME_AI.md).
+
+**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.csv`/`world.xml`/`main.ts`/`index.html`, runs batch+sky+handoff, and scaffolds a playable Vite project. Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context). Providers: `--llm-provider openai|huggingface|stdin`. `--dry-run` generates files without GPU.
 
 ### Tests — single test file or test class
 

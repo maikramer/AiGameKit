@@ -31,9 +31,22 @@ Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadG
 | Plano JSON (batch dry-run) | `gameassets batch --dry-run --dry-run-json ficheiro.json` |
 | GLB no XML | `<gltf-load url="…">` |
 
+## `gameassets dream` — da ideia ao jogo
+
+Novo comando que recebe uma **descrição em linguagem natural**, chama um **LLM** para planear assets e cena, e gera um **projecto Vite jogável** com VibeGame.
+
+```bash
+gameassets dream "idle clicker de fazenda, estilo pixel art" --dry-run
+```
+
+Fases: Plan (LLM) → Emit (yaml/csv/xml/ts) → Batch → Sky → Handoff → Scaffold. `--dry-run` gera ficheiros sem GPU. Providers: `openai`, `huggingface`, `stdin`.
+
+Código: `GameAssets/src/gameassets/dream/`.
+
 ## Backlog opcional
 
 | Prioridade | Tema |
 |------------|------|
 | Média | Zip CI de `public/assets` |
 | Baixa | `resume --dry-run-json` alinhado ao `batch` |
+| Baixa | Refinamento multi-turn do plano no `dream` |

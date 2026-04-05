@@ -1,9 +1,9 @@
 ---
 name: text3d
-description: Gera meshes 3D a partir de texto ou imagem (Text2D + Hunyuan3D-2mini), só geometria; textura/PBR no GLB via Paint3D 2.1 ou GameAssets (`text3d.texture`). Use quando o utilizador pedir 3D, GLB/PLY/OBJ, Hunyuan, text-to-3D, image-to-3D, TEXT3D_BIN, PAINT3D_BIN, ou integração com GameAssets.
+description: Gera meshes 3D a partir de texto ou imagem (Text2D + Hunyuan3D-2.1 SDNQ INT4), só geometria; textura/PBR no GLB via Paint3D 2.1 ou GameAssets (`text3d.texture`). Use quando o utilizador pedir 3D, GLB/PLY/OBJ, Hunyuan, text-to-3D, image-to-3D, TEXT3D_BIN, PAINT3D_BIN, ou integração com GameAssets.
 ---
 
-# Text3D — Text2D + Hunyuan3D-2mini
+# Text3D — Text2D + Hunyuan3D-2.1 SDNQ
 
 ## Quando usar
 
@@ -13,7 +13,7 @@ description: Gera meshes 3D a partir de texto ou imagem (Text2D + Hunyuan3D-2min
 
 ## O que é
 
-Pipeline **text-to-3D**: geração de imagem (**Text2D** / FLUX Klein) + **Hunyuan3D-2mini** (imagem → mesh). Entrada **só por imagem** (`--from-image` / `-i`) sem correr Text2D.
+Pipeline **text-to-3D**: geração de imagem (**Text2D** / FLUX Klein) + **Hunyuan3D-2.1** SDNQ INT4 (imagem → mesh). Entrada **só por imagem** (`--from-image` / `-i`) sem correr Text2D.
 
 ## Pré-requisitos
 
@@ -94,7 +94,7 @@ O sistema aplica **prompt enhancement automático** (v2, framing positivo) que e
 
 ## Licenças e pesos
 
-- **Hunyuan3D-2mini** e ecossistema Tencent: ver model cards e licença **Tencent Hunyuan Community** (restrições de uso).
+- **Hunyuan3D-2.1** e ecossistema Tencent: ver model cards e licença **Tencent Hunyuan Community** (restrições de uso).
 - Primeira execução: downloads grandes para `~/.cache/huggingface/`.
 
 ## Ferramentas relacionadas

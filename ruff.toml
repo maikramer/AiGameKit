@@ -26,6 +26,7 @@ exclude = [
     "node_modules",
     ".git",
     "Rigging3D/src/rigging3d/unirig",
+    "Text3D/src/text3d/hy3dshape",
 ]
 
 [lint]
