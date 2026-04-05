@@ -49,8 +49,7 @@ def smooth_texture(
 
     if verbose:
         print(
-            f"[Smooth] {arr.shape[1]}x{arr.shape[0]} · "
-            f"{passes} passes · d={diameter} σc={sigma_color} σs={sigma_space}"
+            f"[Smooth] {arr.shape[1]}x{arr.shape[0]} · {passes} passes · d={diameter} sc={sigma_color} ss={sigma_space}"
         )
 
     for i in range(passes):

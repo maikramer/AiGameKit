@@ -18,6 +18,7 @@ describe('Builder-Runtime Integration', () => {
     global.Node = dom.window.Node as any;
     global.HTMLElement = dom.window.HTMLElement as any;
     global.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
+    global.cancelAnimationFrame = clearTimeout as any;
     global.performance = { now: () => Date.now() } as any;
   });
 

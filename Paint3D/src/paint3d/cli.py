@@ -206,7 +206,7 @@ def texture(
         f"render={rs_label} · texture={ts_label} · bake_exp={bake_exp}",
     )
     if smooth:
-        info_table.add_row("[bold]Smooth[/bold]", f"bilateral × {smooth_passes} passes")
+        info_table.add_row("[bold]Smooth[/bold]", f"bilateral x {smooth_passes} passes")
     if upscale:
         info_table.add_row("[bold]Upscale[/bold]", f"Real-ESRGAN {upscale_factor}x")
     console.print(Panel(info_table, title="[bold green]Hunyuan3D-Paint 2.1", border_style="green"))

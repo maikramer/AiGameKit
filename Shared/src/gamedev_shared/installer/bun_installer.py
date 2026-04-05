@@ -33,8 +33,7 @@ class BunProjectInstaller(BaseInstaller):
         bun = shutil.which("bun")
         if not bun:
             self.logger.error(
-                "Bun não encontrado no PATH. Instale: https://bun.sh "
-                "(ex.: curl -fsSL https://bun.sh/install | bash)"
+                "Bun não encontrado no PATH. Instale: https://bun.sh (ex.: curl -fsSL https://bun.sh/install | bash)"
             )
             return False
         try:
@@ -57,8 +56,7 @@ class BunProjectInstaller(BaseInstaller):
         node = shutil.which("node")
         if not node:
             self.logger.error(
-                "Node.js não encontrado no PATH. O comando `vibegame` precisa de `node` "
-                "(https://nodejs.org/)."
+                "Node.js não encontrado no PATH. O comando `vibegame` precisa de `node` (https://nodejs.org/)."
             )
             return False
         try:

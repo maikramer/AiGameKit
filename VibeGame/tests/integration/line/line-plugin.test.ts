@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, defineQuery } from 'vibegame';
 import { Line, LinePlugin } from 'vibegame/line';
+
+// Polyfill browser APIs for Bun (GSAP uses these internally)
+globalThis.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
+globalThis.cancelAnimationFrame = clearTimeout as any;
+
 import {
   Transform,
   TransformsPlugin,

@@ -23,6 +23,7 @@ describe('Global API', () => {
     global.document = dom.window.document as any;
     global.MutationObserver = dom.window.MutationObserver as any;
     global.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
+    global.cancelAnimationFrame = clearTimeout as any;
     global.performance = { now: () => Date.now() } as any;
   });
 

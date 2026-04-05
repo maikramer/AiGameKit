@@ -5,13 +5,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from gamedev_shared.installer.bun_installer import BunProjectInstaller
 from gamedev_shared.installer.registry import (
     ToolKind,
     ToolSpec,
     find_monorepo_root,
     get_tool,
 )
-from gamedev_shared.installer.bun_installer import BunProjectInstaller
 from gamedev_shared.installer.unified import (
     _ToolPythonInstaller,
     _ToolRustInstaller,

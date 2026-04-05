@@ -13,6 +13,7 @@ describe('GameBuilder', () => {
     global.document = dom.window.document as any;
     global.MutationObserver = dom.window.MutationObserver as any;
     global.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
+    global.cancelAnimationFrame = clearTimeout as any;
     global.performance = { now: () => Date.now() } as any;
 
     const builderModule = await import('../../src/builder');
