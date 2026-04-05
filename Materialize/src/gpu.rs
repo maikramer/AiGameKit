@@ -14,10 +14,7 @@ pub struct ComputePipeline {
 
 impl GpuContext {
     pub async fn new() -> Result<Self> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::all(),
-            ..Default::default()
-        });
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -29,14 +26,12 @@ impl GpuContext {
             .context("No GPU adapter available. Check Vulkan/Metal/DX12 drivers")?;
 
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    label: None,
-                },
-                None,
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                label: None,
+                ..Default::default()
+            })
             .await
             .context("Failed to create GPU device")?;
 
@@ -65,14 +60,14 @@ impl GpuContext {
         });
 
         self.queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             &rgba,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
                 rows_per_image: Some(dimensions.1),
@@ -205,8 +200,8 @@ impl GpuContext {
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("pipeline_layout"),
-                bind_group_layouts: &[&bind_group_layout, params_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&bind_group_layout), Some(params_layout)],
+                ..Default::default()
             });
 
         let pipeline = self
@@ -215,7 +210,9 @@ impl GpuContext {
                 label: Some("compute_pipeline"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point,
+                entry_point: Some(entry_point),
+                compilation_options: Default::default(),
+                cache: None,
             });
 
         Ok(ComputePipeline {
@@ -317,8 +314,8 @@ impl GpuContext {
             .device
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("pipeline_layout_2in"),
-                bind_group_layouts: &[&bind_group_layout, params_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&bind_group_layout), Some(params_layout)],
+                ..Default::default()
             });
 
         let pipeline = self
@@ -327,7 +324,9 @@ impl GpuContext {
                 label: Some("compute_pipeline_2in"),
                 layout: Some(&pipeline_layout),
                 module: &shader,
-                entry_point,
+                entry_point: Some(entry_point),
+                compilation_options: Default::default(),
+                cache: None,
             });
 
         Ok(ComputePipeline {
@@ -384,8 +383,8 @@ impl GpuContext {
             });
 
             compute_pass.set_pipeline(pipeline);
-            compute_pass.set_bind_group(0, texture_bind_group, &[]);
-            compute_pass.set_bind_group(1, params_bind_group, &[]);
+            compute_pass.set_bind_group(0, Some(texture_bind_group), &[]);
+            compute_pass.set_bind_group(1, Some(params_bind_group), &[]);
             compute_pass.dispatch_workgroups(workgroups_x, workgroups_y, 1);
         }
 
@@ -422,15 +421,15 @@ impl GpuContext {
             });
 
         encoder.copy_texture_to_buffer(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
-            wgpu::ImageCopyBuffer {
+            wgpu::TexelCopyBufferInfo {
                 buffer: &buffer,
-                layout: wgpu::ImageDataLayout {
+                layout: wgpu::TexelCopyBufferLayout {
                     offset: 0,
                     bytes_per_row: Some(padded_bytes_per_row),
                     rows_per_image: Some(size.height),
@@ -448,7 +447,7 @@ impl GpuContext {
             let _ = sender.send(result);
         });
 
-        self.device.poll(wgpu::Maintain::Wait);
+        self.device.poll(wgpu::PollType::wait_indefinitely()).ok();
         receiver.await??;
 
         let data = buffer_slice.get_mapped_range();

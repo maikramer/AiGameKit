@@ -231,7 +231,10 @@ impl Pipeline {
         );
 
         // Read back results
-        self.gpu.device.poll(wgpu::Maintain::Wait);
+        self.gpu
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .ok();
 
         let height_data = self.gpu.read_texture(&height_texture).await?;
         let normal_data = self.gpu.read_texture(&normal_texture).await?;
