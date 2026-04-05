@@ -1,6 +1,10 @@
 import json
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("yaml")
+
 from gamedev_lab.validate_rules import evaluate_inspect_rules, load_rules_file
 
 FIX = Path(__file__).parent / "fixtures"

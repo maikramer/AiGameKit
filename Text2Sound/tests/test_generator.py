@@ -2,11 +2,11 @@
 
 from unittest.mock import MagicMock, patch
 
-import pytest
+import torch
 
-torch = pytest.importorskip("torch")
-pytest.importorskip("torchaudio")
-pytest.importorskip("stable_audio_tools")
+from tests._heavy_deps import require_audio_stack
+
+require_audio_stack()
 
 from text2sound.generator import (
     DEFAULT_CFG_SCALE,

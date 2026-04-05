@@ -1,14 +1,13 @@
 """Smoke tests para text2sound CLI (sem modelo/GPU)."""
 
 import pytest
-
-pytest.importorskip("torch")
-pytest.importorskip("torchaudio")
-pytest.importorskip("stable_audio_tools")
-
 from click.testing import CliRunner
 
-from text2sound.cli import cli
+from tests._heavy_deps import require_audio_stack
+
+require_audio_stack()
+
+from text2sound.cli import cli  # noqa: E402
 
 
 @pytest.fixture

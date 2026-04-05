@@ -1,4 +1,8 @@
+import pytest
+
+
 def test_import_cli():
+    pytest.importorskip("yaml")
     from gamedev_lab.cli import main
 
     assert callable(main)

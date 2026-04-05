@@ -6,6 +6,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+pytest.importorskip("trimesh")
+
 import trimesh
 
 from gamedev_lab.mesh_inspector import (

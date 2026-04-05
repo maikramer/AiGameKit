@@ -1,3 +1,7 @@
+import pytest
+
+pytest.importorskip("numpy")
+
 import numpy as np
 
 from gamedev_lab.compare_images import metrics_mae_rmse_ssim
