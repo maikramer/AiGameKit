@@ -21,6 +21,17 @@ def default_python_command() -> str:
     return "python3"
 
 
+def has_uv() -> bool:
+    """Devolve ``True`` se ``uv`` estiver disponível no PATH."""
+    return shutil.which("uv") is not None
+
+
+def uv_cmd() -> str:
+    """Devolve o caminho absoluto do ``uv`` ou ``'uv'`` se não encontrado."""
+    found = shutil.which("uv")
+    return found if found else "uv"
+
+
 class BaseInstaller:
     """Classe base para instaladores do monorepo GameDev.
 

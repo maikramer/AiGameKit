@@ -17,14 +17,15 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
 
     inst.logger.step("Instalando no venv do projecto...")
     python = str(inst.venv_python)
-    pip_cmd = [python, "-m", "pip", "install"]
+    pip_cmd = inst._pip_install_cmd()
     _root = str(inst.project_root)
 
-    subprocess.run(
-        [python, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
-        check=True,
-        cwd=_root,
-    )
+    if not inst._use_uv:
+        subprocess.run(
+            [python, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
+            check=True,
+            cwd=_root,
+        )
 
     shared_root = (inst.project_root.parent / "Shared").resolve()
     if (shared_root / "pyproject.toml").is_file():

@@ -1,11 +1,18 @@
-"""PythonProjectInstaller — instalador para projectos Python do monorepo."""
+"""PythonProjectInstaller — instalador para projectos Python do monorepo.
+
+Usa ``uv`` (se disponível) para criação de venvs e instalação de pacotes,
+o que permite resolver automaticamente a versão correcta de Python quando
+``min_python`` exige uma versão diferente da do sistema (ex.: Rigging3D 3.11,
+Animator3D 3.13).  Quando ``uv`` não está disponível, usa o fluxo clássico
+``python -m venv`` + ``pip``.
+"""
 
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
 
-from .base import BaseInstaller
+from .base import BaseInstaller, has_uv, uv_cmd
 
 # Política do monorepo: o pacote do projecto é sempre instalado com
 # ``pip install -e`` (modo editável). Alterações ao código-fonte refletem-se
@@ -37,6 +44,7 @@ class PythonProjectInstaller(BaseInstaller):
         skip_models: bool = False,
         force: bool = False,
         skip_pytorch: bool = False,
+        min_python: tuple[int, int] = (3, 10),
     ) -> None:
         super().__init__(
             project_name=project_name,
@@ -50,6 +58,8 @@ class PythonProjectInstaller(BaseInstaller):
         self.skip_models = skip_models
         self.force = force
         self.skip_pytorch = skip_pytorch
+        self.min_python = min_python
+        self._use_uv = has_uv()
 
         self.venv_dir = self.project_root / ".venv"
         if self.is_windows:
@@ -91,23 +101,41 @@ class PythonProjectInstaller(BaseInstaller):
     # ------------------------------------------------------------------
 
     def ensure_project_venv(self) -> bool:
-        """Garante ``projecto/.venv`` com um interpretador válido (cria se necessário)."""
+        """Garante ``projecto/.venv`` com um interpretador válido (cria se necessário).
+
+        Quando ``uv`` está disponível, usa ``uv venv --python X.Y`` para criar o
+        venv com a versão de Python adequada ao projecto (descarrega automaticamente
+        se necessário).  Caso contrário, usa o fluxo clássico ``python -m venv``.
+        """
         if self.venv_python.is_file():
             self.venv_exists = True
             self.logger.info(f"Venv do projecto: {self.venv_dir}")
             return True
 
-        self.logger.step(f"Criando ambiente virtual em {self.venv_dir}...")
-        try:
-            subprocess.run(
-                [self.python_cmd, "-m", "venv", str(self.venv_dir)],
-                check=True,
-            )
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Falha ao criar venv: {e}")
-            if not self.is_windows:
-                self.logger.info("Em Debian/Ubuntu: sudo apt install python3-venv")
-            return False
+        py_version = f"{self.min_python[0]}.{self.min_python[1]}"
+
+        if self._use_uv:
+            self.logger.step(f"Criando ambiente virtual com uv (Python {py_version}) em {self.venv_dir}...")
+            try:
+                subprocess.run(
+                    [uv_cmd(), "venv", str(self.venv_dir), "--python", py_version],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"Falha ao criar venv com uv: {e}")
+                return False
+        else:
+            self.logger.step(f"Criando ambiente virtual em {self.venv_dir}...")
+            try:
+                subprocess.run(
+                    [self.python_cmd, "-m", "venv", str(self.venv_dir)],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                self.logger.error(f"Falha ao criar venv: {e}")
+                if not self.is_windows:
+                    self.logger.info("Em Debian/Ubuntu: sudo apt install python3-venv")
+                return False
 
         if not self.venv_python.is_file():
             self.logger.error(f"Python não encontrado após criar venv: {self.venv_python}")
@@ -121,18 +149,28 @@ class PythonProjectInstaller(BaseInstaller):
     # Instalação em venv
     # ------------------------------------------------------------------
 
+    def _pip_install_cmd(self) -> list[str]:
+        """Devolve o comando base para ``pip install`` (usa ``uv pip`` se disponível)."""
+        if self._use_uv:
+            return [uv_cmd(), "pip", "install", "--python", str(self.venv_python)]
+        return [str(self.venv_python), "-m", "pip", "install"]
+
     def install_in_venv(self) -> None:
         """Instala dependências e o pacote em modo editável no ``.venv`` do projecto."""
         self.logger.step("Instalando no venv do projecto...")
         python = str(self.venv_python)
-        pip_cmd = [python, "-m", "pip", "install"]
+        pip_cmd = self._pip_install_cmd()
 
         _root = str(self.project_root)
-        subprocess.run(
-            [python, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
-            check=True,
-            cwd=_root,
-        )
+
+        if self._use_uv:
+            self.logger.info("Usando uv para instalar dependências (mais rápido)")
+        else:
+            subprocess.run(
+                [python, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
+                check=True,
+                cwd=_root,
+            )
 
         # Monorepo: o venv deve refletir sempre o checkout actual (incl. novos módulos
         # em gamedev-shared). Um «já instalado» que saltava pip -r deixava Shared
@@ -173,14 +211,17 @@ class PythonProjectInstaller(BaseInstaller):
 
     def install_system_wide(self) -> None:
         self.logger.step(f"Instalando {self.project_name} (system-wide / prefix)...")
-        pip_cmd = [self.python_cmd, "-m", "pip", "install"]
+        pip_cmd = (
+            [uv_cmd(), "pip", "install"] if self._use_uv else [self.python_cmd, "-m", "pip", "install"]
+        )
         _root = str(self.project_root)
 
-        subprocess.run(
-            [self.python_cmd, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
-            check=True,
-            cwd=_root,
-        )
+        if not self._use_uv:
+            subprocess.run(
+                [self.python_cmd, "-m", "pip", "install", "--upgrade", *_PIP_BOOTSTRAP],
+                check=True,
+                cwd=_root,
+            )
 
         if not self.skip_pytorch:
             self.install_pytorch(pip_cmd, cwd=self.project_root)
