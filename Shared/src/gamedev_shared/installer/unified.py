@@ -187,13 +187,20 @@ def _install_nvdiffrast(venv_python: Path, project_root: Path, logger: Logger) -
     try:
         if has_uv():
             cmd = [
-                uv_cmd(), "pip", "install", "--python", str(venv_python),
+                uv_cmd(),
+                "pip",
+                "install",
+                "--python",
+                str(venv_python),
                 "git+https://github.com/NVlabs/nvdiffrast.git",
                 "--no-build-isolation",
             ]
         else:
             cmd = [
-                str(venv_python), "-m", "pip", "install",
+                str(venv_python),
+                "-m",
+                "pip",
+                "install",
                 "git+https://github.com/NVlabs/nvdiffrast.git",
                 "--no-build-isolation",
             ]

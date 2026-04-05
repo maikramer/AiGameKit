@@ -202,10 +202,7 @@ class PythonProjectInstaller(BaseInstaller):
                 )
             except subprocess.CalledProcessError:
                 if self._use_uv:
-                    self.logger.warn(
-                        "uv falhou (provavelmente caminhos file: relativos) "
-                        "— a tentar com pip do venv..."
-                    )
+                    self.logger.warn("uv falhou (provavelmente caminhos file: relativos) — a tentar com pip do venv...")
                     subprocess.run(
                         [python, "-m", "pip", "install", "-r", str(self.requirements_file)],
                         check=True,
@@ -230,9 +227,7 @@ class PythonProjectInstaller(BaseInstaller):
 
     def install_system_wide(self) -> None:
         self.logger.step(f"Instalando {self.project_name} (system-wide / prefix)...")
-        pip_cmd = (
-            [uv_cmd(), "pip", "install"] if self._use_uv else [self.python_cmd, "-m", "pip", "install"]
-        )
+        pip_cmd = [uv_cmd(), "pip", "install"] if self._use_uv else [self.python_cmd, "-m", "pip", "install"]
         _root = str(self.project_root)
 
         if not self._use_uv:
