@@ -194,11 +194,25 @@ class PythonProjectInstaller(BaseInstaller):
 
         if self.requirements_file.is_file():
             self.logger.info(f"Instalando dependências: {self.requirements_file}")
-            subprocess.run(
-                [*pip_cmd, "-r", str(self.requirements_file)],
-                check=True,
-                cwd=_root,
-            )
+            try:
+                subprocess.run(
+                    [*pip_cmd, "-r", str(self.requirements_file)],
+                    check=True,
+                    cwd=_root,
+                )
+            except subprocess.CalledProcessError:
+                if self._use_uv:
+                    self.logger.warn(
+                        "uv falhou (provavelmente caminhos file: relativos) "
+                        "— a tentar com pip do venv..."
+                    )
+                    subprocess.run(
+                        [python, "-m", "pip", "install", "-r", str(self.requirements_file)],
+                        check=True,
+                        cwd=_root,
+                    )
+                else:
+                    raise
         else:
             self.logger.warn(f"Ficheiro em falta: {self.requirements_file}")
 
