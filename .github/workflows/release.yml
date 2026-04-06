@@ -1,0 +1,67 @@
+# Release workflow — version bump + git tag + npm publish (VibeGame)
+# Triggered manually or on tag push.
+# Python packages are not published here (no PyPI config); this handles
+# VibeGame npm publish and git tag creation.
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.0.0, 0.4.1)'
+        required: true
+      prerelease:
+        description: 'Prerelease? (skip npm publish)'
+        type: boolean
+        default: false
+
+jobs:
+  version-bump:
+    name: Bump version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Bump VibeGame version
+        run: |
+          cd VibeGame
+          npm version ${{ github.event.inputs.version }} --no-git-tag-version
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "release: v${{ github.event.inputs.version }}"
+          git tag "v${{ github.event.inputs.version }}"
+          git push origin main --tags
+
+  publish-vibegame:
+    name: Publish VibeGame to npm
+    needs: version-bump
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.prerelease == 'false' }}
+    defaults:
+      run:
+        working-directory: VibeGame
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.2.21"
+      - name: Install and build
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

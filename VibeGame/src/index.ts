@@ -14,7 +14,10 @@ export {
 export type { GltfLoadResult } from './extras/gltf-bridge';
 export { GltfAnimator } from './extras/gltf-animator';
 export type { GltfAnimatorOptions } from './extras/gltf-animator';
-export { applyEquirectSkyEnvironment } from './extras/sky-env';
+export {
+  applyEquirectSkyEnvironment,
+  autoLoadSkyEnvironment,
+} from './extras/sky-env';
 export type { EquirectSkyOptions } from './extras/sky-env';
 
 export { Player, PlayerGltfConfig, playerGltfRecipe } from './plugins/player';
