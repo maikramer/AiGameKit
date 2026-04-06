@@ -19,12 +19,12 @@ Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures an
 | [**Text3D**](Text3D/) | **Text-to-3D** pipeline: 2D image (via Text2D) → GLB mesh with Hunyuan3D-2.1 (SDNQ INT4). Texturing via Paint3D (optional). |
 | [**Part3D**](Part3D/) | **Semantic 3D parts**: Hunyuan3D-Part (segmentation / mesh parts). |
 | [**Paint3D**](Paint3D/) | **3D texturing**: Hunyuan3D-Paint 2.1 (multiview PBR) + Materialize PBR + AI upscale (Real-ESRGAN). Standalone or via Text3D. |
-| [**GameAssets**](GameAssets/) | **Prompt/asset batching**: profile + CSV → `text2d` or `texture2d` (per profile or per row) + optional `text3d` / Materialize. |
+| [**GameAssets**](GameAssets/) | **Prompt/asset batching**: profile + CSV → `text2d` or `texture2d` + optional `text3d`, rig, **Animator3D** (`--with-animate`), **`gameassets dream`** (idea → Vite scaffold). |
 | [**Texture2D**](Texture2D/) | **Seamless 2D textures** (tileable) via HF Inference API — no local GPU required. |
 | [**Skymap2D**](Skymap2D/) | **Equirectangular 360° skymaps** via HF Inference API — skyboxes for game dev, no local GPU. |
 | [**Text2Sound**](Text2Sound/) | **Text-to-audio** CLI with Stable Audio Open 1.0: stereo 44.1 kHz, game-dev presets. |
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**UniRig**](https://github.com/VAST-AI-Research/UniRig) (skeleton + skinning + merge); CUDA GPU; Python **3.11**, **bpy** 5.0.x (Open3D). |
-| [**Animator3D**](Animator3D/) | **animator3d** — animation with **bpy** 5.1 (Blender 5.1); Python **3.13**; inspection, test keyframes, GLB/FBX export after rigging. |
+| [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.1; Python **3.13**; procedural clips, **`game-pack`** (humanoid/creature/flying presets), GLB export after rigging. |
 | [**Materialize**](Materialize/) | **PBR maps** CLI (Rust/wgpu): normal, AO, metallic, smoothness from a diffuse texture. |
 | [**GameDevLab**](GameDevLab/) | **Lab CLI**: debug 3D, quantization benches, profiling, pipeline optimization. |
 | [**VibeGame**](VibeGame/) | **vibegame** — TypeScript 3D engine (ECS, Three.js, declarative XML); **Bun** + **Vite**. See [VibeGame/README.md](VibeGame/README.md). |

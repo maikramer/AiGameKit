@@ -31,7 +31,7 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 |--------------------------|-------|------|---------------|--------|
 | `text2d` | Text2D | Python | 3.10 | PyTorch/CUDA recomendado |
 | `text3d` | Text3D | Python | 3.8 | Depende de Text2D; nvdiffrast pós-venv |
-| `gameassets` | GameAssets | Python | 3.10 | Sem PyTorch no pacote; `batch` orquestra CLIs no PATH (ex.: Part3D com `--with-parts`) |
+| `gameassets` | GameAssets | Python | 3.10 | Sem PyTorch no pacote; `batch` orquestra CLIs (`--with-parts`, `--with-rig`, `--with-animate` + Animator3D, etc.) |
 | `text2sound` | Text2Sound | Python | 3.10 | PyTorch/CUDA |
 | `texture2d` | Texture2D | Python | 3.10 | HF API; GPU local opcional |
 | `skymap2d` | Skymap2D | Python | 3.10 | HF API |
