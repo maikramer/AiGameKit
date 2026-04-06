@@ -12,3 +12,51 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+
+  - package-ecosystem: "pip"
+    directory: "/Shared"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+
+  - package-ecosystem: "pip"
+    directory: "/GameAssets"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "pip"
+    directory: "/Texture2D"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "pip"
+    directory: "/Skymap2D"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "pip"
+    directory: "/GameDevLab"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "pip"
+    directory: "/Part3D"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "pip"
+    directory: "/Text2Sound"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 2
+
+  - package-ecosystem: "npm"
+    directory: "/VibeGame"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3

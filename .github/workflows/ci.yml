@@ -18,6 +18,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-lint-${{ runner.os }}-${{ hashFiles('ruff.toml', '.pre-commit-config.yaml') }}
+          restore-keys: pip-lint-${{ runner.os }}-
       - name: Install tools
         run: pip install --upgrade pip && pip install ruff pre-commit
       - name: Ruff check
@@ -76,6 +82,14 @@ jobs:
       - name: Get repo path
         id: repo
         run: echo "path=$(pwd)" >> $GITHUB_OUTPUT
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ matrix.python-version }}-${{ matrix.package }}-${{ hashFiles(format('Shared/pyproject.toml', matrix.package, '/pyproject.toml')) }}
+          restore-keys: |
+            pip-${{ matrix.python-version }}-${{ matrix.package }}-
+            pip-${{ matrix.python-version }}-
       - name: Install Shared (editable, by absolute path)
         run: pip install --upgrade pip && pip install -e ${{ steps.repo.outputs.path }}/Shared/.[dev]
       - name: Install package and run tests
@@ -111,6 +125,12 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.2.21"
+      - name: Cache bun
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('VibeGame/bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
       - name: Install dependencies
         run: bun install --frozen-lockfile
       - name: TypeScript check
