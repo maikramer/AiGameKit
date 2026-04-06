@@ -50,6 +50,8 @@ export type {
   SceneManifest,
   SceneManifestEntry,
 } from './plugins/scene-manifest';
+export { Terrain, TerrainPlugin } from './plugins/terrain';
+export type { TerrainEntityData } from './plugins/terrain';
 export { initAssetHotReload } from './vite/hot-reload-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 

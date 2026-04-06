@@ -1,4 +1,4 @@
-import * as RAPIER from '@dimforge/rapier3d-compat';
+﻿import * as RAPIER from '@dimforge/rapier3d-compat';
 import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
 import { defineQuery, TIME_CONSTANTS } from '../../core';
@@ -75,7 +75,7 @@ const touchEndedEventQuery = defineQuery([TouchEndedEvent]);
 
 const stateToPhysicsContext = new WeakMap<State, PhysicsContext>();
 
-function getPhysicsContext(state: State): PhysicsContext {
+export function getPhysicsContext(state: State): PhysicsContext {
   let context = stateToPhysicsContext.get(state);
   if (!context) {
     context = {

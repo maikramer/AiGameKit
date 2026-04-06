@@ -1,14 +1,41 @@
-/**
+﻿/**
  * Bridge for GLB/GLTF assets produced by Text3D, Paint3D, Rigging3D, etc.
- * Adds the loaded scene graph to the VibeGame Three.js scene.
+ * Parses with @loaders.gl/gltf (post-process + encode), then builds Three.js
+ * scene and clips via GLTFLoader.parseAsync.
  */
+import { encodeSync, load } from '@loaders.gl/core';
+import { DracoLoader } from '@loaders.gl/draco';
+import {
+  GLTFLoader as LoadersGLTFLoader,
+  GLTFWriter,
+  postProcessGLTF,
+} from '@loaders.gl/gltf';
 import type { Group } from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { GLTFLoader as ThreeGLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { State } from '../core';
 import { getScene } from '../plugins/rendering';
 import { GltfAnimator } from './gltf-animator';
+
+const threeGltfLoader = new ThreeGLTFLoader();
+
+/**
+ * Load glTF/GLB via loaders.gl, then round-trip to Three.js GLTF (scene + animations).
+ */
+async function loadGltfAsThree(url: string): Promise<GLTF> {
+  const gltfWithBuffers = await load(url, LoadersGLTFLoader, {
+    DracoLoader,
+    gltf: {
+      decompressMeshes: true,
+      loadBuffers: true,
+      loadImages: true,
+    },
+  });
+  const processed = postProcessGLTF(gltfWithBuffers);
+  const arrayBuffer = encodeSync(processed, GLTFWriter);
+  return threeGltfLoader.parseAsync(arrayBuffer, '');
+}
 
 /**
  * Load a glTF/GLB from URL and attach it to the current rendering scene.
@@ -26,17 +53,9 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
       )
     );
   }
-  const loader = new GLTFLoader();
-  return new Promise((resolve, reject) => {
-    loader.load(
-      url,
-      (gltf) => {
-        scene.add(gltf.scene);
-        resolve(gltf.scene);
-      },
-      undefined,
-      reject
-    );
+  return loadGltfAsThree(url).then((gltf) => {
+    scene.add(gltf.scene);
+    return gltf.scene;
   });
 }
 
@@ -53,8 +72,7 @@ export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
       )
     );
   }
-  const loader = new GLTFLoader();
-  return loader.loadAsync(url).then((gltf) => {
+  return loadGltfAsThree(url).then((gltf) => {
     scene.add(gltf.scene);
     return gltf;
   });
@@ -86,25 +104,17 @@ export function loadGltfToSceneWithAnimator(
       )
     );
   }
-  const loader = new GLTFLoader();
-  return new Promise((resolve, reject) => {
-    loader.load(
-      url,
-      (gltf) => {
-        scene.add(gltf.scene);
-        const animator =
-          gltf.animations.length > 0
-            ? new GltfAnimator(gltf, {
-                crossfadeDuration: options?.crossfadeDuration,
-              })
-            : null;
-        resolve({
-          group: gltf.scene,
-          animator,
-        });
-      },
-      undefined,
-      reject
-    );
+  return loadGltfAsThree(url).then((gltf) => {
+    scene.add(gltf.scene);
+    const animator =
+      gltf.animations.length > 0
+        ? new GltfAnimator(gltf, {
+            crossfadeDuration: options?.crossfadeDuration,
+          })
+        : null;
+    return {
+      group: gltf.scene,
+      animator,
+    };
   });
 }

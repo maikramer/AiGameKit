@@ -10,6 +10,7 @@ import { PlayerPlugin } from './player/plugin';
 import { RenderingPlugin } from './rendering/plugin';
 import { RespawnPlugin } from './respawn/plugin';
 import { StartupPlugin } from './startup/plugin';
+import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { TweenPlugin } from './tweening';
 
@@ -27,4 +28,5 @@ export const DefaultPlugins: Plugin[] = [
   PlayerPlugin,
   StartupPlugin,
   RespawnPlugin,
+  TerrainPlugin,
 ];

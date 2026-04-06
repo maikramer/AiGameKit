@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "three": "^0.170.0",
+    "three": "^0.183.0",
     "vibegame": "file:../.."
   },
   "devDependencies": {

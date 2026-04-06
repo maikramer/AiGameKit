@@ -1,4 +1,4 @@
-import type { State } from '../../core';
+﻿import type { State } from '../../core';
 import * as THREE from 'three';
 import { MainCamera } from './components';
 
@@ -300,7 +300,7 @@ export function createRenderer(
   renderer.setSize(width, height, false);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);

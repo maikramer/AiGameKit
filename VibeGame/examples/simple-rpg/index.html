@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -33,14 +33,17 @@
       Hero model loaded imperatively by main.ts (synced to player entity).
     -->
     <world canvas="#game-canvas" sky="#87CEEB">
-      <static-part
-        pos="0 -0.5 0"
-        shape="box"
-        size="80 1 80"
-        color="#4a7a3a"
-      ></static-part>
+      <!-- Procedural LOD terrain (no heightmap asset required) -->
+      <terrain
+        pos="0 0 0"
+        world-size="256"
+        max-height="50"
+        levels="6"
+        resolution="64"
+      ></terrain>
 
-      <player pos="0 3 0"></player>
+      <!-- Y acima de max-height do terreno (50): o heightmap procedural tem picos até ~maxHeight -->
+      <player pos="0 60 0"></player>
       <follow-camera
         target-distance="6"
         target-pitch="0.35"

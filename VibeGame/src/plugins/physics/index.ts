@@ -1,3 +1,5 @@
+﻿import * as RAPIER from '@dimforge/rapier3d-compat';
+
 export {
   ApplyAngularImpulse,
   ApplyForce,
@@ -21,4 +23,6 @@ export {
   TouchEndedEvent,
 } from './components';
 export { PhysicsPlugin } from './plugin';
+export { getPhysicsContext } from './systems';
 export { DEFAULT_GRAVITY, initializePhysics } from './utils';
+export { RAPIER };

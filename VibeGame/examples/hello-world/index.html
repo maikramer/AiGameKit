@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -23,17 +23,17 @@
 
   <body>
     <world canvas="#game-canvas" sky="#87ceeb">
-      <!-- Ground -->
-      <static-part
-        pos="0 -0.5 0"
-        shape="box"
-        size="20 1 20"
-        color="#90ee90"
-      ></static-part>
+      <!-- Procedural terrain with LOD -->
+      <terrain
+        world-size="256"
+        max-height="50"
+        levels="6"
+        resolution="64"
+      ></terrain>
 
-      <!-- Ball -->
+      <!-- Ball above terrain -->
       <dynamic-part
-        pos="-2 4 -3"
+        pos="0 80 0"
         shape="sphere"
         size="1.0"
         color="#ff4500"
