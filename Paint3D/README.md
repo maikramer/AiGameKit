@@ -33,7 +33,20 @@ The official installer handles **nvdiffrast** (`--no-build-isolation`); for manu
 
 ```bash
 # Texture mesh with reference image (GLB includes PBR material from Paint 2.1)
+# Bilateral smoothing is ON by default (removes bake seam artifacts)
 paint3d texture mesh.glb -i ref.png -o mesh_textured.glb
+
+# Quality tuning
+paint3d texture mesh.glb -i ref.png --bake-exp 8 --smooth-passes 3
+
+# Skip smoothing
+paint3d texture mesh.glb -i ref.png --no-smooth
+
+# Override render/texture resolution (GPUs with >8 GB VRAM)
+paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
+
+# AI upscale (optional, requires: pip install spandrel)
+paint3d texture mesh.glb -i ref.png --upscale
 
 # Diagnostics (rasterizer, GPU)
 paint3d doctor
@@ -42,13 +55,24 @@ paint3d doctor
 paint3d models
 ```
 
+### Key options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--bake-exp` | 6 | View blending exponent (higher = sharper seams, less color bleed) |
+| `--smooth/--no-smooth` | on | Bilateral texture filter (removes bake artifacts without changing resolution) |
+| `--smooth-passes` | 2 | Number of bilateral filter passes (more = smoother) |
+| `--render-size` | 1024 | Back-projection rasterization resolution (higher needs more VRAM) |
+| `--texture-size` | 2048 | UV atlas resolution (higher needs more VRAM) |
+| `--upscale` | off | AI upscale via Real-ESRGAN (CPU, requires `spandrel`) |
+
 ## Python API
 
 ```python
 from paint3d import apply_hunyuan_paint, load_mesh_trimesh
 
 mesh = load_mesh_trimesh("model.glb")
-textured = apply_hunyuan_paint(mesh, "reference.png")
+textured = apply_hunyuan_paint(mesh, "reference.png", bake_exp=6)
 ```
 
 ## Dependencies
