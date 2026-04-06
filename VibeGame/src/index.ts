@@ -52,6 +52,10 @@ export type {
 } from './plugins/scene-manifest';
 export { Terrain, TerrainPlugin } from './plugins/terrain';
 export type { TerrainEntityData } from './plugins/terrain';
+export { Water, WaterPlugin } from './plugins/water';
+export type { WaterEntityData } from './plugins/water';
+export { DebugPlugin } from './plugins/debug';
+export type { VibeGameDebugBridge } from './plugins/debug';
 export { initAssetHotReload } from './vite/hot-reload-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 

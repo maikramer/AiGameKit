@@ -13,6 +13,8 @@ import { StartupPlugin } from './startup/plugin';
 import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { TweenPlugin } from './tweening';
+import { DebugPlugin } from './debug/plugin';
+import { WaterPlugin } from './water/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TweenPlugin,
@@ -29,4 +31,6 @@ export const DefaultPlugins: Plugin[] = [
   StartupPlugin,
   RespawnPlugin,
   TerrainPlugin,
+  WaterPlugin,
+  DebugPlugin,
 ];
