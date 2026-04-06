@@ -1,4 +1,4 @@
-import type { Plugin } from 'vite';
+﻿import type { Plugin } from 'vite';
 
 export function vibegame(): Plugin[] {
   return [
@@ -16,3 +16,4 @@ export function vibegame(): Plugin[] {
 }
 
 export { consoleForwarding } from './console-plugin';
+export { vibegameAssetHotReload } from './hot-reload';

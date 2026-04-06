@@ -1,4 +1,4 @@
-import type { BuilderOptions } from './builder';
+﻿import type { BuilderOptions } from './builder';
 import { GameBuilder } from './builder';
 import type { Component, Plugin, System } from './core';
 import { disposeAllRuntimes } from './core/runtime-manager';
@@ -50,7 +50,6 @@ export type {
   SceneManifest,
   SceneManifestEntry,
 } from './plugins/scene-manifest';
-export { vibegameAssetHotReload } from './vite/hot-reload';
 export { initAssetHotReload } from './vite/hot-reload-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 

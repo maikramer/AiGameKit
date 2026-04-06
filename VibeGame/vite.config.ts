@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+﻿import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 
 export default defineConfig({
@@ -53,6 +53,10 @@ export default defineConfig({
         'jsdom',
         '@fredli74/typr',
         'fs/promises',
+        'node:fs',
+        'node:path',
+        'fs',
+        'path',
       ],
       output: {
         globals: {
