@@ -20,3 +20,9 @@ export const Player = defineComponent({
   platformOffsetZ: Types.f32,
   lastPlatform: Types.eid,
 });
+
+export const PlayerGltfConfig = defineComponent({
+  modelUrlIndex: Types.ui32,
+  loaded: Types.ui8,
+  animatorRegistryIndex: Types.ui32,
+});

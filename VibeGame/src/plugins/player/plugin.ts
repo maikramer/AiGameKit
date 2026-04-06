@@ -1,6 +1,12 @@
 import type { Plugin } from '../../core';
-import { Player } from './components';
-import { playerRecipe } from './recipes';
+import { Player, PlayerGltfConfig } from './components';
+import {
+  playerGltfModelUrlAdapter,
+  PlayerGltfAnimStateSystem,
+  PlayerGltfEnsureHasAnimatorSystem,
+  PlayerGltfSetupSystem,
+} from './gltf-systems';
+import { playerGltfRecipe, playerRecipe } from './recipes';
 import {
   PlayerCameraLinkingSystem,
   PlayerGroundedSystem,
@@ -9,15 +15,24 @@ import {
 
 export const PlayerPlugin: Plugin = {
   systems: [
+    PlayerGltfEnsureHasAnimatorSystem,
+    PlayerGltfSetupSystem,
     PlayerCameraLinkingSystem,
     PlayerMovementSystem,
     PlayerGroundedSystem,
+    PlayerGltfAnimStateSystem,
   ],
-  recipes: [playerRecipe],
+  recipes: [playerRecipe, playerGltfRecipe],
   components: {
     Player,
+    playerGltfConfig: PlayerGltfConfig,
   },
   config: {
+    adapters: {
+      'player-gltf-config': {
+        'model-url': playerGltfModelUrlAdapter,
+      },
+    },
     defaults: {
       player: {
         speed: 5.3,
@@ -31,6 +46,11 @@ export const PlayerPlugin: Plugin = {
         cameraEntity: 0,
         inheritedVelX: 0,
         inheritedVelZ: 0,
+      },
+      'player-gltf-config': {
+        modelUrlIndex: 0,
+        loaded: 0,
+        animatorRegistryIndex: 0,
       },
     },
   },

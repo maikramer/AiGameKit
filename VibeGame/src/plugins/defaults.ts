@@ -1,6 +1,7 @@
 import type { Plugin } from '../core';
 import { AnimationPlugin } from './animation/plugin';
 import { FollowCameraPlugin } from './follow-camera/plugin';
+import { GltfAnimPlugin } from './gltf-anim/plugin';
 import { GltfXmlPlugin } from './gltf-xml/plugin';
 import { InputPlugin } from './input/plugin';
 import { OrbitCameraPlugin } from './orbit-camera/plugin';
@@ -16,6 +17,7 @@ export const DefaultPlugins: Plugin[] = [
   TweenPlugin,
   TransformsPlugin,
   GltfXmlPlugin,
+  GltfAnimPlugin,
   AnimationPlugin,
   InputPlugin,
   PhysicsPlugin,

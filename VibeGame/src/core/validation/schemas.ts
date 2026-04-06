@@ -237,6 +237,12 @@ export const playerRecipeSchema = z
   })
   .strict();
 
+export const playerGltfRecipeSchema = playerRecipeSchema
+  .extend({
+    'model-url': z.string().optional(),
+  })
+  .strict();
+
 export const cameraRecipeSchema = z
   .object({
     distance: numberSchema.optional(),
@@ -380,6 +386,7 @@ export const recipeSchemas = {
   'dynamic-part': dynamicPartRecipeSchema,
   'kinematic-part': kinematicPartRecipeSchema,
   player: playerRecipeSchema,
+  'player-gltf': playerGltfRecipeSchema,
   camera: cameraRecipeSchema,
   'orbit-camera': cameraRecipeSchema,
   'follow-camera': followCameraRecipeSchema,

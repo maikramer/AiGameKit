@@ -26,3 +26,10 @@ export const playerRecipe: Recipe = {
     'collider.pos-offset-y': PLAYER_COLLIDER_DEFAULTS.posOffsetY,
   },
 };
+
+/** Same gameplay stack as {@link playerRecipe} plus GLB-driven visuals (no procedural box character). */
+export const playerGltfRecipe: Recipe = {
+  name: 'player-gltf',
+  components: [...(playerRecipe.components ?? []), 'playerGltfConfig'],
+  overrides: playerRecipe.overrides,
+};
