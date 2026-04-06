@@ -1,6 +1,6 @@
 ---
 name: gameassets
-description: Orquestra batches de prompts e assets 2D/3D/áudio com game.yaml, manifest CSV e presets. Use quando o utilizador falar em GameAssets, manifest, game.yaml, batch de imagens, presets locais, TEXT2D_BIN, TEXTURE2D_BIN, TEXT2SOUND_BIN, TEXT3D_BIN, MATERIALIZE_BIN, RIGGING3D_BIN, image_source text2d/texture2d/skymap2d, generate_audio, generate_rig, batch --with-rig, Rigging3D, coluna image_source no CSV, path_layout flat, ou integração Text2D/Texture2D/Text2Sound/Text3D/Materialize.
+description: Orquestra batches de prompts e assets 2D/3D/áudio com game.yaml, manifest CSV e presets. Use quando o utilizador falar em GameAssets, manifest, game.yaml, batch, gameassets dream, presets locais, TEXT2D_BIN, TEXTURE2D_BIN, TEXT2SOUND_BIN, TEXT3D_BIN, MATERIALIZE_BIN, RIGGING3D_BIN, ANIMATOR3D_BIN, image_source text2d/texture2d/skymap2d, generate_audio, generate_rig, generate_animate, batch --with-rig, --with-animate, Rigging3D, Animator3D, coluna image_source no CSV, path_layout flat, ou integração Text2D/Texture2D/Text2Sound/Text3D/Materialize.
 ---
 
 # GameAssets — batch de prompts e assets
@@ -35,6 +35,7 @@ game.yaml + manifest.csv + presets [+ presets-local.yaml]
         → [se generate_audio e não --skip-audio] text2sound generate …
         → [se generate_3d e --with-3d] text3d generate --from-image … (shape) → paint3d texture … (GLB PBR)
         → [se generate_rig e --with-rig] rigging3d pipeline (GLB após Text3D → GLB rigado)
+        → [se --with-animate e linha elegível] animator3d game-pack (GLB rigado → GLB com clips)
 ```
 
 **Nota:** O custo de API do Texture2D (Hugging Face Inference) não é calculado pelo GameAssets. O registo **`--log`** inclui **`timings_sec`** (segundos por fase: `image_text2d` / `image_texture2d`, `materialize_diffuse`, `text2sound`, `text3d` ou `text3d_shape` / `paint3d_texture` com `phased_batch` e `text3d.texture`), **`audio_path` / `audio_error`** quando aplicável, e **`texture2d_api`: true** nas linhas geradas via Texture2D.
@@ -45,12 +46,12 @@ game.yaml + manifest.csv + presets [+ presets-local.yaml]
 |---------|--------|
 | `gameassets init [--path DIR]` | Cria `game.yaml` e `manifest.csv` de exemplo |
 | `gameassets prompts [--profile …] [--manifest …]` | Pré-visualiza prompts (sem GPU); `-o ficheiro.jsonl` grava JSONL |
-| `gameassets batch [--profile …] [--manifest …]` | Gera imagens; `--with-3d` gera GLB quando `generate_3d=true`; `--with-rig` aplica Rigging3D quando `generate_rig=true` (após GLB); `--dry-run --dry-run-json plan.json` grava plano máquina (argv por fase) |
+| `gameassets batch [--profile …] [--manifest …]` | Gera imagens; `--with-3d` → GLB quando `generate_3d=true`; `--with-rig` → Rigging3D quando `generate_rig=true`; `--with-animate` → Animator3D `game-pack` após rig (requer `animator3d`); `--dry-run --dry-run-json plan.json` grava plano |
 | `gameassets handoff --public-dir …/public` | Copia/symlink GLB/áudio do `output_dir` para `public/assets` e grava `assets/gameassets_handoff.json` |
 | `gameassets dream "descrição" [--dry-run]` | Da ideia ao jogo: LLM planeia assets+cena, batch gera, scaffold projecto Vite. `--dry-run` emite ficheiros sem GPU. Providers: `--llm-provider openai\|huggingface\|stdin` |
 | `gameassets skill install` | Instala esta skill em `.cursor/skills/gameassets/` do projeto alvo |
 
-**Flags úteis em `batch`:** `--dry-run` (ver comandos), `--fail-fast`, `--skip-audio` (ignora `generate_audio`), `--log run.jsonl` (registo JSONL por asset, com **`timings_sec`**).
+**Flags úteis em `batch`:** `--dry-run`, `--fail-fast`, `--skip-audio`, `--with-3d`, `--with-rig`, `--with-animate`, `--with-parts`, `--log run.jsonl` (**`timings_sec`**).
 
 ## Preset só no teu ficheiro (`presets-local.yaml`)
 
@@ -73,12 +74,13 @@ Sem `--presets-local`, o comando falha com **preset desconhecido**.
 - **`text3d`**: `preset` (`fast` \| `balanced` \| `hq`), `low_vram`, `texture` (omitido = **`true`**), ou **Hunyuan explícito** (`steps`, `octree_resolution`, `num_chunks` — nesse caso não se passa `--preset` ao CLI), `no_mesh_repair`, `mesh_smooth`, `mc_level`, `phased_batch`, GPU (`allow_shared_gpu`, `full_gpu`, …). PBR no GLB: **Paint 2.1** — ver `Text3D/docs/PBR_MATERIALIZE.md`.
   - **Paint3D tuning:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (default 6 — costuras mais nítidas).
 - **`rigging3d`** (opcional): `output_suffix`, `root`, `python` — usado com `batch --with-rig` e `generate_rig` no CSV.
+- **`animator3d`** (opcional): `preset` (`humanoid`, …) — usado com `batch --with-rig --with-animate` e linhas que pedem animação após rig.
 
 **Atenção:** `text3d.low_vram: true` em GPU faz o Hunyuan “shape” cair para CPU e **costuma degradar a forma**; preferir reduzir resolução 2D ou fechar outras apps que consumam VRAM.
 
 ## Manifest (`manifest.csv`)
 
-Colunas incluem **`id`**, **`idea`**, **`generate_3d`**, opcionalmente **`generate_audio`**, **`generate_rig`**, **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`), etc. (ver `manifest.py`). Com `path_layout: flat`, `id` pode ser `Categoria/nome` para espelhar pastas no Godot.
+Colunas incluem **`id`**, **`idea`**, **`generate_3d`**, opcionalmente **`generate_audio`**, **`generate_rig`**, **`generate_animate`**, **`generate_parts`**, **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`), etc. (ver `manifest.py`). Com `path_layout: flat`, `id` pode ser `Categoria/nome` para espelhar pastas no Godot.
 
 ## Variáveis de ambiente
 
