@@ -18,6 +18,7 @@ src = [
 exclude = [
     ".venv",
     ".venv312",
+    ".venv-ci",
     "venv",
     "build",
     "dist",

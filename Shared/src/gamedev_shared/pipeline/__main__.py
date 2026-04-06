@@ -1,4 +1,5 @@
 """Allow running pipeline modules directly: python -m gamedev_shared.pipeline.<module>"""
+
 import sys
 
 modules = sys.argv[1] if len(sys.argv) > 1 else ""
