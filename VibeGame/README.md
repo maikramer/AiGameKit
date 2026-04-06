@@ -83,7 +83,7 @@ bun install vibegame
 
 ### 2. ECS Architecture with Plugins
 
-Live bevy, uses an Entity Component System architecture with Plugins:
+Inspired by Bevy, VibeGame uses an Entity Component System architecture with plugins:
 
 - **Components**: Pure data structures without behavior
 - **Systems**: Logic separated from data

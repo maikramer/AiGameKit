@@ -113,7 +113,7 @@ Avoid pasting large generated assets into the chat; **link paths** under `public
 | Export pack | `gameassets handoff --public-dir …` → `public/assets/…` + `gameassets_handoff.json` |
 | Batch plan JSON for agents | `gameassets batch --dry-run --dry-run-json plan.json` |
 | Declarative GLB | `<gltf-load url="/assets/models/foo.glb"></gltf-load>` in world XML |
-| Animated player (XML) | `<player-gltf model-url="…">` — idle/walk/run from input; see §3 |
+| Animated player (XML) | `<player-gltf model-url="…">` — idle/walk/run from input; see [§3 Complete animation pipeline](#3-complete-animation-pipeline) |
 
 ## 6. `gameassets dream` — idea-to-game in one command
 
