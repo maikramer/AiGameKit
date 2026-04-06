@@ -42,31 +42,35 @@ For the runtime to load content **without** a custom CMS:
 
 | Asset type | URL pattern (dev) | Notes |
 |------------|-------------------|--------|
-| GLB | `/assets/models/<name>.glb` | Served as static files; load with `loadGltfToScene` from `vibegame` or Three.js `GLTFLoader` |
+| GLB | `/assets/models/<name>.glb` | Static props: `loadGltfToScene` from `vibegame`, `<gltf-load url="…">`, or `GLTFLoader`. Rigged characters with embedded clips: `loadGltfAnimated` + `GltfAnimator`, or `<player-gltf model-url="…">` ([VibeGame README](../VibeGame/README.md)). |
 | Audio | `/assets/audio/<name>.wav` | Use Web Audio or `<audio>`; not wired by VibeGame core — integrate in your game code |
-| Sky | `/assets/sky/<name>.png` | Use as `THREE.Texture`, `Scene.background`, or PMREM — manual bridge |
+| Sky | `/assets/sky/<name>.png` | Use as `THREE.Texture`, `Scene.background`, or PMREM — e.g. `applyEquirectSkyEnvironment` |
 
 **Environment variables (`*_BIN`)** apply to **CLI batch** tools only, not to the browser. The browser only sees **HTTP URLs**.
 
 ## 4. Reference pipeline (minimal game)
 
-1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `vibegame`, etc.
+1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `vibegame`, etc.
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
-3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv --with-3d` (add `--with-rig`, `--with-parts`, audio columns as needed).
-4. **Copy** generated GLBs/audio into `public/assets/...` of a Vite project (see [VibeGame/examples/monorepo-game](../VibeGame/examples/monorepo-game/)), or use **`gameassets handoff --public-dir path/to/public`** to copy/symlink from the profile `output_dir` and write `assets/gameassets_handoff.json` (URLs per row).
-5. **Run** the web app: `bun dev` / `npm run dev`; GLB loads via `loadGltfToScene` after `run()`, or declaratively with `<gltf-load url="...">` in the world XML. **Skymap2D** equirect PNG/JPG: use `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
+3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv --with-3d`, adding **`--with-rig`** for Rigging3D when `generate_rig=true`, **`--with-animate`** for **Animator3D `game-pack`** after rig (requires `animator3d` on `PATH` or `ANIMATOR3D_BIN`; optional `animator3d` preset in `game.yaml`), **`--with-parts`** and audio columns as needed.
+4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/monorepo-game](../VibeGame/examples/monorepo-game/)).
+5. **Run** the web app: `bun dev` / `npm run dev`; load GLBs as above. **Skymap2D** equirect PNG/JPG: `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
 
-**Animator3D** (bpy animation export) is **not** in `gameassets batch` — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md), then copy the exported GLB into `public/assets/models/`.
+**Animator3D** can run **inside** `gameassets batch` (`--with-animate`) or **standalone** on a rigged GLB — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
+
+**Idea-to-scaffold:** **`gameassets dream`** plans assets + scene, runs batch (including `--with-animate` when the plan includes rigged characters), skymap, handoff, and emits a Vite + VibeGame project — details in [ZERO_TO_GAME_AI.md](ZERO_TO_GAME_AI.md).
 
 ## 5. Synergy limits (honest scope)
 
-- **GameAssets** is the strongest link for **batch content**; it does not emit a VibeGame project by itself.
-- **VibeGame** defaults to **declarative primitives** (XML recipes); **GLB** integration is via the **`loadGltfToScene`** helper and/or your own Three.js code (see example).
-- **One-command “full game”** from prompt to shipped build is **out of scope** without additional automation (CI scripts, templates).
+- **GameAssets** orchestrates batch content; **`gameassets dream`** additionally scaffolds a **playable Vite project** — you still own tuning, gameplay code, and release/CI.
+- **VibeGame** favors **declarative XML**; GLB integration uses **`loadGltfToScene`**, **`loadGltfAnimated`**, **`GltfAnimator`**, `<gltf-load>`, or `<player-gltf>` as needed.
+- **Shipped production builds** (CDN, stores) still need your packaging and QA beyond the monorepo defaults.
 
 ## 6. See also
 
+- [ZERO_TO_GAME_AI.md](ZERO_TO_GAME_AI.md) — AI workflow, animation pipeline, `dream`
 - [VibeGame/examples/monorepo-game/README.md](../VibeGame/examples/monorepo-game/README.md) — runnable bridge example
+- [VibeGame/examples/simple-rpg/README.md](../VibeGame/examples/simple-rpg/README.md) — walkable scene + handoff
 - [GameAssets cursor skill / batch behavior](../GameAssets/src/gameassets/cursor_skill/SKILL.md)
-- [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md) — animation after rigging
+- [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md) — Animator3D after rigging
 - Root [README.md](../README.md) — project map

@@ -15,6 +15,7 @@ CLI for **batched prompts and assets** aligned with your game’s style and conc
   - `TEXT2SOUND_BIN` — `text2sound` executable ([Text2Sound](../Text2Sound)) when CSV rows have **`generate_audio=true`** (and you do not use `--skip-audio`)
   - `MATERIALIZE_BIN` — optional; **PBR maps from diffuse** when using Texture2D + `texture2d.materialize` (see [Materialize](../Materialize) and [Text3D/docs/PBR_MATERIALIZE.md](../Text3D/docs/PBR_MATERIALIZE.md))
   - `PART3D_BIN` — `part3d` executable ([Part3D](../Part3D)) with **`--with-parts`** and CSV column **`generate_parts=true`** (semantic decomposition after Text3D GLB)
+  - `ANIMATOR3D_BIN` — `animator3d` executable ([Animator3D](../Animator3D)) with **`--with-animate`** after a successful rig (`animator3d game-pack`; optional column **`generate_animate`** in CSV — see batch section below)
 
 ## Debug / lab tools
 
@@ -123,6 +124,7 @@ gameassets batch --profile game.yaml --manifest manifest.csv --with-3d \
 
 - Without `--with-3d`, **`text3d` never runs**, even with `generate_3d=true` in the column (warning only).
 - With **`--with-3d`** and **`--with-rig`**, rows with **`generate_rig=true`** (and successful Text3D GLB) call **Rigging3D**; rigged GLB appears in the log as **`rig_mesh_path`** (suffix configurable via `rigging3d.output_suffix` in `game.yaml`). Requires **`RIGGING3D_BIN`** or `rigging3d` on `PATH`.
+- With **`--with-3d`**, **`--with-rig`**, and **`--with-animate`**, after a successful rig the batch runs **`animator3d game-pack`** when the row requests animation: **`generate_animate=true`**, or **`generate_rig=true`** with **`--with-rig`** (Animator3D profile from optional **`animator3d`** in `game.yaml`, default preset `humanoid`). Requires **`ANIMATOR3D_BIN`** or `animator3d` on `PATH`. See [Animator3D after rig](../docs/ANIMATOR3D_AFTER_RIG.md).
 - With **`--with-3d`** and **`--with-parts`**, rows with **`generate_parts=true`** call **Part3D** (`part3d decompose`) on the Text3D GLB **before** rig: outputs **`parts_mesh_path`** (multi-part scene) and **`segmented_mesh_path`** (per-part colors), alongside the main GLB; options under **`part3d`** in `game.yaml`. Requires **`PART3D_BIN`** or `part3d` on `PATH`.
 - `--dry-run` prints commands without executing.
 - `--fail-fast` stops on first error (default: continue).
@@ -182,8 +184,9 @@ Main fields:
 | `image_source` | `text2d` (default), `texture2d`, or `skymap2d` — default image tool (overridable per CSV column) |
 | `text2d` | Optional block: `low_vram`, `cpu`, `width`, `height` |
 | `texture2d` | Optional block when using Texture2D (global or CSV `texture2d` lines): resolution, `steps`, `guidance_scale`, `preset`, … and **PBR from diffuse:** `materialize`, `materialize_maps_subdir`, `materialize_bin`, `materialize_format`, etc. |
-| `text3d` | Optional block: `preset`, `low_vram`, `texture` (omitted = **`true`**), `steps` / `octree_resolution` / `num_chunks` (mutually exclusive with `preset` in practice), `no_mesh_repair`, `mesh_smooth`, `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder` |
+| `text3d` | Optional block: `preset`, `low_vram`, `texture` (omitted = **`true`**), `steps` / `octree_resolution` / `num_chunks` (mutually exclusive with `preset` in practice), `no_mesh_repair`, `mesh_smooth`, `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder`. **Paint3D tuning:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (default 6 — sharper view blending) |
 | `rigging3d` | Optional block (rig after Text3D): `output_suffix` (e.g. `_rigged`), `root` (Rigging3D package code), `python` (interpreter). Used with `batch --with-rig` and `generate_rig=true` rows |
+| `animator3d` | Optional block (**Animator3D** after rig): `preset` (`humanoid` \| `creature` \| `flying`, …). Used with `batch --with-rig --with-animate` and rows that qualify for animation (see batch bullets). Requires `animator3d` on `PATH` or `ANIMATOR3D_BIN` |
 | `part3d` | Optional block (Part3D after Text3D, before rig): `steps`, `octree_resolution`, `num_chunks`, `segment_only`, `no_cpu_offload`, `verbose`, `parts_suffix`, `segmented_suffix`. Used with `batch --with-parts` and `generate_parts=true` rows |
 
 ### Hunyuan3D and quality
@@ -199,14 +202,14 @@ You can create `presets.local.yaml` next to the profile and pass `--presets-loca
 
 ## Manifest (`manifest.csv`)
 
-Headers: **`id`**, **`idea`** (required); optional: **`kind`** (`prop`, `character`, `environment`), **`generate_3d`**, **`generate_audio`**, **`generate_rig`** (`true`/`false`/… — rig GLB after Text3D, with `batch --with-rig`), **`generate_parts`** (`true`/`false`/… — Part3D decomposition after Text3D, with `batch --with-parts`), **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`) to override `game.yaml` `image_source` for that row. With `path_layout: flat`, use `id` with slashes, e.g. `Crystals/shard_blue`, to write files under `Crystals/`.
+Headers: **`id`**, **`idea`** (required); optional: **`kind`** (`prop`, `character`, `environment`), **`generate_3d`**, **`generate_audio`**, **`generate_rig`** (`true`/`false`/… — rig GLB after Text3D, with `batch --with-rig`), **`generate_animate`** (`true`/`false`/… — run **Animator3D** after rig when using `batch --with-animate`; if omitted, rigged rows still animate when **`--with-rig`** is enabled), **`generate_parts`** (`true`/`false`/… — Part3D decomposition after Text3D, with `batch --with-parts`), **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`) to override `game.yaml` `image_source` for that row. With `path_layout: flat`, use `id` with slashes, e.g. `Crystals/shard_blue`, to write files under `Crystals/`.
 
 ## Layout
 
 ```
 GameAssets/
 ├── src/gameassets/
-│   ├── cli.py             # Click CLI (init, prompts, batch, info)
+│   ├── cli.py             # Click CLI (init, prompts, batch, handoff, dream, info, …)
 │   ├── profile.py         # game.yaml parsing
 │   ├── manifest.py        # manifest.csv parsing
 │   ├── prompt_builder.py  # Prompts from profile + preset
@@ -234,6 +237,7 @@ GameAssets/
 | `TEXT2SOUND_BIN` | Path to `text2sound` |
 | `MATERIALIZE_BIN` | Path to `materialize` (only when the profile uses Texture2D + `texture2d.materialize`) |
 | `RIGGING3D_BIN` | Path to `rigging3d` (or `python -m rigging3d`) with `batch --with-rig` |
+| `ANIMATOR3D_BIN` | Path to `animator3d` with `batch --with-rig --with-animate` |
 | `PART3D_BIN` | Path to `part3d` (or `python -m part3d`) with `batch --with-parts` |
 | `PYTORCH_CUDA_ALLOC_CONF` | Auto-set to `expandable_segments:True` if empty (reduces CUDA fragmentation) |
 

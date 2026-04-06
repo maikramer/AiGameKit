@@ -28,7 +28,7 @@ Pipeline **text-to-3D**: geração de imagem (**Text2D** / FLUX Klein) + **Hunyu
 | `text3d generate --from-image img.png -o mesh.glb` | Só Hunyuan (sem Text2D); alias `-i` |
 | `text3d generate … --preset fast\|balanced\|hq` | Perfis (substituem steps/octree/chunks por defeito) |
 | `text3d generate … --save-reference-image` | Guarda PNG de referência (útil antes de `paint3d texture`) |
-| `paint3d texture mesh.glb -i ref.png -o tex.glb` | Textura + material PBR no GLB (Paint3D 2.1) |
+| `paint3d texture mesh.glb -i ref.png -o tex.glb` | Textura + material PBR no GLB (Paint3D 2.1); smooth bilateral ativo por defeito |
 | `text3d doctor` | PyTorch, CUDA |
 | `text3d info` | Sistema e GPU |
 | `text3d convert entrada.ply -o saida.glb` | Conversão PLY/OBJ/GLB |
@@ -40,7 +40,7 @@ Pipeline **text-to-3D**: geração de imagem (**Text2D** / FLUX Klein) + **Hunyu
 ```bash
 text3d generate "uma cadeira de madeira" -o cadeira.glb
 text3d generate "robô" --preset hq -o robo_shape.glb --save-reference-image
-paint3d texture robo_shape.glb -i robo_shape_text2d.png -o robo_tex.glb
+paint3d texture robo_shape.glb -i robo_shape_text2d.png -o robo_tex.glb  # smooth + bake_exp=6 por defeito
 text3d generate --from-image referencia.png -o so_mesh.glb
 text3d doctor
 ```
@@ -101,7 +101,7 @@ O sistema aplica **prompt enhancement automático** (v2, framing positivo) que e
 
 | Ferramenta | Ligação |
 |------------|---------|
-| **Paint3D** | `paint3d texture` após o shape; GLB com PBR do pipeline 2.1. |
+| **Paint3D** | `paint3d texture` após o shape; GLB com PBR do pipeline 2.1. Suavização bilateral por defeito (`--smooth`, `--bake-exp 6`). |
 | **GameAssets** | `game.yaml` com `text3d` + `texture` orquestra shape + `paint3d texture`. |
 | **Materialize** | Mapas PBR a partir de difusa (ex. `texture2d.materialize` no GameAssets). |
 

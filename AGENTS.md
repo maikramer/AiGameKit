@@ -13,7 +13,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Shared/` | Python | `gamedev-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
 | `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ) |
 | `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-2.1 SDNQ) |
-| `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1) |
+| `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | Semantic 3D parts |
 | `GameAssets/` | Python | `gameassets` | Batch asset generation |
 | `Texture2D/` | Python | `texture2d` | Seamless 2D textures (HF API) |
