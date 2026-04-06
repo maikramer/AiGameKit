@@ -246,7 +246,7 @@ def install_tool(
         return False
 
     if spec.kind == ToolKind.PYTHON:
-        inst: PythonProjectInstaller | RustProjectInstaller = _ToolPythonInstaller(
+        inst: PythonProjectInstaller | RustProjectInstaller | BunProjectInstaller = _ToolPythonInstaller(
             spec,
             monorepo,
             install_prefix=install_prefix,
