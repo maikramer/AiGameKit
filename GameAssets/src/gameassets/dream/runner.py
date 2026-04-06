@@ -109,7 +109,8 @@ def run_dream(
                 f"[cyan]dry-run[/cyan] — ficheiros em [bold]{project_dir}[/bold]\n"
                 "Para gerar assets, corre:\n"
                 f"  cd {batch_dir}\n"
-                f"  gameassets batch --profile game.yaml --manifest manifest.csv --with-3d --with-rig\n"
+                f"  gameassets batch --profile game.yaml --manifest manifest.csv "
+                f"--with-3d --with-rig --with-animate\n"
                 f"  gameassets handoff --profile game.yaml --manifest manifest.csv --public-dir {public_dir}",
                 border_style="green",
                 title="Dream (dry-run)",
@@ -121,6 +122,7 @@ def run_dream(
     batch_flags = ["--with-3d"]
     if any(a.generate_rig for a in plan.assets):
         batch_flags.append("--with-rig")
+        batch_flags.append("--with-animate")
     if any(a.generate_parts for a in plan.assets):
         batch_flags.append("--with-parts")
     if not with_audio or not any(a.generate_audio for a in plan.assets):

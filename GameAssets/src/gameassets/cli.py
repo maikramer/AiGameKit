@@ -28,6 +28,7 @@ from .cli_rich import click
 from .manifest import ManifestRow, effective_image_source, load_manifest
 from .presets import get_preset, load_presets_bundle
 from .profile import (
+    Animator3DProfile,
     GameProfile,
     Part3DProfile,
     Rigging3DProfile,
@@ -55,7 +56,8 @@ Preset só num ficheiro teu (ex.: galaxy_orbital em presets-local.yaml):
   gameassets batch --profile game.yaml --manifest manifest.csv --with-3d \\
     --presets-local presets-local.yaml --log run.jsonl
 
-Define TEXT2D_BIN / TEXT3D_BIN / PAINT3D_BIN (se ``text3d.texture``) / RIGGING3D_BIN / PART3D_BIN.
+Define TEXT2D_BIN / TEXT3D_BIN / PAINT3D_BIN (se ``text3d.texture``) / RIGGING3D_BIN / ANIMATOR3D_BIN /
+PART3D_BIN.
 Text3D gera só geometria; textura e PBR no GLB vêm do ``paint3d`` (Hunyuan3D-Paint 2.1).
 Com image_source: texture2d: TEXTURE2D_BIN e, se texture2d.materialize,
 MATERIALIZE_BIN (ou texture2d.materialize_bin) — só para mapas PBR a partir da imagem difusa.
@@ -324,6 +326,28 @@ def _rigging3d_output_path(mesh_final: Path, suffix: str) -> Path:
     return mesh_final.with_name(f"{mesh_final.stem}{s}.glb")
 
 
+def _shell_path(path: Path) -> str:
+    """Caminho normalizado para argv de subprocess (expande user, resolve)."""
+    return str(path.expanduser().resolve())
+
+
+def _animator3d_output_path(base_output: Path) -> Path:
+    """ex.: ``hero_rigged.glb`` → ``hero_rigged_animated.glb``."""
+    return base_output.with_name(f"{base_output.stem}_animated.glb")
+
+
+def _row_wants_animate(row: ManifestRow, with_rig: bool) -> bool:
+    """Linha elegível para game-pack quando ``--with-animate`` está activo."""
+    return bool(row.generate_animate or (with_rig and row.generate_rig))
+
+
+def _resolve_animator3d_bin() -> str | None:
+    try:
+        return resolve_binary("ANIMATOR3D_BIN", "animator3d")
+    except FileNotFoundError:
+        return None
+
+
 def _rigging3d_pipeline_argv(
     rigging3d_bin: str,
     mesh_in: Path,
@@ -394,6 +418,70 @@ def _rigging3d_pipeline_failed(
         console.print(f"[red]rigging3d sem GLB[/red] {row.id}")
         return True
     rec["rig_mesh_path"] = _path_for_log(rig_out, manifest_dir)
+    return False
+
+
+def _animator3d_game_pack_argv(
+    animator3d_bin: str,
+    rig_out: Path,
+    anim_out: Path,
+    *,
+    preset: str,
+) -> list[str]:
+    return [
+        animator3d_bin,
+        "game-pack",
+        _shell_path(rig_out),
+        _shell_path(anim_out),
+        "--preset",
+        preset,
+    ]
+
+
+def _animator3d_game_pack_failed(
+    profile: GameProfile,
+    row: ManifestRow,
+    rigged_glb: Path,
+    animated_glb: Path,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    child_env: dict[str, str],
+    with_animate: bool,
+    with_rig: bool,
+    preset: str = "humanoid",
+) -> bool:
+    """Corre ``animator3d game-pack`` no GLB rigado. Devolve True se falhou."""
+    if not with_animate or not _row_wants_animate(row, with_rig):
+        return False
+    if not row.generate_3d:
+        return False
+    if not rigged_glb.is_file():
+        return False
+    abin = _resolve_animator3d_bin()
+    if not abin:
+        rec["status"] = "error"
+        rec["error"] = "animator3d não encontrado (ANIMATOR3D_BIN ou PATH)"
+        console.print(f"[red]animator3d em falta[/red] {row.id}")
+        return True
+    anim_prof = profile.animator3d or Animator3DProfile()
+    preset_eff = (anim_prof.preset or preset).strip().lower()
+    argv = _animator3d_game_pack_argv(abin, rigged_glb, animated_glb, preset=preset_eff)
+    t0 = time.perf_counter()
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    _timing_append(rec, "animator3d", time.perf_counter() - t0)
+    if r.returncode != 0:
+        err = merge_subprocess_output(r) or "animator3d game-pack falhou"
+        rec["status"] = "error"
+        rec["error"] = err
+        preview = merge_subprocess_output(r, max_chars=4000) or err
+        console.print(f"[red]animator3d game-pack falhou[/red] {row.id}: {preview}")
+        return True
+    if not animated_glb.is_file():
+        rec["status"] = "error"
+        rec["error"] = "animator3d não produziu GLB animado"
+        console.print(f"[red]animator3d sem GLB animado[/red] {row.id}")
+        return True
+    rec["animated_mesh_path"] = _path_for_log(animated_glb, manifest_dir)
     return False
 
 
@@ -544,8 +632,9 @@ def _post_text3d_mesh_extras(
     with_parts: bool,
     rigging3d_bin: str | None,
     with_rig: bool,
+    with_animate: bool,
 ) -> bool:
-    """Define mesh_path, part3d, rigging3d. Devolve True se algum passo falhou."""
+    """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
     part3d_fail = _part3d_pipeline_failed(
         profile,
@@ -564,7 +653,7 @@ def _post_text3d_mesh_extras(
         if not p3.segment_only and out_parts.is_file():
             rig_mesh_in = out_parts
             rec["rig_input_path"] = _path_for_log(rig_mesh_in, manifest_dir)
-    return part3d_fail or _rigging3d_pipeline_failed(
+    rig_fail = _rigging3d_pipeline_failed(
         profile,
         row,
         rig_mesh_in,
@@ -572,6 +661,23 @@ def _post_text3d_mesh_extras(
         manifest_dir,
         child_env,
         rigging3d_bin,
+        with_rig,
+    )
+    if part3d_fail or rig_fail:
+        return True
+    rg = profile.rigging3d
+    sfx = rg.output_suffix if rg else "_rigged"
+    rig_out = _rigging3d_output_path(rig_mesh_in, sfx)
+    anim_out = _animator3d_output_path(rig_out)
+    return _animator3d_game_pack_failed(
+        profile,
+        row,
+        rig_out,
+        anim_out,
+        rec,
+        manifest_dir,
+        child_env,
+        with_animate,
         with_rig,
     )
 
@@ -680,6 +786,7 @@ def info_cmd() -> None:
     row("paint3d", "PAINT3D_BIN", "paint3d")
     row("part3d", "PART3D_BIN", "part3d")
     row("rigging3d", "RIGGING3D_BIN", "rigging3d")
+    row("animator3d", "ANIMATOR3D_BIN", "animator3d")
     row("materialize", "MATERIALIZE_BIN", "materialize")
     console.print(table)
 
@@ -750,6 +857,7 @@ def prompts_cmd(
                 "generate_3d": row.generate_3d,
                 "generate_audio": row.generate_audio,
                 "generate_rig": row.generate_rig,
+                "generate_animate": row.generate_animate,
             }
         )
     if output:
@@ -774,6 +882,7 @@ def prompts_cmd(
     table.add_column("3D?", justify="center")
     table.add_column("áudio?", justify="center")
     table.add_column("rig?", justify="center")
+    table.add_column("anim?", justify="center")
     table.add_column("prompt (início)", overflow="ellipsis", max_width=64)
     for e in entries:
         p = e["prompt"]
@@ -781,7 +890,8 @@ def prompts_cmd(
         flag3 = "sim" if e["generate_3d"] else "não"
         flag_a = "sim" if e["generate_audio"] else "não"
         flag_r = "sim" if e["generate_rig"] else "não"
-        table.add_row(e["id"], flag3, flag_a, flag_r, preview)
+        flag_anim = "sim" if e["generate_animate"] else "não"
+        table.add_row(e["id"], flag3, flag_a, flag_r, flag_anim, preview)
     console.print(table)
 
 
@@ -961,6 +1071,13 @@ def handoff_cmd(
     help="Após Text3D, corre part3d decompose nas linhas com generate_parts=true (partes semânticas).",
 )
 @click.option(
+    "--with-animate/--skip-animate",
+    "with_animate",
+    default=False,
+    show_default=True,
+    help="Run Animator3D game-pack on rigged GLBs.",
+)
+@click.option(
     "--profile-tools",
     is_flag=True,
     help="Activar profiling (CPU/RAM/GPU) em paint3d e part3d via GAMEDEV_PROFILE.",
@@ -987,6 +1104,7 @@ def batch_cmd(
     skip_audio: bool,
     with_rig: bool,
     with_parts: bool,
+    with_animate: bool,
     profile_tools: bool,
     profile_tools_log: Path | None,
 ) -> None:
@@ -1049,6 +1167,25 @@ def batch_cmd(
             )
         )
 
+    if not with_animate and any(r.generate_animate for r in rows):
+        console.print(
+            Panel(
+                "[yellow]Há linhas com generate_animate=true mas Animator3D está desligado.[/yellow]\n"
+                "Usa [bold]--with-animate[/bold] após [bold]--with-rig[/bold] para game-pack no GLB rigado.",
+                title="Aviso",
+                border_style="yellow",
+            )
+        )
+
+    if with_animate and not with_rig and any(r.generate_animate for r in rows):
+        console.print(
+            Panel(
+                "[yellow]--with-animate sem --with-rig[/yellow]: animação precisa de GLB rigado primeiro.",
+                title="Aviso",
+                border_style="yellow",
+            )
+        )
+
     def _row_sources() -> tuple[bool, bool]:
         any_t2d = False
         any_tex = False
@@ -1099,6 +1236,14 @@ def batch_cmd(
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
+    animator3d_bin: str | None = None
+    if with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows):
+        animator3d_bin = _resolve_animator3d_bin()
+        if not animator3d_bin:
+            raise click.ClickException(
+                "Comando não encontrado: 'animator3d'. Instala Animator3D ou define ANIMATOR3D_BIN."
+            )
+
     part3d_bin: str | None = None
     if with_parts and any(r.generate_parts for r in rows):
         try:
@@ -1145,6 +1290,7 @@ def batch_cmd(
         else:
             meta.add_row("paint3d", "[dim](não necessário — sem textura 3D)[/dim]")
     meta.add_row("rigging3d", rigging3d_bin or "[dim](desligado)[/dim]")
+    meta.add_row("animator3d", animator3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("part3d", part3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("Modo", "[cyan]dry-run[/cyan]" if dry_run else "execução")
     if profile_tools:
@@ -1158,6 +1304,10 @@ def batch_cmd(
             ord_skip.append("Text3D (só generate_3d, PNG no output_dir)")
             if with_parts:
                 ord_skip.append("Part3D (generate_parts)")
+            if with_rig:
+                ord_skip.append("Rigging3D (generate_rig)")
+            if with_animate:
+                ord_skip.append("Animator3D game-pack")
         meta.add_row("Ordem", " → ".join(ord_skip))
     elif any_texture2d_row or any_text2d_row:
         if any_texture2d_row and any_text2d_row:
@@ -1174,6 +1324,10 @@ def batch_cmd(
             ord_parts.append("Text3D (só generate_3d)")
             if with_parts:
                 ord_parts.append("Part3D (generate_parts)")
+            if with_rig:
+                ord_parts.append("Rigging3D (generate_rig)")
+            if with_animate:
+                ord_parts.append("Animator3D game-pack")
         meta.add_row("Ordem", " → ".join(ord_parts))
     else:
         ord_tail = "Text2D (todas as linhas)"
@@ -1183,6 +1337,10 @@ def batch_cmd(
             ord_tail += " → Text3D (só generate_3d, imagens já gravadas)"
             if with_parts:
                 ord_tail += " → Part3D (generate_parts)"
+            if with_rig:
+                ord_tail += " → Rigging3D (generate_rig)"
+            if with_animate:
+                ord_tail += " → Animator3D game-pack"
         meta.add_row("Ordem", ord_tail)
     lock_path = manifest_path.parent / ".gameassets_batch.lock"
     meta.add_row(
@@ -1397,6 +1555,28 @@ def batch_cmd(
                     rig_profile=rg,
                 )
                 _dry_run_emit(dry_plan, phase="rigging3d", row_id=row.id, argv=rg_args)
+        if with_animate and animator3d_bin and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows):
+            _dry_run_header(
+                dry_plan,
+                "--- Animator3D game-pack (após rig; generate_animate ou generate_rig + --with-rig) ---",
+            )
+            for row in rows:
+                if not row.generate_3d or not _row_wants_animate(row, with_rig):
+                    continue
+                _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
+                rg = profile.rigging3d
+                sfx = rg.output_suffix if rg else "_rigged"
+                rig_in = mesh_path
+                p3_row = _part3d_profile_effective(profile, row)
+                if with_parts and row.generate_parts and not p3_row.segment_only:
+                    out_p, _ = _part3d_output_paths(mesh_path, p3_row)
+                    rig_in = out_p
+                rig_out = _rigging3d_output_path(rig_in, sfx)
+                anim_out = _animator3d_output_path(rig_out)
+                anim_prof = profile.animator3d or Animator3DProfile()
+                preset = (anim_prof.preset or "humanoid").strip().lower()
+                ap_args = _animator3d_game_pack_argv(animator3d_bin, rig_out, anim_out, preset=preset)
+                _dry_run_emit(dry_plan, phase="animator3d", row_id=row.id, argv=ap_args)
         if dry_run_json is not None and dry_plan is not None:
             payload = {
                 "version": 1,
@@ -1407,6 +1587,7 @@ def batch_cmd(
                     "with_3d": with_3d,
                     "with_rig": with_rig,
                     "with_parts": with_parts,
+                    "with_animate": with_animate,
                     "skip_text2d": skip_text2d,
                     "skip_audio": skip_audio,
                 },
@@ -1461,6 +1642,7 @@ def batch_cmd(
         "with_3d": with_3d,
         "with_rig": with_rig,
         "with_parts": with_parts,
+        "with_animate": with_animate,
         "skip_text2d": skip_text2d,
         "skip_audio": skip_audio,
         "dry_run": dry_run,
@@ -1506,6 +1688,7 @@ def batch_cmd(
                         "parts_mesh_path": None,
                         "segmented_mesh_path": None,
                         "rig_mesh_path": None,
+                        "animated_mesh_path": None,
                         "audio_path": None,
                         "error": None,
                         "audio_error": None,
@@ -1750,6 +1933,7 @@ def batch_cmd(
                             with_parts,
                             rigging3d_bin,
                             with_rig,
+                            with_animate,
                         ):
                             failures += 1
 
@@ -1915,6 +2099,7 @@ def batch_cmd(
                                         with_parts,
                                         rigging3d_bin,
                                         with_rig,
+                                        with_animate,
                                     ):
                                         failures += 1
                                 append_log(rec)
@@ -2437,10 +2622,6 @@ def resume_cmd(
 @main.group("debug")
 def debug_group() -> None:
     """Ferramentas de debugging visual para agentes IA (screenshots, inspect, compare, bundle)."""
-
-
-def _resolve_animator3d_bin() -> str | None:
-    return resolve_binary("ANIMATOR3D_BIN", "animator3d")
 
 
 def _extract_json_from_output(text: str) -> dict[str, Any]:

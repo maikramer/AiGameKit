@@ -113,6 +113,13 @@ class Texture2DProfile:
 
 
 @dataclass
+class Animator3DProfile:
+    """Opções para ``animator3d game-pack`` após Rigging3D (GLB rigado → GLB com clips)."""
+
+    preset: str = "humanoid"
+
+
+@dataclass
 class Rigging3DProfile:
     """Opções para o CLI rigging3d pipeline após Text3D (GLB → GLB rigado)."""
 
@@ -190,6 +197,7 @@ class GameProfile:
     text3d: Text3DProfile | None = None
     text2sound: Text2SoundProfile | None = None
     rigging3d: Rigging3DProfile | None = None
+    animator3d: Animator3DProfile | None = None
     part3d: Part3DProfile | None = None
 
     @classmethod
@@ -468,6 +476,15 @@ class GameProfile:
                 root=rg_root_s,
                 python=rg_py_s,
             )
+        anim3: Animator3DProfile | None = None
+        raw_anim = data.get("animator3d")
+        if isinstance(raw_anim, dict):
+            pr_a = raw_anim.get("preset")
+            pr_as = str(pr_a).strip().lower() if pr_a not in (None, "") else "humanoid"
+            valid_presets = ("humanoid", "creature", "flying")
+            if pr_as not in valid_presets:
+                raise ValueError(f"animator3d.preset deve ser um de: {', '.join(valid_presets)}")
+            anim3 = Animator3DProfile(preset=pr_as)
         p3: Part3DProfile | None = None
         raw_p3 = data.get("part3d")
         if isinstance(raw_p3, dict):
@@ -552,6 +569,7 @@ class GameProfile:
             text3d=t3,
             text2sound=ts2,
             rigging3d=rg3,
+            animator3d=anim3,
             part3d=p3,
         )
 

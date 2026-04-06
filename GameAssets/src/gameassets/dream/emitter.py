@@ -46,6 +46,7 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
     has_rig = any(a.generate_rig for a in plan.assets)
     if has_rig:
         doc["rigging3d"] = {"output_suffix": "_rigged"}
+        doc["animator3d"] = {"preset": "humanoid"}
 
     if with_audio and any(a.generate_audio for a in plan.assets):
         doc["audio_subdir"] = "audio"
@@ -70,6 +71,7 @@ CSV_HEADERS = [
     "generate_3d",
     "generate_audio",
     "generate_rig",
+    "generate_animate",
     "generate_parts",
     "image_source",
 ]
@@ -88,6 +90,7 @@ def emit_manifest_csv(plan: DreamPlan) -> str:
                 "generate_3d": str(a.generate_3d).lower(),
                 "generate_audio": str(a.generate_audio).lower(),
                 "generate_rig": str(a.generate_rig).lower(),
+                "generate_animate": str(a.generate_rig).lower(),
                 "generate_parts": str(a.generate_parts).lower(),
                 "image_source": "",
             }
@@ -122,9 +125,12 @@ def emit_world_xml(plan: DreamPlan) -> str:
     lines.append("")
 
     three_d_ids = {a.id for a in plan.assets if a.generate_3d}
+    skip_gltf_ids = {a.id for a in plan.assets if a.generate_3d and a.generate_rig}
 
     for p in plan.scene.placements:
         if p.asset_id not in three_d_ids:
+            continue
+        if p.asset_id in skip_gltf_ids:
             continue
         pos = p.pos or "0 0 0"
         scale = p.scale or "1 1 1"
@@ -154,7 +160,18 @@ def _ground_color_for_genre(genre: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _dream_animated_character_model_id(plan: DreamPlan) -> str | None:
+    for a in plan.assets:
+        if a.generate_3d and a.generate_rig:
+            return a.id
+    return None
+
+
 def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:
+    model_id = _dream_animated_character_model_id(plan)
+    if model_id is not None:
+        return _emit_main_ts_character_animation(plan, model_id=model_id, with_sky=with_sky)
+
     imports = ["configure", "run"]
     extra_imports: list[str] = []
 
@@ -185,6 +202,152 @@ def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:
     lines.append("void bootstrap();")
     lines.append("")
     return "\n".join(lines)
+
+
+def _emit_main_ts_character_animation(plan: DreamPlan, *, model_id: str, with_sky: bool) -> str:
+    """Bootstrap com GltfAnimator e clipes Animator3D (idle / walk / run) para o herói rigado."""
+    url = f"/assets/models/{model_id}.glb"
+    sky_import = (
+        "import {\n"
+        "  applyEquirectSkyEnvironment,\n"
+        "  configure,\n"
+        "  defineQuery,\n"
+        "  getScene,\n"
+        "  GltfAnimator,\n"
+        "  isKeyDown,\n"
+        "  Parent,\n"
+        "  Player,\n"
+        "  Renderer,\n"
+        "  run,\n"
+        "  WorldTransform,\n"
+        "} from 'vibegame';\n"
+    )
+    no_sky_import = (
+        "import {\n"
+        "  configure,\n"
+        "  defineQuery,\n"
+        "  getScene,\n"
+        "  GltfAnimator,\n"
+        "  isKeyDown,\n"
+        "  Parent,\n"
+        "  Player,\n"
+        "  Renderer,\n"
+        "  run,\n"
+        "  WorldTransform,\n"
+        "} from 'vibegame';\n"
+    )
+    header = sky_import if (with_sky and plan.sky_prompt) else no_sky_import
+    header += "import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';\n"
+    header += "import { Box3, Clock } from 'three';\n\n"
+    header += "const CLIP_IDLE = 'Animator3D_BreatheIdle';\n"
+    header += "const CLIP_WALK = 'Animator3D_Walk';\n"
+    header += "const CLIP_RUN = 'Animator3D_Run';\n"
+    header += f"const HERO_MODEL_URL = '{url}';\n\n"
+    header += "const MOVE_KEYS = [\n"
+    header += "  'KeyW',\n  'KeyA',\n  'KeyS',\n  'KeyD',\n"
+    header += "  'ArrowUp',\n  'ArrowDown',\n  'ArrowLeft',\n  'ArrowRight',\n"
+    header += "] as const;\n\n"
+    header += "const playerQuery = defineQuery([Player]);\n"
+    header += "const parentQuery = defineQuery([Parent]);\n\n"
+    header += "interface HeroHandle {\n  animator: GltfAnimator;\n  yOffset: number;\n}\n\n"
+    header += (
+        "async function loadHero(scene: import('three').Scene): Promise<HeroHandle> {\n"
+        "  const loader = new GLTFLoader();\n"
+        "  const gltf = await loader.loadAsync(HERO_MODEL_URL);\n"
+        "  gltf.scene.name = 'dream-player-model';\n"
+        "  scene.add(gltf.scene);\n"
+        "  const box = new Box3().setFromObject(gltf.scene);\n"
+        "  const yOffset = -box.min.y;\n"
+        "  const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.2 });\n"
+        "  animator.play(CLIP_IDLE);\n"
+        "  return { animator, yOffset };\n"
+        "}\n\n"
+    )
+    header += (
+        "function hideBoxCharacterParts(\n"
+        "  state: ReturnType<Awaited<ReturnType<typeof run>>['getState']>\n"
+        ") {\n"
+        "  const world = state.world;\n"
+        "  const players = playerQuery(world);\n"
+        "  if (players.length === 0) return;\n"
+        "  const playerEid = players[0];\n"
+        "  const allParented = parentQuery(world);\n"
+        "  const childrenOfPlayer = allParented.filter(\n"
+        "    (e: number) => Parent.entity[e] === playerEid\n"
+        "  );\n"
+        "  for (const child of childrenOfPlayer) {\n"
+        "    const grandchildren = allParented.filter(\n"
+        "      (e: number) => Parent.entity[e] === child\n"
+        "    );\n"
+        "    for (const gc of grandchildren) {\n"
+        "      if (state.hasComponent(gc, Renderer)) {\n"
+        "        Renderer.visible[gc] = 0;\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "}\n\n"
+    )
+    header += (
+        "function startGameLoop(\n"
+        "  hero: HeroHandle,\n"
+        "  state: ReturnType<Awaited<ReturnType<typeof run>>['getState']>\n"
+        ") {\n"
+        "  const clock = new Clock();\n"
+        "  function tick() {\n"
+        "    const dt = clock.getDelta();\n"
+        "    const moving = MOVE_KEYS.some((k) => isKeyDown(k));\n"
+        "    const sprint = isKeyDown('ShiftLeft') || isKeyDown('ShiftRight');\n"
+        "    let wantClip = CLIP_IDLE;\n"
+        "    if (moving) {\n"
+        "      wantClip = sprint ? CLIP_RUN : CLIP_WALK;\n"
+        "    }\n"
+        "    if (hero.animator.activeClipName !== wantClip) {\n"
+        "      hero.animator.play(wantClip);\n"
+        "    }\n"
+        "    hero.animator.update(dt);\n"
+        "    const players = playerQuery(state.world);\n"
+        "    if (players.length > 0) {\n"
+        "      const eid = players[0];\n"
+        "      const root = hero.animator.root;\n"
+        "      root.position.set(\n"
+        "        WorldTransform.posX[eid],\n"
+        "        WorldTransform.posY[eid] + hero.yOffset,\n"
+        "        WorldTransform.posZ[eid]\n"
+        "      );\n"
+        "      root.quaternion.set(\n"
+        "        WorldTransform.rotX[eid],\n"
+        "        WorldTransform.rotY[eid],\n"
+        "        WorldTransform.rotZ[eid],\n"
+        "        WorldTransform.rotW[eid]\n"
+        "      );\n"
+        "    }\n"
+        "    requestAnimationFrame(tick);\n"
+        "  }\n"
+        "  tick();\n"
+        "}\n\n"
+    )
+    header += "async function bootstrap(): Promise<void> {\n"
+    header += "  configure({ canvas: '#game-canvas' });\n"
+    header += "  const runtime = await run();\n"
+    header += "  const state = runtime.getState();\n"
+    if with_sky and plan.sky_prompt:
+        header += "  try {\n"
+        header += "    await applyEquirectSkyEnvironment(state, '/assets/sky/sky.png');\n"
+        header += "  } catch {\n"
+        header += "    console.warn('[dream] Sky env map not loaded (optional).');\n"
+        header += "  }\n"
+    header += "  const scene = getScene(state);\n"
+    header += "  if (scene) {\n"
+    header += "    try {\n"
+    header += "      const hero = await loadHero(scene);\n"
+    header += "      hideBoxCharacterParts(state);\n"
+    header += "      startGameLoop(hero, state);\n"
+    header += "    } catch (err) {\n"
+    header += "      console.warn('[dream] Animated character model not found, using box character.', err);\n"
+    header += "    }\n"
+    header += "  }\n"
+    header += "}\n\nvoid bootstrap();\n"
+    return header
 
 
 # ---------------------------------------------------------------------------

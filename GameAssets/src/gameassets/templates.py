@@ -86,9 +86,9 @@ text3d:
 #   segmented_suffix: "_segmented"
 """
 
-MANIFEST_CSV = """id,idea,kind,generate_3d,generate_audio,generate_rig,generate_parts,image_source
-chest_01,"baú de madeira com ferrolhos dourados",prop,false,false,false,false,
-hero_sword,"espada longa com gema azul no punho",prop,true,false,false,false,
-forest_bg,"floresta densa ao entardecer",environment,false,false,false,false,
-sky_sunset,"pôr do sol sobre montanhas, nuvens douradas",skymap,false,false,false,false,skymap2d
+MANIFEST_CSV = """id,idea,kind,generate_3d,generate_audio,generate_rig,generate_animate,generate_parts,image_source
+chest_01,"baú de madeira com ferrolhos dourados",prop,false,false,false,false,false,
+hero_sword,"espada longa com gema azul no punho",prop,true,false,false,false,false,
+forest_bg,"floresta densa ao entardecer",environment,false,false,false,false,false,
+sky_sunset,"pôr do sol sobre montanhas, nuvens douradas",skymap,false,false,false,false,false,skymap2d
 """

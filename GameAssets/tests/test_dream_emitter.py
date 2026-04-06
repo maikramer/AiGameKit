@@ -65,6 +65,12 @@ class TestEmitGameYaml:
         doc = yaml.safe_load(out)
         assert "rigging3d" in doc
 
+    def test_has_animator3d_when_rig(self) -> None:
+        out = emit_game_yaml(_sample_plan())
+        doc = yaml.safe_load(out)
+        assert "animator3d" in doc
+        assert doc["animator3d"]["preset"] == "humanoid"
+
     def test_has_text2sound_when_audio(self) -> None:
         out = emit_game_yaml(_sample_plan(), with_audio=True)
         doc = yaml.safe_load(out)
@@ -84,6 +90,13 @@ class TestEmitManifestCsv:
         assert "id" in header
         assert "idea" in header
         assert "kind" in header
+        assert "generate_animate" in header
+
+    def test_hero_row_has_generate_animate_when_rig(self) -> None:
+        out = emit_manifest_csv(_sample_plan())
+        lines = out.strip().splitlines()
+        hero_line = next(L for L in lines if L.startswith("hero,"))
+        assert hero_line.split(",")[6] == "true"
 
     def test_row_count(self) -> None:
         out = emit_manifest_csv(_sample_plan())
@@ -100,6 +113,13 @@ class TestEmitWorldXml:
     def test_contains_gltf_load(self) -> None:
         xml = emit_world_xml(_sample_plan())
         assert "gltf-load" in xml
+        assert "/assets/models/crystal.glb" in xml
+
+    def test_skips_gltf_for_rigged_character(self) -> None:
+        plan = _sample_plan()
+        plan.scene.placements.append(Placement(asset_id="hero", pos="0 1 0", scale="1 1 1"))
+        xml = emit_world_xml(plan)
+        assert "/assets/models/hero.glb" not in xml
         assert "/assets/models/crystal.glb" in xml
 
     def test_no_audio_placement(self) -> None:
@@ -138,6 +158,21 @@ class TestEmitMainTs:
     def test_has_sky_env(self) -> None:
         ts = emit_main_ts(_sample_plan(), with_sky=True)
         assert "applyEquirectSkyEnvironment" in ts
+
+    def test_animator_clip_names_when_rig(self) -> None:
+        ts = emit_main_ts(_sample_plan(), with_sky=True)
+        assert "Animator3D_BreatheIdle" in ts
+        assert "Animator3D_Walk" in ts
+        assert "Animator3D_Run" in ts
+        assert "GltfAnimator" in ts
+
+    def test_no_gltf_animator_without_rig(self) -> None:
+        plan = _sample_plan()
+        plan.assets = [a for a in plan.assets if a.id != "hero"] + [
+            AssetEntry(id="hero", idea="chibi", kind="character", generate_3d=True, generate_rig=False),
+        ]
+        ts = emit_main_ts(plan, with_sky=True)
+        assert "GltfAnimator" not in ts
 
     def test_no_sky_env_when_disabled(self) -> None:
         ts = emit_main_ts(_sample_plan(), with_sky=False)

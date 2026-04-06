@@ -22,6 +22,8 @@ class ManifestRow:
     generate_audio: bool = False
     # Auto-rig do GLB (Rigging3D) após Text3D; requer --with-rig e generate_3d=true
     generate_rig: bool = False
+    # Animator3D game-pack após rig; requer --with-animate e GLB rigado (ou só --with-rig+generate_rig)
+    generate_animate: bool = False
     # Decomposição semântica (Part3D) após Text3D; requer --with-parts e generate_3d=true
     generate_parts: bool = False
     # Part3D por linha: sobrepõe part3d.{steps,octree_resolution,segment_only} do perfil
@@ -64,7 +66,7 @@ def _parse_int(value: str | None) -> int | None:
 
 def load_manifest(path: Path) -> list[ManifestRow]:
     """Lê CSV: id, idea; opcionais kind, generate_3d, image_source, generate_audio,
-    generate_rig, generate_parts, part3d_steps, part3d_octree_resolution,
+    generate_rig, generate_animate, generate_parts, part3d_steps, part3d_octree_resolution,
     part3d_segment_only."""
     rows: list[ManifestRow] = []
     import io
@@ -92,6 +94,7 @@ def load_manifest(path: Path) -> list[ManifestRow]:
         img_src_key = fields.get("image_source")
         ga_key = fields.get("generate_audio")
         gr_key = fields.get("generate_rig")
+        gan_key = fields.get("generate_animate")
         gp_key = fields.get("generate_parts")
         # Part3D per-row overrides
         p3_steps_key = fields.get("part3d_steps")
@@ -118,6 +121,9 @@ def load_manifest(path: Path) -> list[ManifestRow]:
             gr = False
             if gr_key:
                 gr = _parse_bool(raw.get(gr_key))
+            gan = False
+            if gan_key:
+                gan = _parse_bool(raw.get(gan_key))
             gp = False
             if gp_key:
                 gp = _parse_bool(raw.get(gp_key))
@@ -140,6 +146,7 @@ def load_manifest(path: Path) -> list[ManifestRow]:
                     image_source=img_src,
                     generate_audio=ga,
                     generate_rig=gr,
+                    generate_animate=gan,
                     generate_parts=gp,
                     part3d_steps=p3_steps,
                     part3d_octree_resolution=p3_oct,

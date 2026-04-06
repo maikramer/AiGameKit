@@ -60,6 +60,20 @@ def test_from_dict_rigging3d_output_suffix_adds_underscore() -> None:
     assert p.rigging3d.output_suffix == "_rigged"
 
 
+def test_from_dict_animator3d() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "animator3d": {"preset": "humanoid"},
+        }
+    )
+    assert p.animator3d is not None
+    assert p.animator3d.preset == "humanoid"
+
+
 def test_from_dict_text3d() -> None:
     p = GameProfile.from_dict(
         {

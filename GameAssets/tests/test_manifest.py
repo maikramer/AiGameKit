@@ -37,6 +37,21 @@ def test_quoted_commas() -> None:
         path.unlink(missing_ok=True)
 
 
+def test_generate_animate_column() -> None:
+    content = (
+        "id,idea,kind,generate_3d,generate_rig,generate_animate\na,one,prop,true,true,true\nb,two,,false,false,false\n"
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+        f.write(content)
+        path = Path(f.name)
+    try:
+        rows = load_manifest(path)
+        assert rows[0].generate_animate is True
+        assert rows[1].generate_animate is False
+    finally:
+        path.unlink(missing_ok=True)
+
+
 def test_generate_rig_column() -> None:
     content = "id,idea,kind,generate_3d,generate_rig\na,one,prop,true,true\nb,two,,false,false\n"
     with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
