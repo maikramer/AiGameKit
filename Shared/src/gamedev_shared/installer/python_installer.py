@@ -9,6 +9,7 @@ Animator3D 3.13).  Quando ``uv`` não está disponível, usa o fluxo clássico
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -95,6 +96,44 @@ class PythonProjectInstaller(BaseInstaller):
         self.install_in_venv()
 
         return True
+
+    def run_uninstall(self) -> bool:
+        """Remove o venv do projecto e wrappers do CLI."""
+        self.logger.header(f"Desinstalando {self.project_name}")
+
+        # Remover wrappers
+        wrapper_names = [self.cli_name]
+        if self.is_windows:
+            wrapper_names.append(f"{self.cli_name}.cmd")
+        for name in wrapper_names:
+            w = self.bin_dir / name
+            if w.exists() or w.is_symlink():
+                w.unlink()
+                self.logger.success(f"Removido wrapper: {w}")
+
+        # Remover activate wrapper se existir
+        activate = self.bin_dir / f"{self.cli_name}-activate"
+        if not self.is_windows and (activate.exists() or activate.is_symlink()):
+            activate.unlink()
+            self.logger.success(f"Removido: {activate}")
+
+        # Remover venv
+        if self.venv_dir.exists():
+            try:
+                shutil.rmtree(self.venv_dir)
+                self.logger.success(f"Venv removido: {self.venv_dir}")
+                self.venv_exists = False
+            except OSError as e:
+                self.logger.error(f"Erro ao remover venv: {e}")
+                return False
+
+        self.logger.success(f"{self.project_name} desinstalado.")
+        return True
+
+    def run_reinstall(self) -> bool:
+        """Desinstala e reinstala o projecto."""
+        self.run_uninstall()
+        return self.run()
 
     # ------------------------------------------------------------------
     # venv do projecto

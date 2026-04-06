@@ -278,31 +278,9 @@ def install_tool(
     if action == "install":
         return inst.run()
     elif action == "uninstall":
-        if spec.kind == ToolKind.RUST:
-            return inst.run_uninstall()  # type: ignore[union-attr]
-        if spec.kind == ToolKind.BUN:
-            return inst.run_uninstall()  # type: ignore[union-attr]
-        Logger().warn("Uninstall para Python: pip uninstall <pacote>")
-        return True
+        return inst.run_uninstall()
     elif action == "reinstall":
-        if spec.kind == ToolKind.RUST:
-            return inst.run_reinstall()  # type: ignore[union-attr]
-        if spec.kind == ToolKind.BUN:
-            return inst.run_reinstall()  # type: ignore[union-attr]
-        Logger().warn("Reinstall: use --force com install")
-        return install_tool(
-            name,
-            monorepo=monorepo,
-            action="install",
-            install_prefix=install_prefix,
-            python_cmd=python_cmd,
-            use_venv=use_venv,
-            skip_deps=skip_deps,
-            skip_models=skip_models,
-            force=True,
-            skip_env_config=skip_env_config,
-            text2d_venv_only=text2d_venv_only,
-        )
+        return inst.run_reinstall()
     else:
         Logger().error(f"Acção desconhecida: {action}")
         return False
