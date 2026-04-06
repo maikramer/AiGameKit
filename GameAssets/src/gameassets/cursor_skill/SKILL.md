@@ -92,6 +92,8 @@ Colunas incluem **`id`**, **`idea`**, **`generate_3d`**, opcionalmente **`genera
 | `TEXT2SOUND_BIN` | Idem para `text2sound` quando há `generate_audio` |
 | `MATERIALIZE_BIN` | Idem para `materialize` (só fluxo Texture2D + `texture2d.materialize`) |
 | `RIGGING3D_BIN` | Idem para `rigging3d` (ou `python -m rigging3d`) com `--with-rig` |
+| `ANIMATOR3D_BIN` | Idem para `animator3d` com `--with-rig --with-animate` |
+| `PART3D_BIN` | Idem para `part3d` com `--with-parts` |
 
 ## Prompt — palavras a evitar para 3D limpo
 
@@ -121,6 +123,7 @@ O sistema de prompt enhancement (v2) envolve automaticamente o prompt com enquad
 | `Preset desconhecido` | Passar `--presets-local` com o YAML onde o preset está definido. |
 | GLB não gerado | `batch` sem `--with-3d` **nunca** corre 3D; ou `generate_3d` falso na linha. |
 | Rig não aplicado | `batch` sem `--with-rig` ignora `generate_rig`; precisa de GLB do Text3D primeiro (`--with-3d`). |
+| Sem animação após rig | `batch` sem `--with-animate`, ou `animator3d` ausente (`ANIMATOR3D_BIN` / `PATH`); ou linha sem `generate_rig`/`generate_animate` quando aplicável. |
 | OOM no Text2D | Reduzir resolução em `text2d` no perfil; fechar **Godot** ou outros processos na GPU (`nvidia-smi`). |
 | Qualidade 3D pior que no Text3D “isolado” | Mesmo `game.yaml` e mesmas flags; comparar preset/steps e VRAM livre. |
 
