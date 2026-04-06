@@ -20,10 +20,10 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (HF API) |
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (UniRig, Python 3.11) |
-| `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13) |
+| `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `GameDevLab/` | Python | `gamedev-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
-| `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests) |
+| `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `player-gltf` recipe |
 
 All Python packages depend on `gamedev-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `gamedev-shared`.
 
@@ -81,6 +81,15 @@ make test-materialize  # cargo test in Materialize/
 make test-vibegame     # bun install (frozen) + bun test in VibeGame/
 ```
 
+Animator3D CLI (see [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md)):
+
+```bash
+animator3d game-pack rigged.glb animated.glb --preset humanoid
+animator3d run
+animator3d jump
+animator3d fall
+```
+
 ### VibeGame (TypeScript / Bun)
 
 From repo root (requires [Bun](https://bun.sh/) on `PATH`):
@@ -106,9 +115,15 @@ Formatting: Prettier (`make fmt-vibegame` / `make fmt-check-vibegame`, or `bun r
 
 This runs `bun install --frozen-lockfile` and `bun run build` in `VibeGame/`, then installs `vibegame` into `~/.local/bin` (wrapper → `scripts/vibegame-cli.mjs`). Subcommands: `vibegame create <name>`, `vibegame --version`.
 
-**GLB handoff (Text3D / Paint3D / GameAssets → browser):** export `loadGltfToScene` from `vibegame` (see `VibeGame/src/extras/gltf-bridge.ts`), or declarative `<gltf-load url="…">` in world XML (`VibeGame/src/plugins/gltf-xml/`). Equirect sky → PMREM: `applyEquirectSkyEnvironment` (`VibeGame/src/extras/sky-env.ts`). Pack to `public/`: `gameassets handoff --public-dir …`. End-to-end layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Example: [`VibeGame/examples/monorepo-game/`](VibeGame/examples/monorepo-game/). Animator3D after rig: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md). AI workflow: [`docs/ZERO_TO_GAME_AI.md`](docs/ZERO_TO_GAME_AI.md).
+**GLB handoff (Text3D / Paint3D / GameAssets → browser):** export `loadGltfToScene` from `vibegame` (see `VibeGame/src/extras/gltf-bridge.ts`), or declarative `<gltf-load url="…">` in world XML (`VibeGame/src/plugins/gltf-xml/`). Runtime clip control: `GltfAnimator` (`VibeGame/src/extras/gltf-animator.ts`; pairs with `loadGltfToScene` in `gltf-bridge.ts`). Equirect sky → PMREM: `applyEquirectSkyEnvironment` (`VibeGame/src/extras/sky-env.ts`). Pack to `public/`: `gameassets handoff --public-dir …` (handoff may set `prefer_animated`: animated GLB over rigged, parts, then base). End-to-end layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Example: [`VibeGame/examples/monorepo-game/`](VibeGame/examples/monorepo-game/). Animator3D after rig: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md). AI workflow: [`docs/ZERO_TO_GAME_AI.md`](docs/ZERO_TO_GAME_AI.md).
 
-**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.csv`/`world.xml`/`main.ts`/`index.html`, runs batch+sky+handoff, and scaffolds a playable Vite project. Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context). Providers: `--llm-provider openai|huggingface|stdin`. `--dry-run` generates files without GPU.
+Declarative GLB player in world XML:
+
+```html
+<player-gltf pos="0 0 0" model-url="/assets/models/hero.glb"></player-gltf>
+```
+
+**Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.csv`/`world.xml`/`main.ts`/`index.html`, runs batch+sky+handoff, and scaffolds a playable Vite project. Use `--with-animate` to include an auto-animation step (Animator3D) in the pipeline when applicable. Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context). Providers: `--llm-provider openai|huggingface|stdin`. `--dry-run` generates files without GPU.
 
 ### Tests — single test file or test class
 
