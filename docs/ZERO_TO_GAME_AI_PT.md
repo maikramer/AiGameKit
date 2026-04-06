@@ -66,7 +66,7 @@ O runtime (`player-gltf` e sistemas relacionados) mapeia o movimento a estes nom
 
 ## Handoff técnico
 
-Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadGltfToScene`). **Animator3D** pós-rig: [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md). Céu equirect: `applyEquirectSkyEnvironment` no VibeGame.
+Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadGltfToScene`, `loadGltfAnimated`, `<player-gltf>`). **Animator3D** pós-rig: [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md). Céu equirect: `applyEquirectSkyEnvironment` no VibeGame.
 
 ## Entregas recentes (resumo)
 
@@ -77,7 +77,7 @@ Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadG
 | Pack para web | `gameassets handoff` |
 | Plano JSON (batch dry-run) | `gameassets batch --dry-run --dry-run-json ficheiro.json` |
 | GLB no XML | `<gltf-load url="…">` |
-| Jogador animado (XML) | `<player-gltf model-url="…">` — idle/walk/run pelo input; ver secção *Pipeline completo de animação* |
+| Jogador animado (XML) | `<player-gltf model-url="…">` — idle/walk/run pelo input; ver [Pipeline completo de animação](#pipeline-completo-de-animação) |
 
 ## `gameassets dream` — da ideia ao jogo
 
