@@ -108,7 +108,11 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "bun test tests/unit tests/integration tests/e2e"
+    "test": "bun test tests/unit tests/integration tests/e2e",
+    "playwright:install": "playwright install chromium",
+    "test:playwright": "playwright test",
+    "test:playwright:ui": "playwright test --ui",
+    "test:playwright:debug": "playwright test --debug"
   },
   "keywords": [
     "threejs",
@@ -137,6 +141,7 @@
   },
   "devDependencies": {
     "@fredli74/typr": "^0.3.9",
+    "@playwright/test": "^1.59.1",
     "@types/bun": "^1.2.21",
     "@types/jsdom": "^21.1.7",
     "@types/node": "^24.3.0",
