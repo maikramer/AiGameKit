@@ -79,7 +79,7 @@ test-rust: test-materialize ## alias for test-materialize
 
 # VibeGame: requires Bun (https://bun.sh/) on PATH. Not part of `make test` / `make check`.
 test-vibegame: ## bun install (frozen) + bun test in VibeGame/
-	cd VibeGame && bun install --frozen-lockfile && bun test
+	cd VibeGame && bun install --frozen-lockfile && bun test tests/unit tests/integration tests/e2e
 
 check-vibegame: ## tsc --noEmit in VibeGame/
 	cd VibeGame && bun install --frozen-lockfile && bun run check

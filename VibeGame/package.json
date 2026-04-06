@@ -83,6 +83,14 @@
       "types": "./dist/plugins/terrain/index.d.ts",
       "import": "./dist/plugins/terrain/index.js"
     },
+    "./water": {
+      "types": "./dist/plugins/water/index.d.ts",
+      "import": "./dist/plugins/water/index.js"
+    },
+    "./debug": {
+      "types": "./dist/plugins/debug/index.d.ts",
+      "import": "./dist/plugins/debug/index.js"
+    },
     "./extras/sky": {
       "types": "./dist/extras/sky-env.d.ts",
       "import": "./dist/extras/sky-env.js"
@@ -112,7 +120,8 @@
     "playwright:install": "playwright install chromium",
     "test:playwright": "playwright test",
     "test:playwright:ui": "playwright test --ui",
-    "test:playwright:debug": "playwright test --debug"
+    "test:playwright:debug": "playwright test --debug",
+    "test:debug": "playwright test tests/playwright/debug-cycle.spec.ts tests/playwright/visual-regression.spec.ts --reporter=json"
   },
   "keywords": [
     "threejs",

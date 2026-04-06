@@ -42,6 +42,15 @@
         resolution="64"
       ></terrain>
 
+      <!-- Ocean water plane at Y=5, matches terrain world-size -->
+      <water
+        pos="0 5 0"
+        size="256"
+        opacity="0.8"
+        wave-speed="1.0"
+        wave-scale="0.3"
+      ></water>
+
       <!-- Y acima de max-height do terreno (50): o heightmap procedural tem picos até ~maxHeight -->
       <player pos="0 60 0"></player>
       <follow-camera
