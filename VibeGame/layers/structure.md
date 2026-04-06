@@ -43,6 +43,7 @@ vibegame/
 │   │   └── index.ts  # Core exports
 │   ├── plugins/  # Plugin modules
 │   │   ├── animation/  # Animation system
+│   │   ├── debug/  # State introspection bridge (window.__VIBEGAME__)
 │   │   ├── input/  # Input handling
 │   │   ├── line/  # 2D line rendering
 │   │   ├── orbit-camera/  # Orbital camera
@@ -51,11 +52,13 @@ vibegame/
 │   │   ├── postprocessing/  # Post-processing effects
 │   │   ├── recipes/  # XML recipe system
 │   │   ├── rendering/  # Three.js rendering
-│   │   ├── text/  # 3D text rendering
 │   │   ├── respawn/  # Respawn system
 │   │   ├── startup/  # Initialization
+│   │   ├── terrain/  # LOD terrain with heightmap displacement
+│   │   ├── text/  # 3D text rendering
 │   │   ├── transforms/  # Transform hierarchy
 │   │   ├── tweening/  # Tween animations
+│   │   ├── water/  # Water rendering with waves and reflections
 │   │   └── defaults.ts  # Default plugin bundle
 │   ├── vite/  # Vite plugins
 │   │   ├── index.ts  # Plugin exports
@@ -115,7 +118,11 @@ vibegame/
 ├── tests/
 │   ├── unit/  # Unit tests
 │   ├── integration/  # Integration tests
-│   └── e2e/  # End-to-end tests
+│   ├── e2e/  # End-to-end tests
+│   └── playwright/  # Playwright E2E with debug bridge introspection
+│       ├── helpers/  # GameInspector, visual, interaction helpers
+│       ├── fixtures/  # Custom Playwright fixtures
+│       └── context.md  # Playwright test context
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
@@ -148,18 +155,21 @@ Optional files:
 ### Plugin Registry
 
 1. **animation** - Animation mixer and clip management (AnimationPlugin)
-2. **input** - Mouse, keyboard, gamepad input handling (InputPlugin)
-3. **line** - 2D billboard line rendering with arrowheads (LinePlugin)
-4. **orbit-camera** - Standalone orbital camera with direct input handling (OrbitCameraPlugin)
-5. **physics** - Rapier 3D WASM physics integration (PhysicsPlugin)
-6. **player** - Player character controller (PlayerPlugin)
-7. **postprocessing** - Post-processing effects (PostprocessingPlugin)
-8. **rendering** - Three.js rendering pipeline (RenderingPlugin)
-9. **text** - 3D text with Paragraph/Word layout and troika effects (TextPlugin)
-10. **respawn** - Entity respawn system (RespawnPlugin)
-11. **startup** - Initialization and setup systems (StartupPlugin)
-12. **transforms** - Transform component hierarchy (TransformsPlugin)
-13. **tweening** - Tween animations and presentation shakers (TweenPlugin)
+2. **debug** - Runtime state introspection via `window.__VIBEGAME__` bridge (DebugPlugin)
+3. **input** - Mouse, keyboard, gamepad input handling (InputPlugin)
+4. **line** - 2D billboard line rendering with arrowheads (LinePlugin)
+5. **orbit-camera** - Standalone orbital camera with direct input handling (OrbitCameraPlugin)
+6. **physics** - Rapier 3D WASM physics integration (PhysicsPlugin)
+7. **player** - Player character controller (PlayerPlugin)
+8. **postprocessing** - Post-processing effects (PostprocessingPlugin)
+9. **rendering** - Three.js rendering pipeline (RenderingPlugin)
+10. **terrain** - LOD terrain with heightmap displacement and Rapier heightfield colliders (TerrainPlugin)
+11. **text** - 3D text with Paragraph/Word layout and troika effects (TextPlugin)
+12. **respawn** - Entity respawn system (RespawnPlugin)
+13. **startup** - Initialization and setup systems (StartupPlugin)
+14. **transforms** - Transform component hierarchy (TransformsPlugin)
+15. **tweening** - Tween animations and presentation shakers (TweenPlugin)
+16. **water** - Water rendering with waves, depth coloring, planar reflections (WaterPlugin)
 
 **Note**: Recipe system is core functionality, not a plugin. Individual plugins define their own recipes.
 

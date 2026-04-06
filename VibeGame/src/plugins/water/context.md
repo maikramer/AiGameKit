@@ -1,0 +1,186 @@
+# Water Plugin
+
+<!-- LLM:OVERVIEW -->
+Water rendering with animated sine waves, depth-based coloring from terrain heightmap, Fresnel reflections via planar reflection camera with oblique projection, foam at shallow edges, wave crest highlights, and a Rapier cuboid sensor collider at the water surface.
+<!-- /LLM:OVERVIEW -->
+
+## Layout
+
+```
+water/
+├── context.md            # This file
+├── index.ts              # Public exports
+├── plugin.ts             # Plugin definition + config defaults
+├── components.ts         # Water ECS component
+├── systems.ts            # Bootstrap, render, physics systems
+├── recipes.ts            # <water> recipe (inline)
+├── utils.ts              # Context, terrain heightmap/config cross-plugin lookup
+├── water-material.ts     # Custom GLSL ShaderMaterial (vertex + fragment)
+└── planar-reflection.ts  # PlanarReflection class (mirror camera + oblique projection)
+```
+
+## Scope
+
+- **In-scope**: Water surface rendering, wave animation, depth coloring, planar reflections, foam, water physics surface collider
+- **Out-of-scope**: Underwater rendering, fluid simulation, buoyancy, underwater camera effects, volumetric water
+
+## Entry Points
+
+- **plugin.ts**: WaterPlugin with recipe, systems, components, config defaults
+- **systems.ts**: Three systems — bootstrap (fixed), render (draw), physics (simulation)
+- **index.ts**: Public API — `Water`, `WaterPlugin`, `waterRecipe`, `getWaterContext`, `WaterEntityData`, `createWaterMaterial`, `PlanarReflection`
+
+## Dependencies
+
+- **Internal**: Core ECS, transforms (WorldTransform), rendering (MainCamera, Scene, Renderer), physics (RAPIER), terrain plugin (heightmap lookup)
+- **External**: Three.js, Rapier WASM
+
+<!-- LLM:REFERENCE -->
+### Components
+
+#### Water
+- size: f32 (256) — world-space extent of the water plane (X × Z)
+- waterLevel: f32 (5) — Y position used for depth calculation and reflection plane
+- opacity: f32 (0.8) — surface transparency
+- tintR: f32 (0.1) — water tint red channel
+- tintG: f32 (0.35) — water tint green channel
+- tintB: f32 (0.5) — water tint blue channel
+- waveSpeed: f32 (1.0) — animation speed multiplier
+- waveScale: f32 (0.3) — wave amplitude multiplier
+- wireframe: ui8 (0) — wireframe rendering mode
+
+### Systems
+
+#### WaterBootstrapSystem
+- Group: `fixed` (after PhysicsWorldSystem)
+- Creates PlaneGeometry mesh with custom ShaderMaterial
+- Instantiates PlanarReflection (512×512 render target)
+- Cross-plugin lookup for terrain heightmap/config
+- Cleans up mesh + physics for removed entities
+
+#### WaterRenderSystem
+- Group: `draw` (after CameraSyncSystem)
+- Updates time, camera position uniforms each frame
+- Renders planar reflection (mirrors scene, hides water meshes, uses oblique projection)
+- Syncs WorldTransform position to mesh
+
+#### WaterPhysicsSystem
+- Group: `simulation` (after TransformHierarchySystem)
+- Creates a single fixed Rapier cuboid collider (size × 0.05 × size) at water level
+- Low friction (0.1) to simulate water surface
+
+### Functions
+
+#### getWaterContext(state): Map<number, WaterEntityData>
+WeakMap-based per-state water entity storage
+
+#### findNearestTerrainHeightmap(state): THREE.Texture | null
+Cross-plugin lookup into terrain context for heightmap texture
+
+#### findNearestTerrainConfig(state): { worldSize, maxHeight } | null
+Cross-plugin lookup for terrain world size and max height
+
+#### createWaterMaterial(options): THREE.ShaderMaterial
+Creates the water ShaderMaterial with all uniforms
+
+### Classes
+
+#### PlanarReflection
+- `texture` getter — reflection render target texture
+- `render(renderer, scene, camera, waterLevel)` — renders mirrored scene with oblique projection
+- `resize(width, height)` — updates render target size
+- `dispose()` — cleans up render target
+
+### Shader Uniforms
+
+| Uniform | Type | Description |
+|---------|------|-------------|
+| uTime | float | Elapsed time for wave animation |
+| uWaterLevel | float | Y coordinate of water surface |
+| uOpacity | float | Surface transparency |
+| uTint | vec3 | Water color tint |
+| uWaveSpeed | float | Animation speed |
+| uWaveScale | float | Wave amplitude |
+| uShallowColor | vec3 | Shallow water color (0x2ec4b6) |
+| uDeepColor | vec3 | Deep water color (0x0a1628) |
+| uFoamColor | vec3 | Foam edge color (white) |
+| uFresnelPower | float | Fresnel exponent (3.0) |
+| uMaxDepth | float | Depth normalization range (15.0) |
+| uFoamThreshold | float | Foam depth cutoff (1.5) |
+| uFoamFeather | float | Foam edge softness (0.8) |
+| tReflection | sampler2D | Planar reflection texture |
+| tHeightMap | sampler2D | Terrain heightmap (optional) |
+| uCameraPosition | vec3 | Camera world position |
+
+### Recipes
+
+- water — components: ['water', 'transform']
+<!-- /LLM:REFERENCE -->
+
+<!-- LLM:EXAMPLES -->
+## Examples
+
+### Basic Usage
+
+#### XML Water Plane
+```xml
+<water
+  pos="0 5 0"
+  size="256"
+  opacity="0.8"
+  wave-speed="1.0"
+  wave-scale="0.3"
+></water>
+```
+
+#### XML Water with Custom Tint
+```xml
+<water
+  pos="0 3 0"
+  size="128"
+  opacity="0.6"
+  tint-r="0.0"
+  tint-g="0.2"
+  tint-b="0.6"
+  wave-speed="2.0"
+  wave-scale="0.5"
+></water>
+```
+
+#### JavaScript API
+```typescript
+import * as GAME from 'vibegame';
+import { Water } from 'vibegame/water';
+
+const entity = state.createEntity();
+state.addComponent(entity, Water, {
+  size: 256,
+  waterLevel: 5,
+  opacity: 0.8,
+  tintR: 0.1,
+  tintG: 0.35,
+  tintB: 0.5,
+  waveSpeed: 1.0,
+  waveScale: 0.3,
+});
+```
+
+### Combined with Terrain
+
+Water uses terrain heightmap for depth-based coloring and foam. Place water at a Y position below terrain peaks:
+
+```xml
+<terrain
+  pos="0 0 0"
+  world-size="256"
+  max-height="50"
+  heightmap="/assets/heightmap.png"
+></terrain>
+
+<water
+  pos="0 5 0"
+  size="256"
+  opacity="0.8"
+></water>
+```
+<!-- /LLM:EXAMPLES -->
