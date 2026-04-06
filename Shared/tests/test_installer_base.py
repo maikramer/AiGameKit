@@ -20,6 +20,7 @@ class TestBaseInstallerInit:
         assert installer.cli_name == "test"
         assert installer.project_root == tmp_path.resolve()
         assert installer.logger is not None
+        assert installer.bin_dir == installer.install_prefix / "bin"
 
     def test_custom_prefix(self, tmp_path):
         prefix = tmp_path / "custom"

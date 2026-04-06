@@ -1,4 +1,4 @@
-# Text3D
+﻿# Text3D
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
@@ -34,7 +34,7 @@ cd /caminho/para/GameDev
 ./install.sh text3d
 ```
 
-Instala o pacote em modo editável no `Text3D/.venv`, config em `~/.config/text3d`, wrappers em `~/.local/bin` (Linux/macOS) ou `%USERPROFILE%\bin` (Windows). Variável opcional: `PYTHON_CMD`. Opção CLI: `--skip-env-config` (não escrever `env.sh` / `env.bat`). Textura: instala **[Paint3D](../Paint3D)** à parte.
+Instala o pacote em modo editável no `Text3D/.venv`, config em `~/.config/text3d`, wrappers em `~/.local/bin` (todas as plataformas; `%USERPROFILE%\.local\bin` no Windows). Variável opcional: `PYTHON_CMD`. Opção CLI: `--skip-env-config` (não escrever `env.sh` / `env.bat`). Textura: instala **[Paint3D](../Paint3D)** à parte.
 
 Equivalente: `gamedev-install text3d`. Guia geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
 

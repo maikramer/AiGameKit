@@ -89,8 +89,8 @@ class BaseInstaller:
         self.logger = Logger()
 
     def _default_bin_dir(self) -> Path:
-        if self.is_windows:
-            return Path(os.environ.get("USERPROFILE") or "C:\\") / "bin"
+        # Mesmo destino em todas as plataformas: INSTALL_PREFIX/bin (por defeito ~/.local/bin).
+        # Evita Windows em ~/bin, que raramente está no PATH quando ~/.local/bin já está.
         return self.install_prefix / "bin"
 
     # ------------------------------------------------------------------
