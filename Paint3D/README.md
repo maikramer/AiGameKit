@@ -2,7 +2,7 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-3D texturing: **Hunyuan3D-Paint 2.1** (multiview PBR in the exported GLB) + optional **AI upscale** (Real-ESRGAN).
+3D texturing: **Hunyuan3D-Paint 2.1** (multiview PBR in the exported GLB) + **bilateral texture smoothing** (edge-preserving, on by default) + optional **AI upscale** (Real-ESRGAN).
 
 Uses vendored **`hy3dpaint`** under `Paint3D/src/paint3d/hy3dpaint/`; PBR weights download on demand from Hugging Face (`tencent/Hunyuan3D-2.1`, folder `hunyuan3d-paintpbr-v2-1`). See [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md).
 
