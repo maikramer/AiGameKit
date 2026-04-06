@@ -279,16 +279,16 @@ def install_tool(
         return inst.run()
     elif action == "uninstall":
         if spec.kind == ToolKind.RUST:
-            return inst.run_uninstall()
+            return inst.run_uninstall()  # type: ignore[union-attr]
         if spec.kind == ToolKind.BUN:
-            return inst.run_uninstall()
+            return inst.run_uninstall()  # type: ignore[union-attr]
         Logger().warn("Uninstall para Python: pip uninstall <pacote>")
         return True
     elif action == "reinstall":
         if spec.kind == ToolKind.RUST:
-            return inst.run_reinstall()
+            return inst.run_reinstall()  # type: ignore[union-attr]
         if spec.kind == ToolKind.BUN:
-            return inst.run_reinstall()
+            return inst.run_reinstall()  # type: ignore[union-attr]
         Logger().warn("Reinstall: use --force com install")
         return install_tool(
             name,
