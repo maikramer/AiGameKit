@@ -280,6 +280,13 @@ make fmt
 Cada pacote Python tem um `pyproject.toml` (PEP 621) com metadata, dependências e config do pytest.
 Os ficheiros `setup.py` existentes permanecem para compatibilidade com instaladores legados.
 
+## Referências
+
+Alguns componentes seguem o desenho de projectos externos:
+
+- **[Materialize](Materialize/)** (CLI Rust): inspirado no [Materialize](https://github.com/BoundingBoxSoftware/Materialize) original da Bounding Box Software (Unity/Windows). Ver [`Materialize/README.md`](Materialize/README.md).
+- **[VibeGame](VibeGame/)** (motor TypeScript): projecto upstream [dylanebert/VibeGame](https://github.com/dylanebert/vibegame). Ver [`VibeGame/README.md`](VibeGame/README.md).
+
 ## Contribuir
 
 - Preferir commits pequenos e mensagens no estilo [Conventional Commits](https://www.conventionalcommits.org/).

@@ -27,6 +27,8 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 
 All Python packages depend on `gamedev-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `gamedev-shared`.
 
+**Upstream references:** [Materialize](https://github.com/BoundingBoxSoftware/Materialize) (Bounding Box Software) — see `Materialize/README.md`. [VibeGame](https://github.com/dylanebert/vibegame) (dylanebert) — see `VibeGame/README.md`. Root `README.md` / `README_PT.md` have a **References** section.
+
 ## Build / Lint / Test Commands
 
 ### Full CI (run before PRs)
