@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import os
-import resource
 import sys
 from dataclasses import dataclass
+from types import ModuleType
 from typing import Any
+
+_resource_mod: ModuleType | None = None
+try:
+    import resource
+
+    _resource_mod = resource
+except ModuleNotFoundError:
+    pass  # Unix-only stdlib module (missing on Windows)
 
 try:
     import psutil
@@ -74,26 +82,33 @@ def resource_snapshot() -> ResourceSnapshot:
         except Exception:
             pass
 
-    try:
-        ru = resource.getrusage(resource.RUSAGE_SELF)
-        cpu_u = float(ru.ru_utime)
-        cpu_s = float(ru.ru_stime)
-        # ru_maxrss: macOS bytes, Linux/Unix kilobytes — não é RSS corrente; usar só CPU
-        rss = _linux_proc_rss_bytes()
-        return ResourceSnapshot(
-            cpu_user_s=cpu_u,
-            cpu_system_s=cpu_s,
-            rss_bytes=rss,
-            source="rusage" if rss is None else "linux_proc",
-        )
-    except Exception:
-        rss = _linux_proc_rss_bytes()
-        return ResourceSnapshot(
-            cpu_user_s=None,
-            cpu_system_s=None,
-            rss_bytes=rss,
-            source="linux_proc" if rss is not None else "none",
-        )
+    if _resource_mod is not None:
+        try:
+            # typeshed omits Unix-only symbols on some platforms (e.g. Windows).
+            getrusage = getattr(_resource_mod, "getrusage", None)
+            rusage_self = getattr(_resource_mod, "RUSAGE_SELF", None)
+            if getrusage is not None and rusage_self is not None:
+                ru = getrusage(rusage_self)
+                cpu_u = float(ru.ru_utime)
+                cpu_s = float(ru.ru_stime)
+                # ru_maxrss: macOS bytes, Linux/Unix kilobytes — não é RSS corrente; usar só CPU
+                rss = _linux_proc_rss_bytes()
+                return ResourceSnapshot(
+                    cpu_user_s=cpu_u,
+                    cpu_system_s=cpu_s,
+                    rss_bytes=rss,
+                    source="rusage" if rss is None else "linux_proc",
+                )
+        except Exception:
+            pass
+
+    rss = _linux_proc_rss_bytes()
+    return ResourceSnapshot(
+        cpu_user_s=None,
+        cpu_system_s=None,
+        rss_bytes=rss,
+        source="linux_proc" if rss is not None else "none",
+    )
 
 
 def subtract_cpu(

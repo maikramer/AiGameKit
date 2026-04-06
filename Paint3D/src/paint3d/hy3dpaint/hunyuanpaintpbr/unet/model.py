@@ -121,7 +121,6 @@ class HunyuanPaint(pl.LightningModule):
         self.validation_step_outputs = []
 
     def register_schedule(self):
-
         self.num_timesteps = self.train_scheduler.config.num_train_timesteps
 
         betas = self.train_scheduler.betas.detach().cpu()

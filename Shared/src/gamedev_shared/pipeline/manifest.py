@@ -14,6 +14,7 @@ class ManifestAsset:
 
     model: str | None = None
     textures: list[str] = field(default_factory=list)
+    pbr_textures: list[str] = field(default_factory=list)
     animations: list[str] = field(default_factory=list)
     audio: str | None = None
     bounds: dict[str, list[float]] | None = None
@@ -95,6 +96,8 @@ def merge_manifest(base: GameAssetsManifest, overlay: GameAssetsManifest) -> Gam
                 existing.model = asset.model
             if asset.textures:
                 existing.textures = asset.textures
+            if asset.pbr_textures:
+                existing.pbr_textures = asset.pbr_textures
             if asset.animations:
                 existing.animations = asset.animations
             if asset.audio:

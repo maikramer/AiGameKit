@@ -6,6 +6,7 @@ import json
 import struct
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Any, cast
 
 
 @dataclass
@@ -22,7 +23,7 @@ class GlbMetadata:
     pbr_textures: list[str] = field(default_factory=list)
 
 
-def _read_glb_json_chunk(glb_path: Path) -> dict | None:
+def _read_glb_json_chunk(glb_path: Path) -> dict[str, Any] | None:
     """Parse the JSON chunk from a GLB file (GLB spec: first chunk after 12-byte header)."""
     with open(glb_path, "rb") as f:
         magic = f.read(4)
@@ -37,7 +38,7 @@ def _read_glb_json_chunk(glb_path: Path) -> dict | None:
         json_data = f.read(chunk_length).decode("utf-8", errors="replace")
 
     try:
-        return json.loads(json_data)
+        return cast(dict[str, Any], json.loads(json_data))
     except json.JSONDecodeError:
         return None
 

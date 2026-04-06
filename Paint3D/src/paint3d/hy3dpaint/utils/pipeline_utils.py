@@ -40,7 +40,6 @@ class ViewProcessor:
     def bake_view_selection(
         self, candidate_camera_elevs, candidate_camera_azims, candidate_view_weights, max_selected_view_num
     ):
-
         original_resolution = self.render.default_resolution
         self.render.set_default_render_resolution(1024)
 
