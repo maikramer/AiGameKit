@@ -1,7 +1,7 @@
 # CLI Module
 
 <!-- LLM:OVERVIEW -->
-Headless state creation, XML parsing, text measurement, and query utilities for Node.js/Bun. Enables AI testing and video creation without browser/WebGL.
+Headless state creation, XML parsing, text measurement, and query utilities for Node.js/Bun. Enables AI testing and video creation without browser/WebGL. E2E browser tests are run via the `vibegame` CLI and Playwright (see below).
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -14,6 +14,27 @@ cli/
 ├── queries.ts     # Entity/sequence query utilities
 └── text.ts        # Typr.js text measurement
 ```
+
+## `vibegame` CLI (Playwright)
+
+From the **VibeGame package root** with devDependencies installed (`bun install`, `bun run playwright:install`), the `vibegame` entrypoint (`scripts/vibegame-cli.mjs`) forwards to the Playwright CLI:
+
+- `vibegame playwright <args…>` or `vibegame pw <args…>` — same as `playwright <args…>` with `cwd` at the repo root (uses `playwright.config.ts`).
+
+Examples:
+
+- `vibegame pw test`
+- `vibegame pw test tests/playwright/simple-rpg-smoke.spec.ts`
+- `vibegame pw test --ui` / `vibegame pw test --debug`
+- `vibegame pw install chromium`
+
+Environment variables (see `playwright.config.ts` comments):
+
+- `PLAYWRIGHT_CDP_WS` — full WebSocket URL from the browser’s remote debugging endpoint.
+- `PLAYWRIGHT_CDP_URL` — HTTP base (e.g. `http://127.0.0.1:9222`); config uses `curl` on `{url}/json/version` to obtain the WebSocket (requires `curl` on `PATH`).
+- `PLAYWRIGHT_BASE_URL` — base URL when using CDP (default example: `http://127.0.0.1:3011`).
+
+Without `playwright.config.ts` and without a local `node_modules/.bin/playwright`, the CLI exits with an error pointing to a full monorepo install.
 
 ## Scope
 
