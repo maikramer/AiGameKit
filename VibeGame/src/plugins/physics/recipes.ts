@@ -32,3 +32,8 @@ export const kinematicPartRecipe: Recipe = {
     'body.gravity-scale': 0,
   },
 };
+
+export const colliderRecipe: Recipe = {
+  name: 'collider',
+  components: ['collider', 'transform'],
+};

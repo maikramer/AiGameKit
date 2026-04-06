@@ -39,6 +39,20 @@ export {
   registerAnimator,
 } from './plugins/gltf-anim';
 export { isKeyDown } from './plugins/input';
+export { AudioEmitter, AudioListener, AudioPlugin } from './plugins/audio';
+export { Lod, LodPlugin, LodSystem } from './plugins/lod';
+export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';
+export {
+  loadSceneManifest,
+  SceneManifestPlugin,
+} from './plugins/scene-manifest';
+export type {
+  SceneManifest,
+  SceneManifestEntry,
+} from './plugins/scene-manifest';
+export { vibegameAssetHotReload } from './vite/hot-reload';
+export { initAssetHotReload } from './vite/hot-reload-client';
+export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 
 let globalBuilder: GameBuilder | null = null;
 
