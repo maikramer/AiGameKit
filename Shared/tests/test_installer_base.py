@@ -1,10 +1,12 @@
-"""Testes para gamedev_shared.installer.base."""
+﻿"""Testes para gamedev_shared.installer.base."""
 
 import sys
 from pathlib import Path
 from unittest.mock import patch
 
-from gamedev_shared.installer.base import BaseInstaller
+import pytest
+
+from gamedev_shared.installer.base import BaseInstaller, path_env_contains_dir
 
 
 class TestBaseInstallerInit:
@@ -96,6 +98,22 @@ class TestBaseInstallerCreateWrapper:
             assert wrapper.suffix == ".cmd"
         content = wrapper.read_text()
         assert str(binary) in content
+
+
+class TestPathEnvContainsDir:
+    def test_windows_normalizes_case(self):
+        p = Path(r"C:\Users\test\bin")
+        env = r"D:\x;C:\Users\test\bin;."
+        assert path_env_contains_dir(env, p, is_windows=True) is True
+
+    def test_windows_not_present(self):
+        p = Path(r"C:\Users\test\bin")
+        assert path_env_contains_dir(r"C:\Other\bin", p, is_windows=True) is False
+
+    @pytest.mark.skipif(sys.platform == "win32", reason="PATH estilo Unix; resolve() difere no Windows")
+    def test_unix(self):
+        p = Path("/home/u/.local/bin")
+        assert path_env_contains_dir("/a:/home/u/.local/bin:/b", p, is_windows=False) is True
 
 
 class TestBaseInstallerShowSummary:

@@ -1,4 +1,4 @@
-"""BaseInstaller — lógica partilhada entre instaladores Python e Rust."""
+﻿"""BaseInstaller — lógica partilhada entre instaladores Python e Rust."""
 
 from __future__ import annotations
 
@@ -9,6 +9,27 @@ import subprocess
 from pathlib import Path
 
 from ..logging import Logger
+
+
+def path_env_contains_dir(path_env: str, bin_dir: Path, *, is_windows: bool) -> bool:
+    """Indica se ``PATH`` (string ``;`` ou ``:`` separada) inclui ``bin_dir`` (comparação normalizada)."""
+    sep = ";" if is_windows else ":"
+    resolved = bin_dir.resolve()
+    if is_windows:
+        target = os.path.normcase(os.path.normpath(str(resolved)))
+        for p in path_env.split(sep):
+            if not p.strip():
+                continue
+            if os.path.normcase(os.path.normpath(p)) == target:
+                return True
+    else:
+        target = os.path.normpath(str(resolved))
+        for p in path_env.split(sep):
+            if not p.strip():
+                continue
+            if os.path.normpath(p) == target:
+                return True
+    return False
 
 
 def default_python_command() -> str:
@@ -267,22 +288,108 @@ class BaseInstaller:
     # PATH
     # ------------------------------------------------------------------
 
-    def check_path(self) -> bool:
-        """Verifica e reporta se bin_dir está no PATH."""
-        bin_str = str(self.bin_dir)
-        path_env = os.environ.get("PATH", "")
-        sep = ";" if self.is_windows else ":"
+    def _ensure_windows_user_path(self) -> bool:
+        """Adiciona ``bin_dir`` ao PATH permanente do utilizador (HKCU\\Environment)."""
+        import ctypes
+        import winreg
 
-        if bin_str in path_env.split(sep):
+        bin_str = str(self.bin_dir.resolve())
+        key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE)
+        try:
+            try:
+                path, typ = winreg.QueryValueEx(key, "Path")
+            except FileNotFoundError:
+                path = ""
+                typ = winreg.REG_EXPAND_SZ
+
+            parts = [p.strip() for p in path.split(";") if p.strip()]
+            norm = lambda s: os.path.normcase(os.path.normpath(s))
+            target = norm(bin_str)
+            for p in parts:
+                if norm(p) == target:
+                    return True
+
+            new_path = path.rstrip().rstrip(";")
+            if new_path:
+                new_path = new_path + ";" + bin_str
+            else:
+                new_path = bin_str
+            winreg.SetValueEx(key, "Path", 0, typ, new_path)
+        except OSError as e:
+            self.logger.warn(f"Não foi possível actualizar o PATH do utilizador (registo): {e}")
+            return False
+        finally:
+            winreg.CloseKey(key)
+
+        try:
+            HWND_BROADCAST = 0xFFFF
+            WM_SETTINGCHANGE = 0x001A
+            SMTO_ABORTIFHUNG = 0x0002
+            result = ctypes.c_ulong()
+            ctypes.windll.user32.SendMessageTimeoutW(
+                HWND_BROADCAST,
+                WM_SETTINGCHANGE,
+                0,
+                ctypes.c_wchar_p("Environment"),
+                SMTO_ABORTIFHUNG,
+                5000,
+                ctypes.byref(result),
+            )
+        except Exception:
+            pass
+
+        return True
+
+    def _ensure_unix_user_path(self) -> bool:
+        """Acrescenta ``export PATH=...`` a ``~/.profile`` se ainda não estiver lá."""
+        profile = Path.home() / ".profile"
+        bin_str = str(self.bin_dir.resolve())
+        marker = "# gamedev-install PATH"
+        line = f'export PATH="{bin_str}:$PATH"'
+        try:
+            if profile.is_file():
+                text = profile.read_text(encoding="utf-8")
+                if marker in text and bin_str in text:
+                    return True
+            block = f"\n{marker}\n{line}\n"
+            with open(profile, "a", encoding="utf-8") as f:
+                f.write(block)
+        except OSError as e:
+            self.logger.warn(f"Não foi possível actualizar {profile}: {e}")
+            return False
+
+        return True
+
+    def check_path(self) -> bool:
+        """Garante que ``bin_dir`` está no PATH da sessão e, se possível, no PATH permanente do utilizador."""
+        bin_str = str(self.bin_dir.resolve())
+        sep = ";" if self.is_windows else ":"
+        path_env = os.environ.get("PATH", "")
+
+        if path_env_contains_dir(path_env, self.bin_dir, is_windows=self.is_windows):
             self.logger.success(f"{bin_str} está no PATH")
             return True
 
-        self.logger.warn(f"{bin_str} pode não estar no PATH")
-        if not self.is_windows:
-            self.logger.info(f'Adicione: export PATH="{bin_str}:$PATH"')
+        persisted = False
+        if self.is_windows:
+            persisted = self._ensure_windows_user_path()
         else:
-            self.logger.info(f"Adicione ao PATH do sistema: {bin_str}")
-        return False
+            persisted = self._ensure_unix_user_path()
+
+        os.environ["PATH"] = bin_str + sep + path_env
+
+        if persisted:
+            self.logger.success(f"{bin_str} adicionado ao PATH permanente do utilizador; já activo nesta sessão.")
+            if not self.is_windows:
+                self.logger.info("Novo terminal: abre uma sessão nova ou executa: source ~/.profile")
+        else:
+            self.logger.warn(f"{bin_str} foi adicionado só ao PATH desta sessão")
+            if not self.is_windows:
+                self.logger.info(f'Adicione manualmente: export PATH="{bin_str}:$PATH"')
+            else:
+                self.logger.info(f"Adicione manualmente ao PATH do utilizador: {bin_str}")
+
+        return persisted
 
     # ------------------------------------------------------------------
     # Sumário
