@@ -1,4 +1,5 @@
-﻿import * as THREE from 'three';
+/* global fetch */
+import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 /** Chave = URL normalizada (trim); valores em espaço local do root do GLB (Y up). */
@@ -15,7 +16,10 @@ export function normalizeGltfUrlKey(url: string): string {
  * Regista o intervalo Y do AABB do modelo (ex.: após `loadGltfToScene`, antes de aplicar transform da entidade).
  * Usado pelo spawn com `ground-align="aabb"` para levantar a origem até o solo (`-minY * escala` ao longo da normal).
  */
-export function registerGltfLocalYBounds(url: string, root: THREE.Object3D): void {
+export function registerGltfLocalYBounds(
+  url: string,
+  root: THREE.Object3D
+): void {
   const key = normalizeGltfUrlKey(url);
   root.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(root);

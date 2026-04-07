@@ -43,7 +43,10 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function anchorOffset(state: State, spawnerEid: number): [number, number, number] {
+function anchorOffset(
+  state: State,
+  spawnerEid: number
+): [number, number, number] {
   if (state.hasComponent(spawnerEid, WorldTransform)) {
     return [
       WorldTransform.posX[spawnerEid],
@@ -186,12 +189,7 @@ export const TerrainSpawnSystem: System = {
         for (let attempt = 0; attempt < attempts; attempt++) {
           wx = minX + rand() * (maxX - minX);
           wz = minZ + rand() * (maxZ - minZ);
-          const cand = sampleTerrainSurface(
-            state,
-            wx,
-            wz,
-            spec.surfaceEpsilon
-          );
+          const cand = sampleTerrainSurface(state, wx, wz, spec.surfaceEpsilon);
           if (!cand) continue;
           s = cand;
           if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {

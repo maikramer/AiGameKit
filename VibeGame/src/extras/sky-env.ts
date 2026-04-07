@@ -28,7 +28,10 @@ export interface EquirectSkyOptions {
  * (cujo shader interno ignora ``texture.offset``) receba a textura já alinhada.
  * Retorna a textura original se o deslocamento for 0.
  */
-function rotateEquirectBitmap(tex: THREE.Texture, degrees: number): THREE.Texture {
+function rotateEquirectBitmap(
+  tex: THREE.Texture,
+  degrees: number
+): THREE.Texture {
   const shift = ((degrees % 360) + 360) % 360;
   if (shift === 0) return tex;
   const img = tex.image as HTMLImageElement | undefined;

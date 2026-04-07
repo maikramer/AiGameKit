@@ -61,7 +61,10 @@ function vec3FromAttr(
     return [Number(value[0]), Number(value[1]), Number(value[2])];
   }
   if (typeof value === 'string') {
-    const p = value.trim().split(/\s+/).map((x) => parseFloat(x));
+    const p = value
+      .trim()
+      .split(/\s+/)
+      .map((x) => parseFloat(x));
     if (p.length >= 3) {
       return [p[0], p[1], p[2]];
     }

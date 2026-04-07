@@ -48,7 +48,10 @@ export class WebGLTerrainMaterialProvider {
     );
     this.worldSizeUniform.value = context.worldSize;
     this.heightMapSizeUniform.value = hmSize;
-    this.heightSmoothingUniform.value = Math.min(1, Math.max(0, context.heightSmoothing));
+    this.heightSmoothingUniform.value = Math.min(
+      1,
+      Math.max(0, context.heightSmoothing)
+    );
     this.heightSmoothingSpreadUniform.value = Math.max(
       0.25,
       context.heightSmoothingSpread
@@ -72,7 +75,8 @@ export class WebGLTerrainMaterialProvider {
       shader.uniforms.uWorldSize = this.worldSizeUniform;
       shader.uniforms.uHeightMapSize = this.heightMapSizeUniform;
       shader.uniforms.uHeightSmoothing = this.heightSmoothingUniform;
-      shader.uniforms.uHeightSmoothingSpread = this.heightSmoothingSpreadUniform;
+      shader.uniforms.uHeightSmoothingSpread =
+        this.heightSmoothingSpreadUniform;
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',

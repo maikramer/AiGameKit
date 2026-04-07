@@ -35,7 +35,9 @@ function sameResolvedPath(a, b) {
 /** @param {string} child @param {string} parent */
 function isDescendantDir(child, parent) {
   const rel = relative(resolve(parent), resolve(child));
-  return rel !== '' && !rel.startsWith('..') && !normalize(rel).startsWith('..');
+  return (
+    rel !== '' && !rel.startsWith('..') && !normalize(rel).startsWith('..')
+  );
 }
 
 /**
@@ -348,11 +350,15 @@ function help() {
   console.log(
     '  vibegame run --install / -i / --sync   Também roda bun install na engine (deps da lib)'
   );
-  console.log('  vibegame run --skip-build     Pula build da engine (só sobe dev)');
+  console.log(
+    '  vibegame run --skip-build     Pula build da engine (só sobe dev)'
+  );
   console.log(
     '  vibegame run --skip-app-install   Não roda bun install na pasta do app (node_modules já ok)'
   );
-  console.log('  vibegame run -- --port 5174       Repassa argumentos ao `bun run dev`');
+  console.log(
+    '  vibegame run -- --port 5174       Repassa argumentos ao `bun run dev`'
+  );
   console.log('');
   console.log(
     'Playwright examples (from monorepo root with devDependencies installed):'

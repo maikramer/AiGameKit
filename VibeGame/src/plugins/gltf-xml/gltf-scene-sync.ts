@@ -3,7 +3,10 @@ import type { State, System } from '../../core';
 import { TransformHierarchySystem } from '../transforms';
 import { Transform, WorldTransform } from '../transforms/components';
 import { GltfPending } from './components';
-import { forEachGltfRootGroup, pruneStaleGltfRootGroups } from './group-registry';
+import {
+  forEachGltfRootGroup,
+  pruneStaleGltfRootGroups,
+} from './group-registry';
 
 /**
  * Mantém o `Group` Three.js do GLB alinhado ao `Transform` / `WorldTransform` em ECS.

@@ -131,7 +131,11 @@ function sampleHeightmapRedBilinearNorm(
     const i = (cy * iw + cx) * 4;
     return imageData.data[i] / 255;
   };
-  return lerp(lerp(rAt(x0, y0), rAt(x1, y0), tx), lerp(rAt(x0, y1), rAt(x1, y1), tx), ty);
+  return lerp(
+    lerp(rAt(x0, y0), rAt(x1, y0), tx),
+    lerp(rAt(x0, y1), rAt(x1, y1), tx),
+    ty
+  );
 }
 
 /**
@@ -151,7 +155,9 @@ function terrainHeightFromLocal(
   const u = (lxC + halfWorld) / worldSize;
   const vv = (lzC + halfWorld) / worldSize;
   if (u < 0 || u > 1 || vv < 0 || vv > 1) return 0;
-  return sampleHeightmapRedBilinearNorm(imageData, u, vv, matchWebGL) * maxHeight;
+  return (
+    sampleHeightmapRedBilinearNorm(imageData, u, vv, matchWebGL) * maxHeight
+  );
 }
 
 /**

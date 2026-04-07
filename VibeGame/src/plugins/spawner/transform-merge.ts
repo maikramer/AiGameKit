@@ -103,10 +103,5 @@ export function composeSpawnRotation(
     _qFinal.copy(_qYaw).multiply(_qTemplate);
   }
 
-  return quaternionToEuler(
-    _qFinal.x,
-    _qFinal.y,
-    _qFinal.z,
-    _qFinal.w
-  );
+  return quaternionToEuler(_qFinal.x, _qFinal.y, _qFinal.z, _qFinal.w);
 }

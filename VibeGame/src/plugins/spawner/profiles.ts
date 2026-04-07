@@ -95,9 +95,15 @@ const KNOWN_GROUP_PROFILES = new Set<string>(Object.keys(GROUP_PROFILES));
 /** Perfil opcional em filhos (`profile="physics-crate"` / `gltf-crate`). */
 export type ChildTemplateProfileId = '' | 'physics-crate' | 'gltf-crate';
 
-const KNOWN_CHILD_PROFILES = new Set<string>(['', 'physics-crate', 'gltf-crate']);
+const KNOWN_CHILD_PROFILES = new Set<string>([
+  '',
+  'physics-crate',
+  'gltf-crate',
+]);
 
-export function normalizeGroupProfileId(raw: string | undefined): SpawnGroupProfileId {
+export function normalizeGroupProfileId(
+  raw: string | undefined
+): SpawnGroupProfileId {
   const s = (raw ?? '').trim().toLowerCase();
   if (s === '' || s === 'none') return 'none';
   if (s in GROUP_PROFILES) return s as SpawnGroupProfileId;
@@ -107,7 +113,9 @@ export function normalizeGroupProfileId(raw: string | undefined): SpawnGroupProf
   return 'none';
 }
 
-export function getGroupSpawnDefaults(id: SpawnGroupProfileId): GroupSpawnDefaults {
+export function getGroupSpawnDefaults(
+  id: SpawnGroupProfileId
+): GroupSpawnDefaults {
   return GROUP_PROFILES[id] ?? LEGACY;
 }
 
@@ -169,7 +177,10 @@ function rawToBool01(value: XMLValue): number {
 }
 
 /** Atributo ausente → `profileVal`; presente → parse como número (como o parser). */
-export function optNumber(attr: XMLValue | undefined, profileVal: number): number {
+export function optNumber(
+  attr: XMLValue | undefined,
+  profileVal: number
+): number {
   if (attr === undefined || attr === null) return profileVal;
   if (typeof attr === 'number') return attr;
   if (typeof attr === 'boolean') return attr ? 1 : 0;
@@ -181,7 +192,10 @@ export function optNumber(attr: XMLValue | undefined, profileVal: number): numbe
 }
 
 /** Atributo ausente → `profileVal`; presente → parse como 0/1. */
-export function optBool(attr: XMLValue | undefined, profileVal: boolean): boolean {
+export function optBool(
+  attr: XMLValue | undefined,
+  profileVal: boolean
+): boolean {
   if (attr === undefined || attr === null) return profileVal;
   return rawToBool01(attr) === 1;
 }
@@ -217,7 +231,9 @@ export function resolveGroupSpawnFields(
     maxSlopeDeg: optNumber(attrs['max-slope-deg'], p.maxSlopeDeg),
     maxSlopePlacementAttempts: Math.max(
       1,
-      Math.floor(optNumber(attrs['max-slope-attempts'], p.maxSlopePlacementAttempts))
+      Math.floor(
+        optNumber(attrs['max-slope-attempts'], p.maxSlopePlacementAttempts)
+      )
     ),
   };
 }

@@ -100,22 +100,6 @@ export function sampleTerrainSurface(
         )
       : data.terrainLOD.getHeightAt(wx - ox, wz - oz);
     const ty = terrainBaseY(state, entity);
-    const heightAt = (x: number, z: number) =>
-      imageData
-        ? sampleTerrainHeightGpuAligned(
-            imageData,
-            cfg.worldSize,
-            cfg.maxHeight,
-            x,
-            z,
-            true,
-            ox,
-            oz,
-            hmW,
-            smoothing,
-            spread
-          )
-        : data.terrainLOD.getHeightAt(x - ox, z - oz);
     /** Gradiente para declive: heightmap bruto (smoothing=0). Com smoothing>0 o shader achata o relevo e a normal fica quase +Y mesmo em encostas íngremes — o spawner aceitava sítios demasiado íngremes. */
     const heightAtRawSlope = (x: number, z: number) =>
       imageData

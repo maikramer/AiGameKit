@@ -73,9 +73,7 @@ def _base_cursor_world(
 def _should_skip_mesh(obj) -> bool:
     if obj.type != "MESH":
         return True
-    if obj.parent and obj.parent.type == "ARMATURE":
-        return True
-    return False
+    return bool(obj.parent and obj.parent.type == "ARMATURE")
 
 
 def _set_origins_to_base(axis: str) -> None:
@@ -148,7 +146,7 @@ def main() -> int:
     args = ap.parse_args(raw if raw else [])
 
     try:
-        import bpy  # noqa: F401
+        import bpy
     except ImportError:
         print(
             "Este script tem de ser executado dentro do Blender:\n"

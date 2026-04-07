@@ -6,7 +6,6 @@ import fnmatch
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import trimesh
 
 

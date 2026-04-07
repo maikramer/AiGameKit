@@ -228,7 +228,7 @@ class SkymapGenerator:
         iw, ih = image.size
         if (iw, ih) != (width, height):
             logger.warning(
-                f"HF API devolveu {iw}×{ih} em vez de {width}×{height}; "
+                f"HF API devolveu {iw}x{ih} em vez de {width}x{height}; "
                 "a redimensionar para o tamanho pedido (equirect 2:1)."
             )
             image = image.resize((width, height), Image.Resampling.LANCZOS)

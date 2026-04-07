@@ -73,8 +73,14 @@ export const TerrainBootstrapSystem: System = {
           resolution: Terrain.resolution[entity],
           lodDistanceRatio: Terrain.lodDistanceRatio[entity],
           wireframe: Terrain.wireframe[entity] === 1,
-          heightSmoothing: Math.min(1, Math.max(0, Terrain.heightSmoothing[entity])),
-          heightSmoothingSpread: Math.max(0.25, Terrain.heightSmoothingSpread[entity]),
+          heightSmoothing: Math.min(
+            1,
+            Math.max(0, Terrain.heightSmoothing[entity])
+          ),
+          heightSmoothingSpread: Math.max(
+            0.25,
+            Terrain.heightSmoothingSpread[entity]
+          ),
         });
 
         // Apply runtime-configurable params
