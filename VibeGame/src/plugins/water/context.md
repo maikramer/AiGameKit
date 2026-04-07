@@ -1,7 +1,7 @@
 # Water Plugin
 
 <!-- LLM:OVERVIEW -->
-Water rendering with animated sine waves, depth-based coloring from terrain heightmap, Fresnel reflections via planar reflection camera with oblique projection, foam at shallow edges, wave crest highlights, and a Rapier cuboid sensor collider at the water surface.
+Water rendering with animated sine waves, depth-based coloring from terrain heightmap, Fresnel reflections via planar reflection camera with oblique projection, deterministic foam at shallow edges, wave crest highlights, underwater fog shader driven by camera position, and a Rapier cuboid sensor collider for water contact detection (non-solid, allows player to submerge).
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -21,8 +21,8 @@ water/
 
 ## Scope
 
-- **In-scope**: Water surface rendering, wave animation, depth coloring, planar reflections, foam, water physics surface collider
-- **Out-of-scope**: Underwater rendering, fluid simulation, buoyancy, underwater camera effects, volumetric water
+- **In-scope**: Water surface rendering, wave animation, depth coloring, planar reflections, deterministic foam, underwater fog shader, water contact detection via sensor collider
+- **Out-of-scope**: Fluid simulation, buoyancy physics, volumetric water, post-processing effects
 
 ## Entry Points
 
@@ -48,6 +48,10 @@ water/
 - waveSpeed: f32 (1.0) — animation speed multiplier
 - waveScale: f32 (0.3) — wave amplitude multiplier
 - wireframe: ui8 (0) — wireframe rendering mode
+- underwaterFogColorR: f32 (0.0) — underwater fog red channel
+- underwaterFogColorG: f32 (0.05) — underwater fog green channel
+- underwaterFogColorB: f32 (0.15) — underwater fog blue channel
+- underwaterFogDensity: f32 (0.15) — underwater fog density
 
 ### Systems
 
@@ -61,13 +65,17 @@ water/
 #### WaterRenderSystem
 - Group: `draw` (after CameraSyncSystem)
 - Updates time, camera position uniforms each frame
+- Computes `uUnderwaterFade` from camera Y vs waterLevel (smooth transition over 5 units)
+- Pushes underwater fog color/density uniforms from Water component
 - Renders planar reflection (mirrors scene, hides water meshes, uses oblique projection)
+- Reflections skipped when camera is below waterLevel
 - Syncs WorldTransform position to mesh
 
 #### WaterPhysicsSystem
 - Group: `simulation` (after TransformHierarchySystem)
-- Creates a single fixed Rapier cuboid collider (size × 0.05 × size) at water level
-- Low friction (0.1) to simulate water surface
+- Creates a Rapier cuboid sensor collider (size × 2.0 × size) at water level
+- Sensor mode: player falls through water, does not walk on surface
+- `isSubmerged` flag on WaterEntityData for gameplay hooks
 
 ### Functions
 
@@ -87,7 +95,7 @@ Creates the water ShaderMaterial with all uniforms
 
 #### PlanarReflection
 - `texture` getter — reflection render target texture
-- `render(renderer, scene, camera, waterLevel)` — renders mirrored scene with oblique projection
+- `render(renderer, scene, camera, waterLevel)` — renders mirrored scene with oblique projection; skips when camera is below waterLevel
 - `resize(width, height)` — updates render target size
 - `dispose()` — cleans up render target
 
@@ -111,6 +119,9 @@ Creates the water ShaderMaterial with all uniforms
 | tReflection | sampler2D | Planar reflection texture |
 | tHeightMap | sampler2D | Terrain heightmap (optional) |
 | uCameraPosition | vec3 | Camera world position |
+| uUnderwaterFade | float | Underwater transition factor (0.0–1.0, driven by camera Y vs waterLevel) |
+| uUnderwaterFogColor | vec3 | Underwater fog color (default dark blue) |
+| uUnderwaterFogDensity | float | Underwater fog density (default 0.15) |
 
 ### Recipes
 
