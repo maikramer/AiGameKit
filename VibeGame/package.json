@@ -176,9 +176,6 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.18.2",
     "@interverse/three-terrain-lod": "^2.0.0",
-    "@loaders.gl/core": "~4.4.0",
-    "@loaders.gl/draco": "~4.4.0",
-    "@loaders.gl/gltf": "~4.4.0",
     "gsap": "^3.13.0",
     "postprocessing": "^6.37.8",
     "troika-three-text": "^0.52.4",
