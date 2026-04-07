@@ -13,6 +13,11 @@ export interface WaterEntityData {
   physicsBody: RAPIER.RigidBody | null;
   physicsCollider: RAPIER.Collider | null;
   isSubmerged: boolean;
+  rippleCenter: THREE.Vector3;
+  rippleStrength: number;
+  rippleDecay: number;
+  underwaterPostProcessActive: boolean;
+  audioMuffleHint: boolean;
 }
 
 const stateToWaterContext = new WeakMap<State, Map<number, WaterEntityData>>();

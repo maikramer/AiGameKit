@@ -1,13 +1,27 @@
 import * as THREE from 'three';
+import { addComponent, defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { defineQuery } from '../../core';
+import {
+  CollisionEvents,
+  TouchedEvent,
+  TouchEndedEvent,
+} from '../physics/components';
 import { getPhysicsContext, RAPIER } from '../physics';
 import { PhysicsWorldSystem } from '../physics/systems';
+import { Player } from '../player/components';
 import { getRenderingContext, MainCamera, threeCameras } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
 import { TransformHierarchySystem, WorldTransform } from '../transforms';
-import { Water } from './components';
-import { createWaterMaterial } from './water-material';
+import {
+  PlayerWaterState,
+  SwimTriggerZone,
+  Water,
+  WaterSubmersionState,
+} from './components';
+import {
+  createUnderwaterPostProcessMaterial,
+  createWaterMaterial,
+} from './water-material';
 import { PlanarReflection } from './planar-reflection';
 import {
   findNearestTerrainConfig,
@@ -18,9 +32,78 @@ import {
 
 const waterQuery = defineQuery([Water]);
 const cameraQuery = defineQuery([MainCamera, WorldTransform]);
+const playerCollisionQuery = defineQuery([Player, CollisionEvents]);
+const swimTriggerZoneQuery = defineQuery([SwimTriggerZone]);
 
 const REFLECTION_SIZE = 512;
 const PLANE_SEGMENTS = 256;
+
+const POST_PROCESS_RT = new WeakMap<State, THREE.WebGLRenderTarget>();
+const POST_PROCESS_SCENE = new WeakMap<State, THREE.Scene>();
+const POST_PROCESS_CAMERA = new WeakMap<State, THREE.OrthographicCamera>();
+const POST_PROCESS_MATERIAL = new WeakMap<State, THREE.ShaderMaterial>();
+const POST_PROCESS_QUAD = new WeakMap<State, THREE.Mesh>();
+
+function ensurePostProcessResources(state: State): void {
+  if (POST_PROCESS_RT.has(state)) return;
+
+  const ctx = getRenderingContext(state);
+  const renderer = ctx.renderer;
+  if (!renderer) return;
+  const size = new THREE.Vector2();
+  renderer.getSize(size);
+
+  const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+    depthBuffer: true,
+    stencilBuffer: false,
+  });
+  const scene = new THREE.Scene();
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const material = createUnderwaterPostProcessMaterial({
+    color: new THREE.Color(0x0d4a61),
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+  scene.add(quad);
+
+  POST_PROCESS_RT.set(state, target);
+  POST_PROCESS_SCENE.set(state, scene);
+  POST_PROCESS_CAMERA.set(state, camera);
+  POST_PROCESS_MATERIAL.set(state, material);
+  POST_PROCESS_QUAD.set(state, quad);
+}
+
+function disposePostProcessResources(state: State): void {
+  const rt = POST_PROCESS_RT.get(state);
+  const mat = POST_PROCESS_MATERIAL.get(state);
+  const quad = POST_PROCESS_QUAD.get(state);
+
+  if (quad) {
+    const geometry = quad.geometry;
+    geometry.dispose();
+  }
+  if (mat) mat.dispose();
+  if (rt) rt.dispose();
+
+  POST_PROCESS_RT.delete(state);
+  POST_PROCESS_SCENE.delete(state);
+  POST_PROCESS_CAMERA.delete(state);
+  POST_PROCESS_MATERIAL.delete(state);
+  POST_PROCESS_QUAD.delete(state);
+}
+
+function applyWaterSplash(
+  context: Map<number, WaterEntityData>,
+  waterEntity: number,
+  position: THREE.Vector3,
+  strength: number
+): void {
+  const waterData = context.get(waterEntity);
+  if (!waterData) return;
+
+  waterData.rippleCenter.copy(position);
+  waterData.rippleCenter.y = waterData.worldOffset.y;
+  waterData.rippleStrength = Math.max(waterData.rippleStrength, strength);
+}
 
 export const WaterBootstrapSystem: System = {
   group: 'fixed',
@@ -99,6 +182,11 @@ export const WaterBootstrapSystem: System = {
         physicsBody: null,
         physicsCollider: null,
         isSubmerged: false,
+        rippleCenter: new THREE.Vector3(0, waterLevel, 0),
+        rippleStrength: 0,
+        rippleDecay: 0.92,
+        underwaterPostProcessActive: false,
+        audioMuffleHint: false,
       };
 
       if (state.hasComponent(entity, WorldTransform)) {
@@ -139,6 +227,147 @@ export const WaterBootstrapSystem: System = {
       data.reflection.dispose();
     }
     context.clear();
+
+    disposePostProcessResources(state);
+  },
+};
+
+export const WaterInteractionSystem: System = {
+  group: 'simulation',
+  after: [TransformHierarchySystem],
+  update(state: State) {
+    const context = getWaterContext(state);
+    const players = playerCollisionQuery(state.world);
+    const now = state.time.elapsed;
+
+    for (const entity of players) {
+      if (!state.hasComponent(entity, PlayerWaterState)) {
+        addComponent(state.world, PlayerWaterState, entity);
+        PlayerWaterState.state[entity] = WaterSubmersionState.Outside;
+        PlayerWaterState.waterEntity[entity] = 0;
+        PlayerWaterState.entryTime[entity] = 0;
+        PlayerWaterState.submersionDepth[entity] = 0;
+        PlayerWaterState.swimTriggered[entity] = 0;
+        PlayerWaterState.swimZoneEntity[entity] = 0;
+      }
+
+      const touched = state.hasComponent(entity, TouchedEvent);
+      const ended = state.hasComponent(entity, TouchEndedEvent);
+
+      if (touched) {
+        const other = TouchedEvent.other[entity];
+        if (state.hasComponent(other, Water)) {
+          const waterEntity = other;
+          const waterLevel = Water.waterLevel[waterEntity];
+          const posY = state.hasComponent(entity, WorldTransform)
+            ? WorldTransform.posY[entity]
+            : waterLevel;
+
+          PlayerWaterState.state[entity] = WaterSubmersionState.Entering;
+          PlayerWaterState.waterEntity[entity] = waterEntity;
+          PlayerWaterState.entryTime[entity] = now;
+          PlayerWaterState.submersionDepth[entity] = Math.max(
+            0,
+            waterLevel - posY
+          );
+          PlayerWaterState.swimTriggered[entity] = 0;
+          PlayerWaterState.swimZoneEntity[entity] = 0;
+
+          const splashPos = new THREE.Vector3(
+            state.hasComponent(entity, WorldTransform)
+              ? WorldTransform.posX[entity]
+              : 0,
+            waterLevel,
+            state.hasComponent(entity, WorldTransform)
+              ? WorldTransform.posZ[entity]
+              : 0
+          );
+          applyWaterSplash(context, waterEntity, splashPos, 0.85);
+        }
+      }
+
+      if (ended) {
+        const other = TouchEndedEvent.other[entity];
+        if (state.hasComponent(other, Water)) {
+          const waterEntity = other;
+          const waterLevel = Water.waterLevel[waterEntity];
+
+          PlayerWaterState.state[entity] = WaterSubmersionState.Exiting;
+          PlayerWaterState.submersionDepth[entity] = 0;
+
+          const splashPos = new THREE.Vector3(
+            state.hasComponent(entity, WorldTransform)
+              ? WorldTransform.posX[entity]
+              : 0,
+            waterLevel,
+            state.hasComponent(entity, WorldTransform)
+              ? WorldTransform.posZ[entity]
+              : 0
+          );
+          applyWaterSplash(context, waterEntity, splashPos, 0.45);
+
+          PlayerWaterState.waterEntity[entity] = 0;
+          PlayerWaterState.swimTriggered[entity] = 0;
+          PlayerWaterState.swimZoneEntity[entity] = 0;
+          PlayerWaterState.state[entity] = WaterSubmersionState.Outside;
+        }
+      }
+
+      const activeWater = PlayerWaterState.waterEntity[entity];
+      if (activeWater !== 0 && state.hasComponent(activeWater, Water)) {
+        const waterLevel = Water.waterLevel[activeWater];
+        const py = state.hasComponent(entity, WorldTransform)
+          ? WorldTransform.posY[entity]
+          : waterLevel;
+
+        PlayerWaterState.submersionDepth[entity] = Math.max(0, waterLevel - py);
+        if (PlayerWaterState.submersionDepth[entity] > 0.05) {
+          PlayerWaterState.state[entity] = WaterSubmersionState.Submerged;
+        }
+
+        const ripplePos = new THREE.Vector3(
+          state.hasComponent(entity, WorldTransform)
+            ? WorldTransform.posX[entity]
+            : 0,
+          waterLevel,
+          state.hasComponent(entity, WorldTransform)
+            ? WorldTransform.posZ[entity]
+            : 0
+        );
+        applyWaterSplash(context, activeWater, ripplePos, 0.2);
+      }
+    }
+
+    for (const [, data] of context) {
+      data.rippleStrength *= data.rippleDecay;
+      if (data.rippleStrength < 0.001) {
+        data.rippleStrength = 0;
+      }
+    }
+  },
+};
+
+export const SwimTriggerSystem: System = {
+  group: 'simulation',
+  after: [WaterInteractionSystem],
+  update(state: State) {
+    const players = playerCollisionQuery(state.world);
+    const zones = swimTriggerZoneQuery(state.world);
+
+    for (const player of players) {
+      if (!state.hasComponent(player, PlayerWaterState)) continue;
+      const currentWater = PlayerWaterState.waterEntity[player];
+      if (currentWater === 0) continue;
+
+      for (const zone of zones) {
+        if (SwimTriggerZone.enabled[zone] !== 1) continue;
+        if (SwimTriggerZone.waterEntity[zone] !== currentWater) continue;
+
+        PlayerWaterState.swimTriggered[player] = 1;
+        PlayerWaterState.swimZoneEntity[player] = zone;
+        break;
+      }
+    }
   },
 };
 
@@ -161,6 +390,8 @@ export const WaterRenderSystem: System = {
     if (!camera || !(camera instanceof THREE.PerspectiveCamera)) return;
 
     const time = state.time.elapsed;
+    let strongestUnderwaterFade = 0;
+    let waterLineY = 0.5;
 
     for (const entity of waterQuery(state.world)) {
       const data = context.get(entity);
@@ -176,7 +407,9 @@ export const WaterRenderSystem: System = {
 
       data.material.uniforms.uTime.value = time;
       data.material.uniforms.uCameraPosition.value.copy(camera.position);
-      // Underwater state: compute fade based on camera height relative to water level
+      data.material.uniforms.uRippleCenter.value.copy(data.rippleCenter);
+      data.material.uniforms.uRippleStrength.value = data.rippleStrength;
+
       const waterLevel = Water.waterLevel[entity];
       const cameraY = camera.position.y;
       const underwaterFade =
@@ -186,7 +419,16 @@ export const WaterRenderSystem: System = {
       if (data.material.uniforms.uUnderwaterFade) {
         data.material.uniforms.uUnderwaterFade.value = underwaterFade;
       }
-      // Underwater fog color and density from component
+
+      data.underwaterPostProcessActive = underwaterFade > 0;
+      data.audioMuffleHint = underwaterFade > 0.1;
+
+      if (underwaterFade > strongestUnderwaterFade) {
+        strongestUnderwaterFade = underwaterFade;
+        const projected = new THREE.Vector3(0, waterLevel, 0).project(camera);
+        waterLineY = projected.y * 0.5 + 0.5;
+      }
+
       const fogR = Water.underwaterFogColorR[entity] ?? 0.0;
       const fogG = Water.underwaterFogColorG[entity] ?? 0.0;
       const fogB = Water.underwaterFogColorB[entity] ?? 0.0;
@@ -209,6 +451,37 @@ export const WaterRenderSystem: System = {
       }
 
       data.reflection.render(renderer, scene, camera, data.worldOffset.y);
+    }
+
+    if (strongestUnderwaterFade > 0.001) {
+      ensurePostProcessResources(state);
+      const rt = POST_PROCESS_RT.get(state);
+      const postScene = POST_PROCESS_SCENE.get(state);
+      const postCamera = POST_PROCESS_CAMERA.get(state);
+      const postMaterial = POST_PROCESS_MATERIAL.get(state);
+
+      if (!rt || !postScene || !postCamera || !postMaterial) return;
+
+      const size = new THREE.Vector2();
+      renderer.getSize(size);
+      if (rt.width !== size.x || rt.height !== size.y) {
+        rt.setSize(size.x, size.y);
+      }
+
+      renderer.setRenderTarget(rt);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+
+      postMaterial.uniforms.uSceneTexture.value = rt.texture;
+      postMaterial.uniforms.uTime.value = time;
+      postMaterial.uniforms.uUnderwaterFade.value = strongestUnderwaterFade;
+      postMaterial.uniforms.uLineY.value = THREE.MathUtils.clamp(
+        waterLineY,
+        0,
+        1
+      );
+
+      renderer.render(postScene, postCamera);
     }
   },
 };
@@ -279,4 +552,12 @@ function cleanupPhysics(
     physicsWorld.removeRigidBody(data.physicsBody);
     data.physicsBody = null;
   }
+}
+
+export function isUnderwaterAudioMuffleActive(state: State): boolean {
+  const context = getWaterContext(state);
+  for (const [, data] of context) {
+    if (data.audioMuffleHint) return true;
+  }
+  return false;
 }

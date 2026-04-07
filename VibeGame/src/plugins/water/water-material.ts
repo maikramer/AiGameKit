@@ -16,6 +16,10 @@ export interface WaterMaterialOptions {
   underwaterFogDensity: number;
 }
 
+export interface UnderwaterPostProcessMaterialOptions {
+  color: THREE.Color;
+}
+
 export function createWaterMaterial(
   options: WaterMaterialOptions
 ): THREE.ShaderMaterial {
@@ -40,6 +44,8 @@ export function createWaterMaterial(
       uUnderwaterFade: { value: 0.0 },
       uUnderwaterFogColor: { value: options.underwaterFogColor },
       uUnderwaterFogDensity: { value: options.underwaterFogDensity },
+      uRippleCenter: { value: new THREE.Vector3() },
+      uRippleStrength: { value: 0.0 },
       tReflection: { value: options.reflectionTexture },
       tHeightMap: { value: options.heightmapTexture },
       uHasHeightmap: { value: options.heightmapTexture ? 1.0 : 0.0 },
@@ -56,11 +62,33 @@ export function createWaterMaterial(
   return material;
 }
 
+export function createUnderwaterPostProcessMaterial(
+  options: UnderwaterPostProcessMaterialOptions
+): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uSceneTexture: { value: null as THREE.Texture | null },
+      uTime: { value: 0 },
+      uUnderwaterFade: { value: 0 },
+      uTintColor: { value: options.color.clone() },
+      uDistortionStrength: { value: 0.01 },
+      uLineY: { value: 0.5 },
+    },
+    vertexShader: fullscreenVertexShader,
+    fragmentShader: underwaterPostProcessFragmentShader,
+    depthWrite: false,
+    depthTest: false,
+    transparent: true,
+  });
+}
+
 const waterVertexShader = /* glsl */ `
 uniform float uTime;
 uniform float uWaveSpeed;
 uniform float uWaveScale;
 uniform float uWaterLevel;
+uniform vec3 uRippleCenter;
+uniform float uRippleStrength;
 
 varying vec2 vWorldXZ;
 varying vec3 vWorldPos;
@@ -77,6 +105,11 @@ void main() {
   float w3 = sin((p.x + p.y) * 0.4 + t * uWaveSpeed * 1.3) * 0.3;
   float w4 = sin(p.x * 2.1 - p.y * 1.7 + t * uWaveSpeed * 0.5) * 0.15;
   float waveHeight = (w1 + w2 + w3 + w4) * uWaveScale;
+
+  float rippleDist = distance(p, uRippleCenter.xz);
+  float rippleEnvelope = exp(-rippleDist * 0.35);
+  float rippleWave = sin(rippleDist * 2.8 - t * 8.0) * rippleEnvelope;
+  waveHeight += rippleWave * uRippleStrength;
 
   float dx = cos(p.x * 0.8 + t * uWaveSpeed) * 0.8 * 0.5
             + cos((p.x + p.y) * 0.4 + t * uWaveSpeed * 1.3) * 0.4 * 0.3
@@ -223,5 +256,44 @@ void main() {
   }
 
   gl_FragColor = vec4(color, alpha);
+}
+`;
+
+const fullscreenVertexShader = /* glsl */ `
+varying vec2 vUv;
+
+void main() {
+  vUv = uv;
+  gl_Position = vec4(position.xy, 0.0, 1.0);
+}
+`;
+
+const underwaterPostProcessFragmentShader = /* glsl */ `
+uniform sampler2D uSceneTexture;
+uniform float uTime;
+uniform float uUnderwaterFade;
+uniform vec3 uTintColor;
+uniform float uDistortionStrength;
+uniform float uLineY;
+
+varying vec2 vUv;
+
+void main() {
+  float wave = sin((vUv.y + uTime * 0.2) * 32.0) * 0.5 + 0.5;
+  float lineMask = smoothstep(0.0, 0.08, abs(vUv.y - uLineY));
+  float distortion = (1.0 - lineMask) * wave * uDistortionStrength * uUnderwaterFade;
+
+  vec2 uv = vUv;
+  uv.x += distortion;
+
+  vec4 scene = texture2D(uSceneTexture, uv);
+  float luma = dot(scene.rgb, vec3(0.299, 0.587, 0.114));
+  vec3 desaturated = mix(scene.rgb, vec3(luma), 0.25 * uUnderwaterFade);
+  vec3 tinted = mix(desaturated, uTintColor, 0.28 * uUnderwaterFade);
+
+  float depthFog = smoothstep(0.0, 1.0, vUv.y) * 0.2 * uUnderwaterFade;
+  tinted = mix(tinted, uTintColor, depthFog);
+
+  gl_FragColor = vec4(tinted, scene.a);
 }
 `;

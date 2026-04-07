@@ -1,16 +1,26 @@
 import type { Plugin } from '../../core';
-import { Water } from './components';
+import { PlayerWaterState, SwimTriggerZone, Water } from './components';
 import {
+  SwimTriggerSystem,
   WaterBootstrapSystem,
+  WaterInteractionSystem,
   WaterPhysicsSystem,
   WaterRenderSystem,
 } from './systems';
 
 export const WaterPlugin: Plugin = {
   recipes: [{ name: 'water', components: ['water', 'transform'] }],
-  systems: [WaterBootstrapSystem, WaterRenderSystem, WaterPhysicsSystem],
+  systems: [
+    WaterBootstrapSystem,
+    WaterRenderSystem,
+    WaterPhysicsSystem,
+    WaterInteractionSystem,
+    SwimTriggerSystem,
+  ],
   components: {
     water: Water,
+    playerWaterState: PlayerWaterState,
+    swimTriggerZone: SwimTriggerZone,
   },
   config: {
     defaults: {
@@ -28,6 +38,13 @@ export const WaterPlugin: Plugin = {
         underwaterFogColorG: 0.05,
         underwaterFogColorB: 0.15,
         underwaterFogDensity: 0.15,
+      },
+      swimTriggerZone: {
+        waterEntity: 0,
+        enabled: 1,
+        swimSpeed: 4,
+        buoyancyForce: 8,
+        maxSwimDepth: 6,
       },
     },
   },
