@@ -51,3 +51,4 @@ sandbox/
 /test-results/
 /blob-report/
 debug-errors.ts
+package-lock.json

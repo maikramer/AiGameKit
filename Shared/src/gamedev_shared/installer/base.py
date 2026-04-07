@@ -6,6 +6,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from ..logging import Logger
@@ -289,6 +290,9 @@ class BaseInstaller:
 
     def _ensure_windows_user_path(self) -> bool:
         """Adiciona ``bin_dir`` ao PATH permanente do utilizador (HKCU\\Environment)."""
+        if sys.platform != "win32":
+            return False
+
         import ctypes
         import winreg
 
