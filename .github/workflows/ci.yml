@@ -140,6 +140,6 @@ jobs:
       - name: Prettier check
         run: bun run format:check
       - name: Tests
-        run: bun test
+        run: bun run test
       - name: Vite build
         run: bun run build
