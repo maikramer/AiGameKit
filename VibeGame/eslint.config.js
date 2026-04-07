@@ -36,6 +36,8 @@ export default [
         setInterval: 'readonly',
         clearInterval: 'readonly',
         WebGL2RenderingContext: 'readonly',
+        WebGLProgram: 'readonly',
+        WebGLShader: 'readonly',
         WebGLSync: 'readonly',
         process: 'readonly',
         global: 'readonly',

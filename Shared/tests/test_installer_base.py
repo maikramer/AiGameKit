@@ -1,4 +1,4 @@
-﻿"""Testes para gamedev_shared.installer.base."""
+"""Testes para gamedev_shared.installer.base."""
 
 import sys
 from pathlib import Path

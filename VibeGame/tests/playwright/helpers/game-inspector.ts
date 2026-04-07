@@ -131,7 +131,7 @@ export async function injectWebGLErrorCapture(page: Page): Promise<void> {
       if (contextId === 'webgl2' && ctx && 'getError' in ctx) {
         const gl = ctx;
         const origCompileShader = gl.compileShader.bind(gl);
-        gl.compileShader = function (shader: unknown) {
+        gl.compileShader = function (shader: WebGLShader) {
           origCompileShader(shader);
           if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
             const info = gl.getShaderInfoLog(shader);
@@ -144,7 +144,7 @@ export async function injectWebGLErrorCapture(page: Page): Promise<void> {
         };
 
         const origLinkProgram = gl.linkProgram.bind(gl);
-        gl.linkProgram = function (program: unknown) {
+        gl.linkProgram = function (program: WebGLProgram) {
           origLinkProgram(program);
           if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
             const info = gl.getProgramInfoLog(program);

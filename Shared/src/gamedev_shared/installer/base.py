@@ -1,4 +1,4 @@
-﻿"""BaseInstaller — lógica partilhada entre instaladores Python e Rust."""
+"""BaseInstaller — lógica partilhada entre instaladores Python e Rust."""
 
 from __future__ import annotations
 
@@ -369,11 +369,7 @@ class BaseInstaller:
             self.logger.success(f"{bin_str} está no PATH")
             return True
 
-        persisted = (
-            self._ensure_windows_user_path()
-            if self.is_windows
-            else self._ensure_unix_user_path()
-        )
+        persisted = self._ensure_windows_user_path() if self.is_windows else self._ensure_unix_user_path()
 
         os.environ["PATH"] = bin_str + sep + path_env
 
