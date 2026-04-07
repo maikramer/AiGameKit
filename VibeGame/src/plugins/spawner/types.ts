@@ -37,7 +37,7 @@ export interface SpawnGroupSpec {
   surfaceEpsilon: number;
   /** Inclinação máxima (graus) entre normal do terreno e +Y; acima re-amostra posição. */
   maxSlopeDeg: number;
-  /** Tentativas por instância antes de usar a última amostra (mesmo íngreme). */
+  /** Tentativas por instância para obter declive dentro de max-slope-deg (normal do heightmap bruto). Se esgotar e max-slope-deg for menor que 90°, essa instância não spawna. */
   maxSlopePlacementAttempts: number;
   /** round-robin | random */
   pickStrategy: 'round-robin' | 'random';

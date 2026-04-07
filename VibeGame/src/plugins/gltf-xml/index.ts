@@ -2,6 +2,7 @@
 export { gltfDynamicRecipe, gltfLoadRecipe } from './recipes';
 export { GltfPending, GltfPhysicsPending } from './components';
 export { GltfDynamicPhysicsSystem } from './gltf-dynamic-system';
+export { GltfSceneSyncSystem } from './gltf-scene-sync';
 export {
   getGltfLocalYBounds,
   prefetchGltfLocalYBounds,

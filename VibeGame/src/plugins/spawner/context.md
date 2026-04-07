@@ -31,7 +31,7 @@ Atributo **`profile`** no `<spawn-group>` (e opcionalmente no **filho**) preench
 | profile | Recipe | Preenche se ausente |
 |---------|--------|----------------------|
 | `physics-crate` | `dynamic-part` | `shape`, `size`, `color`, `mass`, `restitution` |
-| `gltf-crate` | `gltf-dynamic` | `mass`, `friction`, `collider-margin` |
+| `gltf-crate` | `gltf-dynamic` | `mass`, `friction`, `collider-margin`, `collider-shape` (padrão `box`) |
 
 ## Estático vs física (templates)
 
@@ -43,7 +43,7 @@ O spawn instancia **qualquer recipe** declarada como filha. A distinção é a *
 | Primitiva física (caixa/cubo empurrável) | `<dynamic-part>` | Malha built-in + Rapier dinâmico. |
 | Obstáculo fixo | `<static-part>` | Corpo fixo. |
 | Plataforma / cinemática | `<kinematic-part>` | Velocidade ou movimento scriptado. |
-| GLB empurrável (collider caixa no AABB) | `<gltf-dynamic>` | Ver plugin `gltf-xml` / `gltf-dynamic` recipe. |
+| GLB empurrável (collider no AABB: caixa, esfera ou cápsula) | `<gltf-dynamic>` | Ver plugin `gltf-xml` / atributo `collider-shape`. |
 
 ### Atributo opcional `role` (metadado)
 
@@ -60,8 +60,8 @@ Nos filhos do `<spawn-group>` pode usar **`role="visual" | "dynamic" | "static" 
 - **random-yaw**: `1` aplica rotação aleatória (eixo vertical se não alinhado; eixo normal se alinhado).
 - **scale-min** / **scale-max**: multiplicador uniforme extra sobre o `scale` do template.
 - **surface-epsilon**: passo em unidades mundo para a normal (padrão `0.75`).
-- **max-slope-deg** (padrão `45`): inclinação máxima aceite — ângulo entre a **normal do terreno** e **+Y**. Se a amostra for mais íngreme, o spawner escolhe **outra posição aleatória** na mesma região e tenta de novo.
-- **max-slope-attempts** (padrão `32`): tentativas por instância. Se nunca couber no declive, usa a **última** amostra (evita buracos no spawn).
+- **max-slope-deg** (padrão `45`): inclinação máxima aceite — ângulo entre a **normal do terreno** e **+Y**. A normal é calculada a partir do **heightmap bruto** (sem o mesmo smoothing do shader), para não subestimar encostas íngremes. Se a amostra for mais íngreme, o spawner escolhe **outra posição aleatória** na mesma região e tenta de novo.
+- **max-slope-attempts** (padrão `32`): tentativas por instância. Se **nenhuma** amostra cumprir o declive e `max-slope-deg` for **menor que 90°**, essa instância **não é criada** (o `count` pode ficar abaixo do pedido em regiões muito íngremes). Com `max-slope-deg` ≥ 90° aceita-se qualquer inclinação.
 - **pick-strategy**: `random` (padrão) ou `round-robin` entre os filhos.
 
 Filhos: um ou mais elementos com **recipe** registrada. O parser não usa o fluxo automático de filhos; grava atributos por template (incluindo `role` e **`profile`** no filho — este último só influencia defaults do template).
@@ -107,7 +107,7 @@ Filhos: um ou mais elementos com **recipe** registrada. O parser não usa o flux
 
 ```xml
 <spawn-group profile="gltf-crate" count="3" seed="11" region-min="-6 0 8" region-max="-2 0 12">
-  <gltf-dynamic role="dynamic" profile="gltf-crate" url="/assets/models/wooden_crate.glb" transform="scale: 1 1 1"></gltf-dynamic>
+  <gltf-dynamic role="dynamic" profile="gltf-crate" url="/assets/models/wooden_crate.glb" collider-shape="box" transform="scale: 1 1 1"></gltf-dynamic>
 </spawn-group>
 ```
 

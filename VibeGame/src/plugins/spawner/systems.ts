@@ -172,10 +172,16 @@ export const TerrainSpawnSystem: System = {
       const minZ = spec.regionMin[2] + az;
       const maxZ = spec.regionMax[2] + az;
 
+      const maxSlope = Number.isFinite(spec.maxSlopeDeg)
+        ? spec.maxSlopeDeg
+        : 45;
+      const acceptAnySlope = maxSlope >= 90 - 1e-6;
+
       for (let i = 0; i < spec.count; i++) {
         let wx = minX;
         let wz = minZ;
         let s: TerrainSurfaceSample | null = null;
+        let foundValidSlope = false;
         const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
         for (let attempt = 0; attempt < attempts; attempt++) {
           wx = minX + rand() * (maxX - minX);
@@ -187,13 +193,19 @@ export const TerrainSpawnSystem: System = {
             spec.surfaceEpsilon
           );
           if (!cand) continue;
-          if (isNormalWithinSlopeLimit(cand.normal, spec.maxSlopeDeg)) {
-            s = cand;
+          s = cand;
+          if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
+            foundValidSlope = true;
             break;
           }
-          s = cand;
         }
-        const wy = s ? s.worldY : 0;
+
+        if (!s) continue;
+        if (!foundValidSlope && !acceptAnySlope) {
+          continue;
+        }
+
+        const wy = s.worldY;
 
         let template: SpawnTemplateSpec;
         if (spec.pickStrategy === 'round-robin') {

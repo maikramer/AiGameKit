@@ -6,8 +6,9 @@ export const GltfPending = defineComponent({
 });
 
 /**
- * Após o GLB carregar, cria `Body` + `Collider` com caixa no AABB do modelo.
+ * Após o GLB carregar, cria `Body` + `Collider` no AABB do modelo.
  * `ready`: 0 = aguardando; 1 = física aplicada.
+ * `colliderShape`: valores de `ColliderShape` (box / sphere / capsule), campo no fim para não alterar layout dos restantes.
  */
 export const GltfPhysicsPending = defineComponent({
   ready: Types.ui8,
@@ -16,4 +17,6 @@ export const GltfPhysicsPending = defineComponent({
   mass: Types.f32,
   friction: Types.f32,
   restitution: Types.f32,
+  /** `ColliderShape` (0 = box, 1 = sphere, 2 = capsule). */
+  colliderShape: Types.ui8,
 });

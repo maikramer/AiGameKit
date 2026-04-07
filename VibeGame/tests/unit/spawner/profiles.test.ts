@@ -73,5 +73,14 @@ describe('spawn profiles', () => {
     expect(attrs.mass).toBe(1.5);
     expect(attrs.friction).toBe(0.55);
     expect(attrs['collider-margin']).toBe(0.02);
+    expect(attrs['collider-shape']).toBe('box');
+  });
+
+  it('applyChildTemplateProfile gltf-crate não sobrescreve collider-shape', () => {
+    const attrs: Record<string, string | number> = {
+      'collider-shape': 'sphere',
+    };
+    applyChildTemplateProfile('gltf-dynamic', attrs, 'gltf-crate');
+    expect(attrs['collider-shape']).toBe('sphere');
   });
 });

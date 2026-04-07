@@ -1,6 +1,6 @@
 ﻿# GLTF-XML Plugin (context.md)
 <!-- LLM:OVERVIEW -->
-Declarative `<gltf-load>` and `<gltf-dynamic>` XML tags for loading GLB models. Static props use `gltf-load`; `gltf-dynamic` adds a **dynamic** Rapier body with a **box collider** fitted to the model AABB after load (see `GltfDynamicPhysicsSystem`). No GLB animation in these tags. For animated player models, use `<player-gltf>`.
+Declarative `<gltf-load>` and `<gltf-dynamic>` XML tags for loading GLB models. Static props use `gltf-load`; `gltf-dynamic` adds a **dynamic** Rapier body with a collider fitted to the model AABB after load (see `GltfDynamicPhysicsSystem` and `fitColliderFromAabb` in `gltf-dynamic-collider-fit.ts`). Shape is configurable: **box** (default), **sphere** (bounding sphere of the AABB), or **capsule** (Y-axis; `radius`/`height` are in world units — the physics pipeline does not scale these by `Transform` like box sizes). No GLB animation in these tags. For animated player models, use `<player-gltf>`.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -14,6 +14,7 @@ gltf-xml/
 ├── systems.ts      # GltfXmlLoadSystem
 ├── group-registry.ts # raiz Three.js por entidade (gltf-dynamic)
 ├── gltf-dynamic-system.ts # Body/Collider após AABB
+├── gltf-dynamic-collider-fit.ts # AABB → Collider (box / sphere / capsule)
 └── recipes.ts      # gltfLoadRecipe, gltfDynamicRecipe
 ```
 
@@ -46,7 +47,7 @@ gltf-xml/
 
 ### Recipe
 - **gltf-load** — components: ['transform', 'gltfPending'], adapter: `url` stores URL in module-level map
-- **gltf-dynamic** — components: ['transform', 'gltfPending', 'gltfPhysicsPending']; mesmo `url`; defaults `gltfPhysicsPending`: `collider-margin`, `mass`, `friction`, `restitution`; após load, cria `Body` (Dynamic) + `Collider` (box) com tamanho do AABB (+ margem), compensando o `scale` do Transform no componente collider.
+- **gltf-dynamic** — components: ['transform', 'gltfPending', 'gltfPhysicsPending']; mesmo `url`; defaults `gltfPhysicsPending`: `collider-margin`, `collider-shape` (`box`), `mass`, `friction`, `restitution`; após load, cria `Body` (Dynamic) + `Collider` com forma escolhida e tamanho automático a partir do AABB (+ margem). Para **box** e **sphere**, `size*` no collider compensa o `scale` do `Transform` como antes; **capsule** usa `radius`/`height` em metros mundo (ver nota acima).
 
 <!-- /LLM:REFERENCE -->
 <!-- LLM:EXAMPLES -->
@@ -59,8 +60,9 @@ gltf-xml/
   mass="2"
   friction="0.6"
   collider-margin="0.03"
+  collider-shape="box"
 ></gltf-dynamic>
 ```
-Atributos opcionais `mass`, `friction`, `restitution`, `collider-margin` aplicam-se ao componente `gltfPhysicsPending` (via recipe).
+Atributos opcionais `mass`, `friction`, `restitution`, `collider-margin`, `collider-shape` (`box` \| `sphere` \| `capsule`) aplicam-se ao componente `gltfPhysicsPending` (via recipe).
 
 <!-- /LLM:EXAMPLES -->

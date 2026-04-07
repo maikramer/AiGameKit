@@ -1,14 +1,10 @@
 ﻿import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
-import {
-  Body,
-  BodyType,
-  Collider,
-  ColliderShape,
-} from '../physics/components';
+import { Body, BodyType, Collider } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
 import { GltfPending, GltfPhysicsPending } from './components';
+import { fitColliderFromAabb } from './gltf-dynamic-collider-fit';
 import { deleteGltfRootGroup, getGltfRootGroup } from './group-registry';
 import { GltfXmlLoadSystem } from './systems';
 
@@ -16,6 +12,11 @@ const query = defineQuery([GltfPhysicsPending, GltfPending, Transform]);
 
 const _box = new THREE.Box3();
 const _size = new THREE.Vector3();
+const _aabbCenterWorld = new THREE.Vector3();
+const _deltaWorld = new THREE.Vector3();
+const _bodyQuat = new THREE.Quaternion();
+const _invBodyQuat = new THREE.Quaternion();
+const _offsetLocal = new THREE.Vector3();
 
 const MIN_HALF_DIM = 0.05;
 
@@ -77,15 +78,54 @@ export const GltfDynamicPhysicsSystem: System = {
       Body.eulerZ[eid] = Transform.eulerZ[eid];
       syncBodyQuaternionFromEuler(eid);
 
-      Collider.shape[eid] = ColliderShape.Box;
-      Collider.sizeX[eid] = sx / tsx;
-      Collider.sizeY[eid] = sy / tsy;
-      Collider.sizeZ[eid] = sz / tsz;
+      // Centro do AABB em mundo vs origem do grupo (Transform): sem isto o colisor fica
+      // desalinhado do mesh e o jogador pode "atravessar" o modelo visível.
+      _box.getCenter(_aabbCenterWorld);
+      _deltaWorld.set(
+        _aabbCenterWorld.x - Transform.posX[eid],
+        _aabbCenterWorld.y - Transform.posY[eid],
+        _aabbCenterWorld.z - Transform.posZ[eid]
+      );
+      _bodyQuat.set(
+        Body.rotX[eid],
+        Body.rotY[eid],
+        Body.rotZ[eid],
+        Body.rotW[eid]
+      );
+      _invBodyQuat.copy(_bodyQuat).invert();
+      _offsetLocal.copy(_deltaWorld).applyQuaternion(_invBodyQuat);
+
+      const fit = fitColliderFromAabb(
+        GltfPhysicsPending.colliderShape[eid],
+        sx,
+        sy,
+        sz,
+        tsx,
+        tsy,
+        tsz
+      );
+      Collider.shape[eid] = fit.shape;
+      Collider.sizeX[eid] = fit.sizeX;
+      Collider.sizeY[eid] = fit.sizeY;
+      Collider.sizeZ[eid] = fit.sizeZ;
+      Collider.radius[eid] = fit.radius;
+      Collider.height[eid] = fit.height;
       Collider.friction[eid] = GltfPhysicsPending.friction[eid];
       Collider.restitution[eid] = GltfPhysicsPending.restitution[eid];
+      Collider.density[eid] = 1;
+      Collider.isSensor[eid] = 0;
+      Collider.membershipGroups[eid] = 0xffff;
+      Collider.filterGroups[eid] = 0xffff;
+      Collider.posOffsetX[eid] = _offsetLocal.x;
+      Collider.posOffsetY[eid] = _offsetLocal.y;
+      Collider.posOffsetZ[eid] = _offsetLocal.z;
+      Collider.rotOffsetW[eid] = 1;
+
+      Body.ccd[eid] = 1;
+      Body.linearDamping[eid] = 0.2;
+      Body.angularDamping[eid] = 0.4;
 
       GltfPhysicsPending.ready[eid] = 1;
-      deleteGltfRootGroup(state, eid);
     }
   },
 };

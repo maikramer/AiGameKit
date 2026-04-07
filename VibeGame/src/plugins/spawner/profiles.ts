@@ -26,7 +26,7 @@ export interface GroupSpawnDefaults {
    * Acima disto, o spawn re-amostra uma posição aleatória na região (até `maxSlopePlacementAttempts`).
    */
   maxSlopeDeg: number;
-  /** Tentativas de posição por instância antes de aceitar um declive íngreme (última amostra). */
+  /** Tentativas de posição aleatória por instância; se nenhuma cumprir o declive (com max-slope-deg menor que 90°), a instância é omitida. */
   maxSlopePlacementAttempts: number;
 }
 
@@ -147,6 +147,7 @@ export function applyChildTemplateProfile(
     if (!('mass' in attrs)) attrs.mass = 1.5;
     if (!('friction' in attrs)) attrs.friction = 0.55;
     if (!('collider-margin' in attrs)) attrs['collider-margin'] = 0.02;
+    if (!('collider-shape' in attrs)) attrs['collider-shape'] = 'box';
   }
 }
 

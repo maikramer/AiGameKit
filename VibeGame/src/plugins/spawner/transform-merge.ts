@@ -90,7 +90,8 @@ export function composeSpawnRotation(
     } else {
       _qYaw.identity();
     }
-    _qFinal.copy(_qAlign).multiply(_qYaw).multiply(_qTemplate);
+    // q_yaw * q_align * q_template: template → alinhar +Y ao normal → yaw em torno do tronco.
+    _qFinal.copy(_qYaw).multiply(_qAlign).multiply(_qTemplate);
   } else {
     if (randomYawRadians !== 0) {
       const yq = eulerToQuaternion(0, (randomYawRadians * 180) / Math.PI, 0);
