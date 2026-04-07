@@ -1,25 +1,358 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 /**
  * CLI `vibegame` — ponto de entrada estável para o instalador unificado do monorepo.
- * Usa apenas Node (stdlib); `bun install` / `bun run build` são responsabilidade do instalador.
+ * `vibegame run`: engine sem `bun install` salvo `--install`; em apps, instala deps em falta (bun, com fallback npm).
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, normalize, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
-const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+
+/** @param {string} text */
+function stripBom(text) {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/**
+ * Lê JSON de ficheiro; remove BOM UTF-8 (comum no Windows) para não falhar JSON.parse.
+ * @param {string} filePath
+ */
+function readJsonFile(filePath) {
+  return JSON.parse(stripBom(readFileSync(filePath, 'utf8')));
+}
+
+const pkg = readJsonFile(join(root, 'package.json'));
 const createScript = join(root, 'create-vibegame', 'index.js');
+
+/** @param {string} a @param {string} b */
+function sameResolvedPath(a, b) {
+  return normalize(resolve(a)) === normalize(resolve(b));
+}
+
+/** @param {string} child @param {string} parent */
+function isDescendantDir(child, parent) {
+  const rel = relative(resolve(parent), resolve(child));
+  return rel !== '' && !rel.startsWith('..') && !normalize(rel).startsWith('..');
+}
+
+/**
+ * Sobe diretórios a partir de `fromDir` e devolve a raiz do pacote `vibegame` (engine).
+ * @param {string} fromDir
+ * @returns {string | null}
+ */
+function findEngineRoot(fromDir) {
+  let dir = resolve(fromDir);
+  let guard = 0;
+  while (guard++ < 24) {
+    const pkgPath = join(dir, 'package.json');
+    if (existsSync(pkgPath)) {
+      try {
+        const j = readJsonFile(pkgPath);
+        if (
+          j.name === 'vibegame' &&
+          existsSync(join(dir, 'scripts', 'vibegame-cli.mjs'))
+        ) {
+          return dir;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/**
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+function resolveEngineFromFileVibegameDep(cwd) {
+  const pkgPath = join(cwd, 'package.json');
+  if (!existsSync(pkgPath)) return null;
+  let j;
+  try {
+    j = readJsonFile(pkgPath);
+  } catch {
+    return null;
+  }
+  const dep =
+    (typeof j.dependencies?.vibegame === 'string' && j.dependencies.vibegame) ||
+    (typeof j.devDependencies?.vibegame === 'string' &&
+      j.devDependencies.vibegame) ||
+    null;
+  if (!dep || !dep.startsWith('file:')) return null;
+  const raw = dep.slice('file:'.length).trim();
+  return resolve(dirname(pkgPath), raw);
+}
+
+/**
+ * @param {string} cwd
+ * @returns {string | null}
+ */
+function resolveEngineRootForRun(cwd) {
+  const fromWalk = findEngineRoot(cwd);
+  if (fromWalk) return fromWalk;
+  const fromFile = resolveEngineFromFileVibegameDep(cwd);
+  if (
+    fromFile &&
+    existsSync(join(fromFile, 'package.json')) &&
+    existsSync(join(fromFile, 'scripts', 'vibegame-cli.mjs'))
+  ) {
+    return fromFile;
+  }
+  return null;
+}
+
+/**
+ * Engine: `bun install` só com `--install`.
+ * App: `bun install` se faltar vite/three ou `file:vibegame` em node_modules; fallback npm se bun falhar.
+ * @param {string[]} args rest after `vibegame run`
+ * @returns {{ install: boolean, skipBuild: boolean, skipAppInstall: boolean, devArgs: string[] }}
+ */
+function parseRunArgs(args) {
+  let install = false;
+  let skipBuild = false;
+  let skipAppInstall = false;
+  /** @type {string[]} */
+  let devArgs = [];
+  const dash = args.indexOf('--');
+  const flagsPart = dash >= 0 ? args.slice(0, dash) : args;
+  if (dash >= 0) devArgs = args.slice(dash + 1);
+  for (const f of flagsPart) {
+    if (f === '--skip-install') install = false;
+    else if (f === '--install' || f === '-i' || f === '--sync') install = true;
+    else if (f === '--skip-build') skipBuild = true;
+    else if (f === '--skip-app-install') skipAppInstall = true;
+  }
+  return { install, skipBuild, skipAppInstall, devArgs };
+}
+
+/**
+ * Executa `bun …` com stdio herdado.
+ * No Windows, `shell: true` com Bun costuma deixar `bun install` sem saída ou sem encerrar após migrar lockfile.
+ * @param {string} cwd
+ * @param {string[]} args argumentos após `bun`
+ * @returns {number}
+ */
+function runBun(cwd, args) {
+  const base = {
+    cwd,
+    stdio: 'inherit',
+    env: process.env,
+    windowsHide: true,
+  };
+  let r = spawnSync('bun', args, { ...base, shell: false });
+  if (r.error) {
+    r = spawnSync('bun', args, { ...base, shell: true });
+  }
+  if (r.error) {
+    console.error(
+      `[vibegame run] Não foi possível executar bun: ${r.error.message}`
+    );
+    return 127;
+  }
+  return r.status ?? 1;
+}
+
+/**
+ * @param {string} cwd
+ * @returns {boolean}
+ */
+function appNodeModulesLookReady(cwd) {
+  const pkgPath = join(cwd, 'package.json');
+  if (!existsSync(pkgPath)) return true;
+  let pkg;
+  try {
+    pkg = readJsonFile(pkgPath);
+  } catch {
+    return false;
+  }
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+  if (!existsSync(join(cwd, 'node_modules', 'vite', 'package.json'))) {
+    return false;
+  }
+  if (
+    deps.three &&
+    !existsSync(join(cwd, 'node_modules', 'three', 'package.json'))
+  ) {
+    return false;
+  }
+  const vg = deps.vibegame;
+  if (typeof vg === 'string' && vg.startsWith('file:')) {
+    if (!existsSync(join(cwd, 'node_modules', 'vibegame', 'package.json'))) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * @param {string} cwd
+ * @returns {number}
+ */
+function runNpmInstall(cwd) {
+  const base = {
+    cwd,
+    stdio: 'inherit',
+    env: process.env,
+    windowsHide: true,
+  };
+  let r = spawnSync('npm', ['install'], { ...base, shell: false });
+  if (r.error) {
+    r = spawnSync('npm', ['install'], { ...base, shell: true });
+  }
+  if (r.error) {
+    console.error(
+      `[vibegame run] npm install também falhou: ${r.error.message}`
+    );
+    return 127;
+  }
+  return r.status ?? 1;
+}
+
+/**
+ * @param {string} cwd
+ * @returns {number}
+ */
+function runAppPackageInstall(cwd) {
+  console.log(`[vibegame run] bun install (app) → ${cwd}`);
+  let code = runBun(cwd, ['install']);
+  if (code !== 0) {
+    console.warn(
+      '[vibegame run] bun install falhou no app; a tentar npm install (útil no Windows com dependências file:).'
+    );
+    code = runNpmInstall(cwd);
+  }
+  return code;
+}
+
+/** @returns {void} */
+function assertBunOnPath() {
+  let r = spawnSync('bun', ['--version'], {
+    stdio: 'pipe',
+    shell: false,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  if (r.error) {
+    r = spawnSync('bun', ['--version'], {
+      stdio: 'pipe',
+      shell: true,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+  }
+  if (r.error || r.status !== 0) {
+    console.error(
+      '[vibegame run] O comando `bun` não está disponível no PATH. Instale Bun: https://bun.sh'
+    );
+    process.exit(127);
+  }
+}
+
+/**
+ * @param {string} engineRoot
+ * @param {{ install: boolean, skipBuild: boolean, skipAppInstall: boolean, devArgs: string[] }} opts
+ * @returns {never}
+ */
+function runVibegameRun(engineRoot, opts) {
+  assertBunOnPath();
+  const cwd = resolve(process.cwd());
+  const localPkgPath = join(cwd, 'package.json');
+  const localPkg =
+    existsSync(localPkgPath) &&
+    (() => {
+      try {
+        return readJsonFile(localPkgPath);
+      } catch {
+        return null;
+      }
+    })();
+
+  const isEngineRoot = sameResolvedPath(cwd, engineRoot);
+  const fileEngine = resolveEngineFromFileVibegameDep(cwd);
+  const linksToThisEngine =
+    fileEngine != null && sameResolvedPath(fileEngine, engineRoot);
+  const hasDevScript = Boolean(localPkg?.scripts?.dev);
+  const isApp =
+    !isEngineRoot &&
+    hasDevScript &&
+    (isDescendantDir(cwd, engineRoot) || linksToThisEngine);
+
+  if (opts.install) {
+    console.log(`[vibegame run] bun install (engine) → ${engineRoot}`);
+    const c0 = runBun(engineRoot, ['install']);
+    if (c0 !== 0) process.exit(c0);
+  }
+
+  if (!opts.skipBuild) {
+    console.log('[vibegame run] bun run build (engine)');
+    const c1 = runBun(engineRoot, ['run', 'build']);
+    if (c1 !== 0) process.exit(c1);
+  }
+
+  if (isApp) {
+    const needsAppInstall =
+      !opts.skipAppInstall && !appNodeModulesLookReady(cwd);
+    if (needsAppInstall) {
+      const c2 = runAppPackageInstall(cwd);
+      if (c2 !== 0) process.exit(c2);
+    } else if (opts.skipAppInstall) {
+      console.log(
+        '[vibegame run] Pulando install no app (--skip-app-install).'
+      );
+    } else {
+      console.log(
+        '[vibegame run] node_modules do app parece completo — pulando install.'
+      );
+    }
+    console.log('[vibegame run] bun run dev (app)');
+    const c3 = runBun(cwd, ['run', 'dev', ...opts.devArgs]);
+    process.exit(c3);
+  }
+
+  if (isEngineRoot) {
+    console.log('[vibegame run] bun run dev (engine — vite build --watch)');
+    const c4 = runBun(engineRoot, ['run', 'dev', ...opts.devArgs]);
+    process.exit(c4);
+  }
+
+  console.error(
+    '[vibegame run] Não foi possível decidir o alvo: não está na raiz da engine nem num projeto com script `dev` ligado a essa engine.'
+  );
+  console.error(`  cwd: ${cwd}`);
+  console.error(`  engine: ${engineRoot}`);
+  console.error(
+    '  Dica: rode dentro de `examples/...` ou da raiz do pacote `vibegame`, ou use dependência `file:` para a engine.'
+  );
+  process.exit(1);
+}
 
 function help() {
   console.log(`vibegame ${pkg.version} — VibeGame (GameDev monorepo)`);
   console.log('');
   console.log('  vibegame create <name>   Create a new project (scaffold)');
+  console.log(
+    '  vibegame run [opts] [-- …]  Build da engine + dev (engine: sem bun install salvo --install)'
+  );
   console.log('  vibegame playwright …    Run Playwright CLI (alias: pw)');
   console.log('  vibegame --version       Show version');
   console.log('  vibegame help            This message');
+  console.log('');
+  console.log(
+    '  vibegame run --install / -i / --sync   Também roda bun install na engine (deps da lib)'
+  );
+  console.log('  vibegame run --skip-build     Pula build da engine (só sobe dev)');
+  console.log(
+    '  vibegame run --skip-app-install   Não roda bun install na pasta do app (node_modules já ok)'
+  );
+  console.log('  vibegame run -- --port 5174       Repassa argumentos ao `bun run dev`');
   console.log('');
   console.log(
     'Playwright examples (from monorepo root with devDependencies installed):'
@@ -127,6 +460,22 @@ if (first === 'create' || first === '-c') {
 if (first === 'playwright' || first === 'pw') {
   const pwArgs = argv.slice(1);
   runPlaywright(pwArgs);
+}
+
+if (first === 'run' || first === 'r') {
+  const runArgv = argv.slice(1);
+  const opts = parseRunArgs(runArgv);
+  const engineRoot = resolveEngineRootForRun(process.cwd());
+  if (!engineRoot) {
+    console.error(
+      '[vibegame run] Não encontrei a engine VibeGame (pacote `vibegame` no disco).'
+    );
+    console.error(
+      '  Rode a partir da pasta do repositório da engine, de `examples/...`, ou de um projeto com `"vibegame": "file:…"` no package.json.'
+    );
+    process.exit(1);
+  }
+  runVibegameRun(engineRoot, opts);
 }
 
 if (first === '--version' || first === '-v') {
