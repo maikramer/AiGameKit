@@ -1,5 +1,11 @@
 /**
  * Skymap2D / equirect PNG → ``Scene.environment`` (PMREM) para PBR no browser.
+ *
+ * Three.js equirectUv: u = atan(dir.z, dir.x), v = asin(dir.y).
+ * Panoramas gerados (Flux-LoRA-Equirectangular e semelhantes) usam a convenção padrão:
+ *   pixel-x = longitude (azimute 360°), pixel-y = latitude (elevação).
+ * O Three.js assume exatamente essa convenção, portanto **não** é necessário rodar ou transpor
+ * o bitmap — basta garantir que a textura é 2:1 (paisagem) e usar EquirectangularReflectionMapping.
  */
 /* global fetch */
 import * as THREE from 'three';
@@ -10,6 +16,43 @@ import { getRenderingContext, getScene } from '../plugins/rendering';
 export interface EquirectSkyOptions {
   /** Se true (defeito), também define ``scene.background``; se false, só iluminação IBL. */
   background?: boolean;
+  /**
+   * Rotação horizontal do panorama em graus (0–360). Roda o bitmap antes do PMREM para
+   * alinhar a direcção "frente" da câmara com o centro da imagem. Defeito: 0.
+   */
+  rotationDeg?: number;
+}
+
+/**
+ * Aplica rotação horizontal (pixel-shift em U) ao bitmap via canvas, para que o PMREM
+ * (cujo shader interno ignora ``texture.offset``) receba a textura já alinhada.
+ * Retorna a textura original se o deslocamento for 0.
+ */
+function rotateEquirectBitmap(tex: THREE.Texture, degrees: number): THREE.Texture {
+  const shift = ((degrees % 360) + 360) % 360;
+  if (shift === 0) return tex;
+  const img = tex.image as HTMLImageElement | undefined;
+  if (!img || !img.width) return tex;
+  if (typeof document === 'undefined') return tex;
+
+  const w = img.width;
+  const h = img.height;
+  const sx = Math.round((shift / 360) * w) % w;
+  if (sx === 0) return tex;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, sx, 0, w - sx, h, 0, 0, w - sx, h);
+  ctx.drawImage(img, 0, 0, sx, h, w - sx, 0, sx, h);
+
+  const out = new THREE.CanvasTexture(canvas);
+  out.mapping = tex.mapping;
+  out.colorSpace = tex.colorSpace;
+  out.needsUpdate = true;
+  tex.dispose();
+  return out;
 }
 
 /**
@@ -32,9 +75,22 @@ export async function applyEquirectSkyEnvironment(
   }
 
   const loader = new THREE.TextureLoader();
-  const tex = await loader.loadAsync(url);
-  tex.mapping = THREE.EquirectangularReflectionMapping;
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const loaded = await loader.loadAsync(url);
+  loaded.mapping = THREE.EquirectangularReflectionMapping;
+  loaded.colorSpace = THREE.SRGBColorSpace;
+
+  const img = loaded.image as HTMLImageElement | undefined;
+  if (img && img.width && img.height) {
+    const ratio = img.width / img.height;
+    if (Math.abs(ratio - 2.0) > 0.15) {
+      console.warn(
+        `[VibeGame] Sky texture "${url}" has aspect ratio ${ratio.toFixed(2)}:1 (expected 2:1 for equirectangular). ` +
+          'The sky may look distorted. Generate with 2:1 ratio (e.g. 2048×1024) for correct results.'
+      );
+    }
+  }
+
+  const tex = rotateEquirectBitmap(loaded, options?.rotationDeg ?? 0);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
@@ -77,12 +133,9 @@ export async function autoLoadSkyEnvironment(
 
   for (const dir of searchPaths) {
     for (const ext of SKY_EXTENSIONS) {
-      // Try common sky filenames
       for (const name of ['sky', 'environment', 'skybox', 'equirect']) {
         const url = `${dir}${name}${ext}`;
         try {
-          // Use fetch to check existence (HEAD request is lighter but may not
-          // work on all static hosts; GET with Range avoids downloading the file)
           const resp = await fetch(url, { method: 'HEAD' });
           if (resp.ok) {
             await applyEquirectSkyEnvironment(state, url, options);
