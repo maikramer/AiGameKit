@@ -1,4 +1,4 @@
-﻿"""Reposicionar GLB para origem nos pés (base Y=0, XZ centrados) em espaço glTF Y-up."""
+"""Reposicionar GLB para origem nos pés (base Y=0, XZ centrados) em espaço glTF Y-up."""
 
 from __future__ import annotations
 

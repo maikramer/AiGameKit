@@ -1,4 +1,4 @@
-﻿"""Testes para reposicionamento de origem (pés) em GLB."""
+"""Testes para reposicionamento de origem (pés) em GLB."""
 
 from __future__ import annotations
 

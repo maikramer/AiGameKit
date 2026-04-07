@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """GameAssets — CLI principal."""
 
 from __future__ import annotations

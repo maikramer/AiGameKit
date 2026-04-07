@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Define a origem de cada mesh no centro da base da AABB (mínimo no eixo vertical).
 
@@ -149,8 +149,7 @@ def main() -> int:
         import bpy
     except ImportError:
         print(
-            "Este script tem de ser executado dentro do Blender:\n"
-            "  blender --background --python ... -- <public_dir>",
+            "Este script tem de ser executado dentro do Blender:\n  blender --background --python ... -- <public_dir>",
             file=sys.stderr,
         )
         return 2
