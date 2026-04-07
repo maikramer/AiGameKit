@@ -11,6 +11,9 @@ export interface WaterMaterialOptions {
   terrainMaxHeight: number;
   reflectionTexture: THREE.Texture;
   heightmapTexture: THREE.Texture | null;
+  // Underwater rendering parameters
+  underwaterFogColor: THREE.Color;
+  underwaterFogDensity: number;
 }
 
 export function createWaterMaterial(
@@ -33,6 +36,10 @@ export function createWaterMaterial(
       uMaxDepth: { value: 15.0 },
       uFoamThreshold: { value: 1.5 },
       uFoamFeather: { value: 0.8 },
+      // Underwater uniforms
+      uUnderwaterFade: { value: 0.0 },
+      uUnderwaterFogColor: { value: options.underwaterFogColor },
+      uUnderwaterFogDensity: { value: options.underwaterFogDensity },
       tReflection: { value: options.reflectionTexture },
       tHeightMap: { value: options.heightmapTexture },
       uHasHeightmap: { value: options.heightmapTexture ? 1.0 : 0.0 },
@@ -106,6 +113,10 @@ uniform float uMaxDepth;
 uniform float uFoamThreshold;
 uniform float uFoamFeather;
 uniform vec3 uCameraPosition;
+// Underwater rendering uniforms
+uniform float uUnderwaterFade;
+uniform vec3 uUnderwaterFogColor;
+uniform float uUnderwaterFogDensity;
 uniform float uHasHeightmap;
 
 uniform sampler2D tReflection;
@@ -145,8 +156,10 @@ vec2 computeReflectionUV(vec3 viewDir, vec3 worldPos) {
 }
 
 float foamNoise(vec2 p) {
-  float n = sin(p.x * 12.9898 + p.y * 78.233 + uTime * 0.5) * 43758.5453;
-  return fract(n);
+  // Deterministic, time-independent noise to avoid flicker
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
 void main() {
@@ -183,6 +196,9 @@ void main() {
     );
     float foamNoiseVal = foamNoise(vWorldXZ * 2.0);
     foamMask *= smoothstep(0.3, 0.7, foamNoiseVal);
+    // Second foam layer for more natural look (time-independent)
+    float foamNoiseVal2 = foamNoise(vWorldXZ * 5.0 + 17.3);
+    foamMask *= smoothstep(0.2, 0.6, foamNoiseVal2);
     color = mix(color, uFoamColor, foamMask * 0.7);
   }
 
@@ -196,6 +212,15 @@ void main() {
 
   float alpha = uOpacity;
   alpha *= smoothstep(0.0, 0.5, depthFactor + 0.3);
+
+  // Underwater fog (applied when camera is underwater)
+  if (uUnderwaterFade > 0.0) {
+    float underwaterDepth = max(0.0, uWaterLevel - vWorldPos.y);
+    float fogFactor = 1.0 - exp(-uUnderwaterFogDensity * underwaterDepth * 0.5);
+    fogFactor = clamp(fogFactor, 0.0, 1.0) * uUnderwaterFade;
+    color = mix(color, uUnderwaterFogColor, fogFactor);
+    alpha = mix(alpha, 1.0, fogFactor * 0.5);
+  }
 
   gl_FragColor = vec4(color, alpha);
 }

@@ -10,4 +10,8 @@ export const Water = defineComponent({
   waveSpeed: Types.f32,
   waveScale: Types.f32,
   wireframe: Types.ui8,
+  underwaterFogColorR: Types.f32,
+  underwaterFogColorG: Types.f32,
+  underwaterFogColorB: Types.f32,
+  underwaterFogDensity: Types.f32,
 });

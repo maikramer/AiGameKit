@@ -12,6 +12,7 @@ export interface WaterEntityData {
   worldOffset: { x: number; y: number; z: number };
   physicsBody: RAPIER.RigidBody | null;
   physicsCollider: RAPIER.Collider | null;
+  isSubmerged: boolean;
 }
 
 const stateToWaterContext = new WeakMap<State, Map<number, WaterEntityData>>();

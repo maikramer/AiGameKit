@@ -72,6 +72,8 @@ export const WaterBootstrapSystem: System = {
         wireframe,
         terrainWorldSize,
         terrainMaxHeight,
+        underwaterFogColor: new THREE.Color(0x001a33),
+        underwaterFogDensity: 0.04,
         reflectionTexture: reflection.texture,
         heightmapTexture: heightmap,
       });
@@ -96,6 +98,7 @@ export const WaterBootstrapSystem: System = {
         worldOffset: { x: 0, y: waterLevel, z: 0 },
         physicsBody: null,
         physicsCollider: null,
+        isSubmerged: false,
       };
 
       if (state.hasComponent(entity, WorldTransform)) {
@@ -173,6 +176,26 @@ export const WaterRenderSystem: System = {
 
       data.material.uniforms.uTime.value = time;
       data.material.uniforms.uCameraPosition.value.copy(camera.position);
+      // Underwater state: compute fade based on camera height relative to water level
+      const waterLevel = Water.waterLevel[entity];
+      const cameraY = camera.position.y;
+      const underwaterFade = cameraY < waterLevel
+        ? Math.min(1.0, (waterLevel - cameraY) / 5.0)
+        : 0.0;
+      if (data.material.uniforms.uUnderwaterFade) {
+        data.material.uniforms.uUnderwaterFade.value = underwaterFade;
+      }
+      // Underwater fog color and density from component
+      const fogR = Water.underwaterFogColorR[entity] ?? 0.0;
+      const fogG = Water.underwaterFogColorG[entity] ?? 0.0;
+      const fogB = Water.underwaterFogColorB[entity] ?? 0.0;
+      const fogDensity = Water.underwaterFogDensity[entity] ?? 0.0;
+      if (data.material.uniforms.uUnderwaterFogColor) {
+        data.material.uniforms.uUnderwaterFogColor.value.setRGB(fogR, fogG, fogB);
+      }
+      if (data.material.uniforms.uUnderwaterFogDensity) {
+        data.material.uniforms.uUnderwaterFogDensity.value = fogDensity;
+      }
 
       const heightmap = findNearestTerrainHeightmap(state);
       if (heightmap && !data.material.uniforms.tHeightMap.value) {
@@ -213,14 +236,13 @@ export const WaterPhysicsSystem: System = {
       const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(ox, oy, oz);
       const body = physicsWorld.createRigidBody(bodyDesc);
 
-      const halfExtents = new RAPIER.Vector3(size / 2, 0.05, size / 2);
+      const halfExtents = new RAPIER.Vector3(size / 2, 2.0, size / 2);
       const colliderDesc = RAPIER.ColliderDesc.cuboid(
         halfExtents.x,
         halfExtents.y,
         halfExtents.z
       );
-      colliderDesc.setFriction(0.1);
-      colliderDesc.setRestitution(0.0);
+      colliderDesc.setSensor(true);
 
       const collider = physicsWorld.createCollider(colliderDesc, body);
 

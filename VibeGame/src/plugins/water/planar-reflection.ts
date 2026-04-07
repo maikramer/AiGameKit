@@ -32,6 +32,9 @@ export class PlanarReflection {
     camera: THREE.PerspectiveCamera,
     waterLevel: number
   ): void {
+    if (camera.position.y < waterLevel) {
+      return;
+    }
     this.reflectionPlane.set(new THREE.Vector3(0, 1, 0), -waterLevel);
 
     this.mirrorCamera.position.copy(camera.position);
