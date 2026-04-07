@@ -1,10 +1,12 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { loadGltfToScene } from '../../extras/gltf-bridge';
 import { getScene } from '../rendering';
 import { Transform } from '../transforms/components';
-import { GltfPending } from './components';
+import { GltfPending, GltfPhysicsPending } from './components';
+import { registerGltfLocalYBounds } from './gltf-bounds-cache';
 import { getGltfUrl, isGltfInFlight, setGltfInFlight } from './context';
+import { registerGltfRootGroup } from './group-registry';
 
 const gltfLoadQuery = defineQuery([GltfPending]);
 
@@ -55,15 +57,25 @@ export const GltfXmlLoadSystem: System = {
       const url = getGltfUrl(state, eid);
       if (!url) {
         GltfPending.loaded[eid] = 1;
+        if (state.hasComponent(eid, GltfPhysicsPending)) {
+          GltfPhysicsPending.ready[eid] = 1;
+        }
         continue;
       }
       setGltfInFlight(state, eid, true);
       void loadGltfToScene(state, url)
         .then((group) => {
+          registerGltfLocalYBounds(url, group);
           applyTransformToGroup(group, eid);
+          if (state.exists(eid) && state.hasComponent(eid, GltfPhysicsPending)) {
+            registerGltfRootGroup(state, eid, group);
+          }
         })
         .catch((err: unknown) => {
           console.error('[gltf-load]', err);
+          if (state.exists(eid) && state.hasComponent(eid, GltfPhysicsPending)) {
+            GltfPhysicsPending.ready[eid] = 1;
+          }
         })
         .finally(() => {
           GltfPending.loaded[eid] = 1;

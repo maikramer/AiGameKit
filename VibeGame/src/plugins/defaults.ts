@@ -1,4 +1,4 @@
-import type { Plugin } from '../core';
+﻿import type { Plugin } from '../core';
 import { AnimationPlugin } from './animation/plugin';
 import { FollowCameraPlugin } from './follow-camera/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
@@ -10,6 +10,7 @@ import { PlayerPlugin } from './player/plugin';
 import { RenderingPlugin } from './rendering/plugin';
 import { RespawnPlugin } from './respawn/plugin';
 import { StartupPlugin } from './startup/plugin';
+import { SpawnerPlugin } from './spawner/plugin';
 import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { TweenPlugin } from './tweening';
@@ -31,6 +32,7 @@ export const DefaultPlugins: Plugin[] = [
   StartupPlugin,
   RespawnPlugin,
   TerrainPlugin,
+  SpawnerPlugin,
   WaterPlugin,
   DebugPlugin,
 ];

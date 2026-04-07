@@ -36,6 +36,8 @@ export const TerrainPlugin: Plugin = {
         metalness: 0.0,
         normalStrength: 1.0,
         skirtDepth: 1.0,
+        heightSmoothing: 0.35,
+        heightSmoothingSpread: 1.25,
         // Physics
         collisionResolution: 64,
         // Debug

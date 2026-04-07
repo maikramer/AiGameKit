@@ -13,6 +13,10 @@ export const Terrain = defineComponent({
   metalness: Types.f32,
   normalStrength: Types.f32,
   skirtDepth: Types.f32,
+  /** 0 = deslocamento só com 1 texel (mais barato); >0 mistura com média 5-tap em cruz (reduz facetas). */
+  heightSmoothing: Types.f32,
+  /** Multiplicador do passo em texels para o filtro de deslocamento (mín. 0,25 na lib). */
+  heightSmoothingSpread: Types.f32,
   // Physics
   collisionResolution: Types.ui8,
   // Debug

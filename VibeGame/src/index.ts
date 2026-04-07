@@ -51,7 +51,38 @@ export type {
   SceneManifestEntry,
 } from './plugins/scene-manifest';
 export { Terrain, TerrainPlugin } from './plugins/terrain';
+export {
+  SpawnerPlugin,
+  SpawnerPending,
+  TerrainSpawnSystem,
+  spawnGroupRecipe,
+  isNormalWithinSlopeLimit,
+  normalFromHeightSampler,
+  sampleTerrainSurface,
+} from './plugins/spawner';
+export type {
+  ChildTemplateProfileId,
+  GroundAlignMode,
+  GroupSpawnDefaults,
+  SpawnGroupProfileId,
+  SpawnGroupSpec,
+  SpawnTemplateRole,
+  SpawnTemplateSpec,
+  TerrainSurfaceSample,
+} from './plugins/spawner';
+export {
+  applyChildTemplateProfile,
+  getGroupSpawnDefaults,
+  normalizeGroupProfileId,
+  optBool,
+  optNumber,
+  resolveGroupSpawnFields,
+} from './plugins/spawner';
 export type { TerrainEntityData } from './plugins/terrain';
+export {
+  getGltfLocalYBounds,
+  prefetchGltfLocalYBounds,
+} from './plugins/gltf-xml';
 export { Water, WaterPlugin } from './plugins/water';
 export type { WaterEntityData } from './plugins/water';
 export { DebugPlugin } from './plugins/debug';

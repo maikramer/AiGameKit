@@ -1,8 +1,6 @@
-# GLTF-XML Plugin (context.md)
+﻿# GLTF-XML Plugin (context.md)
 <!-- LLM:OVERVIEW -->
-Declarative `<gltf-load>` XML tag for loading static GLB models into the scene. Handles async loading with ded in-flight tracking and position/rotation sync. For static props.
- No animation support.
- For animated player models, use `<player-gltf>`.
+Declarative `<gltf-load>` and `<gltf-dynamic>` XML tags for loading GLB models. Static props use `gltf-load`; `gltf-dynamic` adds a **dynamic** Rapier body with a **box collider** fitted to the model AABB after load (see `GltfDynamicPhysicsSystem`). No GLB animation in these tags. For animated player models, use `<player-gltf>`.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -14,7 +12,9 @@ gltf-xml/
 ├── plugin.ts       # Plugin: GltfXmlPlugin (gltf-load recipe + GltfXmlLoadSystem + GltfPending component)
 ├── components.ts   # GltfPending component (loaded: ui8, 0/1)
 ├── systems.ts      # GltfXmlLoadSystem
-└── recipes.ts      # gltfLoadRecipe (gltf-load recipe)
+├── group-registry.ts # raiz Three.js por entidade (gltf-dynamic)
+├── gltf-dynamic-system.ts # Body/Collider após AABB
+└── recipes.ts      # gltfLoadRecipe, gltfDynamicRecipe
 ```
 
 ## Scope
@@ -46,10 +46,21 @@ gltf-xml/
 
 ### Recipe
 - **gltf-load** — components: ['transform', 'gltfPending'], adapter: `url` stores URL in module-level map
+- **gltf-dynamic** — components: ['transform', 'gltfPending', 'gltfPhysicsPending']; mesmo `url`; defaults `gltfPhysicsPending`: `collider-margin`, `mass`, `friction`, `restitution`; após load, cria `Body` (Dynamic) + `Collider` (box) com tamanho do AABB (+ margem), compensando o `scale` do Transform no componente collider.
+
 <!-- /LLM:REFERENCE -->
 <!-- LLM:EXAMPLES -->
 ## Examples
 ```xml
 <gltf-load url="/assets/models/stone_pillar.glb" transform="pos: 10 2 -8; scale: 1.5 1.5" />
+<gltf-dynamic
+  url="/assets/models/wooden_crate.glb"
+  transform="pos: 2 0.5 2; scale: 1 1 1"
+  mass="2"
+  friction="0.6"
+  collider-margin="0.03"
+></gltf-dynamic>
 ```
+Atributos opcionais `mass`, `friction`, `restitution`, `collider-margin` aplicam-se ao componente `gltfPhysicsPending` (via recipe).
+
 <!-- /LLM:EXAMPLES -->

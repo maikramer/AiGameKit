@@ -21,6 +21,8 @@ export interface TerrainEntityData {
   lastMetalness: number;
   lastSkirtDepth: number;
   lastWireframe: number;
+  lastHeightSmoothing: number;
+  lastHeightSmoothingSpread: number;
 }
 
 const stateToTerrainContext = new WeakMap<
@@ -98,6 +100,172 @@ export function extractTerrainHeightmapImageData(
   if (!ctx) return null;
   ctx.drawImage(img as CanvasImageSource, 0, 0);
   return ctx.getImageData(0, 0, w, h);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/** Bilinear no canal R (0–1) em coordenadas de textura normalizadas; `vv` é o mesmo eixo Z mundo que `resampleChunkHeightsForCollider`. */
+function sampleHeightmapRedBilinearNorm(
+  imageData: ImageData,
+  u: number,
+  vv: number,
+  matchWebGL: boolean
+): number {
+  const iw = imageData.width;
+  const ih = imageData.height;
+  if (iw < 1 || ih < 1) return 0;
+  const vRow = matchWebGL ? 1 - vv : vv;
+  const fx = u * (iw - 1);
+  const fy = vRow * (ih - 1);
+  const x0 = Math.floor(fx);
+  const y0 = Math.floor(fy);
+  const x1 = Math.min(iw - 1, x0 + 1);
+  const y1 = Math.min(ih - 1, y0 + 1);
+  const tx = fx - x0;
+  const ty = fy - y0;
+  const rAt = (x: number, y: number) => {
+    const cx = Math.max(0, Math.min(iw - 1, x));
+    const cy = Math.max(0, Math.min(ih - 1, y));
+    const i = (cy * iw + cx) * 4;
+    return imageData.data[i] / 255;
+  };
+  return lerp(lerp(rAt(x0, y0), rAt(x1, y0), tx), lerp(rAt(x0, y1), rAt(x1, y1), tx), ty);
+}
+
+/**
+ * Altura (m) a partir de posição local ao terreno; UV fora do quadrado viram 0 (como clamp da textura).
+ */
+function terrainHeightFromLocal(
+  imageData: ImageData,
+  worldSize: number,
+  maxHeight: number,
+  lx: number,
+  lz: number,
+  matchWebGL: boolean
+): number {
+  const halfWorld = worldSize / 2;
+  const lxC = Math.max(-halfWorld, Math.min(halfWorld, lx));
+  const lzC = Math.max(-halfWorld, Math.min(halfWorld, lz));
+  const u = (lxC + halfWorld) / worldSize;
+  const vv = (lzC + halfWorld) / worldSize;
+  if (u < 0 || u > 1 || vv < 0 || vv > 1) return 0;
+  return sampleHeightmapRedBilinearNorm(imageData, u, vv, matchWebGL) * maxHeight;
+}
+
+/**
+ * Mesma lógica que o vertex shader em `webgl-material.ts`: bilinear (como `texture2D` linear) e,
+ * se `heightSmoothing` > 0, média em cruz + `mix` com o centro — alinha spawn ao mesh deslocado.
+ * `heightMapSize` deve ser a largura da textura (igual `uHeightMapSize` no shader).
+ */
+export function sampleTerrainHeightGpuAligned(
+  imageData: ImageData,
+  worldSize: number,
+  maxHeight: number,
+  worldX: number,
+  worldZ: number,
+  matchWebGL: boolean,
+  terrainOriginX: number,
+  terrainOriginZ: number,
+  heightMapSize: number,
+  heightSmoothing: number,
+  heightSmoothingSpread: number
+): number {
+  const lx = worldX - terrainOriginX;
+  const lz = worldZ - terrainOriginZ;
+  const sm = Math.min(1, Math.max(0, heightSmoothing));
+  const h0 = terrainHeightFromLocal(
+    imageData,
+    worldSize,
+    maxHeight,
+    lx,
+    lz,
+    matchWebGL
+  );
+  if (sm < 1e-6) return h0;
+
+  const spread = Math.max(0.25, heightSmoothingSpread);
+  const hm = Math.max(1, heightMapSize);
+  const dWorld = (spread / hm) * worldSize;
+  const hN = terrainHeightFromLocal(
+    imageData,
+    worldSize,
+    maxHeight,
+    lx,
+    lz + dWorld,
+    matchWebGL
+  );
+  const hS = terrainHeightFromLocal(
+    imageData,
+    worldSize,
+    maxHeight,
+    lx,
+    lz - dWorld,
+    matchWebGL
+  );
+  const hE = terrainHeightFromLocal(
+    imageData,
+    worldSize,
+    maxHeight,
+    lx + dWorld,
+    lz,
+    matchWebGL
+  );
+  const hW = terrainHeightFromLocal(
+    imageData,
+    worldSize,
+    maxHeight,
+    lx - dWorld,
+    lz,
+    matchWebGL
+  );
+  const hF = (h0 + hN + hS + hE + hW) * 0.2;
+  return lerp(h0, hF, sm);
+}
+
+/**
+ * Amostra altura do heightmap em coordenadas de mundo.
+ * `matchWebGL: true` usa a mesma convenção de V que o shader (e `resampleChunkHeightsForCollider` com `invertWorldV: true`).
+ * `terrainOriginX/Z` são a origem horizontal do terreno (ex.: `TerrainEntityData.worldOffset`); o heightmap é definido no espaço local do grupo.
+ * `boxKernel: 3` faz média dos 9 texels centrados (vizinhança 3×3), útil para heightmaps em “degrau” / voxel.
+ */
+export function sampleTerrainHeightFromHeightmap(
+  imageData: ImageData,
+  worldSize: number,
+  maxHeight: number,
+  worldX: number,
+  worldZ: number,
+  matchWebGL: boolean,
+  terrainOriginX = 0,
+  terrainOriginZ = 0,
+  boxKernel: 1 | 3 = 1
+): number {
+  const lx = worldX - terrainOriginX;
+  const lz = worldZ - terrainOriginZ;
+  const halfWorld = worldSize / 2;
+  const u = (lx + halfWorld) / worldSize;
+  const vv = (lz + halfWorld) / worldSize;
+  if (u < 0 || u > 1 || vv < 0 || vv > 1) return 0;
+  const iw = imageData.width;
+  const ih = imageData.height;
+  const imgX = Math.floor(u * (iw - 1));
+  const vRow = matchWebGL ? 1 - vv : vv;
+  const imgY = Math.floor(vRow * (ih - 1));
+  if (boxKernel === 1) {
+    const idx = (imgY * iw + imgX) * 4;
+    return (imageData.data[idx] / 255) * maxHeight;
+  }
+  let sum = 0;
+  for (let ky = -1; ky <= 1; ky++) {
+    for (let kx = -1; kx <= 1; kx++) {
+      const ix = Math.min(iw - 1, Math.max(0, imgX + kx));
+      const iy = Math.min(ih - 1, Math.max(0, imgY + ky));
+      const idx = (iy * iw + ix) * 4;
+      sum += imageData.data[idx] / 255;
+    }
+  }
+  return (sum / 9) * maxHeight;
 }
 
 export type TerrainChunkCollisionLike = {

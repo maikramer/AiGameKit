@@ -24,6 +24,8 @@ export class WebGLTerrainMaterialProvider {
   private skirtWidthUniform = { value: 0.015625 };
   private worldSizeUniform = { value: 2048 };
   private heightMapSizeUniform = { value: 2048 };
+  private heightSmoothingUniform = { value: 0 };
+  private heightSmoothingSpreadUniform = { value: 1.25 };
 
   createMaterial(context: TerrainMaterialContext): THREE.Material {
     const hmImage = context.heightMap.image as
@@ -46,6 +48,11 @@ export class WebGLTerrainMaterialProvider {
     );
     this.worldSizeUniform.value = context.worldSize;
     this.heightMapSizeUniform.value = hmSize;
+    this.heightSmoothingUniform.value = Math.min(1, Math.max(0, context.heightSmoothing));
+    this.heightSmoothingSpreadUniform.value = Math.max(
+      0.25,
+      context.heightSmoothingSpread
+    );
 
     const material = new THREE.MeshStandardMaterial({
       color: context.diffuseTexture ? 0xffffff : 0x4a7a3a,
@@ -64,6 +71,8 @@ export class WebGLTerrainMaterialProvider {
       shader.uniforms.uSkirtWidth = this.skirtWidthUniform;
       shader.uniforms.uWorldSize = this.worldSizeUniform;
       shader.uniforms.uHeightMapSize = this.heightMapSizeUniform;
+      shader.uniforms.uHeightSmoothing = this.heightSmoothingUniform;
+      shader.uniforms.uHeightSmoothingSpread = this.heightSmoothingSpreadUniform;
 
       shader.vertexShader = shader.vertexShader.replace(
         '#include <common>',
@@ -77,6 +86,8 @@ export class WebGLTerrainMaterialProvider {
         uniform float uSkirtWidth;
         uniform float uWorldSize;
         uniform float uHeightMapSize;
+        uniform float uHeightSmoothing;
+        uniform float uHeightSmoothingSpread;
         `
       );
 
@@ -109,7 +120,19 @@ export class WebGLTerrainMaterialProvider {
         vec2 _dUV = vec2(uv.x, 1.0 - uv.y);
         vec2 _dSUV = _dUV * instanceUVTransform.x;
         vec2 _dGUV = _dSUV + vec2(instanceUVTransform.y, instanceUVTransform.z);
-        float _dH = texture2D(tHeightMap, _dGUV).r;
+        float _dH;
+        if (uHeightSmoothing < 0.0001) {
+          _dH = texture2D(tHeightMap, _dGUV).r;
+        } else {
+          float _dTS = (1.0 / uHeightMapSize) * uHeightSmoothingSpread;
+          float _h0 = texture2D(tHeightMap, _dGUV).r;
+          float _hN = texture2D(tHeightMap, _dGUV + vec2(0.0, -_dTS)).r;
+          float _hS = texture2D(tHeightMap, _dGUV + vec2(0.0, _dTS)).r;
+          float _hE = texture2D(tHeightMap, _dGUV + vec2(_dTS, 0.0)).r;
+          float _hW = texture2D(tHeightMap, _dGUV + vec2(-_dTS, 0.0)).r;
+          float _hF = (_h0 + _hN + _hS + _hE + _hW) * 0.2;
+          _dH = mix(_h0, _hF, uHeightSmoothing);
+        }
         transformed.y += _dH * uMaxHeight;
         float _skI = uSkirtWidth * 0.65;
         float _skL = (1.0 - smoothstep(_skI, uSkirtWidth, _dUV.x)) * instanceEdgeSkirt.x;
@@ -158,14 +181,28 @@ export class WebGLTerrainMaterialProvider {
     this.skirtDepthUniform.value = Math.max(0, depth);
   }
 
-  setHeightSmoothing(_amount: number): void {}
+  setHeightSmoothing(amount: number): void {
+    this.heightSmoothingUniform.value = Math.min(1, Math.max(0, amount));
+  }
 
-  setHeightSmoothingSpread(_spread: number): void {}
+  setHeightSmoothingSpread(spread: number): void {
+    this.heightSmoothingSpreadUniform.value = Math.max(0.25, spread);
+  }
 
   setShowChunkBorders(_enabled: boolean): void {}
 
   onHeightMapUpdate(heightMap: THREE.Texture): void {
     this.heightMapUniform.value = heightMap;
+    const img = heightMap.image as
+      | HTMLImageElement
+      | HTMLCanvasElement
+      | { width?: number }
+      | undefined;
+    const w =
+      img && typeof img.width === 'number' && img.width > 0
+        ? img.width
+        : this.heightMapSizeUniform.value;
+    this.heightMapSizeUniform.value = w;
   }
 
   dispose(): void {

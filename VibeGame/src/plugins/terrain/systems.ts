@@ -73,6 +73,8 @@ export const TerrainBootstrapSystem: System = {
           resolution: Terrain.resolution[entity],
           lodDistanceRatio: Terrain.lodDistanceRatio[entity],
           wireframe: Terrain.wireframe[entity] === 1,
+          heightSmoothing: Math.min(1, Math.max(0, Terrain.heightSmoothing[entity])),
+          heightSmoothingSpread: Math.max(0.25, Terrain.heightSmoothingSpread[entity]),
         });
 
         // Apply runtime-configurable params
@@ -107,6 +109,8 @@ export const TerrainBootstrapSystem: System = {
           lastMetalness: -1,
           lastSkirtDepth: -1,
           lastWireframe: -1,
+          lastHeightSmoothing: -1,
+          lastHeightSmoothingSpread: -1,
         };
         context.set(entity, data);
 
@@ -181,6 +185,8 @@ function applyMaterialProperties(
   const metalness = Terrain.metalness[entity];
   const skirtDepth = Terrain.skirtDepth[entity];
   const wireframe = Terrain.wireframe[entity];
+  const heightSmoothing = Terrain.heightSmoothing[entity];
+  const heightSmoothingSpread = Terrain.heightSmoothingSpread[entity];
 
   // Only update when values change (avoids redundant uniform uploads)
   if (roughness !== data.lastRoughness) {
@@ -198,6 +204,14 @@ function applyMaterialProperties(
   if (wireframe !== data.lastWireframe) {
     data.materialProvider.setWireframe(wireframe === 1);
     data.lastWireframe = wireframe;
+  }
+  if (heightSmoothing !== data.lastHeightSmoothing) {
+    data.terrainLOD.setHeightSmoothing(heightSmoothing);
+    data.lastHeightSmoothing = heightSmoothing;
+  }
+  if (heightSmoothingSpread !== data.lastHeightSmoothingSpread) {
+    data.terrainLOD.setHeightSmoothingSpread(heightSmoothingSpread);
+    data.lastHeightSmoothingSpread = heightSmoothingSpread;
   }
 }
 
