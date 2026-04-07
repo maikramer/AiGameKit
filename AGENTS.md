@@ -305,3 +305,17 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Each package may have its own `.venv/` — tests should use the package-local venv.
 - Environment variables are the primary configuration mechanism (see README.md "Environment variables" section).
 - Run `make check` before considering work complete.
+
+## Learned User Preferences
+
+- Prefere explicações e pedidos de funcionalidade em português ao trabalhar neste repositório.
+- Para o fluxo `vibegame run`, quer um loop rápido de desenvolvimento da engine: instalação de dependências no app deve ser opcional, não obrigatória em todo uso.
+- Spawner e conteúdo declarativo no VibeGame: manter o mesmo estilo de recipes/parsers/XML em `index.html` já usado no projeto.
+- Spawner: diferenciar objetos estáticos (árvores, props) de dinâmicos (caixas empurráveis, inimigos em movimento, etc.) e usar perfis que definam defaults automáticos por tipo de objeto.
+- Ajustes de spawn e terreno: priorizar soluções que não degradem muito a performance do mapa.
+
+## Learned Workspace Facts
+
+- Terreno em exemplos VibeGame pode parecer voxel/escadinha; amostragem de altura/normal com um único ponto tende a falhar — estratégias multi-amostra ou suavização costumam ser necessárias para alinhar props ao chão.
+- Problemas de árvores a flutuar ou enterrar foram atribuídos em grande parte a pivô/origem do GLB no centro do mesh em vez da base; o utilizador espera que a pipeline Text3D/GameAssets posicione a origem na base por omissão, com pivô ao centro só quando explicitamente adequado ao tipo de asset.
+- O comando `vibegame run` foi concebido para rebuild/atualização da engine face a exemplos que usam `file:vibegame`; em Windows podem ocorrer falhas de cópia/cache (`ENOENT` no pacote `vibegame`) e é preciso alvo/cwd coerente com a raiz da engine ou exemplo com `dev` ligado à engine.
