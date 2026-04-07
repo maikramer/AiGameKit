@@ -1,7 +1,7 @@
 ﻿import { TerrainLOD } from '@interverse/three-terrain-lod';
-import type * as THREE from 'three';
-import type { State, System } from '../../core';
+import * as THREE from 'three';
 import { defineQuery } from '../../core';
+import type { State, System } from '../../core';
 import { getPhysicsContext, RAPIER } from '../physics';
 import { PhysicsWorldSystem } from '../physics/systems';
 import { CameraSyncSystem } from '../rendering/systems';
@@ -12,13 +12,14 @@ import {
   threeCameras,
 } from '../rendering';
 import { TransformHierarchySystem, WorldTransform } from '../transforms';
-import { Terrain } from './components';
+import { Terrain, TerrainDebugInfo } from './components';
 import {
   extractTerrainHeightmapImageData,
   getTerrainContext,
   getTerrainHeightmapUrl,
   getTerrainTextureUrl,
   resampleChunkHeightsForCollider,
+  setTerrainHeightmapUrl,
   type TerrainEntityData,
 } from './utils';
 import { WebGLTerrainMaterialProvider } from './webgl-material';
@@ -28,11 +29,18 @@ const COLLIDER_HEIGHT_MATCH_WEBGL = true;
 
 const terrainQuery = defineQuery([Terrain]);
 const cameraQuery = defineQuery([MainCamera, WorldTransform]);
+const debugQuery = defineQuery([Terrain, TerrainDebugInfo]);
 
 function getActiveCamera(state: State): THREE.Camera | null {
   const cameraEntities = cameraQuery(state.world);
   if (cameraEntities.length === 0) return null;
   return threeCameras.get(cameraEntities[0]) ?? null;
+}
+
+/** Collision resolution enum mapping: 0=32, 1=64, 2=128. */
+function resolveCollisionResolution(raw: number): 32 | 64 | 128 {
+  if (raw === 32 || raw === 128) return raw;
+  return 64;
 }
 
 /**
@@ -67,10 +75,19 @@ export const TerrainBootstrapSystem: System = {
           wireframe: Terrain.wireframe[entity] === 1,
         });
 
-        // DefaultTerrainMaterial in three-terrain-lod is WebGPU/TSL; WebGL needs this provider.
-        // Do not wait for renderer: TerrainBootstrap runs in `fixed` before the first `draw`
-        // where WebGLRenderer is created — if we skip here, Node materials never compile in WebGL.
-        terrainLOD.setMaterialProvider(new WebGLTerrainMaterialProvider());
+        // Apply runtime-configurable params
+        terrainLOD.setLODHysteresis(Terrain.lodHysteresis[entity]);
+        terrainLOD.setNormalStrength(Terrain.normalStrength[entity]);
+        terrainLOD.setCollisionResolution(
+          resolveCollisionResolution(Terrain.collisionResolution[entity])
+        );
+        if (Terrain.showChunkBorders[entity] === 1) {
+          terrainLOD.setShowChunkBorders(true);
+        }
+
+        const materialProvider = new WebGLTerrainMaterialProvider();
+        terrainLOD.setMaterialProvider(materialProvider);
+
         {
           const r = Terrain.resolution[entity];
           const cr: 32 | 64 | 128 = r === 32 || r === 64 || r === 128 ? r : 64;
@@ -85,6 +102,11 @@ export const TerrainBootstrapSystem: System = {
           collisionReady: false,
           worldOffset: { x: 0, y: 0, z: 0 },
           chunkColliders: new Map(),
+          materialProvider,
+          lastRoughness: -1,
+          lastMetalness: -1,
+          lastSkirtDepth: -1,
+          lastWireframe: -1,
         };
         context.set(entity, data);
 
@@ -95,10 +117,34 @@ export const TerrainBootstrapSystem: System = {
           .init()
           .then(() => {
             entityData.initialized = true;
+            // Apply material properties after init (material is created during init)
+            applyMaterialProperties(entityData, entity);
           })
           .catch((err: unknown) => {
             console.error('[terrain] Failed to initialize TerrainLOD:', err);
           });
+      }
+
+      // Hot-reload: check if heightmap URL changed
+      if (data) {
+        const newHmUrl = getTerrainHeightmapUrl(state, entity);
+        if (newHmUrl && newHmUrl !== data.heightmapUrl) {
+          data.heightmapUrl = newHmUrl;
+          if (data.initialized) {
+            data.terrainLOD
+              .loadHeightMap(newHmUrl, true)
+              .then(() => {
+                data.collisionReady = false;
+              })
+              .catch((err: unknown) => {
+                console.error('[terrain] Failed to hot-reload heightmap:', err);
+              });
+          }
+        }
+        const newTexUrl = getTerrainTextureUrl(state, entity);
+        if (newTexUrl && newTexUrl !== data.textureUrl) {
+          data.textureUrl = newTexUrl;
+        }
       }
     }
 
@@ -126,6 +172,35 @@ export const TerrainBootstrapSystem: System = {
   },
 };
 
+/** Apply ECS component values to the Three.js material at runtime. */
+function applyMaterialProperties(
+  data: TerrainEntityData,
+  entity: number
+): void {
+  const roughness = Terrain.roughness[entity];
+  const metalness = Terrain.metalness[entity];
+  const skirtDepth = Terrain.skirtDepth[entity];
+  const wireframe = Terrain.wireframe[entity];
+
+  // Only update when values change (avoids redundant uniform uploads)
+  if (roughness !== data.lastRoughness) {
+    data.materialProvider.setRoughness(roughness);
+    data.lastRoughness = roughness;
+  }
+  if (metalness !== data.lastMetalness) {
+    data.materialProvider.setMetalness(metalness);
+    data.lastMetalness = metalness;
+  }
+  if (skirtDepth !== data.lastSkirtDepth) {
+    data.materialProvider.setSkirtDepth(skirtDepth);
+    data.lastSkirtDepth = skirtDepth;
+  }
+  if (wireframe !== data.lastWireframe) {
+    data.materialProvider.setWireframe(wireframe === 1);
+    data.lastWireframe = wireframe;
+  }
+}
+
 /** LOD / frustum updates — must run after camera is updated (draw group). */
 export const TerrainRenderSystem: System = {
   group: 'draw',
@@ -147,6 +222,34 @@ export const TerrainRenderSystem: System = {
         data.worldOffset = { x: ox, y: oy, z: oz };
       }
       data.terrainLOD.update(camera);
+
+      // Apply material property changes every frame (cheap equality check)
+      if (data.initialized) {
+        applyMaterialProperties(data, entity);
+      }
+    }
+  },
+};
+
+/** Populates TerrainDebugInfo component with live terrain statistics. */
+export const TerrainDebugSystem: System = {
+  group: 'draw',
+  after: [CameraSyncSystem],
+  update(state: State) {
+    const context = getTerrainContext(state);
+    const now = state.time.elapsed;
+
+    for (const entity of debugQuery(state.world)) {
+      const data = context.get(entity);
+      if (!data || !data.initialized) continue;
+
+      const stats = data.terrainLOD.getStats();
+      TerrainDebugInfo.activeChunks[entity] = stats.instances.active;
+      TerrainDebugInfo.drawCalls[entity] = stats.drawCalls;
+      TerrainDebugInfo.totalInstances[entity] = stats.instances.total;
+      TerrainDebugInfo.geometryCount[entity] = stats.geometries;
+      TerrainDebugInfo.materialCount[entity] = stats.materials;
+      TerrainDebugInfo.lastUpdated[entity] = now;
     }
   },
 };
@@ -373,4 +476,123 @@ function cleanupPhysics(
     physicsWorld.removeRigidBody(body);
   }
   data.chunkColliders.clear();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public query helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Sample terrain height at a world position.
+ * Returns 0 if no terrain entity is initialized.
+ */
+export function getTerrainHeightAt(
+  state: State,
+  worldX: number,
+  worldZ: number
+): number {
+  const context = getTerrainContext(state);
+  for (const [, data] of context) {
+    if (data.initialized) {
+      return data.terrainLOD.getHeightAt(worldX, worldZ);
+    }
+  }
+  return 0;
+}
+
+/**
+ * Find the nearest initialized terrain entity to a given world position.
+ * Returns 0 if no terrain is available.
+ */
+export function findNearestTerrainEntity(
+  state: State,
+  worldX: number,
+  worldZ: number
+): number {
+  const context = getTerrainContext(state);
+  let bestEntity = 0;
+  let bestDist = Infinity;
+
+  for (const [entity, data] of context) {
+    if (!data.initialized) continue;
+    const dx = data.worldOffset.x - worldX;
+    const dz = data.worldOffset.z - worldZ;
+    const dist = dx * dx + dz * dz;
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestEntity = entity;
+    }
+  }
+  return bestEntity;
+}
+
+/**
+ * Toggle wireframe on a specific terrain entity at runtime.
+ * No-op if the entity has no terrain data.
+ */
+export function setTerrainWireframe(
+  state: State,
+  entity: number,
+  enabled: boolean
+): void {
+  const context = getTerrainContext(state);
+  const data = context.get(entity);
+  if (data?.initialized) {
+    data.terrainLOD.setWireframe(enabled);
+    data.materialProvider.setWireframe(enabled);
+    data.lastWireframe = enabled ? 1 : 0;
+  }
+}
+
+/**
+ * Hot-reload the heightmap on a terrain entity from a new URL.
+ * Invalidates physics colliders after loading.
+ */
+export function reloadTerrainHeightmap(
+  state: State,
+  entity: number,
+  url: string
+): void {
+  const context = getTerrainContext(state);
+  const data = context.get(entity);
+  if (!data?.initialized) return;
+
+  setTerrainHeightmapUrl(state, entity, url);
+  data.heightmapUrl = url;
+  data.terrainLOD
+    .loadHeightMap(url, true)
+    .then(() => {
+      data.collisionReady = false;
+    })
+    .catch((err: unknown) => {
+      console.error('[terrain] Failed to hot-reload heightmap:', err);
+    });
+}
+
+/**
+ * Get live terrain statistics for a terrain entity.
+ * Returns null if the entity has no terrain data or is not initialized.
+ */
+export function getTerrainStats(
+  state: State,
+  entity: number
+): {
+  activeChunks: number;
+  drawCalls: number;
+  totalInstances: number;
+  geometries: number;
+  materials: number;
+} | null {
+  const context = getTerrainContext(state);
+  const data = context.get(entity);
+  if (!data?.initialized) return null;
+
+  const stats = data.terrainLOD.getStats();
+  return {
+    activeChunks: stats.instances.active,
+    drawCalls: stats.drawCalls,
+    totalInstances: stats.instances.total,
+    geometries: stats.geometries,
+    materials: stats.materials,
+  };
 }

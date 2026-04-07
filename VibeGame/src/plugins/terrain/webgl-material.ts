@@ -126,6 +126,19 @@ export class WebGLTerrainMaterialProvider {
     return material;
   }
 
+  /** Update MeshStandardMaterial roughness/metalness (runtime-safe, no recompile). */
+  setRoughness(value: number): void {
+    if (this.material) {
+      this.material.roughness = Math.max(0, Math.min(1, value));
+    }
+  }
+
+  setMetalness(value: number): void {
+    if (this.material) {
+      this.material.metalness = Math.max(0, Math.min(1, value));
+    }
+  }
+
   setWireframe(enabled: boolean): void {
     if (this.material) {
       this.material.wireframe = enabled;
@@ -139,6 +152,10 @@ export class WebGLTerrainMaterialProvider {
 
   setNormalStrength(strength: number): void {
     this.normalStrengthUniform.value = Math.max(0, strength);
+  }
+
+  setSkirtDepth(depth: number): void {
+    this.skirtDepthUniform.value = Math.max(0, depth);
   }
 
   setHeightSmoothing(_amount: number): void {}

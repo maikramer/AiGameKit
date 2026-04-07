@@ -1,6 +1,7 @@
 ﻿import type * as RAPIER from '@dimforge/rapier3d-compat';
 import type { TerrainLOD } from '@interverse/three-terrain-lod';
 import type { State } from '../../core';
+import type { WebGLTerrainMaterialProvider } from './webgl-material';
 
 export interface TerrainEntityData {
   terrainLOD: TerrainLOD;
@@ -14,6 +15,12 @@ export interface TerrainEntityData {
     string,
     { body: RAPIER.RigidBody; collider: RAPIER.Collider }
   >;
+  materialProvider: WebGLTerrainMaterialProvider;
+  /** Cached ECS values to avoid redundant uniform updates. */
+  lastRoughness: number;
+  lastMetalness: number;
+  lastSkirtDepth: number;
+  lastWireframe: number;
 }
 
 const stateToTerrainContext = new WeakMap<
