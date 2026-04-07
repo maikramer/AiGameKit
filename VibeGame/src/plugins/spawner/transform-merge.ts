@@ -58,7 +58,8 @@ const _qFinal = new THREE.Quaternion();
 const _up = new THREE.Vector3(0, 1, 0);
 
 /**
- * Monta quaternion: alinha +Y ao normal do terreno, yaw opcional em torno do normal, depois euler do template (graus, ordem XYZ).
+ * Rotação de spawn em Euler graus (ordem XYZ no template).
+ * Com `alignToTerrain`: composição `q_yaw * q_align * q_template` — aplica template local, alinha +Y à normal, depois yaw em torno do tronco (normal).
  */
 export function composeSpawnRotation(
   normal: THREE.Vector3,

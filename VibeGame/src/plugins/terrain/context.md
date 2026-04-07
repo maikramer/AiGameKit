@@ -83,6 +83,11 @@ Rebuilds chunk height samples to match WebGL vertex displacement
 ### Recipes
 
 - terrain — components: ['terrain', 'transform']; attributes: `heightmap`, `texture`
+
+### Spawner e declive (normal vs visual)
+
+O relevo **renderizado** pode ficar mais suave que o heightmap cru devido a **`heightSmoothing`** / spread no componente `Terrain`. O **plugin spawner** posiciona instâncias com a mesma altura “visual” que o jogador vê, mas calcula a **normal** usada para `max-slope-deg` e para `align-to-terrain` com amostras **sem** esse smoothing (heightmap bruto). Assim encostas íngremes não são subavaliadas só porque o mesh está achatado. Ver `spawner/surface.ts` e `spawner/context.md`.
+
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->

@@ -11,6 +11,7 @@
 - **One-way sync**: Body → Transform (never Transform → Body except via teleportation)
 - **Scale inheritance**: Collider dimensions are multiplied by Transform scale at creation time
 - **Initialization delay**: Rapier bodies aren't created until the next fixed update after entity creation
+- **GLB / `gltf-dynamic`**: Rapier drives `Transform`, but the Three.js mesh is a separate object graph. The **gltf-xml** plugin’s `GltfSceneSyncSystem` copies ECS transforms onto the loaded `Group` each frame so dynamic crates and similar props render where the collider is. Without that system, meshes can remain at the initial spawn pose while the body moves.
 
 ### Fixed Timestep Execution
 - **Fixed update rate**: Physics runs at 50Hz (1/50 second intervals), not every frame
