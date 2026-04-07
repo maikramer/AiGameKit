@@ -94,23 +94,49 @@
         transform="pos: 10 0.8 -5; scale: 0.5 0.5 0.5"
       ></gltf-load>
 
-      <!-- Trees (origin at model center → lift significantly for trunk base at ground) -->
-      <gltf-load
-        url="/assets/models/tree_lowpoly.glb"
-        transform="pos: -12 1.5 -3; scale: 2 2 2"
-      ></gltf-load>
-      <gltf-load
-        url="/assets/models/tree_lowpoly.glb"
-        transform="pos: 15 1.4 8; scale: 1.8 1.8 1.8"
-      ></gltf-load>
-      <gltf-load
-        url="/assets/models/tree_lowpoly.glb"
-        transform="pos: -8 1.7 12; scale: 2.2 2.2 2.2"
-      ></gltf-load>
-      <gltf-load
-        url="/assets/models/tree_lowpoly.glb"
-        transform="pos: 20 1.2 -10; scale: 1.6 1.6 1.6"
-      ></gltf-load>
+      <!-- Árvores: spawn procedural (perfil tree = defaults de vegetação) -->
+      <spawn-group
+        profile="tree"
+        count="24"
+        seed="7"
+        region-min="-40 0 -40"
+        region-max="40 0 40"
+        pick-strategy="random"
+      >
+        <gltf-load
+          role="visual"
+          url="/assets/models/tree_lowpoly.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </spawn-group>
+
+      <!-- Caixas físicas (primitiva): physics-box + physics-crate no filho -->
+      <spawn-group
+        profile="physics-box"
+        count="6"
+        seed="3"
+        region-min="4 0 2"
+        region-max="10 0 6"
+        pick-strategy="random"
+      >
+        <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
+      </spawn-group>
+
+      <!-- Caixas GLB empurráveis: gltf-crate no grupo e no filho -->
+      <spawn-group
+        profile="gltf-crate"
+        count="3"
+        seed="11"
+        region-min="-6 0 8"
+        region-max="-2 0 12"
+      >
+        <gltf-dynamic
+          role="dynamic"
+          profile="gltf-crate"
+          url="/assets/models/wooden_crate.glb"
+          transform="scale: 1 1 1"
+        ></gltf-dynamic>
+      </spawn-group>
     </world>
 
     <canvas id="game-canvas"></canvas>

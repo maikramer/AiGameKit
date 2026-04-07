@@ -1,4 +1,4 @@
-import { consoleForwarding, vibegame } from 'vibegame/vite';
+import { consoleForwarding, vibegame } from '../../src/vite/index.ts';
 import { defineConfig } from 'vite';
 
 export default defineConfig({

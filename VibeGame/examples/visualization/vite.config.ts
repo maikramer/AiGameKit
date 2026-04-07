@@ -1,5 +1,5 @@
 import { defineConfig, type Plugin } from 'vite';
-import { vibegame, consoleForwarding } from 'vibegame/vite';
+import { vibegame, consoleForwarding } from '../../src/vite/index.ts';
 import * as path from 'path';
 import * as fs from 'fs';
 
