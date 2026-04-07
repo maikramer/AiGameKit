@@ -97,7 +97,7 @@ export const PlayerGltfEnsureHasAnimatorSystem: System = {
 };
 
 export const PlayerGltfSetupSystem: System = {
-  group: 'setup',
+  group: 'draw',
   update: (state) => {
     for (const eid of playerGltfSetupQuery(state.world)) {
       if (PlayerGltfConfig.loaded[eid] !== 0) {
