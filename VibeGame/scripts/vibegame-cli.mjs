@@ -21,13 +21,17 @@ function help() {
   console.log('  vibegame --version       Show version');
   console.log('  vibegame help            This message');
   console.log('');
-  console.log('Playwright examples (from monorepo root with devDependencies installed):');
+  console.log(
+    'Playwright examples (from monorepo root with devDependencies installed):'
+  );
   console.log('  vibegame pw test');
   console.log('  vibegame pw test tests/playwright/simple-rpg-smoke.spec.ts');
   console.log('  vibegame pw test --ui');
   console.log('  vibegame pw install chromium');
   console.log('');
-  console.log('See playwright.config.ts for PLAYWRIGHT_CDP_WS, PLAYWRIGHT_CDP_URL, PLAYWRIGHT_BASE_URL.');
+  console.log(
+    'See playwright.config.ts for PLAYWRIGHT_CDP_WS, PLAYWRIGHT_CDP_URL, PLAYWRIGHT_BASE_URL.'
+  );
   console.log('');
   console.log(`Library root: ${root}`);
 }
@@ -57,10 +61,12 @@ function runPlaywright(pwArgs) {
 
   if (!localBin && !hasConfig) {
     console.error(
-      'vibegame playwright: no playwright.config.ts in the package root and no local Playwright CLI.',
+      'vibegame playwright: no playwright.config.ts in the package root and no local Playwright CLI.'
     );
     console.error(`  Root: ${root}`);
-    console.error('  Install dev dependencies in the VibeGame monorepo folder (e.g. bun install), then:');
+    console.error(
+      '  Install dev dependencies in the VibeGame monorepo folder (e.g. bun install), then:'
+    );
     console.error('    bun run playwright:install');
     process.exit(1);
   }
@@ -73,22 +79,36 @@ function runPlaywright(pwArgs) {
 
   if (localBin) {
     const useShell = process.platform === 'win32' && localBin.endsWith('.cmd');
-    const r = spawnSync(localBin, pwArgs, useShell ? { ...opts, shell: true } : opts);
+    const r = spawnSync(
+      localBin,
+      pwArgs,
+      useShell ? { ...opts, shell: true } : opts
+    );
     process.exit(r.status ?? 1);
   }
 
-  const tryBunx = spawnSync('bunx', ['playwright', ...pwArgs], { ...opts, shell: true });
+  const tryBunx = spawnSync('bunx', ['playwright', ...pwArgs], {
+    ...opts,
+    shell: true,
+  });
   if (!tryBunx.error) {
     process.exit(tryBunx.status ?? 1);
   }
 
-  const tryNpx = spawnSync('npx', ['--yes', 'playwright', ...pwArgs], { ...opts, shell: true });
+  const tryNpx = spawnSync('npx', ['--yes', 'playwright', ...pwArgs], {
+    ...opts,
+    shell: true,
+  });
   if (!tryNpx.error) {
     process.exit(tryNpx.status ?? 1);
   }
 
-  console.error('vibegame playwright: could not run Playwright (no local CLI, bunx, or npx).');
-  console.error('  In the VibeGame repo: bun install && bun run playwright:install');
+  console.error(
+    'vibegame playwright: could not run Playwright (no local CLI, bunx, or npx).'
+  );
+  console.error(
+    '  In the VibeGame repo: bun install && bun run playwright:install'
+  );
   process.exit(1);
 }
 

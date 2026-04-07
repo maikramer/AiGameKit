@@ -179,9 +179,10 @@ export const WaterRenderSystem: System = {
       // Underwater state: compute fade based on camera height relative to water level
       const waterLevel = Water.waterLevel[entity];
       const cameraY = camera.position.y;
-      const underwaterFade = cameraY < waterLevel
-        ? Math.min(1.0, (waterLevel - cameraY) / 5.0)
-        : 0.0;
+      const underwaterFade =
+        cameraY < waterLevel
+          ? Math.min(1.0, (waterLevel - cameraY) / 5.0)
+          : 0.0;
       if (data.material.uniforms.uUnderwaterFade) {
         data.material.uniforms.uUnderwaterFade.value = underwaterFade;
       }
@@ -191,7 +192,11 @@ export const WaterRenderSystem: System = {
       const fogB = Water.underwaterFogColorB[entity] ?? 0.0;
       const fogDensity = Water.underwaterFogDensity[entity] ?? 0.0;
       if (data.material.uniforms.uUnderwaterFogColor) {
-        data.material.uniforms.uUnderwaterFogColor.value.setRGB(fogR, fogG, fogB);
+        data.material.uniforms.uUnderwaterFogColor.value.setRGB(
+          fogR,
+          fogG,
+          fogB
+        );
       }
       if (data.material.uniforms.uUnderwaterFogDensity) {
         data.material.uniforms.uUnderwaterFogDensity.value = fogDensity;

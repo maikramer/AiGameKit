@@ -14,16 +14,15 @@ from ..logging import Logger
 def path_env_contains_dir(path_env: str, bin_dir: Path, *, is_windows: bool) -> bool:
     """Indica se ``PATH`` (string ``;`` ou ``:`` separada) inclui ``bin_dir`` (comparação normalizada)."""
     sep = ";" if is_windows else ":"
-    resolved = bin_dir.resolve()
     if is_windows:
-        target = os.path.normcase(os.path.normpath(str(resolved)))
+        target = os.path.normcase(os.path.normpath(str(bin_dir)))
         for p in path_env.split(sep):
             if not p.strip():
                 continue
             if os.path.normcase(os.path.normpath(p)) == target:
                 return True
     else:
-        target = os.path.normpath(str(resolved))
+        target = os.path.normpath(str(bin_dir.resolve()))
         for p in path_env.split(sep):
             if not p.strip():
                 continue
@@ -303,17 +302,17 @@ class BaseInstaller:
                 typ = winreg.REG_EXPAND_SZ
 
             parts = [p.strip() for p in path.split(";") if p.strip()]
-            norm = lambda s: os.path.normcase(os.path.normpath(s))
-            target = norm(bin_str)
+
+            def _norm(s: str) -> str:
+                return os.path.normcase(os.path.normpath(s))
+
+            target = _norm(bin_str)
             for p in parts:
-                if norm(p) == target:
+                if _norm(p) == target:
                     return True
 
-            new_path = path.rstrip().rstrip(";")
-            if new_path:
-                new_path = new_path + ";" + bin_str
-            else:
-                new_path = bin_str
+            stripped = path.rstrip().rstrip(";")
+            new_path = (stripped + ";" + bin_str) if stripped else bin_str
             winreg.SetValueEx(key, "Path", 0, typ, new_path)
         except OSError as e:
             self.logger.warn(f"Não foi possível actualizar o PATH do utilizador (registo): {e}")
@@ -370,11 +369,11 @@ class BaseInstaller:
             self.logger.success(f"{bin_str} está no PATH")
             return True
 
-        persisted = False
-        if self.is_windows:
-            persisted = self._ensure_windows_user_path()
-        else:
-            persisted = self._ensure_unix_user_path()
+        persisted = (
+            self._ensure_windows_user_path()
+            if self.is_windows
+            else self._ensure_unix_user_path()
+        )
 
         os.environ["PATH"] = bin_str + sep + path_env
 

@@ -241,6 +241,7 @@ export default [
       'examples/**',
       '**/*.test.js',
       'packages/**/dist/**',
+      'debug-*.ts',
     ],
   },
   // Workspace packages: can import from vibegame package

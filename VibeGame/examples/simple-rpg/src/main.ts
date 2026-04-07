@@ -1,8 +1,4 @@
-import {
-  applyEquirectSkyEnvironment,
-  configure,
-  run,
-} from 'vibegame';
+import { applyEquirectSkyEnvironment, configure, run } from 'vibegame';
 
 async function bootstrap(): Promise<void> {
   configure({ canvas: '#game-canvas' });

@@ -50,3 +50,4 @@ sandbox/
 /playwright-report/
 /test-results/
 /blob-report/
+debug-errors.ts
