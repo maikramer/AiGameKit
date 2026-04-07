@@ -1,7 +1,10 @@
-click>=8.0
+﻿click>=8.0
+numpy>=1.26
 pyyaml>=6.0
 rich>=13.0
 rich-click>=1.8.0
+Pillow>=10.0
+trimesh>=4.0,<5
 
 # Monorepo: biblioteca partilhada. Em setup.py vira file:// absoluto.
 # Caminho relativo ao CWD do projecto (GameAssets/) — usado por pip -r com cwd=projecto.

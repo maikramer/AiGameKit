@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """GameAssets — CLI principal."""
 
 from __future__ import annotations
@@ -26,6 +26,7 @@ from . import __version__
 from .batch_guard import batch_directory_lock, query_gpu_free_mib, subprocess_gpu_env
 from .cli_rich import click
 from .manifest import ManifestRow, effective_image_source, load_manifest
+from .mesh_reorigin import collect_glb_paths, filter_excluded_paths, reorigin_glb_file
 from .presets import get_preset, load_presets_bundle
 from .profile import (
     Animator3DProfile,
@@ -51,6 +52,7 @@ Exemplo rápido:
   gameassets handoff --profile game.yaml --manifest manifest.csv --public-dir ../my-game/public
   gameassets dream "platformer 3D com cristais num mundo de nuvens" --dry-run
   gameassets dream "idle clicker de fazenda" --llm-provider openai --output-dir ./mygame
+  gameassets mesh reorigin-feet ../my-game/public
 
 Preset só num ficheiro teu (ex.: galaxy_orbital em presets-local.yaml):
   gameassets batch --profile game.yaml --manifest manifest.csv --with-3d \\
@@ -729,6 +731,63 @@ def skill_install_cmd(target: Path, force: bool) -> None:
             border_style="green",
         )
     )
+
+
+@main.group("mesh")
+def mesh_group() -> None:
+    """Operações em meshes GLB (origem, etc.)."""
+
+
+@mesh_group.command("reorigin-feet")
+@click.argument(
+    "path",
+    type=click.Path(exists=True, file_okay=True, dir_okay=True, path_type=Path),
+)
+@click.option(
+    "--recursive/--no-recursive",
+    "recursive",
+    default=True,
+    help="Se PATH for pasta, processar subpastas (defeito: sim).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Listar ficheiros .glb sem gravar.",
+)
+@click.option(
+    "--exclude",
+    "excludes",
+    multiple=True,
+    help="Não processar: padrão fnmatch no nome do ficheiro (ex.: hero.glb, *player*). Repetir para vários.",
+)
+def mesh_reorigin_feet_cmd(path: Path, recursive: bool, dry_run: bool, excludes: tuple[str, ...]) -> None:
+    """Reposiciona cada GLB para convenção *pés*: base da caixa em Y=0 e centro em XZ (glTF Y-up).
+
+    Move a **cena inteira** (um único deslocamento por ficheiro). Malhas com armature/animação
+    podem ficar incorrectas; preferir props estáticos.
+
+    Requer ``trimesh`` (dependência do GameAssets).
+    """
+    paths = collect_glb_paths(path, recursive=recursive)
+    paths = filter_excluded_paths(paths, excludes)
+    if not paths:
+        raise click.ClickException("Nenhum ficheiro .glb encontrado (ou extensão não suportada).")
+    if dry_run:
+        for p in paths:
+            console.print(f"[dim]{p}[/dim]")
+        console.print(f"[green]{len(paths)} ficheiro(s) (dry-run).[/green]")
+        return
+    ok = 0
+    for p in paths:
+        try:
+            reorigin_glb_file(p)
+            console.print(f"[green]OK[/green] {p}")
+            ok += 1
+        except Exception as e:
+            console.print(f"[red]Erro[/red] {p}: {e}")
+    if ok != len(paths):
+        raise click.ClickException(f"Falharam {len(paths) - ok} de {len(paths)} ficheiros.")
+    console.print(Panel(f"[bold green]{ok}[/bold green] GLB(s) actualizados.", border_style="green"))
 
 
 @main.command("init")

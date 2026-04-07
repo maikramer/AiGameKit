@@ -11,10 +11,12 @@ authors = [{ name = "GameDev" }]
 requires-python = ">=3.10"
 dependencies = [
     "click>=8.0",
+    "numpy>=1.26",
     "pyyaml>=6.0",
     "rich>=13.0",
     "rich-click>=1.8.0",
     "Pillow>=10.0",
+    "trimesh>=4.0,<5",
     "gamedev-shared @ file:../Shared",
 ]
 classifiers = [
