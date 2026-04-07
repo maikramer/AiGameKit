@@ -74,6 +74,28 @@ def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
     return f"{preset_neg}, {user_neg}"
 
 
+def _fix_equirect_latitude(image: Image.Image) -> Image.Image:
+    """Corrige panoramas Flux-LoRA-Equirectangular que saem com o nadir ao centro vertical.
+
+    Numa equirect standard, a fila central é o horizonte (elevação 0°), o topo é o zénite
+    (+90°) e o fundo é o nadir (-90°). O modelo Flux-LoRA-Equirectangular-v3 gera com os
+    polos ao centro e o horizonte nas bordas superior/inferior — equivale a um desfasamento
+    de 90° em latitude. Corrigimos com um scroll vertical de metade da altura (wrap em V).
+    """
+    w, h = image.size
+    if h < 4:
+        return image
+
+    mid = h // 2
+    top = image.crop((0, 0, w, mid))
+    bottom = image.crop((0, mid, w, h))
+    corrected = Image.new("RGB", (w, h))
+    corrected.paste(bottom, (0, 0))
+    corrected.paste(top, (0, h - mid))
+    logger.info("Equirect latitude shift aplicado (nadir ao centro → nadir no fundo).")
+    return corrected
+
+
 class SkymapGenerator:
     """Gerador de skymaps equirectangular 360° via HF Inference API."""
 
@@ -202,6 +224,16 @@ class SkymapGenerator:
             raise RuntimeError("Nenhuma imagem devolvida pela HF Inference API")
 
         image = image.convert("RGB")
+
+        iw, ih = image.size
+        if (iw, ih) != (width, height):
+            logger.warning(
+                f"HF API devolveu {iw}×{ih} em vez de {width}×{height}; "
+                "a redimensionar para o tamanho pedido (equirect 2:1)."
+            )
+            image = image.resize((width, height), Image.Resampling.LANCZOS)
+
+        image = _fix_equirect_latitude(image)
 
         metadata = {
             "seed": seed,
