@@ -42,11 +42,11 @@ _PACKAGE_JSON_TEMPLATE = """\
 """
 
 _VITE_CONFIG = """\
-import { defineConfig } from 'vite';
+import {{ defineConfig }} from 'vite';
 
-export default defineConfig({
-  server: { open: true },
-});
+export default defineConfig({{
+  server: {{ open: process.env.BROWSER !== 'none' }},
+}});
 """
 
 
@@ -180,6 +180,8 @@ def run_dream(
         "--public-dir",
         str(public_dir),
     ]
+    if any(a.generate_3d for a in plan.assets):
+        handoff_argv.append("--with-textures")
     console.print(f"[dim]$ {' '.join(handoff_argv)}[/dim]")
     rc_ho = subprocess.call(handoff_argv, cwd=str(batch_dir))
     _step("gameassets handoff", ok=rc_ho == 0, detail=f"exit {rc_ho}")
