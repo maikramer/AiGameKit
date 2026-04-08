@@ -13,14 +13,21 @@ import {
   MeshInstanceSystem,
   WebGLRenderSystem,
 } from './systems';
+import {
+  TextureRecipeLoadSystem,
+  TextureRecipeCleanupSystem,
+} from './texture-recipe-system';
+import { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';
 
 export const RenderingPlugin: Plugin = {
   recipes: [rendererRecipe],
   systems: [
+    TextureRecipeLoadSystem,
     MeshInstanceSystem,
     LightSyncSystem,
     CameraSyncSystem,
     WebGLRenderSystem,
+    TextureRecipeCleanupSystem,
   ],
   components: {
     Renderer,
@@ -28,6 +35,8 @@ export const RenderingPlugin: Plugin = {
     MainCamera,
     AmbientLight,
     DirectionalLight,
+    TextureRecipe,
+    TextureRecipeLoaded,
   },
   config: {
     defaults: {

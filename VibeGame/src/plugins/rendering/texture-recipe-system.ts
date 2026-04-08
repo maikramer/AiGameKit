@@ -47,7 +47,8 @@ const CHANNEL_MAP = [
   'normalMap',    // 1
   'roughnessMap', // 2
   'metalnessMap', // 3
-  'aoMap',        // 4 — ambient occlusion
+  'aoMap',          // 4 — ambient occlusion
+  'displacementMap', // 5
 ] as const;
 
 export const TextureRecipeLoadSystem: System = {
