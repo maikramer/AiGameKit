@@ -74,14 +74,14 @@ export const playerRecipe: Recipe = {
 
 Configuração declarativa do plugin, com 6 seções opcionais:
 
-| Seção      | Tipo                                             | Descrição |
-|------------|--------------------------------------------------|-----------|
-| `defaults` | `Record<string, Record<string, number>>`         | Valores padrão para components |
-| `enums`    | `Record<string, Record<string, EnumMapping>>`    | Mapeia strings → números no XML |
-| `adapters` | `Record<string, Record<string, Adapter>>`        | Converte valores XML/JSON para o component |
-| `parsers`  | `Record<string, Parser>`                         | Parsers customizados para elementos XML |
-| `shorthands` | `Record<string, Record<string, ShorthandMapping>>` | Atalhos de atributos |
-| `validations` | `ValidationRule[]`                             | Regras de validação para recipes |
+| Seção         | Tipo                                               | Descrição                                  |
+| ------------- | -------------------------------------------------- | ------------------------------------------ |
+| `defaults`    | `Record<string, Record<string, number>>`           | Valores padrão para components             |
+| `enums`       | `Record<string, Record<string, EnumMapping>>`      | Mapeia strings → números no XML            |
+| `adapters`    | `Record<string, Record<string, Adapter>>`          | Converte valores XML/JSON para o component |
+| `parsers`     | `Record<string, Parser>`                           | Parsers customizados para elementos XML    |
+| `shorthands`  | `Record<string, Record<string, ShorthandMapping>>` | Atalhos de atributos                       |
+| `validations` | `ValidationRule[]`                                 | Regras de validação para recipes           |
 
 **Exemplo de adapter** (converte cor hex `#ff0000` em R/G/B float):
 
@@ -192,24 +192,24 @@ export { MeuSystem } from './systems';
 
 ## Plugins Existentes
 
-| Plugin          | Descrição                                       | Complexidade |
-|-----------------|-------------------------------------------------|--------------|
-| `transforms`    | Posição/rotação/escala 3D                       | Baixa        |
-| `physics`       | Física (Rapier) + colliders                     | Alta         |
-| `rendering`     | Three.js renderer, câmeras, cenas               | Alta         |
-| `player`        | Controle de jogador (movimento, pulo, câmera)   | Média        |
-| `input`         | Teclado/mouse/gamepad                           | Média        |
-| `orbit-camera`  | Câmera orbital com zoom                         | Média        |
-| `follow-camera` | Câmera em terceira pessoa                       | Média        |
-| `fog`           | Neblina volumétrica + fog exp/linear            | Média        |
-| `water`         | Água com física, nado, reflexos                 | Alta         |
-| `terrain`       | Terreno procedural com heightmaps               | Alta         |
-| `gltf-xml`      | Carregamento de modelos GLB/GLTF                | Alta         |
-| `animation`     | Sistema de animação                             | Média        |
-| `tweening`      | Interpolações suaves (tweens)                   | Baixa        |
-| `spawner`       | Spawn de entidades                              | Baixa        |
-| `respawn`       | Respawn de entidades                            | Baixa        |
-| `lod`           | Level of Detail (near/far)                      | Baixa        |
-| `startup`       | Execução deferida pós-inicialização             | Baixa        |
-| `debug`         | Debug overlays (wireframes, etc.)               | Baixa        |
-| `scene-manifest`| Carregamento de cenas XML                       | Média        |
+| Plugin           | Descrição                                     | Complexidade |
+| ---------------- | --------------------------------------------- | ------------ |
+| `transforms`     | Posição/rotação/escala 3D                     | Baixa        |
+| `physics`        | Física (Rapier) + colliders                   | Alta         |
+| `rendering`      | Three.js renderer, câmeras, cenas             | Alta         |
+| `player`         | Controle de jogador (movimento, pulo, câmera) | Média        |
+| `input`          | Teclado/mouse/gamepad                         | Média        |
+| `orbit-camera`   | Câmera orbital com zoom                       | Média        |
+| `follow-camera`  | Câmera em terceira pessoa                     | Média        |
+| `fog`            | Neblina volumétrica + fog exp/linear          | Média        |
+| `water`          | Água com física, nado, reflexos               | Alta         |
+| `terrain`        | Terreno procedural com heightmaps             | Alta         |
+| `gltf-xml`       | Carregamento de modelos GLB/GLTF              | Alta         |
+| `animation`      | Sistema de animação                           | Média        |
+| `tweening`       | Interpolações suaves (tweens)                 | Baixa        |
+| `spawner`        | Spawn de entidades                            | Baixa        |
+| `respawn`        | Respawn de entidades                          | Baixa        |
+| `lod`            | Level of Detail (near/far)                    | Baixa        |
+| `startup`        | Execução deferida pós-inicialização           | Baixa        |
+| `debug`          | Debug overlays (wireframes, etc.)             | Baixa        |
+| `scene-manifest` | Carregamento de cenas XML                     | Média        |
