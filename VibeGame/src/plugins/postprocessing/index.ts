@@ -1,4 +1,13 @@
-export { Bloom, Dithering, SMAA, Tonemapping } from './components';
+export {
+  Bloom,
+  Dithering,
+  SMAA,
+  Tonemapping,
+  Vignette,
+  DepthOfField,
+  ChromaticAberration,
+  Noise,
+} from './components';
 export { PostprocessingPlugin } from './plugin';
 export {
   PostprocessingSystem,
