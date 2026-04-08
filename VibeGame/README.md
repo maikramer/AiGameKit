@@ -219,10 +219,47 @@ bun run build:release
 bun test
 ```
 
+## Plugins
+
+VibeGame includes 20+ plugins for physics, rendering, player controls, and more.
+
+| Category | Plugins |
+|----------|--------|
+| **Core** | transforms, physics, rendering, input, startup |
+| **Camera** | orbit-camera, follow-camera |
+| **Player** | player, gltf-anim |
+| **3D Models** | gltf-xml, **text-3d** (Text3D/Hunyuan GLB) |
+| **Environment** | **sky** (equirectangular IBL), fog, water |
+| **Post-processing** | bloom, SMAA, dithering, tonemapping ([registry API](docs/EFFECT-REGISTRY.md)) |
+| **Logic** | animation, tweening, spawner, respawn, lod, audio, debug |
+| **Pipeline** | scene-manifest (GameAssets JSON), TextureRecipe (Texture2D procedural) |
+
+Full list: [`docs/PLUGINS.md`](docs/PLUGINS.md)
+
+## Documentation
+
+| Doc | Description |
+|-----|-------------|
+| [`docs/PLUGINS.md`](docs/PLUGINS.md) | Lista completa de plugins |
+| [`docs/SHARED.md`](docs/SHARED.md) | Módulo shared (tipos, math, validation) |
+| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md) | Sistema de efeitos pós-processamento |
+| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md) | Pipeline GameAssets Python → VibeGame |
+| [`src/plugins/README.md`](src/plugins/README.md) | Arquitetura de plugins + template |
+
+## Shared Module
+
+`src/shared/` provides lightweight, engine-agnostic utilities used across plugins:
+
+- **types** — `Vector3Like`, `ColorLike`, `AABB`, `QuaternionLike`, etc.
+- **math** — `vec3`, `vec2`, `aabb` operations + `clamp`, `lerp`, `smoothstep`
+- **validation** — Zod schemas for flexible XML/JSON parsing (`vector3Schema`, `colorSchema`, etc.)
+
+See [`docs/SHARED.md`](docs/SHARED.md).
+
 ## Links
 
 - [GitHub Repository](https://github.com/dylanebert/vibegame)
 - [NPM Package](https://www.npmjs.com/package/vibegame)
 - [Live Demo on Hugging Face](https://huggingface.co/spaces/dylanebert/VibeGame)
-- [Live Demo on JSFiddle](https://jsfiddle.net/zhLtd6e2/6/)
+- [Live Demo on JSFiddle](https://jsfiddle.net/keLsxh5t/)
 - [Shallot Context Manager](https://github.com/dylanebert/shallot)

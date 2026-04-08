@@ -213,3 +213,9 @@ export { MeuSystem } from './systems';
 | `startup`        | Execução deferida pós-inicialização           | Baixa        |
 | `debug`          | Debug overlays (wireframes, etc.)             | Baixa        |
 | `scene-manifest` | Carregamento de cenas XML                     | Média        |
+| `text-3d`        | Modelos GLB do Text3D (Hunyuan)              | Baixa        |
+| `sky`            | Skybox equirectangular + IBL (PMREM)         | Média        |
+| `audio`          | Áudio espacial                                | Média        |
+| `sprite`         | Sprites 2D                                    | Baixa        |
+| `line`           | Linhas 3D                                     | Baixa        |
+| `postprocessing` | Bloom, SMAA, dithering, tonemapping (registry) | Alta        |
