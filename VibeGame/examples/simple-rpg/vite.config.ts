@@ -19,7 +19,7 @@ export default defineConfig({
   plugins: [vibegame(), consoleForwarding()],
   server: {
     port: 3011,
-    open: true,
+    open: process.env.BROWSER !== 'none',
     fs: {
       allow: ['..'],
     },

@@ -72,7 +72,7 @@ export default defineConfig({
   webServer: useCdp
     ? undefined
     : {
-        command: `npx vite dev --host 127.0.0.1 --port ${PLAYWRIGHT_DEV_PORT} --strictPort`,
+        command: `BROWSER=none npx vite dev --host 127.0.0.1 --port ${PLAYWRIGHT_DEV_PORT} --strictPort`,
         cwd: 'examples/simple-rpg',
         url: PLAYWRIGHT_ORIGIN,
         reuseExistingServer: !process.env.CI,
