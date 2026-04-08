@@ -12,4 +12,8 @@ export const AudioEmitter = defineComponent({
   playing: Types.ui8,
 });
 
-export const AudioListener = defineComponent({});
+export const AudioListener = defineComponent({
+  posX: Types.f32,
+  posY: Types.f32,
+  posZ: Types.f32,
+});

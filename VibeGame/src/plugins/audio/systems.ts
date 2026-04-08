@@ -1,8 +1,9 @@
-import { Howl } from 'howler';
+import { Howl, Howler } from 'howler';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { AudioEmitter } from './components';
-import { Transform } from '../transforms/components';
+import { AudioEmitter, AudioListener } from './components';
+import { Transform, WorldTransform } from '../transforms/components';
+import { MainCamera } from '../rendering/components';
 
 // Howler.js spatial audio uses stereo panning only (no HRTF).
 
@@ -13,10 +14,12 @@ export function registerAudioClip(id: number, url: string): void {
 }
 
 const audioQuery = defineQuery([AudioEmitter]);
+const listenerQuery = defineQuery([AudioListener, MainCamera, WorldTransform]);
 
 interface AudioState {
   howlMap: Map<number, Howl>;
   prevPlaying: Map<number, number>;
+  _listenerWarned?: boolean;
 }
 
 const AUDIO_STATE = new WeakMap<State, AudioState>();
@@ -98,6 +101,26 @@ export const AudioSystem: System = {
         howlMap.delete(eid);
         prevPlaying.delete(eid);
       }
+    }
+
+    const listeners = listenerQuery(state.world);
+    if (listeners.length > 0) {
+      const eid = listeners[0];
+      const x = WorldTransform.posX[eid];
+      const y = WorldTransform.posY[eid];
+      const z = WorldTransform.posZ[eid];
+      AudioListener.posX[eid] = x;
+      AudioListener.posY[eid] = y;
+      AudioListener.posZ[eid] = z;
+      const ctx = Howler.ctx;
+      if (ctx && ctx.listener) {
+        ctx.listener.positionX.value = x;
+        ctx.listener.positionY.value = y;
+        ctx.listener.positionZ.value = z;
+      }
+    } else if (!getOrCreateState(state)._listenerWarned) {
+      getOrCreateState(state)._listenerWarned = true;
+      console.warn('[audio] No entity with AudioListener + MainCamera + WorldTransform found.');
     }
   },
 };
