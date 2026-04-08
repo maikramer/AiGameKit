@@ -23,7 +23,7 @@ export const TextureRecipe = defineComponent({
   flipY: Types.ui8,
   /** Anisotropia (0 = usar default da GPU). */
   anisotropy: Types.ui8,
-  /** Canal de destino: 0 = map (diffuse), 1 = normalMap, 2 = roughnessMap, 3 = metalnessMap. */
+  /** Canal de destino: 0 = map (diffuse), 1 = normalMap, 2 = roughnessMap, 3 = metalnessMap, 4 = aoMap. */
   channel: Types.ui8,
 });
 

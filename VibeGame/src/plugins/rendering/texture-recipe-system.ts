@@ -6,6 +6,28 @@ import { TextureRecipe } from './texture-recipe';
 const textureUrls = new Map<number, string>();
 // entity → THREE.Texture carregada
 const textureAssets = new Map<number, THREE.Texture>();
+// Cache de texturas invertidas (smoothness → roughness)
+const invertedCache = new Map<number, THREE.CanvasTexture>();
+
+// Materialize outputs smoothness maps; Three.js roughnessMap expects roughness (inverse).
+// Auto-detected by filename containing "smoothness".
+function invertSmoothnessTexture(sourceTexture: THREE.Texture): THREE.CanvasTexture {
+  const img = sourceTexture.image as HTMLImageElement;
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.drawImage(img, 0, 0);
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 255 - data[i]; // invert R channel
+  }
+  ctx.putImageData(imageData, 0, 0);
+  const inverted = new THREE.CanvasTexture(canvas);
+  inverted.colorSpace = THREE.LinearSRGBColorSpace;
+  return inverted;
+}
 
 /** Associa uma URL de textura Texture2D a uma entidade. */
 export function setTextureRecipeUrl(eid: number, url: string): void {
@@ -21,10 +43,11 @@ export function getTextureAsset(eid: number): THREE.Texture | undefined {
 const textureRecipeQuery = defineQuery([TextureRecipe]);
 
 const CHANNEL_MAP = [
-  'map',
-  'normalMap',
-  'roughnessMap',
-  'metalnessMap',
+  'map',          // 0 — albedo/diffuse
+  'normalMap',    // 1
+  'roughnessMap', // 2
+  'metalnessMap', // 3
+  'aoMap',        // 4 — ambient occlusion
 ] as const;
 
 export const TextureRecipeLoadSystem: System = {
@@ -67,10 +90,23 @@ export const TextureRecipeLoadSystem: System = {
             texture.anisotropy = aniso;
           }
 
-          texture.colorSpace = THREE.SRGBColorSpace;
+          const channel = TextureRecipe.channel[eid] || 0;
+          texture.colorSpace =
+            channel === 0
+              ? THREE.SRGBColorSpace
+              : THREE.LinearSRGBColorSpace;
           texture.needsUpdate = true;
 
-          textureAssets.set(eid, texture);
+          const isSmoothness =
+            channel === 2 && url.toLowerCase().includes('smoothness');
+          if (isSmoothness) {
+            const inverted = invertSmoothnessTexture(texture);
+            texture.dispose();
+            invertedCache.set(eid, inverted);
+            textureAssets.set(eid, inverted);
+          } else {
+            textureAssets.set(eid, texture);
+          }
         })
         .catch((err: unknown) => {
           console.error('[texture-recipe] Falha ao carregar textura:', err);
@@ -90,6 +126,11 @@ export const TextureRecipeCleanupSystem: System = {
         texture.dispose();
         textureAssets.delete(eid);
         textureUrls.delete(eid);
+        const inverted = invertedCache.get(eid);
+        if (inverted) {
+          inverted.dispose();
+          invertedCache.delete(eid);
+        }
       }
     }
   },
