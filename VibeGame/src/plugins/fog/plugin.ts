@@ -1,4 +1,5 @@
 import type { Plugin, State } from '../../core';
+import { parseColor } from '../../core/validation/schemas';
 import { Fog } from './components';
 import { FogEffectSystem, FogSystem } from './systems';
 
@@ -7,15 +8,7 @@ function fogColorAdapter(
   value: string | number,
   state: State
 ): void {
-  const num =
-    typeof value === 'number'
-      ? value
-      : parseInt(
-          (value as string).startsWith('#')
-            ? (value as string).slice(1)
-            : (value as string),
-          16
-        );
+  const num = parseColor(value);
   const component = state.getComponent('fog');
   if (component) {
     (component as Record<string, Float32Array>).colorR[entity] =

@@ -1,14 +1,9 @@
 import {
-  BloomEffect as BloomEffectLib,
   EffectComposer,
   EffectPass,
   RenderPass,
-  SMAAEffect,
-  SMAAPreset,
-  ToneMappingEffect,
-  ToneMappingMode,
-  type Effect,
 } from 'postprocessing';
+import type { Effect } from 'postprocessing';
 import * as THREE from 'three';
 import type { State } from '../../core';
 import { defineQuery, type System } from '../../core';
@@ -19,9 +14,8 @@ import {
   getScene,
   threeCameras,
 } from '../rendering';
-import { Bloom, Dithering, SMAA, Tonemapping } from './components';
-import { DitheringEffect } from './effects/dithering-effect';
 import { getPostprocessingContext } from './utils';
+import { getEffectDefinitions, type EffectDefinition } from './effect-registry';
 
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
@@ -36,6 +30,7 @@ export const PostprocessingSystem: System = {
     if (!renderContext.renderer || !scene) return;
 
     const cameraEntities = mainCameraTransformQuery(state.world);
+    const definitions = getEffectDefinitions();
 
     for (const entity of cameraEntities) {
       const camera = threeCameras.get(entity);
@@ -50,152 +45,33 @@ export const PostprocessingSystem: System = {
       }
 
       const effectsMap = postContext.effects.get(entity)!;
-      const currentBloomEffect = effectsMap.get('bloom');
-      const currentDitheringEffect = effectsMap.get('dithering');
-      const currentSmaaEffect = effectsMap.get('smaa');
-      const currentTonemappingEffect = effectsMap.get('tonemapping');
-      const hasBloom = state.hasComponent(entity, Bloom);
-      const hasDithering = state.hasComponent(entity, Dithering);
-      const hasSMAA = state.hasComponent(entity, SMAA);
-      const hasTonemapping = state.hasComponent(entity, Tonemapping);
+      let needsRebuild = false;
 
-      if (hasSMAA) {
-        if (!currentSmaaEffect) {
-          const presetValue = SMAA.preset[entity];
-          const smaaEffect = new SMAAEffect({
-            preset: presetValue as SMAAPreset,
-          });
-          effectsMap.set('smaa', smaaEffect);
-          rebuildEffectPass(
-            composer,
-            effectsMap,
-            camera,
-            postContext.externalEffects
-          );
-        }
-      } else if (currentSmaaEffect) {
-        effectsMap.delete('smaa');
-        rebuildEffectPass(
-          composer,
-          effectsMap,
-          camera,
-          postContext.externalEffects
-        );
-      }
+      for (const def of definitions) {
+        const hasEffect = state.hasComponent(entity, def.component);
+        const current = effectsMap.get(def.key);
 
-      if (hasBloom) {
-        if (!currentBloomEffect) {
-          const bloomEffect = new BloomEffectLib({
-            intensity: Bloom.intensity[entity],
-            luminanceThreshold: Bloom.luminanceThreshold[entity],
-            mipmapBlur: Bloom.mipmapBlur[entity] === 1,
-            radius: Bloom.radius[entity],
-            levels: Bloom.levels[entity],
-          });
-          effectsMap.set('bloom', bloomEffect);
-          rebuildEffectPass(
-            composer,
-            effectsMap,
-            camera,
-            postContext.externalEffects
-          );
-        } else {
-          const bloom = currentBloomEffect as BloomEffectLib;
-          bloom.intensity = Bloom.intensity[entity];
-          bloom.luminanceMaterial.uniforms.threshold.value =
-            Bloom.luminanceThreshold[entity];
-        }
-      } else if (currentBloomEffect) {
-        effectsMap.delete('bloom');
-        rebuildEffectPass(
-          composer,
-          effectsMap,
-          camera,
-          postContext.externalEffects
-        );
-      }
-
-      if (hasDithering) {
-        if (!currentDitheringEffect) {
-          const ditheringEffect = new DitheringEffect({
-            colorBits: Dithering.colorBits[entity],
-            intensity: Dithering.intensity[entity],
-            grayscale: Dithering.grayscale[entity] === 1,
-          });
-          effectsMap.set('dithering', ditheringEffect);
-          rebuildEffectPass(
-            composer,
-            effectsMap,
-            camera,
-            postContext.externalEffects
-          );
-        } else {
-          const dithering = currentDitheringEffect as DitheringEffect;
-          dithering.colorBits = Dithering.colorBits[entity];
-          dithering.intensity = Dithering.intensity[entity];
-          dithering.grayscale = Dithering.grayscale[entity] === 1;
-          dithering.scale = Dithering.scale[entity];
-          dithering.noise = Dithering.noise[entity];
-        }
-      } else if (currentDitheringEffect) {
-        effectsMap.delete('dithering');
-        rebuildEffectPass(
-          composer,
-          effectsMap,
-          camera,
-          postContext.externalEffects
-        );
-      }
-
-      if (hasTonemapping) {
-        if (!currentTonemappingEffect) {
-          const tonemappingEffect = new ToneMappingEffect({
-            mode: Tonemapping.mode[entity] as ToneMappingMode,
-            middleGrey: Tonemapping.middleGrey[entity],
-            whitePoint: Tonemapping.whitePoint[entity],
-            averageLuminance: Tonemapping.averageLuminance[entity],
-            adaptationRate: Tonemapping.adaptationRate[entity],
-          });
-          effectsMap.set('tonemapping', tonemappingEffect);
-          rebuildEffectPass(
-            composer,
-            effectsMap,
-            camera,
-            postContext.externalEffects
-          );
-        } else {
-          const tonemapping = currentTonemappingEffect as ToneMappingEffect;
-          if (
-            tonemapping.middleGrey !== Tonemapping.middleGrey[entity] ||
-            tonemapping.whitePoint !== Tonemapping.whitePoint[entity] ||
-            tonemapping.averageLuminance !==
-              Tonemapping.averageLuminance[entity]
-          ) {
-            const newTonemappingEffect = new ToneMappingEffect({
-              mode: Tonemapping.mode[entity] as ToneMappingMode,
-              middleGrey: Tonemapping.middleGrey[entity],
-              whitePoint: Tonemapping.whitePoint[entity],
-              averageLuminance: Tonemapping.averageLuminance[entity],
-              adaptationRate: Tonemapping.adaptationRate[entity],
-            });
-            effectsMap.set('tonemapping', newTonemappingEffect);
-            rebuildEffectPass(
-              composer,
-              effectsMap,
-              camera,
-              postContext.externalEffects
-            );
-          } else {
-            tonemapping.mode = Tonemapping.mode[entity] as ToneMappingMode;
+        if (hasEffect) {
+          if (!current) {
+            effectsMap.set(def.key, def.create(state, entity));
+            needsRebuild = true;
+          } else if (def.update) {
+            const result = def.update(state, entity, current);
+            if (result === true) needsRebuild = true;
           }
+        } else if (current) {
+          effectsMap.delete(def.key);
+          needsRebuild = true;
         }
-      } else if (currentTonemappingEffect) {
-        effectsMap.delete('tonemapping');
+      }
+
+      if (needsRebuild) {
         rebuildEffectPass(
           composer,
           effectsMap,
           camera,
-          postContext.externalEffects
+          postContext.externalEffects,
+          definitions
         );
       }
 
@@ -203,6 +79,7 @@ export const PostprocessingSystem: System = {
       composer.setSize(size.width, size.height);
     }
 
+    // Cleanup stale composers
     for (const [cameraEntity, composer] of postContext.composers) {
       if (!state.exists(cameraEntity)) {
         composer.dispose();
@@ -215,6 +92,8 @@ export const PostprocessingSystem: System = {
 
 export function triggerRebuild(state: State): void {
   const postContext = getPostprocessingContext(state);
+  const definitions = getEffectDefinitions();
+
   for (const [cameraEntity, composer] of postContext.composers) {
     if (!state.exists(cameraEntity)) continue;
     const effectsMap = postContext.effects.get(cameraEntity);
@@ -225,7 +104,8 @@ export function triggerRebuild(state: State): void {
       composer,
       effectsMap,
       camera,
-      postContext.externalEffects
+      postContext.externalEffects,
+      definitions
     );
   }
 }
@@ -234,33 +114,30 @@ function rebuildEffectPass(
   composer: EffectComposer,
   effectsMap: Map<string, Effect>,
   camera: THREE.Camera,
-  externalEffects: Effect[] = []
+  externalEffects: Effect[],
+  definitions: readonly EffectDefinition[]
 ): void {
   while (composer.passes.length > 1) {
     composer.removePass(composer.passes[1]);
   }
 
-  const hasBuiltinEffects = effectsMap.size > 0;
-  const hasExternalEffects = externalEffects.length > 0;
+  if (effectsMap.size === 0 && externalEffects.length === 0) return;
 
-  if (hasBuiltinEffects || hasExternalEffects) {
-    const effects: Effect[] = [];
-    if (effectsMap.has('smaa')) {
-      effects.push(effectsMap.get('smaa')!);
-    }
-    if (effectsMap.has('bloom')) {
-      effects.push(effectsMap.get('bloom')!);
-    }
-    if (effectsMap.has('dithering')) {
-      effects.push(effectsMap.get('dithering')!);
-    }
-    effects.push(...externalEffects);
-    if (effectsMap.has('tonemapping')) {
-      effects.push(effectsMap.get('tonemapping')!);
-    }
-    const effectPass = new EffectPass(camera, ...effects);
-    composer.addPass(effectPass);
+  const firstEffects: Effect[] = [];
+  const middleEffects: Effect[] = [];
+  const lastEffects: Effect[] = [];
+
+  for (const def of definitions) {
+    const effect = effectsMap.get(def.key);
+    if (!effect) continue;
+    if (def.position === 'first') firstEffects.push(effect);
+    else if (def.position === 'last') lastEffects.push(effect);
+    else middleEffects.push(effect);
   }
+
+  const effects = [...firstEffects, ...middleEffects, ...externalEffects, ...lastEffects];
+  const effectPass = new EffectPass(camera, ...effects);
+  composer.addPass(effectPass);
 }
 
 export const PostprocessingRenderSystem: System = {

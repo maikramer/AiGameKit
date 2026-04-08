@@ -3,10 +3,21 @@ import type { State } from '../../core';
 import { loadGltfToSceneWithAnimator } from '../../extras/gltf-bridge';
 
 export interface SceneManifestEntry {
+  /** Path to the GLB model file (relative to basePath) */
   model?: string;
+  /** Legacy texture paths */
   textures?: string[];
+  /** PBR texture set (albedo, normal, roughness, metallic, ao) */
+  pbr_textures?: string[];
+  /** Animation clip names available in the model */
   animations?: string[];
+  /** Path to associated audio file */
   audio?: string;
+  /** Bounding box: { min: [x,y,z], max: [x,y,z], size: [x,y,z] } */
+  bounds?: { min?: number[]; max?: number[]; size?: number[] };
+  /** Pipeline that generated this asset (e.g. 'tripo3d', 'meshy') */
+  source_pipeline?: string;
+  /* --- Transform overrides (applied after load) --- */
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
@@ -14,6 +25,8 @@ export interface SceneManifestEntry {
 
 export interface SceneManifest {
   version: number;
+  /** ISO 8601 timestamp of when the manifest was generated (from GameAssets pipeline) */
+  generated?: string;
   assets: Record<string, SceneManifestEntry>;
 }
 

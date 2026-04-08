@@ -61,6 +61,18 @@ export const colorSchema = z.union([
   numberStringSchema,
 ]);
 
+/** Parse a color value (hex string with/without #, or number) into a numeric color.
+ *  Throws on invalid input. */
+export function parseColor(value: string | number): number {
+  if (typeof value === 'number') return value;
+  return parseInt(value.startsWith('#') ? value.slice(1) : value, 16);
+}
+
+/** Parse a numeric string (e.g. "1.5") into a number. Returns NaN on invalid. */
+export function parseNumber(value: string | number): number {
+  return typeof value === 'number' ? value : parseFloat(value);
+}
+
 export const shapeSchema = z.enum(['box', 'sphere']);
 
 export const bodyTypeSchema = z.enum(['static', 'dynamic', 'kinematic']);
