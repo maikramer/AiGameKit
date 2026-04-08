@@ -6,3 +6,9 @@ export {
   triggerRebuild,
 } from './systems';
 export { getPostprocessingContext, registerExternalEffect } from './utils';
+export {
+  registerEffect,
+  unregisterEffect,
+  getEffectDefinitions,
+  type EffectDefinition,
+} from './effect-registry';

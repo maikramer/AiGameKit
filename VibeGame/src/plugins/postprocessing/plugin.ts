@@ -1,6 +1,9 @@
 import type { Plugin } from '../../core';
 import { Bloom, Dithering, SMAA, Tonemapping } from './components';
 import { PostprocessingSystem, PostprocessingRenderSystem } from './systems';
+import { registerBuiltinEffects } from './builtin-effects';
+
+registerBuiltinEffects();
 
 export const PostprocessingPlugin: Plugin = {
   systems: [PostprocessingSystem, PostprocessingRenderSystem],

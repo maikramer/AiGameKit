@@ -84,6 +84,7 @@ export {
   prefetchGltfLocalYBounds,
 } from './plugins/gltf-xml';
 export { Water, WaterPlugin } from './plugins/water';
+export { Text3dModel, Text3dPlugin, text3dRecipe } from './plugins/text-3d';
 export type { WaterEntityData } from './plugins/water';
 export { DebugPlugin } from './plugins/debug';
 export type { VibeGameDebugBridge } from './plugins/debug';

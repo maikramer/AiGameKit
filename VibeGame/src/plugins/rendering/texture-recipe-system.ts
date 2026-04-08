@@ -1,0 +1,118 @@
+import * as THREE from 'three';
+import { defineQuery, type System } from '../../core';
+import { TextureRecipe } from './texture-recipe';
+
+// Contexto: entity → URL de textura
+const textureUrls = new Map<number, string>();
+// entity → THREE.Texture carregada
+const textureAssets = new Map<number, THREE.Texture>();
+
+/** Associa uma URL de textura Texture2D a uma entidade. */
+export function setTextureRecipeUrl(eid: number, url: string): void {
+  textureUrls.set(eid, url);
+  TextureRecipe.pending[eid] = 1;
+}
+
+/** Retorna a textura Three.js carregada para uma entidade. */
+export function getTextureAsset(eid: number): THREE.Texture | undefined {
+  return textureAssets.get(eid);
+}
+
+const textureRecipeQuery = defineQuery([TextureRecipe]);
+
+const CHANNEL_MAP: Record<number, keyof THREE.Material> = {
+  0: 'map',
+  1: 'normalMap',
+  2: 'roughnessMap',
+  3: 'metalnessMap',
+};
+
+export const TextureRecipeLoadSystem: System = {
+  group: 'setup',
+  update: (state) => {
+    const loader = new THREE.TextureLoader();
+
+    for (const eid of textureRecipeQuery(state.world)) {
+      if (TextureRecipe.pending[eid] === 0) continue;
+
+      const url = textureUrls.get(eid);
+      if (!url) {
+        TextureRecipe.pending[eid] = 0;
+        continue;
+      }
+
+      void loader
+        .loadAsync(url)
+        .then((texture) => {
+          // Configura wrapping
+          const repeatX = TextureRecipe.repeatX[eid] || 1;
+          const repeatY = TextureRecipe.repeatY[eid] || 1;
+          const useRepeat = TextureRecipe.repeatMode[eid] === 1;
+
+          texture.wrapS = useRepeat
+            ? THREE.RepeatWrapping
+            : THREE.ClampToEdgeWrapping;
+          texture.wrapT = useRepeat
+            ? THREE.RepeatWrapping
+            : THREE.ClampToEdgeWrapping;
+          texture.repeat.set(repeatX, repeatY);
+
+          if (TextureRecipe.flipX[eid]) texture.flipX = true;
+          if (TextureRecipe.flipY[eid]) texture.flipY = true;
+
+          // Anisotropia
+          const maxAniso = 1; // conservative default; GPU value requires renderer ref
+          const aniso = TextureRecipe.anisotropy[eid];
+          if (aniso > 0 && aniso <= maxAniso) {
+            texture.anisotropy = aniso;
+          }
+
+          texture.colorSpace = THREE.SRGBColorSpace;
+          texture.needsUpdate = true;
+
+          textureAssets.set(eid, texture);
+        })
+        .catch((err: unknown) => {
+          console.error('[texture-recipe] Falha ao carregar textura:', err);
+        })
+        .finally(() => {
+          TextureRecipe.pending[eid] = 0;
+        });
+    }
+  },
+};
+
+export const TextureRecipeCleanupSystem: System = {
+  group: 'draw',
+  update: (state) => {
+    for (const [eid, texture] of textureAssets) {
+      if (!state.exists(eid) || !state.hasComponent(eid, TextureRecipe)) {
+        texture.dispose();
+        textureAssets.delete(eid);
+        textureUrls.delete(eid);
+      }
+    }
+  },
+};
+
+/**
+ * Aplica a textura carregada ao material de um mesh Three.js.
+ * Retorna true se aplicou com sucesso.
+ */
+export function applyTextureToMaterial(
+  eid: number,
+  material: THREE.Material
+): boolean {
+  const texture = textureAssets.get(eid);
+  if (!texture) return false;
+
+  const channel = TextureRecipe.channel[eid] || 0;
+  const key = CHANNEL_MAP[channel];
+  if (key) {
+    (material as unknown as Record<string, THREE.Texture | null>)[key] =
+      texture;
+    material.needsUpdate = true;
+    return true;
+  }
+  return false;
+}
