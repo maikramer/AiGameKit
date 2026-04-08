@@ -20,12 +20,7 @@ export function getTextureAsset(eid: number): THREE.Texture | undefined {
 
 const textureRecipeQuery = defineQuery([TextureRecipe]);
 
-const CHANNEL_MAP: Record<number, keyof THREE.Material> = {
-  0: 'map',
-  1: 'normalMap',
-  2: 'roughnessMap',
-  3: 'metalnessMap',
-};
+const CHANNEL_MAP = ['map', 'normalMap', 'roughnessMap', 'metalnessMap'] as const;
 
 export const TextureRecipeLoadSystem: System = {
   group: 'setup',
@@ -57,7 +52,7 @@ export const TextureRecipeLoadSystem: System = {
             : THREE.ClampToEdgeWrapping;
           texture.repeat.set(repeatX, repeatY);
 
-          if (TextureRecipe.flipX[eid]) texture.flipX = true;
+          // flipX not available on THREE.Texture; skip
           if (TextureRecipe.flipY[eid]) texture.flipY = true;
 
           // Anisotropia
@@ -108,7 +103,7 @@ export function applyTextureToMaterial(
 
   const channel = TextureRecipe.channel[eid] || 0;
   const key = CHANNEL_MAP[channel];
-  if (key) {
+  if (key && key in material) {
     (material as unknown as Record<string, THREE.Texture | null>)[key] =
       texture;
     material.needsUpdate = true;

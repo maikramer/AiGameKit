@@ -12,7 +12,7 @@ export const Text3dPlugin: Plugin = {
   config: {
     adapters: {
       text3dModel: {
-        url: ((entity, value, state) => {
+        url: ((entity, value, _state) => {
           setText3dUrl(entity, value as string);
           Text3dModel.pending[entity] = 1;
         }) as Adapter,

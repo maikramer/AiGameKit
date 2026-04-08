@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { loadGltfToScene } from '../../extras/gltf-bridge';
 import { getScene } from '../rendering';
-import { Transform } from '../transforms/components';
 import { Text3dModel } from './components';
 
 // Contexto singleton para mapear entity → URL
@@ -53,12 +52,12 @@ export const Text3dLoadSystem: System = {
           if (tint !== 0) {
             group.traverse((child) => {
               if ((child as THREE.Mesh).isMesh) {
-                const mat = (child as THREE.Mesh).material;
+                const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
                 if (Array.isArray(mat)) {
                   mat.forEach((m) => {
-                    m.color?.setHex(tint);
+                    if ('color' in m) (m as THREE.MeshStandardMaterial).color?.setHex(tint);
                   });
-                } else {
+                } else if ('color' in mat) {
                   mat.color?.setHex(tint);
                 }
               }
