@@ -62,8 +62,21 @@ VIBEGAME_RECIPES = [
     "dynamic-part",
     "kinematic-part",
     "player",
+    "player-gltf",
     "orbit-camera",
+    "follow-camera",
     "gltf-load",
+    "gltf-dynamic",
+    "spawn-group",
+    "terrain",
+    "water",
+    "fog",
+    "audio-emitter",
+    "postprocessing",
+    "bloom",
+    "vignette",
+    "chromatic-aberration",
+    "noise",
     "paragraph",
     "word",
 ]
@@ -80,7 +93,8 @@ SCENE_RULES = """\
 - Keep total assets <= max_assets to avoid excessive GPU time.
 - sky_prompt should describe a 360-degree equirectangular panoramic sky.
 - Provide varied, creative ideas for each asset — avoid generic descriptions.
-- All string values in the JSON must be valid JSON (escaped quotes if needed).\
+- All string values in the JSON must be valid JSON (escaped quotes if needed).
+- Characters with generate_rig=true must use `<player-gltf>` instead of `<gltf-load>` in the scene XML.\
 """
 
 

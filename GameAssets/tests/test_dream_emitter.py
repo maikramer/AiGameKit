@@ -115,12 +115,19 @@ class TestEmitWorldXml:
         assert "gltf-load" in xml
         assert "/assets/models/crystal.glb" in xml
 
-    def test_skips_gltf_for_rigged_character(self) -> None:
+    def test_emits_player_gltf_for_rigged_character(self) -> None:
         plan = _sample_plan()
         plan.scene.placements.append(Placement(asset_id="hero", pos="0 1 0", scale="1 1 1"))
         xml = emit_world_xml(plan)
-        assert "/assets/models/hero.glb" not in xml
+        assert "player-gltf" in xml
+        assert "/assets/models/hero.glb" in xml
         assert "/assets/models/crystal.glb" in xml
+
+    def test_player_gltf_default_pos_high_y(self) -> None:
+        plan = _sample_plan()
+        plan.scene.placements.append(Placement(asset_id="hero", pos="", scale="1 1 1"))
+        xml = emit_world_xml(plan)
+        assert 'pos="0 60 0"' in xml
 
     def test_no_audio_placement(self) -> None:
         xml = emit_world_xml(_sample_plan())
@@ -159,12 +166,10 @@ class TestEmitMainTs:
         ts = emit_main_ts(_sample_plan(), with_sky=True)
         assert "applyEquirectSkyEnvironment" in ts
 
-    def test_animator_clip_names_when_rig(self) -> None:
+    def test_no_gltf_animator_in_main_ts(self) -> None:
         ts = emit_main_ts(_sample_plan(), with_sky=True)
-        assert "Animator3D_BreatheIdle" in ts
-        assert "Animator3D_Walk" in ts
-        assert "Animator3D_Run" in ts
-        assert "GltfAnimator" in ts
+        assert "GltfAnimator" not in ts
+        assert "GLTFLoader" not in ts
 
     def test_no_gltf_animator_without_rig(self) -> None:
         plan = _sample_plan()
