@@ -87,6 +87,10 @@
       "types": "./dist/plugins/water/index.d.ts",
       "import": "./dist/plugins/water/index.js"
     },
+    "./fog": {
+      "types": "./dist/plugins/fog/index.d.ts",
+      "import": "./dist/plugins/fog/index.js"
+    },
     "./debug": {
       "types": "./dist/plugins/debug/index.d.ts",
       "import": "./dist/plugins/debug/index.js"

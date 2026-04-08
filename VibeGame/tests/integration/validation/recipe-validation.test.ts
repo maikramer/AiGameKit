@@ -193,18 +193,12 @@ describe('Recipe Validation Integration', () => {
       const attributes = {
         canvas: '#game-canvas',
         sky: '#87ceeb',
-        fog: '#cccccc',
-        'fog-near': 10,
-        'fog-far': 100,
         gravity: '0 -9.81 0',
       };
 
       const result = validateRecipeAttributes('world', attributes);
       expect(result.canvas).toBe('#game-canvas');
       expect(result.sky).toBe(8900331);
-      expect(result.fog).toBe(13421772);
-      expect(result['fog-near']).toBe(10);
-      expect(result['fog-far']).toBe(100);
       expect(result.gravity).toEqual({ x: 0, y: -9.81, z: 0 });
     });
 

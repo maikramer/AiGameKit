@@ -306,14 +306,36 @@ export const worldRecipeSchema = z
   .object({
     canvas: z.string().optional(),
     sky: colorSchema.optional(),
-    fog: colorSchema.optional(),
-    'fog-near': numberSchema.optional(),
-    'fog-far': numberSchema.optional(),
     gravity: vector3Schema.optional(),
 
     id: z.string().optional(),
   })
   .strict();
+
+export const fogRecipeSchema = z
+  .object({
+    mode: z.enum(['exponential', 'exponential-squared', 'linear']).optional(),
+    color: colorSchema.optional(),
+    density: z.coerce.number().min(0).optional(),
+    near: z.coerce.number().min(0).optional(),
+    far: z.coerce.number().min(0).optional(),
+    'height-falloff': z.coerce.number().min(0).optional(),
+    'base-height': z.coerce.number().optional(),
+    'volumetric-strength': z.coerce.number().min(0).max(1).optional(),
+    quality: z.enum(['low', 'medium', 'high']).optional(),
+    'noise-scale': z.coerce.number().min(0).optional(),
+    id: z.string().optional(),
+  })
+  .strict()
+  .refine((data) => {
+    if (data.near !== undefined && data.far !== undefined) {
+      return data.far > data.near;
+    }
+    return true;
+  }, {
+    message: 'fog "far" must be greater than "near"',
+    path: ['far'],
+  });
 
 export const easingSchema = z.enum([
   'linear',
@@ -391,6 +413,7 @@ export const recipeSchemas = {
   'orbit-camera': cameraRecipeSchema,
   'follow-camera': followCameraRecipeSchema,
   world: worldRecipeSchema,
+  fog: fogRecipeSchema,
   tween: tweenElementSchema,
   pause: pauseElementSchema,
   sequence: sequenceElementSchema,

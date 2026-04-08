@@ -5,6 +5,7 @@ import type { Effect } from 'postprocessing';
 export interface PostprocessingContext {
   composers: Map<number, EffectComposer>;
   effects: Map<number, Map<string, Effect>>;
+  externalEffects: Effect[];
 }
 
 const stateToPostprocessingContext = new WeakMap<
@@ -18,8 +19,14 @@ export function getPostprocessingContext(state: State): PostprocessingContext {
     context = {
       composers: new Map(),
       effects: new Map(),
+      externalEffects: [],
     };
     stateToPostprocessingContext.set(state, context);
   }
   return context;
+}
+
+export function registerExternalEffect(state: State, effect: Effect): void {
+  const context = getPostprocessingContext(state);
+  context.externalEffects.push(effect);
 }

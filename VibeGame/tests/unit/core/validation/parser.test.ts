@@ -82,15 +82,11 @@ describe('Validation Parser', () => {
       const attributes = {
         canvas: '#game-canvas',
         sky: '#87ceeb',
-        'fog-near': 10,
-        'fog-far': 100,
       };
 
       const result = validateRecipeAttributes('world', attributes);
       expect(result.canvas).toBe('#game-canvas');
       expect(result.sky).toBe(8900331);
-      expect(result['fog-near']).toBe(10);
-      expect(result['fog-far']).toBe(100);
     });
   });
 

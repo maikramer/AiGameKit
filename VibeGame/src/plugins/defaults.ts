@@ -15,6 +15,7 @@ import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { TweenPlugin } from './tweening';
 import { DebugPlugin } from './debug/plugin';
+import { FogPlugin } from './fog/plugin';
 import { WaterPlugin } from './water/plugin';
 
 export const DefaultPlugins: Plugin[] = [
@@ -33,6 +34,7 @@ export const DefaultPlugins: Plugin[] = [
   RespawnPlugin,
   TerrainPlugin,
   SpawnerPlugin,
+  FogPlugin,
   WaterPlugin,
   DebugPlugin,
 ];

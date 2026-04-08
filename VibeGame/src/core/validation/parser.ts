@@ -74,6 +74,7 @@ const hierarchyRules: Record<string, string[]> = {
     'camera',
     'tween',
     'sequence',
+    'fog',
   ],
   entity: [
     'tween',

@@ -68,7 +68,7 @@ describe('XML Validation Integration', () => {
     });
 
     it('should validate world element', () => {
-      const xml = `<world canvas="#game" sky="#87ceeb" fog-near="10" fog-far="100"></world>`;
+      const xml = `<world canvas="#game" sky="#87ceeb"></world>`;
 
       const result = validateXMLContent(xml);
       expect(result.success).toBe(true);

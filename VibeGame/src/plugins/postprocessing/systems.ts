@@ -66,11 +66,11 @@ export const PostprocessingSystem: System = {
             preset: presetValue as SMAAPreset,
           });
           effectsMap.set('smaa', smaaEffect);
-          rebuildEffectPass(composer, effectsMap, camera);
+          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
         }
       } else if (currentSmaaEffect) {
         effectsMap.delete('smaa');
-        rebuildEffectPass(composer, effectsMap, camera);
+        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
       }
 
       if (hasBloom) {
@@ -83,7 +83,7 @@ export const PostprocessingSystem: System = {
             levels: Bloom.levels[entity],
           });
           effectsMap.set('bloom', bloomEffect);
-          rebuildEffectPass(composer, effectsMap, camera);
+          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
         } else {
           const bloom = currentBloomEffect as BloomEffectLib;
           bloom.intensity = Bloom.intensity[entity];
@@ -92,7 +92,7 @@ export const PostprocessingSystem: System = {
         }
       } else if (currentBloomEffect) {
         effectsMap.delete('bloom');
-        rebuildEffectPass(composer, effectsMap, camera);
+        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
       }
 
       if (hasDithering) {
@@ -103,7 +103,7 @@ export const PostprocessingSystem: System = {
             grayscale: Dithering.grayscale[entity] === 1,
           });
           effectsMap.set('dithering', ditheringEffect);
-          rebuildEffectPass(composer, effectsMap, camera);
+          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
         } else {
           const dithering = currentDitheringEffect as DitheringEffect;
           dithering.colorBits = Dithering.colorBits[entity];
@@ -114,7 +114,7 @@ export const PostprocessingSystem: System = {
         }
       } else if (currentDitheringEffect) {
         effectsMap.delete('dithering');
-        rebuildEffectPass(composer, effectsMap, camera);
+        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
       }
 
       if (hasTonemapping) {
@@ -127,7 +127,7 @@ export const PostprocessingSystem: System = {
             adaptationRate: Tonemapping.adaptationRate[entity],
           });
           effectsMap.set('tonemapping', tonemappingEffect);
-          rebuildEffectPass(composer, effectsMap, camera);
+          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
         } else {
           const tonemapping = currentTonemappingEffect as ToneMappingEffect;
           if (
@@ -144,14 +144,14 @@ export const PostprocessingSystem: System = {
               adaptationRate: Tonemapping.adaptationRate[entity],
             });
             effectsMap.set('tonemapping', newTonemappingEffect);
-            rebuildEffectPass(composer, effectsMap, camera);
+            rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
           } else {
             tonemapping.mode = Tonemapping.mode[entity] as ToneMappingMode;
           }
         }
       } else if (currentTonemappingEffect) {
         effectsMap.delete('tonemapping');
-        rebuildEffectPass(composer, effectsMap, camera);
+        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
       }
 
       const size = renderContext.renderer.getSize(new THREE.Vector2());
@@ -168,16 +168,32 @@ export const PostprocessingSystem: System = {
   },
 };
 
+export function triggerRebuild(state: State): void {
+  const postContext = getPostprocessingContext(state);
+  for (const [cameraEntity, composer] of postContext.composers) {
+    if (!state.exists(cameraEntity)) continue;
+    const effectsMap = postContext.effects.get(cameraEntity);
+    if (!effectsMap) continue;
+    const camera = threeCameras.get(cameraEntity);
+    if (!camera) continue;
+    rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+  }
+}
+
 function rebuildEffectPass(
   composer: EffectComposer,
   effectsMap: Map<string, Effect>,
-  camera: THREE.Camera
+  camera: THREE.Camera,
+  externalEffects: Effect[] = []
 ): void {
   while (composer.passes.length > 1) {
     composer.removePass(composer.passes[1]);
   }
 
-  if (effectsMap.size > 0) {
+  const hasBuiltinEffects = effectsMap.size > 0;
+  const hasExternalEffects = externalEffects.length > 0;
+
+  if (hasBuiltinEffects || hasExternalEffects) {
     const effects: Effect[] = [];
     if (effectsMap.has('smaa')) {
       effects.push(effectsMap.get('smaa')!);
@@ -188,6 +204,7 @@ function rebuildEffectPass(
     if (effectsMap.has('dithering')) {
       effects.push(effectsMap.get('dithering')!);
     }
+    effects.push(...externalEffects);
     if (effectsMap.has('tonemapping')) {
       effects.push(effectsMap.get('tonemapping')!);
     }
