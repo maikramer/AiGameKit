@@ -1,23 +1,17 @@
 import type { State } from '../../core';
 /* global fetch */
 import { loadGltfToSceneWithAnimator } from '../../extras/gltf-bridge';
+import { AudioEmitter } from '../audio/components';
+import { registerAudioClip } from '../audio/systems';
 
 export interface SceneManifestEntry {
-  /** Path to the GLB model file (relative to basePath) */
   model?: string;
-  /** Legacy texture paths */
   textures?: string[];
-  /** PBR texture set (albedo, normal, roughness, metallic, ao) */
   pbr_textures?: string[];
-  /** Animation clip names available in the model */
   animations?: string[];
-  /** Path to associated audio file */
   audio?: string;
-  /** Bounding box: { min: [x,y,z], max: [x,y,z], size: [x,y,z] } */
   bounds?: { min?: number[]; max?: number[]; size?: number[] };
-  /** Pipeline that generated this asset (e.g. 'tripo3d', 'meshy') */
   source_pipeline?: string;
-  /* --- Transform overrides (applied after load) --- */
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: [number, number, number];
@@ -25,29 +19,32 @@ export interface SceneManifestEntry {
 
 export interface SceneManifest {
   version: number;
-  /** ISO 8601 timestamp of when the manifest was generated (from GameAssets pipeline) */
   generated?: string;
   assets: Record<string, SceneManifestEntry>;
 }
 
-/**
- * Load a gameassets_manifest.json and spawn all model entities into the scene.
- * Returns the loaded manifest for inspection.
- */
-export async function loadSceneManifest(
-  state: State,
-  url: string,
-  basePath = '/'
-): Promise<SceneManifest> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to load manifest: ${response.status} ${response.statusText}`
-    );
-  }
+export interface HandoffRow {
+  id: string;
+  public_id?: string;
+  model?: { kind?: string; url?: string; dest?: string; source?: string };
+  audio?: { url?: string; dest?: string; source?: string };
+}
 
-  const manifest: SceneManifest = await response.json();
+export interface HandoffManifest {
+  version: number;
+  generated_at?: string;
+  public_dir?: string;
+  assets_base_url?: string;
+  rows?: HandoffRow[];
+}
 
+type RawManifest = SceneManifest & Partial<HandoffManifest>;
+
+function isHandoffFormat(data: RawManifest): data is RawManifest & { rows: HandoffRow[] } {
+  return Array.isArray((data as Partial<HandoffManifest>).rows);
+}
+
+async function loadOldFormat(state: State, manifest: SceneManifest, basePath: string): Promise<void> {
   for (const [name, entry] of Object.entries(manifest.assets)) {
     if (!entry.model) continue;
 
@@ -55,19 +52,54 @@ export async function loadSceneManifest(
       const modelUrl = basePath + entry.model;
       const result = await loadGltfToSceneWithAnimator(state, modelUrl);
 
-      if (entry.position) {
-        result.group.position.set(...entry.position);
-      }
-      if (entry.rotation) {
-        result.group.rotation.set(...entry.rotation);
-      }
-      if (entry.scale) {
-        result.group.scale.set(...entry.scale);
-      }
+      if (entry.position) result.group.position.set(...entry.position);
+      if (entry.rotation) result.group.rotation.set(...entry.rotation);
+      if (entry.scale) result.group.scale.set(...entry.scale);
     } catch (err) {
       console.warn(`[SceneManifest] Failed to load asset '${name}':`, err);
     }
   }
+}
 
-  return manifest;
+async function loadHandoffFormat(state: State, manifest: RawManifest & { rows: HandoffRow[] }, basePath: string): Promise<void> {
+  for (const row of manifest.rows) {
+    if (row.model?.url) {
+      try {
+        await loadGltfToSceneWithAnimator(state, row.model.url);
+      } catch (err) {
+        console.warn(`[SceneManifest] Failed to load model '${row.id}':`, err);
+      }
+    } else if (row.audio?.url) {
+      const eid = state.createEntity();
+      state.addComponent(eid, AudioEmitter, {
+        volume: 0.7,
+        loop: 1,
+        spatial: 0,
+        playing: 1,
+      });
+      AudioEmitter.clipPath[eid] = eid;
+      registerAudioClip(eid, basePath + row.audio.url);
+    }
+  }
+}
+
+export async function loadSceneManifest(
+  state: State,
+  url = '/assets/gameassets_handoff.json',
+  basePath = '/'
+): Promise<SceneManifest> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to load manifest: ${response.status} ${response.statusText}`);
+  }
+
+  const data: RawManifest = await response.json();
+
+  if (isHandoffFormat(data)) {
+    await loadHandoffFormat(state, data, basePath);
+  } else {
+    await loadOldFormat(state, data as SceneManifest, basePath);
+  }
+
+  return data as SceneManifest;
 }
