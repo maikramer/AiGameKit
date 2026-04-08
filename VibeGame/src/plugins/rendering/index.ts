@@ -5,10 +5,7 @@ export {
   RenderContext,
   Renderer,
 } from './components';
-export {
-  TextureRecipe,
-  TextureRecipeLoaded,
-} from './texture-recipe';
+export { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';
 export {
   applyTextureToMaterial,
   getTextureAsset,

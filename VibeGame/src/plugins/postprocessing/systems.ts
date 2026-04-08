@@ -1,8 +1,4 @@
-import {
-  EffectComposer,
-  EffectPass,
-  RenderPass,
-} from 'postprocessing';
+import { EffectComposer, EffectPass, RenderPass } from 'postprocessing';
 import type { Effect } from 'postprocessing';
 import * as THREE from 'three';
 import type { State } from '../../core';
@@ -135,7 +131,12 @@ function rebuildEffectPass(
     else middleEffects.push(effect);
   }
 
-  const effects = [...firstEffects, ...middleEffects, ...externalEffects, ...lastEffects];
+  const effects = [
+    ...firstEffects,
+    ...middleEffects,
+    ...externalEffects,
+    ...lastEffects,
+  ];
   const effectPass = new EffectPass(camera, ...effects);
   composer.addPass(effectPass);
 }

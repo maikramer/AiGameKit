@@ -52,10 +52,12 @@ export const Text3dLoadSystem: System = {
           if (tint !== 0) {
             group.traverse((child) => {
               if ((child as THREE.Mesh).isMesh) {
-                const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+                const mat = (child as THREE.Mesh)
+                  .material as THREE.MeshStandardMaterial;
                 if (Array.isArray(mat)) {
                   mat.forEach((m) => {
-                    if ('color' in m) (m as THREE.MeshStandardMaterial).color?.setHex(tint);
+                    if ('color' in m)
+                      (m as THREE.MeshStandardMaterial).color?.setHex(tint);
                   });
                 } else if ('color' in mat) {
                   mat.color?.setHex(tint);

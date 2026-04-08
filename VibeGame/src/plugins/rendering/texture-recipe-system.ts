@@ -20,7 +20,12 @@ export function getTextureAsset(eid: number): THREE.Texture | undefined {
 
 const textureRecipeQuery = defineQuery([TextureRecipe]);
 
-const CHANNEL_MAP = ['map', 'normalMap', 'roughnessMap', 'metalnessMap'] as const;
+const CHANNEL_MAP = [
+  'map',
+  'normalMap',
+  'roughnessMap',
+  'metalnessMap',
+] as const;
 
 export const TextureRecipeLoadSystem: System = {
   group: 'setup',
