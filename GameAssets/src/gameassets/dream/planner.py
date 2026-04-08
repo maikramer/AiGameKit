@@ -22,6 +22,7 @@ class AssetEntry:
     generate_3d: bool = True
     generate_audio: bool = False
     generate_rig: bool = False
+    generate_animate: bool = False
     generate_parts: bool = False
 
 
@@ -67,6 +68,7 @@ class DreamPlan:
                     "generate_3d": a.generate_3d,
                     "generate_audio": a.generate_audio,
                     "generate_rig": a.generate_rig,
+                    "generate_animate": a.generate_animate,
                     "generate_parts": a.generate_parts,
                 }
                 for a in self.assets
@@ -89,6 +91,7 @@ class DreamPlan:
                 generate_3d=a.get("generate_3d", True),
                 generate_audio=a.get("generate_audio", False),
                 generate_rig=a.get("generate_rig", False),
+                generate_animate=a.get("generate_animate", False),
                 generate_parts=a.get("generate_parts", False),
             )
             for a in d.get("assets", [])

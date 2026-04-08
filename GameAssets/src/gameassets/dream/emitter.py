@@ -90,7 +90,7 @@ def emit_manifest_csv(plan: DreamPlan) -> str:
                 "generate_3d": str(a.generate_3d).lower(),
                 "generate_audio": str(a.generate_audio).lower(),
                 "generate_rig": str(a.generate_rig).lower(),
-                "generate_animate": str(a.generate_rig).lower(),
+                "generate_animate": str(a.generate_animate).lower(),
                 "generate_parts": str(a.generate_parts).lower(),
                 "image_source": "",
             }
@@ -109,11 +109,15 @@ def _xml_escape(s: str) -> str:
 
 def emit_world_xml(plan: DreamPlan) -> str:
     """Gera bloco <world> para inserir no index.html do VibeGame."""
+    has_sky_image = bool(plan.sky_prompt)
     sky_attr = ""
-    if plan.scene.sky_color:
+    if plan.scene.sky_color and not has_sky_image:
         sky_attr = f' sky="{_xml_escape(plan.scene.sky_color)}"'
 
     lines = [f'<world canvas="#game-canvas"{sky_attr}>']
+
+    if has_sky_image:
+        lines.append('  <sky url="/assets/sky/sky.png"></sky>')
 
     gs = plan.scene.ground_size or 50
     ground_color = _ground_color_for_genre(plan.genre)
@@ -162,36 +166,26 @@ def _ground_color_for_genre(genre: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:
-    imports = ["configure", "run"]
-    extra_imports: list[str] = []
-
-    if with_sky and plan.sky_prompt:
-        imports.append("applyEquirectSkyEnvironment")
+def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:  # noqa: ARG001
+    imports = ["configure", "run", "loadSceneManifest"]
 
     lines = [
         f"import {{ {', '.join(imports)} }} from 'vibegame';",
+        "",
+        "async function bootstrap(): Promise<void> {",
+        "  configure({ canvas: '#game-canvas' });",
+        "  const runtime = await run();",
+        "  const state = runtime.getState();",
+        "  try {",
+        "    await loadSceneManifest(state);",
+        "  } catch {",
+        "    console.warn('[dream] Scene manifest not loaded (optional).');",
+        "  }",
+        "}",
+        "",
+        "void bootstrap();",
+        "",
     ]
-    if extra_imports:
-        lines.extend(extra_imports)
-
-    lines.append("")
-    lines.append("async function bootstrap(): Promise<void> {")
-    lines.append("  configure({ canvas: '#game-canvas' });")
-    lines.append("  const runtime = await run();")
-
-    if with_sky and plan.sky_prompt:
-        lines.append("  const state = runtime.getState();")
-        lines.append("  try {")
-        lines.append("    await applyEquirectSkyEnvironment(state, '/assets/sky/sky.png');")
-        lines.append("  } catch {")
-        lines.append("    console.warn('[dream] Sky env map not loaded (optional).');")
-        lines.append("  }")
-
-    lines.append("}")
-    lines.append("")
-    lines.append("void bootstrap();")
-    lines.append("")
     return "\n".join(lines)
 
 

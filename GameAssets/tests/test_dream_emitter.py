@@ -27,7 +27,14 @@ def _sample_plan() -> DreamPlan:
         assets=[
             AssetEntry(id="ground", idea="large ground platform", kind="environment", generate_3d=True),
             AssetEntry(id="crystal", idea="blue floating crystal", kind="prop", generate_3d=True),
-            AssetEntry(id="hero", idea="chibi character", kind="character", generate_3d=True, generate_rig=True),
+            AssetEntry(
+                id="hero",
+                idea="chibi character",
+                kind="character",
+                generate_3d=True,
+                generate_rig=True,
+                generate_animate=True,
+            ),
             AssetEntry(
                 id="collect_sfx",
                 idea="crystal collect sound",
@@ -162,9 +169,10 @@ class TestEmitMainTs:
         ts = emit_main_ts(_sample_plan(), with_sky=True)
         assert "from 'vibegame'" in ts
 
-    def test_has_sky_env(self) -> None:
+    def test_calls_load_scene_manifest(self) -> None:
         ts = emit_main_ts(_sample_plan(), with_sky=True)
-        assert "applyEquirectSkyEnvironment" in ts
+        assert "loadSceneManifest" in ts
+        assert "await loadSceneManifest(state)" in ts
 
     def test_no_gltf_animator_in_main_ts(self) -> None:
         ts = emit_main_ts(_sample_plan(), with_sky=True)
