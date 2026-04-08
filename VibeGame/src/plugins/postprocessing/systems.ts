@@ -66,11 +66,21 @@ export const PostprocessingSystem: System = {
             preset: presetValue as SMAAPreset,
           });
           effectsMap.set('smaa', smaaEffect);
-          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+          rebuildEffectPass(
+            composer,
+            effectsMap,
+            camera,
+            postContext.externalEffects
+          );
         }
       } else if (currentSmaaEffect) {
         effectsMap.delete('smaa');
-        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+        rebuildEffectPass(
+          composer,
+          effectsMap,
+          camera,
+          postContext.externalEffects
+        );
       }
 
       if (hasBloom) {
@@ -83,7 +93,12 @@ export const PostprocessingSystem: System = {
             levels: Bloom.levels[entity],
           });
           effectsMap.set('bloom', bloomEffect);
-          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+          rebuildEffectPass(
+            composer,
+            effectsMap,
+            camera,
+            postContext.externalEffects
+          );
         } else {
           const bloom = currentBloomEffect as BloomEffectLib;
           bloom.intensity = Bloom.intensity[entity];
@@ -92,7 +107,12 @@ export const PostprocessingSystem: System = {
         }
       } else if (currentBloomEffect) {
         effectsMap.delete('bloom');
-        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+        rebuildEffectPass(
+          composer,
+          effectsMap,
+          camera,
+          postContext.externalEffects
+        );
       }
 
       if (hasDithering) {
@@ -103,7 +123,12 @@ export const PostprocessingSystem: System = {
             grayscale: Dithering.grayscale[entity] === 1,
           });
           effectsMap.set('dithering', ditheringEffect);
-          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+          rebuildEffectPass(
+            composer,
+            effectsMap,
+            camera,
+            postContext.externalEffects
+          );
         } else {
           const dithering = currentDitheringEffect as DitheringEffect;
           dithering.colorBits = Dithering.colorBits[entity];
@@ -114,7 +139,12 @@ export const PostprocessingSystem: System = {
         }
       } else if (currentDitheringEffect) {
         effectsMap.delete('dithering');
-        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+        rebuildEffectPass(
+          composer,
+          effectsMap,
+          camera,
+          postContext.externalEffects
+        );
       }
 
       if (hasTonemapping) {
@@ -127,7 +157,12 @@ export const PostprocessingSystem: System = {
             adaptationRate: Tonemapping.adaptationRate[entity],
           });
           effectsMap.set('tonemapping', tonemappingEffect);
-          rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+          rebuildEffectPass(
+            composer,
+            effectsMap,
+            camera,
+            postContext.externalEffects
+          );
         } else {
           const tonemapping = currentTonemappingEffect as ToneMappingEffect;
           if (
@@ -144,14 +179,24 @@ export const PostprocessingSystem: System = {
               adaptationRate: Tonemapping.adaptationRate[entity],
             });
             effectsMap.set('tonemapping', newTonemappingEffect);
-            rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+            rebuildEffectPass(
+              composer,
+              effectsMap,
+              camera,
+              postContext.externalEffects
+            );
           } else {
             tonemapping.mode = Tonemapping.mode[entity] as ToneMappingMode;
           }
         }
       } else if (currentTonemappingEffect) {
         effectsMap.delete('tonemapping');
-        rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+        rebuildEffectPass(
+          composer,
+          effectsMap,
+          camera,
+          postContext.externalEffects
+        );
       }
 
       const size = renderContext.renderer.getSize(new THREE.Vector2());
@@ -176,7 +221,12 @@ export function triggerRebuild(state: State): void {
     if (!effectsMap) continue;
     const camera = threeCameras.get(cameraEntity);
     if (!camera) continue;
-    rebuildEffectPass(composer, effectsMap, camera, postContext.externalEffects);
+    rebuildEffectPass(
+      composer,
+      effectsMap,
+      camera,
+      postContext.externalEffects
+    );
   }
 }
 

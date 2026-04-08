@@ -12,9 +12,9 @@ describe('FogPlugin Registration', () => {
   });
 
   it('should have a recipe named "fog" with components ["fog"]', () => {
-    expect(FogPlugin.recipes).toHaveLength(1);
-    expect(FogPlugin.recipes[0].name).toBe('fog');
-    expect(FogPlugin.recipes[0].components).toEqual(['fog']);
+    expect(FogPlugin.recipes!).toHaveLength(1);
+    expect(FogPlugin.recipes![0].name).toBe('fog');
+    expect(FogPlugin.recipes![0].components).toEqual(['fog']);
   });
 
   it('should register the fog component', () => {
@@ -34,7 +34,7 @@ describe('FogPlugin Registration', () => {
   });
 
   it('should have config.defaults with all 12 fog fields', () => {
-    const defaults = FogPlugin.config.defaults.fog;
+    const defaults = FogPlugin.config!.defaults!.fog;
     expect(defaults).toBeDefined();
     expect(defaults.mode).toBe(0);
     expect(defaults.density).toBeCloseTo(0.015);
@@ -51,7 +51,7 @@ describe('FogPlugin Registration', () => {
   });
 
   it('should have config.enums for fog', () => {
-    const enums = FogPlugin.config.enums.fog;
+    const enums = FogPlugin.config!.enums!.fog;
     expect(enums).toBeDefined();
     expect(enums.mode).toBeDefined();
     expect(enums.quality).toBeDefined();

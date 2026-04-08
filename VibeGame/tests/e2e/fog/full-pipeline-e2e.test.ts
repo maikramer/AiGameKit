@@ -4,7 +4,7 @@
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
-import { createHeadlessState, parseWorldXml, queryEntities } from 'vibegame/cli';
+import { createHeadlessState, parseWorldXml } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { Fog } from '../../../src/plugins/fog/components';
 
@@ -44,7 +44,10 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should parse exponential fog with custom density', () => {
-    parseWorldXml(state, `<fog mode="exponential" density="0.05" color="#88ccee"></fog>`);
+    parseWorldXml(
+      state,
+      `<fog mode="exponential" density="0.05" color="#88ccee"></fog>`
+    );
 
     const fogQuery = defineQuery([Fog]);
     const fogEntities = fogQuery(state.world);
@@ -59,7 +62,6 @@ describe('E2E: Fog Full Pipeline', () => {
   it('should parse linear fog with near and far', () => {
     parseWorldXml(state, `<fog mode="linear" near="5" far="200"></fog>`);
 
-    const fogQuery = defineQuery([Fog]);
     const eid = defineQuery([Fog])(state.world)[0];
 
     expect(Fog.mode[eid]).toBe(2);
@@ -70,7 +72,10 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should parse exponential-squared fog', () => {
-    parseWorldXml(state, `<fog mode="exponential-squared" density="0.1"></fog>`);
+    parseWorldXml(
+      state,
+      `<fog mode="exponential-squared" density="0.1"></fog>`
+    );
 
     const eid = defineQuery([Fog])(state.world)[0];
     expect(Fog.mode[eid]).toBe(1);
@@ -128,7 +133,10 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should keep fog component data stable across simulation steps', () => {
-    parseWorldXml(state, `<fog mode="linear" near="10" far="300" density="0.04"></fog>`);
+    parseWorldXml(
+      state,
+      `<fog mode="linear" near="10" far="300" density="0.04"></fog>`
+    );
 
     const eid = defineQuery([Fog])(state.world)[0];
     const initialMode = Fog.mode[eid];

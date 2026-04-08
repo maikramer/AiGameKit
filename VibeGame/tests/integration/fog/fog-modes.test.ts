@@ -18,7 +18,9 @@ describe('Fog Modes Integration', () => {
     });
 
     it('should accept "exponential-squared" as valid mode', () => {
-      const result = validateRecipeAttributes('fog', { mode: 'exponential-squared' });
+      const result = validateRecipeAttributes('fog', {
+        mode: 'exponential-squared',
+      });
       expect(result.mode).toBe('exponential-squared');
     });
 
@@ -28,7 +30,9 @@ describe('Fog Modes Integration', () => {
     });
 
     it('should reject invalid mode value', () => {
-      expect(() => validateRecipeAttributes('fog', { mode: 'volumetric' })).toThrow();
+      expect(() =>
+        validateRecipeAttributes('fog', { mode: 'volumetric' })
+      ).toThrow();
     });
 
     it('should reject numeric mode value', () => {
@@ -103,7 +107,9 @@ describe('Fog Modes Integration', () => {
     });
 
     it('should reject invalid quality value', () => {
-      expect(() => validateRecipeAttributes('fog', { quality: 'ultra' })).toThrow();
+      expect(() =>
+        validateRecipeAttributes('fog', { quality: 'ultra' })
+      ).toThrow();
     });
   });
 

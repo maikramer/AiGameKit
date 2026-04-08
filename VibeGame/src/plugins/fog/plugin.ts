@@ -2,13 +2,28 @@ import type { Plugin, State } from '../../core';
 import { Fog } from './components';
 import { FogEffectSystem, FogSystem } from './systems';
 
-function fogColorAdapter(entity: number, value: string | number, state: State): void {
-  const num = typeof value === 'number' ? value : parseInt((value as string).startsWith('#') ? (value as string).slice(1) : (value as string), 16);
+function fogColorAdapter(
+  entity: number,
+  value: string | number,
+  state: State
+): void {
+  const num =
+    typeof value === 'number'
+      ? value
+      : parseInt(
+          (value as string).startsWith('#')
+            ? (value as string).slice(1)
+            : (value as string),
+          16
+        );
   const component = state.getComponent('fog');
   if (component) {
-    (component as Record<string, Float32Array>).colorR[entity] = ((num >> 16) & 0xff) / 255;
-    (component as Record<string, Float32Array>).colorG[entity] = ((num >> 8) & 0xff) / 255;
-    (component as Record<string, Float32Array>).colorB[entity] = (num & 0xff) / 255;
+    (component as Record<string, Float32Array>).colorR[entity] =
+      ((num >> 16) & 0xff) / 255;
+    (component as Record<string, Float32Array>).colorG[entity] =
+      ((num >> 8) & 0xff) / 255;
+    (component as Record<string, Float32Array>).colorB[entity] =
+      (num & 0xff) / 255;
   }
 }
 

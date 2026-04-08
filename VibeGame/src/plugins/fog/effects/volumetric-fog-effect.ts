@@ -33,78 +33,88 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 `;
 
 export interface VolumetricFogEffectOptions {
-    fogColor?: [number, number, number];
-    density?: number;
-    heightFalloff?: number;
-    baseHeight?: number;
-    volumetricStrength?: number;
-    noiseScale?: number;
-    quality?: 'low' | 'medium' | 'high';
+  fogColor?: [number, number, number];
+  density?: number;
+  heightFalloff?: number;
+  baseHeight?: number;
+  volumetricStrength?: number;
+  noiseScale?: number;
+  quality?: 'low' | 'medium' | 'high';
 }
 
 export class VolumetricFogEffect extends Effect {
-    constructor(options?: VolumetricFogEffectOptions) {
-        const quality = options?.quality ?? 'medium';
-        super('VolumetricFogEffect', fragmentShader, {
-            blendFunction: quality === 'low' ? BlendFunction.SKIP : BlendFunction.NORMAL,
-            attributes: EffectAttribute.DEPTH,
-            uniforms: new Map<string, Uniform>([
-                ['fogColor', new Uniform(new Vector3(...(options?.fogColor ?? [0.533, 0.6, 0.667])))],
-                ['density', new Uniform(options?.density ?? 0.015)],
-                ['heightFalloff', new Uniform(options?.heightFalloff ?? 1.0)],
-                ['baseHeight', new Uniform(options?.baseHeight ?? 0)],
-                ['volumetricStrength', new Uniform(options?.volumetricStrength ?? 0.5)],
-                ['noiseScale', new Uniform(options?.noiseScale ?? 1.0)],
-            ]),
-        });
-    }
+  constructor(options?: VolumetricFogEffectOptions) {
+    const quality = options?.quality ?? 'medium';
+    super('VolumetricFogEffect', fragmentShader, {
+      blendFunction:
+        quality === 'low' ? BlendFunction.SKIP : BlendFunction.NORMAL,
+      attributes: EffectAttribute.DEPTH,
+      uniforms: new Map<string, Uniform>([
+        [
+          'fogColor',
+          new Uniform(
+            new Vector3(...(options?.fogColor ?? [0.533, 0.6, 0.667]))
+          ),
+        ],
+        ['density', new Uniform(options?.density ?? 0.015)],
+        ['heightFalloff', new Uniform(options?.heightFalloff ?? 1.0)],
+        ['baseHeight', new Uniform(options?.baseHeight ?? 0)],
+        ['volumetricStrength', new Uniform(options?.volumetricStrength ?? 0.5)],
+        ['noiseScale', new Uniform(options?.noiseScale ?? 1.0)],
+      ]),
+    });
+  }
 
-    get fogColor(): [number, number, number] {
-        const v = this.uniforms.get('fogColor')!.value as Vector3;
-        return [v.x, v.y, v.z];
-    }
+  get fogColor(): [number, number, number] {
+    const v = this.uniforms.get('fogColor')!.value as Vector3;
+    return [v.x, v.y, v.z];
+  }
 
-    set fogColor(value: [number, number, number]) {
-        (this.uniforms.get('fogColor')!.value as Vector3).set(value[0], value[1], value[2]);
-    }
+  set fogColor(value: [number, number, number]) {
+    (this.uniforms.get('fogColor')!.value as Vector3).set(
+      value[0],
+      value[1],
+      value[2]
+    );
+  }
 
-    get density(): number {
-        return this.uniforms.get('density')!.value;
-    }
+  get density(): number {
+    return this.uniforms.get('density')!.value;
+  }
 
-    set density(value: number) {
-        this.uniforms.get('density')!.value = value;
-    }
+  set density(value: number) {
+    this.uniforms.get('density')!.value = value;
+  }
 
-    get heightFalloff(): number {
-        return this.uniforms.get('heightFalloff')!.value;
-    }
+  get heightFalloff(): number {
+    return this.uniforms.get('heightFalloff')!.value;
+  }
 
-    set heightFalloff(value: number) {
-        this.uniforms.get('heightFalloff')!.value = value;
-    }
+  set heightFalloff(value: number) {
+    this.uniforms.get('heightFalloff')!.value = value;
+  }
 
-    get baseHeight(): number {
-        return this.uniforms.get('baseHeight')!.value;
-    }
+  get baseHeight(): number {
+    return this.uniforms.get('baseHeight')!.value;
+  }
 
-    set baseHeight(value: number) {
-        this.uniforms.get('baseHeight')!.value = value;
-    }
+  set baseHeight(value: number) {
+    this.uniforms.get('baseHeight')!.value = value;
+  }
 
-    get volumetricStrength(): number {
-        return this.uniforms.get('volumetricStrength')!.value;
-    }
+  get volumetricStrength(): number {
+    return this.uniforms.get('volumetricStrength')!.value;
+  }
 
-    set volumetricStrength(value: number) {
-        this.uniforms.get('volumetricStrength')!.value = value;
-    }
+  set volumetricStrength(value: number) {
+    this.uniforms.get('volumetricStrength')!.value = value;
+  }
 
-    get noiseScale(): number {
-        return this.uniforms.get('noiseScale')!.value;
-    }
+  get noiseScale(): number {
+    return this.uniforms.get('noiseScale')!.value;
+  }
 
-    set noiseScale(value: number) {
-        this.uniforms.get('noiseScale')!.value = value;
-    }
+  set noiseScale(value: number) {
+    this.uniforms.get('noiseScale')!.value = value;
+  }
 }

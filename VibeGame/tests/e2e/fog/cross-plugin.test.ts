@@ -5,12 +5,10 @@
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
-import { createHeadlessState, parseWorldXml, queryEntities } from 'vibegame/cli';
+import { createHeadlessState, parseWorldXml } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { Fog } from '../../../src/plugins/fog/components';
 import { Water } from '../../../src/plugins/water/components';
-import { FogPlugin } from '../../../src/plugins/fog/plugin';
-import { WaterPlugin } from '../../../src/plugins/water/plugin';
 
 globalThis.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
 globalThis.cancelAnimationFrame = clearTimeout as any;
@@ -154,7 +152,9 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     expect(Water.underwaterFogColorB[waterEid]).toBeCloseTo(0.15);
 
     expect(Fog.density[fogEid]).toBeCloseTo(0.04);
-    expect(Fog.density[fogEid]).not.toBeCloseTo(Water.underwaterFogDensity[waterEid]);
+    expect(Fog.density[fogEid]).not.toBeCloseTo(
+      Water.underwaterFogDensity[waterEid]
+    );
 
     for (let i = 0; i < 10; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);

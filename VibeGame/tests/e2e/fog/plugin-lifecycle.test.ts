@@ -3,7 +3,14 @@
  * All tests run headless (no GPU/WebGL required).
  */
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, TIME_CONSTANTS, defineQuery, addComponent, addEntity, removeEntity } from 'vibegame';
+import {
+  State,
+  TIME_CONSTANTS,
+  defineQuery,
+  addComponent,
+  addEntity,
+  removeEntity,
+} from 'vibegame';
 import { createHeadlessState } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { FogPlugin } from '../../../src/plugins/fog/plugin';
@@ -23,11 +30,8 @@ describe('E2E: Fog Plugin Lifecycle', () => {
 
   it('should register FogPlugin with recipes, components, and systems', () => {
     expect(state.hasRecipe('fog')).toBe(true);
-
     const fogComponent = state.getComponent('fog');
     expect(fogComponent).toBeDefined();
-
-    const systemNames = Array.from(state.systems).map((s) => s.name || String(s));
     expect(state.systems.size).toBeGreaterThan(0);
   });
 

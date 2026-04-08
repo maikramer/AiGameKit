@@ -36,7 +36,7 @@ describe('Fog Defaults Integration', () => {
     expect(entities).toHaveLength(1);
     const entity = entities[0].entity;
 
-    const defaults = FogPlugin.config.defaults.fog;
+    const defaults = FogPlugin.config!.defaults!.fog;
     expect(Fog.mode[entity]).toBe(defaults.mode);
     expect(Fog.density[entity]).toBeCloseTo(defaults.density);
     expect(Fog.near[entity]).toBe(defaults.near);
@@ -46,7 +46,9 @@ describe('Fog Defaults Integration', () => {
     expect(Fog.colorB[entity]).toBeCloseTo(defaults.colorB);
     expect(Fog.heightFalloff[entity]).toBeCloseTo(defaults.heightFalloff);
     expect(Fog.baseHeight[entity]).toBe(defaults.baseHeight);
-    expect(Fog.volumetricStrength[entity]).toBeCloseTo(defaults.volumetricStrength);
+    expect(Fog.volumetricStrength[entity]).toBeCloseTo(
+      defaults.volumetricStrength
+    );
     expect(Fog.quality[entity]).toBe(defaults.quality);
     expect(Fog.noiseScale[entity]).toBeCloseTo(defaults.noiseScale);
   });
@@ -75,7 +77,7 @@ describe('Fog Defaults Integration', () => {
     const entities = parseXMLToEntities(state, parsed.root);
 
     const entity = entities[0].entity;
-    const defaults = FogPlugin.config.defaults.fog;
+    const defaults = FogPlugin.config!.defaults!.fog;
 
     expect(Fog.density[entity]).toBeCloseTo(0.1);
     expect(Fog.quality[entity]).toBe(2);
@@ -86,7 +88,9 @@ describe('Fog Defaults Integration', () => {
     expect(Fog.colorB[entity]).toBeCloseTo(defaults.colorB);
     expect(Fog.heightFalloff[entity]).toBeCloseTo(defaults.heightFalloff);
     expect(Fog.baseHeight[entity]).toBe(defaults.baseHeight);
-    expect(Fog.volumetricStrength[entity]).toBeCloseTo(defaults.volumetricStrength);
+    expect(Fog.volumetricStrength[entity]).toBeCloseTo(
+      defaults.volumetricStrength
+    );
     expect(Fog.noiseScale[entity]).toBeCloseTo(defaults.noiseScale);
   });
 

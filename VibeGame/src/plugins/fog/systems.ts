@@ -4,21 +4,28 @@ import type { State, System } from '../../core';
 import { getScene } from '../rendering/utils';
 import { CameraSyncSystem } from '../rendering/systems';
 import { Fog } from './components';
-import { getPostprocessingContext, registerExternalEffect, triggerRebuild } from '../postprocessing';
+import {
+  getPostprocessingContext,
+  registerExternalEffect,
+  triggerRebuild,
+} from '../postprocessing';
 import { VolumetricFogEffect } from './effects/volumetric-fog-effect';
 
 const fogQuery = defineQuery([Fog]);
 
-const FOG_STATE = new WeakMap<State, {
-  trackedEid: number;
-  mode: number;
-  density: number;
-  near: number;
-  far: number;
-  colorR: number;
-  colorG: number;
-  colorB: number;
-}>();
+const FOG_STATE = new WeakMap<
+  State,
+  {
+    trackedEid: number;
+    mode: number;
+    density: number;
+    near: number;
+    far: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+  }
+>();
 
 export const FogSystem: System = {
   group: 'draw',

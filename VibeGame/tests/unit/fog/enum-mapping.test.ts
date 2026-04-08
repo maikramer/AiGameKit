@@ -3,7 +3,7 @@ import { FogPlugin } from '../../../src/plugins/fog/plugin';
 
 describe('Fog Enum Mapping', () => {
   describe('mode enum', () => {
-    const mode = FogPlugin.config.enums.fog.mode;
+    const mode = FogPlugin.config!.enums!.fog.mode;
 
     it('should map "exponential" to 0', () => {
       expect(mode.exponential).toBe(0);
@@ -23,7 +23,7 @@ describe('Fog Enum Mapping', () => {
   });
 
   describe('quality enum', () => {
-    const quality = FogPlugin.config.enums.fog.quality;
+    const quality = FogPlugin.config!.enums!.fog.quality;
 
     it('should map "low" to 0', () => {
       expect(quality.low).toBe(0);

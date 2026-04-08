@@ -327,15 +327,18 @@ export const fogRecipeSchema = z
     id: z.string().optional(),
   })
   .strict()
-  .refine((data) => {
-    if (data.near !== undefined && data.far !== undefined) {
-      return data.far > data.near;
+  .refine(
+    (data) => {
+      if (data.near !== undefined && data.far !== undefined) {
+        return data.far > data.near;
+      }
+      return true;
+    },
+    {
+      message: 'fog "far" must be greater than "near"',
+      path: ['far'],
     }
-    return true;
-  }, {
-    message: 'fog "far" must be greater than "near"',
-    path: ['far'],
-  });
+  );
 
 export const easingSchema = z.enum([
   'linear',

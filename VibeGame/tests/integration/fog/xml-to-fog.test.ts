@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
-import { validateRecipeAttributes, validateXMLContent } from 'vibegame/core/validation';
+import {
+  validateRecipeAttributes,
+  validateXMLContent,
+} from 'vibegame/core/validation';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
 import { FogPlugin } from '../../../src/plugins/fog/plugin';
 import { Fog } from '../../../src/plugins/fog/components';
@@ -87,7 +90,9 @@ describe('XML to Fog Component Integration', () => {
   });
 
   it('should reject negative density', () => {
-    expect(() => validateRecipeAttributes('fog', { density: '-0.01' })).toThrow();
+    expect(() =>
+      validateRecipeAttributes('fog', { density: '-0.01' })
+    ).toThrow();
   });
 
   it('should reject negative near', () => {
@@ -160,7 +165,8 @@ describe('XML to Fog Component Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog mode="linear" density="0.05" near="5" far="200" color="#88ccee"></fog></root>';
+    const xml =
+      '<root><fog mode="linear" density="0.05" near="5" far="200" color="#88ccee"></fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -182,7 +188,7 @@ describe('XML to Fog Component Integration', () => {
     const entities = parseXMLToEntities(state, parsed.root);
 
     const entity = entities[0].entity;
-    const defaults = FogPlugin.config.defaults.fog;
+    const defaults = FogPlugin.config!.defaults!.fog;
     expect(Fog.mode[entity]).toBe(defaults.mode);
     expect(Fog.density[entity]).toBeCloseTo(defaults.density);
     expect(Fog.colorR[entity]).toBeCloseTo(defaults.colorR);
@@ -190,7 +196,9 @@ describe('XML to Fog Component Integration', () => {
     expect(Fog.colorB[entity]).toBeCloseTo(defaults.colorB);
     expect(Fog.heightFalloff[entity]).toBeCloseTo(defaults.heightFalloff);
     expect(Fog.baseHeight[entity]).toBe(defaults.baseHeight);
-    expect(Fog.volumetricStrength[entity]).toBeCloseTo(defaults.volumetricStrength);
+    expect(Fog.volumetricStrength[entity]).toBeCloseTo(
+      defaults.volumetricStrength
+    );
     expect(Fog.quality[entity]).toBe(defaults.quality);
     expect(Fog.noiseScale[entity]).toBeCloseTo(defaults.noiseScale);
   });
