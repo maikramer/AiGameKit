@@ -181,6 +181,7 @@
     "@dimforge/rapier3d-compat": "^0.18.2",
     "@interverse/three-terrain-lod": "^2.0.0",
     "gsap": "^3.13.0",
+    "howler": "^2.2.4",
     "postprocessing": "^6.37.8",
     "troika-three-text": "^0.52.4",
     "zod": "^4.1.5"

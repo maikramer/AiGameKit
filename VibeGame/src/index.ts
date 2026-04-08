@@ -39,7 +39,7 @@ export {
   registerAnimator,
 } from './plugins/gltf-anim';
 export { isKeyDown } from './plugins/input';
-export { AudioEmitter, AudioListener, AudioPlugin } from './plugins/audio';
+export { AudioEmitter, AudioListener, AudioPlugin, registerAudioClip } from './plugins/audio';
 export { Lod, LodPlugin, LodSystem } from './plugins/lod';
 export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';
 export {

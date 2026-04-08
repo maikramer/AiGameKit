@@ -18,6 +18,7 @@ import { DebugPlugin } from './debug/plugin';
 import { FogPlugin } from './fog/plugin';
 import { Text3dPlugin } from './text-3d/plugin';
 import { SkyPlugin } from './sky/plugin';
+import { AudioPlugin } from './audio/plugin';
 import { WaterPlugin } from './water/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
 
@@ -41,6 +42,7 @@ export const DefaultPlugins: Plugin[] = [
   PostprocessingPlugin,
   SkyPlugin,
   WaterPlugin,
+  AudioPlugin,
   Text3dPlugin,
   DebugPlugin,
 ];
