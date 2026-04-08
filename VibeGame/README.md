@@ -223,28 +223,28 @@ bun test
 
 VibeGame includes 20+ plugins for physics, rendering, player controls, and more.
 
-| Category | Plugins |
-|----------|--------|
-| **Core** | transforms, physics, rendering, input, startup |
-| **Camera** | orbit-camera, follow-camera |
-| **Player** | player, gltf-anim |
-| **3D Models** | gltf-xml, **text-3d** (Text3D/Hunyuan GLB) |
-| **Environment** | **sky** (equirectangular IBL), fog, water |
+| Category            | Plugins                                                                       |
+| ------------------- | ----------------------------------------------------------------------------- |
+| **Core**            | transforms, physics, rendering, input, startup                                |
+| **Camera**          | orbit-camera, follow-camera                                                   |
+| **Player**          | player, gltf-anim                                                             |
+| **3D Models**       | gltf-xml, **text-3d** (Text3D/Hunyuan GLB)                                    |
+| **Environment**     | **sky** (equirectangular IBL), fog, water                                     |
 | **Post-processing** | bloom, SMAA, dithering, tonemapping ([registry API](docs/EFFECT-REGISTRY.md)) |
-| **Logic** | animation, tweening, spawner, respawn, lod, audio, debug |
-| **Pipeline** | scene-manifest (GameAssets JSON), TextureRecipe (Texture2D procedural) |
+| **Logic**           | animation, tweening, spawner, respawn, lod, audio, debug                      |
+| **Pipeline**        | scene-manifest (GameAssets JSON), TextureRecipe (Texture2D procedural)        |
 
 Full list: [`docs/PLUGINS.md`](docs/PLUGINS.md)
 
 ## Documentation
 
-| Doc | Description |
-|-----|-------------|
-| [`docs/PLUGINS.md`](docs/PLUGINS.md) | Lista completa de plugins |
-| [`docs/SHARED.md`](docs/SHARED.md) | Módulo shared (tipos, math, validation) |
-| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md) | Sistema de efeitos pós-processamento |
-| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md) | Pipeline GameAssets Python → VibeGame |
-| [`src/plugins/README.md`](src/plugins/README.md) | Arquitetura de plugins + template |
+| Doc                                                  | Description                             |
+| ---------------------------------------------------- | --------------------------------------- |
+| [`docs/PLUGINS.md`](docs/PLUGINS.md)                 | Lista completa de plugins               |
+| [`docs/SHARED.md`](docs/SHARED.md)                   | Módulo shared (tipos, math, validation) |
+| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md) | Sistema de efeitos pós-processamento    |
+| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md)   | Pipeline GameAssets Python → VibeGame   |
+| [`src/plugins/README.md`](src/plugins/README.md)     | Arquitetura de plugins + template       |
 
 ## Shared Module
 

@@ -192,30 +192,30 @@ export { MeuSystem } from './systems';
 
 ## Plugins Existentes
 
-| Plugin           | Descrição                                     | Complexidade |
-| ---------------- | --------------------------------------------- | ------------ |
-| `transforms`     | Posição/rotação/escala 3D                     | Baixa        |
-| `physics`        | Física (Rapier) + colliders                   | Alta         |
-| `rendering`      | Three.js renderer, câmeras, cenas             | Alta         |
-| `player`         | Controle de jogador (movimento, pulo, câmera) | Média        |
-| `input`          | Teclado/mouse/gamepad                         | Média        |
-| `orbit-camera`   | Câmera orbital com zoom                       | Média        |
-| `follow-camera`  | Câmera em terceira pessoa                     | Média        |
-| `fog`            | Neblina volumétrica + fog exp/linear          | Média        |
-| `water`          | Água com física, nado, reflexos               | Alta         |
-| `terrain`        | Terreno procedural com heightmaps             | Alta         |
-| `gltf-xml`       | Carregamento de modelos GLB/GLTF              | Alta         |
-| `animation`      | Sistema de animação                           | Média        |
-| `tweening`       | Interpolações suaves (tweens)                 | Baixa        |
-| `spawner`        | Spawn de entidades                            | Baixa        |
-| `respawn`        | Respawn de entidades                          | Baixa        |
-| `lod`            | Level of Detail (near/far)                    | Baixa        |
-| `startup`        | Execução deferida pós-inicialização           | Baixa        |
-| `debug`          | Debug overlays (wireframes, etc.)             | Baixa        |
-| `scene-manifest` | Carregamento de cenas XML                     | Média        |
-| `text-3d`        | Modelos GLB do Text3D (Hunyuan)              | Baixa        |
-| `sky`            | Skybox equirectangular + IBL (PMREM)         | Média        |
-| `audio`          | Áudio espacial                                | Média        |
-| `sprite`         | Sprites 2D                                    | Baixa        |
-| `line`           | Linhas 3D                                     | Baixa        |
-| `postprocessing` | Bloom, SMAA, dithering, tonemapping (registry) | Alta        |
+| Plugin           | Descrição                                      | Complexidade |
+| ---------------- | ---------------------------------------------- | ------------ |
+| `transforms`     | Posição/rotação/escala 3D                      | Baixa        |
+| `physics`        | Física (Rapier) + colliders                    | Alta         |
+| `rendering`      | Three.js renderer, câmeras, cenas              | Alta         |
+| `player`         | Controle de jogador (movimento, pulo, câmera)  | Média        |
+| `input`          | Teclado/mouse/gamepad                          | Média        |
+| `orbit-camera`   | Câmera orbital com zoom                        | Média        |
+| `follow-camera`  | Câmera em terceira pessoa                      | Média        |
+| `fog`            | Neblina volumétrica + fog exp/linear           | Média        |
+| `water`          | Água com física, nado, reflexos                | Alta         |
+| `terrain`        | Terreno procedural com heightmaps              | Alta         |
+| `gltf-xml`       | Carregamento de modelos GLB/GLTF               | Alta         |
+| `animation`      | Sistema de animação                            | Média        |
+| `tweening`       | Interpolações suaves (tweens)                  | Baixa        |
+| `spawner`        | Spawn de entidades                             | Baixa        |
+| `respawn`        | Respawn de entidades                           | Baixa        |
+| `lod`            | Level of Detail (near/far)                     | Baixa        |
+| `startup`        | Execução deferida pós-inicialização            | Baixa        |
+| `debug`          | Debug overlays (wireframes, etc.)              | Baixa        |
+| `scene-manifest` | Carregamento de cenas XML                      | Média        |
+| `text-3d`        | Modelos GLB do Text3D (Hunyuan)                | Baixa        |
+| `sky`            | Skybox equirectangular + IBL (PMREM)           | Média        |
+| `audio`          | Áudio espacial                                 | Média        |
+| `sprite`         | Sprites 2D                                     | Baixa        |
+| `line`           | Linhas 3D                                      | Baixa        |
+| `postprocessing` | Bloom, SMAA, dithering, tonemapping (registry) | Alta         |
