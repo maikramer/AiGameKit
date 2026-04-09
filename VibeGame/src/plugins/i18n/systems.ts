@@ -10,6 +10,7 @@ export const I18nResolveSystem: System = {
   group: 'simulation',
   update: (state) => {
     for (const eid of i18nHudQuery(state.world)) {
+      if (I18nText.resolved[eid] === 1) continue;
       const key = getStringAt(state, I18nText.keyIndex[eid]);
       const text = t(state, key);
       HudPanel.textIndex[eid] = internString(state, text);
