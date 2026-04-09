@@ -20,6 +20,28 @@ export const CameraProjection = {
 export const threeCameras = new Map<number, THREE.Camera>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
 
+let angleD3dShaderInfoWarnFilterInstalled = false;
+
+/** Suprime avisos não acionáveis do compilador HLSL/D3D (ANGLE no Windows) no Program Info Log. */
+function installAngleD3dShaderInfoWarnFilter(): void {
+  if (angleD3dShaderInfoWarnFilterInstalled || typeof console === 'undefined') {
+    return;
+  }
+  angleD3dShaderInfoWarnFilterInstalled = true;
+  const orig = console.warn.bind(console);
+  console.warn = (...args: unknown[]) => {
+    const text = args.map((a) => String(a)).join(' ');
+    if (
+      text.includes('WebGLProgram') &&
+      text.includes('Program Info Log') &&
+      text.includes('X4122')
+    ) {
+      return;
+    }
+    orig(...args);
+  };
+}
+
 function getCanvasAspect(state: State): {
   width: number;
   height: number;
@@ -290,6 +312,7 @@ export function createRenderer(
   canvas: HTMLCanvasElement,
   clearColor: number
 ): THREE.WebGLRenderer {
+  installAngleD3dShaderInfoWarnFilter();
   const renderer = new THREE.WebGLRenderer({
     canvas,
     antialias: true,

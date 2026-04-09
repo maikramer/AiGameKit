@@ -22,6 +22,7 @@ import {
 } from './transform-merge';
 import {
   getGltfLocalYBounds,
+  isGltfBoundsPrefetchInflight,
   warnMissingGltfBoundsOnce,
 } from '../gltf-xml/gltf-bounds-cache';
 import { TransformHierarchySystem } from '../transforms';
@@ -126,7 +127,7 @@ function spawnOne(
       } else {
         _foot.set(0, lift, 0);
       }
-    } else {
+    } else if (!isGltfBoundsPrefetchInflight(url)) {
       warnMissingGltfBoundsOnce(url);
     }
   }

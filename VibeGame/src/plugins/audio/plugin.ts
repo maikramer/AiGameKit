@@ -1,9 +1,9 @@
 import type { Plugin } from '../../core';
 import { AudioEmitter, AudioListener } from './components';
-import { AudioSystem } from './systems';
+import { AudioListenerSetupSystem, AudioSystem } from './systems';
 
 export const AudioPlugin: Plugin = {
-  systems: [AudioSystem],
+  systems: [AudioListenerSetupSystem, AudioSystem],
   components: {
     AudioEmitter,
     AudioListener,

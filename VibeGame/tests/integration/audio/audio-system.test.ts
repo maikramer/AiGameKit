@@ -1,7 +1,19 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
 import { State } from 'vibegame';
 import { AudioEmitter } from '../../../src/plugins/audio/components';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
+
+const originalWarn = console.warn;
+beforeAll(() => {
+  console.warn = (...args: unknown[]) => {
+    const msg = String(args[0] ?? '');
+    if (msg.includes('[audio]') && msg.includes('AudioListener')) return;
+    originalWarn.apply(console, args as []);
+  };
+});
+afterAll(() => {
+  console.warn = originalWarn;
+});
 
 const howlInstances: any[] = [];
 

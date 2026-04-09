@@ -2,8 +2,9 @@ import { Howl, Howler } from 'howler';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { AudioEmitter, AudioListener } from './components';
-import { Transform, WorldTransform } from '../transforms/components';
 import { MainCamera } from '../rendering/components';
+import { TransformHierarchySystem } from '../transforms/systems';
+import { Transform, WorldTransform } from '../transforms/components';
 
 // Howler.js spatial audio uses stereo panning only (no HRTF).
 
@@ -15,6 +16,7 @@ export function registerAudioClip(id: number, url: string): void {
 
 const audioQuery = defineQuery([AudioEmitter]);
 const listenerQuery = defineQuery([AudioListener, MainCamera, WorldTransform]);
+const mainCameraTransformQuery = defineQuery([MainCamera, Transform]);
 
 interface AudioState {
   howlMap: Map<number, Howl>;
@@ -33,8 +35,25 @@ function getOrCreateState(state: State): AudioState {
   return s;
 }
 
+/** Garante AudioListener na entidade da câmara (MainCamera + Transform). */
+export const AudioListenerSetupSystem: System = {
+  group: 'setup',
+  update(state: State) {
+    if (state.headless) return;
+    for (const eid of mainCameraTransformQuery(state.world)) {
+      if (!state.hasComponent(eid, AudioListener)) {
+        state.addComponent(eid, AudioListener);
+        AudioListener.posX[eid] = 0;
+        AudioListener.posY[eid] = 0;
+        AudioListener.posZ[eid] = 0;
+      }
+    }
+  },
+};
+
 export const AudioSystem: System = {
   group: 'simulation',
+  after: [TransformHierarchySystem],
   update(state: State) {
     if (state.headless) return;
 
@@ -60,7 +79,11 @@ export const AudioSystem: System = {
             volume: AudioEmitter.volume[eid],
             rate: AudioEmitter.pitch[eid],
             ...(spatial && {
-              pos: [Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]],
+              pos: [
+                Transform.posX[eid],
+                Transform.posY[eid],
+                Transform.posZ[eid],
+              ],
               pannerAttr: {
                 refDistance: AudioEmitter.minDistance[eid],
                 maxDistance: AudioEmitter.maxDistance[eid],
@@ -83,7 +106,11 @@ export const AudioSystem: System = {
         howl.rate(AudioEmitter.pitch[eid]);
 
         if (AudioEmitter.spatial[eid] === 1) {
-          howl.pos(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
+          howl.pos(
+            Transform.posX[eid],
+            Transform.posY[eid],
+            Transform.posZ[eid]
+          );
           howl.pannerAttr({
             refDistance: AudioEmitter.minDistance[eid],
             maxDistance: AudioEmitter.maxDistance[eid],
@@ -118,9 +145,14 @@ export const AudioSystem: System = {
         ctx.listener.positionY.value = y;
         ctx.listener.positionZ.value = z;
       }
-    } else if (!getOrCreateState(state)._listenerWarned) {
+    } else if (
+      audioQuery(state.world).length > 0 &&
+      !getOrCreateState(state)._listenerWarned
+    ) {
       getOrCreateState(state)._listenerWarned = true;
-      console.warn('[audio] No entity with AudioListener + MainCamera + WorldTransform found.');
+      console.warn(
+        '[audio] Nenhuma entidade com AudioListener + MainCamera + WorldTransform; áudio espacial pode falhar.'
+      );
     }
   },
 };

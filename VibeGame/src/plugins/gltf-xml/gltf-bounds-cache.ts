@@ -33,6 +33,11 @@ export function getGltfLocalYBounds(
   return boundsByUrl.get(normalizeGltfUrlKey(url)) ?? null;
 }
 
+export function isGltfBoundsPrefetchInflight(url: string): boolean {
+  const key = normalizeGltfUrlKey(url);
+  return prefetchInflight.has(key);
+}
+
 export function warnMissingGltfBoundsOnce(url: string): void {
   const key = normalizeGltfUrlKey(url);
   if (warnedMissing.has(key)) return;

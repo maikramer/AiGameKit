@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * CLI `vibegame` — ponto de entrada estável para o instalador unificado do monorepo.
- * `vibegame run`: engine sem `bun install` salvo `--install`; em apps, instala deps em falta (bun, com fallback npm).
+ * `vibegame run`: antes do build da engine, `bun install` na engine se faltar alguma dependência
+ * declarada em package.json (evita erros tipo Rollup não resolver `howler`). `--install` força install
+ * mesmo com node_modules completo. `--skip-engine-install` pula esse passo. Em apps, instala deps em
+ * falta (bun, com fallback npm).
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
@@ -112,14 +115,13 @@ function resolveEngineRootForRun(cwd) {
 }
 
 /**
- * Engine: `bun install` só com `--install`.
- * App: `bun install` se faltar vite/three ou `file:vibegame` em node_modules; fallback npm se bun falhar.
  * @param {string[]} args rest after `vibegame run`
- * @returns {{ install: boolean, skipBuild: boolean, skipAppInstall: boolean, devArgs: string[] }}
+ * @returns {{ install: boolean, skipBuild: boolean, skipEngineInstall: boolean, skipAppInstall: boolean, devArgs: string[] }}
  */
 function parseRunArgs(args) {
   let install = false;
   let skipBuild = false;
+  let skipEngineInstall = false;
   let skipAppInstall = false;
   /** @type {string[]} */
   let devArgs = [];
@@ -127,12 +129,12 @@ function parseRunArgs(args) {
   const flagsPart = dash >= 0 ? args.slice(0, dash) : args;
   if (dash >= 0) devArgs = args.slice(dash + 1);
   for (const f of flagsPart) {
-    if (f === '--skip-install') install = false;
+    if (f === '--skip-install' || f === '--skip-engine-install') skipEngineInstall = true;
     else if (f === '--install' || f === '-i' || f === '--sync') install = true;
     else if (f === '--skip-build') skipBuild = true;
     else if (f === '--skip-app-install') skipAppInstall = true;
   }
-  return { install, skipBuild, skipAppInstall, devArgs };
+  return { install, skipBuild, skipEngineInstall, skipAppInstall, devArgs };
 }
 
 /**
@@ -163,6 +165,58 @@ function runBun(cwd, args) {
 }
 
 /**
+ * @param {string} root
+ * @param {string} pkgName npm package name (e.g. "howler", "@types/howler")
+ * @returns {boolean}
+ */
+function depPackageJsonExists(root, pkgName) {
+  const parts = pkgName.split('/');
+  let rel;
+  if (pkgName.startsWith('@')) {
+    if (parts.length < 2) return false;
+    rel = join('node_modules', parts[0], parts[1], 'package.json');
+  } else {
+    rel = join('node_modules', pkgName, 'package.json');
+  }
+  return existsSync(join(root, rel));
+}
+
+/**
+ * Verifica se cada dependência declarada em package.json existe em node_modules.
+ * Não inclui peerDependencies (podem vir de hoisting em monorepos).
+ * @param {string} projectRoot
+ * @param {Record<string, unknown>} pkg conteúdo de package.json
+ * @returns {boolean}
+ */
+function declaredDepsSatisfied(projectRoot, pkg) {
+  if (!existsSync(join(projectRoot, 'node_modules'))) return false;
+  const groups = [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies];
+  for (const g of groups) {
+    if (!g || typeof g !== 'object') continue;
+    for (const name of Object.keys(g)) {
+      if (!depPackageJsonExists(projectRoot, name)) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * @param {string} engineRoot
+ * @returns {boolean}
+ */
+function engineNodeModulesLookReady(engineRoot) {
+  const pkgPath = join(engineRoot, 'package.json');
+  if (!existsSync(pkgPath)) return false;
+  let pkg;
+  try {
+    pkg = readJsonFile(pkgPath);
+  } catch {
+    return false;
+  }
+  return declaredDepsSatisfied(engineRoot, pkg);
+}
+
+/**
  * @param {string} cwd
  * @returns {boolean}
  */
@@ -175,23 +229,7 @@ function appNodeModulesLookReady(cwd) {
   } catch {
     return false;
   }
-  const deps = { ...pkg.dependencies, ...pkg.devDependencies };
-  if (!existsSync(join(cwd, 'node_modules', 'vite', 'package.json'))) {
-    return false;
-  }
-  if (
-    deps.three &&
-    !existsSync(join(cwd, 'node_modules', 'three', 'package.json'))
-  ) {
-    return false;
-  }
-  const vg = deps.vibegame;
-  if (typeof vg === 'string' && vg.startsWith('file:')) {
-    if (!existsSync(join(cwd, 'node_modules', 'vibegame', 'package.json'))) {
-      return false;
-    }
-  }
-  return true;
+  return declaredDepsSatisfied(cwd, pkg);
 }
 
 /**
@@ -260,7 +298,7 @@ function assertBunOnPath() {
 
 /**
  * @param {string} engineRoot
- * @param {{ install: boolean, skipBuild: boolean, skipAppInstall: boolean, devArgs: string[] }} opts
+ * @param {{ install: boolean, skipBuild: boolean, skipEngineInstall: boolean, skipAppInstall: boolean, devArgs: string[] }} opts
  * @returns {never}
  */
 function runVibegameRun(engineRoot, opts) {
@@ -288,9 +326,19 @@ function runVibegameRun(engineRoot, opts) {
     (isDescendantDir(cwd, engineRoot) || linksToThisEngine);
 
   if (opts.install) {
-    console.log(`[vibegame run] bun install (engine) → ${engineRoot}`);
+    console.log(`[vibegame run] bun install (engine, --install) → ${engineRoot}`);
     const c0 = runBun(engineRoot, ['install']);
     if (c0 !== 0) process.exit(c0);
+  } else if (!opts.skipEngineInstall && !engineNodeModulesLookReady(engineRoot)) {
+    console.log(
+      `[vibegame run] Dependências da engine em falta ou incompletas — bun install (engine) → ${engineRoot}`
+    );
+    const c0 = runBun(engineRoot, ['install']);
+    if (c0 !== 0) process.exit(c0);
+  } else if (opts.skipEngineInstall && !engineNodeModulesLookReady(engineRoot)) {
+    console.warn(
+      '[vibegame run] Aviso: --skip-engine-install / --skip-install ativo mas node_modules da engine parece incompleto; o build pode falhar.'
+    );
   }
 
   if (!opts.skipBuild) {
@@ -341,14 +389,20 @@ function help() {
   console.log('');
   console.log('  vibegame create <name>   Create a new project (scaffold)');
   console.log(
-    '  vibegame run [opts] [-- …]  Build da engine + dev (engine: sem bun install salvo --install)'
+    '  vibegame run [opts] [-- …]  Build da engine + dev (bun install na engine se faltar deps)'
   );
   console.log('  vibegame playwright …    Run Playwright CLI (alias: pw)');
   console.log('  vibegame --version       Show version');
   console.log('  vibegame help            This message');
   console.log('');
   console.log(
-    '  vibegame run --install / -i / --sync   Também roda bun install na engine (deps da lib)'
+    '  vibegame run --install / -i / --sync   Força bun install na engine antes do build'
+  );
+  console.log(
+    '  vibegame run --skip-engine-install   Não roda bun install na engine (node_modules já ok)'
+  );
+  console.log(
+    '  vibegame run --skip-install   Alias de --skip-engine-install'
   );
   console.log(
     '  vibegame run --skip-build     Pula build da engine (só sobe dev)'
