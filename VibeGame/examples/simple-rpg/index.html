@@ -42,11 +42,21 @@
 
     <player-gltf pos="0 60 0" model-url="/assets/models/hero.glb"></player-gltf>
 
-    <follow-camera target-distance="6" target-pitch="0.35" yaw-smoothness="0.07" position-lag="0.14"
+    <follow-camera
+      target-distance="6"
+      target-pitch="0.35"
+      yaw-smoothness="0.07"
+      position-lag="0.14"
       auto-rotate-delay="0.4"
-      bloom="intensity: 1.0; luminance-threshold: 0.3; luminance-smoothing: 0.1; mipmap-blur: 1; radius: 0.6"
-      vignette="darkness: 0.15; offset: 0.08" chromatic-aberration="offset-x: 0.001; offset-y: 0.0005"
-      noise="opacity: 0.08"></follow-camera>
+      smaa="preset: ultra"
+      bloom="intensity: 1.5; luminance-threshold: 0.3; luminance-smoothing: 0.3; mipmap-blur: 1; radius: 0.85"
+      depth-of-field="focus-distance: 8; focal-length: 0.1; bokeh-scale: 3; auto-focus: on"
+      vignette="darkness: 0.6; offset: 0.2"
+      chromatic-aberration="offset-x: 0.003; offset-y: 0.0015"
+      dithering="color-bits: 5; intensity: 0.8"
+      noise="opacity: 0.15"
+      tonemapping="mode: aces-filmic"
+    ></follow-camera>
 
     <!-- Stone pillar: <place> = XZ fixo + altura/alinhamento ao terreno -->
     <place at="0 -8">
