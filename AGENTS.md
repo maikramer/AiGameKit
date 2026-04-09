@@ -309,7 +309,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 ## Learned User Preferences
 
 - Prefere explicações e pedidos de funcionalidade em português ao trabalhar neste repositório.
-- Para o fluxo `vibegame run`, quer um loop rápido de desenvolvimento da engine: instalação de dependências no app deve ser opcional, não obrigatória em todo uso.
+- Para `vibegame run`: instalação no **app** deve poder ser opcional quando `node_modules` já está completo; na **engine**, o CLI pode correr `bun install` automaticamente se faltarem dependências declaradas no `package.json` (evita falhas de build por módulos em falta); usar `--skip-engine-install` ou `--skip-install` para pular esse passo quando o ambiente já está sincronizado.
 - Spawner e conteúdo declarativo no VibeGame: manter o mesmo estilo de recipes/parsers/XML em `index.html` já usado no projeto.
 - Spawner: diferenciar objetos estáticos (árvores, props) de dinâmicos (caixas empurráveis, inimigos em movimento, etc.) e usar perfis que definam defaults automáticos por tipo de objeto.
 - Ajustes de spawn e terreno: priorizar soluções que não degradem muito a performance do mapa.
@@ -322,4 +322,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - O modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir.
 - O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas).
 - Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir.
+- Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
+- No recipe `<terrain>`, muitos campos do componente `Terrain` são configuráveis por atributos XML em kebab-case (defaults do plugin); `collision-resolution` (32/64/128) é aplicado ao `TerrainLOD`/`three-terrain-lod` sem ser sobrescrito pela `resolution` da malha do chunk.
 - Corpos dinâmicos GLTF no VibeGame podem ter colisor desalinhado do mesh visível se o centro do AABB não coincidir com a origem da entidade; é necessário definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local.
+- No plugin de partículas (`three.quarks`), o simulador usa o emissor interno `ParticleSystem.emitter`; adicionar à cena um wrapper `ParticleEmitter` novo em vez desse nó faz o batch descartar o sistema no update e as partículas deixam de aparecer — integrar com `ps.emitter` diretamente.
