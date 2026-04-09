@@ -1,10 +1,17 @@
 import { Client } from 'colyseus.js';
 import { defineQuery, type System } from '../../core';
 import { Transform } from '../transforms';
-import { NetworkBuffer, Networked } from './components';
+import { NetworkBuffer, Networked, NetworkStatus } from './components';
 import { getNetworkContext } from './context';
 
 const netQuery = defineQuery([Networked, Transform]);
+const statusQuery = defineQuery([NetworkStatus]);
+
+function setStatus(world: import('bitecs').IWorld, status: number): void {
+  for (const eid of statusQuery(world)) {
+    NetworkStatus.connected[eid] = status;
+  }
+}
 
 export const NetworkConnectSystem: System = {
   group: 'setup',
@@ -13,11 +20,14 @@ export const NetworkConnectSystem: System = {
     const ctx = getNetworkContext(state);
     if (!ctx.url || ctx.room) return;
 
+    setStatus(state.world, 1);
+
     const client = new Client(ctx.url);
     client
       .joinOrCreate(ctx.roomName)
-      .then((room) => {
+      .then((room: { onMessage: (type: string, cb: (msg: { eid: number; x: number; y: number; z: number }) => void) => void }) => {
         ctx.room = room;
+        setStatus(state.world, 2);
         room.onMessage(
           'transform',
           (msg: { eid: number; x: number; y: number; z: number }) => {
@@ -33,8 +43,9 @@ export const NetworkConnectSystem: System = {
           }
         );
       })
-      .catch(() => {
-        /* servidor opcional */
+      .catch((err: unknown) => {
+        setStatus(state.world, 3);
+        console.warn('[network]', 'connection failed:', err);
       });
   },
 };
