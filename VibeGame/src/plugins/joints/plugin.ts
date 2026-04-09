@@ -1,10 +1,10 @@
 import type { Plugin } from '../../core';
 import { PhysicsJoint } from './components';
 import { jointRecipe } from './recipes';
-import { JointCreateSystem } from './systems';
+import { JointCleanupSystem, JointCreateSystem } from './systems';
 
 export const JointsPlugin: Plugin = {
-  systems: [JointCreateSystem],
+  systems: [JointCleanupSystem, JointCreateSystem],
   recipes: [jointRecipe],
   components: {
     physicsJoint: PhysicsJoint,

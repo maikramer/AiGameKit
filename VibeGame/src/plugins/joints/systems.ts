@@ -117,3 +117,22 @@ export const JointCreateSystem: System = {
     }
   },
 };
+
+export const JointCleanupSystem: System = {
+  group: 'fixed',
+  after: [JointCreateSystem],
+  update: (state) => {
+    const ctx = getPhysicsContext(state);
+    const world = ctx.physicsWorld;
+    if (!world) return;
+
+    const handles = getJointHandles(state);
+
+    for (const [eid, joint] of handles) {
+      if (!state.hasComponent(eid, PhysicsJoint)) {
+        world.removeImpulseJoint(joint, true);
+        handles.delete(eid);
+      }
+    }
+  },
+};
