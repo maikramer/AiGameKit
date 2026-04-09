@@ -54,6 +54,29 @@ function buildJointData(eid: number): JointData | null {
   }
 }
 
+interface UnitJoint extends ImpulseJoint {
+  setLimits(min: number, max: number): void;
+  configureMotorVelocity(targetVel: number, factor: number): void;
+}
+
+function configureJoint(joint: ImpulseJoint, eid: number): void {
+  if (!('setLimits' in joint)) return;
+
+  const unitJoint = joint as unknown as UnitJoint;
+
+  const limitsMin = PhysicsJoint.limitsMin[eid];
+  const limitsMax = PhysicsJoint.limitsMax[eid];
+  if (limitsMin !== 0 || limitsMax !== 0) {
+    unitJoint.setLimits(limitsMin, limitsMax);
+  }
+
+  const motorSpeed = PhysicsJoint.motorSpeed[eid];
+  const motorMaxForce = PhysicsJoint.motorMaxForce[eid];
+  if (motorMaxForce > 0) {
+    unitJoint.configureMotorVelocity(motorSpeed, motorMaxForce);
+  }
+}
+
 export const JointCreateSystem: System = {
   group: 'fixed',
   after: [PhysicsInitializationSystem],
@@ -83,10 +106,12 @@ export const JointCreateSystem: System = {
       let joint: ImpulseJoint;
       try {
         joint = world.createImpulseJoint(desc, rbA, rbB, true);
-      } catch {
+      } catch (e) {
+        console.warn('[joints] failed to create joint:', e);
         continue;
       }
 
+      configureJoint(joint, eid);
       handles.set(eid, joint);
       PhysicsJoint.created[eid] = 1;
     }
