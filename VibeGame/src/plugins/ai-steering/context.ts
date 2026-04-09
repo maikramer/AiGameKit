@@ -1,15 +1,12 @@
-import type { State } from '../../core';
+import type { FleeBehavior, SeekBehavior, Vehicle, WanderBehavior } from "yuka";
 
-/** Handles yuka (tipagem relaxada — pacote sem `.d.ts`). */
+import type { State } from "../../core";
+
 export interface SteeringRow {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- yuka sem tipos
-  vehicle: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  seek?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  flee?: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  wander?: any;
+  vehicle: Vehicle;
+  seek?: SeekBehavior;
+  flee?: FleeBehavior;
+  wander?: WanderBehavior;
 }
 
 const stateToSteering = new WeakMap<State, Map<number, SteeringRow>>();

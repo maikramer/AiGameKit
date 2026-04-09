@@ -84,11 +84,19 @@ export const SteeringSyncSystem: System = {
       Transform.posX[eid] = row.vehicle.position.x;
       Transform.posY[eid] = row.vehicle.position.y;
       Transform.posZ[eid] = row.vehicle.position.z;
+      Transform.rotX[eid] = row.vehicle.rotation.x;
+      Transform.rotY[eid] = row.vehicle.rotation.y;
+      Transform.rotZ[eid] = row.vehicle.rotation.z;
+      Transform.rotW[eid] = row.vehicle.rotation.w;
 
       if (hasComponent(state.world, WorldTransform, eid)) {
         WorldTransform.posX[eid] = Transform.posX[eid];
         WorldTransform.posY[eid] = Transform.posY[eid];
         WorldTransform.posZ[eid] = Transform.posZ[eid];
+        WorldTransform.rotX[eid] = Transform.rotX[eid];
+        WorldTransform.rotY[eid] = Transform.rotY[eid];
+        WorldTransform.rotZ[eid] = Transform.rotZ[eid];
+        WorldTransform.rotW[eid] = Transform.rotW[eid];
       }
     }
   },
