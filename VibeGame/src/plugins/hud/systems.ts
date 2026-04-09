@@ -10,16 +10,27 @@ import { getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
 import { HudPanel } from './components';
 import { getStringAt } from './context';
+import { I18nText } from '../i18n/components';
 
 const hudQuery = defineQuery([HudPanel, Transform]);
 
 const blockByEntity = new WeakMap<State, Map<number, Block>>();
+const textByEntity = new WeakMap<State, Map<number, Text>>();
 
 function getBlocks(state: State): Map<number, Block> {
   let m = blockByEntity.get(state);
   if (!m) {
     m = new Map();
     blockByEntity.set(state, m);
+  }
+  return m;
+}
+
+function getTexts(state: State): Map<number, Text> {
+  let m = textByEntity.get(state);
+  if (!m) {
+    m = new Map();
+    textByEntity.set(state, m);
   }
   return m;
 }
@@ -32,8 +43,17 @@ export const HudBuildSystem: System = {
     if (!scene) return;
 
     const blocks = getBlocks(state);
+    const texts = getTexts(state);
     for (const eid of hudQuery(state.world)) {
-      if (HudPanel.built[eid]) continue;
+      if (HudPanel.built[eid]) {
+        if (hasComponent(state.world, I18nText, eid) && I18nText.resolved[eid]) {
+          const text = texts.get(eid);
+          if (text) {
+            text.set({ content: getStringAt(state, HudPanel.textIndex[eid]) });
+          }
+        }
+        continue;
+      }
 
       const block = new Block({
         width: HudPanel.width[eid],
@@ -54,6 +74,7 @@ export const HudBuildSystem: System = {
 
       scene.add(block);
       blocks.set(eid, block);
+      texts.set(eid, text);
       HudPanel.built[eid] = 1;
     }
   },
