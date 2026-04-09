@@ -30,3 +30,8 @@ export function registerExternalEffect(state: State, effect: Effect): void {
   const context = getPostprocessingContext(state);
   context.externalEffects.push(effect);
 }
+
+export function hasActiveComposer(state: State, cameraEntity: number): boolean {
+  const context = stateToPostprocessingContext.get(state);
+  return context?.composers.has(cameraEntity) ?? false;
+}

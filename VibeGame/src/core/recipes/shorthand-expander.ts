@@ -26,7 +26,13 @@ export function expandShorthands(
     const stringValue = valueToString(value);
     let handled = false;
 
-    for (const componentName of presentComponents) {
+    // If the attribute name matches a registered component, only expand for
+    // that component. This prevents e.g. `noise="opacity: 0.15"` being
+    // absorbed into the `dithering` component's `noise` field.
+    const keyComponent = state.getComponent(key);
+    const targetComponents = keyComponent ? [key] : [...presentComponents];
+
+    for (const componentName of targetComponents) {
       const component = state.getComponent(componentName);
       if (!component) continue;
 

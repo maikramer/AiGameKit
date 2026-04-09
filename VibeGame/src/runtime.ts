@@ -158,7 +158,12 @@ export class GameRuntime {
 
       parseXMLToEntities(this.state, parseResult.root);
     } catch (error) {
-      console.error('❌ World content parsing failed:', error);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const errStack = error instanceof Error ? error.stack : undefined;
+      console.error('❌ World content parsing failed:', errMsg);
+      if (errStack) {
+        console.error(errStack);
+      }
       if (
         typeof process !== 'undefined' &&
         process.env?.NODE_ENV !== 'production'

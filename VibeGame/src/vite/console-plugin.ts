@@ -90,10 +90,13 @@ if (import.meta.hot) {
   
   function sendConsoleMessage(level, args) {
     const stackInfo = getStackInfo();
+    const serializedArgs = args.length > 1
+      ? Array.from(args).slice(1).map(a => a instanceof Error ? a.stack || a.message : a)
+      : undefined;
     const message = {
       level,
-      message: args[0]?.toString() || '',
-      args: args.length > 1 ? Array.from(args).slice(1) : undefined,
+      message: args[0] instanceof Error ? args[0].message : (args[0]?.toString() || ''),
+      args: serializedArgs,
       timestamp: Date.now(),
       context: {
         ...stackInfo,

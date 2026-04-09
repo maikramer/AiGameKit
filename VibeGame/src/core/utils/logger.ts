@@ -62,6 +62,9 @@ export function formatLogMessage(message: LogMessage): string {
 
   if (args.length > 0) {
     const formattedArgs = args.map((arg) => {
+      if (arg instanceof Error) {
+        return arg.stack || arg.message;
+      }
       if (typeof arg === 'object') {
         try {
           return JSON.stringify(arg);

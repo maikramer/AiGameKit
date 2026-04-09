@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { State } from '../../core';
 import { defineQuery, type System } from '../../core';
+import { hasActiveComposer } from '../postprocessing/utils';
 import { WorldTransform } from '../transforms';
 import {
   AmbientLight,
@@ -238,6 +239,8 @@ export const WebGLRenderSystem: System = {
     const cameraEntity = cameraEntities[0];
     const camera = threeCameras.get(cameraEntity);
     if (!camera) return;
+
+    if (hasActiveComposer(state, cameraEntity)) return;
 
     context.renderer.render(scene, camera);
   },

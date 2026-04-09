@@ -14,7 +14,11 @@ export {
   PostprocessingRenderSystem,
   triggerRebuild,
 } from './systems';
-export { getPostprocessingContext, registerExternalEffect } from './utils';
+export {
+  getPostprocessingContext,
+  registerExternalEffect,
+  hasActiveComposer,
+} from './utils';
 export {
   registerEffect,
   unregisterEffect,
