@@ -15,6 +15,13 @@ interface TerrainMaterialContext {
   heightSmoothingSpread: number;
 }
 
+export interface WebGLTerrainMaterialOptions {
+  /** Initial skirt width in UV space (overrides context when creating material). */
+  skirtWidth?: number;
+  /** RGB hex when no diffuse texture (e.g. 0x4a7a3a). */
+  baseColor?: number;
+}
+
 export class WebGLTerrainMaterialProvider {
   private material: THREE.MeshStandardMaterial | null = null;
   private heightMapUniform = { value: null as THREE.Texture | null };
@@ -26,6 +33,17 @@ export class WebGLTerrainMaterialProvider {
   private heightMapSizeUniform = { value: 2048 };
   private heightSmoothingUniform = { value: 0 };
   private heightSmoothingSpreadUniform = { value: 1.25 };
+  private skirtWidthValue = 0.015625;
+  private baseColorValue = 0x4a7a3a;
+
+  constructor(opts?: WebGLTerrainMaterialOptions) {
+    if (opts?.skirtWidth !== undefined) {
+      this.skirtWidthValue = opts.skirtWidth;
+    }
+    if (opts?.baseColor !== undefined) {
+      this.baseColorValue = opts.baseColor >>> 0;
+    }
+  }
 
   createMaterial(context: TerrainMaterialContext): THREE.Material {
     const hmImage = context.heightMap.image as
@@ -38,14 +56,16 @@ export class WebGLTerrainMaterialProvider {
         ? hmImage.width
         : 2048;
 
+    const skirtW = Math.max(
+      0.0001,
+      Math.min(0.49, this.skirtWidthValue ?? context.skirtWidth)
+    );
+
     this.heightMapUniform.value = context.heightMap;
     this.maxHeightUniform.value = context.maxHeight;
     this.normalStrengthUniform.value = Math.max(0, context.normalStrength);
     this.skirtDepthUniform.value = Math.max(0, context.skirtDepth);
-    this.skirtWidthUniform.value = Math.max(
-      0.0001,
-      Math.min(0.49, context.skirtWidth)
-    );
+    this.skirtWidthUniform.value = skirtW;
     this.worldSizeUniform.value = context.worldSize;
     this.heightMapSizeUniform.value = hmSize;
     this.heightSmoothingUniform.value = Math.min(
@@ -57,8 +77,10 @@ export class WebGLTerrainMaterialProvider {
       context.heightSmoothingSpread
     );
 
+    const tint = context.diffuseTexture ? 0xffffff : this.baseColorValue >>> 0;
+
     const material = new THREE.MeshStandardMaterial({
-      color: context.diffuseTexture ? 0xffffff : 0x4a7a3a,
+      color: tint,
       map: context.diffuseTexture ?? undefined,
       roughness: 0.85,
       metalness: 0.0,
@@ -183,6 +205,22 @@ export class WebGLTerrainMaterialProvider {
 
   setSkirtDepth(depth: number): void {
     this.skirtDepthUniform.value = Math.max(0, depth);
+  }
+
+  setSkirtWidth(width: number): void {
+    const w = Math.max(0.0001, Math.min(0.49, width));
+    this.skirtWidthValue = w;
+    this.skirtWidthUniform.value = w;
+  }
+
+  /** Diffuse tint when no `map`; use 0xffffff when a diffuse texture is active. */
+  setTerrainColor(rgbHex: number): void {
+    const c = rgbHex >>> 0;
+    this.baseColorValue = c;
+    if (this.material) {
+      this.material.color.setHex(c);
+      this.material.needsUpdate = true;
+    }
   }
 
   setHeightSmoothing(amount: number): void {

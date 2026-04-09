@@ -20,9 +20,12 @@ export interface TerrainEntityData {
   lastRoughness: number;
   lastMetalness: number;
   lastSkirtDepth: number;
+  lastSkirtWidth: number;
   lastWireframe: number;
   lastHeightSmoothing: number;
   lastHeightSmoothingSpread: number;
+  /** Last applied tint (0xffffff when diffuse texture is set). */
+  lastBaseColor: number;
 }
 
 const stateToTerrainContext = new WeakMap<

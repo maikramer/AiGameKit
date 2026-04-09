@@ -91,6 +91,25 @@ Veja [`docs/EFFECT-REGISTRY.md`](EFFECT-REGISTRY.md) para detalhes do sistema de
 | `audio` | `audio/` | Áudio espacial |
 | `debug` | `debug/` | Debug overlays (wireframes, etc.) |
 
+## Engine features (gameplay)
+
+| Plugin | Pasta | Descrição |
+|--------|-------|-----------|
+| `raycast` | `raycast/` | Raycast Rapier (`castRayAndGetNormal`) + componentes `raycast-source` / `raycast-result` |
+| `navmesh` | `navmesh/` | Navmesh com `three-pathfinding` (zona por omissão: plano) + `nav-agent` |
+| `ai-steering` | `ai-steering/` | Steering **yuka** (seek / wander / flee) + recipe `npc` |
+| `particles` | `particles/` | Partículas **three.quarks** (`particle-emitter`, `particle-burst`) |
+| `hud` | `hud/` | Painéis **three-mesh-ui** (`hud-panel`) em espaço mundo |
+| `joints` | `joints/` | Joints Rapier (`physicsJoint` / recipe `joint`) |
+
+## Opcionais (registar com `withPlugin`)
+
+| Plugin | Pasta | Descrição |
+|--------|-------|-----------|
+| `save-load` | `save-load/` | Snapshot `msgpackr` + componente `serializable` |
+| `network` | `network/` | Cliente **colyseus.js** (mensagens `transform`) |
+| `i18n` | `i18n/` | Chaves i18n (`i18n-text`) + integração com HUD |
+
 ## Pipeline
 
 | Plugin | Pasta | Descrição |

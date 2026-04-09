@@ -2,14 +2,39 @@
 
 Spawn procedural declarativo com `<spawn-group>` no `index.html`, alinhado à altura do terreno e opcionalmente à **inclinação** (normal por diferenças finitas no heightmap).
 
+## `<place>` — posicionamento determinístico (recomendado)
+
+Para colocar props, NPCs, partículas ou qualquer recipe num **ponto fixo** sem adivinhar `Y` manualmente, use **`<place at="x z">`**. O motor amostra a superfície do terreno nesse XZ, aplica `base-y-offset` / `y-offset`, alinhamento à normal (`align-to-terrain`) e, para GLBs com URL, `ground-align="aabb"` (base do modelo no chão).
+
+- **Evite** `pos="x y z"` em recipes com terreno procedural: o `Y` fixo tende a enterrar ou flutuar o objeto.
+- **Prefira** `<place>` (ou `<spawn-group>` só para **várias instâncias aleatórias** numa região).
+
+Atributos principais:
+
+| Atributo | Significado |
+|----------|-------------|
+| `at` (obrigatório) | `"x z"` — posição horizontal (mundo, somada à âncora do elemento `<place>` se usar `transform` no pai) |
+| `y-offset` | Atalho para `base-y-offset` (offset vertical após o solo) |
+| `ground-align` | `aabb` \| `none` — elevar GLB pelo AABB local (só útil com `url` no filho) |
+| `align-to-terrain` | `1` \| `0` — rodar para alinhar à normal do terreno |
+| `max-slope-deg` | Inclinação máxima aceite; acima, aviso e instâncias omitidas |
+
+O perfil interno `place` em `profiles.ts` define defaults: `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`.
+
+Ficheiros: `place-parser.ts`, `place-system.ts` (`TerrainPlaceSystem`), `place-context.ts`, `place-types.ts`, `spawn-template.ts` (lógica partilhada com o spawn aleatório).
+
 ## Layout
 
 - `plugin.ts` — `SpawnerPlugin` (recipe, parser, system, defaults)
-- `parser.ts` — lê atributos e filhos como templates de recipe
+- `parser.ts` — lê atributos e filhos como templates de recipe (`spawn-group`)
+- `place-parser.ts` — idem para `<place>`
 - `systems.ts` — `TerrainSpawnSystem` (após `TransformHierarchySystem`)
+- `place-system.ts` — `TerrainPlaceSystem` (idem)
+- `spawn-template.ts` — `spawnTemplateAtTerrain` (spawn único no solo)
 - `surface.ts` — `sampleTerrainSurface`, `isNormalWithinSlopeLimit`, `normalFromHeightSampler`
 - `transform-merge.ts` — parse/merge de `transform` e `composeSpawnRotation` (quaternions)
-- `context.ts` — `WeakMap` State → spec por entidade
+- `context.ts` — `WeakMap` State → spec por entidade (`spawn-group`)
+- `place-context.ts` — idem para `<place>`
 - `profiles.ts` — perfis `profile` no grupo/filhos e merge de defaults
 
 ## Perfis (`profile`)
@@ -25,6 +50,7 @@ Atributo **`profile`** no `<spawn-group>` (e opcionalmente no **filho**) preench
 | `foliage` | Vegetação mais baixa | Como `tree`, com `scale-min=0.9` / `scale-max=1.3` |
 | `physics-box` | `dynamic-part` no chão | sem alinhamento ao declive, `base-y-offset≈0.425`, yaw aleatório, escala 1 |
 | `gltf-crate` | `gltf-dynamic` | sem alinhamento ao declive, `base-y-offset=0.35`, yaw aleatório, leve jitter de escala |
+| `place` | Usado internamente por `<place>` | `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90` |
 
 ### Filho `profile="..."` (template)
 

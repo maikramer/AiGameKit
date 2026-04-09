@@ -1,8 +1,13 @@
-﻿export { SpawnerPending } from './components';
+﻿export { PlacePending, SpawnerPending } from './components';
 export { SpawnerPlugin } from './plugin';
-export { spawnGroupRecipe } from './recipes';
+export { placeRecipe, spawnGroupRecipe } from './recipes';
 export { spawnGroupParser } from './parser';
+export { placeParser } from './place-parser';
+export { TerrainPlaceSystem } from './place-system';
 export { TerrainSpawnSystem } from './systems';
+export { spawnTemplateAtTerrain } from './spawn-template';
+export type { PlacementSpec } from './place-types';
+export { getPlacementSpecs, setPlacementSpec } from './place-context';
 export {
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
@@ -12,6 +17,7 @@ export type { TerrainSurfaceSample } from './surface';
 export {
   applyChildTemplateProfile,
   getGroupSpawnDefaults,
+  isKnownGroupProfileForTests,
   normalizeGroupProfileId,
   optBool,
   optNumber,

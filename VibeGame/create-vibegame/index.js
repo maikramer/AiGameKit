@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exec } from 'node:child_process';
+import { exec, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { cyan, green, red, yellow } from 'kolorist';
 
@@ -25,13 +25,14 @@ function copyDir(src, dest) {
   }
 }
 
-async function commandExists(cmd) {
-  try {
-    await execAsync(`which ${cmd}`);
-    return true;
-  } catch {
-    return false;
-  }
+/** Bun no PATH (sem depender de `which` / shell Unix — funciona no Windows). */
+function bunIsAvailable() {
+  const r = spawnSync('bun', ['--version'], {
+    stdio: 'pipe',
+    windowsHide: true,
+    encoding: 'utf8',
+  });
+  return !r.error && r.status === 0;
 }
 
 async function init() {
@@ -80,7 +81,7 @@ async function init() {
         : 'npm';
 
   // Check if bun is available even if not used to run create-vibegame
-  if (pkgManager === 'npm' && (await commandExists('bun'))) {
+  if (pkgManager === 'npm' && bunIsAvailable()) {
     pkgManager = 'bun';
   }
 

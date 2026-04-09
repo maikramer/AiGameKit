@@ -9,7 +9,10 @@ export {
   setTerrainTextureUrl,
 } from './utils';
 export type { TerrainEntityData } from './utils';
-export { WebGLTerrainMaterialProvider } from './webgl-material';
+export {
+  WebGLTerrainMaterialProvider,
+  type WebGLTerrainMaterialOptions,
+} from './webgl-material';
 export {
   getTerrainHeightAt,
   findNearestTerrainEntity,

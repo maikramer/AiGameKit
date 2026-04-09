@@ -31,7 +31,7 @@ Examples:
 Environment variables (see `playwright.config.ts` comments):
 
 - `PLAYWRIGHT_CDP_WS` — full WebSocket URL from the browser’s remote debugging endpoint.
-- `PLAYWRIGHT_CDP_URL` — HTTP base (e.g. `http://127.0.0.1:9222`); config uses `curl` on `{url}/json/version` to obtain the WebSocket (requires `curl` on `PATH`).
+- `PLAYWRIGHT_CDP_URL` — HTTP base (e.g. `http://127.0.0.1:9222`); `playwright.config.ts` fetches `{url}/json/version` via `http`/`https` do Node (sem `curl` no `PATH`).
 - `PLAYWRIGHT_BASE_URL` — base URL when using CDP (default example: `http://127.0.0.1:3011`).
 
 Without `playwright.config.ts` and without a local `node_modules/.bin/playwright`, the CLI exits with an error pointing to a full monorepo install.

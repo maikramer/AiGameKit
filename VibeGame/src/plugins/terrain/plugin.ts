@@ -1,4 +1,5 @@
-﻿import type { Adapter, Plugin } from '../../core';
+﻿import type { Adapter, Plugin, State } from '../../core';
+import { parseColor } from '../../core/validation/schemas';
 import { Terrain, TerrainDebugInfo } from './components';
 import { terrainRecipe } from './recipes';
 import {
@@ -8,6 +9,14 @@ import {
   TerrainRenderSystem,
 } from './systems';
 import { setTerrainHeightmapUrl, setTerrainTextureUrl } from './utils';
+
+function terrainBaseColorAdapter(
+  entity: number,
+  value: string,
+  _state: State
+): void {
+  Terrain.baseColor[entity] = parseColor(value) >>> 0;
+}
 
 export const TerrainPlugin: Plugin = {
   recipes: [terrainRecipe],
@@ -36,6 +45,8 @@ export const TerrainPlugin: Plugin = {
         metalness: 0.0,
         normalStrength: 1.0,
         skirtDepth: 1.0,
+        skirtWidth: 0.015625,
+        baseColor: 0x4a7a3a,
         heightSmoothing: 0.35,
         heightSmoothingSpread: 1.25,
         // Physics
@@ -52,6 +63,7 @@ export const TerrainPlugin: Plugin = {
         texture: ((entity, value, state) => {
           setTerrainTextureUrl(state, entity, value);
         }) as Adapter,
+        'base-color': terrainBaseColorAdapter as Adapter,
       },
     },
   },

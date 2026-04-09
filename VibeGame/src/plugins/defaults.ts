@@ -1,12 +1,18 @@
 ﻿import type { Plugin } from '../core';
+import { AiSteeringPlugin } from './ai-steering/plugin';
 import { AnimationPlugin } from './animation/plugin';
 import { FollowCameraPlugin } from './follow-camera/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
 import { GltfXmlPlugin } from './gltf-xml/plugin';
 import { InputPlugin } from './input/plugin';
+import { JointsPlugin } from './joints/plugin';
+import { NavmeshPlugin } from './navmesh/plugin';
 import { OrbitCameraPlugin } from './orbit-camera/plugin';
+import { ParticlesPlugin } from './particles/plugin';
 import { PhysicsPlugin } from './physics/plugin';
+import { HudPlugin } from './hud/plugin';
 import { PlayerPlugin } from './player/plugin';
+import { RaycastPlugin } from './raycast/plugin';
 import { RenderingPlugin } from './rendering/plugin';
 import { RespawnPlugin } from './respawn/plugin';
 import { StartupPlugin } from './startup/plugin';
@@ -30,7 +36,13 @@ export const DefaultPlugins: Plugin[] = [
   AnimationPlugin,
   InputPlugin,
   PhysicsPlugin,
+  RaycastPlugin,
+  NavmeshPlugin,
+  AiSteeringPlugin,
+  JointsPlugin,
   RenderingPlugin,
+  ParticlesPlugin,
+  HudPlugin,
   FollowCameraPlugin,
   OrbitCameraPlugin,
   PlayerPlugin,

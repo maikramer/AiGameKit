@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
-import { AudioEmitter, AudioListener } from '../../../src/plugins/audio/components';
+import {
+  AudioEmitter,
+  AudioListener,
+} from '../../../src/plugins/audio/components';
 import { DefaultPlugins } from '../../../src/plugins/defaults';
 
 describe('AudioPlugin Registration', () => {
@@ -12,8 +15,8 @@ describe('AudioPlugin Registration', () => {
     state.registerPlugin(AudioPlugin);
   });
 
-  it('should have exactly one system (AudioSystem)', () => {
-    expect(AudioPlugin.systems).toHaveLength(1);
+  it('should register AudioListenerSetupSystem and AudioSystem', () => {
+    expect(AudioPlugin.systems).toHaveLength(2);
   });
 
   it('should register AudioEmitter component', () => {

@@ -49,7 +49,11 @@ terrain/
 - metalness: f32 (0.0) — material metalness (runtime-adjustable)
 - normalStrength: f32 (1.0) — normal map intensity multiplier
 - skirtDepth: f32 (1.0) — depth of edge skirts to hide chunk seams
-- collisionResolution: ui8 (64) — physics heightfield resolution (32/64/128)
+- skirtWidth: f32 (0.015625) — UV width of chunk seam skirts
+- heightSmoothing: f32 (0.35) — vertex displacement blend (see spawner note below)
+- heightSmoothingSpread: f32 (1.25) — texel multiplier for smoothing taps
+- baseColor: ui32 (0x4a7a3a) — albedo when no diffuse `texture`; with `texture`, tint is forced to white
+- collisionResolution: ui8 (64) — physics heightfield resolution (32/64/128); applied to `TerrainLOD` and not overwritten by mesh `resolution`
 - showChunkBorders: ui8 (0) — debug: show chunk LOD boundaries
 
 #### TerrainDebugInfo
@@ -73,7 +77,7 @@ terrain/
 #### TerrainRenderSystem
 - Group: `draw` (after CameraSyncSystem)
 - Updates LOD frustum culling and syncs WorldTransform position to TerrainLOD
-- Applies runtime material property changes (roughness, metalness, skirtDepth, wireframe)
+- Applies runtime material property changes (roughness, metalness, skirtDepth, skirtWidth, terrain tint, wireframe)
 
 #### TerrainPhysicsSystem
 - Group: `simulation` (after TransformHierarchySystem)
@@ -121,7 +125,7 @@ Rebuilds chunk height samples to match WebGL vertex displacement
 
 ### Recipes
 
-- terrain — components: ['terrain', 'transform']; attributes: `heightmap`, `texture`
+- terrain — components: ['terrain', 'transform']; adapters: `heightmap`, `texture`, `base-color` (hex `#RRGGBB` or `0xRRGGBB`); other fields via kebab-case attributes matching component defaults
 
 ### Spawner e declive (normal vs visual)
 
@@ -157,8 +161,10 @@ O relevo **renderizado** pode ficar mais suave que o heightmap cru devido a **`h
   metalness="0.1"
   normal-strength="1.5"
   skirt-depth="2.0"
+  skirt-width="0.02"
   lod-hysteresis="1.5"
   collision-resolution="128"
+  base-color="#3d6b32"
 ></terrain>
 ```
 
@@ -211,9 +217,10 @@ if (stats) {
 
 ### Heightmap URL via Adapter
 
-The `heightmap` and `texture` attributes are parsed by adapters, not direct component fields. They set internal URLs that the bootstrap system reads when creating the TerrainLOD instance.
+The `heightmap`, `texture`, and `base-color` attributes are parsed by adapters. URLs are stored for bootstrap; `base-color` sets the diffuse tint when there is no `texture` (hex `#RRGGBB` or `0xRRGGBB`).
 
 ```xml
 <terrain heightmap="/maps/island.png" texture="/maps/sand_grass.jpg" />
+<terrain heightmap="/maps/gray.png" base-color="#4a7a3a" />
 ```
 <!-- /LLM:EXAMPLES -->

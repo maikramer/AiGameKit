@@ -13,6 +13,10 @@ export const Terrain = defineComponent({
   metalness: Types.f32,
   normalStrength: Types.f32,
   skirtDepth: Types.f32,
+  /** Largura da saia entre chunks (UV); típico ~0.015625. */
+  skirtWidth: Types.f32,
+  /** Cor difusa quando não há `texture` (RGB em 0xRRGGBB). */
+  baseColor: Types.ui32,
   /** 0 = deslocamento só com 1 texel (mais barato); >0 mistura com média 5-tap em cruz (reduz facetas). */
   heightSmoothing: Types.f32,
   /** Multiplicador do passo em texels para o filtro de deslocamento (mín. 0,25 na lib). */

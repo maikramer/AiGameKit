@@ -38,6 +38,17 @@ vibegame create my-game
 
 Runs `bun install`, builds the package, and installs the `vibegame` CLI into `~/.local/bin` (see root `docs/INSTALLING.md`).
 
+#### `vibegame run` (apps with `file:…/VibeGame`)
+
+From an example app or a project that lists `vibegame` as a `file:` dependency, run the dev server with the local engine built first:
+
+```bash
+vibegame run
+vibegame run -- --host
+```
+
+Useful flags: `--install` / `-i` (force `bun install` in the engine), `--skip-engine-install` / `--skip-install`, `--skip-build`, `--skip-app-install`. Arguments after `--` are passed to `bun run dev` (e.g. Vite). If the command cannot find the engine, run from the app directory that depends on the engine via `file:` or from a folder under the monorepo tree. See [`scripts/vibegame-cli.mjs`](scripts/vibegame-cli.mjs) and the monorepo [`AGENTS.md`](../AGENTS.md).
+
 **GLB handoff (Text3D / Paint3D / `gameassets` batch):** import **`loadGltfToScene`** for static meshes; for **animated** rigged GLBs (Animator3D clips), use **`loadGltfAnimated`**, **`loadGltfToSceneWithAnimator`**, or **`GltfAnimator`** from `vibegame`. Declarative: **`<gltf-load url="…">`** for props; **`<player-gltf model-url="…">`** for a third-person character with idle/walk/run. See [examples/monorepo-game](examples/monorepo-game/) and [MONOREPO_GAME_PIPELINE.md](../docs/MONOREPO_GAME_PIPELINE.md). **Walkable demo + handoff:** [examples/simple-rpg](examples/simple-rpg/). **Skymap2D equirect → IBL:** `applyEquirectSkyEnvironment`. **`gameassets handoff`** copies into `public/assets` and can prefer animated GLBs when present.
 
 ### Or install directly
@@ -232,6 +243,8 @@ VibeGame includes 20+ plugins for physics, rendering, player controls, and more.
 | **Environment**     | **sky** (equirectangular IBL), fog, water                                     |
 | **Post-processing** | bloom, SMAA, dithering, tonemapping ([registry API](docs/EFFECT-REGISTRY.md)) |
 | **Logic**           | animation, tweening, spawner, respawn, lod, audio, debug                      |
+| **Gameplay**        | raycast, navmesh, ai-steering, particles, hud, joints                         |
+| **Opcionais**       | save-load (msgpackr), network (colyseus), i18n (`withPlugin`)                 |
 | **Pipeline**        | scene-manifest (GameAssets JSON), TextureRecipe (Texture2D procedural)        |
 
 Full list: [`docs/PLUGINS.md`](docs/PLUGINS.md)
@@ -258,8 +271,8 @@ See [`docs/SHARED.md`](docs/SHARED.md).
 
 ## Links
 
-- [GitHub Repository](https://github.com/dylanebert/vibegame)
-- [NPM Package](https://www.npmjs.com/package/vibegame)
-- [Live Demo on Hugging Face](https://huggingface.co/spaces/dylanebert/VibeGame)
-- [Live Demo on JSFiddle](https://jsfiddle.net/keLsxh5t/)
+**Upstream VibeGame (original project):** [dylanebert/vibegame on GitHub](https://github.com/dylanebert/vibegame), [npm package](https://www.npmjs.com/package/vibegame), [Hugging Face Space](https://huggingface.co/spaces/dylanebert/VibeGame), [JSFiddle](https://jsfiddle.net/keLsxh5t/).
+
+**This copy in the GameDev monorepo:** [maikramer/GameDev — `VibeGame/`](https://github.com/maikramer/GameDev/tree/main/VibeGame) (issues and PRs for the forked engine live on that repository).
+
 - [Shallot Context Manager](https://github.com/dylanebert/shallot)

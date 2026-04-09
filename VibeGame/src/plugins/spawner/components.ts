@@ -4,3 +4,8 @@
 export const SpawnerPending = defineComponent({
   spawned: Types.ui8,
 });
+
+/** Same semantics as {@link SpawnerPending}, for `<place>` (deterministic placement). */
+export const PlacePending = defineComponent({
+  spawned: Types.ui8,
+});

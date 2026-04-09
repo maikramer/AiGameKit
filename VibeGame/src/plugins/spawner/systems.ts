@@ -1,35 +1,15 @@
-﻿import * as THREE from 'three';
-import {
-  defineQuery,
-  type State,
-  type System,
-  type XMLValue,
-} from '../../core';
-import { createEntityFromRecipe } from '../../core/recipes/parser';
+﻿import { defineQuery, type State, type System } from '../../core';
 import { SpawnerPending } from './components';
 import { getSpawnGroupSpecs } from './context';
+import { spawnTemplateAtTerrain } from './spawn-template';
 import {
   isNormalWithinSlopeLimit,
   sampleTerrainSurface,
   type TerrainSurfaceSample,
 } from './surface';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
-import {
-  composeSpawnRotation,
-  defaultTransformParts,
-  formatTransformAttr,
-  parseTransformAttr,
-} from './transform-merge';
-import {
-  getGltfLocalYBounds,
-  isGltfBoundsPrefetchInflight,
-  warnMissingGltfBoundsOnce,
-} from '../gltf-xml/gltf-bounds-cache';
 import { TransformHierarchySystem } from '../transforms';
 import { Transform, WorldTransform } from '../transforms/components';
-
-const upNormal = new THREE.Vector3(0, 1, 0);
-const _foot = new THREE.Vector3();
 
 const spawnerQuery = defineQuery([SpawnerPending]);
 
@@ -62,19 +42,6 @@ function anchorOffset(
   ];
 }
 
-function mergeTemplateAttributes(
-  template: SpawnTemplateSpec,
-  transformStr: string
-): Record<string, XMLValue> {
-  const out: Record<string, XMLValue> = {};
-  for (const [k, v] of Object.entries(template.attributes)) {
-    if (k === 'transform') continue;
-    out[k] = v;
-  }
-  out.transform = transformStr;
-  return out;
-}
-
 function spawnOne(
   state: State,
   spec: SpawnGroupSpec,
@@ -84,63 +51,7 @@ function spawnOne(
   wz: number,
   template: SpawnTemplateSpec
 ): void {
-  const tmplTransform =
-    typeof template.attributes.transform === 'string'
-      ? template.attributes.transform
-      : undefined;
-  const parts = parseTransformAttr(tmplTransform);
-  const base = defaultTransformParts();
-  const scaleJitter = spec.scaleMin + rand() * (spec.scaleMax - spec.scaleMin);
-  base.scale = [
-    parts.scale[0] * scaleJitter,
-    parts.scale[1] * scaleJitter,
-    parts.scale[2] * scaleJitter,
-  ];
-
-  const surface = sampleTerrainSurface(state, wx, wz, spec.surfaceEpsilon);
-  const normal = surface?.normal ?? upNormal;
-
-  let yawRad = 0;
-  if (spec.randomYaw) {
-    yawRad = rand() * Math.PI * 2;
-  }
-
-  const euler = composeSpawnRotation(
-    normal,
-    spec.alignToTerrain,
-    yawRad,
-    parts.euler
-  );
-  base.euler = [euler.x, euler.y, euler.z];
-
-  const urlRaw = template.attributes.url;
-  const url = typeof urlRaw === 'string' ? urlRaw.trim() : '';
-  const scaleY = Math.max(scaleJitter * parts.scale[1], 1e-6);
-
-  _foot.set(0, 0, 0);
-  if (spec.groundAlign === 'aabb' && url) {
-    const b = getGltfLocalYBounds(url);
-    if (b) {
-      const lift = -b.minY * scaleY;
-      if (spec.alignToTerrain) {
-        _foot.copy(normal).multiplyScalar(lift);
-      } else {
-        _foot.set(0, lift, 0);
-      }
-    } else if (!isGltfBoundsPrefetchInflight(url)) {
-      warnMissingGltfBoundsOnce(url);
-    }
-  }
-
-  base.pos = [
-    wx + parts.pos[0] + _foot.x,
-    wy + parts.pos[1] + spec.baseYOffset + _foot.y,
-    wz + parts.pos[2] + _foot.z,
-  ];
-
-  const transformStr = formatTransformAttr(base);
-  const attrs = mergeTemplateAttributes(template, transformStr);
-  createEntityFromRecipe(state, template.tagName, attrs);
+  spawnTemplateAtTerrain(state, spec, rand, wx, wy, wz, template);
 }
 
 export const TerrainSpawnSystem: System = {

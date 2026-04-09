@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { animatorMap, HandoffAnimatorTickSystem } from '../../../src/plugins/scene-manifest/loader';
+import {
+  animatorMap,
+  HandoffAnimatorTickSystem,
+} from '../../../src/plugins/scene-manifest/loader';
 
 describe('HandoffAnimatorTickSystem and animatorMap (T8)', () => {
   it('animatorMap is exported as a Map', () => {

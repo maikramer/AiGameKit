@@ -13,7 +13,9 @@ describe('SceneManifestPlugin config', () => {
   });
 
   it('allows overriding manifestUrl', () => {
-    const config = createSceneManifestConfig({ manifestUrl: '/custom/manifest.json' });
+    const config = createSceneManifestConfig({
+      manifestUrl: '/custom/manifest.json',
+    });
     expect(config.manifestUrl).toBe('/custom/manifest.json');
   });
 

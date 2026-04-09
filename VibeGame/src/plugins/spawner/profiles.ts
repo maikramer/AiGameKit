@@ -6,7 +6,9 @@ export type SpawnGroupProfileId =
   | 'tree'
   | 'foliage'
   | 'physics-box'
-  | 'gltf-crate';
+  | 'gltf-crate'
+  /** Defaults for `<place>` (deterministic terrain placement). */
+  | 'place';
 
 /** Defaults de spawn resolvidos antes do `TerrainSpawnSystem`. */
 /** `aabb`: desloca a origem com `-minY×escala` ao longo da normal (ou +Y se sem alinhar ao terreno), a partir do AABB local do GLB. */
@@ -88,6 +90,17 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
   },
+  place: {
+    alignToTerrain: true,
+    groundAlign: 'aabb',
+    baseYOffset: 0,
+    randomYaw: false,
+    scaleMin: 1,
+    scaleMax: 1,
+    surfaceEpsilon: 0.75,
+    maxSlopeDeg: 90,
+    maxSlopePlacementAttempts: 1,
+  },
 };
 
 const KNOWN_GROUP_PROFILES = new Set<string>(Object.keys(GROUP_PROFILES));
@@ -108,7 +121,7 @@ export function normalizeGroupProfileId(
   if (s === '' || s === 'none') return 'none';
   if (s in GROUP_PROFILES) return s as SpawnGroupProfileId;
   console.warn(
-    `[spawn-group] profile="${raw}" desconhecido; use none | tree | foliage | physics-box | gltf-crate. Usando "none".`
+    `[spawn-group] profile="${raw}" desconhecido; use none | tree | foliage | physics-box | gltf-crate | place. Usando "none".`
   );
   return 'none';
 }

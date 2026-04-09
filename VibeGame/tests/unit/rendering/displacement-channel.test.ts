@@ -13,11 +13,11 @@ describe('CHANNEL_MAP (displacementMap channel)', () => {
 
   it('maps channel 5 to displacementMap', () => {
     const CHANNEL_MAP = [
-      'map',           // 0
-      'normalMap',     // 1
-      'roughnessMap',  // 2
-      'metalnessMap',  // 3
-      'aoMap',         // 4
+      'map', // 0
+      'normalMap', // 1
+      'roughnessMap', // 2
+      'metalnessMap', // 3
+      'aoMap', // 4
       'displacementMap', // 5
     ] as const;
     expect(CHANNEL_MAP[5]).toBe('displacementMap');
@@ -25,11 +25,11 @@ describe('CHANNEL_MAP (displacementMap channel)', () => {
 
   it('preserves existing channel indices', () => {
     const CHANNEL_MAP = [
-      'map',           // 0
-      'normalMap',     // 1
-      'roughnessMap',  // 2
-      'metalnessMap',  // 3
-      'aoMap',         // 4
+      'map', // 0
+      'normalMap', // 1
+      'roughnessMap', // 2
+      'metalnessMap', // 3
+      'aoMap', // 4
       'displacementMap', // 5
     ] as const;
     expect(CHANNEL_MAP[0]).toBe('map');

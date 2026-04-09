@@ -11,7 +11,10 @@ describe('HandoffRow pbr_textures (T9)', () => {
     const row: HandoffRow = {
       id: 'test',
       model: { url: '/test.glb' },
-      pbr_textures: ['/assets/pbr/test/normal.png', '/assets/pbr/test/roughness.png'],
+      pbr_textures: [
+        '/assets/pbr/test/normal.png',
+        '/assets/pbr/test/roughness.png',
+      ],
     };
     expect(row.pbr_textures).toHaveLength(2);
     expect(row.pbr_textures![0]).toBe('/assets/pbr/test/normal.png');

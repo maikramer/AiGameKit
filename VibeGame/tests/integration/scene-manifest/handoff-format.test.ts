@@ -1,7 +1,10 @@
 import { describe, expect, it, mock, spyOn } from 'bun:test';
 import { State, defineQuery } from 'vibegame';
 import { loadSceneManifest } from '../../../src/plugins/scene-manifest/loader';
-import type { HandoffRow, HandoffManifest } from '../../../src/plugins/scene-manifest/loader';
+import type {
+  HandoffRow,
+  HandoffManifest,
+} from '../../../src/plugins/scene-manifest/loader';
 import { AudioEmitter } from '../../../src/plugins/audio/components';
 
 const mockGroup = {
@@ -23,14 +26,17 @@ describe('SceneManifest Handoff Format Integration', () => {
 
   function mockFetch(data: object) {
     return spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify(data))
+      new globalThis.Response(JSON.stringify(data))
     );
   }
 
   describe('Handoff format detection', () => {
     it('should process handoff format (rows array) as handoff', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, rows: [{ id: 'test', audio: { url: '/audio/test.wav' } }] });
+      const fetchMock = mockFetch({
+        version: 1,
+        rows: [{ id: 'test', audio: { url: '/audio/test.wav' } }],
+      });
 
       const result = await loadSceneManifest(state, '/test.json');
       fetchMock.mockRestore();
@@ -40,7 +46,10 @@ describe('SceneManifest Handoff Format Integration', () => {
 
     it('should process old format (assets object) without rows', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, assets: { hero: { model: '/hero.glb' } } });
+      const fetchMock = mockFetch({
+        version: 1,
+        assets: { hero: { model: '/hero.glb' } },
+      });
 
       const result = await loadSceneManifest(state, '/test.json');
       fetchMock.mockRestore();
@@ -55,7 +64,11 @@ describe('SceneManifest Handoff Format Integration', () => {
       const row: HandoffRow = {
         id: 'hero',
         public_id: 'hero',
-        model: { kind: 'rigged', url: '/models/hero.glb', dest: '/public/hero.glb' },
+        model: {
+          kind: 'rigged',
+          url: '/models/hero.glb',
+          dest: '/public/hero.glb',
+        },
       };
       expect(row.id).toBe('hero');
       expect(row.model?.url).toBe('/models/hero.glb');
@@ -87,7 +100,10 @@ describe('SceneManifest Handoff Format Integration', () => {
   describe('Audio entity creation', () => {
     it('should create AudioEmitter entity for audio-only row', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, rows: [{ id: 'sfx_collect', audio: { url: '/audio/collect.wav' } }] });
+      const fetchMock = mockFetch({
+        version: 1,
+        rows: [{ id: 'sfx_collect', audio: { url: '/audio/collect.wav' } }],
+      });
 
       await loadSceneManifest(state, '/test.json');
       fetchMock.mockRestore();
@@ -98,7 +114,10 @@ describe('SceneManifest Handoff Format Integration', () => {
 
     it('should set AudioEmitter defaults: volume=0.7, loop=1, spatial=0, playing=1', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, rows: [{ id: 'sfx', audio: { url: '/audio/sfx.wav' } }] });
+      const fetchMock = mockFetch({
+        version: 1,
+        rows: [{ id: 'sfx', audio: { url: '/audio/sfx.wav' } }],
+      });
 
       await loadSceneManifest(state, '/test.json');
       fetchMock.mockRestore();
@@ -114,7 +133,10 @@ describe('SceneManifest Handoff Format Integration', () => {
 
     it('should set clipPath to eid for audio rows', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, rows: [{ id: 'sfx', audio: { url: '/audio/sfx.wav' } }] });
+      const fetchMock = mockFetch({
+        version: 1,
+        rows: [{ id: 'sfx', audio: { url: '/audio/sfx.wav' } }],
+      });
 
       await loadSceneManifest(state, '/test.json');
       fetchMock.mockRestore();
@@ -127,7 +149,10 @@ describe('SceneManifest Handoff Format Integration', () => {
 
     it('should call registerAudioClip with basePath + audio url', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, rows: [{ id: 'sfx', audio: { url: '/audio/test.wav' } }] });
+      const fetchMock = mockFetch({
+        version: 1,
+        rows: [{ id: 'sfx', audio: { url: '/audio/test.wav' } }],
+      });
 
       await loadSceneManifest(state, '/test.json');
       fetchMock.mockRestore();
@@ -140,7 +165,10 @@ describe('SceneManifest Handoff Format Integration', () => {
 
     it('should use custom basePath for audio registration', async () => {
       const state = makeState();
-      const fetchMock = mockFetch({ version: 1, rows: [{ id: 'sfx', audio: { url: '/audio/test.wav' } }] });
+      const fetchMock = mockFetch({
+        version: 1,
+        rows: [{ id: 'sfx', audio: { url: '/audio/test.wav' } }],
+      });
 
       await loadSceneManifest(state, '/test.json', '/custom-base');
       fetchMock.mockRestore();
@@ -213,10 +241,12 @@ describe('SceneManifest Handoff Format Integration', () => {
     it('should throw on fetch failure', async () => {
       const state = makeState();
       const fetchMock = spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-        new Response('', { status: 404, statusText: 'Not Found' })
+        new globalThis.Response('', { status: 404, statusText: 'Not Found' })
       );
 
-      await expect(loadSceneManifest(state, '/missing.json')).rejects.toThrow(/404/);
+      await expect(loadSceneManifest(state, '/missing.json')).rejects.toThrow(
+        /404/
+      );
       fetchMock.mockRestore();
     });
   });

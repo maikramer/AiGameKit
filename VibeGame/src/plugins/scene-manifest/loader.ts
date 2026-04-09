@@ -70,11 +70,17 @@ function storeAnimator(state: State, animator: GltfAnimator | null): number {
 
 type RawManifest = SceneManifest & Partial<HandoffManifest>;
 
-function isHandoffFormat(data: RawManifest): data is RawManifest & { rows: HandoffRow[] } {
+function isHandoffFormat(
+  data: RawManifest
+): data is RawManifest & { rows: HandoffRow[] } {
   return Array.isArray((data as Partial<HandoffManifest>).rows);
 }
 
-async function loadOldFormat(state: State, manifest: SceneManifest, basePath: string): Promise<void> {
+async function loadOldFormat(
+  state: State,
+  manifest: SceneManifest,
+  basePath: string
+): Promise<void> {
   for (const [name, entry] of Object.entries(manifest.assets)) {
     if (!entry.model) continue;
 
@@ -93,7 +99,11 @@ async function loadOldFormat(state: State, manifest: SceneManifest, basePath: st
   }
 }
 
-async function loadHandoffFormat(state: State, manifest: RawManifest & { rows: HandoffRow[] }, basePath: string): Promise<void> {
+async function loadHandoffFormat(
+  state: State,
+  manifest: RawManifest & { rows: HandoffRow[] },
+  basePath: string
+): Promise<void> {
   for (const row of manifest.rows) {
     if (row.model?.url) {
       try {
@@ -116,7 +126,11 @@ async function loadHandoffFormat(state: State, manifest: RawManifest & { rows: H
 
     if (row.pbr_textures?.length) {
       const channelOrder = [0, 1, 2, 3, 4];
-      for (let i = 0; i < row.pbr_textures.length && i < channelOrder.length; i++) {
+      for (
+        let i = 0;
+        i < row.pbr_textures.length && i < channelOrder.length;
+        i++
+      ) {
         const eid = state.createEntity();
         state.addComponent(eid, TextureRecipe, {
           channel: channelOrder[i],
@@ -173,7 +187,9 @@ export async function loadSceneManifest(
 ): Promise<SceneManifest> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to load manifest: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to load manifest: ${response.status} ${response.statusText}`
+    );
   }
 
   const data: RawManifest = await response.json();

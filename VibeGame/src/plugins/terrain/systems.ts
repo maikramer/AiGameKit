@@ -37,7 +37,7 @@ function getActiveCamera(state: State): THREE.Camera | null {
   return threeCameras.get(cameraEntities[0]) ?? null;
 }
 
-/** Collision resolution enum mapping: 0=32, 1=64, 2=128. */
+/** Physics heightfield sampling: must be 32, 64, or 128 (defaults to 64). */
 function resolveCollisionResolution(raw: number): 32 | 64 | 128 {
   if (raw === 32 || raw === 128) return raw;
   return 64;
@@ -93,14 +93,11 @@ export const TerrainBootstrapSystem: System = {
           terrainLOD.setShowChunkBorders(true);
         }
 
-        const materialProvider = new WebGLTerrainMaterialProvider();
+        const materialProvider = new WebGLTerrainMaterialProvider({
+          skirtWidth: Terrain.skirtWidth[entity],
+          baseColor: Terrain.baseColor[entity],
+        });
         terrainLOD.setMaterialProvider(materialProvider);
-
-        {
-          const r = Terrain.resolution[entity];
-          const cr: 32 | 64 | 128 = r === 32 || r === 64 || r === 128 ? r : 64;
-          terrainLOD.setCollisionResolution(cr);
-        }
 
         data = {
           terrainLOD,
@@ -114,9 +111,11 @@ export const TerrainBootstrapSystem: System = {
           lastRoughness: -1,
           lastMetalness: -1,
           lastSkirtDepth: -1,
+          lastSkirtWidth: -1,
           lastWireframe: -1,
           lastHeightSmoothing: -1,
           lastHeightSmoothingSpread: -1,
+          lastBaseColor: -1,
         };
         context.set(entity, data);
 
@@ -128,7 +127,7 @@ export const TerrainBootstrapSystem: System = {
           .then(() => {
             entityData.initialized = true;
             // Apply material properties after init (material is created during init)
-            applyMaterialProperties(entityData, entity);
+            applyMaterialProperties(entityData, entity, state);
           })
           .catch((err: unknown) => {
             console.error('[terrain] Failed to initialize TerrainLOD:', err);
@@ -185,14 +184,18 @@ export const TerrainBootstrapSystem: System = {
 /** Apply ECS component values to the Three.js material at runtime. */
 function applyMaterialProperties(
   data: TerrainEntityData,
-  entity: number
+  entity: number,
+  state: State
 ): void {
   const roughness = Terrain.roughness[entity];
   const metalness = Terrain.metalness[entity];
   const skirtDepth = Terrain.skirtDepth[entity];
+  const skirtWidth = Terrain.skirtWidth[entity];
   const wireframe = Terrain.wireframe[entity];
   const heightSmoothing = Terrain.heightSmoothing[entity];
   const heightSmoothingSpread = Terrain.heightSmoothingSpread[entity];
+  const baseColor = Terrain.baseColor[entity] >>> 0;
+  const hasDiffuseTexture = Boolean(getTerrainTextureUrl(state, entity));
 
   // Only update when values change (avoids redundant uniform uploads)
   if (roughness !== data.lastRoughness) {
@@ -207,6 +210,10 @@ function applyMaterialProperties(
     data.materialProvider.setSkirtDepth(skirtDepth);
     data.lastSkirtDepth = skirtDepth;
   }
+  if (skirtWidth !== data.lastSkirtWidth) {
+    data.materialProvider.setSkirtWidth(skirtWidth);
+    data.lastSkirtWidth = skirtWidth;
+  }
   if (wireframe !== data.lastWireframe) {
     data.materialProvider.setWireframe(wireframe === 1);
     data.lastWireframe = wireframe;
@@ -218,6 +225,12 @@ function applyMaterialProperties(
   if (heightSmoothingSpread !== data.lastHeightSmoothingSpread) {
     data.terrainLOD.setHeightSmoothingSpread(heightSmoothingSpread);
     data.lastHeightSmoothingSpread = heightSmoothingSpread;
+  }
+
+  const effectiveColor = hasDiffuseTexture ? 0xffffff : baseColor;
+  if (effectiveColor !== data.lastBaseColor) {
+    data.materialProvider.setTerrainColor(effectiveColor);
+    data.lastBaseColor = effectiveColor;
   }
 }
 
@@ -245,7 +258,7 @@ export const TerrainRenderSystem: System = {
 
       // Apply material property changes every frame (cheap equality check)
       if (data.initialized) {
-        applyMaterialProperties(data, entity);
+        applyMaterialProperties(data, entity, state);
       }
     }
   },

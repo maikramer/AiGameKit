@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { AudioEmitter, AudioListener } from '../../../src/plugins/audio/components';
+import {
+  AudioEmitter,
+  AudioListener,
+} from '../../../src/plugins/audio/components';
 
 const EMITTER_FIELDS = [
   'clipPath',

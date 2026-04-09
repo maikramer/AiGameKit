@@ -11,7 +11,9 @@ const invertedCache = new Map<number, THREE.CanvasTexture>();
 
 // Materialize outputs smoothness maps; Three.js roughnessMap expects roughness (inverse).
 // Auto-detected by filename containing "smoothness".
-function invertSmoothnessTexture(sourceTexture: THREE.Texture): THREE.CanvasTexture {
+function invertSmoothnessTexture(
+  sourceTexture: THREE.Texture
+): THREE.CanvasTexture {
   const img = sourceTexture.image as HTMLImageElement;
   const canvas = document.createElement('canvas');
   canvas.width = img.width;
@@ -43,11 +45,11 @@ export function getTextureAsset(eid: number): THREE.Texture | undefined {
 const textureRecipeQuery = defineQuery([TextureRecipe]);
 
 const CHANNEL_MAP = [
-  'map',          // 0 — albedo/diffuse
-  'normalMap',    // 1
+  'map', // 0 — albedo/diffuse
+  'normalMap', // 1
   'roughnessMap', // 2
   'metalnessMap', // 3
-  'aoMap',          // 4 — ambient occlusion
+  'aoMap', // 4 — ambient occlusion
   'displacementMap', // 5
 ] as const;
 
@@ -93,9 +95,7 @@ export const TextureRecipeLoadSystem: System = {
 
           const channel = TextureRecipe.channel[eid] || 0;
           texture.colorSpace =
-            channel === 0
-              ? THREE.SRGBColorSpace
-              : THREE.LinearSRGBColorSpace;
+            channel === 0 ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
           texture.needsUpdate = true;
 
           const isSmoothness =

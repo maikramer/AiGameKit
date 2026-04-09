@@ -39,7 +39,12 @@ export {
   registerAnimator,
 } from './plugins/gltf-anim';
 export { isKeyDown } from './plugins/input';
-export { AudioEmitter, AudioListener, AudioPlugin, registerAudioClip } from './plugins/audio';
+export {
+  AudioEmitter,
+  AudioListener,
+  AudioPlugin,
+  registerAudioClip,
+} from './plugins/audio';
 export { Lod, LodPlugin, LodSystem } from './plugins/lod';
 export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';
 export {
@@ -54,8 +59,15 @@ export { Terrain, TerrainPlugin } from './plugins/terrain';
 export {
   SpawnerPlugin,
   SpawnerPending,
+  PlacePending,
   TerrainSpawnSystem,
+  TerrainPlaceSystem,
   spawnGroupRecipe,
+  placeRecipe,
+  placeParser,
+  spawnTemplateAtTerrain,
+  getPlacementSpecs,
+  setPlacementSpec,
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
   sampleTerrainSurface,
@@ -64,6 +76,7 @@ export type {
   ChildTemplateProfileId,
   GroundAlignMode,
   GroupSpawnDefaults,
+  PlacementSpec,
   SpawnGroupProfileId,
   SpawnGroupSpec,
   SpawnTemplateRole,
@@ -73,6 +86,7 @@ export type {
 export {
   applyChildTemplateProfile,
   getGroupSpawnDefaults,
+  isKnownGroupProfileForTests,
   normalizeGroupProfileId,
   optBool,
   optNumber,
@@ -88,6 +102,42 @@ export { Text3dModel, Text3dPlugin, text3dRecipe } from './plugins/text-3d';
 export type { WaterEntityData } from './plugins/water';
 export { DebugPlugin } from './plugins/debug';
 export type { VibeGameDebugBridge } from './plugins/debug';
+export { RaycastPlugin, RaycastResult, RaycastSource } from './plugins/raycast';
+export { NavmeshPlugin, NavAgent, NavMesh } from './plugins/navmesh';
+export {
+  AiSteeringPlugin,
+  SteeringAgent,
+  SteeringTarget,
+} from './plugins/ai-steering';
+export {
+  ParticlesPlugin,
+  ParticlesBurst,
+  ParticlesEmitter,
+} from './plugins/particles';
+export { HudPlugin, HudPanel } from './plugins/hud';
+export { JointsPlugin, PhysicsJoint } from './plugins/joints';
+export {
+  SaveLoadPlugin,
+  Serializable,
+  loadFromLocalStorage,
+  loadSnapshot,
+  saveSnapshot,
+  saveToLocalStorage,
+} from './plugins/save-load';
+export {
+  NetworkPlugin,
+  NetworkBuffer,
+  Networked,
+  setNetworkConfig,
+} from './plugins/network';
+export {
+  I18nPlugin,
+  I18nText,
+  getLocale,
+  loadDictionary,
+  setLocale,
+  t,
+} from './plugins/i18n';
 export { initAssetHotReload } from './vite/hot-reload-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 

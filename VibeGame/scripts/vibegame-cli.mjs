@@ -129,7 +129,8 @@ function parseRunArgs(args) {
   const flagsPart = dash >= 0 ? args.slice(0, dash) : args;
   if (dash >= 0) devArgs = args.slice(dash + 1);
   for (const f of flagsPart) {
-    if (f === '--skip-install' || f === '--skip-engine-install') skipEngineInstall = true;
+    if (f === '--skip-install' || f === '--skip-engine-install')
+      skipEngineInstall = true;
     else if (f === '--install' || f === '-i' || f === '--sync') install = true;
     else if (f === '--skip-build') skipBuild = true;
     else if (f === '--skip-app-install') skipAppInstall = true;
@@ -190,7 +191,11 @@ function depPackageJsonExists(root, pkgName) {
  */
 function declaredDepsSatisfied(projectRoot, pkg) {
   if (!existsSync(join(projectRoot, 'node_modules'))) return false;
-  const groups = [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies];
+  const groups = [
+    pkg.dependencies,
+    pkg.devDependencies,
+    pkg.optionalDependencies,
+  ];
   for (const g of groups) {
     if (!g || typeof g !== 'object') continue;
     for (const name of Object.keys(g)) {
@@ -326,16 +331,24 @@ function runVibegameRun(engineRoot, opts) {
     (isDescendantDir(cwd, engineRoot) || linksToThisEngine);
 
   if (opts.install) {
-    console.log(`[vibegame run] bun install (engine, --install) → ${engineRoot}`);
+    console.log(
+      `[vibegame run] bun install (engine, --install) → ${engineRoot}`
+    );
     const c0 = runBun(engineRoot, ['install']);
     if (c0 !== 0) process.exit(c0);
-  } else if (!opts.skipEngineInstall && !engineNodeModulesLookReady(engineRoot)) {
+  } else if (
+    !opts.skipEngineInstall &&
+    !engineNodeModulesLookReady(engineRoot)
+  ) {
     console.log(
       `[vibegame run] Dependências da engine em falta ou incompletas — bun install (engine) → ${engineRoot}`
     );
     const c0 = runBun(engineRoot, ['install']);
     if (c0 !== 0) process.exit(c0);
-  } else if (opts.skipEngineInstall && !engineNodeModulesLookReady(engineRoot)) {
+  } else if (
+    opts.skipEngineInstall &&
+    !engineNodeModulesLookReady(engineRoot)
+  ) {
     console.warn(
       '[vibegame run] Aviso: --skip-engine-install / --skip-install ativo mas node_modules da engine parece incompleto; o build pode falhar.'
     );
@@ -401,9 +414,7 @@ function help() {
   console.log(
     '  vibegame run --skip-engine-install   Não roda bun install na engine (node_modules já ok)'
   );
-  console.log(
-    '  vibegame run --skip-install   Alias de --skip-engine-install'
-  );
+  console.log('  vibegame run --skip-install   Alias de --skip-engine-install');
   console.log(
     '  vibegame run --skip-build     Pula build da engine (só sobe dev)'
   );
