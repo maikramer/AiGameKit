@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import { hasComponent } from 'bitecs';
 import { defineQuery, type System } from '../../core';
 import { Pathfinding } from 'three-pathfinding';
+import { Collider } from '../physics';
+import { getRenderingContext } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
 import { NavAgent, NavMesh } from './components';
 import { getNavmeshContext } from './context';
 
 const navMeshQuery = defineQuery([NavMesh]);
 const navAgentQuery = defineQuery([NavAgent, Transform]);
+const colliderQuery = defineQuery([Collider]);
 
 function ensureZone(state: import('../../core').State): void {
   const ctx = getNavmeshContext(state);
@@ -32,6 +35,100 @@ export const NavMeshLoadSystem: System = {
     if (navMeshQuery(state.world).length === 0) {
       ensureZone(state);
     }
+  },
+};
+
+function collectCollidableGeometry(state: import('../../core').State): THREE.BufferGeometry | null {
+  const ctx = getRenderingContext(state);
+  const geometries: THREE.BufferGeometry[] = [];
+  const world = state.world;
+
+  for (const eid of colliderQuery(world)) {
+    const instance = ctx.entityInstances.get(eid);
+    if (!instance) continue;
+
+    const pool = instance.unlit
+      ? ctx.unlitMeshPools.get(instance.poolId)
+      : ctx.meshPools.get(instance.poolId);
+    if (!pool) continue;
+
+    const mesh = pool as THREE.InstancedMesh;
+    const geom = mesh.geometry.clone();
+
+    const mtx = new THREE.Matrix4();
+    mesh.getMatrixAt(instance.instanceId, mtx);
+    geom.applyMatrix4(mtx);
+
+    geometries.push(geom);
+  }
+
+  if (geometries.length === 0) return null;
+
+  const merged = mergeGeometriesManual(geometries);
+
+  for (const g of geometries) g.dispose();
+  return merged;
+}
+
+function mergeGeometriesManual(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  let totalVerts = 0;
+  let totalIdx = 0;
+  for (const g of geometries) {
+    totalVerts += g.attributes.position.count;
+    totalIdx += g.index ? g.index.count : 0;
+  }
+
+  const positions = new Float32Array(totalVerts * 3);
+  const indices: number[] = [];
+  let vertOffset = 0;
+  let idxOffset = 0;
+
+  for (const g of geometries) {
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      positions[(vertOffset + i) * 3] = pos.getX(i);
+      positions[(vertOffset + i) * 3 + 1] = pos.getY(i);
+      positions[(vertOffset + i) * 3 + 2] = pos.getZ(i);
+    }
+    if (g.index) {
+      for (let i = 0; i < g.index.count; i++) {
+        indices[idxOffset++] = g.index.getX(i) + vertOffset;
+      }
+    }
+    vertOffset += pos.count;
+  }
+
+  const merged = new THREE.BufferGeometry();
+  merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  if (indices.length > 0) {
+    merged.setIndex(indices);
+  }
+  return merged;
+}
+
+export const NavMeshBuildSystem: System = {
+  group: 'setup',
+  update: (state) => {
+    const ctx = getNavmeshContext(state);
+    if (ctx.zoneRegistered) return;
+
+    let needsSceneBuild = false;
+    for (const eid of navMeshQuery(state.world)) {
+      if (NavMesh.buildFromScene[eid] === 1) {
+        needsSceneBuild = true;
+        break;
+      }
+    }
+
+    if (!needsSceneBuild) return;
+
+    const geom = collectCollidableGeometry(state);
+    if (!geom) return;
+
+    const zone = Pathfinding.createZone(geom);
+    ctx.pathfinding.setZoneData(ctx.zoneId, zone);
+    ctx.zoneRegistered = true;
+    geom.dispose();
   },
 };
 

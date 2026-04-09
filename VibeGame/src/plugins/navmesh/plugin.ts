@@ -4,6 +4,7 @@ import { navAgentRecipe, navMeshRecipe } from './recipes';
 import {
   NavAgentMoveSystem,
   NavAgentPathSystem,
+  NavMeshBuildSystem,
   NavMeshLoadSystem,
 } from './systems';
 
@@ -15,7 +16,7 @@ function targetAdapter(entity: number, value: string, _state: State): void {
 }
 
 export const NavmeshPlugin: Plugin = {
-  systems: [NavMeshLoadSystem, NavAgentPathSystem, NavAgentMoveSystem],
+  systems: [NavMeshLoadSystem, NavMeshBuildSystem, NavAgentPathSystem, NavAgentMoveSystem],
   recipes: [navMeshRecipe, navAgentRecipe],
   components: {
     navMesh: NavMesh,
@@ -25,6 +26,7 @@ export const NavmeshPlugin: Plugin = {
     defaults: {
       navMesh: {
         loaded: 0,
+        buildFromScene: 0,
       },
       navAgent: {
         targetX: 0,

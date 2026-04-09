@@ -4,5 +4,6 @@ export { NavmeshPlugin } from './plugin';
 export {
   NavAgentMoveSystem,
   NavAgentPathSystem,
+  NavMeshBuildSystem,
   NavMeshLoadSystem,
 } from './systems';
