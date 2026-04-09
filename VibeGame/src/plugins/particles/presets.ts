@@ -49,6 +49,35 @@ export function createParticleSystemForPreset(
     mat.color.setHex(0xffffaa);
     base.startColor = new ConstantColor(new Vector4(1, 1, 0.8, 1));
     base.startSpeed = new ConstantValue(5);
+  } else if (preset === 4) {
+    // rain - fast downward, blue-white, small droplets
+    mat.color.setHex(0xaaddff);
+    mat.blending = THREE.NormalBlending;
+    base.startColor = new ConstantColor(new Vector4(0.6, 0.8, 1, 0.7));
+    base.startSpeed = new ConstantValue(15);
+    base.startLife = new ConstantValue(0.6);
+    base.startSize = new ConstantValue(size * 0.4);
+    base.emitterShape = new SphereEmitter({ radius: 3 });
+    base.emissionOverTime = new ConstantValue(rate * 4);
+  } else if (preset === 5) {
+    // snow - slow drift, white, low speed, long life
+    mat.color.setHex(0xffffff);
+    mat.blending = THREE.NormalBlending;
+    base.startColor = new ConstantColor(new Vector4(1, 1, 1, 0.9));
+    base.startSpeed = new ConstantValue(0.5);
+    base.startLife = new ConstantValue(lifetime * 3);
+    base.startSize = new ConstantValue(size * 1.5);
+    base.emitterShape = new SphereEmitter({ radius: 4 });
+    base.emissionOverTime = new ConstantValue(rate * 0.6);
+  } else if (preset === 99) {
+    // custom - neutral defaults (white, medium speed, upward)
+    mat.color.setHex(0xffffff);
+    mat.blending = THREE.NormalBlending;
+    base.startColor = new ConstantColor(new Vector4(1, 1, 1, 1));
+    base.startSpeed = new ConstantValue(3);
+    base.startLife = new ConstantValue(lifetime);
+    base.startSize = new ConstantValue(size);
+    base.emitterShape = new SphereEmitter({ radius: 0.15 });
   }
 
   const ps = new ParticleSystem(base);
