@@ -1,7 +1,6 @@
-import { hasComponent } from 'bitecs';
-import {
-  BatchedParticleRenderer,
-} from 'three.quarks';
+import { entityExists, hasComponent } from 'bitecs';
+import type { Object3D } from 'three';
+import { BatchedParticleRenderer, type ParticleSystem } from 'three.quarks';
 import { defineQuery, type System } from '../../core';
 import { getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
@@ -11,6 +10,24 @@ import { createParticleSystemForPreset } from './presets';
 
 const emitterQuery = defineQuery([ParticlesEmitter, Transform]);
 const burstQuery = defineQuery([ParticlesBurst, Transform]);
+
+const entityToPS = new Map<number, ParticleSystem>();
+
+function disposeParticle(eid: number, ctx: { batch: BatchedParticleRenderer | null; roots: Map<number, Object3D> }) {
+  const ps = entityToPS.get(eid);
+  const root = ctx.roots.get(eid);
+  if (ps && ctx.batch) {
+    ctx.batch.deleteSystem(ps);
+  }
+  if (root) {
+    root.removeFromParent();
+    ctx.roots.delete(eid);
+  }
+  if (ps) {
+    ps.dispose();
+    entityToPS.delete(eid);
+  }
+}
 
 export const ParticleBootstrapSystem: System = {
   group: 'setup',
@@ -55,6 +72,7 @@ export const ParticleEmitSystem: System = {
       const scene = getScene(state);
       if (scene) scene.add(root);
       ctx.roots.set(eid, root);
+      entityToPS.set(eid, ps);
       ParticlesEmitter.spawned[eid] = 1;
     }
 
@@ -92,6 +110,11 @@ export const ParticleBurstSystem: System = {
 
     for (const eid of burstQuery(state.world)) {
       if (!ParticlesBurst.triggered[eid]) continue;
+
+      if (entityToPS.has(eid)) {
+        disposeParticle(eid, ctx);
+      }
+
       const ps = createParticleSystemForPreset(
         ParticlesBurst.preset[eid],
         ParticlesBurst.count[eid],
@@ -102,6 +125,8 @@ export const ParticleBurstSystem: System = {
       const root = ps.emitter;
       const scene = getScene(state);
       if (scene) scene.add(root);
+      ctx.roots.set(eid, root);
+      entityToPS.set(eid, ps);
       const wx = hasComponent(state.world, WorldTransform, eid)
         ? WorldTransform.posX[eid]
         : Transform.posX[eid];
@@ -125,5 +150,20 @@ export const ParticleRenderSystem: System = {
     const batch = ctx.batch;
     if (!batch) return;
     batch.update(state.time.deltaTime);
+  },
+};
+
+export const ParticleCleanupSystem: System = {
+  group: 'draw',
+  after: [ParticleRenderSystem],
+  update: (state) => {
+    if (state.headless) return;
+    const ctx = getParticlesContext(state);
+    if (!ctx.batch) return;
+    for (const eid of entityToPS.keys()) {
+      if (!entityExists(state.world, eid)) {
+        disposeParticle(eid, ctx);
+      }
+    }
   },
 };

@@ -3,6 +3,7 @@ export { ParticlesPlugin } from './plugin';
 export {
   ParticleBootstrapSystem,
   ParticleBurstSystem,
+  ParticleCleanupSystem,
   ParticleEmitSystem,
   ParticleRenderSystem,
 } from './systems';

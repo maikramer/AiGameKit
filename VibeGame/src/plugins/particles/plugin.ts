@@ -4,6 +4,7 @@ import { particleBurstRecipe, particleEmitterRecipe } from './recipes';
 import {
   ParticleBootstrapSystem,
   ParticleBurstSystem,
+  ParticleCleanupSystem,
   ParticleEmitSystem,
   ParticleRenderSystem,
 } from './systems';
@@ -14,6 +15,7 @@ export const ParticlesPlugin: Plugin = {
     ParticleEmitSystem,
     ParticleBurstSystem,
     ParticleRenderSystem,
+    ParticleCleanupSystem,
   ],
   recipes: [particleEmitterRecipe, particleBurstRecipe],
   components: {
