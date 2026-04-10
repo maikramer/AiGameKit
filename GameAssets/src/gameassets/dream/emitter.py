@@ -166,7 +166,7 @@ def _ground_color_for_genre(genre: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:  # noqa: ARG001
+def emit_main_ts(plan: DreamPlan, *, with_sky: bool = True) -> str:
     imports = ["configure", "run", "loadSceneManifest"]
 
     lines = [
