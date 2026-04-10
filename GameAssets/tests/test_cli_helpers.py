@@ -140,6 +140,20 @@ def test_text3d_argv_with_profile_options() -> None:
     assert "--preset" in argv and "hq" in argv
     assert "--low-vram" in argv
     assert "--texture" not in argv
+    assert "--export-origin" in argv
+    assert argv[argv.index("--export-origin") + 1] == "feet"
+
+
+def test_text3d_argv_export_origin_center() -> None:
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        text3d=Text3DProfile(preset="fast", texture=True, export_origin="center"),
+    )
+    argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
+    assert argv[argv.index("--export-origin") + 1] == "center"
 
 
 def test_text3d_argv_shape_only_skips_texture() -> None:
@@ -197,6 +211,25 @@ def test_paint3d_texture_argv_gpu_flags() -> None:
     assert "--allow-shared-gpu" in argv
     assert "--no-gpu-kill-others" in argv
     assert "--paint-full-gpu" in argv
+    assert "--preserve-origin" in argv
+
+
+def test_paint3d_texture_argv_no_preserve_origin() -> None:
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        text3d=Text3DProfile(texture=True, paint_preserve_origin=False),
+    )
+    argv = _paint3d_texture_argv(
+        "/bin/paint3d",
+        p,
+        Path("/shape.glb"),
+        Path("/ref.png"),
+        Path("/out.glb"),
+    )
+    assert "--no-preserve-origin" in argv
 
 
 def test_texture_subprocess_delegates_to_paint3d() -> None:

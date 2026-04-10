@@ -137,6 +137,35 @@ def test_from_dict_text3d_hunyuan_explicit() -> None:
     assert p.text3d is not None
     assert p.text3d.steps == 26
     assert p.text3d.octree_resolution == 160
+    assert p.text3d.export_origin == "feet"
+    assert p.text3d.paint_preserve_origin is True
+
+
+def test_from_dict_text3d_export_origin_center() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "text3d": {"preset": "fast", "texture": True, "export_origin": "center"},
+        }
+    )
+    assert p.text3d is not None
+    assert p.text3d.export_origin == "center"
+
+
+def test_from_dict_text3d_export_origin_invalid() -> None:
+    with pytest.raises(ValueError, match="export_origin"):
+        GameProfile.from_dict(
+            {
+                "title": "A",
+                "genre": "B",
+                "tone": "C",
+                "style_preset": "lowpoly",
+                "text3d": {"preset": "fast", "export_origin": "invalid"},
+            }
+        )
 
 
 def test_from_dict_invalid_preset() -> None:

@@ -71,6 +71,10 @@ text3d:
   preset: fast
   low_vram: false
   texture: true
+  # feet = base do modelo em Y=0 (recomendado para a maioria dos props/personagens).
+  # export_origin: center  # só para excepções (pivô no centro da caixa)
+  export_origin: feet
+  paint_preserve_origin: true
   # phased_batch: false
 
 # Rigging3D após Text3D (--with-rig + coluna generate_rig=true no CSV). Requer bash, GPU CUDA; ver Rigging3D/README.md.

@@ -41,6 +41,8 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
             "preset": "fast",
             "low_vram": False,
             "texture": True,
+            "export_origin": "feet",
+            "paint_preserve_origin": True,
         }
 
     has_rig = any(a.generate_rig for a in plan.assets)

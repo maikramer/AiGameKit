@@ -24,6 +24,11 @@ class Text3DProfile:
     preset: str | None = None  # fast | balanced | hq
     low_vram: bool = False
     texture: bool = False
+    # Origem ao exportar GLB (shape): feet = base AABB em Y=0 e XZ centrado (defeito para props/personagens).
+    # Sobrescreve TEXT3D_EXPORT_ORIGIN no batch gameassets (reprodutibilidade).
+    export_origin: str = "feet"
+    # Após paint3d texture: repor convenção "pés" na mesh final (alinhado com Text3D).
+    paint_preserve_origin: bool = True
     # Se qualquer um estiver definido, não se passa --preset (o text3d aplica preset por cima de --steps)
     steps: int | None = None
     octree_resolution: int | None = None
@@ -435,10 +440,18 @@ class GameProfile:
             )
             if paint_quant_s and paint_quant_s not in valid_quant_modes:
                 raise ValueError(f"text3d.paint_quantization deve ser um de: {', '.join(valid_quant_modes)}")
+            eo_raw = raw_t3.get("export_origin", "feet")
+            eo = str(eo_raw).strip().lower() if eo_raw not in (None, "") else "feet"
+            valid_eo = frozenset({"feet", "center", "none"})
+            if eo not in valid_eo:
+                raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
+            paint_preserve = bool(raw_t3.get("paint_preserve_origin", True))
             t3 = Text3DProfile(
                 preset=pr,
                 low_vram=bool(raw_t3.get("low_vram", False)),
                 texture=tx,
+                export_origin=eo,
+                paint_preserve_origin=paint_preserve,
                 steps=st_i,
                 octree_resolution=oc_i,
                 num_chunks=nc_i,

@@ -2226,6 +2226,10 @@ def _paint3d_texture_argv(
         args.extend(["--texture-size", str(t3.paint_texture_size)])
     if t3.paint_bake_exp is not None:
         args.extend(["--bake-exp", str(t3.paint_bake_exp)])
+    if t3.paint_preserve_origin:
+        args.append("--preserve-origin")
+    else:
+        args.append("--no-preserve-origin")
     # --- Otimizações de VRAM ---
     if t3.paint_low_vram_mode:
         args.append("--low-vram-mode")
@@ -2305,6 +2309,7 @@ def _text3d_argv(
         args.append("--no-gpu-kill-others")
     if t3.full_gpu:
         args.append("--t2d-full-gpu")
+    args.extend(["--export-origin", t3.export_origin])
     return args
 
 
