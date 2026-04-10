@@ -1,0 +1,20 @@
+{
+  "prompt": "soft positive UI confirm chime gentle bell game menu save success",
+  "profile": "music",
+  "model_id": "stabilityai/stable-audio-open-1.0",
+  "duration": 3.0,
+  "steps": 100,
+  "cfg_scale": 7.0,
+  "seed": 102,
+  "seed_effective": 102,
+  "sampler": "dpmpp-3m-sde",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": true,
+  "format": "wav",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0"
+}

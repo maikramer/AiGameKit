@@ -1,0 +1,20 @@
+{
+  "prompt": "Calm RPG exploration background music, orchestral strings and soft synth pads, bright fantasy adventure, peaceful green fields, loopable mood, light percussion, no heavy drums, suitable for a cute lowpoly game",
+  "profile": "music",
+  "model_id": "stabilityai/stable-audio-open-1.0",
+  "duration": 40.0,
+  "steps": 80,
+  "cfg_scale": 6.0,
+  "seed": 2026,
+  "seed_effective": 2026,
+  "sampler": "dpmpp-3m-sde",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": true,
+  "format": "wav",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0"
+}

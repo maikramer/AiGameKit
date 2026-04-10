@@ -1,126 +1,399 @@
 ﻿<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RPG Simples — Vale do Cristal (VibeGame)</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Simple RPG Demo — GameAssets + VibeGame</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #111;
+      }
 
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #111;
-    }
+      #game-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
 
-    #game-canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-  </style>
-</head>
+  <body>
+    <world
+      canvas="#game-canvas"
+      sky="#87CEEB"
+      resume-audio-on-user-gesture="true"
+    >
+      <sky url="/assets/sky/sky.png"></sky>
 
-<body>
-  <world canvas="#game-canvas" sky="#87CEEB">
-    <terrain pos="0 0 0" world-size="256" max-height="50" levels="6" resolution="64" lod-hysteresis="1.25"
-      lod-distance-ratio="2" height-smoothing="0.35" height-smoothing-spread="1.25" collision-resolution="64"
-      skirt-width="0.015625" roughness="0.82" base-color="#8bc34a"></terrain>
+      <audio-clip
+        name="bgm"
+        url="/assets/audio/bgm_field.wav"
+        loop="true"
+        volume="0.18"
+        playing="true"
+        spatial="false"
+      ></audio-clip>
+      <audio-clip
+        name="sfx-jump"
+        url="/assets/audio/sfx_jump.wav"
+        loop="false"
+        volume="0.42"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
+      <audio-clip
+        name="sfx-save"
+        url="/assets/audio/sfx_save.wav"
+        loop="false"
+        volume="0.48"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
+      <audio-clip
+        name="sfx-load"
+        url="/assets/audio/sfx_load.wav"
+        loop="false"
+        volume="0.44"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
 
-    <water pos="0 5 0" size="256" opacity="0.8" wave-speed="1.0" wave-scale="0.3" underwater-fog-color-r="0.0"
-      underwater-fog-color-g="0.1" underwater-fog-color-b="0.3" underwater-fog-density="0.2"></water>
+      <terrain
+        pos="0 0 0"
+        world-size="256"
+        max-height="50"
+        levels="6"
+        resolution="64"
+        lod-hysteresis="1.25"
+        lod-distance-ratio="2"
+        height-smoothing="0.35"
+        height-smoothing-spread="1.25"
+        collision-resolution="64"
+        skirt-width="0.015625"
+        roughness="0.82"
+        base-color="#8bc34a"
+      ></terrain>
 
-    <fog color="#c8d0d8" density="0.012" mode="exponential" height-falloff="0.8" base-height="0"
-      volumetric-strength="0.4" quality="medium" noise-scale="0.5"></fog>
+      <water
+        pos="0 5 0"
+        size="256"
+        opacity="0.8"
+        wave-speed="1.0"
+        wave-scale="0.3"
+        underwater-fog-color-r="0.0"
+        underwater-fog-color-g="0.1"
+        underwater-fog-color-b="0.3"
+        underwater-fog-density="0.2"
+      ></water>
 
-    <player-gltf pos="0 60 0" model-url="/assets/models/hero.glb"></player-gltf>
+      <fog
+        color="#c8d4e0"
+        density="0.007"
+        mode="exponential"
+        height-falloff="0.55"
+        base-height="0"
+        volumetric-strength="0.22"
+        quality="medium"
+        noise-scale="0.35"
+      ></fog>
 
-    <follow-camera
-      target-distance="6"
-      target-pitch="0.35"
-      yaw-smoothness="0.07"
-      position-lag="0.14"
-      auto-rotate-delay="0.4"
-      smaa="preset: ultra"
-      bloom="intensity: 1.5; luminance-threshold: 0.3; luminance-smoothing: 0.3; mipmap-blur: 1; radius: 0.85"
-      depth-of-field="focus-distance: 8; focal-length: 0.1; bokeh-scale: 3; auto-focus: on"
-      vignette="darkness: 0.6; offset: 0.2"
-      chromatic-aberration="offset-x: 0.003; offset-y: 0.0015"
-      dithering="color-bits: 5; intensity: 0.8"
-      noise="opacity: 0.15"
-      tonemapping="mode: aces-filmic"
-    ></follow-camera>
+      <player-gltf
+        name="hero"
+        pos="0 60 0"
+        model-url="/assets/models/hero.glb"
+      ></player-gltf>
 
-    <!-- Stone pillar: <place> = XZ fixo + altura/alinhamento ao terreno -->
-    <place at="0 -8">
-      <gltf-load role="visual" url="/assets/models/stone_pillar.glb" transform="scale: 1.5 1.5 1.5"></gltf-load>
-    </place>
+      <follow-camera
+        target-distance="7"
+        target-pitch="0.32"
+        yaw-smoothness="0.055"
+        position-lag="0.18"
+        auto-rotate-delay="0.55"
+        smaa="preset: ultra"
+        bloom="intensity: 0.55; luminance-threshold: 0.72; luminance-smoothing: 0.45; mipmap-blur: 1; radius: 0.55"
+        depth-of-field="focus-distance: 9; focal-length: 0.06; bokeh-scale: 1.4; auto-focus: on"
+        vignette="darkness: 0.28; offset: 0.35"
+        chromatic-aberration="offset-x: 0.0008; offset-y: 0.0005"
+        dithering="color-bits: 6; intensity: 0.28"
+        noise="opacity: 0.045"
+        tonemapping="mode: aces-filmic"
+      ></follow-camera>
 
-    <place at="5 3">
-      <gltf-load role="visual" url="/assets/models/wooden_crate.glb" transform="scale: 1 1 1"></gltf-load>
-    </place>
-    <place at="6.2 3.5">
-      <gltf-load role="visual" url="/assets/models/wooden_crate.glb" transform="scale: 0.8 0.8 0.8"></gltf-load>
-    </place>
+      <!-- Stone pillar: <place> = XZ fixo + altura/alinhamento ao terreno -->
+      <place at="0 -8">
+        <gltf-load
+          role="visual"
+          url="/assets/models/stone_pillar.glb"
+          transform="scale: 1.5 1.5 1.5"
+        ></gltf-load>
+      </place>
 
-    <!-- Crystal effects: deliberately exaggerated so they read as particles, not reflections -->
-    <place at="-4 6" y-offset="0.6" ground-align="none">
-      <gltf-load role="visual" url="/assets/models/crystal_blue.glb" transform="scale: 0.6 0.6 0.6"></gltf-load>
-      <particle-emitter preset="sparks" rate="28" lifetime="2.2" size="0.38"
-        transform="pos: 0 1.35 0"></particle-emitter>
-      <particle-emitter preset="sparks" rate="16" lifetime="1.6" size="0.18"
-        transform="pos: 0 0.9 0"></particle-emitter>
-    </place>
-    <place at="10 -5" y-offset="0.6" ground-align="none">
-      <gltf-load role="visual" url="/assets/models/crystal_blue.glb" transform="scale: 0.5 0.5 0.5"></gltf-load>
-      <particle-emitter preset="sparks" rate="24" lifetime="2.0" size="0.32"
-        transform="pos: 0 1.2 0"></particle-emitter>
-      <particle-emitter preset="sparks" rate="14" lifetime="1.5" size="0.16"
-        transform="pos: 0 0.8 0"></particle-emitter>
-    </place>
+      <place at="5 3">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_crate.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </place>
+      <place at="6.2 3.5">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_crate.glb"
+          transform="scale: 0.8 0.8 0.8"
+        ></gltf-load>
+      </place>
 
-    <!-- Campfire + smoke: y-offset acima do solo amostrado -->
-    <place at="0 -8" y-offset="2.5" ground-align="none">
-      <particle-emitter preset="fire" rate="40" lifetime="1.2" size="0.25"></particle-emitter>
-    </place>
-    <place at="0 -8" y-offset="4" ground-align="none">
-      <particle-emitter preset="smoke" rate="8" lifetime="3" size="0.4"></particle-emitter>
-    </place>
+      <place at="4.2 2.8">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_barrel.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </place>
+      <place at="3.4 4.1">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_barrel.glb"
+          transform="scale: 0.95 0.95 0.95"
+        ></gltf-load>
+      </place>
 
-    <place at="12 8" align-to-terrain="0" ground-align="none">
-      <npc behavior="wander" max-speed="1.5" max-force="4"></npc>
-    </place>
-    <place at="-15 -10" align-to-terrain="0" ground-align="none">
-      <npc behavior="wander" max-speed="2" max-force="5"></npc>
-    </place>
-    <place at="20 -18" align-to-terrain="0" ground-align="none">
-      <npc behavior="wander" max-speed="1.2" max-force="3"></npc>
-    </place>
+      <place at="-1.5 -9" y-offset="0.35" ground-align="none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/treasure_chest.glb"
+          transform="scale: 1.1 1.1 1.1"
+        ></gltf-load>
+      </place>
 
-    <spawn-group profile="tree" count="24" seed="7" region-min="-40 0 -40" region-max="40 0 40" pick-strategy="random">
-      <gltf-load role="visual" url="/assets/models/tree_lowpoly.glb" transform="scale: 1 1 1"></gltf-load>
-    </spawn-group>
+      <place at="-14 2">
+        <gltf-load
+          role="visual"
+          url="/assets/models/stone_well.glb"
+          transform="scale: 1.2 1.2 1.2"
+        ></gltf-load>
+      </place>
 
-    <spawn-group profile="physics-box" count="6" seed="3" region-min="4 0 2" region-max="10 0 6" pick-strategy="random">
-      <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
-    </spawn-group>
+      <place at="8 -12">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_sign.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </place>
 
-    <spawn-group profile="gltf-crate" count="3" seed="11" region-min="-6 0 8" region-max="-2 0 12">
-      <gltf-dynamic role="dynamic" profile="gltf-crate" url="/assets/models/wooden_crate.glb" collider-shape="box"
-        transform="scale: 1 1 1"></gltf-dynamic>
-    </spawn-group>
-  </world>
+      <place at="-18 -6">
+        <gltf-load
+          role="visual"
+          url="/assets/models/rock_boulder.glb"
+          transform="scale: 1.4 1.4 1.4"
+        ></gltf-load>
+      </place>
+      <place at="22 6">
+        <gltf-load
+          role="visual"
+          url="/assets/models/rock_boulder.glb"
+          transform="scale: 1.1 1.1 1.1"
+        ></gltf-load>
+      </place>
+      <place at="-8 18">
+        <gltf-load
+          role="visual"
+          url="/assets/models/rock_boulder.glb"
+          transform="scale: 0.9 0.9 0.9"
+        ></gltf-load>
+      </place>
 
-  <canvas id="game-canvas"></canvas>
+      <place at="-2 -7.5" y-offset="1.1" ground-align="none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/torch_stand.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+        <particle-emitter
+          preset="fire"
+          rate="14"
+          lifetime="1.2"
+          size="0.16"
+          transform="pos: 0 0.35 0"
+        ></particle-emitter>
+      </place>
+      <place at="2 -7.5" y-offset="1.1" ground-align="none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/torch_stand.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+        <particle-emitter
+          preset="fire"
+          rate="14"
+          lifetime="1.2"
+          size="0.16"
+          transform="pos: 0 0.35 0"
+        ></particle-emitter>
+      </place>
 
-  <script type="module" src="/src/main.ts"></script>
-</body>
+      <place at="-11 9">
+        <gltf-load
+          role="visual"
+          url="/assets/models/hay_bale.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </place>
+      <place at="-9.5 10.2">
+        <gltf-load
+          role="visual"
+          url="/assets/models/hay_bale.glb"
+          transform="scale: 0.9 0.9 0.9"
+        ></gltf-load>
+      </place>
 
+      <!-- Cristais de energia: um emissor suave por sítio -->
+      <place at="-4 6" y-offset="0.6" ground-align="none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/crystal_blue.glb"
+          transform="scale: 0.6 0.6 0.6"
+        ></gltf-load>
+        <particle-emitter
+          preset="sparks"
+          rate="9"
+          lifetime="2.4"
+          size="0.22"
+          transform="pos: 0 1.1 0"
+        ></particle-emitter>
+      </place>
+      <place at="10 -5" y-offset="0.6" ground-align="none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/crystal_blue.glb"
+          transform="scale: 0.5 0.5 0.5"
+        ></gltf-load>
+        <particle-emitter
+          preset="sparks"
+          rate="8"
+          lifetime="2.2"
+          size="0.2"
+          transform="pos: 0 1 0"
+        ></particle-emitter>
+      </place>
+      <place at="-10 -14" y-offset="0.55" ground-align="none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/crystal_blue.glb"
+          transform="scale: 0.55 0.55 0.55"
+        ></gltf-load>
+        <particle-emitter
+          preset="sparks"
+          rate="8"
+          lifetime="2.3"
+          size="0.21"
+          transform="pos: 0 1.05 0"
+        ></particle-emitter>
+      </place>
+
+      <!-- Fogueira no acampamento: chamas e fumo discretos -->
+      <place at="0 -8" y-offset="2.5" ground-align="none">
+        <particle-emitter
+          preset="fire"
+          rate="18"
+          lifetime="1.4"
+          size="0.2"
+        ></particle-emitter>
+      </place>
+      <place at="0 -8" y-offset="3.6" ground-align="none">
+        <particle-emitter
+          preset="smoke"
+          rate="4"
+          lifetime="3.5"
+          size="0.32"
+        ></particle-emitter>
+      </place>
+
+      <place at="12 8" align-to-terrain="0" ground-align="none">
+        <npc behavior="wander" max-speed="1.1" max-force="3.5"></npc>
+      </place>
+      <place at="-15 -10" align-to-terrain="0" ground-align="none">
+        <npc behavior="wander" max-speed="1.25" max-force="4"></npc>
+      </place>
+      <place at="20 -18" align-to-terrain="0" ground-align="none">
+        <npc behavior="wander" max-speed="0.95" max-force="3"></npc>
+      </place>
+      <place at="-6 14" align-to-terrain="0" ground-align="none">
+        <npc behavior="wander" max-speed="1.05" max-force="3.2"></npc>
+      </place>
+
+      <spawn-group
+        profile="tree"
+        count="18"
+        seed="7"
+        region-min="-40 0 -40"
+        region-max="40 0 40"
+        pick-strategy="random"
+      >
+        <gltf-load
+          role="visual"
+          url="/assets/models/tree_lowpoly.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </spawn-group>
+
+      <spawn-group
+        profile="physics-box"
+        count="5"
+        seed="3"
+        region-min="4 0 2"
+        region-max="10 0 6"
+        pick-strategy="random"
+      >
+        <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
+      </spawn-group>
+
+      <spawn-group
+        profile="gltf-crate"
+        count="4"
+        seed="11"
+        region-min="-6 0 8"
+        region-max="-2 0 12"
+      >
+        <gltf-dynamic
+          role="dynamic"
+          profile="gltf-crate"
+          url="/assets/models/wooden_crate.glb"
+          collider-shape="box"
+          transform="scale: 1 1 1"
+        ></gltf-dynamic>
+      </spawn-group>
+
+      <spawn-group
+        profile="gltf-crate"
+        count="3"
+        seed="19"
+        region-min="14 0 -8"
+        region-max="22 0 -2"
+      >
+        <gltf-dynamic
+          role="dynamic"
+          profile="gltf-crate"
+          url="/assets/models/wooden_crate.glb"
+          collider-shape="box"
+          transform="scale: 0.9 0.9 0.9"
+        ></gltf-dynamic>
+      </spawn-group>
+    </world>
+
+    <canvas id="game-canvas"></canvas>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

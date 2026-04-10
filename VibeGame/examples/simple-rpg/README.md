@@ -2,9 +2,9 @@
 
 End-to-end example of the **GameDev monorepo workflow**: describe assets in `game.yaml` + `manifest.csv`, generate **GLBs** (Text3D + Paint3D), optional **rigging** (Rigging3D), **audio** (Text2Sound), **sky** (Skymap2D), **handoff** to `public/assets/`, and run a playable **VibeGame** scene.
 
-This demo also showcases VibeGame's **new engine features**: particles, AI steering NPCs, save/load, and i18n — all used declaratively or via a lightweight gameplay system.
+This demo also showcases VibeGame's **new engine features**: particles, AI steering NPCs, save/load, i18n, declarative **sky** (`<sky url="…">`) and **audio** (`<audio-clip>` + `resume-audio-on-user-gesture`) — plus lightweight gameplay code for HUD and SFX triggers.
 
-**Portugues:** demo completa do pipeline do monorepo GameDev: GameAssets batch gera GLBs, audio e imagens; handoff copia para `public/`; VibeGame carrega via `<gltf-load>` + `applyEquirectSkyEnvironment`. Esta demo também mostra as novas features da engine: partículas, NPCs com IA, save/load e i18n.
+**Português:** demo completa do pipeline do monorepo GameDev: GameAssets batch gera GLBs, áudio e imagens; handoff copia para `public/`; VibeGame carrega GLBs via `<gltf-load>` / `<player-gltf>`, céu equirect com `<sky>`, e clips com `<audio-clip>`. A API `playAudioEmitter` dispara SFX nomeados; ver [`docs/AUDIO.md`](../../docs/AUDIO.md). Novas features: partículas, NPCs com IA, save/load e i18n.
 
 ## What is in the scene
 
@@ -29,8 +29,8 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 | Save / Load                  | **Save-Load plugin**           | `withPlugin(SaveLoadPlugin)` in `src/main.ts`        |
 | Localized messages (EN/PT)   | **i18n plugin**                | `withPlugin(I18nPlugin)` + `loadDictionary`          |
 | On-screen status overlay     | Custom DOM via gameplay system | `withSystem(GameplayHudSystem)` in `src/main.ts`     |
-| Sky IBL + background         | Skymap2D (equirect PNG)        | `applyEquirectSkyEnvironment` in `src/main.ts`       |
-| Collect sound effect         | Text2Sound                     | `public/assets/audio/collect_sfx.wav`                |
+| Sky IBL + background         | Skymap2D (equirect PNG) + `sky` plugin | **`<sky url="/assets/sky/sky.png">`** em `index.html` |
+| BGM + SFX (jump, save, load) | Text2Sound + `audio` plugin    | **`<audio-clip>`** + `playAudioEmitter` em `src/main.ts` |
 
 ## Engine features demonstrated
 
@@ -41,6 +41,7 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 | AI Steering | `AiSteeringPlugin` | 3 NPCs wandering autonomously (Yuka)                        |
 | Save / Load | `SaveLoadPlugin`   | Q = save, E = load via localStorage + msgpackr              |
 | i18n        | `I18nPlugin`       | Auto-detect PT/EN; overlay messages localized               |
+| Audio       | `AudioPlugin`      | `<audio-clip>` + `resume-audio-on-user-gesture`; SFX por nome |
 | Raycast     | `RaycastPlugin`    | Available (not used directly in this demo yet)              |
 | Joints      | `JointsPlugin`     | Available (not used directly in this demo yet)              |
 | Navmesh     | `NavmeshPlugin`    | Available (not used directly in this demo yet)              |
@@ -95,7 +96,7 @@ This creates:
 public/
   assets/
     models/hero.glb, wooden_crate.glb, crystal_blue.glb, stone_pillar.glb, tree_lowpoly.glb
-    audio/collect_sfx.wav
+    audio/bgm_field.wav, sfx_jump.wav, sfx_save.wav, sfx_load.wav
     textures/hero.png, ...  (optional diffuse images)
     sky/sky.png
     gameassets_handoff.json
@@ -139,5 +140,6 @@ The scene still runs without GLBs — you see the terrain, the player capsule, p
 - [MONOREPO_GAME_PIPELINE.md](../../../docs/MONOREPO_GAME_PIPELINE.md) — folder layout and handoff contract
 - [ZERO_TO_GAME_AI.md](../../../docs/ZERO_TO_GAME_AI.md) — AI-centric workflow and `dream` command
 - [GameAssets README](../../../GameAssets/README.md) — batch, handoff, presets
-- [PLUGINS.md](../../../docs/PLUGINS.md) — full engine plugin reference
+- [PLUGINS.md](../../docs/PLUGINS.md) — full engine plugin reference
+- [AUDIO.md](../../docs/AUDIO.md) — Howler, `<audio-clip>`, autoplay no browser
 - [monorepo-game example](../monorepo-game/) — minimal GLB bridge (imperative `loadGltfToScene`)
