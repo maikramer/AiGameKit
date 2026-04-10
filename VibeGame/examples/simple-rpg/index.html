@@ -1,186 +1,392 @@
 ﻿<!doctype html>
 <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RPG Simples — Vale do Cristal (VibeGame)</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RPG Simples — Vale do Cristal (VibeGame)</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #111;
+      }
 
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #111;
-    }
+      #game-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
 
-    #game-canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-    }
-  </style>
-</head>
+  <body>
+    <world
+      canvas="#game-canvas"
+      sky="#ffffff"
+      resume-audio-on-user-gesture="true"
+    >
+      <sky url="/assets/sky/sky.png"></sky>
 
-<body>
-  <world canvas="#game-canvas" sky="#ffffff" resume-audio-on-user-gesture="true">
-    <sky url="/assets/sky/sky.png"></sky>
+      <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
+      <entity
+        ambient-light="sky-color: 0xd8ecff; ground-color: 0x726a58; intensity: 0.84"
+        directional-light="color: 0xfff8f2; intensity: 1.78; direction-x: -0.92; direction-y: 1.55; direction-z: -0.78; cast-shadow: 1; shadow-map-size: 4096; distance: 55"
+      >
+      </entity>
 
-    <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
-    <entity ambient-light="sky-color: 0xd8ecff; ground-color: 0x726a58; intensity: 0.84"
-      directional-light="color: 0xfff8f2; intensity: 1.78; direction-x: -0.92; direction-y: 1.55; direction-z: -0.78; cast-shadow: 1; shadow-map-size: 4096; distance: 55">
-    </entity>
+      <audio-clip
+        name="bgm"
+        url="/assets/audio/bgm_field.wav"
+        loop="true"
+        volume="0.18"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
+      <audio-clip
+        name="sfx-jump"
+        url="/assets/audio/sfx_jump.wav"
+        loop="false"
+        volume="0.42"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
+      <audio-clip
+        name="sfx-save"
+        url="/assets/audio/sfx_save.wav"
+        loop="false"
+        volume="0.48"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
+      <audio-clip
+        name="sfx-load"
+        url="/assets/audio/sfx_load.wav"
+        loop="false"
+        volume="0.44"
+        playing="false"
+        spatial="false"
+      ></audio-clip>
 
-    <audio-clip name="bgm" url="/assets/audio/bgm_field.wav" loop="true" volume="0.18" playing="false"
-      spatial="false"></audio-clip>
-    <audio-clip name="sfx-jump" url="/assets/audio/sfx_jump.wav" loop="false" volume="0.42" playing="false"
-      spatial="false"></audio-clip>
-    <audio-clip name="sfx-save" url="/assets/audio/sfx_save.wav" loop="false" volume="0.48" playing="false"
-      spatial="false"></audio-clip>
-    <audio-clip name="sfx-load" url="/assets/audio/sfx_load.wav" loop="false" volume="0.44" playing="false"
-      spatial="false"></audio-clip>
+      <!-- Relva: tom um pouco mais claro para ler melhor nas sombras (sem mexer no motor). -->
+      <terrain
+        pos="0 0 0"
+        world-size="384"
+        max-height="28"
+        levels="6"
+        resolution="64"
+        lod-hysteresis="1.25"
+        lod-distance-ratio="2"
+        height-smoothing="0.48"
+        height-smoothing-spread="1.35"
+        collision-resolution="64"
+        skirt-width="0.015625"
+        roughness="0.5"
+        metalness="0"
+        normal-strength="0.8"
+        base-color="#96ad78"
+      ></terrain>
 
-    <!-- Relva: tom um pouco mais claro para ler melhor nas sombras (sem mexer no motor). -->
-    <terrain pos="0 0 0" world-size="384" max-height="28" levels="6" resolution="64" lod-hysteresis="1.25"
-      lod-distance-ratio="2" height-smoothing="0.48" height-smoothing-spread="1.35" collision-resolution="64"
-      skirt-width="0.015625" roughness="0.5" metalness="0" normal-strength="0.8" base-color="#96ad78"></terrain>
+      <!-- Água: tom menos “ciano de poço”; water-level alinhado ao Y. -->
+      <water
+        pos="0 1.25 0"
+        water-level="1.25"
+        size="384"
+        opacity="0.22"
+        wave-speed="1.0"
+        wave-scale="0.3"
+        tint-r="0.14"
+        tint-g="0.38"
+        tint-b="0.34"
+        underwater-fog-color-r="0.0"
+        underwater-fog-color-g="0.1"
+        underwater-fog-color-b="0.3"
+        underwater-fog-density="0.2"
+      ></water>
 
-    <!-- Água: tom menos “ciano de poço”; water-level alinhado ao Y. -->
-    <water pos="0 1.25 0" water-level="1.25" size="384" opacity="0.22" wave-speed="1.0" wave-scale="0.3"
-      tint-r="0.14" tint-g="0.38" tint-b="0.34"
-      underwater-fog-color-r="0.0" underwater-fog-color-g="0.1" underwater-fog-color-b="0.3"
-      underwater-fog-density="0.2"></water>
+      <fog
+        color="#dde6d4"
+        density="0.001"
+        mode="exponential"
+        height-falloff="0.48"
+        base-height="0"
+        volumetric-strength="0.016"
+        quality="medium"
+        noise-scale="0.28"
+      ></fog>
 
-    <fog color="#dde6d4" density="0.001" mode="exponential" height-falloff="0.48" base-height="0"
-      volumetric-strength="0.016" quality="medium" noise-scale="0.28"></fog>
+      <player-gltf
+        name="hero"
+        pos="0 60 0"
+        model-url="/assets/models/hero.glb"
+      ></player-gltf>
 
-    <player-gltf name="hero" pos="0 60 0" model-url="/assets/models/hero.glb"></player-gltf>
+      <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
+      <follow-camera
+        target-distance="7"
+        target-pitch="0.32"
+        yaw-smoothness="0.055"
+        position-lag="0.18"
+        auto-rotate-delay="0.55"
+        smaa="preset: high"
+        bloom="intensity: 1.52; luminance-threshold: 0.78; luminance-smoothing: 0.4; mipmap-blur: 1; radius: 0.9; levels: 8"
+        vignette="darkness: 0.24; offset: 0.14"
+        noise="opacity: 0.028; blend-function: normal"
+        tonemapping="mode: aces-filmic; middle-grey: 0.82; white-point: 6.8; average-luminance: 1.2; adaptation-rate: 1.0"
+      ></follow-camera>
 
-    <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
-    <follow-camera target-distance="7" target-pitch="0.32" yaw-smoothness="0.055" position-lag="0.18"
-      auto-rotate-delay="0.55"
-      smaa="preset: high"
-      bloom="intensity: 1.52; luminance-threshold: 0.78; luminance-smoothing: 0.4; mipmap-blur: 1; radius: 0.9; levels: 8"
-      vignette="darkness: 0.24; offset: 0.14"
-      noise="opacity: 0.028; blend-function: normal"
-      tonemapping="mode: aces-filmic; middle-grey: 0.82; white-point: 6.8; average-luminance: 1.2; adaptation-rate: 1.0"></follow-camera>
+      <!-- Props: <entity place="at: …"> = XZ fixo + altura/alinhamento ao terreno -->
+      <entity place="at: 0 -8">
+        <gltf-load
+          role="visual"
+          url="/assets/models/stone_pillar.glb"
+          transform="scale: 1.5 1.5 1.5"
+        ></gltf-load>
+        <particle-emitter
+          preset="sparks"
+          rate="28"
+          lifetime="0.9"
+          size="0.12"
+          transform="pos: 0 1.4 0"
+        ></particle-emitter>
+      </entity>
 
-    <!-- Props: <entity place="at: …"> = XZ fixo + altura/alinhamento ao terreno -->
-    <entity place="at: 0 -8">
-      <gltf-load role="visual" url="/assets/models/stone_pillar.glb" transform="scale: 1.5 1.5 1.5"></gltf-load>
-      <particle-emitter preset="sparks" rate="28" lifetime="0.9" size="0.12"
-        transform="pos: 0 1.4 0"></particle-emitter>
-    </entity>
+      <entity place="at: 5 3">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_crate.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </entity>
+      <entity place="at: 6.2 3.5">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_crate.glb"
+          transform="scale: 0.8 0.8 0.8"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: 5 3">
-      <gltf-load role="visual" url="/assets/models/wooden_crate.glb" transform="scale: 1 1 1"></gltf-load>
-    </entity>
-    <entity place="at: 6.2 3.5">
-      <gltf-load role="visual" url="/assets/models/wooden_crate.glb" transform="scale: 0.8 0.8 0.8"></gltf-load>
-    </entity>
+      <entity place="at: 4.2 2.8">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_barrel.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </entity>
+      <entity place="at: 3.4 4.1">
+        <gltf-load
+          role="visual"
+          url="/assets/models/wooden_barrel.glb"
+          transform="scale: 0.95 0.95 0.95"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: 4.2 2.8">
-      <gltf-load role="visual" url="/assets/models/wooden_barrel.glb" transform="scale: 1 1 1"></gltf-load>
-    </entity>
-    <entity place="at: 3.4 4.1">
-      <gltf-load role="visual" url="/assets/models/wooden_barrel.glb" transform="scale: 0.95 0.95 0.95"></gltf-load>
-    </entity>
+      <entity place="at: -1.5 -9">
+        <gltf-load
+          role="visual"
+          url="/assets/models/treasure_chest.glb"
+          transform="scale: 1.1 1.1 1.1"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: -1.5 -9">
-      <gltf-load role="visual" url="/assets/models/treasure_chest.glb" transform="scale: 1.1 1.1 1.1"></gltf-load>
-    </entity>
+      <entity place="at: -14 2">
+        <gltf-load
+          role="visual"
+          url="/assets/models/stone_well.glb"
+          transform="scale: 1.2 1.2 1.2"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: -14 2">
-      <gltf-load role="visual" url="/assets/models/stone_well.glb" transform="scale: 1.2 1.2 1.2"></gltf-load>
-    </entity>
+      <entity place="at: 8 -12">
+        <gltf-load
+          role="visual"
+          url="/assets/models/milestone_stone.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: 8 -12">
-      <gltf-load role="visual" url="/assets/models/milestone_stone.glb" transform="scale: 1 1 1"></gltf-load>
-    </entity>
+      <entity place="at: -18 -6">
+        <gltf-load
+          role="visual"
+          url="/assets/models/rock_boulder.glb"
+          transform="scale: 1.4 1.4 1.4"
+        ></gltf-load>
+      </entity>
+      <entity place="at: 22 6">
+        <gltf-load
+          role="visual"
+          url="/assets/models/rock_boulder.glb"
+          transform="scale: 1.1 1.1 1.1"
+        ></gltf-load>
+      </entity>
+      <entity place="at: -8 18">
+        <gltf-load
+          role="visual"
+          url="/assets/models/rock_boulder.glb"
+          transform="scale: 0.9 0.9 0.9"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: -18 -6">
-      <gltf-load role="visual" url="/assets/models/rock_boulder.glb" transform="scale: 1.4 1.4 1.4"></gltf-load>
-    </entity>
-    <entity place="at: 22 6">
-      <gltf-load role="visual" url="/assets/models/rock_boulder.glb" transform="scale: 1.1 1.1 1.1"></gltf-load>
-    </entity>
-    <entity place="at: -8 18">
-      <gltf-load role="visual" url="/assets/models/rock_boulder.glb" transform="scale: 0.9 0.9 0.9"></gltf-load>
-    </entity>
+      <entity place="at: -2 -7.5; y-offset: 1.1; ground-align: none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/torch_stand.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </entity>
+      <entity place="at: 2 -7.5; y-offset: 1.1; ground-align: none">
+        <gltf-load
+          role="visual"
+          url="/assets/models/torch_stand.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: -2 -7.5; y-offset: 1.1; ground-align: none">
-      <gltf-load role="visual" url="/assets/models/torch_stand.glb" transform="scale: 1 1 1"></gltf-load>
-    </entity>
-    <entity place="at: 2 -7.5; y-offset: 1.1; ground-align: none">
-      <gltf-load role="visual" url="/assets/models/torch_stand.glb" transform="scale: 1 1 1"></gltf-load>
-    </entity>
+      <entity place="at: -11 9">
+        <gltf-load
+          role="visual"
+          url="/assets/models/hay_bale.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </entity>
+      <entity place="at: -9.5 10.2">
+        <gltf-load
+          role="visual"
+          url="/assets/models/hay_bale.glb"
+          transform="scale: 0.9 0.9 0.9"
+        ></gltf-load>
+      </entity>
 
-    <entity place="at: -11 9">
-      <gltf-load role="visual" url="/assets/models/hay_bale.glb" transform="scale: 1 1 1"></gltf-load>
-    </entity>
-    <entity place="at: -9.5 10.2">
-      <gltf-load role="visual" url="/assets/models/hay_bale.glb" transform="scale: 0.9 0.9 0.9"></gltf-load>
-    </entity>
+      <!-- Cristais: assentar pela base (AABB) -->
+      <entity place="at: -4 6; base-y-offset: 0.02">
+        <gltf-load
+          role="visual"
+          url="/assets/models/crystal_blue.glb"
+          transform="scale: 0.6 0.6 0.6"
+          script="crystal.ts"
+        ></gltf-load>
+      </entity>
+      <entity place="at: 10 -5; base-y-offset: 0.02">
+        <gltf-load
+          role="visual"
+          url="/assets/models/crystal_blue.glb"
+          transform="scale: 0.5 0.5 0.5"
+          script="crystal.ts"
+        ></gltf-load>
+      </entity>
+      <entity place="at: -10 -14; base-y-offset: 0.02">
+        <gltf-load
+          role="visual"
+          url="/assets/models/crystal_blue.glb"
+          transform="scale: 0.55 0.55 0.55"
+          script="crystal.ts"
+        ></gltf-load>
+      </entity>
 
-    <!-- Cristais: assentar pela base (AABB) -->
-    <entity place="at: -4 6; base-y-offset: 0.02">
-      <gltf-load role="visual" url="/assets/models/crystal_blue.glb" transform="scale: 0.6 0.6 0.6"
-        script="crystal.ts"></gltf-load>
-    </entity>
-    <entity place="at: 10 -5; base-y-offset: 0.02">
-      <gltf-load role="visual" url="/assets/models/crystal_blue.glb" transform="scale: 0.5 0.5 0.5"
-        script="crystal.ts"></gltf-load>
-    </entity>
-    <entity place="at: -10 -14; base-y-offset: 0.02">
-      <gltf-load role="visual" url="/assets/models/crystal_blue.glb" transform="scale: 0.55 0.55 0.55"
-        script="crystal.ts"></gltf-load>
-    </entity>
+      <entity
+        place="at: 12 8; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
+      >
+        <npc behavior="wander" max-speed="1.1" max-force="3.5"></npc>
+      </entity>
+      <entity
+        place="at: -15 -10; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
+      >
+        <npc behavior="wander" max-speed="1.25" max-force="4"></npc>
+      </entity>
+      <entity
+        place="at: 20 -18; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
+      >
+        <npc behavior="wander" max-speed="0.95" max-force="3"></npc>
+      </entity>
+      <entity
+        place="at: -6 14; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
+      >
+        <npc behavior="wander" max-speed="1.05" max-force="3.2"></npc>
+      </entity>
 
-    <entity place="at: 12 8; align-to-terrain: 0; ground-align: none; y-offset: 0.44">
-      <npc behavior="wander" max-speed="1.1" max-force="3.5"></npc>
-    </entity>
-    <entity place="at: -15 -10; align-to-terrain: 0; ground-align: none; y-offset: 0.44">
-      <npc behavior="wander" max-speed="1.25" max-force="4"></npc>
-    </entity>
-    <entity place="at: 20 -18; align-to-terrain: 0; ground-align: none; y-offset: 0.44">
-      <npc behavior="wander" max-speed="0.95" max-force="3"></npc>
-    </entity>
-    <entity place="at: -6 14; align-to-terrain: 0; ground-align: none; y-offset: 0.44">
-      <npc behavior="wander" max-speed="1.05" max-force="3.2"></npc>
-    </entity>
+      <spawn-group
+        profile="tree"
+        count="18"
+        seed="7"
+        region-min="-55 0 -55"
+        region-max="55 0 55"
+        pick-strategy="random"
+      >
+        <gltf-load
+          role="visual"
+          url="/assets/models/tree_lowpoly.glb"
+          transform="scale: 1 1 1"
+        ></gltf-load>
+      </spawn-group>
 
-    <spawn-group profile="tree" count="18" seed="7" region-min="-55 0 -55" region-max="55 0 55" pick-strategy="random">
-      <gltf-load role="visual" url="/assets/models/tree_lowpoly.glb" transform="scale: 1 1 1"></gltf-load>
-    </spawn-group>
+      <spawn-group
+        profile="tree"
+        count="14"
+        seed="23"
+        region-min="-50 0 -50"
+        region-max="50 0 50"
+        pick-strategy="random"
+      >
+        <gltf-load
+          role="visual"
+          url="/assets/models/bush_small.glb"
+          transform="scale: 0.55 0.55 0.55"
+        ></gltf-load>
+      </spawn-group>
 
-    <spawn-group profile="tree" count="14" seed="23" region-min="-50 0 -50" region-max="50 0 50" pick-strategy="random">
-      <gltf-load role="visual" url="/assets/models/bush_small.glb" transform="scale: 0.55 0.55 0.55"></gltf-load>
-    </spawn-group>
+      <spawn-group
+        profile="physics-box"
+        count="5"
+        seed="3"
+        region-min="4 0 2"
+        region-max="10 0 6"
+        pick-strategy="random"
+      >
+        <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
+      </spawn-group>
 
-    <spawn-group profile="physics-box" count="5" seed="3" region-min="4 0 2" region-max="10 0 6" pick-strategy="random">
-      <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
-    </spawn-group>
+      <spawn-group
+        profile="gltf-crate"
+        count="4"
+        seed="11"
+        region-min="-6 0 8"
+        region-max="-2 0 12"
+      >
+        <gltf-dynamic
+          role="dynamic"
+          profile="gltf-crate"
+          url="/assets/models/wooden_crate.glb"
+          collider-shape="box"
+          transform="scale: 1 1 1"
+        ></gltf-dynamic>
+      </spawn-group>
 
-    <spawn-group profile="gltf-crate" count="4" seed="11" region-min="-6 0 8" region-max="-2 0 12">
-      <gltf-dynamic role="dynamic" profile="gltf-crate" url="/assets/models/wooden_crate.glb" collider-shape="box"
-        transform="scale: 1 1 1"></gltf-dynamic>
-    </spawn-group>
+      <spawn-group
+        profile="gltf-crate"
+        count="3"
+        seed="19"
+        region-min="14 0 -8"
+        region-max="22 0 -2"
+      >
+        <gltf-dynamic
+          role="dynamic"
+          profile="gltf-crate"
+          url="/assets/models/wooden_crate.glb"
+          collider-shape="box"
+          transform="scale: 0.9 0.9 0.9"
+        ></gltf-dynamic>
+      </spawn-group>
+    </world>
 
-    <spawn-group profile="gltf-crate" count="3" seed="19" region-min="14 0 -8" region-max="22 0 -2">
-      <gltf-dynamic role="dynamic" profile="gltf-crate" url="/assets/models/wooden_crate.glb" collider-shape="box"
-        transform="scale: 0.9 0.9 0.9"></gltf-dynamic>
-    </spawn-group>
-  </world>
+    <canvas id="game-canvas"></canvas>
 
-  <canvas id="game-canvas"></canvas>
-
-  <script type="module" src="/src/main.ts"></script>
-</body>
-
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>

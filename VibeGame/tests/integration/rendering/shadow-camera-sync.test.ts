@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { DirectionalLight, RenderingPlugin, getRenderingContext } from 'vibegame/rendering';
+import {
+  DirectionalLight,
+  RenderingPlugin,
+  getRenderingContext,
+} from 'vibegame/rendering';
 import { TransformsPlugin } from 'vibegame/transforms';
 import { LightSyncSystem } from '../../../src/plugins/rendering/systems';
 

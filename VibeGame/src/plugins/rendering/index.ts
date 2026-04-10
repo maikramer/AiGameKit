@@ -1,9 +1,12 @@
 export {
   AmbientLight,
+  CsmConfig,
   DirectionalLight,
   MainCamera,
+  PointLight,
   RenderContext,
   Renderer,
+  SpotLight,
 } from './components';
 export { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';
 export {
@@ -14,7 +17,7 @@ export {
   TextureRecipeLoadSystem,
 } from './texture-recipe-system';
 export { RenderingPlugin } from './plugin';
-export { rendererRecipe } from './recipes';
+export { rendererRecipe, pointLightRecipe, spotLightRecipe } from './recipes';
 export {
   CameraProjection,
   getRenderingContext,

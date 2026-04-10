@@ -37,3 +37,28 @@ export const DirectionalLight = defineComponent({
   directionZ: Types.f32,
   distance: Types.f32,
 });
+
+export const PointLight = defineComponent({
+  color: Types.ui32,
+  intensity: Types.f32,
+  distance: Types.f32,
+  decay: Types.f32,
+  castShadow: Types.ui8,
+});
+
+export const SpotLight = defineComponent({
+  color: Types.ui32,
+  intensity: Types.f32,
+  distance: Types.f32,
+  decay: Types.f32,
+  angle: Types.f32,
+  penumbra: Types.f32,
+  castShadow: Types.ui8,
+});
+
+export const CsmConfig = defineComponent({
+  cascades: Types.ui8,
+  maxFar: Types.f32,
+  shadowMapSize: Types.ui16,
+  enabled: Types.ui8,
+});

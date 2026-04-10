@@ -41,6 +41,7 @@ export class State {
   public headless = false;
   private readonly recipes = new Map<string, Recipe>();
   private readonly components = new Map<string, Component>();
+  private readonly componentNames = new WeakMap<Component, string>();
   private readonly plugins: Plugin[] = [];
   private readonly entityNames = new Map<string, number>();
   private isDisposed = false;
@@ -103,6 +104,7 @@ export class State {
   registerComponent(name: string, component: Component): void {
     const kebabName = toKebabCase(name);
     this.components.set(kebabName, component);
+    this.componentNames.set(component, kebabName);
   }
 
   registerConfig(config: Config): void {
@@ -153,12 +155,7 @@ export class State {
   }
 
   private getComponentName(component: Component): string | undefined {
-    for (const [name, comp] of this.components.entries()) {
-      if (comp === component) {
-        return name;
-      }
-    }
-    return undefined;
+    return this.componentNames.get(component);
   }
 
   step(deltaTime = TIME_CONSTANTS.DEFAULT_DELTA): void {

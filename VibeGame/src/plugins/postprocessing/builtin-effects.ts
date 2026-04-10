@@ -3,16 +3,18 @@ import {
   ChromaticAberrationEffect,
   DepthOfFieldEffect,
   NoiseEffect,
+  SSAOEffect,
   SMAAEffect,
   SMAAPreset,
   ToneMappingEffect,
   ToneMappingMode,
   VignetteEffect,
 } from 'postprocessing';
+import { SSREffect } from 'screen-space-reflections';
 import { Vector2 } from 'three';
 import { defineQuery } from '../../core';
 import { Player } from '../player';
-import { MainCamera, threeCameras } from '../rendering';
+import { MainCamera, getScene, threeCameras } from '../rendering';
 import { WorldTransform } from '../transforms';
 import {
   Bloom,
@@ -21,6 +23,8 @@ import {
   Dithering,
   Noise,
   SMAA,
+  ScreenSpaceAmbientOcclusion,
+  ScreenSpaceReflection,
   Tonemapping,
   Vignette,
 } from './components';
@@ -238,6 +242,50 @@ const builtinDefinitions: EffectDefinition[] = [
       if (noise.blendMode.blendFunction !== blendFunction) {
         noise.blendMode.blendFunction = blendFunction;
       }
+    },
+  },
+  {
+    key: 'ssao',
+    component: ScreenSpaceAmbientOcclusion,
+    create(_state, entity) {
+      const camera = threeCameras.get(entity);
+      return new SSAOEffect(camera!, null!, {
+        intensity: ScreenSpaceAmbientOcclusion.intensity[entity],
+        radius: ScreenSpaceAmbientOcclusion.radius[entity],
+        luminanceInfluence:
+          ScreenSpaceAmbientOcclusion.luminanceInfluence[entity],
+      });
+    },
+    update(_state, entity, effect) {
+      const ssao = effect as SSAOEffect;
+      const intensity = ScreenSpaceAmbientOcclusion.intensity[entity];
+      const radius = ScreenSpaceAmbientOcclusion.radius[entity];
+      const luminanceInfluence =
+        ScreenSpaceAmbientOcclusion.luminanceInfluence[entity];
+      if (ssao.intensity !== intensity) ssao.intensity = intensity;
+      if (ssao.radius !== radius) ssao.radius = radius;
+      if ((ssao as any).luminanceInfluence !== luminanceInfluence) {
+        (ssao as any).luminanceInfluence = luminanceInfluence;
+      }
+    },
+  },
+  {
+    key: 'ssr',
+    component: ScreenSpaceReflection,
+    create(state, entity) {
+      const camera = threeCameras.get(entity);
+      const scene = getScene(state);
+      return new SSREffect(scene!, camera!, {
+        intensity: ScreenSpaceReflection.intensity[entity],
+        distance: ScreenSpaceReflection.maxDistance[entity],
+      });
+    },
+    update(_state, entity, effect) {
+      const ssr = effect as SSREffect;
+      const intensity = ScreenSpaceReflection.intensity[entity];
+      const maxDistance = ScreenSpaceReflection.maxDistance[entity];
+      if (ssr.intensity !== intensity) ssr.intensity = intensity;
+      if (ssr.distance !== maxDistance) ssr.distance = maxDistance;
     },
   },
 ];

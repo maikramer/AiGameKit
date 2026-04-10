@@ -1,13 +1,26 @@
 import { entityExists, hasComponent } from 'bitecs';
+import * as THREE from 'three';
 import type { Object3D } from 'three';
 import { BatchedParticleRenderer } from 'three.quarks';
 import type { ParticleSystem } from 'three.quarks';
 import { Parent, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
-import { Transform, TransformHierarchySystem, WorldTransform } from '../transforms';
-import { ParticlesBurst, ParticlesEmitter } from './components';
+import { getTextureAsset } from '../rendering/texture-recipe-system';
+import { TextureRecipe } from '../rendering/texture-recipe';
+import {
+  Transform,
+  TransformHierarchySystem,
+  WorldTransform,
+} from '../transforms';
+import {
+  ColorOverLife,
+  ParticleTexture,
+  ParticlesBurst,
+  ParticlesEmitter,
+  SizeOverLife,
+} from './components';
 import { getParticlesContext } from './context';
-import { createParticleSystemForPreset } from './presets';
+import { createParticleSystemForPreset, psMaterialMap } from './presets';
 
 /**
  * World position for the emitter Object3D (`scene.add(emitter)` — must be world space).
@@ -15,7 +28,10 @@ import { createParticleSystemForPreset } from './presets';
  * Runs after `TransformHierarchySystem`. Terrain placement for `<entity place="…">` runs **first**
  * in the simulation group so parent `Transform` is updated before hierarchy propagates to children.
  */
-function getEmitterWorldPosition(state: State, eid: number): [number, number, number] {
+function getEmitterWorldPosition(
+  state: State,
+  eid: number
+): [number, number, number] {
   if (hasComponent(state.world, Parent, eid)) {
     if (hasComponent(state.world, WorldTransform, eid)) {
       return [
@@ -32,6 +48,15 @@ const emitterQuery = defineQuery([ParticlesEmitter, Transform]);
 const burstQuery = defineQuery([ParticlesBurst, Transform]);
 
 const entityToPS = new Map<number, ParticleSystem>();
+
+interface SpriteAnimData {
+  frames: number;
+  animationSpeed: number;
+  elapsed: number;
+}
+const entitySpriteAnim = new Map<number, SpriteAnimData>();
+
+const _tmpOffset = new THREE.Vector2();
 
 function disposeParticle(
   eid: number,
@@ -53,6 +78,7 @@ function disposeParticle(
     ps.dispose();
     entityToPS.delete(eid);
   }
+  entitySpriteAnim.delete(eid);
 }
 
 export const ParticleBootstrapSystem: System = {
@@ -89,18 +115,71 @@ export const ParticleEmitSystem: System = {
       if (ParticlesEmitter.spawned[eid]) continue;
       if (!ParticlesEmitter.playing[eid]) continue;
 
+      const colOL = hasComponent(state.world, ColorOverLife, eid)
+        ? {
+            startR: ColorOverLife.startR[eid],
+            startG: ColorOverLife.startG[eid],
+            startB: ColorOverLife.startB[eid],
+            startA: ColorOverLife.startA[eid],
+            endR: ColorOverLife.endR[eid],
+            endG: ColorOverLife.endG[eid],
+            endB: ColorOverLife.endB[eid],
+            endA: ColorOverLife.endA[eid],
+          }
+        : undefined;
+
+      const szOL = hasComponent(state.world, SizeOverLife, eid)
+        ? {
+            startSize: SizeOverLife.startSize[eid],
+            endSize: SizeOverLife.endSize[eid],
+          }
+        : undefined;
+
+      let texture: THREE.Texture | undefined;
+      let spriteFrames = 1;
+      let spriteSpeed = 1;
+
+      if (hasComponent(state.world, TextureRecipe, eid)) {
+        const loaded = getTextureAsset(eid);
+        if (!loaded) continue;
+        texture = loaded.clone();
+        texture.needsUpdate = true;
+
+        if (hasComponent(state.world, ParticleTexture, eid)) {
+          spriteFrames = ParticleTexture.frames[eid] || 1;
+          spriteSpeed = ParticleTexture.animationSpeed[eid] || 1;
+          if (spriteFrames > 1) {
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(1 / spriteFrames, 1);
+          }
+        }
+      }
+
       const ps = createParticleSystemForPreset(
         ParticlesEmitter.preset[eid],
         ParticlesEmitter.rate[eid],
         ParticlesEmitter.lifetime[eid],
         ParticlesEmitter.size[eid],
-        batch
+        batch,
+        colOL,
+        szOL,
+        texture
       );
       const root = ps.emitter;
       const scene = getScene(state);
       if (scene) scene.add(root);
       ctx.roots.set(eid, root);
       entityToPS.set(eid, ps);
+
+      if (spriteFrames > 1) {
+        entitySpriteAnim.set(eid, {
+          frames: spriteFrames,
+          animationSpeed: spriteSpeed,
+          elapsed: 0,
+        });
+      }
+
       ParticlesEmitter.spawned[eid] = 1;
     }
 
@@ -163,6 +242,19 @@ export const ParticleRenderSystem: System = {
     const batch = ctx.batch;
     if (!batch) return;
     batch.update(state.time.deltaTime);
+
+    for (const [eid, anim] of entitySpriteAnim) {
+      if (!entityExists(state.world, eid)) continue;
+      const ps = entityToPS.get(eid);
+      if (!ps) continue;
+      const mat = psMaterialMap.get(ps);
+      if (!mat?.map) continue;
+      anim.elapsed += state.time.deltaTime;
+      const frame =
+        Math.floor(anim.elapsed * anim.animationSpeed) % anim.frames;
+      _tmpOffset.set(frame / anim.frames, 0);
+      mat.map.offset.copy(_tmpOffset);
+    }
   },
 };
 

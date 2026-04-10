@@ -1,16 +1,20 @@
 import type { Plugin } from '../../core';
 import {
   AmbientLight,
+  CsmConfig,
   DirectionalLight,
   MainCamera,
+  PointLight,
   RenderContext,
   Renderer,
+  SpotLight,
 } from './components';
-import { rendererRecipe } from './recipes';
+import { pointLightRecipe, rendererRecipe, spotLightRecipe } from './recipes';
 import {
   CameraSyncSystem,
   LightSyncSystem,
   MeshInstanceSystem,
+  PointSpotLightSyncSystem,
   WebGLRenderSystem,
 } from './systems';
 import {
@@ -20,11 +24,12 @@ import {
 import { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';
 
 export const RenderingPlugin: Plugin = {
-  recipes: [rendererRecipe],
+  recipes: [rendererRecipe, pointLightRecipe, spotLightRecipe],
   systems: [
     TextureRecipeLoadSystem,
     MeshInstanceSystem,
     LightSyncSystem,
+    PointSpotLightSyncSystem,
     CameraSyncSystem,
     WebGLRenderSystem,
     TextureRecipeCleanupSystem,
@@ -35,6 +40,9 @@ export const RenderingPlugin: Plugin = {
     MainCamera,
     AmbientLight,
     DirectionalLight,
+    PointLight,
+    SpotLight,
+    CsmConfig,
     TextureRecipe,
     TextureRecipeLoaded,
   },
@@ -67,6 +75,28 @@ export const RenderingPlugin: Plugin = {
         projection: 0,
         fov: 75,
         orthoSize: 10,
+      },
+      csmConfig: {
+        cascades: 4,
+        maxFar: 200,
+        shadowMapSize: 2048,
+        enabled: 1,
+      },
+      pointLight: {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        decay: 2,
+        castShadow: 0,
+      },
+      spotLight: {
+        color: 0xffffff,
+        intensity: 1,
+        distance: 0,
+        decay: 2,
+        angle: Math.PI / 3,
+        penumbra: 0,
+        castShadow: 0,
       },
     },
     enums: {

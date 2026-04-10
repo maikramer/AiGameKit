@@ -8,6 +8,7 @@ export type { BuilderOptions };
 export type { GameRuntime } from './runtime';
 export {
   applyDefaultShadowFlags,
+  createGLTFLoader,
   loadGltfAnimated,
   loadGltfToScene,
   loadGltfToSceneWithAnimator,

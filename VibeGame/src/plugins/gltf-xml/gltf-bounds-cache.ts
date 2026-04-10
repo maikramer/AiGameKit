@@ -1,6 +1,7 @@
 /* global fetch */
 import * as THREE from 'three';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+
+import { createGLTFLoader } from '../../extras/gltf-bridge';
 
 /** Chave = URL normalizada (trim); valores em espaço local do root do GLB (Y up). */
 const boundsByUrl = new Map<string, { minY: number; maxY: number }>();
@@ -59,7 +60,7 @@ export function prefetchGltfLocalYBounds(url: string): void {
   if (typeof fetch !== 'function') return;
 
   prefetchInflight.add(key);
-  const loader = new GLTFLoader();
+  const loader = createGLTFLoader();
   fetch(key)
     .then((r) => {
       if (!r.ok) throw new Error(String(r.status));

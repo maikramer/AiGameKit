@@ -6,6 +6,8 @@ import {
   Dithering,
   Noise,
   SMAA,
+  ScreenSpaceAmbientOcclusion,
+  ScreenSpaceReflection,
   Tonemapping,
   Vignette,
 } from './components';
@@ -23,6 +25,8 @@ export const PostprocessingPlugin: Plugin = {
     Dithering,
     Noise,
     SMAA,
+    SSAO: ScreenSpaceAmbientOcclusion,
+    SSR: ScreenSpaceReflection,
     Tonemapping,
     Vignette,
   },
@@ -73,6 +77,15 @@ export const PostprocessingPlugin: Plugin = {
       noise: {
         opacity: 0.2,
         blendFunction: 0,
+      },
+      ssao: {
+        intensity: 1.0,
+        radius: 0.1825,
+        luminanceInfluence: 0.7,
+      },
+      ssr: {
+        intensity: 1.0,
+        maxDistance: 10.0,
       },
     },
     enums: {

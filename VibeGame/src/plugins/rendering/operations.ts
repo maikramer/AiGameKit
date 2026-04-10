@@ -5,6 +5,7 @@ import { Renderer } from './components';
 import {
   findAvailableInstanceSlot,
   initializeInstancedMesh,
+  releaseInstanceSlot,
   resizeInstancedMesh,
   RendererShape,
   MAX_TOTAL_INSTANCES,
@@ -16,6 +17,9 @@ const matrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
 const rotation = new THREE.Quaternion();
 const scale = new THREE.Vector3();
+const _color = new THREE.Color();
+const _zeroMatrix = new THREE.Matrix4();
+_zeroMatrix.makeScale(0, 0, 0);
 
 export function getOrCreateMesh(
   context: RenderingContext,
@@ -121,8 +125,8 @@ export function updateInstance(
     mesh.setMatrixAt(instanceInfo.instanceId, matrix);
     mesh.instanceMatrix.needsUpdate = true;
 
-    const color = new THREE.Color(Renderer.color[entity]);
-    mesh.setColorAt(instanceInfo.instanceId, color);
+    _color.set(Renderer.color[entity]);
+    mesh.setColorAt(instanceInfo.instanceId, _color);
     if (mesh.instanceColor) {
       mesh.instanceColor.needsUpdate = true;
     }
@@ -138,9 +142,8 @@ export function hideInstance(
 ): void {
   const instanceInfo = context.entityInstances.get(entity);
   if (instanceInfo) {
-    const zeroMatrix = new THREE.Matrix4();
-    zeroMatrix.makeScale(0, 0, 0);
-    mesh.setMatrixAt(instanceInfo.instanceId, zeroMatrix);
+    mesh.setMatrixAt(instanceInfo.instanceId, _zeroMatrix);
     mesh.instanceMatrix.needsUpdate = true;
+    releaseInstanceSlot(mesh, instanceInfo.instanceId);
   }
 }

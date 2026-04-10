@@ -19,6 +19,7 @@ export default [
         console: 'readonly',
         window: 'readonly',
         document: 'readonly',
+        navigator: 'readonly',
         HTMLElement: 'readonly',
         HTMLCanvasElement: 'readonly',
         HTMLImageElement: 'readonly',

@@ -8,6 +8,12 @@ import {
 import { Player } from './components';
 import * as THREE from 'three';
 
+const _tmpVec3 = new THREE.Vector3();
+const _tmpMat4 = new THREE.Matrix4();
+const _tmpQuat = new THREE.Quaternion();
+const _tmpQuat2 = new THREE.Quaternion();
+const _tmpEuler = new THREE.Euler();
+
 export const JUMP_CONSTANTS = {
   verticalVelocityThreshold: 0.001,
   cooldown: 0.2,
@@ -24,7 +30,7 @@ export function calculateTangentialVelocity(
   const tangentialVelX = angVelY * offsetZ - angVelZ * offsetY;
   const tangentialVelY = angVelZ * offsetX - angVelX * offsetZ;
   const tangentialVelZ = angVelX * offsetY - angVelY * offsetX;
-  return new THREE.Vector3(tangentialVelX, tangentialVelY, tangentialVelZ);
+  return _tmpVec3.set(tangentialVelX, tangentialVelY, tangentialVelZ);
 }
 
 export function processInput(
@@ -32,13 +38,13 @@ export function processInput(
   moveRight: number,
   cameraYaw: number
 ): THREE.Vector3 {
-  const inputVector = new THREE.Vector3(moveRight, 0, -moveForward);
-  if (inputVector.length() > 0) {
-    inputVector.normalize();
-    const rotationMatrix = new THREE.Matrix4().makeRotationY(cameraYaw);
-    inputVector.applyMatrix4(rotationMatrix);
+  _tmpVec3.set(moveRight, 0, -moveForward);
+  if (_tmpVec3.length() > 0) {
+    _tmpVec3.normalize();
+    _tmpMat4.makeRotationY(cameraYaw);
+    _tmpVec3.applyMatrix4(_tmpMat4);
   }
-  return inputVector;
+  return _tmpVec3;
 }
 
 function canPerformJump(entity: number, currentTime: number): boolean {
@@ -128,11 +134,10 @@ export function updateRotation(
   }
 
   const targetYRotation = Math.atan2(inputVector.x, inputVector.z);
-  const targetQuaternion = new THREE.Quaternion().setFromEuler(
-    new THREE.Euler(0, targetYRotation, 0)
-  );
+  _tmpEuler.set(0, targetYRotation, 0);
+  _tmpQuat.setFromEuler(_tmpEuler);
 
-  const currentQuaternion = new THREE.Quaternion(
+  _tmpQuat2.set(
     rotationData.rotX,
     rotationData.rotY,
     rotationData.rotZ,
@@ -141,17 +146,17 @@ export function updateRotation(
 
   const maxRotationRadians = Player.rotationSpeed[entity] * deltaTime;
   const slerpFactor = calculateSlerpFactor(
-    currentQuaternion,
-    targetQuaternion,
+    _tmpQuat2,
+    _tmpQuat,
     maxRotationRadians
   );
 
-  currentQuaternion.slerp(targetQuaternion, slerpFactor);
+  _tmpQuat2.slerp(_tmpQuat, slerpFactor);
 
   return {
-    x: currentQuaternion.x,
-    y: currentQuaternion.y,
-    z: currentQuaternion.z,
-    w: currentQuaternion.w,
+    x: _tmpQuat2.x,
+    y: _tmpQuat2.y,
+    z: _tmpQuat2.z,
+    w: _tmpQuat2.w,
   };
 }

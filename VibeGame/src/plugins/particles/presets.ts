@@ -1,21 +1,54 @@
 import * as THREE from 'three';
-import type { BatchedRenderer } from 'three.quarks';
+import type { BatchedRenderer, Behavior } from 'three.quarks';
 import {
+  Bezier,
   ConstantColor,
   ConstantValue,
-  ParticleSystem,
-  SphereEmitter,
+  Gradient,
+  PiecewiseBezier,
 } from 'three.quarks';
-import { Vector4 } from 'three.quarks';
+import {
+  ColorOverLife as QuarksColorOverLife,
+  SizeOverLife as QuarksSizeOverLife,
+} from 'three.quarks';
+import { ParticleSystem, SphereEmitter, Vector3, Vector4 } from 'three.quarks';
+
+export interface ColorOverLifeConfig {
+  startR: number;
+  startG: number;
+  startB: number;
+  startA: number;
+  endR: number;
+  endG: number;
+  endB: number;
+  endA: number;
+}
+
+export interface SizeOverLifeConfig {
+  startSize: number;
+  endSize: number;
+}
 
 export type ParticlePresetId = 0 | 1 | 2 | 3 | 4 | 5 | 99;
+
+const _tmpV3Start = new Vector3();
+const _tmpV3End = new Vector3();
+
+/** Material map keyed by ParticleSystem — used by sprite sheet animation in systems.ts. */
+export const psMaterialMap = new WeakMap<
+  ParticleSystem,
+  THREE.MeshBasicMaterial
+>();
 
 export function createParticleSystemForPreset(
   preset: number,
   rate: number,
   lifetime: number,
   size: number,
-  batch: BatchedRenderer
+  batch: BatchedRenderer,
+  colorOverLife?: ColorOverLifeConfig,
+  sizeOverLife?: SizeOverLifeConfig,
+  texture?: THREE.Texture
 ): ParticleSystem {
   const mat = new THREE.MeshBasicMaterial({
     color: 0xff6600,
@@ -23,6 +56,13 @@ export function createParticleSystemForPreset(
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
+
+  if (texture) {
+    mat.map = texture;
+    mat.alphaMap = texture;
+    mat.transparent = true;
+    mat.needsUpdate = true;
+  }
 
   const base = {
     looping: true,
@@ -87,7 +127,58 @@ export function createParticleSystemForPreset(
     base.emitterShape = new SphereEmitter({ radius: 0.15 });
   }
 
+  if (colorOverLife) {
+    base.startColor = new ConstantColor(new Vector4(1, 1, 1, 1));
+  }
+
+  const behaviors: Behavior[] = [];
+
   const ps = new ParticleSystem(base);
+
+  if (colorOverLife) {
+    _tmpV3Start.set(
+      colorOverLife.startR,
+      colorOverLife.startG,
+      colorOverLife.startB
+    );
+    _tmpV3End.set(colorOverLife.endR, colorOverLife.endG, colorOverLife.endB);
+    const gradient = new Gradient(
+      [
+        [_tmpV3Start.clone(), 0],
+        [_tmpV3End.clone(), 1],
+      ],
+      [
+        [colorOverLife.startA, 0],
+        [colorOverLife.endA, 1],
+      ]
+    );
+    behaviors.push(new QuarksColorOverLife(gradient));
+  }
+
+  if (sizeOverLife) {
+    const ratio = sizeOverLife.endSize / sizeOverLife.startSize;
+    behaviors.push(
+      new QuarksSizeOverLife(
+        new PiecewiseBezier([
+          [
+            new Bezier(
+              1,
+              1 + (ratio - 1) / 3,
+              1 + ((ratio - 1) * 2) / 3,
+              ratio
+            ),
+            0,
+          ],
+        ])
+      )
+    );
+  }
+
+  for (const b of behaviors) {
+    ps.addBehavior(b);
+  }
+
+  psMaterialMap.set(ps, mat);
   batch.addSystem(ps);
   return ps;
 }

@@ -1,6 +1,33 @@
 import * as THREE from 'three';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { defineQuery, type System } from '../../core';
 import { TextureRecipe } from './texture-recipe';
+import { getRenderingContext } from './utils';
+
+function isKTX2Url(url: string): boolean {
+  return url.endsWith('.ktx2') || url.endsWith('.basis');
+}
+
+let _ktx2Loader: KTX2Loader | null | undefined = undefined;
+
+function tryInitKTX2(renderer: THREE.WebGLRenderer): KTX2Loader | null {
+  if (_ktx2Loader !== undefined) return _ktx2Loader;
+  try {
+    _ktx2Loader = new KTX2Loader()
+      .setTranscoderPath(
+        `https://unpkg.com/three@0.${THREE.REVISION}.0/examples/jsm/libs/basis/`
+      )
+      .detectSupport(renderer);
+    return _ktx2Loader;
+  } catch (e) {
+    console.warn(
+      '[texture-recipe] KTX2Loader init failed — KTX2 textures disabled.',
+      e
+    );
+    _ktx2Loader = null;
+    return null;
+  }
+}
 
 // Contexto: entity → URL de textura
 const textureUrls = new Map<number, string>();
@@ -67,8 +94,23 @@ export const TextureRecipeLoadSystem: System = {
         continue;
       }
 
-      void loader
-        .loadAsync(url)
+      const loadTexture = async (texUrl: string): Promise<THREE.Texture> => {
+        if (!isKTX2Url(texUrl)) return loader.loadAsync(texUrl);
+
+        const { renderer } = getRenderingContext(state);
+        if (!renderer) return loader.loadAsync(texUrl);
+
+        const ktx2 = tryInitKTX2(renderer);
+        if (!ktx2) return loader.loadAsync(texUrl);
+
+        try {
+          return await ktx2.loadAsync(texUrl);
+        } catch {
+          return loader.loadAsync(texUrl);
+        }
+      };
+
+      void loadTexture(url)
         .then((texture) => {
           // Configura wrapping
           const repeatX = TextureRecipe.repeatX[eid] || 1;
@@ -86,12 +128,11 @@ export const TextureRecipeLoadSystem: System = {
           // flipX not available on THREE.Texture; skip
           if (TextureRecipe.flipY[eid]) texture.flipY = true;
 
-          // Anisotropia
-          const maxAniso = 1; // conservative default; GPU value requires renderer ref
+          // Anisotropia — 8 is a safe minimum for all modern GPUs
+          const maxAniso = 8;
           const aniso = TextureRecipe.anisotropy[eid];
-          if (aniso > 0 && aniso <= maxAniso) {
-            texture.anisotropy = aniso;
-          }
+          texture.anisotropy =
+            aniso === 0 ? maxAniso : Math.min(aniso, maxAniso);
 
           const channel = TextureRecipe.channel[eid] || 0;
           texture.colorSpace =

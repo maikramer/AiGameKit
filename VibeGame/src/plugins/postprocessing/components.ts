@@ -53,3 +53,14 @@ export const Noise = defineComponent({
   opacity: Types.f32,
   blendFunction: Types.ui8,
 });
+
+export const ScreenSpaceReflection = defineComponent({
+  intensity: Types.f32,
+  maxDistance: Types.f32,
+});
+
+export const ScreenSpaceAmbientOcclusion = defineComponent({
+  intensity: Types.f32,
+  radius: Types.f32,
+  luminanceInfluence: Types.f32,
+});

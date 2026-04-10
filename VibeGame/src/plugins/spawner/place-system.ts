@@ -33,7 +33,7 @@ function anchorOffset(
 const deterministicRand = (): number => 0;
 
 function applyRootPlacement(
-  state: State,
+  _state: State,
   eid: number,
   spawn: GroupSpawnDefaults,
   wx: number,
@@ -41,7 +41,12 @@ function applyRootPlacement(
   wz: number,
   normal: THREE.Vector3
 ): void {
-  const euler = composeSpawnRotation(normal, spawn.alignToTerrain, 0, [0, 0, 0]);
+  const euler = composeSpawnRotation(
+    normal,
+    spawn.alignToTerrain,
+    0,
+    [0, 0, 0]
+  );
   Transform.posX[eid] = wx;
   Transform.posY[eid] = wy + spawn.baseYOffset;
   Transform.posZ[eid] = wz;

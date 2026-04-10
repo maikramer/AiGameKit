@@ -285,9 +285,9 @@ export const TerrainRenderSystem: System = {
       // Apply material property changes every frame (cheap equality check)
       if (data.initialized) {
         applyMaterialProperties(data, entity, state);
-        const im = (
-          data.terrainLOD as TerrainLOD & { instancedMesh?: THREE.InstancedMesh }
-        ).instancedMesh;
+        const im = (data.terrainLOD as any).instancedMesh as
+          | THREE.InstancedMesh
+          | undefined;
         if (im) {
           im.receiveShadow = true;
           im.castShadow = false;

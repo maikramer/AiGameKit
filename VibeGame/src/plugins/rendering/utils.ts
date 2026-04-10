@@ -1,4 +1,5 @@
-﻿import type { State } from '../../core';
+﻿import type { CSM } from 'three-stdlib';
+import type { State } from '../../core';
 import * as THREE from 'three';
 import { MainCamera } from './components';
 
@@ -124,20 +125,25 @@ function syncCameraSettings(
 
 export { createThreeCamera, getCanvasAspect, syncCameraSettings };
 
+const instanceFreeLists = new WeakMap<THREE.InstancedMesh, number[]>();
+
+export function releaseInstanceSlot(
+  mesh: THREE.InstancedMesh,
+  index: number
+): void {
+  const freeList = instanceFreeLists.get(mesh);
+  if (freeList) {
+    freeList.push(index);
+  }
+}
+
 export function findAvailableInstanceSlot(
   mesh: THREE.InstancedMesh,
-  matrix: THREE.Matrix4
+  _matrix: THREE.Matrix4
 ): number | null {
-  const maxCount = mesh.count;
-  for (let i = 0; i < maxCount; i++) {
-    mesh.getMatrixAt(i, matrix);
-    if (
-      matrix.elements[0] === 0 &&
-      matrix.elements[5] === 0 &&
-      matrix.elements[10] === 0
-    ) {
-      return i;
-    }
+  const freeList = instanceFreeLists.get(mesh);
+  if (freeList && freeList.length > 0) {
+    return freeList.pop()!;
   }
   return null;
 }
@@ -166,6 +172,12 @@ export function initializeInstancedMesh(
   if (mesh.instanceColor) {
     mesh.instanceColor.needsUpdate = true;
   }
+
+  const freeList: number[] = [];
+  for (let i = count - 1; i >= 0; i--) {
+    freeList.push(i);
+  }
+  instanceFreeLists.set(mesh, freeList);
 
   return mesh;
 }
@@ -199,6 +211,14 @@ export function resizeInstancedMesh(
     newMesh.instanceColor.needsUpdate = true;
   }
 
+  const freeList = instanceFreeLists.get(newMesh);
+  if (freeList) {
+    freeList.length = 0;
+    for (let i = newCount - 1; i >= oldCount; i--) {
+      freeList.push(i);
+    }
+  }
+
   scene.remove(oldMesh);
   oldMesh.dispose();
   scene.add(newMesh);
@@ -220,9 +240,13 @@ export interface RenderingContext {
   lights: {
     ambient: THREE.HemisphereLight;
     directional: THREE.DirectionalLight;
+    pointLights: THREE.PointLight[];
+    spotLights: THREE.SpotLight[];
   };
   renderer?: THREE.WebGLRenderer;
   canvas?: HTMLCanvasElement;
+  csm?: CSM;
+  csmSetupPending: boolean;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
 }
@@ -263,9 +287,12 @@ export function initializeContext(): RenderingContext {
     lights: {
       ambient: ambient,
       directional: directional,
+      pointLights: [],
+      spotLights: [],
     },
     totalInstanceCount: 0,
     hasShownPerformanceWarning: false,
+    csmSetupPending: false,
   };
 }
 
@@ -315,13 +342,18 @@ export function createRenderer(
   installAngleD3dShaderInfoWarnFilter();
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias: false,
   });
 
   const width = canvas.clientWidth || window.innerWidth;
   const height = canvas.clientHeight || window.innerHeight;
   renderer.setSize(width, height, false);
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setPixelRatio(
+    Math.min(
+      window.devicePixelRatio,
+      /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
+    )
+  );
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
 

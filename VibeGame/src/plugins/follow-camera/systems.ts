@@ -25,6 +25,7 @@ const _tempSpherical = new THREE.Spherical();
 const _tempVecCam = new THREE.Vector3();
 const _tempVecTarget = new THREE.Vector3();
 const _tempMat = new THREE.Matrix4();
+const _upVec = new THREE.Vector3(0, 1, 0);
 
 function extractBodyYaw(entity: number): number {
   _tempQuat.set(
@@ -241,7 +242,7 @@ export const FollowCameraPositionSystem: System = {
       Transform.posY[cam] = _tempVecCam.y;
       Transform.posZ[cam] = _tempVecCam.z;
 
-      _tempMat.lookAt(_tempVecCam, _tempVecTarget, new THREE.Vector3(0, 1, 0));
+      _tempMat.lookAt(_tempVecCam, _tempVecTarget, _upVec);
       _tempQuat.setFromRotationMatrix(_tempMat);
 
       Transform.rotX[cam] = _tempQuat.x;

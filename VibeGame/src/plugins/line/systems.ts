@@ -15,6 +15,19 @@ const lineQuery = defineQuery([LineComponent, WorldTransform]);
 
 const ARROW_ANGLE = Math.PI / 6;
 
+const _dir = new THREE.Vector3();
+const _arrowTip = new THREE.Vector3();
+const _arrowDir = new THREE.Vector3();
+const _perp = new THREE.Vector3();
+const _wingDir = new THREE.Vector3();
+const _wingEnd = new THREE.Vector3();
+const _upRef = new THREE.Vector3(0, 1, 0);
+const _sideRef = new THREE.Vector3(1, 0, 0);
+const _startPos = new THREE.Vector3();
+const _scaledOffset = new THREE.Vector3();
+const _endPos = new THREE.Vector3();
+const _lineColor = new THREE.Color();
+
 interface LineData {
   entity: number;
   startPos: THREE.Vector3;
@@ -33,29 +46,28 @@ function computeArrowWing(
   atStart: boolean,
   wingIndex: number
 ): { tip: THREE.Vector3; wingEnd: THREE.Vector3 } {
-  const direction = new THREE.Vector3().subVectors(end, start).normalize();
-  const arrowTip = atStart ? start.clone() : end.clone();
-  const arrowDir = atStart ? direction : direction.clone().negate();
-
-  const perpendicular = new THREE.Vector3();
-  if (Math.abs(direction.y) < 0.9) {
-    perpendicular
-      .crossVectors(direction, new THREE.Vector3(0, 1, 0))
-      .normalize();
+  _dir.subVectors(end, start).normalize();
+  _arrowTip.copy(atStart ? start : end);
+  if (atStart) {
+    _arrowDir.copy(_dir);
   } else {
-    perpendicular
-      .crossVectors(direction, new THREE.Vector3(1, 0, 0))
-      .normalize();
+    _arrowDir.copy(_dir).negate();
+  }
+
+  if (Math.abs(_dir.y) < 0.9) {
+    _perp.crossVectors(_dir, _upRef).normalize();
+  } else {
+    _perp.crossVectors(_dir, _sideRef).normalize();
   }
 
   const angle = wingIndex === 0 ? ARROW_ANGLE : -ARROW_ANGLE;
-  const wingDir = arrowDir
-    .clone()
-    .applyAxisAngle(perpendicular, angle)
+  _wingDir
+    .copy(_arrowDir)
+    .applyAxisAngle(_perp, angle)
     .multiplyScalar(arrowSize);
-  const wingEnd = arrowTip.clone().add(wingDir);
+  _wingEnd.copy(_arrowTip).add(_wingDir);
 
-  return { tip: arrowTip, wingEnd };
+  return { tip: _arrowTip, wingEnd: _wingEnd };
 }
 
 function pushSegment(
@@ -138,22 +150,22 @@ export const LineSystem: System = {
       const opacity = LineComponent.opacity[entity];
       const key = getMaterialKey(thickness, opacity);
 
-      const startPos = new THREE.Vector3(
+      _startPos.set(
         WorldTransform.posX[entity],
         WorldTransform.posY[entity],
         WorldTransform.posZ[entity]
       );
 
-      const scaledOffset = new THREE.Vector3(
+      _scaledOffset.set(
         LineComponent.offsetX[entity] * WorldTransform.scaleX[entity],
         LineComponent.offsetY[entity] * WorldTransform.scaleY[entity],
         LineComponent.offsetZ[entity] * WorldTransform.scaleZ[entity]
       );
 
-      const endPos = new THREE.Vector3(
-        startPos.x + scaledOffset.x,
-        startPos.y + scaledOffset.y,
-        startPos.z + scaledOffset.z
+      _endPos.set(
+        _startPos.x + _scaledOffset.x,
+        _startPos.y + _scaledOffset.y,
+        _startPos.z + _scaledOffset.z
       );
 
       const unscaledLength = Math.sqrt(
@@ -161,14 +173,16 @@ export const LineSystem: System = {
           LineComponent.offsetY[entity] ** 2 +
           LineComponent.offsetZ[entity] ** 2
       );
-      const scaledLength = scaledOffset.length();
+      const scaledLength = _scaledOffset.length();
       const arrowScale = unscaledLength > 0 ? scaledLength / unscaledLength : 1;
+
+      _lineColor.set(LineComponent.color[entity]);
 
       const lineData: LineData = {
         entity,
-        startPos,
-        endPos,
-        color: new THREE.Color(LineComponent.color[entity]),
+        startPos: _startPos.clone(),
+        endPos: _endPos.clone(),
+        color: _lineColor.clone(),
         arrowStart: LineComponent.arrowStart[entity] === 1,
         arrowEnd: LineComponent.arrowEnd[entity] === 1,
         arrowSize: LineComponent.arrowSize[entity] * arrowScale,

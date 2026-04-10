@@ -6,10 +6,52 @@ import type { Group, Object3D } from 'three';
 import * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 
 import type { State } from '../core';
-import { getScene } from '../plugins/rendering';
+import { getRenderingContext, getScene } from '../plugins/rendering';
 import { GltfAnimator } from './gltf-animator';
+
+let _ktx2Loader: KTX2Loader | null | undefined = undefined;
+
+function tryInitKTX2(renderer: THREE.WebGLRenderer): KTX2Loader | null {
+  if (_ktx2Loader !== undefined) return _ktx2Loader;
+  try {
+    const revision = THREE.REVISION;
+    const transcoderPath = `https://unpkg.com/three@0.${revision}.0/examples/jsm/libs/basis/`;
+    _ktx2Loader = new KTX2Loader()
+      .setTranscoderPath(transcoderPath)
+      .detectSupport(renderer);
+    return _ktx2Loader;
+  } catch (e) {
+    console.warn(
+      '[VibeGame] KTX2Loader init failed — KTX2 textures disabled.',
+      e
+    );
+    _ktx2Loader = null;
+    return null;
+  }
+}
+
+function ensureKTX2FromState(state: State): void {
+  if (_ktx2Loader !== undefined) return;
+  const ctx = getRenderingContext(state);
+  if (ctx.renderer) tryInitKTX2(ctx.renderer);
+}
+
+/**
+ * Create a {@link GLTFLoader} with KTX2 texture support attached (when available).
+ *
+ * @param manager - Optional Three.js LoadingManager.
+ * @returns A configured GLTFLoader instance.
+ */
+export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
+  const loader = new GLTFLoader(manager);
+  if (_ktx2Loader) {
+    loader.setKTX2Loader(_ktx2Loader);
+  }
+  return loader;
+}
 
 /**
  * Meshes GLB não carregam `castShadow`/`receiveShadow` por defeito; sem isto o sol direcional não projeta sombras.
@@ -40,7 +82,8 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
       )
     );
   }
-  const loader = new GLTFLoader();
+  ensureKTX2FromState(state);
+  const loader = createGLTFLoader();
   return new Promise((resolve, reject) => {
     loader.load(
       url,
@@ -68,7 +111,8 @@ export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
       )
     );
   }
-  const loader = new GLTFLoader();
+  ensureKTX2FromState(state);
+  const loader = createGLTFLoader();
   return loader.loadAsync(url).then((gltf) => {
     applyDefaultShadowFlags(gltf.scene);
     scene.add(gltf.scene);
@@ -102,7 +146,8 @@ export function loadGltfToSceneWithAnimator(
       )
     );
   }
-  const loader = new GLTFLoader();
+  ensureKTX2FromState(state);
+  const loader = createGLTFLoader();
   return new Promise((resolve, reject) => {
     loader.load(
       url,

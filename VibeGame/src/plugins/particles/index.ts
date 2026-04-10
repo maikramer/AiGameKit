@@ -1,4 +1,10 @@
-export { ParticlesBurst, ParticlesEmitter } from './components';
+export {
+  ColorOverLife,
+  ParticleTexture,
+  ParticlesBurst,
+  ParticlesEmitter,
+  SizeOverLife,
+} from './components';
 export { ParticlesPlugin } from './plugin';
 export {
   ParticleBootstrapSystem,
@@ -11,4 +17,8 @@ export { getParticlesContext } from './context';
 export type { ParticlesContext } from './context';
 export { particleBurstRecipe, particleEmitterRecipe } from './recipes';
 export { createParticleSystemForPreset } from './presets';
-export type { ParticlePresetId } from './presets';
+export type {
+  ColorOverLifeConfig,
+  ParticlePresetId,
+  SizeOverLifeConfig,
+} from './presets';

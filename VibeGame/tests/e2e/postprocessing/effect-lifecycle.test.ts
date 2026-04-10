@@ -66,7 +66,9 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     expect(keys).toContain('depthOfField');
     expect(keys).toContain('chromaticAberration');
     expect(keys).toContain('noise');
-    expect(defs.length).toBe(8);
+    expect(keys).toContain('ssao');
+    expect(keys).toContain('ssr');
+    expect(defs.length).toBe(10);
   });
 
   it('should create bloom entity with plugin defaults', () => {

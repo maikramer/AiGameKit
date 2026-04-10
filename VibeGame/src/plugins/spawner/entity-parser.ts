@@ -15,16 +15,19 @@ function prefetchGltfChildren(element: {
 }): void {
   const walk = (el: {
     tagName: string;
-    children: readonly { tagName: string; attributes: Record<string, unknown> }[];
+    children: readonly {
+      tagName: string;
+      attributes: Record<string, unknown>;
+    }[];
   }) => {
-    for (const c of el.children) {
+    for (const c of el.children || []) {
       if (c.tagName === 'gltf-load' || c.tagName === 'gltf-dynamic') {
         const u = c.attributes.url;
         if (typeof u === 'string' && u.trim()) {
           prefetchGltfLocalYBounds(u.trim());
         }
       }
-      walk(c as typeof el);
+      walk(c as unknown as typeof el);
     }
   };
   walk(element);

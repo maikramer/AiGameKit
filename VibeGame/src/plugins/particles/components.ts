@@ -16,3 +16,26 @@ export const ParticlesBurst = defineComponent({
   count: Types.f32,
   triggered: Types.ui8,
 });
+
+export const ColorOverLife = defineComponent({
+  startR: Types.f32,
+  startG: Types.f32,
+  startB: Types.f32,
+  startA: Types.f32,
+  endR: Types.f32,
+  endG: Types.f32,
+  endB: Types.f32,
+  endA: Types.f32,
+});
+
+export const SizeOverLife = defineComponent({
+  startSize: Types.f32,
+  endSize: Types.f32,
+});
+
+export const ParticleTexture = defineComponent({
+  frameWidth: Types.f32,
+  frameHeight: Types.f32,
+  frames: Types.ui8,
+  animationSpeed: Types.f32,
+});

@@ -7,6 +7,8 @@ export {
   DepthOfField,
   ChromaticAberration,
   Noise,
+  ScreenSpaceAmbientOcclusion,
+  ScreenSpaceReflection,
 } from './components';
 export { PostprocessingPlugin } from './plugin';
 export {

@@ -34,15 +34,15 @@ export function parseAt(value: XMLValue | undefined): [number, number] {
   if (typeof value === 'number') {
     return [value, 0];
   }
-  throw new Error(
-    '[entity] "at" must be two numbers: "x z" (e.g. at: 12 -4).'
-  );
+  throw new Error('[entity] "at" must be two numbers: "x z" (e.g. at: 12 -4).');
 }
 
 /**
  * Parse a semicolon-separated `key: value` string (entity `place` attribute).
  */
-export function parseSemicolonPlaceString(placeStr: string): Record<string, XMLValue> {
+export function parseSemicolonPlaceString(
+  placeStr: string
+): Record<string, XMLValue> {
   const out: Record<string, XMLValue> = {};
   for (const part of placeStr.split(';')) {
     const trimmed = part.trim();
