@@ -75,7 +75,16 @@ export const GltfXmlLoadSystem: System = {
           }
         })
         .catch((err: unknown) => {
-          console.error('[gltf-load]', err);
+          const url = getGltfUrl(state, eid);
+          const base = err instanceof Error ? err.message : String(err);
+          const looksLike404Html =
+            base.includes('JSON') ||
+            base.includes('parse') ||
+            base.includes('<!DOCTYPE');
+          const hint = looksLike404Html
+            ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
+            : '';
+          console.error('[gltf-load]', url ?? '(sem url)', base + hint);
           if (
             state.exists(eid) &&
             state.hasComponent(eid, GltfPhysicsPending)

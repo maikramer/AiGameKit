@@ -64,7 +64,9 @@ function patchShadowMapDepthFilter(renderer: THREE.WebGLRenderer): void {
     let hasShadowCaster = false;
     scene.traverse((object) => {
       if (!(object instanceof THREE.Light)) return;
-      const light = object as THREE.Light & { shadow?: { map?: { depthTexture?: THREE.DepthTexture } } };
+      const light = object as THREE.Light & {
+        shadow?: { map?: { depthTexture?: THREE.DepthTexture } };
+      };
       const depthTexture = light.shadow?.map?.depthTexture;
       if (!depthTexture) return;
       hasShadowCaster = true;

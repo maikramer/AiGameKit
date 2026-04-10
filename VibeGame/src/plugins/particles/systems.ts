@@ -1,6 +1,7 @@
 import { entityExists, hasComponent } from 'bitecs';
 import type { Object3D } from 'three';
-import { BatchedParticleRenderer, type ParticleSystem } from 'three.quarks';
+import { BatchedParticleRenderer } from 'three.quarks';
+import type { ParticleSystem } from 'three.quarks';
 import { defineQuery, type System } from '../../core';
 import { getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
@@ -15,7 +16,10 @@ const entityToPS = new Map<number, ParticleSystem>();
 
 function disposeParticle(
   eid: number,
-  ctx: { batch: BatchedParticleRenderer | null; roots: Map<number, Object3D> }
+  ctx: {
+    batch: InstanceType<typeof BatchedParticleRenderer> | null;
+    roots: Map<number, Object3D>;
+  }
 ) {
   const ps = entityToPS.get(eid);
   const root = ctx.roots.get(eid);

@@ -47,8 +47,12 @@ class MockHowl {
 
 mock.module('howler', () => ({ Howl: MockHowl }));
 
-const { registerAudioClip, AudioSystem, playAudioEmitter, clearAudioClipRegistry } =
-  await import('../../../src/plugins/audio/systems');
+const {
+  registerAudioClip,
+  AudioSystem,
+  playAudioEmitter,
+  clearAudioClipRegistry,
+} = await import('../../../src/plugins/audio/systems');
 
 describe('AudioSystem Integration', () => {
   let state: State;

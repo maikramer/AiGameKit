@@ -31,6 +31,12 @@ export interface EffectDefinition {
    * undefined = runs in order of registration.
    */
   readonly position?: 'first' | 'last';
+
+  /**
+   * Whether this effect requires convolution (screen-space effect).
+   * Convolution effects need special handling in the effect pass.
+   */
+  readonly convolution?: boolean;
 }
 
 const registry: EffectDefinition[] = [];

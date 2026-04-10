@@ -1,4 +1,4 @@
-import { Client } from 'colyseus.js';
+import { Client, type Room } from 'colyseus.js';
 import { defineQuery, type System } from '../../core';
 import { Transform } from '../transforms';
 import { NetworkBuffer, Networked, NetworkStatus } from './components';
@@ -71,47 +71,40 @@ export const NetworkConnectSystem: System = {
     const client = new Client(ctx.url);
     client
       .joinOrCreate(ctx.roomName)
-      .then(
-        (room: {
-          onMessage: (
-            type: string,
-            cb: (msg: TransformMessage) => void
-          ) => void;
-        }) => {
-          ctx.room = room;
-          setStatus(state.world, 2);
-          room.onMessage('transform', (msg: TransformMessage) => {
-            for (const eid of netQuery(state.world)) {
-              if (msg.eid !== eid || Networked.isOwner[eid]) continue;
+      .then((room: Room) => {
+        ctx.room = room;
+        setStatus(state.world, 2);
+        room.onMessage('transform', (msg: TransformMessage) => {
+          for (const eid of netQuery(state.world)) {
+            if (msg.eid !== eid || Networked.isOwner[eid]) continue;
 
-              const snapshot = toSnapshot(msg, performance.now());
-              const jb = getJitterBuffer(eid);
-              jb.push(snapshot);
+            const snapshot = toSnapshot(msg, performance.now());
+            const jb = getJitterBuffer(eid);
+            jb.push(snapshot);
 
-              NetworkBuffer.prevX[eid] = NetworkBuffer.nextX[eid];
-              NetworkBuffer.prevY[eid] = NetworkBuffer.nextY[eid];
-              NetworkBuffer.prevZ[eid] = NetworkBuffer.nextZ[eid];
-              NetworkBuffer.prevRotX[eid] = NetworkBuffer.nextRotX[eid];
-              NetworkBuffer.prevRotY[eid] = NetworkBuffer.nextRotY[eid];
-              NetworkBuffer.prevRotZ[eid] = NetworkBuffer.nextRotZ[eid];
-              NetworkBuffer.prevRotW[eid] = NetworkBuffer.nextRotW[eid];
-              NetworkBuffer.prevScaleX[eid] = NetworkBuffer.nextScaleX[eid];
-              NetworkBuffer.prevScaleY[eid] = NetworkBuffer.nextScaleY[eid];
-              NetworkBuffer.prevScaleZ[eid] = NetworkBuffer.nextScaleZ[eid];
-              NetworkBuffer.nextX[eid] = msg.x;
-              NetworkBuffer.nextY[eid] = msg.y;
-              NetworkBuffer.nextZ[eid] = msg.z;
-              NetworkBuffer.nextRotX[eid] = msg.rotX ?? 0;
-              NetworkBuffer.nextRotY[eid] = msg.rotY ?? 0;
-              NetworkBuffer.nextRotZ[eid] = msg.rotZ ?? 0;
-              NetworkBuffer.nextRotW[eid] = msg.rotW ?? 1;
-              NetworkBuffer.nextScaleX[eid] = msg.scaleX ?? 1;
-              NetworkBuffer.nextScaleY[eid] = msg.scaleY ?? 1;
-              NetworkBuffer.nextScaleZ[eid] = msg.scaleZ ?? 1;
-            }
-          });
-        }
-      )
+            NetworkBuffer.prevX[eid] = NetworkBuffer.nextX[eid];
+            NetworkBuffer.prevY[eid] = NetworkBuffer.nextY[eid];
+            NetworkBuffer.prevZ[eid] = NetworkBuffer.nextZ[eid];
+            NetworkBuffer.prevRotX[eid] = NetworkBuffer.nextRotX[eid];
+            NetworkBuffer.prevRotY[eid] = NetworkBuffer.nextRotY[eid];
+            NetworkBuffer.prevRotZ[eid] = NetworkBuffer.nextRotZ[eid];
+            NetworkBuffer.prevRotW[eid] = NetworkBuffer.nextRotW[eid];
+            NetworkBuffer.prevScaleX[eid] = NetworkBuffer.nextScaleX[eid];
+            NetworkBuffer.prevScaleY[eid] = NetworkBuffer.nextScaleY[eid];
+            NetworkBuffer.prevScaleZ[eid] = NetworkBuffer.nextScaleZ[eid];
+            NetworkBuffer.nextX[eid] = msg.x;
+            NetworkBuffer.nextY[eid] = msg.y;
+            NetworkBuffer.nextZ[eid] = msg.z;
+            NetworkBuffer.nextRotX[eid] = msg.rotX ?? 0;
+            NetworkBuffer.nextRotY[eid] = msg.rotY ?? 0;
+            NetworkBuffer.nextRotZ[eid] = msg.rotZ ?? 0;
+            NetworkBuffer.nextRotW[eid] = msg.rotW ?? 1;
+            NetworkBuffer.nextScaleX[eid] = msg.scaleX ?? 1;
+            NetworkBuffer.nextScaleY[eid] = msg.scaleY ?? 1;
+            NetworkBuffer.nextScaleZ[eid] = msg.scaleZ ?? 1;
+          }
+        });
+      })
       .catch((err: unknown) => {
         setStatus(state.world, 3);
         console.warn('[network]', 'connection failed:', err);

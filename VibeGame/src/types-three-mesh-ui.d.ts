@@ -15,6 +15,7 @@ declare module 'three-mesh-ui/build/three-mesh-ui.module.js' {
 
   export class Text extends Object3D {
     constructor(options: Record<string, unknown>);
+    set(options: { content?: string; [key: string]: unknown }): void;
   }
 
   export function update(): void;

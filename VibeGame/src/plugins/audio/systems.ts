@@ -99,6 +99,7 @@ export const AudioListenerSetupSystem: System = {
 
 export const AudioSystem: System = {
   group: 'simulation',
+  last: true,
   after: [TransformHierarchySystem],
   update(state: State) {
     if (state.headless) return;

@@ -1,7 +1,9 @@
 import type { System, State } from 'vibegame';
 import {
+  AudioEmitter,
   configure,
   playAudioEmitter,
+  resumeAudioContextIfSuspended,
   run,
   withPlugin,
   withSystem,
@@ -92,7 +94,8 @@ function formatTime(sec: number): string {
   const s = Math.floor(sec % 60);
   const m = Math.floor(sec / 60) % 60;
   const h = Math.floor(sec / 3600);
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  if (h > 0)
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
@@ -110,7 +113,10 @@ function loadProgress(): void {
   if (!raw) return;
   try {
     const data = JSON.parse(raw) as Progress;
-    if (!Array.isArray(data.crystals) || data.crystals.length !== CRYSTAL_SITES.length) {
+    if (
+      !Array.isArray(data.crystals) ||
+      data.crystals.length !== CRYSTAL_SITES.length
+    ) {
       return;
     }
     progress.crystals = data.crystals.map((v) => Boolean(v));
@@ -147,9 +153,13 @@ function refreshHud(state: State): void {
   if (overlayStatsEl) {
     overlayStatsEl.innerHTML =
       `${t(state, 'hud.crystals', { count: String(count), total: String(total) })}<br/>` +
-      `${t(state, 'hud.gold', { gold: String(goldAmount()) })} · ${t(state, 'hud.time', {
-        time: formatTime(playTimeSec),
-      })}<br/>` +
+      `${t(state, 'hud.gold', { gold: String(goldAmount()) })} · ${t(
+        state,
+        'hud.time',
+        {
+          time: formatTime(playTimeSec),
+        }
+      )}<br/>` +
       `${t(state, 'hud.locale', { lang: getLocale(state) === 'pt' ? 'PT' : 'EN' })}`;
   }
 }
@@ -162,7 +172,11 @@ const GameplayHudSystem: System = {
 
     const TransformCmp = state.getComponent('transform');
     const heroEid = state.getEntityByName('hero');
-    if (TransformCmp && heroEid !== null && state.hasComponent(heroEid, TransformCmp)) {
+    if (
+      TransformCmp &&
+      heroEid !== null &&
+      state.hasComponent(heroEid, TransformCmp)
+    ) {
       const px = TransformCmp.posX[heroEid];
       const pz = TransformCmp.posZ[heroEid];
       for (let i = 0; i < CRYSTAL_SITES.length; i++) {
@@ -175,7 +189,10 @@ const GameplayHudSystem: System = {
           saveProgress();
           if (eidSfxSave >= 0) playAudioEmitter(state, eidSfxSave);
           pushFlash(state, 'hud.collect', 2);
-          if (crystalCount() === CRYSTAL_SITES.length && !progress.victoryAnnounced) {
+          if (
+            crystalCount() === CRYSTAL_SITES.length &&
+            !progress.victoryAnnounced
+          ) {
             progress.victoryAnnounced = true;
             saveProgress();
             pushFlash(state, 'hud.victory', 4);
@@ -209,7 +226,8 @@ const GameplayHudSystem: System = {
       localeDebounce = true;
       const next = getLocale(state) === 'pt' ? 'en' : 'pt';
       setLocale(state, next);
-      if (overlayControlsEl) overlayControlsEl.textContent = t(state, 'hud.controls');
+      if (overlayControlsEl)
+        overlayControlsEl.textContent = t(state, 'hud.controls');
       refreshHud(state);
     }
     if (!isKeyDown('KeyL')) localeDebounce = false;
@@ -304,6 +322,18 @@ async function bootstrap(): Promise<void> {
 
   loadProgress();
   createOverlayHud(state);
+
+  const bgmEid = state.getEntityByName('bgm');
+  if (bgmEid !== null && typeof document !== 'undefined') {
+    const startBgm = () => {
+      resumeAudioContextIfSuspended();
+      if (state.exists(bgmEid) && state.hasComponent(bgmEid, AudioEmitter)) {
+        AudioEmitter.playing[bgmEid] = 1;
+      }
+      document.removeEventListener('pointerdown', startBgm);
+    };
+    document.addEventListener('pointerdown', startBgm, { once: true });
+  }
 }
 
 void bootstrap();

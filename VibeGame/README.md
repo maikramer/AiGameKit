@@ -251,14 +251,14 @@ Full list: [`docs/PLUGINS.md`](docs/PLUGINS.md)
 
 ## Documentation
 
-| Doc                                                  | Description                             |
-| ---------------------------------------------------- | --------------------------------------- |
-| [`docs/PLUGINS.md`](docs/PLUGINS.md)                 | Lista completa de plugins               |
-| [`docs/SHARED.md`](docs/SHARED.md)                   | Módulo shared (tipos, math, validation) |
-| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md) | Sistema de efeitos pós-processamento    |
-| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md)   | Pipeline GameAssets Python → VibeGame   |
+| Doc                                                  | Description                              |
+| ---------------------------------------------------- | ---------------------------------------- |
+| [`docs/PLUGINS.md`](docs/PLUGINS.md)                 | Lista completa de plugins                |
+| [`docs/SHARED.md`](docs/SHARED.md)                   | Módulo shared (tipos, math, validation)  |
+| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md) | Sistema de efeitos pós-processamento     |
+| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md)   | Pipeline GameAssets Python → VibeGame    |
 | [`docs/AUDIO.md`](docs/AUDIO.md)                     | Sistema de áudio (Howler, XML, autoplay) |
-| [`src/plugins/README.md`](src/plugins/README.md)     | Arquitetura de plugins + template       |
+| [`src/plugins/README.md`](src/plugins/README.md)     | Arquitetura de plugins + template        |
 
 ## Shared Module
 
