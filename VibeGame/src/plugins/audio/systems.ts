@@ -194,12 +194,8 @@ export const AudioSystem: System = {
       AudioListener.posX[eid] = x;
       AudioListener.posY[eid] = y;
       AudioListener.posZ[eid] = z;
-      const ctx = Howler.ctx;
-      if (ctx && ctx.listener) {
-        ctx.listener.positionX.value = x;
-        ctx.listener.positionY.value = y;
-        ctx.listener.positionZ.value = z;
-      }
+      // Howler.pos trata browsers só com setPosition() vs AudioParam positionX/Y/Z.
+      Howler.pos(x, y, z);
     } else if (
       audioQuery(state.world).length > 0 &&
       !getOrCreateState(state)._listenerWarned
