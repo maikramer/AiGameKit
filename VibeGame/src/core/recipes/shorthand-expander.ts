@@ -30,7 +30,16 @@ export function expandShorthands(
     // that component. This prevents e.g. `noise="opacity: 0.15"` being
     // absorbed into the `dithering` component's `noise` field.
     const keyComponent = state.getComponent(key);
-    const targetComponents = keyComponent ? [key] : [...presentComponents];
+    const targetComponents: string[] = keyComponent
+      ? [key]
+      : [...presentComponents];
+    if (!keyComponent) {
+      for (const c of state.config.getComponentNamesForShorthandKey(key)) {
+        if (!targetComponents.includes(c)) {
+          targetComponents.push(c);
+        }
+      }
+    }
 
     for (const componentName of targetComponents) {
       const component = state.getComponent(componentName);
@@ -50,6 +59,12 @@ export function expandShorthands(
               componentProps
             )
           ) {
+            handled = true;
+          } else if (state.config.getAdapter(componentName, target)) {
+            if (!componentProps[componentName]) {
+              componentProps[componentName] = {};
+            }
+            componentProps[componentName][target] = stringValue;
             handled = true;
           }
         }

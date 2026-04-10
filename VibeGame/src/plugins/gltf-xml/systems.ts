@@ -67,10 +67,7 @@ export const GltfXmlLoadSystem: System = {
         .then((group) => {
           registerGltfLocalYBounds(url, group);
           applyTransformToGroup(group, eid);
-          if (
-            state.exists(eid) &&
-            state.hasComponent(eid, GltfPhysicsPending)
-          ) {
+          if (state.exists(eid)) {
             registerGltfRootGroup(state, eid, group);
           }
         })

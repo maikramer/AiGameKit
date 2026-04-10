@@ -3,6 +3,7 @@ import {
   AudioEmitter,
   configure,
   playAudioEmitter,
+  registerEntityScripts,
   resumeAudioContextIfSuspended,
   run,
   withPlugin,
@@ -311,6 +312,8 @@ async function bootstrap(): Promise<void> {
   configure({ canvas: '#game-canvas' });
   const runtime = await run();
   const state = runtime.getState();
+
+  registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
 
   resolveAudioEids(state);
 

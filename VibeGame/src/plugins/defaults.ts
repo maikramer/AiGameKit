@@ -3,6 +3,7 @@ import { AiSteeringPlugin } from './ai-steering/plugin';
 import { AnimationPlugin } from './animation/plugin';
 import { FollowCameraPlugin } from './follow-camera/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
+import { EntityScriptPlugin } from './entity-script/plugin';
 import { GltfXmlPlugin } from './gltf-xml/plugin';
 import { InputPlugin } from './input/plugin';
 import { JointsPlugin } from './joints/plugin';
@@ -32,6 +33,7 @@ export const DefaultPlugins: Plugin[] = [
   TweenPlugin,
   TransformsPlugin,
   GltfXmlPlugin,
+  EntityScriptPlugin,
   GltfAnimPlugin,
   AnimationPlugin,
   InputPlugin,

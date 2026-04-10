@@ -134,4 +134,17 @@ export class ConfigRegistry {
     const componentAdapters = this.adapters[toKebabCase(componentName)];
     return componentAdapters ? Object.keys(componentAdapters) : [];
   }
+
+  /** Component kebab-names that declare an explicit shorthand for `attrKey` (e.g. `script` → entity-script). */
+  getComponentNamesForShorthandKey(attrKey: string): string[] {
+    const out: string[] = [];
+    for (const [componentName, shorthands] of Object.entries(
+      this.componentShorthands
+    )) {
+      if (attrKey in shorthands) {
+        out.push(componentName);
+      }
+    }
+    return out;
+  }
 }

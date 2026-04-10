@@ -49,6 +49,17 @@ export {
   resumeAudioContextIfSuspended,
   resumeAudioContextOnFirstUserGesture,
 } from './plugins/audio';
+export {
+  EntityScript,
+  EntityScriptPlugin,
+  EntityScriptSystem,
+  registerEntityScripts,
+  resolveEntityScriptGlobKey,
+} from './plugins/entity-script';
+export type {
+  EntityScriptContext,
+  EntityScriptModule,
+} from './plugins/entity-script';
 export { Lod, LodPlugin, LodSystem } from './plugins/lod';
 export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';
 export {
