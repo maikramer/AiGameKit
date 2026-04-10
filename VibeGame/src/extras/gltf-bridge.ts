@@ -2,13 +2,27 @@
  * Bridge for GLB/GLTF assets produced by Text3D, Paint3D, Rigging3D, etc.
  * Adds the loaded scene graph to the VibeGame Three.js scene.
  */
-import type { Group } from 'three';
+import type { Group, Object3D } from 'three';
+import * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 import type { State } from '../core';
 import { getScene } from '../plugins/rendering';
 import { GltfAnimator } from './gltf-animator';
+
+/**
+ * Meshes GLB não carregam `castShadow`/`receiveShadow` por defeito; sem isto o sol direcional não projeta sombras.
+ */
+export function applyDefaultShadowFlags(root: Object3D): void {
+  root.traverse((o) => {
+    const m = o as THREE.Mesh & THREE.SkinnedMesh;
+    if (m.isMesh === true) {
+      m.castShadow = true;
+      m.receiveShadow = true;
+    }
+  });
+}
 
 /**
  * Load a glTF/GLB from URL and attach it to the current rendering scene.
@@ -31,6 +45,7 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
     loader.load(
       url,
       (gltf) => {
+        applyDefaultShadowFlags(gltf.scene);
         scene.add(gltf.scene);
         resolve(gltf.scene);
       },
@@ -55,6 +70,7 @@ export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
   }
   const loader = new GLTFLoader();
   return loader.loadAsync(url).then((gltf) => {
+    applyDefaultShadowFlags(gltf.scene);
     scene.add(gltf.scene);
     return gltf;
   });
@@ -91,6 +107,7 @@ export function loadGltfToSceneWithAnimator(
     loader.load(
       url,
       (gltf) => {
+        applyDefaultShadowFlags(gltf.scene);
         scene.add(gltf.scene);
         const animator =
           gltf.animations.length > 0

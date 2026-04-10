@@ -73,43 +73,20 @@ vibegame/
 │   ├── builder.ts  # Builder pattern API
 │   ├── runtime.ts  # Game runtime engine
 │   └── index.ts  # Main exports
-├── examples/  # Example applications
-│   ├── hello-world/  # Basic example
+├── examples/  # Shipped example applications (see examples/context.md)
+│   ├── hello-world/  # Minimal: terrain, physics, <entity place="…">
+│   │   ├── README.md
 │   │   ├── context.md
 │   │   ├── src/main.ts
 │   │   ├── index.html
 │   │   ├── package.json
 │   │   └── vite.config.ts
-│   ├── lorenz/  # Lorenz attractor particle system
-│   │   ├── context.md
-│   │   ├── src/
-│   │   │   ├── main.ts
-│   │   │   ├── plugin.ts
-│   │   │   ├── components.ts
-│   │   │   ├── systems.ts
-│   │   │   └── utils.ts
-│   │   ├── index.html
-│   │   ├── package.json
-│   │   └── vite.config.ts
-│   └── visualization/  # Blog-style visualization with sequencing
-│       ├── context.md
-│       ├── index.html       # Blog harness (includes content.html)
-│       ├── record.html      # Video recording page
-│       ├── vite.config.ts   # Build config with html-include plugin
-│       ├── package.json
-│       ├── tsconfig.json
-│       └── src/
-│           ├── content.html     # World definition with entities
-│           ├── components.css   # Visualization styles
-│           ├── components.ts    # BreatheDriver component
-│           ├── systems.ts       # BreatheDriver systems
-│           ├── plugin.ts        # VisualizationPlugin
-│           ├── main.ts          # Blog entry point
-│           ├── record.ts        # Video recording entry point
-│           └── sequences/
-│               ├── index.ts     # Sequence loader + STEP_SEQUENCES map
-│               ├── step-0-1.xml # Camera sequences
-│               └── step-1-2.xml # Breathe sequences
+│   └── simple-rpg/  # Full GameDev pipeline demo + handoff
+│       ├── README.md
+│       ├── index.html
+│       ├── src/main.ts
+│       ├── public/assets/
+│       └── sample-gameassets/
 ├── layers/
 │   ├── structure.md  # Project-level context (Tier 1)
 │   ├── context-template.md  # Template for context files

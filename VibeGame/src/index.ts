@@ -1,4 +1,4 @@
-﻿import type { BuilderOptions } from './builder';
+import type { BuilderOptions } from './builder';
 import { GameBuilder } from './builder';
 import type { Component, Plugin, System } from './core';
 import { disposeAllRuntimes } from './core/runtime-manager';
@@ -7,6 +7,7 @@ export * from './core';
 export type { BuilderOptions };
 export type { GameRuntime } from './runtime';
 export {
+  applyDefaultShadowFlags,
   loadGltfAnimated,
   loadGltfToScene,
   loadGltfToSceneWithAnimator,
@@ -78,8 +79,8 @@ export {
   TerrainSpawnSystem,
   TerrainPlaceSystem,
   spawnGroupRecipe,
-  placeRecipe,
-  placeParser,
+  entitySpawnerRecipe,
+  entityParser,
   spawnTemplateAtTerrain,
   getPlacementSpecs,
   setPlacementSpec,

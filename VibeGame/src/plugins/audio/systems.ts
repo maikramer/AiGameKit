@@ -23,9 +23,17 @@ const audioQuery = defineQuery([AudioEmitter]);
 const listenerQuery = defineQuery([AudioListener, MainCamera, WorldTransform]);
 const mainCameraTransformQuery = defineQuery([MainCamera, Transform]);
 
+/** Últimos valores aplicados ao Howl (evitar setters por frame: Howler reinicia reprodução em `loop(true)` com som ativo; `rate()` também altera timers). */
+interface HowlPropSnapshot {
+  volume: number;
+  loop: boolean;
+  rate: number;
+}
+
 interface AudioState {
   howlMap: Map<number, Howl>;
   prevPlaying: Map<number, number>;
+  howlPropSnapshot: Map<number, HowlPropSnapshot>;
   _listenerWarned?: boolean;
 }
 
@@ -34,7 +42,11 @@ const AUDIO_STATE = new WeakMap<State, AudioState>();
 function getOrCreateState(state: State): AudioState {
   let s = AUDIO_STATE.get(state);
   if (!s) {
-    s = { howlMap: new Map(), prevPlaying: new Map() };
+    s = {
+      howlMap: new Map(),
+      prevPlaying: new Map(),
+      howlPropSnapshot: new Map(),
+    };
     AUDIO_STATE.set(state, s);
   }
   return s;
@@ -104,7 +116,7 @@ export const AudioSystem: System = {
   update(state: State) {
     if (state.headless) return;
 
-    const { howlMap, prevPlaying } = getOrCreateState(state);
+    const { howlMap, prevPlaying, howlPropSnapshot } = getOrCreateState(state);
     const entities = audioQuery(state.world);
 
     for (const eid of entities) {
@@ -148,6 +160,11 @@ export const AudioSystem: System = {
             });
           }
           howlMap.set(eid, howl);
+          howlPropSnapshot.set(eid, {
+            volume: AudioEmitter.volume[eid],
+            loop: AudioEmitter.loop[eid] === 1,
+            rate: AudioEmitter.pitch[eid],
+          });
         }
         howl.play();
       }
@@ -157,9 +174,24 @@ export const AudioSystem: System = {
       }
 
       if (howl) {
-        howl.volume(AudioEmitter.volume[eid]);
-        howl.loop(AudioEmitter.loop[eid] === 1);
-        howl.rate(AudioEmitter.pitch[eid]);
+        const nextVol = AudioEmitter.volume[eid];
+        const nextLoop = AudioEmitter.loop[eid] === 1;
+        const nextRate = AudioEmitter.pitch[eid];
+        const snap = howlPropSnapshot.get(eid);
+        if (!snap || snap.volume !== nextVol) {
+          howl.volume(nextVol);
+        }
+        if (!snap || snap.loop !== nextLoop) {
+          howl.loop(nextLoop);
+        }
+        if (!snap || snap.rate !== nextRate) {
+          howl.rate(nextRate);
+        }
+        howlPropSnapshot.set(eid, {
+          volume: nextVol,
+          loop: nextLoop,
+          rate: nextRate,
+        });
 
         if (AudioEmitter.spatial[eid] === 1) {
           howl.pos(
@@ -183,6 +215,7 @@ export const AudioSystem: System = {
         howl.unload();
         howlMap.delete(eid);
         prevPlaying.delete(eid);
+        howlPropSnapshot.delete(eid);
       }
     }
 

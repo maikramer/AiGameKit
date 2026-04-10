@@ -1,4 +1,4 @@
-﻿import { TerrainLOD } from '@interverse/three-terrain-lod';
+import { TerrainLOD } from '@interverse/three-terrain-lod';
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
@@ -99,6 +99,21 @@ export const TerrainBootstrapSystem: System = {
         });
         terrainLOD.setMaterialProvider(materialProvider);
 
+        // Intercept InstancedMesh creation to set receiveShadow BEFORE first render.
+        // The shader program is compiled on first draw; if receiveShadow is false at
+        // that point, USE_SHADOWMAP won't be defined and shadows are permanently off.
+        const origAdd = terrainLOD.add.bind(terrainLOD);
+        terrainLOD.add = function (...objs: THREE.Object3D[]) {
+          for (const o of objs) {
+            const im = o as THREE.InstancedMesh;
+            if (im.isInstancedMesh) {
+              im.receiveShadow = true;
+              im.castShadow = false;
+            }
+          }
+          return origAdd(...objs);
+        };
+
         data = {
           terrainLOD,
           heightmapUrl,
@@ -128,6 +143,17 @@ export const TerrainBootstrapSystem: System = {
             entityData.initialized = true;
             // Apply material properties after init (material is created during init)
             applyMaterialProperties(entityData, entity, state);
+            /** Só recebe: se `castShadow` estiver ligado no terreno, o shadow map enche com a malha gigante e a sombra do herói/ props deixa de ler-se. */
+            terrainLOD.traverse((child) => {
+              const mesh = child as THREE.Mesh;
+              if (mesh.isMesh === true) {
+                mesh.receiveShadow = true;
+                mesh.castShadow = false;
+                if (mesh.material && 'needsUpdate' in mesh.material) {
+                  (mesh.material as THREE.Material).needsUpdate = true;
+                }
+              }
+            });
           })
           .catch((err: unknown) => {
             console.error('[terrain] Failed to initialize TerrainLOD:', err);
@@ -259,6 +285,13 @@ export const TerrainRenderSystem: System = {
       // Apply material property changes every frame (cheap equality check)
       if (data.initialized) {
         applyMaterialProperties(data, entity, state);
+        const im = (
+          data.terrainLOD as TerrainLOD & { instancedMesh?: THREE.InstancedMesh }
+        ).instancedMesh;
+        if (im) {
+          im.receiveShadow = true;
+          im.castShadow = false;
+        }
       }
     }
   },

@@ -5,7 +5,7 @@ import {
   resolveGroupSpawnFields,
 } from 'vibegame';
 
-describe('place profile (<place>)', () => {
+describe('place profile (entity place= + perfil place)', () => {
   it('place define align, escala fixa e declive permissivo', () => {
     const d = getGroupSpawnDefaults('place');
     expect(d.alignToTerrain).toBe(true);

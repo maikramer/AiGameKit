@@ -21,6 +21,8 @@ export interface EquirectSkyOptions {
    * alinhar a direcção "frente" da câmara com o centro da imagem. Defeito: 0.
    */
   rotationDeg?: number;
+  /** Multiplicador do IBL em ``scene.environment`` (defeito ~0.1). Valores mais baixos = sombras mais visíveis no PBR. */
+  environmentIntensity?: number;
 }
 
 /**
@@ -102,6 +104,7 @@ export async function applyEquirectSkyEnvironment(
   tex.dispose();
   pmrem.dispose();
   scene.environment = envMap;
+  scene.environmentIntensity = options?.environmentIntensity ?? 0.1;
 
   if (options?.background !== false) {
     scene.background = envMap;

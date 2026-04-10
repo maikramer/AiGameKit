@@ -10,12 +10,7 @@ import {
   RenderContext,
   Renderer,
 } from './components';
-import {
-  getOrCreateMesh,
-  hideInstance,
-  updateInstance,
-  updateShadowCamera,
-} from './operations';
+import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
 import {
   createRenderer,
   createThreeCamera,
@@ -35,7 +30,6 @@ const directionalQuery = defineQuery([DirectionalLight]);
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
 const renderContextQuery = defineQuery([RenderContext]);
-
 export const MeshInstanceSystem: System = {
   group: 'draw',
   update(state: State) {
@@ -69,8 +63,6 @@ export const MeshInstanceSystem: System = {
 
       mesh = updateInstance(mesh, entity, context, state, unlit);
     }
-
-    updateShadowCamera(context, state);
   },
 };
 
@@ -114,54 +106,41 @@ export const LightSyncSystem: System = {
         light.castShadow = true;
         light.shadow.mapSize.width = DirectionalLight.shadowMapSize[entity];
         light.shadow.mapSize.height = DirectionalLight.shadowMapSize[entity];
+        /** Valores altos de normalBias + normais do terreno inclinadas → quase tudo “em sombra” dentro da frustum. */
+        light.shadow.bias = -0.0001;
+        light.shadow.normalBias = 0;
       } else {
         light.castShadow = false;
       }
 
-      const cameraTargets = mainCameraTransformQuery(state.world);
-      let activeTarget: number | null = null;
+      const targetPosition = SHADOW_CONFIG.FIXED_FRUSTUM_CENTER.clone();
 
-      for (const cameraEntity of cameraTargets) {
-        activeTarget = cameraEntity;
-        break;
-      }
+      const lightDirection = new THREE.Vector3(
+        DirectionalLight.directionX[entity],
+        DirectionalLight.directionY[entity],
+        DirectionalLight.directionZ[entity]
+      ).normalize();
 
-      if (activeTarget !== null) {
-        const targetPosition = new THREE.Vector3(
-          WorldTransform.posX[activeTarget],
-          WorldTransform.posY[activeTarget],
-          WorldTransform.posZ[activeTarget]
-        );
+      const lightPosition = targetPosition
+        .clone()
+        .add(lightDirection.multiplyScalar(DirectionalLight.distance[entity]));
 
-        const lightDirection = new THREE.Vector3(
-          DirectionalLight.directionX[entity],
-          DirectionalLight.directionY[entity],
-          DirectionalLight.directionZ[entity]
-        ).normalize();
+      light.position.copy(lightPosition);
+      light.target.position.copy(targetPosition);
+      light.target.updateMatrixWorld();
 
-        const lightPosition = targetPosition
-          .clone()
-          .add(
-            lightDirection.multiplyScalar(DirectionalLight.distance[entity])
-          );
-
-        light.position.copy(lightPosition);
-        light.target.position.copy(targetPosition);
-        light.target.updateMatrixWorld();
-
-        const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
-        const radius = SHADOW_CONFIG.CAMERA_RADIUS;
-        shadowCamera.left = -radius;
-        shadowCamera.right = radius;
-        shadowCamera.top = radius;
-        shadowCamera.bottom = -radius;
-        shadowCamera.near = SHADOW_CONFIG.NEAR_PLANE;
-        shadowCamera.far = SHADOW_CONFIG.FAR_PLANE;
-        shadowCamera.position.copy(lightPosition);
-        shadowCamera.lookAt(targetPosition);
-        shadowCamera.updateProjectionMatrix();
-        shadowCamera.updateMatrixWorld();
-      }
+      const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
+      const radius = SHADOW_CONFIG.CAMERA_RADIUS;
+      shadowCamera.left = -radius;
+      shadowCamera.right = radius;
+      shadowCamera.top = radius;
+      shadowCamera.bottom = -radius;
+      shadowCamera.near = SHADOW_CONFIG.NEAR_PLANE;
+      shadowCamera.far = SHADOW_CONFIG.FAR_PLANE;
+      shadowCamera.position.copy(lightPosition);
+      shadowCamera.lookAt(targetPosition);
+      shadowCamera.updateProjectionMatrix();
+      shadowCamera.updateMatrixWorld();
     }
   },
 };

@@ -6,6 +6,8 @@ import {
   SteeringTarget,
 } from '../../../src/plugins/ai-steering/components';
 import { AiSteeringPlugin } from '../../../src/plugins/ai-steering/plugin';
+import { Renderer } from '../../../src/plugins/rendering/components';
+import { RenderingPlugin } from '../../../src/plugins/rendering/plugin';
 
 describe('AI-Steering XML recipe', () => {
   beforeEach(() => {
@@ -27,6 +29,7 @@ describe('AI-Steering XML recipe', () => {
 
   it('npc recipe creates entity with correct components', () => {
     const state = new State();
+    state.registerPlugin(RenderingPlugin);
     state.registerPlugin(AiSteeringPlugin);
 
     const xml = '<root><npc behavior="seek"></npc></root>';
@@ -37,6 +40,8 @@ describe('AI-Steering XML recipe', () => {
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, SteeringAgent)).toBe(true);
     expect(state.hasComponent(entity, SteeringTarget)).toBe(true);
+    expect(state.hasComponent(entity, Renderer)).toBe(true);
+    expect(Renderer.shape[entity]).toBe(1);
   });
 
   it('parses seek behavior enum', () => {

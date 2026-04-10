@@ -42,43 +42,6 @@ function installAngleD3dShaderInfoWarnFilter(): void {
   };
 }
 
-let shadowMapDepthPatchInstalled = false;
-
-/**
- * Patch shadow map depth textures to use NearestFilter instead of LinearFilter.
- * PCFShadowMap sets LinearFilter on DepthTexture for hardware comparison sampling,
- * which triggers a WebGL warning about implementation-defined behavior on some GPUs.
- * NearestFilter produces identical visual results when compareFunction is set.
- */
-function patchShadowMapDepthFilter(renderer: THREE.WebGLRenderer): void {
-  if (shadowMapDepthPatchInstalled) return;
-  shadowMapDepthPatchInstalled = true;
-
-  const origRender = renderer.render.bind(renderer);
-  let firstRenderDone = false;
-
-  renderer.render = function (scene: THREE.Scene, camera: THREE.Camera) {
-    origRender(scene, camera);
-    if (firstRenderDone) return;
-
-    let hasShadowCaster = false;
-    scene.traverse((object) => {
-      if (!(object instanceof THREE.Light)) return;
-      const light = object as THREE.Light & {
-        shadow?: { map?: { depthTexture?: THREE.DepthTexture } };
-      };
-      const depthTexture = light.shadow?.map?.depthTexture;
-      if (!depthTexture) return;
-      hasShadowCaster = true;
-      depthTexture.minFilter = THREE.NearestFilter;
-      depthTexture.magFilter = THREE.NearestFilter;
-      depthTexture.needsUpdate = true;
-    });
-
-    if (hasShadowCaster) firstRenderDone = true;
-  };
-}
-
 function getCanvasAspect(state: State): {
   width: number;
   height: number;
@@ -361,11 +324,15 @@ export function createRenderer(
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
-  patchShadowMapDepthFilter(renderer);
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);
   }
+
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  /** PBR/IBL sem tone mapping no ecrã fica HDR “cru” (lavado). ACES como base; pós com `tonemapping` põe `NoToneMapping` no render. */
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1;
 
   return renderer;
 }
@@ -400,9 +367,16 @@ export function handleWindowResize(
 export const SHADOW_CONFIG = {
   LIGHT_DIRECTION: new THREE.Vector3(5, 10, 2).normalize(),
   LIGHT_DISTANCE: 25,
-  CAMERA_RADIUS: 50,
-  NEAR_PLANE: 1,
-  FAR_PLANE: 200,
+  /** Raio ortográfico da câmara de sombras (metade da largura do frustum). Maior = mais cobertura ao redor do alvo. */
+  CAMERA_RADIUS: 140,
+  NEAR_PLANE: 0.5,
+  FAR_PLANE: 250,
+  /**
+   * Centro da frustum ortográfica do shadow map em espaço de mundo (Y≈altura média do chão).
+   * Centrar na câmara/jogador faz o limite do mapa “seguir” o ecrã (parece um quadrado que anda);
+   * âncora fixa cobre o mapa centrado na origem (ex.: terrain pos 0,0,0).
+   */
+  FIXED_FRUSTUM_CENTER: new THREE.Vector3(0, 0, 0),
 } as const;
 
 export { MAX_TOTAL_INSTANCES, PERFORMANCE_WARNING_THRESHOLD };

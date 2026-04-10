@@ -1,4 +1,4 @@
-﻿import type { Parser, XMLValue } from '../../core';
+import type { Parser, XMLValue } from '../../core';
 import { formatUnknownElement } from '../../core/recipes/diagnostics';
 import { setSpawnGroupSpec } from './context';
 import { prefetchGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
@@ -122,6 +122,14 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     };
     if (childTplProfile) {
       tpl.childProfile = childTplProfile;
+    }
+    if (child.tagName === 'entity') {
+      const grand = child.children.filter(
+        (c) => c.tagName && c.tagName !== 'parsererror'
+      );
+      if (grand.length > 0) {
+        tpl.entityChildren = grand;
+      }
     }
     templates.push(tpl);
   }

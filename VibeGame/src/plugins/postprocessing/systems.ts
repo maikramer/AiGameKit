@@ -12,6 +12,7 @@ import {
 } from '../rendering';
 import { getPostprocessingContext } from './utils';
 import { getEffectDefinitions, type EffectDefinition } from './effect-registry';
+import { Tonemapping } from './components';
 
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
@@ -168,6 +169,12 @@ export const PostprocessingRenderSystem: System = {
   group: 'draw',
   last: true,
   update(state: State) {
+    if (state.headless) return;
+
+    const renderContext = getRenderingContext(state);
+    const renderer = renderContext.renderer;
+    if (!renderer) return;
+
     const postContext = getPostprocessingContext(state);
     const cameraEntities = mainCameraQuery(state.world);
 
@@ -176,8 +183,27 @@ export const PostprocessingRenderSystem: System = {
     const cameraEntity = cameraEntities[0];
     const composer = postContext.composers.get(cameraEntity);
 
-    if (composer) {
-      composer.render();
+    if (!composer) return;
+
+    /**
+     * Sem `Tonemapping` no compositor, o RenderPass usa o tone mapping do renderer.
+     * O default do Three.js é `NoToneMapping`, o que deixa HDR/IBL sem mapear para o ecrã
+     * (aspeto lavado/pálido). Com `ToneMappingEffect`, o shader do efeito faz o mapeamento:
+     * o renderer deve ficar em `NoToneMapping` para não duplicar.
+     */
+    const prevToneMapping = renderer.toneMapping;
+    const prevExposure = renderer.toneMappingExposure;
+
+    if (state.hasComponent(cameraEntity, Tonemapping)) {
+      renderer.toneMapping = THREE.NoToneMapping;
+    } else {
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1;
     }
+
+    composer.render();
+
+    renderer.toneMapping = prevToneMapping;
+    renderer.toneMappingExposure = prevExposure;
   },
 };

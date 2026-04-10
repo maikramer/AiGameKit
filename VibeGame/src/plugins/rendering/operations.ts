@@ -1,14 +1,12 @@
 import type { State } from '../../core';
-import { defineQuery } from '../../core';
 import * as THREE from 'three';
 import { WorldTransform } from '../transforms';
-import { MainCamera, Renderer } from './components';
+import { Renderer } from './components';
 import {
   findAvailableInstanceSlot,
   initializeInstancedMesh,
   resizeInstancedMesh,
   RendererShape,
-  SHADOW_CONFIG,
   MAX_TOTAL_INSTANCES,
   PERFORMANCE_WARNING_THRESHOLD,
   type RenderingContext,
@@ -18,8 +16,6 @@ const matrix = new THREE.Matrix4();
 const position = new THREE.Vector3();
 const rotation = new THREE.Quaternion();
 const scale = new THREE.Vector3();
-
-const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 
 export function getOrCreateMesh(
   context: RenderingContext,
@@ -147,54 +143,4 @@ export function hideInstance(
     mesh.setMatrixAt(instanceInfo.instanceId, zeroMatrix);
     mesh.instanceMatrix.needsUpdate = true;
   }
-}
-
-export function updateShadowCamera(
-  context: RenderingContext,
-  state: State
-): void {
-  const cameraTargets = mainCameraTransformQuery(state.world);
-  let activeTarget: number | null = null;
-
-  for (const entity of cameraTargets) {
-    activeTarget = entity;
-    break;
-  }
-
-  if (activeTarget === null) return;
-
-  const directional = context.lights.directional;
-  if (!directional) return;
-
-  const targetPosition = new THREE.Vector3(
-    WorldTransform.posX[activeTarget],
-    WorldTransform.posY[activeTarget],
-    WorldTransform.posZ[activeTarget]
-  );
-
-  const shadowCamera = directional.shadow.camera as THREE.OrthographicCamera;
-
-  const lightPosition = targetPosition
-    .clone()
-    .add(
-      SHADOW_CONFIG.LIGHT_DIRECTION.clone().multiplyScalar(
-        SHADOW_CONFIG.LIGHT_DISTANCE
-      )
-    );
-
-  directional.position.copy(lightPosition);
-  directional.target.position.copy(targetPosition);
-  directional.target.updateMatrixWorld();
-
-  const radius = SHADOW_CONFIG.CAMERA_RADIUS;
-  shadowCamera.left = -radius;
-  shadowCamera.right = radius;
-  shadowCamera.top = radius;
-  shadowCamera.bottom = -radius;
-  shadowCamera.near = SHADOW_CONFIG.NEAR_PLANE;
-  shadowCamera.far = SHADOW_CONFIG.FAR_PLANE;
-  shadowCamera.position.copy(lightPosition);
-  shadowCamera.lookAt(targetPosition);
-  shadowCamera.updateProjectionMatrix();
-  shadowCamera.updateMatrixWorld();
 }

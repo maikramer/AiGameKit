@@ -37,18 +37,25 @@ export function createParticleSystemForPreset(
     worldSpace: true,
   };
 
-  if (preset === 1) {
+  if (preset === 3) {
+    // sparks: short-lived, small; XML `lifetime` is scaled down, not used verbatim
+    const sparkLife = Math.min(Math.max(lifetime * 0.22, 0.12), 0.5);
+    mat.color.setHex(0xb8d4ff);
+    mat.blending = THREE.AdditiveBlending;
+    base.duration = Math.max(0.35, sparkLife * 1.2);
+    base.startColor = new ConstantColor(new Vector4(0.82, 0.9, 1, 0.75));
+    base.startSpeed = new ConstantValue(1.25);
+    base.startLife = new ConstantValue(sparkLife);
+    base.startSize = new ConstantValue(Math.max(size * 0.32, 0.035));
+    base.emissionOverTime = new ConstantValue(Math.max(rate * 0.4, 1));
+    base.emitterShape = new SphereEmitter({ radius: 0.055 });
+  } else if (preset === 1) {
     mat.color.setHex(0x888888);
     base.startColor = new ConstantColor(new Vector4(0.5, 0.5, 0.5, 0.6));
   } else if (preset === 2) {
     mat.color.setHex(0xffff44);
     base.startColor = new ConstantColor(new Vector4(1, 1, 0.3, 1));
     base.startSpeed = new ConstantValue(8);
-  } else if (preset === 3) {
-    // sparks - bright yellow/white
-    mat.color.setHex(0xffffaa);
-    base.startColor = new ConstantColor(new Vector4(1, 1, 0.8, 1));
-    base.startSpeed = new ConstantValue(5);
   } else if (preset === 4) {
     // rain - fast downward, blue-white, small droplets
     mat.color.setHex(0xaaddff);

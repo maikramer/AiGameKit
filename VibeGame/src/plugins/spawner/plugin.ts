@@ -1,13 +1,13 @@
-﻿import type { Plugin } from '../../core';
+import type { Plugin } from '../../core';
 import { PlacePending, SpawnerPending } from './components';
-import { placeParser } from './place-parser';
-import { placeRecipe, spawnGroupRecipe } from './recipes';
+import { entityParser } from './entity-parser';
+import { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';
 import { spawnGroupParser } from './parser';
 import { TerrainPlaceSystem } from './place-system';
 import { TerrainSpawnSystem } from './systems';
 
 export const SpawnerPlugin: Plugin = {
-  recipes: [spawnGroupRecipe, placeRecipe],
+  recipes: [spawnGroupRecipe, entitySpawnerRecipe],
   systems: [TerrainSpawnSystem, TerrainPlaceSystem],
   components: {
     spawnerPending: SpawnerPending,
@@ -16,7 +16,7 @@ export const SpawnerPlugin: Plugin = {
   config: {
     parsers: {
       'spawn-group': spawnGroupParser,
-      place: placeParser,
+      entity: entityParser,
     },
     defaults: {
       spawnerPending: {

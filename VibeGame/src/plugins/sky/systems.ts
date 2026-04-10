@@ -99,6 +99,7 @@ export const SkySystem: System = {
       pmrem.dispose();
 
       scene.environment = envMap;
+      scene.environmentIntensity = 0.22;
       if (Sky.setBackground[eid] === 1) {
         scene.background = envMap;
       }

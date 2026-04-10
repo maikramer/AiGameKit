@@ -205,6 +205,27 @@ describe('AudioSystem Integration', () => {
     expect(AudioEmitter.playing[entity]).toBe(0);
   });
 
+  it('should not call Howl loop() every frame for looped clips (Howler restarts playback)', () => {
+    howlInstances.length = 0;
+    registerAudioClip(1, '/assets/bgm.mp3');
+
+    state = new State();
+    state.registerPlugin(AudioPlugin);
+
+    const entity = state.createEntity();
+    state.addComponent(entity, AudioEmitter);
+    AudioEmitter.clipPath[entity] = 1;
+    AudioEmitter.volume[entity] = 0.5;
+    AudioEmitter.loop[entity] = 1;
+    AudioEmitter.playing[entity] = 1;
+
+    for (let i = 0; i < 25; i++) {
+      AudioSystem.update!(state);
+    }
+
+    expect(howlInstances[0].loop).toHaveBeenCalledTimes(0);
+  });
+
   it('should call stop and play on playAudioEmitter for existing non-loop Howl', () => {
     howlInstances.length = 0;
     registerAudioClip(1, '/assets/test.mp3');

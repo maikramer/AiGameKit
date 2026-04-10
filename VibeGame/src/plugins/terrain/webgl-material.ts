@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 
 interface TerrainMaterialContext {
   heightMap: THREE.Texture;
@@ -86,6 +86,7 @@ export class WebGLTerrainMaterialProvider {
       metalness: 0.0,
       side: THREE.DoubleSide,
       wireframe: context.wireframe,
+      envMapIntensity: 0.38,
     });
 
     material.onBeforeCompile = (shader) => {

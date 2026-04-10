@@ -56,7 +56,7 @@ export class State {
     this.registerComponent('parent', Parent);
     this.registerRecipe({
       name: 'entity',
-      components: [],
+      components: ['transform'],
     });
   }
 

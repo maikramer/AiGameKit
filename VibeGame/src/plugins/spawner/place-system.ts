@@ -1,9 +1,12 @@
+import * as THREE from 'three';
+import { eulerToQuaternion } from '../../core/math';
 import { defineQuery, type State, type System } from '../../core';
 import { PlacePending } from './components';
+import type { GroupSpawnDefaults } from './profiles';
 import { getPlacementSpecs } from './place-context';
 import { spawnTemplateAtTerrain } from './spawn-template';
 import { isNormalWithinSlopeLimit, sampleTerrainSurface } from './surface';
-import { TransformHierarchySystem } from '../transforms';
+import { composeSpawnRotation } from './transform-merge';
 import { Transform, WorldTransform } from '../transforms/components';
 
 const placeQuery = defineQuery([PlacePending]);
@@ -29,9 +32,38 @@ function anchorOffset(
 /** Deterministic rand: no scale jitter, no random yaw. */
 const deterministicRand = (): number => 0;
 
+function applyRootPlacement(
+  state: State,
+  eid: number,
+  spawn: GroupSpawnDefaults,
+  wx: number,
+  wy: number,
+  wz: number,
+  normal: THREE.Vector3
+): void {
+  const euler = composeSpawnRotation(normal, spawn.alignToTerrain, 0, [0, 0, 0]);
+  Transform.posX[eid] = wx;
+  Transform.posY[eid] = wy + spawn.baseYOffset;
+  Transform.posZ[eid] = wz;
+  Transform.eulerX[eid] = euler.x;
+  Transform.eulerY[eid] = euler.y;
+  Transform.eulerZ[eid] = euler.z;
+  const q = eulerToQuaternion(euler.x, euler.y, euler.z);
+  Transform.rotX[eid] = q.x;
+  Transform.rotY[eid] = q.y;
+  Transform.rotZ[eid] = q.z;
+  Transform.rotW[eid] = q.w;
+}
+
+/**
+ * Runs in the **first** simulation bucket so root `Transform` is updated from terrain **before**
+ * {@link TransformHierarchySystem} propagates to children. If this ran after hierarchy, child
+ * `WorldTransform` (e.g. particle emitters under `<entity place="…">`) would stay wrong until the
+ * next frame — emitters looked “stuck” near world origin / wrong height.
+ */
 export const TerrainPlaceSystem: System = {
   group: 'simulation',
-  after: [TransformHierarchySystem],
+  first: true,
   update(state) {
     if (state.headless) return;
 
@@ -74,16 +106,20 @@ export const TerrainPlaceSystem: System = {
 
       const wy = s.worldY;
 
-      for (const template of spec.templates) {
-        spawnTemplateAtTerrain(
-          state,
-          spec.spawn,
-          deterministicRand,
-          wx,
-          wy,
-          wz,
-          template
-        );
+      if (spec.templates.length === 0) {
+        applyRootPlacement(state, eid, spec.spawn, wx, wy, wz, s.normal);
+      } else {
+        for (const template of spec.templates) {
+          spawnTemplateAtTerrain(
+            state,
+            spec.spawn,
+            deterministicRand,
+            wx,
+            wy,
+            wz,
+            template
+          );
+        }
       }
 
       PlacePending.spawned[eid] = 1;

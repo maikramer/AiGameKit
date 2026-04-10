@@ -1,6 +1,10 @@
 import * as THREE from 'three';
 import type { State, XMLValue } from '../../core';
-import { createEntityFromRecipe } from '../../core/recipes/parser';
+import { ParseContext } from '../../core/recipes/parse-context';
+import {
+  createEntityFromRecipe,
+  processRecipeChildElements,
+} from '../../core/recipes/parser';
 import { sampleTerrainSurface } from './surface';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import {
@@ -109,5 +113,17 @@ export function spawnTemplateAtTerrain(
 
   const transformStr = formatTransformAttr(base);
   const attrs = mergeTemplateAttributes(template, transformStr);
+
+  if (template.tagName === 'entity') {
+    delete attrs.place;
+    const root = createEntityFromRecipe(state, 'entity', attrs);
+    const ch = template.entityChildren;
+    if (ch?.length) {
+      const context = new ParseContext(state);
+      processRecipeChildElements(state, root, 'entity', ch, context);
+    }
+    return;
+  }
+
   createEntityFromRecipe(state, template.tagName, attrs);
 }

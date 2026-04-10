@@ -207,7 +207,7 @@ export { MeuSystem } from './systems';
 | `gltf-xml`       | Carregamento de modelos GLB/GLTF                                                 | Alta         |
 | `animation`      | Sistema de animação                                                              | Média        |
 | `tweening`       | Interpolações suaves (tweens)                                                    | Baixa        |
-| `spawner`        | Spawn de entidades                                                               | Baixa        |
+| `spawner`        | `<spawn-group>`, `<entity place="…">` no terreno — [context.md](./spawner/context.md) | Média        |
 | `respawn`        | Respawn de entidades                                                             | Baixa        |
 | `lod`            | Level of Detail (near/far)                                                       | Baixa        |
 | `startup`        | Execução deferida pós-inicialização                                              | Baixa        |

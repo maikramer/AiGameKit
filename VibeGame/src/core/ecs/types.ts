@@ -31,6 +31,20 @@ export interface Recipe {
   readonly name: string;
   readonly components?: string[];
   readonly overrides?: Record<string, number>;
+  /** When true, as a child of another recipe tag, components merge onto the parent entity instead of creating a new entity. */
+  readonly merge?: boolean;
+  /** Attribute names consumed by the tag parser; not applied as component fields. */
+  readonly parserAttributes?: readonly string[];
+  /**
+   * When true, the tag parser fully interprets child elements (e.g. spawn-group templates, sequence steps).
+   * When false (default), children are still processed as nested recipe entities after the parser runs.
+   */
+  readonly parserOwnsChildren?: boolean;
+  /**
+   * When true, as a child of another recipe, run the tag parser only (no `processElement` subtree).
+   * Use for tags like `tween` / `shaker` whose parser does not attach to the parent's entity id.
+   */
+  readonly parserOnlyAsChild?: boolean;
 }
 
 export interface ComponentDefaults {

@@ -18,6 +18,48 @@ function toNumber(value: XMLValue): number {
   return 0;
 }
 
+function installRecipeComponents(
+  entity: number,
+  recipe: Recipe,
+  state: State,
+  onlyAddMissing: boolean
+): void {
+  if (!recipe.components) return;
+  for (const componentName of recipe.components) {
+    const component = state.getComponent(componentName);
+    if (!component) continue;
+    if (onlyAddMissing && state.hasComponent(entity, component)) continue;
+    state.addComponent(entity, component);
+    const componentDefaults = state.config.getDefaults(componentName);
+    for (const [fieldName, value] of Object.entries(componentDefaults)) {
+      if (fieldName in component) {
+        (component as ComponentWithFields)[fieldName][entity] = value;
+      }
+    }
+  }
+}
+
+function applyRecipeOverrides(
+  entity: number,
+  recipe: Recipe,
+  state: State
+): void {
+  if (!recipe.overrides) return;
+  for (const [path, value] of Object.entries(recipe.overrides)) {
+    const [componentName, fieldName] = path.split('.');
+    const component = state.getComponent(componentName);
+    if (component) {
+      if (!state.hasComponent(entity, component)) {
+        state.addComponent(entity, component);
+      }
+      const camelField = toCamelCase(fieldName);
+      if (camelField in component) {
+        (component as ComponentWithFields)[camelField][entity] = value;
+      }
+    }
+  }
+}
+
 function createEntityFromRecipeInternal(
   state: State,
   recipeName: string,
@@ -32,49 +74,38 @@ function createEntityFromRecipeInternal(
   }
 
   const entity = state.createEntity();
-
-  if (recipe.components) {
-    for (const componentName of recipe.components) {
-      const component = state.getComponent(componentName);
-      if (component) {
-        state.addComponent(entity, component);
-      }
-    }
-  }
-
-  if (recipe.components) {
-    for (const componentName of recipe.components) {
-      const component = state.getComponent(componentName);
-      if (component) {
-        const componentDefaults = state.config.getDefaults(componentName);
-        for (const [fieldName, value] of Object.entries(componentDefaults)) {
-          if (fieldName in component) {
-            (component as ComponentWithFields)[fieldName][entity] = value;
-          }
-        }
-      }
-    }
-  }
-
-  if (recipe.overrides) {
-    for (const [path, value] of Object.entries(recipe.overrides)) {
-      const [componentName, fieldName] = path.split('.');
-      const component = state.getComponent(componentName);
-      if (component) {
-        if (!state.hasComponent(entity, component)) {
-          state.addComponent(entity, component);
-        }
-        const camelField = toCamelCase(fieldName);
-        if (camelField in component) {
-          (component as ComponentWithFields)[camelField][entity] = value;
-        }
-      }
-    }
-  }
-
+  installRecipeComponents(entity, recipe, state, false);
+  applyRecipeOverrides(entity, recipe, state);
   applyAttributesFromRecipe(entity, recipe, attributes, state, context);
 
   return entity;
+}
+
+function applyMergedRecipeIntoParent(
+  parentEntity: number,
+  childElement: ParsedElement,
+  state: State,
+  context: ParseContext
+): void {
+  const recipe = state.getRecipe(childElement.tagName);
+  if (!recipe?.merge) {
+    throw new Error(
+      `[parser] Internal: merge expected for <${childElement.tagName}>`
+    );
+  }
+  installRecipeComponents(parentEntity, recipe, state, true);
+  applyRecipeOverrides(parentEntity, recipe, state);
+  applyAttributesFromRecipe(
+    parentEntity,
+    recipe,
+    childElement.attributes,
+    state,
+    context
+  );
+  const parser = state.getParser(childElement.tagName);
+  if (parser) {
+    parser({ entity: parentEntity, element: childElement, state, context });
+  }
 }
 
 export function createEntityFromRecipe(
@@ -216,10 +247,9 @@ function applyAttributesFromRecipe(
     }
   }
 
-  const hasParser = !!state.getParser(recipe.name);
-
   for (const [attrName, attrValue] of Object.entries(expandedAttributes)) {
     if (attrName === 'id') continue;
+    if (recipe.parserAttributes?.includes(attrName)) continue;
     if (attrName === 'name') {
       if (typeof attrValue === 'string') {
         context.setName(attrValue, entity);
@@ -263,7 +293,7 @@ function applyAttributesFromRecipe(
         state
       );
 
-      if (!handled && !hasParser) {
+      if (!handled) {
         const availableAttrs = getAvailableAttributes(recipe, state);
         const availableShorthands: string[] = [];
 
@@ -297,117 +327,188 @@ function applyAttributesFromRecipe(
   }
 }
 
+function processChildElementsForParent(
+  parentEntity: number,
+  parentTagName: string,
+  children: readonly ParsedElement[],
+  state: State,
+  context: ParseContext,
+  processElementRecursive: (el: ParsedElement) => EntityCreationResult | null
+): EntityCreationResult[] {
+  const childResults: EntityCreationResult[] = [];
+  for (const childElement of children) {
+    const childRecipe = state.getRecipe(childElement.tagName);
+    if (childRecipe?.merge) {
+      applyMergedRecipeIntoParent(parentEntity, childElement, state, context);
+      continue;
+    }
+    const childParser = state.getParser(childElement.tagName);
+    if (childParser && childRecipe?.parserOnlyAsChild) {
+      childParser({
+        entity: parentEntity,
+        element: childElement,
+        state,
+        context,
+      });
+      continue;
+    }
+    if (state.hasRecipe(childElement.tagName)) {
+      const childResult = processElementRecursive(childElement);
+      if (childResult) {
+        childResults.push(childResult);
+
+        const childEntity = childResult.entity;
+        const Parent = state.getComponent('parent');
+        const Transform = state.getComponent('transform');
+
+        if (Parent && Transform) {
+          if (!state.hasComponent(parentEntity, Transform)) {
+            console.warn(
+              `[${parentTagName}] Parent entity is missing Transform component. Adding automatically.\n` +
+                `  Consider adding transform="pos: 0 0 0" to the parent element.`
+            );
+            state.addComponent(parentEntity, Transform);
+            const defaults = state.config.getDefaults('transform');
+            for (const [fieldName, value] of Object.entries(defaults)) {
+              if (fieldName in Transform) {
+                (Transform as ComponentWithFields)[fieldName][parentEntity] =
+                  value;
+              }
+            }
+          }
+
+          if (!state.hasComponent(childEntity, Transform)) {
+            console.warn(
+              `[${childElement.tagName}] Child entity is missing Transform component. Adding automatically.\n` +
+                `  Consider adding transform="pos: 0 0 0" to the child element.`
+            );
+            state.addComponent(childEntity, Transform);
+            const defaults = state.config.getDefaults('transform');
+            for (const [fieldName, value] of Object.entries(defaults)) {
+              if (fieldName in Transform) {
+                (Transform as ComponentWithFields)[fieldName][childEntity] =
+                  value;
+              }
+            }
+          }
+
+          state.addComponent(childEntity, Parent);
+          (Parent as ComponentWithFields).entity[childEntity] = parentEntity;
+
+          const Body = state.getComponent('body');
+          if (Body) {
+            if (
+              state.hasComponent(parentEntity, Body) &&
+              state.hasComponent(childEntity, Body)
+            ) {
+              console.warn(
+                `[Physics Warning] "${childElement.tagName}" has a Body component and is nested inside "${parentTagName}" which also has a Body component.\n` +
+                  `This configuration is not supported - a physics body should not be a child of another physics body.\n` +
+                  `Consider one of these solutions:\n` +
+                  `  1. Remove the Body component from the child (keep only Collider if needed)\n` +
+                  `  2. Make "${childElement.tagName}" a sibling of "${parentTagName}" instead of a child\n` +
+                  `  3. Use physics constraints or joints to connect separate bodies`
+              );
+            }
+          }
+        }
+      }
+      continue;
+    }
+    if (childParser) {
+      childParser({
+        entity: parentEntity,
+        element: childElement,
+        state,
+        context,
+      });
+      continue;
+    }
+    const availableRecipes = Array.from(state.getRecipeNames());
+    const message = formatUnknownElement(
+      childElement.tagName,
+      availableRecipes
+    );
+    throw new Error(
+      message +
+        '\n  Note: Components must be specified as attributes, not child elements.' +
+        '\n  Example: <entity transform="pos: 0 5 0" renderer="shape: box"></entity>'
+    );
+  }
+  return childResults;
+}
+
+function createProcessElement(state: State, context: ParseContext) {
+  function processElement(element: ParsedElement): EntityCreationResult | null {
+    if (!state.hasRecipe(element.tagName)) {
+      return null;
+    }
+    const recipe = state.getRecipe(element.tagName);
+    if (!recipe) {
+      return null;
+    }
+
+    const entity = createEntityFromRecipeInternal(
+      state,
+      element.tagName,
+      element.attributes,
+      context
+    );
+
+    const parser = state.getParser(element.tagName);
+    if (parser) {
+      parser({ entity, element, state, context });
+    }
+    if (recipe.parserOwnsChildren) {
+      return { entity, tagName: element.tagName, children: [] };
+    }
+
+    const childResults = processChildElementsForParent(
+      entity,
+      element.tagName,
+      element.children,
+      state,
+      context,
+      processElement
+    );
+
+    return {
+      entity,
+      tagName: element.tagName,
+      children: childResults,
+    };
+  }
+  return processElement;
+}
+
+/**
+ * Process XML child recipes under an existing entity (e.g. spawn-group template `entity` subtree).
+ */
+export function processRecipeChildElements(
+  state: State,
+  parentEntity: number,
+  parentTagName: string,
+  children: readonly ParsedElement[],
+  context: ParseContext
+): EntityCreationResult[] {
+  const processElement = createProcessElement(state, context);
+  return processChildElementsForParent(
+    parentEntity,
+    parentTagName,
+    children,
+    state,
+    context,
+    processElement
+  );
+}
+
 export function parseXMLToEntities(
   state: State,
   xmlContent: ParsedElement
 ): EntityCreationResult[] {
   const results: EntityCreationResult[] = [];
   const context = new ParseContext(state);
-
-  function processElement(element: ParsedElement): EntityCreationResult | null {
-    if (state.hasRecipe(element.tagName)) {
-      const entity = createEntityFromRecipeInternal(
-        state,
-        element.tagName,
-        element.attributes,
-        context
-      );
-
-      const parser = state.getParser(element.tagName);
-      if (parser) {
-        parser({ entity, element, state, context });
-        return { entity, tagName: element.tagName, children: [] };
-      }
-
-      const childResults: EntityCreationResult[] = [];
-      for (const childElement of element.children) {
-        const childParser = state.getParser(childElement.tagName);
-        if (childParser) {
-          childParser({ entity, element: childElement, state, context });
-        } else if (state.hasRecipe(childElement.tagName)) {
-          const childResult = processElement(childElement);
-          if (childResult) {
-            childResults.push(childResult);
-
-            const childEntity = childResult.entity;
-            const Parent = state.getComponent('parent');
-            const Transform = state.getComponent('transform');
-
-            if (Parent && Transform) {
-              if (!state.hasComponent(entity, Transform)) {
-                console.warn(
-                  `[${element.tagName}] Parent entity is missing Transform component. Adding automatically.\n` +
-                    `  Consider adding transform="pos: 0 0 0" to the parent element.`
-                );
-                state.addComponent(entity, Transform);
-                const defaults = state.config.getDefaults('transform');
-                for (const [fieldName, value] of Object.entries(defaults)) {
-                  if (fieldName in Transform) {
-                    (Transform as ComponentWithFields)[fieldName][entity] =
-                      value;
-                  }
-                }
-              }
-
-              if (!state.hasComponent(childEntity, Transform)) {
-                console.warn(
-                  `[${childElement.tagName}] Child entity is missing Transform component. Adding automatically.\n` +
-                    `  Consider adding transform="pos: 0 0 0" to the child element.`
-                );
-                state.addComponent(childEntity, Transform);
-                const defaults = state.config.getDefaults('transform');
-                for (const [fieldName, value] of Object.entries(defaults)) {
-                  if (fieldName in Transform) {
-                    (Transform as ComponentWithFields)[fieldName][childEntity] =
-                      value;
-                  }
-                }
-              }
-
-              state.addComponent(childEntity, Parent);
-              (Parent as ComponentWithFields).entity[childEntity] = entity;
-
-              const Body = state.getComponent('body');
-              if (Body) {
-                if (
-                  state.hasComponent(entity, Body) &&
-                  state.hasComponent(childEntity, Body)
-                ) {
-                  console.warn(
-                    `[Physics Warning] "${childElement.tagName}" has a Body component and is nested inside "${element.tagName}" which also has a Body component.\n` +
-                      `This configuration is not supported - a physics body should not be a child of another physics body.\n` +
-                      `Consider one of these solutions:\n` +
-                      `  1. Remove the Body component from the child (keep only Collider if needed)\n` +
-                      `  2. Make "${childElement.tagName}" a sibling of "${element.tagName}" instead of a child\n` +
-                      `  3. Use physics constraints or joints to connect separate bodies`
-                  );
-                }
-              }
-            }
-          }
-        } else {
-          const availableRecipes = Array.from(state.getRecipeNames());
-          const message = formatUnknownElement(
-            childElement.tagName,
-            availableRecipes
-          );
-          throw new Error(
-            message +
-              '\n  Note: Components must be specified as attributes, not child elements.' +
-              '\n  Example: <entity transform="pos: 0 5 0" renderer="shape: box"></entity>'
-          );
-        }
-      }
-
-      return {
-        entity,
-        tagName: element.tagName,
-        children: childResults,
-      };
-    }
-
-    return null;
-  }
+  const processElement = createProcessElement(state, context);
 
   if (xmlContent.children.length > 0) {
     for (const child of xmlContent.children) {

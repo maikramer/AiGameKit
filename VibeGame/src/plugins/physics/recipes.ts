@@ -22,6 +22,8 @@ export const dynamicPartRecipe: Recipe = {
   overrides: {
     'body.type': BodyType.Dynamic,
   },
+  /** Metadado de templates (spawn-group); não mapeia para componentes. */
+  parserAttributes: ['role', 'profile'],
 };
 
 export const kinematicPartRecipe: Recipe = {

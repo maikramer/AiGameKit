@@ -1,40 +1,59 @@
-﻿# Spawner (terreno)
+# Spawner (terreno)
 
 Spawn procedural declarativo com `<spawn-group>` no `index.html`, alinhado à altura do terreno e opcionalmente à **inclinação** (normal por diferenças finitas no heightmap).
 
-## `<place>` — posicionamento determinístico (recomendado)
+## `<entity place="…">` — posicionamento determinístico (recomendado)
 
-Para colocar props, NPCs, partículas ou qualquer recipe num **ponto fixo** sem adivinhar `Y` manualmente, use **`<place at="x z">`**. O motor amostra a superfície do terreno nesse XZ, aplica `base-y-offset` / `y-offset`, alinhamento à normal (`align-to-terrain`) e, para GLBs com URL, `ground-align="aabb"` (base do modelo no chão).
+Para colocar props, NPCs, partículas ou qualquer recipe num **ponto fixo** sem adivinhar `Y` manualmente, use **`<entity place="at: x z; …">`**. O atributo `place` é uma string com pares `chave: valor` separados por `;` (estilo semelhante ao `transform`). O motor amostra a superfície do terreno nesse XZ, posiciona a **entidade raiz**, aplica `base-y-offset` / `y-offset`, alinhamento à normal (`align-to-terrain`) e, para GLBs com URL nos filhos, `ground-align="aabb"` (base do modelo no chão). Os **filhos** (`gltf-load`, `particle-emitter`, `<npc>` com `merge`, etc.) ficam na hierarquia ECS sob essa raiz.
 
-- **Evite** `pos="x y z"` em recipes com terreno procedural: o `Y` fixo tende a enterrar ou flutuar o objeto.
-- **Prefira** `<place>` (ou `<spawn-group>` só para **várias instâncias aleatórias** numa região).
+- **Evite** `pos="x y z"` em objetos que devem assentar no terreno procedural: o `Y` fixo tende a enterrar ou flutuar.
+- **Prefira** `<entity place="…">` para um único ponto; use `<spawn-group>` para **várias instâncias aleatórias** numa região.
 
-Atributos principais:
+Chaves típicas dentro de `place` (ver também `place-fields.ts` e `profiles.ts`, perfil interno `place`):
 
-| Atributo | Significado |
-|----------|-------------|
-| `at` (obrigatório) | `"x z"` — posição horizontal (mundo, somada à âncora do elemento `<place>` se usar `transform` no pai) |
+| Chave | Significado |
+|--------|-------------|
+| `at` (obrigatório) | Dois números `x z` — posição horizontal em mundo (e âncora do grupo; soma-se ao `transform` do pai se existir) |
 | `y-offset` | Atalho para `base-y-offset` (offset vertical após o solo) |
-| `ground-align` | `aabb` \| `none` — elevar GLB pelo AABB local (só útil com `url` no filho) |
-| `align-to-terrain` | `1` \| `0` — rodar para alinhar à normal do terreno |
+| `ground-align` | `aabb` \| `none` — elevar GLB pelo AABB local (relevante com `url` num filho) |
+| `align-to-terrain` | `1` \| `0` — rodar a raiz para alinhar à normal do terreno |
 | `max-slope-deg` | Inclinação máxima aceite; acima, aviso e instâncias omitidas |
 
-O perfil interno `place` em `profiles.ts` define defaults: `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`.
+O perfil interno `place` em `profiles.ts` define defaults para esse modo: `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`.
 
-Ficheiros: `place-parser.ts`, `place-system.ts` (`TerrainPlaceSystem`), `place-context.ts`, `place-types.ts`, `spawn-template.ts` (lógica partilhada com o spawn aleatório).
+Ficheiros: `entity-parser.ts`, `place-fields.ts`, `place-system.ts` (`TerrainPlaceSystem`), `place-context.ts`, `place-types.ts`, `spawn-template.ts` (lógica partilhada com o spawn aleatório).
+
+**Ordem de sistemas:** `TerrainPlaceSystem` corre no **primeiro** bucket de `simulation` (`first: true`), **antes** de `TransformHierarchySystem`. Assim o `Transform` da raiz já reflete o solo quando os filhos recebem `WorldTransform`. Se o placement viesse **depois** da hierarquia, filhos (ex. `particle-emitter`) ficariam com mundo errado até ao frame seguinte — em XZ perto de `(0,0)` e altura inconsistente.
+
+### Exemplo mínimo
+
+```xml
+<entity place="at: -4 6; base-y-offset: 0.02">
+  <gltf-load role="visual" url="/assets/models/prop.glb" transform="scale: 1 1 1"></gltf-load>
+  <particle-emitter preset="sparks" rate="4" transform="pos: 0 0.5 0"></particle-emitter>
+</entity>
+```
+
+NPC com merge no pai:
+
+```xml
+<entity place="at: 12 8; align-to-terrain: 0; ground-align: none; y-offset: 0.44">
+  <npc behavior="wander" max-speed="1.1" max-force="3.5"></npc>
+</entity>
+```
 
 ## Layout
 
 - `plugin.ts` — `SpawnerPlugin` (recipe, parser, system, defaults)
 - `parser.ts` — lê atributos e filhos como templates de recipe (`spawn-group`)
-- `place-parser.ts` — idem para `<place>`
+- `entity-parser.ts` — lê `place` em `<entity>` e regista `PlacementSpec`
 - `systems.ts` — `TerrainSpawnSystem` (após `TransformHierarchySystem`)
-- `place-system.ts` — `TerrainPlaceSystem` (idem)
-- `spawn-template.ts` — `spawnTemplateAtTerrain` (spawn único no solo)
+- `place-system.ts` — `TerrainPlaceSystem` (posiciona raiz e/ou instancia templates legados de spec)
+- `spawn-template.ts` — `spawnTemplateAtTerrain` (spawn único no solo; suporta template `<entity>` com filhos)
 - `surface.ts` — `sampleTerrainSurface`, `isNormalWithinSlopeLimit`, `normalFromHeightSampler`
 - `transform-merge.ts` — parse/merge de `transform` e `composeSpawnRotation` (quaternions)
 - `context.ts` — `WeakMap` State → spec por entidade (`spawn-group`)
-- `place-context.ts` — idem para `<place>`
+- `place-context.ts` — idem para colocação determinística (`entity` com `place`)
 - `profiles.ts` — perfis `profile` no grupo/filhos e merge de defaults
 
 ## Perfis (`profile`)
@@ -50,7 +69,7 @@ Atributo **`profile`** no `<spawn-group>` (e opcionalmente no **filho**) preench
 | `foliage` | Vegetação mais baixa | Como `tree`, com `scale-min=0.9` / `scale-max=1.3` |
 | `physics-box` | `dynamic-part` no chão | sem alinhamento ao declive, `base-y-offset≈0.425`, yaw aleatório, escala 1 |
 | `gltf-crate` | `gltf-dynamic` | sem alinhamento ao declive, `base-y-offset=0.35`, yaw aleatório, leve jitter de escala |
-| `place` | Usado internamente por `<place>` | `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90` |
+| `place` | Usado internamente por `place="…"` em `<entity>` | `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90` |
 
 ### Filho `profile="..."` (template)
 

@@ -14,13 +14,14 @@ describe('AiSteeringPlugin Registration', () => {
     state.registerPlugin(AiSteeringPlugin);
   });
 
-  it('should have a recipe named "npc" with components ["transform", "steeringAgent", "steeringTarget"]', () => {
+  it('should have a recipe named "npc" with transform, steering, and renderer placeholder', () => {
     expect(AiSteeringPlugin.recipes!).toHaveLength(1);
     expect(AiSteeringPlugin.recipes![0].name).toBe('npc');
     expect(AiSteeringPlugin.recipes![0].components).toEqual([
       'transform',
       'steeringAgent',
       'steeringTarget',
+      'renderer',
     ]);
   });
 

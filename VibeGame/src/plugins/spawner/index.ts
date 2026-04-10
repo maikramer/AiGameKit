@@ -1,8 +1,8 @@
-﻿export { PlacePending, SpawnerPending } from './components';
+export { PlacePending, SpawnerPending } from './components';
 export { SpawnerPlugin } from './plugin';
-export { placeRecipe, spawnGroupRecipe } from './recipes';
+export { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';
 export { spawnGroupParser } from './parser';
-export { placeParser } from './place-parser';
+export { entityParser } from './entity-parser';
 export { TerrainPlaceSystem } from './place-system';
 export { TerrainSpawnSystem } from './systems';
 export { spawnTemplateAtTerrain } from './spawn-template';

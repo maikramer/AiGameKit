@@ -2,12 +2,31 @@ import { entityExists, hasComponent } from 'bitecs';
 import type { Object3D } from 'three';
 import { BatchedParticleRenderer } from 'three.quarks';
 import type { ParticleSystem } from 'three.quarks';
-import { defineQuery, type System } from '../../core';
+import { Parent, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
-import { Transform, WorldTransform } from '../transforms';
+import { Transform, TransformHierarchySystem, WorldTransform } from '../transforms';
 import { ParticlesBurst, ParticlesEmitter } from './components';
 import { getParticlesContext } from './context';
 import { createParticleSystemForPreset } from './presets';
+
+/**
+ * World position for the emitter Object3D (`scene.add(emitter)` — must be world space).
+ * Child entities: use {@link WorldTransform}. Roots: {@link Transform}.
+ * Runs after `TransformHierarchySystem`. Terrain placement for `<entity place="…">` runs **first**
+ * in the simulation group so parent `Transform` is updated before hierarchy propagates to children.
+ */
+function getEmitterWorldPosition(state: State, eid: number): [number, number, number] {
+  if (hasComponent(state.world, Parent, eid)) {
+    if (hasComponent(state.world, WorldTransform, eid)) {
+      return [
+        WorldTransform.posX[eid],
+        WorldTransform.posY[eid],
+        WorldTransform.posZ[eid],
+      ];
+    }
+  }
+  return [Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]];
+}
 
 const emitterQuery = defineQuery([ParticlesEmitter, Transform]);
 const burstQuery = defineQuery([ParticlesBurst, Transform]);
@@ -52,6 +71,8 @@ export const ParticleBootstrapSystem: System = {
 
 export const ParticleEmitSystem: System = {
   group: 'simulation',
+  last: true,
+  after: [TransformHierarchySystem],
   update: (state) => {
     if (state.headless) return;
     const ctx = getParticlesContext(state);
@@ -86,15 +107,7 @@ export const ParticleEmitSystem: System = {
     for (const eid of emitterQuery(state.world)) {
       const root = ctx.roots.get(eid);
       if (!root) continue;
-      const wx = hasComponent(state.world, WorldTransform, eid)
-        ? WorldTransform.posX[eid]
-        : Transform.posX[eid];
-      const wy = hasComponent(state.world, WorldTransform, eid)
-        ? WorldTransform.posY[eid]
-        : Transform.posY[eid];
-      const wz = hasComponent(state.world, WorldTransform, eid)
-        ? WorldTransform.posZ[eid]
-        : Transform.posZ[eid];
+      const [wx, wy, wz] = getEmitterWorldPosition(state, eid);
       root.position.set(wx, wy, wz);
     }
   },
@@ -102,6 +115,7 @@ export const ParticleEmitSystem: System = {
 
 export const ParticleBurstSystem: System = {
   group: 'simulation',
+  last: true,
   after: [ParticleEmitSystem],
   update: (state) => {
     if (state.headless) return;
@@ -134,15 +148,7 @@ export const ParticleBurstSystem: System = {
       if (scene) scene.add(root);
       ctx.roots.set(eid, root);
       entityToPS.set(eid, ps);
-      const wx = hasComponent(state.world, WorldTransform, eid)
-        ? WorldTransform.posX[eid]
-        : Transform.posX[eid];
-      const wy = hasComponent(state.world, WorldTransform, eid)
-        ? WorldTransform.posY[eid]
-        : Transform.posY[eid];
-      const wz = hasComponent(state.world, WorldTransform, eid)
-        ? WorldTransform.posZ[eid]
-        : Transform.posZ[eid];
+      const [wx, wy, wz] = getEmitterWorldPosition(state, eid);
       root.position.set(wx, wy, wz);
       ParticlesBurst.triggered[eid] = 0;
     }

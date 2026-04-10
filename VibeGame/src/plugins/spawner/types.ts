@@ -1,4 +1,4 @@
-﻿import type { XMLValue } from '../../core';
+import type { ParsedElement, XMLValue } from '../../core';
 import type {
   ChildTemplateProfileId,
   GroundAlignMode,
@@ -19,6 +19,8 @@ export interface SpawnTemplateSpec {
   role: SpawnTemplateRole;
   /** Perfil de template no filho (`profile` no XML), se houver. */
   childProfile?: ChildTemplateProfileId;
+  /** When `tagName` is `entity`, XML children to attach under the spawned root. */
+  entityChildren?: ParsedElement[];
 }
 
 export interface SpawnGroupSpec {

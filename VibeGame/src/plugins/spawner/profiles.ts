@@ -1,4 +1,4 @@
-﻿import type { XMLValue } from '../../core';
+import type { XMLValue } from '../../core';
 
 /** Perfis de `<spawn-group profile="...">`. `none` = legado (mesmos fallbacks do parser antes dos perfis). */
 export type SpawnGroupProfileId =
@@ -7,7 +7,7 @@ export type SpawnGroupProfileId =
   | 'foliage'
   | 'physics-box'
   | 'gltf-crate'
-  /** Defaults for `<place>` (deterministic terrain placement). */
+  /** Defaults for `place="…"` on `<entity>` (deterministic terrain placement). */
   | 'place';
 
 /** Defaults de spawn resolvidos antes do `TerrainSpawnSystem`. */
