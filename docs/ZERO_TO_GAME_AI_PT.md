@@ -14,7 +14,7 @@ Documento de apoio ao fluxo **conteúdo gerado + orquestração + agentes de có
 2. Definir `game.yaml` + `manifest.csv` + presets; opcionalmente `gameassets prompts` antes do batch.
 3. Correr `gameassets batch` com as flags necessárias (`--with-3d`, `--with-rig`, **`--with-animate`** para pipeline completo com Animator3D, áudio, etc.).
 4. Opcional: validar GLBs com GameDevLab.
-5. Copiar outputs para `public/assets/…` (ou `gameassets handoff --public-dir …`) e usar `loadGltfToScene`, `<gltf-load url="…">`, ou o exemplo [monorepo-game](../VibeGame/examples/monorepo-game/).
+5. Copiar outputs para `public/assets/…` (ou `gameassets handoff --public-dir …`) e usar `loadGltfToScene`, `<gltf-load url="…">`, ou os exemplos [simple-rpg](../VibeGame/examples/simple-rpg/) (completo) / [hello-world](../VibeGame/examples/hello-world/) (mínimo).
 6. Iterar **código e XML** com o assistente, usando `llms.txt` para VibeGame e AGENTS.md para o resto do repositório.
 
 ## Pipeline completo de animação

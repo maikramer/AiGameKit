@@ -53,7 +53,7 @@ For the runtime to load content **without** a custom CMS:
 1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `vibegame`, etc.
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
 3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv --with-3d`, adding **`--with-rig`** for Rigging3D when `generate_rig=true`, **`--with-animate`** for **Animator3D `game-pack`** after rig (requires `animator3d` on `PATH` or `ANIMATOR3D_BIN`; optional `animator3d` preset in `game.yaml`), **`--with-parts`** and audio columns as needed.
-4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/monorepo-game](../VibeGame/examples/monorepo-game/)).
+4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) for a full handoff layout).
 5. **Run** the web app: `bun dev` / `npm run dev`; load GLBs as above. **Skymap2D** equirect PNG/JPG: `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
 
 **Animator3D** can run **inside** `gameassets batch` (`--with-animate`) or **standalone** on a rigged GLB — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
@@ -69,8 +69,8 @@ For the runtime to load content **without** a custom CMS:
 ## 6. See also
 
 - [ZERO_TO_GAME_AI.md](ZERO_TO_GAME_AI.md) — AI workflow, animation pipeline, `dream`
-- [VibeGame/examples/monorepo-game/README.md](../VibeGame/examples/monorepo-game/README.md) — runnable bridge example
-- [VibeGame/examples/simple-rpg/README.md](../VibeGame/examples/simple-rpg/README.md) — walkable scene + handoff
+- [VibeGame/examples/hello-world/README.md](../VibeGame/examples/hello-world/README.md) — minimal Vite + terrain + `<entity place="…">`
+- [VibeGame/examples/simple-rpg/README.md](../VibeGame/examples/simple-rpg/README.md) — walkable scene + full GameAssets handoff
 - [GameAssets cursor skill / batch behavior](../GameAssets/src/gameassets/cursor_skill/SKILL.md)
 - [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md) — Animator3D after rigging
 - Root [README.md](../README.md) — project map
