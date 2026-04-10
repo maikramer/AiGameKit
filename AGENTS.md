@@ -313,6 +313,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Spawner e conteúdo declarativo no VibeGame: manter o mesmo estilo de recipes/parsers/XML em `index.html` já usado no projeto.
 - Spawner: diferenciar objetos estáticos (árvores, props) de dinâmicos (caixas empurráveis, inimigos em movimento, etc.) e usar perfis que definam defaults automáticos por tipo de objeto.
 - Ajustes de spawn e terreno: priorizar soluções que não degradem muito a performance do mapa.
+- Lógica por objeto no VibeGame: scripts ao nível da **entidade** (estilo MonoBehaviour no modelo), não hooks exclusivos ao `<place>`/spawner; expor via atributo `script` no recipe que cria a entidade (ex. `gltf-load`), em linha com o plano do plugin `entity-script`.
 
 ## Learned Workspace Facts
 
@@ -321,8 +322,8 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - O comando `vibegame run` foi concebido para rebuild/atualização da engine face a exemplos que usam `file:vibegame`; em Windows podem ocorrer falhas de cópia/cache (`ENOENT` no pacote `vibegame`) e é preciso alvo/cwd coerente com a raiz da engine ou exemplo com `dev` ligado à engine.
 - O modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir.
 - O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas).
-- Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir.
-- Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
+- Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` (centro = horizonte; topo = zénite; fundo = nadir). Texturas em **retrato** ou com eixos trocados podem mapear o azimute ao eixo vertical e causar artefactos «pilares»; normalizar para panorama 2:1 em paisagem antes do PMREM quando necessário.
+- O conteúdo sob `<world>` no VibeGame é injetado como HTML (`innerHTML`); a tag nativa **`<script>`** não serve para marcar módulos TS do motor — usar atributo `script` nos recipes ou um nome de elemento que não colida com HTML.
 - No recipe `<terrain>`, muitos campos do componente `Terrain` são configuráveis por atributos XML em kebab-case (defaults do plugin); `collision-resolution` (32/64/128) é aplicado ao `TerrainLOD`/`three-terrain-lod` sem ser sobrescrito pela `resolution` da malha do chunk.
 - Corpos dinâmicos GLTF no VibeGame podem ter colisor desalinhado do mesh visível se o centro do AABB não coincidir com a origem da entidade; é necessário definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local.
 - No plugin de partículas (`three.quarks`), o simulador usa o emissor interno `ParticleSystem.emitter`; adicionar à cena um wrapper `ParticleEmitter` novo em vez desse nó faz o batch descartar o sistema no update e as partículas deixam de aparecer — integrar com `ps.emitter` diretamente.
