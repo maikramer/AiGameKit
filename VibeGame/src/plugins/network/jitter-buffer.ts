@@ -44,9 +44,10 @@ export class JitterBuffer {
       }
     }
 
-    const t = newer.timestamp === older.timestamp
-      ? 1
-      : (targetTime - older.timestamp) / (newer.timestamp - older.timestamp);
+    const t =
+      newer.timestamp === older.timestamp
+        ? 1
+        : (targetTime - older.timestamp) / (newer.timestamp - older.timestamp);
 
     const alpha = Math.max(0, Math.min(1, t));
 
@@ -69,7 +70,11 @@ export class JitterBuffer {
   }
 }
 
-function lerpSnapshot(a: TransformSnapshot, b: TransformSnapshot, t: number): TransformSnapshot {
+function lerpSnapshot(
+  a: TransformSnapshot,
+  b: TransformSnapshot,
+  t: number
+): TransformSnapshot {
   const rot = slerpQuaternion(a, b, t);
   return {
     timestamp: a.timestamp + (b.timestamp - a.timestamp) * t,
@@ -89,9 +94,10 @@ function lerpSnapshot(a: TransformSnapshot, b: TransformSnapshot, t: number): Tr
 function slerpQuaternion(
   a: { rotX: number; rotY: number; rotZ: number; rotW: number },
   b: { rotX: number; rotY: number; rotZ: number; rotW: number },
-  t: number,
+  t: number
 ): { rotX: number; rotY: number; rotZ: number; rotW: number } {
-  let dot = a.rotX * b.rotX + a.rotY * b.rotY + a.rotZ * b.rotZ + a.rotW * b.rotW;
+  let dot =
+    a.rotX * b.rotX + a.rotY * b.rotY + a.rotZ * b.rotZ + a.rotW * b.rotW;
 
   let bx = b.rotX;
   let by = b.rotY;
@@ -120,7 +126,7 @@ function slerpQuaternion(
   const sinTheta = Math.sin(theta);
   const sinTheta0 = Math.sin(theta0);
 
-  const wa = Math.cos(theta) - dot * sinTheta / sinTheta0;
+  const wa = Math.cos(theta) - (dot * sinTheta) / sinTheta0;
   const wb = sinTheta / sinTheta0;
 
   return {

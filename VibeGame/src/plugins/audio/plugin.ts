@@ -1,9 +1,20 @@
-import type { Plugin } from '../../core';
+import type { Plugin, State } from '../../core';
 import { AudioEmitter, AudioListener } from './components';
-import { AudioListenerSetupSystem, AudioSystem } from './systems';
+import { audioClipRecipe } from './recipes';
+import {
+  AudioListenerSetupSystem,
+  AudioSystem,
+  registerAudioClip,
+} from './systems';
+
+function audioUrlAdapter(entity: number, value: string, _state: State): void {
+  registerAudioClip(entity, value.trim());
+  AudioEmitter.clipPath[entity] = entity;
+}
 
 export const AudioPlugin: Plugin = {
   systems: [AudioListenerSetupSystem, AudioSystem],
+  recipes: [audioClipRecipe],
   components: {
     AudioEmitter,
     AudioListener,
@@ -19,6 +30,11 @@ export const AudioPlugin: Plugin = {
         maxDistance: 100,
         rolloff: 1,
         playing: 0,
+      },
+    },
+    adapters: {
+      audioEmitter: {
+        url: audioUrlAdapter,
       },
     },
   },

@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { SteeringAgent, SteeringTarget } from '../../../src/plugins/ai-steering/components';
+import {
+  SteeringAgent,
+  SteeringTarget,
+} from '../../../src/plugins/ai-steering/components';
 
 const STEERING_AGENT_FIELDS = [
   'behavior',

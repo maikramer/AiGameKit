@@ -2,7 +2,16 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { HudPanel } from '../../../src/plugins/hud/components';
 
-const HUD_PANEL_FIELDS = ['width', 'height', 'bgR', 'bgG', 'bgB', 'opacity', 'textIndex', 'built'] as const;
+const HUD_PANEL_FIELDS = [
+  'width',
+  'height',
+  'bgR',
+  'bgG',
+  'bgB',
+  'opacity',
+  'textIndex',
+  'built',
+] as const;
 
 describe('HudPanel Component', () => {
   let state: State;

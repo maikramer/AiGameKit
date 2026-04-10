@@ -68,6 +68,8 @@ Carrega texturas equirectangulares (2:1 PNG/JPG/HDR) como background e/ou ilumin
 **Componentes:** `Sky` (urlIndex, rotationDeg, setBackground, loaded)
 **Systems:** `SkySystem` (carrega textura, aplica PMREM, seta environment/background)
 
+Para céu só por código (URL dinâmico), use `applyEquirectSkyEnvironment` (`src/extras/sky-env.ts`).
+
 ## Visual
 
 | Plugin | Pasta | Descrição |
@@ -88,8 +90,23 @@ Veja [`docs/EFFECT-REGISTRY.md`](EFFECT-REGISTRY.md) para detalhes do sistema de
 | `spawner` | `spawner/` | Spawn de entidades |
 | `respawn` | `respawn/` | Respawn de entidades |
 | `lod` | `lod/` | Level of Detail (near/far) |
-| `audio` | `audio/` | Áudio espacial |
+| `audio` | `audio/` | Áudio espacial (Howler) + `audio-clip` — ver [`AUDIO.md`](AUDIO.md) |
 | `debug` | `debug/` | Debug overlays (wireframes, etc.) |
+
+### audio
+
+Áudio via **Howler**: `AudioEmitter` + `AudioListener` na câmara; recipe **`<audio-clip>`** com `url`, opcionalmente `loop`, `playing`, `spatial`, `name`, etc.
+
+```html
+<world canvas="#canvas" resume-audio-on-user-gesture="true">
+  <audio-clip url="/assets/audio/bgm.wav" name="bgm" loop="true" playing="true"></audio-clip>
+  <audio-clip url="/assets/audio/jump.wav" name="sfx-jump"></audio-clip>
+</world>
+```
+
+**Exports úteis:** `playAudioEmitter`, `resumeAudioContextIfSuspended`, `resumeAudioContextOnFirstUserGesture`, `AudioSystem`.
+
+Documentação completa: [`docs/AUDIO.md`](AUDIO.md).
 
 ## Engine features (gameplay)
 

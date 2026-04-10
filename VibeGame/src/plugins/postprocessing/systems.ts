@@ -35,6 +35,16 @@ export const PostprocessingSystem: System = {
       let composer = postContext.composers.get(entity);
       if (!composer) {
         composer = new EffectComposer(renderContext.renderer);
+        const composerAny = composer as unknown as {
+          createDepthTexture: () => THREE.DepthTexture;
+        };
+        const origCreate = composerAny.createDepthTexture.bind(composerAny);
+        composerAny.createDepthTexture = () => {
+          const dt = origCreate();
+          dt.minFilter = THREE.NearestFilter;
+          dt.magFilter = THREE.NearestFilter;
+          return dt;
+        };
         composer.addPass(new RenderPass(scene, camera));
         postContext.composers.set(entity, composer);
         postContext.effects.set(entity, new Map());
@@ -122,13 +132,20 @@ function rebuildEffectPass(
   const firstEffects: Effect[] = [];
   const middleEffects: Effect[] = [];
   const lastEffects: Effect[] = [];
+  const convolutionEffects: Effect[] = [];
 
   for (const def of definitions) {
     const effect = effectsMap.get(def.key);
     if (!effect) continue;
-    if (def.position === 'first') firstEffects.push(effect);
-    else if (def.position === 'last') lastEffects.push(effect);
-    else middleEffects.push(effect);
+    if (def.convolution) {
+      convolutionEffects.push(effect);
+    } else if (def.position === 'first') {
+      firstEffects.push(effect);
+    } else if (def.position === 'last') {
+      lastEffects.push(effect);
+    } else {
+      middleEffects.push(effect);
+    }
   }
 
   const effects = [
@@ -137,8 +154,14 @@ function rebuildEffectPass(
     ...externalEffects,
     ...lastEffects,
   ];
-  const effectPass = new EffectPass(camera, ...effects);
-  composer.addPass(effectPass);
+
+  if (effects.length > 0) {
+    composer.addPass(new EffectPass(camera, ...effects));
+  }
+
+  for (const effect of convolutionEffects) {
+    composer.addPass(new EffectPass(camera, effect));
+  }
 }
 
 export const PostprocessingRenderSystem: System = {

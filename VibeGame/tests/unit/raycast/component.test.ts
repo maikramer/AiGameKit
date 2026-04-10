@@ -1,8 +1,18 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { RaycastSource, RaycastResult } from '../../../src/plugins/raycast/components';
+import {
+  RaycastSource,
+  RaycastResult,
+} from '../../../src/plugins/raycast/components';
 
-const SOURCE_FIELDS = ['dirX', 'dirY', 'dirZ', 'maxDist', 'layerMask', 'mode'] as const;
+const SOURCE_FIELDS = [
+  'dirX',
+  'dirY',
+  'dirZ',
+  'maxDist',
+  'layerMask',
+  'mode',
+] as const;
 
 const RESULT_FIELDS = [
   'hitValid',

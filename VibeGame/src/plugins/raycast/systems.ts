@@ -89,7 +89,9 @@ function castBvhRay(
     const entity = resolveEntityFromObject(state, hit.object);
     if (entity !== null) {
       if (hit.face) {
-        _normal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+        _normal
+          .copy(hit.face.normal)
+          .transformDirection(hit.object.matrixWorld);
       } else {
         _normal.set(0, 1, 0);
       }

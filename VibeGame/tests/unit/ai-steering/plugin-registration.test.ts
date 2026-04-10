@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { AiSteeringPlugin } from '../../../src/plugins/ai-steering/plugin';
-import { SteeringAgent, SteeringTarget } from '../../../src/plugins/ai-steering/components';
+import {
+  SteeringAgent,
+  SteeringTarget,
+} from '../../../src/plugins/ai-steering/components';
 
 describe('AiSteeringPlugin Registration', () => {
   let state: State;
@@ -14,7 +17,11 @@ describe('AiSteeringPlugin Registration', () => {
   it('should have a recipe named "npc" with components ["transform", "steeringAgent", "steeringTarget"]', () => {
     expect(AiSteeringPlugin.recipes!).toHaveLength(1);
     expect(AiSteeringPlugin.recipes![0].name).toBe('npc');
-    expect(AiSteeringPlugin.recipes![0].components).toEqual(['transform', 'steeringAgent', 'steeringTarget']);
+    expect(AiSteeringPlugin.recipes![0].components).toEqual([
+      'transform',
+      'steeringAgent',
+      'steeringTarget',
+    ]);
   });
 
   it('should register the steeringAgent component', () => {

@@ -5,6 +5,7 @@ import { parseXMLToEntities } from './core/recipes/parser';
 import { RenderContext, setCanvasElement } from './plugins/rendering';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
+import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
 
 export class GameRuntime {
   private state: State;
@@ -129,6 +130,11 @@ export class GameRuntime {
     }
 
     this.processWorldContent(element);
+
+    const resumeAudio = element.getAttribute('resume-audio-on-user-gesture');
+    if (resumeAudio === 'true' || resumeAudio === '') {
+      resumeAudioContextOnFirstUserGesture();
+    }
   }
 
   private processWorldContent(worldElement: HTMLElement): void {

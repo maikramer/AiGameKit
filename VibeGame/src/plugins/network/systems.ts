@@ -31,7 +31,10 @@ interface TransformMessage {
   timestamp?: number;
 }
 
-function toSnapshot(msg: TransformMessage, fallbackTime: number): TransformSnapshot {
+function toSnapshot(
+  msg: TransformMessage,
+  fallbackTime: number
+): TransformSnapshot {
   return {
     timestamp: msg.timestamp ?? fallbackTime,
     posX: msg.x,
@@ -68,40 +71,47 @@ export const NetworkConnectSystem: System = {
     const client = new Client(ctx.url);
     client
       .joinOrCreate(ctx.roomName)
-      .then((room: { onMessage: (type: string, cb: (msg: TransformMessage) => void) => void }) => {
-        ctx.room = room;
-        setStatus(state.world, 2);
-        room.onMessage('transform', (msg: TransformMessage) => {
-          for (const eid of netQuery(state.world)) {
-            if (msg.eid !== eid || Networked.isOwner[eid]) continue;
+      .then(
+        (room: {
+          onMessage: (
+            type: string,
+            cb: (msg: TransformMessage) => void
+          ) => void;
+        }) => {
+          ctx.room = room;
+          setStatus(state.world, 2);
+          room.onMessage('transform', (msg: TransformMessage) => {
+            for (const eid of netQuery(state.world)) {
+              if (msg.eid !== eid || Networked.isOwner[eid]) continue;
 
-            const snapshot = toSnapshot(msg, performance.now());
-            const jb = getJitterBuffer(eid);
-            jb.push(snapshot);
+              const snapshot = toSnapshot(msg, performance.now());
+              const jb = getJitterBuffer(eid);
+              jb.push(snapshot);
 
-            NetworkBuffer.prevX[eid] = NetworkBuffer.nextX[eid];
-            NetworkBuffer.prevY[eid] = NetworkBuffer.nextY[eid];
-            NetworkBuffer.prevZ[eid] = NetworkBuffer.nextZ[eid];
-            NetworkBuffer.prevRotX[eid] = NetworkBuffer.nextRotX[eid];
-            NetworkBuffer.prevRotY[eid] = NetworkBuffer.nextRotY[eid];
-            NetworkBuffer.prevRotZ[eid] = NetworkBuffer.nextRotZ[eid];
-            NetworkBuffer.prevRotW[eid] = NetworkBuffer.nextRotW[eid];
-            NetworkBuffer.prevScaleX[eid] = NetworkBuffer.nextScaleX[eid];
-            NetworkBuffer.prevScaleY[eid] = NetworkBuffer.nextScaleY[eid];
-            NetworkBuffer.prevScaleZ[eid] = NetworkBuffer.nextScaleZ[eid];
-            NetworkBuffer.nextX[eid] = msg.x;
-            NetworkBuffer.nextY[eid] = msg.y;
-            NetworkBuffer.nextZ[eid] = msg.z;
-            NetworkBuffer.nextRotX[eid] = msg.rotX ?? 0;
-            NetworkBuffer.nextRotY[eid] = msg.rotY ?? 0;
-            NetworkBuffer.nextRotZ[eid] = msg.rotZ ?? 0;
-            NetworkBuffer.nextRotW[eid] = msg.rotW ?? 1;
-            NetworkBuffer.nextScaleX[eid] = msg.scaleX ?? 1;
-            NetworkBuffer.nextScaleY[eid] = msg.scaleY ?? 1;
-            NetworkBuffer.nextScaleZ[eid] = msg.scaleZ ?? 1;
-          }
-        });
-      })
+              NetworkBuffer.prevX[eid] = NetworkBuffer.nextX[eid];
+              NetworkBuffer.prevY[eid] = NetworkBuffer.nextY[eid];
+              NetworkBuffer.prevZ[eid] = NetworkBuffer.nextZ[eid];
+              NetworkBuffer.prevRotX[eid] = NetworkBuffer.nextRotX[eid];
+              NetworkBuffer.prevRotY[eid] = NetworkBuffer.nextRotY[eid];
+              NetworkBuffer.prevRotZ[eid] = NetworkBuffer.nextRotZ[eid];
+              NetworkBuffer.prevRotW[eid] = NetworkBuffer.nextRotW[eid];
+              NetworkBuffer.prevScaleX[eid] = NetworkBuffer.nextScaleX[eid];
+              NetworkBuffer.prevScaleY[eid] = NetworkBuffer.nextScaleY[eid];
+              NetworkBuffer.prevScaleZ[eid] = NetworkBuffer.nextScaleZ[eid];
+              NetworkBuffer.nextX[eid] = msg.x;
+              NetworkBuffer.nextY[eid] = msg.y;
+              NetworkBuffer.nextZ[eid] = msg.z;
+              NetworkBuffer.nextRotX[eid] = msg.rotX ?? 0;
+              NetworkBuffer.nextRotY[eid] = msg.rotY ?? 0;
+              NetworkBuffer.nextRotZ[eid] = msg.rotZ ?? 0;
+              NetworkBuffer.nextRotW[eid] = msg.rotW ?? 1;
+              NetworkBuffer.nextScaleX[eid] = msg.scaleX ?? 1;
+              NetworkBuffer.nextScaleY[eid] = msg.scaleY ?? 1;
+              NetworkBuffer.nextScaleZ[eid] = msg.scaleZ ?? 1;
+            }
+          });
+        }
+      )
       .catch((err: unknown) => {
         setStatus(state.world, 3);
         console.warn('[network]', 'connection failed:', err);
@@ -137,15 +147,24 @@ export const NetworkSendSystem: System = {
 };
 
 function slerp(
-  ax: number, ay: number, az: number, aw: number,
-  bx: number, by: number, bz: number, bw: number,
-  t: number,
+  ax: number,
+  ay: number,
+  az: number,
+  aw: number,
+  bx: number,
+  by: number,
+  bz: number,
+  bw: number,
+  t: number
 ): [number, number, number, number] {
   let dot = ax * bx + ay * by + az * bz + aw * bw;
 
   if (dot < 0) {
     dot = -dot;
-    bx = -bx; by = -by; bz = -bz; bw = -bw;
+    bx = -bx;
+    by = -by;
+    bz = -bz;
+    bw = -bw;
   }
 
   if (dot > 0.9995) {
@@ -161,7 +180,7 @@ function slerp(
   const theta = theta0 * t;
   const sinTheta = Math.sin(theta);
   const sinTheta0 = Math.sin(theta0);
-  const wa = Math.cos(theta) - dot * sinTheta / sinTheta0;
+  const wa = Math.cos(theta) - (dot * sinTheta) / sinTheta0;
   const wb = sinTheta / sinTheta0;
 
   return [
@@ -201,25 +220,41 @@ export const NetworkInterpolationSystem: System = {
 
       const t = Math.min(1, state.time.deltaTime * 10);
 
-      Transform.posX[eid] = NetworkBuffer.prevX[eid] + (NetworkBuffer.nextX[eid] - NetworkBuffer.prevX[eid]) * t;
-      Transform.posY[eid] = NetworkBuffer.prevY[eid] + (NetworkBuffer.nextY[eid] - NetworkBuffer.prevY[eid]) * t;
-      Transform.posZ[eid] = NetworkBuffer.prevZ[eid] + (NetworkBuffer.nextZ[eid] - NetworkBuffer.prevZ[eid]) * t;
+      Transform.posX[eid] =
+        NetworkBuffer.prevX[eid] +
+        (NetworkBuffer.nextX[eid] - NetworkBuffer.prevX[eid]) * t;
+      Transform.posY[eid] =
+        NetworkBuffer.prevY[eid] +
+        (NetworkBuffer.nextY[eid] - NetworkBuffer.prevY[eid]) * t;
+      Transform.posZ[eid] =
+        NetworkBuffer.prevZ[eid] +
+        (NetworkBuffer.nextZ[eid] - NetworkBuffer.prevZ[eid]) * t;
 
       const [rx, ry, rz, rw] = slerp(
-        NetworkBuffer.prevRotX[eid], NetworkBuffer.prevRotY[eid],
-        NetworkBuffer.prevRotZ[eid], NetworkBuffer.prevRotW[eid],
-        NetworkBuffer.nextRotX[eid], NetworkBuffer.nextRotY[eid],
-        NetworkBuffer.nextRotZ[eid], NetworkBuffer.nextRotW[eid],
-        t,
+        NetworkBuffer.prevRotX[eid],
+        NetworkBuffer.prevRotY[eid],
+        NetworkBuffer.prevRotZ[eid],
+        NetworkBuffer.prevRotW[eid],
+        NetworkBuffer.nextRotX[eid],
+        NetworkBuffer.nextRotY[eid],
+        NetworkBuffer.nextRotZ[eid],
+        NetworkBuffer.nextRotW[eid],
+        t
       );
       Transform.rotX[eid] = rx;
       Transform.rotY[eid] = ry;
       Transform.rotZ[eid] = rz;
       Transform.rotW[eid] = rw;
 
-      Transform.scaleX[eid] = NetworkBuffer.prevScaleX[eid] + (NetworkBuffer.nextScaleX[eid] - NetworkBuffer.prevScaleX[eid]) * t;
-      Transform.scaleY[eid] = NetworkBuffer.prevScaleY[eid] + (NetworkBuffer.nextScaleY[eid] - NetworkBuffer.prevScaleY[eid]) * t;
-      Transform.scaleZ[eid] = NetworkBuffer.prevScaleZ[eid] + (NetworkBuffer.nextScaleZ[eid] - NetworkBuffer.prevScaleZ[eid]) * t;
+      Transform.scaleX[eid] =
+        NetworkBuffer.prevScaleX[eid] +
+        (NetworkBuffer.nextScaleX[eid] - NetworkBuffer.prevScaleX[eid]) * t;
+      Transform.scaleY[eid] =
+        NetworkBuffer.prevScaleY[eid] +
+        (NetworkBuffer.nextScaleY[eid] - NetworkBuffer.prevScaleY[eid]) * t;
+      Transform.scaleZ[eid] =
+        NetworkBuffer.prevScaleZ[eid] +
+        (NetworkBuffer.nextScaleZ[eid] - NetworkBuffer.prevScaleZ[eid]) * t;
     }
   },
 };

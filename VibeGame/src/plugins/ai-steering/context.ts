@@ -1,6 +1,6 @@
-import type { FleeBehavior, SeekBehavior, Vehicle, WanderBehavior } from "yuka";
+import type { FleeBehavior, SeekBehavior, Vehicle, WanderBehavior } from 'yuka';
 
-import type { State } from "../../core";
+import type { State } from '../../core';
 
 export interface SteeringRow {
   vehicle: Vehicle;

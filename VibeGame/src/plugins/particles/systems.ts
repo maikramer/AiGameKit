@@ -13,7 +13,10 @@ const burstQuery = defineQuery([ParticlesBurst, Transform]);
 
 const entityToPS = new Map<number, ParticleSystem>();
 
-function disposeParticle(eid: number, ctx: { batch: BatchedParticleRenderer | null; roots: Map<number, Object3D> }) {
+function disposeParticle(
+  eid: number,
+  ctx: { batch: BatchedParticleRenderer | null; roots: Map<number, Object3D> }
+) {
   const ps = entityToPS.get(eid);
   const root = ctx.roots.get(eid);
   if (ps && ctx.batch) {

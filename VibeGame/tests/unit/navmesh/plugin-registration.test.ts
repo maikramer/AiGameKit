@@ -16,7 +16,10 @@ describe('NavmeshPlugin Registration', () => {
     expect(NavmeshPlugin.recipes![0].name).toBe('nav-mesh');
     expect(NavmeshPlugin.recipes![0].components).toEqual(['navMesh']);
     expect(NavmeshPlugin.recipes![1].name).toBe('nav-agent');
-    expect(NavmeshPlugin.recipes![1].components).toEqual(['transform', 'navAgent']);
+    expect(NavmeshPlugin.recipes![1].components).toEqual([
+      'transform',
+      'navAgent',
+    ]);
   });
 
   it('should register the navMesh component', () => {

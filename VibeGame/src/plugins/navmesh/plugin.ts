@@ -16,7 +16,12 @@ function targetAdapter(entity: number, value: string, _state: State): void {
 }
 
 export const NavmeshPlugin: Plugin = {
-  systems: [NavMeshLoadSystem, NavMeshBuildSystem, NavAgentPathSystem, NavAgentMoveSystem],
+  systems: [
+    NavMeshLoadSystem,
+    NavMeshBuildSystem,
+    NavAgentPathSystem,
+    NavAgentMoveSystem,
+  ],
   recipes: [navMeshRecipe, navAgentRecipe],
   components: {
     navMesh: NavMesh,

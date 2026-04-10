@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { ParticlesPlugin } from '../../../src/plugins/particles/plugin';
-import { ParticlesEmitter, ParticlesBurst } from '../../../src/plugins/particles/components';
+import {
+  ParticlesEmitter,
+  ParticlesBurst,
+} from '../../../src/plugins/particles/components';
 
 describe('ParticlesPlugin Registration', () => {
   let state: State;
@@ -12,13 +15,20 @@ describe('ParticlesPlugin Registration', () => {
   });
 
   it('should have a recipe named "particle-emitter" with components ["transform", "particlesEmitter"]', () => {
-    const emitterRecipe = ParticlesPlugin.recipes!.find((r) => r.name === 'particle-emitter');
+    const emitterRecipe = ParticlesPlugin.recipes!.find(
+      (r) => r.name === 'particle-emitter'
+    );
     expect(emitterRecipe).toBeDefined();
-    expect(emitterRecipe!.components).toEqual(['transform', 'particlesEmitter']);
+    expect(emitterRecipe!.components).toEqual([
+      'transform',
+      'particlesEmitter',
+    ]);
   });
 
   it('should have a recipe named "particle-burst" with components ["transform", "particlesBurst"]', () => {
-    const burstRecipe = ParticlesPlugin.recipes!.find((r) => r.name === 'particle-burst');
+    const burstRecipe = ParticlesPlugin.recipes!.find(
+      (r) => r.name === 'particle-burst'
+    );
     expect(burstRecipe).toBeDefined();
     expect(burstRecipe!.components).toEqual(['transform', 'particlesBurst']);
   });

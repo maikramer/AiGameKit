@@ -38,7 +38,9 @@ export const NavMeshLoadSystem: System = {
   },
 };
 
-function collectCollidableGeometry(state: import('../../core').State): THREE.BufferGeometry | null {
+function collectCollidableGeometry(
+  state: import('../../core').State
+): THREE.BufferGeometry | null {
   const ctx = getRenderingContext(state);
   const geometries: THREE.BufferGeometry[] = [];
   const world = state.world;
@@ -70,12 +72,12 @@ function collectCollidableGeometry(state: import('../../core').State): THREE.Buf
   return merged;
 }
 
-function mergeGeometriesManual(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+function mergeGeometriesManual(
+  geometries: THREE.BufferGeometry[]
+): THREE.BufferGeometry {
   let totalVerts = 0;
-  let totalIdx = 0;
   for (const g of geometries) {
     totalVerts += g.attributes.position.count;
-    totalIdx += g.index ? g.index.count : 0;
   }
 
   const positions = new Float32Array(totalVerts * 3);

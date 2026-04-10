@@ -2,10 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { NavMesh, NavAgent } from '../../../src/plugins/navmesh/components';
 
-const NAVMESH_FIELDS = [
-  'loaded',
-  'buildFromScene',
-] as const;
+const NAVMESH_FIELDS = ['loaded', 'buildFromScene'] as const;
 
 const NAVAGENT_FIELDS = [
   'targetX',

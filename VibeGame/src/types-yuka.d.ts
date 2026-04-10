@@ -1,4 +1,4 @@
-declare module "yuka" {
+declare module 'yuka' {
   export class Vector3 {
     x: number;
     y: number;
@@ -56,7 +56,7 @@ declare module "yuka" {
 
   export class ObstacleAvoidanceBehavior extends SteeringBehavior {
     maxSightRange: number;
-    obstacles:unknown[];
+    obstacles: unknown[];
     constructor(obstacles?: unknown[]);
   }
 

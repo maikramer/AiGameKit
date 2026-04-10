@@ -14,6 +14,11 @@ export function registerAudioClip(id: number, url: string): void {
   clipRegistry.set(id, url);
 }
 
+/** Limpa o registo global de clips (útil em testes para evitar fuga entre ficheiros). */
+export function clearAudioClipRegistry(): void {
+  clipRegistry.clear();
+}
+
 const audioQuery = defineQuery([AudioEmitter]);
 const listenerQuery = defineQuery([AudioListener, MainCamera, WorldTransform]);
 const mainCameraTransformQuery = defineQuery([MainCamera, Transform]);
@@ -33,6 +38,47 @@ function getOrCreateState(state: State): AudioState {
     AUDIO_STATE.set(state, s);
   }
   return s;
+}
+
+/**
+ * Reproduz o clip deste emissor: para one-shots (`loop=0`) reinicia o Howl se já existir;
+ * caso contrário define `playing=1` para o próximo tick do AudioSystem criar/reproduzir.
+ */
+export function playAudioEmitter(state: State, eid: number): void {
+  if (state.headless) return;
+  const { howlMap, prevPlaying } = getOrCreateState(state);
+  const howl = howlMap.get(eid);
+  if (howl && AudioEmitter.loop[eid] === 0) {
+    AudioEmitter.playing[eid] = 0;
+    prevPlaying.set(eid, 0);
+    howl.stop();
+    howl.play();
+    AudioEmitter.playing[eid] = 1;
+    prevPlaying.set(eid, 1);
+    return;
+  }
+  AudioEmitter.playing[eid] = 1;
+}
+
+/** Retoma o AudioContext do Howler se estiver suspenso (política de autoplay dos browsers). */
+export function resumeAudioContextIfSuspended(): void {
+  const ctx = Howler.ctx;
+  if (ctx?.state === 'suspended') {
+    void ctx.resume();
+  }
+}
+
+/**
+ * No browser, regista um `pointerdown` único para retomar o contexto de áudio.
+ * Sem efeito fora de ambiente DOM.
+ */
+export function resumeAudioContextOnFirstUserGesture(): void {
+  if (typeof document === 'undefined') return;
+  const handler = () => {
+    resumeAudioContextIfSuspended();
+    document.removeEventListener('pointerdown', handler);
+  };
+  document.addEventListener('pointerdown', handler, { once: true });
 }
 
 /** Garante AudioListener na entidade da câmara (MainCamera + Transform). */
@@ -91,6 +137,15 @@ export const AudioSystem: System = {
               },
             }),
           });
+          if (AudioEmitter.loop[eid] === 0) {
+            howl.on('end', () => {
+              if (!state.exists(eid)) return;
+              if (AudioEmitter.loop[eid] === 1) return;
+              if (AudioEmitter.playing[eid] !== 1) return;
+              AudioEmitter.playing[eid] = 0;
+              prevPlaying.set(eid, 0);
+            });
+          }
           howlMap.set(eid, howl);
         }
         howl.play();

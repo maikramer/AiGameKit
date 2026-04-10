@@ -43,7 +43,11 @@ export {
   AudioEmitter,
   AudioListener,
   AudioPlugin,
+  AudioSystem,
+  playAudioEmitter,
   registerAudioClip,
+  resumeAudioContextIfSuspended,
+  resumeAudioContextOnFirstUserGesture,
 } from './plugins/audio';
 export { Lod, LodPlugin, LodSystem } from './plugins/lod';
 export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';

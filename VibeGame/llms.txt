@@ -36,7 +36,8 @@ Bevy-inspired modular architecture:
 ### Monorepo asset bridge (GameDev)
 - **GLB from disk (imperative):** `loadGltfToScene(state, url)` after `run()` — URL like `/assets/models/hero.glb`.
 - **GLB (declarative XML):** `<gltf-load url="/assets/models/hero.glb" transform="pos: 0 0 0"></gltf-load>` inside `<world>`.
-- **Equirect sky / IBL:** `applyEquirectSkyEnvironment(state, '/assets/sky/env.png')` for PMREM on `Scene.environment` (optional background).
+- **Equirect sky / IBL:** `<sky url="/assets/sky/env.png"></sky>` inside `<world>`, or `applyEquirectSkyEnvironment(state, url)` for dynamic URLs — PMREM on `Scene.environment` (optional background).
+- **Audio (Howler):** `<audio-clip url="/assets/audio/bgm.wav" name="bgm" loop="true" playing="true"></audio-clip>`; trigger SFX with `playAudioEmitter(state, entityId)`. Use `<world resume-audio-on-user-gesture="true">` for browser autoplay policy. Full reference: `docs/AUDIO.md`.
 
 ## Instant Playable Game
 
@@ -746,16 +747,13 @@ const health = Health.current[entity];
 
 ## Features Not Yet Built-In
 
-### ❌ Engine Features Not Available
-- **Multiplayer/Networking** - No server sync
-- **Sound/Audio** - No audio system yet
-- **Save/Load** - No persistence system
-- **Inventory** - No item management system built-in (but easily implementable with UI)
-- **Dialog/NPCs** - No conversation system built-in (but easily implementable with UI)
-- **AI/Pathfinding** - No enemy AI
-- **Particles** - No particle effects (though UI can create particle-like effects)
-- **Custom shaders** - Fixed rendering pipeline
-- **Terrain** - Use box platforms instead
+### ❌ Engine Features Not Available (or limited)
+- **Authoritative multiplayer** - `network` plugin is client-oriented; no built-in game server / sync template
+- **Inventory** - No item management system built-in (implementable with ECS + UI)
+- **Dialog trees** - No branching conversation system built-in (implementable with UI / custom data)
+- **Custom shaders** - Fixed Three.js materials; no user shader graph
+
+**Built-in today (do not claim missing):** `audio` (Howler + `<audio-clip>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-steering`, declarative `sky`, GLTF animation — see `docs/PLUGINS.md` and `docs/AUDIO.md`.
 
 ### Recommended Approaches
 - **Complex UI** → HTML/CSS overlays (this is actually superior to most game engines)

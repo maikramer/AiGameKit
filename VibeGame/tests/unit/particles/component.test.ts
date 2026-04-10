@@ -1,8 +1,19 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { ParticlesEmitter, ParticlesBurst } from '../../../src/plugins/particles/components';
+import {
+  ParticlesEmitter,
+  ParticlesBurst,
+} from '../../../src/plugins/particles/components';
 
-const EMITTER_FIELDS = ['preset', 'rate', 'lifetime', 'size', 'looping', 'playing', 'spawned'] as const;
+const EMITTER_FIELDS = [
+  'preset',
+  'rate',
+  'lifetime',
+  'size',
+  'looping',
+  'playing',
+  'spawned',
+] as const;
 
 const BURST_FIELDS = ['preset', 'count', 'triggered'] as const;
 

@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { NetworkPlugin } from '../../../src/plugins/network/plugin';
-import { Networked, NetworkBuffer } from '../../../src/plugins/network/components';
+import {
+  Networked,
+  NetworkBuffer,
+} from '../../../src/plugins/network/components';
 
 describe('NetworkPlugin Registration', () => {
   let state: State;
@@ -14,7 +17,11 @@ describe('NetworkPlugin Registration', () => {
   it('should have a recipe named "networked-player" with components ["transform", "networked", "networkBuffer"]', () => {
     expect(NetworkPlugin.recipes!).toHaveLength(1);
     expect(NetworkPlugin.recipes![0].name).toBe('networked-player');
-    expect(NetworkPlugin.recipes![0].components).toEqual(['transform', 'networked', 'networkBuffer']);
+    expect(NetworkPlugin.recipes![0].components).toEqual([
+      'transform',
+      'networked',
+      'networkBuffer',
+    ]);
   });
 
   it('should register the networked component', () => {

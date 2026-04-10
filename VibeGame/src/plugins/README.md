@@ -215,7 +215,7 @@ export { MeuSystem } from './systems';
 | `scene-manifest` | Carregamento de cenas XML                      | Média        |
 | `text-3d`        | Modelos GLB do Text3D (Hunyuan)                | Baixa        |
 | `sky`            | Skybox equirectangular + IBL (PMREM)           | Média        |
-| `audio`          | Áudio espacial                                 | Média        |
+| `audio`          | Áudio espacial (Howler, `<audio-clip>`) — [`docs/AUDIO.md`](../../docs/AUDIO.md) | Média        |
 | `sprite`         | Sprites 2D                                     | Baixa        |
 | `line`           | Linhas 3D                                      | Baixa        |
 | `postprocessing` | Bloom, SMAA, dithering, tonemapping (registry) | Alta         |

@@ -30,9 +30,13 @@ export function loadSnapshot(state: State, data: Uint8Array): void {
     serializableEids?: number[];
   };
   state.time.elapsed = payload.elapsed ?? 0;
-  if (typeof window !== 'undefined' && window.dispatchEvent) {
+  if (
+    typeof window !== 'undefined' &&
+    window.dispatchEvent &&
+    typeof window.CustomEvent === 'function'
+  ) {
     window.dispatchEvent(
-      new CustomEvent('snapshot-loaded', { detail: payload })
+      new window.CustomEvent('snapshot-loaded', { detail: payload })
     );
   }
   void payload;

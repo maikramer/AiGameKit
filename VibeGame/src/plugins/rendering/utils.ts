@@ -42,6 +42,41 @@ function installAngleD3dShaderInfoWarnFilter(): void {
   };
 }
 
+let shadowMapDepthPatchInstalled = false;
+
+/**
+ * Patch shadow map depth textures to use NearestFilter instead of LinearFilter.
+ * PCFShadowMap sets LinearFilter on DepthTexture for hardware comparison sampling,
+ * which triggers a WebGL warning about implementation-defined behavior on some GPUs.
+ * NearestFilter produces identical visual results when compareFunction is set.
+ */
+function patchShadowMapDepthFilter(renderer: THREE.WebGLRenderer): void {
+  if (shadowMapDepthPatchInstalled) return;
+  shadowMapDepthPatchInstalled = true;
+
+  const origRender = renderer.render.bind(renderer);
+  let firstRenderDone = false;
+
+  renderer.render = function (scene: THREE.Scene, camera: THREE.Camera) {
+    origRender(scene, camera);
+    if (firstRenderDone) return;
+
+    let hasShadowCaster = false;
+    scene.traverse((object) => {
+      if (!(object instanceof THREE.Light)) return;
+      const light = object as THREE.Light & { shadow?: { map?: { depthTexture?: THREE.DepthTexture } } };
+      const depthTexture = light.shadow?.map?.depthTexture;
+      if (!depthTexture) return;
+      hasShadowCaster = true;
+      depthTexture.minFilter = THREE.NearestFilter;
+      depthTexture.magFilter = THREE.NearestFilter;
+      depthTexture.needsUpdate = true;
+    });
+
+    if (hasShadowCaster) firstRenderDone = true;
+  };
+}
+
 function getCanvasAspect(state: State): {
   width: number;
   height: number;
@@ -324,6 +359,7 @@ export function createRenderer(
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
+  patchShadowMapDepthFilter(renderer);
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);

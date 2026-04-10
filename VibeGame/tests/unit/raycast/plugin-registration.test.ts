@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { RaycastPlugin } from '../../../src/plugins/raycast/plugin';
-import { RaycastSource, RaycastResult } from '../../../src/plugins/raycast/components';
+import {
+  RaycastSource,
+  RaycastResult,
+} from '../../../src/plugins/raycast/components';
 
 describe('RaycastPlugin Registration', () => {
   let state: State;
@@ -14,7 +17,11 @@ describe('RaycastPlugin Registration', () => {
   it('should have a recipe named "raycast-source" with correct components', () => {
     expect(RaycastPlugin.recipes!).toHaveLength(1);
     expect(RaycastPlugin.recipes![0].name).toBe('raycast-source');
-    expect(RaycastPlugin.recipes![0].components).toEqual(['transform', 'raycastSource', 'raycastResult']);
+    expect(RaycastPlugin.recipes![0].components).toEqual([
+      'transform',
+      'raycastSource',
+      'raycastResult',
+    ]);
   });
 
   it('should register the raycastSource component', () => {

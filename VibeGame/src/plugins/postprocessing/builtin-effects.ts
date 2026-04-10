@@ -34,6 +34,7 @@ const builtinDefinitions: EffectDefinition[] = [
     key: 'smaa',
     component: SMAA,
     position: 'first',
+    convolution: true,
     create(_state, entity) {
       const presetValue = SMAA.preset[entity];
       return new SMAAEffect({ preset: presetValue as SMAAPreset });
@@ -54,11 +55,16 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(_state, entity, effect) {
       const bloom = effect as BloomEffectLib;
-      bloom.intensity = Bloom.intensity[entity];
-      bloom.luminanceMaterial.uniforms.threshold.value =
-        Bloom.luminanceThreshold[entity];
-      bloom.luminanceMaterial.uniforms.smoothing.value =
-        Bloom.luminanceSmoothing[entity];
+      const intensity = Bloom.intensity[entity];
+      const threshold = Bloom.luminanceThreshold[entity];
+      const smoothing = Bloom.luminanceSmoothing[entity];
+      if (bloom.intensity !== intensity) bloom.intensity = intensity;
+      if (bloom.luminanceMaterial.uniforms.threshold.value !== threshold) {
+        bloom.luminanceMaterial.uniforms.threshold.value = threshold;
+      }
+      if (bloom.luminanceMaterial.uniforms.smoothing.value !== smoothing) {
+        bloom.luminanceMaterial.uniforms.smoothing.value = smoothing;
+      }
     },
   },
   {
@@ -73,11 +79,16 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(_state, entity, effect) {
       const dithering = effect as DitheringEffect;
-      dithering.colorBits = Dithering.colorBits[entity];
-      dithering.intensity = Dithering.intensity[entity];
-      dithering.grayscale = Dithering.grayscale[entity] === 1;
-      dithering.scale = Dithering.scale[entity];
-      dithering.noise = Dithering.noise[entity];
+      const colorBits = Dithering.colorBits[entity];
+      const intensity = Dithering.intensity[entity];
+      const grayscale = Dithering.grayscale[entity] === 1;
+      const scale = Dithering.scale[entity];
+      const noise = Dithering.noise[entity];
+      if (dithering.colorBits !== colorBits) dithering.colorBits = colorBits;
+      if (dithering.intensity !== intensity) dithering.intensity = intensity;
+      if (dithering.grayscale !== grayscale) dithering.grayscale = grayscale;
+      if (dithering.scale !== scale) dithering.scale = scale;
+      if (dithering.noise !== noise) dithering.noise = noise;
     },
   },
   {
@@ -95,14 +106,21 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(_state, entity, effect) {
       const tonemapping = effect as ToneMappingEffect;
+      const mode = Tonemapping.mode[entity] as ToneMappingMode;
+      const middleGrey = Tonemapping.middleGrey[entity];
+      const whitePoint = Tonemapping.whitePoint[entity];
+      const averageLuminance = Tonemapping.averageLuminance[entity];
       if (
-        tonemapping.middleGrey !== Tonemapping.middleGrey[entity] ||
-        tonemapping.whitePoint !== Tonemapping.whitePoint[entity] ||
-        tonemapping.averageLuminance !== Tonemapping.averageLuminance[entity]
+        tonemapping.middleGrey !== middleGrey ||
+        tonemapping.whitePoint !== whitePoint ||
+        tonemapping.averageLuminance !== averageLuminance
       ) {
         return true;
       }
-      tonemapping.mode = Tonemapping.mode[entity] as ToneMappingMode;
+      if (tonemapping.mode !== mode) {
+        tonemapping.mode = mode;
+        return true;
+      }
       return;
     },
   },
@@ -117,8 +135,10 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(_state, entity, effect) {
       const vignette = effect as VignetteEffect;
-      vignette.darkness = Vignette.darkness[entity];
-      vignette.offset = Vignette.offset[entity];
+      const darkness = Vignette.darkness[entity];
+      const offset = Vignette.offset[entity];
+      if (vignette.darkness !== darkness) vignette.darkness = darkness;
+      if (vignette.offset !== offset) vignette.offset = offset;
     },
   },
   {
@@ -133,6 +153,8 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(state, entity, effect) {
       const dof = effect as DepthOfFieldEffect;
+      const focalLength = DepthOfField.focalLength[entity];
+      const bokehScale = DepthOfField.bokehScale[entity];
       if (DepthOfField.autoFocus[entity] === 1) {
         const playerEntities = playerTransformQuery(state.world);
         const cameraEntities = cameraTransformQuery(state.world);
@@ -145,20 +167,29 @@ const builtinDefinitions: EffectDefinition[] = [
             WorldTransform.posY[cameraEid] - WorldTransform.posY[playerEid];
           const dz =
             WorldTransform.posZ[cameraEid] - WorldTransform.posZ[playerEid];
-          dof.cocMaterial.focusDistance = Math.sqrt(
-            dx * dx + dy * dy + dz * dz
-          );
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+          if (dof.cocMaterial.focusDistance !== dist) {
+            dof.cocMaterial.focusDistance = dist;
+          }
         }
       } else {
-        dof.cocMaterial.focusDistance = DepthOfField.focusDistance[entity];
+        const focusDistance = DepthOfField.focusDistance[entity];
+        if (dof.cocMaterial.focusDistance !== focusDistance) {
+          dof.cocMaterial.focusDistance = focusDistance;
+        }
       }
-      dof.cocMaterial.focalLength = DepthOfField.focalLength[entity];
-      dof.bokehScale = DepthOfField.bokehScale[entity];
+      if (dof.cocMaterial.focalLength !== focalLength) {
+        dof.cocMaterial.focalLength = focalLength;
+      }
+      if (dof.bokehScale !== bokehScale) {
+        dof.bokehScale = bokehScale;
+      }
     },
   },
   {
     key: 'chromaticAberration',
     component: ChromaticAberration,
+    convolution: true,
     create(_state, entity) {
       return new ChromaticAberrationEffect({
         offset: new Vector2(
@@ -171,12 +202,19 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(_state, entity, effect) {
       const ca = effect as ChromaticAberrationEffect;
-      ca.offset.set(
-        ChromaticAberration.offsetX[entity],
-        ChromaticAberration.offsetY[entity]
-      );
-      ca.radialModulation = ChromaticAberration.radialModulation[entity] === 1;
-      ca.modulationOffset = ChromaticAberration.modulationOffset[entity];
+      const offsetX = ChromaticAberration.offsetX[entity];
+      const offsetY = ChromaticAberration.offsetY[entity];
+      const radialMod = ChromaticAberration.radialModulation[entity] === 1;
+      const modOffset = ChromaticAberration.modulationOffset[entity];
+      if (ca.offset.x !== offsetX || ca.offset.y !== offsetY) {
+        ca.offset.set(offsetX, offsetY);
+      }
+      if (ca.radialModulation !== radialMod) {
+        ca.radialModulation = radialMod;
+      }
+      if (ca.modulationOffset !== modOffset) {
+        ca.modulationOffset = modOffset;
+      }
     },
   },
   {
@@ -192,8 +230,14 @@ const builtinDefinitions: EffectDefinition[] = [
     },
     update(_state, entity, effect) {
       const noise = effect as NoiseEffect;
-      noise.blendMode.setOpacity(Noise.opacity[entity]);
-      noise.blendMode.blendFunction = Noise.blendFunction[entity];
+      const opacity = Noise.opacity[entity];
+      const blendFunction = Noise.blendFunction[entity];
+      if (noise.blendMode.getOpacity() !== opacity) {
+        noise.blendMode.setOpacity(opacity);
+      }
+      if (noise.blendMode.blendFunction !== blendFunction) {
+        noise.blendMode.blendFunction = blendFunction;
+      }
     },
   },
 ];

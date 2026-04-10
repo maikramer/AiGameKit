@@ -24,31 +24,31 @@ import { I18nResolveSystem } from './systems';
  * @see HudPanel
  */
 export const I18nPlugin: Plugin = {
-    systems: [I18nResolveSystem],
-    recipes: [i18nTextRecipe],
-    components: {
-        'i18n-text': I18nText,
+  systems: [I18nResolveSystem],
+  recipes: [i18nTextRecipe],
+  components: {
+    'i18n-text': I18nText,
+  },
+  initialize(state) {
+    if (!state.getComponent('hud-panel')) {
+      console.warn(
+        '[i18n] I18nPlugin requires HudPlugin to function. Register HudPlugin first.'
+      );
+    }
+  },
+  config: {
+    defaults: {
+      'i18n-text': {
+        keyIndex: 0,
+        resolved: 0,
+      },
     },
-    initialize(state) {
-        if (!state.getComponent('hud-panel')) {
-            console.warn(
-                '[i18n] I18nPlugin requires HudPlugin to function. Register HudPlugin first.',
-            );
-        }
+    adapters: {
+      'i18n-text': {
+        key: ((entity: number, value: string, state) => {
+          I18nText.keyIndex[entity] = internString(state, value);
+        }) as Adapter,
+      },
     },
-    config: {
-        defaults: {
-            'i18n-text': {
-                keyIndex: 0,
-                resolved: 0,
-            },
-        },
-        adapters: {
-            'i18n-text': {
-                key: ((entity: number, value: string, state) => {
-                    I18nText.keyIndex[entity] = internString(state, value);
-                }) as Adapter,
-            },
-        },
-    },
+  },
 };

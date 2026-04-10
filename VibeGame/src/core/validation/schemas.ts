@@ -319,8 +319,33 @@ export const worldRecipeSchema = z
     canvas: z.string().optional(),
     sky: colorSchema.optional(),
     gravity: vector3Schema.optional(),
+    'resume-audio-on-user-gesture': booleanSchema.optional(),
 
     id: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .strict();
+
+export const skyRecipeSchema = z
+  .object({
+    url: z.string(),
+    'rotation-deg': z.coerce.number().optional(),
+    'set-background': booleanSchema.optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+  })
+  .strict();
+
+export const audioClipRecipeSchema = z
+  .object({
+    url: z.string(),
+    volume: z.coerce.number().min(0).max(4).optional(),
+    loop: booleanSchema.optional(),
+    playing: booleanSchema.optional(),
+    spatial: booleanSchema.optional(),
+    pitch: z.coerce.number().optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
   })
   .strict();
 
@@ -428,6 +453,8 @@ export const recipeSchemas = {
   'orbit-camera': cameraRecipeSchema,
   'follow-camera': followCameraRecipeSchema,
   world: worldRecipeSchema,
+  sky: skyRecipeSchema,
+  'audio-clip': audioClipRecipeSchema,
   fog: fogRecipeSchema,
   tween: tweenElementSchema,
   pause: pauseElementSchema,

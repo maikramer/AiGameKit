@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'bun:test';
-import { JitterBuffer, type TransformSnapshot } from '../../../src/plugins/network/jitter-buffer';
+import {
+  JitterBuffer,
+  type TransformSnapshot,
+} from '../../../src/plugins/network/jitter-buffer';
 
-function makeSnapshot(timestamp: number, x = 0, y = 0, z = 0): TransformSnapshot {
+function makeSnapshot(
+  timestamp: number,
+  x = 0,
+  y = 0,
+  z = 0
+): TransformSnapshot {
   return {
     timestamp,
     posX: x,
@@ -122,15 +130,29 @@ describe('JitterBuffer', () => {
     const buf = new JitterBuffer(0);
     const a: TransformSnapshot = {
       timestamp: 0,
-      posX: 0, posY: 0, posZ: 0,
-      rotX: 0, rotY: 0, rotZ: 0, rotW: 1,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
+      posX: 0,
+      posY: 0,
+      posZ: 0,
+      rotX: 0,
+      rotY: 0,
+      rotZ: 0,
+      rotW: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
     };
     const b: TransformSnapshot = {
       timestamp: 100,
-      posX: 0, posY: 0, posZ: 0,
-      rotX: 0, rotY: 0, rotZ: 0, rotW: 1,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
+      posX: 0,
+      posY: 0,
+      posZ: 0,
+      rotX: 0,
+      rotY: 0,
+      rotZ: 0,
+      rotW: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
     };
     buf.push(a);
     buf.push(b);
@@ -147,15 +169,29 @@ describe('JitterBuffer', () => {
     const buf = new JitterBuffer(0);
     const a: TransformSnapshot = {
       timestamp: 0,
-      posX: 0, posY: 0, posZ: 0,
-      rotX: 0, rotY: 0, rotZ: 0, rotW: 1,
-      scaleX: 1, scaleY: 1, scaleZ: 1,
+      posX: 0,
+      posY: 0,
+      posZ: 0,
+      rotX: 0,
+      rotY: 0,
+      rotZ: 0,
+      rotW: 1,
+      scaleX: 1,
+      scaleY: 1,
+      scaleZ: 1,
     };
     const b: TransformSnapshot = {
       timestamp: 100,
-      posX: 0, posY: 0, posZ: 0,
-      rotX: 0, rotY: 0, rotZ: 0, rotW: 1,
-      scaleX: 2, scaleY: 3, scaleZ: 4,
+      posX: 0,
+      posY: 0,
+      posZ: 0,
+      rotX: 0,
+      rotY: 0,
+      rotZ: 0,
+      rotW: 1,
+      scaleX: 2,
+      scaleY: 3,
+      scaleZ: 4,
     };
     buf.push(a);
     buf.push(b);

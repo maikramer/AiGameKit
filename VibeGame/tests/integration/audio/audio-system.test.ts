@@ -1,4 +1,12 @@
-import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test';
+import {
+  afterAll,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  mock,
+} from 'bun:test';
 import { State } from 'vibegame';
 import { AudioEmitter } from '../../../src/plugins/audio/components';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
@@ -27,6 +35,10 @@ class MockHowl {
   pos = mock(() => {});
   pannerAttr = mock(() => {});
   _opts: any;
+  _onEnd?: () => void;
+  on = mock((event: string, cb: () => void) => {
+    if (event === 'end') this._onEnd = cb;
+  });
   constructor(opts: any) {
     this._opts = opts;
     howlInstances.push(this);
@@ -35,12 +47,16 @@ class MockHowl {
 
 mock.module('howler', () => ({ Howl: MockHowl }));
 
-const { registerAudioClip, AudioSystem } = await import(
-  '../../../src/plugins/audio/systems'
-);
+const { registerAudioClip, AudioSystem, playAudioEmitter, clearAudioClipRegistry } =
+  await import('../../../src/plugins/audio/systems');
 
 describe('AudioSystem Integration', () => {
   let state: State;
+
+  beforeEach(() => {
+    clearAudioClipRegistry();
+    howlInstances.length = 0;
+  });
 
   it('should register an audio clip in the registry', () => {
     registerAudioClip(1, '/assets/test.mp3');
@@ -162,5 +178,47 @@ describe('AudioSystem Integration', () => {
     expect(howlInstances[0]._opts.pannerAttr.refDistance).toBe(5);
     expect(howlInstances[0]._opts.pannerAttr.maxDistance).toBe(200);
     expect(howlInstances[0]._opts.pannerAttr.rolloffFactor).toBe(2);
+  });
+
+  it('should sync playing to 0 on Howl end for non-loop clips', () => {
+    howlInstances.length = 0;
+    registerAudioClip(1, '/assets/test.mp3');
+
+    state = new State();
+    state.registerPlugin(AudioPlugin);
+
+    const entity = state.createEntity();
+    state.addComponent(entity, AudioEmitter);
+    AudioEmitter.clipPath[entity] = 1;
+    AudioEmitter.loop[entity] = 0;
+    AudioEmitter.playing[entity] = 1;
+
+    AudioSystem.update!(state);
+    expect(howlInstances).toHaveLength(1);
+    expect(AudioEmitter.playing[entity]).toBe(1);
+
+    howlInstances[0]._onEnd?.();
+    expect(AudioEmitter.playing[entity]).toBe(0);
+  });
+
+  it('should call stop and play on playAudioEmitter for existing non-loop Howl', () => {
+    howlInstances.length = 0;
+    registerAudioClip(1, '/assets/test.mp3');
+
+    state = new State();
+    state.registerPlugin(AudioPlugin);
+
+    const entity = state.createEntity();
+    state.addComponent(entity, AudioEmitter);
+    AudioEmitter.clipPath[entity] = 1;
+    AudioEmitter.loop[entity] = 0;
+    AudioEmitter.playing[entity] = 1;
+
+    AudioSystem.update!(state);
+    expect(howlInstances).toHaveLength(1);
+
+    playAudioEmitter(state, entity);
+    expect(howlInstances[0].stop).toHaveBeenCalled();
+    expect(howlInstances[0].play).toHaveBeenCalledTimes(2);
   });
 });

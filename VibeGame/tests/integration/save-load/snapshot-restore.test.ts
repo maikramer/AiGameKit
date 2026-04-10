@@ -3,7 +3,10 @@ import { Packr } from 'msgpackr';
 import { State } from 'vibegame';
 import { Serializable } from '../../../src/plugins/save-load/components';
 import { SaveLoadPlugin } from '../../../src/plugins/save-load/plugin';
-import { saveSnapshot, loadSnapshot } from '../../../src/plugins/save-load/serializer';
+import {
+  saveSnapshot,
+  loadSnapshot,
+} from '../../../src/plugins/save-load/serializer';
 
 const packr = new Packr();
 
@@ -28,7 +31,10 @@ describe('Save-Load Snapshot Restore', () => {
     const data = saveSnapshot(state);
     const payload = packr.unpack(data) as {
       elapsed: number;
-      entities: Array<{ eid: number; components: Record<string, Record<string, number>> }>;
+      entities: Array<{
+        eid: number;
+        components: Record<string, Record<string, number>>;
+      }>;
       serializableEids?: number[];
     };
 
@@ -79,7 +85,10 @@ describe('Save-Load Snapshot Restore', () => {
 
     const data = saveSnapshot(state);
     const payload = packr.unpack(data) as {
-      entities: Array<{ eid: number; components: Record<string, Record<string, number>> }>;
+      entities: Array<{
+        eid: number;
+        components: Record<string, Record<string, number>>;
+      }>;
     };
 
     expect(payload.entities.length).toBeGreaterThanOrEqual(1);

@@ -1,16 +1,14 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { NetworkStatus, Networked, NetworkBuffer } from '../../../src/plugins/network/components';
+import {
+  NetworkStatus,
+  Networked,
+  NetworkBuffer,
+} from '../../../src/plugins/network/components';
 
-const NETWORK_STATUS_FIELDS = [
-  'connected',
-] as const;
+const NETWORK_STATUS_FIELDS = ['connected'] as const;
 
-const NETWORKED_FIELDS = [
-  'networkId',
-  'isOwner',
-  'interpolate',
-] as const;
+const NETWORKED_FIELDS = ['networkId', 'isOwner', 'interpolate'] as const;
 
 const NETWORK_BUFFER_FIELDS = [
   'prevX',
