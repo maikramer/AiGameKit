@@ -16,16 +16,16 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 | Player (animated GLB + WASD) | Built-in `<player-gltf>`               | Declarative                                              |
 | Follow camera + post-fx      | Built-in `<follow-camera>`             | Declarative (bloom, vignette, chromatic aberration)      |
 | Hero character (GLB, rigged) | Text3D + Paint3D + Rigging3D           | `<player-gltf model-url="...">`                          |
-| Stone pillar                 | Text3D + Paint3D                       | **`<place at="x z">`** (terrain height + AABB)           |
-| Wooden crates (x2)           | Text3D + Paint3D                       | **`<place at="x z">`**                                   |
-| Blue crystals (x2)           | Text3D + Paint3D                       | **`<place at="x z" y-offset="0.6">`**                    |
+| Stone pillar                 | Text3D + Paint3D                       | **`<entity place="at: x z">`** (terrain height + AABB)   |
+| Wooden crates (x2)           | Text3D + Paint3D                       | **`<entity place="at: x z">`**                           |
+| Blue crystals (x2)           | Text3D + Paint3D                       | **`<entity place="at: x z; base-y-offset: …">`**         |
 | Lowpoly trees (x24 spawned)  | Text3D + Paint3D + Spawner             | `<spawn-group profile="tree">`                           |
 | Physics crates (x6 spawned)  | Spawner + Physics                      | `<spawn-group profile="physics-box">`                    |
 | GLB pushable crates (x3)     | Spawner + Physics                      | `<spawn-group profile="gltf-crate">`                     |
-| Campfire (fire + smoke)      | **Particles + Spawner**                | `<place at="x z" y-offset="…">` + `particle-emitter`     |
-| Crystal sparkles (x2)        | **Particles + Spawner**                | `<place at="x z" y-offset="…">` + `particle-emitter`     |
+| Campfire (fire + smoke)      | **Particles + Spawner**                | `<entity place="at: x z; y-offset: …">` + `particle-emitter` |
+| Crystal sparkles (x2)        | **Particles + Spawner**                | `<entity place="at: x z; …">` + `particle-emitter`       |
 | Ambient rain                 | **Particles plugin**                   | `<particle-emitter preset="rain">` (high Y)              |
-| Wandering NPCs (x3)          | **AI Steering + Spawner**              | `<place align-to-terrain="0">` + `<npc>`                 |
+| Wandering NPCs (x3)          | **AI Steering + Spawner**              | `<entity place="at: x z; align-to-terrain: 0; …"><npc>`  |
 | Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`            |
 | Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`              |
 | On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`         |
@@ -36,8 +36,8 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 
 | Feature     | Plugin             | Usage in this demo                                            |
 | ----------- | ------------------ | ------------------------------------------------------------- |
-| Particles   | `ParticlesPlugin`  | Fire, smoke, sparks, rain (via `<place>` for ground height)   |
-| `<place>`   | `SpawnerPlugin`    | Deterministic XZ + terrain Y + optional AABB align            |
+| Particles   | `ParticlesPlugin`  | Fire, smoke, sparks, rain (often under `<entity place="…">` for ground height) |
+| `<entity place="…">` | `SpawnerPlugin` | Deterministic XZ + terrain Y on the root entity; children are local transforms / merge |
 | AI Steering | `AiSteeringPlugin` | 3 NPCs wandering autonomously (Yuka)                          |
 | Save / Load | `SaveLoadPlugin`   | Q = save, E = load via localStorage + msgpackr                |
 | i18n        | `I18nPlugin`       | Auto-detect PT/EN; overlay messages localized                 |
@@ -128,7 +128,7 @@ The scene still runs without GLBs — you see the terrain, the player capsule, p
 ## Extending
 
 - Add more assets: edit `manifest.csv`, re-run batch + handoff.
-- Change layout: edit `index.html` `<gltf-load>` positions, or regenerate via `gameassets dream`.
+- Change layout: edit `index.html` (`<entity place="…">` wrappers, `<gltf-load>`, etc.) or regenerate via `gameassets dream`.
 - Add game logic: edit `src/main.ts` using the VibeGame runtime API and custom systems.
 - Add more particle effects: `<particle-emitter preset="snow">`, `<particle-burst preset="explosion">`.
 - Add pathfinding: `<nav-mesh>` + `<nav-agent target="x y z">` for AI navigation.
@@ -140,6 +140,6 @@ The scene still runs without GLBs — you see the terrain, the player capsule, p
 - [MONOREPO_GAME_PIPELINE.md](../../../docs/MONOREPO_GAME_PIPELINE.md) — folder layout and handoff contract
 - [ZERO_TO_GAME_AI.md](../../../docs/ZERO_TO_GAME_AI.md) — AI-centric workflow and `dream` command
 - [GameAssets README](../../../GameAssets/README.md) — batch, handoff, presets
-- [PLUGINS.md](../../docs/PLUGINS.md) — full engine plugin reference
+- [Plugins overview](../../src/plugins/README.md) — engine plugin architecture (`DefaultPlugins`)
 - [AUDIO.md](../../docs/AUDIO.md) — Howler, `<audio-clip>`, autoplay no browser
-- [monorepo-game example](../monorepo-game/) — minimal GLB bridge (imperative `loadGltfToScene`)
+- [hello-world example](../hello-world/context.md) — minimal Vite scene (`<entity place="…">`, no handoff required)

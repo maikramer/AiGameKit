@@ -1,15 +1,14 @@
 # Hello World Example
 
 <!-- LLM:OVERVIEW -->
-Basic example demonstrating VibeGame engine features including physics, player controls, and XML-based entity creation. Use as reference for integrating the engine into your own projects.
+Minimal example: procedural terrain, one dynamic physics sphere, and a small **`<entity place="…">`** demo (terrain-sampled XZ + surface Y) with a child `particle-emitter`. Entry is `GAME.run()` with default plugins. Use as a template for new Vite + VibeGame apps.
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
 
-- Demonstrate engine capabilities
-- Test plugin integrations
-- Provide usage examples
-- Development playground
+- Show the smallest `index.html` + `main.ts` integration
+- Demonstrate **entity-centric placement** (`place` attribute on `<entity>`)
+- Demonstrate physics with `<dynamic-part>`
 
 ## Layout
 
@@ -17,122 +16,55 @@ Basic example demonstrating VibeGame engine features including physics, player c
 hello-world/
 ├── context.md  # This file
 ├── src/
-│   └── main.ts  # Entry point
-├── index.html  # HTML entry point
-├── package.json  # Example dependencies
-└── vite.config.ts  # Vite configuration
+│   └── main.ts  # Entry: GAME.run()
+├── index.html      # World XML (terrain, dynamic-part, entity + particles)
+├── package.json
+├── vite.config.ts
+└── tsconfig.json
 ```
 
 ## Scope
 
-- **In-scope**: Demo scenes, feature showcase
-- **Out-of-scope**: Production code, tests
+- **In-scope**: Declarative scene, default plugins, one placement demo
+- **Out-of-scope**: GLB handoff, save/load, custom pipeline
 
 ## Entry Points
 
-- **src/main.ts**: Application entry point
-- **index.html**: Browser entry point
-
-## Dependencies
-
-- **Internal**: Full engine with all plugins
-- **External**: Vite, Three.js
+- **`src/main.ts`**: `import * as GAME from 'vibegame'; GAME.run();`
+- **`index.html`**: `<world>` + canvas + Vite module entry
 
 ## Features Demonstrated
 
-- XML-based entity creation
-- Physics simulation
-- Player movement
-- Orbital camera
-- Tween animations
-- Dynamic entity spawning
+- `<terrain>` — procedural LOD terrain
+- `<dynamic-part>` — Rapier dynamic body (sphere)
+- **`<entity place="at: x z; …">`** — deterministic XZ + terrain height; `particle-emitter` as child (local transform)
+- Default plugins (physics, rendering, particles, spawner, etc.)
 
 ## Running
 
 ```bash
-# From repository root
-bun run example
+cd VibeGame/examples/hello-world
+bun install
+bun run dev
 ```
+
+## Related
+
+- Spawner / placement behaviour: [`../../src/plugins/spawner/context.md`](../../src/plugins/spawner/context.md)
+- Larger demo: [`../simple-rpg/README.md`](../simple-rpg/README.md)
 
 <!-- LLM:EXAMPLES -->
-## Examples
+## Code snippet — entity placement
 
-### Running the Example
-
-```bash
-# From repository root
-bun run example
+```xml
+<entity place="at: 0 -12; base-y-offset: 0.02">
+  <particle-emitter
+    preset="fire"
+    rate="12"
+    transform="pos: 0 0.25 0"
+  ></particle-emitter>
+</entity>
 ```
 
-### Basic Integration
-
-```typescript
-// src/main.ts
-import * as GAME from 'vibegame';
-
-// Create engine with default plugins
-const engine = GAME.builder()
-  .withPlugins(GAME.DefaultPlugins)
-  .withCanvas('#game')
-  .build();
-
-// Load XML scene
-const sceneXML = `
-  <world clear-color="#87ceeb">
-    <entity ambient-light="intensity: 0.5" directional-light></entity>
-
-    <entity transform="pos: 0 10 20" main-camera orbit-camera></entity>
-
-    <player transform="pos: 0 1 0"></player>
-
-    <entity transform="pos: 0 -0.5 0"
-            renderer="shape: box; size: 20 1 20; color: 0x808080"
-            body="type: fixed">
-    </entity>
-  </world>
-`;
-
-engine.loadXML(sceneXML);
-engine.start();
-```
-
-### Custom Scene Setup
-
-```typescript
-// Adding entities programmatically
-import * as GAME from 'vibegame';
-
-const MyCustomSystem = {
-  id: 'my-custom-system',
-  setup: (state) => {
-    // Create entity with components
-    const entity = state.createEntity();
-    state.addComponent(entity, GAME.Transform);
-    state.addComponent(entity, GAME.Renderer);
-    
-    // Set component values
-    GAME.Transform.posY[entity] = 5;
-    GAME.Renderer.shape[entity] = 1; // sphere
-    GAME.Renderer.color[entity] = 0xff0000; // red
-  }
-};
-
-// Add custom system to engine
-const engine = GAME.builder()
-  .withPlugins(GAME.DefaultPlugins)
-  .withSystem(MyCustomSystem)
-  .build();
-```
-
-### Hot Module Replacement
-
-```typescript
-// Vite config enables HMR
-if (import.meta.hot) {
-  import.meta.hot.accept();
-  import.meta.hot.dispose(() => {
-    engine.stop();
-  });
-}
-```
+The root entity is positioned on the terrain; emitters (or `gltf-load`, `npc`, etc.) are children in the ECS hierarchy.
 <!-- /LLM:EXAMPLES -->

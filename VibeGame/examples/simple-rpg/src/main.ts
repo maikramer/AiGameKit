@@ -22,7 +22,7 @@ import {
 const SAVE_KEY = 'simple-rpg-save';
 const PROGRESS_KEY = 'simple-rpg-progress';
 
-/** Posições XZ dos cristais (alinhadas ao `<place at="x z">` no index.html). */
+/** Posições XZ dos cristais (alinhadas ao `place="at: x z; …"` no index.html). */
 const CRYSTAL_SITES = [
   { x: -4, z: 6 },
   { x: 10, z: -5 },
