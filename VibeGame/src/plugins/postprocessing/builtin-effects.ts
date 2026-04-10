@@ -275,12 +275,20 @@ const builtinDefinitions: EffectDefinition[] = [
     create(state, entity) {
       const camera = threeCameras.get(entity);
       const scene = getScene(state);
-      return new SSREffect(scene!, camera!, {
-        intensity: ScreenSpaceReflection.intensity[entity],
-        distance: ScreenSpaceReflection.maxDistance[entity],
-      });
+      try {
+        return new SSREffect(scene!, camera!, {
+          intensity: ScreenSpaceReflection.intensity[entity],
+          distance: ScreenSpaceReflection.maxDistance[entity],
+        });
+      } catch (e: any) {
+        console.warn(
+          `[vibegame] SSR effect unavailable — screen-space-reflections is incompatible with this Three.js version (${e?.message ?? e}). Skipping.`
+        );
+        return null as unknown as InstanceType<typeof SSREffect>;
+      }
     },
     update(_state, entity, effect) {
+      if (!effect) return;
       const ssr = effect as SSREffect;
       const intensity = ScreenSpaceReflection.intensity[entity];
       const maxDistance = ScreenSpaceReflection.maxDistance[entity];

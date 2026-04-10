@@ -17,6 +17,9 @@ import { Tonemapping } from './components';
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
 
+/** Sentinel value: effect creation failed (incompatible library), skip without retrying. */
+const skippedMarker: Effect = null as unknown as Effect;
+
 export const PostprocessingSystem: System = {
   group: 'draw',
   update(state: State) {
@@ -59,9 +62,15 @@ export const PostprocessingSystem: System = {
         const current = effectsMap.get(def.key);
 
         if (hasEffect) {
-          if (!current) {
-            effectsMap.set(def.key, def.create(state, entity));
-            needsRebuild = true;
+          if (!current || current === skippedMarker) {
+            if (current === skippedMarker) continue;
+            const effect = def.create(state, entity);
+            if (effect) {
+              effectsMap.set(def.key, effect);
+              needsRebuild = true;
+            } else {
+              effectsMap.set(def.key, skippedMarker);
+            }
           } else if (def.update) {
             const result = def.update(state, entity, current);
             if (result === true) needsRebuild = true;
