@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-04-05T22:20:53.679500+00:00",
+  "generated_at": "2026-04-10T03:41:46.172896+00:00",
   "public_dir": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public",
   "assets_base_url": "/assets",
   "rows": [
@@ -8,10 +8,15 @@
       "id": "hero",
       "public_id": "hero",
       "model": {
-        "kind": "rigged",
-        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/hero_rigged.glb",
+        "kind": "animated",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/hero_animated.glb",
         "url": "/assets/models/hero.glb",
         "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/hero.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/hero.png",
+        "url": "/assets/textures/hero.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/hero.png"
       }
     },
     {
@@ -22,6 +27,11 @@
         "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/wooden_crate.glb",
         "url": "/assets/models/wooden_crate.glb",
         "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/wooden_crate.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/wooden_crate.png",
+        "url": "/assets/textures/wooden_crate.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/wooden_crate.png"
       }
     },
     {
@@ -32,6 +42,11 @@
         "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/crystal_blue.glb",
         "url": "/assets/models/crystal_blue.glb",
         "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/crystal_blue.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/crystal_blue.png",
+        "url": "/assets/textures/crystal_blue.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/crystal_blue.png"
       }
     },
     {
@@ -42,6 +57,11 @@
         "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/stone_pillar.glb",
         "url": "/assets/models/stone_pillar.glb",
         "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/stone_pillar.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/stone_pillar.png",
+        "url": "/assets/textures/stone_pillar.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/stone_pillar.png"
       }
     },
     {
@@ -52,6 +72,11 @@
         "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/tree_lowpoly.glb",
         "url": "/assets/models/tree_lowpoly.glb",
         "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/tree_lowpoly.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/tree_lowpoly.png",
+        "url": "/assets/textures/tree_lowpoly.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/tree_lowpoly.png"
       }
     },
     {
@@ -61,6 +86,167 @@
         "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/audio/collect_sfx.wav",
         "url": "/assets/audio/collect_sfx.wav",
         "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio/collect_sfx.wav"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/collect_sfx.png",
+        "url": "/assets/textures/collect_sfx.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/collect_sfx.png"
+      }
+    },
+    {
+      "id": "bgm_field",
+      "public_id": "bgm_field",
+      "audio": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/audio/bgm_field.wav",
+        "url": "/assets/audio/bgm_field.wav",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio/bgm_field.wav"
+      }
+    },
+    {
+      "id": "sfx_jump",
+      "public_id": "sfx_jump",
+      "audio": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/audio/sfx_jump.wav",
+        "url": "/assets/audio/sfx_jump.wav",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio/sfx_jump.wav"
+      }
+    },
+    {
+      "id": "sfx_save",
+      "public_id": "sfx_save",
+      "audio": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/audio/sfx_save.wav",
+        "url": "/assets/audio/sfx_save.wav",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio/sfx_save.wav"
+      }
+    },
+    {
+      "id": "sfx_load",
+      "public_id": "sfx_load",
+      "audio": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/audio/sfx_load.wav",
+        "url": "/assets/audio/sfx_load.wav",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/audio/sfx_load.wav"
+      }
+    },
+    {
+      "id": "wooden_barrel",
+      "public_id": "wooden_barrel",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/wooden_barrel.glb",
+        "url": "/assets/models/wooden_barrel.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/wooden_barrel.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/wooden_barrel.png",
+        "url": "/assets/textures/wooden_barrel.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/wooden_barrel.png"
+      }
+    },
+    {
+      "id": "treasure_chest",
+      "public_id": "treasure_chest",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/treasure_chest.glb",
+        "url": "/assets/models/treasure_chest.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/treasure_chest.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/treasure_chest.png",
+        "url": "/assets/textures/treasure_chest.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/treasure_chest.png"
+      }
+    },
+    {
+      "id": "rock_boulder",
+      "public_id": "rock_boulder",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/rock_boulder.glb",
+        "url": "/assets/models/rock_boulder.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/rock_boulder.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/rock_boulder.png",
+        "url": "/assets/textures/rock_boulder.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/rock_boulder.png"
+      }
+    },
+    {
+      "id": "milestone_stone",
+      "public_id": "milestone_stone",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/milestone_stone.glb",
+        "url": "/assets/models/milestone_stone.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/milestone_stone.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/milestone_stone.png",
+        "url": "/assets/textures/milestone_stone.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/milestone_stone.png"
+      }
+    },
+    {
+      "id": "stone_well",
+      "public_id": "stone_well",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/stone_well.glb",
+        "url": "/assets/models/stone_well.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/stone_well.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/stone_well.png",
+        "url": "/assets/textures/stone_well.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/stone_well.png"
+      }
+    },
+    {
+      "id": "torch_stand",
+      "public_id": "torch_stand",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/torch_stand.glb",
+        "url": "/assets/models/torch_stand.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/torch_stand.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/torch_stand.png",
+        "url": "/assets/textures/torch_stand.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/torch_stand.png"
+      }
+    },
+    {
+      "id": "bush_small",
+      "public_id": "bush_small",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/bush_small.glb",
+        "url": "/assets/models/bush_small.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/bush_small.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/bush_small.png",
+        "url": "/assets/textures/bush_small.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/bush_small.png"
+      }
+    },
+    {
+      "id": "hay_bale",
+      "public_id": "hay_bale",
+      "model": {
+        "kind": "base",
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/meshes/hay_bale.glb",
+        "url": "/assets/models/hay_bale.glb",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/models/hay_bale.glb"
+      },
+      "texture": {
+        "source": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/sample-gameassets/images/hay_bale.png",
+        "url": "/assets/textures/hay_bale.png",
+        "dest": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/hay_bale.png"
       }
     }
   ],
