@@ -1,7 +1,7 @@
 # GLTF-Anim Plugin (context.md)
 <!-- LLM:OVERVIEW -->
 ECS plugin for managing `GltfAnimator` instances in the ECS. The `GltfAnimationUpdateSystem` ticks all registered animators each frame and and syncs their root Three.js `Object3D` position/rotation to `WorldTransform`. Use `animatorRegistry` global Map and `registerAnimator` for ECS integration.
- for animated player models ( use `<player-gltf>`.
+ for animated player models ( use `<PlayerGLTF>`.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout

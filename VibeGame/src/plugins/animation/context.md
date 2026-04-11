@@ -115,7 +115,7 @@ const MySystem: GAME.System = {
 
 ```xml
 <!-- Player entity with animated character -->
-<entity 
+<GameObject 
   animated-character
   character-controller
   transform="pos: 0 2 0"

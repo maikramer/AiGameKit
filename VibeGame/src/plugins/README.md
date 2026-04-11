@@ -207,7 +207,7 @@ export { MeuSystem } from './systems';
 | `gltf-xml`       | Carregamento de modelos GLB/GLTF                                                      | Alta         |
 | `animation`      | Sistema de animação                                                                   | Média        |
 | `tweening`       | Interpolações suaves (tweens)                                                         | Baixa        |
-| `spawner`        | `<spawn-group>`, `<entity place="…">` no terreno — [context.md](./spawner/context.md) | Média        |
+| `spawner`        | `<SpawnGroup>`, `<GameObject place="…">` no terreno — [context.md](./spawner/context.md) | Média        |
 | `respawn`        | Respawn de entidades                                                                  | Baixa        |
 | `lod`            | Level of Detail (near/far)                                                            | Baixa        |
 | `startup`        | Execução deferida pós-inicialização                                                   | Baixa        |
@@ -215,7 +215,7 @@ export { MeuSystem } from './systems';
 | `scene-manifest` | Carregamento de cenas XML                                                             | Média        |
 | `text-3d`        | Modelos GLB do Text3D (Hunyuan)                                                       | Baixa        |
 | `sky`            | Skybox equirectangular + IBL (PMREM)                                                  | Média        |
-| `audio`          | Áudio espacial (Howler, `<audio-clip>`) — [`docs/AUDIO.md`](../../docs/AUDIO.md)      | Média        |
+| `audio`          | Áudio espacial (Howler, `<AudioSource>`) — [`docs/AUDIO.md`](../../docs/AUDIO.md)      | Média        |
 | `sprite`         | Sprites 2D                                                                            | Baixa        |
 | `line`           | Linhas 3D                                                                             | Baixa        |
 | `postprocessing` | Bloom, SMAA, dithering, tonemapping (registry)                                        | Alta         |

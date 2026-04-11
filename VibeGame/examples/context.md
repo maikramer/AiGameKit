@@ -15,7 +15,7 @@ Shipped examples in this repository: **hello-world** (minimal terrain + physics 
 ```
 examples/
 ├── context.md          # This file
-├── hello-world/        # Minimal: terrain, dynamic body, <entity place="…">
+├── hello-world/        # Minimal: terrain, dynamic body, <GameObject place="…">
 │   ├── context.md
 │   ├── src/main.ts
 │   ├── index.html
@@ -31,7 +31,7 @@ examples/
 
 ## Deterministic terrain placement (entity-centric)
 
-Use **`<entity place="at: x z; …">`** (not a separate wrapper tag): one root entity is anchored to the terrain at XZ; optional keys match the internal `place` profile (`base-y-offset`, `y-offset`, `ground-align`, `align-to-terrain`, …). Child recipes (`gltf-load`, `particle-emitter`, `<npc>` with merge, etc.) hang under that root. See [Spawner plugin context](../src/plugins/spawner/context.md).
+Use **`<GameObject place="at: x z; …">`** (not a separate wrapper tag): one root entity is anchored to the terrain at XZ; optional keys match the internal `place` profile (`base-y-offset`, `y-offset`, `ground-align`, `align-to-terrain`, …). Child recipes (`GLTFLoader`, `ParticleSystem`, `NPC` with merge, etc.) hang under that root. See [Spawner plugin context](../src/plugins/spawner/context.md).
 
 ## Running Examples
 

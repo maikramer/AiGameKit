@@ -4,7 +4,7 @@
 Two-stage GLB loading pipeline: `loaders.gl` decompress + Three.js `GLTFLoader.parseAsync`).
  Static GLB models become Three.js scenes with animation clips.
  Wraps animated models in `GltfAnimator` for runtime clip playback.
- `PlayerGltfSetupSystem` handles movement input and walk/runidle animation. `PlayerGltfAnimStateSystem` handles sync per frame. For static props, use `<gltf-load>` in XML. For static environment objects. Use `<player-gltf>` in XML for animated player character models. Can also be loaded programmatically via the APIs (`loadGltfToScene`, `loadGltfAnimated`, `loadGltfToSceneWithAnimator`). `GltfAnimator` class for runtime animation control. `animatorRegistry`/`registerAnimator` for ECS integration with `GltfAnimPlugin`. `GltfAnimationState` component syncs animator root to `WorldTransform`.
+ `PlayerGltfSetupSystem` handles movement input and walk/runidle animation. `PlayerGltfAnimStateSystem` handles sync per frame. For static props, use `<GLTFLoader>` in XML. For static environment objects. Use `<PlayerGLTF>` in XML for animated player character models. Can also be loaded programmatically via the APIs (`loadGltfToScene`, `loadGltfAnimated`, `loadGltfToSceneWithAnimator`). `GltfAnimator` class for runtime animation control. `animatorRegistry`/`registerAnimator` for ECS integration with `GltfAnimPlugin`. `GltfAnimationState` component syncs animator root to `WorldTransform`.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -22,10 +22,10 @@ gltf-xml/
 │   ├── context.ts      # Runtime state storage (WeakMap)
 │   ├── index.ts         # Exports
 │   ├── plugin.ts      # Plugin: GltfXmlPlugin
-gltf-load recipe + GltfXmlLoadSystem + GltfPending component)
+GLTFLoader recipe + GltfXmlLoadSystem + GltfPending component)
 │   ├── components.ts  # GltfPending component
 │   ├── systems.ts     # GltfXmlLoadSystem
-│   └── recipes.ts   # gltfLoadRecipe (gltf-load recipe)
+│   └── recipes.ts   # gltfLoadRecipe (GLTFLoader recipe)
 gltf-anim/
 │   ├── context.md     # THIS FILE
 │   ├── index.ts         # Exports
@@ -40,7 +40,7 @@ gltf-anim/
 #### loadGltfToScene(state, url): Promise<Group>
 Loads GLB, adds scene to render graph, returns only the `Group` (no animation access). For static props/environment objects.
 
- Use in `index.html` via the `<gltf-load>` tag.
+ Use in `index.html` via the `<GLTFLoader>` tag.
 
  ```typescript
 const group = await loadGltfToScene(state, url);
@@ -94,8 +94,8 @@ const idx = registerAnimator(animator);
  ```
 
 ### Recipes
-- **gltf-load** — components: ['transform', 'gltfPending']. Static GLB entities in the scene via `<gltf-load>` XML tag.
-- **player-gltf** — components: [...playerRecipe.components, 'playerGltfConfig']. Full player gameplay stack with GLB-driven visuals and animation. `player-gltf` XML tag. The `model-url` adapter stores the model URL in a module-level map.
+- **GLTFLoader** — components: ['transform', 'gltfPending']. Static GLB entities in the scene via `<GLTFLoader>` XML tag.
+- **player-gltf** — components: [...playerRecipe.components, 'playerGltfConfig']. Full player gameplay stack with GLB-driven visuals and animation. `PlayerGLTF` XML tag. The `model-url` adapter stores the model URL in a module-level map.
 
  `PlayerGltfSetupSystem` loads GLB via `loadGltfAnimated`, creates `GltfAnimator`, plays default idle clip. `PlayerGltfAnimStateSystem` handles idle/walk/run animation state. `PlayerGltfEnsureHasAnimatorSystem` prevents procedural box character from spawning by adding `HasAnimator` component. `GltfAnimationUpdateSystem` ticks the `GltfAnimator` via `animatorRegistry` and syncs `animator.root` position/rotation to `WorldTransform`. Expected clip names: `Animator3D_BreatheIdle`, `Animator3D_Walk`, `Animator3D_Run` (requires Shift key modifier).
 
@@ -108,12 +108,12 @@ const idx = registerAnimator(animator);
 ## Examples
 ### Declarative Static Prop
 ```xml
-<gltf-load url="/assets/models/stone_pillar.glb" transform="pos: 10 2 -8; scale: 1.5 1.5" />
+<GLTFLoader url="/assets/models/stone_pillar.glb" transform="pos: 10 2 -8; scale: 1.5 1.5" />
 ```
 
 ### Declarative Animated Player
 ```xml
-<player-gltf model-url="/assets/models/hero.glb" pos="0 60 0"></player-gltf>
+<PlayerGLTF model-url="/assets/models/hero.glb" pos="0 60 0"></PlayerGLTF>
 ```
 
 ### Programmatic Loading

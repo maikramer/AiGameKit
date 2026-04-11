@@ -38,9 +38,9 @@ Todos os plugins registrados em `DefaultPlugins` (`src/plugins/defaults.ts`).
 Diferente do plugin `text` (que usa troika-three-text para texto 2D em 3D), o `text-3d` carrega **modelos 3D geométricos** gerados pela pipeline Text3D (Hunyuan3D).
 
 ```html
-<world canvas="#canvas">
-  <text3d text3dModel="url: models/hello.glb" scale="2" tint="0xff0000" pos="0 1 0"></text3d>
-</world>
+<Scene canvas="#canvas">
+  <TextMesh text3dModel="url: models/hello.glb" scale="2" tint="0xff0000" pos="0 1 0"></TextMesh>
+</Scene>
 ```
 
 **Componentes:** `Text3dModel` (url, pending, scale, tint)
@@ -60,9 +60,9 @@ Diferente do plugin `text` (que usa troika-three-text para texto 2D em 3D), o `t
 Carrega texturas equirectangulares (2:1 PNG/JPG/HDR) como background e/ou iluminação IBL (Image-Based Lighting) via PMREM.
 
 ```html
-<world canvas="#canvas">
-  <sky url="textures/sky.hdr" rotationDeg="90" setBackground="1"></sky>
-</world>
+<Scene canvas="#canvas">
+  <Skybox url="textures/sky.hdr" rotationDeg="90" setBackground="1"></Skybox>
+</Scene>
 ```
 
 **Componentes:** `Sky` (urlIndex, rotationDeg, setBackground, loaded)
@@ -90,18 +90,18 @@ Veja [`docs/EFFECT-REGISTRY.md`](EFFECT-REGISTRY.md) para detalhes do sistema de
 | `spawner` | `spawner/` | Spawn de entidades |
 | `respawn` | `respawn/` | Respawn de entidades |
 | `lod` | `lod/` | Level of Detail (near/far) |
-| `audio` | `audio/` | Áudio espacial (Howler) + `audio-clip` — ver [`AUDIO.md`](AUDIO.md) |
+| `audio` | `audio/` | Áudio espacial (Howler) + `AudioSource` — ver [`AUDIO.md`](AUDIO.md) |
 | `debug` | `debug/` | Debug overlays (wireframes, etc.) |
 
 ### audio
 
-Áudio via **Howler**: `AudioEmitter` + `AudioListener` na câmara; recipe **`<audio-clip>`** com `url`, opcionalmente `loop`, `playing`, `spatial`, `name`, etc.
+Áudio via **Howler**: `AudioEmitter` + `AudioListener` na câmara; recipe **`<AudioSource>`** com `url`, opcionalmente `loop`, `playing`, `spatial`, `name`, etc.
 
 ```html
-<world canvas="#canvas" resume-audio-on-user-gesture="true">
-  <audio-clip url="/assets/audio/bgm.wav" name="bgm" loop="true" playing="true"></audio-clip>
-  <audio-clip url="/assets/audio/jump.wav" name="sfx-jump"></audio-clip>
-</world>
+<Scene canvas="#canvas" resume-audio-on-user-gesture="true">
+  <AudioSource url="/assets/audio/bgm.wav" name="bgm" loop="true" playing="true"></AudioSource>
+  <AudioSource url="/assets/audio/jump.wav" name="sfx-jump"></AudioSource>
+</Scene>
 ```
 
 **Exports úteis:** `playAudioEmitter`, `resumeAudioContextIfSuspended`, `resumeAudioContextOnFirstUserGesture`, `AudioSystem`.
@@ -113,10 +113,10 @@ Documentação completa: [`docs/AUDIO.md`](AUDIO.md).
 | Plugin | Pasta | Descrição |
 |--------|-------|-----------|
 | `raycast` | `raycast/` | Raycast Rapier (`castRayAndGetNormal`) + componentes `raycast-source` / `raycast-result` |
-| `navmesh` | `navmesh/` | Navmesh com `three-pathfinding` (zona por omissão: plano) + `nav-agent` |
-| `ai-steering` | `ai-steering/` | Steering **yuka** (seek / wander / flee) + recipe `npc` |
-| `particles` | `particles/` | Partículas **three.quarks** (`particle-emitter`, `particle-burst`) |
-| `hud` | `hud/` | Painéis **three-mesh-ui** (`hud-panel`) em espaço mundo |
+| `navmesh` | `navmesh/` | Navmesh com `three-pathfinding` (zona por omissão: plano) + `NavMeshAgent` |
+| `ai-steering` | `ai-steering/` | Steering **yuka** (seek / wander / flee) + recipe `NPC` |
+| `particles` | `particles/` | Partículas **three.quarks** (`ParticleSystem`, `ParticleBurst`) |
+| `hud` | `hud/` | Painéis **three-mesh-ui** (`HudPanel`) em espaço mundo |
 | `joints` | `joints/` | Joints Rapier (`physicsJoint` / recipe `joint`) |
 
 ## Opcionais (registar com `withPlugin`)
@@ -125,7 +125,7 @@ Documentação completa: [`docs/AUDIO.md`](AUDIO.md).
 |--------|-------|-----------|
 | `save-load` | `save-load/` | Snapshot `msgpackr` + componente `serializable` |
 | `network` | `network/` | Cliente **colyseus.js** (mensagens `transform`) |
-| `i18n` | `i18n/` | Chaves i18n (`i18n-text`) + integração com HUD |
+| `i18n` | `i18n/` | Chaves i18n (`I18nText`) + integração com HUD |
 
 ## Pipeline
 
@@ -140,9 +140,9 @@ Veja [`docs/ASSET-PIPELINE.md`](ASSET-PIPELINE.md) para detalhes.
 O plugin `rendering` inclui o sistema `TextureRecipe` que integra texturas procedurais do Texture2D:
 
 ```html
-<entity transform renderer
+<GameObjecttransform renderer
   textureRecipe="url: textures/wood.png; repeatMode: 1; repeatX: 4; repeatY: 4; channel: 0">
-</entity>
+</GameObject>
 ```
 
 **Canais:** 0=map (diffuse), 1=normalMap, 2=roughnessMap, 3=metalnessMap

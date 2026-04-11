@@ -86,12 +86,12 @@ interface XMLParseResult {
 import * as GAME from 'vibegame';
 
 const xml = `
-  <world>
-    <entity pos="0 1 0" euler="0 45 0">
+  <Scene>
+    <GameObject pos="0 1 0" euler="0 45 0">
       <box size="1 1 1" color="#ff0000"></box>
       <rigidbody type="dynamic"></rigidbody>
-    </entity>
-  </world>
+    </GameObject>
+  </Scene>
 `;
 
 const result = GAME.XMLParser.parse(xml);

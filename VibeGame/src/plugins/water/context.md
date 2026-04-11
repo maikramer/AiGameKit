@@ -13,7 +13,7 @@ water/
 ├── plugin.ts             # Plugin definition + config defaults
 ├── components.ts         # Water ECS component
 ├── systems.ts            # Bootstrap, render, physics systems
-├── recipes.ts            # <water> recipe (inline)
+├── recipes.ts            # <Water> recipe (inline)
 ├── utils.ts              # Context, terrain heightmap/config cross-plugin lookup
 ├── water-material.ts     # Custom GLSL ShaderMaterial (vertex + fragment)
 └── planar-reflection.ts  # PlanarReflection class (mirror camera + oblique projection)
@@ -135,19 +135,17 @@ Creates the water ShaderMaterial with all uniforms
 
 #### XML Water Plane
 ```xml
-<water
-  pos="0 5 0"
+<Water   pos="0 5 0"
   size="256"
   opacity="0.8"
   wave-speed="1.0"
   wave-scale="0.3"
-></water>
+></Water>
 ```
 
 #### XML Water with Custom Tint
 ```xml
-<water
-  pos="0 3 0"
+<Water   pos="0 3 0"
   size="128"
   opacity="0.6"
   tint-r="0.0"
@@ -155,7 +153,7 @@ Creates the water ShaderMaterial with all uniforms
   tint-b="0.6"
   wave-speed="2.0"
   wave-scale="0.5"
-></water>
+></Water>
 ```
 
 #### JavaScript API
@@ -181,17 +179,15 @@ state.addComponent(entity, Water, {
 Water uses terrain heightmap for depth-based coloring and foam. Place water at a Y position below terrain peaks:
 
 ```xml
-<terrain
-  pos="0 0 0"
+<Terrain   pos="0 0 0"
   world-size="256"
   max-height="50"
   heightmap="/assets/heightmap.png"
-></terrain>
+></Terrain>
 
-<water
-  pos="0 5 0"
+<Water   pos="0 5 0"
   size="256"
   opacity="0.8"
-></water>
+></Water>
 ```
 <!-- /LLM:EXAMPLES -->

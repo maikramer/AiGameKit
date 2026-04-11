@@ -90,7 +90,7 @@ All builder functions return a builder instance for method chaining.
 
 - `canvas?: string` - Canvas selector for rendering
 - `autoStart?: boolean` - Auto-start animation loop (default: true)
-- `dom?: boolean` - Process DOM for <world> elements (default: true)
+- `dom?: boolean` - Process DOM for <Scene> elements (default: true)
 
 ### Runtime Interface
 

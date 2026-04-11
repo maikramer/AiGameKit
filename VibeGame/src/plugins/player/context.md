@@ -123,23 +123,22 @@ Smooth rotation towards movement
 ### Basic Player Usage (XML)
 
 ```xml
-<world>
+<Scene>
   <!-- Player auto-created if not specified -->
-  <player pos="0 2 0" speed="6" jump-height="3" />
-</world>
+  <Player pos="0 2 0" speed="6" jump-height="3" />
+</Scene>
 ```
 
 ### Custom Player Configuration (XML)
 
 ```xml
-<world>
-  <player
-    pos="5 1 -10"
+<Scene>
+  <Player     pos="5 1 -10"
     speed="8"
     jump-height="4"
     rotation-speed="15"
   />
-</world>
+</Scene>
 ```
 
 ### Accessing Player Component (JavaScript)

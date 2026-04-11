@@ -108,28 +108,28 @@ orbit-camera/
 ### Basic Camera
 
 ```xml
-<orbit-camera />
+<OrbitCamera />
 ```
 
 ### Camera Following Player
 
 ```xml
-<world>
-  <player id="player" pos="0 0 0" />
-  <orbit-camera
+<Scene>
+  <Player id="player" pos="0 0 0" />
+  <OrbitCamera
     target="#player"
     target-distance="10"
     min-distance="5"
     max-distance="20"
     offset-y="2"
   />
-</world>
+</Scene>
 ```
 
 ### Custom Orbit Settings
 
 ```xml
-<entity 
+<GameObject 
   orbit-camera="
     target: #boss;
     target-distance: 15;

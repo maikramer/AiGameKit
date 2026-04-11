@@ -66,13 +66,13 @@ GAME.run(); // Uses DefaultPlugins which includes StartupPlugin
 ### Preventing Auto-Creation with XML
 
 ```xml
-<world>
+<Scene>
   <!-- Creating your own player prevents auto-creation -->
-  <player pos="10 2 -5" speed="12" />
+  <Player pos="10 2 -5" speed="12" />
   
   <!-- Creating custom lighting prevents default lights -->
-  <entity ambient="sky-color: 0xff0000" directional />
-</world>
+  <GameObject ambient="sky-color: 0xff0000" directional />
+</Scene>
 ```
 
 ### Manual Plugin Registration

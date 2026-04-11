@@ -291,9 +291,9 @@ state.registerPlugin(HealthPlugin);
 import * as GAME from 'vibegame';
 
 const xml = `
-  <world>
-    <entity transform="pos: 0 5 0" health="max: 100"></entity>
-  </world>
+  <Scene>
+    <GameObject transform="pos: 0 5 0" health="max: 100"></GameObject>
+  </Scene>
 `;
 
 const result = GAME.XMLParser.parse(xml);

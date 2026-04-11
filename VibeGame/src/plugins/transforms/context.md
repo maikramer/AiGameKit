@@ -60,16 +60,16 @@ transforms/
 #### XML Position and Rotation
 ```xml
 <!-- Position only -->
-<entity transform="pos: 0 5 -3"></entity>
+<GameObject transform="pos: 0 5 -3"></GameObject>
 
 <!-- Euler rotation (degrees) -->
-<entity transform="euler: 0 45 0"></entity>
+<GameObject transform="euler: 0 45 0"></GameObject>
 
 <!-- Scale (single value applies to all axes) -->
-<entity transform="scale: 2"></entity>
+<GameObject transform="scale: 2"></GameObject>
 
 <!-- Combined transform -->
-<entity transform="pos: 0 5 0; euler: 0 45 0; scale: 1.5"></entity>
+<GameObject transform="pos: 0 5 0; euler: 0 45 0; scale: 1.5"></GameObject>
 ```
 
 #### JavaScript API
@@ -98,18 +98,18 @@ const MySystem = {
 #### Parent-Child Relationships
 ```xml
 <!-- Parent at origin -->
-<entity transform="pos: 0 0 0">
+<GameObject transform="pos: 0 0 0">
   <!-- Children positioned relative to parent -->
-  <entity transform="pos: 2 0 0"></entity>
-  <entity transform="pos: -2 0 0"></entity>
-</entity>
+  <GameObject transform="pos: 2 0 0"></GameObject>
+  <GameObject transform="pos: -2 0 0"></GameObject>
+</GameObject>
 
 <!-- Rotating parent affects all children -->
-<entity transform="euler: 0 45 0">
-  <entity id="arm" transform="pos: 0 2 0">
-    <entity id="hand" transform="pos: 0 2 0"></entity>
-  </entity>
-</entity>
+<GameObject transform="euler: 0 45 0">
+  <GameObject id="arm" transform="pos: 0 2 0">
+    <GameObject id="hand" transform="pos: 0 2 0"></GameObject>
+  </GameObject>
+</GameObject>
 ```
 
 #### Accessing World Transform

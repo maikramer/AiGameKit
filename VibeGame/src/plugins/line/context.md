@@ -83,32 +83,29 @@ Each visible line entity contributes:
 
 ```xml
 <!-- Simple horizontal line -->
-<entity transform="pos: 0 0 0" line="offset: 5 0 0"></entity>
+<GameObject transform="pos: 0 0 0" line="offset: 5 0 0"></GameObject>
 
 <!-- Diagonal line with custom color -->
-<entity transform="pos: 0 0 0" line="offset: 3 3 0; color: 0xff0000"></entity>
+<GameObject transform="pos: 0 0 0" line="offset: 3 3 0; color: 0xff0000"></GameObject>
 ```
 
 ### Styled Line
 
 ```xml
 <!-- Thick semi-transparent line -->
-<entity
-  transform="pos: 0 0 0"
+<GameObject   transform="pos: 0 0 0"
   line="offset: 5 0 0; thickness: 5; opacity: 0.5">
-</entity>
+</GameObject>
 
 <!-- Line with arrow at end -->
-<entity
-  transform="pos: 0 0 0"
+<GameObject   transform="pos: 0 0 0"
   line="offset: 0 5 0; arrow-end: 1; arrow-size: 0.3">
-</entity>
+</GameObject>
 
 <!-- Vector arrow (both ends) -->
-<entity
-  transform="pos: 0 0 0"
+<GameObject   transform="pos: 0 0 0"
   line="offset: 4 2 0; arrow-start: 1; arrow-end: 1; arrow-size: 0.25; color: 0x00ff00">
-</entity>
+</GameObject>
 ```
 
 ### Imperative Usage

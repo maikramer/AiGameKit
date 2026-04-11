@@ -35,19 +35,19 @@ Bevy-inspired modular architecture:
 
 ### Monorepo asset bridge (GameDev)
 - **GLB from disk (imperative):** `loadGltfToScene(state, url)` after `run()` — URL like `/assets/models/hero.glb`.
-- **GLB (declarative XML):** `<gltf-load url="/assets/models/hero.glb" transform="pos: 0 0 0"></gltf-load>` inside `<world>`.
-- **Equirect sky / IBL:** `<sky url="/assets/sky/env.png"></sky>` inside `<world>`, or `applyEquirectSkyEnvironment(state, url)` for dynamic URLs — PMREM on `Scene.environment` (optional background).
-- **Audio (Howler):** `<audio-clip url="/assets/audio/bgm.wav" name="bgm" loop="true" playing="true"></audio-clip>`; trigger SFX with `playAudioEmitter(state, entityId)`. Use `<world resume-audio-on-user-gesture="true">` for browser autoplay policy. Full reference: `docs/AUDIO.md`.
+- **GLB (declarative XML):** `<GLTFLoader url="/assets/models/hero.glb" transform="pos: 0 0 0"></GLTFLoader>` inside `<Scene>`.
+- **Equirect sky / IBL:** `<Skybox url="/assets/sky/env.png"></Skybox>` inside `<Scene>`, or `applyEquirectSkyEnvironment(state, url)` for dynamic URLs — PMREM on `Scene.environment` (optional background).
+- **Audio (Howler):** `<AudioSource url="/assets/audio/bgm.wav" name="bgm" loop="true" playing="true"></AudioSource>`; trigger SFX with `playAudioEmitter(state, entityId)`. Use `<Scene resume-audio-on-user-gesture="true">` for browser autoplay policy. Full reference: `docs/AUDIO.md`.
 
 ## Instant Playable Game
 
 ```html
 <script src="https://cdn.jsdelivr.net/npm/vibegame@latest/dist/cdn/vibegame.standalone.iife.js"></script>
 
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <!-- Ground (REQUIRED to prevent player falling) -->
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
-</world>
+</Scene>
 
 <canvas id="game-canvas"></canvas>
 <script>
@@ -88,7 +88,7 @@ bun dev    # Start dev server with hot reload
 ## Physics Objects
 
 ```xml
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <!-- 1. Static: Never moves (grounds, walls, platforms) -->
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#808080"></static-part>
   
@@ -97,8 +97,8 @@ bun dev    # Start dev server with hot reload
   
   <!-- 3. Kinematic: Script-controlled movement (moving platforms, doors) -->
   <kinematic-part name="lift" pos="5 2 0" shape="box" size="3 0.5 3" color="#0000ff"></kinematic-part>
-  <tween target="lift" attr="body.pos-y" from="2" to="5" duration="3" easing="sine-in-out"></tween>
-</world>
+  <Tween target="lift" attr="body.pos-y" from="2" to="5" duration="3" easing="sine-in-out"></Tween>
+</Scene>
 ```
 
 ## CRITICAL: Physics Position vs Transform Position
@@ -113,10 +113,10 @@ Always set position on the body, not the transform, for physics entities.
 <dynamic-part pos="0 5 0" shape="sphere" size="1"></dynamic-part>
 
 <!-- ❌ WRONG: Transform position ignored if body exists -->
-<entity transform="pos: 0 5 0" body collider></entity>  <!-- Falls to 0,0,0! -->
+<GameObject transform="pos: 0 5 0" body collider></GameObject>  <!-- Falls to 0,0,0! -->
 
 <!-- ✅ CORRECT: Set body position explicitly (if using raw entity) -->
-<entity transform body="pos: 0 5 0" collider></entity>
+<GameObject transform body="pos: 0 5 0" collider></GameObject>
 ```
 
 ## ECS Architecture Explained
@@ -165,21 +165,21 @@ You only need to provide:
 While auto-creation is recommended, you can manually create these for customization:
 
 ```xml
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
 
   <!-- Custom player spawn position and properties -->
-  <player pos="0 10 0" speed="8" jump-height="3"></player>
+  <Player pos="0 10 0" speed="8" jump-height="3"></Player>
 
   <!-- Custom camera (auto-creates target and input if not specified) -->
-  <orbit-camera target-distance="10" target-pitch="0.5" sensitivity="0.01"></orbit-camera>
+  <OrbitCamera target-distance="10" target-pitch="0.5" sensitivity="0.01"></OrbitCamera>
 
   <!-- Custom lighting (combined entity) -->
   <entity
     ambient-light="sky-color: 0xff6b6b; ground-color: 0x4ecdc4; intensity: 0.8"
     directional-light="color: 0xffffff; intensity: 0.5; direction-x: -1; direction-y: -2; direction-z: -1"
-  ></entity>
-</world>
+  ></GameObject>
+</Scene>
 ```
 
 **Best Practice**: Use auto-creation unless you specifically need custom positions, properties, or multiple instances. The defaults are well-tuned for most games.
@@ -233,34 +233,34 @@ GAME
 
 ```xml
 <!-- Simple line from entity position -->
-<entity transform="pos: 0 0 0" line="offset: 5 0 0"></entity>
+<GameObject transform="pos: 0 0 0" line="offset: 5 0 0"></GameObject>
 
 <!-- Vector arrow with arrowhead -->
-<entity transform line="offset: 3 2 0; color: 0xff0000; arrow-end: 1; arrow-size: 0.3"></entity>
+<GameObject transform line="offset: 3 2 0; color: 0xff0000; arrow-end: 1; arrow-size: 0.3"></GameObject>
 
 <!-- Styled line with both arrowheads -->
-<entity transform line="offset: 0 5 0; thickness: 4; arrow-start: 1; arrow-end: 1"></entity>
+<GameObject transform line="offset: 0 5 0; thickness: 4; arrow-start: 1; arrow-end: 1"></GameObject>
 ```
 
 ```xml
 <!-- Bloom effect for glow -->
-<orbit-camera bloom="intensity: 2; luminance-threshold: 0.8"></orbit-camera>
+<OrbitCamera bloom="intensity: 2; luminance-threshold: 0.8"></OrbitCamera>
 
 <!-- Retro dithering (reduces color palette) -->
-<orbit-camera dithering="color-bits: 3; scale: 2; noise: 1"></orbit-camera>
+<OrbitCamera dithering="color-bits: 3; scale: 2; noise: 1"></OrbitCamera>
 
 <!-- Tonemapping for HDR-like visuals -->
-<orbit-camera tonemapping="mode: aces-filmic"></orbit-camera>
+<OrbitCamera tonemapping="mode: aces-filmic"></OrbitCamera>
 
 <!-- Combined cinematic style -->
-<orbit-camera bloom="intensity: 1.5" tonemapping="mode: aces-filmic"></orbit-camera>
+<OrbitCamera bloom="intensity: 1.5" tonemapping="mode: aces-filmic"></OrbitCamera>
 ```
 
 ## Common Game Patterns
 
 ### Basic Platformer
 ```xml
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <!-- Ground -->
   <static-part pos="0 -0.5 0" shape="box" size="50 1 50" color="#90ee90"></static-part>
   
@@ -271,28 +271,28 @@ GAME
   
   <!-- Moving platform -->
   <kinematic-part name="moving-platform" pos="0 3 5" shape="box" size="4 0.5 4" color="#4169e1"></kinematic-part>
-  <tween target="moving-platform" attr="body.pos-x" from="-10" to="10" duration="5" easing="sine-in-out"></tween>
+  <Tween target="moving-platform" attr="body.pos-x" from="-10" to="10" duration="5" easing="sine-in-out"></Tween>
 
   <!-- Goal area -->
   <static-part pos="10 8 0" shape="box" size="5 0.5 5" color="#ffd700"></static-part>
-</world>
+</Scene>
 ```
 
 ### Collectible Coins (Collision-based)
 ```xml
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
 
   <!-- Rotating coins (create new tween when complete for continuous rotation) -->
   <kinematic-part pos="2 1 0" shape="box" size="0.5 0.5 0.1" color="#ffd700"></kinematic-part>
 
   <kinematic-part pos="-2 1 0" shape="box" size="0.5 0.1 0.5" color="#ffd700"></kinematic-part>
-</world>
+</Scene>
 ```
 
 ### Physics Playground
 ```xml
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <!-- Ground -->
   <static-part pos="0 -0.5 0" shape="box" size="30 1 30" color="#90ee90"></static-part>
   
@@ -310,7 +310,7 @@ GAME
   <!-- Bouncy ball (high restitution) -->
   <dynamic-part pos="0 15 5" shape="sphere" size="1" color="#ff00ff" 
                 collider="restitution: 0.9"></dynamic-part>
-</world>
+</Scene>
 ```
 
 ## Recipe Reference
@@ -320,13 +320,13 @@ GAME
 | `<static-part>` | Immovable objects | `name`, `pos`, `shape`, `size`, `color` | Grounds, walls, platforms |
 | `<dynamic-part>` | Gravity-affected objects | `name`, `pos`, `shape`, `size`, `color`, `mass` | Balls, crates, falling objects |
 | `<kinematic-part>` | Script-controlled physics | `name`, `pos`, `shape`, `size`, `color` | Moving platforms, doors |
-| `<renderer>` | Visual entity (no physics) | `name`, `pos`, `shape`, `size`, `color` | Decorations, visual effects |
+| `<MeshRenderer>` | Visual entity (no physics) | `name`, `pos`, `shape`, `size`, `color` | Decorations, visual effects |
 | `<paragraph>` | Text container | `name`, `pos`, `gap`, `align` | Text layouts |
 | `<word>` | Text element | `name`, `text`, `font-size`, `color` | Individual words, labels |
-| `<player>` | Player character | `pos`, `speed`, `jump-height` | Main character (auto-created) |
-| `<entity>` | Base entity | `name`, any components via attributes | Custom entities |
-| `<tween>` | Animation | `target`, `attr`, `to`, `from`, `duration`, `easing` | Animate named entities |
-| `<sequence>` | Animation group | `name`, `autoplay` | Reusable animation sequences |
+| `<Player>` | Player character | `pos`, `speed`, `jump-height` | Main character (auto-created) |
+| `<GameObject>` | Base entity | `name`, any components via attributes | Custom entities |
+| `<Tween>` | Animation | `target`, `attr`, `to`, `from`, `duration`, `easing` | Animate named entities |
+| `<Sequence>` | Animation group | `name`, `autoplay` | Reusable animation sequences |
 | `<pause>` | Sequence timing | `duration` | Separate parallel tween groups |
 
 ### Shape Options
@@ -347,7 +347,7 @@ Entities with `name` attribute are registered at parse time. Names resolve to en
 <kinematic-part name="door" pos="0 0 0" shape="box" size="2 4 0.2"></kinematic-part>
 
 <!-- "door" resolved to entity ID -->
-<tween target="door" attr="body.pos-y" to="3" duration="2"></tween>
+<Tween target="door" attr="body.pos-y" to="3" duration="2"></Tween>
 ```
 
 Runtime lookup: `state.getEntityByName('door')` returns entity ID or null.
@@ -390,14 +390,14 @@ Shorthands expand to 3 tweens (one per axis):
 ```xml
 <!-- Single property -->
 <kinematic-part name="lift" pos="0 0 0" shape="box" size="4 0.5 4"></kinematic-part>
-<tween target="lift" attr="body.pos-y" from="0" to="5" duration="3" easing="sine-in-out"></tween>
+<Tween target="lift" attr="body.pos-y" from="0" to="5" duration="3" easing="sine-in-out"></Tween>
 
 <!-- Shorthand: animate position -->
-<renderer name="cube" shape="box"></renderer>
-<tween target="cube" attr="at" from="0 0 0" to="10 5 0" duration="2"></tween>
+<MeshRenderer name="cube" shape="box"></MeshRenderer>
+<Tween target="cube" attr="at" from="0 0 0" to="10 5 0" duration="2"></Tween>
 
 <!-- Shorthand: animate scale -->
-<tween target="cube" attr="scale" from="1 1 1" to="2 2 2" duration="1" easing="back-out"></tween>
+<Tween target="cube" attr="scale" from="1 1 1" to="2 2 2" duration="1" easing="back-out"></Tween>
 ```
 
 ### TypeScript Tween Examples
@@ -433,21 +433,21 @@ Sequences orchestrate multiple tweens with timing control. Tweens before `<pause
 
 ```xml
 <!-- Named sequence (starts paused, trigger via playSequence) -->
-<sequence name="bounce">
-  <tween target="cube" attr="scale" from="1 1 1" to="1.3 1.3 1.3" duration="0.15" easing="back-out"></tween>
+<Sequence name="bounce">
+  <Tween target="cube" attr="scale" from="1 1 1" to="1.3 1.3 1.3" duration="0.15" easing="back-out"></Tween>
   <pause duration="0.1"></pause>
-  <tween target="cube" attr="scale" from="1.3 1.3 1.3" to="1 1 1" duration="0.15" easing="sine-in-out"></tween>
-</sequence>
+  <Tween target="cube" attr="scale" from="1.3 1.3 1.3" to="1 1 1" duration="0.15" easing="sine-in-out"></Tween>
+</Sequence>
 
 <!-- Autoplay with parallel + sequential groups -->
-<sequence autoplay="true">
+<Sequence autoplay="true">
   <!-- Group 1: These run in parallel -->
-  <tween target="cube" attr="at" from="-10 0 0" to="0 0 0" duration="1" easing="sine-out"></tween>
-  <tween target="cube" attr="scale" from="0 0 0" to="1 1 1" duration="0.5" easing="back-out"></tween>
+  <Tween target="cube" attr="at" from="-10 0 0" to="0 0 0" duration="1" easing="sine-out"></Tween>
+  <Tween target="cube" attr="scale" from="0 0 0" to="1 1 1" duration="0.5" easing="back-out"></Tween>
   <pause duration="0.3"></pause>
   <!-- Group 2: Runs after pause -->
-  <tween target="cube" attr="scale" to="1.2 1.2 1.2" duration="0.2"></tween>
-</sequence>
+  <Tween target="cube" attr="scale" to="1.2 1.2 1.2" duration="0.2"></Tween>
+</Sequence>
 ```
 
 ### TypeScript Sequence Control
@@ -501,15 +501,15 @@ A driver is a single tweened component value that a system uses to control multi
 
 ```xml
 <!-- Driver holds the tweened value -->
-<entity name="breathe-driver" breathe-driver="value: 0"></entity>
+<GameObject name="breathe-driver" breathe-driver="value: 0"></GameObject>
 
 <!-- Multiple entities with marker component -->
-<renderer name="cube1" shape="box" breathe></renderer>
-<renderer name="cube2" pos="3 0 0" shape="box" breathe></renderer>
-<renderer name="cube3" pos="-3 0 0" shape="box" breathe></renderer>
+<MeshRenderer name="cube1" shape="box" breathe></MeshRenderer>
+<MeshRenderer name="cube2" pos="3 0 0" shape="box" breathe></MeshRenderer>
+<MeshRenderer name="cube3" pos="-3 0 0" shape="box" breathe></MeshRenderer>
 
 <!-- Tween the driver to activate the effect -->
-<tween target="breathe-driver" attr="breathe-driver.value" from="0" to="1" duration="0.5"></tween>
+<Tween target="breathe-driver" attr="breathe-driver.value" from="0" to="1" duration="0.5"></Tween>
 ```
 
 ```typescript
@@ -533,18 +533,18 @@ const BreatheSystem: System = {
 Shakers allow multiple independent effects on the same property. Each shaker has an `intensity` (0-1) that can be tweened, enabling effects to fade in/out independently.
 
 ```xml
-<renderer name="cube" shape="box"></renderer>
+<MeshRenderer name="cube" shape="box"></MeshRenderer>
 
 <!-- Multiple shakers on same target -->
-<shaker name="pulse" target="cube" attr="scale" value="0.8" intensity="0" mode="multiplicative"></shaker>
-<shaker name="bounce" target="cube" attr="transform.scale-y" value="0.3" intensity="0" mode="additive"></shaker>
+<Shaker name="pulse" target="cube" attr="scale" value="0.8" intensity="0" mode="multiplicative"></Shaker>
+<Shaker name="bounce" target="cube" attr="transform.scale-y" value="0.3" intensity="0" mode="additive"></Shaker>
 
 <!-- Tween shaker intensities independently (use "shaker.intensity" - resolves automatically) -->
-<sequence name="activate">
-  <tween target="pulse" attr="shaker.intensity" to="1" duration="0.3" easing="expo-out"></tween>
+<Sequence name="activate">
+  <Tween target="pulse" attr="shaker.intensity" to="1" duration="0.3" easing="expo-out"></Tween>
   <pause duration="0.1"></pause>
-  <tween target="bounce" attr="shaker.intensity" to="1" duration="0.2" easing="back-out"></tween>
-</sequence>
+  <Tween target="bounce" attr="shaker.intensity" to="1" duration="0.2" easing="back-out"></Tween>
+</Sequence>
 ```
 
 Key benefits:
@@ -556,18 +556,18 @@ Key benefits:
 ## How Recipes and Shorthands Work
 
 ### Everything is an Entity
-Every XML tag creates an entity. Recipes like `<static-part>` are just shortcuts for `<entity>` with preset components.
+Every XML tag creates an entity. Recipes like `<static-part>` are just shortcuts for `<GameObject>` with preset components.
 
 ```xml
 <!-- These are equivalent: -->
 <static-part pos="0 0 0" color="#ff0000"></static-part>
 
-<entity 
+<GameObject 
   transform 
   body="type: fixed" 
   collider 
   renderer="color: 0xff0000"
-  pos="0 0 0"></entity>
+  pos="0 0 0"></GameObject>
 ```
 
 ### Component Attributes
@@ -575,16 +575,16 @@ Components are declared using bare attributes (no value means "use defaults"):
 
 ```xml
 <!-- Bare attributes declare components with default values -->
-<entity transform body collider renderer></entity>
+<GameObject transform body collider renderer></GameObject>
 
 <!-- Add properties to override defaults -->
-<entity transform="pos-x: 5; pos-y: 2; pos-z: -3; scale: 2"></entity>
+<GameObject transform="pos-x: 5; pos-y: 2; pos-z: -3; scale: 2"></GameObject>
 
 <!-- Mix bare and valued attributes -->
-<entity transform="pos: 0 5 0" body="type: dynamic; mass: 10" collider renderer></entity>
+<GameObject transform="pos: 0 5 0" body="type: dynamic; mass: 10" collider renderer></GameObject>
 
 <!-- Property groups -->
-<entity transform="pos: 5 2 -3; scale: 2 2 2"></entity>
+<GameObject transform="pos: 5 2 -3; scale: 2 2 2"></GameObject>
 ```
 
 **Important**: Bare attributes like `transform` mean "include this component with default values", NOT "empty" or "disabled".
@@ -594,18 +594,18 @@ Shorthands expand to ANY component with matching properties:
 
 ```xml
 <!-- "pos" shorthand applies to components with posX, posY, posZ -->
-<entity transform body pos="0 5 0"></entity>
+<GameObject transform body pos="0 5 0"></GameObject>
 <!-- Both transform AND body get pos values -->
 
 <!-- "color" shorthand applies to renderer.color -->
-<entity renderer color="#ff0000"></entity>  
+<GameObject renderer color="#ff0000"></GameObject>  
 
 <!-- "size" shorthand (broadcasts single value) -->
-<entity collider size="2"></entity>
+<GameObject collider size="2"></GameObject>
 <!-- Expands to: sizeX: 2, sizeY: 2, sizeZ: 2 -->
 
 <!-- Multiple shorthands together -->
-<entity transform body collider renderer pos="0 5 0" size="1" color="#ff0000"></entity>
+<GameObject transform body collider renderer pos="0 5 0" size="1" color="#ff0000"></GameObject>
 ```
 
 ### Recipe Internals
@@ -613,41 +613,41 @@ Recipes are registered component bundles with defaults:
 
 ```xml
 <!-- What <dynamic-part> actually is: -->
-<entity 
+<GameObject 
   transform
   body="type: dynamic"     <!-- Override -->
   collider
   renderer
   respawn
-></entity>
+></GameObject>
 
 <!-- So this: -->
 <dynamic-part pos="0 5 0" color="#ff0000"></dynamic-part>
 
 <!-- Is really: -->
-<entity 
+<GameObject 
   transform="pos: 0 5 0"
   body="type: dynamic; pos: 0 5 0"  <!-- pos applies to body too! -->
   collider
   renderer="color: 0xff0000"
   respawn
-></entity>
+></GameObject>
 ```
 
 ### Common Pitfall: Component Requirements
 ```xml
 <!-- ❌ BAD: Missing required components -->
-<entity pos="0 5 0"></entity>  <!-- No transform component! -->
+<GameObject pos="0 5 0"></GameObject>  <!-- No transform component! -->
 
 <!-- ✅ GOOD: Explicit components -->
-<entity transform="pos: 0 5 0"></entity>
+<GameObject transform="pos: 0 5 0"></GameObject>
 
 <!-- ✅ BEST: Use recipe with built-in components -->
 <static-part pos="0 5 0"></static-part>
 ```
 
 ### Best Practices Summary
-1. **Use recipes** (`<static-part>`, `<dynamic-part>`, etc.) instead of raw `<entity>` tags
+1. **Use recipes** (`<static-part>`, `<dynamic-part>`, etc.) instead of raw `<GameObject>` tags
 2. **Use shorthands** (`pos`, `size`, `color`) for cleaner code
 3. **Override only what you need** - recipes have good defaults
 4. **Mix recipes with custom components** - e.g., `<dynamic-part health="max: 100">`
@@ -678,7 +678,7 @@ Recipes are registered component bundles with defaults:
 
 ### Troubleshooting
 
-- **Physics not working?** → Check if ground exists, verify `<world>` tag
+- **Physics not working?** → Check if ground exists, verify `<Scene>` tag
 - **Entity not appearing?** → Verify transform component, check position values
 - **Movement feels wrong?** → Physics body position overrides transform position
 - **Player falling forever?** → Add a ground/platform with `<static-part>`
@@ -753,7 +753,7 @@ const health = Health.current[entity];
 - **Dialog trees** - No branching conversation system built-in (implementable with UI / custom data)
 - **Custom shaders** - Fixed Three.js materials; no user shader graph
 
-**Built-in today (do not claim missing):** `audio` (Howler + `<audio-clip>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-steering`, declarative `sky`, GLTF animation — see `docs/PLUGINS.md` and `docs/AUDIO.md`.
+**Built-in today (do not claim missing):** `audio` (Howler + `<AudioSource>`), `save-load`, `particles`, `terrain`, `navmesh`, `ai-steering`, declarative `sky`, GLTF animation — see `docs/PLUGINS.md` and `docs/AUDIO.md`.
 
 ### Recommended Approaches
 - **Complex UI** → HTML/CSS overlays (this is actually superior to most game engines)
@@ -767,18 +767,18 @@ const health = Health.current[entity];
 ### ❌ Forgetting the Ground
 ```xml
 <!-- BAD: No ground, player falls forever -->
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <dynamic-part pos="0 5 0" shape="sphere"></dynamic-part>
-</world>
+</Scene>
 ```
 
 ### ❌ Setting Transform Position on Physics Objects
 ```xml
 <!-- BAD: Transform position ignored -->
-<entity transform="pos: 0 5 0" body collider></entity>
+<GameObject transform="pos: 0 5 0" body collider></GameObject>
 
 <!-- GOOD: Set body position (raw entity) -->
-<entity transform body="pos: 0 5 0" collider></entity>
+<GameObject transform body="pos: 0 5 0" collider></GameObject>
 
 <!-- BEST: Use recipes with pos shorthand -->
 <dynamic-part pos="0 5 0" shape="sphere"></dynamic-part>
@@ -790,20 +790,20 @@ const health = Health.current[entity];
 <static-part pos="0 0 0" shape="box"></static-part>
 
 <!-- GOOD: Everything inside world -->
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <static-part pos="0 0 0" shape="box"></static-part>
-</world>
+</Scene>
 ```
 
 ### ❌ Wrong Physics Type
 ```xml
 <!-- BAD: Dynamic platform (falls with gravity) -->
 <dynamic-part name="platform" pos="0 3 0" shape="box"></dynamic-part>
-<tween target="platform" attr="body.pos-x" from="-5" to="5"></tween>
+<Tween target="platform" attr="body.pos-x" from="-5" to="5"></Tween>
 
 <!-- GOOD: Kinematic for controlled movement -->
 <kinematic-part name="platform" pos="0 3 0" shape="box"></kinematic-part>
-<tween target="platform" attr="body.pos-x" from="-5" to="5"></tween>
+<Tween target="platform" attr="body.pos-x" from="-5" to="5"></Tween>
 ```
 
 ## Custom Components and Systems
@@ -848,11 +848,11 @@ GAME.withPlugin(HealthPlugin).run();
 
 ### Using in XML
 ```xml
-<world canvas="#game-canvas">
+<Scene canvas="#game-canvas">
   <!-- Add health to a dynamic entity (best practice: use recipes) -->
   <dynamic-part pos="0 2 0" shape="sphere" color="#ff0000"
                 health="current: 50; max: 100"></dynamic-part>
-</world>
+</Scene>
 ```
 
 ## State API Reference
@@ -1075,7 +1075,7 @@ const MySystem: GAME.System = {
 
 ```xml
 <!-- Player entity with animated character -->
-<entity 
+<GameObject 
   animated-character
   character-controller
   transform="pos: 0 2 0"
@@ -1266,10 +1266,10 @@ canvas.addEventListener('mouseup', GAME.handleMouseUp);
 
 ```xml
 <!-- Simple horizontal line -->
-<entity transform="pos: 0 0 0" line="offset: 5 0 0"></entity>
+<GameObject transform="pos: 0 0 0" line="offset: 5 0 0"></GameObject>
 
 <!-- Diagonal line with custom color -->
-<entity transform="pos: 0 0 0" line="offset: 3 3 0; color: 0xff0000"></entity>
+<GameObject transform="pos: 0 0 0" line="offset: 3 3 0; color: 0xff0000"></GameObject>
 ```
 
 ### Styled Line
@@ -1279,19 +1279,19 @@ canvas.addEventListener('mouseup', GAME.handleMouseUp);
 <entity
   transform="pos: 0 0 0"
   line="offset: 5 0 0; thickness: 5; opacity: 0.5">
-</entity>
+</GameObject>
 
 <!-- Line with arrow at end -->
 <entity
   transform="pos: 0 0 0"
   line="offset: 0 5 0; arrow-end: 1; arrow-size: 0.3">
-</entity>
+</GameObject>
 
 <!-- Vector arrow (both ends) -->
 <entity
   transform="pos: 0 0 0"
   line="offset: 4 2 0; arrow-start: 1; arrow-end: 1; arrow-size: 0.25; color: 0x00ff00">
-</entity>
+</GameObject>
 ```
 
 ### Imperative Usage
@@ -1375,14 +1375,14 @@ Standalone orbital camera controller with direct input handling for third-person
 ### Basic Camera
 
 ```xml
-<orbit-camera />
+<OrbitCamera />
 ```
 
 ### Camera Following Player
 
 ```xml
-<world>
-  <player id="player" pos="0 0 0" />
+<Scene>
+  <Player id="player" pos="0 0 0" />
   <orbit-camera
     target="#player"
     target-distance="10"
@@ -1390,13 +1390,13 @@ Standalone orbital camera controller with direct input handling for third-person
     max-distance="20"
     offset-y="2"
   />
-</world>
+</Scene>
 ```
 
 ### Custom Orbit Settings
 
 ```xml
-<entity 
+<GameObject 
   orbit-camera="
     target: #boss;
     target-distance: 15;
@@ -1816,23 +1816,23 @@ Smooth rotation towards movement
 ### Basic Player Usage (XML)
 
 ```xml
-<world>
+<Scene>
   <!-- Player auto-created if not specified -->
-  <player pos="0 2 0" speed="6" jump-height="3" />
-</world>
+  <Player pos="0 2 0" speed="6" jump-height="3" />
+</Scene>
 ```
 
 ### Custom Player Configuration (XML)
 
 ```xml
-<world>
+<Scene>
   <player
     pos="5 1 -10"
     speed="8"
     jump-height="4"
     rotation-speed="15"
   />
-</world>
+</Scene>
 ```
 
 ### Accessing Player Component (JavaScript)
@@ -2100,16 +2100,16 @@ Associates canvas with RenderContext
 
 ```xml
 <!-- Declarative scene with lighting and rendered objects -->
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <!-- Lighting (auto-created if omitted) -->
-  <entity ambient-light directional-light></entity>
+  <GameObject ambient-light directional-light></GameObject>
 
-  <!-- Rendered box using <renderer> recipe -->
-  <renderer shape="box" color="#ff0000" size-x="2" pos="0 1 0"></renderer>
+  <!-- Rendered box using <MeshRenderer> recipe -->
+  <MeshRenderer shape="box" color="#ff0000" size-x="2" pos="0 1 0"></MeshRenderer>
 
   <!-- Rendered sphere -->
-  <renderer shape="sphere" color="#00ff00" pos="3 1 0"></renderer>
-</world>
+  <MeshRenderer shape="sphere" color="#00ff00" pos="3 1 0"></MeshRenderer>
+</Scene>
 ```
 
 ### Custom Lighting
@@ -2119,11 +2119,11 @@ Associates canvas with RenderContext
 <entity
   ambient-light="sky-color: 0xffd4a3; ground-color: 0x808080; intensity: 0.4"
   directional-light="color: 0xffffff; intensity: 1.5; direction-x: -1; direction-y: 3; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 2048"
-></entity>
+></GameObject>
 
 <!-- Or separate entities for independent control -->
-<entity ambient-light="sky-color: 0xffd4a3; intensity: 0.4"></entity>
-<entity directional-light="intensity: 1.5; direction-y: 3"></entity>
+<GameObject ambient-light="sky-color: 0xffd4a3; intensity: 0.4"></GameObject>
+<GameObject directional-light="intensity: 1.5; direction-y: 3"></GameObject>
 ```
 
 ### Imperative Usage
@@ -2168,10 +2168,10 @@ const shapes = {
 };
 
 // Use in XML
-<entity renderer="shape: sphere"></entity>
+<GameObject renderer="shape: sphere"></GameObject>
 
 // Or with enum names
-<entity renderer="shape: 1"></entity>
+<GameObject renderer="shape: 1"></GameObject>
 ```
 
 ### Visibility Control
@@ -2184,14 +2184,14 @@ GAME.Renderer.visible[entity] = 0; // Hide
 GAME.Renderer.visible[entity] = 1; // Show
 
 // In XML
-<entity renderer="visible: 0"></entity>  <!-- Initially hidden -->
+<GameObject renderer="visible: 0"></GameObject>  <!-- Initially hidden -->
 ```
 
 ### Unlit Rendering
 
 ```xml
 <!-- Emissive/unlit objects (not affected by lighting) -->
-<entity renderer="shape: sphere; color: 0xffff00; unlit: 1"></entity>
+<GameObject renderer="shape: sphere; color: 0xffff00; unlit: 1"></GameObject>
 ```
 
 ### Orthographic Camera
@@ -2226,21 +2226,21 @@ Automatic respawn system that resets entities when falling below Y=-100.
 
 ### Player with Respawn (Automatic)
 
-The `<player>` recipe automatically includes respawn:
+The `<Player>` recipe automatically includes respawn:
 
 ```xml
-<world>
+<Scene>
   <!-- Player spawns at 0,5,0 and respawns there if falling -->
-  <player pos="0 5 0"></player>
-</world>
+  <Player pos="0 5 0"></Player>
+</Scene>
 ```
 
 ### Manual Respawn Component
 
 ```xml
-<entity transform body collider respawn="pos: 0 10 -5">
+<GameObject transform body collider respawn="pos: 0 10 -5">
   <!-- Entity respawns at 0,10,-5 when falling below Y=-100 -->
-</entity>
+</GameObject>
 ```
 
 ### Imperative Usage
@@ -2282,7 +2282,7 @@ Position attributes automatically populate the respawn component:
 
 ```xml
 <!-- Position sets both transform and respawn -->
-<player pos="5 3 -2" euler="0 90 0"></player>
+<Player pos="5 3 -2" euler="0 90 0"></Player>
 ```
 
 ### Startup
@@ -2325,13 +2325,13 @@ GAME.run(); // Uses DefaultPlugins which includes StartupPlugin
 ### Preventing Auto-Creation with XML
 
 ```xml
-<world>
+<Scene>
   <!-- Creating your own player prevents auto-creation -->
-  <player pos="10 2 -5" speed="12" />
+  <Player pos="10 2 -5" speed="12" />
   
   <!-- Creating custom lighting prevents default lights -->
-  <entity ambient="sky-color: 0xff0000" directional />
-</world>
+  <GameObject ambient="sky-color: 0xff0000" directional />
+</Scene>
 ```
 
 ### Manual Plugin Registration
@@ -2434,16 +2434,16 @@ Use `setMeasureFn(state, fn)` to inject custom measurement. CLI module provides 
 #### XML Position and Rotation
 ```xml
 <!-- Position only -->
-<entity transform="pos: 0 5 -3"></entity>
+<GameObject transform="pos: 0 5 -3"></GameObject>
 
 <!-- Euler rotation (degrees) -->
-<entity transform="euler: 0 45 0"></entity>
+<GameObject transform="euler: 0 45 0"></GameObject>
 
 <!-- Scale (single value applies to all axes) -->
-<entity transform="scale: 2"></entity>
+<GameObject transform="scale: 2"></GameObject>
 
 <!-- Combined transform -->
-<entity transform="pos: 0 5 0; euler: 0 45 0; scale: 1.5"></entity>
+<GameObject transform="pos: 0 5 0; euler: 0 45 0; scale: 1.5"></GameObject>
 ```
 
 #### JavaScript API
@@ -2472,18 +2472,18 @@ const MySystem = {
 #### Parent-Child Relationships
 ```xml
 <!-- Parent at origin -->
-<entity transform="pos: 0 0 0">
+<GameObject transform="pos: 0 0 0">
   <!-- Children positioned relative to parent -->
-  <entity transform="pos: 2 0 0"></entity>
-  <entity transform="pos: -2 0 0"></entity>
-</entity>
+  <GameObject transform="pos: 2 0 0"></GameObject>
+  <GameObject transform="pos: -2 0 0"></GameObject>
+</GameObject>
 
 <!-- Rotating parent affects all children -->
-<entity transform="euler: 0 45 0">
-  <entity id="arm" transform="pos: 0 2 0">
-    <entity id="hand" transform="pos: 0 2 0"></entity>
-  </entity>
-</entity>
+<GameObject transform="euler: 0 45 0">
+  <GameObject id="arm" transform="pos: 0 2 0">
+    <GameObject id="hand" transform="pos: 0 2 0"></GameObject>
+  </GameObject>
+</GameObject>
 ```
 
 #### Accessing World Transform
@@ -2556,7 +2556,7 @@ Entities with `name` attribute are registered in a name→entityId map at parse 
 <kinematic-part name="door" pos="0 0 0" shape="box" size="2 4 0.2"></kinematic-part>
 
 <!-- "door" resolved to entity ID when parsing tween -->
-<tween target="door" attr="body.pos-y" to="3" duration="2"></tween>
+<Tween target="door" attr="body.pos-y" to="3" duration="2"></Tween>
 ```
 
 Runtime lookup via `state.getEntityByName('door')` returns the entity ID.
@@ -2664,16 +2664,16 @@ completeSequence(state, entity): void  // Jump to end, apply final values
 
 ```xml
 <kinematic-part name="platform" pos="0 2 0" shape="box" size="4 0.5 4"></kinematic-part>
-<tween target="platform" attr="body.pos-x" from="-5" to="5" duration="3" easing="sine-in-out"></tween>
+<Tween target="platform" attr="body.pos-x" from="-5" to="5" duration="3" easing="sine-in-out"></Tween>
 ```
 
 ### Shorthand Tweens
 
 ```xml
-<entity name="cube" transform renderer="shape: box"></entity>
-<tween target="cube" attr="at" from="0 0 0" to="10 5 0" duration="2"></tween>
-<tween target="cube" attr="scale" from="1 1 1" to="2 2 2" duration="1"></tween>
-<tween target="cube" attr="rotation" from="0 0 0" to="0 180 0" duration="2"></tween>
+<GameObject name="cube" transform renderer="shape: box"></GameObject>
+<Tween target="cube" attr="at" from="0 0 0" to="10 5 0" duration="2"></Tween>
+<Tween target="cube" attr="scale" from="1 1 1" to="2 2 2" duration="1"></Tween>
+<Tween target="cube" attr="rotation" from="0 0 0" to="0 180 0" duration="2"></Tween>
 ```
 
 ### Named Sequence (Reusable)
@@ -2681,13 +2681,13 @@ completeSequence(state, entity): void  // Jump to end, apply final values
 Sequences with `name` start paused. Trigger via `playSequence()` in TypeScript.
 
 ```xml
-<entity name="button" transform renderer="shape: box; color: 0x4488ff"></entity>
+<GameObject name="button" transform renderer="shape: box; color: 0x4488ff"></GameObject>
 
-<sequence name="button-press">
-  <tween target="button" attr="scale" from="1 1 1" to="0.9 0.9 0.9" duration="0.1" easing="quad-out"></tween>
+<Sequence name="button-press">
+  <Tween target="button" attr="scale" from="1 1 1" to="0.9 0.9 0.9" duration="0.1" easing="quad-out"></Tween>
   <pause duration="0.05"></pause>
-  <tween target="button" attr="scale" from="0.9 0.9 0.9" to="1 1 1" duration="0.15" easing="back-out"></tween>
-</sequence>
+  <Tween target="button" attr="scale" from="0.9 0.9 0.9" to="1 1 1" duration="0.15" easing="back-out"></Tween>
+</Sequence>
 ```
 
 ### Autoplay Sequence (Parallel + Sequential)
@@ -2695,16 +2695,16 @@ Sequences with `name` start paused. Trigger via `playSequence()` in TypeScript.
 Tweens before `<pause>` run simultaneously. Pause separates sequential groups.
 
 ```xml
-<entity name="cube" transform renderer="shape: box"></entity>
+<GameObject name="cube" transform renderer="shape: box"></GameObject>
 
-<sequence autoplay="true">
-  <tween target="cube" attr="at" from="-10 0 0" to="0 0 0" duration="1" easing="sine-out"></tween>
-  <tween target="cube" attr="scale" from="0 0 0" to="1 1 1" duration="0.5" easing="back-out"></tween>
+<Sequence autoplay="true">
+  <Tween target="cube" attr="at" from="-10 0 0" to="0 0 0" duration="1" easing="sine-out"></Tween>
+  <Tween target="cube" attr="scale" from="0 0 0" to="1 1 1" duration="0.5" easing="back-out"></Tween>
   <pause duration="0.3"></pause>
-  <tween target="cube" attr="scale" to="1.2 1.2 1.2" duration="0.2" easing="quad-out"></tween>
+  <Tween target="cube" attr="scale" to="1.2 1.2 1.2" duration="0.2" easing="quad-out"></Tween>
   <pause duration="0.1"></pause>
-  <tween target="cube" attr="scale" to="1 1 1" duration="0.15" easing="sine-in-out"></tween>
-</sequence>
+  <Tween target="cube" attr="scale" to="1 1 1" duration="0.15" easing="sine-in-out"></Tween>
+</Sequence>
 ```
 
 ## TypeScript (Imperative) Patterns
@@ -2798,15 +2798,15 @@ A driver is a single tweened value that controls multiple entities via a system.
 
 ```xml
 <!-- Driver component holds the tweened value -->
-<entity name="breathe-driver" breathe-driver="value: 0"></entity>
+<GameObject name="breathe-driver" breathe-driver="value: 0"></GameObject>
 
 <!-- All entities with "breathe" marker are affected -->
-<entity name="cube1" transform renderer="shape: box" breathe></entity>
-<entity name="cube2" transform="pos: 3 0 0" renderer="shape: box" breathe></entity>
-<entity name="cube3" transform="pos: -3 0 0" renderer="shape: box" breathe></entity>
+<GameObject name="cube1" transform renderer="shape: box" breathe></GameObject>
+<GameObject name="cube2" transform="pos: 3 0 0" renderer="shape: box" breathe></GameObject>
+<GameObject name="cube3" transform="pos: -3 0 0" renderer="shape: box" breathe></GameObject>
 
 <!-- Tween the driver to control all breathing entities -->
-<tween target="breathe-driver" attr="breathe-driver.value" from="0" to="1" duration="0.5"></tween>
+<Tween target="breathe-driver" attr="breathe-driver.value" from="0" to="1" duration="0.5"></Tween>
 ```
 
 ```typescript
@@ -2834,25 +2834,25 @@ Shakers enable multiple independent effects on the same property. Each shaker ha
 
 ```xml
 <!-- Entity with two shakers targeting scale -->
-<entity name="cube" transform renderer="shape: box"></entity>
+<GameObject name="cube" transform renderer="shape: box"></GameObject>
 
 <!-- Shaker 1: Pulse effect (multiplicative) -->
-<shaker name="pulse" target="cube" attr="scale" value="0.8" intensity="0" mode="multiplicative"></shaker>
+<Shaker name="pulse" target="cube" attr="scale" value="0.8" intensity="0" mode="multiplicative"></Shaker>
 
 <!-- Shaker 2: Bounce effect (additive, single axis) -->
-<shaker name="bounce" target="cube" attr="transform.scale-y" value="0.3" intensity="0" mode="additive"></shaker>
+<Shaker name="bounce" target="cube" attr="transform.scale-y" value="0.3" intensity="0" mode="additive"></Shaker>
 
 <!-- Tween shaker intensities independently - use "shaker.intensity" (alias resolves automatically) -->
-<sequence name="activate-effects">
-  <tween target="pulse" attr="shaker.intensity" to="1" duration="0.3" easing="expo-out"></tween>
+<Sequence name="activate-effects">
+  <Tween target="pulse" attr="shaker.intensity" to="1" duration="0.3" easing="expo-out"></Tween>
   <pause duration="0.1"></pause>
-  <tween target="bounce" attr="shaker.intensity" to="1" duration="0.2" easing="back-out"></tween>
-</sequence>
+  <Tween target="bounce" attr="shaker.intensity" to="1" duration="0.2" easing="back-out"></Tween>
+</Sequence>
 
-<sequence name="deactivate-effects">
-  <tween target="bounce" attr="shaker.intensity" to="0" duration="0.2"></tween>
-  <tween target="pulse" attr="shaker.intensity" to="0" duration="0.3"></tween>
-</sequence>
+<Sequence name="deactivate-effects">
+  <Tween target="bounce" attr="shaker.intensity" to="0" duration="0.2"></Tween>
+  <Tween target="pulse" attr="shaker.intensity" to="0" duration="0.3"></Tween>
+</Sequence>
 ```
 
 Key benefits:
@@ -2976,9 +2976,9 @@ gsap.to("#currency", {
   </style>
 </head>
 <body>
-  <world canvas="#game-canvas">
+  <Scene canvas="#game-canvas">
     <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
-  </world>
+  </Scene>
 
   <canvas id="game-canvas"></canvas>
 

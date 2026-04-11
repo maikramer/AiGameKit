@@ -49,7 +49,7 @@ vibegame run -- --host
 
 Useful flags: `--install` / `-i` (force `bun install` in the engine), `--skip-engine-install` / `--skip-install`, `--skip-build`, `--skip-app-install`. Arguments after `--` are passed to `bun run dev` (e.g. Vite). If the command cannot find the engine, run from the app directory that depends on the engine via `file:` or from a folder under the monorepo tree. See [`scripts/vibegame-cli.mjs`](scripts/vibegame-cli.mjs) and the monorepo [`AGENTS.md`](../AGENTS.md).
 
-**GLB handoff (Text3D / Paint3D / `gameassets` batch):** import **`loadGltfToScene`** for static meshes; for **animated** rigged GLBs (Animator3D clips), use **`loadGltfAnimated`**, **`loadGltfToSceneWithAnimator`**, or **`GltfAnimator`** from `vibegame`. Declarative: **`<gltf-load url="…">`** for props; **`<player-gltf model-url="…">`** for a third-person character with idle/walk/run. See [examples/simple-rpg](examples/simple-rpg/) and [MONOREPO_GAME_PIPELINE.md](../docs/MONOREPO_GAME_PIPELINE.md). **Minimal scene:** [examples/hello-world](examples/hello-world/). **Céu equirect / IBL:** **`<sky url="…">`** no XML ou `applyEquirectSkyEnvironment` em código. **Áudio:** **`<audio-clip>`** + `playAudioEmitter` — ver [`docs/AUDIO.md`](docs/AUDIO.md). **`gameassets handoff`** copies into `public/assets` and can prefer animated GLBs when present.
+**GLB handoff (Text3D / Paint3D / `gameassets` batch):** import **`loadGltfToScene`** for static meshes; for **animated** rigged GLBs (Animator3D clips), use **`loadGltfAnimated`**, **`loadGltfToSceneWithAnimator`**, or **`GltfAnimator`** from `vibegame`. Declarative: **`<GLTFLoader url="…">`** for props; **`<PlayerGLTF model-url="…">`** for a third-person character with idle/walk/run. See [examples/simple-rpg](examples/simple-rpg/) and [MONOREPO_GAME_PIPELINE.md](../docs/MONOREPO_GAME_PIPELINE.md). **Minimal scene:** [examples/hello-world](examples/hello-world/). **Céu equirect / IBL:** **`<Skybox url="…">`** no XML ou `applyEquirectSkyEnvironment` em código. **Áudio:** **`<AudioSource>`** + `playAudioEmitter` — ver [`docs/AUDIO.md`](docs/AUDIO.md). **`gameassets handoff`** copies into `public/assets` and can prefer animated GLBs when present.
 
 ### Or install directly
 
@@ -58,13 +58,13 @@ bun install vibegame
 ```
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <!-- Ground -->
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
 
   <!-- Ball -->
   <dynamic-part pos="-2 4 -3" shape="sphere" size="1" color="#ff4500"></dynamic-part>
-</world>
+</Scene>
 
 <canvas id="game-canvas"></canvas>
 
@@ -105,9 +105,9 @@ Inspired by Bevy, VibeGame uses an Entity Component System architecture with plu
 Entities and components defined declaratively in HTML:
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20"></static-part>
-</world>
+</Scene>
 ```
 
 ### 4. Roblox-like Abstraction
@@ -122,14 +122,14 @@ Game-ready features out of the box:
 
 ## Core Concepts
 
-### World
+### Scene
 
-All entities are defined within the `<world>` tag:
+All entities are defined within the `<Scene>` tag:
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <!-- All entities and components here -->
-</world>
+</Scene>
 ```
 
 ### Basic Entities and Components
@@ -137,21 +137,21 @@ All entities are defined within the `<world>` tag:
 Entities and components can be defined with a CSS-like syntax:
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
-  <entity
+<Scene canvas="#game-canvas" sky="#87ceeb">
+  <GameObject
     transform
     body="type: 1; pos: 0 -0.5 0"
     renderer="shape: box; size: 20 1 20; color: 0x90ee90"
     collider="shape: box; size: 20 1 20"
-  ></entity>
-</world>
+  ></GameObject>
+</Scene>
 ```
 
 or, with CSS-style shorthand expansion:
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
-  <entity
+<Scene canvas="#game-canvas" sky="#87ceeb">
+  <GameObject
     transform
     renderer
     collider
@@ -160,16 +160,16 @@ or, with CSS-style shorthand expansion:
     shape="box"
     size="20 1 20"
     color="#90ee90"
-  ></entity>
-</world>
+  ></GameObject>
+</Scene>
 ```
 
 or, with recipes (entity-component bundles):
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
-</world>
+</Scene>
 ```
 
 ### Custom Systems
@@ -177,12 +177,12 @@ or, with recipes (entity-component bundles):
 Register custom systems and components to handle arbitrary game logic:
 
 ```html
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
 
   <!-- Entity with custom component -->
-  <entity my-component="10"></entity>
-</world>
+  <GameObject my-component="10"></GameObject>
+</Scene>
 
 <script type="module">
   import * as GAME from 'vibegame';

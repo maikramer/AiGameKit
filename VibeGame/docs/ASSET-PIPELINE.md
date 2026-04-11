@@ -97,9 +97,9 @@ function createSceneManifestConfig(config?: {
 Texturas procedurais geradas pelo Texture2D podem ser aplicadas via `TextureRecipe` (plugin rendering):
 
 ```html
-<entity transform renderer
+<GameObject transform renderer
   textureRecipe="url: textures/marble.png; repeatMode: 1; repeatX: 8; repeatY: 8; channel: 0">
-</entity>
+</GameObject>
 ```
 
 Veja [`docs/PLUGINS.md`](PLUGINS.md) para detalhes do TextureRecipe.

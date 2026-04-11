@@ -50,21 +50,21 @@ respawn/
 
 ### Player with Respawn (Automatic)
 
-The `<player>` recipe automatically includes respawn:
+The `<Player>` recipe automatically includes respawn:
 
 ```xml
-<world>
+<Scene>
   <!-- Player spawns at 0,5,0 and respawns there if falling -->
-  <player pos="0 5 0"></player>
-</world>
+  <Player pos="0 5 0"></Player>
+</Scene>
 ```
 
 ### Manual Respawn Component
 
 ```xml
-<entity transform body collider respawn="pos: 0 10 -5">
+<GameObject transform body collider respawn="pos: 0 10 -5">
   <!-- Entity respawns at 0,10,-5 when falling below Y=-100 -->
-</entity>
+</GameObject>
 ```
 
 ### Imperative Usage
@@ -106,6 +106,6 @@ Position attributes automatically populate the respawn component:
 
 ```xml
 <!-- Position sets both transform and respawn -->
-<player pos="5 3 -2" euler="0 90 0"></player>
+<Player pos="5 3 -2" euler="0 90 0"></Player>
 ```
 <!-- /LLM:EXAMPLES -->

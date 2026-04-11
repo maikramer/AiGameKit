@@ -13,7 +13,7 @@ terrain/
 ├── plugin.ts             # Plugin definition + config defaults/adapters
 ├── components.ts         # Terrain + TerrainDebugInfo ECS components
 ├── systems.ts            # Bootstrap, render, physics, debug systems + query helpers
-├── recipes.ts            # <terrain> recipe
+├── recipes.ts            # <Terrain> recipe
 ├── utils.ts              # Context, heightmap/texture URL setters, height resampling
 └── webgl-material.ts     # WebGL terrain material with displacement + normals
 ```
@@ -140,21 +140,19 @@ O relevo **renderizado** pode ficar mais suave que o heightmap cru devido a **`h
 
 #### XML Terrain with Heightmap
 ```xml
-<terrain
-  pos="0 0 0"
+<Terrain   pos="0 0 0"
   world-size="256"
   max-height="50"
   levels="6"
   resolution="64"
   heightmap="/assets/heightmap.png"
   texture="/assets/terrain_diffuse.jpg"
-></terrain>
+></Terrain>
 ```
 
 #### XML Terrain with Custom Material
 ```xml
-<terrain
-  pos="0 0 0"
+<Terrain   pos="0 0 0"
   world-size="512"
   max-height="80"
   roughness="0.7"
@@ -165,17 +163,16 @@ O relevo **renderizado** pode ficar mais suave que o heightmap cru devido a **`h
   lod-hysteresis="1.5"
   collision-resolution="128"
   base-color="#3d6b32"
-></terrain>
+></Terrain>
 ```
 
 #### XML Terrain with Debug Info
 ```xml
-<terrain
-  pos="0 0 0"
+<Terrain   pos="0 0 0"
   world-size="256"
   show-chunk-borders="1"
   terrain-debug-info=""
-></terrain>
+></Terrain>
 ```
 
 #### JavaScript API — Height Query
@@ -220,7 +217,7 @@ if (stats) {
 The `heightmap`, `texture`, and `base-color` attributes are parsed by adapters. URLs are stored for bootstrap; `base-color` sets the diffuse tint when there is no `texture` (hex `#RRGGBB` or `0xRRGGBB`).
 
 ```xml
-<terrain heightmap="/maps/island.png" texture="/maps/sand_grass.jpg" />
-<terrain heightmap="/maps/gray.png" base-color="#4a7a3a" />
+<Terrain heightmap="/maps/island.png" texture="/maps/sand_grass.jpg" />
+<Terrain heightmap="/maps/gray.png" base-color="#4a7a3a" />
 ```
 <!-- /LLM:EXAMPLES -->

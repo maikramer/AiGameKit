@@ -74,7 +74,7 @@ vibegame/
 │   ├── runtime.ts  # Game runtime engine
 │   └── index.ts  # Main exports
 ├── examples/  # Shipped example applications (see examples/context.md)
-│   ├── hello-world/  # Minimal: terrain, physics, <entity place="…">
+│   ├── hello-world/  # Minimal: terrain, physics, <GameObject place="…">
 │   │   ├── README.md
 │   │   ├── context.md
 │   │   ├── src/main.ts

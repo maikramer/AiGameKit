@@ -1,13 +1,13 @@
 # Hello World Example
 
 <!-- LLM:OVERVIEW -->
-Minimal example: procedural terrain, one dynamic physics sphere, and a small **`<entity place="…">`** demo (terrain-sampled XZ + surface Y) with a child `particle-emitter`. Entry is `GAME.run()` with default plugins. Use as a template for new Vite + VibeGame apps.
+Minimal example: procedural terrain, one dynamic physics sphere, and a small **`<GameObject place="…">`** demo (terrain-sampled XZ + surface Y) with a child `ParticleSystem`. Entry is `GAME.run()` with default plugins. Use as a template for new Vite + VibeGame apps.
 <!-- /LLM:OVERVIEW -->
 
 ## Purpose
 
 - Show the smallest `index.html` + `main.ts` integration
-- Demonstrate **entity-centric placement** (`place` attribute on `<entity>`)
+- Demonstrate **entity-centric placement** (`place` attribute on `<GameObject>`)
 - Demonstrate physics with `<dynamic-part>`
 
 ## Layout
@@ -31,13 +31,13 @@ hello-world/
 ## Entry Points
 
 - **`src/main.ts`**: `import * as GAME from 'vibegame'; GAME.run();`
-- **`index.html`**: `<world>` + canvas + Vite module entry
+- **`index.html`**: `<Scene>` + canvas + Vite module entry
 
 ## Features Demonstrated
 
-- `<terrain>` — procedural LOD terrain
+- `<Terrain>` — procedural LOD terrain
 - `<dynamic-part>` — Rapier dynamic body (sphere)
-- **`<entity place="at: x z; …">`** — deterministic XZ + terrain height; `particle-emitter` as child (local transform)
+- **`<GameObject place="at: x z; …">`** — deterministic XZ + terrain height; `ParticleSystem` as child (local transform)
 - Default plugins (physics, rendering, particles, spawner, etc.)
 
 ## Running
@@ -57,14 +57,13 @@ bun run dev
 ## Code snippet — entity placement
 
 ```xml
-<entity place="at: 0 -12; base-y-offset: 0.02">
-  <particle-emitter
-    preset="fire"
+<GameObject place="at: 0 -12; base-y-offset: 0.02">
+  <ParticleSystem     preset="fire"
     rate="12"
     transform="pos: 0 0.25 0"
-  ></particle-emitter>
-</entity>
+  ></ParticleSystem>
+</GameObject>
 ```
 
-The root entity is positioned on the terrain; emitters (or `gltf-load`, `npc`, etc.) are children in the ECS hierarchy.
+The root entity is positioned on the terrain; emitters (or `GLTFLoader`, `NPC`, etc.) are children in the ECS hierarchy.
 <!-- /LLM:EXAMPLES -->

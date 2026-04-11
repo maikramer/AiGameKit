@@ -86,13 +86,13 @@ Converts Euler angles (radians) to quaternion
 
 ```xml
 <!-- Create a basic entity with no components -->
-<entity></entity>
+<GameObject></GameObject>
 
 <!-- Entity with transform component -->
-<entity transform="pos: 0 5 0"></entity>
+<GameObject transform="pos: 0 5 0"></GameObject>
 
 <!-- Entity with multiple components -->
-<entity 
+<GameObject 
   transform="pos: 0 5 0; euler: 0 45 0"
   renderer="shape: box; color: 0xff0000"
 />
@@ -102,10 +102,10 @@ Converts Euler angles (radians) to quaternion
 
 ```xml
 <!-- Position shorthand expands to transform component -->
-<entity pos="0 5 0"></entity>
+<GameObject pos="0 5 0"></GameObject>
 
 <!-- Multiple shorthands -->
-<entity 
+<GameObject 
   pos="0 5 0"
   euler="0 45 0"
   scale="2"
@@ -117,18 +117,18 @@ Converts Euler angles (radians) to quaternion
 
 ```xml
 <!-- Parent with children -->
-<entity transform="pos: 0 0 0">
+<GameObject transform="pos: 0 0 0">
   <!-- Children inherit parent transform -->
-  <entity transform="pos: 2 0 0"></entity>
-  <entity transform="pos: -2 0 0"></entity>
-</entity>
+  <GameObject transform="pos: 2 0 0"></GameObject>
+  <GameObject transform="pos: -2 0 0"></GameObject>
+</GameObject>
 
 <!-- Nested hierarchy -->
-<entity id="root" transform>
-  <entity id="arm" transform="pos: 0 2 0">
-    <entity id="hand" transform="pos: 0 2 0"></entity>
-  </entity>
-</entity>
+<GameObject id="root" transform>
+  <GameObject id="arm" transform="pos: 0 2 0">
+    <GameObject id="hand" transform="pos: 0 2 0"></GameObject>
+  </GameObject>
+</GameObject>
 ```
 
 ### JavaScript API Usage
@@ -173,12 +173,12 @@ try {
 
 ```xml
 <!-- Component with enum values -->
-<entity body="type: dynamic"></entity>
+<GameObject body="type: dynamic"></GameObject>
 
 <!-- Vector properties with broadcast -->
-<entity transform="scale: 2"></entity>  <!-- All axes set to 2 -->
+<GameObject transform="scale: 2"></GameObject>  <!-- All axes set to 2 -->
 
 <!-- Rotation using euler angles (degrees) -->
-<entity transform="euler: 0 45 0"></entity>
+<GameObject transform="euler: 0 45 0"></GameObject>
 ```
 <!-- /LLM:EXAMPLES -->

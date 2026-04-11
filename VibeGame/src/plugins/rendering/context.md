@@ -110,30 +110,29 @@ Associates canvas with RenderContext
 
 ```xml
 <!-- Declarative scene with lighting and rendered objects -->
-<world canvas="#game-canvas" sky="#87ceeb">
+<Scene canvas="#game-canvas" sky="#87ceeb">
   <!-- Lighting (auto-created if omitted) -->
-  <entity ambient-light directional-light></entity>
+  <GameObject ambient-light directional-light></GameObject>
 
-  <!-- Rendered box using <renderer> recipe -->
-  <renderer shape="box" color="#ff0000" size-x="2" pos="0 1 0"></renderer>
+  <!-- Rendered box using <MeshRenderer> recipe -->
+  <MeshRenderer shape="box" color="#ff0000" size-x="2" pos="0 1 0"></MeshRenderer>
 
   <!-- Rendered sphere -->
-  <renderer shape="sphere" color="#00ff00" pos="3 1 0"></renderer>
-</world>
+  <MeshRenderer shape="sphere" color="#00ff00" pos="3 1 0"></MeshRenderer>
+</Scene>
 ```
 
 ### Custom Lighting
 
 ```xml
 <!-- Combined lighting entity with custom properties -->
-<entity
-  ambient-light="sky-color: 0xffd4a3; ground-color: 0x808080; intensity: 0.4"
+<GameObject   ambient-light="sky-color: 0xffd4a3; ground-color: 0x808080; intensity: 0.4"
   directional-light="color: 0xffffff; intensity: 1.5; direction-x: -1; direction-y: 3; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 2048"
-></entity>
+></GameObject>
 
 <!-- Or separate entities for independent control -->
-<entity ambient-light="sky-color: 0xffd4a3; intensity: 0.4"></entity>
-<entity directional-light="intensity: 1.5; direction-y: 3"></entity>
+<GameObject ambient-light="sky-color: 0xffd4a3; intensity: 0.4"></GameObject>
+<GameObject directional-light="intensity: 1.5; direction-y: 3"></GameObject>
 ```
 
 ### Imperative Usage
@@ -178,10 +177,10 @@ const shapes = {
 };
 
 // Use in XML
-<entity renderer="shape: sphere"></entity>
+<GameObject renderer="shape: sphere"></GameObject>
 
 // Or with enum names
-<entity renderer="shape: 1"></entity>
+<GameObject renderer="shape: 1"></GameObject>
 ```
 
 ### Visibility Control
@@ -194,14 +193,14 @@ GAME.Renderer.visible[entity] = 0; // Hide
 GAME.Renderer.visible[entity] = 1; // Show
 
 // In XML
-<entity renderer="visible: 0"></entity>  <!-- Initially hidden -->
+<GameObject renderer="visible: 0"></GameObject>  <!-- Initially hidden -->
 ```
 
 ### Unlit Rendering
 
 ```xml
 <!-- Emissive/unlit objects (not affected by lighting) -->
-<entity renderer="shape: sphere; color: 0xffff00; unlit: 1"></entity>
+<GameObject renderer="shape: sphere; color: 0xffff00; unlit: 1"></GameObject>
 ```
 
 ### Orthographic Camera

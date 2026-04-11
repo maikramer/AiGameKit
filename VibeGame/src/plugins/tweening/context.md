@@ -26,7 +26,7 @@ tweening/
 
 - **plugin.ts**: TweenPlugin definition for registration
 - **systems.ts**: Kinematic systems (fixed), Tween/Sequence systems (simulation), Shaker systems (draw)
-- **parser.ts**: Parses `<tween>`, `<sequence>`, and `<shaker>` elements from XML
+- **parser.ts**: Parses `<Tween>`, `<Sequence>`, and `<Shaker>` elements from XML
 
 ## Dependencies
 
@@ -43,7 +43,7 @@ Entities with `name` attribute are registered in a name→entityId map at parse 
 <kinematic-part name="door" pos="0 0 0" shape="box" size="2 4 0.2"></kinematic-part>
 
 <!-- "door" resolved to entity ID when parsing tween -->
-<tween target="door" attr="body.pos-y" to="3" duration="2"></tween>
+<Tween target="door" attr="body.pos-y" to="3" duration="2"></Tween>
 ```
 
 Runtime lookup via `state.getEntityByName('door')` returns the entity ID.
@@ -151,16 +151,16 @@ completeSequence(state, entity): void  // Jump to end, apply final values
 
 ```xml
 <kinematic-part name="platform" pos="0 2 0" shape="box" size="4 0.5 4"></kinematic-part>
-<tween target="platform" attr="body.pos-x" from="-5" to="5" duration="3" easing="sine-in-out"></tween>
+<Tween target="platform" attr="body.pos-x" from="-5" to="5" duration="3" easing="sine-in-out"></Tween>
 ```
 
 ### Shorthand Tweens
 
 ```xml
-<entity name="cube" transform renderer="shape: box"></entity>
-<tween target="cube" attr="at" from="0 0 0" to="10 5 0" duration="2"></tween>
-<tween target="cube" attr="scale" from="1 1 1" to="2 2 2" duration="1"></tween>
-<tween target="cube" attr="rotation" from="0 0 0" to="0 180 0" duration="2"></tween>
+<GameObject name="cube" transform renderer="shape: box"></GameObject>
+<Tween target="cube" attr="at" from="0 0 0" to="10 5 0" duration="2"></Tween>
+<Tween target="cube" attr="scale" from="1 1 1" to="2 2 2" duration="1"></Tween>
+<Tween target="cube" attr="rotation" from="0 0 0" to="0 180 0" duration="2"></Tween>
 ```
 
 ### Named Sequence (Reusable)
@@ -168,13 +168,13 @@ completeSequence(state, entity): void  // Jump to end, apply final values
 Sequences with `name` start paused. Trigger via `playSequence()` in TypeScript.
 
 ```xml
-<entity name="button" transform renderer="shape: box; color: 0x4488ff"></entity>
+<GameObject name="button" transform renderer="shape: box; color: 0x4488ff"></GameObject>
 
-<sequence name="button-press">
-  <tween target="button" attr="scale" from="1 1 1" to="0.9 0.9 0.9" duration="0.1" easing="quad-out"></tween>
+<Sequence name="button-press">
+  <Tween target="button" attr="scale" from="1 1 1" to="0.9 0.9 0.9" duration="0.1" easing="quad-out"></Tween>
   <pause duration="0.05"></pause>
-  <tween target="button" attr="scale" from="0.9 0.9 0.9" to="1 1 1" duration="0.15" easing="back-out"></tween>
-</sequence>
+  <Tween target="button" attr="scale" from="0.9 0.9 0.9" to="1 1 1" duration="0.15" easing="back-out"></Tween>
+</Sequence>
 ```
 
 ### Autoplay Sequence (Parallel + Sequential)
@@ -182,16 +182,16 @@ Sequences with `name` start paused. Trigger via `playSequence()` in TypeScript.
 Tweens before `<pause>` run simultaneously. Pause separates sequential groups.
 
 ```xml
-<entity name="cube" transform renderer="shape: box"></entity>
+<GameObject name="cube" transform renderer="shape: box"></GameObject>
 
-<sequence autoplay="true">
-  <tween target="cube" attr="at" from="-10 0 0" to="0 0 0" duration="1" easing="sine-out"></tween>
-  <tween target="cube" attr="scale" from="0 0 0" to="1 1 1" duration="0.5" easing="back-out"></tween>
+<Sequence autoplay="true">
+  <Tween target="cube" attr="at" from="-10 0 0" to="0 0 0" duration="1" easing="sine-out"></Tween>
+  <Tween target="cube" attr="scale" from="0 0 0" to="1 1 1" duration="0.5" easing="back-out"></Tween>
   <pause duration="0.3"></pause>
-  <tween target="cube" attr="scale" to="1.2 1.2 1.2" duration="0.2" easing="quad-out"></tween>
+  <Tween target="cube" attr="scale" to="1.2 1.2 1.2" duration="0.2" easing="quad-out"></Tween>
   <pause duration="0.1"></pause>
-  <tween target="cube" attr="scale" to="1 1 1" duration="0.15" easing="sine-in-out"></tween>
-</sequence>
+  <Tween target="cube" attr="scale" to="1 1 1" duration="0.15" easing="sine-in-out"></Tween>
+</Sequence>
 ```
 
 ## TypeScript (Imperative) Patterns
@@ -285,15 +285,15 @@ A driver is a single tweened value that controls multiple entities via a system.
 
 ```xml
 <!-- Driver component holds the tweened value -->
-<entity name="breathe-driver" breathe-driver="value: 0"></entity>
+<GameObject name="breathe-driver" breathe-driver="value: 0"></GameObject>
 
 <!-- All entities with "breathe" marker are affected -->
-<entity name="cube1" transform renderer="shape: box" breathe></entity>
-<entity name="cube2" transform="pos: 3 0 0" renderer="shape: box" breathe></entity>
-<entity name="cube3" transform="pos: -3 0 0" renderer="shape: box" breathe></entity>
+<GameObject name="cube1" transform renderer="shape: box" breathe></GameObject>
+<GameObject name="cube2" transform="pos: 3 0 0" renderer="shape: box" breathe></GameObject>
+<GameObject name="cube3" transform="pos: -3 0 0" renderer="shape: box" breathe></GameObject>
 
 <!-- Tween the driver to control all breathing entities -->
-<tween target="breathe-driver" attr="breathe-driver.value" from="0" to="1" duration="0.5"></tween>
+<Tween target="breathe-driver" attr="breathe-driver.value" from="0" to="1" duration="0.5"></Tween>
 ```
 
 ```typescript
@@ -321,25 +321,25 @@ Shakers enable multiple independent effects on the same property. Each shaker ha
 
 ```xml
 <!-- Entity with two shakers targeting scale -->
-<entity name="cube" transform renderer="shape: box"></entity>
+<GameObject name="cube" transform renderer="shape: box"></GameObject>
 
 <!-- Shaker 1: Pulse effect (multiplicative) -->
-<shaker name="pulse" target="cube" attr="scale" value="0.8" intensity="0" mode="multiplicative"></shaker>
+<Shaker name="pulse" target="cube" attr="scale" value="0.8" intensity="0" mode="multiplicative"></Shaker>
 
 <!-- Shaker 2: Bounce effect (additive, single axis) -->
-<shaker name="bounce" target="cube" attr="transform.scale-y" value="0.3" intensity="0" mode="additive"></shaker>
+<Shaker name="bounce" target="cube" attr="transform.scale-y" value="0.3" intensity="0" mode="additive"></Shaker>
 
 <!-- Tween shaker intensities independently - use "shaker.intensity" (alias resolves automatically) -->
-<sequence name="activate-effects">
-  <tween target="pulse" attr="shaker.intensity" to="1" duration="0.3" easing="expo-out"></tween>
+<Sequence name="activate-effects">
+  <Tween target="pulse" attr="shaker.intensity" to="1" duration="0.3" easing="expo-out"></Tween>
   <pause duration="0.1"></pause>
-  <tween target="bounce" attr="shaker.intensity" to="1" duration="0.2" easing="back-out"></tween>
-</sequence>
+  <Tween target="bounce" attr="shaker.intensity" to="1" duration="0.2" easing="back-out"></Tween>
+</Sequence>
 
-<sequence name="deactivate-effects">
-  <tween target="bounce" attr="shaker.intensity" to="0" duration="0.2"></tween>
-  <tween target="pulse" attr="shaker.intensity" to="0" duration="0.3"></tween>
-</sequence>
+<Sequence name="deactivate-effects">
+  <Tween target="bounce" attr="shaker.intensity" to="0" duration="0.2"></Tween>
+  <Tween target="pulse" attr="shaker.intensity" to="0" duration="0.3"></Tween>
+</Sequence>
 ```
 
 Key benefits:

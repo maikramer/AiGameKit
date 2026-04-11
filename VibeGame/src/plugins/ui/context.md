@@ -102,9 +102,9 @@ gsap.to("#currency", {
   </style>
 </head>
 <body>
-  <world canvas="#game-canvas">
+  <Scene canvas="#game-canvas">
     <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
-  </world>
+  </Scene>
 
   <canvas id="game-canvas"></canvas>
 
