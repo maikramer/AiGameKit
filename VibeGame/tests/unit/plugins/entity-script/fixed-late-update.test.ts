@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../../src/core/ecs/state';
 import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
-  coerceEntityScriptModule,
-  getCachedEntityScriptModule,
+  coerceMonoBehaviourModule,
+  getCachedMonoBehaviourModule,
   registerEntityScripts,
-  setCachedEntityScriptModule,
+  setCachedMonoBehaviourModule,
   setScriptFile,
 } from '../../../../src/plugins/entity-script/context';
 import {
@@ -37,7 +37,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedEntityScriptModule(state, globKey, mod as ReturnType<typeof coerceEntityScriptModule>);
+    setCachedMonoBehaviourModule(state, globKey, mod as ReturnType<typeof coerceMonoBehaviourModule>);
 
     MonoBehaviour.ready[eid] = 1;
 
@@ -100,7 +100,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, 'notready.ts');
     registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ fixedUpdate: () => { fixedCount++; }, update: () => {} }) });
-    setCachedEntityScriptModule(state, './scripts/notready.ts', coerceEntityScriptModule({ fixedUpdate: () => { fixedCount++; }, update: () => {} })!);
+    setCachedMonoBehaviourModule(state, './scripts/notready.ts', coerceMonoBehaviourModule({ fixedUpdate: () => { fixedCount++; }, update: () => {} })!);
 
     EntityScriptFixedUpdateSystem.update(state);
 
@@ -138,7 +138,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, 'notready.ts');
     registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ lateUpdate: () => { lateCount++; }, update: () => {} }) });
-    setCachedEntityScriptModule(state, './scripts/notready.ts', coerceEntityScriptModule({ lateUpdate: () => { lateCount++; }, update: () => {} })!);
+    setCachedMonoBehaviourModule(state, './scripts/notready.ts', coerceMonoBehaviourModule({ lateUpdate: () => { lateCount++; }, update: () => {} })!);
 
     EntityScriptLateUpdateSystem.update(state);
 
@@ -148,7 +148,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   it('coerceEntityScriptModule extracts fixedUpdate and lateUpdate', () => {
     const fixedUpdate = () => {};
     const lateUpdate = () => {};
-    const mod = coerceEntityScriptModule({
+    const mod = coerceMonoBehaviourModule({
       update: () => {},
       fixedUpdate,
       lateUpdate,

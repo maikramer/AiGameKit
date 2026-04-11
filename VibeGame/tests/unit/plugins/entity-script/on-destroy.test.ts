@@ -3,12 +3,12 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../../src/core/ecs/state';
 import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
-  coerceEntityScriptModule,
+  coerceMonoBehaviourModule,
   deleteScriptFile,
-  getCachedEntityScriptModule,
+  getCachedMonoBehaviourModule,
   getScriptFile,
   registerEntityScripts,
-  setCachedEntityScriptModule,
+  setCachedMonoBehaviourModule,
   setScriptFile,
 } from '../../../../src/plugins/entity-script/context';
 import { EntityScriptPlugin } from '../../../../src/plugins/entity-script/plugin';
@@ -33,7 +33,7 @@ describe('entity-script onDestroy', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedEntityScriptModule(state, globKey, mod);
+    setCachedMonoBehaviourModule(state, globKey, mod);
 
     MonoBehaviour.ready[eid] = 1;
 
@@ -42,7 +42,7 @@ describe('entity-script onDestroy', () => {
 
   function registerDestroyCallback(eid: number, globKey: string): void {
     state.onDestroy(eid, () => {
-      const mod = getCachedEntityScriptModule(state, globKey);
+      const mod = getCachedMonoBehaviourModule(state, globKey);
       if (mod?.onDestroy) {
         mod.onDestroy({
           state,
@@ -118,7 +118,7 @@ describe('entity-script onDestroy', () => {
 
     state.onDestroy(eid, () => {
       const globKey = './scripts/test.ts';
-      const mod = getCachedEntityScriptModule(state, globKey);
+      const mod = getCachedMonoBehaviourModule(state, globKey);
       if (mod?.onDestroy) {
         mod.onDestroy({
           state,
@@ -139,7 +139,7 @@ describe('entity-script onDestroy', () => {
 
   it('coerceEntityScriptModule extracts onDestroy from loaded module', () => {
     const onDestroy = () => {};
-    const mod = coerceEntityScriptModule({
+    const mod = coerceMonoBehaviourModule({
       start: () => {},
       onDestroy,
     });
@@ -147,7 +147,7 @@ describe('entity-script onDestroy', () => {
   });
 
   it('coerceEntityScriptModule returns null if only onDestroy is present (no start/update)', () => {
-    const mod = coerceEntityScriptModule({
+    const mod = coerceMonoBehaviourModule({
       onDestroy: () => {},
     });
     expect(mod).toBeNull();

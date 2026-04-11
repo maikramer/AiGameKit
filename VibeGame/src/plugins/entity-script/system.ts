@@ -1,12 +1,14 @@
 import type { Component } from 'bitecs';
 
-import { Parent, defineQuery, type State, type System } from '../../core';
+import { Parent, Tag, Layer, defineQuery, type State, type System } from '../../core';
 import {
   startCoroutine,
   stopAllCoroutines,
   stopCoroutine,
 } from '../../core/ecs/coroutines';
+import { getTagName } from '../../core/ecs/tags';
 import { Collider, TouchedEvent, TouchEndedEvent } from '../physics/components';
+import { Transform } from '../transforms/components';
 import { GltfPending } from '../gltf-xml/components';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { MonoBehaviour } from './components';
@@ -16,9 +18,9 @@ import {
   deletePrevEnabled,
   deleteScriptFile,
   getActiveCollisionPairs,
-  getCachedEntityScriptModule,
+  getCachedMonoBehaviourModule,
   getEntityScriptsGlob,
-  getOrLoadEntityScriptModule,
+  getOrLoadMonoBehaviourModule,
   getPrevEnabled,
   getScriptFile,
   isEntityScriptSetupInflight,
@@ -27,7 +29,7 @@ import {
   setEntityScriptSetupInflight,
   setPrevEnabled,
 } from './context';
-import type { CollisionOther, EntityScriptContext } from './types';
+import type { CollisionOther, MonoBehaviourContext, MonoBehaviourModule } from './types';
 
 const entityScriptQuery = defineQuery([MonoBehaviour]);
 const parentQuery = defineQuery([Parent]);
@@ -62,13 +64,39 @@ function findComponentInParent(state: State, eid: number, name: string): Compone
   return findComponentInParent(state, parentEid, name);
 }
 
-export function buildContext(state: State, eid: number): EntityScriptContext {
+export function buildContext(state: State, eid: number): MonoBehaviourContext {
   const root = getGltfRootGroup(state, eid);
+  const hasTransform = state.hasComponent(eid, Transform);
+  const hasTag = state.hasComponent(eid, Tag);
+  const hasLayer = state.hasComponent(eid, Layer);
   return {
     state,
     entity: eid,
     object3d: root ?? null,
     deltaTime: state.time.deltaTime,
+    gameObject: {
+      id: eid,
+      get name() {
+        return `Entity_${eid}`;
+      },
+      get tag() {
+        return hasTag ? getTagName(Tag.value[eid]) : 'Untagged';
+      },
+      get layer() {
+        return hasLayer ? Layer.value[eid] : 0;
+      },
+    },
+    transform: {
+      get positionX() { return hasTransform ? Transform.posX[eid] : 0; },
+      get positionY() { return hasTransform ? Transform.posY[eid] : 0; },
+      get positionZ() { return hasTransform ? Transform.posZ[eid] : 0; },
+      get rotationX() { return hasTransform ? Transform.eulerX[eid] : 0; },
+      get rotationY() { return hasTransform ? Transform.eulerY[eid] : 0; },
+      get rotationZ() { return hasTransform ? Transform.eulerZ[eid] : 0; },
+      get scaleX() { return hasTransform ? Transform.scaleX[eid] : 1; },
+      get scaleY() { return hasTransform ? Transform.scaleY[eid] : 1; },
+      get scaleZ() { return hasTransform ? Transform.scaleZ[eid] : 1; },
+    },
     getComponent(name: string): Component | null {
       return resolveComponent(state, eid, name);
     },
@@ -142,7 +170,7 @@ export const EntityScriptSystem: System = {
         }
 
         setEntityScriptSetupInflight(state, eid, true);
-        void getOrLoadEntityScriptModule(state, glob, globKey)
+        void getOrLoadMonoBehaviourModule(state, glob, globKey)
           .then(async (mod) => {
             if (!state.exists(eid)) {
               setEntityScriptSetupInflight(state, eid, false);
@@ -172,7 +200,7 @@ export const EntityScriptSystem: System = {
               setPrevEnabled(state, eid, isEnabled ? 1 : 0);
             }
             state.onDestroy(eid, () => {
-              const cached = getCachedEntityScriptModule(state, globKey);
+              const cached = getCachedMonoBehaviourModule(state, globKey);
               if (cached) {
                 const destroyCtx = buildContext(state, eid);
                 if (MonoBehaviour.enabled[eid] === 1 && cached.onDisable) {
@@ -211,7 +239,7 @@ export const EntityScriptSystem: System = {
         continue;
       }
 
-      const mod = getCachedEntityScriptModule(state, globKey2);
+      const mod = getCachedMonoBehaviourModule(state, globKey2);
       if (!mod) {
         continue;
       }
@@ -242,7 +270,7 @@ export const EntityScriptSystem: System = {
   },
 };
 
-function resolveModule(state: State, eid: number): { mod: EntityScriptModule } | null {
+function resolveModule(state: State, eid: number): { mod: MonoBehaviourModule } | null {
   const file = getScriptFile(state, eid);
   if (!file) return null;
 
@@ -252,7 +280,7 @@ function resolveModule(state: State, eid: number): { mod: EntityScriptModule } |
   const globKey = resolveEntityScriptGlobKey(glob, file);
   if (!globKey) return null;
 
-  const mod = getCachedEntityScriptModule(state, globKey);
+  const mod = getCachedMonoBehaviourModule(state, globKey);
   if (!mod) return null;
 
   return { mod };

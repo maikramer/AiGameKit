@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from '../../../../src/core/ecs/state';
 import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
-  coerceEntityScriptModule,
+  coerceMonoBehaviourModule,
   deletePrevEnabled,
   deleteScriptFile,
-  getCachedEntityScriptModule,
+  getCachedMonoBehaviourModule,
   getPrevEnabled,
   registerEntityScripts,
-  setCachedEntityScriptModule,
+  setCachedMonoBehaviourModule,
   setPrevEnabled,
   setScriptFile,
 } from '../../../../src/plugins/entity-script/context';
@@ -36,7 +36,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedEntityScriptModule(state, globKey, mod as ReturnType<typeof coerceEntityScriptModule>);
+    setCachedMonoBehaviourModule(state, globKey, mod as ReturnType<typeof coerceMonoBehaviourModule>);
 
     MonoBehaviour.ready[eid] = 1;
 
@@ -44,7 +44,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
   }
 
   function simulateSetup(eid: number, globKey: string): void {
-    const mod = getCachedEntityScriptModule(state, globKey);
+    const mod = getCachedMonoBehaviourModule(state, globKey);
     if (!mod) return;
     const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
     if (mod.awake) mod.awake(ctx);
@@ -56,7 +56,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
 
   function registerDestroyCallback(eid: number, globKey: string): void {
     state.onDestroy(eid, () => {
-      const mod = getCachedEntityScriptModule(state, globKey);
+      const mod = getCachedMonoBehaviourModule(state, globKey);
       if (mod) {
         const destroyCtx = { state, entity: eid, object3d: null, deltaTime: 0 };
         if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
@@ -121,7 +121,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     });
     simulateSetup(eid, './scripts/test.ts');
 
-    const mod = getCachedEntityScriptModule(state, './scripts/test.ts')!;
+    const mod = getCachedMonoBehaviourModule(state, './scripts/test.ts')!;
     const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
 
     MonoBehaviour.enabled[eid] = 0;
@@ -158,7 +158,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     });
     simulateSetup(eid, './scripts/test.ts');
 
-    const mod = getCachedEntityScriptModule(state, './scripts/test.ts')!;
+    const mod = getCachedMonoBehaviourModule(state, './scripts/test.ts')!;
     const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
 
     MonoBehaviour.enabled[eid] = 0;
@@ -176,7 +176,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     const awake = () => {};
     const onEnable = () => {};
     const onDisable = () => {};
-    const mod = coerceEntityScriptModule({
+    const mod = coerceMonoBehaviourModule({
       start: () => {},
       awake,
       onEnable,
@@ -188,7 +188,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
   });
 
   it('coerceEntityScriptModule returns null if only lifecycle hooks present (no start/update)', () => {
-    const mod = coerceEntityScriptModule({
+    const mod = coerceMonoBehaviourModule({
       awake: () => {},
       onEnable: () => {},
       onDisable: () => {},

@@ -4,7 +4,7 @@ import { expandShorthands } from '../../../src/core/recipes/shorthand-expander';
 import { State } from '../../../src/core/ecs/state';
 import { MonoBehaviour } from '../../../src/plugins/entity-script/components';
 import {
-  coerceEntityScriptModule,
+  coerceMonoBehaviourModule,
   getEntityScriptsGlob,
   getScriptFile,
   registerEntityScripts,
@@ -66,7 +66,7 @@ describe('MonoBehaviour', () => {
   it('coerceEntityScriptModule reads named exports', () => {
     const start = () => {};
     const update = () => {};
-    const mod = coerceEntityScriptModule({ start, update });
+    const mod = coerceMonoBehaviourModule({ start, update });
     expect(mod?.start).toBe(start);
     expect(mod?.update).toBe(update);
   });

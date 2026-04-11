@@ -5,11 +5,11 @@ import { Collider, TouchedEvent, TouchEndedEvent } from '../../../../src/plugins
 import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
   addActiveCollisionPair,
-  coerceEntityScriptModule,
+  coerceMonoBehaviourModule,
   deleteActiveCollisionPairsForEntity,
   getActiveCollisionPairs,
   registerEntityScripts,
-  setCachedEntityScriptModule,
+  setCachedMonoBehaviourModule,
   setScriptFile,
 } from '../../../../src/plugins/entity-script/context';
 import { EntityScriptPlugin } from '../../../../src/plugins/entity-script/plugin';
@@ -38,7 +38,7 @@ describe('entity-script collision/trigger callbacks', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedEntityScriptModule(state, globKey, mod as ReturnType<typeof coerceEntityScriptModule>);
+    setCachedMonoBehaviourModule(state, globKey, mod as ReturnType<typeof coerceMonoBehaviourModule>);
 
     MonoBehaviour.ready[eid] = 1;
     return eid;
@@ -81,7 +81,7 @@ describe('entity-script collision/trigger callbacks', () => {
       const onTriggerEnter = () => {};
       const onTriggerStay = () => {};
       const onTriggerExit = () => {};
-      const mod = coerceEntityScriptModule({
+      const mod = coerceMonoBehaviourModule({
         start: () => {},
         onCollisionEnter,
         onCollisionStay,
@@ -99,7 +99,7 @@ describe('entity-script collision/trigger callbacks', () => {
     });
 
     it('returns null when only collision callbacks present (no start/update)', () => {
-      const mod = coerceEntityScriptModule({
+      const mod = coerceMonoBehaviourModule({
         onCollisionEnter: () => {},
         onTriggerEnter: () => {},
       });
@@ -107,7 +107,7 @@ describe('entity-script collision/trigger callbacks', () => {
     });
 
     it('returns undefined for unprovided collision callbacks', () => {
-      const mod = coerceEntityScriptModule({
+      const mod = coerceMonoBehaviourModule({
         start: () => {},
         onCollisionEnter: () => {},
       });

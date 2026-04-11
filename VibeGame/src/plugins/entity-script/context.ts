@@ -1,6 +1,6 @@
 import type { State } from '../../core';
 
-import type { EntityScriptModule } from './types';
+import type { MonoBehaviourModule } from './types';
 
 const scriptFileByState = new WeakMap<State, Map<number, string>>();
 const globByState = new WeakMap<
@@ -9,10 +9,10 @@ const globByState = new WeakMap<
 >();
 const setupInflightByState = new WeakMap<State, Set<number>>();
 /** Resolved modules keyed by glob path (e.g. `./scripts/cristal.ts`). */
-const moduleByGlobKey = new WeakMap<State, Map<string, EntityScriptModule>>();
+const moduleByGlobKey = new WeakMap<State, Map<string, MonoBehaviourModule>>();
 const moduleLoadPromises = new WeakMap<
   State,
-  Map<string, Promise<EntityScriptModule | null>>
+  Map<string, Promise<MonoBehaviourModule | null>>
 >();
 /** Tracks previous enabled state per entity for onEnable/onDisable transitions. */
 const prevEnabledByState = new WeakMap<State, Map<number, number>>();
@@ -113,17 +113,17 @@ export function resolveEntityScriptGlobKey(
   return matches[0];
 }
 
-export function getCachedEntityScriptModule(
+export function getCachedMonoBehaviourModule(
   state: State,
   globKey: string
-): EntityScriptModule | undefined {
+): MonoBehaviourModule | undefined {
   return moduleByGlobKey.get(state)?.get(globKey);
 }
 
-export function setCachedEntityScriptModule(
+export function setCachedMonoBehaviourModule(
   state: State,
   globKey: string,
-  mod: EntityScriptModule
+  mod: MonoBehaviourModule
 ): void {
   let m = moduleByGlobKey.get(state);
   if (!m) {
@@ -190,12 +190,12 @@ export function deleteActiveCollisionPairsForEntity(state: State, entity: number
   activeCollisionPairsByState.get(state)?.delete(entity);
 }
 
-export function getOrLoadEntityScriptModule(
+export function getOrLoadMonoBehaviourModule(
   state: State,
   glob: Record<string, () => Promise<unknown>>,
   globKey: string
-): Promise<EntityScriptModule | null> {
-  const cached = getCachedEntityScriptModule(state, globKey);
+): Promise<MonoBehaviourModule | null> {
+  const cached = getCachedMonoBehaviourModule(state, globKey);
   if (cached) {
     return Promise.resolve(cached);
   }
@@ -216,10 +216,10 @@ export function getOrLoadEntityScriptModule(
   }
 
   const p = loader()
-    .then((raw) => coerceEntityScriptModule(raw))
+    .then((raw) => coerceMonoBehaviourModule(raw))
     .then((mod) => {
       if (mod) {
-        setCachedEntityScriptModule(state, globKey, mod);
+        setCachedMonoBehaviourModule(state, globKey, mod);
       }
       byKey!.delete(globKey);
       return mod;
@@ -233,68 +233,68 @@ export function getOrLoadEntityScriptModule(
   return p;
 }
 
-export function coerceEntityScriptModule(
+export function coerceMonoBehaviourModule(
   m: unknown
-): EntityScriptModule | null {
+): MonoBehaviourModule | null {
   if (typeof m !== 'object' || m === null) {
     return null;
   }
   const o = m as Record<string, unknown>;
   const awake =
     typeof o.awake === 'function'
-      ? (o.awake as EntityScriptModule['awake'])
+      ? (o.awake as MonoBehaviourModule['awake'])
       : undefined;
   const onEnable =
     typeof o.onEnable === 'function'
-      ? (o.onEnable as EntityScriptModule['onEnable'])
+      ? (o.onEnable as MonoBehaviourModule['onEnable'])
       : undefined;
   const onDisable =
     typeof o.onDisable === 'function'
-      ? (o.onDisable as EntityScriptModule['onDisable'])
+      ? (o.onDisable as MonoBehaviourModule['onDisable'])
       : undefined;
   const start =
     typeof o.start === 'function'
-      ? (o.start as EntityScriptModule['start'])
+      ? (o.start as MonoBehaviourModule['start'])
       : undefined;
   const update =
     typeof o.update === 'function'
-      ? (o.update as EntityScriptModule['update'])
+      ? (o.update as MonoBehaviourModule['update'])
       : undefined;
   const onDestroy =
     typeof o.onDestroy === 'function'
-      ? (o.onDestroy as EntityScriptModule['onDestroy'])
+      ? (o.onDestroy as MonoBehaviourModule['onDestroy'])
       : undefined;
   const fixedUpdate =
     typeof o.fixedUpdate === 'function'
-      ? (o.fixedUpdate as EntityScriptModule['fixedUpdate'])
+      ? (o.fixedUpdate as MonoBehaviourModule['fixedUpdate'])
       : undefined;
   const lateUpdate =
     typeof o.lateUpdate === 'function'
-      ? (o.lateUpdate as EntityScriptModule['lateUpdate'])
+      ? (o.lateUpdate as MonoBehaviourModule['lateUpdate'])
       : undefined;
   const onCollisionEnter =
     typeof o.onCollisionEnter === 'function'
-      ? (o.onCollisionEnter as EntityScriptModule['onCollisionEnter'])
+      ? (o.onCollisionEnter as MonoBehaviourModule['onCollisionEnter'])
       : undefined;
   const onCollisionStay =
     typeof o.onCollisionStay === 'function'
-      ? (o.onCollisionStay as EntityScriptModule['onCollisionStay'])
+      ? (o.onCollisionStay as MonoBehaviourModule['onCollisionStay'])
       : undefined;
   const onCollisionExit =
     typeof o.onCollisionExit === 'function'
-      ? (o.onCollisionExit as EntityScriptModule['onCollisionExit'])
+      ? (o.onCollisionExit as MonoBehaviourModule['onCollisionExit'])
       : undefined;
   const onTriggerEnter =
     typeof o.onTriggerEnter === 'function'
-      ? (o.onTriggerEnter as EntityScriptModule['onTriggerEnter'])
+      ? (o.onTriggerEnter as MonoBehaviourModule['onTriggerEnter'])
       : undefined;
   const onTriggerStay =
     typeof o.onTriggerStay === 'function'
-      ? (o.onTriggerStay as EntityScriptModule['onTriggerStay'])
+      ? (o.onTriggerStay as MonoBehaviourModule['onTriggerStay'])
       : undefined;
   const onTriggerExit =
     typeof o.onTriggerExit === 'function'
-      ? (o.onTriggerExit as EntityScriptModule['onTriggerExit'])
+      ? (o.onTriggerExit as MonoBehaviourModule['onTriggerExit'])
       : undefined;
   if (!start && !update) {
     return null;
