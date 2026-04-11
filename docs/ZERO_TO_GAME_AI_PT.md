@@ -14,7 +14,7 @@ Documento de apoio ao fluxo **conteúdo gerado + orquestração + agentes de có
 2. Definir `game.yaml` + `manifest.csv` + presets; opcionalmente `gameassets prompts` antes do batch.
 3. Correr `gameassets batch` com as flags necessárias (`--with-3d`, `--with-rig`, **`--with-animate`** para pipeline completo com Animator3D, áudio, etc.).
 4. Opcional: validar GLBs com GameDevLab.
-5. Copiar outputs para `public/assets/…` (ou `gameassets handoff --public-dir …`) e usar `loadGltfToScene`, `<gltf-load url="…">`, ou os exemplos [simple-rpg](../VibeGame/examples/simple-rpg/) (completo) / [hello-world](../VibeGame/examples/hello-world/) (mínimo).
+5. Copiar outputs para `public/assets/…` (ou `gameassets handoff --public-dir …`) e usar `loadGltfToScene`, `<GLTFLoader url="…">`, ou os exemplos [simple-rpg](../VibeGame/examples/simple-rpg/) (completo) / [hello-world](../VibeGame/examples/hello-world/) (mínimo).
 6. Iterar **código e XML** com o assistente, usando `llms.txt` para VibeGame e AGENTS.md para o resto do repositório.
 
 ## Pipeline completo de animação
@@ -40,10 +40,10 @@ O preset `humanoid` cria cinco clips: **BreatheIdle**, **Walk**, **Run**, **Jump
 
 ### VibeGame: personagem animada declarativa
 
-Em vez de código à mão para cada projeto, usar o elemento **`player-gltf`** no XML da cena. Carrega o GLB, reproduz **idle / walk / run** (e estados relacionados quando existem clips) e substitui a caixa por defeito:
+Em vez de código à mão para cada projeto, usar o elemento **`PlayerGLTF`** no XML da cena. Carrega o GLB, reproduz **idle / walk / run** (e estados relacionados quando existem clips) e substitui a caixa por defeito:
 
 ```html
-<player-gltf pos="0 0 0" model-url="/assets/models/hero.glb"></player-gltf>
+<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
 ```
 
 ### Convenção de origem (pés no chão)
@@ -62,11 +62,11 @@ No GLB exportado:
 - `Animator3D_Jump`
 - `Animator3D_Fall`
 
-O runtime (`player-gltf` e sistemas relacionados) mapeia o movimento a estes nomes (ou aliases compatíveis).
+O runtime (`PlayerGLTF` e sistemas relacionados) mapeia o movimento a estes nomes (ou aliases compatíveis).
 
 ## Handoff técnico
 
-Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadGltfToScene`, `loadGltfAnimated`, `<player-gltf>`). **Animator3D** pós-rig: [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md). Céu equirect: `applyEquirectSkyEnvironment` no VibeGame.
+Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadGltfToScene`, `loadGltfAnimated`, `<PlayerGLTF>`). **Animator3D** pós-rig: [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md). Céu equirect: `applyEquirectSkyEnvironment` no VibeGame.
 
 ## Entregas recentes (resumo)
 
@@ -76,8 +76,8 @@ Ver [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (pastas, URLs, `loadG
 | PMREM / céu | `applyEquirectSkyEnvironment` (`vibegame`) |
 | Pack para web | `gameassets handoff` |
 | Plano JSON (batch dry-run) | `gameassets batch --dry-run --dry-run-json ficheiro.json` |
-| GLB no XML | `<gltf-load url="…">` |
-| Jogador animado (XML) | `<player-gltf model-url="…">` — idle/walk/run pelo input; ver [Pipeline completo de animação](#pipeline-completo-de-animação) |
+| GLB no XML | `<GLTFLoader url="…">` |
+| Jogador animado (XML) | `<PlayerGLTF model-url="…">` — idle/walk/run pelo input; ver [Pipeline completo de animação](#pipeline-completo-de-animação) |
 
 ## `gameassets dream` — da ideia ao jogo
 

@@ -23,7 +23,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `GameDevLab/` | Python | `gamedev-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
-| `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `player-gltf` recipe |
+| `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
 All Python packages depend on `gamedev-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `gamedev-shared`.
 
@@ -117,12 +117,12 @@ Formatting: Prettier (`make fmt-vibegame` / `make fmt-check-vibegame`, or `bun r
 
 This runs `bun install --frozen-lockfile` and `bun run build` in `VibeGame/`, then installs `vibegame` into `~/.local/bin` (wrapper → `scripts/vibegame-cli.mjs`). Subcommands: `vibegame create <name>`, `vibegame --version`.
 
-**GLB handoff (Text3D / Paint3D / GameAssets → browser):** `loadGltfToScene`, `loadGltfAnimated`, or `loadGltfToSceneWithAnimator` from `vibegame` (`VibeGame/src/extras/gltf-bridge.ts`); declarative `<gltf-load url="…">` or `<player-gltf model-url="…">` (`VibeGame/src/plugins/gltf-xml/`, player recipe). Clips: `GltfAnimator` (`VibeGame/src/extras/gltf-animator.ts`); ECS plugin `gltf-anim` optional. Equirect sky → PMREM: `applyEquirectSkyEnvironment` (`VibeGame/src/extras/sky-env.ts`). Pack: `gameassets handoff --public-dir …` (prefers animated GLB when present). Layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Examples: [`VibeGame/examples/hello-world/`](VibeGame/examples/hello-world/) (minimal), [`VibeGame/examples/simple-rpg/`](VibeGame/examples/simple-rpg/) (full pipeline). Animator3D: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md). AI: [`docs/ZERO_TO_GAME_AI.md`](docs/ZERO_TO_GAME_AI.md).
+**GLB handoff (Text3D / Paint3D / GameAssets → browser):** `loadGltfToScene`, `loadGltfAnimated`, or `loadGltfToSceneWithAnimator` from `vibegame` (`VibeGame/src/extras/gltf-bridge.ts`); declarative `<GLTFLoader url="…">` or `<PlayerGLTF model-url="…">` (`VibeGame/src/plugins/gltf-xml/`, player recipe). Clips: `GltfAnimator` (`VibeGame/src/extras/gltf-animator.ts`); ECS plugin `gltf-anim` optional. Equirect sky → PMREM: `applyEquirectSkyEnvironment` (`VibeGame/src/extras/sky-env.ts`). Pack: `gameassets handoff --public-dir …` (prefers animated GLB when present). Layout: [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md). Examples: [`VibeGame/examples/hello-world/`](VibeGame/examples/hello-world/) (minimal), [`VibeGame/examples/simple-rpg/`](VibeGame/examples/simple-rpg/) (full pipeline). Animator3D: [`docs/ANIMATOR3D_AFTER_RIG.md`](docs/ANIMATOR3D_AFTER_RIG.md). AI: [`docs/ZERO_TO_GAME_AI.md`](docs/ZERO_TO_GAME_AI.md).
 
 Declarative GLB player in world XML:
 
 ```html
-<player-gltf pos="0 0 0" model-url="/assets/models/hero.glb"></player-gltf>
+<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
 ```
 
 **Idea-to-game (`gameassets dream`):** `gameassets dream "description" --dry-run` calls an LLM to plan assets+scene, emits `game.yaml`/`manifest.csv`/`world.xml`/`main.ts`/`index.html`, runs batch+sky+handoff, and scaffolds a playable Vite project. Use `--with-animate` to include an auto-animation step (Animator3D) in the pipeline when applicable. Source: `GameAssets/src/gameassets/dream/` (planner, emitter, runner, llm_context). Providers: `--llm-provider openai|huggingface|stdin`. `--dry-run` generates files without GPU.
@@ -313,7 +313,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Spawner e conteúdo declarativo no VibeGame: manter o mesmo estilo de recipes/parsers/XML em `index.html` já usado no projeto.
 - Spawner: diferenciar objetos estáticos (árvores, props) de dinâmicos (caixas empurráveis, inimigos em movimento, etc.) e usar perfis que definam defaults automáticos por tipo de objeto.
 - Ajustes de spawn e terreno: priorizar soluções que não degradem muito a performance do mapa.
-- Lógica por objeto no VibeGame: scripts ao nível da **entidade** (estilo MonoBehaviour no modelo); expor via atributo `script` no recipe que cria a entidade (ex. `gltf-load`) ou filho `<entity-script>` com merge, em linha com o plugin `entity-script`.
+- Lógica por objeto no VibeGame: scripts ao nível da **entidade** (estilo MonoBehaviour no modelo); expor via atributo `script` no recipe que cria a entidade (ex. `GLTFLoader`) ou filho `<MonoBehaviour>` com merge, em linha com o plugin `MonoBehaviour`.
 - VibeGame: correções reutilizáveis devem ir para a **engine**; no **jogo/exemplo** (ex. `simple-rpg`) ficam só ajustes específicos desse jogo.
 
 ## Learned Workspace Facts
@@ -324,8 +324,8 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - O modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir.
 - O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas).
 - Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` (centro = horizonte; topo = zénite; fundo = nadir). Texturas em **retrato** ou com eixos trocados podem mapear o azimute ao eixo vertical e causar artefactos «pilares»; normalizar para panorama 2:1 em paisagem antes do PMREM quando necessário.
-- O conteúdo sob `<world>` no VibeGame é injetado como HTML (`innerHTML`); a tag nativa **`<script>`** não serve para marcar módulos TS do motor — usar atributo `script` nos recipes ou um nome de elemento que não colida com HTML.
-- No recipe `<terrain>`, muitos campos do componente `Terrain` são configuráveis por atributos XML em kebab-case (defaults do plugin); `collision-resolution` (32/64/128) é aplicado ao `TerrainLOD`/`three-terrain-lod` sem ser sobrescrito pela `resolution` da malha do chunk.
+- O conteúdo sob `<Scene>` no VibeGame é injetado como HTML (`innerHTML`); a tag nativa **`<script>`** não serve para marcar módulos TS do motor — usar atributo `script` nos recipes ou um nome de elemento que não colida com HTML.
+- No recipe `<Terrain>`, muitos campos do componente `Terrain` são configuráveis por atributos XML em kebab-case (defaults do plugin); `collision-resolution` (32/64/128) é aplicado ao `TerrainLOD`/`three-terrain-lod` sem ser sobrescrito pela `resolution` da malha do chunk.
 - Corpos dinâmicos GLTF no VibeGame podem ter colisor desalinhado do mesh visível se o centro do AABB não coincidir com a origem da entidade; é necessário definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local.
 - No plugin de partículas (`three.quarks`), o simulador usa o emissor interno `ParticleSystem.emitter`; adicionar à cena um wrapper `ParticleEmitter` novo em vez desse nó faz o batch descartar o sistema no update e as partículas deixam de aparecer — integrar com `ps.emitter` diretamente.
 - No PyPI, `bpy==5.1.0` exige Python 3.13; o Rigging3D (inferência UniRig) fixa Python 3.11 com `bpy==5.0.1` e `open3d` porque não há combinação estável Open3D + `bpy` 5.1 no mesmo venv. O **Animator3D** usa stack **3.13 + `bpy==5.1.0`** em paralelo — não assumir um único Python/`bpy` para todo o monorepo.

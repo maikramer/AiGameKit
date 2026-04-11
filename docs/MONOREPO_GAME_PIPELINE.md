@@ -42,7 +42,7 @@ For the runtime to load content **without** a custom CMS:
 
 | Asset type | URL pattern (dev) | Notes |
 |------------|-------------------|--------|
-| GLB | `/assets/models/<name>.glb` | Static props: `loadGltfToScene` from `vibegame`, `<gltf-load url="…">`, or `GLTFLoader`. Rigged characters with embedded clips: `loadGltfAnimated` + `GltfAnimator`, or `<player-gltf model-url="…">` ([VibeGame README](../VibeGame/README.md)). |
+| GLB | `/assets/models/<name>.glb` | Static props: `loadGltfToScene` from `vibegame`, `<GLTFLoader url="…">`, or `GLTFLoader`. Rigged characters with embedded clips: `loadGltfAnimated` + `GltfAnimator`, or `<PlayerGLTF model-url="…">` ([VibeGame README](../VibeGame/README.md)). |
 | Audio | `/assets/audio/<name>.wav` | Use Web Audio or `<audio>`; not wired by VibeGame core — integrate in your game code |
 | Sky | `/assets/sky/<name>.png` | Use as `THREE.Texture`, `Scene.background`, or PMREM — e.g. `applyEquirectSkyEnvironment` |
 
@@ -63,7 +63,7 @@ For the runtime to load content **without** a custom CMS:
 ## 5. Synergy limits (honest scope)
 
 - **GameAssets** orchestrates batch content; **`gameassets dream`** additionally scaffolds a **playable Vite project** — you still own tuning, gameplay code, and release/CI.
-- **VibeGame** favors **declarative XML**; GLB integration uses **`loadGltfToScene`**, **`loadGltfAnimated`**, **`GltfAnimator`**, `<gltf-load>`, or `<player-gltf>` as needed.
+- **VibeGame** favors **declarative XML**; GLB integration uses **`loadGltfToScene`**, **`loadGltfAnimated`**, **`GltfAnimator`**, `<GLTFLoader>`, or `<PlayerGLTF>` as needed.
 - **Shipped production builds** (CDN, stores) still need your packaging and QA beyond the monorepo defaults.
 
 ## 6. See also

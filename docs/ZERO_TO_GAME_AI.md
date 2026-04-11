@@ -69,10 +69,10 @@ The `humanoid` preset creates five clips: **BreatheIdle**, **Walk**, **Run**, **
 
 ### VibeGame: declarative animated player
 
-Instead of custom glue code for every project, use the **`player-gltf`** element in world XML. It loads the GLB, plays **idle / walk / run** (and related states when clips exist), and replaces the default box character:
+Instead of custom glue code for every project, use the **`PlayerGLTF`** element in scene XML. It loads the GLB, plays **idle / walk / run** (and related states when clips exist), and replaces the default box character:
 
 ```html
-<player-gltf pos="0 0 0" model-url="/assets/models/hero.glb"></player-gltf>
+<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
 ```
 
 ### Origin convention (feet on the floor)
@@ -91,7 +91,7 @@ Clips in the exported GLB use this naming:
 - `Animator3D_Jump`
 - `Animator3D_Fall`
 
-Runtime (`player-gltf` and related systems) maps movement to these names (or compatible aliases).
+Runtime (`PlayerGLTF` and related systems) maps movement to these names (or compatible aliases).
 
 ## 4. Context bundle for coding agents
 
@@ -112,8 +112,8 @@ Avoid pasting large generated assets into the chat; **link paths** under `public
 | Sky / env (equirect → PMREM) | `applyEquirectSkyEnvironment` in VibeGame (`vibegame`, export `vibegame/extras/sky`) |
 | Export pack | `gameassets handoff --public-dir …` → `public/assets/…` + `gameassets_handoff.json` |
 | Batch plan JSON for agents | `gameassets batch --dry-run --dry-run-json plan.json` |
-| Declarative GLB | `<gltf-load url="/assets/models/foo.glb"></gltf-load>` in world XML |
-| Animated player (XML) | `<player-gltf model-url="…">` — idle/walk/run from input; see [§3 Complete animation pipeline](#3-complete-animation-pipeline) |
+| Declarative GLB | `<GLTFLoader url="/assets/models/foo.glb"></GLTFLoader>` in scene XML |
+| Animated player (XML) | `<PlayerGLTF model-url="…">` — idle/walk/run from input; see [§3 Complete animation pipeline](#3-complete-animation-pipeline) |
 
 ## 6. `gameassets dream` — idea-to-game in one command
 
