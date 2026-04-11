@@ -35,7 +35,7 @@ export const RenderingPlugin: Plugin = {
     TextureRecipeCleanupSystem,
   ],
   components: {
-    renderer: MeshRenderer,
+    meshRenderer: MeshRenderer,
     RenderContext,
     MainCamera,
     AmbientLight,
@@ -63,7 +63,7 @@ export const RenderingPlugin: Plugin = {
         directionZ: -1,
         distance: 30,
       },
-      renderer: {
+      meshRenderer: {
         visible: 1,
         sizeX: 1,
         sizeY: 1,
@@ -100,7 +100,7 @@ export const RenderingPlugin: Plugin = {
       },
     },
     enums: {
-      renderer: {
+      meshRenderer: {
         shape: {
           box: 0,
           sphere: 1,

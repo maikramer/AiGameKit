@@ -24,7 +24,7 @@ describe('State Recipe Integration', () => {
       name: 'physics-box',
       components: ['transform', 'body', 'collider'],
       overrides: {
-        'body.type': 1,
+        'rigidbody.type': 1,
       },
     });
 
@@ -36,7 +36,7 @@ describe('State Recipe Integration', () => {
     expect(state.exists(entity)).toBe(true);
 
     const Transform = state.getComponent('transform');
-    const Rigidbody = state.getComponent('body');
+    const Rigidbody = state.getComponent('rigidbody');
     const Collider = state.getComponent('collider');
 
     expect(state.hasComponent(entity, Transform!)).toBe(true);
@@ -55,14 +55,14 @@ describe('State Recipe Integration', () => {
   });
 
   it('should work with both imperative and XML methods', () => {
-    const entity1 = state.createFromRecipe('entity', {
+    const entity1 = state.createFromRecipe('GameObject', {
       transform: 'pos: 1 2 3',
     });
 
     const { parseXMLToEntities } = require('vibegame');
     const { XMLParser } = require('vibegame');
 
-    const xml = '<root><entity transform="pos: 1 2 3"></entity></root>';
+    const xml = '<root><GameObject transform="pos: 1 2 3"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity2 = entities[0].entity;

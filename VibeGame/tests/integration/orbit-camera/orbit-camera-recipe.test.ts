@@ -21,14 +21,14 @@ describe('OrbitCamera Recipe Integration', () => {
   });
 
   it('should create orbit camera from recipe', () => {
-    const entity = state.createFromRecipe('orbit-camera');
+    const entity = state.createFromRecipe('OrbitCamera');
 
     expect(state.hasComponent(entity, OrbitCamera)).toBe(true);
     expect(state.hasComponent(entity, Transform)).toBe(true);
   });
 
   it('should override values with custom attributes', () => {
-    const entity = state.createFromRecipe('orbit-camera', {
+    const entity = state.createFromRecipe('OrbitCamera', {
       'orbit-camera.target': 5,
       'orbit-camera.current-distance': 15,
       'orbit-camera.target-distance': 15,
@@ -42,7 +42,7 @@ describe('OrbitCamera Recipe Integration', () => {
   });
 
   it('should handle distance constraints in overrides', () => {
-    const entity = state.createFromRecipe('orbit-camera', {
+    const entity = state.createFromRecipe('OrbitCamera', {
       'orbit-camera.min-distance': 1,
       'orbit-camera.max-distance': 100,
     });
@@ -52,7 +52,7 @@ describe('OrbitCamera Recipe Integration', () => {
   });
 
   it('should handle angle values in overrides', () => {
-    const entity = state.createFromRecipe('orbit-camera', {
+    const entity = state.createFromRecipe('OrbitCamera', {
       'orbit-camera.current-yaw': Math.PI / 2,
       'orbit-camera.target-yaw': Math.PI / 2,
       'orbit-camera.current-pitch': Math.PI / 6,
@@ -66,9 +66,9 @@ describe('OrbitCamera Recipe Integration', () => {
   });
 
   it('should verify recipe includes expected components', () => {
-    expect(state.hasRecipe('orbit-camera')).toBe(true);
+    expect(state.hasRecipe('OrbitCamera')).toBe(true);
 
-    const recipe = state.getRecipe('orbit-camera');
+    const recipe = state.getRecipe('OrbitCamera');
     expect(recipe).toBeDefined();
     expect(recipe?.components).toContain('orbit-camera');
     expect(recipe?.components).toContain('transform');
@@ -76,7 +76,7 @@ describe('OrbitCamera Recipe Integration', () => {
 
   describe('XML Declarative Approach', () => {
     it('should create default orbital camera from XML', () => {
-      const xml = '<root><orbit-camera /></root>';
+      const xml = '<root><OrbitCamera /></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -95,8 +95,8 @@ describe('OrbitCamera Recipe Integration', () => {
     it('should create camera with distance and offset attributes', () => {
       const xml = `
         <root>
-          <player pos="5 0 3" />
-          <orbit-camera
+          <Player pos="5 0 3" />
+          <OrbitCamera
             target-distance="10"
             min-distance="5"
             max-distance="20"
@@ -121,7 +121,7 @@ describe('OrbitCamera Recipe Integration', () => {
 
     it('should create entity with orbit-camera using CSS-style syntax', () => {
       const xml =
-        '<root><entity orbit-camera="target-distance: 15; target-yaw: 0; target-pitch: 0.5; smoothness: 0.2; offset-y: 3" transform="" main-camera="" /></root>';
+        '<root><GameObject orbit-camera="target-distance: 15; target-yaw: 0; target-pitch: 0.5; smoothness: 0.2; offset-y: 3" transform="" main-camera="" /></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -140,10 +140,10 @@ describe('OrbitCamera Recipe Integration', () => {
 
     it('should handle nested camera inside world with player', () => {
       const xml = `
-        <world>
-          <player pos="0 0 0" />
-          <orbit-camera target-distance="12" />
-        </world>
+        <Scene>
+          <Player pos="0 0 0" />
+          <OrbitCamera target-distance="12" />
+        </Scene>
       `;
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -162,7 +162,7 @@ describe('OrbitCamera Recipe Integration', () => {
     it('should apply offset values from attributes', () => {
       const xml = `
         <root>
-          <orbit-camera
+          <OrbitCamera
             offset-x="2"
             offset-y="5"
             offset-z="-1"
@@ -181,7 +181,7 @@ describe('OrbitCamera Recipe Integration', () => {
     it('should handle pitch and yaw constraints', () => {
       const xml = `
         <root>
-          <orbit-camera
+          <OrbitCamera
             min-pitch="0.1"
             max-pitch="1.4"
             current-yaw="1.57"

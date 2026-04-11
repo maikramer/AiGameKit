@@ -11,12 +11,12 @@ describe('Terrain recipe integration', () => {
     global.DOMParser = dom.window.DOMParser;
   });
 
-  it('parses bare <terrain> and applies plugin defaults', () => {
+  it('parses bare <Terrain> and applies plugin defaults', () => {
     const state = new State();
     state.registerPlugin(TransformsPlugin);
     state.registerPlugin(TerrainPlugin);
 
-    const xml = '<root><terrain></terrain></root>';
+    const xml = '<root><Terrain></Terrain></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

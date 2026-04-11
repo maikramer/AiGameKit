@@ -15,10 +15,10 @@ describe('Joints XML recipe', () => {
     const state = new State();
     state.registerPlugin(JointsPlugin);
 
-    const recipe = state.getRecipe('joint');
+    const recipe = state.getRecipe('Joint');
     expect(recipe).toBeDefined();
-    expect(recipe?.name).toBe('joint');
-    expect(recipe?.components).toContain('physicsJoint');
+    expect(recipe?.name).toBe('Joint');
+    expect(recipe?.components).toContain('joint');
   });
 
   it('joint recipe creates entity with PhysicsJoint component', () => {
@@ -26,7 +26,7 @@ describe('Joints XML recipe', () => {
     const state = new State();
     state.registerPlugin(JointsPlugin);
 
-    const xml = '<root><joint joint-type="1"></joint></root>';
+    const xml = '<root><Joint joint-type="1"></Joint></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -40,7 +40,7 @@ describe('Joints XML recipe', () => {
     const state = new State();
     state.registerPlugin(JointsPlugin);
 
-    const xml = '<root><joint joint-type="3"></joint></root>';
+    const xml = '<root><Joint joint-type="3"></Joint></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -54,7 +54,7 @@ describe('Joints XML recipe', () => {
     state.registerPlugin(JointsPlugin);
 
     const xml =
-      '<root><joint joint-type="5" spring-stiffness="25" spring-damping="2" rope-length="5"></joint></root>';
+      '<root><Joint joint-type="5" spring-stiffness="25" spring-damping="2" rope-length="5"></Joint></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -131,8 +131,8 @@ describe('Joints XML recipe', () => {
 
     const xml =
       '<root>' +
-      '<joint joint-type="0"></joint>' +
-      '<joint joint-type="5" spring-stiffness="30"></joint>' +
+      '<Joint joint-type="0"></Joint>' +
+      '<Joint joint-type="5" spring-stiffness="30"></Joint>' +
       '</root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);

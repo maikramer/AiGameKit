@@ -18,22 +18,22 @@ export const EntityScriptPlugin: Plugin = {
   recipes: [entityScriptRecipe],
   systems: [CoroutineRunnerSystem, EntityScriptCollisionBridgeSystem, EntityScriptFixedUpdateSystem, EntityScriptSystem, EntityScriptLateUpdateSystem],
   components: {
-    entityScript: MonoBehaviour,
+    monoBehaviour: MonoBehaviour,
   },
   config: {
     defaults: {
-      entityScript: {
+      monoBehaviour: {
         ready: 0,
         enabled: 1,
       },
     },
     shorthands: {
-      entityScript: {
+      monoBehaviour: {
         script: 'file',
       },
     },
     adapters: {
-      entityScript: {
+      monoBehaviour: {
         file: scriptFileAdapter,
       },
     },

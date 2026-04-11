@@ -11,9 +11,9 @@ describe('FogPlugin Registration', () => {
     state.registerPlugin(FogPlugin);
   });
 
-  it('should have a recipe named "fog" with components ["fog"]', () => {
+  it('should have a recipe named "Fog" with components ["fog"]', () => {
     expect(FogPlugin.recipes!).toHaveLength(1);
-    expect(FogPlugin.recipes![0].name).toBe('fog');
+    expect(FogPlugin.recipes![0].name).toBe('Fog');
     expect(FogPlugin.recipes![0].components).toEqual(['fog']);
   });
 
@@ -24,7 +24,7 @@ describe('FogPlugin Registration', () => {
   });
 
   it('should register the fog recipe', () => {
-    const recipe = state.getRecipe('fog');
+    const recipe = state.getRecipe('Fog');
     expect(recipe).toBeDefined();
     expect(recipe?.components).toContain('fog');
   });

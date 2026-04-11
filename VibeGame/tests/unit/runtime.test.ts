@@ -139,50 +139,50 @@ describe('GameRuntime', () => {
   });
 
   it('should not process DOM when dom is false', async () => {
-    document.body.innerHTML = '<world></world>';
+    document.body.innerHTML = '<Scene></Scene>';
 
     const noDomRuntime = new GameRuntime(state, { dom: false });
     await noDomRuntime.start();
 
-    const worldElement = document.querySelector('world') as HTMLElement;
+    const worldElement = document.querySelector('Scene') as HTMLElement;
     expect(worldElement?.style.display).not.toBe('none');
 
     noDomRuntime.stop();
   });
 
   it('should process world elements in DOM', async () => {
-    document.body.innerHTML = '<world></world>';
+    document.body.innerHTML = '<Scene></Scene>';
 
-    state.registerRecipe({ name: 'world', components: [] });
+    state.registerRecipe({ name: 'Scene', components: [] });
     await runtime.start();
 
-    const worldElement = document.querySelector('world') as HTMLElement;
+    const worldElement = document.querySelector('Scene') as HTMLElement;
     expect(worldElement?.style.display).toBe('none');
   });
 
   it('should process world element with canvas attribute', async () => {
     document.body.innerHTML = `
       <canvas id="game-canvas"></canvas>
-      <world canvas="#game-canvas"></world>
+      <Scene canvas="#game-canvas"></Scene>
     `;
 
-    state.registerRecipe({ name: 'world', components: [] });
+    state.registerRecipe({ name: 'Scene', components: [] });
     await runtime.start();
 
-    const worldElement = document.querySelector('world') as HTMLElement;
+    const worldElement = document.querySelector('Scene') as HTMLElement;
     expect(worldElement?.style.display).toBe('none');
   });
 
   it('should process world element with sky attribute', async () => {
     document.body.innerHTML = `
       <canvas id="game-canvas"></canvas>
-      <world canvas="#game-canvas" sky="#87CEEB"></world>
+      <Scene canvas="#game-canvas" skybox="#87CEEB"></Scene>
     `;
 
-    state.registerRecipe({ name: 'world', components: [] });
+    state.registerRecipe({ name: 'Scene', components: [] });
     await runtime.start();
 
-    const worldElement = document.querySelector('world') as HTMLElement;
+    const worldElement = document.querySelector('Scene') as HTMLElement;
     expect(worldElement?.style.display).toBe('none');
   });
 
@@ -190,14 +190,14 @@ describe('GameRuntime', () => {
     const TestComponent = defineComponent({ value: Types.f32 });
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
-      name: 'entity',
+      name: 'GameObject',
       components: ['test'],
     });
 
     document.body.innerHTML = `
-      <world>
-        <entity test="value: 42"></entity>
-      </world>
+      <Scene>
+        <GameObject test="value: 42"></GameObject>
+      </Scene>
     `;
 
     await runtime.start();
@@ -209,7 +209,7 @@ describe('GameRuntime', () => {
   it('should setup mutation observer for dynamic world elements', async () => {
     await runtime.start();
 
-    const newWorld = document.createElement('world');
+    const newWorld = document.createElement('Scene');
     document.body.appendChild(newWorld);
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -221,12 +221,12 @@ describe('GameRuntime', () => {
     await runtime.start();
 
     const container = document.createElement('div');
-    container.innerHTML = '<world></world>';
+    container.innerHTML = '<Scene></Scene>';
     document.body.appendChild(container);
 
     await new Promise((resolve) => setTimeout(resolve, 10));
 
-    const worldElement = container.querySelector('world') as HTMLElement;
+    const worldElement = container.querySelector('Scene') as HTMLElement;
     expect(worldElement?.style.display).toBe('none');
   });
 
@@ -234,7 +234,7 @@ describe('GameRuntime', () => {
     await runtime.start();
     runtime.stop();
 
-    const newWorld = document.createElement('world');
+    const newWorld = document.createElement('Scene');
     document.body.appendChild(newWorld);
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -267,7 +267,7 @@ describe('GameRuntime', () => {
     process.env.NODE_ENV = 'development';
 
     document.body.innerHTML =
-      '<world><entity><nested></entity></nested></world>';
+      '<Scene><GameObject><nested></GameObject></nested></Scene>';
 
     let errorThrown = false;
     try {
@@ -286,7 +286,7 @@ describe('GameRuntime', () => {
     process.env.NODE_ENV = 'production';
 
     document.body.innerHTML =
-      '<world><entity><nested></entity></nested></world>';
+      '<Scene><GameObject><nested></GameObject></nested></Scene>';
 
     let errorLogged = false;
     const originalError = console.error;
@@ -304,14 +304,14 @@ describe('GameRuntime', () => {
 
   it('should handle multiple world elements', async () => {
     document.body.innerHTML = `
-      <world></world>
-      <world></world>
+      <Scene></Scene>
+      <Scene></Scene>
     `;
 
-    state.registerRecipe({ name: 'world', components: [] });
+    state.registerRecipe({ name: 'Scene', components: [] });
     await runtime.start();
 
-    const worldElements = document.querySelectorAll('world');
+    const worldElements = document.querySelectorAll('Scene');
     worldElements.forEach((element) => {
       expect((element as HTMLElement).style.display).toBe('none');
     });
@@ -326,16 +326,16 @@ describe('GameRuntime', () => {
 
     state.registerComponent('transform', Transform);
     state.registerRecipe({
-      name: 'entity',
+      name: 'GameObject',
       components: ['transform'],
     });
 
     document.body.innerHTML = `
-      <world>
-        <entity transform="pos: 1 2 3">
-          <entity transform="pos: 4 5 6"></entity>
-        </entity>
-      </world>
+      <Scene>
+        <GameObject transform="pos: 1 2 3">
+          <GameObject transform="pos: 4 5 6"></GameObject>
+        </GameObject>
+      </Scene>
     `;
 
     await runtime.start();

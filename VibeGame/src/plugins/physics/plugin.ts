@@ -70,7 +70,7 @@ export const PhysicsPlugin: Plugin = {
   ],
   components: {
     PhysicsWorld,
-    body: Rigidbody,
+    rigidbody: Rigidbody,
     Collider,
     CharacterController,
     CharacterMovement,
@@ -89,7 +89,7 @@ export const PhysicsPlugin: Plugin = {
   },
   config: {
     defaults: {
-      body: {
+      rigidbody: {
         type: 0, // Fixed/Static
         mass: 1,
         gravityScale: 1,
@@ -133,7 +133,7 @@ export const PhysicsPlugin: Plugin = {
       },
     },
     enums: {
-      body: {
+      rigidbody: {
         type: {
           fixed: 0,
           static: 0,

@@ -24,14 +24,14 @@ describe('Rendering Recipes', () => {
 
   describe('Basic Rendering Setup', () => {
     it('should handle root element with canvas and sky attributes', () => {
-      const xml = `<root canvas="#game-canvas" sky="#87ceeb"><entity renderer="shape: box"></entity></root>`;
+      const xml = `<root canvas="#game-canvas" skybox="#87ceeb"><GameObject meshRenderer="shape: box"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const rootElement = parsed.root;
 
       expect(rootElement).toBeDefined();
       expect(rootElement.attributes.canvas).toBe('#game-canvas');
-      expect(rootElement.attributes.sky).toBe(0x87ceeb);
+      expect(rootElement.attributes.skybox).toBe(0x87ceeb);
     });
   });
 
@@ -85,7 +85,7 @@ describe('Rendering Recipes', () => {
 
   describe('Shape Types', () => {
     it('should handle shape enums in XML', () => {
-      const xml = `<root><entity renderer="shape: sphere"></entity><entity renderer="shape: box"></entity></root>`;
+      const xml = `<root><GameObject meshRenderer="shape: sphere"></GameObject><GameObject meshRenderer="shape: box"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -96,7 +96,7 @@ describe('Rendering Recipes', () => {
     });
 
     it('should handle numeric shape values', () => {
-      const xml = `<root><entity renderer="shape: 0"></entity><entity renderer="shape: 1"></entity></root>`;
+      const xml = `<root><GameObject meshRenderer="shape: 0"></GameObject><GameObject meshRenderer="shape: 1"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -126,7 +126,7 @@ describe('Rendering Recipes', () => {
 
   describe('Visibility Control', () => {
     it('should handle visibility in XML', () => {
-      const xml = `<root><entity renderer="visible: 0"></entity><entity renderer="visible: 1"></entity></root>`;
+      const xml = `<root><GameObject meshRenderer="visible: 0"></GameObject><GameObject meshRenderer="visible: 1"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -148,7 +148,7 @@ describe('Rendering Recipes', () => {
     });
 
     it('should handle initially hidden entities', () => {
-      const xml = `<root><entity renderer="shape: box; color: 0xff0000; visible: 0" transform="pos: 0 0 0" /></root>`;
+      const xml = `<root><GameObject meshRenderer="shape: box; color: 0xff0000; visible: 0" transform="pos: 0 0 0" /></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -163,7 +163,7 @@ describe('Rendering Recipes', () => {
 
   describe('Size and Color Properties', () => {
     it('should handle size shorthand expansion', () => {
-      const xml = `<root><entity renderer="size: 2 3 4"></entity><entity renderer="size: 5"></entity></root>`;
+      const xml = `<root><GameObject meshRenderer="size: 2 3 4"></GameObject><GameObject meshRenderer="size: 5"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -180,7 +180,7 @@ describe('Rendering Recipes', () => {
     });
 
     it('should handle mixed properties in renderer string', () => {
-      const xml = `<root><entity renderer="shape: sphere; size: 2 2 2; color: 0x00ff00; visible: 1"></entity></root>`;
+      const xml = `<root><GameObject meshRenderer="shape: sphere; size: 2 2 2; color: 0x00ff00; visible: 1"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -195,7 +195,7 @@ describe('Rendering Recipes', () => {
     });
 
     it('should apply default values when not specified', () => {
-      const xml = `<root><entity renderer="shape: box"></entity></root>`;
+      const xml = `<root><GameObject meshRenderer="shape: box"></GameObject></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
@@ -212,7 +212,7 @@ describe('Rendering Recipes', () => {
 
   describe('MainCamera Component', () => {
     it('should create camera entity from XML', () => {
-      const xml = `<root><entity main-camera="" transform="pos: 0 10 20" /></root>`;
+      const xml = `<root><GameObject main-camera="" transform="pos: 0 10 20" /></root>`;
 
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);

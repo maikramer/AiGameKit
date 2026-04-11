@@ -1,6 +1,6 @@
 import type { Recipe } from '../../core';
 
 export const jointRecipe: Recipe = {
-  name: 'joint',
-  components: ['physicsJoint'],
+  name: 'Joint',
+  components: ['joint'],
 };

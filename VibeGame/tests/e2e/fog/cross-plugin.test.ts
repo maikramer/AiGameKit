@@ -22,8 +22,8 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
   });
 
   it('should register both FogPlugin and WaterPlugin', () => {
-    expect(state.hasRecipe('fog')).toBe(true);
-    expect(state.hasRecipe('water')).toBe(true);
+    expect(state.hasRecipe('Fog')).toBe(true);
+    expect(state.hasRecipe('Water')).toBe(true);
     expect(state.getComponent('fog')).toBeDefined();
     expect(state.getComponent('water')).toBeDefined();
   });
@@ -33,11 +33,11 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
-        renderer="shape: box; size: 30 1 30; color: 0x90ee90"
+        rigidbody="pos: 0 -0.5 0"
+        meshRenderer="shape: box; size: 30 1 30; color: 0x90ee90"
         collider="shape: box; size: 30 1 30" />
-      <water size="128" water-level="5" />
-      <fog mode="exponential" density="0.02" color="#8899aa" />
+      <Water size="128" water-level="5" />
+      <Fog mode="exponential" density="0.02" color="#8899aa" />
     `
     );
 
@@ -61,10 +61,10 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
       state,
       `
       <static-part
-        body="pos: 0 -10 0"
+        rigidbody="pos: 0 -10 0"
         collider="shape: box; size: 50 1 50" />
-      <water size="64" water-level="3" />
-      <fog mode="linear" near="1" far="100" />
+      <Water size="64" water-level="3" />
+      <Fog mode="linear" near="1" far="100" />
     `
     );
 
@@ -85,8 +85,8 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     parseWorldXml(
       state,
       `
-      <water size="256" water-level="8" tint-r="0.1" tint-g="0.3" tint-b="0.5" />
-      <fog mode="exponential-squared" density="0.05" />
+      <Water size="256" water-level="8" tint-r="0.1" tint-g="0.3" tint-b="0.5" />
+      <Fog mode="exponential-squared" density="0.05" />
     `
     );
 
@@ -116,8 +116,8 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     parseWorldXml(
       state,
       `
-      <water size="64" water-level="5" tint-r="0.9" tint-g="0.1" tint-b="0.2" />
-      <fog density="0.03" color="#aabbcc" />
+      <Water size="64" water-level="5" tint-r="0.9" tint-g="0.1" tint-b="0.2" />
+      <Fog density="0.03" color="#aabbcc" />
     `
     );
 
@@ -136,10 +136,10 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     parseWorldXml(
       state,
       `
-      <water size="64" water-level="5"
+      <Water size="64" water-level="5"
              underwater-fog-color-r="0.1" underwater-fog-color-g="0.05" underwater-fog-color-b="0.15"
              underwater-fog-density="0.2" />
-      <fog mode="exponential" density="0.04" color="#ffeedd" />
+      <Fog mode="exponential" density="0.04" color="#ffeedd" />
     `
     );
 
@@ -168,8 +168,8 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     parseWorldXml(
       state,
       `
-      <static-part body="pos: 0 -0.5 0" collider="shape: box; size: 20 1 20" />
-      <fog mode="linear" near="5" far="200" />
+      <static-part rigidbody="pos: 0 -0.5 0" collider="shape: box; size: 20 1 20" />
+      <Fog mode="linear" near="5" far="200" />
     `
     );
 
@@ -188,8 +188,8 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     parseWorldXml(
       state,
       `
-      <static-part body="pos: 0 -10 0" collider="shape: box; size: 30 1 30" />
-      <water size="128" water-level="5" />
+      <static-part rigidbody="pos: 0 -10 0" collider="shape: box; size: 30 1 30" />
+      <Water size="128" water-level="5" />
     `
     );
 
@@ -208,9 +208,9 @@ describe('E2E: Fog + Water Cross-Plugin', () => {
     parseWorldXml(
       state,
       `
-      <static-part body="pos: 0 -5 0" collider="shape: box; size: 40 1 40" />
-      <water size="64" water-level="2" />
-      <fog mode="exponential" density="0.025" />
+      <static-part rigidbody="pos: 0 -5 0" collider="shape: box; size: 40 1 40" />
+      <Water size="64" water-level="2" />
+      <Fog mode="exponential" density="0.025" />
     `
     );
 

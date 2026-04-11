@@ -11,13 +11,13 @@ const skyUrlAdapter: Adapter = (entity, value, _state) => {
 export const SkyPlugin: Plugin = {
   systems: [SkySystem],
   recipes: [skyRecipe],
-  components: { sky: Skybox },
+  components: { skybox: Skybox },
   config: {
     adapters: {
-      sky: { url: skyUrlAdapter },
+      skybox: { url: skyUrlAdapter },
     },
     defaults: {
-      sky: {
+      skybox: {
         urlIndex: 0,
         rotationDeg: 0,
         setBackground: 1,

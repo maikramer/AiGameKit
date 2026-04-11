@@ -14,13 +14,13 @@ describe('RaycastPlugin Registration', () => {
     state.registerPlugin(RaycastPlugin);
   });
 
-  it('should have a recipe named "raycast-source" with correct components', () => {
+  it('should have a recipe named "RaycastSource" with correct components', () => {
     expect(RaycastPlugin.recipes!).toHaveLength(1);
-    expect(RaycastPlugin.recipes![0].name).toBe('raycast-source');
+    expect(RaycastPlugin.recipes![0].name).toBe('RaycastSource');
     expect(RaycastPlugin.recipes![0].components).toEqual([
       'transform',
       'raycastSource',
-      'raycastResult',
+      'raycastHit',
     ]);
   });
 
@@ -37,10 +37,10 @@ describe('RaycastPlugin Registration', () => {
   });
 
   it('should register the raycast-source recipe', () => {
-    const recipe = state.getRecipe('raycast-source');
+    const recipe = state.getRecipe('RaycastSource');
     expect(recipe).toBeDefined();
     expect(recipe?.components).toContain('raycastSource');
-    expect(recipe?.components).toContain('raycastResult');
+    expect(recipe?.components).toContain('raycastHit');
   });
 
   it('should have two systems registered (RaycastResetSystem + RaycastSystem)', () => {
@@ -59,7 +59,7 @@ describe('RaycastPlugin Registration', () => {
   });
 
   it('should have config.defaults for raycastResult', () => {
-    const defaults = RaycastPlugin.config!.defaults!.raycastResult;
+    const defaults = RaycastPlugin.config!.defaults!.raycastHit;
     expect(defaults).toBeDefined();
     expect(defaults.hitValid).toBe(0);
     expect(defaults.hitEntity).toBe(0);

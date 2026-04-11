@@ -59,7 +59,7 @@ describe('Global API', () => {
     const state = runtime.getState();
 
     const transform = state.getComponent('transform');
-    const renderer = state.getComponent('renderer');
+    const renderer = state.getComponent('meshRenderer');
     expect(transform).toBeUndefined();
     expect(renderer).toBeUndefined();
 

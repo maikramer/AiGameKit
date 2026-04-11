@@ -395,7 +395,7 @@ function processChildElementsForParent(
           state.addComponent(childEntity, Parent);
           (Parent as ComponentWithFields).entity[childEntity] = parentEntity;
 
-          const Rigidbody = state.getComponent('body');
+          const Rigidbody = state.getComponent('rigidbody');
           if (Rigidbody) {
             if (
               state.hasComponent(parentEntity, Rigidbody) &&
@@ -522,7 +522,7 @@ export function parseXMLToEntities(
       }
     }
   } else {
-    if (xmlContent.tagName === 'world') {
+    if (xmlContent.tagName.toLowerCase() === 'scene') {
       return results;
     }
     const result = processElement(xmlContent);

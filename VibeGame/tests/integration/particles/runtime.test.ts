@@ -19,7 +19,7 @@ describe('Particles runtime integration', () => {
     state.registerPlugin(ParticlesPlugin);
     getRenderingContext(state);
 
-    const entity = createEntityFromRecipe(state, 'particle-emitter', {
+    const entity = createEntityFromRecipe(state, 'ParticleSystem', {
       preset: 'sparks',
       rate: 60,
       lifetime: 2,

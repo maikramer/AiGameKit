@@ -75,7 +75,7 @@ export class State {
 
     this.registerComponent('parent', Parent);
     this.registerRecipe({
-      name: 'entity',
+      name: 'GameObject',
       components: ['transform'],
     });
   }
@@ -117,7 +117,7 @@ export class State {
   }
 
   registerRecipe(recipe: Recipe): void {
-    this.recipes.set(recipe.name, recipe);
+    this.recipes.set(recipe.name.toLowerCase(), recipe);
   }
 
   registerComponent(name: string, component: Component): void {
@@ -131,11 +131,11 @@ export class State {
   }
 
   getParser(tag: string): Parser | undefined {
-    return this.config.getParser(tag);
+    return this.config.getParser(tag) ?? this.config.getParser(tag.toLowerCase());
   }
 
   getRecipe(name: string): Recipe | undefined {
-    return this.recipes.get(name);
+    return this.recipes.get(name.toLowerCase());
   }
 
   getComponent(name: string): Component | undefined {
@@ -143,11 +143,11 @@ export class State {
   }
 
   hasRecipe(name: string): boolean {
-    return this.recipes.has(name);
+    return this.recipes.has(name.toLowerCase());
   }
 
   getRecipeNames(): Set<string> {
-    return new Set(this.recipes.keys());
+    return new Set(Array.from(this.recipes.values()).map((r) => r.name));
   }
 
   getComponentNames(): string[] {

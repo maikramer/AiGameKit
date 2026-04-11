@@ -34,7 +34,7 @@ describe('Player Recipes and XML', () => {
 
   describe('Basic Player Usage (XML)', () => {
     it('should create player with default values', () => {
-      const xml = '<root><player /></root>';
+      const xml = '<root><Player /></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -61,7 +61,7 @@ describe('Player Recipes and XML', () => {
 
     it('should create player with custom position, speed and jump height', () => {
       const xml =
-        '<root><player pos="0 2 0" speed="6" jump-height="3" /></root>';
+        '<root><Player pos="0 2 0" speed="6" jump-height="3" /></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -78,7 +78,7 @@ describe('Player Recipes and XML', () => {
     it('should create player with all custom attributes', () => {
       const xml = `
         <root>
-          <player
+          <Player
             pos="5 1 -10"
             speed="8"
             jump-height="4"
@@ -101,7 +101,7 @@ describe('Player Recipes and XML', () => {
     it('should handle CSS-style syntax for player attributes', () => {
       const xml = `
         <root>
-          <player player="speed: 7; jump-height: 3.5" />
+          <Player playerController="speed: 7; jump-height: 3.5" />
         </root>
       `;
       const parsed = XMLParser.parse(xml);
@@ -115,10 +115,10 @@ describe('Player Recipes and XML', () => {
     it('should handle dot notation for player attributes', () => {
       const xml = `
         <root>
-          <player
-            player.speed="10"
-            player.jump-height="5"
-            player.rotation-speed="12"
+          <Player
+            playerController.speed="10"
+            playerController.jump-height="5"
+            playerController.rotation-speed="12"
           />
         </root>
       `;
@@ -134,7 +134,7 @@ describe('Player Recipes and XML', () => {
 
   describe('Player Recipe Defaults', () => {
     it('should have correct default body configuration', () => {
-      const entity = state.createFromRecipe('player');
+      const entity = state.createFromRecipe('Player');
 
       expect(Rigidbody.type[entity]).toBe(BodyType.KinematicPositionBased);
       expect(Rigidbody.mass[entity]).toBe(1);
@@ -148,7 +148,7 @@ describe('Player Recipes and XML', () => {
     });
 
     it('should have correct default collider configuration', () => {
-      const entity = state.createFromRecipe('player');
+      const entity = state.createFromRecipe('Player');
 
       expect(Collider.shape[entity]).toBe(ColliderShape.Capsule);
       expect(Collider.radius[entity]).toBeCloseTo(0.3);
@@ -160,7 +160,7 @@ describe('Player Recipes and XML', () => {
     });
 
     it('should have correct default character controller configuration', () => {
-      const entity = state.createFromRecipe('player');
+      const entity = state.createFromRecipe('Player');
 
       expect(CharacterController.offset[entity]).toBeCloseTo(0.08);
       expect(CharacterController.maxSlope[entity]).toBeCloseTo(Math.PI / 4);
@@ -174,7 +174,7 @@ describe('Player Recipes and XML', () => {
     });
 
     it('should have correct default transform values', () => {
-      const entity = state.createFromRecipe('player');
+      const entity = state.createFromRecipe('Player');
 
       expect(Transform.posX[entity]).toBe(0);
       expect(Transform.posY[entity]).toBe(0);
@@ -189,7 +189,7 @@ describe('Player Recipes and XML', () => {
     });
 
     it('should have correct default respawn values', () => {
-      const entity = state.createFromRecipe('player');
+      const entity = state.createFromRecipe('Player');
 
       expect(Respawn.posX[entity]).toBe(0);
       expect(Respawn.posY[entity]).toBe(0);
@@ -243,12 +243,12 @@ describe('Player Recipes and XML', () => {
 
   describe('Player Recipe with Overrides', () => {
     it('should override default values using recipe', () => {
-      const entity = state.createFromRecipe('player', {
-        'player.speed': 12,
-        'player.jump-height': 6,
-        'player.rotation-speed': 20,
+      const entity = state.createFromRecipe('Player', {
+        'playerController.speed': 12,
+        'playerController.jump-height': 6,
+        'playerController.rotation-speed': 20,
         'transform.pos-y': 10,
-        'body.gravity-scale': 0.5,
+        'rigidbody.gravity-scale': 0.5,
       });
 
       expect(PlayerController.speed[entity]).toBe(12);
@@ -259,7 +259,7 @@ describe('Player Recipes and XML', () => {
     });
 
     it('should handle transform position override', () => {
-      const entity = state.createFromRecipe('player', {
+      const entity = state.createFromRecipe('Player', {
         'transform.pos-x': 5,
         'transform.pos-y': 10,
         'transform.pos-z': -3,
@@ -271,7 +271,7 @@ describe('Player Recipes and XML', () => {
     });
 
     it('should handle collider customization', () => {
-      const entity = state.createFromRecipe('player', {
+      const entity = state.createFromRecipe('Player', {
         'collider.radius': 0.5,
         'collider.height': 1.5,
         'collider.friction': 0.3,
@@ -287,8 +287,8 @@ describe('Player Recipes and XML', () => {
     it('should handle multiple players with different configurations', () => {
       const xml = `
         <root>
-          <player pos="0 0 0" speed="5" />
-          <player pos="10 0 10" speed="10" jump-height="5" />
+          <Player pos="0 0 0" speed="5" />
+          <Player pos="10 0 10" speed="10" jump-height="5" />
         </root>
       `;
       const parsed = XMLParser.parse(xml);
@@ -315,9 +315,9 @@ describe('Player Recipes and XML', () => {
     it('should handle player as child entity', () => {
       const xml = `
         <root>
-          <entity>
-            <player speed="7" />
-          </entity>
+          <GameObject>
+            <Player speed="7" />
+          </GameObject>
         </root>
       `;
       const parsed = XMLParser.parse(xml);

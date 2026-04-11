@@ -29,7 +29,7 @@ describe('E2E: Fog Plugin Lifecycle', () => {
   });
 
   it('should register FogPlugin with recipes, components, and systems', () => {
-    expect(state.hasRecipe('fog')).toBe(true);
+    expect(state.hasRecipe('Fog')).toBe(true);
     const fogComponent = state.getComponent('fog');
     expect(fogComponent).toBeDefined();
     expect(state.systems.size).toBeGreaterThan(0);

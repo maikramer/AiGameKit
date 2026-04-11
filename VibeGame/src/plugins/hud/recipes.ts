@@ -1,6 +1,6 @@
 import type { Recipe } from '../../core';
 
 export const hudPanelRecipe: Recipe = {
-  name: 'hud-panel',
+  name: 'HudPanel',
   components: ['transform', 'hudPanel'],
 };

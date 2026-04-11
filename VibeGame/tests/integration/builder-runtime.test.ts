@@ -35,8 +35,8 @@ describe('Builder-Runtime Integration', () => {
       const state = runtime.getState();
 
       expect(state.getComponent('transform')).toBeDefined();
-      expect(state.getComponent('renderer')).toBeDefined();
-      expect(state.getComponent('body')).toBeDefined();
+      expect(state.getComponent('meshRenderer')).toBeDefined();
+      expect(state.getComponent('rigidbody')).toBeDefined();
 
       runtime.stop();
     });
@@ -70,8 +70,8 @@ describe('Builder-Runtime Integration', () => {
       const state = runtime.getState();
 
       expect(state.getComponent('transform')).toBeUndefined();
-      expect(state.getComponent('renderer')).toBeDefined();
-      expect(state.getComponent('body')).toBeDefined();
+      expect(state.getComponent('meshRenderer')).toBeDefined();
+      expect(state.getComponent('rigidbody')).toBeDefined();
       expect(state.getComponent('custom')).toBeDefined();
 
       expect(state.getComponent('animation-mixer')).toBeUndefined();
@@ -178,17 +178,17 @@ describe('Builder-Runtime Integration', () => {
       state.registerPlugin(TransformsPlugin);
       state.registerComponent('test', TestComponent);
       state.registerRecipe({
-        name: 'entity',
+        name: 'GameObject',
         components: ['transform', 'test'],
       });
 
       document.body.innerHTML = `
         <canvas id="game"></canvas>
-        <world canvas="#game">
-          <entity transform="pos: 10 20 30" test="x: 5; y: 10">
-            <entity transform="pos: 1 2 3"></entity>
-          </entity>
-        </world>
+        <Scene canvas="#game">
+          <GameObject transform="pos: 10 20 30" test="x: 5; y: 10">
+            <GameObject transform="pos: 1 2 3"></GameObject>
+          </GameObject>
+        </Scene>
       `;
 
       const { GameRuntime } = await import('../../src/runtime');
@@ -245,7 +245,7 @@ describe('Builder-Runtime Integration', () => {
         systems: [GameSystem],
         recipes: [
           {
-            name: 'player',
+            name: 'Player',
             components: ['transform', 'game'],
             overrides: {
               'game.lives': 3,
@@ -265,9 +265,9 @@ describe('Builder-Runtime Integration', () => {
 
       document.body.innerHTML = `
         <canvas id="game-canvas"></canvas>
-        <world canvas="#game-canvas" sky="#87CEEB">
-          <player transform="pos: 0 0 0"></player>
-        </world>
+        <Scene canvas="#game-canvas" skybox="#87CEEB">
+          <Player transform="pos: 0 0 0"></Player>
+        </Scene>
       `;
 
       const runtime = await GAME.withoutDefaultPlugins()
@@ -356,11 +356,11 @@ describe('Builder-Runtime Integration', () => {
   describe('Error Handling', () => {
     it('should handle invalid XML gracefully', async () => {
       document.body.innerHTML = `
-        <world>
+        <Scene>
           <unknown-element transform="invalid syntax">
             <unclosed>
           </unknown-element>
-        </world>
+        </Scene>
       `;
 
       let errorLogged = false;

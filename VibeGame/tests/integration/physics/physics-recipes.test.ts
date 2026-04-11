@@ -34,9 +34,9 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <static-part 
-            body="pos: 0 10 0"
+            rigidbody="pos: 0 10 0"
             transform="pos: 0 10 0"
-            renderer="shape: box; size: 5 1 5" 
+            meshRenderer="shape: box; size: 5 1 5" 
             collider="shape: box; size: 5 1 5" />
         </root>
       `;
@@ -67,9 +67,9 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <static-part 
-            body="pos: 5 2 -3; mass: 10"
+            rigidbody="pos: 5 2 -3; mass: 10"
             transform="pos: 5 2 -3"
-            renderer="shape: sphere; size: 2 2 2; color: 0xff0000"
+            meshRenderer="shape: sphere; size: 2 2 2; color: 0xff0000"
             collider="shape: sphere; radius: 1"
           />
         </root>
@@ -93,9 +93,9 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <dynamic-part 
-            body="pos: 0 10 0"
+            rigidbody="pos: 0 10 0"
             transform="pos: 0 10 0"
-            renderer="shape: sphere; size: 1 1 1"
+            meshRenderer="shape: sphere; size: 1 1 1"
             collider="shape: sphere; radius: 0.5" />
         </root>
       `;
@@ -126,7 +126,7 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <dynamic-part 
-            body="pos: 0 5 0; mass: 5"
+            rigidbody="pos: 0 5 0; mass: 5"
             transform="pos: 0 5 0"
             collider="density: 5" />
         </root>
@@ -146,9 +146,9 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <kinematic-part 
-            body="pos: 0 10 0"
+            rigidbody="pos: 0 10 0"
             transform="pos: 0 10 0"
-            renderer="shape: box; size: 3 1 3"
+            meshRenderer="shape: box; size: 3 1 3"
             collider="shape: box; size: 3 1 3" />
         </root>
       `;
@@ -179,7 +179,7 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <kinematic-part 
-            body="pos: 0 5 0; vel: 2 0 0"
+            rigidbody="pos: 0 5 0; vel: 2 0 0"
             transform="pos: 0 5 0" />
         </root>
       `;
@@ -210,7 +210,7 @@ describe('Physics Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const entity = entities[0].entity;
 
-      const renderer = state.getComponent('renderer') as any;
+      const renderer = state.getComponent('meshRenderer') as any;
       const collider = state.getComponent('collider') as any;
 
       expect(renderer?.sizeX?.[entity]).toBe(10);
@@ -236,7 +236,7 @@ describe('Physics Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const entity = entities[0].entity;
 
-      const renderer = state.getComponent('renderer') as any;
+      const renderer = state.getComponent('meshRenderer') as any;
       const collider = state.getComponent('collider') as any;
 
       expect(renderer?.shape?.[entity]).toBe(1);
@@ -258,7 +258,7 @@ describe('Physics Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const entity = entities[0].entity;
 
-      const renderer = state.getComponent('renderer') as any;
+      const renderer = state.getComponent('meshRenderer') as any;
       const collider = state.getComponent('collider') as any;
 
       expect(renderer?.shape?.[entity]).toBe(0);
@@ -272,14 +272,14 @@ describe('Physics Recipes', () => {
     it('should create character entity with controller from XML', () => {
       const xml = `
         <root>
-          <entity
+          <GameObject
             pos="0 1 0"
-            body="type: kinematic-position"
+            rigidbody="type: kinematic-position"
             collider="shape: capsule; height: 1.8; radius: 0.4"
             character-controller=""
             character-movement=""
             transform=""
-            renderer=""
+            meshRenderer=""
           />
         </root>
       `;
@@ -319,9 +319,9 @@ describe('Physics Recipes', () => {
 
       const xml = `
         <root>
-          <entity
+          <GameObject
             pos="0 2 0"
-            body="type: kinematic-position"
+            rigidbody="type: kinematic-position"
             collider="shape: capsule; height: 1.8; radius: 0.4"
             character-controller="max-slope: 0.785; auto-step: 1; max-step-height: 0.3"
             character-movement=""
@@ -357,9 +357,9 @@ describe('Physics Recipes', () => {
             color="#4169e1"
           >
           </kinematic-part>
-          <tween
+          <Tween
             target="platform"
-            attr="body.pos-y"
+            attr="rigidbody.pos-y"
             from="2"
             to="5"
             duration="3"
@@ -378,7 +378,7 @@ describe('Physics Recipes', () => {
       expect(Rigidbody.type[platform]).toBe(BodyType.KinematicVelocityBased);
       expect(Rigidbody.posY[platform]).toBe(2);
 
-      const renderer = state.getComponent('renderer') as any;
+      const renderer = state.getComponent('meshRenderer') as any;
       const collider = state.getComponent('collider') as any;
 
       expect(renderer?.shape?.[platform]).toBe(0);
@@ -402,19 +402,19 @@ describe('Physics Recipes', () => {
       const xml = `
         <root>
           <static-part 
-            body="pos: 0 0 0"
+            rigidbody="pos: 0 0 0"
             transform="pos: 0 0 0"
-            renderer="shape: box; size: 20 1 20"
+            meshRenderer="shape: box; size: 20 1 20"
             collider="shape: box; size: 20 1 20" />
           <dynamic-part 
-            body="pos: 0 10 0"
+            rigidbody="pos: 0 10 0"
             transform="pos: 0 10 0"
-            renderer="shape: sphere; size: 1 1 1"
+            meshRenderer="shape: sphere; size: 1 1 1"
             collider="shape: sphere; radius: 0.5" />
           <kinematic-part 
-            body="pos: 5 5 0"
+            rigidbody="pos: 5 5 0"
             transform="pos: 5 5 0"
-            renderer="shape: box; size: 3 1 3"
+            meshRenderer="shape: box; size: 3 1 3"
             collider="shape: box; size: 3 1 3" />
         </root>
       `;

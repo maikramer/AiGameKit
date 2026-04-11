@@ -19,8 +19,8 @@ describe('Tween Parser', () => {
   it('should parse tween element from XML', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" from="0" to="10" duration="2"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" from="0" to="10" duration="2"></Tween>
       </root>
     `;
 
@@ -37,8 +37,8 @@ describe('Tween Parser', () => {
   it('should throw when target attribute is missing', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween attr="transform.pos-x" to="10" duration="1"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween attr="transform.pos-x" to="10" duration="1"></Tween>
       </root>
     `;
 
@@ -49,8 +49,8 @@ describe('Tween Parser', () => {
   it('should throw when to attribute is missing', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" from="0" duration="1"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" from="0" duration="1"></Tween>
       </root>
     `;
 
@@ -61,8 +61,8 @@ describe('Tween Parser', () => {
   it('should throw when target cannot be resolved', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="sphere" attr="transform.pos-x" to="10" duration="1"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="sphere" attr="transform.pos-x" to="10" duration="1"></Tween>
       </root>
     `;
 
@@ -73,8 +73,8 @@ describe('Tween Parser', () => {
   it('should throw when target property cannot be resolved', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="invalid.field" to="10" duration="1"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="invalid.field" to="10" duration="1"></Tween>
       </root>
     `;
 
@@ -87,10 +87,10 @@ describe('Tween Parser', () => {
   it('should parse multiple tweens targeting same entity', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" to="10" duration="1"></tween>
-        <tween target="cube" attr="transform.pos-y" to="20" duration="2"></tween>
-        <tween target="cube" attr="transform.pos-z" to="30" duration="3"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" to="10" duration="1"></Tween>
+        <Tween target="cube" attr="transform.pos-y" to="20" duration="2"></Tween>
+        <Tween target="cube" attr="transform.pos-z" to="30" duration="3"></Tween>
       </root>
     `;
 
@@ -111,10 +111,10 @@ describe('Tween Parser', () => {
   it('should parse tweens targeting different entities', () => {
     const xml = `
       <root>
-        <entity name="cube1" transform=""></entity>
-        <entity name="cube2" transform=""></entity>
-        <tween target="cube1" attr="transform.pos-x" to="10" duration="1"></tween>
-        <tween target="cube2" attr="transform.pos-y" to="20" duration="1"></tween>
+        <GameObject name="cube1" transform=""></GameObject>
+        <GameObject name="cube2" transform=""></GameObject>
+        <Tween target="cube1" attr="transform.pos-x" to="10" duration="1"></Tween>
+        <Tween target="cube2" attr="transform.pos-y" to="20" duration="1"></Tween>
       </root>
     `;
 
@@ -128,8 +128,8 @@ describe('Tween Parser', () => {
   it('should use default duration when not specified', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" to="10"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" to="10"></Tween>
       </root>
     `;
 
@@ -144,8 +144,8 @@ describe('Tween Parser', () => {
   it('should parse vector values from attributes', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="rotation" from="0 0 0" to="90 180 270" duration="1"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="rotation" from="0 0 0" to="90 180 270" duration="1"></Tween>
       </root>
     `;
 
@@ -164,14 +164,14 @@ describe('Tween Parser', () => {
   it('should parse easing attribute', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween
           target="cube"
           attr="transform.pos-x"
           to="10"
           duration="1"
           easing="bounce-out">
-        </tween>
+        </Tween>
       </root>
     `;
 
@@ -187,8 +187,8 @@ describe('Tween Parser', () => {
   it('should handle numeric string values', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" from="5.5" to="15.5" duration="2.5"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" from="5.5" to="15.5" duration="2.5"></Tween>
       </root>
     `;
 
@@ -214,8 +214,8 @@ describe('Tween Parser', () => {
       <root>
         <moving-platform name="platform1"></moving-platform>
         <moving-platform name="platform2"></moving-platform>
-        <tween target="platform1" attr="transform.pos-x" from="-10" to="10" duration="2"></tween>
-        <tween target="platform2" attr="transform.pos-y" from="0" to="5" duration="1"></tween>
+        <Tween target="platform1" attr="transform.pos-x" from="-10" to="10" duration="2"></Tween>
+        <Tween target="platform2" attr="transform.pos-y" from="0" to="5" duration="1"></Tween>
       </root>
     `;
 
@@ -231,8 +231,8 @@ describe('Tween Parser', () => {
   it('should throw error for invalid easing value', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" to="10" duration="1" easing="invalid-easing"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" to="10" duration="1" easing="invalid-easing"></Tween>
       </root>
     `;
 
@@ -243,8 +243,8 @@ describe('Tween Parser', () => {
   it('should suggest correct easing for typos', () => {
     const xml = `
       <root>
-        <entity name="cube" transform=""></entity>
-        <tween target="cube" attr="transform.pos-x" to="10" duration="1" easing="sine-ou"></tween>
+        <GameObject name="cube" transform=""></GameObject>
+        <Tween target="cube" attr="transform.pos-x" to="10" duration="1" easing="sine-ou"></Tween>
       </root>
     `;
 

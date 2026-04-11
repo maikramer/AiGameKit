@@ -69,7 +69,7 @@ describe('Physics XML Declarative API', () => {
             pos="0 5 0"
             shape="box"
             size="3 1 3"
-            body="vel: 2 0 0"
+            rigidbody="vel: 2 0 0"
           />
         </root>
       `;

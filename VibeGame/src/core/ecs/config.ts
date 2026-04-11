@@ -26,6 +26,12 @@ export class ConfigRegistry {
         const existing = this.parsers.get(name) || [];
         existing.push(parser);
         this.parsers.set(name, existing);
+        const lowerName = name.toLowerCase();
+        if (lowerName !== name) {
+          const lowerExisting = this.parsers.get(lowerName) || [];
+          lowerExisting.push(parser);
+          this.parsers.set(lowerName, lowerExisting);
+        }
       }
     }
 

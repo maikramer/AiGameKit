@@ -16,12 +16,12 @@ export const AudioPlugin: Plugin = {
   systems: [AudioListenerSetupSystem, AudioSystem],
   recipes: [audioClipRecipe],
   components: {
-    audioEmitter: AudioSource,
+    audioSource: AudioSource,
     AudioListener,
   },
   config: {
     defaults: {
-      audioEmitter: {
+      audioSource: {
         volume: 1,
         loop: 0,
         pitch: 1,
@@ -33,7 +33,7 @@ export const AudioPlugin: Plugin = {
       },
     },
     adapters: {
-      audioEmitter: {
+      audioSource: {
         url: audioUrlAdapter,
       },
     },

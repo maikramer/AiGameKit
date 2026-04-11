@@ -25,15 +25,15 @@ export const ParticlesPlugin: Plugin = {
   ],
   recipes: [particleEmitterRecipe, particleBurstRecipe],
   components: {
-    particlesEmitter: ParticleSystem,
-    particlesBurst: ParticleBurst,
+    particleSystem: ParticleSystem,
+    particleBurst: ParticleBurst,
     colorOverLife: ColorOverLife,
     sizeOverLife: SizeOverLife,
     particleTexture: ParticleTexture,
   },
   config: {
     defaults: {
-      particlesEmitter: {
+      particleSystem: {
         preset: 0,
         rate: 20,
         lifetime: 2,
@@ -42,7 +42,7 @@ export const ParticlesPlugin: Plugin = {
         playing: 1,
         spawned: 0,
       },
-      particlesBurst: {
+      particleBurst: {
         preset: 2,
         count: 100,
         triggered: 0,
@@ -69,7 +69,7 @@ export const ParticlesPlugin: Plugin = {
       },
     },
     enums: {
-      particlesEmitter: {
+      particleSystem: {
         preset: {
           fire: 0,
           smoke: 1,

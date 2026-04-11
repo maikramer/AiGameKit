@@ -11,8 +11,8 @@ describe('Fog Defaults Integration', () => {
     global.DOMParser = dom.window.DOMParser;
   });
 
-  it('should apply all defaults when <fog/> has no attributes', () => {
-    const result = validateRecipeAttributes('fog', {});
+  it('should apply all defaults when <Fog/> has no attributes', () => {
+    const result = validateRecipeAttributes('Fog', {});
     expect(result.mode).toBeUndefined();
     expect(result.color).toBeUndefined();
     expect(result.density).toBeUndefined();
@@ -25,11 +25,11 @@ describe('Fog Defaults Integration', () => {
     expect(result['noise-scale']).toBeUndefined();
   });
 
-  it('should fill Fog component with plugin defaults for bare <fog> tag', () => {
+  it('should fill Fog component with plugin defaults for bare <Fog> tag', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -53,11 +53,11 @@ describe('Fog Defaults Integration', () => {
     expect(Fog.noiseScale[entity]).toBeCloseTo(defaults.noiseScale);
   });
 
-  it('should use self-closing <fog/> as valid empty fog element', () => {
+  it('should use self-closing <Fog/> as valid empty fog element', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog/></root>';
+    const xml = '<root><Fog/></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -72,7 +72,7 @@ describe('Fog Defaults Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog density="0.1" quality="high"></fog></root>';
+    const xml = '<root><Fog density="0.1" quality="high"></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -98,7 +98,7 @@ describe('Fog Defaults Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -111,7 +111,7 @@ describe('Fog Defaults Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -125,7 +125,7 @@ describe('Fog Defaults Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -137,7 +137,7 @@ describe('Fog Defaults Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -149,7 +149,7 @@ describe('Fog Defaults Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

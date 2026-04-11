@@ -1,11 +1,11 @@
 import type { Recipe } from '../../core';
 
 export const particleEmitterRecipe: Recipe = {
-  name: 'particle-emitter',
-  components: ['transform', 'particlesEmitter'],
+  name: 'ParticleSystem',
+  components: ['transform', 'particleSystem'],
 };
 
 export const particleBurstRecipe: Recipe = {
-  name: 'particle-burst',
-  components: ['transform', 'particlesBurst'],
+  name: 'ParticleBurst',
+  components: ['transform', 'particleBurst'],
 };

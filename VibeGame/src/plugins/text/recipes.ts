@@ -1,11 +1,11 @@
 import type { Recipe } from '../../core';
 
 export const paragraphRecipe: Recipe = {
-  name: 'paragraph',
+  name: 'Paragraph',
   components: ['transform', 'paragraph'],
 };
 
 export const wordRecipe: Recipe = {
-  name: 'word',
+  name: 'Word',
   components: ['transform', 'word'],
 };

@@ -208,7 +208,7 @@ describe('GameBuilder', () => {
 
   it('should register recipes with state when building', async () => {
     const recipe = {
-      name: 'player',
+      name: 'Player',
       components: ['transform'],
     };
 
@@ -216,12 +216,12 @@ describe('GameBuilder', () => {
     const runtime = await builder.build();
     const state = runtime.getState();
 
-    const playerRecipe = state.getRecipe('player');
+    const playerRecipe = state.getRecipe('Player');
     expect(playerRecipe).toBeDefined();
     expect(playerRecipe?.components).toEqual(['transform']);
 
     const recipeNames = state.getRecipeNames();
-    expect(recipeNames.has('player')).toBe(true);
+    expect(recipeNames.has('Player')).toBe(true);
   });
 
   it('should register config with state when building', async () => {
@@ -244,7 +244,7 @@ describe('GameBuilder', () => {
     const state = runtime.getState();
 
     const transform = state.getComponent('transform');
-    const renderer = state.getComponent('renderer');
+    const renderer = state.getComponent('meshRenderer');
     expect(transform).toBeDefined();
     expect(renderer).toBeDefined();
   });
@@ -255,7 +255,7 @@ describe('GameBuilder', () => {
     const state = runtime.getState();
 
     const transform = state.getComponent('transform');
-    const renderer = state.getComponent('renderer');
+    const renderer = state.getComponent('meshRenderer');
     expect(transform).toBeUndefined();
     expect(renderer).toBeUndefined();
   });

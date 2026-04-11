@@ -21,13 +21,13 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -10 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 -10 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
 
       <kinematic-part
-        body="pos: 0 2 0"
-        renderer="shape: box; size: 4 1 4; color: 0xff6600"
+        rigidbody="pos: 0 2 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0xff6600"
         collider="shape: box; size: 4 1 4" />
     `
     );
@@ -89,16 +89,16 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -10 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 -10 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
 
       <kinematic-part name="platform"
-        body="pos: 0 5 0"
-        renderer="shape: box; size: 4 1 4; color: 0xff6600"
+        rigidbody="pos: 0 5 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0xff6600"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform" attr="body.pos-y" from="5" to="0" duration="2"></tween>
+      <Tween target="platform" attr="rigidbody.pos-y" from="5" to="0" duration="2"></Tween>
     `
     );
 
@@ -185,16 +185,16 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -5 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 -5 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
 
       <kinematic-part name="platform"
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 4 1 4; color: 0xff6600"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0xff6600"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform" attr="body.pos-y" from="0" to="5" duration="2"></tween>
+      <Tween target="platform" attr="rigidbody.pos-y" from="0" to="5" duration="2"></Tween>
     `
     );
 
@@ -259,23 +259,23 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -10 0"
-        renderer="shape: box; size: 50 1 50; color: 0x90ee90"
+        rigidbody="pos: 0 -10 0"
+        meshRenderer="shape: box; size: 50 1 50; color: 0x90ee90"
         collider="shape: box; size: 50 1 50" />
 
       <kinematic-part name="platform1"
-        body="pos: -3 0 0"
-        renderer="shape: box; size: 4 1 4; color: 0xff6600"
+        rigidbody="pos: -3 0 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0xff6600"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform1" attr="body.pos-y" from="0" to="3" duration="1.5"></tween>
+      <Tween target="platform1" attr="rigidbody.pos-y" from="0" to="3" duration="1.5"></Tween>
 
       <kinematic-part name="platform2"
-        body="pos: 3 2 0"
-        renderer="shape: box; size: 4 1 4; color: 0x00ff66"
+        rigidbody="pos: 3 2 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0x00ff66"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform2" attr="body.pos-y" from="2" to="6" duration="2"></tween>
+      <Tween target="platform2" attr="rigidbody.pos-y" from="2" to="6" duration="2"></Tween>
     `
     );
 
@@ -310,16 +310,16 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -10 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 -10 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
 
       <kinematic-part name="platform"
-        body="pos: 0 2 0"
-        renderer="shape: box; size: 4 1 4; color: 0xff6600"
+        rigidbody="pos: 0 2 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0xff6600"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform" attr="body.pos-x" from="0" to="5" duration="2"></tween>
+      <Tween target="platform" attr="rigidbody.pos-x" from="0" to="5" duration="2"></Tween>
     `
     );
 
@@ -384,17 +384,17 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -5 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 -5 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
 
       <kinematic-part name="platform"
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 4 1 4; color: 0xff6600"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0xff6600"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform" attr="body.pos-y" from="0" to="5" duration="2"></tween>
-      <tween target="platform" attr="body.pos-x" from="0" to="5" duration="2"></tween>
+      <Tween target="platform" attr="rigidbody.pos-y" from="0" to="5" duration="2"></Tween>
+      <Tween target="platform" attr="rigidbody.pos-x" from="0" to="5" duration="2"></Tween>
     `
     );
 
@@ -506,17 +506,17 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -10 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 -10 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
 
       <kinematic-part name="platform"
-        body="pos: 0 5 0"
-        renderer="shape: box; size: 4 1 4; color: 0x00ff66"
+        rigidbody="pos: 0 5 0"
+        meshRenderer="shape: box; size: 4 1 4; color: 0x00ff66"
         collider="shape: box; size: 4 1 4">
       </kinematic-part>
-      <tween target="platform" attr="body.pos-x" from="0" to="5" duration="2"></tween>
-      <tween target="platform" attr="body.pos-y" from="5" to="2" duration="2"></tween>
+      <Tween target="platform" attr="rigidbody.pos-x" from="0" to="5" duration="2"></Tween>
+      <Tween target="platform" attr="rigidbody.pos-y" from="5" to="2" duration="2"></Tween>
     `
     );
 
@@ -612,16 +612,16 @@ describe('E2E: Moving Platform Character Controller', () => {
       state,
       `
       <static-part
-        body="pos: 0 -5 0"
-        renderer="shape: box; size: 30 1 30; color: 0x90ee90"
+        rigidbody="pos: 0 -5 0"
+        meshRenderer="shape: box; size: 30 1 30; color: 0x90ee90"
         collider="shape: box; size: 30 1 30" />
 
       <kinematic-part name="platform"
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 6 1 6; color: 0xffff00"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 6 1 6; color: 0xffff00"
         collider="shape: box; size: 6 1 6">
       </kinematic-part>
-      <tween target="platform" attr="body.pos-y" from="0" to="4" duration="1"></tween>
+      <Tween target="platform" attr="rigidbody.pos-y" from="0" to="4" duration="1"></Tween>
     `
     );
 

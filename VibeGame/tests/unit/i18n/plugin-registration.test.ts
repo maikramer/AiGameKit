@@ -11,9 +11,9 @@ describe('I18nPlugin Registration', () => {
     state.registerPlugin(I18nPlugin);
   });
 
-  it('should have a recipe named "i18n-text" with components ["i18n-text"]', () => {
+  it('should have a recipe named "I18nText" with components ["i18n-text"]', () => {
     expect(I18nPlugin.recipes!).toHaveLength(1);
-    expect(I18nPlugin.recipes![0].name).toBe('i18n-text');
+    expect(I18nPlugin.recipes![0].name).toBe('I18nText');
     expect(I18nPlugin.recipes![0].components).toEqual(['i18n-text']);
   });
 
@@ -24,7 +24,7 @@ describe('I18nPlugin Registration', () => {
   });
 
   it('should register the i18n-text recipe', () => {
-    const recipe = state.getRecipe('i18n-text');
+    const recipe = state.getRecipe('I18nText');
     expect(recipe).toBeDefined();
     expect(recipe?.components).toContain('i18n-text');
   });

@@ -11,9 +11,9 @@ describe('HudPlugin Registration', () => {
     state.registerPlugin(HudPlugin);
   });
 
-  it('should have a recipe named "hud-panel" with components ["transform", "hudPanel"]', () => {
+  it('should have a recipe named "HudPanel" with components ["transform", "hudPanel"]', () => {
     expect(HudPlugin.recipes!).toHaveLength(1);
-    expect(HudPlugin.recipes![0].name).toBe('hud-panel');
+    expect(HudPlugin.recipes![0].name).toBe('HudPanel');
     expect(HudPlugin.recipes![0].components).toEqual(['transform', 'hudPanel']);
   });
 
@@ -24,7 +24,7 @@ describe('HudPlugin Registration', () => {
   });
 
   it('should register the hud-panel recipe', () => {
-    const recipe = state.getRecipe('hud-panel');
+    const recipe = state.getRecipe('HudPanel');
     expect(recipe).toBeDefined();
     expect(recipe?.components).toContain('hudPanel');
   });

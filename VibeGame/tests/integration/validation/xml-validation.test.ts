@@ -41,7 +41,7 @@ describe('XML Validation Integration', () => {
     });
 
     it('should validate entity with optional attributes', () => {
-      const xml = `<entity pos="0 5 0" euler="0 45 0" scale="2"></entity>`;
+      const xml = `<GameObject pos="0 5 0" euler="0 45 0" scale="2"></GameObject>`;
 
       const result = validateXMLContent(xml);
       expect(result.success).toBe(true);
@@ -49,10 +49,10 @@ describe('XML Validation Integration', () => {
 
     it('should validate nested entities', () => {
       const xml = `
-        <entity pos="0 0 0">
-          <entity pos="1 0 0"></entity>
-          <entity pos="-1 0 0"></entity>
-        </entity>
+        <GameObject pos="0 0 0">
+          <GameObject pos="1 0 0"></GameObject>
+          <GameObject pos="-1 0 0"></GameObject>
+        </GameObject>
       `;
 
       const result = validateXMLContent(xml);
@@ -68,7 +68,7 @@ describe('XML Validation Integration', () => {
     });
 
     it('should validate world element', () => {
-      const xml = `<world canvas="#game" sky="#87ceeb"></world>`;
+      const xml = `<Scene canvas="#game" sky="#87ceeb"></Scene>`;
 
       const result = validateXMLContent(xml);
       expect(result.success).toBe(true);
@@ -89,10 +89,10 @@ describe('XML Validation Integration', () => {
         <!DOCTYPE html>
         <html>
         <body>
-          <world canvas="#game">
+          <Scene canvas="#game">
             <static-part pos="0 0 0" shape="box" size="1 1 1" color="#ff0000"></static-part>
             <dynamic-part pos="0 5 0" shape="sphere" size="1" color="#00ff00"></dynamic-part>
-          </world>
+          </Scene>
         </body>
         </html>
       `;
@@ -133,8 +133,8 @@ describe('XML Validation Integration', () => {
 
     it('should handle self-closing tags', () => {
       const html = `
-        <entity pos="0 0 0" />
-        <player speed="10" />
+        <GameObject pos="0 0 0" />
+        <Player speed="10" />
       `;
 
       const results = validateHTMLContent(html);
@@ -146,7 +146,7 @@ describe('XML Validation Integration', () => {
 
   describe('validateParsedElement', () => {
     it('should validate parsed element tree', () => {
-      const xml = `<entity pos="0 0 0"><entity pos="1 1 1"></entity></entity>`;
+      const xml = `<GameObject pos="0 0 0"><GameObject pos="1 1 1"></GameObject></GameObject>`;
       const parsed = XMLParser.parse(xml);
 
       const result = validateParsedElement(parsed.root);
@@ -155,13 +155,13 @@ describe('XML Validation Integration', () => {
 
     it('should validate deeply nested structures', () => {
       const xml = `
-        <entity>
-          <entity>
-            <entity>
-              <entity pos="0 0 0"></entity>
-            </entity>
-          </entity>
-        </entity>
+        <GameObject>
+          <GameObject>
+            <GameObject>
+              <GameObject pos="0 0 0"></GameObject>
+            </GameObject>
+          </GameObject>
+        </GameObject>
       `;
       const parsed = XMLParser.parse(xml);
 
@@ -171,9 +171,9 @@ describe('XML Validation Integration', () => {
 
     it('should catch errors in nested elements', () => {
       const xml = `
-        <entity pos="0 0 0">
+        <GameObject pos="0 0 0">
           <static-part pos="invalid" shape="box" size="1 1 1" color="#ff0000"></static-part>
-        </entity>
+        </GameObject>
       `;
       const parsed = XMLParser.parse(xml);
 
@@ -184,12 +184,12 @@ describe('XML Validation Integration', () => {
 
     it('should validate complex recipe combinations', () => {
       const xml = `
-        <world canvas="#game">
+        <Scene canvas="#game">
           <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
           <dynamic-part pos="0 5 0" shape="sphere" size="1" color="#ff0000" mass="10"></dynamic-part>
-          <player speed="8" jump-height="3"></player>
+          <Player speed="8" jump-height="3"></Player>
           <camera distance="10" min-distance="5"></camera>
-        </world>
+        </Scene>
       `;
       const parsed = XMLParser.parse(xml);
 

@@ -11,10 +11,10 @@ describe('JointsPlugin Registration', () => {
     state.registerPlugin(JointsPlugin);
   });
 
-  it('should have a recipe named "joint" with components ["physicsJoint"]', () => {
+  it('should have a recipe named "Joint" with components ["joint"]', () => {
     expect(JointsPlugin.recipes!).toHaveLength(1);
-    expect(JointsPlugin.recipes![0].name).toBe('joint');
-    expect(JointsPlugin.recipes![0].components).toEqual(['physicsJoint']);
+    expect(JointsPlugin.recipes![0].name).toBe('Joint');
+    expect(JointsPlugin.recipes![0].components).toEqual(['joint']);
   });
 
   it('should register the physicsJoint component', () => {
@@ -24,9 +24,9 @@ describe('JointsPlugin Registration', () => {
   });
 
   it('should register the joint recipe', () => {
-    const recipe = state.getRecipe('joint');
+    const recipe = state.getRecipe('Joint');
     expect(recipe).toBeDefined();
-    expect(recipe?.components).toContain('physicsJoint');
+    expect(recipe?.components).toContain('joint');
   });
 
   it('should have two systems registered (JointCleanupSystem + JointCreateSystem)', () => {
@@ -34,7 +34,7 @@ describe('JointsPlugin Registration', () => {
   });
 
   it('should have config.defaults for physicsJoint', () => {
-    const defaults = JointsPlugin.config!.defaults!.physicsJoint;
+    const defaults = JointsPlugin.config!.defaults!.joint;
     expect(defaults).toBeDefined();
     expect(defaults.bodyA).toBe(0);
     expect(defaults.bodyB).toBe(0);
@@ -59,7 +59,7 @@ describe('JointsPlugin Registration', () => {
   });
 
   it('should have config.enums for physicsJoint type', () => {
-    const enums = JointsPlugin.config!.enums!.physicsJoint;
+    const enums = JointsPlugin.config!.enums!.joint;
     expect(enums).toBeDefined();
     expect(enums.type).toBeDefined();
     expect(enums.type.fixed).toBe(0);

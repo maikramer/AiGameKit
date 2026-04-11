@@ -164,7 +164,7 @@ export function applyChildTemplateProfile(
     return;
   }
 
-  if (childProfile === 'gltf-crate' && tagName === 'gltf-dynamic') {
+  if (childProfile === 'gltf-crate' && tagName === 'GLTFDynamic') {
     if (!('mass' in attrs)) attrs.mass = 1.5;
     if (!('friction' in attrs)) attrs.friction = 0.55;
     if (!('collider-margin' in attrs)) attrs['collider-margin'] = 0.02;

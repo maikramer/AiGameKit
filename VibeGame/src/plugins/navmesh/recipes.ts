@@ -1,11 +1,11 @@
 import type { Recipe } from '../../core';
 
 export const navMeshRecipe: Recipe = {
-  name: 'nav-mesh',
-  components: ['navMesh'],
+  name: 'NavMeshSurface',
+  components: ['navMeshSurface'],
 };
 
 export const navAgentRecipe: Recipe = {
-  name: 'nav-agent',
-  components: ['transform', 'navAgent'],
+  name: 'NavMeshAgent',
+  components: ['transform', 'navMeshAgent'],
 };

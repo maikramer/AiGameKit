@@ -1,6 +1,6 @@
 ﻿import type { Recipe } from '../../core';
 
 export const terrainRecipe: Recipe = {
-  name: 'terrain',
+  name: 'Terrain',
   components: ['terrain', 'transform'],
 };

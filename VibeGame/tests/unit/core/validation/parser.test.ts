@@ -61,7 +61,7 @@ describe('Validation Parser', () => {
         euler: '0 45 0',
       };
 
-      const result = validateRecipeAttributes('entity', attributes);
+      const result = validateRecipeAttributes('GameObject', attributes);
       expect(result.pos).toEqual({ x: 1, y: 2, z: 3 });
       expect(result.scale).toEqual({ x: 2, y: 2, z: 2 });
       expect(result.euler).toEqual({ x: 0, y: 45, z: 0 });
@@ -73,7 +73,7 @@ describe('Validation Parser', () => {
         'jump-height': 5,
       };
 
-      const result = validateRecipeAttributes('player', attributes);
+      const result = validateRecipeAttributes('Player', attributes);
       expect(result.speed).toBe(10);
       expect(result['jump-height']).toBe(5);
     });
@@ -84,7 +84,7 @@ describe('Validation Parser', () => {
         sky: '#87ceeb',
       };
 
-      const result = validateRecipeAttributes('world', attributes);
+      const result = validateRecipeAttributes('Scene', attributes);
       expect(result.canvas).toBe('#game-canvas');
       expect(result.sky).toBe(8900331);
     });
@@ -125,7 +125,7 @@ describe('Validation Parser', () => {
         pos: 'invalid-position',
       };
 
-      const result = safeValidateRecipeAttributes('entity', attributes, {
+      const result = safeValidateRecipeAttributes('GameObject', attributes, {
         filename: 'test.xml',
         lineNumber: 10,
       });
@@ -139,13 +139,13 @@ describe('Validation Parser', () => {
 
   describe('isValidRecipeName', () => {
     it('should return true for valid recipe names', () => {
-      expect(isValidRecipeName('entity')).toBe(true);
+      expect(isValidRecipeName('GameObject')).toBe(true);
       expect(isValidRecipeName('static-part')).toBe(true);
       expect(isValidRecipeName('dynamic-part')).toBe(true);
       expect(isValidRecipeName('kinematic-part')).toBe(true);
-      expect(isValidRecipeName('player')).toBe(true);
+      expect(isValidRecipeName('Player')).toBe(true);
       expect(isValidRecipeName('camera')).toBe(true);
-      expect(isValidRecipeName('world')).toBe(true);
+      expect(isValidRecipeName('Scene')).toBe(true);
     });
 
     it('should return false for invalid recipe names', () => {
@@ -177,7 +177,7 @@ describe('Validation Parser', () => {
     });
 
     it('should validate with returned schema', () => {
-      const schema = getRecipeSchema('player');
+      const schema = getRecipeSchema('Player');
       expect(schema).toBeDefined();
 
       if (schema) {

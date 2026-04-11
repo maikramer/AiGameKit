@@ -29,7 +29,7 @@ function parseElement(element: Element): ParsedElement {
   }
 
   return {
-    tagName: element.tagName.toLowerCase(),
+    tagName: element.tagName,
     attributes,
     children,
   };

@@ -14,23 +14,23 @@ describe('ParticlesPlugin Registration', () => {
     state.registerPlugin(ParticlesPlugin);
   });
 
-  it('should have a recipe named "particle-emitter" with components ["transform", "particlesEmitter"]', () => {
+  it('should have a recipe named "ParticleSystem" with components ["transform", "particleSystem"]', () => {
     const emitterRecipe = ParticlesPlugin.recipes!.find(
-      (r) => r.name === 'particle-emitter'
+      (r) => r.name === 'ParticleSystem'
     );
     expect(emitterRecipe).toBeDefined();
     expect(emitterRecipe!.components).toEqual([
       'transform',
-      'particlesEmitter',
+      'particleSystem',
     ]);
   });
 
-  it('should have a recipe named "particle-burst" with components ["transform", "particlesBurst"]', () => {
+  it('should have a recipe named "ParticleBurst" with components ["transform", "particleBurst"]', () => {
     const burstRecipe = ParticlesPlugin.recipes!.find(
-      (r) => r.name === 'particle-burst'
+      (r) => r.name === 'ParticleBurst'
     );
     expect(burstRecipe).toBeDefined();
-    expect(burstRecipe!.components).toEqual(['transform', 'particlesBurst']);
+    expect(burstRecipe!.components).toEqual(['transform', 'particleBurst']);
   });
 
   it('should register the particlesEmitter component', () => {
@@ -46,15 +46,15 @@ describe('ParticlesPlugin Registration', () => {
   });
 
   it('should register the particle-emitter recipe', () => {
-    const recipe = state.getRecipe('particle-emitter');
+    const recipe = state.getRecipe('ParticleSystem');
     expect(recipe).toBeDefined();
-    expect(recipe?.components).toContain('particlesEmitter');
+    expect(recipe?.components).toContain('particleSystem');
   });
 
   it('should register the particle-burst recipe', () => {
-    const recipe = state.getRecipe('particle-burst');
+    const recipe = state.getRecipe('ParticleBurst');
     expect(recipe).toBeDefined();
-    expect(recipe?.components).toContain('particlesBurst');
+    expect(recipe?.components).toContain('particleBurst');
   });
 
   it('should have five systems registered', () => {
@@ -62,7 +62,7 @@ describe('ParticlesPlugin Registration', () => {
   });
 
   it('should have config.defaults for particlesEmitter', () => {
-    const defaults = ParticlesPlugin.config!.defaults!.particlesEmitter;
+    const defaults = ParticlesPlugin.config!.defaults!.particleSystem;
     expect(defaults).toBeDefined();
     expect(defaults.preset).toBe(0);
     expect(defaults.rate).toBeCloseTo(20);
@@ -74,7 +74,7 @@ describe('ParticlesPlugin Registration', () => {
   });
 
   it('should have config.defaults for particlesBurst', () => {
-    const defaults = ParticlesPlugin.config!.defaults!.particlesBurst;
+    const defaults = ParticlesPlugin.config!.defaults!.particleBurst;
     expect(defaults).toBeDefined();
     expect(defaults.preset).toBe(2);
     expect(defaults.count).toBeCloseTo(100);
@@ -82,7 +82,7 @@ describe('ParticlesPlugin Registration', () => {
   });
 
   it('should have config.enums for particlesEmitter preset with unique values', () => {
-    const enums = ParticlesPlugin.config!.enums!.particlesEmitter;
+    const enums = ParticlesPlugin.config!.enums!.particleSystem;
     expect(enums).toBeDefined();
     expect(enums.preset).toBeDefined();
 

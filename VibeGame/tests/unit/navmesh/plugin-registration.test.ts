@@ -11,14 +11,14 @@ describe('NavmeshPlugin Registration', () => {
     state.registerPlugin(NavmeshPlugin);
   });
 
-  it('should have two recipes: "nav-mesh" and "nav-agent"', () => {
+  it('should have two recipes: "NavMeshSurface" and "NavMeshAgent"', () => {
     expect(NavmeshPlugin.recipes!).toHaveLength(2);
-    expect(NavmeshPlugin.recipes![0].name).toBe('nav-mesh');
-    expect(NavmeshPlugin.recipes![0].components).toEqual(['navMesh']);
-    expect(NavmeshPlugin.recipes![1].name).toBe('nav-agent');
+    expect(NavmeshPlugin.recipes![0].name).toBe('NavMeshSurface');
+    expect(NavmeshPlugin.recipes![0].components).toEqual(['navMeshSurface']);
+    expect(NavmeshPlugin.recipes![1].name).toBe('NavMeshAgent');
     expect(NavmeshPlugin.recipes![1].components).toEqual([
       'transform',
-      'navAgent',
+      'navMeshAgent',
     ]);
   });
 
@@ -35,15 +35,15 @@ describe('NavmeshPlugin Registration', () => {
   });
 
   it('should register the nav-mesh recipe', () => {
-    const recipe = state.getRecipe('nav-mesh');
+    const recipe = state.getRecipe('NavMeshSurface');
     expect(recipe).toBeDefined();
-    expect(recipe?.components).toContain('navMesh');
+    expect(recipe?.components).toContain('navMeshSurface');
   });
 
   it('should register the nav-agent recipe', () => {
-    const recipe = state.getRecipe('nav-agent');
+    const recipe = state.getRecipe('NavMeshAgent');
     expect(recipe).toBeDefined();
-    expect(recipe?.components).toContain('navAgent');
+    expect(recipe?.components).toContain('navMeshAgent');
   });
 
   it('should have four systems registered', () => {
@@ -51,14 +51,14 @@ describe('NavmeshPlugin Registration', () => {
   });
 
   it('should have config.defaults for navMesh', () => {
-    const defaults = NavmeshPlugin.config!.defaults!.navMesh;
+    const defaults = NavmeshPlugin.config!.defaults!.navMeshSurface;
     expect(defaults).toBeDefined();
     expect(defaults.loaded).toBe(0);
     expect(defaults.buildFromScene).toBe(0);
   });
 
   it('should have config.defaults for navAgent', () => {
-    const defaults = NavmeshPlugin.config!.defaults!.navAgent;
+    const defaults = NavmeshPlugin.config!.defaults!.navMeshAgent;
     expect(defaults).toBeDefined();
     expect(defaults.targetX).toBe(0);
     expect(defaults.targetY).toBe(0);

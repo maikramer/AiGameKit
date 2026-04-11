@@ -22,7 +22,7 @@ function fogColorAdapter(
 
 /** Volumetric fog plugin — exponential, exponential-squared, or linear fog with optional height falloff and volumetric scattering. */
 export const FogPlugin: Plugin = {
-  recipes: [{ name: 'fog', components: ['fog'] }],
+  recipes: [{ name: 'Fog', components: ['fog'] }],
   systems: [FogSystem, FogEffectSystem],
   components: {
     fog: Fog,

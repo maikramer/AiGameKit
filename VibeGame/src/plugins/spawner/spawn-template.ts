@@ -114,13 +114,13 @@ export function spawnTemplateAtTerrain(
   const transformStr = formatTransformAttr(base);
   const attrs = mergeTemplateAttributes(template, transformStr);
 
-  if (template.tagName === 'entity') {
+  if (template.tagName === 'GameObject') {
     delete attrs.place;
-    const root = createEntityFromRecipe(state, 'entity', attrs);
+    const root = createEntityFromRecipe(state, 'GameObject', attrs);
     const ch = template.entityChildren;
     if (ch?.length) {
       const context = new ParseContext(state);
-      processRecipeChildElements(state, root, 'entity', ch, context);
+      processRecipeChildElements(state, root, 'GameObject', ch, context);
     }
     return;
   }

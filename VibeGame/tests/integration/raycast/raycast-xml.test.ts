@@ -18,12 +18,12 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const recipe = state.getRecipe('raycast-source');
+    const recipe = state.getRecipe('RaycastSource');
     expect(recipe).toBeDefined();
-    expect(recipe?.name).toBe('raycast-source');
+    expect(recipe?.name).toBe('RaycastSource');
     expect(recipe?.components).toContain('transform');
     expect(recipe?.components).toContain('raycastSource');
-    expect(recipe?.components).toContain('raycastResult');
+    expect(recipe?.components).toContain('raycastHit');
   });
 
   it('raycast-source recipe creates entity with correct components', () => {
@@ -31,7 +31,7 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const xml = '<root><raycast-source max-dist="50"></raycast-source></root>';
+    const xml = '<root><RaycastSource max-dist="50"></RaycastSource></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -46,7 +46,7 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const xml = '<root><raycast-source max-dist="200"></raycast-source></root>';
+    const xml = '<root><RaycastSource max-dist="200"></RaycastSource></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -60,7 +60,7 @@ describe('Raycast XML recipe', () => {
     state.registerPlugin(RaycastPlugin);
 
     const xml =
-      '<root><raycast-source layer-mask="255"></raycast-source></root>';
+      '<root><RaycastSource layer-mask="255"></RaycastSource></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -73,7 +73,7 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const xml = '<root><raycast-source mode="1"></raycast-source></root>';
+    const xml = '<root><RaycastSource mode="1"></RaycastSource></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -86,7 +86,7 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const entity = state.createFromRecipe('raycast-source', {
+    const entity = state.createFromRecipe('RaycastSource', {
       direction: '0 1 0',
     });
     expect(RaycastSource.dirX[entity]).toBeCloseTo(0);
@@ -99,7 +99,7 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const entity = state.createFromRecipe('raycast-source', {
+    const entity = state.createFromRecipe('RaycastSource', {
       direction: '3 4 0',
     });
     expect(RaycastSource.dirX[entity]).toBeCloseTo(3 / 5);

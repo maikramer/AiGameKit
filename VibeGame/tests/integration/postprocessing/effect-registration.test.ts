@@ -155,7 +155,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity vignette="darkness: 0.8; offset: 0.15"></entity></root>';
+      '<root><GameObject vignette="darkness: 0.8; offset: 0.15"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -171,7 +171,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity noise="opacity: 0.3; blend-function: skip"></entity></root>';
+      '<root><GameObject noise="opacity: 0.3; blend-function: skip"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -187,7 +187,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity bloom="intensity: 2.0; luminance-threshold: 0.8"></entity></root>';
+      '<root><GameObject bloom="intensity: 2.0; luminance-threshold: 0.8"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -203,7 +203,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity chromatic-aberration="offset-x: 0.003; offset-y: 0.002"></entity></root>';
+      '<root><GameObject chromatic-aberration="offset-x: 0.003; offset-y: 0.002"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -219,7 +219,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity depth-of-field="focus-distance: 20; focal-length: 0.08"></entity></root>';
+      '<root><GameObject depth-of-field="focus-distance: 20; focal-length: 0.08"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -235,7 +235,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity tonemapping="mode: aces-filmic; middle-grey: 0.5"></entity></root>';
+      '<root><GameObject tonemapping="mode: aces-filmic; middle-grey: 0.5"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -250,7 +250,7 @@ describe('Postprocessing Effect Registration', () => {
     const state = new State();
     state.registerPlugin(PostprocessingPlugin);
 
-    const xml = '<root><entity smaa="preset: ultra"></entity></root>';
+    const xml = '<root><GameObject smaa="preset: ultra"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -265,7 +265,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity dithering="color-bits: 4; intensity: 1.0"></entity></root>';
+      '<root><GameObject dithering="color-bits: 4; intensity: 1.0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -282,7 +282,7 @@ describe('Postprocessing Effect Registration', () => {
 
     const defaults = PostprocessingPlugin.config!.defaults!.vignette;
 
-    const xml = '<root><entity vignette="darkness: 0.9"></entity></root>';
+    const xml = '<root><GameObject vignette="darkness: 0.9"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -297,7 +297,7 @@ describe('Postprocessing Effect Registration', () => {
 
     const defaults = PostprocessingPlugin.config!.defaults!.noise;
 
-    const xml = '<root><entity noise="opacity: 0.5"></entity></root>';
+    const xml = '<root><GameObject noise="opacity: 0.5"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -311,7 +311,7 @@ describe('Postprocessing Effect Registration', () => {
     state.registerPlugin(PostprocessingPlugin);
 
     const xml =
-      '<root><entity vignette="darkness: 0.8" bloom="intensity: 1.5" noise="opacity: 0.2"></entity></root>';
+      '<root><GameObject vignette="darkness: 0.8" bloom="intensity: 1.5" noise="opacity: 0.2"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

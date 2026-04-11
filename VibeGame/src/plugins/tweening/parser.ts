@@ -42,7 +42,7 @@ function toNumberOrArray(value: XMLValue): number | number[] {
 }
 
 export const tweenParser: Parser = ({ element, state, context }) => {
-  if (element.tagName !== 'tween') {
+  if (element.tagName !== 'Tween') {
     return;
   }
 
@@ -102,7 +102,7 @@ export const tweenParser: Parser = ({ element, state, context }) => {
 };
 
 export const sequenceParser: Parser = ({ element, state, context }) => {
-  if (element.tagName !== 'sequence') return;
+  if (element.tagName !== 'Sequence') return;
 
   const seqEntity = state.createEntity();
   state.addComponent(seqEntity, Sequence);
@@ -117,7 +117,7 @@ export const sequenceParser: Parser = ({ element, state, context }) => {
   const items: SequenceItemSpec[] = [];
 
   for (const child of element.children) {
-    if (child.tagName === 'tween') {
+    if (child.tagName === 'Tween') {
       const targetName = child.attributes.target as string;
       if (!targetName) {
         throw new Error('[Sequence] Tween missing "target" attribute');
@@ -181,7 +181,7 @@ function validateMode(mode: string | undefined, context: string): void {
 }
 
 export const shakerParser: Parser = ({ element, state, context }) => {
-  if (element.tagName !== 'shaker') return;
+  if (element.tagName !== 'Shaker') return;
 
   const targetName = element.attributes.target as string;
   if (!targetName) {

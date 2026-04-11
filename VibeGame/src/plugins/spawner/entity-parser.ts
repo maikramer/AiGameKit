@@ -21,7 +21,7 @@ function prefetchGltfChildren(element: {
     }[];
   }) => {
     for (const c of el.children || []) {
-      if (c.tagName === 'gltf-load' || c.tagName === 'gltf-dynamic') {
+      if (c.tagName === 'GLTFLoader' || c.tagName === 'GLTFDynamic') {
         const u = c.attributes.url;
         if (typeof u === 'string' && u.trim()) {
           prefetchGltfLocalYBounds(u.trim());
@@ -34,7 +34,7 @@ function prefetchGltfChildren(element: {
 }
 
 export const entityParser: Parser = ({ entity, element, state }) => {
-  if (element.tagName !== 'entity') return;
+  if (element.tagName !== 'GameObject') return;
 
   const placeRaw = element.attributes.place;
   if (placeRaw === undefined || placeRaw === null) return;
@@ -43,7 +43,7 @@ export const entityParser: Parser = ({ entity, element, state }) => {
   const merged = parseSemicolonPlaceString(placeStr);
   if (!('at' in merged)) {
     throw new Error(
-      '[entity] place= must include at: "x z" (e.g. place="at: 0 -8; base-y-offset: 0.02")'
+      '[GameObject] place= must include at: "x z" (e.g. place="at: 0 -8; base-y-offset: 0.02")'
     );
   }
   const [atX, atZ] = parseAt(merged.at);

@@ -64,39 +64,39 @@ export function safeValidateRecipeAttributes<T extends RecipeName>(
 }
 
 const hierarchyRules: Record<string, string[]> = {
-  world: [
-    'entity',
+  Scene: [
+    'GameObject',
     'static-part',
     'dynamic-part',
     'kinematic-part',
-    'player',
-    'player-gltf',
+    'Player',
+    'PlayerGLTF',
     'camera',
-    'tween',
-    'sequence',
-    'fog',
-    'sky',
-    'audio-clip',
+    'Tween',
+    'Sequence',
+    'Fog',
+    'Skybox',
+    'AudioSource',
   ],
-  entity: [
-    'tween',
-    'sequence',
-    'entity',
+  GameObject: [
+    'Tween',
+    'Sequence',
+    'GameObject',
     'static-part',
     'dynamic-part',
     'kinematic-part',
-    'player',
-    'player-gltf',
+    'Player',
+    'PlayerGLTF',
     'camera',
   ],
-  'static-part': ['entity', 'tween', 'sequence'],
-  'dynamic-part': ['entity', 'tween', 'sequence'],
-  'kinematic-part': ['entity', 'tween', 'sequence'],
-  player: ['entity', 'tween', 'sequence'],
-  'player-gltf': ['entity', 'tween', 'sequence'],
+  'static-part': ['GameObject', 'Tween', 'Sequence'],
+  'dynamic-part': ['GameObject', 'Tween', 'Sequence'],
+  'kinematic-part': ['GameObject', 'Tween', 'Sequence'],
+  Player: ['GameObject', 'Tween', 'Sequence'],
+  PlayerGLTF: ['GameObject', 'Tween', 'Sequence'],
   camera: [],
-  tween: [],
-  sequence: ['tween', 'pause'],
+  Tween: [],
+  Sequence: ['Tween', 'pause'],
   pause: [],
 };
 
@@ -186,7 +186,7 @@ export function validateHTMLContent(
   const results: ValidationResult[] = [];
 
   const xmlPattern =
-    /<(world|entity|static-part|dynamic-part|kinematic-part|player|camera|tween)([^>]*?)(?:\/>|>[\s\S]*?<\/\1>)/gi;
+    /<(Scene|GameObject|static-part|dynamic-part|kinematic-part|Player|camera|Tween)([^>]*?)(?:\/>|>[\s\S]*?<\/\1>)/gi;
   const matches = htmlContent.matchAll(xmlPattern);
 
   for (const match of matches) {

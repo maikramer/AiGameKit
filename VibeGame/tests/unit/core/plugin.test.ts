@@ -71,7 +71,7 @@ describe('Plugin System', () => {
     const plugin1: Plugin = {
       config: {
         parsers: {
-          entity: () => calls.push('parser1'),
+          GameObject: () => calls.push('parser1'),
         },
       },
     };
@@ -79,7 +79,7 @@ describe('Plugin System', () => {
     const plugin2: Plugin = {
       config: {
         parsers: {
-          entity: () => calls.push('parser2'),
+          GameObject: () => calls.push('parser2'),
         },
       },
     };
@@ -87,10 +87,10 @@ describe('Plugin System', () => {
     state.registerPlugin(plugin1);
     state.registerPlugin(plugin2);
 
-    const parser = state.getParser('entity');
+    const parser = state.getParser('GameObject');
     parser?.({
       entity: 0,
-      element: { tagName: 'entity', attributes: {}, children: [] },
+      element: { tagName: 'GameObject', attributes: {}, children: [] },
       state,
       context: new ParseContext(state),
     });

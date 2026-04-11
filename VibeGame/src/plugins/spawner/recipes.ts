@@ -1,7 +1,7 @@
 import type { Recipe } from '../../core';
 
 export const spawnGroupRecipe: Recipe = {
-  name: 'spawn-group',
+  name: 'SpawnGroup',
   components: ['transform', 'spawnerPending'],
   parserOwnsChildren: true,
   parserAttributes: [
@@ -25,7 +25,7 @@ export const spawnGroupRecipe: Recipe = {
 
 /** Overrides core `entity` with transform + optional terrain placement (`place` attr). */
 export const entitySpawnerRecipe: Recipe = {
-  name: 'entity',
+  name: 'GameObject',
   components: ['transform'],
   parserAttributes: ['place'],
 };

@@ -23,8 +23,8 @@ describe('E2E: Player Jump Mechanics', () => {
       state,
       `
       <static-part
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
     `
     );
@@ -68,8 +68,8 @@ describe('E2E: Player Jump Mechanics', () => {
       state,
       `
       <static-part
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
     `
     );
@@ -132,8 +132,8 @@ describe('E2E: Player Jump Mechanics', () => {
       state,
       `
       <static-part
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 50 1 50; color: 0x90ee90"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 50 1 50; color: 0x90ee90"
         collider="shape: box; size: 50 1 50" />
     `
     );
@@ -243,8 +243,8 @@ describe('E2E: Player Jump Mechanics', () => {
       state,
       `
       <static-part
-        body="pos: 0 0 0"
-        renderer="shape: box; size: 20 1 20; color: 0x90ee90"
+        rigidbody="pos: 0 0 0"
+        meshRenderer="shape: box; size: 20 1 20; color: 0x90ee90"
         collider="shape: box; size: 20 1 20" />
     `
     );

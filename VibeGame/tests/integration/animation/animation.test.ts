@@ -118,12 +118,12 @@ describe('Animation Plugin', () => {
   describe('XML Declaration', () => {
     it('should create animated character from XML', () => {
       state.registerRecipe({
-        name: 'entity',
+        name: 'GameObject',
         components: [],
       });
 
       const xml =
-        '<root><entity animated-character="" transform="pos: 0 2 0"></entity></root>';
+        '<root><GameObject animated-character="" transform="pos: 0 2 0"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -135,12 +135,12 @@ describe('Animation Plugin', () => {
 
     it('should create animated character with character controller from XML', () => {
       state.registerRecipe({
-        name: 'entity',
+        name: 'GameObject',
         components: [],
       });
 
       const xml =
-        '<root><entity animated-character="" character-controller="" transform="pos: 0 2 0"></entity></root>';
+        '<root><GameObject animated-character="" character-controller="" transform="pos: 0 2 0"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -153,14 +153,14 @@ describe('Animation Plugin', () => {
 
     it('should handle multiple animated characters in XML', () => {
       state.registerRecipe({
-        name: 'entity',
+        name: 'GameObject',
         components: [],
       });
 
       const xml = `<root>
-        <entity animated-character="" transform="pos: 0 0 0"></entity>
-        <entity animated-character="" transform="pos: 5 0 0"></entity>
-        <entity animated-character="" transform="pos: 10 0 0"></entity>
+        <GameObject animated-character="" transform="pos: 0 0 0"></GameObject>
+        <GameObject animated-character="" transform="pos: 5 0 0"></GameObject>
+        <GameObject animated-character="" transform="pos: 10 0 0"></GameObject>
       </root>`;
 
       const parsed = XMLParser.parse(xml);

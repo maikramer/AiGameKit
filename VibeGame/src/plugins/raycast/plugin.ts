@@ -20,7 +20,7 @@ export const RaycastPlugin: Plugin = {
   recipes: [raycastSourceRecipe],
   components: {
     raycastSource: RaycastSource,
-    raycastResult: RaycastHit,
+    raycastHit: RaycastHit,
   },
   config: {
     defaults: {
@@ -32,7 +32,7 @@ export const RaycastPlugin: Plugin = {
         layerMask: 0xffff,
         mode: 0,
       },
-      raycastResult: {
+      raycastHit: {
         hitValid: 0,
         hitEntity: 0,
         hitDist: 0,

@@ -19,9 +19,9 @@ describe('AI-Steering XML recipe', () => {
     const state = new State();
     state.registerPlugin(AiSteeringPlugin);
 
-    const recipe = state.getRecipe('npc');
+    const recipe = state.getRecipe('NPC');
     expect(recipe).toBeDefined();
-    expect(recipe?.name).toBe('npc');
+    expect(recipe?.name).toBe('NPC');
     expect(recipe?.components).toContain('transform');
     expect(recipe?.components).toContain('steeringAgent');
     expect(recipe?.components).toContain('steeringTarget');
@@ -32,7 +32,7 @@ describe('AI-Steering XML recipe', () => {
     state.registerPlugin(RenderingPlugin);
     state.registerPlugin(AiSteeringPlugin);
 
-    const xml = '<root><npc behavior="seek"></npc></root>';
+    const xml = '<root><NPC behavior="seek"></NPC></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -48,7 +48,7 @@ describe('AI-Steering XML recipe', () => {
     const state = new State();
     state.registerPlugin(AiSteeringPlugin);
 
-    const xml = '<root><npc behavior="seek"></npc></root>';
+    const xml = '<root><NPC behavior="seek"></NPC></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -60,7 +60,7 @@ describe('AI-Steering XML recipe', () => {
     const state = new State();
     state.registerPlugin(AiSteeringPlugin);
 
-    const xml = '<root><npc behavior="wander"></npc></root>';
+    const xml = '<root><NPC behavior="wander"></NPC></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -72,7 +72,7 @@ describe('AI-Steering XML recipe', () => {
     const state = new State();
     state.registerPlugin(AiSteeringPlugin);
 
-    const xml = '<root><npc behavior="flee"></npc></root>';
+    const xml = '<root><NPC behavior="flee"></NPC></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -85,7 +85,7 @@ describe('AI-Steering XML recipe', () => {
     state.registerPlugin(AiSteeringPlugin);
 
     const xml =
-      '<root><npc behavior="seek" max-speed="5" max-force="20"></npc></root>';
+      '<root><NPC behavior="seek" max-speed="5" max-force="20"></NPC></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -99,7 +99,7 @@ describe('AI-Steering XML recipe', () => {
     state.registerPlugin(AiSteeringPlugin);
 
     const xml =
-      '<root><npc behavior="seek" target-x="10" target-y="2" target-z="-5"></npc></root>';
+      '<root><NPC behavior="seek" target-x="10" target-y="2" target-z="-5"></NPC></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -159,8 +159,8 @@ describe('AI-Steering XML recipe', () => {
 
     const xml =
       '<root>' +
-      '<npc behavior="seek" max-speed="5" target-x="10"></npc>' +
-      '<npc behavior="flee" max-speed="8" target-x="-3"></npc>' +
+      '<NPC behavior="seek" max-speed="5" target-x="10"></NPC>' +
+      '<NPC behavior="flee" max-speed="8" target-x="-3"></NPC>' +
       '</root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);

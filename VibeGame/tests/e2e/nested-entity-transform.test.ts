@@ -18,9 +18,9 @@ describe('E2E: Nested Entity Transform Hierarchy', () => {
 
   it('should establish parent-child relationship for nested entities', () => {
     const xml = `
-      <entity transform="pos: 0 0 0">
-        <entity transform="pos: 2 0 0"></entity>
-      </entity>
+      <GameObject transform="pos: 0 0 0">
+        <GameObject transform="pos: 2 0 0"></GameObject>
+      </GameObject>
     `;
 
     parseWorldXml(state, xml);
@@ -43,11 +43,11 @@ describe('E2E: Nested Entity Transform Hierarchy', () => {
     const initialEntityCount = queryEntities(state, 'transform').length;
 
     const xml = `
-      <entity transform="pos: 0 0 0">
-        <entity transform="pos: 1 0 0">
-          <entity transform="pos: 1 0 0"></entity>
-        </entity>
-      </entity>
+      <GameObject transform="pos: 0 0 0">
+        <GameObject transform="pos: 1 0 0">
+          <GameObject transform="pos: 1 0 0"></GameObject>
+        </GameObject>
+      </GameObject>
     `;
 
     parseWorldXml(state, xml);
@@ -76,10 +76,10 @@ describe('E2E: Nested Entity Transform Hierarchy', () => {
 
   it('should rotate child with parent when parent rotates', () => {
     const xml = `
-      <entity name="parent" transform="pos: 0 0 0">
-        <entity transform="pos: 2 0 0"></entity>
-      </entity>
-      <tween target="parent" attr="rotation" from="0 0 0" to="0 180 0" duration="1"></tween>
+      <GameObject name="parent" transform="pos: 0 0 0">
+        <GameObject transform="pos: 2 0 0"></GameObject>
+      </GameObject>
+      <Tween target="parent" attr="rotation" from="0 0 0" to="0 180 0" duration="1"></Tween>
     `;
 
     parseWorldXml(state, xml);

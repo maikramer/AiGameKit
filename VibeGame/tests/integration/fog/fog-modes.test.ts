@@ -13,30 +13,30 @@ describe('Fog Modes Integration', () => {
 
   describe('mode enum validation', () => {
     it('should accept "exponential" as valid mode', () => {
-      const result = validateRecipeAttributes('fog', { mode: 'exponential' });
+      const result = validateRecipeAttributes('Fog', { mode: 'exponential' });
       expect(result.mode).toBe('exponential');
     });
 
     it('should accept "exponential-squared" as valid mode', () => {
-      const result = validateRecipeAttributes('fog', {
+      const result = validateRecipeAttributes('Fog', {
         mode: 'exponential-squared',
       });
       expect(result.mode).toBe('exponential-squared');
     });
 
     it('should accept "linear" as valid mode', () => {
-      const result = validateRecipeAttributes('fog', { mode: 'linear' });
+      const result = validateRecipeAttributes('Fog', { mode: 'linear' });
       expect(result.mode).toBe('linear');
     });
 
     it('should reject invalid mode value', () => {
       expect(() =>
-        validateRecipeAttributes('fog', { mode: 'volumetric' })
+        validateRecipeAttributes('Fog', { mode: 'volumetric' })
       ).toThrow();
     });
 
     it('should reject numeric mode value', () => {
-      expect(() => validateRecipeAttributes('fog', { mode: '0' })).toThrow();
+      expect(() => validateRecipeAttributes('Fog', { mode: '0' })).toThrow();
     });
   });
 
@@ -45,7 +45,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog mode="exponential"></fog></root>';
+      const xml = '<root><Fog mode="exponential"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -57,7 +57,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog mode="exponential-squared"></fog></root>';
+      const xml = '<root><Fog mode="exponential-squared"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -69,7 +69,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog mode="linear"></fog></root>';
+      const xml = '<root><Fog mode="linear"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -81,7 +81,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog></fog></root>';
+      const xml = '<root><Fog></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -92,23 +92,23 @@ describe('Fog Modes Integration', () => {
 
   describe('quality enum validation', () => {
     it('should accept "low" as valid quality', () => {
-      const result = validateRecipeAttributes('fog', { quality: 'low' });
+      const result = validateRecipeAttributes('Fog', { quality: 'low' });
       expect(result.quality).toBe('low');
     });
 
     it('should accept "medium" as valid quality', () => {
-      const result = validateRecipeAttributes('fog', { quality: 'medium' });
+      const result = validateRecipeAttributes('Fog', { quality: 'medium' });
       expect(result.quality).toBe('medium');
     });
 
     it('should accept "high" as valid quality', () => {
-      const result = validateRecipeAttributes('fog', { quality: 'high' });
+      const result = validateRecipeAttributes('Fog', { quality: 'high' });
       expect(result.quality).toBe('high');
     });
 
     it('should reject invalid quality value', () => {
       expect(() =>
-        validateRecipeAttributes('fog', { quality: 'ultra' })
+        validateRecipeAttributes('Fog', { quality: 'ultra' })
       ).toThrow();
     });
   });
@@ -118,7 +118,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog quality="low"></fog></root>';
+      const xml = '<root><Fog quality="low"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -130,7 +130,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog quality="medium"></fog></root>';
+      const xml = '<root><Fog quality="medium"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -142,7 +142,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog quality="high"></fog></root>';
+      const xml = '<root><Fog quality="high"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -154,7 +154,7 @@ describe('Fog Modes Integration', () => {
       const state = new State();
       state.registerPlugin(FogPlugin);
 
-      const xml = '<root><fog></fog></root>';
+      const xml = '<root><Fog></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -169,7 +169,7 @@ describe('Fog Modes Integration', () => {
       state.registerPlugin(FogPlugin);
 
       const xml =
-        '<root><fog mode="exponential" density="0.03" quality="high" volumetric-strength="0.9" noise-scale="2.0"></fog></root>';
+        '<root><Fog mode="exponential" density="0.03" quality="high" volumetric-strength="0.9" noise-scale="2.0"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -186,7 +186,7 @@ describe('Fog Modes Integration', () => {
       state.registerPlugin(FogPlugin);
 
       const xml =
-        '<root><fog mode="linear" near="10" far="200" quality="low"></fog></root>';
+        '<root><Fog mode="linear" near="10" far="200" quality="low"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -202,7 +202,7 @@ describe('Fog Modes Integration', () => {
       state.registerPlugin(FogPlugin);
 
       const xml =
-        '<root><fog mode="exponential-squared" density="0.05" height-falloff="3.0" base-height="-2"></fog></root>';
+        '<root><Fog mode="exponential-squared" density="0.05" height-falloff="3.0" base-height="-2"></Fog></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 

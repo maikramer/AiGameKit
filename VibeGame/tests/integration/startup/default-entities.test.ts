@@ -101,7 +101,7 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
   });
 
   it('should not create player when one already exists from XML', () => {
-    const xml = '<root><player pos="10 2 -5" speed="12" /></root>';
+    const xml = '<root><Player pos="10 2 -5" speed="12" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -121,7 +121,7 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
 
   it('should not create camera when one already exists from XML', () => {
     const xml =
-      '<root><orbit-camera target-distance="20" target-pitch="-45" /></root>';
+      '<root><OrbitCamera target-distance="20" target-pitch="-45" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -140,7 +140,7 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
   });
 
   it('should not create lighting when ambient light already exists from XML', () => {
-    const xml = '<root><entity ambient-light="sky-color: 0xff0000" /></root>';
+    const xml = '<root><GameObject ambient-light="sky-color: 0xff0000" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -156,7 +156,7 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
   });
 
   it('should not create lighting when directional light already exists from XML', () => {
-    const xml = '<root><entity directional-light="" /></root>';
+    const xml = '<root><GameObject directional-light="" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -169,7 +169,7 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
   });
 
   it('should not create lighting when combined light already exists from XML', () => {
-    const xml = '<root><entity directional-light="" ambient-light="" /></root>';
+    const xml = '<root><GameObject directional-light="" ambient-light="" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -257,7 +257,7 @@ describe('Startup Plugin - Player Character System', () => {
   });
 
   it('should not attach character to players that already have HasAnimator', () => {
-    const xml = '<root><player /></root>';
+    const xml = '<root><Player /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -297,7 +297,7 @@ describe('Startup Plugin - Component Defaults', () => {
   });
 
   it('should match player defaults between XML and startup system', () => {
-    const xml = '<root><player /></root>';
+    const xml = '<root><Player /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -335,7 +335,7 @@ describe('Startup Plugin - Component Defaults', () => {
   });
 
   it('should match camera defaults between XML and startup system', () => {
-    const xml = '<root><player /><orbit-camera /></root>';
+    const xml = '<root><Player /><OrbitCamera /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
     state.scheduler.step(state, 0);
@@ -361,7 +361,7 @@ describe('Startup Plugin - Component Defaults', () => {
   });
 
   it('should match lighting defaults between XML and startup system', () => {
-    const xml = '<root><entity directional-light="" ambient-light="" /></root>';
+    const xml = '<root><GameObject directional-light="" ambient-light="" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 

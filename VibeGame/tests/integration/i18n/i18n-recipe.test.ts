@@ -45,8 +45,8 @@ describe('I18n Integration', () => {
     state.registerPlugin(HudPlugin);
     state.registerPlugin(I18nPlugin);
 
-    const recipe = state.getRecipe('i18n-text');
+    const recipe = state.getRecipe('I18nText');
     expect(recipe).toBeDefined();
-    expect(recipe?.name).toBe('i18n-text');
+    expect(recipe?.name).toBe('I18nText');
   });
 });

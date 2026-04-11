@@ -26,7 +26,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity vignette="darkness: 0.8; offset: 0.15"></entity></root>';
+        '<root><GameObject vignette="darkness: 0.8; offset: 0.15"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -40,7 +40,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity depth-of-field="focus-distance: 25; focal-length: 0.1; bokeh-scale: 3; auto-focus: off"></entity></root>';
+        '<root><GameObject depth-of-field="focus-distance: 25; focal-length: 0.1; bokeh-scale: 3; auto-focus: off"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -56,7 +56,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity chromatic-aberration="offset-x: 0.005; offset-y: 0.003; radial-modulation: on; modulation-offset: 0.2"></entity></root>';
+        '<root><GameObject chromatic-aberration="offset-x: 0.005; offset-y: 0.003; radial-modulation: on; modulation-offset: 0.2"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -72,7 +72,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity noise="opacity: 0.4; blend-function: overlay"></entity></root>';
+        '<root><GameObject noise="opacity: 0.4; blend-function: overlay"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -110,7 +110,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity depth-of-field="auto-focus: on; resolution-scale: 0.75"></entity></root>';
+        '<root><GameObject depth-of-field="auto-focus: on; resolution-scale: 0.75"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -126,7 +126,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity tonemapping="mode: aces-filmic"></entity></root>';
+        '<root><GameObject tonemapping="mode: aces-filmic"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -137,7 +137,7 @@ describe('Postprocessing XML Parsing', () => {
       const state = new State();
       state.registerPlugin(PostprocessingPlugin);
 
-      const xml = '<root><entity tonemapping="mode: reinhard"></entity></root>';
+      const xml = '<root><GameObject tonemapping="mode: reinhard"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -148,7 +148,7 @@ describe('Postprocessing XML Parsing', () => {
       const state = new State();
       state.registerPlugin(PostprocessingPlugin);
 
-      const xml = '<root><entity smaa="preset: high"></entity></root>';
+      const xml = '<root><GameObject smaa="preset: high"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -159,7 +159,7 @@ describe('Postprocessing XML Parsing', () => {
       const state = new State();
       state.registerPlugin(PostprocessingPlugin);
 
-      const xml = '<root><entity smaa="preset: low"></entity></root>';
+      const xml = '<root><GameObject smaa="preset: low"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -171,7 +171,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity depth-of-field="auto-focus: on"></entity></root>';
+        '<root><GameObject depth-of-field="auto-focus: on"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -183,7 +183,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity chromatic-aberration="radial-modulation: on"></entity></root>';
+        '<root><GameObject chromatic-aberration="radial-modulation: on"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -195,7 +195,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity noise="blend-function: normal"></entity></root>';
+        '<root><GameObject noise="blend-function: normal"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -207,7 +207,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity noise="blend-function: multiply"></entity></root>';
+        '<root><GameObject noise="blend-function: multiply"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -222,7 +222,7 @@ describe('Postprocessing XML Parsing', () => {
 
       const defaults = PostprocessingPlugin.config!.defaults!.vignette;
 
-      const xml = '<root><entity vignette="darkness: 0.7"></entity></root>';
+      const xml = '<root><GameObject vignette="darkness: 0.7"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -237,7 +237,7 @@ describe('Postprocessing XML Parsing', () => {
 
       const defaults = PostprocessingPlugin.config!.defaults!.bloom;
 
-      const xml = '<root><entity bloom="intensity: 3.0"></entity></root>';
+      const xml = '<root><GameObject bloom="intensity: 3.0"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -258,7 +258,7 @@ describe('Postprocessing XML Parsing', () => {
       const defaults = PostprocessingPlugin.config!.defaults!.tonemapping;
 
       const xml =
-        '<root><entity tonemapping="mode: reinhard2"></entity></root>';
+        '<root><GameObject tonemapping="mode: reinhard2"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -275,7 +275,7 @@ describe('Postprocessing XML Parsing', () => {
       const defaults = PostprocessingPlugin.config!.defaults!.depthOfField;
 
       const xml =
-        '<root><entity depth-of-field="focus-distance: 15"></entity></root>';
+        '<root><GameObject depth-of-field="focus-distance: 15"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -293,7 +293,7 @@ describe('Postprocessing XML Parsing', () => {
 
       const defaults = PostprocessingPlugin.config!.defaults!.dithering;
 
-      const xml = '<root><entity dithering="color-bits: 8"></entity></root>';
+      const xml = '<root><GameObject dithering="color-bits: 8"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -310,7 +310,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity vignette="darkness: 0.6; offset: 0.2"></entity></root>';
+        '<root><GameObject vignette="darkness: 0.6; offset: 0.2"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 
@@ -326,7 +326,7 @@ describe('Postprocessing XML Parsing', () => {
       state.registerPlugin(PostprocessingPlugin);
 
       const xml =
-        '<root><entity vignette="darkness: 0.5" bloom="intensity: 1.2" tonemapping="mode: aces-filmic"></entity></root>';
+        '<root><GameObject vignette="darkness: 0.5" bloom="intensity: 1.2" tonemapping="mode: aces-filmic"></GameObject></root>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
 

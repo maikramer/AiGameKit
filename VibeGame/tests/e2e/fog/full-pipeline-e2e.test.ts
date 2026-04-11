@@ -19,8 +19,8 @@ describe('E2E: Fog Full Pipeline', () => {
     await state.initializePlugins();
   });
 
-  it('should parse <fog> with defaults from XML and run systems', () => {
-    parseWorldXml(state, `<fog></fog>`);
+  it('should parse <Fog> with defaults from XML and run systems', () => {
+    parseWorldXml(state, `<Fog></Fog>`);
 
     const fogQuery = defineQuery([Fog]);
     const fogEntities = fogQuery(state.world);
@@ -46,7 +46,7 @@ describe('E2E: Fog Full Pipeline', () => {
   it('should parse exponential fog with custom density', () => {
     parseWorldXml(
       state,
-      `<fog mode="exponential" density="0.05" color="#88ccee"></fog>`
+      `<Fog mode="exponential" density="0.05" color="#88ccee"></Fog>`
     );
 
     const fogQuery = defineQuery([Fog]);
@@ -60,7 +60,7 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should parse linear fog with near and far', () => {
-    parseWorldXml(state, `<fog mode="linear" near="5" far="200"></fog>`);
+    parseWorldXml(state, `<Fog mode="linear" near="5" far="200"></Fog>`);
 
     const eid = defineQuery([Fog])(state.world)[0];
 
@@ -74,7 +74,7 @@ describe('E2E: Fog Full Pipeline', () => {
   it('should parse exponential-squared fog', () => {
     parseWorldXml(
       state,
-      `<fog mode="exponential-squared" density="0.1"></fog>`
+      `<Fog mode="exponential-squared" density="0.1"></Fog>`
     );
 
     const eid = defineQuery([Fog])(state.world)[0];
@@ -87,9 +87,9 @@ describe('E2E: Fog Full Pipeline', () => {
   it('should parse fog with all attributes', () => {
     parseWorldXml(
       state,
-      `<fog mode="linear" density="0.08" near="2" far="150" color="#ff8800"
+      `<Fog mode="linear" density="0.08" near="2" far="150" color="#ff8800"
            height-falloff="3" base-height="-2" volumetric-strength="0.7"
-           quality="high" noise-scale="2"></fog>`
+           quality="high" noise-scale="2"></Fog>`
     );
 
     const eid = defineQuery([Fog])(state.world)[0];
@@ -112,10 +112,10 @@ describe('E2E: Fog Full Pipeline', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
-        renderer="shape: box; size: 10 1 10; color: 0x90ee90"
+        rigidbody="pos: 0 -0.5 0"
+        meshRenderer="shape: box; size: 10 1 10; color: 0x90ee90"
         collider="shape: box; size: 10 1 10" />
-      <fog mode="exponential" density="0.02"></fog>
+      <Fog mode="exponential" density="0.02"></Fog>
     `
     );
 
@@ -135,7 +135,7 @@ describe('E2E: Fog Full Pipeline', () => {
   it('should keep fog component data stable across simulation steps', () => {
     parseWorldXml(
       state,
-      `<fog mode="linear" near="10" far="300" density="0.04"></fog>`
+      `<Fog mode="linear" near="10" far="300" density="0.04"></Fog>`
     );
 
     const eid = defineQuery([Fog])(state.world)[0];
@@ -154,8 +154,8 @@ describe('E2E: Fog Full Pipeline', () => {
     expect(Fog.density[eid]).toBeCloseTo(initialDensity);
   });
 
-  it('should parse self-closing <fog/> element', () => {
-    parseWorldXml(state, `<fog/>`);
+  it('should parse self-closing <Fog/> element', () => {
+    parseWorldXml(state, `<Fog/>`);
 
     const fogEntities = defineQuery([Fog])(state.world);
     expect(fogEntities.length).toBeGreaterThanOrEqual(1);
@@ -164,7 +164,7 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should parse fog with quality=low', () => {
-    parseWorldXml(state, `<fog quality="low" density="0.03"></fog>`);
+    parseWorldXml(state, `<Fog quality="low" density="0.03"></Fog>`);
 
     const eid = defineQuery([Fog])(state.world)[0];
     expect(Fog.quality[eid]).toBe(0);
@@ -173,7 +173,7 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should parse fog with quality=medium', () => {
-    parseWorldXml(state, `<fog quality="medium"></fog>`);
+    parseWorldXml(state, `<Fog quality="medium"></Fog>`);
 
     const eid = defineQuery([Fog])(state.world)[0];
     expect(Fog.quality[eid]).toBe(1);
@@ -182,7 +182,7 @@ describe('E2E: Fog Full Pipeline', () => {
   });
 
   it('should parse fog with quality=high', () => {
-    parseWorldXml(state, `<fog quality="high"></fog>`);
+    parseWorldXml(state, `<Fog quality="high"></Fog>`);
 
     const eid = defineQuery([Fog])(state.world)[0];
     expect(Fog.quality[eid]).toBe(2);

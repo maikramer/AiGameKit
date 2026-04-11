@@ -14,14 +14,14 @@ import { EntityScriptPlugin } from '../../../src/plugins/entity-script/plugin';
 import { GltfXmlPlugin } from '../../../src/plugins/gltf-xml/plugin';
 import { TransformsPlugin } from '../../../src/plugins/transforms';
 
-describe('entity-script', () => {
+describe('MonoBehaviour', () => {
   it('expandShorthands maps script= to entity-script file for gltf-load', () => {
     const state = new State();
     state.registerPlugin(TransformsPlugin);
     state.registerPlugin(GltfXmlPlugin);
     state.registerPlugin(EntityScriptPlugin);
 
-    const recipe = state.getRecipe('gltf-load');
+    const recipe = state.getRecipe('GLTFLoader');
     expect(recipe).toBeDefined();
 
     const expanded = expandShorthands(
@@ -33,7 +33,7 @@ describe('entity-script', () => {
       state
     );
 
-    expect(expanded['entity-script']).toBe('file: cristal.ts');
+    expect(expanded['mono-behaviour']).toBe('file: cristal.ts');
   });
 
   it('createEntityFromRecipe with script stores file and adds EntityScript', () => {
@@ -42,7 +42,7 @@ describe('entity-script', () => {
     state.registerPlugin(GltfXmlPlugin);
     state.registerPlugin(EntityScriptPlugin);
 
-    const eid = createEntityFromRecipe(state, 'gltf-load', {
+    const eid = createEntityFromRecipe(state, 'GLTFLoader', {
       url: '/assets/m.glb',
       transform: 'pos: 0 0 0',
       script: 'cristal.ts',

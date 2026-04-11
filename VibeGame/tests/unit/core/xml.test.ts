@@ -19,21 +19,21 @@ describe('XML Parser', () => {
   describe('XMLParser.parse', () => {
     it('should parse XML string into element tree', () => {
       const xml = `
-        <world>
-          <entity pos="0 1 0" euler="0 45 0">
+        <Scene>
+          <GameObject pos="0 1 0" euler="0 45 0">
             <box size="1 1 1" color="#ff0000"></box>
             <rigidbody type="dynamic"></rigidbody>
-          </entity>
-        </world>
+          </GameObject>
+        </Scene>
       `;
 
       const result = XMLParser.parse(xml);
 
-      expect(result.root.tagName).toBe('world');
+      expect(result.root.tagName).toBe('Scene');
       expect(result.root.children.length).toBe(1);
 
       const entity = result.root.children[0];
-      expect(entity.tagName).toBe('entity');
+      expect(entity.tagName).toBe('GameObject');
       expect(entity.attributes.pos).toEqual({ x: 0, y: 1, z: 0 });
       expect(entity.attributes.euler).toEqual({ x: 0, y: 45, z: 0 });
 
@@ -138,11 +138,11 @@ describe('XML Parser', () => {
     it('should traverse all elements in tree', () => {
       const xml = `
         <root>
-          <entity>
+          <GameObject>
             <child1></child1>
             <child2></child2>
-          </entity>
-          <entity></entity>
+          </GameObject>
+          <GameObject></GameObject>
         </root>
       `;
 
@@ -155,7 +155,7 @@ describe('XML Parser', () => {
         },
       });
 
-      expect(visited).toEqual(['entity', 'child1', 'child2', 'entity']);
+      expect(visited).toEqual(['GameObject', 'child1', 'child2', 'GameObject']);
     });
 
     it('should handle single element', () => {
@@ -173,13 +173,13 @@ describe('XML Parser', () => {
     });
 
     it('should provide access to element attributes', () => {
-      const xml = '<root><entity id="test" value="42"></entity></root>';
+      const xml = '<root><GameObject id="test" value="42"></GameObject></root>';
       const result = XMLParser.parse(xml);
       const attributes: Array<Record<string, any>> = [];
 
       traverseElements(result.root, {
         onElement: (element) => {
-          if (element.tagName === 'entity') {
+          if (element.tagName === 'GameObject') {
             attributes.push(element.attributes);
           }
         },
@@ -195,10 +195,10 @@ describe('XML Parser', () => {
     it('should find elements matching predicate', () => {
       const xml = `
         <root>
-          <entity type="player"></entity>
-          <entity type="enemy"></entity>
+          <GameObject type="player"></GameObject>
+          <GameObject type="enemy"></GameObject>
           <box></box>
-          <entity type="enemy"></entity>
+          <GameObject type="enemy"></GameObject>
         </root>
       `;
 
@@ -216,9 +216,9 @@ describe('XML Parser', () => {
     it('should find elements by tag name', () => {
       const xml = `
         <root>
-          <entity></entity>
+          <GameObject></GameObject>
           <box></box>
-          <entity></entity>
+          <GameObject></GameObject>
           <sphere></sphere>
         </root>
       `;
@@ -226,12 +226,12 @@ describe('XML Parser', () => {
       const result = XMLParser.parse(xml);
       const entities = findElements(
         result.root,
-        (el) => el.tagName === 'entity'
+        (el) => el.tagName === 'GameObject'
       );
 
       expect(entities.length).toBe(2);
-      expect(entities[0].tagName).toBe('entity');
-      expect(entities[1].tagName).toBe('entity');
+      expect(entities[0].tagName).toBe('GameObject');
+      expect(entities[1].tagName).toBe('GameObject');
     });
 
     it('should find nested elements', () => {
@@ -257,7 +257,7 @@ describe('XML Parser', () => {
     });
 
     it('should return empty array when no matches', () => {
-      const xml = '<root><entity></entity></root>';
+      const xml = '<root><GameObject></GameObject></root>';
       const result = XMLParser.parse(xml);
       const notFound = findElements(
         result.root,

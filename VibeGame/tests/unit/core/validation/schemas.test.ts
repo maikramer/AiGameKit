@@ -249,9 +249,9 @@ describe('Validation Schemas', () => {
         shape: 'box',
         size: '1 1 1',
         color: '#ffffff',
-        body: 'type: dynamic; mass: 10',
+        rigidbody: 'type: dynamic; mass: 10',
       });
-      expect(result.body).toBe('type: dynamic; mass: 10');
+      expect(result.rigidbody).toBe('type: dynamic; mass: 10');
     });
   });
 

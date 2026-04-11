@@ -7,11 +7,11 @@ export const Text3dPlugin: Plugin = {
   recipes: [text3dRecipe],
   systems: [Text3dLoadSystem, Text3dCleanupSystem],
   components: {
-    text3dModel: TextMesh,
+    textMesh: TextMesh,
   },
   config: {
     adapters: {
-      text3dModel: {
+      textMesh: {
         url: ((entity, value, _state) => {
           setText3dUrl(entity, value as string);
           TextMesh.pending[entity] = 1;
@@ -19,7 +19,7 @@ export const Text3dPlugin: Plugin = {
       },
     },
     defaults: {
-      text3dModel: {
+      textMesh: {
         pending: 0,
         scale: 1,
         tint: 0,

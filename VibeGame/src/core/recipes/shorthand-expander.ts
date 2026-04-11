@@ -1,3 +1,4 @@
+import { toKebabCase } from '../utils/naming';
 import type { Component, Recipe, State, XMLValue } from '../';
 
 export function expandShorthands(
@@ -34,9 +35,11 @@ export function expandShorthands(
       ? [key]
       : [...presentComponents];
     if (!keyComponent) {
+      const normalized = new Set(targetComponents.map(toKebabCase));
       for (const c of state.config.getComponentNamesForShorthandKey(key)) {
-        if (!targetComponents.includes(c)) {
+        if (!normalized.has(toKebabCase(c))) {
           targetComponents.push(c);
+          normalized.add(toKebabCase(c));
         }
       }
     }

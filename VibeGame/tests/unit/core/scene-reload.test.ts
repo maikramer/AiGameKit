@@ -19,7 +19,7 @@ describe("Scene reload", () => {
 
   describe("state.xmlSource", () => {
     it("stores XML source string on state", () => {
-      const xml = "<world><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
       state.xmlSource = xml;
@@ -33,7 +33,7 @@ describe("Scene reload", () => {
 
   describe("Scene.reload", () => {
     it("destroys all entities and re-parses XML from xmlSource", () => {
-      const xml = "<world><entity></entity><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -49,7 +49,7 @@ describe("Scene reload", () => {
     });
 
     it("fires OnDestroy callbacks for all entities before destruction", () => {
-      const xml = "<world><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -72,7 +72,7 @@ describe("Scene reload", () => {
     it("stops all coroutines during reload", () => {
       state.registerSystem(CoroutineRunnerSystem);
 
-      const xml = "<world><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -99,7 +99,7 @@ describe("Scene reload", () => {
       });
       expect(state.getTemplate("test-tpl")).toBeDefined();
 
-      const xml = "<world><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -110,7 +110,7 @@ describe("Scene reload", () => {
     });
 
     it("creates new entities from re-parsed XML", () => {
-      const xml = "<world><entity></entity><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -126,7 +126,7 @@ describe("Scene reload", () => {
     });
 
     it("handles multiple reloads without issues", () => {
-      const xml = "<world><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -146,7 +146,7 @@ describe("Scene reload", () => {
 
   describe("Scene.reloadAsync", () => {
     it("returns a promise that resolves after reload", async () => {
-      const xml = "<world><entity></entity></world>";
+      const xml = "<Scene><GameObject></GameObject></Scene>";
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 

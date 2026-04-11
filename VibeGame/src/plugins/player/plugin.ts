@@ -24,7 +24,7 @@ export const PlayerPlugin: Plugin = {
   ],
   recipes: [playerRecipe, playerGltfRecipe],
   components: {
-    player: PlayerController,
+    playerController: PlayerController,
     playerGltfConfig: PlayerGltfConfig,
   },
   config: {
@@ -34,7 +34,7 @@ export const PlayerPlugin: Plugin = {
       },
     },
     defaults: {
-      player: {
+      playerController: {
         speed: 5.3,
         jumpHeight: 2.3,
         rotationSpeed: 10,

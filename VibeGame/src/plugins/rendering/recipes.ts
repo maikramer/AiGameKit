@@ -1,16 +1,16 @@
 import type { Recipe } from '../../core';
 
 export const rendererRecipe: Recipe = {
-  name: 'renderer',
-  components: ['transform', 'renderer'],
+  name: 'MeshRenderer',
+  components: ['transform', 'meshRenderer'],
 };
 
 export const pointLightRecipe: Recipe = {
-  name: 'point-light',
+  name: 'PointLight',
   components: ['transform', 'pointLight'],
 };
 
 export const spotLightRecipe: Recipe = {
-  name: 'spot-light',
+  name: 'SpotLight',
   components: ['transform', 'spotLight'],
 };

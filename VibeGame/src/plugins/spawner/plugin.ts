@@ -15,8 +15,8 @@ export const SpawnerPlugin: Plugin = {
   },
   config: {
     parsers: {
-      'spawn-group': spawnGroupParser,
-      entity: entityParser,
+      SpawnGroup: spawnGroupParser,
+      GameObject: entityParser,
     },
     defaults: {
       spawnerPending: {

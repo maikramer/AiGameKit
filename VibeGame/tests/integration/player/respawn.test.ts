@@ -39,7 +39,7 @@ describe('Respawn Plugin', () => {
 
   describe('XML Declarative Usage', () => {
     it('should automatically include respawn in player recipe', () => {
-      const xml = '<world><player pos="0 5 0"></player></world>';
+      const xml = '<Scene><Player pos="0 5 0"></Player></Scene>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -51,7 +51,7 @@ describe('Respawn Plugin', () => {
     });
 
     it('should respawn player when falling below threshold', () => {
-      const xml = '<world><player pos="0 5 0"></player></world>';
+      const xml = '<Scene><Player pos="0 5 0"></Player></Scene>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -81,7 +81,7 @@ describe('Respawn Plugin', () => {
     });
 
     it('should set respawn position separately from transform', () => {
-      const xml = '<player pos="5 3 -2" respawn="pos: 10 15 20"></player>';
+      const xml = '<Player pos="5 3 -2" respawn="pos: 10 15 20"></Player>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
@@ -344,7 +344,7 @@ describe('Respawn Plugin', () => {
 
   describe('Multiple Entities', () => {
     it('should handle multiple entities independently', () => {
-      const xml = '<player pos="0 5 0"></player>';
+      const xml = '<Player pos="0 5 0"></Player>';
       const parsed = XMLParser.parse(xml);
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;

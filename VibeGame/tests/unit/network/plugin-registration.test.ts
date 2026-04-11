@@ -14,9 +14,9 @@ describe('NetworkPlugin Registration', () => {
     state.registerPlugin(NetworkPlugin);
   });
 
-  it('should have a recipe named "networked-player" with components ["transform", "networked", "networkBuffer"]', () => {
+  it('should have a recipe named "NetworkedPlayer" with components ["transform", "networked", "networkBuffer"]', () => {
     expect(NetworkPlugin.recipes!).toHaveLength(1);
-    expect(NetworkPlugin.recipes![0].name).toBe('networked-player');
+    expect(NetworkPlugin.recipes![0].name).toBe('NetworkedPlayer');
     expect(NetworkPlugin.recipes![0].components).toEqual([
       'transform',
       'networked',
@@ -37,7 +37,7 @@ describe('NetworkPlugin Registration', () => {
   });
 
   it('should register the networked-player recipe', () => {
-    const recipe = state.getRecipe('networked-player');
+    const recipe = state.getRecipe('NetworkedPlayer');
     expect(recipe).toBeDefined();
     expect(recipe?.components).toContain('networked');
     expect(recipe?.components).toContain('networkBuffer');

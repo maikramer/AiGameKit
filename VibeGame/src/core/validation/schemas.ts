@@ -148,13 +148,13 @@ export const playerComponentSchema = z
 export const entityRecipeSchema = z
   .object({
     transform: z.union([z.string(), transformComponentSchema]).optional(),
-    body: z.union([z.string(), bodyComponentSchema]).optional(),
+    rigidbody: z.union([z.string(), bodyComponentSchema]).optional(),
     collider: z.union([z.string(), colliderComponentSchema]).optional(),
-    renderer: z.union([z.string(), rendererComponentSchema]).optional(),
+    meshRenderer: z.union([z.string(), rendererComponentSchema]).optional(),
     'orbit-camera': z
       .union([z.string(), orbitCameraComponentSchema])
       .optional(),
-    player: z.union([z.string(), playerComponentSchema]).optional(),
+    playerController: z.union([z.string(), playerComponentSchema]).optional(),
 
     pos: vector3Schema.optional(),
     scale: vector3Schema.optional(),
@@ -176,7 +176,7 @@ export const staticPartRecipeSchema = z
 
     transform: z.union([z.string(), transformComponentSchema]).optional(),
     collider: z.union([z.string(), colliderComponentSchema]).optional(),
-    renderer: z.union([z.string(), rendererComponentSchema]).optional(),
+    meshRenderer: z.union([z.string(), rendererComponentSchema]).optional(),
 
     scale: vector3Schema.optional(),
     euler: vector3Schema.optional(),
@@ -196,9 +196,9 @@ export const dynamicPartRecipeSchema = z
     color: colorSchema,
 
     transform: z.union([z.string(), transformComponentSchema]).optional(),
-    body: z.union([z.string(), bodyComponentSchema]).optional(),
+    rigidbody: z.union([z.string(), bodyComponentSchema]).optional(),
     collider: z.union([z.string(), colliderComponentSchema]).optional(),
-    renderer: z.union([z.string(), rendererComponentSchema]).optional(),
+    meshRenderer: z.union([z.string(), rendererComponentSchema]).optional(),
 
     scale: vector3Schema.optional(),
     euler: vector3Schema.optional(),
@@ -219,9 +219,9 @@ export const kinematicPartRecipeSchema = z
     color: colorSchema,
 
     transform: z.union([z.string(), transformComponentSchema]).optional(),
-    body: z.union([z.string(), bodyComponentSchema]).optional(),
+    rigidbody: z.union([z.string(), bodyComponentSchema]).optional(),
     collider: z.union([z.string(), colliderComponentSchema]).optional(),
-    renderer: z.union([z.string(), rendererComponentSchema]).optional(),
+    meshRenderer: z.union([z.string(), rendererComponentSchema]).optional(),
 
     scale: vector3Schema.optional(),
     euler: vector3Schema.optional(),
@@ -241,9 +241,9 @@ export const playerRecipeSchema = z
     'air-control': numberSchema.optional(),
 
     transform: z.union([z.string(), transformComponentSchema]).optional(),
-    body: z.union([z.string(), bodyComponentSchema]).optional(),
+    rigidbody: z.union([z.string(), bodyComponentSchema]).optional(),
     collider: z.union([z.string(), colliderComponentSchema]).optional(),
-    player: z.union([z.string(), playerComponentSchema]).optional(),
+    playerController: z.union([z.string(), playerComponentSchema]).optional(),
 
     id: z.string().optional(),
   })
@@ -443,22 +443,22 @@ export const sequenceElementSchema = z
   .strict();
 
 export const recipeSchemas = {
-  entity: entityRecipeSchema,
+  GameObject: entityRecipeSchema,
   'static-part': staticPartRecipeSchema,
   'dynamic-part': dynamicPartRecipeSchema,
   'kinematic-part': kinematicPartRecipeSchema,
-  player: playerRecipeSchema,
-  'player-gltf': playerGltfRecipeSchema,
+  Player: playerRecipeSchema,
+  PlayerGLTF: playerGltfRecipeSchema,
   camera: cameraRecipeSchema,
-  'orbit-camera': cameraRecipeSchema,
-  'follow-camera': followCameraRecipeSchema,
-  world: worldRecipeSchema,
-  sky: skyRecipeSchema,
-  'audio-clip': audioClipRecipeSchema,
-  fog: fogRecipeSchema,
-  tween: tweenElementSchema,
+  OrbitCamera: cameraRecipeSchema,
+  FollowCamera: followCameraRecipeSchema,
+  Scene: worldRecipeSchema,
+  Skybox: skyRecipeSchema,
+  AudioSource: audioClipRecipeSchema,
+  Fog: fogRecipeSchema,
+  Tween: tweenElementSchema,
   pause: pauseElementSchema,
-  sequence: sequenceElementSchema,
+  Sequence: sequenceElementSchema,
 } as const;
 
 export type RecipeSchemas = typeof recipeSchemas;

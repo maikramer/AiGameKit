@@ -28,12 +28,12 @@ describe('E2E: XML World Parsing', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
-        renderer="shape: box; size: 10 1 10; color: 0x90ee90"
+        rigidbody="pos: 0 -0.5 0"
+        meshRenderer="shape: box; size: 10 1 10; color: 0x90ee90"
         collider="shape: box; size: 10 1 10" />
       <static-part
-        body="pos: 5 0 0"
-        renderer="shape: box; size: 2 2 2; color: 0x87ceeb" />
+        rigidbody="pos: 5 0 0"
+        meshRenderer="shape: box; size: 2 2 2; color: 0x87ceeb" />
     `
     );
 
@@ -48,11 +48,11 @@ describe('E2E: XML World Parsing', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
+        rigidbody="pos: 0 -0.5 0"
         collider="shape: box; size: 20 1 20" />
       <dynamic-part
-        body="pos: 0 5 0; vel: 0 -1 0"
-        renderer="shape: sphere; size: 1; color: 0xff0000"
+        rigidbody="pos: 0 5 0; vel: 0 -1 0"
+        meshRenderer="shape: sphere; size: 1; color: 0xff0000"
         collider="shape: sphere; radius: 1" />
     `
     );
@@ -70,14 +70,14 @@ describe('E2E: XML World Parsing', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
+        rigidbody="pos: 0 -0.5 0"
         collider="shape: box; size: 30 1 30" />
       <static-part
-        body="pos: 3 0.5 0"
-        renderer="shape: box; size: 1 1 1; color: 0xffff00" />
+        rigidbody="pos: 3 0.5 0"
+        meshRenderer="shape: box; size: 1 1 1; color: 0xffff00" />
       <static-part
-        body="pos: -3 0.5 0"
-        renderer="shape: box; size: 1 2 1; color: 0xff8800" />
+        rigidbody="pos: -3 0.5 0"
+        meshRenderer="shape: box; size: 1 2 1; color: 0xff8800" />
     `
     );
 
@@ -108,11 +108,11 @@ describe('E2E: XML World Parsing', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
+        rigidbody="pos: 0 -0.5 0"
         collider="shape: box; size: 20 1 20" />
       <dynamic-part
-        body="pos: 0 10 0"
-        renderer="shape: sphere; size: 1; color: 0xff0000"
+        rigidbody="pos: 0 10 0"
+        meshRenderer="shape: sphere; size: 1; color: 0xff0000"
         collider="shape: sphere; radius: 1" />
     `
     );
@@ -130,7 +130,7 @@ describe('E2E: XML World Parsing', () => {
       state,
       `
       <static-part
-        body="pos: 0 -0.5 0"
+        rigidbody="pos: 0 -0.5 0"
         collider="shape: box; size: 20 1 20" />
     `
     );

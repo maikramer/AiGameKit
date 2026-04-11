@@ -14,7 +14,7 @@ describe('XML to Fog Component Integration', () => {
     global.DOMParser = dom.window.DOMParser;
   });
 
-  it('should parse <fog> XML attributes into Fog component fields', () => {
+  it('should parse <Fog> XML attributes into Fog component fields', () => {
     const attributes = {
       mode: 'exponential',
       color: '#aabbcc',
@@ -28,7 +28,7 @@ describe('XML to Fog Component Integration', () => {
       'noise-scale': '1.5',
     };
 
-    const result = validateRecipeAttributes('fog', attributes);
+    const result = validateRecipeAttributes('Fog', attributes);
     expect(result.mode).toBe('exponential');
     expect(result.color).toBe(0xaabbcc);
     expect(result.density).toBeCloseTo(0.02);
@@ -41,8 +41,8 @@ describe('XML to Fog Component Integration', () => {
     expect(result['noise-scale']).toBeCloseTo(1.5);
   });
 
-  it('should validate <fog> tag via validateXMLContent', () => {
-    const xml = `<fog mode="exponential" color="#aabbcc" density="0.02"></fog>`;
+  it('should validate <Fog> tag via validateXMLContent', () => {
+    const xml = `<Fog mode="exponential" color="#aabbcc" density="0.02"></Fog>`;
     const result = validateXMLContent(xml);
     expect(result.success).toBe(true);
   });
@@ -58,7 +58,7 @@ describe('XML to Fog Component Integration', () => {
       'noise-scale': '2.0',
     };
 
-    const result = validateRecipeAttributes('fog', attributes);
+    const result = validateRecipeAttributes('Fog', attributes);
     expect(typeof result.density).toBe('number');
     expect(result.density).toBeCloseTo(0.02);
     expect(typeof result.near).toBe('number');
@@ -76,88 +76,88 @@ describe('XML to Fog Component Integration', () => {
   });
 
   it('should parse hex color #aabbcc to integer', () => {
-    const result = validateRecipeAttributes('fog', { color: '#aabbcc' });
+    const result = validateRecipeAttributes('Fog', { color: '#aabbcc' });
     expect(result.color).toBe(0xaabbcc);
   });
 
   it('should parse 0x-prefixed color to integer', () => {
-    const result = validateRecipeAttributes('fog', { color: '0xff8800' });
+    const result = validateRecipeAttributes('Fog', { color: '0xff8800' });
     expect(result.color).toBe(0xff8800);
   });
 
   it('should reject invalid color format', () => {
-    expect(() => validateRecipeAttributes('fog', { color: 'red' })).toThrow();
+    expect(() => validateRecipeAttributes('Fog', { color: 'red' })).toThrow();
   });
 
   it('should reject negative density', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { density: '-0.01' })
+      validateRecipeAttributes('Fog', { density: '-0.01' })
     ).toThrow();
   });
 
   it('should reject negative near', () => {
-    expect(() => validateRecipeAttributes('fog', { near: '-1' })).toThrow();
+    expect(() => validateRecipeAttributes('Fog', { near: '-1' })).toThrow();
   });
 
   it('should reject negative far', () => {
-    expect(() => validateRecipeAttributes('fog', { far: '-10' })).toThrow();
+    expect(() => validateRecipeAttributes('Fog', { far: '-10' })).toThrow();
   });
 
   it('should reject negative height-falloff', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { 'height-falloff': '-1' })
+      validateRecipeAttributes('Fog', { 'height-falloff': '-1' })
     ).toThrow();
   });
 
   it('should reject volumetric-strength above 1', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { 'volumetric-strength': '1.5' })
+      validateRecipeAttributes('Fog', { 'volumetric-strength': '1.5' })
     ).toThrow();
   });
 
   it('should reject volumetric-strength below 0', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { 'volumetric-strength': '-0.1' })
+      validateRecipeAttributes('Fog', { 'volumetric-strength': '-0.1' })
     ).toThrow();
   });
 
   it('should reject negative noise-scale', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { 'noise-scale': '-0.5' })
+      validateRecipeAttributes('Fog', { 'noise-scale': '-0.5' })
     ).toThrow();
   });
 
   it('should reject near >= far via refine', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { near: '100', far: '10' })
+      validateRecipeAttributes('Fog', { near: '100', far: '10' })
     ).toThrow(/far.*greater.*near/);
   });
 
   it('should reject near === far via refine', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { near: '50', far: '50' })
+      validateRecipeAttributes('Fog', { near: '50', far: '50' })
     ).toThrow(/far.*greater.*near/);
   });
 
   it('should accept valid near < far', () => {
-    const result = validateRecipeAttributes('fog', { near: '10', far: '100' });
+    const result = validateRecipeAttributes('Fog', { near: '10', far: '100' });
     expect(result.near).toBe(10);
     expect(result.far).toBe(100);
   });
 
   it('should accept near without far', () => {
-    const result = validateRecipeAttributes('fog', { near: '5' });
+    const result = validateRecipeAttributes('Fog', { near: '5' });
     expect(result.near).toBe(5);
   });
 
   it('should accept far without near', () => {
-    const result = validateRecipeAttributes('fog', { far: '200' });
+    const result = validateRecipeAttributes('Fog', { far: '200' });
     expect(result.far).toBe(200);
   });
 
   it('should reject unknown attributes (strict mode)', () => {
     expect(() =>
-      validateRecipeAttributes('fog', { unknown: 'value' })
+      validateRecipeAttributes('Fog', { unknown: 'value' })
     ).toThrow();
   });
 
@@ -166,7 +166,7 @@ describe('XML to Fog Component Integration', () => {
     state.registerPlugin(FogPlugin);
 
     const xml =
-      '<root><fog mode="linear" density="0.05" near="5" far="200" color="#88ccee"></fog></root>';
+      '<root><Fog mode="linear" density="0.05" near="5" far="200" color="#88ccee"></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -183,7 +183,7 @@ describe('XML to Fog Component Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><fog></fog></root>';
+    const xml = '<root><Fog></Fog></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

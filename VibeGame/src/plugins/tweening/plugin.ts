@@ -45,20 +45,20 @@ export const TweenPlugin: Plugin = {
     TransformShaker,
   },
   recipes: [
-    { name: 'tween', components: [], parserOnlyAsChild: true },
+    { name: 'Tween', components: [], parserOnlyAsChild: true },
     {
-      name: 'sequence',
+      name: 'Sequence',
       components: [],
       parserOwnsChildren: true,
       parserOnlyAsChild: true,
     },
-    { name: 'shaker', components: [], parserOnlyAsChild: true },
+    { name: 'Shaker', components: [], parserOnlyAsChild: true },
   ],
   config: {
     parsers: {
-      tween: tweenParser,
-      sequence: sequenceParser,
-      shaker: shakerParser,
+      Tween: tweenParser,
+      Sequence: sequenceParser,
+      Shaker: shakerParser,
     },
   },
 };

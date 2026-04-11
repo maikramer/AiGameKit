@@ -10,7 +10,7 @@ describe('State Recipe Methods', () => {
   });
 
   it('should create entity using state.createFromRecipe method', () => {
-    const entity = state.createFromRecipe('entity');
+    const entity = state.createFromRecipe('GameObject');
     expect(entity).toBeGreaterThanOrEqual(0);
     expect(state.exists(entity)).toBe(true);
   });

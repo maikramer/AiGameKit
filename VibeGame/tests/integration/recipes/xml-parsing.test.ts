@@ -15,7 +15,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should create entities from XML', () => {
-    const xml = '<root><entity></entity></root>';
+    const xml = '<root><GameObject></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -38,10 +38,10 @@ describe('XML Recipe Integration', () => {
 
     const xml = `
       <root>
-        <entity>
-          <entity></entity>
-          <entity></entity>
-        </entity>
+        <GameObject>
+          <GameObject></GameObject>
+          <GameObject></GameObject>
+        </GameObject>
       </root>
     `;
 
@@ -98,11 +98,11 @@ describe('XML Recipe Integration', () => {
 
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
-      name: 'entity',
+      name: 'GameObject',
       components: [],
     });
 
-    const xml = '<root><entity test="value: 42; pos: 1 2 3"></entity></root>';
+    const xml = '<root><GameObject test="value: 42; pos: 1 2 3"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -122,11 +122,11 @@ describe('XML Recipe Integration', () => {
 
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
-      name: 'entity',
+      name: 'GameObject',
       components: ['test'],
     });
 
-    const xml = '<root><entity test.value="42"></entity></root>';
+    const xml = '<root><GameObject test.value="42"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -151,9 +151,9 @@ describe('XML Recipe Integration', () => {
 
     const xml = `
       <root>
-        <entity>
+        <GameObject>
           <custom></custom>
-        </entity>
+        </GameObject>
       </root>
     `;
 
@@ -172,7 +172,7 @@ describe('XML Recipe Integration', () => {
       shape: Types.i8,
     });
 
-    state.registerComponent('renderer', MeshRenderer);
+    state.registerComponent('meshRenderer', MeshRenderer);
     state.registerConfig({
       shorthands: {
         renderer: {
@@ -191,7 +191,7 @@ describe('XML Recipe Integration', () => {
     });
 
     const xml =
-      '<root><entity size="2 3 4" renderer="shape: 1"></entity></root>';
+      '<root><GameObject size="2 3 4" meshRenderer="shape: 1"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -211,9 +211,9 @@ describe('XML Recipe Integration', () => {
       sizeZ: Types.f32,
     });
 
-    state.registerComponent('renderer', MeshRenderer);
+    state.registerComponent('meshRenderer', MeshRenderer);
 
-    const xml = '<root><entity renderer="" size="2 3 4"></entity></root>';
+    const xml = '<root><GameObject meshRenderer="" size="2 3 4"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -232,13 +232,13 @@ describe('XML Recipe Integration', () => {
       warning = msg;
     };
 
-    const xml = '<root><entity my-component="10"></entity></root>';
+    const xml = '<root><GameObject my-component="10"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     parseXMLToEntities(state, parsed.root);
 
     expect(warning).toContain('Unknown attribute "my-component"');
-    expect(warning).toContain('[entity]');
+    expect(warning).toContain('[GameObject]');
 
     const MyComponent = defineComponent({ value: Types.f32 });
     state.registerComponent('my-component', MyComponent);
@@ -249,7 +249,7 @@ describe('XML Recipe Integration', () => {
     });
 
     warning = '';
-    const xml2 = '<root><entity my-component="value: 20"></entity></root>';
+    const xml2 = '<root><GameObject my-component="value: 20"></GameObject></root>';
     const parsed2 = XMLParser.parse(xml2);
     const entities = parseXMLToEntities(state, parsed2.root);
 
@@ -263,7 +263,7 @@ describe('XML Recipe Integration', () => {
   it('should handle component registration before and after recipe registration', () => {
     const MyComponent = defineComponent({ value: Types.f32 });
 
-    const xml = '<root><entity my-component="value: 42"></entity></root>';
+    const xml = '<root><GameObject my-component="value: 42"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const consoleWarnSpy = console.warn;
@@ -306,7 +306,7 @@ describe('XML Recipe Integration', () => {
       },
     });
 
-    const xml = '<root><entity transform="scale: 2"></entity></root>';
+    const xml = '<root><GameObject transform="scale: 2"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -343,7 +343,7 @@ describe('XML Recipe Integration', () => {
       },
     });
 
-    const xml = '<root><entity transform="euler: 0 90 0"></entity></root>';
+    const xml = '<root><GameObject transform="euler: 0 90 0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -384,7 +384,7 @@ describe('XML Recipe Integration', () => {
       },
     });
 
-    const xml = '<root><entity transform="rotation: 0 90 0"></entity></root>';
+    const xml = '<root><GameObject transform="rotation: 0 90 0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -434,7 +434,7 @@ describe('XML Recipe Integration', () => {
     });
 
     const xml =
-      '<root><entity transform="pos: 0 5 0; euler: 0 45 0; scale: 1.5"></entity></root>';
+      '<root><GameObject transform="pos: 0 5 0; euler: 0 45 0; scale: 1.5"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -456,10 +456,10 @@ describe('XML Recipe Integration', () => {
       type: Types.i8,
     });
 
-    state.registerComponent('body', Rigidbody);
+    state.registerComponent('rigidbody', Rigidbody);
     state.registerConfig({
       enums: {
-        body: {
+        rigidbody: {
           type: {
             static: 0,
             dynamic: 1,
@@ -468,13 +468,13 @@ describe('XML Recipe Integration', () => {
         },
       },
       defaults: {
-        body: {
+        rigidbody: {
           type: 0,
         },
       },
     });
 
-    const xml = '<root><entity body="type: dynamic"></entity></root>';
+    const xml = '<root><GameObject rigidbody="type: dynamic"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -490,11 +490,11 @@ describe('XML Recipe Integration', () => {
       warning = msg;
     };
 
-    const xml = '<root><entity my-component="10"></entity></root>';
+    const xml = '<root><GameObject my-component="10"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
-    expect(warning).toContain('[entity] Unknown attribute "my-component"');
+    expect(warning).toContain('[GameObject] Unknown attribute "my-component"');
     expect(warning).toContain('Available: id, name, parent');
 
     const MyComponent = defineComponent({ value: Types.f32 });
@@ -506,7 +506,7 @@ describe('XML Recipe Integration', () => {
     });
 
     warning = '';
-    const xml2 = '<root><entity my-component="value: 10"></entity></root>';
+    const xml2 = '<root><GameObject my-component="value: 10"></GameObject></root>';
     const parsed2 = XMLParser.parse(xml2);
     const entities = parseXMLToEntities(state, parsed2.root);
 

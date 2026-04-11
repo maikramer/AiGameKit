@@ -90,11 +90,11 @@ describe('Recipe Validation Integration', () => {
         shape: 'sphere',
         size: '1',
         color: '#00ff00',
-        body: 'type: dynamic; mass: 10; linear-damping: 0.5',
+        rigidbody: 'type: dynamic; mass: 10; linear-damping: 0.5',
       };
 
       const result = validateRecipeAttributes('dynamic-part', attributes);
-      expect(result.body).toBe('type: dynamic; mass: 10; linear-damping: 0.5');
+      expect(result.rigidbody).toBe('type: dynamic; mass: 10; linear-damping: 0.5');
     });
   });
 
@@ -138,7 +138,7 @@ describe('Recipe Validation Integration', () => {
         'air-control': 0.3,
       };
 
-      const result = validateRecipeAttributes('player', attributes);
+      const result = validateRecipeAttributes('Player', attributes);
       expect(result.pos).toEqual({ x: 0, y: 1, z: 0 });
       expect(result.speed).toBe(8);
       expect(result['jump-height']).toBe(3);
@@ -149,14 +149,14 @@ describe('Recipe Validation Integration', () => {
     it('should validate component overrides', () => {
       const attributes = {
         transform: 'pos: 10 0 10',
-        body: 'type: dynamic; mass: 80',
-        player: 'speed: 12; jump-height: 5',
+        rigidbody: 'type: dynamic; mass: 80',
+        playerController: 'speed: 12; jump-height: 5',
       };
 
-      const result = validateRecipeAttributes('player', attributes);
+      const result = validateRecipeAttributes('Player', attributes);
       expect(result.transform).toBe('pos: 10 0 10');
-      expect(result.body).toBe('type: dynamic; mass: 80');
-      expect(result.player).toBe('speed: 12; jump-height: 5');
+      expect(result.rigidbody).toBe('type: dynamic; mass: 80');
+      expect(result.playerController).toBe('speed: 12; jump-height: 5');
     });
   });
 
@@ -196,7 +196,7 @@ describe('Recipe Validation Integration', () => {
         gravity: '0 -9.81 0',
       };
 
-      const result = validateRecipeAttributes('world', attributes);
+      const result = validateRecipeAttributes('Scene', attributes);
       expect(result.canvas).toBe('#game-canvas');
       expect(result.sky).toBe(8900331);
       expect(result.gravity).toEqual({ x: 0, y: -9.81, z: 0 });
@@ -207,7 +207,7 @@ describe('Recipe Validation Integration', () => {
         canvas: '#game',
       };
 
-      const result = validateRecipeAttributes('world', attributes);
+      const result = validateRecipeAttributes('Scene', attributes);
       expect(result.canvas).toBe('#game');
     });
   });
@@ -220,7 +220,7 @@ describe('Recipe Validation Integration', () => {
         anotherCustom: 123,
       };
 
-      const result = validateRecipeAttributes('entity', attributes);
+      const result = validateRecipeAttributes('GameObject', attributes);
       expect(result.pos).toEqual({ x: 0, y: 0, z: 0 });
       expect(result.customAttribute).toBe('customValue');
       expect(result.anotherCustom).toBe(123);
@@ -229,12 +229,12 @@ describe('Recipe Validation Integration', () => {
     it('should validate component string syntax', () => {
       const attributes = {
         transform: 'pos: 1 2 3; scale: 2',
-        renderer: 'shape: box; color: 0xff0000',
+        meshRenderer: 'shape: box; color: 0xff0000',
       };
 
-      const result = validateRecipeAttributes('entity', attributes);
+      const result = validateRecipeAttributes('GameObject', attributes);
       expect(result.transform).toBe('pos: 1 2 3; scale: 2');
-      expect(result.renderer).toBe('shape: box; color: 0xff0000');
+      expect(result.meshRenderer).toBe('shape: box; color: 0xff0000');
     });
   });
 
@@ -242,16 +242,16 @@ describe('Recipe Validation Integration', () => {
     it('should validate tween element attributes', () => {
       const attributes = {
         target: 'platform',
-        attr: 'body.pos-x',
+        attr: 'rigidbody.pos-x',
         from: '-5',
         to: '5',
         duration: '3',
         easing: 'ease-in-out',
       };
 
-      const result = validateRecipeAttributes('tween', attributes);
+      const result = validateRecipeAttributes('Tween', attributes);
       expect(result.target).toBe('platform');
-      expect(result.attr).toBe('body.pos-x');
+      expect(result.attr).toBe('rigidbody.pos-x');
       expect(result.from).toBe(-5);
       expect(result.to).toBe(5);
       expect(result.duration).toBe(3);
@@ -267,39 +267,39 @@ describe('Recipe Validation Integration', () => {
         duration: 2,
       };
 
-      const result = validateRecipeAttributes('tween', attributes);
+      const result = validateRecipeAttributes('Tween', attributes);
       expect(result.from).toEqual({ x: 0, y: 0, z: 0 });
       expect(result.to).toEqual({ x: 10, y: 5, z: -3 });
     });
 
     it('should reject missing target', () => {
       const attributes = {
-        attr: 'body.pos-x',
+        attr: 'rigidbody.pos-x',
         to: '5',
       };
 
-      expect(() => validateRecipeAttributes('tween', attributes)).toThrow();
+      expect(() => validateRecipeAttributes('Tween', attributes)).toThrow();
     });
 
     it('should reject invalid easing value', () => {
       const attributes = {
         target: 'cube',
-        attr: 'body.pos-y',
+        attr: 'rigidbody.pos-y',
         to: '5',
         easing: 'invalid-easing',
       };
 
-      expect(() => validateRecipeAttributes('tween', attributes)).toThrow();
+      expect(() => validateRecipeAttributes('Tween', attributes)).toThrow();
     });
   });
 
   describe('hierarchical validation', () => {
     it('should allow tween as sibling of entity types', () => {
       const xml = `
-        <entity>
+        <GameObject>
           <static-part name="platform" pos="0 3 0" shape="box" size="3 0.5 3" color="#0000ff"></static-part>
-          <tween target="platform" attr="body.pos-x" from="-5" to="5" duration="3"></tween>
-        </entity>
+          <Tween target="platform" attr="rigidbody.pos-x" from="-5" to="5" duration="3"></Tween>
+        </GameObject>
       `;
 
       const result = validateXMLContent(xml);
@@ -309,10 +309,10 @@ describe('Recipe Validation Integration', () => {
 
     it('should allow tween in world with target', () => {
       const xml = `
-        <world canvas="#game">
-          <entity name="cube" transform=""></entity>
-          <tween target="cube" attr="transform.pos-x" to="5"></tween>
-        </world>
+        <Scene canvas="#game">
+          <GameObject name="cube" transform=""></GameObject>
+          <Tween target="cube" attr="transform.pos-x" to="5"></Tween>
+        </Scene>
       `;
 
       const result = validateXMLContent(xml);
@@ -321,11 +321,11 @@ describe('Recipe Validation Integration', () => {
 
     it('should allow nested entities', () => {
       const xml = `
-        <entity>
-          <entity transform="pos: 2 0 0">
-            <entity transform="pos: 0 2 0"></entity>
-          </entity>
-        </entity>
+        <GameObject>
+          <GameObject transform="pos: 2 0 0">
+            <GameObject transform="pos: 0 2 0"></GameObject>
+          </GameObject>
+        </GameObject>
       `;
 
       const result = validateXMLContent(xml);
@@ -334,9 +334,9 @@ describe('Recipe Validation Integration', () => {
 
     it('should allow lighting in world', () => {
       const xml = `
-        <world canvas="#game">
-          <entity ambient-light="sky-color: 0x87ceeb" directional-light="color: 0xffffff"></entity>
-        </world>
+        <Scene canvas="#game">
+          <GameObject ambient-light="sky-color: 0x87ceeb" directional-light="color: 0xffffff"></GameObject>
+        </Scene>
       `;
 
       const result = validateXMLContent(xml);
@@ -345,23 +345,23 @@ describe('Recipe Validation Integration', () => {
 
     it('should reject world as child of entity', () => {
       const xml = `
-        <entity>
-          <world canvas="#game"></world>
-        </entity>
+        <GameObject>
+          <Scene canvas="#game"></Scene>
+        </GameObject>
       `;
 
       const result = validateXMLContent(xml);
       expect(result.success).toBe(false);
-      expect(result.error).toContain('not allowed as a child of <entity>');
+      expect(result.error).toContain('not allowed as a child of <GameObject>');
     });
 
     it('should allow multiple tweens targeting same entity', () => {
       const xml = `
-        <entity>
+        <GameObject>
           <kinematic-part name="platform" pos="0 3 0" shape="box" size="3 0.5 3" color="#0000ff"></kinematic-part>
-          <tween target="platform" attr="body.pos-x" from="-5" to="5" duration="3"></tween>
-          <tween target="platform" attr="body.euler-y" from="0" to="360" duration="2"></tween>
-        </entity>
+          <Tween target="platform" attr="rigidbody.pos-x" from="-5" to="5" duration="3"></Tween>
+          <Tween target="platform" attr="rigidbody.euler-y" from="0" to="360" duration="2"></Tween>
+        </GameObject>
       `;
 
       const result = validateXMLContent(xml);
@@ -372,15 +372,15 @@ describe('Recipe Validation Integration', () => {
   describe('Real-world XML examples', () => {
     it('should validate complete game world with lighting', () => {
       const xml = `
-        <world canvas="#game-canvas" sky="#87ceeb">
-          <entity ambient-light="sky-color: 0x87ceeb; intensity: 0.6" directional-light="color: 0xffffff; intensity: 1; direction-x: -1; direction-y: -2; direction-z: -1"></entity>
+        <Scene canvas="#game-canvas" sky="#87ceeb">
+          <GameObject ambient-light="sky-color: 0x87ceeb; intensity: 0.6" directional-light="color: 0xffffff; intensity: 1; direction-x: -1; direction-y: -2; direction-z: -1"></GameObject>
           <static-part pos="0 -0.5 0" shape="box" size="20 1 20" color="#90ee90"></static-part>
           <dynamic-part pos="-2 4 -3" shape="sphere" size="1" color="#ff4500"></dynamic-part>
           <kinematic-part name="platform" pos="5 2 0" shape="box" size="3 0.5 3" color="#0000ff"></kinematic-part>
-          <tween target="platform" attr="body.pos-y" from="2" to="5" duration="3"></tween>
-          <player pos="0 1 0" speed="8"></player>
+          <Tween target="platform" attr="rigidbody.pos-y" from="2" to="5" duration="3"></Tween>
+          <Player pos="0 1 0" speed="8"></Player>
           <camera distance="10"></camera>
-        </world>
+        </Scene>
       `;
 
       const result = validateXMLContent(xml);
@@ -389,15 +389,15 @@ describe('Recipe Validation Integration', () => {
 
     it('should validate platformer with animated elements', () => {
       const xml = `
-        <entity>
+        <GameObject>
           <static-part pos="-5 2 0" shape="box" size="3 0.5 3" color="#808080"></static-part>
           <static-part pos="0 4 0" shape="box" size="3 0.5 3" color="#808080"></static-part>
           <static-part pos="5 6 0" shape="box" size="3 0.5 3" color="#808080"></static-part>
           <kinematic-part name="moving-platform" pos="0 3 5" shape="box" size="4 0.5 4" color="#4169e1"></kinematic-part>
-          <tween target="moving-platform" attr="body.pos-x" from="-10" to="10" duration="5"></tween>
+          <Tween target="moving-platform" attr="rigidbody.pos-x" from="-10" to="10" duration="5"></Tween>
           <kinematic-part name="spinner" pos="2 1 0" shape="box" size="0.5 0.1 0.5" color="#ffd700"></kinematic-part>
-          <tween target="spinner" attr="body.euler-y" from="0" to="360" duration="2"></tween>
-        </entity>
+          <Tween target="spinner" attr="rigidbody.euler-y" from="0" to="360" duration="2"></Tween>
+        </GameObject>
       `;
 
       const result = validateXMLContent(xml);

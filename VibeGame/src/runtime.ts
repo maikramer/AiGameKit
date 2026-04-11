@@ -94,14 +94,14 @@ export class GameRuntime {
   }
 
   private processWorldElements(): void {
-    const worldElements = document.querySelectorAll('world');
+    const worldElements = document.querySelectorAll('Scene');
     worldElements.forEach((element) => {
       this.processWorldElement(element as HTMLElement);
     });
   }
 
   private processWorldElement(element: HTMLElement): void {
-    if (element.tagName.toLowerCase() !== 'world') return;
+    if (element.tagName.toLowerCase() !== 'scene') return;
 
     element.style.display = 'none';
 
@@ -150,7 +150,7 @@ export class GameRuntime {
         this.validateXMLStructure(originalHTML);
       }
 
-      const xmlContent = `<world>${originalHTML}</world>`;
+      const xmlContent = `<Scene>${originalHTML}</Scene>`;
       const parseResult = XMLParser.parse(xmlContent);
 
       if (parseResult.root.tagName === 'parsererror') {
@@ -271,11 +271,11 @@ export class GameRuntime {
           if (node.nodeType === Node.ELEMENT_NODE) {
             const element = node as HTMLElement;
 
-            if (element.tagName.toLowerCase() === 'world') {
+            if (element.tagName.toLowerCase() === 'scene') {
               this.processWorldElement(element);
             }
 
-            element.querySelectorAll?.('world').forEach((worldEl) => {
+            element.querySelectorAll?.('Scene').forEach((worldEl) => {
               this.processWorldElement(worldEl as HTMLElement);
             });
           }

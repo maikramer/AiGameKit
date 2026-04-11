@@ -3,16 +3,16 @@ import { BodyType } from './components';
 
 const physicsPartRecipe: Recipe = {
   name: 'physics-part',
-  components: ['body', 'collider', 'transform', 'renderer'],
+  components: ['rigidbody', 'collider', 'transform', 'meshRenderer'],
 };
 
 export const staticPartRecipe: Recipe = {
   ...physicsPartRecipe,
   name: 'static-part',
   overrides: {
-    'body.type': BodyType.Fixed,
-    'body.mass': 0,
-    'body.gravity-scale': 0,
+    'rigidbody.type': BodyType.Fixed,
+    'rigidbody.mass': 0,
+    'rigidbody.gravity-scale': 0,
   },
 };
 
@@ -20,7 +20,7 @@ export const dynamicPartRecipe: Recipe = {
   ...physicsPartRecipe,
   name: 'dynamic-part',
   overrides: {
-    'body.type': BodyType.Dynamic,
+    'rigidbody.type': BodyType.Dynamic,
   },
   /** Metadado de templates (spawn-group); não mapeia para componentes. */
   parserAttributes: ['role', 'profile'],
@@ -30,12 +30,12 @@ export const kinematicPartRecipe: Recipe = {
   ...physicsPartRecipe,
   name: 'kinematic-part',
   overrides: {
-    'body.type': BodyType.KinematicVelocityBased,
-    'body.gravity-scale': 0,
+    'rigidbody.type': BodyType.KinematicVelocityBased,
+    'rigidbody.gravity-scale': 0,
   },
 };
 
 export const colliderRecipe: Recipe = {
-  name: 'collider',
+  name: 'Collider',
   components: ['collider', 'transform'],
 };

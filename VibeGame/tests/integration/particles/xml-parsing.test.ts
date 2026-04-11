@@ -15,13 +15,13 @@ describe('Particles XML parsing', () => {
     state.registerPlugin(ParticlesPlugin);
 
     const xml =
-      '<root><particle-emitter preset="sparks" rate="12" lifetime="2.0" size="0.35"></particle-emitter></root>';
+      '<root><ParticleSystem preset="sparks" rate="12" lifetime="2.0" size="0.35"></ParticleSystem></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
     const entity = entities[0].entity;
     expect(ParticleSystem.preset[entity]).toBe(
-      ParticlesPlugin.config!.enums!.particlesEmitter.preset.sparks
+      ParticlesPlugin.config!.enums!.particleSystem.preset.sparks
     );
     expect(ParticleSystem.rate[entity]).toBeCloseTo(12);
     expect(ParticleSystem.lifetime[entity]).toBeCloseTo(2.0);

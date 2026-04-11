@@ -12,19 +12,19 @@ describe('WaterPlugin smoke', () => {
   });
 
   it('registers water recipe and defaults', () => {
-    expect(WaterPlugin.recipes?.some((r) => r.name === 'water')).toBe(true);
+    expect(WaterPlugin.recipes?.some((r) => r.name === 'Water')).toBe(true);
     const defaults = WaterPlugin.config?.defaults?.water;
     expect(defaults).toBeDefined();
     expect(defaults!.size).toBe(256);
     expect(defaults!.waterLevel).toBe(5);
   });
 
-  it('parses bare <water> and applies defaults', () => {
+  it('parses bare <Water> and applies defaults', () => {
     const state = new State();
     state.registerPlugin(TransformsPlugin);
     state.registerPlugin(WaterPlugin);
 
-    const xml = '<root><water></water></root>';
+    const xml = '<root><Water></Water></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

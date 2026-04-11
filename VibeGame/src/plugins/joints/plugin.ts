@@ -7,11 +7,11 @@ export const JointsPlugin: Plugin = {
   systems: [JointCleanupSystem, JointCreateSystem],
   recipes: [jointRecipe],
   components: {
-    physicsJoint: Joint,
+    joint: Joint,
   },
   config: {
     defaults: {
-      physicsJoint: {
+      joint: {
         bodyA: 0,
         bodyB: 0,
         jointType: 1,
@@ -35,7 +35,7 @@ export const JointsPlugin: Plugin = {
       },
     },
     enums: {
-      physicsJoint: {
+      joint: {
         type: {
           fixed: 0,
           revolute: 1,

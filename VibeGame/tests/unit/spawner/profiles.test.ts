@@ -69,7 +69,7 @@ describe('spawn profiles', () => {
 
   it('applyChildTemplateProfile gltf-crate em gltf-dynamic', () => {
     const attrs: Record<string, string | number> = {};
-    applyChildTemplateProfile('gltf-dynamic', attrs, 'gltf-crate');
+    applyChildTemplateProfile('GLTFDynamic', attrs, 'gltf-crate');
     expect(attrs.mass).toBe(1.5);
     expect(attrs.friction).toBe(0.55);
     expect(attrs['collider-margin']).toBe(0.02);
@@ -80,7 +80,7 @@ describe('spawn profiles', () => {
     const attrs: Record<string, string | number> = {
       'collider-shape': 'sphere',
     };
-    applyChildTemplateProfile('gltf-dynamic', attrs, 'gltf-crate');
+    applyChildTemplateProfile('GLTFDynamic', attrs, 'gltf-crate');
     expect(attrs['collider-shape']).toBe('sphere');
   });
 });

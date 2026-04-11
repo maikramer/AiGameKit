@@ -33,12 +33,12 @@ describe('AudioPlugin Registration', () => {
 
   it('should register both components in the plugin definition', () => {
     expect(AudioPlugin.components).toBeDefined();
-    expect(AudioPlugin.components!['audioEmitter']).toBe(AudioSource);
+    expect(AudioPlugin.components!['audioSource']).toBe(AudioSource);
     expect(AudioPlugin.components!['AudioListener']).toBe(AudioListener);
   });
 
   it('should have config.defaults for audioEmitter', () => {
-    const defaults = AudioPlugin.config!.defaults!.audioEmitter;
+    const defaults = AudioPlugin.config!.defaults!.audioSource;
     expect(defaults).toBeDefined();
     expect(defaults.volume).toBe(1);
     expect(defaults.loop).toBe(0);

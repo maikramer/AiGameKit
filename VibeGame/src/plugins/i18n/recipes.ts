@@ -1,6 +1,6 @@
 import type { Recipe } from '../../core';
 
 export const i18nTextRecipe: Recipe = {
-  name: 'i18n-text',
+  name: 'I18nText',
   components: ['i18n-text'],
 };

@@ -34,14 +34,14 @@ describe('Engine feature plugins registration', () => {
   it('registers raycast components', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
-    expect(state.getComponent('raycast-source')).toBeDefined();
-    expect(state.getComponent('raycast-result')).toBeDefined();
+    expect(state.getComponent('RaycastSource')).toBeDefined();
+    expect(state.getComponent('raycastHit')).toBeDefined();
   });
 
   it('registers navmesh components', () => {
     const state = new State();
     state.registerPlugin(NavmeshPlugin);
-    expect(state.getComponent('nav-mesh')).toBeDefined();
-    expect(state.getComponent('nav-agent')).toBeDefined();
+    expect(state.getComponent('NavMeshSurface')).toBeDefined();
+    expect(state.getComponent('NavMeshAgent')).toBeDefined();
   });
 });

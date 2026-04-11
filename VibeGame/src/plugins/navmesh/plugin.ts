@@ -24,16 +24,16 @@ export const NavmeshPlugin: Plugin = {
   ],
   recipes: [navMeshRecipe, navAgentRecipe],
   components: {
-    navMesh: NavMeshSurface,
-    navAgent: NavMeshAgent,
+    navMeshSurface: NavMeshSurface,
+    navMeshAgent: NavMeshAgent,
   },
   config: {
     defaults: {
-      navMesh: {
+      navMeshSurface: {
         loaded: 0,
         buildFromScene: 0,
       },
-      navAgent: {
+      navMeshAgent: {
         targetX: 0,
         targetY: 0,
         targetZ: 0,
@@ -43,7 +43,7 @@ export const NavmeshPlugin: Plugin = {
       },
     },
     adapters: {
-      'nav-agent': {
+      'NavMeshAgent': {
         target: targetAdapter,
       },
     },

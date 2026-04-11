@@ -25,11 +25,11 @@ describe('Parser Diagnostics', () => {
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
-      }).toThrow(/Unknown element <plyaer> - did you mean <player>\?/);
+      }).toThrow(/Unknown element <plyaer> - did you mean <Player>\?/);
     });
 
     it('should provide helpful error for invalid property syntax', () => {
-      const xml = XMLParser.parse('<entity transform="pos 0 5 0"></entity>');
+      const xml = XMLParser.parse('<GameObject transform="pos 0 5 0"></GameObject>');
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
@@ -39,7 +39,7 @@ describe('Parser Diagnostics', () => {
     });
 
     it('should provide helpful error for wrong number of values', () => {
-      const xml = XMLParser.parse('<entity transform="pos: 0 5"></entity>');
+      const xml = XMLParser.parse('<GameObject transform="pos: 0 5"></GameObject>');
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
@@ -50,17 +50,17 @@ describe('Parser Diagnostics', () => {
 
     it('should provide helpful error for invalid enum value', () => {
       const xml = XMLParser.parse(
-        '<static-part body="type: cube"></static-part>'
+        '<static-part rigidbody="type: cube"></static-part>'
       );
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
-      }).toThrow(/\[body.type\] Invalid value "cube"/);
+      }).toThrow(/\[rigidbody.type\] Invalid value "cube"/);
     });
 
     it('should provide helpful error for unknown property with suggestions', () => {
       const xml = XMLParser.parse(
-        '<entity transform="positon: 0 5 0"></entity>'
+        '<GameObject transform="positon: 0 5 0"></GameObject>'
       );
 
       expect(() => {
@@ -69,7 +69,7 @@ describe('Parser Diagnostics', () => {
     });
 
     it('should provide helpful error for empty property name', () => {
-      const xml = XMLParser.parse('<entity transform=": 0 5 0"></entity>');
+      const xml = XMLParser.parse('<GameObject transform=": 0 5 0"></GameObject>');
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
@@ -79,7 +79,7 @@ describe('Parser Diagnostics', () => {
     });
 
     it('should provide helpful error for empty property value', () => {
-      const xml = XMLParser.parse('<entity transform="pos:"></entity>');
+      const xml = XMLParser.parse('<GameObject transform="pos:"></GameObject>');
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
@@ -87,7 +87,7 @@ describe('Parser Diagnostics', () => {
     });
 
     it('should provide helpful error for type mismatch', () => {
-      const xml = XMLParser.parse('<entity transform="pos-x: hello"></entity>');
+      const xml = XMLParser.parse('<GameObject transform="pos-x: hello"></GameObject>');
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
@@ -99,36 +99,36 @@ describe('Parser Diagnostics', () => {
 
   describe('Warning Messages', () => {
     it('should warn about unknown attributes with suggestions', () => {
-      const xml = XMLParser.parse('<entity transfrom="pos: 0 5 0"></entity>');
+      const xml = XMLParser.parse('<GameObject transfrom="pos: 0 5 0"></GameObject>');
       parseXMLToEntities(state, xml.root);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[entity\] Unknown attribute "transfrom" - did you mean "transform"\?/
+          /\[GameObject\] Unknown attribute "transfrom" - did you mean "transform"\?/
         )
       );
     });
 
     it('should warn when world-transform is assigned', () => {
       const xml = XMLParser.parse(
-        '<entity world-transform="pos: 0 5 0"></entity>'
+        '<GameObject world-transform="pos: 0 5 0"></GameObject>'
       );
       parseXMLToEntities(state, xml.root);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[entity\] Warning: "world-transform" is read-only/
+          /\[GameObject\] Warning: "world-transform" is read-only/
         )
       );
     });
 
     it('should show available options for unknown attributes', () => {
-      const xml = XMLParser.parse('<entity unknownattr="value"></entity>');
+      const xml = XMLParser.parse('<GameObject unknownattr="value"></GameObject>');
       parseXMLToEntities(state, xml.root);
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
         expect.stringMatching(
-          /\[entity\] Unknown attribute "unknownattr"[\s\S]*Available:/
+          /\[GameObject\] Unknown attribute "unknownattr"[\s\S]*Available:/
         )
       );
     });
@@ -137,9 +137,9 @@ describe('Parser Diagnostics', () => {
   describe('Component Child Elements', () => {
     it('should provide clear error when components are used as child elements', () => {
       const xml = XMLParser.parse(`
-        <entity>
+        <GameObject>
           <transform pos="0 5 0"></transform>
-        </entity>
+        </GameObject>
       `);
 
       expect(() => {
@@ -151,7 +151,7 @@ describe('Parser Diagnostics', () => {
   describe('Enum Value Validation', () => {
     it('should list valid options for body.type enum', () => {
       const xml = XMLParser.parse(
-        '<static-part body="type: invalid"></static-part>'
+        '<static-part rigidbody="type: invalid"></static-part>'
       );
 
       expect(() => {
@@ -161,7 +161,7 @@ describe('Parser Diagnostics', () => {
 
     it('should list valid options for renderer.shape enum', () => {
       const xml = XMLParser.parse(
-        '<entity renderer="shape: invalid"></entity>'
+        '<GameObject meshRenderer="shape: invalid"></GameObject>'
       );
 
       expect(() => {
@@ -182,7 +182,7 @@ describe('Parser Diagnostics', () => {
 
   describe('Quaternion Parsing', () => {
     it('should provide clear error for incorrect quaternion value count', () => {
-      const xml = XMLParser.parse('<entity transform="rot: 0 45"></entity>');
+      const xml = XMLParser.parse('<GameObject transform="rot: 0 45"></GameObject>');
 
       expect(() => {
         parseXMLToEntities(state, xml.root);

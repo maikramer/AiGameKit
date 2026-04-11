@@ -11,7 +11,7 @@ describe('Recipe Core', () => {
   });
 
   it('should have entity recipe by default', () => {
-    expect(state.hasRecipe('entity')).toBe(true);
+    expect(state.hasRecipe('GameObject')).toBe(true);
   });
 
   it('should create entity from recipe', () => {
@@ -85,11 +85,11 @@ describe('Recipe Core', () => {
         shape: Types.ui8,
       });
 
-      state.registerComponent('renderer', MeshRenderer);
+      state.registerComponent('meshRenderer', MeshRenderer);
       state.registerComponent('collider', Collider);
       state.registerConfig({
         shorthands: {
-          renderer: {
+          meshRenderer: {
             shape: 'shape',
             color: 'color',
           },
@@ -101,7 +101,7 @@ describe('Recipe Core', () => {
 
       const recipe = {
         name: 'test-shorthand',
-        components: ['renderer', 'collider'],
+        components: ['meshRenderer', 'collider'],
       };
 
       state.registerRecipe(recipe);
@@ -125,11 +125,11 @@ describe('Recipe Core', () => {
         shape: Types.ui8,
       });
 
-      state.registerComponent('renderer', MeshRenderer);
+      state.registerComponent('meshRenderer', MeshRenderer);
       state.registerComponent('collider', Collider);
       state.registerConfig({
         shorthands: {
-          renderer: {
+          meshRenderer: {
             shape: 'shape',
           },
           collider: {
@@ -140,14 +140,14 @@ describe('Recipe Core', () => {
 
       const recipe = {
         name: 'test-override',
-        components: ['renderer', 'collider'],
+        components: ['meshRenderer', 'collider'],
       };
 
       state.registerRecipe(recipe);
 
       const entity = state.createFromRecipe('test-override', {
         shape: '1',
-        renderer: 'shape: 2',
+        meshRenderer: 'shape: 2',
       });
 
       expect(MeshRenderer.shape[entity]).toBe(2);
@@ -169,12 +169,12 @@ describe('Recipe Core', () => {
 
       const plugin = {
         components: {
-          renderer: MeshRenderer,
+          meshRenderer: MeshRenderer,
           Collider,
         },
         config: {
           shorthands: {
-            renderer: {
+            meshRenderer: {
               size: 'size',
             },
             collider: {
@@ -188,7 +188,7 @@ describe('Recipe Core', () => {
 
       const recipe = {
         name: 'test-transform',
-        components: ['renderer', 'collider'],
+        components: ['meshRenderer', 'collider'],
       };
 
       state.registerRecipe(recipe);
@@ -220,13 +220,13 @@ describe('Recipe Core', () => {
       });
 
       state.registerComponent('transform', Transform);
-      state.registerComponent('renderer', MeshRenderer);
+      state.registerComponent('meshRenderer', MeshRenderer);
       state.registerConfig({
         shorthands: {
           transform: {
             pos: 'pos',
           },
-          renderer: {
+          meshRenderer: {
             color: 'color',
           },
         },
@@ -236,18 +236,18 @@ describe('Recipe Core', () => {
             posY: 0,
             posZ: 0,
           },
-          renderer: {
+          meshRenderer: {
             color: 0xffffff,
           },
         },
       });
 
       state.registerRecipe({
-        name: 'entity',
-        components: ['transform', 'renderer'],
+        name: 'GameObject',
+        components: ['transform', 'meshRenderer'],
       });
 
-      const entity = state.createFromRecipe('entity', {
+      const entity = state.createFromRecipe('GameObject', {
         pos: '0 5 0',
         color: '0xff0000',
       });
