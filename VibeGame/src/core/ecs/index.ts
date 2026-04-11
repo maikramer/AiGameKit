@@ -1,5 +1,35 @@
 export { NULL_ENTITY, TIME_CONSTANTS } from './constants';
 export { Parent } from './components';
+export {
+  cleanupEntityCoroutines,
+  CoroutineFixedUpdateSystem,
+  CoroutineLateFrameSystem,
+  CoroutineRunnerSystem,
+  getActiveCoroutines,
+  getCoroutine,
+  startCoroutine,
+  stopAllCoroutines,
+  stopCoroutine,
+} from './coroutines';
+export type { CoroutineEntry } from './coroutines';
+export {
+  WaitForSeconds,
+  WaitForSecondsRealtime,
+  WaitForEndOfFrame,
+  WaitForFixedUpdate,
+  WaitUntil,
+  WaitWhile,
+} from './yield-instructions';
+export type {
+  CoroutineYieldValue,
+  WaitForSecondsInstruction,
+  WaitForSecondsRealtimeInstruction,
+  WaitForEndOfFrameInstruction,
+  WaitForFixedUpdateInstruction,
+  WaitUntilInstruction,
+  WaitWhileInstruction,
+  YieldInstruction,
+} from './yield-instructions';
 export { State } from './state';
 export { Time } from './time';
 export { createSnapshot, formatSnapshot } from './snapshot';

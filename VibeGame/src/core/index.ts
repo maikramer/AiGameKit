@@ -26,6 +26,7 @@ export type {
   ComponentDefaults,
   ComponentEnums,
   Config,
+  CoroutineEntry,
   EntitySnapshot,
   EnumMapping,
   GameTime,
@@ -42,6 +43,33 @@ export type {
 } from './ecs';
 export { Tag, addTag, getTagId, getTagName } from './ecs';
 export { Layer, LayerMask } from './ecs';
+export {
+  cleanupEntityCoroutines,
+  CoroutineFixedUpdateSystem,
+  CoroutineLateFrameSystem,
+  CoroutineRunnerSystem,
+  getActiveCoroutines,
+  getCoroutine,
+  startCoroutine,
+  stopAllCoroutines,
+  stopCoroutine,
+  WaitForSeconds,
+  WaitForSecondsRealtime,
+  WaitForEndOfFrame,
+  WaitForFixedUpdate,
+  WaitUntil,
+  WaitWhile,
+} from './ecs';
+export type {
+  CoroutineYieldValue,
+  WaitForSecondsInstruction,
+  WaitForSecondsRealtimeInstruction,
+  WaitForEndOfFrameInstruction,
+  WaitForFixedUpdateInstruction,
+  WaitUntilInstruction,
+  WaitWhileInstruction,
+  YieldInstruction,
+} from './ecs';
 export {
   addEventListener,
   removeEventListener,
