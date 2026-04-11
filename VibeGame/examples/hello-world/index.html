@@ -22,14 +22,14 @@
   </head>
 
   <body>
-    <world canvas="#game-canvas" sky="#87ceeb">
+    <Scene canvas="#game-canvas" sky="#87ceeb">
       <!-- Procedural terrain with LOD -->
-      <terrain
+      <Terrain
         world-size="256"
         max-height="50"
         levels="6"
         resolution="64"
-      ></terrain>
+      ></Terrain>
 
       <!-- Ball above terrain -->
       <dynamic-part
@@ -39,17 +39,17 @@
         color="#ff4500"
       ></dynamic-part>
 
-      <!-- Deterministic terrain placement: <entity place="…"> anchors the root; children use local transforms -->
-      <entity place="at: 0 -12; base-y-offset: 0.02">
-        <particle-emitter
+      <!-- Deterministic terrain placement: <GameObject place="…"> anchors the root; children use local transforms -->
+      <GameObject place="at: 0 -12; base-y-offset: 0.02">
+        <ParticleSystem
           preset="fire"
           rate="12"
           lifetime="1.1"
           size="0.14"
           transform="pos: 0 0.25 0"
-        ></particle-emitter>
-      </entity>
-    </world>
+        ></ParticleSystem>
+      </GameObject>
+    </Scene>
 
     <canvas id="game-canvas"></canvas>
 

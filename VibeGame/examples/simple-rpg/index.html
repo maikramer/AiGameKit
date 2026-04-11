@@ -28,55 +28,55 @@
   </head>
 
   <body>
-    <world
+    <Scene
       canvas="#game-canvas"
       sky="#ffffff"
       resume-audio-on-user-gesture="true"
     >
-      <sky url="/assets/sky/sky.png"></sky>
+      <Skybox url="/assets/sky/sky.png"></Skybox>
 
       <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
-      <entity
+      <GameObject
         ambient-light="sky-color: 0xd8ecff; ground-color: 0x726a58; intensity: 0.84"
         directional-light="color: 0xfff8f2; intensity: 1.78; direction-x: -0.92; direction-y: 1.55; direction-z: -0.78; cast-shadow: 1; shadow-map-size: 4096; distance: 55"
       >
-      </entity>
+      </GameObject>
 
-      <audio-clip
+      <AudioSource
         name="bgm"
         url="/assets/audio/bgm_field.wav"
         loop="true"
         volume="0.18"
         playing="false"
         spatial="false"
-      ></audio-clip>
-      <audio-clip
+      ></AudioSource>
+      <AudioSource
         name="sfx-jump"
         url="/assets/audio/sfx_jump.wav"
         loop="false"
         volume="0.42"
         playing="false"
         spatial="false"
-      ></audio-clip>
-      <audio-clip
+      ></AudioSource>
+      <AudioSource
         name="sfx-save"
         url="/assets/audio/sfx_save.wav"
         loop="false"
         volume="0.48"
         playing="false"
         spatial="false"
-      ></audio-clip>
-      <audio-clip
+      ></AudioSource>
+      <AudioSource
         name="sfx-load"
         url="/assets/audio/sfx_load.wav"
         loop="false"
         volume="0.44"
         playing="false"
         spatial="false"
-      ></audio-clip>
+      ></AudioSource>
 
       <!-- Relva: tom um pouco mais claro para ler melhor nas sombras (sem mexer no motor). -->
-      <terrain
+      <Terrain
         pos="0 0 0"
         world-size="384"
         max-height="28"
@@ -92,10 +92,10 @@
         metalness="0"
         normal-strength="0.8"
         base-color="#96ad78"
-      ></terrain>
+      ></Terrain>
 
       <!-- Água: tom menos “ciano de poço”; water-level alinhado ao Y. -->
-      <water
+      <Water
         pos="0 1.25 0"
         water-level="1.25"
         size="384"
@@ -109,9 +109,9 @@
         underwater-fog-color-g="0.1"
         underwater-fog-color-b="0.3"
         underwater-fog-density="0.2"
-      ></water>
+      ></Water>
 
-      <fog
+      <Fog
         color="#dde6d4"
         density="0.001"
         mode="exponential"
@@ -120,16 +120,16 @@
         volumetric-strength="0.016"
         quality="medium"
         noise-scale="0.28"
-      ></fog>
+      ></Fog>
 
-      <player-gltf
+      <PlayerGLTF
         name="hero"
         pos="0 60 0"
         model-url="/assets/models/hero.glb"
-      ></player-gltf>
+      ></PlayerGLTF>
 
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
-      <follow-camera
+      <FollowCamera
         target-distance="7"
         target-pitch="0.32"
         yaw-smoothness="0.055"
@@ -140,178 +140,178 @@
         vignette="darkness: 0.24; offset: 0.14"
         noise="opacity: 0.028; blend-function: normal"
         tonemapping="mode: aces-filmic; middle-grey: 0.82; white-point: 6.8; average-luminance: 1.2; adaptation-rate: 1.0"
-      ></follow-camera>
+      ></FollowCamera>
 
-      <!-- Props: <entity place="at: …"> = XZ fixo + altura/alinhamento ao terreno -->
-      <entity place="at: 0 -8">
-        <gltf-load
+      <!-- Props: <GameObject place="at: …"> = XZ fixo + altura/alinhamento ao terreno -->
+      <GameObject place="at: 0 -8">
+        <GLTFLoader
           role="visual"
           url="/assets/models/stone_pillar.glb"
           transform="scale: 1.5 1.5 1.5"
-        ></gltf-load>
-        <particle-emitter
+        ></GLTFLoader>
+        <ParticleSystem
           preset="sparks"
           rate="28"
           lifetime="0.9"
           size="0.12"
           transform="pos: 0 1.4 0"
-        ></particle-emitter>
-      </entity>
+        ></ParticleSystem>
+      </GameObject>
 
-      <entity place="at: 5 3">
-        <gltf-load
+      <GameObject place="at: 5 3">
+        <GLTFLoader
           role="visual"
           url="/assets/models/wooden_crate.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </entity>
-      <entity place="at: 6.2 3.5">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 6.2 3.5">
+        <GLTFLoader
           role="visual"
           url="/assets/models/wooden_crate.glb"
           transform="scale: 0.8 0.8 0.8"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: 4.2 2.8">
-        <gltf-load
+      <GameObject place="at: 4.2 2.8">
+        <GLTFLoader
           role="visual"
           url="/assets/models/wooden_barrel.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </entity>
-      <entity place="at: 3.4 4.1">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 3.4 4.1">
+        <GLTFLoader
           role="visual"
           url="/assets/models/wooden_barrel.glb"
           transform="scale: 0.95 0.95 0.95"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: -1.5 -9">
-        <gltf-load
+      <GameObject place="at: -1.5 -9">
+        <GLTFLoader
           role="visual"
           url="/assets/models/treasure_chest.glb"
           transform="scale: 1.1 1.1 1.1"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: -14 2">
-        <gltf-load
+      <GameObject place="at: -14 2">
+        <GLTFLoader
           role="visual"
           url="/assets/models/stone_well.glb"
           transform="scale: 1.2 1.2 1.2"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: 8 -12">
-        <gltf-load
+      <GameObject place="at: 8 -12">
+        <GLTFLoader
           role="visual"
           url="/assets/models/milestone_stone.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: -18 -6">
-        <gltf-load
+      <GameObject place="at: -18 -6">
+        <GLTFLoader
           role="visual"
           url="/assets/models/rock_boulder.glb"
           transform="scale: 1.4 1.4 1.4"
-        ></gltf-load>
-      </entity>
-      <entity place="at: 22 6">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 22 6">
+        <GLTFLoader
           role="visual"
           url="/assets/models/rock_boulder.glb"
           transform="scale: 1.1 1.1 1.1"
-        ></gltf-load>
-      </entity>
-      <entity place="at: -8 18">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -8 18">
+        <GLTFLoader
           role="visual"
           url="/assets/models/rock_boulder.glb"
           transform="scale: 0.9 0.9 0.9"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: -2 -7.5; y-offset: 1.1; ground-align: none">
-        <gltf-load
+      <GameObject place="at: -2 -7.5; y-offset: 1.1; ground-align: none">
+        <GLTFLoader
           role="visual"
           url="/assets/models/torch_stand.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </entity>
-      <entity place="at: 2 -7.5; y-offset: 1.1; ground-align: none">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 2 -7.5; y-offset: 1.1; ground-align: none">
+        <GLTFLoader
           role="visual"
           url="/assets/models/torch_stand.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity place="at: -11 9">
-        <gltf-load
+      <GameObject place="at: -11 9">
+        <GLTFLoader
           role="visual"
           url="/assets/models/hay_bale.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </entity>
-      <entity place="at: -9.5 10.2">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -9.5 10.2">
+        <GLTFLoader
           role="visual"
           url="/assets/models/hay_bale.glb"
           transform="scale: 0.9 0.9 0.9"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
       <!-- Cristais: assentar pela base (AABB) -->
-      <entity place="at: -4 6; base-y-offset: 0.02">
-        <gltf-load
+      <GameObject place="at: -4 6; base-y-offset: 0.02">
+        <GLTFLoader
           role="visual"
           url="/assets/models/crystal_blue.glb"
           transform="scale: 0.6 0.6 0.6"
           script="crystal.ts"
-        ></gltf-load>
-      </entity>
-      <entity place="at: 10 -5; base-y-offset: 0.02">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 10 -5; base-y-offset: 0.02">
+        <GLTFLoader
           role="visual"
           url="/assets/models/crystal_blue.glb"
           transform="scale: 0.5 0.5 0.5"
           script="crystal.ts"
-        ></gltf-load>
-      </entity>
-      <entity place="at: -10 -14; base-y-offset: 0.02">
-        <gltf-load
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -10 -14; base-y-offset: 0.02">
+        <GLTFLoader
           role="visual"
           url="/assets/models/crystal_blue.glb"
           transform="scale: 0.55 0.55 0.55"
           script="crystal.ts"
-        ></gltf-load>
-      </entity>
+        ></GLTFLoader>
+      </GameObject>
 
-      <entity
+      <GameObject
         place="at: 12 8; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
       >
-        <npc behavior="wander" max-speed="1.1" max-force="3.5"></npc>
-      </entity>
-      <entity
+        <NPC behavior="wander" max-speed="1.1" max-force="3.5"></NPC>
+      </GameObject>
+      <GameObject
         place="at: -15 -10; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
       >
-        <npc behavior="wander" max-speed="1.25" max-force="4"></npc>
-      </entity>
-      <entity
+        <NPC behavior="wander" max-speed="1.25" max-force="4"></NPC>
+      </GameObject>
+      <GameObject
         place="at: 20 -18; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
       >
-        <npc behavior="wander" max-speed="0.95" max-force="3"></npc>
-      </entity>
-      <entity
+        <NPC behavior="wander" max-speed="0.95" max-force="3"></NPC>
+      </GameObject>
+      <GameObject
         place="at: -6 14; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
       >
-        <npc behavior="wander" max-speed="1.05" max-force="3.2"></npc>
-      </entity>
+        <NPC behavior="wander" max-speed="1.05" max-force="3.2"></NPC>
+      </GameObject>
 
-      <spawn-group
+      <SpawnGroup
         profile="tree"
         count="18"
         seed="7"
@@ -319,14 +319,14 @@
         region-max="55 0 55"
         pick-strategy="random"
       >
-        <gltf-load
+        <GLTFLoader
           role="visual"
           url="/assets/models/tree_lowpoly.glb"
           transform="scale: 1 1 1"
-        ></gltf-load>
-      </spawn-group>
+        ></GLTFLoader>
+      </SpawnGroup>
 
-      <spawn-group
+      <SpawnGroup
         profile="tree"
         count="14"
         seed="23"
@@ -334,14 +334,14 @@
         region-max="50 0 50"
         pick-strategy="random"
       >
-        <gltf-load
+        <GLTFLoader
           role="visual"
           url="/assets/models/bush_small.glb"
           transform="scale: 0.55 0.55 0.55"
-        ></gltf-load>
-      </spawn-group>
+        ></GLTFLoader>
+      </SpawnGroup>
 
-      <spawn-group
+      <SpawnGroup
         profile="physics-box"
         count="5"
         seed="3"
@@ -350,40 +350,40 @@
         pick-strategy="random"
       >
         <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
-      </spawn-group>
+      </SpawnGroup>
 
-      <spawn-group
+      <SpawnGroup
         profile="gltf-crate"
         count="4"
         seed="11"
         region-min="-6 0 8"
         region-max="-2 0 12"
       >
-        <gltf-dynamic
+        <GLTFDynamic
           role="dynamic"
           profile="gltf-crate"
           url="/assets/models/wooden_crate.glb"
           collider-shape="box"
           transform="scale: 1 1 1"
-        ></gltf-dynamic>
-      </spawn-group>
+        ></GLTFDynamic>
+      </SpawnGroup>
 
-      <spawn-group
+      <SpawnGroup
         profile="gltf-crate"
         count="3"
         seed="19"
         region-min="14 0 -8"
         region-max="22 0 -2"
       >
-        <gltf-dynamic
+        <GLTFDynamic
           role="dynamic"
           profile="gltf-crate"
           url="/assets/models/wooden_crate.glb"
           collider-shape="box"
           transform="scale: 0.9 0.9 0.9"
-        ></gltf-dynamic>
-      </spawn-group>
-    </world>
+        ></GLTFDynamic>
+      </SpawnGroup>
+    </Scene>
 
     <canvas id="game-canvas"></canvas>
 
