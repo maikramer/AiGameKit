@@ -101,7 +101,7 @@ def emit_manifest_csv(plan: DreamPlan) -> str:
 
 
 # ---------------------------------------------------------------------------
-# world XML (scene for VibeGame <world>)
+# world XML (scene for VibeGame <Scene>)
 # ---------------------------------------------------------------------------
 
 
@@ -110,24 +110,24 @@ def _xml_escape(s: str) -> str:
 
 
 def emit_world_xml(plan: DreamPlan) -> str:
-    """Gera bloco <world> para inserir no index.html do VibeGame."""
+    """Gera bloco <Scene> para inserir no index.html do VibeGame."""
     has_sky_image = bool(plan.sky_prompt)
     sky_attr = ""
     if plan.scene.sky_color and not has_sky_image:
         sky_attr = f' sky="{_xml_escape(plan.scene.sky_color)}"'
 
-    lines = [f'<world canvas="#game-canvas"{sky_attr}>']
+    lines = [f'<Scene canvas="#game-canvas"{sky_attr}>']
 
     if has_sky_image:
-        lines.append('  <sky url="/assets/sky/sky.png"></sky>')
+        lines.append('  <Skybox url="/assets/sky/sky.png"></Skybox>')
 
     gs = plan.scene.ground_size or 50
     ground_color = _ground_color_for_genre(plan.genre)
     lines.append(f'  <static-part pos="0 -0.5 0" shape="box" size="{gs} 1 {gs}" color="{ground_color}"></static-part>')
 
     spawn_y = plan.scene.spawn_y if plan.scene.spawn_y is not None else 3
-    lines.append(f'  <player pos="0 {spawn_y} 0"></player>')
-    lines.append('  <orbit-camera target-distance="14" target-pitch="-0.4"></orbit-camera>')
+    lines.append(f'  <Player pos="0 {spawn_y} 0"></Player>')
+    lines.append('  <OrbitCamera target-distance="14" target-pitch="-0.4"></OrbitCamera>')
     lines.append("")
 
     three_d_ids = {a.id for a in plan.assets if a.generate_3d}
@@ -139,13 +139,13 @@ def emit_world_xml(plan: DreamPlan) -> str:
         url = f"/assets/models/{p.asset_id}.glb"
         if p.asset_id in rigged_ids:
             pos = p.pos or "0 60 0"
-            lines.append(f'  <player-gltf model-url="{_xml_escape(url)}" pos="{_xml_escape(pos)}"></player-gltf>')
+            lines.append(f'  <PlayerGLTF model-url="{_xml_escape(url)}" pos="{_xml_escape(pos)}"></PlayerGLTF>')
         else:
             pos = p.pos or "0 0 0"
             scale = p.scale or "1 1 1"
-            lines.append(f'  <gltf-load url="{_xml_escape(url)}" transform="pos: {pos}; scale: {scale}"></gltf-load>')
+            lines.append(f'  <GLTFLoader url="{_xml_escape(url)}" transform="pos: {pos}; scale: {scale}"></GLTFLoader>')
 
-    lines.append("</world>")
+    lines.append("</Scene>")
     return "\n".join(lines) + "\n"
 
 

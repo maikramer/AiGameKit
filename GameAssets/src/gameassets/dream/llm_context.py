@@ -56,33 +56,33 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
 }
 
 VIBEGAME_RECIPES = [
-    "entity",
-    "renderer",
+    "GameObject",
+    "MeshRenderer",
     "static-part",
     "dynamic-part",
     "kinematic-part",
-    "player",
-    "player-gltf",
-    "orbit-camera",
-    "follow-camera",
-    "gltf-load",
-    "gltf-dynamic",
-    "spawn-group",
-    "terrain",
-    "water",
-    "fog",
-    "audio-emitter",
+    "Player",
+    "PlayerGLTF",
+    "OrbitCamera",
+    "FollowCamera",
+    "GLTFLoader",
+    "GLTFDynamic",
+    "SpawnGroup",
+    "Terrain",
+    "Water",
+    "Fog",
+    "AudioSource",
     "postprocessing",
     "bloom",
     "vignette",
     "chromatic-aberration",
     "noise",
-    "paragraph",
-    "word",
+    "Paragraph",
+    "Word",
 ]
 
 SCENE_RULES = """\
-- The scene MUST have at least one large ground platform (static-part or gltf-load).
+- The scene MUST have at least one large ground platform (static-part or GLTFLoader).
 - spawn_y should be above the highest ground surface so the player does not clip.
 - Positions use "X Y Z" strings (Y is up). Reasonable range: -50 to 50 per axis.
 - Scale uses "X Y Z" strings. Ground platforms typically "10 1 10" or larger.
@@ -94,7 +94,7 @@ SCENE_RULES = """\
 - sky_prompt should describe a 360-degree equirectangular panoramic sky.
 - Provide varied, creative ideas for each asset — avoid generic descriptions.
 - All string values in the JSON must be valid JSON (escaped quotes if needed).
-- Characters with generate_rig=true must use `<player-gltf>` instead of `<gltf-load>` in the scene XML.\
+- Characters with generate_rig=true must use `<PlayerGLTF>` instead of `<GLTFLoader>` in the scene XML.\
 """
 
 

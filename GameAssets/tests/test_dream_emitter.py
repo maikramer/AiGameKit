@@ -112,21 +112,21 @@ class TestEmitManifestCsv:
 
 
 class TestEmitWorldXml:
-    def test_contains_world_tags(self) -> None:
+    def test_contains_scene_tags(self) -> None:
         xml = emit_world_xml(_sample_plan())
-        assert xml.startswith("<world")
-        assert xml.strip().endswith("</world>")
+        assert xml.startswith("<Scene")
+        assert xml.strip().endswith("</Scene>")
 
     def test_contains_gltf_load(self) -> None:
         xml = emit_world_xml(_sample_plan())
-        assert "gltf-load" in xml
+        assert "GLTFLoader" in xml
         assert "/assets/models/crystal.glb" in xml
 
     def test_emits_player_gltf_for_rigged_character(self) -> None:
         plan = _sample_plan()
         plan.scene.placements.append(Placement(asset_id="hero", pos="0 1 0", scale="1 1 1"))
         xml = emit_world_xml(plan)
-        assert "player-gltf" in xml
+        assert "PlayerGLTF" in xml
         assert "/assets/models/hero.glb" in xml
         assert "/assets/models/crystal.glb" in xml
 
@@ -146,12 +146,12 @@ class TestEmitWorldXml:
 
     def test_has_player(self) -> None:
         xml = emit_world_xml(_sample_plan())
-        assert "<player" in xml
+        assert "<Player" in xml
         assert 'pos="0 5 0"' in xml
 
     def test_has_orbit_camera(self) -> None:
         xml = emit_world_xml(_sample_plan())
-        assert "<orbit-camera" in xml
+        assert "<OrbitCamera" in xml
 
     def test_ground_color_default_green(self) -> None:
         xml = emit_world_xml(_sample_plan())
@@ -197,7 +197,7 @@ class TestEmitIndexHtml:
         world = emit_world_xml(_sample_plan())
         html = emit_index_html(_sample_plan(), world)
         assert 'id="game-canvas"' in html
-        assert "<world" in html
+        assert "<Scene" in html
 
     def test_title(self) -> None:
         world = emit_world_xml(_sample_plan())
