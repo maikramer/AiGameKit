@@ -4,7 +4,7 @@ import {
   AmbientLight,
   DirectionalLight,
   MainCamera,
-  Renderer,
+  MeshRenderer,
   RenderingPlugin,
 } from 'vibegame/rendering';
 import {
@@ -29,29 +29,29 @@ describe('Rendering Plugin Integration', () => {
     state.registerPlugin(RenderingPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, Renderer);
+    state.addComponent(entity, MeshRenderer);
 
-    Renderer.shape[entity] = 0;
-    Renderer.sizeX[entity] = 1.0;
-    Renderer.sizeY[entity] = 1.0;
-    Renderer.sizeZ[entity] = 1.0;
-    Renderer.color[entity] = 0xffffff;
-    Renderer.visible[entity] = 1;
+    MeshRenderer.shape[entity] = 0;
+    MeshRenderer.sizeX[entity] = 1.0;
+    MeshRenderer.sizeY[entity] = 1.0;
+    MeshRenderer.sizeZ[entity] = 1.0;
+    MeshRenderer.color[entity] = 0xffffff;
+    MeshRenderer.visible[entity] = 1;
 
-    expect(state.hasComponent(entity, Renderer)).toBe(true);
+    expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
   });
 
   it('should handle visibility toggling', () => {
     state.registerPlugin(RenderingPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, Renderer);
+    state.addComponent(entity, MeshRenderer);
 
-    Renderer.visible[entity] = 1;
-    expect(Renderer.visible[entity]).toBe(1);
+    MeshRenderer.visible[entity] = 1;
+    expect(MeshRenderer.visible[entity]).toBe(1);
 
-    Renderer.visible[entity] = 0;
-    expect(Renderer.visible[entity]).toBe(0);
+    MeshRenderer.visible[entity] = 0;
+    expect(MeshRenderer.visible[entity]).toBe(0);
   });
 
   it('should handle MainCamera entities', () => {
@@ -90,20 +90,20 @@ describe('Rendering Plugin Integration', () => {
     const entities = [];
     for (let i = 0; i < 5; i++) {
       const entity = state.createEntity();
-      state.addComponent(entity, Renderer);
+      state.addComponent(entity, MeshRenderer);
 
-      Renderer.shape[entity] = i % 4;
-      Renderer.sizeX[entity] = 1.0;
-      Renderer.sizeY[entity] = 1.0;
-      Renderer.sizeZ[entity] = 1.0;
-      Renderer.color[entity] = 0xffffff;
-      Renderer.visible[entity] = 1;
+      MeshRenderer.shape[entity] = i % 4;
+      MeshRenderer.sizeX[entity] = 1.0;
+      MeshRenderer.sizeY[entity] = 1.0;
+      MeshRenderer.sizeZ[entity] = 1.0;
+      MeshRenderer.color[entity] = 0xffffff;
+      MeshRenderer.visible[entity] = 1;
 
       entities.push(entity);
     }
 
     for (const entity of entities) {
-      expect(state.hasComponent(entity, Renderer)).toBe(true);
+      expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
     }
   });
 
@@ -114,10 +114,10 @@ describe('Rendering Plugin Integration', () => {
     const entity2 = state.createEntity();
     const entity3 = state.createEntity();
 
-    state.addComponent(entity1, Renderer);
-    state.addComponent(entity2, Renderer);
+    state.addComponent(entity1, MeshRenderer);
+    state.addComponent(entity2, MeshRenderer);
 
-    const renderableEntities = defineQuery([Renderer])(state.world);
+    const renderableEntities = defineQuery([MeshRenderer])(state.world);
     expect(renderableEntities).toContain(entity1);
     expect(renderableEntities).toContain(entity2);
     expect(renderableEntities).not.toContain(entity3);
@@ -144,17 +144,17 @@ describe('Rendering Plugin Integration', () => {
     state.registerPlugin(RenderingPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, Renderer);
+    state.addComponent(entity, MeshRenderer);
     state.addComponent(entity, Transform);
     state.addComponent(entity, WorldTransform);
 
-    Renderer.shape[entity] = 0;
-    Renderer.visible[entity] = 1;
+    MeshRenderer.shape[entity] = 0;
+    MeshRenderer.visible[entity] = 1;
     Transform.posX[entity] = 5;
     Transform.posY[entity] = 10;
     Transform.posZ[entity] = 15;
 
-    expect(state.hasComponent(entity, Renderer)).toBe(true);
+    expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
     expect(state.hasComponent(entity, WorldTransform)).toBe(true);
   });
 

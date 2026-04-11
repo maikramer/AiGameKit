@@ -1,7 +1,7 @@
 import type { State, System } from '../../core';
 import { defineQuery, lerp } from '../../core';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   SetAngularVelocity,
   SetLinearVelocity,
@@ -52,17 +52,17 @@ const RAD_TO_DEG = 180 / Math.PI;
 
 type Vec3Arrays = { x: Float32Array; y: Float32Array; z: Float32Array };
 
-const bodyPos: Vec3Arrays = { x: Body.posX, y: Body.posY, z: Body.posZ };
+const bodyPos: Vec3Arrays = { x: Rigidbody.posX, y: Rigidbody.posY, z: Rigidbody.posZ };
 const bodyEuler: Vec3Arrays = {
-  x: Body.eulerX,
-  y: Body.eulerY,
-  z: Body.eulerZ,
+  x: Rigidbody.eulerX,
+  y: Rigidbody.eulerY,
+  z: Rigidbody.eulerZ,
 };
-const bodyVel: Vec3Arrays = { x: Body.velX, y: Body.velY, z: Body.velZ };
+const bodyVel: Vec3Arrays = { x: Rigidbody.velX, y: Rigidbody.velY, z: Rigidbody.velZ };
 const bodyRotVel: Vec3Arrays = {
-  x: Body.rotVelX,
-  y: Body.rotVelY,
-  z: Body.rotVelZ,
+  x: Rigidbody.rotVelX,
+  y: Rigidbody.rotVelY,
+  z: Rigidbody.rotVelZ,
 };
 
 function getAxisArray(vec: Vec3Arrays, axis: number): Float32Array {
@@ -159,7 +159,7 @@ export const KinematicTweenSystem: System = {
     for (const entity of kinematicTweenQuery(state.world)) {
       const targetEntity = KinematicTween.targetEntity[entity];
 
-      if (!state.hasComponent(targetEntity, Body)) {
+      if (!state.hasComponent(targetEntity, Rigidbody)) {
         toDestroy.push(entity);
         continue;
       }
@@ -198,7 +198,7 @@ export const KinematicRotationTweenSystem: System = {
     for (const entity of kinematicRotationTweenQuery(state.world)) {
       const targetEntity = KinematicRotationTween.targetEntity[entity];
 
-      if (!state.hasComponent(targetEntity, Body)) {
+      if (!state.hasComponent(targetEntity, Rigidbody)) {
         toDestroy.push(entity);
         continue;
       }
@@ -254,15 +254,15 @@ export const TweenSystem: System = {
         const array = tweenFieldRegistry.get(valueEntity);
 
         const isKinematicBodyField =
-          state.hasComponent(targetEntity, Body) &&
-          Body.type[targetEntity] === BodyType.KinematicVelocityBased &&
+          state.hasComponent(targetEntity, Rigidbody) &&
+          Rigidbody.type[targetEntity] === BodyType.KinematicVelocityBased &&
           array &&
-          (array === Body.posX ||
-            array === Body.posY ||
-            array === Body.posZ ||
-            array === Body.eulerX ||
-            array === Body.eulerY ||
-            array === Body.eulerZ);
+          (array === Rigidbody.posX ||
+            array === Rigidbody.posY ||
+            array === Rigidbody.posZ ||
+            array === Rigidbody.eulerX ||
+            array === Rigidbody.eulerY ||
+            array === Rigidbody.eulerZ);
 
         if (isKinematicBodyField) continue;
 

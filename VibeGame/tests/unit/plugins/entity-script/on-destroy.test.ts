@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { State } from '../../../../src/core/ecs/state';
-import { EntityScript } from '../../../../src/plugins/entity-script/components';
+import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
   coerceEntityScriptModule,
   deleteScriptFile,
@@ -28,14 +28,14 @@ describe('entity-script onDestroy', () => {
     mod: { start?: () => void; update?: () => void; onDestroy?: () => void }
   ): number {
     const eid = state.createEntity();
-    state.addComponent(eid, EntityScript, { ready: 0, enabled: 1 });
+    state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, file);
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
     setCachedEntityScriptModule(state, globKey, mod);
 
-    EntityScript.ready[eid] = 1;
+    MonoBehaviour.ready[eid] = 1;
 
     return eid;
   }
@@ -72,7 +72,7 @@ describe('entity-script onDestroy', () => {
     let componentValue: number | null = null;
     const eid = createScriptedEntity('test.ts', {
       onDestroy: () => {
-        componentValue = EntityScript.ready[eid];
+        componentValue = MonoBehaviour.ready[eid];
       },
     });
 

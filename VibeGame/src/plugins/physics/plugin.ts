@@ -4,7 +4,7 @@ import {
   ApplyForce,
   ApplyImpulse,
   ApplyTorque,
-  Body,
+  Rigidbody,
   CharacterController,
   CharacterMovement,
   Collider,
@@ -70,7 +70,7 @@ export const PhysicsPlugin: Plugin = {
   ],
   components: {
     PhysicsWorld,
-    Body,
+    body: Rigidbody,
     Collider,
     CharacterController,
     CharacterMovement,

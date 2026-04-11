@@ -5,7 +5,7 @@ export {
   ApplyForce,
   ApplyImpulse,
   ApplyTorque,
-  Body,
+  Rigidbody,
   BodyType,
   CharacterController,
   CharacterMovement,

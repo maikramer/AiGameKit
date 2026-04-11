@@ -1,17 +1,17 @@
 import type { Plugin, Adapter } from '../../core';
-import { Sky } from './components';
+import { Skybox } from './components';
 import { skyRecipe } from './recipes';
 import { SkySystem, assignSkyUrl } from './systems';
 
 const skyUrlAdapter: Adapter = (entity, value, _state) => {
-  Sky.urlIndex[entity] = assignSkyUrl(value);
+  Skybox.urlIndex[entity] = assignSkyUrl(value);
 };
 
 /** Plugin de sky environment — aplica texturas equirectangulares como IBL/background. */
 export const SkyPlugin: Plugin = {
   systems: [SkySystem],
   recipes: [skyRecipe],
-  components: { sky: Sky },
+  components: { sky: Skybox },
   config: {
     adapters: {
       sky: { url: skyUrlAdapter },

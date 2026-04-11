@@ -1,14 +1,14 @@
 import { defineComponent, Types } from 'bitecs';
 
 /** Marca zona de navegação (recipe `nav-mesh`). */
-export const NavMesh = defineComponent({
+export const NavMeshSurface = defineComponent({
   loaded: Types.ui8,
   /** 0 = use fallback PlaneGeometry zone, 1 = build from scene collidable meshes. */
   buildFromScene: Types.ui8,
 });
 
 /** Agente que segue caminho no navmesh. */
-export const NavAgent = defineComponent({
+export const NavMeshAgent = defineComponent({
   targetX: Types.f32,
   targetY: Types.f32,
   targetZ: Types.f32,

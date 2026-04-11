@@ -8,7 +8,7 @@ import {
   ApplyForce,
   ApplyImpulse,
   ApplyTorque,
-  Body,
+  Rigidbody,
   CharacterController,
   CharacterMovement,
   Collider,
@@ -53,23 +53,23 @@ interface PhysicsContext {
 }
 
 const physicsWorldQuery = defineQuery([PhysicsWorld]);
-const bodyQuery = defineQuery([Body]);
+const bodyQuery = defineQuery([Rigidbody]);
 const colliderQuery = defineQuery([Collider]);
 const characterControllerQuery = defineQuery([CharacterController]);
 const characterMovementQuery = defineQuery([
   CharacterController,
   CharacterMovement,
-  Body,
+  Rigidbody,
   Transform,
 ]);
-const applyForceQuery = defineQuery([ApplyForce, Body]);
-const applyTorqueQuery = defineQuery([ApplyTorque, Body]);
-const applyImpulseQuery = defineQuery([ApplyImpulse, Body]);
-const applyAngularImpulseQuery = defineQuery([ApplyAngularImpulse, Body]);
-const setLinearVelocityQuery = defineQuery([SetLinearVelocity, Body]);
-const setAngularVelocityQuery = defineQuery([SetAngularVelocity, Body]);
-const kinematicMoveQuery = defineQuery([KinematicMove, Body]);
-const kinematicRotateQuery = defineQuery([KinematicRotate, Body]);
+const applyForceQuery = defineQuery([ApplyForce, Rigidbody]);
+const applyTorqueQuery = defineQuery([ApplyTorque, Rigidbody]);
+const applyImpulseQuery = defineQuery([ApplyImpulse, Rigidbody]);
+const applyAngularImpulseQuery = defineQuery([ApplyAngularImpulse, Rigidbody]);
+const setLinearVelocityQuery = defineQuery([SetLinearVelocity, Rigidbody]);
+const setAngularVelocityQuery = defineQuery([SetAngularVelocity, Rigidbody]);
+const kinematicMoveQuery = defineQuery([KinematicMove, Rigidbody]);
+const kinematicRotateQuery = defineQuery([KinematicRotate, Rigidbody]);
 const touchedEventQuery = defineQuery([TouchedEvent]);
 const touchEndedEventQuery = defineQuery([TouchEndedEvent]);
 
@@ -169,23 +169,23 @@ function createRigidbodyForEntity(
   context: PhysicsContext
 ): void {
   const position = new RAPIER.Vector3(
-    Body.posX[entity],
-    Body.posY[entity],
-    Body.posZ[entity]
+    Rigidbody.posX[entity],
+    Rigidbody.posY[entity],
+    Rigidbody.posZ[entity]
   );
 
   const hasEuler =
-    Body.eulerX[entity] !== 0 ||
-    Body.eulerY[entity] !== 0 ||
-    Body.eulerZ[entity] !== 0;
+    Rigidbody.eulerX[entity] !== 0 ||
+    Rigidbody.eulerY[entity] !== 0 ||
+    Rigidbody.eulerZ[entity] !== 0;
   if (hasEuler) {
     syncBodyQuaternionFromEuler(entity);
   }
 
-  const rotX = Body.rotX[entity];
-  const rotY = Body.rotY[entity];
-  const rotZ = Body.rotZ[entity];
-  const rotW = Body.rotW[entity];
+  const rotX = Rigidbody.rotX[entity];
+  const rotY = Rigidbody.rotY[entity];
+  const rotZ = Rigidbody.rotZ[entity];
+  const rotW = Rigidbody.rotW[entity];
   const magnitude = Math.sqrt(
     rotX * rotX + rotY * rotY + rotZ * rotZ + rotW * rotW
   );
@@ -200,7 +200,7 @@ function createRigidbodyForEntity(
 
   const rotation = new RAPIER.Quaternion(rotX, rotY, rotZ, rotW);
   const descriptor = createRigidbodyDescriptor(
-    Body.type[entity],
+    Rigidbody.type[entity],
     position,
     rotation
   );
@@ -210,34 +210,34 @@ function createRigidbodyForEntity(
   configureRigidbody(
     body,
     entity,
-    Body.type[entity],
-    Body.mass[entity],
-    new RAPIER.Vector3(Body.velX[entity], Body.velY[entity], Body.velZ[entity]),
+    Rigidbody.type[entity],
+    Rigidbody.mass[entity],
+    new RAPIER.Vector3(Rigidbody.velX[entity], Rigidbody.velY[entity], Rigidbody.velZ[entity]),
     new RAPIER.Vector3(
-      Body.rotVelX[entity],
-      Body.rotVelY[entity],
-      Body.rotVelZ[entity]
+      Rigidbody.rotVelX[entity],
+      Rigidbody.rotVelY[entity],
+      Rigidbody.rotVelZ[entity]
     ),
-    Body.linearDamping[entity],
-    Body.angularDamping[entity],
-    Body.gravityScale[entity],
-    Body.ccd[entity],
-    Body.lockRotX[entity],
-    Body.lockRotY[entity],
-    Body.lockRotZ[entity]
+    Rigidbody.linearDamping[entity],
+    Rigidbody.angularDamping[entity],
+    Rigidbody.gravityScale[entity],
+    Rigidbody.ccd[entity],
+    Rigidbody.lockRotX[entity],
+    Rigidbody.lockRotY[entity],
+    Rigidbody.lockRotZ[entity]
   );
 
   context.entityToRigidbody.set(entity, body);
 
   if (!state.hasComponent(entity, Transform)) {
     state.addComponent(entity, Transform);
-    Transform.posX[entity] = Body.posX[entity];
-    Transform.posY[entity] = Body.posY[entity];
-    Transform.posZ[entity] = Body.posZ[entity];
-    Transform.rotX[entity] = Body.rotX[entity];
-    Transform.rotY[entity] = Body.rotY[entity];
-    Transform.rotZ[entity] = Body.rotZ[entity];
-    Transform.rotW[entity] = Body.rotW[entity];
+    Transform.posX[entity] = Rigidbody.posX[entity];
+    Transform.posY[entity] = Rigidbody.posY[entity];
+    Transform.posZ[entity] = Rigidbody.posZ[entity];
+    Transform.rotX[entity] = Rigidbody.rotX[entity];
+    Transform.rotY[entity] = Rigidbody.rotY[entity];
+    Transform.rotZ[entity] = Rigidbody.rotZ[entity];
+    Transform.rotW[entity] = Rigidbody.rotW[entity];
     Transform.scaleX[entity] = 1;
     Transform.scaleY[entity] = 1;
     Transform.scaleZ[entity] = 1;
@@ -245,13 +245,13 @@ function createRigidbodyForEntity(
 
   if (!state.hasComponent(entity, WorldTransform)) {
     state.addComponent(entity, WorldTransform);
-    WorldTransform.posX[entity] = Body.posX[entity];
-    WorldTransform.posY[entity] = Body.posY[entity];
-    WorldTransform.posZ[entity] = Body.posZ[entity];
-    WorldTransform.rotX[entity] = Body.rotX[entity];
-    WorldTransform.rotY[entity] = Body.rotY[entity];
-    WorldTransform.rotZ[entity] = Body.rotZ[entity];
-    WorldTransform.rotW[entity] = Body.rotW[entity];
+    WorldTransform.posX[entity] = Rigidbody.posX[entity];
+    WorldTransform.posY[entity] = Rigidbody.posY[entity];
+    WorldTransform.posZ[entity] = Rigidbody.posZ[entity];
+    WorldTransform.rotX[entity] = Rigidbody.rotX[entity];
+    WorldTransform.rotY[entity] = Rigidbody.rotY[entity];
+    WorldTransform.rotZ[entity] = Rigidbody.rotZ[entity];
+    WorldTransform.rotW[entity] = Rigidbody.rotW[entity];
     WorldTransform.scaleX[entity] = 1;
     WorldTransform.scaleY[entity] = 1;
     WorldTransform.scaleZ[entity] = 1;
@@ -288,7 +288,7 @@ function createColliderForEntity(
   context: PhysicsContext
 ): void {
   const body = context.entityToRigidbody.get(entity);
-  if (!body || !state.hasComponent(entity, Body)) {
+  if (!body || !state.hasComponent(entity, Rigidbody)) {
     return;
   }
 
@@ -409,7 +409,7 @@ export const PhysicsCleanupSystem: System = {
     }
 
     for (const [entity, body] of context.entityToRigidbody) {
-      if (!state.hasComponent(entity, Body)) {
+      if (!state.hasComponent(entity, Rigidbody)) {
         worldRapier.removeRigidBody(body);
         context.entityToRigidbody.delete(entity);
       }
@@ -651,7 +651,7 @@ export const PhysicsRapierSyncSystem: System = {
     const context = getPhysicsContext(state);
 
     for (const [entity, body] of context.entityToRigidbody) {
-      if (state.hasComponent(entity, Body)) {
+      if (state.hasComponent(entity, Rigidbody)) {
         syncRigidbodyToECS(entity, body, state);
         copyRigidbodyToTransforms(entity, state);
       }

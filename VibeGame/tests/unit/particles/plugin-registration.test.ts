@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { ParticlesPlugin } from '../../../src/plugins/particles/plugin';
 import {
-  ParticlesEmitter,
-  ParticlesBurst,
+  ParticleSystem,
+  ParticleBurst,
 } from '../../../src/plugins/particles/components';
 
 describe('ParticlesPlugin Registration', () => {
@@ -35,14 +35,14 @@ describe('ParticlesPlugin Registration', () => {
 
   it('should register the particlesEmitter component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, ParticlesEmitter);
-    expect(state.hasComponent(entity, ParticlesEmitter)).toBe(true);
+    state.addComponent(entity, ParticleSystem);
+    expect(state.hasComponent(entity, ParticleSystem)).toBe(true);
   });
 
   it('should register the particlesBurst component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, ParticlesBurst);
-    expect(state.hasComponent(entity, ParticlesBurst)).toBe(true);
+    state.addComponent(entity, ParticleBurst);
+    expect(state.hasComponent(entity, ParticleBurst)).toBe(true);
   });
 
   it('should register the particle-emitter recipe', () => {

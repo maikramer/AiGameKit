@@ -1,11 +1,11 @@
 import { INPUT_CONFIG } from '../input';
 import {
-  Body,
+  Rigidbody,
   CharacterController,
   CharacterMovement,
   DEFAULT_GRAVITY,
 } from '../physics';
-import { Player } from './components';
+import { PlayerController } from './components';
 import * as THREE from 'three';
 
 const _tmpVec3 = new THREE.Vector3();
@@ -48,21 +48,21 @@ export function processInput(
 }
 
 function canPerformJump(entity: number, currentTime: number): boolean {
-  const timeSinceGrounded = currentTime - Player.lastGroundedTime[entity];
-  const timeSinceJumpPressed = currentTime - Player.jumpBufferTime[entity];
+  const timeSinceGrounded = currentTime - PlayerController.lastGroundedTime[entity];
+  const timeSinceJumpPressed = currentTime - PlayerController.jumpBufferTime[entity];
   const isGrounded = CharacterController.grounded[entity] === 1;
 
   return (
     timeSinceJumpPressed <= INPUT_CONFIG.bufferWindow &&
-    Player.canJump[entity] === 1 &&
+    PlayerController.canJump[entity] === 1 &&
     (isGrounded || timeSinceGrounded <= INPUT_CONFIG.gracePeriods.coyoteTime)
   );
 }
 
 function calculateJumpVelocity(entity: number): number {
-  const gravityScale = Body.gravityScale[entity];
+  const gravityScale = Rigidbody.gravityScale[entity];
   const gravity = Math.abs(DEFAULT_GRAVITY * gravityScale);
-  return Math.sqrt(2 * gravity * Player.jumpHeight[entity]);
+  return Math.sqrt(2 * gravity * PlayerController.jumpHeight[entity]);
 }
 
 export function handleJump(
@@ -72,29 +72,29 @@ export function handleJump(
   platform: number | null = null
 ): number {
   if (jumpPressed === 1) {
-    Player.jumpBufferTime[entity] = currentTime;
+    PlayerController.jumpBufferTime[entity] = currentTime;
   }
 
   if (canPerformJump(entity, currentTime)) {
     const jumpVelocity = calculateJumpVelocity(entity);
     CharacterMovement.velocityY[entity] = jumpVelocity;
-    Player.isJumping[entity] = 1;
-    Player.canJump[entity] = 0;
-    Player.jumpCooldown[entity] = JUMP_CONSTANTS.cooldown;
-    Player.jumpBufferTime[entity] = -10000;
+    PlayerController.isJumping[entity] = 1;
+    PlayerController.canJump[entity] = 0;
+    PlayerController.jumpCooldown[entity] = JUMP_CONSTANTS.cooldown;
+    PlayerController.jumpBufferTime[entity] = -10000;
 
     if (platform && platform > 0) {
       const tangentialVel = calculateTangentialVelocity(
-        Player.inheritedAngVelX[entity],
-        Player.inheritedAngVelY[entity],
-        Player.inheritedAngVelZ[entity],
-        Player.platformOffsetX[entity],
-        Player.platformOffsetY[entity],
-        Player.platformOffsetZ[entity]
+        PlayerController.inheritedAngVelX[entity],
+        PlayerController.inheritedAngVelY[entity],
+        PlayerController.inheritedAngVelZ[entity],
+        PlayerController.platformOffsetX[entity],
+        PlayerController.platformOffsetY[entity],
+        PlayerController.platformOffsetZ[entity]
       );
 
-      Player.inheritedVelX[entity] += tangentialVel.x;
-      Player.inheritedVelZ[entity] += tangentialVel.z;
+      PlayerController.inheritedVelX[entity] += tangentialVel.x;
+      PlayerController.inheritedVelZ[entity] += tangentialVel.z;
     }
 
     return jumpVelocity;
@@ -144,7 +144,7 @@ export function updateRotation(
     rotationData.rotW
   );
 
-  const maxRotationRadians = Player.rotationSpeed[entity] * deltaTime;
+  const maxRotationRadians = PlayerController.rotationSpeed[entity] * deltaTime;
   const slerpFactor = calculateSlerpFactor(
     _tmpQuat2,
     _tmpQuat,

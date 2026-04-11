@@ -1,7 +1,7 @@
 import type { State } from '../../core';
 import * as THREE from 'three';
 import { WorldTransform } from '../transforms';
-import { Renderer } from './components';
+import { MeshRenderer } from './components';
 import {
   findAvailableInstanceSlot,
   initializeInstancedMesh,
@@ -62,7 +62,7 @@ export function updateInstance(
         );
       }
 
-      const shapeId = Renderer.shape[entity];
+      const shapeId = MeshRenderer.shape[entity];
       const geometry = context.geometries.get(shapeId);
       if (!geometry) return mesh;
 
@@ -76,7 +76,7 @@ export function updateInstance(
       if (instanceId === null) return mesh;
     }
 
-    instanceInfo = { poolId: Renderer.shape[entity], instanceId, unlit };
+    instanceInfo = { poolId: MeshRenderer.shape[entity], instanceId, unlit };
     context.entityInstances.set(entity, instanceInfo);
     context.totalInstanceCount++;
 
@@ -111,21 +111,21 @@ export function updateInstance(
     );
 
     if (instanceInfo.poolId === RendererShape.SPHERE) {
-      const sphereScale = Renderer.sizeX[entity] / 2;
+      const sphereScale = MeshRenderer.sizeX[entity] / 2;
       scale.x *= sphereScale;
       scale.y *= sphereScale;
       scale.z *= sphereScale;
     } else {
-      scale.x *= Renderer.sizeX[entity];
-      scale.y *= Renderer.sizeY[entity];
-      scale.z *= Renderer.sizeZ[entity];
+      scale.x *= MeshRenderer.sizeX[entity];
+      scale.y *= MeshRenderer.sizeY[entity];
+      scale.z *= MeshRenderer.sizeZ[entity];
     }
 
     matrix.compose(position, rotation, scale);
     mesh.setMatrixAt(instanceInfo.instanceId, matrix);
     mesh.instanceMatrix.needsUpdate = true;
 
-    _color.set(Renderer.color[entity]);
+    _color.set(MeshRenderer.color[entity]);
     mesh.setColorAt(instanceInfo.instanceId, _color);
     if (mesh.instanceColor) {
       mesh.instanceColor.needsUpdate = true;

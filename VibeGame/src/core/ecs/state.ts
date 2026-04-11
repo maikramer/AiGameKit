@@ -19,11 +19,11 @@ import { TIME_CONSTANTS } from './constants';
 import { Scheduler } from './scheduler';
 import type {
   Config,
-  GameTime,
   Parser,
   Plugin,
   Recipe,
   System,
+  Time,
   XMLValue,
 } from './types';
 import {
@@ -44,7 +44,7 @@ import {
 
 export class State {
   public readonly world: IWorld;
-  public readonly time: GameTime;
+  public readonly time: Time;
   public readonly scheduler = new Scheduler();
   public readonly systems = new Set<System>();
   public readonly config = new ConfigRegistry();

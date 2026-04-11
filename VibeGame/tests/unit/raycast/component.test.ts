@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import {
   RaycastSource,
-  RaycastResult,
+  RaycastHit,
 } from '../../../src/plugins/raycast/components';
 
 const SOURCE_FIELDS = [
@@ -108,66 +108,66 @@ describe('RaycastResult Component', () => {
 
   it('should have all 9 fields defined', () => {
     for (const field of RESULT_FIELDS) {
-      expect(RaycastResult[field]).toBeDefined();
-      expect(typeof RaycastResult[field][entity]).toBe('number');
+      expect(RaycastHit[field]).toBeDefined();
+      expect(typeof RaycastHit[field][entity]).toBe('number');
     }
   });
 
   it('should initialize all fields to 0', () => {
-    state.addComponent(entity, RaycastResult);
+    state.addComponent(entity, RaycastHit);
 
     for (const field of RESULT_FIELDS) {
-      expect(RaycastResult[field][entity]).toBe(0);
+      expect(RaycastHit[field][entity]).toBe(0);
     }
   });
 
   it('should allow writing and reading hitValid and hitEntity', () => {
-    state.addComponent(entity, RaycastResult);
-    RaycastResult.hitValid[entity] = 1;
-    RaycastResult.hitEntity[entity] = 42;
-    expect(RaycastResult.hitValid[entity]).toBe(1);
-    expect(RaycastResult.hitEntity[entity]).toBe(42);
+    state.addComponent(entity, RaycastHit);
+    RaycastHit.hitValid[entity] = 1;
+    RaycastHit.hitEntity[entity] = 42;
+    expect(RaycastHit.hitValid[entity]).toBe(1);
+    expect(RaycastHit.hitEntity[entity]).toBe(42);
   });
 
   it('should allow writing and reading hit distance', () => {
-    state.addComponent(entity, RaycastResult);
-    RaycastResult.hitDist[entity] = 15.5;
-    expect(RaycastResult.hitDist[entity]).toBeCloseTo(15.5);
+    state.addComponent(entity, RaycastHit);
+    RaycastHit.hitDist[entity] = 15.5;
+    expect(RaycastHit.hitDist[entity]).toBeCloseTo(15.5);
   });
 
   it('should allow writing and reading hit normal', () => {
-    state.addComponent(entity, RaycastResult);
-    RaycastResult.hitNormalX[entity] = 0;
-    RaycastResult.hitNormalY[entity] = 1;
-    RaycastResult.hitNormalZ[entity] = 0;
-    expect(RaycastResult.hitNormalX[entity]).toBe(0);
-    expect(RaycastResult.hitNormalY[entity]).toBe(1);
-    expect(RaycastResult.hitNormalZ[entity]).toBe(0);
+    state.addComponent(entity, RaycastHit);
+    RaycastHit.hitNormalX[entity] = 0;
+    RaycastHit.hitNormalY[entity] = 1;
+    RaycastHit.hitNormalZ[entity] = 0;
+    expect(RaycastHit.hitNormalX[entity]).toBe(0);
+    expect(RaycastHit.hitNormalY[entity]).toBe(1);
+    expect(RaycastHit.hitNormalZ[entity]).toBe(0);
   });
 
   it('should allow writing and reading hit point', () => {
-    state.addComponent(entity, RaycastResult);
-    RaycastResult.hitPointX[entity] = 1.5;
-    RaycastResult.hitPointY[entity] = 2.0;
-    RaycastResult.hitPointZ[entity] = -3.0;
-    expect(RaycastResult.hitPointX[entity]).toBeCloseTo(1.5);
-    expect(RaycastResult.hitPointY[entity]).toBeCloseTo(2.0);
-    expect(RaycastResult.hitPointZ[entity]).toBeCloseTo(-3.0);
+    state.addComponent(entity, RaycastHit);
+    RaycastHit.hitPointX[entity] = 1.5;
+    RaycastHit.hitPointY[entity] = 2.0;
+    RaycastHit.hitPointZ[entity] = -3.0;
+    expect(RaycastHit.hitPointX[entity]).toBeCloseTo(1.5);
+    expect(RaycastHit.hitPointY[entity]).toBeCloseTo(2.0);
+    expect(RaycastHit.hitPointZ[entity]).toBeCloseTo(-3.0);
   });
 
   it('should support multiple entities with independent values', () => {
-    state.addComponent(entity, RaycastResult);
+    state.addComponent(entity, RaycastHit);
     const entity2 = state.createEntity();
-    state.addComponent(entity2, RaycastResult);
+    state.addComponent(entity2, RaycastHit);
 
-    RaycastResult.hitValid[entity] = 1;
-    RaycastResult.hitValid[entity2] = 0;
-    RaycastResult.hitDist[entity] = 10;
-    RaycastResult.hitDist[entity2] = 50;
+    RaycastHit.hitValid[entity] = 1;
+    RaycastHit.hitValid[entity2] = 0;
+    RaycastHit.hitDist[entity] = 10;
+    RaycastHit.hitDist[entity2] = 50;
 
-    expect(RaycastResult.hitValid[entity]).toBe(1);
-    expect(RaycastResult.hitValid[entity2]).toBe(0);
-    expect(RaycastResult.hitDist[entity]).toBe(10);
-    expect(RaycastResult.hitDist[entity2]).toBe(50);
+    expect(RaycastHit.hitValid[entity]).toBe(1);
+    expect(RaycastHit.hitValid[entity2]).toBe(0);
+    expect(RaycastHit.hitDist[entity]).toBe(10);
+    expect(RaycastHit.hitDist[entity2]).toBe(50);
   });
 });

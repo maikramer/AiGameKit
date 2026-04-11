@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { loadGltfToScene } from '../../extras/gltf-bridge';
 import { getScene } from '../rendering';
-import { Text3dModel } from './components';
+import { TextMesh } from './components';
 
 // Contexto singleton para mapear entity → URL
 const text3dUrls = new Map<number, string>();
@@ -19,7 +19,7 @@ export function getText3dUrl(eid: number): string | undefined {
   return text3dUrls.get(eid);
 }
 
-const text3dQuery = defineQuery([Text3dModel]);
+const text3dQuery = defineQuery([TextMesh]);
 
 export const Text3dLoadSystem: System = {
   group: 'setup',
@@ -28,12 +28,12 @@ export const Text3dLoadSystem: System = {
     if (!scene) return;
 
     for (const eid of text3dQuery(state.world)) {
-      if (Text3dModel.pending[eid] === 0) continue;
+      if (TextMesh.pending[eid] === 0) continue;
       if (text3dInFlight.get(eid)) continue;
 
       const url = text3dUrls.get(eid);
       if (!url) {
-        Text3dModel.pending[eid] = 0;
+        TextMesh.pending[eid] = 0;
         continue;
       }
 
@@ -42,13 +42,13 @@ export const Text3dLoadSystem: System = {
       void loadGltfToScene(state, url)
         .then((group) => {
           // Aplica escala do Text3D (se definida)
-          const s = Text3dModel.scale[eid];
+          const s = TextMesh.scale[eid];
           if (s > 0 && s !== 1) {
             group.scale.set(s, s, s);
           }
 
           // Aplica tint se definido
-          const tint = Text3dModel.tint[eid];
+          const tint = TextMesh.tint[eid];
           if (tint !== 0) {
             group.traverse((child) => {
               if ((child as THREE.Mesh).isMesh) {
@@ -72,7 +72,7 @@ export const Text3dLoadSystem: System = {
           console.error('[text-3d] Falha ao carregar modelo Text3D:', err);
         })
         .finally(() => {
-          Text3dModel.pending[eid] = 0;
+          TextMesh.pending[eid] = 0;
           text3dInFlight.set(eid, false);
         });
     }
@@ -86,7 +86,7 @@ export const Text3dCleanupSystem: System = {
     if (!scene) return;
 
     for (const [eid, group] of text3dGroups) {
-      if (!state.exists(eid) || !state.hasComponent(eid, Text3dModel)) {
+      if (!state.exists(eid) || !state.hasComponent(eid, TextMesh)) {
         scene.remove(group);
         text3dGroups.delete(eid);
         text3dUrls.delete(eid);

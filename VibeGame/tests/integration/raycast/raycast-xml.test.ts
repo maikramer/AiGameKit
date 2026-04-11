@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
 import {
   RaycastSource,
-  RaycastResult,
+  RaycastHit,
 } from '../../../src/plugins/raycast/components';
 import { RaycastPlugin } from '../../../src/plugins/raycast/plugin';
 
@@ -38,7 +38,7 @@ describe('Raycast XML recipe', () => {
     expect(entities.length).toBe(1);
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, RaycastSource)).toBe(true);
-    expect(state.hasComponent(entity, RaycastResult)).toBe(true);
+    expect(state.hasComponent(entity, RaycastHit)).toBe(true);
   });
 
   it('parses max-dist attribute from XML', () => {
@@ -129,17 +129,17 @@ describe('Raycast XML recipe', () => {
     state.registerPlugin(RaycastPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, RaycastResult);
+    state.addComponent(entity, RaycastHit);
 
-    expect(RaycastResult.hitValid[entity]).toBe(0);
-    expect(RaycastResult.hitEntity[entity]).toBe(0);
-    expect(RaycastResult.hitDist[entity]).toBeCloseTo(0);
-    expect(RaycastResult.hitNormalX[entity]).toBeCloseTo(0);
-    expect(RaycastResult.hitNormalY[entity]).toBeCloseTo(1);
-    expect(RaycastResult.hitNormalZ[entity]).toBeCloseTo(0);
-    expect(RaycastResult.hitPointX[entity]).toBeCloseTo(0);
-    expect(RaycastResult.hitPointY[entity]).toBeCloseTo(0);
-    expect(RaycastResult.hitPointZ[entity]).toBeCloseTo(0);
+    expect(RaycastHit.hitValid[entity]).toBe(0);
+    expect(RaycastHit.hitEntity[entity]).toBe(0);
+    expect(RaycastHit.hitDist[entity]).toBeCloseTo(0);
+    expect(RaycastHit.hitNormalX[entity]).toBeCloseTo(0);
+    expect(RaycastHit.hitNormalY[entity]).toBeCloseTo(1);
+    expect(RaycastHit.hitNormalZ[entity]).toBeCloseTo(0);
+    expect(RaycastHit.hitPointX[entity]).toBeCloseTo(0);
+    expect(RaycastHit.hitPointY[entity]).toBeCloseTo(0);
+    expect(RaycastHit.hitPointZ[entity]).toBeCloseTo(0);
   });
 
   it('allows writing and reading RaycastSource fields', () => {

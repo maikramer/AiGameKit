@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'vibegame';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   PhysicsPlugin,
   CharacterController,
@@ -48,11 +48,11 @@ describe('Physics Recipes', () => {
       const staticEntity = entities[0].entity;
 
       // Verify body type is Fixed
-      expect(Body.type[staticEntity]).toBe(BodyType.Fixed);
-      expect(Body.mass[staticEntity]).toBe(0);
-      expect(Body.gravityScale[staticEntity]).toBe(0);
+      expect(Rigidbody.type[staticEntity]).toBe(BodyType.Fixed);
+      expect(Rigidbody.mass[staticEntity]).toBe(0);
+      expect(Rigidbody.gravityScale[staticEntity]).toBe(0);
 
-      const initialY = Body.posY[staticEntity];
+      const initialY = Rigidbody.posY[staticEntity];
       expect(initialY).toBe(10);
 
       // Simulate and verify it doesn't move
@@ -60,7 +60,7 @@ describe('Physics Recipes', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posY[staticEntity]).toBe(initialY);
+      expect(Rigidbody.posY[staticEntity]).toBe(initialY);
     });
 
     it('should apply attributes correctly', () => {
@@ -79,12 +79,12 @@ describe('Physics Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const entity = entities[0].entity;
 
-      expect(Body.posX[entity]).toBe(5);
-      expect(Body.posY[entity]).toBe(2);
-      expect(Body.posZ[entity]).toBe(-3);
+      expect(Rigidbody.posX[entity]).toBe(5);
+      expect(Rigidbody.posY[entity]).toBe(2);
+      expect(Rigidbody.posZ[entity]).toBe(-3);
       // Even with mass attribute, static should override to 0
-      expect(Body.mass[entity]).toBe(10);
-      expect(Body.type[entity]).toBe(BodyType.Fixed);
+      expect(Rigidbody.mass[entity]).toBe(10);
+      expect(Rigidbody.type[entity]).toBe(BodyType.Fixed);
     });
   });
 
@@ -107,11 +107,11 @@ describe('Physics Recipes', () => {
       const dynamicEntity = entities[0].entity;
 
       // Verify body type is Dynamic
-      expect(Body.type[dynamicEntity]).toBe(BodyType.Dynamic);
-      expect(Body.mass[dynamicEntity]).toBe(1);
-      expect(Body.gravityScale[dynamicEntity]).toBe(1);
+      expect(Rigidbody.type[dynamicEntity]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.mass[dynamicEntity]).toBe(1);
+      expect(Rigidbody.gravityScale[dynamicEntity]).toBe(1);
 
-      const initialY = Body.posY[dynamicEntity];
+      const initialY = Rigidbody.posY[dynamicEntity];
       expect(initialY).toBe(10);
 
       // Simulate and verify it falls
@@ -119,7 +119,7 @@ describe('Physics Recipes', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posY[dynamicEntity]).toBeLessThan(initialY);
+      expect(Rigidbody.posY[dynamicEntity]).toBeLessThan(initialY);
     });
 
     it('should apply custom mass', () => {
@@ -136,8 +136,8 @@ describe('Physics Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const entity = entities[0].entity;
 
-      expect(Body.mass[entity]).toBe(5);
-      expect(Body.gravityScale[entity]).toBe(1);
+      expect(Rigidbody.mass[entity]).toBe(5);
+      expect(Rigidbody.gravityScale[entity]).toBe(1);
     });
   });
 
@@ -160,11 +160,11 @@ describe('Physics Recipes', () => {
       const kinematicEntity = entities[0].entity;
 
       // Verify body type is Kinematic
-      expect(Body.type[kinematicEntity]).toBe(BodyType.KinematicVelocityBased);
-      expect(Body.mass[kinematicEntity]).toBe(1);
-      expect(Body.gravityScale[kinematicEntity]).toBe(0);
+      expect(Rigidbody.type[kinematicEntity]).toBe(BodyType.KinematicVelocityBased);
+      expect(Rigidbody.mass[kinematicEntity]).toBe(1);
+      expect(Rigidbody.gravityScale[kinematicEntity]).toBe(0);
 
-      const initialY = Body.posY[kinematicEntity];
+      const initialY = Rigidbody.posY[kinematicEntity];
       expect(initialY).toBe(10);
 
       // Simulate and verify it doesn't fall
@@ -172,7 +172,7 @@ describe('Physics Recipes', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posY[kinematicEntity]).toBe(initialY);
+      expect(Rigidbody.posY[kinematicEntity]).toBe(initialY);
     });
 
     it('should support velocity for moving platforms', () => {
@@ -188,9 +188,9 @@ describe('Physics Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const entity = entities[0].entity;
 
-      expect(Body.velX[entity]).toBe(2);
-      expect(Body.velY[entity]).toBe(0);
-      expect(Body.velZ[entity]).toBe(0);
+      expect(Rigidbody.velX[entity]).toBe(2);
+      expect(Rigidbody.velY[entity]).toBe(0);
+      expect(Rigidbody.velZ[entity]).toBe(0);
     });
   });
 
@@ -290,11 +290,11 @@ describe('Physics Recipes', () => {
       expect(entities.length).toBe(1);
       const character = entities[0].entity;
 
-      expect(state.hasComponent(character, Body)).toBe(true);
-      expect(Body.type[character]).toBe(BodyType.KinematicPositionBased);
-      expect(Body.posX[character]).toBe(0);
-      expect(Body.posY[character]).toBe(1);
-      expect(Body.posZ[character]).toBe(0);
+      expect(state.hasComponent(character, Rigidbody)).toBe(true);
+      expect(Rigidbody.type[character]).toBe(BodyType.KinematicPositionBased);
+      expect(Rigidbody.posX[character]).toBe(0);
+      expect(Rigidbody.posY[character]).toBe(1);
+      expect(Rigidbody.posZ[character]).toBe(0);
 
       expect(state.hasComponent(character, Collider)).toBe(true);
       expect(Collider.shape[character]).toBe(ColliderShape.Capsule);
@@ -374,9 +374,9 @@ describe('Physics Recipes', () => {
       expect(entities.length).toBe(2);
       const platform = entities[0].entity;
 
-      expect(state.hasComponent(platform, Body)).toBe(true);
-      expect(Body.type[platform]).toBe(BodyType.KinematicVelocityBased);
-      expect(Body.posY[platform]).toBe(2);
+      expect(state.hasComponent(platform, Rigidbody)).toBe(true);
+      expect(Rigidbody.type[platform]).toBe(BodyType.KinematicVelocityBased);
+      expect(Rigidbody.posY[platform]).toBe(2);
 
       const renderer = state.getComponent('renderer') as any;
       const collider = state.getComponent('collider') as any;
@@ -429,18 +429,18 @@ describe('Physics Recipes', () => {
       );
 
       // Verify body types
-      expect(Body.type[staticEnt]).toBe(BodyType.Fixed);
-      expect(Body.type[dynamicEnt]).toBe(BodyType.Dynamic);
-      expect(Body.type[kinematicEnt]).toBe(BodyType.KinematicVelocityBased);
+      expect(Rigidbody.type[staticEnt]).toBe(BodyType.Fixed);
+      expect(Rigidbody.type[dynamicEnt]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.type[kinematicEnt]).toBe(BodyType.KinematicVelocityBased);
 
       // Verify gravity scales
-      expect(Body.gravityScale[staticEnt]).toBe(0);
-      expect(Body.gravityScale[dynamicEnt]).toBe(1);
-      expect(Body.gravityScale[kinematicEnt]).toBe(0);
+      expect(Rigidbody.gravityScale[staticEnt]).toBe(0);
+      expect(Rigidbody.gravityScale[dynamicEnt]).toBe(1);
+      expect(Rigidbody.gravityScale[kinematicEnt]).toBe(0);
 
-      const staticInitialY = Body.posY[staticEnt];
-      const dynamicInitialY = Body.posY[dynamicEnt];
-      const kinematicInitialY = Body.posY[kinematicEnt];
+      const staticInitialY = Rigidbody.posY[staticEnt];
+      const dynamicInitialY = Rigidbody.posY[dynamicEnt];
+      const kinematicInitialY = Rigidbody.posY[kinematicEnt];
 
       // Simulate
       for (let i = 0; i < 30; i++) {
@@ -448,11 +448,11 @@ describe('Physics Recipes', () => {
       }
 
       // Static and kinematic should not move
-      expect(Body.posY[staticEnt]).toBe(staticInitialY);
-      expect(Body.posY[kinematicEnt]).toBe(kinematicInitialY);
+      expect(Rigidbody.posY[staticEnt]).toBe(staticInitialY);
+      expect(Rigidbody.posY[kinematicEnt]).toBe(kinematicInitialY);
 
       // Dynamic should fall
-      expect(Body.posY[dynamicEnt]).toBeLessThan(dynamicInitialY);
+      expect(Rigidbody.posY[dynamicEnt]).toBeLessThan(dynamicInitialY);
     });
   });
 });

@@ -5,7 +5,7 @@ export {
   MainCamera,
   PointLight,
   RenderContext,
-  Renderer,
+  MeshRenderer,
   SpotLight,
 } from './components';
 export { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';

@@ -1,6 +1,6 @@
 import type { State } from '../../core';
 import { Parent } from '../../core';
-import { Renderer } from '../rendering';
+import { MeshRenderer } from '../rendering';
 import { Transform } from '../transforms';
 import { ANIMATION_CONFIG, BODY_PARTS } from './constants';
 
@@ -13,7 +13,7 @@ export function createBodyPart(
   const entity = state.createEntity();
 
   state.addComponent(entity, Transform);
-  state.addComponent(entity, Renderer);
+  state.addComponent(entity, MeshRenderer);
   state.addComponent(entity, Parent);
 
   Transform.posX[entity] = part.offset.x;
@@ -27,12 +27,12 @@ export function createBodyPart(
   Transform.scaleY[entity] = 1;
   Transform.scaleZ[entity] = 1;
 
-  Renderer.shape[entity] = 0; // BOX
-  Renderer.sizeX[entity] = part.size.x;
-  Renderer.sizeY[entity] = part.size.y;
-  Renderer.sizeZ[entity] = part.size.z;
-  Renderer.color[entity] = part.color;
-  Renderer.visible[entity] = 1;
+  MeshRenderer.shape[entity] = 0; // BOX
+  MeshRenderer.sizeX[entity] = part.size.x;
+  MeshRenderer.sizeY[entity] = part.size.y;
+  MeshRenderer.sizeZ[entity] = part.size.z;
+  MeshRenderer.color[entity] = part.color;
+  MeshRenderer.visible[entity] = 1;
 
   Parent.entity[entity] = parentEntity;
 

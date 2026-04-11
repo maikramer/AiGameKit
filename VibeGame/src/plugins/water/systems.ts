@@ -8,7 +8,7 @@ import {
 } from '../physics/components';
 import { getPhysicsContext, RAPIER } from '../physics';
 import { PhysicsWorldSystem } from '../physics/systems';
-import { Player } from '../player/components';
+import { PlayerController } from '../player/components';
 import { getRenderingContext, MainCamera, threeCameras } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
 import { TransformHierarchySystem, WorldTransform } from '../transforms';
@@ -33,7 +33,7 @@ import { ScreenSpaceReflection } from '../postprocessing/components';
 
 const waterQuery = defineQuery([Water]);
 const cameraQuery = defineQuery([MainCamera, WorldTransform]);
-const playerCollisionQuery = defineQuery([Player, CollisionEvents]);
+const playerCollisionQuery = defineQuery([PlayerController, CollisionEvents]);
 const swimTriggerZoneQuery = defineQuery([SwimTriggerZone]);
 const ssrQuery = defineQuery([ScreenSpaceReflection]);
 

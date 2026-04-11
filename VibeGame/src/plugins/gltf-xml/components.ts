@@ -6,7 +6,7 @@ export const GltfPending = defineComponent({
 });
 
 /**
- * Após o GLB carregar, cria `Body` + `Collider` no AABB do modelo.
+ * Após o GLB carregar, cria `Rigidbody` + `Collider` no AABB do modelo.
  * `ready`: 0 = aguardando; 1 = física aplicada.
  * `colliderShape`: valores de `ColliderShape` (box / sphere / capsule), campo no fim para não alterar layout dos restantes.
  */

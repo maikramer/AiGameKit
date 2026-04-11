@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { createEntityFromRecipe } from '../../../src/core/recipes/parser';
 import { expandShorthands } from '../../../src/core/recipes/shorthand-expander';
 import { State } from '../../../src/core/ecs/state';
-import { EntityScript } from '../../../src/plugins/entity-script/components';
+import { MonoBehaviour } from '../../../src/plugins/entity-script/components';
 import {
   coerceEntityScriptModule,
   getEntityScriptsGlob,
@@ -48,8 +48,8 @@ describe('entity-script', () => {
       script: 'cristal.ts',
     });
 
-    expect(state.hasComponent(eid, EntityScript)).toBe(true);
-    expect(EntityScript.ready[eid]).toBe(0);
+    expect(state.hasComponent(eid, MonoBehaviour)).toBe(true);
+    expect(MonoBehaviour.ready[eid]).toBe(0);
     expect(getScriptFile(state, eid)).toBe('cristal.ts');
   });
 

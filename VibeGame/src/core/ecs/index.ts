@@ -54,6 +54,7 @@ export type {
   Recipe,
   ShorthandMapping,
   System,
+  Time,
   ValidationRule,
 } from './types';
 export { Tag, addTag, getTagId, getTagName } from './tags';

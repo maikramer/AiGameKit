@@ -4,13 +4,13 @@ import { HasAnimator } from '../animation/components';
 import { InputState } from '../input';
 import { OrbitCamera } from '../orbit-camera';
 import {
-  Body,
+  Rigidbody,
   CharacterController,
   CharacterMovement,
   Collider,
 } from '../physics';
 import {
-  Player,
+  PlayerController,
   PLAYER_BODY_DEFAULTS,
   PLAYER_COLLIDER_DEFAULTS,
 } from '../player';
@@ -20,9 +20,9 @@ import { Transform } from '../transforms';
 
 const ambientQuery = defineQuery([AmbientLight]);
 const directionalQuery = defineQuery([DirectionalLight]);
-const playersQuery = defineQuery([Player]);
+const playersQuery = defineQuery([PlayerController]);
 const mainCameraQuery = defineQuery([MainCamera]);
-const playersWithoutAnimatorQuery = defineQuery([Player]);
+const playersWithoutAnimatorQuery = defineQuery([PlayerController]);
 
 export const LightingStartupSystem: System = {
   group: 'setup',
@@ -48,36 +48,36 @@ export const PlayerStartupSystem: System = {
     if (existingPlayers.length === 0) {
       const entity = state.createEntity();
 
-      state.addComponent(entity, Player);
+      state.addComponent(entity, PlayerController);
       state.addComponent(entity, CharacterMovement);
       state.addComponent(entity, Transform);
 
-      state.addComponent(entity, Body);
-      Body.type[entity] = PLAYER_BODY_DEFAULTS.type;
-      Body.mass[entity] = PLAYER_BODY_DEFAULTS.mass;
-      Body.posX[entity] = PLAYER_BODY_DEFAULTS.posX;
-      Body.posY[entity] = PLAYER_BODY_DEFAULTS.posY;
-      Body.posZ[entity] = PLAYER_BODY_DEFAULTS.posZ;
-      Body.eulerX[entity] = PLAYER_BODY_DEFAULTS.eulerX;
-      Body.eulerY[entity] = PLAYER_BODY_DEFAULTS.eulerY;
-      Body.eulerZ[entity] = PLAYER_BODY_DEFAULTS.eulerZ;
-      Body.rotX[entity] = 0;
-      Body.rotY[entity] = 0;
-      Body.rotZ[entity] = 0;
-      Body.rotW[entity] = 1;
-      Body.velX[entity] = PLAYER_BODY_DEFAULTS.velX;
-      Body.velY[entity] = PLAYER_BODY_DEFAULTS.velY;
-      Body.velZ[entity] = PLAYER_BODY_DEFAULTS.velZ;
-      Body.rotVelX[entity] = PLAYER_BODY_DEFAULTS.rotVelX;
-      Body.rotVelY[entity] = PLAYER_BODY_DEFAULTS.rotVelY;
-      Body.rotVelZ[entity] = PLAYER_BODY_DEFAULTS.rotVelZ;
-      Body.linearDamping[entity] = PLAYER_BODY_DEFAULTS.linearDamping;
-      Body.angularDamping[entity] = PLAYER_BODY_DEFAULTS.angularDamping;
-      Body.gravityScale[entity] = PLAYER_BODY_DEFAULTS.gravityScale;
-      Body.ccd[entity] = PLAYER_BODY_DEFAULTS.ccd;
-      Body.lockRotX[entity] = PLAYER_BODY_DEFAULTS.lockRotX;
-      Body.lockRotY[entity] = PLAYER_BODY_DEFAULTS.lockRotY;
-      Body.lockRotZ[entity] = PLAYER_BODY_DEFAULTS.lockRotZ;
+      state.addComponent(entity, Rigidbody);
+      Rigidbody.type[entity] = PLAYER_BODY_DEFAULTS.type;
+      Rigidbody.mass[entity] = PLAYER_BODY_DEFAULTS.mass;
+      Rigidbody.posX[entity] = PLAYER_BODY_DEFAULTS.posX;
+      Rigidbody.posY[entity] = PLAYER_BODY_DEFAULTS.posY;
+      Rigidbody.posZ[entity] = PLAYER_BODY_DEFAULTS.posZ;
+      Rigidbody.eulerX[entity] = PLAYER_BODY_DEFAULTS.eulerX;
+      Rigidbody.eulerY[entity] = PLAYER_BODY_DEFAULTS.eulerY;
+      Rigidbody.eulerZ[entity] = PLAYER_BODY_DEFAULTS.eulerZ;
+      Rigidbody.rotX[entity] = 0;
+      Rigidbody.rotY[entity] = 0;
+      Rigidbody.rotZ[entity] = 0;
+      Rigidbody.rotW[entity] = 1;
+      Rigidbody.velX[entity] = PLAYER_BODY_DEFAULTS.velX;
+      Rigidbody.velY[entity] = PLAYER_BODY_DEFAULTS.velY;
+      Rigidbody.velZ[entity] = PLAYER_BODY_DEFAULTS.velZ;
+      Rigidbody.rotVelX[entity] = PLAYER_BODY_DEFAULTS.rotVelX;
+      Rigidbody.rotVelY[entity] = PLAYER_BODY_DEFAULTS.rotVelY;
+      Rigidbody.rotVelZ[entity] = PLAYER_BODY_DEFAULTS.rotVelZ;
+      Rigidbody.linearDamping[entity] = PLAYER_BODY_DEFAULTS.linearDamping;
+      Rigidbody.angularDamping[entity] = PLAYER_BODY_DEFAULTS.angularDamping;
+      Rigidbody.gravityScale[entity] = PLAYER_BODY_DEFAULTS.gravityScale;
+      Rigidbody.ccd[entity] = PLAYER_BODY_DEFAULTS.ccd;
+      Rigidbody.lockRotX[entity] = PLAYER_BODY_DEFAULTS.lockRotX;
+      Rigidbody.lockRotY[entity] = PLAYER_BODY_DEFAULTS.lockRotY;
+      Rigidbody.lockRotZ[entity] = PLAYER_BODY_DEFAULTS.lockRotZ;
 
       state.addComponent(entity, Collider);
       Collider.shape[entity] = PLAYER_COLLIDER_DEFAULTS.shape;

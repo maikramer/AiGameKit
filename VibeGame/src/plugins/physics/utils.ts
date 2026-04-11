@@ -18,7 +18,7 @@ import {
   ApplyForce,
   ApplyImpulse,
   ApplyTorque,
-  Body,
+  Rigidbody,
   BodyType,
   CharacterController,
   CharacterMovement,
@@ -166,7 +166,7 @@ export function applyForceToEntity(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  if (Body.type[entity] === BodyType.Dynamic) {
+  if (Rigidbody.type[entity] === BodyType.Dynamic) {
     body.addForce(
       new RAPIER.Vector3(
         ApplyForce.x[entity],
@@ -184,7 +184,7 @@ export function applyTorqueToEntity(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  if (Body.type[entity] === BodyType.Dynamic) {
+  if (Rigidbody.type[entity] === BodyType.Dynamic) {
     body.addTorque(
       new RAPIER.Vector3(
         ApplyTorque.x[entity],
@@ -202,7 +202,7 @@ export function applyImpulseToEntity(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  if (Body.type[entity] === BodyType.Dynamic) {
+  if (Rigidbody.type[entity] === BodyType.Dynamic) {
     body.applyImpulse(
       new RAPIER.Vector3(
         ApplyImpulse.x[entity],
@@ -220,7 +220,7 @@ export function applyAngularImpulseToEntity(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  if (Body.type[entity] === BodyType.Dynamic) {
+  if (Rigidbody.type[entity] === BodyType.Dynamic) {
     body.applyTorqueImpulse(
       new RAPIER.Vector3(
         ApplyAngularImpulse.x[entity],
@@ -238,7 +238,7 @@ export function setLinearVelocityForEntity(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  const type = Body.type[entity];
+  const type = Rigidbody.type[entity];
 
   if (type === BodyType.Dynamic) {
     const currentVel = body.linvel();
@@ -278,7 +278,7 @@ export function setAngularVelocityForEntity(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  const type = Body.type[entity];
+  const type = Rigidbody.type[entity];
 
   if (type === BodyType.Dynamic) {
     const currentAngVel = body.angvel();
@@ -322,7 +322,7 @@ export function applyKinematicMove(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  const type = Body.type[entity];
+  const type = Rigidbody.type[entity];
   if (type === BodyType.KinematicPositionBased) {
     body.setNextKinematicTranslation(
       new RAPIER.Vector3(
@@ -354,7 +354,7 @@ export function applyKinematicRotation(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  if (Body.type[entity] === BodyType.KinematicPositionBased) {
+  if (Rigidbody.type[entity] === BodyType.KinematicPositionBased) {
     body.setNextKinematicRotation(
       new RAPIER.Quaternion(
         KinematicRotate.x[entity],
@@ -372,56 +372,56 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
   const currentRot = body.rotation();
 
   const hasPositionChange =
-    currentPos.x !== Body.posX[entity] ||
-    currentPos.y !== Body.posY[entity] ||
-    currentPos.z !== Body.posZ[entity];
+    currentPos.x !== Rigidbody.posX[entity] ||
+    currentPos.y !== Rigidbody.posY[entity] ||
+    currentPos.z !== Rigidbody.posZ[entity];
 
   const hasRotationChange =
-    currentRot.x !== Body.rotX[entity] ||
-    currentRot.y !== Body.rotY[entity] ||
-    currentRot.z !== Body.rotZ[entity] ||
-    currentRot.w !== Body.rotW[entity];
+    currentRot.x !== Rigidbody.rotX[entity] ||
+    currentRot.y !== Rigidbody.rotY[entity] ||
+    currentRot.z !== Rigidbody.rotZ[entity] ||
+    currentRot.w !== Rigidbody.rotW[entity];
 
   if (hasPositionChange) {
     body.setTranslation(
       new RAPIER.Vector3(
-        Body.posX[entity],
-        Body.posY[entity],
-        Body.posZ[entity]
+        Rigidbody.posX[entity],
+        Rigidbody.posY[entity],
+        Rigidbody.posZ[entity]
       ),
       true
     );
 
     if (InterpolatedTransform.prevPosX[entity] !== undefined) {
-      InterpolatedTransform.prevPosX[entity] = Body.posX[entity];
-      InterpolatedTransform.prevPosY[entity] = Body.posY[entity];
-      InterpolatedTransform.prevPosZ[entity] = Body.posZ[entity];
-      InterpolatedTransform.posX[entity] = Body.posX[entity];
-      InterpolatedTransform.posY[entity] = Body.posY[entity];
-      InterpolatedTransform.posZ[entity] = Body.posZ[entity];
+      InterpolatedTransform.prevPosX[entity] = Rigidbody.posX[entity];
+      InterpolatedTransform.prevPosY[entity] = Rigidbody.posY[entity];
+      InterpolatedTransform.prevPosZ[entity] = Rigidbody.posZ[entity];
+      InterpolatedTransform.posX[entity] = Rigidbody.posX[entity];
+      InterpolatedTransform.posY[entity] = Rigidbody.posY[entity];
+      InterpolatedTransform.posZ[entity] = Rigidbody.posZ[entity];
     }
   }
 
   if (hasRotationChange) {
     body.setRotation(
       new RAPIER.Quaternion(
-        Body.rotX[entity],
-        Body.rotY[entity],
-        Body.rotZ[entity],
-        Body.rotW[entity]
+        Rigidbody.rotX[entity],
+        Rigidbody.rotY[entity],
+        Rigidbody.rotZ[entity],
+        Rigidbody.rotW[entity]
       ),
       true
     );
 
     if (InterpolatedTransform.prevRotX[entity] !== undefined) {
-      InterpolatedTransform.prevRotX[entity] = Body.rotX[entity];
-      InterpolatedTransform.prevRotY[entity] = Body.rotY[entity];
-      InterpolatedTransform.prevRotZ[entity] = Body.rotZ[entity];
-      InterpolatedTransform.prevRotW[entity] = Body.rotW[entity];
-      InterpolatedTransform.rotX[entity] = Body.rotX[entity];
-      InterpolatedTransform.rotY[entity] = Body.rotY[entity];
-      InterpolatedTransform.rotZ[entity] = Body.rotZ[entity];
-      InterpolatedTransform.rotW[entity] = Body.rotW[entity];
+      InterpolatedTransform.prevRotX[entity] = Rigidbody.rotX[entity];
+      InterpolatedTransform.prevRotY[entity] = Rigidbody.rotY[entity];
+      InterpolatedTransform.prevRotZ[entity] = Rigidbody.rotZ[entity];
+      InterpolatedTransform.prevRotW[entity] = Rigidbody.rotW[entity];
+      InterpolatedTransform.rotX[entity] = Rigidbody.rotX[entity];
+      InterpolatedTransform.rotY[entity] = Rigidbody.rotY[entity];
+      InterpolatedTransform.rotZ[entity] = Rigidbody.rotZ[entity];
+      InterpolatedTransform.rotW[entity] = Rigidbody.rotW[entity];
     }
   }
 }
@@ -480,7 +480,7 @@ export function applyCharacterMovement(
 ): void {
   const wasGrounded = CharacterController.grounded[entity] === 1;
 
-  const gravityScale = Body.gravityScale[entity];
+  const gravityScale = Rigidbody.gravityScale[entity];
   const effectiveGravity = gravityY * gravityScale;
 
   if (!wasGrounded) {
@@ -503,24 +503,24 @@ export function applyCharacterMovement(
 
   const platform = CharacterController.platform[entity];
   if (wasGrounded && platform !== NULL_ENTITY) {
-    const platformBodyType = Body.type[platform];
+    const platformBodyType = Rigidbody.type[platform];
     if (platformBodyType === BodyType.KinematicVelocityBased) {
-      platformVelX = Body.velX[platform] || 0;
-      platformVelY = Body.velY[platform] || 0;
-      platformVelZ = Body.velZ[platform] || 0;
+      platformVelX = Rigidbody.velX[platform] || 0;
+      platformVelY = Rigidbody.velY[platform] || 0;
+      platformVelZ = Rigidbody.velZ[platform] || 0;
     }
 
-    const angVelX = Body.rotVelX[platform] || 0;
-    const angVelY = Body.rotVelY[platform] || 0;
-    const angVelZ = Body.rotVelZ[platform] || 0;
+    const angVelX = Rigidbody.rotVelX[platform] || 0;
+    const angVelY = Rigidbody.rotVelY[platform] || 0;
+    const angVelZ = Rigidbody.rotVelZ[platform] || 0;
 
     if (angVelX !== 0 || angVelY !== 0 || angVelZ !== 0) {
-      const playerPosX = Body.posX[entity];
-      const playerPosY = Body.posY[entity];
-      const playerPosZ = Body.posZ[entity];
-      const platformPosX = Body.posX[platform];
-      const platformPosY = Body.posY[platform];
-      const platformPosZ = Body.posZ[platform];
+      const playerPosX = Rigidbody.posX[entity];
+      const playerPosY = Rigidbody.posY[entity];
+      const playerPosZ = Rigidbody.posZ[entity];
+      const platformPosX = Rigidbody.posX[platform];
+      const platformPosY = Rigidbody.posY[platform];
+      const platformPosZ = Rigidbody.posZ[platform];
 
       const offsetX = playerPosX - platformPosX;
       const offsetY = playerPosY - platformPosY;
@@ -685,13 +685,13 @@ export function syncRigidbodyToECS(
   const rotation = body.rotation();
   const linvel = body.linvel();
 
-  Body.posX[entity] = position.x;
-  Body.posY[entity] = position.y;
-  Body.posZ[entity] = position.z;
-  Body.rotX[entity] = rotation.x;
-  Body.rotY[entity] = rotation.y;
-  Body.rotZ[entity] = rotation.z;
-  Body.rotW[entity] = rotation.w;
+  Rigidbody.posX[entity] = position.x;
+  Rigidbody.posY[entity] = position.y;
+  Rigidbody.posZ[entity] = position.z;
+  Rigidbody.rotX[entity] = rotation.x;
+  Rigidbody.rotY[entity] = rotation.y;
+  Rigidbody.rotZ[entity] = rotation.z;
+  Rigidbody.rotW[entity] = rotation.w;
 
   const euler = quaternionToEuler(
     rotation.x,
@@ -699,23 +699,23 @@ export function syncRigidbodyToECS(
     rotation.z,
     rotation.w
   );
-  Body.eulerX[entity] = euler.x;
-  Body.eulerY[entity] = euler.y;
-  Body.eulerZ[entity] = euler.z;
+  Rigidbody.eulerX[entity] = euler.x;
+  Rigidbody.eulerY[entity] = euler.y;
+  Rigidbody.eulerZ[entity] = euler.z;
 
-  Body.velX[entity] = linvel.x;
-  Body.velY[entity] = linvel.y;
-  Body.velZ[entity] = linvel.z;
+  Rigidbody.velX[entity] = linvel.x;
+  Rigidbody.velY[entity] = linvel.y;
+  Rigidbody.velZ[entity] = linvel.z;
 
   if (state.hasComponent(entity, KinematicAngularVelocity)) {
-    Body.rotVelX[entity] = KinematicAngularVelocity.x[entity];
-    Body.rotVelY[entity] = KinematicAngularVelocity.y[entity];
-    Body.rotVelZ[entity] = KinematicAngularVelocity.z[entity];
+    Rigidbody.rotVelX[entity] = KinematicAngularVelocity.x[entity];
+    Rigidbody.rotVelY[entity] = KinematicAngularVelocity.y[entity];
+    Rigidbody.rotVelZ[entity] = KinematicAngularVelocity.z[entity];
   } else {
     const angvel = body.angvel();
-    Body.rotVelX[entity] = angvel.x;
-    Body.rotVelY[entity] = angvel.y;
-    Body.rotVelZ[entity] = angvel.z;
+    Rigidbody.rotVelX[entity] = angvel.x;
+    Rigidbody.rotVelY[entity] = angvel.y;
+    Rigidbody.rotVelZ[entity] = angvel.z;
   }
 }
 
@@ -729,27 +729,27 @@ export function copyRigidbodyToTransforms(entity: number, state: State): void {
       `[copyRigidbodyToTransforms] Entity ${entity} does not have the required components`
     );
 
-  Transform.posX[entity] = Body.posX[entity];
-  Transform.posY[entity] = Body.posY[entity];
-  Transform.posZ[entity] = Body.posZ[entity];
-  Transform.rotX[entity] = Body.rotX[entity];
-  Transform.rotY[entity] = Body.rotY[entity];
-  Transform.rotZ[entity] = Body.rotZ[entity];
-  Transform.rotW[entity] = Body.rotW[entity];
-  Transform.eulerX[entity] = Body.eulerX[entity];
-  Transform.eulerY[entity] = Body.eulerY[entity];
-  Transform.eulerZ[entity] = Body.eulerZ[entity];
+  Transform.posX[entity] = Rigidbody.posX[entity];
+  Transform.posY[entity] = Rigidbody.posY[entity];
+  Transform.posZ[entity] = Rigidbody.posZ[entity];
+  Transform.rotX[entity] = Rigidbody.rotX[entity];
+  Transform.rotY[entity] = Rigidbody.rotY[entity];
+  Transform.rotZ[entity] = Rigidbody.rotZ[entity];
+  Transform.rotW[entity] = Rigidbody.rotW[entity];
+  Transform.eulerX[entity] = Rigidbody.eulerX[entity];
+  Transform.eulerY[entity] = Rigidbody.eulerY[entity];
+  Transform.eulerZ[entity] = Rigidbody.eulerZ[entity];
 
-  WorldTransform.posX[entity] = Body.posX[entity];
-  WorldTransform.posY[entity] = Body.posY[entity];
-  WorldTransform.posZ[entity] = Body.posZ[entity];
-  WorldTransform.rotX[entity] = Body.rotX[entity];
-  WorldTransform.rotY[entity] = Body.rotY[entity];
-  WorldTransform.rotZ[entity] = Body.rotZ[entity];
-  WorldTransform.rotW[entity] = Body.rotW[entity];
-  WorldTransform.eulerX[entity] = Body.eulerX[entity];
-  WorldTransform.eulerY[entity] = Body.eulerY[entity];
-  WorldTransform.eulerZ[entity] = Body.eulerZ[entity];
+  WorldTransform.posX[entity] = Rigidbody.posX[entity];
+  WorldTransform.posY[entity] = Rigidbody.posY[entity];
+  WorldTransform.posZ[entity] = Rigidbody.posZ[entity];
+  WorldTransform.rotX[entity] = Rigidbody.rotX[entity];
+  WorldTransform.rotY[entity] = Rigidbody.rotY[entity];
+  WorldTransform.rotZ[entity] = Rigidbody.rotZ[entity];
+  WorldTransform.rotW[entity] = Rigidbody.rotW[entity];
+  WorldTransform.eulerX[entity] = Rigidbody.eulerX[entity];
+  WorldTransform.eulerY[entity] = Rigidbody.eulerY[entity];
+  WorldTransform.eulerZ[entity] = Rigidbody.eulerZ[entity];
 
   InterpolatedTransform.prevPosX[entity] = InterpolatedTransform.posX[entity];
   InterpolatedTransform.prevPosY[entity] = InterpolatedTransform.posY[entity];
@@ -759,35 +759,35 @@ export function copyRigidbodyToTransforms(entity: number, state: State): void {
   InterpolatedTransform.prevRotZ[entity] = InterpolatedTransform.rotZ[entity];
   InterpolatedTransform.prevRotW[entity] = InterpolatedTransform.rotW[entity];
 
-  InterpolatedTransform.posX[entity] = Body.posX[entity];
-  InterpolatedTransform.posY[entity] = Body.posY[entity];
-  InterpolatedTransform.posZ[entity] = Body.posZ[entity];
-  InterpolatedTransform.rotX[entity] = Body.rotX[entity];
-  InterpolatedTransform.rotY[entity] = Body.rotY[entity];
-  InterpolatedTransform.rotZ[entity] = Body.rotZ[entity];
-  InterpolatedTransform.rotW[entity] = Body.rotW[entity];
+  InterpolatedTransform.posX[entity] = Rigidbody.posX[entity];
+  InterpolatedTransform.posY[entity] = Rigidbody.posY[entity];
+  InterpolatedTransform.posZ[entity] = Rigidbody.posZ[entity];
+  InterpolatedTransform.rotX[entity] = Rigidbody.rotX[entity];
+  InterpolatedTransform.rotY[entity] = Rigidbody.rotY[entity];
+  InterpolatedTransform.rotZ[entity] = Rigidbody.rotZ[entity];
+  InterpolatedTransform.rotW[entity] = Rigidbody.rotW[entity];
 }
 
 export function syncBodyQuaternionFromEuler(entity: number): void {
   const quat = eulerToQuaternion(
-    Body.eulerX[entity],
-    Body.eulerY[entity],
-    Body.eulerZ[entity]
+    Rigidbody.eulerX[entity],
+    Rigidbody.eulerY[entity],
+    Rigidbody.eulerZ[entity]
   );
-  Body.rotX[entity] = quat.x;
-  Body.rotY[entity] = quat.y;
-  Body.rotZ[entity] = quat.z;
-  Body.rotW[entity] = quat.w;
+  Rigidbody.rotX[entity] = quat.x;
+  Rigidbody.rotY[entity] = quat.y;
+  Rigidbody.rotZ[entity] = quat.z;
+  Rigidbody.rotW[entity] = quat.w;
 }
 
 export function syncBodyEulerFromQuaternion(entity: number): void {
   const euler = quaternionToEuler(
-    Body.rotX[entity],
-    Body.rotY[entity],
-    Body.rotZ[entity],
-    Body.rotW[entity]
+    Rigidbody.rotX[entity],
+    Rigidbody.rotY[entity],
+    Rigidbody.rotZ[entity],
+    Rigidbody.rotW[entity]
   );
-  Body.eulerX[entity] = euler.x;
-  Body.eulerY[entity] = euler.y;
-  Body.eulerZ[entity] = euler.z;
+  Rigidbody.eulerX[entity] = euler.x;
+  Rigidbody.eulerY[entity] = euler.y;
+  Rigidbody.eulerZ[entity] = euler.z;
 }

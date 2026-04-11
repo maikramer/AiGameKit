@@ -1,6 +1,6 @@
 import { defineComponent, Types } from 'bitecs';
 
-export const AudioEmitter = defineComponent({
+export const AudioSource = defineComponent({
   clipPath: Types.ui32, // string ID
   volume: Types.f32,
   loop: Types.ui8,

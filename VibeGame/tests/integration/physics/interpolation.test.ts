@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   Collider,
   ColliderShape,
@@ -23,7 +23,7 @@ describe('Physics Interpolation', () => {
 
   it('should interpolate positions between fixed steps', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
     state.addComponent(box, WorldTransform);
@@ -33,14 +33,14 @@ describe('Physics Interpolation', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posX[box] = 0;
-    Body.posY[box] = 10;
-    Body.posZ[box] = 0;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 1;
-    Body.velX[box] = 5;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posX[box] = 0;
+    Rigidbody.posY[box] = 10;
+    Rigidbody.posZ[box] = 0;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 1;
+    Rigidbody.velX[box] = 5;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -75,7 +75,7 @@ describe('Physics Interpolation', () => {
 
   it('should interpolate rotations using slerp', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
     state.addComponent(box, WorldTransform);
@@ -85,17 +85,17 @@ describe('Physics Interpolation', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posX[box] = 0;
-    Body.posY[box] = 5;
-    Body.posZ[box] = 0;
-    Body.rotX[box] = 0;
-    Body.rotY[box] = 0;
-    Body.rotZ[box] = 0;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 0;
-    Body.rotVelY[box] = 2;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posX[box] = 0;
+    Rigidbody.posY[box] = 5;
+    Rigidbody.posZ[box] = 0;
+    Rigidbody.rotX[box] = 0;
+    Rigidbody.rotY[box] = 0;
+    Rigidbody.rotZ[box] = 0;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 0;
+    Rigidbody.rotVelY[box] = 2;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -126,20 +126,20 @@ describe('Physics Interpolation', () => {
 
     for (let i = 0; i < 5; i++) {
       const entity = state.createEntity();
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
       state.addComponent(entity, Collider);
       state.addComponent(entity, Transform);
       state.addComponent(entity, WorldTransform);
       state.addComponent(entity, InterpolatedTransform);
 
-      Body.type[entity] = BodyType.Dynamic;
-      Body.posX[entity] = i * 2;
-      Body.posY[entity] = 5;
-      Body.posZ[entity] = 0;
-      Body.rotW[entity] = 1;
-      Body.mass[entity] = 1;
-      Body.gravityScale[entity] = 0;
-      Body.velX[entity] = (i + 1) * 2;
+      Rigidbody.type[entity] = BodyType.Dynamic;
+      Rigidbody.posX[entity] = i * 2;
+      Rigidbody.posY[entity] = 5;
+      Rigidbody.posZ[entity] = 0;
+      Rigidbody.rotW[entity] = 1;
+      Rigidbody.mass[entity] = 1;
+      Rigidbody.gravityScale[entity] = 0;
+      Rigidbody.velX[entity] = (i + 1) * 2;
 
       Collider.shape[entity] = ColliderShape.Box;
       Collider.sizeX[entity] = 1;
@@ -178,7 +178,7 @@ describe('Physics Interpolation', () => {
 
   it('should reset interpolation when teleporting', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
     state.addComponent(box, WorldTransform);
@@ -188,14 +188,14 @@ describe('Physics Interpolation', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posX[box] = 0;
-    Body.posY[box] = 5;
-    Body.posZ[box] = 0;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 0;
-    Body.velX[box] = 10;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posX[box] = 0;
+    Rigidbody.posY[box] = 5;
+    Rigidbody.posZ[box] = 0;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 0;
+    Rigidbody.velX[box] = 10;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -205,10 +205,10 @@ describe('Physics Interpolation', () => {
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-    const posAfterStep = Body.posX[box];
+    const posAfterStep = Rigidbody.posX[box];
     expect(posAfterStep).toBeGreaterThan(0);
 
-    Body.posX[box] = 100;
+    Rigidbody.posX[box] = 100;
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -219,24 +219,24 @@ describe('Physics Interpolation', () => {
 
   it('should handle static bodies without interpolation artifacts', () => {
     const floor = state.createEntity();
-    state.addComponent(floor, Body);
+    state.addComponent(floor, Rigidbody);
     state.addComponent(floor, Collider);
     state.addComponent(floor, Transform);
     state.addComponent(floor, WorldTransform);
     state.addComponent(floor, InterpolatedTransform);
 
-    Body.type[floor] = BodyType.Fixed;
-    Body.posX[floor] = 0;
-    Body.posY[floor] = 0;
-    Body.posZ[floor] = 0;
-    Body.rotW[floor] = 1;
+    Rigidbody.type[floor] = BodyType.Fixed;
+    Rigidbody.posX[floor] = 0;
+    Rigidbody.posY[floor] = 0;
+    Rigidbody.posZ[floor] = 0;
+    Rigidbody.rotW[floor] = 1;
 
     Collider.shape[floor] = ColliderShape.Box;
     Collider.sizeX[floor] = 100;
     Collider.sizeY[floor] = 1;
     Collider.sizeZ[floor] = 100;
 
-    const initialX = Body.posX[floor];
+    const initialX = Rigidbody.posX[floor];
 
     for (let i = 0; i < 10; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);

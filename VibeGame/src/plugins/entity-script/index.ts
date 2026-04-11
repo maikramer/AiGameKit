@@ -1,9 +1,9 @@
-export { EntityScript } from './components';
+export { MonoBehaviour } from './components';
 export {
   getEntityScriptsGlob,
   registerEntityScripts,
   resolveEntityScriptGlobKey,
 } from './context';
 export { EntityScriptPlugin } from './plugin';
-export { EntityScriptSystem } from './system';
-export type { EntityScriptContext, EntityScriptModule } from './types';
+export { EntityScriptCollisionBridgeSystem, EntityScriptSystem } from './system';
+export type { CollisionOther, EntityScriptContext, EntityScriptModule } from './types';

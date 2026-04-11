@@ -5,7 +5,7 @@ import {
   ApplyForce,
   ApplyImpulse,
   ApplyTorque,
-  Body,
+  Rigidbody,
   BodyType,
   Collider,
   ColliderShape,
@@ -30,7 +30,7 @@ describe('Physics Forces and Impulses', () => {
   describe('Linear Forces', () => {
     it('should apply continuous force to dynamic body', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, ApplyForce);
@@ -39,13 +39,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -57,19 +57,19 @@ describe('Physics Forces and Impulses', () => {
       ApplyForce.y[box] = 0;
       ApplyForce.z[box] = 0;
 
-      const initialX = Body.posX[box];
+      const initialX = Rigidbody.posX[box];
 
       for (let i = 0; i < 10; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posX[box]).toBeGreaterThan(initialX);
-      expect(Body.velX[box]).toBeGreaterThan(0);
+      expect(Rigidbody.posX[box]).toBeGreaterThan(initialX);
+      expect(Rigidbody.velX[box]).toBeGreaterThan(0);
     });
 
     it('should apply impulse for instant velocity change', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, ApplyImpulse);
@@ -78,13 +78,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -98,22 +98,22 @@ describe('Physics Forces and Impulses', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.velX[box]).toBeGreaterThan(0);
-      expect(Body.velX[box]).toBeCloseTo(5, 1);
+      expect(Rigidbody.velX[box]).toBeGreaterThan(0);
+      expect(Rigidbody.velX[box]).toBeCloseTo(5, 1);
 
       state.removeComponent(box, ApplyImpulse);
-      const velocityAfterImpulse = Body.velX[box];
+      const velocityAfterImpulse = Rigidbody.velX[box];
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.velX[box]).toBeCloseTo(velocityAfterImpulse, 2);
+      expect(Rigidbody.velX[box]).toBeCloseTo(velocityAfterImpulse, 2);
     });
   });
 
   describe('Angular Forces', () => {
     it('should apply torque for continuous rotation', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, ApplyTorque);
@@ -122,13 +122,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -140,19 +140,19 @@ describe('Physics Forces and Impulses', () => {
       ApplyTorque.y[box] = 10;
       ApplyTorque.z[box] = 0;
 
-      const initialRotY = Body.rotY[box];
+      const initialRotY = Rigidbody.rotY[box];
 
       for (let i = 0; i < 10; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.rotVelY[box]).toBeGreaterThan(0);
-      expect(Body.rotY[box]).not.toBeCloseTo(initialRotY, 2);
+      expect(Rigidbody.rotVelY[box]).toBeGreaterThan(0);
+      expect(Rigidbody.rotY[box]).not.toBeCloseTo(initialRotY, 2);
     });
 
     it('should apply angular impulse for instant rotation', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, ApplyAngularImpulse);
@@ -161,13 +161,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -181,21 +181,21 @@ describe('Physics Forces and Impulses', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.rotVelY[box]).toBeGreaterThan(0);
+      expect(Rigidbody.rotVelY[box]).toBeGreaterThan(0);
 
       state.removeComponent(box, ApplyAngularImpulse);
-      const angularVelAfterImpulse = Body.rotVelY[box];
+      const angularVelAfterImpulse = Rigidbody.rotVelY[box];
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.rotVelY[box]).toBeCloseTo(angularVelAfterImpulse, 2);
+      expect(Rigidbody.rotVelY[box]).toBeCloseTo(angularVelAfterImpulse, 2);
     });
   });
 
   describe('Velocity Setting', () => {
     it('should set linear velocity directly', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, SetLinearVelocity);
@@ -204,13 +204,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -224,14 +224,14 @@ describe('Physics Forces and Impulses', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.velX[box]).toBeCloseTo(10, 1);
-      expect(Body.velY[box]).toBeCloseTo(5, 1);
-      expect(Body.velZ[box]).toBeCloseTo(-3, 1);
+      expect(Rigidbody.velX[box]).toBeCloseTo(10, 1);
+      expect(Rigidbody.velY[box]).toBeCloseTo(5, 1);
+      expect(Rigidbody.velZ[box]).toBeCloseTo(-3, 1);
     });
 
     it('should set angular velocity directly', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, SetAngularVelocity);
@@ -240,13 +240,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -260,16 +260,16 @@ describe('Physics Forces and Impulses', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.rotVelX[box]).toBeCloseTo(2, 1);
-      expect(Body.rotVelY[box]).toBeCloseTo(4, 1);
-      expect(Body.rotVelZ[box]).toBeCloseTo(1, 1);
+      expect(Rigidbody.rotVelX[box]).toBeCloseTo(2, 1);
+      expect(Rigidbody.rotVelY[box]).toBeCloseTo(4, 1);
+      expect(Rigidbody.rotVelZ[box]).toBeCloseTo(1, 1);
     });
   });
 
   describe('Kinematic Movement', () => {
     it('should move kinematic body to target position', () => {
       const platform = state.createEntity();
-      state.addComponent(platform, Body);
+      state.addComponent(platform, Rigidbody);
       state.addComponent(platform, Collider);
       state.addComponent(platform, Transform);
       state.addComponent(platform, KinematicMove);
@@ -278,11 +278,11 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[platform] = 1;
       Transform.scaleZ[platform] = 1;
 
-      Body.type[platform] = BodyType.KinematicPositionBased;
-      Body.posX[platform] = 0;
-      Body.posY[platform] = 0;
-      Body.posZ[platform] = 0;
-      Body.rotW[platform] = 1;
+      Rigidbody.type[platform] = BodyType.KinematicPositionBased;
+      Rigidbody.posX[platform] = 0;
+      Rigidbody.posY[platform] = 0;
+      Rigidbody.posZ[platform] = 0;
+      Rigidbody.rotW[platform] = 1;
 
       Collider.shape[platform] = ColliderShape.Box;
       Collider.sizeX[platform] = 4;
@@ -295,14 +295,14 @@ describe('Physics Forces and Impulses', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.posX[platform]).toBeCloseTo(5, 1);
-      expect(Body.posY[platform]).toBeCloseTo(2, 1);
-      expect(Body.posZ[platform]).toBeCloseTo(-3, 1);
+      expect(Rigidbody.posX[platform]).toBeCloseTo(5, 1);
+      expect(Rigidbody.posY[platform]).toBeCloseTo(2, 1);
+      expect(Rigidbody.posZ[platform]).toBeCloseTo(-3, 1);
     });
 
     it('should push dynamic bodies with kinematic movement', () => {
       const platform = state.createEntity();
-      state.addComponent(platform, Body);
+      state.addComponent(platform, Rigidbody);
       state.addComponent(platform, Collider);
       state.addComponent(platform, Transform);
 
@@ -310,11 +310,11 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[platform] = 1;
       Transform.scaleZ[platform] = 1;
 
-      Body.type[platform] = BodyType.KinematicVelocityBased;
-      Body.posX[platform] = 0;
-      Body.posY[platform] = 0;
-      Body.posZ[platform] = 0;
-      Body.rotW[platform] = 1;
+      Rigidbody.type[platform] = BodyType.KinematicVelocityBased;
+      Rigidbody.posX[platform] = 0;
+      Rigidbody.posY[platform] = 0;
+      Rigidbody.posZ[platform] = 0;
+      Rigidbody.rotW[platform] = 1;
 
       Collider.shape[platform] = ColliderShape.Box;
       Collider.sizeX[platform] = 4;
@@ -322,7 +322,7 @@ describe('Physics Forces and Impulses', () => {
       Collider.sizeZ[platform] = 4;
 
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
 
@@ -330,13 +330,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 1;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 0;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 1;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 0;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -348,7 +348,7 @@ describe('Physics Forces and Impulses', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      const boxInitialY = Body.posY[box];
+      const boxInitialY = Rigidbody.posY[box];
 
       state.addComponent(platform, KinematicMove);
       KinematicMove.x[platform] = 0;
@@ -357,15 +357,15 @@ describe('Physics Forces and Impulses', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.posY[platform]).toBeGreaterThan(0);
-      expect(Body.posY[box]).toBeGreaterThan(boxInitialY);
+      expect(Rigidbody.posY[platform]).toBeGreaterThan(0);
+      expect(Rigidbody.posY[box]).toBeGreaterThan(boxInitialY);
     });
   });
 
   describe('Force Accumulation', () => {
     it('should combine multiple forces correctly', () => {
       const box = state.createEntity();
-      state.addComponent(box, Body);
+      state.addComponent(box, Rigidbody);
       state.addComponent(box, Collider);
       state.addComponent(box, Transform);
       state.addComponent(box, ApplyForce);
@@ -374,13 +374,13 @@ describe('Physics Forces and Impulses', () => {
       Transform.scaleY[box] = 1;
       Transform.scaleZ[box] = 1;
 
-      Body.type[box] = BodyType.Dynamic;
-      Body.posX[box] = 0;
-      Body.posY[box] = 5;
-      Body.posZ[box] = 0;
-      Body.rotW[box] = 1;
-      Body.mass[box] = 1;
-      Body.gravityScale[box] = 1;
+      Rigidbody.type[box] = BodyType.Dynamic;
+      Rigidbody.posX[box] = 0;
+      Rigidbody.posY[box] = 5;
+      Rigidbody.posZ[box] = 0;
+      Rigidbody.rotW[box] = 1;
+      Rigidbody.mass[box] = 1;
+      Rigidbody.gravityScale[box] = 1;
 
       Collider.shape[box] = ColliderShape.Box;
       Collider.sizeX[box] = 1;
@@ -401,8 +401,8 @@ describe('Physics Forces and Impulses', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.velX[box]).toBeGreaterThan(0);
-      expect(Body.posX[box]).toBeGreaterThan(0);
+      expect(Rigidbody.velX[box]).toBeGreaterThan(0);
+      expect(Rigidbody.posX[box]).toBeGreaterThan(0);
     });
   });
 });

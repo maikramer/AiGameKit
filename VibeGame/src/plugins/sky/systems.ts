@@ -2,9 +2,9 @@ import * as THREE from 'three';
 import { defineQuery, type State, type System } from '../../core';
 import { getScene, getRenderingContext } from '../rendering/utils';
 import { CameraSyncSystem } from '../rendering/systems';
-import { Sky } from './components';
+import { Skybox } from './components';
 
-const skyQuery = defineQuery([Sky]);
+const skyQuery = defineQuery([Skybox]);
 
 let nextUrlIndex = 1;
 const urlByIndex = new Map<number, string>();
@@ -66,9 +66,9 @@ export const SkySystem: System = {
     if (entities.length === 0) return;
 
     const eid = entities[0];
-    if (Sky.loaded[eid] === 1) return;
+    if (Skybox.loaded[eid] === 1) return;
 
-    const url = getUrl(Sky.urlIndex[eid]);
+    const url = getUrl(Skybox.urlIndex[eid]);
     if (!url) return;
 
     const p = (async () => {
@@ -89,7 +89,7 @@ export const SkySystem: System = {
         }
       }
 
-      const tex = rotateEquirectBitmap(loaded, Sky.rotationDeg[eid]);
+      const tex = rotateEquirectBitmap(loaded, Skybox.rotationDeg[eid]);
 
       const pmrem = new THREE.PMREMGenerator(renderer);
       pmrem.compileEquirectangularShader();
@@ -100,11 +100,11 @@ export const SkySystem: System = {
 
       scene.environment = envMap;
       scene.environmentIntensity = 0.22;
-      if (Sky.setBackground[eid] === 1) {
+      if (Skybox.setBackground[eid] === 1) {
         scene.background = envMap;
       }
 
-      Sky.loaded[eid] = 1;
+      Skybox.loaded[eid] = 1;
       pending.delete(state);
     })().catch((err) => {
       console.error(`[sky] Failed to load "${url}":`, err);

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { State } from '../../../../src/core/ecs/state';
-import { EntityScript } from '../../../../src/plugins/entity-script/components';
+import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
   coerceEntityScriptModule,
   getCachedEntityScriptModule,
@@ -32,14 +32,14 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     enabled = 1,
   ): number {
     const eid = state.createEntity();
-    state.addComponent(eid, EntityScript, { ready: 0, enabled });
+    state.addComponent(eid, MonoBehaviour, { ready: 0, enabled });
     setScriptFile(state, eid, file);
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
     setCachedEntityScriptModule(state, globKey, mod as ReturnType<typeof coerceEntityScriptModule>);
 
-    EntityScript.ready[eid] = 1;
+    MonoBehaviour.ready[eid] = 1;
 
     return eid;
   }
@@ -97,7 +97,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   it('fixedUpdate does NOT fire when entity is not ready', () => {
     let fixedCount = 0;
     const eid = state.createEntity();
-    state.addComponent(eid, EntityScript, { ready: 0, enabled: 1 });
+    state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, 'notready.ts');
     registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ fixedUpdate: () => { fixedCount++; }, update: () => {} }) });
     setCachedEntityScriptModule(state, './scripts/notready.ts', coerceEntityScriptModule({ fixedUpdate: () => { fixedCount++; }, update: () => {} })!);
@@ -135,7 +135,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   it('lateUpdate does NOT fire when entity is not ready', () => {
     let lateCount = 0;
     const eid = state.createEntity();
-    state.addComponent(eid, EntityScript, { ready: 0, enabled: 1 });
+    state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, 'notready.ts');
     registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ lateUpdate: () => { lateCount++; }, update: () => {} }) });
     setCachedEntityScriptModule(state, './scripts/notready.ts', coerceEntityScriptModule({ lateUpdate: () => { lateCount++; }, update: () => {} })!);
@@ -165,12 +165,12 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     EntityScriptFixedUpdateSystem.update(state);
     EntityScriptLateUpdateSystem.update(state);
 
-    expect(EntityScript.ready[eid]).toBe(1);
+    expect(MonoBehaviour.ready[eid]).toBe(1);
   });
 
   it('fixedUpdate and lateUpdate skipped for entity without script file', () => {
     const eid = state.createEntity();
-    state.addComponent(eid, EntityScript, { ready: 1, enabled: 1 });
+    state.addComponent(eid, MonoBehaviour, { ready: 1, enabled: 1 });
 
     EntityScriptFixedUpdateSystem.update(state);
     EntityScriptLateUpdateSystem.update(state);

@@ -10,7 +10,7 @@ import {
 import {
   ApplyForce,
   ApplyImpulse,
-  Body,
+  Rigidbody,
   BodyType,
   Collider,
   ColliderShape,
@@ -54,9 +54,9 @@ describe('Physics XML Declarative API', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const ball = entities[0].entity;
 
-      expect(Body.type[ball]).toBe(BodyType.Dynamic);
-      expect(Body.mass[ball]).toBe(2);
-      expect(Body.posY[ball]).toBe(5);
+      expect(Rigidbody.type[ball]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.mass[ball]).toBe(2);
+      expect(Rigidbody.posY[ball]).toBe(5);
 
       const collider = state.getComponent('collider') as any;
       expect(collider?.restitution?.[ball]).toBeCloseTo(0.8, 2);
@@ -78,10 +78,10 @@ describe('Physics XML Declarative API', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const platform = entities[0].entity;
 
-      expect(Body.type[platform]).toBe(BodyType.KinematicVelocityBased);
-      expect(Body.velX[platform]).toBe(2);
-      expect(Body.velY[platform]).toBe(0);
-      expect(Body.velZ[platform]).toBe(0);
+      expect(Rigidbody.type[platform]).toBe(BodyType.KinematicVelocityBased);
+      expect(Rigidbody.velX[platform]).toBe(2);
+      expect(Rigidbody.velY[platform]).toBe(0);
+      expect(Rigidbody.velZ[platform]).toBe(0);
     });
 
     it('should create static floor with collision properties', () => {
@@ -100,7 +100,7 @@ describe('Physics XML Declarative API', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const floor = entities[0].entity;
 
-      expect(Body.type[floor]).toBe(BodyType.Fixed);
+      expect(Rigidbody.type[floor]).toBe(BodyType.Fixed);
 
       const collider = state.getComponent('collider') as any;
       expect(collider?.friction?.[floor]).toBeCloseTo(0.7, 2);
@@ -139,8 +139,8 @@ describe('Physics XML Declarative API', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const [box, floor] = entities.map((e) => e.entity);
 
-      expect(Body.type[box]).toBe(BodyType.Dynamic);
-      expect(Body.type[floor]).toBe(BodyType.Fixed);
+      expect(Rigidbody.type[box]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.type[floor]).toBe(BodyType.Fixed);
 
       state.addComponent(box, CollisionEvents);
       state.addComponent(floor, CollisionEvents);
@@ -179,7 +179,7 @@ describe('Physics XML Declarative API', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const ball = entities[0].entity;
 
-      expect(Body.type[ball]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.type[ball]).toBe(BodyType.Dynamic);
 
       state.addComponent(ball, ApplyImpulse, {
         x: 0,
@@ -189,7 +189,7 @@ describe('Physics XML Declarative API', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.velY[ball]).toBeGreaterThan(0);
+      expect(Rigidbody.velY[ball]).toBeGreaterThan(0);
 
       state.removeComponent(ball, ApplyImpulse);
       state.addComponent(ball, ApplyForce, {
@@ -202,7 +202,7 @@ describe('Physics XML Declarative API', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.velX[ball]).toBeGreaterThan(0);
+      expect(Rigidbody.velX[ball]).toBeGreaterThan(0);
     });
 
     it('should handle collision response imperatively for XML entities', () => {
@@ -246,7 +246,7 @@ describe('Physics XML Declarative API', () => {
       }
 
       expect(bounced).toBe(true);
-      expect(Body.posY[box]).toBeGreaterThan(0);
+      expect(Rigidbody.posY[box]).toBeGreaterThan(0);
     });
   });
 
@@ -261,14 +261,14 @@ describe('Physics XML Declarative API', () => {
       testState.registerPlugin(PhysicsPlugin);
 
       const entity = testState.createEntity();
-      testState.addComponent(entity, Body);
+      testState.addComponent(entity, Rigidbody);
       testState.addComponent(entity, Collider);
 
-      Body.type[entity] = BodyType.Dynamic;
-      Body.posY[entity] = 10;
-      Body.rotW[entity] = 1;
-      Body.mass[entity] = 1;
-      Body.gravityScale[entity] = 1;
+      Rigidbody.type[entity] = BodyType.Dynamic;
+      Rigidbody.posY[entity] = 10;
+      Rigidbody.rotW[entity] = 1;
+      Rigidbody.mass[entity] = 1;
+      Rigidbody.gravityScale[entity] = 1;
 
       Collider.shape[entity] = ColliderShape.Box;
       Collider.sizeX[entity] = 1;
@@ -279,13 +279,13 @@ describe('Physics XML Declarative API', () => {
       testState.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       testState.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      const initialY = Body.posY[entity];
+      const initialY = Rigidbody.posY[entity];
 
       for (let i = 0; i < 60; i++) {
         testState.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posY[entity]).toBeLessThan(initialY);
+      expect(Rigidbody.posY[entity]).toBeLessThan(initialY);
     });
   });
 });

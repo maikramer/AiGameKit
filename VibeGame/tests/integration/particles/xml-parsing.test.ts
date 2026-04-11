@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { ParticlesEmitter } from '../../../src/plugins/particles/components';
+import { ParticleSystem } from '../../../src/plugins/particles/components';
 import { ParticlesPlugin } from '../../../src/plugins/particles/plugin';
 
 describe('Particles XML parsing', () => {
@@ -20,11 +20,11 @@ describe('Particles XML parsing', () => {
     const entities = parseXMLToEntities(state, parsed.root);
 
     const entity = entities[0].entity;
-    expect(ParticlesEmitter.preset[entity]).toBe(
+    expect(ParticleSystem.preset[entity]).toBe(
       ParticlesPlugin.config!.enums!.particlesEmitter.preset.sparks
     );
-    expect(ParticlesEmitter.rate[entity]).toBeCloseTo(12);
-    expect(ParticlesEmitter.lifetime[entity]).toBeCloseTo(2.0);
-    expect(ParticlesEmitter.size[entity]).toBeCloseTo(0.35);
+    expect(ParticleSystem.rate[entity]).toBeCloseTo(12);
+    expect(ParticleSystem.lifetime[entity]).toBeCloseTo(2.0);
+    expect(ParticleSystem.size[entity]).toBeCloseTo(0.35);
   });
 });

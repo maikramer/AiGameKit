@@ -1,33 +1,33 @@
 import { JointData, RotationOps, Vector3 } from '@dimforge/rapier3d-compat';
 import type { ImpulseJoint } from '@dimforge/rapier3d-compat';
 import { defineQuery, type System } from '../../core';
-import { Body } from '../physics/components';
+import { Rigidbody } from '../physics/components';
 import {
   getPhysicsContext,
   PhysicsInitializationSystem,
 } from '../physics/systems';
-import { PhysicsJoint } from './components';
+import { Joint } from './components';
 import { getJointHandles } from './context';
 
-const jointQuery = defineQuery([PhysicsJoint]);
+const jointQuery = defineQuery([Joint]);
 
 function buildJointData(eid: number): JointData | null {
   const a1 = new Vector3(
-    PhysicsJoint.anchorAX[eid],
-    PhysicsJoint.anchorAY[eid],
-    PhysicsJoint.anchorAZ[eid]
+    Joint.anchorAX[eid],
+    Joint.anchorAY[eid],
+    Joint.anchorAZ[eid]
   );
   const a2 = new Vector3(
-    PhysicsJoint.anchorBX[eid],
-    PhysicsJoint.anchorBY[eid],
-    PhysicsJoint.anchorBZ[eid]
+    Joint.anchorBX[eid],
+    Joint.anchorBY[eid],
+    Joint.anchorBZ[eid]
   );
   const axis = new Vector3(
-    PhysicsJoint.axisX[eid],
-    PhysicsJoint.axisY[eid],
-    PhysicsJoint.axisZ[eid]
+    Joint.axisX[eid],
+    Joint.axisY[eid],
+    Joint.axisZ[eid]
   );
-  const t = PhysicsJoint.jointType[eid];
+  const t = Joint.jointType[eid];
   const frame = RotationOps.identity();
 
   switch (t) {
@@ -40,12 +40,12 @@ function buildJointData(eid: number): JointData | null {
     case 3:
       return JointData.spherical(a1, a2);
     case 4:
-      return JointData.rope(PhysicsJoint.ropeLength[eid] || 1, a1, a2);
+      return JointData.rope(Joint.ropeLength[eid] || 1, a1, a2);
     case 5:
       return JointData.spring(
-        PhysicsJoint.limitsMax[eid] || 1,
-        PhysicsJoint.springStiffness[eid] || 10,
-        PhysicsJoint.springDamping[eid] || 1,
+        Joint.limitsMax[eid] || 1,
+        Joint.springStiffness[eid] || 10,
+        Joint.springDamping[eid] || 1,
         a1,
         a2
       );
@@ -64,14 +64,14 @@ function configureJoint(joint: ImpulseJoint, eid: number): void {
 
   const unitJoint = joint as unknown as UnitJoint;
 
-  const limitsMin = PhysicsJoint.limitsMin[eid];
-  const limitsMax = PhysicsJoint.limitsMax[eid];
+  const limitsMin = Joint.limitsMin[eid];
+  const limitsMax = Joint.limitsMax[eid];
   if (limitsMin !== 0 || limitsMax !== 0) {
     unitJoint.setLimits(limitsMin, limitsMax);
   }
 
-  const motorSpeed = PhysicsJoint.motorSpeed[eid];
-  const motorMaxForce = PhysicsJoint.motorMaxForce[eid];
+  const motorSpeed = Joint.motorSpeed[eid];
+  const motorMaxForce = Joint.motorMaxForce[eid];
   if (motorMaxForce > 0) {
     unitJoint.configureMotorVelocity(motorSpeed, motorMaxForce);
   }
@@ -88,16 +88,16 @@ export const JointCreateSystem: System = {
     const handles = getJointHandles(state);
 
     for (const eid of jointQuery(state.world)) {
-      if (PhysicsJoint.created[eid]) continue;
+      if (Joint.created[eid]) continue;
 
-      const ba = PhysicsJoint.bodyA[eid];
-      const bb = PhysicsJoint.bodyB[eid];
+      const ba = Joint.bodyA[eid];
+      const bb = Joint.bodyB[eid];
       if (!ba || !bb) continue;
 
       const rbA = ctx.entityToRigidbody.get(ba);
       const rbB = ctx.entityToRigidbody.get(bb);
       if (!rbA || !rbB) continue;
-      if (!state.hasComponent(ba, Body) || !state.hasComponent(bb, Body))
+      if (!state.hasComponent(ba, Rigidbody) || !state.hasComponent(bb, Rigidbody))
         continue;
 
       const desc = buildJointData(eid);
@@ -113,7 +113,7 @@ export const JointCreateSystem: System = {
 
       configureJoint(joint, eid);
       handles.set(eid, joint);
-      PhysicsJoint.created[eid] = 1;
+      Joint.created[eid] = 1;
     }
   },
 };
@@ -129,7 +129,7 @@ export const JointCleanupSystem: System = {
     const handles = getJointHandles(state);
 
     for (const [eid, joint] of handles) {
-      if (!state.hasComponent(eid, PhysicsJoint)) {
+      if (!state.hasComponent(eid, Joint)) {
         world.removeImpulseJoint(joint, true);
         handles.delete(eid);
       }

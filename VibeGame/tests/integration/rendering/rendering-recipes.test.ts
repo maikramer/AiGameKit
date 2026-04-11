@@ -4,7 +4,7 @@ import { State, XMLParser, defineQuery, parseXMLToEntities } from 'vibegame';
 import {
   MainCamera,
   RenderContext,
-  Renderer,
+  MeshRenderer,
   RenderingPlugin,
   setCanvasElement,
 } from 'vibegame/rendering';
@@ -45,7 +45,7 @@ describe('Rendering Recipes', () => {
         posZ: 0,
       });
 
-      state.addComponent(entity, Renderer, {
+      state.addComponent(entity, MeshRenderer, {
         shape: 1,
         sizeX: 2,
         sizeY: 2,
@@ -55,16 +55,16 @@ describe('Rendering Recipes', () => {
       });
 
       expect(state.hasComponent(entity, Transform)).toBe(true);
-      expect(state.hasComponent(entity, Renderer)).toBe(true);
+      expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
       expect(Transform.posX[entity]).toBe(0);
       expect(Transform.posY[entity]).toBe(5);
       expect(Transform.posZ[entity]).toBe(0);
-      expect(Renderer.shape[entity]).toBe(1);
-      expect(Renderer.sizeX[entity]).toBe(2);
-      expect(Renderer.sizeY[entity]).toBe(2);
-      expect(Renderer.sizeZ[entity]).toBe(2);
-      expect(Renderer.color[entity]).toBe(0xff00ff);
-      expect(Renderer.visible[entity]).toBe(1);
+      expect(MeshRenderer.shape[entity]).toBe(1);
+      expect(MeshRenderer.sizeX[entity]).toBe(2);
+      expect(MeshRenderer.sizeY[entity]).toBe(2);
+      expect(MeshRenderer.sizeZ[entity]).toBe(2);
+      expect(MeshRenderer.color[entity]).toBe(0xff00ff);
+      expect(MeshRenderer.visible[entity]).toBe(1);
     });
 
     it('should set canvas for rendering context', () => {
@@ -91,8 +91,8 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       expect(entities.length).toBe(2);
-      expect(Renderer.shape[entities[0].entity]).toBe(1);
-      expect(Renderer.shape[entities[1].entity]).toBe(0);
+      expect(MeshRenderer.shape[entities[0].entity]).toBe(1);
+      expect(MeshRenderer.shape[entities[1].entity]).toBe(0);
     });
 
     it('should handle numeric shape values', () => {
@@ -102,8 +102,8 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       expect(entities.length).toBe(2);
-      expect(Renderer.shape[entities[0].entity]).toBe(0);
-      expect(Renderer.shape[entities[1].entity]).toBe(1);
+      expect(MeshRenderer.shape[entities[0].entity]).toBe(0);
+      expect(MeshRenderer.shape[entities[1].entity]).toBe(1);
     });
 
     it('should use shape enum programmatically', () => {
@@ -113,14 +113,14 @@ describe('Rendering Recipes', () => {
       };
 
       const boxEntity = state.createEntity();
-      state.addComponent(boxEntity, Renderer);
-      Renderer.shape[boxEntity] = shapes.box;
-      expect(Renderer.shape[boxEntity]).toBe(0);
+      state.addComponent(boxEntity, MeshRenderer);
+      MeshRenderer.shape[boxEntity] = shapes.box;
+      expect(MeshRenderer.shape[boxEntity]).toBe(0);
 
       const sphereEntity = state.createEntity();
-      state.addComponent(sphereEntity, Renderer);
-      Renderer.shape[sphereEntity] = shapes.sphere;
-      expect(Renderer.shape[sphereEntity]).toBe(1);
+      state.addComponent(sphereEntity, MeshRenderer);
+      MeshRenderer.shape[sphereEntity] = shapes.sphere;
+      expect(MeshRenderer.shape[sphereEntity]).toBe(1);
     });
   });
 
@@ -132,19 +132,19 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       expect(entities.length).toBe(2);
-      expect(Renderer.visible[entities[0].entity]).toBe(0);
-      expect(Renderer.visible[entities[1].entity]).toBe(1);
+      expect(MeshRenderer.visible[entities[0].entity]).toBe(0);
+      expect(MeshRenderer.visible[entities[1].entity]).toBe(1);
     });
 
     it('should toggle visibility programmatically', () => {
       const entity = state.createEntity();
-      state.addComponent(entity, Renderer);
+      state.addComponent(entity, MeshRenderer);
 
-      Renderer.visible[entity] = 0;
-      expect(Renderer.visible[entity]).toBe(0);
+      MeshRenderer.visible[entity] = 0;
+      expect(MeshRenderer.visible[entity]).toBe(0);
 
-      Renderer.visible[entity] = 1;
-      expect(Renderer.visible[entity]).toBe(1);
+      MeshRenderer.visible[entity] = 1;
+      expect(MeshRenderer.visible[entity]).toBe(1);
     });
 
     it('should handle initially hidden entities', () => {
@@ -154,10 +154,10 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       const entity = entities[0].entity;
-      expect(state.hasComponent(entity, Renderer)).toBe(true);
-      expect(Renderer.visible[entity]).toBe(0);
-      expect(Renderer.shape[entity]).toBe(0);
-      expect(Renderer.color[entity]).toBe(0xff0000);
+      expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
+      expect(MeshRenderer.visible[entity]).toBe(0);
+      expect(MeshRenderer.shape[entity]).toBe(0);
+      expect(MeshRenderer.color[entity]).toBe(0xff0000);
     });
   });
 
@@ -169,14 +169,14 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       const entity1 = entities[0].entity;
-      expect(Renderer.sizeX[entity1]).toBe(2);
-      expect(Renderer.sizeY[entity1]).toBe(3);
-      expect(Renderer.sizeZ[entity1]).toBe(4);
+      expect(MeshRenderer.sizeX[entity1]).toBe(2);
+      expect(MeshRenderer.sizeY[entity1]).toBe(3);
+      expect(MeshRenderer.sizeZ[entity1]).toBe(4);
 
       const entity2 = entities[1].entity;
-      expect(Renderer.sizeX[entity2]).toBe(5);
-      expect(Renderer.sizeY[entity2]).toBe(5);
-      expect(Renderer.sizeZ[entity2]).toBe(5);
+      expect(MeshRenderer.sizeX[entity2]).toBe(5);
+      expect(MeshRenderer.sizeY[entity2]).toBe(5);
+      expect(MeshRenderer.sizeZ[entity2]).toBe(5);
     });
 
     it('should handle mixed properties in renderer string', () => {
@@ -186,12 +186,12 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       const entity = entities[0].entity;
-      expect(Renderer.shape[entity]).toBe(1);
-      expect(Renderer.sizeX[entity]).toBe(2);
-      expect(Renderer.sizeY[entity]).toBe(2);
-      expect(Renderer.sizeZ[entity]).toBe(2);
-      expect(Renderer.color[entity]).toBe(0x00ff00);
-      expect(Renderer.visible[entity]).toBe(1);
+      expect(MeshRenderer.shape[entity]).toBe(1);
+      expect(MeshRenderer.sizeX[entity]).toBe(2);
+      expect(MeshRenderer.sizeY[entity]).toBe(2);
+      expect(MeshRenderer.sizeZ[entity]).toBe(2);
+      expect(MeshRenderer.color[entity]).toBe(0x00ff00);
+      expect(MeshRenderer.visible[entity]).toBe(1);
     });
 
     it('should apply default values when not specified', () => {
@@ -201,12 +201,12 @@ describe('Rendering Recipes', () => {
       const entities = parseXMLToEntities(state, parsed.root);
 
       const entity = entities[0].entity;
-      expect(Renderer.shape[entity]).toBe(0);
-      expect(Renderer.sizeX[entity]).toBe(1);
-      expect(Renderer.sizeY[entity]).toBe(1);
-      expect(Renderer.sizeZ[entity]).toBe(1);
-      expect(Renderer.color[entity]).toBe(0xffffff);
-      expect(Renderer.visible[entity]).toBe(1);
+      expect(MeshRenderer.shape[entity]).toBe(0);
+      expect(MeshRenderer.sizeX[entity]).toBe(1);
+      expect(MeshRenderer.sizeY[entity]).toBe(1);
+      expect(MeshRenderer.sizeZ[entity]).toBe(1);
+      expect(MeshRenderer.color[entity]).toBe(0xffffff);
+      expect(MeshRenderer.visible[entity]).toBe(1);
     });
   });
 

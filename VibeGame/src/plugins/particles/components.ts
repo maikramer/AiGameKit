@@ -1,7 +1,7 @@
 import { defineComponent, Types } from 'bitecs';
 
 /** Estado do emissor declarativo (preset + parâmetros). */
-export const ParticlesEmitter = defineComponent({
+export const ParticleSystem = defineComponent({
   preset: Types.ui8,
   rate: Types.f32,
   lifetime: Types.f32,
@@ -11,7 +11,7 @@ export const ParticlesEmitter = defineComponent({
   spawned: Types.ui8,
 });
 
-export const ParticlesBurst = defineComponent({
+export const ParticleBurst = defineComponent({
   preset: Types.ui8,
   count: Types.f32,
   triggered: Types.ui8,

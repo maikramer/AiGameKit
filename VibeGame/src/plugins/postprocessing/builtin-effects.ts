@@ -13,7 +13,7 @@ import {
 import { SSREffect } from 'screen-space-reflections';
 import { Vector2 } from 'three';
 import { defineQuery } from '../../core';
-import { Player } from '../player';
+import { PlayerController } from '../player';
 import { MainCamera, getScene, threeCameras } from '../rendering';
 import { WorldTransform } from '../transforms';
 import {
@@ -31,7 +31,7 @@ import {
 import { DitheringEffect } from './effects/dithering-effect';
 import { registerEffect, type EffectDefinition } from './effect-registry';
 
-const playerTransformQuery = defineQuery([Player, WorldTransform]);
+const playerTransformQuery = defineQuery([PlayerController, WorldTransform]);
 const cameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const builtinDefinitions: EffectDefinition[] = [
   {

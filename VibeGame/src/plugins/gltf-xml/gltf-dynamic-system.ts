@@ -1,6 +1,6 @@
 ﻿import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
-import { Body, BodyType, Collider } from '../physics/components';
+import { Rigidbody, BodyType, Collider } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
 import { GltfPending, GltfPhysicsPending } from './components';
@@ -60,22 +60,22 @@ export const GltfDynamicPhysicsSystem: System = {
       const tsy = Math.max(Math.abs(Transform.scaleY[eid]), 1e-6);
       const tsz = Math.max(Math.abs(Transform.scaleZ[eid]), 1e-6);
 
-      if (!state.hasComponent(eid, Body)) {
-        state.addComponent(eid, Body);
+      if (!state.hasComponent(eid, Rigidbody)) {
+        state.addComponent(eid, Rigidbody);
       }
       if (!state.hasComponent(eid, Collider)) {
         state.addComponent(eid, Collider);
       }
 
-      Body.type[eid] = BodyType.Dynamic;
-      Body.mass[eid] = GltfPhysicsPending.mass[eid];
-      Body.gravityScale[eid] = 1;
-      Body.posX[eid] = Transform.posX[eid];
-      Body.posY[eid] = Transform.posY[eid];
-      Body.posZ[eid] = Transform.posZ[eid];
-      Body.eulerX[eid] = Transform.eulerX[eid];
-      Body.eulerY[eid] = Transform.eulerY[eid];
-      Body.eulerZ[eid] = Transform.eulerZ[eid];
+      Rigidbody.type[eid] = BodyType.Dynamic;
+      Rigidbody.mass[eid] = GltfPhysicsPending.mass[eid];
+      Rigidbody.gravityScale[eid] = 1;
+      Rigidbody.posX[eid] = Transform.posX[eid];
+      Rigidbody.posY[eid] = Transform.posY[eid];
+      Rigidbody.posZ[eid] = Transform.posZ[eid];
+      Rigidbody.eulerX[eid] = Transform.eulerX[eid];
+      Rigidbody.eulerY[eid] = Transform.eulerY[eid];
+      Rigidbody.eulerZ[eid] = Transform.eulerZ[eid];
       syncBodyQuaternionFromEuler(eid);
 
       // Centro do AABB em mundo vs origem do grupo (Transform): sem isto o colisor fica
@@ -87,10 +87,10 @@ export const GltfDynamicPhysicsSystem: System = {
         _aabbCenterWorld.z - Transform.posZ[eid]
       );
       _bodyQuat.set(
-        Body.rotX[eid],
-        Body.rotY[eid],
-        Body.rotZ[eid],
-        Body.rotW[eid]
+        Rigidbody.rotX[eid],
+        Rigidbody.rotY[eid],
+        Rigidbody.rotZ[eid],
+        Rigidbody.rotW[eid]
       );
       _invBodyQuat.copy(_bodyQuat).invert();
       _offsetLocal.copy(_deltaWorld).applyQuaternion(_invBodyQuat);
@@ -121,9 +121,9 @@ export const GltfDynamicPhysicsSystem: System = {
       Collider.posOffsetZ[eid] = _offsetLocal.z;
       Collider.rotOffsetW[eid] = 1;
 
-      Body.ccd[eid] = 1;
-      Body.linearDamping[eid] = 0.2;
-      Body.angularDamping[eid] = 0.4;
+      Rigidbody.ccd[eid] = 1;
+      Rigidbody.linearDamping[eid] = 0.2;
+      Rigidbody.angularDamping[eid] = 0.4;
 
       GltfPhysicsPending.ready[eid] = 1;
     }

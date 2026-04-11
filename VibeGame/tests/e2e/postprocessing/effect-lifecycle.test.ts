@@ -29,7 +29,7 @@ import {
 } from '../../../src/plugins/postprocessing/components';
 import { WorldTransform } from '../../../src/plugins/transforms';
 import { MainCamera } from '../../../src/plugins/rendering/components';
-import { Player } from '../../../src/plugins/player/components';
+import { PlayerController } from '../../../src/plugins/player/components';
 
 // Polyfill browser APIs for Bun (GSAP uses these internally)
 globalThis.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
@@ -192,7 +192,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     WorldTransform.posZ[e1] = 5;
 
     const e2 = addEntity(state.world);
-    addComponent(state.world, Player, e2);
+    addComponent(state.world, PlayerController, e2);
 
     for (let i = 0; i < 10; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -283,7 +283,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should DoF auto-focus: player and camera entities with WorldTransforms', () => {
     const player = addEntity(state.world);
-    addComponent(state.world, Player, player);
+    addComponent(state.world, PlayerController, player);
     addComponent(state.world, WorldTransform, player);
     WorldTransform.posX[player] = 10;
     WorldTransform.posY[player] = 0;
@@ -303,7 +303,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-    const playerQuery = defineQuery([Player, WorldTransform])(state.world);
+    const playerQuery = defineQuery([PlayerController, WorldTransform])(state.world);
     const cameraQuery = defineQuery([MainCamera, WorldTransform])(state.world);
     const dofQuery = defineQuery([DepthOfField])(state.world);
 
@@ -320,7 +320,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should DoF auto-focus: update player position and verify distance changes', () => {
     const player = addEntity(state.world);
-    addComponent(state.world, Player, player);
+    addComponent(state.world, PlayerController, player);
     addComponent(state.world, WorldTransform, player);
     WorldTransform.posX[player] = 3;
     WorldTransform.posY[player] = 4;

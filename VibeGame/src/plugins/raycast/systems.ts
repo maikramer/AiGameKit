@@ -4,10 +4,10 @@ import { defineQuery, type State, type System } from '../../core';
 import { forEachGltfRootGroup } from '../gltf-xml/group-registry';
 import { PhysicsInterpolationSystem } from '../physics/systems';
 import { getRenderingContext } from '../rendering/utils';
-import { RaycastResult, RaycastSource } from './components';
+import { RaycastHit, RaycastSource } from './components';
 import { castRapierRay, getRayOriginFromEntity } from './utils';
 
-const rayQuery = defineQuery([RaycastSource, RaycastResult]);
+const rayQuery = defineQuery([RaycastSource, RaycastHit]);
 
 const _origin = new THREE.Vector3();
 const _raycaster = new THREE.Raycaster();
@@ -21,7 +21,7 @@ export const RaycastResetSystem: System = {
   first: true,
   update: (state) => {
     for (const eid of rayQuery(state.world)) {
-      RaycastResult.hitValid[eid] = 0;
+      RaycastHit.hitValid[eid] = 0;
     }
   },
 };
@@ -129,19 +129,19 @@ export const RaycastSystem: System = {
         _dir.set(ndx, ndy, ndz);
         const hit = castBvhRay(state, _origin, _dir, maxDist);
         if (!hit) {
-          RaycastResult.hitValid[eid] = 0;
+          RaycastHit.hitValid[eid] = 0;
           continue;
         }
 
-        RaycastResult.hitValid[eid] = 1;
-        RaycastResult.hitEntity[eid] = hit.entity;
-        RaycastResult.hitDist[eid] = hit.distance;
-        RaycastResult.hitNormalX[eid] = hit.normal.x;
-        RaycastResult.hitNormalY[eid] = hit.normal.y;
-        RaycastResult.hitNormalZ[eid] = hit.normal.z;
-        RaycastResult.hitPointX[eid] = hit.point.x;
-        RaycastResult.hitPointY[eid] = hit.point.y;
-        RaycastResult.hitPointZ[eid] = hit.point.z;
+        RaycastHit.hitValid[eid] = 1;
+        RaycastHit.hitEntity[eid] = hit.entity;
+        RaycastHit.hitDist[eid] = hit.distance;
+        RaycastHit.hitNormalX[eid] = hit.normal.x;
+        RaycastHit.hitNormalY[eid] = hit.normal.y;
+        RaycastHit.hitNormalZ[eid] = hit.normal.z;
+        RaycastHit.hitPointX[eid] = hit.point.x;
+        RaycastHit.hitPointY[eid] = hit.point.y;
+        RaycastHit.hitPointZ[eid] = hit.point.z;
         continue;
       }
 
@@ -150,19 +150,19 @@ export const RaycastSystem: System = {
 
       const hit = castRapierRay(state, origin, dir, maxDist, layerMask);
       if (!hit) {
-        RaycastResult.hitValid[eid] = 0;
+        RaycastHit.hitValid[eid] = 0;
         continue;
       }
 
-      RaycastResult.hitValid[eid] = 1;
-      RaycastResult.hitEntity[eid] = hit.entity;
-      RaycastResult.hitDist[eid] = hit.toi;
-      RaycastResult.hitNormalX[eid] = hit.normal.x;
-      RaycastResult.hitNormalY[eid] = hit.normal.y;
-      RaycastResult.hitNormalZ[eid] = hit.normal.z;
-      RaycastResult.hitPointX[eid] = hit.point.x;
-      RaycastResult.hitPointY[eid] = hit.point.y;
-      RaycastResult.hitPointZ[eid] = hit.point.z;
+      RaycastHit.hitValid[eid] = 1;
+      RaycastHit.hitEntity[eid] = hit.entity;
+      RaycastHit.hitDist[eid] = hit.toi;
+      RaycastHit.hitNormalX[eid] = hit.normal.x;
+      RaycastHit.hitNormalY[eid] = hit.normal.y;
+      RaycastHit.hitNormalZ[eid] = hit.normal.z;
+      RaycastHit.hitPointX[eid] = hit.point.x;
+      RaycastHit.hitPointY[eid] = hit.point.y;
+      RaycastHit.hitPointZ[eid] = hit.point.z;
     }
   },
 };

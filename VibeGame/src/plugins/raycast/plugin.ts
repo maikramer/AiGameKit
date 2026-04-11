@@ -1,5 +1,5 @@
 import type { Plugin, State } from '../../core';
-import { RaycastResult, RaycastSource } from './components';
+import { RaycastHit, RaycastSource } from './components';
 import { raycastSourceRecipe } from './recipes';
 import { RaycastResetSystem, RaycastSystem } from './systems';
 
@@ -20,7 +20,7 @@ export const RaycastPlugin: Plugin = {
   recipes: [raycastSourceRecipe],
   components: {
     raycastSource: RaycastSource,
-    raycastResult: RaycastResult,
+    raycastResult: RaycastHit,
   },
   config: {
     defaults: {

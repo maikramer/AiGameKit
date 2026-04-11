@@ -1,8 +1,14 @@
 import type { Adapter, Plugin } from '../../core';
-import { EntityScript } from './components';
+import { CoroutineRunnerSystem } from '../../core/ecs/coroutines';
+import { MonoBehaviour } from './components';
 import { setScriptFile } from './context';
 import { entityScriptRecipe } from './recipes';
-import { EntityScriptFixedUpdateSystem, EntityScriptLateUpdateSystem, EntityScriptSystem } from './system';
+import {
+  EntityScriptCollisionBridgeSystem,
+  EntityScriptFixedUpdateSystem,
+  EntityScriptLateUpdateSystem,
+  EntityScriptSystem,
+} from './system';
 
 const scriptFileAdapter: Adapter = (entity, value, state) => {
   setScriptFile(state, entity, value);
@@ -10,9 +16,9 @@ const scriptFileAdapter: Adapter = (entity, value, state) => {
 
 export const EntityScriptPlugin: Plugin = {
   recipes: [entityScriptRecipe],
-  systems: [EntityScriptFixedUpdateSystem, EntityScriptSystem, EntityScriptLateUpdateSystem],
+  systems: [CoroutineRunnerSystem, EntityScriptCollisionBridgeSystem, EntityScriptFixedUpdateSystem, EntityScriptSystem, EntityScriptLateUpdateSystem],
   components: {
-    entityScript: EntityScript,
+    entityScript: MonoBehaviour,
   },
   config: {
     defaults: {

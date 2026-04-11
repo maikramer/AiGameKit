@@ -11,7 +11,7 @@ import {
   MainCamera,
   PointLight,
   RenderContext,
-  Renderer,
+  MeshRenderer,
   SpotLight,
 } from './components';
 import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
@@ -28,7 +28,7 @@ import {
   threeCameras,
 } from './utils';
 
-const rendererQuery = defineQuery([Renderer]);
+const rendererQuery = defineQuery([MeshRenderer]);
 const ambientQuery = defineQuery([AmbientLight]);
 const directionalQuery = defineQuery([DirectionalLight]);
 const csmQuery = defineQuery([CsmConfig]);
@@ -70,11 +70,11 @@ export const MeshInstanceSystem: System = {
 
     const rendererEntities = rendererQuery(state.world);
     for (const entity of rendererEntities) {
-      const unlit = Renderer.unlit[entity] === 1;
-      let mesh = getOrCreateMesh(context, Renderer.shape[entity], unlit);
+      const unlit = MeshRenderer.unlit[entity] === 1;
+      let mesh = getOrCreateMesh(context, MeshRenderer.shape[entity], unlit);
       if (!mesh) continue;
 
-      if (Renderer.visible[entity] !== 1) {
+      if (MeshRenderer.visible[entity] !== 1) {
         hideInstance(mesh, entity, context);
         continue;
       }

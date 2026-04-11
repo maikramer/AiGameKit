@@ -3,7 +3,7 @@ import { State } from 'vibegame';
 import { RaycastPlugin } from '../../../src/plugins/raycast/plugin';
 import {
   RaycastSource,
-  RaycastResult,
+  RaycastHit,
 } from '../../../src/plugins/raycast/components';
 
 describe('RaycastPlugin Registration', () => {
@@ -32,8 +32,8 @@ describe('RaycastPlugin Registration', () => {
 
   it('should register the raycastResult component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, RaycastResult);
-    expect(state.hasComponent(entity, RaycastResult)).toBe(true);
+    state.addComponent(entity, RaycastHit);
+    expect(state.hasComponent(entity, RaycastHit)).toBe(true);
   });
 
   it('should register the raycast-source recipe', () => {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { JointsPlugin } from '../../../src/plugins/joints/plugin';
-import { PhysicsJoint } from '../../../src/plugins/joints/components';
+import { Joint } from '../../../src/plugins/joints/components';
 
 describe('JointsPlugin Registration', () => {
   let state: State;
@@ -19,8 +19,8 @@ describe('JointsPlugin Registration', () => {
 
   it('should register the physicsJoint component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, PhysicsJoint);
-    expect(state.hasComponent(entity, PhysicsJoint)).toBe(true);
+    state.addComponent(entity, Joint);
+    expect(state.hasComponent(entity, Joint)).toBe(true);
   });
 
   it('should register the joint recipe', () => {

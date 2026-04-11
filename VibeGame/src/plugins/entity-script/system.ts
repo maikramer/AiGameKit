@@ -1,27 +1,38 @@
 import type { Component } from 'bitecs';
 
 import { Parent, defineQuery, type State, type System } from '../../core';
+import {
+  startCoroutine,
+  stopAllCoroutines,
+  stopCoroutine,
+} from '../../core/ecs/coroutines';
+import { Collider, TouchedEvent, TouchEndedEvent } from '../physics/components';
 import { GltfPending } from '../gltf-xml/components';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
-import { EntityScript } from './components';
+import { MonoBehaviour } from './components';
 import {
+  addActiveCollisionPair,
+  deleteActiveCollisionPairsForEntity,
   deletePrevEnabled,
   deleteScriptFile,
+  getActiveCollisionPairs,
   getCachedEntityScriptModule,
   getEntityScriptsGlob,
   getOrLoadEntityScriptModule,
   getPrevEnabled,
   getScriptFile,
   isEntityScriptSetupInflight,
+  removeActiveCollisionPair,
   resolveEntityScriptGlobKey,
   setEntityScriptSetupInflight,
   setPrevEnabled,
 } from './context';
-import type { EntityScriptContext } from './types';
+import type { CollisionOther, EntityScriptContext } from './types';
 
-const entityScriptQuery = defineQuery([EntityScript]);
-
+const entityScriptQuery = defineQuery([MonoBehaviour]);
 const parentQuery = defineQuery([Parent]);
+const touchedWithScriptQuery = defineQuery([MonoBehaviour, TouchedEvent]);
+const touchEndedWithScriptQuery = defineQuery([MonoBehaviour, TouchEndedEvent]);
 
 function resolveComponent(state: State, eid: number, name: string): Component | null {
   const component = state.getComponent(name);
@@ -67,6 +78,15 @@ export function buildContext(state: State, eid: number): EntityScriptContext {
     getComponentInParent(name: string): Component | null {
       return findComponentInParent(state, eid, name);
     },
+    StartCoroutine(genOrFn: Generator | (() => Generator)): number {
+      return startCoroutine(state, eid, genOrFn);
+    },
+    StopCoroutine(coroutineId: number): void {
+      stopCoroutine(state, eid, coroutineId);
+    },
+    StopAllCoroutines(): void {
+      stopAllCoroutines(state, eid);
+    },
   };
 }
 
@@ -91,8 +111,8 @@ export const EntityScriptSystem: System = {
         continue;
       }
 
-      if (EntityScript.ready[eid] === 0) {
-        if (EntityScript.enabled[eid] !== 1) {
+      if (MonoBehaviour.ready[eid] === 0) {
+        if (MonoBehaviour.enabled[eid] !== 1) {
           continue;
         }
 
@@ -104,7 +124,7 @@ export const EntityScriptSystem: System = {
           console.warn(
             `[entity-script] No script glob registered; call registerEntityScripts(state, import.meta.glob(...)). Entity ${eid}`
           );
-          EntityScript.ready[eid] = 1;
+          MonoBehaviour.ready[eid] = 1;
           continue;
         }
 
@@ -113,7 +133,7 @@ export const EntityScriptSystem: System = {
           console.warn(
             `[entity-script] No script module for "${file}" in registered glob. Entity ${eid}`
           );
-          EntityScript.ready[eid] = 1;
+          MonoBehaviour.ready[eid] = 1;
           continue;
         }
 
@@ -132,7 +152,7 @@ export const EntityScriptSystem: System = {
               console.warn(
                 `[entity-script] Module for "${file}" has no start/update. Entity ${eid}`
               );
-              EntityScript.ready[eid] = 1;
+              MonoBehaviour.ready[eid] = 1;
               setEntityScriptSetupInflight(state, eid, false);
               return;
             }
@@ -140,7 +160,7 @@ export const EntityScriptSystem: System = {
             if (mod.awake) {
               mod.awake(ctx);
             }
-            const isEnabled = EntityScript.enabled[eid] === 1;
+            const isEnabled = MonoBehaviour.enabled[eid] === 1;
             if (isEnabled && mod.onEnable) {
               mod.onEnable(ctx);
             }
@@ -148,14 +168,14 @@ export const EntityScriptSystem: System = {
               await mod.start(ctx);
             }
             if (state.exists(eid)) {
-              EntityScript.ready[eid] = 1;
+              MonoBehaviour.ready[eid] = 1;
               setPrevEnabled(state, eid, isEnabled ? 1 : 0);
             }
             state.onDestroy(eid, () => {
               const cached = getCachedEntityScriptModule(state, globKey);
               if (cached) {
                 const destroyCtx = buildContext(state, eid);
-                if (EntityScript.enabled[eid] === 1 && cached.onDisable) {
+                if (MonoBehaviour.enabled[eid] === 1 && cached.onDisable) {
                   cached.onDisable(destroyCtx);
                 }
                 if (cached.onDestroy) {
@@ -170,14 +190,14 @@ export const EntityScriptSystem: System = {
           .catch((err: unknown) => {
             console.error(`[entity-script] Failed to load "${file}":`, err);
             if (state.exists(eid)) {
-              EntityScript.ready[eid] = 1;
+              MonoBehaviour.ready[eid] = 1;
             }
             setEntityScriptSetupInflight(state, eid, false);
           });
         continue;
       }
 
-      if (EntityScript.ready[eid] !== 1) {
+      if (MonoBehaviour.ready[eid] !== 1) {
         continue;
       }
 
@@ -196,7 +216,7 @@ export const EntityScriptSystem: System = {
         continue;
       }
 
-      const curEnabled = EntityScript.enabled[eid];
+      const curEnabled = MonoBehaviour.enabled[eid];
       const prev = getPrevEnabled(state, eid);
 
       if (prev !== undefined && curEnabled !== prev) {
@@ -244,7 +264,7 @@ export const EntityScriptFixedUpdateSystem: System = {
     if (state.headless) return;
 
     for (const eid of entityScriptQuery(state.world)) {
-      if (EntityScript.ready[eid] !== 1 || EntityScript.enabled[eid] !== 1) {
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) {
         continue;
       }
 
@@ -264,7 +284,7 @@ export const EntityScriptLateUpdateSystem: System = {
     if (state.headless) return;
 
     for (const eid of entityScriptQuery(state.world)) {
-      if (EntityScript.ready[eid] !== 1 || EntityScript.enabled[eid] !== 1) {
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) {
         continue;
       }
 
@@ -274,6 +294,93 @@ export const EntityScriptLateUpdateSystem: System = {
       }
 
       resolved.mod.lateUpdate(buildContext(state, eid));
+    }
+  },
+};
+
+function isTriggerCollision(state: State, eid1: number, eid2: number): boolean {
+  const hasC1 = state.hasComponent(eid1, Collider);
+  const hasC2 = state.hasComponent(eid2, Collider);
+  if (hasC1 && Collider.isSensor[eid1] === 1) return true;
+  if (hasC2 && Collider.isSensor[eid2] === 1) return true;
+  return false;
+}
+
+export const EntityScriptCollisionBridgeSystem: System = {
+  group: 'simulation',
+  update(state: State): void {
+    if (state.headless) return;
+
+    const enteredPairs = new Set<string>();
+
+    for (const eid of touchedWithScriptQuery(state.world)) {
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) continue;
+
+      const other = TouchedEvent.other[eid];
+      const trigger = isTriggerCollision(state, eid, other);
+      addActiveCollisionPair(state, eid, other, trigger);
+      enteredPairs.add(`${eid}:${other}`);
+
+      const resolved = resolveModule(state, eid);
+      if (!resolved) continue;
+
+      const ctx = buildContext(state, eid);
+      const otherObj: CollisionOther = { entity: other };
+      if (trigger) {
+        resolved.mod.onTriggerEnter?.(ctx, otherObj);
+      } else {
+        resolved.mod.onCollisionEnter?.(ctx, otherObj);
+      }
+    }
+
+    for (const eid of touchEndedWithScriptQuery(state.world)) {
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) continue;
+
+      const other = TouchEndedEvent.other[eid];
+      const pairs = getActiveCollisionPairs(state);
+      const wasTrigger = pairs.get(eid)?.get(other) ?? false;
+      removeActiveCollisionPair(state, eid, other);
+
+      const resolved = resolveModule(state, eid);
+      if (!resolved) continue;
+
+      const ctx = buildContext(state, eid);
+      const otherObj: CollisionOther = { entity: other };
+      if (wasTrigger) {
+        resolved.mod.onTriggerExit?.(ctx, otherObj);
+      } else {
+        resolved.mod.onCollisionExit?.(ctx, otherObj);
+      }
+    }
+
+    const activePairs = getActiveCollisionPairs(state);
+    for (const [eid, others] of activePairs) {
+      if (!state.exists(eid)) {
+        activePairs.delete(eid);
+        continue;
+      }
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) continue;
+
+      const resolved = resolveModule(state, eid);
+      if (!resolved) continue;
+
+      const ctx = buildContext(state, eid);
+      for (const [other, trigger] of others) {
+        if (!state.exists(other)) {
+          others.delete(other);
+          continue;
+        }
+        if (enteredPairs.has(`${eid}:${other}`)) continue;
+        const otherObj: CollisionOther = { entity: other };
+        if (trigger) {
+          resolved.mod.onTriggerStay?.(ctx, otherObj);
+        } else {
+          resolved.mod.onCollisionStay?.(ctx, otherObj);
+        }
+      }
+      if (others.size === 0) {
+        activePairs.delete(eid);
+      }
     }
   },
 };

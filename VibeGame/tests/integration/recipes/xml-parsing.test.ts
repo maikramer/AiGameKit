@@ -165,14 +165,14 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should expand component shorthands when component is present', () => {
-    const Renderer = defineComponent({
+    const MeshRenderer = defineComponent({
       sizeX: Types.f32,
       sizeY: Types.f32,
       sizeZ: Types.f32,
       shape: Types.i8,
     });
 
-    state.registerComponent('renderer', Renderer);
+    state.registerComponent('renderer', MeshRenderer);
     state.registerConfig({
       shorthands: {
         renderer: {
@@ -197,21 +197,21 @@ describe('XML Recipe Integration', () => {
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
 
-    expect(state.hasComponent(entity, Renderer)).toBe(true);
-    expect(Renderer.sizeX[entity]).toBe(2);
-    expect(Renderer.sizeY[entity]).toBe(3);
-    expect(Renderer.sizeZ[entity]).toBe(4);
-    expect(Renderer.shape[entity]).toBe(1);
+    expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
+    expect(MeshRenderer.sizeX[entity]).toBe(2);
+    expect(MeshRenderer.sizeY[entity]).toBe(3);
+    expect(MeshRenderer.sizeZ[entity]).toBe(4);
+    expect(MeshRenderer.shape[entity]).toBe(1);
   });
 
   it('should auto-expand shorthands only for present components', () => {
-    const Renderer = defineComponent({
+    const MeshRenderer = defineComponent({
       sizeX: Types.f32,
       sizeY: Types.f32,
       sizeZ: Types.f32,
     });
 
-    state.registerComponent('renderer', Renderer);
+    state.registerComponent('renderer', MeshRenderer);
 
     const xml = '<root><entity renderer="" size="2 3 4"></entity></root>';
     const parsed = XMLParser.parse(xml);
@@ -219,10 +219,10 @@ describe('XML Recipe Integration', () => {
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
 
-    expect(state.hasComponent(entity, Renderer)).toBe(true);
-    expect(Renderer.sizeX[entity]).toBe(2);
-    expect(Renderer.sizeY[entity]).toBe(3);
-    expect(Renderer.sizeZ[entity]).toBe(4);
+    expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
+    expect(MeshRenderer.sizeX[entity]).toBe(2);
+    expect(MeshRenderer.sizeY[entity]).toBe(3);
+    expect(MeshRenderer.sizeZ[entity]).toBe(4);
   });
 
   it('should warn about unknown attributes for components registered after XML parsing', () => {
@@ -452,11 +452,11 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle enum values in body component', () => {
-    const Body = defineComponent({
+    const Rigidbody = defineComponent({
       type: Types.i8,
     });
 
-    state.registerComponent('body', Body);
+    state.registerComponent('body', Rigidbody);
     state.registerConfig({
       enums: {
         body: {
@@ -479,8 +479,8 @@ describe('XML Recipe Integration', () => {
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
 
-    expect(state.hasComponent(entity, Body)).toBe(true);
-    expect(Body.type[entity]).toBe(1);
+    expect(state.hasComponent(entity, Rigidbody)).toBe(true);
+    expect(Rigidbody.type[entity]).toBe(1);
   });
 
   it('should demonstrate order-of-operations issue', () => {

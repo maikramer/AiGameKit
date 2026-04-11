@@ -76,7 +76,7 @@ describe('Recipe Core', () => {
 
   describe('Recipe Shorthands', () => {
     it('should expand shorthands to component properties', () => {
-      const Renderer = defineComponent({
+      const MeshRenderer = defineComponent({
         shape: Types.ui8,
         color: Types.ui32,
       });
@@ -85,7 +85,7 @@ describe('Recipe Core', () => {
         shape: Types.ui8,
       });
 
-      state.registerComponent('renderer', Renderer);
+      state.registerComponent('renderer', MeshRenderer);
       state.registerComponent('collider', Collider);
       state.registerConfig({
         shorthands: {
@@ -111,13 +111,13 @@ describe('Recipe Core', () => {
         color: '0xff0000',
       });
 
-      expect(Renderer.shape[entity]).toBe(1);
+      expect(MeshRenderer.shape[entity]).toBe(1);
       expect(Collider.shape[entity]).toBe(1);
-      expect(Renderer.color[entity]).toBe(0xff0000);
+      expect(MeshRenderer.color[entity]).toBe(0xff0000);
     });
 
     it('should allow explicit properties to override shorthands', () => {
-      const Renderer = defineComponent({
+      const MeshRenderer = defineComponent({
         shape: Types.ui8,
       });
 
@@ -125,7 +125,7 @@ describe('Recipe Core', () => {
         shape: Types.ui8,
       });
 
-      state.registerComponent('renderer', Renderer);
+      state.registerComponent('renderer', MeshRenderer);
       state.registerComponent('collider', Collider);
       state.registerConfig({
         shorthands: {
@@ -150,12 +150,12 @@ describe('Recipe Core', () => {
         renderer: 'shape: 2',
       });
 
-      expect(Renderer.shape[entity]).toBe(2);
+      expect(MeshRenderer.shape[entity]).toBe(2);
       expect(Collider.shape[entity]).toBe(1);
     });
 
     it('should apply component-level shorthands', () => {
-      const Renderer = defineComponent({
+      const MeshRenderer = defineComponent({
         sizeX: Types.f32,
         sizeY: Types.f32,
         sizeZ: Types.f32,
@@ -169,7 +169,7 @@ describe('Recipe Core', () => {
 
       const plugin = {
         components: {
-          Renderer,
+          renderer: MeshRenderer,
           Collider,
         },
         config: {
@@ -197,9 +197,9 @@ describe('Recipe Core', () => {
         size: '10 4 6',
       });
 
-      expect(Renderer.sizeX[entity]).toBe(10);
-      expect(Renderer.sizeY[entity]).toBe(4);
-      expect(Renderer.sizeZ[entity]).toBe(6);
+      expect(MeshRenderer.sizeX[entity]).toBe(10);
+      expect(MeshRenderer.sizeY[entity]).toBe(4);
+      expect(MeshRenderer.sizeZ[entity]).toBe(6);
 
       expect(Collider.sizeX[entity]).toBe(10);
       expect(Collider.sizeY[entity]).toBe(4);
@@ -215,12 +215,12 @@ describe('Recipe Core', () => {
         posZ: Types.f32,
       });
 
-      const Renderer = defineComponent({
+      const MeshRenderer = defineComponent({
         color: Types.ui32,
       });
 
       state.registerComponent('transform', Transform);
-      state.registerComponent('renderer', Renderer);
+      state.registerComponent('renderer', MeshRenderer);
       state.registerConfig({
         shorthands: {
           transform: {
@@ -253,11 +253,11 @@ describe('Recipe Core', () => {
       });
 
       expect(state.hasComponent(entity, Transform)).toBe(true);
-      expect(state.hasComponent(entity, Renderer)).toBe(true);
+      expect(state.hasComponent(entity, MeshRenderer)).toBe(true);
       expect(Transform.posX[entity]).toBe(0);
       expect(Transform.posY[entity]).toBe(5);
       expect(Transform.posZ[entity]).toBe(0);
-      expect(Renderer.color[entity]).toBe(0xff0000);
+      expect(MeshRenderer.color[entity]).toBe(0xff0000);
     });
 
     it('should throw helpful error for unknown recipe', () => {

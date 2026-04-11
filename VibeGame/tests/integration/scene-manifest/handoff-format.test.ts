@@ -5,7 +5,7 @@ import type {
   HandoffRow,
   HandoffManifest,
 } from '../../../src/plugins/scene-manifest/loader';
-import { AudioEmitter } from '../../../src/plugins/audio/components';
+import { AudioSource } from '../../../src/plugins/audio/components';
 
 const mockGroup = {
   position: { set: mock(() => {}) },
@@ -17,7 +17,7 @@ mock.module('../../../src/extras/gltf-bridge', () => ({
   loadGltfToSceneWithAnimator: mock(async () => ({ group: mockGroup })),
 }));
 
-const audioQuery = defineQuery([AudioEmitter]);
+const audioQuery = defineQuery([AudioSource]);
 
 describe('SceneManifest Handoff Format Integration', () => {
   function makeState() {
@@ -125,10 +125,10 @@ describe('SceneManifest Handoff Format Integration', () => {
       const entities = audioQuery(state.world);
       expect(entities.length).toBe(1);
       const eid = entities[0];
-      expect(AudioEmitter.volume[eid]).toBeCloseTo(0.7);
-      expect(AudioEmitter.loop[eid]).toBe(1);
-      expect(AudioEmitter.spatial[eid]).toBe(0);
-      expect(AudioEmitter.playing[eid]).toBe(1);
+      expect(AudioSource.volume[eid]).toBeCloseTo(0.7);
+      expect(AudioSource.loop[eid]).toBe(1);
+      expect(AudioSource.spatial[eid]).toBe(0);
+      expect(AudioSource.playing[eid]).toBe(1);
     });
 
     it('should set clipPath to eid for audio rows', async () => {
@@ -144,7 +144,7 @@ describe('SceneManifest Handoff Format Integration', () => {
       const entities = audioQuery(state.world);
       expect(entities.length).toBe(1);
       const eid = entities[0];
-      expect(AudioEmitter.clipPath[eid]).toBe(eid);
+      expect(AudioSource.clipPath[eid]).toBe(eid);
     });
 
     it('should call registerAudioClip with basePath + audio url', async () => {
@@ -160,7 +160,7 @@ describe('SceneManifest Handoff Format Integration', () => {
       const entities = audioQuery(state.world);
       expect(entities.length).toBe(1);
       const eid = entities[0];
-      expect(AudioEmitter.clipPath[eid]).toBe(eid);
+      expect(AudioSource.clipPath[eid]).toBe(eid);
     });
 
     it('should use custom basePath for audio registration', async () => {
@@ -175,7 +175,7 @@ describe('SceneManifest Handoff Format Integration', () => {
 
       const entities = audioQuery(state.world);
       expect(entities.length).toBe(1);
-      expect(AudioEmitter.clipPath[entities[0]]).toBe(entities[0]);
+      expect(AudioSource.clipPath[entities[0]]).toBe(entities[0]);
     });
   });
 

@@ -395,17 +395,17 @@ function processChildElementsForParent(
           state.addComponent(childEntity, Parent);
           (Parent as ComponentWithFields).entity[childEntity] = parentEntity;
 
-          const Body = state.getComponent('body');
-          if (Body) {
+          const Rigidbody = state.getComponent('body');
+          if (Rigidbody) {
             if (
-              state.hasComponent(parentEntity, Body) &&
-              state.hasComponent(childEntity, Body)
+              state.hasComponent(parentEntity, Rigidbody) &&
+              state.hasComponent(childEntity, Rigidbody)
             ) {
               console.warn(
-                `[Physics Warning] "${childElement.tagName}" has a Body component and is nested inside "${parentTagName}" which also has a Body component.\n` +
+                `[Physics Warning] "${childElement.tagName}" has a Rigidbody component and is nested inside "${parentTagName}" which also has a Rigidbody component.\n` +
                   `This configuration is not supported - a physics body should not be a child of another physics body.\n` +
                   `Consider one of these solutions:\n` +
-                  `  1. Remove the Body component from the child (keep only Collider if needed)\n` +
+                  `  1. Remove the Rigidbody component from the child (keep only Collider if needed)\n` +
                   `  2. Make "${childElement.tagName}" a sibling of "${parentTagName}" instead of a child\n` +
                   `  3. Use physics constraints or joints to connect separate bodies`
               );

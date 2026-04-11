@@ -18,6 +18,17 @@ export interface EntityScriptContext {
   getComponentInChildren(name: string): Component | null;
   /** Search this entity then its ancestors for a component. */
   getComponentInParent(name: string): Component | null;
+  /** Start a coroutine (generator) on this entity. Returns coroutine ID. */
+  StartCoroutine(genOrFn: Generator | (() => Generator)): number;
+  /** Stop a running coroutine by ID. */
+  StopCoroutine(coroutineId: number): void;
+  /** Stop all coroutines on this entity. */
+  StopAllCoroutines(): void;
+}
+
+/** Other entity involved in a collision/trigger event. */
+export interface CollisionOther {
+  entity: number;
 }
 
 /** Module shape for `import.meta.glob` entries (named exports). */
@@ -30,4 +41,10 @@ export interface EntityScriptModule {
   fixedUpdate?: (ctx: EntityScriptContext) => void;
   lateUpdate?: (ctx: EntityScriptContext) => void;
   onDestroy?: (ctx: EntityScriptContext) => void;
+  onCollisionEnter?: (ctx: EntityScriptContext, other: CollisionOther) => void;
+  onCollisionStay?: (ctx: EntityScriptContext, other: CollisionOther) => void;
+  onCollisionExit?: (ctx: EntityScriptContext, other: CollisionOther) => void;
+  onTriggerEnter?: (ctx: EntityScriptContext, other: CollisionOther) => void;
+  onTriggerStay?: (ctx: EntityScriptContext, other: CollisionOther) => void;
+  onTriggerExit?: (ctx: EntityScriptContext, other: CollisionOther) => void;
 }

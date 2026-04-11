@@ -1,4 +1,4 @@
-export { RaycastResult, RaycastSource } from './components';
+export { RaycastHit, RaycastSource } from './components';
 export { RaycastPlugin } from './plugin';
 export { RaycastResetSystem, RaycastSystem } from './systems';
 export {

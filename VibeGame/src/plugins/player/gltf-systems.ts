@@ -6,7 +6,7 @@ import { animatorRegistry, registerAnimator } from '../gltf-anim/systems';
 import { HasAnimator } from '../animation/components';
 import { isKeyDown } from '../input/utils';
 import { WorldTransform } from '../transforms';
-import { Player, PlayerGltfConfig } from './components';
+import { PlayerController, PlayerGltfConfig } from './components';
 
 let nextModelUrlIndex = 1;
 const modelUrlByIndex = new Map<number, string>();
@@ -81,7 +81,7 @@ function isRunModifier(): boolean {
   return isKeyDown('ShiftLeft') || isKeyDown('ShiftRight');
 }
 
-const playerGltfSetupQuery = defineQuery([Player, PlayerGltfConfig]);
+const playerGltfSetupQuery = defineQuery([PlayerController, PlayerGltfConfig]);
 
 /** Runs in the first setup bucket so {@link HasAnimator} exists before the procedural character is spawned. */
 export const PlayerGltfEnsureHasAnimatorSystem: System = {
@@ -137,7 +137,7 @@ export const PlayerGltfSetupSystem: System = {
   },
 };
 
-const playerGltfAnimQuery = defineQuery([Player, PlayerGltfConfig]);
+const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig]);
 
 export const PlayerGltfAnimStateSystem: System = {
   group: 'simulation',

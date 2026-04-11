@@ -1,8 +1,8 @@
 export {
   ColorOverLife,
   ParticleTexture,
-  ParticlesBurst,
-  ParticlesEmitter,
+  ParticleBurst,
+  ParticleSystem,
   SizeOverLife,
 } from './components';
 export { ParticlesPlugin } from './plugin';

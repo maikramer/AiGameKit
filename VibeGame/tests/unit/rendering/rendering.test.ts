@@ -4,7 +4,7 @@ import {
   AmbientLight,
   DirectionalLight,
   MainCamera,
-  Renderer,
+  MeshRenderer,
 } from 'vibegame/rendering';
 
 describe('Rendering Components', () => {
@@ -16,46 +16,46 @@ describe('Rendering Components', () => {
 
   it('should create Renderer component with proper field access', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, Renderer);
+    state.addComponent(entity, MeshRenderer);
 
-    Renderer.shape[entity] = 0; // BOX
-    Renderer.sizeX[entity] = 2.0;
-    Renderer.sizeY[entity] = 3.0;
-    Renderer.sizeZ[entity] = 1.5;
-    Renderer.color[entity] = 0xff0000;
-    Renderer.visible[entity] = 1;
+    MeshRenderer.shape[entity] = 0; // BOX
+    MeshRenderer.sizeX[entity] = 2.0;
+    MeshRenderer.sizeY[entity] = 3.0;
+    MeshRenderer.sizeZ[entity] = 1.5;
+    MeshRenderer.color[entity] = 0xff0000;
+    MeshRenderer.visible[entity] = 1;
 
-    expect(Renderer.shape[entity]).toBe(0);
-    expect(Renderer.sizeX[entity]).toBe(2.0);
-    expect(Renderer.sizeY[entity]).toBe(3.0);
-    expect(Renderer.sizeZ[entity]).toBe(1.5);
-    expect(Renderer.color[entity]).toBe(0xff0000);
-    expect(Renderer.visible[entity]).toBe(1);
+    expect(MeshRenderer.shape[entity]).toBe(0);
+    expect(MeshRenderer.sizeX[entity]).toBe(2.0);
+    expect(MeshRenderer.sizeY[entity]).toBe(3.0);
+    expect(MeshRenderer.sizeZ[entity]).toBe(1.5);
+    expect(MeshRenderer.color[entity]).toBe(0xff0000);
+    expect(MeshRenderer.visible[entity]).toBe(1);
   });
 
   it('should handle different shape types', () => {
     const box = state.createEntity();
     const sphere = state.createEntity();
 
-    state.addComponent(box, Renderer);
-    state.addComponent(sphere, Renderer);
+    state.addComponent(box, MeshRenderer);
+    state.addComponent(sphere, MeshRenderer);
 
-    Renderer.shape[box] = 0; // BOX
-    Renderer.shape[sphere] = 1; // SPHERE
+    MeshRenderer.shape[box] = 0; // BOX
+    MeshRenderer.shape[sphere] = 1; // SPHERE
 
-    expect(Renderer.shape[box]).toBe(0);
-    expect(Renderer.shape[sphere]).toBe(1);
+    expect(MeshRenderer.shape[box]).toBe(0);
+    expect(MeshRenderer.shape[sphere]).toBe(1);
   });
 
   it('should handle visibility states', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, Renderer);
+    state.addComponent(entity, MeshRenderer);
 
-    Renderer.visible[entity] = 1;
-    expect(Renderer.visible[entity]).toBe(1);
+    MeshRenderer.visible[entity] = 1;
+    expect(MeshRenderer.visible[entity]).toBe(1);
 
-    Renderer.visible[entity] = 0;
-    expect(Renderer.visible[entity]).toBe(0);
+    MeshRenderer.visible[entity] = 0;
+    expect(MeshRenderer.visible[entity]).toBe(0);
   });
 
   it('should create MainCamera component', () => {
@@ -66,9 +66,9 @@ describe('Rendering Components', () => {
   });
 
   it('should support component queries', () => {
-    const rendererQuery = defineQuery([Renderer])(state.world);
+    const rendererQuery = defineQuery([MeshRenderer])(state.world);
     const cameraQuery = defineQuery([MainCamera])(state.world);
-    const combinedQuery = defineQuery([Renderer, MainCamera])(state.world);
+    const combinedQuery = defineQuery([MeshRenderer, MainCamera])(state.world);
 
     expect(rendererQuery).toBeDefined();
     expect(cameraQuery).toBeDefined();
@@ -80,17 +80,17 @@ describe('Rendering Components', () => {
     const entity2 = state.createEntity();
     const entity3 = state.createEntity();
 
-    state.addComponent(entity1, Renderer);
-    state.addComponent(entity2, Renderer);
-    state.addComponent(entity3, Renderer);
+    state.addComponent(entity1, MeshRenderer);
+    state.addComponent(entity2, MeshRenderer);
+    state.addComponent(entity3, MeshRenderer);
 
-    Renderer.color[entity1] = 0xff0000;
-    Renderer.color[entity2] = 0x00ff00;
-    Renderer.color[entity3] = 0x0000ff;
+    MeshRenderer.color[entity1] = 0xff0000;
+    MeshRenderer.color[entity2] = 0x00ff00;
+    MeshRenderer.color[entity3] = 0x0000ff;
 
-    expect(Renderer.color[entity1]).toBe(0xff0000);
-    expect(Renderer.color[entity2]).toBe(0x00ff00);
-    expect(Renderer.color[entity3]).toBe(0x0000ff);
+    expect(MeshRenderer.color[entity1]).toBe(0xff0000);
+    expect(MeshRenderer.color[entity2]).toBe(0x00ff00);
+    expect(MeshRenderer.color[entity3]).toBe(0x0000ff);
   });
 
   it('should create HemisphereLight component', () => {

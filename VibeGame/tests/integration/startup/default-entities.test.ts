@@ -10,7 +10,7 @@ import {
 } from 'vibegame/rendering';
 import { AnimatedCharacter, HasAnimator } from 'vibegame/animation';
 import {
-  Body,
+  Rigidbody,
   CharacterController,
   CharacterMovement,
   Collider,
@@ -18,7 +18,7 @@ import {
 import { InputState } from 'vibegame/input';
 import { OrbitCamera } from 'vibegame/orbit-camera';
 import { Parent, Transform, TransformsPlugin } from 'vibegame/transforms';
-import { Player } from 'vibegame/player';
+import { PlayerController } from 'vibegame/player';
 import { Respawn } from 'vibegame/respawn';
 import { StartupPlugin } from 'vibegame/startup';
 
@@ -35,25 +35,25 @@ describe('Startup Plugin - Auto-Creation', () => {
     }
     await state.initializePlugins();
 
-    expect(defineQuery([Player])(state.world).length).toBe(0);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(0);
     expect(defineQuery([MainCamera])(state.world).length).toBe(0);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(0);
     expect(defineQuery([DirectionalLight])(state.world).length).toBe(0);
 
     state.scheduler.step(state, 0);
 
-    expect(defineQuery([Player])(state.world).length).toBe(1);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
     expect(defineQuery([MainCamera])(state.world).length).toBe(1);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(1);
     expect(defineQuery([DirectionalLight])(state.world).length).toBe(1);
 
-    const player = defineQuery([Player])(state.world)[0];
+    const player = defineQuery([PlayerController])(state.world)[0];
     const camera = defineQuery([MainCamera])(state.world)[0];
     const light = defineQuery([AmbientLight])(state.world)[0];
 
     expect(state.hasComponent(player, CharacterMovement)).toBe(true);
     expect(state.hasComponent(player, Transform)).toBe(true);
-    expect(state.hasComponent(player, Body)).toBe(true);
+    expect(state.hasComponent(player, Rigidbody)).toBe(true);
     expect(state.hasComponent(player, Collider)).toBe(true);
     expect(state.hasComponent(player, CharacterController)).toBe(true);
     expect(state.hasComponent(player, InputState)).toBe(true);
@@ -73,13 +73,13 @@ describe('Startup Plugin - Auto-Creation', () => {
     state.registerPlugin(StartupPlugin);
     await state.initializePlugins();
 
-    expect(defineQuery([Player])(state.world).length).toBe(0);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(0);
     expect(defineQuery([MainCamera])(state.world).length).toBe(0);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(0);
 
     state.scheduler.step(state);
 
-    expect(defineQuery([Player])(state.world).length).toBe(1);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
     expect(defineQuery([MainCamera])(state.world).length).toBe(1);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(1);
     expect(defineQuery([DirectionalLight])(state.world).length).toBe(1);
@@ -105,17 +105,17 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
-    expect(defineQuery([Player])(state.world).length).toBe(1);
-    const xmlPlayer = defineQuery([Player])(state.world)[0];
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
+    const xmlPlayer = defineQuery([PlayerController])(state.world)[0];
     expect(Transform.posX[xmlPlayer]).toBe(10);
     expect(Transform.posY[xmlPlayer]).toBe(2);
     expect(Transform.posZ[xmlPlayer]).toBe(-5);
-    expect(Player.speed[xmlPlayer]).toBe(12);
+    expect(PlayerController.speed[xmlPlayer]).toBe(12);
 
     state.scheduler.step(state, 0);
 
-    expect(defineQuery([Player])(state.world).length).toBe(1);
-    const afterStartup = defineQuery([Player])(state.world)[0];
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
+    const afterStartup = defineQuery([PlayerController])(state.world)[0];
     expect(afterStartup).toBe(xmlPlayer);
   });
 
@@ -133,7 +133,7 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
     state.scheduler.step(state, 0);
 
     expect(defineQuery([MainCamera])(state.world).length).toBe(1);
-    expect(defineQuery([Player])(state.world).length).toBe(1);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
 
     const afterStartup = defineQuery([MainCamera])(state.world)[0];
     expect(afterStartup).toBe(xmlCamera);
@@ -198,27 +198,27 @@ describe('Startup Plugin - Idempotent Behavior', () => {
   });
 
   it('should be idempotent and only create entities once', () => {
-    expect(defineQuery([Player])(state.world).length).toBe(0);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(0);
     expect(defineQuery([MainCamera])(state.world).length).toBe(0);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(0);
 
     state.scheduler.step(state, 0);
 
-    expect(defineQuery([Player])(state.world).length).toBe(1);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
     expect(defineQuery([MainCamera])(state.world).length).toBe(1);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(1);
 
-    const firstPlayer = defineQuery([Player])(state.world)[0];
+    const firstPlayer = defineQuery([PlayerController])(state.world)[0];
     const firstCamera = defineQuery([MainCamera])(state.world)[0];
     const firstLight = defineQuery([AmbientLight])(state.world)[0];
 
     state.scheduler.step(state, 0);
 
-    expect(defineQuery([Player])(state.world).length).toBe(1);
+    expect(defineQuery([PlayerController])(state.world).length).toBe(1);
     expect(defineQuery([MainCamera])(state.world).length).toBe(1);
     expect(defineQuery([AmbientLight])(state.world).length).toBe(1);
 
-    expect(defineQuery([Player])(state.world)[0]).toBe(firstPlayer);
+    expect(defineQuery([PlayerController])(state.world)[0]).toBe(firstPlayer);
     expect(defineQuery([MainCamera])(state.world)[0]).toBe(firstCamera);
     expect(defineQuery([AmbientLight])(state.world)[0]).toBe(firstLight);
   });
@@ -241,7 +241,7 @@ describe('Startup Plugin - Player Character System', () => {
   it('should attach animated character to player entities', () => {
     state.scheduler.step(state, 0);
 
-    const player = defineQuery([Player])(state.world)[0];
+    const player = defineQuery([PlayerController])(state.world)[0];
     expect(state.hasComponent(player, HasAnimator)).toBe(true);
 
     const characters = defineQuery([AnimatedCharacter])(state.world);
@@ -261,7 +261,7 @@ describe('Startup Plugin - Player Character System', () => {
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
-    const player = defineQuery([Player])(state.world)[0];
+    const player = defineQuery([PlayerController])(state.world)[0];
     state.addComponent(player, HasAnimator);
 
     state.scheduler.step(state, 0);
@@ -301,23 +301,23 @@ describe('Startup Plugin - Component Defaults', () => {
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
-    const xmlPlayer = defineQuery([Player])(state.world)[0];
-    const startupPlayer = defineQuery([Player])(startupState.world)[0];
+    const xmlPlayer = defineQuery([PlayerController])(state.world)[0];
+    const startupPlayer = defineQuery([PlayerController])(startupState.world)[0];
 
     expect(Transform.posX[xmlPlayer]).toBe(Transform.posX[startupPlayer]);
     expect(Transform.posY[xmlPlayer]).toBe(Transform.posY[startupPlayer]);
     expect(Transform.posZ[xmlPlayer]).toBe(Transform.posZ[startupPlayer]);
 
-    expect(Player.speed[xmlPlayer]).toBe(Player.speed[startupPlayer]);
-    expect(Player.jumpHeight[xmlPlayer]).toBe(Player.jumpHeight[startupPlayer]);
-    expect(Player.rotationSpeed[xmlPlayer]).toBe(
-      Player.rotationSpeed[startupPlayer]
+    expect(PlayerController.speed[xmlPlayer]).toBe(PlayerController.speed[startupPlayer]);
+    expect(PlayerController.jumpHeight[xmlPlayer]).toBe(PlayerController.jumpHeight[startupPlayer]);
+    expect(PlayerController.rotationSpeed[xmlPlayer]).toBe(
+      PlayerController.rotationSpeed[startupPlayer]
     );
 
-    expect(Body.type[xmlPlayer]).toBe(Body.type[startupPlayer]);
-    expect(Body.lockRotX[xmlPlayer]).toBe(Body.lockRotX[startupPlayer]);
-    expect(Body.lockRotY[xmlPlayer]).toBe(Body.lockRotY[startupPlayer]);
-    expect(Body.lockRotZ[xmlPlayer]).toBe(Body.lockRotZ[startupPlayer]);
+    expect(Rigidbody.type[xmlPlayer]).toBe(Rigidbody.type[startupPlayer]);
+    expect(Rigidbody.lockRotX[xmlPlayer]).toBe(Rigidbody.lockRotX[startupPlayer]);
+    expect(Rigidbody.lockRotY[xmlPlayer]).toBe(Rigidbody.lockRotY[startupPlayer]);
+    expect(Rigidbody.lockRotZ[xmlPlayer]).toBe(Rigidbody.lockRotZ[startupPlayer]);
 
     expect(Collider.shape[xmlPlayer]).toBe(Collider.shape[startupPlayer]);
     expect(Collider.radius[xmlPlayer]).toBe(Collider.radius[startupPlayer]);

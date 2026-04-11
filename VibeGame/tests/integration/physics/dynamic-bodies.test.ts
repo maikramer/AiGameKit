@@ -3,7 +3,7 @@ import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
 import {
   ApplyForce,
   ApplyImpulse,
-  Body,
+  Rigidbody,
   BodyType,
   Collider,
   ColliderShape,
@@ -25,7 +25,7 @@ describe('Dynamic Bodies Integration', () => {
 
   it('should fall under gravity', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
 
@@ -33,11 +33,11 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posY[box] = 10;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 1;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posY[box] = 10;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 1;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -50,19 +50,19 @@ describe('Dynamic Bodies Integration', () => {
       PhysicsWorld.gravityY[worldEntities[0]] = -9.81;
     }
 
-    const initialY = Body.posY[box];
+    const initialY = Rigidbody.posY[box];
 
     for (let i = 0; i < 30; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    expect(Body.posY[box]).toBeLessThan(initialY);
-    expect(Body.velY[box]).toBeLessThan(0);
+    expect(Rigidbody.posY[box]).toBeLessThan(initialY);
+    expect(Rigidbody.velY[box]).toBeLessThan(0);
   });
 
   it('should respond to applied forces', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
 
@@ -70,13 +70,13 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posX[box] = 0;
-    Body.posY[box] = 5;
-    Body.posZ[box] = 0;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 0;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posX[box] = 0;
+    Rigidbody.posY[box] = 5;
+    Rigidbody.posZ[box] = 0;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 0;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -93,13 +93,13 @@ describe('Dynamic Bodies Integration', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    expect(Body.posX[box]).toBeGreaterThan(0);
-    expect(Body.velX[box]).toBeGreaterThan(0);
+    expect(Rigidbody.posX[box]).toBeGreaterThan(0);
+    expect(Rigidbody.velX[box]).toBeGreaterThan(0);
   });
 
   it('should respond to impulses', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
 
@@ -107,13 +107,13 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posX[box] = 0;
-    Body.posY[box] = 5;
-    Body.posZ[box] = 0;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 0;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posX[box] = 0;
+    Rigidbody.posY[box] = 5;
+    Rigidbody.posZ[box] = 0;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 0;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -130,20 +130,20 @@ describe('Dynamic Bodies Integration', () => {
 
     state.removeComponent(box, ApplyImpulse);
 
-    expect(Body.velX[box]).toBeGreaterThan(0);
-    expect(Body.velY[box]).toBeGreaterThan(0);
+    expect(Rigidbody.velX[box]).toBeGreaterThan(0);
+    expect(Rigidbody.velY[box]).toBeGreaterThan(0);
 
     for (let i = 0; i < 30; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    expect(Body.posX[box]).toBeGreaterThan(0);
-    expect(Body.posY[box]).toBeGreaterThan(5);
+    expect(Rigidbody.posX[box]).toBeGreaterThan(0);
+    expect(Rigidbody.posY[box]).toBeGreaterThan(5);
   });
 
   it('should handle velocity changes', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
 
@@ -151,13 +151,13 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posX[box] = 0;
-    Body.posY[box] = 5;
-    Body.posZ[box] = 0;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 0;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posX[box] = 0;
+    Rigidbody.posY[box] = 5;
+    Rigidbody.posZ[box] = 0;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 0;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -172,9 +172,9 @@ describe('Dynamic Bodies Integration', () => {
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-    expect(Body.velX[box]).toBe(5);
-    expect(Body.velY[box]).toBe(0);
-    expect(Body.velZ[box]).toBe(0);
+    expect(Rigidbody.velX[box]).toBe(5);
+    expect(Rigidbody.velY[box]).toBe(0);
+    expect(Rigidbody.velZ[box]).toBe(0);
 
     state.removeComponent(box, SetLinearVelocity);
 
@@ -182,12 +182,12 @@ describe('Dynamic Bodies Integration', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    expect(Body.posX[box]).toBeGreaterThan(0);
+    expect(Rigidbody.posX[box]).toBeGreaterThan(0);
   });
 
   it('should bounce with restitution', () => {
     const floor = state.createEntity();
-    state.addComponent(floor, Body);
+    state.addComponent(floor, Rigidbody);
     state.addComponent(floor, Collider);
     state.addComponent(floor, Transform);
 
@@ -195,9 +195,9 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[floor] = 1;
     Transform.scaleZ[floor] = 1;
 
-    Body.type[floor] = BodyType.Fixed;
-    Body.posY[floor] = 0;
-    Body.rotW[floor] = 1;
+    Rigidbody.type[floor] = BodyType.Fixed;
+    Rigidbody.posY[floor] = 0;
+    Rigidbody.rotW[floor] = 1;
 
     Collider.shape[floor] = ColliderShape.Box;
     Collider.sizeX[floor] = 100;
@@ -206,7 +206,7 @@ describe('Dynamic Bodies Integration', () => {
     Collider.restitution[floor] = 0.8;
 
     const ball = state.createEntity();
-    state.addComponent(ball, Body);
+    state.addComponent(ball, Rigidbody);
     state.addComponent(ball, Collider);
     state.addComponent(ball, Transform);
 
@@ -214,11 +214,11 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[ball] = 1;
     Transform.scaleZ[ball] = 1;
 
-    Body.type[ball] = BodyType.Dynamic;
-    Body.posY[ball] = 10;
-    Body.rotW[ball] = 1;
-    Body.mass[ball] = 1;
-    Body.gravityScale[ball] = 1;
+    Rigidbody.type[ball] = BodyType.Dynamic;
+    Rigidbody.posY[ball] = 10;
+    Rigidbody.rotW[ball] = 1;
+    Rigidbody.mass[ball] = 1;
+    Rigidbody.gravityScale[ball] = 1;
 
     Collider.shape[ball] = ColliderShape.Sphere;
     Collider.sizeX[ball] = 1;
@@ -237,11 +237,11 @@ describe('Dynamic Bodies Integration', () => {
     for (let i = 0; i < 120; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      if (i > 30 && Body.velY[ball] > 0 && previousVelY < 0) {
+      if (i > 30 && Rigidbody.velY[ball] > 0 && previousVelY < 0) {
         bounceDetected = true;
         break;
       }
-      previousVelY = Body.velY[ball];
+      previousVelY = Rigidbody.velY[ball];
     }
 
     expect(bounceDetected).toBe(true);
@@ -249,7 +249,7 @@ describe('Dynamic Bodies Integration', () => {
 
   it('should handle linear damping', () => {
     const box = state.createEntity();
-    state.addComponent(box, Body);
+    state.addComponent(box, Rigidbody);
     state.addComponent(box, Collider);
     state.addComponent(box, Transform);
 
@@ -257,13 +257,13 @@ describe('Dynamic Bodies Integration', () => {
     Transform.scaleY[box] = 1;
     Transform.scaleZ[box] = 1;
 
-    Body.type[box] = BodyType.Dynamic;
-    Body.posY[box] = 5;
-    Body.rotW[box] = 1;
-    Body.mass[box] = 1;
-    Body.gravityScale[box] = 0;
-    Body.linearDamping[box] = 2;
-    Body.velX[box] = 10;
+    Rigidbody.type[box] = BodyType.Dynamic;
+    Rigidbody.posY[box] = 5;
+    Rigidbody.rotW[box] = 1;
+    Rigidbody.mass[box] = 1;
+    Rigidbody.gravityScale[box] = 0;
+    Rigidbody.linearDamping[box] = 2;
+    Rigidbody.velX[box] = 10;
 
     Collider.shape[box] = ColliderShape.Box;
     Collider.sizeX[box] = 1;
@@ -271,13 +271,13 @@ describe('Dynamic Bodies Integration', () => {
     Collider.sizeZ[box] = 1;
     Collider.density[box] = 1;
 
-    const initialVel = Body.velX[box];
+    const initialVel = Rigidbody.velX[box];
 
     for (let i = 0; i < 60; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    expect(Body.velX[box]).toBeLessThan(initialVel);
-    expect(Body.velX[box]).toBeGreaterThan(0);
+    expect(Rigidbody.velX[box]).toBeLessThan(initialVel);
+    expect(Rigidbody.velX[box]).toBeGreaterThan(0);
   });
 });

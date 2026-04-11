@@ -5,7 +5,7 @@ import {
   shortestAngleDiff,
   smoothLerp,
 } from '../orbit-camera/math';
-import { Body } from '../physics';
+import { Rigidbody } from '../physics';
 import {
   Transform,
   WorldTransform,
@@ -29,10 +29,10 @@ const _upVec = new THREE.Vector3(0, 1, 0);
 
 function extractBodyYaw(entity: number): number {
   _tempQuat.set(
-    Body.rotX[entity],
-    Body.rotY[entity],
-    Body.rotZ[entity],
-    Body.rotW[entity]
+    Rigidbody.rotX[entity],
+    Rigidbody.rotY[entity],
+    Rigidbody.rotZ[entity],
+    Rigidbody.rotW[entity]
   );
   _tempEuler.setFromQuaternion(_tempQuat, 'YXZ');
   return _tempEuler.y;
@@ -148,7 +148,7 @@ export const FollowCameraAutoRotateSystem: System = {
       if (FollowCamera.autoRotate[entity] !== 1) continue;
 
       const targetEntity = FollowCamera.target[entity];
-      if (!targetEntity || !state.hasComponent(targetEntity, Body)) continue;
+      if (!targetEntity || !state.hasComponent(targetEntity, Rigidbody)) continue;
       if (!state.hasComponent(targetEntity, InputState)) continue;
 
       const delay = FollowCamera.autoRotateDelay[entity];

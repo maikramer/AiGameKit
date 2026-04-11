@@ -3,7 +3,7 @@ import { State, TIME_CONSTANTS } from 'vibegame';
 import { InputState } from 'vibegame/input';
 import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   CharacterController,
   CharacterMovement,
@@ -11,7 +11,7 @@ import {
   ColliderShape,
   PhysicsPlugin,
 } from 'vibegame/physics';
-import { Player, PlayerPlugin } from 'vibegame/player';
+import { PlayerController, PlayerPlugin } from 'vibegame/player';
 import {
   Transform,
   TransformsPlugin,
@@ -35,30 +35,30 @@ describe('Player Jumping', () => {
 
   function createPlayer(x = 0, y = 5, z = 0): number {
     const player = state.createEntity();
-    state.addComponent(player, Player);
+    state.addComponent(player, PlayerController);
     state.addComponent(player, InputState);
-    state.addComponent(player, Body);
+    state.addComponent(player, Rigidbody);
     state.addComponent(player, Collider);
     state.addComponent(player, CharacterController);
     state.addComponent(player, CharacterMovement);
     state.addComponent(player, Transform);
     state.addComponent(player, WorldTransform);
 
-    Player.speed[player] = 10;
-    Player.jumpHeight[player] = 3;
-    Player.rotationSpeed[player] = 10;
-    Player.canJump[player] = 1;
-    Player.isJumping[player] = 0;
-    Player.jumpCooldown[player] = 0;
-    Player.lastGroundedTime[player] = -10000;
-    Player.jumpBufferTime[player] = -10000;
+    PlayerController.speed[player] = 10;
+    PlayerController.jumpHeight[player] = 3;
+    PlayerController.rotationSpeed[player] = 10;
+    PlayerController.canJump[player] = 1;
+    PlayerController.isJumping[player] = 0;
+    PlayerController.jumpCooldown[player] = 0;
+    PlayerController.lastGroundedTime[player] = -10000;
+    PlayerController.jumpBufferTime[player] = -10000;
 
-    Body.type[player] = BodyType.KinematicPositionBased;
-    Body.posX[player] = x;
-    Body.posY[player] = y;
-    Body.posZ[player] = z;
-    Body.rotW[player] = 1;
-    Body.gravityScale[player] = 1;
+    Rigidbody.type[player] = BodyType.KinematicPositionBased;
+    Rigidbody.posX[player] = x;
+    Rigidbody.posY[player] = y;
+    Rigidbody.posZ[player] = z;
+    Rigidbody.rotW[player] = 1;
+    Rigidbody.gravityScale[player] = 1;
 
     Collider.shape[player] = ColliderShape.Capsule;
     Collider.radius[player] = 0.5;
@@ -80,13 +80,13 @@ describe('Player Jumping', () => {
 
   function createFloor(y = 0): number {
     const floor = state.createEntity();
-    state.addComponent(floor, Body);
+    state.addComponent(floor, Rigidbody);
     state.addComponent(floor, Collider);
     state.addComponent(floor, Transform);
 
-    Body.type[floor] = BodyType.Fixed;
-    Body.posY[floor] = y;
-    Body.rotW[floor] = 1;
+    Rigidbody.type[floor] = BodyType.Fixed;
+    Rigidbody.posY[floor] = y;
+    Rigidbody.rotW[floor] = 1;
 
     Collider.shape[floor] = ColliderShape.Box;
     Collider.sizeX[floor] = 100;
@@ -110,18 +110,18 @@ describe('Player Jumping', () => {
 
       waitForGrounded(player);
 
-      const startY = Body.posY[player];
+      const startY = Rigidbody.posY[player];
       InputState.jump[player] = 1;
 
       let maxHeight = startY;
       for (let i = 0; i < 60; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-        maxHeight = Math.max(maxHeight, Body.posY[player]);
+        maxHeight = Math.max(maxHeight, Rigidbody.posY[player]);
         InputState.jump[player] = 0;
       }
 
       const heightReached = maxHeight - startY;
-      const expectedHeight = Player.jumpHeight[player];
+      const expectedHeight = PlayerController.jumpHeight[player];
 
       expect(heightReached).toBeGreaterThan(expectedHeight * 0.8);
       expect(heightReached).toBeLessThan(expectedHeight * 1.2);
@@ -134,14 +134,14 @@ describe('Player Jumping', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       expect(CharacterController.grounded[player]).toBe(0);
 
-      const startY = Body.posY[player];
+      const startY = Rigidbody.posY[player];
       InputState.jump[player] = 1;
 
       for (let i = 0; i < 5; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posY[player]).toBeLessThan(startY);
+      expect(Rigidbody.posY[player]).toBeLessThan(startY);
     });
 
     it('should respect jump cooldown', () => {
@@ -158,8 +158,8 @@ describe('Player Jumping', () => {
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Player.canJump[player]).toBe(0);
-      expect(Player.jumpCooldown[player]).toBeGreaterThan(0);
+      expect(PlayerController.canJump[player]).toBe(0);
+      expect(PlayerController.jumpCooldown[player]).toBeGreaterThan(0);
     });
 
     it('should apply gravity during jump', () => {
@@ -207,11 +207,11 @@ describe('Player Jumping', () => {
       // Jump buffer should be set (not at default -10000)
       // With 50Hz physics, the timing may be different
       // Just verify the mechanism works
-      if (Player.jumpBufferTime[player] === -10000) {
+      if (PlayerController.jumpBufferTime[player] === -10000) {
         // Manually set it for test purposes
-        Player.jumpBufferTime[player] = state.time.elapsed * 1000;
+        PlayerController.jumpBufferTime[player] = state.time.elapsed * 1000;
       }
-      expect(Player.jumpBufferTime[player]).toBeGreaterThanOrEqual(-10000);
+      expect(PlayerController.jumpBufferTime[player]).toBeGreaterThanOrEqual(-10000);
 
       let jumped = false;
       for (let i = 0; i < 20; i++) {
@@ -234,7 +234,7 @@ describe('Player Jumping', () => {
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Player.jumpBufferTime[player]).toBe(-10000);
+      expect(PlayerController.jumpBufferTime[player]).toBe(-10000);
     });
   });
 
@@ -242,15 +242,15 @@ describe('Player Jumping', () => {
     it('should allow jumping shortly after leaving platform', () => {
       createFloor();
       const platform = state.createEntity();
-      state.addComponent(platform, Body);
+      state.addComponent(platform, Rigidbody);
       state.addComponent(platform, Collider);
       state.addComponent(platform, Transform);
 
-      Body.type[platform] = BodyType.Fixed;
-      Body.posX[platform] = 0;
-      Body.posY[platform] = 5;
-      Body.posZ[platform] = 0;
-      Body.rotW[platform] = 1;
+      Rigidbody.type[platform] = BodyType.Fixed;
+      Rigidbody.posX[platform] = 0;
+      Rigidbody.posY[platform] = 5;
+      Rigidbody.posZ[platform] = 0;
+      Rigidbody.rotW[platform] = 1;
 
       Collider.shape[platform] = ColliderShape.Box;
       Collider.sizeX[platform] = 1;
@@ -262,7 +262,7 @@ describe('Player Jumping', () => {
       waitForGrounded(player);
 
       // Move player to edge of platform and then off
-      Body.posX[player] = 0.6;
+      Rigidbody.posX[player] = 0.6;
       InputState.moveX[player] = 1;
 
       // Step multiple times to ensure we move off the platform
@@ -289,7 +289,7 @@ describe('Player Jumping', () => {
       createFloor();
       const player = createPlayer(0, 10, 0);
 
-      Player.lastGroundedTime[player] = -1000;
+      PlayerController.lastGroundedTime[player] = -1000;
 
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -305,7 +305,7 @@ describe('Player Jumping', () => {
       expect(CharacterController.grounded[player]).toBe(1);
 
       const recentTime = state.time.elapsed * 1000 - 50;
-      Player.lastGroundedTime[player] = recentTime;
+      PlayerController.lastGroundedTime[player] = recentTime;
 
       CharacterController.grounded[player] = 0;
 
@@ -313,8 +313,8 @@ describe('Player Jumping', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       expect(CharacterMovement.velocityY[player]).toBeGreaterThan(5);
-      expect(Player.isJumping[player]).toBe(1);
-      expect(Player.canJump[player]).toBe(0);
+      expect(PlayerController.isJumping[player]).toBe(1);
+      expect(PlayerController.canJump[player]).toBe(0);
     });
 
     it('should not allow jumping beyond coyote time window of 100ms', () => {
@@ -322,7 +322,7 @@ describe('Player Jumping', () => {
       const player = createPlayer(0, 10, 0);
 
       const currentTime = state.time.elapsed * 1000;
-      Player.lastGroundedTime[player] = currentTime - 150;
+      PlayerController.lastGroundedTime[player] = currentTime - 150;
 
       expect(CharacterController.grounded[player]).toBe(0);
 
@@ -330,7 +330,7 @@ describe('Player Jumping', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       expect(CharacterMovement.velocityY[player]).toBeLessThanOrEqual(0);
-      expect(Player.isJumping[player]).toBe(0);
+      expect(PlayerController.isJumping[player]).toBe(0);
     });
   });
 
@@ -340,10 +340,10 @@ describe('Player Jumping', () => {
       const normalPlayer = createPlayer(0, 2, 0);
       const lowGravPlayer = createPlayer(5, 2, 0);
 
-      Body.gravityScale[normalPlayer] = 1;
-      Body.gravityScale[lowGravPlayer] = 0.5;
-      Player.jumpHeight[normalPlayer] = 3;
-      Player.jumpHeight[lowGravPlayer] = 3;
+      Rigidbody.gravityScale[normalPlayer] = 1;
+      Rigidbody.gravityScale[lowGravPlayer] = 0.5;
+      PlayerController.jumpHeight[normalPlayer] = 3;
+      PlayerController.jumpHeight[lowGravPlayer] = 3;
 
       waitForGrounded(normalPlayer);
       waitForGrounded(lowGravPlayer);
@@ -357,13 +357,13 @@ describe('Player Jumping', () => {
 
       expect(normalVel).toBeGreaterThan(lowGravVel);
 
-      let normalMaxHeight = Body.posY[normalPlayer];
-      let lowGravMaxHeight = Body.posY[lowGravPlayer];
+      let normalMaxHeight = Rigidbody.posY[normalPlayer];
+      let lowGravMaxHeight = Rigidbody.posY[lowGravPlayer];
 
       for (let i = 0; i < 60; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-        normalMaxHeight = Math.max(normalMaxHeight, Body.posY[normalPlayer]);
-        lowGravMaxHeight = Math.max(lowGravMaxHeight, Body.posY[lowGravPlayer]);
+        normalMaxHeight = Math.max(normalMaxHeight, Rigidbody.posY[normalPlayer]);
+        lowGravMaxHeight = Math.max(lowGravMaxHeight, Rigidbody.posY[lowGravPlayer]);
       }
 
       const normalHeightReached = normalMaxHeight - 2;
@@ -378,14 +378,14 @@ describe('Player Jumping', () => {
       const shortJumper = createPlayer(0, 2, 0);
       const tallJumper = createPlayer(5, 2, 0);
 
-      Player.jumpHeight[shortJumper] = 1.5;
-      Player.jumpHeight[tallJumper] = 5;
+      PlayerController.jumpHeight[shortJumper] = 1.5;
+      PlayerController.jumpHeight[tallJumper] = 5;
 
       waitForGrounded(shortJumper);
       waitForGrounded(tallJumper);
 
-      const shortStartY = Body.posY[shortJumper];
-      const tallStartY = Body.posY[tallJumper];
+      const shortStartY = Rigidbody.posY[shortJumper];
+      const tallStartY = Rigidbody.posY[tallJumper];
 
       InputState.jump[shortJumper] = 1;
       InputState.jump[tallJumper] = 1;
@@ -396,8 +396,8 @@ describe('Player Jumping', () => {
 
       for (let i = 0; i < 60; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-        shortMaxHeight = Math.max(shortMaxHeight, Body.posY[shortJumper]);
-        tallMaxHeight = Math.max(tallMaxHeight, Body.posY[tallJumper]);
+        shortMaxHeight = Math.max(shortMaxHeight, Rigidbody.posY[shortJumper]);
+        tallMaxHeight = Math.max(tallMaxHeight, Rigidbody.posY[tallJumper]);
       }
 
       const shortHeight = shortMaxHeight - shortStartY;
@@ -415,14 +415,14 @@ describe('Player Jumping', () => {
 
       waitForGrounded(player);
 
-      expect(Player.isJumping[player]).toBe(0);
-      expect(Player.canJump[player]).toBe(1);
+      expect(PlayerController.isJumping[player]).toBe(0);
+      expect(PlayerController.canJump[player]).toBe(1);
 
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Player.isJumping[player]).toBe(1);
-      expect(Player.canJump[player]).toBe(0);
+      expect(PlayerController.isJumping[player]).toBe(1);
+      expect(PlayerController.canJump[player]).toBe(0);
     });
 
     it('should reset jump ability after cooldown', () => {
@@ -434,15 +434,15 @@ describe('Player Jumping', () => {
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Player.canJump[player]).toBe(0);
-      expect(Player.jumpCooldown[player]).toBeGreaterThan(0);
+      expect(PlayerController.canJump[player]).toBe(0);
+      expect(PlayerController.jumpCooldown[player]).toBeGreaterThan(0);
 
       for (let i = 0; i < 30; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Player.jumpCooldown[player]).toBeLessThanOrEqual(0);
-      expect(Player.canJump[player]).toBe(1);
+      expect(PlayerController.jumpCooldown[player]).toBeLessThanOrEqual(0);
+      expect(PlayerController.canJump[player]).toBe(1);
     });
 
     it('should allow multiple jumps after landing', () => {
@@ -451,40 +451,40 @@ describe('Player Jumping', () => {
 
       waitForGrounded(player);
 
-      const initialY = Body.posY[player];
+      const initialY = Rigidbody.posY[player];
 
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       InputState.jump[player] = 0;
 
-      expect(Player.isJumping[player]).toBe(1);
-      expect(Player.canJump[player]).toBe(0);
+      expect(PlayerController.isJumping[player]).toBe(1);
+      expect(PlayerController.canJump[player]).toBe(0);
 
       let maxHeight = initialY;
       for (let i = 0; i < 60; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-        maxHeight = Math.max(maxHeight, Body.posY[player]);
+        maxHeight = Math.max(maxHeight, Rigidbody.posY[player]);
       }
 
       waitForGrounded(player);
 
-      expect(Player.isJumping[player]).toBe(0);
-      expect(Player.canJump[player]).toBe(1);
+      expect(PlayerController.isJumping[player]).toBe(0);
+      expect(PlayerController.canJump[player]).toBe(1);
 
-      const secondJumpY = Body.posY[player];
+      const secondJumpY = Rigidbody.posY[player];
 
       InputState.jump[player] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       InputState.jump[player] = 0;
 
-      expect(Player.isJumping[player]).toBe(1);
+      expect(PlayerController.isJumping[player]).toBe(1);
       expect(CharacterMovement.velocityY[player]).toBeGreaterThan(0);
 
       for (let i = 0; i < 10; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       }
 
-      expect(Body.posY[player]).toBeGreaterThan(secondJumpY);
+      expect(Rigidbody.posY[player]).toBeGreaterThan(secondJumpY);
     });
 
     it('should handle rapid jump attempts after landing (real world scenario)', () => {
@@ -492,33 +492,33 @@ describe('Player Jumping', () => {
       const player = createPlayer(0, 2, 0);
 
       waitForGrounded(player);
-      expect(Player.canJump[player]).toBe(1);
+      expect(PlayerController.canJump[player]).toBe(1);
 
       for (let jumpAttempt = 0; jumpAttempt < 5; jumpAttempt++) {
-        const beforeJumpY = Body.posY[player];
+        const beforeJumpY = Rigidbody.posY[player];
 
         InputState.jump[player] = 1;
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
         InputState.jump[player] = 0;
 
-        expect(Player.isJumping[player]).toBe(1);
-        expect(Player.canJump[player]).toBe(0);
+        expect(PlayerController.isJumping[player]).toBe(1);
+        expect(PlayerController.canJump[player]).toBe(0);
 
         for (let i = 0; i < 80; i++) {
           state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
           if (
             CharacterController.grounded[player] === 1 &&
-            Player.isJumping[player] === 0
+            PlayerController.isJumping[player] === 0
           ) {
             break;
           }
         }
 
         expect(CharacterController.grounded[player]).toBe(1);
-        expect(Player.isJumping[player]).toBe(0);
-        expect(Player.canJump[player]).toBe(1);
+        expect(PlayerController.isJumping[player]).toBe(0);
+        expect(PlayerController.canJump[player]).toBe(1);
 
-        expect(Body.posY[player]).toBeGreaterThan(beforeJumpY - 0.1);
+        expect(Rigidbody.posY[player]).toBeGreaterThan(beforeJumpY - 0.1);
       }
     });
   });

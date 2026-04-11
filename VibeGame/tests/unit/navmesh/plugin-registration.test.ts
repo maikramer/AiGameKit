@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { NavmeshPlugin } from '../../../src/plugins/navmesh/plugin';
-import { NavMesh, NavAgent } from '../../../src/plugins/navmesh/components';
+import { NavMeshSurface, NavMeshAgent } from '../../../src/plugins/navmesh/components';
 
 describe('NavmeshPlugin Registration', () => {
   let state: State;
@@ -24,14 +24,14 @@ describe('NavmeshPlugin Registration', () => {
 
   it('should register the navMesh component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, NavMesh);
-    expect(state.hasComponent(entity, NavMesh)).toBe(true);
+    state.addComponent(entity, NavMeshSurface);
+    expect(state.hasComponent(entity, NavMeshSurface)).toBe(true);
   });
 
   it('should register the navAgent component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, NavAgent);
-    expect(state.hasComponent(entity, NavAgent)).toBe(true);
+    state.addComponent(entity, NavMeshAgent);
+    expect(state.hasComponent(entity, NavMeshAgent)).toBe(true);
   });
 
   it('should register the nav-mesh recipe', () => {

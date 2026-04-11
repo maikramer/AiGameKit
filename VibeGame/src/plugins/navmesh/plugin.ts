@@ -1,5 +1,5 @@
 import type { Plugin, State } from '../../core';
-import { NavAgent, NavMesh } from './components';
+import { NavMeshAgent, NavMeshSurface } from './components';
 import { navAgentRecipe, navMeshRecipe } from './recipes';
 import {
   NavAgentMoveSystem,
@@ -10,9 +10,9 @@ import {
 
 function targetAdapter(entity: number, value: string, _state: State): void {
   const parts = value.trim().split(/\s+/).map(Number);
-  NavAgent.targetX[entity] = parts[0] ?? 0;
-  NavAgent.targetY[entity] = parts[1] ?? 0;
-  NavAgent.targetZ[entity] = parts[2] ?? 0;
+  NavMeshAgent.targetX[entity] = parts[0] ?? 0;
+  NavMeshAgent.targetY[entity] = parts[1] ?? 0;
+  NavMeshAgent.targetZ[entity] = parts[2] ?? 0;
 }
 
 export const NavmeshPlugin: Plugin = {
@@ -24,8 +24,8 @@ export const NavmeshPlugin: Plugin = {
   ],
   recipes: [navMeshRecipe, navAgentRecipe],
   components: {
-    navMesh: NavMesh,
-    navAgent: NavAgent,
+    navMesh: NavMeshSurface,
+    navAgent: NavMeshAgent,
   },
   config: {
     defaults: {

@@ -1,7 +1,7 @@
 import { defineComponent, Types } from 'bitecs';
 
 /** 0 fixed, 1 revolute, 2 prismatic, 3 spherical, 4 rope, 5 spring */
-export const PhysicsJoint = defineComponent({
+export const Joint = defineComponent({
   bodyA: Types.eid,
   bodyB: Types.eid,
   jointType: Types.ui8,

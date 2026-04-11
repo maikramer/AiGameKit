@@ -6,7 +6,7 @@ import {
   MainCamera,
   PointLight,
   RenderContext,
-  Renderer,
+  MeshRenderer,
   SpotLight,
 } from './components';
 import { pointLightRecipe, rendererRecipe, spotLightRecipe } from './recipes';
@@ -35,7 +35,7 @@ export const RenderingPlugin: Plugin = {
     TextureRecipeCleanupSystem,
   ],
   components: {
-    Renderer,
+    renderer: MeshRenderer,
     RenderContext,
     MainCamera,
     AmbientLight,

@@ -7,8 +7,8 @@ import {
 } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { InputState } from 'vibegame/input';
-import { Body, CharacterController, CharacterMovement } from 'vibegame/physics';
-import { Player } from 'vibegame/player';
+import { Rigidbody, CharacterController, CharacterMovement } from 'vibegame/physics';
+import { PlayerController } from 'vibegame/player';
 
 describe('E2E: Player Jump Mechanics', () => {
   let state: State;
@@ -36,9 +36,9 @@ describe('E2E: Player Jump Mechanics', () => {
     const playerEntity = players[0];
 
     // Player should not be jumping initially
-    expect(Player.isJumping[playerEntity]).toBe(0);
-    expect(Player.canJump[playerEntity]).toBe(1);
-    expect(Player.jumpCooldown[playerEntity]).toBe(0);
+    expect(PlayerController.isJumping[playerEntity]).toBe(0);
+    expect(PlayerController.canJump[playerEntity]).toBe(1);
+    expect(PlayerController.jumpCooldown[playerEntity]).toBe(0);
 
     // Input should be zero
     expect(InputState.jump[playerEntity]).toBe(0);
@@ -53,14 +53,14 @@ describe('E2E: Player Jump Mechanics', () => {
       // Player should not start jumping
       if (i > 5) {
         // After settling
-        expect(Player.isJumping[playerEntity]).toBe(0);
+        expect(PlayerController.isJumping[playerEntity]).toBe(0);
         expect(CharacterMovement.velocityY[playerEntity]).toBeLessThan(1);
       }
     }
 
     // Player should be grounded and stable
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    expect(Player.canJump[playerEntity]).toBe(1);
+    expect(PlayerController.canJump[playerEntity]).toBe(1);
   });
 
   it('should jump once and land properly', () => {
@@ -86,9 +86,9 @@ describe('E2E: Player Jump Mechanics', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    expect(Player.canJump[playerEntity]).toBe(1);
+    expect(PlayerController.canJump[playerEntity]).toBe(1);
 
-    const groundedY = Body.posY[playerEntity];
+    const groundedY = Rigidbody.posY[playerEntity];
 
     // Trigger jump
     InputState.jump[playerEntity] = 1;
@@ -96,8 +96,8 @@ describe('E2E: Player Jump Mechanics', () => {
     InputState.jump[playerEntity] = 0;
 
     // Should be jumping now
-    expect(Player.isJumping[playerEntity]).toBe(1);
-    expect(Player.canJump[playerEntity]).toBe(0);
+    expect(PlayerController.isJumping[playerEntity]).toBe(1);
+    expect(PlayerController.canJump[playerEntity]).toBe(0);
     expect(CharacterMovement.velocityY[playerEntity]).toBeGreaterThan(5);
 
     let maxHeight = groundedY;
@@ -105,12 +105,12 @@ describe('E2E: Player Jump Mechanics', () => {
     // Simulate jump arc
     for (let i = 0; i < 80; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-      maxHeight = Math.max(maxHeight, Body.posY[playerEntity]);
+      maxHeight = Math.max(maxHeight, Rigidbody.posY[playerEntity]);
 
       // If landed, break (but ensure we don't break too early)
       if (
         CharacterController.grounded[playerEntity] === 1 &&
-        Player.isJumping[playerEntity] === 0 &&
+        PlayerController.isJumping[playerEntity] === 0 &&
         i > 10
       ) {
         break;
@@ -122,9 +122,9 @@ describe('E2E: Player Jump Mechanics', () => {
 
     // Should be landed and ready to jump again
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    expect(Player.isJumping[playerEntity]).toBe(0);
-    expect(Player.canJump[playerEntity]).toBe(1);
-    expect(Player.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
+    expect(PlayerController.isJumping[playerEntity]).toBe(0);
+    expect(PlayerController.canJump[playerEntity]).toBe(1);
+    expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
   });
 
   it('should allow multiple consecutive jumps with proper timing', () => {
@@ -148,13 +148,13 @@ describe('E2E: Player Jump Mechanics', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       if (
         CharacterController.grounded[playerEntity] === 1 &&
-        Player.canJump[playerEntity] === 1
+        PlayerController.canJump[playerEntity] === 1
       )
         break;
     }
 
     console.log(
-      `Starting multiple jump test - grounded: ${CharacterController.grounded[playerEntity]}, canJump: ${Player.canJump[playerEntity]}`
+      `Starting multiple jump test - grounded: ${CharacterController.grounded[playerEntity]}, canJump: ${PlayerController.canJump[playerEntity]}`
     );
 
     // Perform multiple jumps with detailed tracking
@@ -163,11 +163,11 @@ describe('E2E: Player Jump Mechanics', () => {
 
       // Verify ready state
       expect(CharacterController.grounded[playerEntity]).toBe(1);
-      expect(Player.canJump[playerEntity]).toBe(1);
-      expect(Player.isJumping[playerEntity]).toBe(0);
-      expect(Player.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
+      expect(PlayerController.canJump[playerEntity]).toBe(1);
+      expect(PlayerController.isJumping[playerEntity]).toBe(0);
+      expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
 
-      const beforeJumpY = Body.posY[playerEntity];
+      const beforeJumpY = Rigidbody.posY[playerEntity];
       console.log(`Before jump Y: ${beforeJumpY}`);
 
       // Trigger jump
@@ -176,11 +176,11 @@ describe('E2E: Player Jump Mechanics', () => {
       InputState.jump[playerEntity] = 0;
 
       console.log(
-        `After jump trigger - isJumping: ${Player.isJumping[playerEntity]}, canJump: ${Player.canJump[playerEntity]}, velocityY: ${CharacterMovement.velocityY[playerEntity]}`
+        `After jump trigger - isJumping: ${PlayerController.isJumping[playerEntity]}, canJump: ${PlayerController.canJump[playerEntity]}, velocityY: ${CharacterMovement.velocityY[playerEntity]}`
       );
 
-      expect(Player.isJumping[playerEntity]).toBe(1);
-      expect(Player.canJump[playerEntity]).toBe(0);
+      expect(PlayerController.isJumping[playerEntity]).toBe(1);
+      expect(PlayerController.canJump[playerEntity]).toBe(0);
       expect(CharacterMovement.velocityY[playerEntity]).toBeGreaterThan(5);
 
       let maxHeight = beforeJumpY;
@@ -191,22 +191,22 @@ describe('E2E: Player Jump Mechanics', () => {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
         stepCount++;
 
-        const currentY = Body.posY[playerEntity];
+        const currentY = Rigidbody.posY[playerEntity];
         maxHeight = Math.max(maxHeight, currentY);
 
         // Log key moments
         if (stepCount % 20 === 0) {
           console.log(
-            `Step ${stepCount}: Y=${currentY.toFixed(2)}, grounded=${CharacterController.grounded[playerEntity]}, isJumping=${Player.isJumping[playerEntity]}, canJump=${Player.canJump[playerEntity]}, cooldown=${Player.jumpCooldown[playerEntity].toFixed(3)}`
+            `Step ${stepCount}: Y=${currentY.toFixed(2)}, grounded=${CharacterController.grounded[playerEntity]}, isJumping=${PlayerController.isJumping[playerEntity]}, canJump=${PlayerController.canJump[playerEntity]}, cooldown=${PlayerController.jumpCooldown[playerEntity].toFixed(3)}`
           );
         }
 
         // Break when fully landed and ready
         if (
           CharacterController.grounded[playerEntity] === 1 &&
-          Player.isJumping[playerEntity] === 0 &&
-          Player.canJump[playerEntity] === 1 &&
-          Player.jumpCooldown[playerEntity] <= 0
+          PlayerController.isJumping[playerEntity] === 0 &&
+          PlayerController.canJump[playerEntity] === 1 &&
+          PlayerController.jumpCooldown[playerEntity] <= 0
         ) {
           console.log(
             `Landed after ${stepCount} steps at Y=${currentY.toFixed(2)}`
@@ -215,7 +215,7 @@ describe('E2E: Player Jump Mechanics', () => {
         }
       }
 
-      const finalY = Body.posY[playerEntity];
+      const finalY = Rigidbody.posY[playerEntity];
       console.log(
         `Jump ${jumpNum + 1} complete - Max height: ${maxHeight.toFixed(2)}, Final Y: ${finalY.toFixed(2)}, Height gained: ${(maxHeight - beforeJumpY).toFixed(2)}`
       );
@@ -225,9 +225,9 @@ describe('E2E: Player Jump Mechanics', () => {
 
       // Verify proper landing state
       expect(CharacterController.grounded[playerEntity]).toBe(1);
-      expect(Player.isJumping[playerEntity]).toBe(0);
-      expect(Player.canJump[playerEntity]).toBe(1);
-      expect(Player.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
+      expect(PlayerController.isJumping[playerEntity]).toBe(0);
+      expect(PlayerController.canJump[playerEntity]).toBe(1);
+      expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
 
       // Add extra settling time between jumps
       for (let i = 0; i < 10; i++) {
@@ -265,15 +265,15 @@ describe('E2E: Player Jump Mechanics', () => {
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
     // Should have cooldown set
-    expect(Player.jumpCooldown[playerEntity]).toBeGreaterThan(0);
-    expect(Player.canJump[playerEntity]).toBe(0);
+    expect(PlayerController.jumpCooldown[playerEntity]).toBeGreaterThan(0);
+    expect(PlayerController.canJump[playerEntity]).toBe(0);
 
     // Track cooldown progression
     let cooldownValues: number[] = [];
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-      cooldownValues.push(Player.jumpCooldown[playerEntity]);
+      cooldownValues.push(PlayerController.jumpCooldown[playerEntity]);
     }
 
     // Cooldown should decrease over time
@@ -286,6 +286,6 @@ describe('E2E: Player Jump Mechanics', () => {
     // Should eventually reach 0 or negative, and canJump should be restored
     const finalCooldown = cooldownValues[cooldownValues.length - 1];
     expect(finalCooldown).toBeLessThanOrEqual(0);
-    expect(Player.canJump[playerEntity]).toBe(1);
+    expect(PlayerController.canJump[playerEntity]).toBe(1);
   });
 });

@@ -8,7 +8,7 @@ import {
   mock,
 } from 'bun:test';
 import { State } from 'vibegame';
-import { AudioEmitter } from '../../../src/plugins/audio/components';
+import { AudioSource } from '../../../src/plugins/audio/components';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
 
 const originalWarn = console.warn;
@@ -69,10 +69,10 @@ describe('AudioSystem Integration', () => {
     state = new State();
     state.registerPlugin(AudioPlugin);
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
 
-    expect(AudioEmitter.clipPath[entity]).toBe(1);
+    expect(AudioSource.clipPath[entity]).toBe(1);
   });
 
   it('should return early when state.headless is true', () => {
@@ -84,9 +84,9 @@ describe('AudioSystem Integration', () => {
     state.headless = true;
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.playing[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.playing[entity] = 1;
 
     AudioSystem.update!(state);
 
@@ -105,9 +105,9 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 999;
-    AudioEmitter.playing[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 999;
+    AudioSource.playing[entity] = 1;
 
     AudioSystem.update!(state);
     expect(howlInstances).toHaveLength(0);
@@ -121,15 +121,15 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.volume[entity] = 0.8;
-    AudioEmitter.playing[entity] = 0;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.volume[entity] = 0.8;
+    AudioSource.playing[entity] = 0;
 
     AudioSystem.update!(state);
     expect(howlInstances).toHaveLength(0);
 
-    AudioEmitter.playing[entity] = 1;
+    AudioSource.playing[entity] = 1;
     AudioSystem.update!(state);
 
     expect(howlInstances).toHaveLength(1);
@@ -144,16 +144,16 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.volume[entity] = 0.5;
-    AudioEmitter.playing[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.volume[entity] = 0.5;
+    AudioSource.playing[entity] = 1;
 
     AudioSystem.update!(state);
     expect(howlInstances).toHaveLength(1);
     expect(howlInstances[0].play).toHaveBeenCalledTimes(1);
 
-    AudioEmitter.playing[entity] = 0;
+    AudioSource.playing[entity] = 0;
     AudioSystem.update!(state);
 
     expect(howlInstances[0].stop).toHaveBeenCalledTimes(1);
@@ -167,13 +167,13 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.playing[entity] = 1;
-    AudioEmitter.spatial[entity] = 1;
-    AudioEmitter.minDistance[entity] = 5;
-    AudioEmitter.maxDistance[entity] = 200;
-    AudioEmitter.rolloff[entity] = 2;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.playing[entity] = 1;
+    AudioSource.spatial[entity] = 1;
+    AudioSource.minDistance[entity] = 5;
+    AudioSource.maxDistance[entity] = 200;
+    AudioSource.rolloff[entity] = 2;
 
     AudioSystem.update!(state);
 
@@ -192,17 +192,17 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.loop[entity] = 0;
-    AudioEmitter.playing[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.loop[entity] = 0;
+    AudioSource.playing[entity] = 1;
 
     AudioSystem.update!(state);
     expect(howlInstances).toHaveLength(1);
-    expect(AudioEmitter.playing[entity]).toBe(1);
+    expect(AudioSource.playing[entity]).toBe(1);
 
     howlInstances[0]._onEnd?.();
-    expect(AudioEmitter.playing[entity]).toBe(0);
+    expect(AudioSource.playing[entity]).toBe(0);
   });
 
   it('should not call Howl loop() every frame for looped clips (Howler restarts playback)', () => {
@@ -213,11 +213,11 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.volume[entity] = 0.5;
-    AudioEmitter.loop[entity] = 1;
-    AudioEmitter.playing[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.volume[entity] = 0.5;
+    AudioSource.loop[entity] = 1;
+    AudioSource.playing[entity] = 1;
 
     for (let i = 0; i < 25; i++) {
       AudioSystem.update!(state);
@@ -234,10 +234,10 @@ describe('AudioSystem Integration', () => {
     state.registerPlugin(AudioPlugin);
 
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    AudioEmitter.clipPath[entity] = 1;
-    AudioEmitter.loop[entity] = 0;
-    AudioEmitter.playing[entity] = 1;
+    state.addComponent(entity, AudioSource);
+    AudioSource.clipPath[entity] = 1;
+    AudioSource.loop[entity] = 0;
+    AudioSource.playing[entity] = 1;
 
     AudioSystem.update!(state);
     expect(howlInstances).toHaveLength(1);

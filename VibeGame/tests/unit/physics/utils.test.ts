@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { Body, BodyType, Collider, ColliderShape } from 'vibegame/physics';
+import { Rigidbody, BodyType, Collider, ColliderShape } from 'vibegame/physics';
 
 describe('Physics Component Behavior', () => {
   let state: State;
@@ -13,25 +13,25 @@ describe('Physics Component Behavior', () => {
 
   describe('Body Type Behavior', () => {
     it('should recognize Fixed body type', () => {
-      state.addComponent(entity, Body);
-      Body.type[entity] = BodyType.Fixed;
-      expect(Body.type[entity]).toBe(BodyType.Fixed);
+      state.addComponent(entity, Rigidbody);
+      Rigidbody.type[entity] = BodyType.Fixed;
+      expect(Rigidbody.type[entity]).toBe(BodyType.Fixed);
     });
 
     it('should recognize Dynamic body type', () => {
-      state.addComponent(entity, Body);
-      Body.type[entity] = BodyType.Dynamic;
-      expect(Body.type[entity]).toBe(BodyType.Dynamic);
+      state.addComponent(entity, Rigidbody);
+      Rigidbody.type[entity] = BodyType.Dynamic;
+      expect(Rigidbody.type[entity]).toBe(BodyType.Dynamic);
     });
 
     it('should recognize Kinematic body types', () => {
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
 
-      Body.type[entity] = BodyType.KinematicVelocityBased;
-      expect(Body.type[entity]).toBe(BodyType.KinematicVelocityBased);
+      Rigidbody.type[entity] = BodyType.KinematicVelocityBased;
+      expect(Rigidbody.type[entity]).toBe(BodyType.KinematicVelocityBased);
 
-      Body.type[entity] = BodyType.KinematicPositionBased;
-      expect(Body.type[entity]).toBe(BodyType.KinematicPositionBased);
+      Rigidbody.type[entity] = BodyType.KinematicPositionBased;
+      expect(Rigidbody.type[entity]).toBe(BodyType.KinematicPositionBased);
     });
   });
 

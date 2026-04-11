@@ -1,6 +1,6 @@
 import { defineComponent, Types } from 'bitecs';
 
-export const Renderer = defineComponent({
+export const MeshRenderer = defineComponent({
   shape: Types.ui8,
   sizeX: Types.f32,
   sizeY: Types.f32,

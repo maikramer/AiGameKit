@@ -36,18 +36,18 @@ describe('State Recipe Integration', () => {
     expect(state.exists(entity)).toBe(true);
 
     const Transform = state.getComponent('transform');
-    const Body = state.getComponent('body');
+    const Rigidbody = state.getComponent('body');
     const Collider = state.getComponent('collider');
 
     expect(state.hasComponent(entity, Transform!)).toBe(true);
-    expect(state.hasComponent(entity, Body!)).toBe(true);
+    expect(state.hasComponent(entity, Rigidbody!)).toBe(true);
     expect(state.hasComponent(entity, Collider!)).toBe(true);
 
     expect((Transform as any).posX[entity]).toBe(5);
     expect((Transform as any).posY[entity]).toBe(10);
     expect((Transform as any).posZ[entity]).toBe(15);
 
-    expect((Body as any).type[entity]).toBe(1);
+    expect((Rigidbody as any).type[entity]).toBe(1);
 
     expect((Collider as any).sizeX[entity]).toBe(2);
     expect((Collider as any).sizeY[entity]).toBe(2);

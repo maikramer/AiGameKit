@@ -2,7 +2,7 @@ import type { Component } from 'bitecs';
 import { gsap } from 'gsap';
 import type { State } from '../../core';
 import { defineQuery, toCamelCase } from '../../core';
-import { Body, BodyType } from '../physics';
+import { Rigidbody, BodyType } from '../physics';
 import { Transform } from '../transforms';
 import {
   KinematicRotationTween,
@@ -141,7 +141,7 @@ export function expandShorthand(
   if (target === 'rotation') {
     const toArray = parseNumberOrArray(options.to, [0, 0, 0]);
     const fields = ['eulerX', 'eulerY', 'eulerZ'];
-    const hasBody = state.hasComponent(entity, Body);
+    const hasBody = state.hasComponent(entity, Rigidbody);
     const prefix = hasBody ? 'body' : 'transform';
 
     for (let i = 0; i < fields.length; i++) {
@@ -376,26 +376,26 @@ export function createTween(
       if (!resolved) continue;
 
       const isKinematicVelocityBody =
-        state.hasComponent(entity, Body) &&
-        Body.type[entity] === BodyType.KinematicVelocityBased;
+        state.hasComponent(entity, Rigidbody) &&
+        Rigidbody.type[entity] === BodyType.KinematicVelocityBased;
 
       const isPositionField =
-        resolved.array === Body.posX ||
-        resolved.array === Body.posY ||
-        resolved.array === Body.posZ;
+        resolved.array === Rigidbody.posX ||
+        resolved.array === Rigidbody.posY ||
+        resolved.array === Rigidbody.posZ;
 
       const isRotationField =
-        resolved.array === Body.eulerX ||
-        resolved.array === Body.eulerY ||
-        resolved.array === Body.eulerZ;
+        resolved.array === Rigidbody.eulerX ||
+        resolved.array === Rigidbody.eulerY ||
+        resolved.array === Rigidbody.eulerZ;
 
       if (isKinematicVelocityBody && isPositionField) {
         const kinematicEntity = state.createEntity();
         state.addComponent(kinematicEntity, KinematicTween);
 
         let axis = 0;
-        if (resolved.array === Body.posY) axis = 1;
-        else if (resolved.array === Body.posZ) axis = 2;
+        if (resolved.array === Rigidbody.posY) axis = 1;
+        else if (resolved.array === Rigidbody.posZ) axis = 2;
 
         const currentValue = resolved.array[entity];
 
@@ -411,8 +411,8 @@ export function createTween(
         state.addComponent(kinematicRotEntity, KinematicRotationTween);
 
         let axis = 0;
-        if (resolved.array === Body.eulerY) axis = 1;
-        else if (resolved.array === Body.eulerZ) axis = 2;
+        if (resolved.array === Rigidbody.eulerY) axis = 1;
+        else if (resolved.array === Rigidbody.eulerZ) axis = 2;
 
         const currentValue = resolved.array[entity];
 
@@ -456,26 +456,26 @@ export function createTween(
     const toValue = typeof options.to === 'number' ? options.to : options.to[0];
 
     const isKinematicVelocityBody =
-      state.hasComponent(entity, Body) &&
-      Body.type[entity] === BodyType.KinematicVelocityBased;
+      state.hasComponent(entity, Rigidbody) &&
+      Rigidbody.type[entity] === BodyType.KinematicVelocityBased;
 
     const isPositionField =
-      resolved.array === Body.posX ||
-      resolved.array === Body.posY ||
-      resolved.array === Body.posZ;
+      resolved.array === Rigidbody.posX ||
+      resolved.array === Rigidbody.posY ||
+      resolved.array === Rigidbody.posZ;
 
     const isRotationField =
-      resolved.array === Body.eulerX ||
-      resolved.array === Body.eulerY ||
-      resolved.array === Body.eulerZ;
+      resolved.array === Rigidbody.eulerX ||
+      resolved.array === Rigidbody.eulerY ||
+      resolved.array === Rigidbody.eulerZ;
 
     if (isKinematicVelocityBody && isPositionField) {
       const kinematicEntity = state.createEntity();
       state.addComponent(kinematicEntity, KinematicTween);
 
       let axis = 0;
-      if (resolved.array === Body.posY) axis = 1;
-      else if (resolved.array === Body.posZ) axis = 2;
+      if (resolved.array === Rigidbody.posY) axis = 1;
+      else if (resolved.array === Rigidbody.posZ) axis = 2;
 
       KinematicTween.tweenEntity[kinematicEntity] = tweenEntity;
       KinematicTween.targetEntity[kinematicEntity] = entity;
@@ -489,8 +489,8 @@ export function createTween(
       state.addComponent(kinematicRotEntity, KinematicRotationTween);
 
       let axis = 0;
-      if (resolved.array === Body.eulerY) axis = 1;
-      else if (resolved.array === Body.eulerZ) axis = 2;
+      if (resolved.array === Rigidbody.eulerY) axis = 1;
+      else if (resolved.array === Rigidbody.eulerZ) axis = 2;
 
       KinematicRotationTween.tweenEntity[kinematicRotEntity] = tweenEntity;
       KinematicRotationTween.targetEntity[kinematicRotEntity] = entity;

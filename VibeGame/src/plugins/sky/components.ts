@@ -1,7 +1,7 @@
 import { defineComponent, Types } from 'bitecs';
 
 /** Configuração de sky environment por entidade. */
-export const Sky = defineComponent({
+export const Skybox = defineComponent({
   /** URL da textura equirectangular (2:1 PNG/JPG/HDR). */
   urlIndex: Types.ui32,
   /** Rotação horizontal em graus (0-360). */

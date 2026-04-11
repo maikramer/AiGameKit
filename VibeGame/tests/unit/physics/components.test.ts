@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   CharacterController,
   CharacterMovement,
@@ -43,56 +43,56 @@ describe('Physics Components', () => {
 
   describe('Body', () => {
     it('should initialize with default values', () => {
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
 
-      expect(Body.type[entity]).toBe(0);
-      expect(Body.mass[entity]).toBe(0);
-      expect(Body.linearDamping[entity]).toBe(0);
-      expect(Body.angularDamping[entity]).toBe(0);
-      expect(Body.gravityScale[entity]).toBe(0);
-      expect(Body.ccd[entity]).toBe(0);
-      expect(Body.lockRotX[entity]).toBe(0);
-      expect(Body.lockRotY[entity]).toBe(0);
-      expect(Body.lockRotZ[entity]).toBe(0);
+      expect(Rigidbody.type[entity]).toBe(0);
+      expect(Rigidbody.mass[entity]).toBe(0);
+      expect(Rigidbody.linearDamping[entity]).toBe(0);
+      expect(Rigidbody.angularDamping[entity]).toBe(0);
+      expect(Rigidbody.gravityScale[entity]).toBe(0);
+      expect(Rigidbody.ccd[entity]).toBe(0);
+      expect(Rigidbody.lockRotX[entity]).toBe(0);
+      expect(Rigidbody.lockRotY[entity]).toBe(0);
+      expect(Rigidbody.lockRotZ[entity]).toBe(0);
     });
 
     it('should support different body types', () => {
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
 
-      Body.type[entity] = BodyType.Dynamic;
-      expect(Body.type[entity]).toBe(BodyType.Dynamic);
+      Rigidbody.type[entity] = BodyType.Dynamic;
+      expect(Rigidbody.type[entity]).toBe(BodyType.Dynamic);
 
-      Body.type[entity] = BodyType.KinematicPositionBased;
-      expect(Body.type[entity]).toBe(BodyType.KinematicPositionBased);
+      Rigidbody.type[entity] = BodyType.KinematicPositionBased;
+      expect(Rigidbody.type[entity]).toBe(BodyType.KinematicPositionBased);
 
-      Body.type[entity] = BodyType.Fixed;
-      expect(Body.type[entity]).toBe(BodyType.Fixed);
+      Rigidbody.type[entity] = BodyType.Fixed;
+      expect(Rigidbody.type[entity]).toBe(BodyType.Fixed);
     });
 
     it('should store position and rotation', () => {
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
 
-      Body.posX[entity] = 10;
-      Body.posY[entity] = 5;
-      Body.posZ[entity] = -3;
-      Body.rotW[entity] = 1;
+      Rigidbody.posX[entity] = 10;
+      Rigidbody.posY[entity] = 5;
+      Rigidbody.posZ[entity] = -3;
+      Rigidbody.rotW[entity] = 1;
 
-      expect(Body.posX[entity]).toBe(10);
-      expect(Body.posY[entity]).toBe(5);
-      expect(Body.posZ[entity]).toBe(-3);
-      expect(Body.rotW[entity]).toBe(1);
+      expect(Rigidbody.posX[entity]).toBe(10);
+      expect(Rigidbody.posY[entity]).toBe(5);
+      expect(Rigidbody.posZ[entity]).toBe(-3);
+      expect(Rigidbody.rotW[entity]).toBe(1);
     });
 
     it('should store velocity values', () => {
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
 
-      Body.velX[entity] = 2;
-      Body.velY[entity] = -1;
-      Body.velZ[entity] = 0.5;
+      Rigidbody.velX[entity] = 2;
+      Rigidbody.velY[entity] = -1;
+      Rigidbody.velZ[entity] = 0.5;
 
-      expect(Body.velX[entity]).toBe(2);
-      expect(Body.velY[entity]).toBe(-1);
-      expect(Body.velZ[entity]).toBe(0.5);
+      expect(Rigidbody.velX[entity]).toBe(2);
+      expect(Rigidbody.velY[entity]).toBe(-1);
+      expect(Rigidbody.velZ[entity]).toBe(0.5);
     });
   });
 

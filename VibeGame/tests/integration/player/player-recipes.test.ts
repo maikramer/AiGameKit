@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
-import { Player, PlayerPlugin } from 'vibegame/player';
+import { PlayerController, PlayerPlugin } from 'vibegame/player';
 import { InputState, InputPlugin } from 'vibegame/input';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   CharacterController,
   CharacterMovement,
@@ -39,24 +39,24 @@ describe('Player Recipes and XML', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
 
-      expect(state.hasComponent(player, Player)).toBe(true);
+      expect(state.hasComponent(player, PlayerController)).toBe(true);
       expect(state.hasComponent(player, CharacterMovement)).toBe(true);
       expect(state.hasComponent(player, Transform)).toBe(true);
-      expect(state.hasComponent(player, Body)).toBe(true);
+      expect(state.hasComponent(player, Rigidbody)).toBe(true);
       expect(state.hasComponent(player, Collider)).toBe(true);
       expect(state.hasComponent(player, CharacterController)).toBe(true);
       expect(state.hasComponent(player, InputState)).toBe(true);
       expect(state.hasComponent(player, Respawn)).toBe(true);
 
-      expect(Player.speed[player]).toBeCloseTo(5.3);
-      expect(Player.jumpHeight[player]).toBeCloseTo(2.3);
-      expect(Player.rotationSpeed[player]).toBe(10);
-      expect(Player.canJump[player]).toBe(1);
-      expect(Player.isJumping[player]).toBe(0);
-      expect(Player.jumpCooldown[player]).toBe(0);
-      expect(Player.lastGroundedTime[player]).toBe(0);
-      expect(Player.jumpBufferTime[player]).toBe(-10000);
-      expect(Player.cameraEntity[player]).toBe(0);
+      expect(PlayerController.speed[player]).toBeCloseTo(5.3);
+      expect(PlayerController.jumpHeight[player]).toBeCloseTo(2.3);
+      expect(PlayerController.rotationSpeed[player]).toBe(10);
+      expect(PlayerController.canJump[player]).toBe(1);
+      expect(PlayerController.isJumping[player]).toBe(0);
+      expect(PlayerController.jumpCooldown[player]).toBe(0);
+      expect(PlayerController.lastGroundedTime[player]).toBe(0);
+      expect(PlayerController.jumpBufferTime[player]).toBe(-10000);
+      expect(PlayerController.cameraEntity[player]).toBe(0);
     });
 
     it('should create player with custom position, speed and jump height', () => {
@@ -69,8 +69,8 @@ describe('Player Recipes and XML', () => {
       expect(Transform.posX[player]).toBe(0);
       expect(Transform.posY[player]).toBe(2);
       expect(Transform.posZ[player]).toBe(0);
-      expect(Player.speed[player]).toBe(6);
-      expect(Player.jumpHeight[player]).toBe(3);
+      expect(PlayerController.speed[player]).toBe(6);
+      expect(PlayerController.jumpHeight[player]).toBe(3);
     });
   });
 
@@ -93,9 +93,9 @@ describe('Player Recipes and XML', () => {
       expect(Transform.posX[player]).toBe(5);
       expect(Transform.posY[player]).toBe(1);
       expect(Transform.posZ[player]).toBe(-10);
-      expect(Player.speed[player]).toBe(8);
-      expect(Player.jumpHeight[player]).toBe(4);
-      expect(Player.rotationSpeed[player]).toBe(15);
+      expect(PlayerController.speed[player]).toBe(8);
+      expect(PlayerController.jumpHeight[player]).toBe(4);
+      expect(PlayerController.rotationSpeed[player]).toBe(15);
     });
 
     it('should handle CSS-style syntax for player attributes', () => {
@@ -108,8 +108,8 @@ describe('Player Recipes and XML', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
 
-      expect(Player.speed[player]).toBe(7);
-      expect(Player.jumpHeight[player]).toBe(3.5);
+      expect(PlayerController.speed[player]).toBe(7);
+      expect(PlayerController.jumpHeight[player]).toBe(3.5);
     });
 
     it('should handle dot notation for player attributes', () => {
@@ -126,9 +126,9 @@ describe('Player Recipes and XML', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
 
-      expect(Player.speed[player]).toBe(10);
-      expect(Player.jumpHeight[player]).toBe(5);
-      expect(Player.rotationSpeed[player]).toBe(12);
+      expect(PlayerController.speed[player]).toBe(10);
+      expect(PlayerController.jumpHeight[player]).toBe(5);
+      expect(PlayerController.rotationSpeed[player]).toBe(12);
     });
   });
 
@@ -136,15 +136,15 @@ describe('Player Recipes and XML', () => {
     it('should have correct default body configuration', () => {
       const entity = state.createFromRecipe('player');
 
-      expect(Body.type[entity]).toBe(BodyType.KinematicPositionBased);
-      expect(Body.mass[entity]).toBe(1);
-      expect(Body.linearDamping[entity]).toBe(0);
-      expect(Body.angularDamping[entity]).toBe(0);
-      expect(Body.gravityScale[entity]).toBe(1);
-      expect(Body.ccd[entity]).toBe(1);
-      expect(Body.lockRotX[entity]).toBe(1);
-      expect(Body.lockRotY[entity]).toBe(0);
-      expect(Body.lockRotZ[entity]).toBe(1);
+      expect(Rigidbody.type[entity]).toBe(BodyType.KinematicPositionBased);
+      expect(Rigidbody.mass[entity]).toBe(1);
+      expect(Rigidbody.linearDamping[entity]).toBe(0);
+      expect(Rigidbody.angularDamping[entity]).toBe(0);
+      expect(Rigidbody.gravityScale[entity]).toBe(1);
+      expect(Rigidbody.ccd[entity]).toBe(1);
+      expect(Rigidbody.lockRotX[entity]).toBe(1);
+      expect(Rigidbody.lockRotY[entity]).toBe(0);
+      expect(Rigidbody.lockRotZ[entity]).toBe(1);
     });
 
     it('should have correct default collider configuration', () => {
@@ -204,39 +204,39 @@ describe('Player Recipes and XML', () => {
     it('should create player entity with recipe components', () => {
       const player = state.createEntity();
 
-      state.addComponent(player, Player, {
+      state.addComponent(player, PlayerController, {
         speed: 7,
         jumpHeight: 3.5,
       });
 
       state.addComponent(player, Transform, { posY: 5 });
-      state.addComponent(player, Body, {
+      state.addComponent(player, Rigidbody, {
         type: BodyType.KinematicPositionBased,
       });
       state.addComponent(player, CharacterController);
       state.addComponent(player, InputState);
 
-      expect(state.hasComponent(player, Player)).toBe(true);
+      expect(state.hasComponent(player, PlayerController)).toBe(true);
       expect(state.hasComponent(player, Transform)).toBe(true);
-      expect(state.hasComponent(player, Body)).toBe(true);
+      expect(state.hasComponent(player, Rigidbody)).toBe(true);
       expect(state.hasComponent(player, CharacterController)).toBe(true);
       expect(state.hasComponent(player, InputState)).toBe(true);
 
-      expect(Player.speed[player]).toBe(7);
-      expect(Player.jumpHeight[player]).toBe(3.5);
+      expect(PlayerController.speed[player]).toBe(7);
+      expect(PlayerController.jumpHeight[player]).toBe(3.5);
       expect(Transform.posY[player]).toBe(5);
-      expect(Body.type[player]).toBe(BodyType.KinematicPositionBased);
+      expect(Rigidbody.type[player]).toBe(BodyType.KinematicPositionBased);
     });
 
     it('should handle missing components gracefully', () => {
       const player = state.createEntity();
 
-      state.addComponent(player, Player);
+      state.addComponent(player, PlayerController);
       state.addComponent(player, Transform);
 
-      expect(state.hasComponent(player, Player)).toBe(true);
+      expect(state.hasComponent(player, PlayerController)).toBe(true);
       expect(state.hasComponent(player, Transform)).toBe(true);
-      expect(state.hasComponent(player, Body)).toBe(false);
+      expect(state.hasComponent(player, Rigidbody)).toBe(false);
       expect(state.hasComponent(player, CharacterController)).toBe(false);
     });
   });
@@ -251,11 +251,11 @@ describe('Player Recipes and XML', () => {
         'body.gravity-scale': 0.5,
       });
 
-      expect(Player.speed[entity]).toBe(12);
-      expect(Player.jumpHeight[entity]).toBe(6);
-      expect(Player.rotationSpeed[entity]).toBe(20);
+      expect(PlayerController.speed[entity]).toBe(12);
+      expect(PlayerController.jumpHeight[entity]).toBe(6);
+      expect(PlayerController.rotationSpeed[entity]).toBe(20);
       expect(Transform.posY[entity]).toBe(10);
-      expect(Body.gravityScale[entity]).toBe(0.5);
+      expect(Rigidbody.gravityScale[entity]).toBe(0.5);
     });
 
     it('should handle transform position override', () => {
@@ -301,13 +301,13 @@ describe('Player Recipes and XML', () => {
 
       expect(Transform.posX[player1]).toBe(0);
       expect(Transform.posZ[player1]).toBe(0);
-      expect(Player.speed[player1]).toBe(5);
-      expect(Player.jumpHeight[player1]).toBeCloseTo(2.3);
+      expect(PlayerController.speed[player1]).toBe(5);
+      expect(PlayerController.jumpHeight[player1]).toBeCloseTo(2.3);
 
       expect(Transform.posX[player2]).toBe(10);
       expect(Transform.posZ[player2]).toBe(10);
-      expect(Player.speed[player2]).toBe(10);
-      expect(Player.jumpHeight[player2]).toBe(5);
+      expect(PlayerController.speed[player2]).toBe(10);
+      expect(PlayerController.jumpHeight[player2]).toBe(5);
     });
   });
 
@@ -327,8 +327,8 @@ describe('Player Recipes and XML', () => {
       expect(entities[0].children.length).toBe(1);
 
       const player = entities[0].children[0].entity;
-      expect(state.hasComponent(player, Player)).toBe(true);
-      expect(Player.speed[player]).toBe(7);
+      expect(state.hasComponent(player, PlayerController)).toBe(true);
+      expect(PlayerController.speed[player]).toBe(7);
     });
   });
 });

@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import {
-  ParticlesEmitter,
-  ParticlesBurst,
+  ParticleSystem,
+  ParticleBurst,
 } from '../../../src/plugins/particles/components';
 
 const EMITTER_FIELDS = [
@@ -28,71 +28,71 @@ describe('ParticlesEmitter Component', () => {
 
   it('should have all 7 fields defined', () => {
     for (const field of EMITTER_FIELDS) {
-      expect(ParticlesEmitter[field]).toBeDefined();
-      expect(typeof ParticlesEmitter[field][entity]).toBe('number');
+      expect(ParticleSystem[field]).toBeDefined();
+      expect(typeof ParticleSystem[field][entity]).toBe('number');
     }
   });
 
   it('should initialize all fields to 0', () => {
-    state.addComponent(entity, ParticlesEmitter);
+    state.addComponent(entity, ParticleSystem);
 
     for (const field of EMITTER_FIELDS) {
-      expect(ParticlesEmitter[field][entity]).toBe(0);
+      expect(ParticleSystem[field][entity]).toBe(0);
     }
   });
 
   it('should allow writing and reading preset', () => {
-    state.addComponent(entity, ParticlesEmitter);
-    ParticlesEmitter.preset[entity] = 4;
-    expect(ParticlesEmitter.preset[entity]).toBe(4);
+    state.addComponent(entity, ParticleSystem);
+    ParticleSystem.preset[entity] = 4;
+    expect(ParticleSystem.preset[entity]).toBe(4);
   });
 
   it('should allow writing and reading rate', () => {
-    state.addComponent(entity, ParticlesEmitter);
-    ParticlesEmitter.rate[entity] = 20;
-    expect(ParticlesEmitter.rate[entity]).toBeCloseTo(20);
+    state.addComponent(entity, ParticleSystem);
+    ParticleSystem.rate[entity] = 20;
+    expect(ParticleSystem.rate[entity]).toBeCloseTo(20);
   });
 
   it('should allow writing and reading lifetime', () => {
-    state.addComponent(entity, ParticlesEmitter);
-    ParticlesEmitter.lifetime[entity] = 2.5;
-    expect(ParticlesEmitter.lifetime[entity]).toBeCloseTo(2.5);
+    state.addComponent(entity, ParticleSystem);
+    ParticleSystem.lifetime[entity] = 2.5;
+    expect(ParticleSystem.lifetime[entity]).toBeCloseTo(2.5);
   });
 
   it('should allow writing and reading size', () => {
-    state.addComponent(entity, ParticlesEmitter);
-    ParticlesEmitter.size[entity] = 0.3;
-    expect(ParticlesEmitter.size[entity]).toBeCloseTo(0.3);
+    state.addComponent(entity, ParticleSystem);
+    ParticleSystem.size[entity] = 0.3;
+    expect(ParticleSystem.size[entity]).toBeCloseTo(0.3);
   });
 
   it('should allow writing and reading looping and playing', () => {
-    state.addComponent(entity, ParticlesEmitter);
-    ParticlesEmitter.looping[entity] = 1;
-    ParticlesEmitter.playing[entity] = 1;
-    expect(ParticlesEmitter.looping[entity]).toBe(1);
-    expect(ParticlesEmitter.playing[entity]).toBe(1);
+    state.addComponent(entity, ParticleSystem);
+    ParticleSystem.looping[entity] = 1;
+    ParticleSystem.playing[entity] = 1;
+    expect(ParticleSystem.looping[entity]).toBe(1);
+    expect(ParticleSystem.playing[entity]).toBe(1);
   });
 
   it('should allow writing and reading spawned', () => {
-    state.addComponent(entity, ParticlesEmitter);
-    ParticlesEmitter.spawned[entity] = 1;
-    expect(ParticlesEmitter.spawned[entity]).toBe(1);
+    state.addComponent(entity, ParticleSystem);
+    ParticleSystem.spawned[entity] = 1;
+    expect(ParticleSystem.spawned[entity]).toBe(1);
   });
 
   it('should support multiple entities with independent values', () => {
-    state.addComponent(entity, ParticlesEmitter);
+    state.addComponent(entity, ParticleSystem);
     const entity2 = state.createEntity();
-    state.addComponent(entity2, ParticlesEmitter);
+    state.addComponent(entity2, ParticleSystem);
 
-    ParticlesEmitter.preset[entity] = 0;
-    ParticlesEmitter.preset[entity2] = 5;
-    ParticlesEmitter.rate[entity] = 10;
-    ParticlesEmitter.rate[entity2] = 30;
+    ParticleSystem.preset[entity] = 0;
+    ParticleSystem.preset[entity2] = 5;
+    ParticleSystem.rate[entity] = 10;
+    ParticleSystem.rate[entity2] = 30;
 
-    expect(ParticlesEmitter.preset[entity]).toBe(0);
-    expect(ParticlesEmitter.preset[entity2]).toBe(5);
-    expect(ParticlesEmitter.rate[entity]).toBeCloseTo(10);
-    expect(ParticlesEmitter.rate[entity2]).toBeCloseTo(30);
+    expect(ParticleSystem.preset[entity]).toBe(0);
+    expect(ParticleSystem.preset[entity2]).toBe(5);
+    expect(ParticleSystem.rate[entity]).toBeCloseTo(10);
+    expect(ParticleSystem.rate[entity2]).toBeCloseTo(30);
   });
 });
 
@@ -107,50 +107,50 @@ describe('ParticlesBurst Component', () => {
 
   it('should have all 3 fields defined', () => {
     for (const field of BURST_FIELDS) {
-      expect(ParticlesBurst[field]).toBeDefined();
-      expect(typeof ParticlesBurst[field][entity]).toBe('number');
+      expect(ParticleBurst[field]).toBeDefined();
+      expect(typeof ParticleBurst[field][entity]).toBe('number');
     }
   });
 
   it('should initialize all fields to 0', () => {
-    state.addComponent(entity, ParticlesBurst);
+    state.addComponent(entity, ParticleBurst);
 
     for (const field of BURST_FIELDS) {
-      expect(ParticlesBurst[field][entity]).toBe(0);
+      expect(ParticleBurst[field][entity]).toBe(0);
     }
   });
 
   it('should allow writing and reading preset', () => {
-    state.addComponent(entity, ParticlesBurst);
-    ParticlesBurst.preset[entity] = 2;
-    expect(ParticlesBurst.preset[entity]).toBe(2);
+    state.addComponent(entity, ParticleBurst);
+    ParticleBurst.preset[entity] = 2;
+    expect(ParticleBurst.preset[entity]).toBe(2);
   });
 
   it('should allow writing and reading count', () => {
-    state.addComponent(entity, ParticlesBurst);
-    ParticlesBurst.count[entity] = 100;
-    expect(ParticlesBurst.count[entity]).toBeCloseTo(100);
+    state.addComponent(entity, ParticleBurst);
+    ParticleBurst.count[entity] = 100;
+    expect(ParticleBurst.count[entity]).toBeCloseTo(100);
   });
 
   it('should allow writing and reading triggered', () => {
-    state.addComponent(entity, ParticlesBurst);
-    ParticlesBurst.triggered[entity] = 1;
-    expect(ParticlesBurst.triggered[entity]).toBe(1);
+    state.addComponent(entity, ParticleBurst);
+    ParticleBurst.triggered[entity] = 1;
+    expect(ParticleBurst.triggered[entity]).toBe(1);
   });
 
   it('should support multiple entities with independent values', () => {
-    state.addComponent(entity, ParticlesBurst);
+    state.addComponent(entity, ParticleBurst);
     const entity2 = state.createEntity();
-    state.addComponent(entity2, ParticlesBurst);
+    state.addComponent(entity2, ParticleBurst);
 
-    ParticlesBurst.preset[entity] = 0;
-    ParticlesBurst.preset[entity2] = 99;
-    ParticlesBurst.count[entity] = 50;
-    ParticlesBurst.count[entity2] = 200;
+    ParticleBurst.preset[entity] = 0;
+    ParticleBurst.preset[entity2] = 99;
+    ParticleBurst.count[entity] = 50;
+    ParticleBurst.count[entity2] = 200;
 
-    expect(ParticlesBurst.preset[entity]).toBe(0);
-    expect(ParticlesBurst.preset[entity2]).toBe(99);
-    expect(ParticlesBurst.count[entity]).toBeCloseTo(50);
-    expect(ParticlesBurst.count[entity2]).toBeCloseTo(200);
+    expect(ParticleBurst.preset[entity]).toBe(0);
+    expect(ParticleBurst.preset[entity2]).toBe(99);
+    expect(ParticleBurst.count[entity]).toBeCloseTo(50);
+    expect(ParticleBurst.count[entity2]).toBeCloseTo(200);
   });
 });

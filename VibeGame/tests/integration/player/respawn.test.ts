@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS, XMLParser, parseXMLToEntities } from 'vibegame';
 import {
-  Body,
+  Rigidbody,
   BodyType,
   CharacterController,
   CharacterMovement,
@@ -12,7 +12,7 @@ import {
 } from 'vibegame/physics';
 import { InputState } from 'vibegame/input';
 import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
-import { Player, PlayerPlugin } from 'vibegame/player';
+import { PlayerController, PlayerPlugin } from 'vibegame/player';
 import { Respawn, RespawnPlugin } from 'vibegame/respawn';
 import {
   Transform,
@@ -56,18 +56,18 @@ describe('Respawn Plugin', () => {
       const entities = parseXMLToEntities(state, parsed.root);
       const player = entities[0].entity;
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.posY[player]).toBeCloseTo(5, 1);
+      expect(Rigidbody.posY[player]).toBeCloseTo(5, 1);
       expect(WorldTransform.posY[player]).toBeCloseTo(5, 1);
     });
 
     it('should apply manual respawn component via XML', () => {
       const entity = state.createEntity();
       state.addComponent(entity, Transform);
-      state.addComponent(entity, Body);
+      state.addComponent(entity, Rigidbody);
       state.addComponent(entity, Collider);
       state.addComponent(entity, Respawn);
       Respawn.posX[entity] = 0;
@@ -176,9 +176,9 @@ describe('Respawn Plugin', () => {
 
     function createPlayer(x = 0, y = 5, z = 0): number {
       const player = state.createEntity();
-      state.addComponent(player, Player);
+      state.addComponent(player, PlayerController);
       state.addComponent(player, InputState);
-      state.addComponent(player, Body);
+      state.addComponent(player, Rigidbody);
       state.addComponent(player, Collider);
       state.addComponent(player, CharacterController);
       state.addComponent(player, CharacterMovement);
@@ -186,24 +186,24 @@ describe('Respawn Plugin', () => {
       state.addComponent(player, WorldTransform);
       state.addComponent(player, Respawn);
 
-      Player.speed[player] = 10;
-      Player.jumpHeight[player] = 3;
-      Player.rotationSpeed[player] = 10;
-      Body.gravityScale[player] = 1;
-      Player.canJump[player] = 1;
-      Player.isJumping[player] = 0;
-      Player.jumpCooldown[player] = 0;
-      Player.lastGroundedTime[player] = -10000;
-      Player.jumpBufferTime[player] = -10000;
+      PlayerController.speed[player] = 10;
+      PlayerController.jumpHeight[player] = 3;
+      PlayerController.rotationSpeed[player] = 10;
+      Rigidbody.gravityScale[player] = 1;
+      PlayerController.canJump[player] = 1;
+      PlayerController.isJumping[player] = 0;
+      PlayerController.jumpCooldown[player] = 0;
+      PlayerController.lastGroundedTime[player] = -10000;
+      PlayerController.jumpBufferTime[player] = -10000;
 
-      Body.type[player] = BodyType.KinematicPositionBased;
-      Body.posX[player] = x;
-      Body.posY[player] = y;
-      Body.posZ[player] = z;
-      Body.rotX[player] = 0;
-      Body.rotY[player] = 0;
-      Body.rotZ[player] = 0;
-      Body.rotW[player] = 1;
+      Rigidbody.type[player] = BodyType.KinematicPositionBased;
+      Rigidbody.posX[player] = x;
+      Rigidbody.posY[player] = y;
+      Rigidbody.posZ[player] = z;
+      Rigidbody.rotX[player] = 0;
+      Rigidbody.rotY[player] = 0;
+      Rigidbody.rotZ[player] = 0;
+      Rigidbody.rotW[player] = 1;
 
       Collider.shape[player] = ColliderShape.Capsule;
       Collider.radius[player] = 0.5;
@@ -237,12 +237,12 @@ describe('Respawn Plugin', () => {
     it('should trigger at Y=-100 threshold', () => {
       const player = createPlayer(0, 5, 0);
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.posY[player]).toBeCloseTo(5, 1);
+      expect(Rigidbody.posY[player]).toBeCloseTo(5, 1);
       expect(WorldTransform.posY[player]).toBeCloseTo(5, 1);
     });
 
@@ -252,40 +252,40 @@ describe('Respawn Plugin', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       // Player should still be above -100 threshold
-      expect(Body.posY[player]).toBeGreaterThan(-100);
+      expect(Rigidbody.posY[player]).toBeGreaterThan(-100);
     });
 
     it('should reset position to spawn point', () => {
       const player = createPlayer(10, 20, 30);
 
-      Body.posX[player] = 999;
-      Body.posY[player] = -101;
-      Body.posZ[player] = 999;
+      Rigidbody.posX[player] = 999;
+      Rigidbody.posY[player] = -101;
+      Rigidbody.posZ[player] = 999;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.posX[player]).toBe(10);
-      expect(Body.posY[player]).toBe(20);
-      expect(Body.posZ[player]).toBe(30);
+      expect(Rigidbody.posX[player]).toBe(10);
+      expect(Rigidbody.posY[player]).toBe(20);
+      expect(Rigidbody.posZ[player]).toBe(30);
     });
 
     it('should reset all velocities', () => {
       const player = createPlayer(0, 5, 0);
 
-      Body.velX[player] = 10;
-      Body.velY[player] = -20;
-      Body.velZ[player] = 5;
+      Rigidbody.velX[player] = 10;
+      Rigidbody.velY[player] = -20;
+      Rigidbody.velZ[player] = 5;
       CharacterMovement.velocityY[player] = -20;
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.velX[player]).toBe(0);
-      expect(Body.velY[player]).toBe(0);
-      expect(Body.velZ[player]).toBeCloseTo(0, 1);
+      expect(Rigidbody.velX[player]).toBe(0);
+      expect(Rigidbody.velY[player]).toBe(0);
+      expect(Rigidbody.velZ[player]).toBeCloseTo(0, 1);
       expect(Math.abs(CharacterMovement.velocityY[player])).toBeLessThanOrEqual(
         2
       );
@@ -299,7 +299,7 @@ describe('Respawn Plugin', () => {
       CharacterController.moveZ[player] = 15;
       CharacterController.grounded[player] = 1;
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -313,18 +313,18 @@ describe('Respawn Plugin', () => {
     it('should reset player jump state', () => {
       const player = createPlayer(0, 5, 0);
 
-      Player.isJumping[player] = 1;
-      Player.canJump[player] = 0;
-      Player.jumpCooldown[player] = 0.5;
+      PlayerController.isJumping[player] = 1;
+      PlayerController.canJump[player] = 0;
+      PlayerController.jumpCooldown[player] = 0.5;
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Player.isJumping[player]).toBe(0);
-      expect(Player.canJump[player]).toBe(1);
-      expect(Player.jumpCooldown[player]).toBeCloseTo(0, 1);
+      expect(PlayerController.isJumping[player]).toBe(0);
+      expect(PlayerController.canJump[player]).toBe(1);
+      expect(PlayerController.jumpCooldown[player]).toBeCloseTo(0, 1);
     });
 
     it('should apply stored rotation on respawn', () => {
@@ -332,13 +332,13 @@ describe('Respawn Plugin', () => {
 
       Respawn.eulerY[player] = 90;
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      expect(Body.rotY[player]).toBeCloseTo(0.707, 0);
-      expect(Body.rotW[player]).toBeCloseTo(0.707, 0);
+      expect(Rigidbody.rotY[player]).toBeCloseTo(0.707, 0);
+      expect(Rigidbody.rotW[player]).toBeCloseTo(0.707, 0);
     });
   });
 
@@ -359,7 +359,7 @@ describe('Respawn Plugin', () => {
 
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-      Body.posY[player] = -101;
+      Rigidbody.posY[player] = -101;
       Transform.posY[entity] = -101;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);

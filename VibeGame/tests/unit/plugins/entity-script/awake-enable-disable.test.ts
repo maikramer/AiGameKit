@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { State } from '../../../../src/core/ecs/state';
-import { EntityScript } from '../../../../src/plugins/entity-script/components';
+import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
   coerceEntityScriptModule,
   deletePrevEnabled,
@@ -31,14 +31,14 @@ describe('entity-script awake/onEnable/onDisable', () => {
     enabled = 1
   ): number {
     const eid = state.createEntity();
-    state.addComponent(eid, EntityScript, { ready: 0, enabled });
+    state.addComponent(eid, MonoBehaviour, { ready: 0, enabled });
     setScriptFile(state, eid, file);
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
     setCachedEntityScriptModule(state, globKey, mod as ReturnType<typeof coerceEntityScriptModule>);
 
-    EntityScript.ready[eid] = 1;
+    MonoBehaviour.ready[eid] = 1;
 
     return eid;
   }
@@ -48,7 +48,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     if (!mod) return;
     const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
     if (mod.awake) mod.awake(ctx);
-    const isEnabled = EntityScript.enabled[eid] === 1;
+    const isEnabled = MonoBehaviour.enabled[eid] === 1;
     if (isEnabled && mod.onEnable) mod.onEnable(ctx);
     if (mod.start) mod.start(ctx);
     setPrevEnabled(state, eid, isEnabled ? 1 : 0);
@@ -59,7 +59,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
       const mod = getCachedEntityScriptModule(state, globKey);
       if (mod) {
         const destroyCtx = { state, entity: eid, object3d: null, deltaTime: 0 };
-        if (EntityScript.enabled[eid] === 1 && mod.onDisable) {
+        if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
           mod.onDisable(destroyCtx);
         }
         if (mod.onDestroy) mod.onDestroy(destroyCtx);
@@ -87,7 +87,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     }, 0);
     simulateSetup(eid, './scripts/test.ts');
     expect(awakeFired).toBe(true);
-    expect(EntityScript.enabled[eid]).toBe(0);
+    expect(MonoBehaviour.enabled[eid]).toBe(0);
   });
 
   it('lifecycle order is awake → onEnable → start for enabled=1', () => {
@@ -124,11 +124,11 @@ describe('entity-script awake/onEnable/onDisable', () => {
     const mod = getCachedEntityScriptModule(state, './scripts/test.ts')!;
     const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
 
-    EntityScript.enabled[eid] = 0;
+    MonoBehaviour.enabled[eid] = 0;
     if (mod.onDisable) mod.onDisable(ctx);
     setPrevEnabled(state, eid, 0);
 
-    EntityScript.enabled[eid] = 1;
+    MonoBehaviour.enabled[eid] = 1;
     if (mod.onEnable) mod.onEnable(ctx);
     setPrevEnabled(state, eid, 1);
 
@@ -161,11 +161,11 @@ describe('entity-script awake/onEnable/onDisable', () => {
     const mod = getCachedEntityScriptModule(state, './scripts/test.ts')!;
     const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
 
-    EntityScript.enabled[eid] = 0;
+    MonoBehaviour.enabled[eid] = 0;
     if (mod.onDisable) mod.onDisable(ctx);
     setPrevEnabled(state, eid, 0);
 
-    EntityScript.enabled[eid] = 1;
+    MonoBehaviour.enabled[eid] = 1;
     if (mod.onEnable) mod.onEnable(ctx);
     setPrevEnabled(state, eid, 1);
 

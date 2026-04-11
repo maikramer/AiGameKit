@@ -12,7 +12,7 @@ export const RaycastSource = defineComponent({
 });
 
 /** Resultado preenchido por RaycastSystem. */
-export const RaycastResult = defineComponent({
+export const RaycastHit = defineComponent({
   hitValid: Types.ui8,
   hitEntity: Types.eid,
   hitDist: Types.f32,

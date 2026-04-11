@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { AudioPlugin } from '../../../src/plugins/audio/plugin';
 import {
-  AudioEmitter,
+  AudioSource,
   AudioListener,
 } from '../../../src/plugins/audio/components';
 import { DefaultPlugins } from '../../../src/plugins/defaults';
@@ -21,8 +21,8 @@ describe('AudioPlugin Registration', () => {
 
   it('should register AudioEmitter component', () => {
     const entity = state.createEntity();
-    state.addComponent(entity, AudioEmitter);
-    expect(state.hasComponent(entity, AudioEmitter)).toBe(true);
+    state.addComponent(entity, AudioSource);
+    expect(state.hasComponent(entity, AudioSource)).toBe(true);
   });
 
   it('should register AudioListener component', () => {
@@ -33,7 +33,7 @@ describe('AudioPlugin Registration', () => {
 
   it('should register both components in the plugin definition', () => {
     expect(AudioPlugin.components).toBeDefined();
-    expect(AudioPlugin.components!['AudioEmitter']).toBe(AudioEmitter);
+    expect(AudioPlugin.components!['audioEmitter']).toBe(AudioSource);
     expect(AudioPlugin.components!['AudioListener']).toBe(AudioListener);
   });
 

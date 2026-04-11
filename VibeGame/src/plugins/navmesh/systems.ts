@@ -5,11 +5,11 @@ import { Pathfinding } from 'three-pathfinding';
 import { Collider } from '../physics';
 import { getRenderingContext } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
-import { NavAgent, NavMesh } from './components';
+import { NavMeshAgent, NavMeshSurface } from './components';
 import { getNavmeshContext } from './context';
 
-const navMeshQuery = defineQuery([NavMesh]);
-const navAgentQuery = defineQuery([NavAgent, Transform]);
+const navMeshQuery = defineQuery([NavMeshSurface]);
+const navAgentQuery = defineQuery([NavMeshAgent, Transform]);
 const colliderQuery = defineQuery([Collider]);
 
 function ensureZone(state: import('../../core').State): void {
@@ -27,9 +27,9 @@ export const NavMeshLoadSystem: System = {
   group: 'setup',
   update: (state) => {
     for (const eid of navMeshQuery(state.world)) {
-      if (NavMesh.loaded[eid]) continue;
+      if (NavMeshSurface.loaded[eid]) continue;
       ensureZone(state);
-      NavMesh.loaded[eid] = 1;
+      NavMeshSurface.loaded[eid] = 1;
       break;
     }
     if (navMeshQuery(state.world).length === 0) {
@@ -116,7 +116,7 @@ export const NavMeshBuildSystem: System = {
 
     let needsSceneBuild = false;
     for (const eid of navMeshQuery(state.world)) {
-      if (NavMesh.buildFromScene[eid] === 1) {
+      if (NavMeshSurface.buildFromScene[eid] === 1) {
         needsSceneBuild = true;
         break;
       }
@@ -142,7 +142,7 @@ export const NavAgentPathSystem: System = {
     if (!pf || !ctx.zoneId) return;
 
     for (const eid of navAgentQuery(state.world)) {
-      const st = NavAgent.status[eid];
+      const st = NavMeshAgent.status[eid];
       if (st === 1 || st === 2) continue;
 
       const ox = hasComponent(state.world, WorldTransform, eid)
@@ -157,23 +157,23 @@ export const NavAgentPathSystem: System = {
 
       const start = new THREE.Vector3(ox, oy, oz);
       const end = new THREE.Vector3(
-        NavAgent.targetX[eid],
-        NavAgent.targetY[eid],
-        NavAgent.targetZ[eid]
+        NavMeshAgent.targetX[eid],
+        NavMeshAgent.targetY[eid],
+        NavMeshAgent.targetZ[eid]
       );
 
       const group = pf.getGroup(ctx.zoneId, start);
       if (group === null) {
-        NavAgent.status[eid] = 3;
+        NavMeshAgent.status[eid] = 3;
         continue;
       }
 
       const path = pf.findPath(start, end, ctx.zoneId, group);
       if (!path || path.length === 0) {
-        if (start.distanceToSquared(end) < NavAgent.tolerance[eid] ** 2) {
-          NavAgent.status[eid] = 2;
+        if (start.distanceToSquared(end) < NavMeshAgent.tolerance[eid] ** 2) {
+          NavMeshAgent.status[eid] = 2;
         } else {
-          NavAgent.status[eid] = 3;
+          NavMeshAgent.status[eid] = 3;
         }
         ctx.waypoints.delete(eid);
         ctx.waypointIndex.delete(eid);
@@ -182,7 +182,7 @@ export const NavAgentPathSystem: System = {
 
       ctx.waypoints.set(eid, path);
       ctx.waypointIndex.set(eid, 0);
-      NavAgent.status[eid] = 1;
+      NavMeshAgent.status[eid] = 1;
     }
   },
 };
@@ -194,17 +194,17 @@ export const NavAgentMoveSystem: System = {
     const dt = state.time.fixedDeltaTime;
 
     for (const eid of navAgentQuery(state.world)) {
-      if (NavAgent.status[eid] !== 1) continue;
+      if (NavMeshAgent.status[eid] !== 1) continue;
 
       const path = ctx.waypoints.get(eid);
       if (!path || path.length === 0) {
-        NavAgent.status[eid] = 2;
+        NavMeshAgent.status[eid] = 2;
         continue;
       }
 
       let wi = ctx.waypointIndex.get(eid) ?? 0;
       if (wi >= path.length) {
-        NavAgent.status[eid] = 2;
+        NavMeshAgent.status[eid] = 2;
         continue;
       }
 
@@ -215,14 +215,14 @@ export const NavAgentMoveSystem: System = {
       const pos = new THREE.Vector3(ox, oy, oz);
       const to = target.clone().sub(pos);
       const dist = to.length();
-      const speed = NavAgent.speed[eid];
-      const tol = NavAgent.tolerance[eid];
+      const speed = NavMeshAgent.speed[eid];
+      const tol = NavMeshAgent.tolerance[eid];
 
       if (dist < tol) {
         wi += 1;
         ctx.waypointIndex.set(eid, wi);
         if (wi >= path.length) {
-          NavAgent.status[eid] = 2;
+          NavMeshAgent.status[eid] = 2;
         }
         continue;
       }

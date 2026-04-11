@@ -1,8 +1,8 @@
 import { defineQuery, type System } from '../../core';
 import { WorldTransform } from '../transforms';
-import { Lod } from './components';
+import { LODGroup } from './components';
 
-const lodQuery = defineQuery([Lod, WorldTransform]);
+const lodQuery = defineQuery([LODGroup, WorldTransform]);
 
 const cameraQuery = defineQuery([WorldTransform]);
 
@@ -31,11 +31,11 @@ export const LodSystem: System = {
       const dz = ez - cz;
       const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
-      const far = Lod.far[eid];
+      const far = LODGroup.far[eid];
       const newLevel = dist > far ? 1 : 0;
 
-      if (newLevel !== Lod.currentLevel[eid]) {
-        Lod.currentLevel[eid] = newLevel;
+      if (newLevel !== LODGroup.currentLevel[eid]) {
+        LODGroup.currentLevel[eid] = newLevel;
       }
     }
   },

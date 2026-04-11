@@ -1,4 +1,4 @@
-export { AudioEmitter, AudioListener } from './components';
+export { AudioSource, AudioListener } from './components';
 export { AudioPlugin } from './plugin';
 export { audioClipRecipe } from './recipes';
 export {

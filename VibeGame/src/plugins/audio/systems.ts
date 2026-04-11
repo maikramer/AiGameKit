@@ -1,7 +1,7 @@
 import { Howl, Howler } from 'howler';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { AudioEmitter, AudioListener } from './components';
+import { AudioSource, AudioListener } from './components';
 import { MainCamera } from '../rendering/components';
 import { TransformHierarchySystem } from '../transforms/systems';
 import { Transform, WorldTransform } from '../transforms/components';
@@ -19,7 +19,7 @@ export function clearAudioClipRegistry(): void {
   clipRegistry.clear();
 }
 
-const audioQuery = defineQuery([AudioEmitter]);
+const audioQuery = defineQuery([AudioSource]);
 const listenerQuery = defineQuery([AudioListener, MainCamera, WorldTransform]);
 const mainCameraTransformQuery = defineQuery([MainCamera, Transform]);
 
@@ -60,16 +60,16 @@ export function playAudioEmitter(state: State, eid: number): void {
   if (state.headless) return;
   const { howlMap, prevPlaying } = getOrCreateState(state);
   const howl = howlMap.get(eid);
-  if (howl && AudioEmitter.loop[eid] === 0) {
-    AudioEmitter.playing[eid] = 0;
+  if (howl && AudioSource.loop[eid] === 0) {
+    AudioSource.playing[eid] = 0;
     prevPlaying.set(eid, 0);
     howl.stop();
     howl.play();
-    AudioEmitter.playing[eid] = 1;
+    AudioSource.playing[eid] = 1;
     prevPlaying.set(eid, 1);
     return;
   }
-  AudioEmitter.playing[eid] = 1;
+  AudioSource.playing[eid] = 1;
 }
 
 /** Retoma o AudioContext do Howler se estiver suspenso (política de autoplay dos browsers). */
@@ -120,8 +120,8 @@ export const AudioSystem: System = {
     const entities = audioQuery(state.world);
 
     for (const eid of entities) {
-      const clipId = AudioEmitter.clipPath[eid];
-      const playing = AudioEmitter.playing[eid];
+      const clipId = AudioSource.clipPath[eid];
+      const playing = AudioSource.playing[eid];
       const wasPlaying = prevPlaying.get(eid) ?? 0;
 
       let howl = howlMap.get(eid);
@@ -131,12 +131,12 @@ export const AudioSystem: System = {
           const url = clipRegistry.get(clipId);
           if (!url) continue;
 
-          const spatial = AudioEmitter.spatial[eid] === 1;
+          const spatial = AudioSource.spatial[eid] === 1;
           howl = new Howl({
             src: [url],
-            loop: AudioEmitter.loop[eid] === 1,
-            volume: AudioEmitter.volume[eid],
-            rate: AudioEmitter.pitch[eid],
+            loop: AudioSource.loop[eid] === 1,
+            volume: AudioSource.volume[eid],
+            rate: AudioSource.pitch[eid],
             ...(spatial && {
               pos: [
                 Transform.posX[eid],
@@ -144,26 +144,26 @@ export const AudioSystem: System = {
                 Transform.posZ[eid],
               ],
               pannerAttr: {
-                refDistance: AudioEmitter.minDistance[eid],
-                maxDistance: AudioEmitter.maxDistance[eid],
-                rolloffFactor: AudioEmitter.rolloff[eid],
+                refDistance: AudioSource.minDistance[eid],
+                maxDistance: AudioSource.maxDistance[eid],
+                rolloffFactor: AudioSource.rolloff[eid],
               },
             }),
           });
-          if (AudioEmitter.loop[eid] === 0) {
+          if (AudioSource.loop[eid] === 0) {
             howl.on('end', () => {
               if (!state.exists(eid)) return;
-              if (AudioEmitter.loop[eid] === 1) return;
-              if (AudioEmitter.playing[eid] !== 1) return;
-              AudioEmitter.playing[eid] = 0;
+              if (AudioSource.loop[eid] === 1) return;
+              if (AudioSource.playing[eid] !== 1) return;
+              AudioSource.playing[eid] = 0;
               prevPlaying.set(eid, 0);
             });
           }
           howlMap.set(eid, howl);
           howlPropSnapshot.set(eid, {
-            volume: AudioEmitter.volume[eid],
-            loop: AudioEmitter.loop[eid] === 1,
-            rate: AudioEmitter.pitch[eid],
+            volume: AudioSource.volume[eid],
+            loop: AudioSource.loop[eid] === 1,
+            rate: AudioSource.pitch[eid],
           });
         }
         howl.play();
@@ -174,9 +174,9 @@ export const AudioSystem: System = {
       }
 
       if (howl) {
-        const nextVol = AudioEmitter.volume[eid];
-        const nextLoop = AudioEmitter.loop[eid] === 1;
-        const nextRate = AudioEmitter.pitch[eid];
+        const nextVol = AudioSource.volume[eid];
+        const nextLoop = AudioSource.loop[eid] === 1;
+        const nextRate = AudioSource.pitch[eid];
         const snap = howlPropSnapshot.get(eid);
         if (!snap || snap.volume !== nextVol) {
           howl.volume(nextVol);
@@ -193,16 +193,16 @@ export const AudioSystem: System = {
           rate: nextRate,
         });
 
-        if (AudioEmitter.spatial[eid] === 1) {
+        if (AudioSource.spatial[eid] === 1) {
           howl.pos(
             Transform.posX[eid],
             Transform.posY[eid],
             Transform.posZ[eid]
           );
           howl.pannerAttr({
-            refDistance: AudioEmitter.minDistance[eid],
-            maxDistance: AudioEmitter.maxDistance[eid],
-            rolloffFactor: AudioEmitter.rolloff[eid],
+            refDistance: AudioSource.minDistance[eid],
+            maxDistance: AudioSource.maxDistance[eid],
+            rolloffFactor: AudioSource.rolloff[eid],
           });
         }
       }

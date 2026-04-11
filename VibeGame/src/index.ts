@@ -22,7 +22,7 @@ export {
 } from './extras/sky-env';
 export type { EquirectSkyOptions } from './extras/sky-env';
 
-export { Player, PlayerGltfConfig, playerGltfRecipe } from './plugins/player';
+export { PlayerController, PlayerGltfConfig, playerGltfRecipe } from './plugins/player';
 export {
   FollowCamera,
   FollowCameraPlugin,
@@ -30,7 +30,7 @@ export {
 } from './plugins/follow-camera';
 export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
 export { getScene } from './plugins/rendering';
-export { Renderer } from './plugins/rendering';
+export { MeshRenderer } from './plugins/rendering';
 export { Transform, WorldTransform } from './plugins/transforms';
 export { AnimatedCharacter, HasAnimator } from './plugins/animation';
 export {
@@ -42,7 +42,7 @@ export {
 } from './plugins/gltf-anim';
 export { isKeyDown } from './plugins/input';
 export {
-  AudioEmitter,
+  AudioSource,
   AudioListener,
   AudioPlugin,
   AudioSystem,
@@ -52,7 +52,7 @@ export {
   resumeAudioContextOnFirstUserGesture,
 } from './plugins/audio';
 export {
-  EntityScript,
+  MonoBehaviour,
   EntityScriptPlugin,
   EntityScriptSystem,
   registerEntityScripts,
@@ -62,7 +62,7 @@ export type {
   EntityScriptContext,
   EntityScriptModule,
 } from './plugins/entity-script';
-export { Lod, LodPlugin, LodSystem } from './plugins/lod';
+export { LODGroup, LodPlugin, LodSystem } from './plugins/lod';
 export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';
 export {
   loadSceneManifest,
@@ -115,12 +115,12 @@ export {
   prefetchGltfLocalYBounds,
 } from './plugins/gltf-xml';
 export { Water, WaterPlugin } from './plugins/water';
-export { Text3dModel, Text3dPlugin, text3dRecipe } from './plugins/text-3d';
+export { TextMesh, Text3dPlugin, text3dRecipe } from './plugins/text-3d';
 export type { WaterEntityData } from './plugins/water';
 export { DebugPlugin } from './plugins/debug';
 export type { VibeGameDebugBridge } from './plugins/debug';
-export { RaycastPlugin, RaycastResult, RaycastSource } from './plugins/raycast';
-export { NavmeshPlugin, NavAgent, NavMesh } from './plugins/navmesh';
+export { RaycastPlugin, RaycastHit, RaycastSource } from './plugins/raycast';
+export { NavmeshPlugin, NavMeshAgent, NavMeshSurface } from './plugins/navmesh';
 export {
   AiSteeringPlugin,
   SteeringAgent,
@@ -128,11 +128,11 @@ export {
 } from './plugins/ai-steering';
 export {
   ParticlesPlugin,
-  ParticlesBurst,
-  ParticlesEmitter,
+  ParticleBurst,
+  ParticleSystem,
 } from './plugins/particles';
 export { HudPlugin, HudPanel } from './plugins/hud';
-export { JointsPlugin, PhysicsJoint } from './plugins/joints';
+export { JointsPlugin, Joint } from './plugins/joints';
 export {
   SaveLoadPlugin,
   Serializable,

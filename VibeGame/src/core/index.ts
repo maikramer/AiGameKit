@@ -42,6 +42,7 @@ export type {
   ShorthandMapping,
   SnapshotOptions,
   System,
+  Time,
   ValidationRule,
   WorldSnapshot,
 } from './ecs';

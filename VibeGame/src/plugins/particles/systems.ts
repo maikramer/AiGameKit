@@ -15,8 +15,8 @@ import {
 import {
   ColorOverLife,
   ParticleTexture,
-  ParticlesBurst,
-  ParticlesEmitter,
+  ParticleBurst,
+  ParticleSystem,
   SizeOverLife,
 } from './components';
 import { getParticlesContext } from './context';
@@ -44,8 +44,8 @@ function getEmitterWorldPosition(
   return [Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]];
 }
 
-const emitterQuery = defineQuery([ParticlesEmitter, Transform]);
-const burstQuery = defineQuery([ParticlesBurst, Transform]);
+const emitterQuery = defineQuery([ParticleSystem, Transform]);
+const burstQuery = defineQuery([ParticleBurst, Transform]);
 
 const entityToPS = new Map<number, ParticleSystem>();
 
@@ -112,8 +112,8 @@ export const ParticleEmitSystem: System = {
     }
 
     for (const eid of emitterQuery(state.world)) {
-      if (ParticlesEmitter.spawned[eid]) continue;
-      if (!ParticlesEmitter.playing[eid]) continue;
+      if (ParticleSystem.spawned[eid]) continue;
+      if (!ParticleSystem.playing[eid]) continue;
 
       const colOL = hasComponent(state.world, ColorOverLife, eid)
         ? {
@@ -157,10 +157,10 @@ export const ParticleEmitSystem: System = {
       }
 
       const ps = createParticleSystemForPreset(
-        ParticlesEmitter.preset[eid],
-        ParticlesEmitter.rate[eid],
-        ParticlesEmitter.lifetime[eid],
-        ParticlesEmitter.size[eid],
+        ParticleSystem.preset[eid],
+        ParticleSystem.rate[eid],
+        ParticleSystem.lifetime[eid],
+        ParticleSystem.size[eid],
         batch,
         colOL,
         szOL,
@@ -180,7 +180,7 @@ export const ParticleEmitSystem: System = {
         });
       }
 
-      ParticlesEmitter.spawned[eid] = 1;
+      ParticleSystem.spawned[eid] = 1;
     }
 
     for (const eid of emitterQuery(state.world)) {
@@ -209,15 +209,15 @@ export const ParticleBurstSystem: System = {
     }
 
     for (const eid of burstQuery(state.world)) {
-      if (!ParticlesBurst.triggered[eid]) continue;
+      if (!ParticleBurst.triggered[eid]) continue;
 
       if (entityToPS.has(eid)) {
         disposeParticle(eid, ctx);
       }
 
       const ps = createParticleSystemForPreset(
-        ParticlesBurst.preset[eid],
-        ParticlesBurst.count[eid],
+        ParticleBurst.preset[eid],
+        ParticleBurst.count[eid],
         0.4,
         0.15,
         batch
@@ -229,7 +229,7 @@ export const ParticleBurstSystem: System = {
       entityToPS.set(eid, ps);
       const [wx, wy, wz] = getEmitterWorldPosition(state, eid);
       root.position.set(wx, wy, wz);
-      ParticlesBurst.triggered[eid] = 0;
+      ParticleBurst.triggered[eid] = 0;
     }
   },
 };

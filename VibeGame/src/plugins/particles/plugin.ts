@@ -2,8 +2,8 @@ import type { Plugin } from '../../core';
 import {
   ColorOverLife,
   ParticleTexture,
-  ParticlesBurst,
-  ParticlesEmitter,
+  ParticleBurst,
+  ParticleSystem,
   SizeOverLife,
 } from './components';
 import { particleBurstRecipe, particleEmitterRecipe } from './recipes';
@@ -25,8 +25,8 @@ export const ParticlesPlugin: Plugin = {
   ],
   recipes: [particleEmitterRecipe, particleBurstRecipe],
   components: {
-    particlesEmitter: ParticlesEmitter,
-    particlesBurst: ParticlesBurst,
+    particlesEmitter: ParticleSystem,
+    particlesBurst: ParticleBurst,
     colorOverLife: ColorOverLife,
     sizeOverLife: SizeOverLife,
     particleTexture: ParticleTexture,

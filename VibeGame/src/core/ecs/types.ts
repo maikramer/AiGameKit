@@ -91,7 +91,7 @@ export interface Plugin {
   readonly initialize?: (state: State) => void | Promise<void>;
 }
 
-export interface GameTime {
+export interface Time {
   deltaTime: number;
   unscaledDeltaTime: number;
   fixedDeltaTime: number;
@@ -101,3 +101,6 @@ export interface GameTime {
   realtimeSinceStartup: number;
   elapsed: number;
 }
+
+/** @deprecated Use {@link Time} instead. */
+export type GameTime = Time;

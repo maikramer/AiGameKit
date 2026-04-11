@@ -1,3 +1,3 @@
-export { PhysicsJoint } from './components';
+export { Joint } from './components';
 export { JointsPlugin } from './plugin';
 export { JointCreateSystem } from './systems';

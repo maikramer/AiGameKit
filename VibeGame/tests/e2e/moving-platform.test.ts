@@ -6,7 +6,7 @@ import {
   queryEntities,
 } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
-import { Body, BodyType, CharacterController } from 'vibegame/physics';
+import { Rigidbody, BodyType, CharacterController } from 'vibegame/physics';
 
 describe('E2E: Moving Platform Character Controller', () => {
   let state: State;
@@ -38,8 +38,8 @@ describe('E2E: Moving Platform Character Controller', () => {
     for (const entity of entities) {
       // kinematic-part recipe uses KinematicVelocityBased
       if (
-        Body.type[entity] === BodyType.KinematicVelocityBased &&
-        Body.posY[entity] === 2
+        Rigidbody.type[entity] === BodyType.KinematicVelocityBased &&
+        Rigidbody.posY[entity] === 2
       ) {
         kinematicPlatform = entity;
         break;
@@ -53,9 +53,9 @@ describe('E2E: Moving Platform Character Controller', () => {
     expect(players.length).toBe(1);
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = 0;
-    Body.posY[playerEntity] = 4;
-    Body.posZ[playerEntity] = 0;
+    Rigidbody.posX[playerEntity] = 0;
+    Rigidbody.posY[playerEntity] = 4;
+    Rigidbody.posZ[playerEntity] = 0;
 
     for (let i = 0; i < 30; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -63,7 +63,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    const settledY = Body.posY[playerEntity];
+    const settledY = Rigidbody.posY[playerEntity];
     expect(settledY).toBeGreaterThan(2);
     expect(settledY).toBeLessThan(4);
 
@@ -72,7 +72,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     const positions: number[] = [];
     for (let i = 0; i < 60; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-      positions.push(Body.posY[playerEntity]);
+      positions.push(Rigidbody.posY[playerEntity]);
     }
 
     const minY = Math.min(...positions);
@@ -103,11 +103,11 @@ describe('E2E: Moving Platform Character Controller', () => {
     );
 
     const platforms = queryEntities(state, 'body').filter(
-      (ent) => Body.type[ent] === BodyType.KinematicVelocityBased
+      (ent) => Rigidbody.type[ent] === BodyType.KinematicVelocityBased
     );
     expect(platforms.length).toBeGreaterThan(0);
     const platform = platforms[0];
-    expect(Body.posY[platform]).toBe(5);
+    expect(Rigidbody.posY[platform]).toBe(5);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -115,9 +115,9 @@ describe('E2E: Moving Platform Character Controller', () => {
     expect(players.length).toBe(1);
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = 0;
-    Body.posY[playerEntity] = 7;
-    Body.posZ[playerEntity] = 0;
+    Rigidbody.posX[playerEntity] = 0;
+    Rigidbody.posY[playerEntity] = 7;
+    Rigidbody.posZ[playerEntity] = 0;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -125,8 +125,8 @@ describe('E2E: Moving Platform Character Controller', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    const initialPlayerY = Body.posY[playerEntity];
-    const initialPlatformY = Body.posY[platform];
+    const initialPlayerY = Rigidbody.posY[playerEntity];
+    const initialPlatformY = Rigidbody.posY[platform];
 
     console.log(
       `Initial player Y: ${initialPlayerY}, Initial platform Y: ${initialPlatformY}`
@@ -147,8 +147,8 @@ describe('E2E: Moving Platform Character Controller', () => {
       }
 
       if (i % 10 === 0 || i === stepsForFullDuration - 1) {
-        const currentPlayerY = Body.posY[playerEntity];
-        const currentPlatformY = Body.posY[platform];
+        const currentPlayerY = Rigidbody.posY[playerEntity];
+        const currentPlatformY = Rigidbody.posY[platform];
         console.log(
           `Step ${i}: Player Y: ${currentPlayerY.toFixed(2)}, Platform Y: ${currentPlatformY.toFixed(2)}, Grounded: ${isGrounded}`
         );
@@ -162,10 +162,10 @@ describe('E2E: Moving Platform Character Controller', () => {
       `Grounded percentage: ${(((stepsForFullDuration - ungroundedFrames) / stepsForFullDuration) * 100).toFixed(1)}%`
     );
 
-    const finalPlatformY = Body.posY[platform];
+    const finalPlatformY = Rigidbody.posY[platform];
     expect(finalPlatformY).toBeCloseTo(0, 1);
 
-    const finalPlayerY = Body.posY[playerEntity];
+    const finalPlayerY = Rigidbody.posY[playerEntity];
     console.log(
       `Final player Y: ${finalPlayerY}, Final platform Y: ${finalPlatformY}`
     );
@@ -199,11 +199,11 @@ describe('E2E: Moving Platform Character Controller', () => {
     );
 
     const platforms = queryEntities(state, 'body').filter(
-      (ent) => Body.type[ent] === BodyType.KinematicVelocityBased
+      (ent) => Rigidbody.type[ent] === BodyType.KinematicVelocityBased
     );
     expect(platforms.length).toBeGreaterThan(0);
     const platform = platforms[0];
-    expect(Body.posY[platform]).toBeCloseTo(0, 1);
+    expect(Rigidbody.posY[platform]).toBeCloseTo(0, 1);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -211,9 +211,9 @@ describe('E2E: Moving Platform Character Controller', () => {
     expect(players.length).toBe(1);
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = 0;
-    Body.posY[playerEntity] = 1;
-    Body.posZ[playerEntity] = 0;
+    Rigidbody.posX[playerEntity] = 0;
+    Rigidbody.posY[playerEntity] = 1;
+    Rigidbody.posZ[playerEntity] = 0;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -221,8 +221,8 @@ describe('E2E: Moving Platform Character Controller', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    const initialPlayerY = Body.posY[playerEntity];
-    const initialPlatformY = Body.posY[platform];
+    const initialPlayerY = Rigidbody.posY[playerEntity];
+    const initialPlatformY = Rigidbody.posY[platform];
 
     console.log(
       `Initial player Y: ${initialPlayerY}, Initial platform Y: ${initialPlatformY}`
@@ -234,18 +234,18 @@ describe('E2E: Moving Platform Character Controller', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       if (i % 10 === 0 || i === stepsForFullDuration - 1) {
-        const currentPlayerY = Body.posY[playerEntity];
-        const currentPlatformY = Body.posY[platform];
+        const currentPlayerY = Rigidbody.posY[playerEntity];
+        const currentPlatformY = Rigidbody.posY[platform];
         console.log(
           `Step ${i}: Player Y: ${currentPlayerY.toFixed(2)}, Platform Y: ${currentPlatformY.toFixed(2)}, Grounded: ${CharacterController.grounded[playerEntity]}`
         );
       }
     }
 
-    const finalPlatformY = Body.posY[platform];
+    const finalPlatformY = Rigidbody.posY[platform];
     expect(finalPlatformY).toBeCloseTo(5, 1);
 
-    const finalPlayerY = Body.posY[playerEntity];
+    const finalPlayerY = Rigidbody.posY[playerEntity];
     console.log(
       `Final player Y: ${finalPlayerY}, Final platform Y: ${finalPlatformY}`
     );
@@ -284,15 +284,15 @@ describe('E2E: Moving Platform Character Controller', () => {
     const players = queryEntities(state, 'player');
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = -3;
-    Body.posY[playerEntity] = 1;
+    Rigidbody.posX[playerEntity] = -3;
+    Rigidbody.posY[playerEntity] = 1;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       if (CharacterController.grounded[playerEntity] === 1) break;
     }
 
-    const startY = Body.posY[playerEntity];
+    const startY = Rigidbody.posY[playerEntity];
     console.log(`Starting on first platform at Y: ${startY}`);
 
     const stepsForOneSecond = Math.ceil(1 / TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -300,7 +300,7 @@ describe('E2E: Moving Platform Character Controller', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    const midY = Body.posY[playerEntity];
+    const midY = Rigidbody.posY[playerEntity];
     console.log(`After 1 second, player Y: ${midY}`);
     expect(midY).toBeGreaterThan(startY);
   });
@@ -324,11 +324,11 @@ describe('E2E: Moving Platform Character Controller', () => {
     );
 
     const platforms = queryEntities(state, 'body').filter(
-      (ent) => Body.type[ent] === BodyType.KinematicVelocityBased
+      (ent) => Rigidbody.type[ent] === BodyType.KinematicVelocityBased
     );
     expect(platforms.length).toBeGreaterThan(0);
     const platform = platforms[0];
-    expect(Body.posX[platform]).toBe(0);
+    expect(Rigidbody.posX[platform]).toBe(0);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -336,9 +336,9 @@ describe('E2E: Moving Platform Character Controller', () => {
     expect(players.length).toBe(1);
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = 0;
-    Body.posY[playerEntity] = 4;
-    Body.posZ[playerEntity] = 0;
+    Rigidbody.posX[playerEntity] = 0;
+    Rigidbody.posY[playerEntity] = 4;
+    Rigidbody.posZ[playerEntity] = 0;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -346,8 +346,8 @@ describe('E2E: Moving Platform Character Controller', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    const initialPlayerX = Body.posX[playerEntity];
-    const initialPlatformX = Body.posX[platform];
+    const initialPlayerX = Rigidbody.posX[playerEntity];
+    const initialPlatformX = Rigidbody.posX[platform];
 
     console.log(
       `Initial player X: ${initialPlayerX}, Initial platform X: ${initialPlatformX}`
@@ -359,18 +359,18 @@ describe('E2E: Moving Platform Character Controller', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       if (i % 10 === 0 || i === stepsForFullDuration - 1) {
-        const currentPlayerX = Body.posX[playerEntity];
-        const currentPlatformX = Body.posX[platform];
+        const currentPlayerX = Rigidbody.posX[playerEntity];
+        const currentPlatformX = Rigidbody.posX[platform];
         console.log(
           `Step ${i}: Player X: ${currentPlayerX.toFixed(2)}, Platform X: ${currentPlatformX.toFixed(2)}, Grounded: ${CharacterController.grounded[playerEntity]}`
         );
       }
     }
 
-    const finalPlatformX = Body.posX[platform];
+    const finalPlatformX = Rigidbody.posX[platform];
     expect(finalPlatformX).toBeCloseTo(5, 1);
 
-    const finalPlayerX = Body.posX[playerEntity];
+    const finalPlayerX = Rigidbody.posX[playerEntity];
     console.log(
       `Final player X: ${finalPlayerX}, Final platform X: ${finalPlatformX}`
     );
@@ -399,11 +399,11 @@ describe('E2E: Moving Platform Character Controller', () => {
     );
 
     const platforms = queryEntities(state, 'body').filter(
-      (ent) => Body.type[ent] === BodyType.KinematicVelocityBased
+      (ent) => Rigidbody.type[ent] === BodyType.KinematicVelocityBased
     );
     expect(platforms.length).toBeGreaterThan(0);
     const platform = platforms[0];
-    expect(Body.posY[platform]).toBeCloseTo(0, 1);
+    expect(Rigidbody.posY[platform]).toBeCloseTo(0, 1);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -411,9 +411,9 @@ describe('E2E: Moving Platform Character Controller', () => {
     expect(players.length).toBe(1);
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = 0;
-    Body.posY[playerEntity] = 1;
-    Body.posZ[playerEntity] = 0;
+    Rigidbody.posX[playerEntity] = 0;
+    Rigidbody.posY[playerEntity] = 1;
+    Rigidbody.posZ[playerEntity] = 0;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -421,10 +421,10 @@ describe('E2E: Moving Platform Character Controller', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    const initialPlayerX = Body.posX[playerEntity];
-    const initialPlayerY = Body.posY[playerEntity];
-    const initialPlatformX = Body.posX[platform];
-    const initialPlatformY = Body.posY[platform];
+    const initialPlayerX = Rigidbody.posX[playerEntity];
+    const initialPlayerY = Rigidbody.posY[playerEntity];
+    const initialPlatformX = Rigidbody.posX[platform];
+    const initialPlatformY = Rigidbody.posY[platform];
 
     console.log(
       `Initial player X: ${initialPlayerX.toFixed(2)}, Y: ${initialPlayerY.toFixed(2)}`
@@ -441,7 +441,7 @@ describe('E2E: Moving Platform Character Controller', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       const isGrounded = CharacterController.grounded[playerEntity] === 1;
-      const playerY = Body.posY[playerEntity];
+      const playerY = Rigidbody.posY[playerEntity];
 
       if (!isGrounded && firstUngroundedStep === -1) {
         firstUngroundedStep = i;
@@ -452,20 +452,20 @@ describe('E2E: Moving Platform Character Controller', () => {
       }
 
       if (i % 10 === 0 || i === stepsForFullDuration - 1) {
-        const currentPlayerX = Body.posX[playerEntity];
-        const currentPlayerY = Body.posY[playerEntity];
-        const currentPlatformX = Body.posX[platform];
-        const currentPlatformY = Body.posY[platform];
+        const currentPlayerX = Rigidbody.posX[playerEntity];
+        const currentPlayerY = Rigidbody.posY[playerEntity];
+        const currentPlatformX = Rigidbody.posX[platform];
+        const currentPlatformY = Rigidbody.posY[platform];
         console.log(
           `Step ${i}: Player X=${currentPlayerX.toFixed(2)}, Y=${currentPlayerY.toFixed(2)}, Platform X=${currentPlatformX.toFixed(2)}, Y=${currentPlatformY.toFixed(2)}, Grounded: ${isGrounded ? 1 : 0}`
         );
       }
     }
 
-    const finalPlatformX = Body.posX[platform];
-    const finalPlatformY = Body.posY[platform];
-    const finalPlayerX = Body.posX[playerEntity];
-    const finalPlayerY = Body.posY[playerEntity];
+    const finalPlatformX = Rigidbody.posX[platform];
+    const finalPlatformY = Rigidbody.posY[platform];
+    const finalPlayerX = Rigidbody.posX[playerEntity];
+    const finalPlayerY = Rigidbody.posY[playerEntity];
 
     console.log(
       `Final player X: ${finalPlayerX.toFixed(2)}, Y: ${finalPlayerY.toFixed(2)}`
@@ -521,12 +521,12 @@ describe('E2E: Moving Platform Character Controller', () => {
     );
 
     const platforms = queryEntities(state, 'body').filter(
-      (ent) => Body.type[ent] === BodyType.KinematicVelocityBased
+      (ent) => Rigidbody.type[ent] === BodyType.KinematicVelocityBased
     );
     expect(platforms.length).toBeGreaterThan(0);
     const platform = platforms[0];
-    expect(Body.posX[platform]).toBe(0);
-    expect(Body.posY[platform]).toBe(5);
+    expect(Rigidbody.posX[platform]).toBe(0);
+    expect(Rigidbody.posY[platform]).toBe(5);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -534,9 +534,9 @@ describe('E2E: Moving Platform Character Controller', () => {
     expect(players.length).toBe(1);
     const playerEntity = players[0];
 
-    Body.posX[playerEntity] = 0;
-    Body.posY[playerEntity] = 7;
-    Body.posZ[playerEntity] = 0;
+    Rigidbody.posX[playerEntity] = 0;
+    Rigidbody.posY[playerEntity] = 7;
+    Rigidbody.posZ[playerEntity] = 0;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -544,10 +544,10 @@ describe('E2E: Moving Platform Character Controller', () => {
     }
 
     expect(CharacterController.grounded[playerEntity]).toBe(1);
-    const initialPlayerX = Body.posX[playerEntity];
-    const initialPlayerY = Body.posY[playerEntity];
-    const initialPlatformX = Body.posX[platform];
-    const initialPlatformY = Body.posY[platform];
+    const initialPlayerX = Rigidbody.posX[playerEntity];
+    const initialPlayerY = Rigidbody.posY[playerEntity];
+    const initialPlatformX = Rigidbody.posX[platform];
+    const initialPlatformY = Rigidbody.posY[platform];
 
     console.log(
       `Initial - Player: (${initialPlayerX.toFixed(2)}, ${initialPlayerY.toFixed(2)}), Platform: (${initialPlatformX.toFixed(2)}, ${initialPlatformY.toFixed(2)})`
@@ -564,20 +564,20 @@ describe('E2E: Moving Platform Character Controller', () => {
       }
 
       if (i % 10 === 0 || i === stepsForFullDuration - 1) {
-        const currentPlayerX = Body.posX[playerEntity];
-        const currentPlayerY = Body.posY[playerEntity];
-        const currentPlatformX = Body.posX[platform];
-        const currentPlatformY = Body.posY[platform];
+        const currentPlayerX = Rigidbody.posX[playerEntity];
+        const currentPlayerY = Rigidbody.posY[playerEntity];
+        const currentPlatformX = Rigidbody.posX[platform];
+        const currentPlatformY = Rigidbody.posY[platform];
         console.log(
           `Step ${i}: Player: (${currentPlayerX.toFixed(2)}, ${currentPlayerY.toFixed(2)}), Platform: (${currentPlatformX.toFixed(2)}, ${currentPlatformY.toFixed(2)}), Grounded: ${CharacterController.grounded[playerEntity]}`
         );
       }
     }
 
-    const finalPlayerX = Body.posX[playerEntity];
-    const finalPlayerY = Body.posY[playerEntity];
-    const finalPlatformX = Body.posX[platform];
-    const finalPlatformY = Body.posY[platform];
+    const finalPlayerX = Rigidbody.posX[playerEntity];
+    const finalPlayerY = Rigidbody.posY[playerEntity];
+    const finalPlatformX = Rigidbody.posX[platform];
+    const finalPlatformY = Rigidbody.posY[platform];
 
     console.log(
       `Final - Player: (${finalPlayerX.toFixed(2)}, ${finalPlayerY.toFixed(2)}), Platform: (${finalPlatformX.toFixed(2)}, ${finalPlatformY.toFixed(2)})`
@@ -642,9 +642,9 @@ describe('E2E: Moving Platform Character Controller', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       if (i % 15 === 0) {
-        positions.push(Body.posY[playerEntity]);
+        positions.push(Rigidbody.posY[playerEntity]);
         console.log(
-          `Time ${(i * TIME_CONSTANTS.FIXED_TIMESTEP).toFixed(2)}s: Player Y = ${Body.posY[playerEntity].toFixed(2)}`
+          `Time ${(i * TIME_CONSTANTS.FIXED_TIMESTEP).toFixed(2)}s: Player Y = ${Rigidbody.posY[playerEntity].toFixed(2)}`
         );
       }
     }

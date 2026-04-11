@@ -19,7 +19,7 @@ export const PhysicsWorld = defineComponent({
   gravityZ: Types.f32,
 });
 
-export const Body = defineComponent({
+export const Rigidbody = defineComponent({
   type: Types.ui8,
   mass: Types.f32,
   linearDamping: Types.f32,

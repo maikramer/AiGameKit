@@ -9,7 +9,7 @@ import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
 import { createHeadlessState, parseWorldXml } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { Transform } from 'vibegame/transforms';
-import { Body } from 'vibegame/physics';
+import { Rigidbody } from 'vibegame/physics';
 
 // Polyfill browser APIs for Bun (GSAP uses these internally)
 globalThis.requestAnimationFrame = ((cb: any) => setTimeout(cb, 16)) as any;
@@ -61,7 +61,7 @@ describe('E2E: XML World Parsing', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    const bodies = defineQuery([Body])(state.world);
+    const bodies = defineQuery([Rigidbody])(state.world);
     expect(bodies.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -121,7 +121,7 @@ describe('E2E: XML World Parsing', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
     }
 
-    const bodies = defineQuery([Body])(state.world);
+    const bodies = defineQuery([Rigidbody])(state.world);
     expect(bodies.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -138,7 +138,7 @@ describe('E2E: XML World Parsing', () => {
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
     // Player should be created by default
-    const bodies = defineQuery([Body])(state.world);
+    const bodies = defineQuery([Rigidbody])(state.world);
     expect(bodies.length).toBeGreaterThanOrEqual(1);
   });
 });

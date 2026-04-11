@@ -2,7 +2,7 @@ import { type State, type System } from '../../core';
 /* global fetch */
 import { loadGltfToSceneWithAnimator } from '../../extras/gltf-bridge';
 import type { GltfAnimator } from '../../extras/gltf-animator';
-import { AudioEmitter } from '../audio/components';
+import { AudioSource } from '../audio/components';
 import { registerAudioClip } from '../audio/systems';
 import { TextureRecipe } from '../rendering/texture-recipe';
 import { setTextureRecipeUrl } from '../rendering/texture-recipe-system';
@@ -114,13 +114,13 @@ async function loadHandoffFormat(
       }
     } else if (row.audio?.url) {
       const eid = state.createEntity();
-      state.addComponent(eid, AudioEmitter, {
+      state.addComponent(eid, AudioSource, {
         volume: 0.7,
         loop: 1,
         spatial: 0,
         playing: 1,
       });
-      AudioEmitter.clipPath[eid] = eid;
+      AudioSource.clipPath[eid] = eid;
       registerAudioClip(eid, basePath + row.audio.url);
     }
 

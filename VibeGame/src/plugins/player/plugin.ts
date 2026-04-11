@@ -1,5 +1,5 @@
 import type { Plugin } from '../../core';
-import { Player, PlayerGltfConfig } from './components';
+import { PlayerController, PlayerGltfConfig } from './components';
 import {
   playerGltfModelUrlAdapter,
   PlayerGltfAnimStateSystem,
@@ -24,7 +24,7 @@ export const PlayerPlugin: Plugin = {
   ],
   recipes: [playerRecipe, playerGltfRecipe],
   components: {
-    Player,
+    player: PlayerController,
     playerGltfConfig: PlayerGltfConfig,
   },
   config: {

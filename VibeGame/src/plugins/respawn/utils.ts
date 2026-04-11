@@ -1,12 +1,12 @@
 import type { State } from '../../core';
 import {
-  Body,
+  Rigidbody,
   CharacterController,
   CharacterMovement,
   SetAngularVelocity,
   SetLinearVelocity,
 } from '../physics';
-import { Player } from '../player';
+import { PlayerController } from '../player';
 import { Respawn } from './components';
 import { Transform, eulerToQuaternion } from '../transforms';
 
@@ -35,20 +35,20 @@ export function respawnEntity(state: State, entity: number): void {
     Transform.rotW[entity] = quat.w;
   }
 
-  if (state.hasComponent(entity, Body)) {
-    Body.posX[entity] = x;
-    Body.posY[entity] = y;
-    Body.posZ[entity] = z;
-    Body.rotX[entity] = quat.x;
-    Body.rotY[entity] = quat.y;
-    Body.rotZ[entity] = quat.z;
-    Body.rotW[entity] = quat.w;
-    Body.velX[entity] = 0;
-    Body.velY[entity] = 0;
-    Body.velZ[entity] = 0;
-    Body.rotVelX[entity] = 0;
-    Body.rotVelY[entity] = 0;
-    Body.rotVelZ[entity] = 0;
+  if (state.hasComponent(entity, Rigidbody)) {
+    Rigidbody.posX[entity] = x;
+    Rigidbody.posY[entity] = y;
+    Rigidbody.posZ[entity] = z;
+    Rigidbody.rotX[entity] = quat.x;
+    Rigidbody.rotY[entity] = quat.y;
+    Rigidbody.rotZ[entity] = quat.z;
+    Rigidbody.rotW[entity] = quat.w;
+    Rigidbody.velX[entity] = 0;
+    Rigidbody.velY[entity] = 0;
+    Rigidbody.velZ[entity] = 0;
+    Rigidbody.rotVelX[entity] = 0;
+    Rigidbody.rotVelY[entity] = 0;
+    Rigidbody.rotVelZ[entity] = 0;
 
     state.addComponent(entity, SetLinearVelocity);
     SetLinearVelocity.x[entity] = 0;
@@ -75,9 +75,9 @@ export function respawnEntity(state: State, entity: number): void {
     CharacterMovement.velocityY[entity] = 0;
   }
 
-  if (state.hasComponent(entity, Player)) {
-    Player.canJump[entity] = 1;
-    Player.isJumping[entity] = 0;
-    Player.jumpCooldown[entity] = 0;
+  if (state.hasComponent(entity, PlayerController)) {
+    PlayerController.canJump[entity] = 1;
+    PlayerController.isJumping[entity] = 0;
+    PlayerController.jumpCooldown[entity] = 0;
   }
 }

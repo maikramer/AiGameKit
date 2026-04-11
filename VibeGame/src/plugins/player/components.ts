@@ -1,6 +1,6 @@
 import { defineComponent, Types } from 'bitecs';
 
-export const Player = defineComponent({
+export const PlayerController = defineComponent({
   speed: Types.f32,
   jumpHeight: Types.f32,
   rotationSpeed: Types.f32,

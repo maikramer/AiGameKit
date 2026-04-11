@@ -17,6 +17,9 @@ const moduleLoadPromises = new WeakMap<
 /** Tracks previous enabled state per entity for onEnable/onDisable transitions. */
 const prevEnabledByState = new WeakMap<State, Map<number, number>>();
 
+/** Active collision pairs per entity: entity → (other → isTrigger). */
+const activeCollisionPairsByState = new WeakMap<State, Map<number, Map<number, boolean>>>();
+
 export function setScriptFile(
   state: State,
   entity: number,
@@ -147,6 +150,46 @@ export function deletePrevEnabled(state: State, entity: number): void {
   prevEnabledByState.get(state)?.delete(entity);
 }
 
+export function getActiveCollisionPairs(state: State): Map<number, Map<number, boolean>> {
+  let pairs = activeCollisionPairsByState.get(state);
+  if (!pairs) {
+    pairs = new Map();
+    activeCollisionPairsByState.set(state, pairs);
+  }
+  return pairs;
+}
+
+export function addActiveCollisionPair(
+  state: State,
+  entity: number,
+  other: number,
+  isTrigger: boolean,
+): void {
+  const pairs = getActiveCollisionPairs(state);
+  let entityPairs = pairs.get(entity);
+  if (!entityPairs) {
+    entityPairs = new Map();
+    pairs.set(entity, entityPairs);
+  }
+  entityPairs.set(other, isTrigger);
+}
+
+export function removeActiveCollisionPair(state: State, entity: number, other: number): boolean {
+  const pairs = activeCollisionPairsByState.get(state);
+  if (!pairs) return false;
+  const entityPairs = pairs.get(entity);
+  if (!entityPairs) return false;
+  const had = entityPairs.delete(other);
+  if (entityPairs.size === 0) {
+    pairs.delete(entity);
+  }
+  return had;
+}
+
+export function deleteActiveCollisionPairsForEntity(state: State, entity: number): void {
+  activeCollisionPairsByState.get(state)?.delete(entity);
+}
+
 export function getOrLoadEntityScriptModule(
   state: State,
   glob: Record<string, () => Promise<unknown>>,
@@ -229,8 +272,47 @@ export function coerceEntityScriptModule(
     typeof o.lateUpdate === 'function'
       ? (o.lateUpdate as EntityScriptModule['lateUpdate'])
       : undefined;
+  const onCollisionEnter =
+    typeof o.onCollisionEnter === 'function'
+      ? (o.onCollisionEnter as EntityScriptModule['onCollisionEnter'])
+      : undefined;
+  const onCollisionStay =
+    typeof o.onCollisionStay === 'function'
+      ? (o.onCollisionStay as EntityScriptModule['onCollisionStay'])
+      : undefined;
+  const onCollisionExit =
+    typeof o.onCollisionExit === 'function'
+      ? (o.onCollisionExit as EntityScriptModule['onCollisionExit'])
+      : undefined;
+  const onTriggerEnter =
+    typeof o.onTriggerEnter === 'function'
+      ? (o.onTriggerEnter as EntityScriptModule['onTriggerEnter'])
+      : undefined;
+  const onTriggerStay =
+    typeof o.onTriggerStay === 'function'
+      ? (o.onTriggerStay as EntityScriptModule['onTriggerStay'])
+      : undefined;
+  const onTriggerExit =
+    typeof o.onTriggerExit === 'function'
+      ? (o.onTriggerExit as EntityScriptModule['onTriggerExit'])
+      : undefined;
   if (!start && !update) {
     return null;
   }
-  return { awake, onEnable, onDisable, start, update, fixedUpdate, lateUpdate, onDestroy };
+  return {
+    awake,
+    onEnable,
+    onDisable,
+    start,
+    update,
+    fixedUpdate,
+    lateUpdate,
+    onDestroy,
+    onCollisionEnter,
+    onCollisionStay,
+    onCollisionExit,
+    onTriggerEnter,
+    onTriggerStay,
+    onTriggerExit,
+  };
 }
