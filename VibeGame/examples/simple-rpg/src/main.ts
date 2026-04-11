@@ -3,10 +3,11 @@ import {
   AudioSource,
   PlayerController,
   configure,
+  getBuilder,
   playAudioEmitter,
   registerEntityScripts,
+  resetBuilder,
   resumeAudioContextIfSuspended,
-  run,
   withPlugin,
   withSystem,
   SaveLoadPlugin,
@@ -19,8 +20,8 @@ import {
   t,
   isKeyDown,
 } from 'vibegame';
-import { CombatPlugin } from 'vibegame/plugins/combat';
-import { Health, isDead } from 'vibegame/plugins/combat/components';
+import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
+import { Health, isDead } from '../../../src/plugins/combat/components.ts';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
 
 const SAVE_KEY = 'simple-rpg-save';
@@ -472,7 +473,10 @@ async function bootstrap(): Promise<void> {
   withSystem(GameplayHudSystem);
 
   configure({ canvas: '#game-canvas' });
-  const runtime = await run();
+
+  const builder = getBuilder();
+  resetBuilder();
+  const runtime = await builder.build();
   const state = runtime.getState();
 
   registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
@@ -505,6 +509,8 @@ async function bootstrap(): Promise<void> {
     };
     document.addEventListener('pointerdown', startBgm, { once: true });
   }
+
+  await runtime.start();
 }
 
 void bootstrap();

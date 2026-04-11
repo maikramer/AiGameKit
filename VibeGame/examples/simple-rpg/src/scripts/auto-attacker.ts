@@ -1,8 +1,8 @@
 import { defineQuery } from 'bitecs';
 import type { MonoBehaviourContext } from 'vibegame';
 import { Transform } from 'vibegame';
-import { Health, ProjectileData } from 'vibegame/plugins/combat/components';
-import { Collider, CollisionEvents, SetLinearVelocity } from 'vibegame/plugins/physics/components';
+import { Health, ProjectileData } from '../../../../src/plugins/combat/components.ts';
+import { Collider, CollisionEvents, SetLinearVelocity } from '../../../../src/plugins/physics/components.ts';
 
 interface AttackConfig {
   cooldown: number;

@@ -7,10 +7,10 @@ import {
   SteeringTarget,
   MonoBehaviour,
 } from "vibegame";
-import { Health, isDead } from "vibegame/plugins/combat/components";
-import { CollisionEvents } from "vibegame/plugins/physics/components";
-import { getTerrainHeightAt } from "vibegame/plugins/terrain/systems";
-import { setScriptFile } from "vibegame/plugins/entity-script/context";
+import { Health, isDead } from "../../../../src/plugins/combat/components.ts";
+import { CollisionEvents } from "../../../../src/plugins/physics/components.ts";
+import { getTerrainHeightAt } from "../../../../src/plugins/terrain/systems.ts";
+import { setScriptFile } from "../../../../src/plugins/entity-script/context.ts";
 
 const WATER_LEVEL = 1.25;
 const HEAL_DROP_CHANCE = 0.4;

@@ -1,6 +1,6 @@
 import type { MonoBehaviourContext } from 'vibegame';
-import { ProjectileData } from 'vibegame/plugins/combat/components';
-import { Collider, CollisionEvents, Rigidbody } from 'vibegame/plugins/physics/components';
+import { ProjectileData } from '../../../../src/plugins/combat/components.ts';
+import { Collider, CollisionEvents, Rigidbody } from '../../../../src/plugins/physics/components.ts';
 
 // Minimal setup — damage handled by DamageResolutionSystem, cleanup by ProjectileCleanupSystem
 export function start(ctx: MonoBehaviourContext): void {

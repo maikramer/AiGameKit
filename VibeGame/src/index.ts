@@ -176,7 +176,7 @@ export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
 
 let globalBuilder: GameBuilder | null = null;
 
-function getBuilder(): GameBuilder {
+export function getBuilder(): GameBuilder {
   if (!globalBuilder) {
     globalBuilder = new GameBuilder();
   }

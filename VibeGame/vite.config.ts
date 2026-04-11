@@ -34,8 +34,6 @@ export default defineConfig({
         'plugins/transforms/index': 'src/plugins/transforms/index.ts',
         'plugins/tweening/index': 'src/plugins/tweening/index.ts',
         'plugins/line/index': 'src/plugins/line/index.ts',
-        'plugins/combat/index': 'src/plugins/combat/index.ts',
-        'plugins/combat/components': 'src/plugins/combat/components.ts',
         'plugins/terrain/index': 'src/plugins/terrain/index.ts',
         'plugins/water/index': 'src/plugins/water/index.ts',
         'plugins/debug/index': 'src/plugins/debug/index.ts',
