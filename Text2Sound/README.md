@@ -19,7 +19,7 @@ Both repos can be **gated**: accept terms on the Hub and set `HF_TOKEN`. **Stabi
 - **Multiple formats** — WAV, FLAC, OGG
 - **Batch** — many audios from a prompt file
 - **Seed** — full reproducibility
-- **Auto trim** — trailing silence removal
+- **Auto trim** — leading and trailing silence removal
 - **JSON metadata** — generation params saved next to audio (includes `seed_effective`, sigmas, trim, CLI version)
 - **VRAM management** — automatic cleanup after each generation
 
@@ -139,7 +139,7 @@ text2sound --help   # full help
 | `--sigma-max` | 500 | Max noise schedule |
 | `--sampler` | dpmpp-3m-sde | Sampler type |
 | `--seed` | random | Reproducibility |
-| `--trim/--no-trim` | trim | Remove trailing silence |
+| `--trim/--no-trim` | trim | Remove leading and trailing silence |
 
 ## Layout
 

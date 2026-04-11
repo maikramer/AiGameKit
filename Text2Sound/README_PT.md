@@ -19,7 +19,7 @@ Ambos os repositórios podem ser **gated**: aceita os termos no Hub e define `HF
 - **Múltiplos formatos** — WAV, FLAC, OGG
 - **Batch processing** — gerar vários áudios a partir de ficheiro de prompts
 - **Seed** — reprodutibilidade total
-- **Trim automático** — remoção de silêncio trailing
+- **Trim automático** — remoção de silêncio no início e no fim
 - **Metadados JSON** — parâmetros de geração gravados ao lado do áudio (inclui `seed_effective`, sigmas, trim, versão da CLI)
 - **Gestão de VRAM** — limpeza automática após cada geração
 
@@ -139,7 +139,7 @@ text2sound --help   # ajuda completa
 | `--sigma-max` | 500 | Noise schedule máximo |
 | `--sampler` | dpmpp-3m-sde | Tipo de sampler |
 | `--seed` | aleatório | Seed para reprodutibilidade |
-| `--trim/--no-trim` | trim | Remover silêncio trailing |
+| `--trim/--no-trim` | trim | Remover silêncio no início e no fim |
 
 ## Estrutura
 

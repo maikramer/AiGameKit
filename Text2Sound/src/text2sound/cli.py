@@ -227,7 +227,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--trim/--no-trim",
     default=True,
     show_default=True,
-    help="Remover silêncio trailing",
+    help="Remover silêncio no início e no fim do clip",
 )
 @click.option(
     "--model",

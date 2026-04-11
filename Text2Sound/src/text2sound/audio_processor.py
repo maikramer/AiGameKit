@@ -1,6 +1,6 @@
 """Text2Sound — processamento e exportação de áudio.
 
-Normalização de pico, conversão de formatos e remoção de silêncio trailing.
+Normalização de pico, conversão de formatos e remoção de silêncio no início e no fim.
 Usa soundfile (libsndfile) para escrita — portável, sem dependência de CUDA.
 """
 
@@ -43,16 +43,16 @@ def trim_silence(
     threshold_db: float = -60.0,
     min_silence_ms: int = 200,
 ) -> torch.Tensor:
-    """Remove silêncio no final do áudio.
+    """Remove silêncio no início e no fim do áudio.
 
-    Procura de trás para frente pelo último sample acima do limiar
-    e corta o áudio mantendo um buffer mínimo.
+    Localiza o primeiro e o último sample acima do limiar (mono = max por canal)
+    e corta o sinal, mantendo um pequeno buffer em cada extremo (fade natural).
 
     Args:
         audio: Tensor (channels, samples) float.
         sample_rate: Taxa de amostragem.
         threshold_db: Limiar em dB abaixo do qual se considera silêncio.
-        min_silence_ms: Buffer mínimo de silêncio a manter (ms).
+        min_silence_ms: Buffer mínimo (ms) antes do primeiro som e após o último.
     """
     threshold_linear = 10 ** (threshold_db / 20.0)
     mono = audio.abs().max(dim=0).values
@@ -61,11 +61,17 @@ def trim_silence(
     if len(above_threshold) == 0:
         return audio
 
+    first_sound = above_threshold[0].item()
     last_sound = above_threshold[-1].item()
     buffer_samples = int(sample_rate * min_silence_ms / 1000)
+
+    start_idx = max(0, first_sound - buffer_samples)
     end_idx = min(last_sound + buffer_samples, audio.shape[-1])
 
-    return audio[:, :end_idx]
+    if start_idx >= end_idx:
+        return audio
+
+    return audio[:, start_idx:end_idx]
 
 
 def save_audio(
@@ -87,7 +93,7 @@ def save_audio(
         fmt: Formato de saída (wav, flac, ogg).
         as_int16: Converter para int16 antes de gravar (WAV).
         normalize: Aplicar normalização de pico.
-        trim: Remover silêncio trailing.
+        trim: Remover silêncio no início e no fim.
         metadata: Metadados para gravar num .json ao lado do áudio.
 
     Returns:

@@ -65,6 +65,22 @@ class TestTrimSilence:
         assert result.shape[-1] < audio.shape[-1]
         assert result.shape[-1] >= 200
 
+    def test_trims_leading_silence(self):
+        sr = 1000
+        audio = torch.zeros(2, sr)
+        audio[:, 400:600] = 0.5
+        result = trim_silence(audio, sr, threshold_db=-40.0, min_silence_ms=100)
+        assert result.shape[-1] < audio.shape[-1]
+        assert result.shape[-1] >= 200
+        assert torch.any(result > 0.4)
+
+    def test_trims_both_ends(self):
+        sr = 1000
+        audio = torch.zeros(2, sr)
+        audio[:, 300:500] = 0.5
+        result = trim_silence(audio, sr, threshold_db=-40.0, min_silence_ms=50)
+        assert result.shape[-1] < 400
+
     def test_no_trim_if_no_silence(self):
         sr = 1000
         audio = torch.ones(2, sr) * 0.5
