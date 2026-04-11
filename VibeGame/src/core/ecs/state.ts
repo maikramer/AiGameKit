@@ -58,6 +58,7 @@ export class State {
   private readonly globalDestroyCallbacks = new Set<(eid: number) => void>();
   private readonly templates = new Map<string, TemplateData>();
   private isDisposed = false;
+  public xmlSource?: string;
 
   constructor() {
     this.world = createWorld();
@@ -341,6 +342,10 @@ export class State {
 
   getTemplate(id: string): TemplateData | undefined {
     return this.templates.get(id);
+  }
+
+  clearTemplates(): void {
+    this.templates.clear();
   }
 
   Instantiate(templateId: string, options: InstantiateOptions = {}): number {
