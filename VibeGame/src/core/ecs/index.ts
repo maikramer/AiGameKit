@@ -24,3 +24,12 @@ export type {
   System,
   ValidationRule,
 } from './types';
+export { Tag, addTag, getTagId, getTagName } from './tags';
+export { Layer, LayerMask } from './layers';
+export {
+  addEventListener,
+  removeEventListener,
+  addEventListenerOnce,
+  dispatchEvent,
+  removeAllListeners,
+} from './events';

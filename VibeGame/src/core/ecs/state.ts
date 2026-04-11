@@ -9,6 +9,7 @@ import {
   type Component,
   type IWorld,
 } from 'bitecs';
+import { defineQuery } from 'bitecs';
 import { toKebabCase } from '../utils/naming';
 import { ConfigRegistry } from './config';
 import { setComponentFields } from './utils';
@@ -31,6 +32,14 @@ import {
   type WorldSnapshot,
 } from './snapshot';
 import { createEntityFromRecipe } from '../recipes/parser';
+import { Tag, addTag, getTagId, getTagName } from './tags';
+import { Layer } from './layers';
+import {
+  addEventListener as _addEventListener,
+  dispatchEvent as _dispatchEvent,
+  removeAllListeners,
+  removeEventListener as _removeEventListener,
+} from './events';
 
 export class State {
   public readonly world: IWorld;
@@ -195,6 +204,7 @@ export class State {
         console.error("[VibeGame] destroyEntity global callback error:", err);
       }
     }
+    removeAllListeners(eid);
     removeEntity(this.world, eid);
   }
 
@@ -217,6 +227,77 @@ export class State {
 
   exists(eid: number): boolean {
     return entityExists(this.world, eid);
+  }
+
+  setTag(eid: number, name: string): void {
+    let id = getTagId(name);
+    if (id < 0) id = addTag(name);
+    if (!hasComponent(this.world, Tag, eid)) {
+      addComponent(this.world, Tag, eid);
+    }
+    Tag.value[eid] = id;
+  }
+
+  getTag(eid: number): string {
+    if (!hasComponent(this.world, Tag, eid)) return "Untagged";
+    return getTagName(Tag.value[eid]);
+  }
+
+  findByTag(name: string): number | undefined {
+    const id = getTagId(name);
+    if (id < 0) return undefined;
+    const entities = defineQuery([Tag])(this.world);
+    for (const eid of entities) {
+      if (Tag.value[eid] === id) return eid;
+    }
+    return undefined;
+  }
+
+  findGameObjectsWithTag(name: string): number[] {
+    const id = getTagId(name);
+    if (id < 0) return [];
+    const result: number[] = [];
+    const entities = defineQuery([Tag])(this.world);
+    for (const eid of entities) {
+      if (Tag.value[eid] === id) result.push(eid);
+    }
+    return result;
+  }
+
+  setLayer(eid: number, layer: number): void {
+    if (!hasComponent(this.world, Layer, eid)) {
+      addComponent(this.world, Layer, eid);
+    }
+    Layer.value[eid] = layer;
+  }
+
+  getLayer(eid: number): number {
+    if (!hasComponent(this.world, Layer, eid)) return 0;
+    return Layer.value[eid];
+  }
+
+  addEventListener(eid: number, eventName: string, callback: (data?: unknown) => void): void {
+    _addEventListener(eid, eventName, callback);
+  }
+
+  removeEventListener(eid: number, eventName: string, callback: (data?: unknown) => void): void {
+    _removeEventListener(eid, eventName, callback);
+  }
+
+  addEventListenerOnce(eid: number, eventName: string, callback: (data?: unknown) => void): void {
+    const wrapper = (data?: unknown) => {
+      _removeEventListener(eid, eventName, wrapper);
+      callback(data);
+    };
+    _addEventListener(eid, eventName, wrapper);
+  }
+
+  dispatchEvent(eid: number, eventName: string, data?: unknown): void {
+    _dispatchEvent(eid, eventName, data);
+  }
+
+  removeAllEventListeners(eid: number, eventName?: string): void {
+    removeAllListeners(eid, eventName);
   }
 
   addComponent<T extends Component>(

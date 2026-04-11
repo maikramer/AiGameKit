@@ -40,6 +40,15 @@ export type {
   ValidationRule,
   WorldSnapshot,
 } from './ecs';
+export { Tag, addTag, getTagId, getTagName } from './ecs';
+export { Layer, LayerMask } from './ecs';
+export {
+  addEventListener,
+  removeEventListener,
+  addEventListenerOnce,
+  dispatchEvent,
+  removeAllListeners,
+} from './ecs';
 export { eulerToQuaternion, lerp, quaternionToEuler, slerp } from './math';
 export {
   entityRecipe,

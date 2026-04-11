@@ -1,4 +1,6 @@
-import { defineQuery, type State, type System } from '../../core';
+import type { Component } from 'bitecs';
+
+import { Parent, defineQuery, type State, type System } from '../../core';
 import { GltfPending } from '../gltf-xml/components';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { EntityScript } from './components';
@@ -19,13 +21,52 @@ import type { EntityScriptContext } from './types';
 
 const entityScriptQuery = defineQuery([EntityScript]);
 
-function buildContext(state: State, eid: number): EntityScriptContext {
+const parentQuery = defineQuery([Parent]);
+
+function resolveComponent(state: State, eid: number, name: string): Component | null {
+  const component = state.getComponent(name);
+  if (!component) return null;
+  return state.hasComponent(eid, component) ? component : null;
+}
+
+function findComponentInChildren(state: State, eid: number, name: string): Component | null {
+  const onSelf = resolveComponent(state, eid, name);
+  if (onSelf) return onSelf;
+
+  for (const candidate of parentQuery(state.world)) {
+    if (Parent.entity[candidate] !== eid) continue;
+    const found = findComponentInChildren(state, candidate, name);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findComponentInParent(state: State, eid: number, name: string): Component | null {
+  const onSelf = resolveComponent(state, eid, name);
+  if (onSelf) return onSelf;
+
+  if (!state.hasComponent(eid, Parent)) return null;
+  const parentEid = Parent.entity[eid];
+  if (parentEid === 0) return null;
+  return findComponentInParent(state, parentEid, name);
+}
+
+export function buildContext(state: State, eid: number): EntityScriptContext {
   const root = getGltfRootGroup(state, eid);
   return {
     state,
     entity: eid,
     object3d: root ?? null,
     deltaTime: state.time.deltaTime,
+    getComponent(name: string): Component | null {
+      return resolveComponent(state, eid, name);
+    },
+    getComponentInChildren(name: string): Component | null {
+      return findComponentInChildren(state, eid, name);
+    },
+    getComponentInParent(name: string): Component | null {
+      return findComponentInParent(state, eid, name);
+    },
   };
 }
 

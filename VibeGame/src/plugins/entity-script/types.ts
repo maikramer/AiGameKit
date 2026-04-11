@@ -1,3 +1,4 @@
+import type { Component } from 'bitecs';
 import type { Object3D } from 'three';
 
 import type { State } from '../../core';
@@ -11,6 +12,12 @@ export interface EntityScriptContext {
   object3d: Object3D | null;
   /** Shortcut for `state.time.deltaTime`. */
   deltaTime: number;
+  /** Get a component by registered name on this entity. Returns null if not present. */
+  getComponent(name: string): Component | null;
+  /** Search this entity then its children (depth-first) for a component. */
+  getComponentInChildren(name: string): Component | null;
+  /** Search this entity then its ancestors for a component. */
+  getComponentInParent(name: string): Component | null;
 }
 
 /** Module shape for `import.meta.glob` entries (named exports). */
