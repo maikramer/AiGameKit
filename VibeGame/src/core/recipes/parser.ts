@@ -1,5 +1,7 @@
 import type { ParsedElement, Recipe, State, XMLValue } from '../';
 import { toCamelCase } from '../';
+import { addTag, getTagId, Tag } from '../ecs/tags';
+import { Layer, LayerMask } from '../ecs/layers';
 import { formatUnknownAttribute, formatUnknownElement } from './diagnostics';
 import { ParseContext } from './parse-context';
 import { parseComponentProperties } from './property-parser';
@@ -253,6 +255,35 @@ function applyAttributesFromRecipe(
     if (attrName === 'name') {
       if (typeof attrValue === 'string') {
         context.setName(attrValue, entity);
+      }
+      continue;
+    }
+    if (attrName === 'tag') {
+      if (typeof attrValue === 'string') {
+        const tagId = getTagId(attrValue);
+        if (tagId === -1) {
+          addTag(attrValue);
+        }
+        const finalId = getTagId(attrValue);
+        if (!state.hasComponent(entity, Tag)) {
+          state.addComponent(entity, Tag);
+        }
+        (Tag as ComponentWithFields).value[entity] = finalId;
+      }
+      continue;
+    }
+    if (attrName === 'layer') {
+      if (typeof attrValue === 'string') {
+        const numVal = parseFloat(attrValue);
+        const layerId = isNaN(numVal)
+          ? LayerMask.NameToLayer(attrValue)
+          : Math.round(numVal);
+        if (layerId >= 0) {
+          if (!state.hasComponent(entity, Layer)) {
+            state.addComponent(entity, Layer);
+          }
+          (Layer as ComponentWithFields).value[entity] = layerId;
+        }
       }
       continue;
     }

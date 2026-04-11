@@ -1,10 +1,10 @@
 import type { Plugin } from '../';
 import { Parent } from './components';
-import { entityRecipe } from './recipes';
+import { entityRecipe, transformRecipe } from './recipes';
 
 export const RecipePlugin: Plugin = {
   components: {
     parent: Parent,
   },
-  recipes: [entityRecipe],
+  recipes: [entityRecipe, transformRecipe],
 };

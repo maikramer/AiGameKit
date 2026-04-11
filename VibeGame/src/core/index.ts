@@ -88,6 +88,7 @@ export {
   fromEuler,
   ParseContext,
   parseXMLToEntities,
+  transformRecipe,
   type EntityCreationResult,
 } from './recipes';
 export { toCamelCase, toKebabCase } from './utils';

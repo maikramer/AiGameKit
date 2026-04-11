@@ -23,6 +23,7 @@ import {
   kinematicPartRecipe,
   staticPartRecipe,
   colliderRecipe,
+  rigidbodyRecipe,
 } from './recipes';
 import {
   ApplyAngularImpulsesSystem,
@@ -67,6 +68,7 @@ export const PhysicsPlugin: Plugin = {
     dynamicPartRecipe,
     kinematicPartRecipe,
     colliderRecipe,
+    rigidbodyRecipe,
   ],
   components: {
     PhysicsWorld,

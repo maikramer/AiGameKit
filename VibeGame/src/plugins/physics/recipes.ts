@@ -37,5 +37,12 @@ export const kinematicPartRecipe: Recipe = {
 
 export const colliderRecipe: Recipe = {
   name: 'Collider',
+  merge: true,
   components: ['collider', 'transform'],
+};
+
+export const rigidbodyRecipe: Recipe = {
+  name: 'Rigidbody',
+  merge: true,
+  components: ['rigidbody', 'transform'],
 };
