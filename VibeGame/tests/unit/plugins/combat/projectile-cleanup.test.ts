@@ -23,7 +23,10 @@ describe('ProjectileCleanupSystem', () => {
   }
 
   function run(deltaTime: number = 1): void {
-    Object.defineProperty(state.time, 'deltaTime', { value: deltaTime, writable: true });
+    Object.defineProperty(state.time, 'deltaTime', {
+      value: deltaTime,
+      writable: true,
+    });
     ProjectileCleanupSystem.update!(state);
   }
 

@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { ProjectileData, setProjectileOwner, incrementProjectileAge, isProjectileExpired } from '../../../../src/plugins/combat/components';
+import {
+  ProjectileData,
+  setProjectileOwner,
+  incrementProjectileAge,
+  isProjectileExpired,
+} from '../../../../src/plugins/combat/components';
 
 describe('ProjectileData Component', () => {
   let state: State;

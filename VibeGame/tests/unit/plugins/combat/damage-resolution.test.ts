@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { State } from '../../../../src/core/ecs/state';
-import { Health, ProjectileData } from '../../../../src/plugins/combat/components';
+import {
+  Health,
+  ProjectileData,
+} from '../../../../src/plugins/combat/components';
 import { DamageResolutionSystem } from '../../../../src/plugins/combat/systems';
 import { TouchedEvent } from '../../../../src/plugins/physics/components';
 
@@ -15,7 +18,11 @@ describe('DamageResolutionSystem', () => {
     state.registerComponent('health', Health);
   });
 
-  function createProjectile(ownerEid: number, damage: number, targetEid: number): number {
+  function createProjectile(
+    ownerEid: number,
+    damage: number,
+    targetEid: number
+  ): number {
     const eid = state.createEntity();
     state.addComponent(eid, ProjectileData);
     ProjectileData.damage[eid] = damage;

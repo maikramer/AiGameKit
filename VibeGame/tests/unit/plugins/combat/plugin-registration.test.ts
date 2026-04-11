@@ -21,7 +21,12 @@ describe('CombatPlugin registration', () => {
   it('should have config defaults for projectileData', () => {
     const defaults = CombatPlugin.config?.defaults;
     expect(defaults).toBeDefined();
-    expect(defaults!['projectileData']).toEqual({ damage: 10, ownerEid: 0, lifetime: 3.0, age: 0 });
+    expect(defaults!['projectileData']).toEqual({
+      damage: 10,
+      ownerEid: 0,
+      lifetime: 3.0,
+      age: 0,
+    });
   });
 
   it('should have systems as an array', () => {
@@ -31,7 +36,10 @@ describe('CombatPlugin registration', () => {
   it('should NOT be in DefaultPlugins', async () => {
     const fs = await import('fs');
     const path = await import('path');
-    const defaultsPath = path.join(import.meta.dir, '../../../../src/defaults.ts');
+    const defaultsPath = path.join(
+      import.meta.dir,
+      '../../../../src/defaults.ts'
+    );
     const content = fs.readFileSync(defaultsPath, 'utf-8');
     expect(content.includes('CombatPlugin')).toBe(false);
   });

@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { Health, damageHealth, healHealth, isAlive, isDead, setMaxHealth } from '../../../../src/plugins/combat/components';
+import {
+  Health,
+  damageHealth,
+  healHealth,
+  isAlive,
+  isDead,
+  setMaxHealth,
+} from '../../../../src/plugins/combat/components';
 
 describe('Health Component', () => {
   let state: State;
