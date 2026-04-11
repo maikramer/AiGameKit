@@ -114,7 +114,7 @@ export function spawnTemplateAtTerrain(
   const transformStr = formatTransformAttr(base);
   const attrs = mergeTemplateAttributes(template, transformStr);
 
-  if (template.tagName === 'GameObject') {
+  if (template.tagName.toLowerCase() === 'gameobject') {
     delete attrs.place;
     const root = createEntityFromRecipe(state, 'GameObject', attrs);
     const ch = template.entityChildren;

@@ -21,7 +21,8 @@ function prefetchGltfChildren(element: {
     }[];
   }) => {
     for (const c of el.children || []) {
-      if (c.tagName === 'GLTFLoader' || c.tagName === 'GLTFDynamic') {
+      const tn = c.tagName.toLowerCase();
+      if (tn === 'gltfloader' || tn === 'gltfdynamic') {
         const u = c.attributes.url;
         if (typeof u === 'string' && u.trim()) {
           prefetchGltfLocalYBounds(u.trim());
@@ -34,7 +35,7 @@ function prefetchGltfChildren(element: {
 }
 
 export const entityParser: Parser = ({ entity, element, state }) => {
-  if (element.tagName !== 'GameObject') return;
+  if (element.tagName.toLowerCase() !== 'gameobject') return;
 
   const placeRaw = element.attributes.place;
   if (placeRaw === undefined || placeRaw === null) return;

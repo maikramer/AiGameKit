@@ -73,7 +73,7 @@ function vec3FromAttr(
 }
 
 export const spawnGroupParser: Parser = ({ entity, element, state }) => {
-  if (element.tagName !== 'SpawnGroup') return;
+  if (element.tagName.toLowerCase() !== 'spawngroup') return;
 
   const count = toNumber(element.attributes.count, 0);
   if (count < 1) {
@@ -123,7 +123,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     if (childTplProfile) {
       tpl.childProfile = childTplProfile;
     }
-    if (child.tagName === 'GameObject') {
+    if (child.tagName.toLowerCase() === 'gameobject') {
       const grand = child.children.filter(
         (c) => c.tagName && c.tagName !== 'parsererror'
       );
