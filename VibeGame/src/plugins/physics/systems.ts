@@ -212,7 +212,11 @@ function createRigidbodyForEntity(
     entity,
     Rigidbody.type[entity],
     Rigidbody.mass[entity],
-    new RAPIER.Vector3(Rigidbody.velX[entity], Rigidbody.velY[entity], Rigidbody.velZ[entity]),
+    new RAPIER.Vector3(
+      Rigidbody.velX[entity],
+      Rigidbody.velY[entity],
+      Rigidbody.velZ[entity]
+    ),
     new RAPIER.Vector3(
       Rigidbody.rotVelX[entity],
       Rigidbody.rotVelY[entity],

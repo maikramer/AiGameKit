@@ -2,7 +2,7 @@ import { entityExists, hasComponent } from 'bitecs';
 import * as THREE from 'three';
 import type { Object3D } from 'three';
 import { BatchedParticleRenderer } from 'three.quarks';
-import type { ParticleSystem } from 'three.quarks';
+import type { ParticleSystem as QuarksParticleSystem } from 'three.quarks';
 import { Parent, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
 import { getTextureAsset } from '../rendering/texture-recipe-system';
@@ -47,7 +47,7 @@ function getEmitterWorldPosition(
 const emitterQuery = defineQuery([ParticleSystem, Transform]);
 const burstQuery = defineQuery([ParticleBurst, Transform]);
 
-const entityToPS = new Map<number, ParticleSystem>();
+const entityToPS = new Map<number, QuarksParticleSystem>();
 
 interface SpriteAnimData {
   frames: number;

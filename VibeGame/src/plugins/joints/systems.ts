@@ -97,7 +97,10 @@ export const JointCreateSystem: System = {
       const rbA = ctx.entityToRigidbody.get(ba);
       const rbB = ctx.entityToRigidbody.get(bb);
       if (!rbA || !rbB) continue;
-      if (!state.hasComponent(ba, Rigidbody) || !state.hasComponent(bb, Rigidbody))
+      if (
+        !state.hasComponent(ba, Rigidbody) ||
+        !state.hasComponent(bb, Rigidbody)
+      )
         continue;
 
       const desc = buildJointData(eid);

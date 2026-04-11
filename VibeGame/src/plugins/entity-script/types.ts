@@ -34,7 +34,17 @@ export interface MonoBehaviourContext {
   /** Unity-style proxy for this entity's "GameObject". */
   gameObject: GameObjectProxy;
   /** Shortcut for Transform component data (position x/y/z). */
-  transform: { readonly positionX: number; readonly positionY: number; readonly positionZ: number; readonly rotationX: number; readonly rotationY: number; readonly rotationZ: number; readonly scaleX: number; readonly scaleY: number; readonly scaleZ: number };
+  transform: {
+    readonly positionX: number;
+    readonly positionY: number;
+    readonly positionZ: number;
+    readonly rotationX: number;
+    readonly rotationY: number;
+    readonly rotationZ: number;
+    readonly scaleX: number;
+    readonly scaleY: number;
+    readonly scaleZ: number;
+  };
   /** Get a component by registered name on this entity. Returns null if not present. */
   getComponent(name: string): Component | null;
   /** Search this entity then its children (depth-first) for a component. */

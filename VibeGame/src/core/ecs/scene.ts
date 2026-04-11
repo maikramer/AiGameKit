@@ -1,12 +1,12 @@
-import { getAllEntities } from "bitecs";
-import type { State } from "./state";
-import { stopAllCoroutines } from "./coroutines";
-import { XMLParser } from "../xml";
-import { parseXMLToEntities } from "../recipes/parser";
+import { getAllEntities } from 'bitecs';
+import type { State } from './state';
+import { stopAllCoroutines } from './coroutines';
+import { XMLParser } from '../xml';
+import { parseXMLToEntities } from '../recipes/parser';
 
 function performReload(state: State): void {
   if (!state.xmlSource) {
-    throw new Error("[VibeGame] Scene.reload: state.xmlSource is not set");
+    throw new Error('[VibeGame] Scene.reload: state.xmlSource is not set');
   }
 
   const allEntityIds = Array.from(getAllEntities(state.world));

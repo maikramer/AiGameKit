@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import {
   State,
-  Tag,
   addTag,
   getTagId,
   getTagName,
@@ -99,7 +98,7 @@ describe("Tag system", () => {
 
   describe("State.findByTag", () => {
     it("finds first entity with given tag", () => {
-      const eid1 = state.createEntity();
+      state.createEntity();
       const eid2 = state.createEntity();
       state.setTag(eid2, "Player");
       expect(state.findByTag("Player")).toBe(eid2);

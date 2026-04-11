@@ -22,7 +22,11 @@ export {
 } from './extras/sky-env';
 export type { EquirectSkyOptions } from './extras/sky-env';
 
-export { PlayerController, PlayerGltfConfig, playerGltfRecipe } from './plugins/player';
+export {
+  PlayerController,
+  PlayerGltfConfig,
+  playerGltfRecipe,
+} from './plugins/player';
 export {
   FollowCamera,
   FollowCameraPlugin,

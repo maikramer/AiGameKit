@@ -19,5 +19,15 @@ export { getOrLoadMonoBehaviourModule } from './context';
 /** @deprecated Use getOrLoadMonoBehaviourModule. */
 export { getOrLoadMonoBehaviourModule as getOrLoadEntityScriptModule } from './context';
 export { EntityScriptPlugin } from './plugin';
-export { EntityScriptCollisionBridgeSystem, EntityScriptSystem } from './system';
-export type { CollisionOther, EntityScriptContext, EntityScriptModule, MonoBehaviourContext, MonoBehaviourModule, GameObjectProxy } from './types';
+export {
+  EntityScriptCollisionBridgeSystem,
+  EntityScriptSystem,
+} from './system';
+export type {
+  CollisionOther,
+  EntityScriptContext,
+  EntityScriptModule,
+  MonoBehaviourContext,
+  MonoBehaviourModule,
+  GameObjectProxy,
+} from './types';

@@ -1,6 +1,6 @@
-import type { State } from "./state";
-import type { System } from "./types";
-import type { CoroutineYieldValue } from "./yield-instructions";
+import type { State } from './state';
+import type { System } from './types';
+import type { CoroutineYieldValue } from './yield-instructions';
 
 export interface CoroutineEntry {
   generator: Generator;
@@ -14,8 +14,14 @@ type CoroutineMap = Map<number, CoroutineEntry>;
 const coroutineState = new WeakMap<State, Map<number, CoroutineMap>>();
 const nextIdState = new WeakMap<State, number>();
 
-const endOfFrameQueue = new WeakMap<State, Array<{ eid: number; id: number }>>();
-const fixedUpdateQueue = new WeakMap<State, Array<{ eid: number; id: number }>>();
+const endOfFrameQueue = new WeakMap<
+  State,
+  Array<{ eid: number; id: number }>
+>();
+const fixedUpdateQueue = new WeakMap<
+  State,
+  Array<{ eid: number; id: number }>
+>();
 
 function getOrCreateEntityMap(state: State, eid: number): CoroutineMap {
   let byState = coroutineState.get(state);
@@ -70,29 +76,35 @@ function shouldAdvance(state: State, entry: CoroutineEntry): boolean {
   if (yv === null || yv === undefined) return true;
 
   switch (yv.type) {
-    case "waitForSeconds": {
+    case 'waitForSeconds': {
       if (entry.waitRemaining === undefined) return true;
       entry.waitRemaining -= state.time.deltaTime;
       return entry.waitRemaining <= 0;
     }
-    case "waitForSecondsRealtime": {
+    case 'waitForSecondsRealtime': {
       if (entry.waitRemaining === undefined) return true;
       entry.waitRemaining -= state.time.unscaledDeltaTime;
       return entry.waitRemaining <= 0;
     }
-    case "waitUntil":
+    case 'waitUntil':
       return yv.predicate();
-    case "waitWhile":
+    case 'waitWhile':
       return !yv.predicate();
-    case "waitForEndOfFrame":
-    case "waitForFixedUpdate":
+    case 'waitForEndOfFrame':
+    case 'waitForFixedUpdate':
       return false;
     default:
       return true;
   }
 }
 
-function advanceGenerator(state: State, eid: number, id: number, entry: CoroutineEntry, entityMap: CoroutineMap): void {
+function advanceGenerator(
+  state: State,
+  eid: number,
+  id: number,
+  entry: CoroutineEntry,
+  entityMap: CoroutineMap
+): void {
   entry.yieldValue = undefined;
   entry.waitRemaining = undefined;
 
@@ -103,17 +115,18 @@ function advanceGenerator(state: State, eid: number, id: number, entry: Coroutin
     return;
   }
 
-  const yielded: CoroutineYieldValue = result.value ?? null;
+  const yielded: CoroutineYieldValue =
+    (result.value as CoroutineYieldValue) ?? null;
   entry.yieldValue = yielded;
 
   if (yielded !== null && yielded !== undefined) {
-    if (yielded.type === "waitForEndOfFrame") {
+    if (yielded.type === 'waitForEndOfFrame') {
       getQueue(endOfFrameQueue, state).push({ eid, id });
-    } else if (yielded.type === "waitForFixedUpdate") {
+    } else if (yielded.type === 'waitForFixedUpdate') {
       getQueue(fixedUpdateQueue, state).push({ eid, id });
-    } else if (yielded.type === "waitForSeconds") {
+    } else if (yielded.type === 'waitForSeconds') {
       entry.waitRemaining = yielded.seconds;
-    } else if (yielded.type === "waitForSecondsRealtime") {
+    } else if (yielded.type === 'waitForSecondsRealtime') {
       entry.waitRemaining = yielded.seconds;
     }
   }
@@ -122,9 +135,9 @@ function advanceGenerator(state: State, eid: number, id: number, entry: Coroutin
 export function startCoroutine(
   state: State,
   eid: number,
-  genOrFn: Generator | (() => Generator),
+  genOrFn: Generator | (() => Generator)
 ): number {
-  const gen = typeof genOrFn === "function" ? genOrFn() : genOrFn;
+  const gen = typeof genOrFn === 'function' ? genOrFn() : genOrFn;
   const id = allocId(state);
   const entityMap = getOrCreateEntityMap(state, eid);
   const entry: CoroutineEntry = { generator: gen, done: false };
@@ -139,16 +152,17 @@ export function startCoroutine(
       coroutineState.get(state)?.delete(eid);
     }
   } else {
-    const yielded: CoroutineYieldValue = result.value ?? null;
+    const yielded: CoroutineYieldValue =
+      (result.value as CoroutineYieldValue) ?? null;
     entry.yieldValue = yielded;
     if (yielded !== null && yielded !== undefined) {
-      if (yielded.type === "waitForEndOfFrame") {
+      if (yielded.type === 'waitForEndOfFrame') {
         getQueue(endOfFrameQueue, state).push({ eid, id });
-      } else if (yielded.type === "waitForFixedUpdate") {
+      } else if (yielded.type === 'waitForFixedUpdate') {
         getQueue(fixedUpdateQueue, state).push({ eid, id });
-      } else if (yielded.type === "waitForSeconds") {
+      } else if (yielded.type === 'waitForSeconds') {
         entry.waitRemaining = yielded.seconds;
-      } else if (yielded.type === "waitForSecondsRealtime") {
+      } else if (yielded.type === 'waitForSecondsRealtime') {
         entry.waitRemaining = yielded.seconds;
       }
     }
@@ -157,7 +171,11 @@ export function startCoroutine(
   return id;
 }
 
-export function stopCoroutine(state: State, eid: number, coroutineId: number): void {
+export function stopCoroutine(
+  state: State,
+  eid: number,
+  coroutineId: number
+): void {
   coroutineState.get(state)?.get(eid)?.delete(coroutineId);
 }
 
@@ -166,11 +184,18 @@ export function stopAllCoroutines(state: State, eid: number): void {
   coroutineState.get(state)?.delete(eid);
 }
 
-export function getActiveCoroutines(state: State, eid: number): CoroutineMap | undefined {
+export function getActiveCoroutines(
+  state: State,
+  eid: number
+): CoroutineMap | undefined {
   return coroutineState.get(state)?.get(eid);
 }
 
-export function getCoroutine(state: State, eid: number, id: number): CoroutineEntry | undefined {
+export function getCoroutine(
+  state: State,
+  eid: number,
+  id: number
+): CoroutineEntry | undefined {
   return coroutineState.get(state)?.get(eid)?.get(id);
 }
 
@@ -181,7 +206,7 @@ export function cleanupEntityCoroutines(state: State, eid: number): void {
 }
 
 export const CoroutineRunnerSystem: System = {
-  group: "simulation",
+  group: 'simulation',
   update(state: State): void {
     const byState = coroutineState.get(state);
     if (!byState) return;
@@ -207,7 +232,7 @@ export const CoroutineRunnerSystem: System = {
 
 function processQueue(
   state: State,
-  queueMap: WeakMap<State, Array<{ eid: number; id: number }>>,
+  queueMap: WeakMap<State, Array<{ eid: number; id: number }>>
 ): void {
   const queue = queueMap.get(state);
   if (!queue || queue.length === 0) return;
@@ -231,14 +256,14 @@ function processQueue(
 }
 
 export const CoroutineLateFrameSystem: System = {
-  group: "late",
+  group: 'late',
   update(state: State): void {
     processQueue(state, endOfFrameQueue);
   },
 };
 
 export const CoroutineFixedUpdateSystem: System = {
-  group: "fixed",
+  group: 'fixed',
   update(state: State): void {
     processQueue(state, fixedUpdateQueue);
   },

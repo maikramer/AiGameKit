@@ -11,6 +11,7 @@ import {
   setCachedMonoBehaviourModule,
   setScriptFile,
 } from '../../../../src/plugins/entity-script/context';
+import type { MonoBehaviourContext } from '../../../../src/plugins/entity-script/types';
 import { EntityScriptPlugin } from '../../../../src/plugins/entity-script/plugin';
 import { TransformsPlugin } from '../../../../src/plugins/transforms';
 
@@ -25,7 +26,7 @@ describe('entity-script onDestroy', () => {
 
   function createScriptedEntity(
     file: string,
-    mod: { start?: () => void; update?: () => void; onDestroy?: () => void }
+    mod: { start?: (ctx: MonoBehaviourContext) => void; update?: (ctx: MonoBehaviourContext) => void; onDestroy?: (ctx: MonoBehaviourContext) => void }
   ): number {
     const eid = state.createEntity();
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
@@ -33,7 +34,7 @@ describe('entity-script onDestroy', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedMonoBehaviourModule(state, globKey, mod);
+    setCachedMonoBehaviourModule(state, globKey, mod as any);
 
     MonoBehaviour.ready[eid] = 1;
 
@@ -49,7 +50,7 @@ describe('entity-script onDestroy', () => {
           entity: eid,
           object3d: null,
           deltaTime: 0,
-        });
+        } as MonoBehaviourContext);
       }
       deleteScriptFile(state, eid);
     });
@@ -78,7 +79,7 @@ describe('entity-script onDestroy', () => {
 
     registerDestroyCallback(eid, './scripts/test.ts');
     state.destroyEntity(eid);
-    expect(componentValue).toBe(1);
+    expect(componentValue!).toBe(1);
   });
 
   it('provides EntityScriptContext in onDestroy callback', () => {
@@ -94,8 +95,8 @@ describe('entity-script onDestroy', () => {
 
     registerDestroyCallback(eid, './scripts/test.ts');
     state.destroyEntity(eid);
-    expect(receivedState).toBe(state);
-    expect(receivedEntity).toBe(eid);
+    expect(receivedState!).toBe(state);
+    expect(receivedEntity!).toBe(eid);
   });
 
   it('does not crash for entity with no onDestroy method', () => {
@@ -125,7 +126,7 @@ describe('entity-script onDestroy', () => {
           entity: eid,
           object3d: null,
           deltaTime: 0,
-        });
+        } as MonoBehaviourContext);
       }
       order.push('before-delete');
       deleteScriptFile(state, eid);

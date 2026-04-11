@@ -32,7 +32,7 @@ describe("destroyEntity callbacks", () => {
       valueInsideCallback = TestComponent.value[eid];
     });
     state.destroyEntity(eid);
-    expect(valueInsideCallback).toBe(42);
+    expect(valueInsideCallback!).toBe(42);
   });
 
   it("passes correct entity id to per-entity callback", () => {
@@ -42,7 +42,7 @@ describe("destroyEntity callbacks", () => {
       receivedEid = id;
     });
     state.destroyEntity(eid);
-    expect(receivedEid).toBe(eid);
+    expect(receivedEid!).toBe(eid);
   });
 
   it("fires global onDestroyAll callback for every destroyed entity", () => {
@@ -64,7 +64,7 @@ describe("destroyEntity callbacks", () => {
       receivedEid = id;
     });
     state.destroyEntity(eid);
-    expect(receivedEid).toBe(eid);
+    expect(receivedEid!).toBe(eid);
   });
 
   it("fires multiple per-entity callbacks in registration order", () => {

@@ -148,7 +148,8 @@ export const FollowCameraAutoRotateSystem: System = {
       if (FollowCamera.autoRotate[entity] !== 1) continue;
 
       const targetEntity = FollowCamera.target[entity];
-      if (!targetEntity || !state.hasComponent(targetEntity, Rigidbody)) continue;
+      if (!targetEntity || !state.hasComponent(targetEntity, Rigidbody))
+        continue;
       if (!state.hasComponent(targetEntity, InputState)) continue;
 
       const delay = FollowCamera.autoRotateDelay[entity];

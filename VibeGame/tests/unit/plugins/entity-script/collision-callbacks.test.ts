@@ -38,7 +38,7 @@ describe('entity-script collision/trigger callbacks', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedMonoBehaviourModule(state, globKey, mod as ReturnType<typeof coerceMonoBehaviourModule>);
+    setCachedMonoBehaviourModule(state, globKey, mod as any);
 
     MonoBehaviour.ready[eid] = 1;
     return eid;
@@ -70,7 +70,7 @@ describe('entity-script collision/trigger callbacks', () => {
   }
 
   function runBridge(): void {
-    EntityScriptCollisionBridgeSystem.update(state);
+    EntityScriptCollisionBridgeSystem.update!(state);
   }
 
   describe('coerceEntityScriptModule', () => {
@@ -384,7 +384,7 @@ describe('entity-script collision/trigger callbacks', () => {
       const eid = createScriptedEntity('test.ts', {
         start: () => {},
         onCollisionEnter: (_ctx: unknown, other: { entity: number }) => {
-          events.push(other.entity);
+          events.push(String(other.entity));
         },
       });
 

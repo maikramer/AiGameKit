@@ -14,6 +14,7 @@ import {
   setScriptFile,
 } from '../../../../src/plugins/entity-script/context';
 import { EntityScriptPlugin } from '../../../../src/plugins/entity-script/plugin';
+import type { MonoBehaviourContext } from '../../../../src/plugins/entity-script/types';
 import { TransformsPlugin } from '../../../../src/plugins/transforms';
 
 describe('entity-script awake/onEnable/onDisable', () => {
@@ -36,7 +37,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedMonoBehaviourModule(state, globKey, mod as ReturnType<typeof coerceMonoBehaviourModule>);
+    setCachedMonoBehaviourModule(state, globKey, mod as any);
 
     MonoBehaviour.ready[eid] = 1;
 
@@ -46,7 +47,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
   function simulateSetup(eid: number, globKey: string): void {
     const mod = getCachedMonoBehaviourModule(state, globKey);
     if (!mod) return;
-    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
+    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
     if (mod.awake) mod.awake(ctx);
     const isEnabled = MonoBehaviour.enabled[eid] === 1;
     if (isEnabled && mod.onEnable) mod.onEnable(ctx);
@@ -58,7 +59,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     state.onDestroy(eid, () => {
       const mod = getCachedMonoBehaviourModule(state, globKey);
       if (mod) {
-        const destroyCtx = { state, entity: eid, object3d: null, deltaTime: 0 };
+        const destroyCtx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
         if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
           mod.onDisable(destroyCtx);
         }
@@ -122,7 +123,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     simulateSetup(eid, './scripts/test.ts');
 
     const mod = getCachedMonoBehaviourModule(state, './scripts/test.ts')!;
-    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
+    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
 
     MonoBehaviour.enabled[eid] = 0;
     if (mod.onDisable) mod.onDisable(ctx);
@@ -159,7 +160,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     simulateSetup(eid, './scripts/test.ts');
 
     const mod = getCachedMonoBehaviourModule(state, './scripts/test.ts')!;
-    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 };
+    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
 
     MonoBehaviour.enabled[eid] = 0;
     if (mod.onDisable) mod.onDisable(ctx);

@@ -4,7 +4,9 @@ let stateRef: State | null = null;
 
 function requireState(): State {
   if (!stateRef) {
-    throw new Error('[VibeGame] Time not initialized. Call Time.init(state) first.');
+    throw new Error(
+      '[VibeGame] Time not initialized. Call Time.init(state) first.'
+    );
   }
   return stateRef;
 }

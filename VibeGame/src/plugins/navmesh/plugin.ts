@@ -43,7 +43,7 @@ export const NavmeshPlugin: Plugin = {
       },
     },
     adapters: {
-      'NavMeshAgent': {
+      NavMeshAgent: {
         target: targetAdapter,
       },
     },

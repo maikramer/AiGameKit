@@ -1,4 +1,4 @@
-import { defineComponent, Types } from "bitecs";
+import { defineComponent, Types } from 'bitecs';
 
 export const Tag = defineComponent({
   value: Types.ui8,
@@ -16,12 +16,12 @@ function registerBuiltin(name: string, id: number): void {
   }
 }
 
-registerBuiltin("Untagged", 0);
-registerBuiltin("Player", 1);
-registerBuiltin("MainCamera", 2);
-registerBuiltin("Respawn", 3);
-registerBuiltin("Finish", 4);
-registerBuiltin("EditorOnly", 5);
+registerBuiltin('Untagged', 0);
+registerBuiltin('Player', 1);
+registerBuiltin('MainCamera', 2);
+registerBuiltin('Respawn', 3);
+registerBuiltin('Finish', 4);
+registerBuiltin('EditorOnly', 5);
 
 export function addTag(name: string): number {
   const existing = tagByName.get(name);
@@ -40,5 +40,5 @@ export function getTagId(name: string): number {
 }
 
 export function getTagName(id: number): string {
-  return tagById.get(id) ?? "";
+  return tagById.get(id) ?? '';
 }

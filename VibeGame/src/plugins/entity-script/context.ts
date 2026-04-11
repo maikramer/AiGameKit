@@ -18,7 +18,10 @@ const moduleLoadPromises = new WeakMap<
 const prevEnabledByState = new WeakMap<State, Map<number, number>>();
 
 /** Active collision pairs per entity: entity → (other → isTrigger). */
-const activeCollisionPairsByState = new WeakMap<State, Map<number, Map<number, boolean>>>();
+const activeCollisionPairsByState = new WeakMap<
+  State,
+  Map<number, Map<number, boolean>>
+>();
 
 export function setScriptFile(
   state: State,
@@ -133,7 +136,10 @@ export function setCachedMonoBehaviourModule(
   m.set(globKey, mod);
 }
 
-export function getPrevEnabled(state: State, entity: number): number | undefined {
+export function getPrevEnabled(
+  state: State,
+  entity: number
+): number | undefined {
   return prevEnabledByState.get(state)?.get(entity);
 }
 
@@ -150,7 +156,9 @@ export function deletePrevEnabled(state: State, entity: number): void {
   prevEnabledByState.get(state)?.delete(entity);
 }
 
-export function getActiveCollisionPairs(state: State): Map<number, Map<number, boolean>> {
+export function getActiveCollisionPairs(
+  state: State
+): Map<number, Map<number, boolean>> {
   let pairs = activeCollisionPairsByState.get(state);
   if (!pairs) {
     pairs = new Map();
@@ -163,7 +171,7 @@ export function addActiveCollisionPair(
   state: State,
   entity: number,
   other: number,
-  isTrigger: boolean,
+  isTrigger: boolean
 ): void {
   const pairs = getActiveCollisionPairs(state);
   let entityPairs = pairs.get(entity);
@@ -174,7 +182,11 @@ export function addActiveCollisionPair(
   entityPairs.set(other, isTrigger);
 }
 
-export function removeActiveCollisionPair(state: State, entity: number, other: number): boolean {
+export function removeActiveCollisionPair(
+  state: State,
+  entity: number,
+  other: number
+): boolean {
   const pairs = activeCollisionPairsByState.get(state);
   if (!pairs) return false;
   const entityPairs = pairs.get(entity);
@@ -186,7 +198,10 @@ export function removeActiveCollisionPair(state: State, entity: number, other: n
   return had;
 }
 
-export function deleteActiveCollisionPairsForEntity(state: State, entity: number): void {
+export function deleteActiveCollisionPairsForEntity(
+  state: State,
+  entity: number
+): void {
   activeCollisionPairsByState.get(state)?.delete(entity);
 }
 

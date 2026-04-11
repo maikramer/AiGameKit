@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "bun:test";
-import { State, Layer, LayerMask } from "vibegame";
+import { State, LayerMask } from "vibegame";
 
 describe("Layer system", () => {
   let state: State;

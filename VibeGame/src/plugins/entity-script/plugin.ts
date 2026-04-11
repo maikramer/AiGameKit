@@ -16,7 +16,13 @@ const scriptFileAdapter: Adapter = (entity, value, state) => {
 
 export const EntityScriptPlugin: Plugin = {
   recipes: [entityScriptRecipe],
-  systems: [CoroutineRunnerSystem, EntityScriptCollisionBridgeSystem, EntityScriptFixedUpdateSystem, EntityScriptSystem, EntityScriptLateUpdateSystem],
+  systems: [
+    CoroutineRunnerSystem,
+    EntityScriptCollisionBridgeSystem,
+    EntityScriptFixedUpdateSystem,
+    EntityScriptSystem,
+    EntityScriptLateUpdateSystem,
+  ],
   components: {
     monoBehaviour: MonoBehaviour,
   },

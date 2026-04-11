@@ -12,7 +12,11 @@ import {
 import { defineQuery } from 'bitecs';
 import { toKebabCase } from '../utils/naming';
 import { ConfigRegistry } from './config';
-import { type InstantiateOptions, type TemplateData, deepCloneTemplate } from './prefabs';
+import {
+  type InstantiateOptions,
+  type TemplateData,
+  deepCloneTemplate,
+} from './prefabs';
 import { setComponentFields } from './utils';
 import { Parent } from './components';
 import { TIME_CONSTANTS } from './constants';
@@ -54,7 +58,10 @@ export class State {
   private readonly componentNames = new WeakMap<Component, string>();
   private readonly plugins: Plugin[] = [];
   private readonly entityNames = new Map<string, number>();
-  private readonly destroyCallbacks = new Map<number, Set<(eid: number) => void>>();
+  private readonly destroyCallbacks = new Map<
+    number,
+    Set<(eid: number) => void>
+  >();
   private readonly globalDestroyCallbacks = new Set<(eid: number) => void>();
   private readonly templates = new Map<string, TemplateData>();
   private isDisposed = false;
@@ -131,7 +138,9 @@ export class State {
   }
 
   getParser(tag: string): Parser | undefined {
-    return this.config.getParser(tag) ?? this.config.getParser(tag.toLowerCase());
+    return (
+      this.config.getParser(tag) ?? this.config.getParser(tag.toLowerCase())
+    );
   }
 
   getRecipe(name: string): Recipe | undefined {
@@ -232,7 +241,7 @@ export class State {
         try {
           cb(eid);
         } catch (err) {
-          console.error("[VibeGame] destroyEntity callback error:", err);
+          console.error('[VibeGame] destroyEntity callback error:', err);
         }
       }
       this.destroyCallbacks.delete(eid);
@@ -241,7 +250,7 @@ export class State {
       try {
         cb(eid);
       } catch (err) {
-        console.error("[VibeGame] destroyEntity global callback error:", err);
+        console.error('[VibeGame] destroyEntity global callback error:', err);
       }
     }
     removeAllListeners(eid);
@@ -279,7 +288,7 @@ export class State {
   }
 
   getTag(eid: number): string {
-    if (!hasComponent(this.world, Tag, eid)) return "Untagged";
+    if (!hasComponent(this.world, Tag, eid)) return 'Untagged';
     return getTagName(Tag.value[eid]);
   }
 
@@ -316,15 +325,27 @@ export class State {
     return Layer.value[eid];
   }
 
-  addEventListener(eid: number, eventName: string, callback: (data?: unknown) => void): void {
+  addEventListener(
+    eid: number,
+    eventName: string,
+    callback: (data?: unknown) => void
+  ): void {
     _addEventListener(eid, eventName, callback);
   }
 
-  removeEventListener(eid: number, eventName: string, callback: (data?: unknown) => void): void {
+  removeEventListener(
+    eid: number,
+    eventName: string,
+    callback: (data?: unknown) => void
+  ): void {
     _removeEventListener(eid, eventName, callback);
   }
 
-  addEventListenerOnce(eid: number, eventName: string, callback: (data?: unknown) => void): void {
+  addEventListenerOnce(
+    eid: number,
+    eventName: string,
+    callback: (data?: unknown) => void
+  ): void {
     const wrapper = (data?: unknown) => {
       _removeEventListener(eid, eventName, wrapper);
       callback(data);

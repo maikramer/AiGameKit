@@ -48,8 +48,10 @@ export function processInput(
 }
 
 function canPerformJump(entity: number, currentTime: number): boolean {
-  const timeSinceGrounded = currentTime - PlayerController.lastGroundedTime[entity];
-  const timeSinceJumpPressed = currentTime - PlayerController.jumpBufferTime[entity];
+  const timeSinceGrounded =
+    currentTime - PlayerController.lastGroundedTime[entity];
+  const timeSinceJumpPressed =
+    currentTime - PlayerController.jumpBufferTime[entity];
   const isGrounded = CharacterController.grounded[entity] === 1;
 
   return (

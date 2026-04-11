@@ -1,3 +1,5 @@
+/* global structuredClone */
+
 export interface TemplateData {
   components: Record<string, Record<string, number>>;
 }

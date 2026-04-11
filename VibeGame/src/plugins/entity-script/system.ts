@@ -1,6 +1,13 @@
 import type { Component } from 'bitecs';
 
-import { Parent, Tag, Layer, defineQuery, type State, type System } from '../../core';
+import {
+  Parent,
+  Tag,
+  Layer,
+  defineQuery,
+  type State,
+  type System,
+} from '../../core';
 import {
   startCoroutine,
   stopAllCoroutines,
@@ -14,7 +21,6 @@ import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { MonoBehaviour } from './components';
 import {
   addActiveCollisionPair,
-  deleteActiveCollisionPairsForEntity,
   deletePrevEnabled,
   deleteScriptFile,
   getActiveCollisionPairs,
@@ -29,20 +35,32 @@ import {
   setEntityScriptSetupInflight,
   setPrevEnabled,
 } from './context';
-import type { CollisionOther, MonoBehaviourContext, MonoBehaviourModule } from './types';
+import type {
+  CollisionOther,
+  MonoBehaviourContext,
+  MonoBehaviourModule,
+} from './types';
 
 const entityScriptQuery = defineQuery([MonoBehaviour]);
 const parentQuery = defineQuery([Parent]);
 const touchedWithScriptQuery = defineQuery([MonoBehaviour, TouchedEvent]);
 const touchEndedWithScriptQuery = defineQuery([MonoBehaviour, TouchEndedEvent]);
 
-function resolveComponent(state: State, eid: number, name: string): Component | null {
+function resolveComponent(
+  state: State,
+  eid: number,
+  name: string
+): Component | null {
   const component = state.getComponent(name);
   if (!component) return null;
   return state.hasComponent(eid, component) ? component : null;
 }
 
-function findComponentInChildren(state: State, eid: number, name: string): Component | null {
+function findComponentInChildren(
+  state: State,
+  eid: number,
+  name: string
+): Component | null {
   const onSelf = resolveComponent(state, eid, name);
   if (onSelf) return onSelf;
 
@@ -54,7 +72,11 @@ function findComponentInChildren(state: State, eid: number, name: string): Compo
   return null;
 }
 
-function findComponentInParent(state: State, eid: number, name: string): Component | null {
+function findComponentInParent(
+  state: State,
+  eid: number,
+  name: string
+): Component | null {
   const onSelf = resolveComponent(state, eid, name);
   if (onSelf) return onSelf;
 
@@ -87,15 +109,33 @@ export function buildContext(state: State, eid: number): MonoBehaviourContext {
       },
     },
     transform: {
-      get positionX() { return hasTransform ? Transform.posX[eid] : 0; },
-      get positionY() { return hasTransform ? Transform.posY[eid] : 0; },
-      get positionZ() { return hasTransform ? Transform.posZ[eid] : 0; },
-      get rotationX() { return hasTransform ? Transform.eulerX[eid] : 0; },
-      get rotationY() { return hasTransform ? Transform.eulerY[eid] : 0; },
-      get rotationZ() { return hasTransform ? Transform.eulerZ[eid] : 0; },
-      get scaleX() { return hasTransform ? Transform.scaleX[eid] : 1; },
-      get scaleY() { return hasTransform ? Transform.scaleY[eid] : 1; },
-      get scaleZ() { return hasTransform ? Transform.scaleZ[eid] : 1; },
+      get positionX() {
+        return hasTransform ? Transform.posX[eid] : 0;
+      },
+      get positionY() {
+        return hasTransform ? Transform.posY[eid] : 0;
+      },
+      get positionZ() {
+        return hasTransform ? Transform.posZ[eid] : 0;
+      },
+      get rotationX() {
+        return hasTransform ? Transform.eulerX[eid] : 0;
+      },
+      get rotationY() {
+        return hasTransform ? Transform.eulerY[eid] : 0;
+      },
+      get rotationZ() {
+        return hasTransform ? Transform.eulerZ[eid] : 0;
+      },
+      get scaleX() {
+        return hasTransform ? Transform.scaleX[eid] : 1;
+      },
+      get scaleY() {
+        return hasTransform ? Transform.scaleY[eid] : 1;
+      },
+      get scaleZ() {
+        return hasTransform ? Transform.scaleZ[eid] : 1;
+      },
     },
     getComponent(name: string): Component | null {
       return resolveComponent(state, eid, name);
@@ -270,7 +310,10 @@ export const EntityScriptSystem: System = {
   },
 };
 
-function resolveModule(state: State, eid: number): { mod: MonoBehaviourModule } | null {
+function resolveModule(
+  state: State,
+  eid: number
+): { mod: MonoBehaviourModule } | null {
   const file = getScriptFile(state, eid);
   if (!file) return null;
 
@@ -342,7 +385,8 @@ export const EntityScriptCollisionBridgeSystem: System = {
     const enteredPairs = new Set<string>();
 
     for (const eid of touchedWithScriptQuery(state.world)) {
-      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) continue;
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
+        continue;
 
       const other = TouchedEvent.other[eid];
       const trigger = isTriggerCollision(state, eid, other);
@@ -362,7 +406,8 @@ export const EntityScriptCollisionBridgeSystem: System = {
     }
 
     for (const eid of touchEndedWithScriptQuery(state.world)) {
-      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) continue;
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
+        continue;
 
       const other = TouchEndedEvent.other[eid];
       const pairs = getActiveCollisionPairs(state);
@@ -387,7 +432,8 @@ export const EntityScriptCollisionBridgeSystem: System = {
         activePairs.delete(eid);
         continue;
       }
-      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1) continue;
+      if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
+        continue;
 
       const resolved = resolveModule(state, eid);
       if (!resolved) continue;

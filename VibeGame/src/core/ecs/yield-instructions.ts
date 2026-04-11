@@ -3,30 +3,30 @@ export interface YieldInstruction {
 }
 
 export interface WaitForSecondsInstruction extends YieldInstruction {
-  readonly type: "waitForSeconds";
+  readonly type: 'waitForSeconds';
   readonly seconds: number;
 }
 
 export interface WaitForSecondsRealtimeInstruction extends YieldInstruction {
-  readonly type: "waitForSecondsRealtime";
+  readonly type: 'waitForSecondsRealtime';
   readonly seconds: number;
 }
 
 export interface WaitForEndOfFrameInstruction extends YieldInstruction {
-  readonly type: "waitForEndOfFrame";
+  readonly type: 'waitForEndOfFrame';
 }
 
 export interface WaitForFixedUpdateInstruction extends YieldInstruction {
-  readonly type: "waitForFixedUpdate";
+  readonly type: 'waitForFixedUpdate';
 }
 
 export interface WaitUntilInstruction extends YieldInstruction {
-  readonly type: "waitUntil";
+  readonly type: 'waitUntil';
   readonly predicate: () => boolean;
 }
 
 export interface WaitWhileInstruction extends YieldInstruction {
-  readonly type: "waitWhile";
+  readonly type: 'waitWhile';
   readonly predicate: () => boolean;
 }
 
@@ -41,25 +41,27 @@ export type CoroutineYieldValue =
   | WaitWhileInstruction;
 
 export function WaitForSeconds(seconds: number): WaitForSecondsInstruction {
-  return { type: "waitForSeconds", seconds };
+  return { type: 'waitForSeconds', seconds };
 }
 
-export function WaitForSecondsRealtime(seconds: number): WaitForSecondsRealtimeInstruction {
-  return { type: "waitForSecondsRealtime", seconds };
+export function WaitForSecondsRealtime(
+  seconds: number
+): WaitForSecondsRealtimeInstruction {
+  return { type: 'waitForSecondsRealtime', seconds };
 }
 
 export function WaitForEndOfFrame(): WaitForEndOfFrameInstruction {
-  return { type: "waitForEndOfFrame" };
+  return { type: 'waitForEndOfFrame' };
 }
 
 export function WaitForFixedUpdate(): WaitForFixedUpdateInstruction {
-  return { type: "waitForFixedUpdate" };
+  return { type: 'waitForFixedUpdate' };
 }
 
 export function WaitUntil(predicate: () => boolean): WaitUntilInstruction {
-  return { type: "waitUntil", predicate };
+  return { type: 'waitUntil', predicate };
 }
 
 export function WaitWhile(predicate: () => boolean): WaitWhileInstruction {
-  return { type: "waitWhile", predicate };
+  return { type: 'waitWhile', predicate };
 }

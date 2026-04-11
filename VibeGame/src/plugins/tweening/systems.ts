@@ -52,13 +52,21 @@ const RAD_TO_DEG = 180 / Math.PI;
 
 type Vec3Arrays = { x: Float32Array; y: Float32Array; z: Float32Array };
 
-const bodyPos: Vec3Arrays = { x: Rigidbody.posX, y: Rigidbody.posY, z: Rigidbody.posZ };
+const bodyPos: Vec3Arrays = {
+  x: Rigidbody.posX,
+  y: Rigidbody.posY,
+  z: Rigidbody.posZ,
+};
 const bodyEuler: Vec3Arrays = {
   x: Rigidbody.eulerX,
   y: Rigidbody.eulerY,
   z: Rigidbody.eulerZ,
 };
-const bodyVel: Vec3Arrays = { x: Rigidbody.velX, y: Rigidbody.velY, z: Rigidbody.velZ };
+const bodyVel: Vec3Arrays = {
+  x: Rigidbody.velX,
+  y: Rigidbody.velY,
+  z: Rigidbody.velZ,
+};
 const bodyRotVel: Vec3Arrays = {
   x: Rigidbody.rotVelX,
   y: Rigidbody.rotVelY,

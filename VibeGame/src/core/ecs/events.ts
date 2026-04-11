@@ -11,7 +11,11 @@ function getOrCreateListenerMap(eid: number): Map<string, Set<Callback>> {
   return map;
 }
 
-export function addEventListener(eid: number, eventName: string, callback: Callback): void {
+export function addEventListener(
+  eid: number,
+  eventName: string,
+  callback: Callback
+): void {
   const map = getOrCreateListenerMap(eid);
   let set = map.get(eventName);
   if (!set) {
@@ -21,11 +25,19 @@ export function addEventListener(eid: number, eventName: string, callback: Callb
   set.add(callback);
 }
 
-export function removeEventListener(eid: number, eventName: string, callback: Callback): void {
+export function removeEventListener(
+  eid: number,
+  eventName: string,
+  callback: Callback
+): void {
   entityListeners.get(eid)?.get(eventName)?.delete(callback);
 }
 
-export function addEventListenerOnce(eid: number, eventName: string, callback: Callback): void {
+export function addEventListenerOnce(
+  eid: number,
+  eventName: string,
+  callback: Callback
+): void {
   const wrapper: Callback = (data) => {
     removeEventListener(eid, eventName, wrapper);
     callback(data);
@@ -33,7 +45,11 @@ export function addEventListenerOnce(eid: number, eventName: string, callback: C
   addEventListener(eid, eventName, wrapper);
 }
 
-export function dispatchEvent(eid: number, eventName: string, data?: unknown): void {
+export function dispatchEvent(
+  eid: number,
+  eventName: string,
+  data?: unknown
+): void {
   const map = entityListeners.get(eid);
   const set = map?.get(eventName);
   if (!set) return;

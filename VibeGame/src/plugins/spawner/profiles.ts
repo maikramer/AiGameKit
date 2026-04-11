@@ -155,7 +155,10 @@ export function applyChildTemplateProfile(
 ): void {
   if (!childProfile) return;
 
-  if (childProfile === 'physics-crate' && tagName.toLowerCase() === 'dynamic-part') {
+  if (
+    childProfile === 'physics-crate' &&
+    tagName.toLowerCase() === 'dynamic-part'
+  ) {
     if (!('shape' in attrs)) attrs.shape = 'box';
     if (!('size' in attrs)) attrs.size = '0.85 0.85 0.85';
     if (!('color' in attrs)) attrs.color = '#8b6914';
@@ -164,7 +167,10 @@ export function applyChildTemplateProfile(
     return;
   }
 
-  if (childProfile === 'gltf-crate' && tagName.toLowerCase() === 'gltfdynamic') {
+  if (
+    childProfile === 'gltf-crate' &&
+    tagName.toLowerCase() === 'gltfdynamic'
+  ) {
     if (!('mass' in attrs)) attrs.mass = 1.5;
     if (!('friction' in attrs)) attrs.friction = 0.55;
     if (!('collider-margin' in attrs)) attrs['collider-margin'] = 0.02;

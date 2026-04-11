@@ -88,11 +88,14 @@ export const PlayerMovementSystem: System = {
         }
       }
 
-      const momentumFactor = PlayerController.isJumping[entity] === 1 ? 0.85 : 0;
+      const momentumFactor =
+        PlayerController.isJumping[entity] === 1 ? 0.85 : 0;
       CharacterMovement.desiredVelX[entity] =
-        horizontalVelX + PlayerController.inheritedVelX[entity] * momentumFactor;
+        horizontalVelX +
+        PlayerController.inheritedVelX[entity] * momentumFactor;
       CharacterMovement.desiredVelZ[entity] =
-        horizontalVelZ + PlayerController.inheritedVelZ[entity] * momentumFactor;
+        horizontalVelZ +
+        PlayerController.inheritedVelZ[entity] * momentumFactor;
 
       if (PlayerController.isJumping[entity] === 1) {
         PlayerController.inheritedVelX[entity] *= 0.98;
@@ -141,7 +144,10 @@ export const PlayerGroundedSystem: System = {
       if (currentPlatform !== PlayerController.lastPlatform[entity]) {
         PlayerController.lastPlatform[entity] = currentPlatform;
 
-        if (currentPlatform > 0 && state.hasComponent(currentPlatform, Rigidbody)) {
+        if (
+          currentPlatform > 0 &&
+          state.hasComponent(currentPlatform, Rigidbody)
+        ) {
           PlayerController.platformOffsetX[entity] =
             Rigidbody.posX[entity] - Rigidbody.posX[currentPlatform];
           PlayerController.platformOffsetY[entity] =
@@ -163,7 +169,10 @@ export const PlayerGroundedSystem: System = {
           PlayerController.inheritedAngVelZ[entity] = 0;
         }
 
-        if (PlayerController.canJump[entity] === 0 && PlayerController.jumpCooldown[entity] <= 0) {
+        if (
+          PlayerController.canJump[entity] === 0 &&
+          PlayerController.jumpCooldown[entity] <= 0
+        ) {
           PlayerController.canJump[entity] = 1;
         }
       }

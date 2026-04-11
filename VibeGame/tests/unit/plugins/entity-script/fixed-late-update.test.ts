@@ -4,7 +4,6 @@ import { State } from '../../../../src/core/ecs/state';
 import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
   coerceMonoBehaviourModule,
-  getCachedMonoBehaviourModule,
   registerEntityScripts,
   setCachedMonoBehaviourModule,
   setScriptFile,
@@ -37,7 +36,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
 
     const globKey = `./scripts/${file}`;
     registerEntityScripts(state, { [globKey]: () => Promise.resolve(mod) });
-    setCachedMonoBehaviourModule(state, globKey, mod as ReturnType<typeof coerceMonoBehaviourModule>);
+    setCachedMonoBehaviourModule(state, globKey, mod as any);
 
     MonoBehaviour.ready[eid] = 1;
 
@@ -50,9 +49,9 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => { updateCount++; },
     });
 
-    EntityScriptSystem.update(state);
-    EntityScriptSystem.update(state);
-    EntityScriptSystem.update(state);
+    EntityScriptSystem.update!(state);
+    EntityScriptSystem.update!(state);
+    EntityScriptSystem.update!(state);
 
     expect(updateCount).toBe(3);
   });
@@ -63,8 +62,8 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => { updateCount++; },
     }, 0);
 
-    EntityScriptSystem.update(state);
-    EntityScriptSystem.update(state);
+    EntityScriptSystem.update!(state);
+    EntityScriptSystem.update!(state);
 
     expect(updateCount).toBe(0);
   });
@@ -76,8 +75,8 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => {},
     });
 
-    EntityScriptFixedUpdateSystem.update(state);
-    EntityScriptFixedUpdateSystem.update(state);
+    EntityScriptFixedUpdateSystem.update!(state);
+    EntityScriptFixedUpdateSystem.update!(state);
 
     expect(fixedCount).toBe(2);
   });
@@ -89,7 +88,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => {},
     }, 0);
 
-    EntityScriptFixedUpdateSystem.update(state);
+    EntityScriptFixedUpdateSystem.update!(state);
 
     expect(fixedCount).toBe(0);
   });
@@ -102,7 +101,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ fixedUpdate: () => { fixedCount++; }, update: () => {} }) });
     setCachedMonoBehaviourModule(state, './scripts/notready.ts', coerceMonoBehaviourModule({ fixedUpdate: () => { fixedCount++; }, update: () => {} })!);
 
-    EntityScriptFixedUpdateSystem.update(state);
+    EntityScriptFixedUpdateSystem.update!(state);
 
     expect(fixedCount).toBe(0);
   });
@@ -114,8 +113,8 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => {},
     });
 
-    EntityScriptLateUpdateSystem.update(state);
-    EntityScriptLateUpdateSystem.update(state);
+    EntityScriptLateUpdateSystem.update!(state);
+    EntityScriptLateUpdateSystem.update!(state);
 
     expect(lateCount).toBe(2);
   });
@@ -127,7 +126,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => {},
     }, 0);
 
-    EntityScriptLateUpdateSystem.update(state);
+    EntityScriptLateUpdateSystem.update!(state);
 
     expect(lateCount).toBe(0);
   });
@@ -140,7 +139,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ lateUpdate: () => { lateCount++; }, update: () => {} }) });
     setCachedMonoBehaviourModule(state, './scripts/notready.ts', coerceMonoBehaviourModule({ lateUpdate: () => { lateCount++; }, update: () => {} })!);
 
-    EntityScriptLateUpdateSystem.update(state);
+    EntityScriptLateUpdateSystem.update!(state);
 
     expect(lateCount).toBe(0);
   });
@@ -162,8 +161,8 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
       update: () => {},
     });
 
-    EntityScriptFixedUpdateSystem.update(state);
-    EntityScriptLateUpdateSystem.update(state);
+    EntityScriptFixedUpdateSystem.update!(state);
+    EntityScriptLateUpdateSystem.update!(state);
 
     expect(MonoBehaviour.ready[eid]).toBe(1);
   });
@@ -172,8 +171,8 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     const eid = state.createEntity();
     state.addComponent(eid, MonoBehaviour, { ready: 1, enabled: 1 });
 
-    EntityScriptFixedUpdateSystem.update(state);
-    EntityScriptLateUpdateSystem.update(state);
+    EntityScriptFixedUpdateSystem.update!(state);
+    EntityScriptLateUpdateSystem.update!(state);
 
     expect(state.exists(eid)).toBe(true);
   });
