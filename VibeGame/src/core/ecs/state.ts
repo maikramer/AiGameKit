@@ -44,6 +44,8 @@ export class State {
   private readonly componentNames = new WeakMap<Component, string>();
   private readonly plugins: Plugin[] = [];
   private readonly entityNames = new Map<string, number>();
+  private readonly destroyCallbacks = new Map<number, Set<(eid: number) => void>>();
+  private readonly globalDestroyCallbacks = new Set<(eid: number) => void>();
   private isDisposed = false;
 
   constructor() {
@@ -170,7 +172,42 @@ export class State {
 
   destroyEntity(eid: number): void {
     this.checkDisposed();
+    const perEntity = this.destroyCallbacks.get(eid);
+    if (perEntity) {
+      for (const cb of perEntity) {
+        try {
+          cb(eid);
+        } catch (err) {
+          console.error("[VibeGame] destroyEntity callback error:", err);
+        }
+      }
+      this.destroyCallbacks.delete(eid);
+    }
+    for (const cb of this.globalDestroyCallbacks) {
+      try {
+        cb(eid);
+      } catch (err) {
+        console.error("[VibeGame] destroyEntity global callback error:", err);
+      }
+    }
     removeEntity(this.world, eid);
+  }
+
+  onDestroy(eid: number, callback: (eid: number) => void): void {
+    let set = this.destroyCallbacks.get(eid);
+    if (!set) {
+      set = new Set();
+      this.destroyCallbacks.set(eid, set);
+    }
+    set.add(callback);
+  }
+
+  offDestroy(eid: number, callback: (eid: number) => void): void {
+    this.destroyCallbacks.get(eid)?.delete(callback);
+  }
+
+  onDestroyAll(callback: (eid: number) => void): void {
+    this.globalDestroyCallbacks.add(callback);
   }
 
   exists(eid: number): boolean {
