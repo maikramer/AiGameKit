@@ -12,6 +12,7 @@ import {
 import { defineQuery } from 'bitecs';
 import { toKebabCase } from '../utils/naming';
 import { ConfigRegistry } from './config';
+import { type InstantiateOptions, type TemplateData, deepCloneTemplate } from './prefabs';
 import { setComponentFields } from './utils';
 import { Parent } from './components';
 import { TIME_CONSTANTS } from './constants';
@@ -55,6 +56,7 @@ export class State {
   private readonly entityNames = new Map<string, number>();
   private readonly destroyCallbacks = new Map<number, Set<(eid: number) => void>>();
   private readonly globalDestroyCallbacks = new Set<(eid: number) => void>();
+  private readonly templates = new Map<string, TemplateData>();
   private isDisposed = false;
 
   constructor() {
@@ -331,6 +333,50 @@ export class State {
     attributes: Record<string, XMLValue> = {}
   ): number {
     return createEntityFromRecipe(this, recipeName, attributes);
+  }
+
+  registerTemplate(id: string, data: TemplateData): void {
+    this.templates.set(id, deepCloneTemplate(data));
+  }
+
+  getTemplate(id: string): TemplateData | undefined {
+    return this.templates.get(id);
+  }
+
+  Instantiate(templateId: string, options: InstantiateOptions = {}): number {
+    this.checkDisposed();
+    const template = this.templates.get(templateId);
+    if (!template) {
+      throw new Error(`[VibeGame] Template not found: "${templateId}"`);
+    }
+
+    const eid = this.createEntity();
+
+    for (const [componentName, values] of Object.entries(template.components)) {
+      const component = this.getComponent(componentName);
+      if (component) {
+        this.addComponent(eid, component, values);
+      }
+    }
+
+    if (options.overrides) {
+      for (const [componentName, values] of Object.entries(options.overrides)) {
+        const component = this.getComponent(componentName);
+        if (component) {
+          if (!this.hasComponent(eid, component)) {
+            this.addComponent(eid, component, values);
+          } else {
+            setComponentFields(component, eid, values);
+          }
+        }
+      }
+    }
+
+    if (options.parent !== undefined) {
+      this.addComponent(eid, Parent, { entity: options.parent });
+    }
+
+    return eid;
   }
 
   dispose(): void {

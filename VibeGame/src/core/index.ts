@@ -20,6 +20,8 @@ export {
   State,
   TIME_CONSTANTS,
   Time,
+  type InstantiateOptions,
+  type TemplateData,
 } from './ecs';
 export type {
   Adapter,

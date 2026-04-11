@@ -31,6 +31,7 @@ export type {
   YieldInstruction,
 } from './yield-instructions';
 export { State } from './state';
+export { type InstantiateOptions, type TemplateData } from './prefabs';
 export { Time } from './time';
 export { createSnapshot, formatSnapshot } from './snapshot';
 export type {
