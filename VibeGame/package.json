@@ -98,6 +98,26 @@
     "./extras/sky": {
       "types": "./dist/extras/sky-env.d.ts",
       "import": "./dist/extras/sky-env.js"
+    },
+    "./plugins/combat": {
+      "types": "./dist/plugins/combat/index.d.ts",
+      "import": "./dist/plugins/combat/index.js"
+    },
+    "./plugins/combat/components": {
+      "types": "./dist/plugins/combat/components.d.ts",
+      "import": "./dist/plugins/combat/components.js"
+    },
+    "./plugins/physics/components": {
+      "types": "./dist/plugins/physics/components.d.ts",
+      "import": "./dist/plugins/physics/components.js"
+    },
+    "./plugins/terrain/systems": {
+      "types": "./dist/plugins/terrain/systems.d.ts",
+      "import": "./dist/plugins/terrain/systems.js"
+    },
+    "./plugins/entity-script/context": {
+      "types": "./dist/plugins/entity-script/context.d.ts",
+      "import": "./dist/plugins/entity-script/context.js"
     }
   },
   "files": [

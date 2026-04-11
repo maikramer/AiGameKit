@@ -74,6 +74,14 @@
         playing="false"
         spatial="false"
       ></AudioSource>
+      <AudioSource
+        name="sfx-heal"
+        url="/assets/audio/collect_sfx.wav"
+        loop="false"
+        volume="0.48"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
 
       <!-- Relva: tom um pouco mais claro para ler melhor nas sombras (sem mexer no motor). -->
       <Terrain
@@ -126,7 +134,10 @@
         name="hero"
         pos="0 60 0"
         model-url="/assets/models/hero.glb"
+        script="auto-attacker.ts"
       ></PlayerGLTF>
+
+      <GameObject name="WaveManager" script="wave-manager.ts"></GameObject>
 
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
       <FollowCamera
@@ -261,32 +272,6 @@
           role="visual"
           url="/assets/models/hay_bale.glb"
           transform="scale: 0.9 0.9 0.9"
-        ></GLTFLoader>
-      </GameObject>
-
-      <!-- Cristais: assentar pela base (AABB) -->
-      <GameObject place="at: -4 6; base-y-offset: 0.02">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/crystal_blue.glb"
-          transform="scale: 0.6 0.6 0.6"
-          script="crystal.ts"
-        ></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 10 -5; base-y-offset: 0.02">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/crystal_blue.glb"
-          transform="scale: 0.5 0.5 0.5"
-          script="crystal.ts"
-        ></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: -10 -14; base-y-offset: 0.02">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/crystal_blue.glb"
-          transform="scale: 0.55 0.55 0.55"
-          script="crystal.ts"
         ></GLTFLoader>
       </GameObject>
 

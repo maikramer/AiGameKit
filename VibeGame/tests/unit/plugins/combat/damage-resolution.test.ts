@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { State } from '../../../../src/core/ecs/state';
-import { Health, ProjectileData, damageHealth } from '../../../../src/plugins/combat/components';
+import { Health, ProjectileData } from '../../../../src/plugins/combat/components';
 import { DamageResolutionSystem } from '../../../../src/plugins/combat/systems';
 import { TouchedEvent } from '../../../../src/plugins/physics/components';
 

@@ -11,10 +11,11 @@ const vibegameRoot = path.resolve(
 export default defineConfig({
   resolve: {
     dedupe: ['three'],
-    alias: {
-      vibegame: path.join(vibegameRoot, 'src/index.ts'),
-      'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
-    },
+    alias: [
+      { find: 'vibegame/vite', replacement: path.join(vibegameRoot, 'src/vite/index.ts') },
+      { find: 'vibegame/plugins', replacement: path.join(vibegameRoot, 'src/plugins') },
+      { find: 'vibegame', replacement: path.join(vibegameRoot, 'src/index.ts') },
+    ],
   },
   plugins: [vibegame(), consoleForwarding()],
   server: {

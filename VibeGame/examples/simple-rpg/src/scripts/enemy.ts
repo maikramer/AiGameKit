@@ -1,7 +1,8 @@
 import { defineQuery } from 'bitecs';
 import type { MonoBehaviourContext, CollisionOther } from 'vibegame';
 import { Transform, PlayerController, SteeringAgent, SteeringTarget } from 'vibegame';
-import { Health, CollisionEvents, damageHealth, isDead } from 'vibegame/plugins/combat/components';
+import { Health, damageHealth, isDead } from 'vibegame/plugins/combat/components';
+import { CollisionEvents } from 'vibegame/plugins/physics/components';
 
 interface EnemyConfig {
   health: number;
