@@ -3,14 +3,17 @@ import { GltfPending } from '../gltf-xml/components';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { EntityScript } from './components';
 import {
+  deletePrevEnabled,
   deleteScriptFile,
   getCachedEntityScriptModule,
   getEntityScriptsGlob,
   getOrLoadEntityScriptModule,
+  getPrevEnabled,
   getScriptFile,
   isEntityScriptSetupInflight,
   resolveEntityScriptGlobKey,
   setEntityScriptSetupInflight,
+  setPrevEnabled,
 } from './context';
 import type { EntityScriptContext } from './types';
 
@@ -42,16 +45,16 @@ export const EntityScriptSystem: System = {
     const glob = getEntityScriptsGlob(state);
 
     for (const eid of entityScriptQuery(state.world)) {
-      if (EntityScript.enabled[eid] !== 1) {
-        continue;
-      }
-
       const file = getScriptFile(state, eid);
       if (!file) {
         continue;
       }
 
       if (EntityScript.ready[eid] === 0) {
+        if (EntityScript.enabled[eid] !== 1) {
+          continue;
+        }
+
         if (shouldWaitForGltf(state, eid)) {
           continue;
         }
@@ -93,17 +96,32 @@ export const EntityScriptSystem: System = {
               return;
             }
             const ctx = buildContext(state, eid);
+            if (mod.awake) {
+              mod.awake(ctx);
+            }
+            const isEnabled = EntityScript.enabled[eid] === 1;
+            if (isEnabled && mod.onEnable) {
+              mod.onEnable(ctx);
+            }
             if (mod.setup) {
               await mod.setup(ctx);
             }
             if (state.exists(eid)) {
               EntityScript.ready[eid] = 1;
+              setPrevEnabled(state, eid, isEnabled ? 1 : 0);
             }
             state.onDestroy(eid, () => {
               const cached = getCachedEntityScriptModule(state, globKey);
-              if (cached?.onDestroy) {
-                cached.onDestroy(buildContext(state, eid));
+              if (cached) {
+                const destroyCtx = buildContext(state, eid);
+                if (EntityScript.enabled[eid] === 1 && cached.onDisable) {
+                  cached.onDisable(destroyCtx);
+                }
+                if (cached.onDestroy) {
+                  cached.onDestroy(destroyCtx);
+                }
               }
+              deletePrevEnabled(state, eid);
               deleteScriptFile(state, eid);
             });
             setEntityScriptSetupInflight(state, eid, false);
@@ -123,18 +141,38 @@ export const EntityScriptSystem: System = {
       }
 
       const glob2 = getEntityScriptsGlob(state);
-      const file2 = getScriptFile(state, eid);
-      if (!glob2 || !file2) {
+      if (!glob2) {
         continue;
       }
 
-      const globKey2 = resolveEntityScriptGlobKey(glob2, file2);
+      const globKey2 = resolveEntityScriptGlobKey(glob2, file);
       if (!globKey2) {
         continue;
       }
 
       const mod = getCachedEntityScriptModule(state, globKey2);
-      if (!mod?.update) {
+      if (!mod) {
+        continue;
+      }
+
+      const curEnabled = EntityScript.enabled[eid];
+      const prev = getPrevEnabled(state, eid);
+
+      if (prev !== undefined && curEnabled !== prev) {
+        const ctx = buildContext(state, eid);
+        if (prev === 1 && curEnabled === 0 && mod.onDisable) {
+          mod.onDisable(ctx);
+        } else if (prev === 0 && curEnabled === 1 && mod.onEnable) {
+          mod.onEnable(ctx);
+        }
+        setPrevEnabled(state, eid, curEnabled);
+      }
+
+      if (curEnabled !== 1) {
+        continue;
+      }
+
+      if (!mod.update) {
         continue;
       }
 

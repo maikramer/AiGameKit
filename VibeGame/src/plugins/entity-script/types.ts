@@ -15,6 +15,9 @@ export interface EntityScriptContext {
 
 /** Module shape for `import.meta.glob` entries (named exports). */
 export interface EntityScriptModule {
+  awake?: (ctx: EntityScriptContext) => void;
+  onEnable?: (ctx: EntityScriptContext) => void;
+  onDisable?: (ctx: EntityScriptContext) => void;
   setup?: (ctx: EntityScriptContext) => void | Promise<void>;
   update?: (ctx: EntityScriptContext) => void;
   onDestroy?: (ctx: EntityScriptContext) => void;

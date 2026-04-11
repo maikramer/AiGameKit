@@ -14,6 +14,8 @@ const moduleLoadPromises = new WeakMap<
   State,
   Map<string, Promise<EntityScriptModule | null>>
 >();
+/** Tracks previous enabled state per entity for onEnable/onDisable transitions. */
+const prevEnabledByState = new WeakMap<State, Map<number, number>>();
 
 export function setScriptFile(
   state: State,
@@ -128,6 +130,23 @@ export function setCachedEntityScriptModule(
   m.set(globKey, mod);
 }
 
+export function getPrevEnabled(state: State, entity: number): number | undefined {
+  return prevEnabledByState.get(state)?.get(entity);
+}
+
+export function setPrevEnabled(state: State, entity: number, v: number): void {
+  let m = prevEnabledByState.get(state);
+  if (!m) {
+    m = new Map();
+    prevEnabledByState.set(state, m);
+  }
+  m.set(entity, v);
+}
+
+export function deletePrevEnabled(state: State, entity: number): void {
+  prevEnabledByState.get(state)?.delete(entity);
+}
+
 export function getOrLoadEntityScriptModule(
   state: State,
   glob: Record<string, () => Promise<unknown>>,
@@ -178,6 +197,18 @@ export function coerceEntityScriptModule(
     return null;
   }
   const o = m as Record<string, unknown>;
+  const awake =
+    typeof o.awake === 'function'
+      ? (o.awake as EntityScriptModule['awake'])
+      : undefined;
+  const onEnable =
+    typeof o.onEnable === 'function'
+      ? (o.onEnable as EntityScriptModule['onEnable'])
+      : undefined;
+  const onDisable =
+    typeof o.onDisable === 'function'
+      ? (o.onDisable as EntityScriptModule['onDisable'])
+      : undefined;
   const setup =
     typeof o.setup === 'function'
       ? (o.setup as EntityScriptModule['setup'])
@@ -193,5 +224,5 @@ export function coerceEntityScriptModule(
   if (!setup && !update) {
     return null;
   }
-  return { setup, update, onDestroy };
+  return { awake, onEnable, onDisable, setup, update, onDestroy };
 }
