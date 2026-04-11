@@ -31,12 +31,13 @@ export class Scheduler {
 
     mutableTime.deltaTime = deltaTime;
     this.runSystemGroup(state, 'simulation');
+    this.runSystemGroup(state, 'late');
     this.runSystemGroup(state, 'draw');
   }
 
   private runSystemGroup(
     state: State,
-    group: 'setup' | 'simulation' | 'fixed' | 'draw'
+    group: 'setup' | 'simulation' | 'fixed' | 'late' | 'draw'
   ) {
     const systems = this.getSystemsByGroup(state, group);
     for (const system of systems) {
@@ -50,7 +51,7 @@ export class Scheduler {
 
   private getSystemsByGroup(
     state: State,
-    group: 'setup' | 'simulation' | 'fixed' | 'draw'
+    group: 'setup' | 'simulation' | 'fixed' | 'late' | 'draw'
   ): System[] {
     if (state.systems.size !== this.lastSystemsSize) {
       this.systemGroupCache.clear();

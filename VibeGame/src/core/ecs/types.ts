@@ -9,7 +9,7 @@ export interface System {
   readonly update?: (state: State) => void;
   readonly setup?: (state: State) => void;
   readonly dispose?: (state: State) => void;
-  readonly group?: 'setup' | 'simulation' | 'fixed' | 'draw';
+  readonly group?: 'setup' | 'simulation' | 'fixed' | 'late' | 'draw';
   readonly first?: boolean;
   readonly last?: boolean;
   readonly before?: readonly System[];
