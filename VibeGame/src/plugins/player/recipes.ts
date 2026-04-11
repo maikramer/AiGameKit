@@ -32,4 +32,5 @@ export const playerGltfRecipe: Recipe = {
   name: 'PlayerGLTF',
   components: [...(playerRecipe.components ?? []), 'playerGltfConfig'],
   overrides: playerRecipe.overrides,
+  merge: true,
 };

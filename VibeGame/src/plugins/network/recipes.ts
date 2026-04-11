@@ -4,4 +4,5 @@ import type { Recipe } from '../../core';
 export const networkedPlayerRecipe: Recipe = {
   name: 'NetworkedPlayer',
   components: ['transform', 'networked', 'networkBuffer'],
+  merge: true,
 };

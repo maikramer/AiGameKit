@@ -5,10 +5,12 @@ export const gltfLoadRecipe: Recipe = {
   components: ['transform', 'gltfPending'],
   /** Metadado de templates (spawn-group); não mapeia para componentes. */
   parserAttributes: ['role', 'profile'],
+  merge: true,
 };
 
 export const gltfDynamicRecipe: Recipe = {
   name: 'GLTFDynamic',
   components: ['transform', 'gltfPending', 'gltfPhysicsPending'],
   parserAttributes: ['role', 'profile'],
+  merge: true,
 };

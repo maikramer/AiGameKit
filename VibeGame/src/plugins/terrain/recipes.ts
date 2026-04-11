@@ -3,4 +3,5 @@
 export const terrainRecipe: Recipe = {
   name: 'Terrain',
   components: ['terrain', 'transform'],
+  merge: true,
 };

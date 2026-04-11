@@ -9,7 +9,7 @@ import {
 } from './systems';
 
 export const WaterPlugin: Plugin = {
-  recipes: [{ name: 'Water', components: ['water', 'transform'] }],
+  recipes: [{ name: 'Water', components: ['water', 'transform'], merge: true }],
   systems: [
     WaterBootstrapSystem,
     WaterRenderSystem,

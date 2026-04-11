@@ -187,8 +187,45 @@ export class State {
     return addEntity(this.world);
   }
 
+  getDescendants(eid: number): number[] {
+    const parentQuery = defineQuery([Parent]);
+    const entitiesWithParent = parentQuery(this.world);
+    const childrenOf = new Map<number, number[]>();
+    for (const childEid of entitiesWithParent) {
+      const parentEid = Parent.entity[childEid];
+      let siblings = childrenOf.get(parentEid);
+      if (!siblings) {
+        siblings = [];
+        childrenOf.set(parentEid, siblings);
+      }
+      siblings.push(childEid);
+    }
+    const result: number[] = [];
+    const queue: number[] = [eid];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const children = childrenOf.get(current);
+      if (children) {
+        for (const child of children) {
+          result.push(child);
+          queue.push(child);
+        }
+      }
+    }
+    result.reverse();
+    return result;
+  }
+
   destroyEntity(eid: number): void {
     this.checkDisposed();
+    const descendants = this.getDescendants(eid);
+    for (const descEid of descendants) {
+      this.destroyEntityImmediate(descEid);
+    }
+    this.destroyEntityImmediate(eid);
+  }
+
+  private destroyEntityImmediate(eid: number): void {
     const perEntity = this.destroyCallbacks.get(eid);
     if (perEntity) {
       for (const cb of perEntity) {
