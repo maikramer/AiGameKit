@@ -186,8 +186,12 @@ export function coerceEntityScriptModule(
     typeof o.update === 'function'
       ? (o.update as EntityScriptModule['update'])
       : undefined;
+  const onDestroy =
+    typeof o.onDestroy === 'function'
+      ? (o.onDestroy as EntityScriptModule['onDestroy'])
+      : undefined;
   if (!setup && !update) {
     return null;
   }
-  return { setup, update };
+  return { setup, update, onDestroy };
 }

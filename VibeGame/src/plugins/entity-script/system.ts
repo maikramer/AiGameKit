@@ -3,6 +3,7 @@ import { GltfPending } from '../gltf-xml/components';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { EntityScript } from './components';
 import {
+  deleteScriptFile,
   getCachedEntityScriptModule,
   getEntityScriptsGlob,
   getOrLoadEntityScriptModule,
@@ -98,6 +99,13 @@ export const EntityScriptSystem: System = {
             if (state.exists(eid)) {
               EntityScript.ready[eid] = 1;
             }
+            state.onDestroy(eid, () => {
+              const cached = getCachedEntityScriptModule(state, globKey);
+              if (cached?.onDestroy) {
+                cached.onDestroy(buildContext(state, eid));
+              }
+              deleteScriptFile(state, eid);
+            });
             setEntityScriptSetupInflight(state, eid, false);
           })
           .catch((err: unknown) => {

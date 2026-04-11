@@ -17,4 +17,5 @@ export interface EntityScriptContext {
 export interface EntityScriptModule {
   setup?: (ctx: EntityScriptContext) => void | Promise<void>;
   update?: (ctx: EntityScriptContext) => void;
+  onDestroy?: (ctx: EntityScriptContext) => void;
 }
