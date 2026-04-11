@@ -1,6 +1,7 @@
 import type { System, State } from 'vibegame';
 import {
-  AudioEmitter,
+  AudioSource,
+  PlayerController,
   configure,
   playAudioEmitter,
   registerEntityScripts,
@@ -80,7 +81,7 @@ let eidSfxLoad = -1;
 let saveDebounce = false;
 let loadDebounce = false;
 let localeDebounce = false;
-let spaceWasDown = false;
+let prevHeroIsJumping = 0;
 
 let playTimeSec = 0;
 let statusFlashUntil = 0;
@@ -217,11 +218,17 @@ const GameplayHudSystem: System = {
     }
     refreshHud(state);
 
-    const spaceDown = isKeyDown('Space');
-    if (spaceDown && !spaceWasDown && eidSfxJump >= 0) {
-      playAudioEmitter(state, eidSfxJump);
+    if (
+      heroEid !== null &&
+      eidSfxJump >= 0 &&
+      state.hasComponent(heroEid, PlayerController)
+    ) {
+      const jumping = PlayerController.isJumping[heroEid];
+      if (jumping === 1 && prevHeroIsJumping === 0) {
+        playAudioEmitter(state, eidSfxJump);
+      }
+      prevHeroIsJumping = jumping;
     }
-    spaceWasDown = spaceDown;
 
     if (isKeyDown('KeyL') && !localeDebounce) {
       localeDebounce = true;
@@ -330,8 +337,8 @@ async function bootstrap(): Promise<void> {
   if (bgmEid !== null && typeof document !== 'undefined') {
     const startBgm = () => {
       resumeAudioContextIfSuspended();
-      if (state.exists(bgmEid) && state.hasComponent(bgmEid, AudioEmitter)) {
-        AudioEmitter.playing[bgmEid] = 1;
+      if (state.exists(bgmEid) && state.hasComponent(bgmEid, AudioSource)) {
+        AudioSource.playing[bgmEid] = 1;
       }
       document.removeEventListener('pointerdown', startBgm);
     };

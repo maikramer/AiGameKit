@@ -134,6 +134,7 @@ export const AudioSystem: System = {
           const spatial = AudioSource.spatial[eid] === 1;
           howl = new Howl({
             src: [url],
+            preload: true,
             loop: AudioSource.loop[eid] === 1,
             volume: AudioSource.volume[eid],
             rate: AudioSource.pitch[eid],
