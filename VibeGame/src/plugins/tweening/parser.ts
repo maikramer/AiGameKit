@@ -42,7 +42,7 @@ function toNumberOrArray(value: XMLValue): number | number[] {
 }
 
 export const tweenParser: Parser = ({ element, state, context }) => {
-  if (element.tagName !== 'Tween') {
+  if (element.tagName.toLowerCase() !== 'tween') {
     return;
   }
 
@@ -102,7 +102,7 @@ export const tweenParser: Parser = ({ element, state, context }) => {
 };
 
 export const sequenceParser: Parser = ({ element, state, context }) => {
-  if (element.tagName !== 'Sequence') return;
+  if (element.tagName.toLowerCase() !== 'sequence') return;
 
   const seqEntity = state.createEntity();
   state.addComponent(seqEntity, Sequence);
@@ -117,7 +117,7 @@ export const sequenceParser: Parser = ({ element, state, context }) => {
   const items: SequenceItemSpec[] = [];
 
   for (const child of element.children) {
-    if (child.tagName === 'Tween') {
+    if (child.tagName.toLowerCase() === 'tween') {
       const targetName = child.attributes.target as string;
       if (!targetName) {
         throw new Error('[Sequence] Tween missing "target" attribute');
@@ -153,7 +153,7 @@ export const sequenceParser: Parser = ({ element, state, context }) => {
         duration: toNumber(child.attributes.duration || 1),
         easing,
       });
-    } else if (child.tagName === 'pause') {
+    } else if (child.tagName.toLowerCase() === 'pause') {
       items.push({
         type: 'pause',
         duration: toNumber(child.attributes.duration || 0),
@@ -181,7 +181,7 @@ function validateMode(mode: string | undefined, context: string): void {
 }
 
 export const shakerParser: Parser = ({ element, state, context }) => {
-  if (element.tagName !== 'Shaker') return;
+  if (element.tagName.toLowerCase() !== 'shaker') return;
 
   const targetName = element.attributes.target as string;
   if (!targetName) {
