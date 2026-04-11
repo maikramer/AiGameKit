@@ -1,8 +1,9 @@
 import type { Plugin } from '../../core';
 import { Health, ProjectileData } from './components';
+import { DamageResolutionSystem, ProjectileCleanupSystem } from './systems';
 
 export const CombatPlugin: Plugin = {
-  systems: [],
+  systems: [DamageResolutionSystem, ProjectileCleanupSystem],
   components: {
     health: Health,
     projectileData: ProjectileData,

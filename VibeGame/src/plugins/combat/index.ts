@@ -11,3 +11,4 @@ export {
   isProjectileExpired,
 } from './components';
 export { CombatPlugin } from './plugin';
+export { DamageResolutionSystem, ProjectileCleanupSystem } from './systems';
