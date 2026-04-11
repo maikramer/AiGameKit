@@ -89,7 +89,7 @@ export const EntityScriptSystem: System = {
             }
             if (!mod) {
               console.warn(
-                `[entity-script] Module for "${file}" has no setup/update. Entity ${eid}`
+                `[entity-script] Module for "${file}" has no start/update. Entity ${eid}`
               );
               EntityScript.ready[eid] = 1;
               setEntityScriptSetupInflight(state, eid, false);
@@ -103,8 +103,8 @@ export const EntityScriptSystem: System = {
             if (isEnabled && mod.onEnable) {
               mod.onEnable(ctx);
             }
-            if (mod.setup) {
-              await mod.setup(ctx);
+            if (mod.start) {
+              await mod.start(ctx);
             }
             if (state.exists(eid)) {
               EntityScript.ready[eid] = 1;
@@ -177,6 +177,62 @@ export const EntityScriptSystem: System = {
       }
 
       mod.update(buildContext(state, eid));
+    }
+  },
+};
+
+function resolveModule(state: State, eid: number): { mod: EntityScriptModule } | null {
+  const file = getScriptFile(state, eid);
+  if (!file) return null;
+
+  const glob = getEntityScriptsGlob(state);
+  if (!glob) return null;
+
+  const globKey = resolveEntityScriptGlobKey(glob, file);
+  if (!globKey) return null;
+
+  const mod = getCachedEntityScriptModule(state, globKey);
+  if (!mod) return null;
+
+  return { mod };
+}
+
+export const EntityScriptFixedUpdateSystem: System = {
+  group: 'fixed',
+  update(state: State): void {
+    if (state.headless) return;
+
+    for (const eid of entityScriptQuery(state.world)) {
+      if (EntityScript.ready[eid] !== 1 || EntityScript.enabled[eid] !== 1) {
+        continue;
+      }
+
+      const resolved = resolveModule(state, eid);
+      if (!resolved || !resolved.mod.fixedUpdate) {
+        continue;
+      }
+
+      resolved.mod.fixedUpdate(buildContext(state, eid));
+    }
+  },
+};
+
+export const EntityScriptLateUpdateSystem: System = {
+  group: 'late',
+  update(state: State): void {
+    if (state.headless) return;
+
+    for (const eid of entityScriptQuery(state.world)) {
+      if (EntityScript.ready[eid] !== 1 || EntityScript.enabled[eid] !== 1) {
+        continue;
+      }
+
+      const resolved = resolveModule(state, eid);
+      if (!resolved || !resolved.mod.lateUpdate) {
+        continue;
+      }
+
+      resolved.mod.lateUpdate(buildContext(state, eid));
     }
   },
 };

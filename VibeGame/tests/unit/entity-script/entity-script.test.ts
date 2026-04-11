@@ -64,10 +64,10 @@ describe('entity-script', () => {
   });
 
   it('coerceEntityScriptModule reads named exports', () => {
-    const setup = () => {};
+    const start = () => {};
     const update = () => {};
-    const mod = coerceEntityScriptModule({ setup, update });
-    expect(mod?.setup).toBe(setup);
+    const mod = coerceEntityScriptModule({ start, update });
+    expect(mod?.start).toBe(start);
     expect(mod?.update).toBe(update);
   });
 

@@ -2,7 +2,7 @@ import type { Adapter, Plugin } from '../../core';
 import { EntityScript } from './components';
 import { setScriptFile } from './context';
 import { entityScriptRecipe } from './recipes';
-import { EntityScriptSystem } from './system';
+import { EntityScriptFixedUpdateSystem, EntityScriptLateUpdateSystem, EntityScriptSystem } from './system';
 
 const scriptFileAdapter: Adapter = (entity, value, state) => {
   setScriptFile(state, entity, value);
@@ -10,7 +10,7 @@ const scriptFileAdapter: Adapter = (entity, value, state) => {
 
 export const EntityScriptPlugin: Plugin = {
   recipes: [entityScriptRecipe],
-  systems: [EntityScriptSystem],
+  systems: [EntityScriptFixedUpdateSystem, EntityScriptSystem, EntityScriptLateUpdateSystem],
   components: {
     entityScript: EntityScript,
   },

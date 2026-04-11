@@ -93,6 +93,11 @@ export interface Plugin {
 
 export interface GameTime {
   deltaTime: number;
+  unscaledDeltaTime: number;
   fixedDeltaTime: number;
+  fixedTime: number;
+  timeScale: number;
+  frameCount: number;
+  realtimeSinceStartup: number;
   elapsed: number;
 }

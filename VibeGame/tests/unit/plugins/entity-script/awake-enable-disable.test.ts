@@ -50,7 +50,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     if (mod.awake) mod.awake(ctx);
     const isEnabled = EntityScript.enabled[eid] === 1;
     if (isEnabled && mod.onEnable) mod.onEnable(ctx);
-    if (mod.setup) mod.setup(ctx);
+    if (mod.start) mod.start(ctx);
     setPrevEnabled(state, eid, isEnabled ? 1 : 0);
   }
 
@@ -73,7 +73,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     let awakeCount = 0;
     const eid = createScriptedEntity('test.ts', {
       awake: () => { awakeCount++; },
-      setup: () => {},
+      start: () => {},
     });
     simulateSetup(eid, './scripts/test.ts');
     expect(awakeCount).toBe(1);
@@ -83,22 +83,22 @@ describe('entity-script awake/onEnable/onDisable', () => {
     let awakeFired = false;
     const eid = createScriptedEntity('test.ts', {
       awake: () => { awakeFired = true; },
-      setup: () => {},
+      start: () => {},
     }, 0);
     simulateSetup(eid, './scripts/test.ts');
     expect(awakeFired).toBe(true);
     expect(EntityScript.enabled[eid]).toBe(0);
   });
 
-  it('lifecycle order is awake → onEnable → setup for enabled=1', () => {
+  it('lifecycle order is awake → onEnable → start for enabled=1', () => {
     const order: string[] = [];
     const eid = createScriptedEntity('test.ts', {
       awake: () => { order.push('awake'); },
       onEnable: () => { order.push('onEnable'); },
-      setup: () => { order.push('setup'); },
+      start: () => { order.push('start'); },
     });
     simulateSetup(eid, './scripts/test.ts');
-    expect(order).toEqual(['awake', 'onEnable', 'setup']);
+    expect(order).toEqual(['awake', 'onEnable', 'start']);
   });
 
   it('onEnable does NOT fire if entity created with enabled=0', () => {
@@ -106,7 +106,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     const eid = createScriptedEntity('test.ts', {
       awake: () => {},
       onEnable: () => { onEnableFired = true; },
-      setup: () => {},
+      start: () => {},
     }, 0);
     simulateSetup(eid, './scripts/test.ts');
     expect(onEnableFired).toBe(false);
@@ -140,7 +140,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     const eid = createScriptedEntity('test.ts', {
       onDisable: () => { order.push('onDisable'); },
       onDestroy: () => { order.push('onDestroy'); },
-      setup: () => {},
+      start: () => {},
     });
     simulateSetup(eid, './scripts/test.ts');
     registerDestroyCallback(eid, './scripts/test.ts');
@@ -154,7 +154,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
       awake: () => { awakeCount++; },
       onEnable: () => {},
       onDisable: () => {},
-      setup: () => {},
+      start: () => {},
     });
     simulateSetup(eid, './scripts/test.ts');
 
@@ -177,7 +177,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     const onEnable = () => {};
     const onDisable = () => {};
     const mod = coerceEntityScriptModule({
-      setup: () => {},
+      start: () => {},
       awake,
       onEnable,
       onDisable,
@@ -187,7 +187,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
     expect(mod?.onDisable).toBe(onDisable);
   });
 
-  it('coerceEntityScriptModule returns null if only lifecycle hooks present (no setup/update)', () => {
+  it('coerceEntityScriptModule returns null if only lifecycle hooks present (no start/update)', () => {
     const mod = coerceEntityScriptModule({
       awake: () => {},
       onEnable: () => {},
@@ -197,7 +197,7 @@ describe('entity-script awake/onEnable/onDisable', () => {
   });
 
   it('prevEnabled is cleaned up after entity destruction', () => {
-    const eid = createScriptedEntity('test.ts', { setup: () => {} });
+    const eid = createScriptedEntity('test.ts', { start: () => {} });
     simulateSetup(eid, './scripts/test.ts');
     expect(getPrevEnabled(state, eid)).toBe(1);
 

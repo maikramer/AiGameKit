@@ -15,21 +15,36 @@ export class Scheduler {
 
   step(state: State, deltaTime = TIME_CONSTANTS.DEFAULT_DELTA) {
     const fixedDeltaTime = TIME_CONSTANTS.FIXED_TIMESTEP;
-    const mutableTime = state.time as { deltaTime: number; elapsed: number };
+    const mutableTime = state.time as {
+      deltaTime: number;
+      unscaledDeltaTime: number;
+      elapsed: number;
+      frameCount: number;
+      realtimeSinceStartup: number;
+      fixedTime: number;
+    };
 
-    mutableTime.deltaTime = deltaTime;
-    mutableTime.elapsed += deltaTime;
-    this.accumulator += deltaTime;
+    const unscaledDelta = deltaTime;
+    const scaledDelta = unscaledDelta * state.time.timeScale;
+
+    mutableTime.unscaledDeltaTime = unscaledDelta;
+    mutableTime.realtimeSinceStartup += unscaledDelta;
+    mutableTime.elapsed = mutableTime.realtimeSinceStartup;
+    mutableTime.frameCount += 1;
+
+    mutableTime.deltaTime = scaledDelta;
+    this.accumulator += scaledDelta;
 
     this.runSystemGroup(state, 'setup');
 
     while (this.accumulator >= fixedDeltaTime) {
       mutableTime.deltaTime = fixedDeltaTime;
+      mutableTime.fixedTime += fixedDeltaTime;
       this.runSystemGroup(state, 'fixed');
       this.accumulator -= fixedDeltaTime;
     }
 
-    mutableTime.deltaTime = deltaTime;
+    mutableTime.deltaTime = scaledDelta;
     this.runSystemGroup(state, 'simulation');
     this.runSystemGroup(state, 'late');
     this.runSystemGroup(state, 'draw');

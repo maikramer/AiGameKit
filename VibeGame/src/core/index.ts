@@ -19,6 +19,7 @@ export {
   Parent,
   State,
   TIME_CONSTANTS,
+  Time,
 } from './ecs';
 export type {
   Adapter,

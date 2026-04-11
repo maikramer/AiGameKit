@@ -52,7 +52,12 @@ export class State {
     this.world = createWorld();
     this.time = {
       deltaTime: 0,
+      unscaledDeltaTime: 0,
       fixedDeltaTime: TIME_CONSTANTS.FIXED_TIMESTEP,
+      fixedTime: 0,
+      timeScale: 1.0,
+      frameCount: 0,
+      realtimeSinceStartup: 0,
       elapsed: 0,
     };
 

@@ -25,7 +25,7 @@ describe('entity-script onDestroy', () => {
 
   function createScriptedEntity(
     file: string,
-    mod: { setup?: () => void; update?: () => void; onDestroy?: () => void }
+    mod: { start?: () => void; update?: () => void; onDestroy?: () => void }
   ): number {
     const eid = state.createEntity();
     state.addComponent(eid, EntityScript, { ready: 0, enabled: 1 });
@@ -100,7 +100,7 @@ describe('entity-script onDestroy', () => {
 
   it('does not crash for entity with no onDestroy method', () => {
     const eid = createScriptedEntity('test.ts', {
-      setup: () => {},
+      start: () => {},
       update: () => {},
     });
 
@@ -140,13 +140,13 @@ describe('entity-script onDestroy', () => {
   it('coerceEntityScriptModule extracts onDestroy from loaded module', () => {
     const onDestroy = () => {};
     const mod = coerceEntityScriptModule({
-      setup: () => {},
+      start: () => {},
       onDestroy,
     });
     expect(mod?.onDestroy).toBe(onDestroy);
   });
 
-  it('coerceEntityScriptModule returns null if only onDestroy is present (no setup/update)', () => {
+  it('coerceEntityScriptModule returns null if only onDestroy is present (no start/update)', () => {
     const mod = coerceEntityScriptModule({
       onDestroy: () => {},
     });

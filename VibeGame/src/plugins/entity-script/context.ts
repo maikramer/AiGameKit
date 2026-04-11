@@ -209,9 +209,9 @@ export function coerceEntityScriptModule(
     typeof o.onDisable === 'function'
       ? (o.onDisable as EntityScriptModule['onDisable'])
       : undefined;
-  const setup =
-    typeof o.setup === 'function'
-      ? (o.setup as EntityScriptModule['setup'])
+  const start =
+    typeof o.start === 'function'
+      ? (o.start as EntityScriptModule['start'])
       : undefined;
   const update =
     typeof o.update === 'function'
@@ -221,8 +221,16 @@ export function coerceEntityScriptModule(
     typeof o.onDestroy === 'function'
       ? (o.onDestroy as EntityScriptModule['onDestroy'])
       : undefined;
-  if (!setup && !update) {
+  const fixedUpdate =
+    typeof o.fixedUpdate === 'function'
+      ? (o.fixedUpdate as EntityScriptModule['fixedUpdate'])
+      : undefined;
+  const lateUpdate =
+    typeof o.lateUpdate === 'function'
+      ? (o.lateUpdate as EntityScriptModule['lateUpdate'])
+      : undefined;
+  if (!start && !update) {
     return null;
   }
-  return { awake, onEnable, onDisable, setup, update, onDestroy };
+  return { awake, onEnable, onDisable, start, update, fixedUpdate, lateUpdate, onDestroy };
 }
