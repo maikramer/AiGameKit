@@ -86,38 +86,24 @@
       <!-- Relva: tom um pouco mais claro para ler melhor nas sombras (sem mexer no motor). -->
       <Terrain
         pos="0 0 0"
-        world-size="384"
+        world-size="768"
         max-height="28"
         levels="6"
         resolution="64"
         lod-hysteresis="1.25"
         lod-distance-ratio="2"
-        height-smoothing="0.48"
-        height-smoothing-spread="1.35"
-        collision-resolution="64"
+        height-smoothing="0.22"
+        height-smoothing-spread="1.15"
+        heightmap="/assets/terrain/heightmap.png"
+        collision-resolution="32"
         skirt-width="0.015625"
         roughness="0.5"
         metalness="0"
-        normal-strength="0.8"
+        normal-strength="0.5"
         base-color="#96ad78"
       ></Terrain>
 
-      <!-- Água: tom menos “ciano de poço”; water-level alinhado ao Y. -->
-      <Water
-        pos="0 1.25 0"
-        water-level="1.25"
-        size="384"
-        opacity="0.22"
-        wave-speed="1.0"
-        wave-scale="0.3"
-        tint-r="0.14"
-        tint-g="0.38"
-        tint-b="0.34"
-        underwater-fog-color-r="0.0"
-        underwater-fog-color-g="0.1"
-        underwater-fog-color-b="0.3"
-        underwater-fog-density="0.2"
-      ></Water>
+      <!-- Água gerada dinamicamente a partir de /assets/terrain/terrain.json no bootstrap. -->
 
       <Fog
         color="#dde6d4"
@@ -132,7 +118,7 @@
 
       <PlayerGLTF
         name="hero"
-        pos="0 60 0"
+        pos="210 75 185"
         model-url="/assets/models/hero.glb"
         script="auto-attacker.ts"
       ></PlayerGLTF>
@@ -189,7 +175,8 @@
           role="dynamic"
           url="/assets/models/rock_boulder.glb"
           body-type="fixed"
-          collider-shape="sphere"
+          collider-shape="capsule"
+          collider-margin="-0.12"
           transform="scale: 1.4 1.4 1.4"
         ></GLTFDynamic>
       </GameObject>
@@ -198,7 +185,8 @@
           role="dynamic"
           url="/assets/models/rock_boulder.glb"
           body-type="fixed"
-          collider-shape="sphere"
+          collider-shape="capsule"
+          collider-margin="-0.12"
           transform="scale: 1.1 1.1 1.1"
         ></GLTFDynamic>
       </GameObject>
@@ -207,7 +195,8 @@
           role="dynamic"
           url="/assets/models/rock_boulder.glb"
           body-type="fixed"
-          collider-shape="sphere"
+          collider-shape="capsule"
+          collider-margin="-0.12"
           transform="scale: 0.9 0.9 0.9"
         ></GLTFDynamic>
       </GameObject>
@@ -215,26 +204,45 @@
 
 
 
+      <!-- Árvores: LOD1 (text3d lod) para ~200 instâncias; lod0/lod2 em disco para herói/LOD runtime futuro -->
       <SpawnGroup
         profile="tree"
-        count="18"
+        count="200"
         seed="7"
-        region-min="-55 0 -55"
-        region-max="55 0 55"
+        region-min="-330 0 -330"
+        region-max="330 0 330"
+        max-slope-attempts="220"
         pick-strategy="random"
       >
         <GLTFDynamic
           role="dynamic"
           profile="tree"
-          url="/assets/models/tree_lowpoly.glb"
+          url="/assets/models/tree_lowpoly_lod1.glb"
           body-type="fixed"
-          collider-shape="box"
+          collider-shape="capsule"
+          collider-margin="-0.18"
           transform="scale: 1 1 1"
         ></GLTFDynamic>
       </SpawnGroup>
 
-      <SpawnGroup profile="tree" count="10" seed="42" region-min="-45 0 -45" region-max="45 0 45" pick-strategy="random">
-        <GLTFDynamic role="dynamic" profile="tree" url="/assets/models/rock_boulder.glb" collider-shape="sphere" body-type="fixed" transform="scale: 1.2 1.2 1.2"></GLTFDynamic>
+      <SpawnGroup
+        profile="tree"
+        count="10"
+        seed="42"
+        region-min="-330 0 -330"
+        region-max="330 0 330"
+        max-slope-attempts="72"
+        pick-strategy="random"
+      >
+        <GLTFDynamic
+          role="dynamic"
+          profile="tree"
+          url="/assets/models/rock_boulder.glb"
+          collider-shape="capsule"
+          collider-margin="-0.12"
+          body-type="fixed"
+          transform="scale: 1.2 1.2 1.2"
+        ></GLTFDynamic>
       </SpawnGroup>
 
     </Scene>

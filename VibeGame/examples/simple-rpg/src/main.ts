@@ -22,6 +22,8 @@ import {
 } from 'vibegame';
 import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
 import { Health, isDead } from '../../../src/plugins/combat/components.ts';
+import { createLakeWaterEntities } from '../../../src/plugins/terrain/lake-renderer';
+import { loadTerrainData } from '../../../src/plugins/terrain/terrain-data-loader';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
 
 const SAVE_KEY = 'simple-rpg-save';
@@ -466,11 +468,34 @@ function resolveAudioEids(state: State): void {
   eidSfxHeal = state.getEntityByName('sfx-heal') ?? -1;
 }
 
+async function injectTerrainWaterEntities(): Promise<void> {
+  const scene = document.querySelector('Scene');
+  if (!(scene instanceof Element)) return;
+
+  try {
+    const terrainData = await loadTerrainData('/assets/terrain/terrain.json');
+    const lakeWaterXml = createLakeWaterEntities(terrainData);
+    if (!lakeWaterXml) return;
+
+    const fogNode = scene.querySelector('Fog');
+    if (fogNode instanceof Element) {
+      fogNode.insertAdjacentHTML('beforebegin', `${lakeWaterXml}\n`);
+      return;
+    }
+
+    scene.insertAdjacentHTML('beforeend', lakeWaterXml);
+  } catch (error) {
+    console.warn('[simple-rpg] Failed to inject terrain water entities', error);
+  }
+}
+
 async function bootstrap(): Promise<void> {
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(CombatPlugin);
   withSystem(GameplayHudSystem);
+
+  await injectTerrainWaterEntities();
 
   configure({ canvas: '#game-canvas' });
 
