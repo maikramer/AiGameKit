@@ -30,6 +30,8 @@ export interface GroupSpawnDefaults {
   maxSlopeDeg: number;
   /** Tentativas de posição aleatória por instância; se nenhuma cumprir o declive (com max-slope-deg menor que 90°), a instância é omitida. */
   maxSlopePlacementAttempts: number;
+  /** Re-amostra posições que cairiam sob planos de água (lagos). */
+  avoidWater: boolean;
 }
 
 const LEGACY: GroupSpawnDefaults = {
@@ -42,6 +44,7 @@ const LEGACY: GroupSpawnDefaults = {
   surfaceEpsilon: 0.75,
   maxSlopeDeg: 45,
   maxSlopePlacementAttempts: 32,
+  avoidWater: false,
 };
 
 const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
@@ -55,7 +58,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMax: 2.2,
     surfaceEpsilon: 0.75,
     maxSlopeDeg: 45,
-    maxSlopePlacementAttempts: 32,
+    maxSlopePlacementAttempts: 48,
+    avoidWater: true,
   },
   foliage: {
     alignToTerrain: true,
@@ -66,7 +70,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMax: 1.3,
     surfaceEpsilon: 0.75,
     maxSlopeDeg: 45,
-    maxSlopePlacementAttempts: 32,
+    maxSlopePlacementAttempts: 48,
+    avoidWater: true,
   },
   'physics-box': {
     alignToTerrain: false,
@@ -78,6 +83,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     surfaceEpsilon: 0.75,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
+    avoidWater: false,
   },
   'gltf-crate': {
     alignToTerrain: false,
@@ -89,6 +95,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     surfaceEpsilon: 0.75,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
+    avoidWater: false,
   },
   place: {
     alignToTerrain: true,
@@ -100,6 +107,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     surfaceEpsilon: 0.75,
     maxSlopeDeg: 90,
     maxSlopePlacementAttempts: 1,
+    avoidWater: false,
   },
 };
 
@@ -254,5 +262,6 @@ export function resolveGroupSpawnFields(
         optNumber(attrs['max-slope-attempts'], p.maxSlopePlacementAttempts)
       )
     ),
+    avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
   };
 }

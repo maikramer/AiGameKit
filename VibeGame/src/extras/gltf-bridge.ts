@@ -73,6 +73,52 @@ export function applyDefaultShadowFlags(root: Object3D): void {
  * @param url - Absolute or site-root URL (e.g. ``/assets/models/hero.glb``).
  * @returns The loaded root object (typically scaled/positioned by the asset).
  */
+/**
+ * Carrega três GLBs (LOD0/1/2), agrupa-os num único `Group` e adiciona-o à cena.
+ * Filhos: nomes `lod0`–`lod2`; só um fica `visible` (por omissão lod1 até ao sistema de LOD).
+ */
+export function loadGltfLodToScene(
+  state: State,
+  urls: readonly [string, string, string]
+): Promise<Group> {
+  const scene = getScene(state);
+  if (!scene) {
+    return Promise.reject(
+      new Error(
+        'VibeGame loadGltfLodToScene: no Three.js scene (headless or rendering not ready).'
+      )
+    );
+  }
+  ensureKTX2FromState(state);
+  const loader = createGLTFLoader();
+  const root = new THREE.Group();
+  root.name = 'gltf-lod-root';
+
+  return Promise.all(
+    urls.map((url, i) =>
+      loader.loadAsync(url).then((gltf) => {
+        applyDefaultShadowFlags(gltf.scene);
+        const child = gltf.scene;
+        child.name = `lod${i}`;
+        child.visible = false;
+        child.userData.lodLevel = i;
+        return child;
+      })
+    )
+  ).then((children) => {
+    for (const c of children) {
+      root.add(c);
+    }
+    if (children[1]) {
+      children[1].visible = true;
+    } else if (children[0]) {
+      children[0].visible = true;
+    }
+    scene.add(root);
+    return root;
+  });
+}
+
 export function loadGltfToScene(state: State, url: string): Promise<Group> {
   const scene = getScene(state);
   if (!scene) {

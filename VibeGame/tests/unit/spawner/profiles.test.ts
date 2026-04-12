@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import {
   applyChildTemplateProfile,
   getGroupSpawnDefaults,
@@ -25,7 +25,8 @@ describe('spawn profiles', () => {
     expect(r.baseYOffset).toBe(0.02);
     expect(r.scaleMin).toBe(1.6);
     expect(r.maxSlopeDeg).toBe(45);
-    expect(r.maxSlopePlacementAttempts).toBe(32);
+    expect(r.maxSlopePlacementAttempts).toBe(48);
+    expect(r.avoidWater).toBe(true);
   });
 
   it('resolveGroupSpawnFields XML explícito sobrescreve perfil', () => {

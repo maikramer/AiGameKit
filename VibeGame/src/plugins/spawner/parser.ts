@@ -172,6 +172,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     maxSlopeDeg: resolvedSpawn.maxSlopeDeg,
     maxSlopePlacementAttempts: resolvedSpawn.maxSlopePlacementAttempts,
     pickStrategy,
+    avoidWater: resolvedSpawn.avoidWater,
     templates,
   };
 

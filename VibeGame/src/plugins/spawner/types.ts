@@ -43,5 +43,7 @@ export interface SpawnGroupSpec {
   maxSlopePlacementAttempts: number;
   /** round-robin | random */
   pickStrategy: 'round-robin' | 'random';
+  /** Re-sample XZ when terrain would sit under a Water plane (lakes). */
+  avoidWater: boolean;
   templates: SpawnTemplateSpec[];
 }

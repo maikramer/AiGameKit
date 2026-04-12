@@ -1,4 +1,4 @@
-﻿import { defineQuery, type State, type System } from '../../core';
+import { defineQuery, type State, type System } from '../../core';
 import { SpawnerPending } from './components';
 import { getSpawnGroupSpecs } from './context';
 import { spawnTemplateAtTerrain } from './spawn-template';
@@ -7,6 +7,7 @@ import {
   sampleTerrainSurface,
   type TerrainSurfaceSample,
 } from './surface';
+import { isTerrainUnderwaterAt } from './water-spawn';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
 import { Transform, WorldTransform } from '../transforms/components';
@@ -103,6 +104,12 @@ export const TerrainSpawnSystem: System = {
           wz = minZ + rand() * (maxZ - minZ);
           const cand = sampleTerrainSurface(state, wx, wz, spec.surfaceEpsilon);
           if (!cand) continue;
+          if (
+            spec.avoidWater &&
+            isTerrainUnderwaterAt(state, wx, wz, cand.worldY)
+          ) {
+            continue;
+          }
           s = cand;
           if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
             foundValidSlope = true;

@@ -10,6 +10,7 @@ export {
   applyDefaultShadowFlags,
   createGLTFLoader,
   loadGltfAnimated,
+  loadGltfLodToScene,
   loadGltfToScene,
   loadGltfToSceneWithAnimator,
 } from './extras/gltf-bridge';

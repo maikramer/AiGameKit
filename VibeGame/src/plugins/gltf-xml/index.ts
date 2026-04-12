@@ -1,7 +1,9 @@
-﻿export { GltfXmlPlugin } from './plugin';
+export { GltfXmlPlugin } from './plugin';
 export { gltfDynamicRecipe, gltfLoadRecipe } from './recipes';
-export { GltfPending, GltfPhysicsPending } from './components';
+export { GltfLod, GltfPending, GltfPhysicsPending } from './components';
 export { GltfDynamicPhysicsSystem } from './gltf-dynamic-system';
+export { GltfLodSystem } from './gltf-lod-system';
+export { pickLodLevel } from './gltf-lod-level';
 export { GltfSceneSyncSystem } from './gltf-scene-sync';
 export {
   getGltfLocalYBounds,

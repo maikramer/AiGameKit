@@ -1,11 +1,17 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
-import { loadGltfToScene } from '../../extras/gltf-bridge';
+import { loadGltfLodToScene, loadGltfToScene } from '../../extras/gltf-bridge';
 import { getScene } from '../rendering';
 import { Transform } from '../transforms/components';
 import { GltfPending, GltfPhysicsPending } from './components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
-import { getGltfUrl, isGltfInFlight, setGltfInFlight } from './context';
+import {
+  clearGltfLodUrls,
+  getGltfLodUrls,
+  getGltfUrl,
+  isGltfInFlight,
+  setGltfInFlight,
+} from './context';
 import { registerGltfRootGroup } from './group-registry';
 
 const gltfLoadQuery = defineQuery([GltfPending]);
@@ -54,7 +60,45 @@ export const GltfXmlLoadSystem: System = {
       if (isGltfInFlight(state, eid)) {
         continue;
       }
+      const lodTriple = getGltfLodUrls(state, eid);
       const url = getGltfUrl(state, eid);
+      if (lodTriple) {
+        setGltfInFlight(state, eid, true);
+        void loadGltfLodToScene(state, lodTriple)
+          .then((group) => {
+            registerGltfLocalYBounds(lodTriple[1], group.children[1] ?? group);
+            applyTransformToGroup(group, eid);
+            if (state.exists(eid)) {
+              registerGltfRootGroup(state, eid, group);
+            }
+            clearGltfLodUrls(state, eid);
+          })
+          .catch((err: unknown) => {
+            const u = lodTriple.join(' | ');
+            const base = err instanceof Error ? err.message : String(err);
+            const looksLike404Html =
+              base.includes('JSON') ||
+              base.includes('parse') ||
+              base.includes('<!DOCTYPE');
+            const hint = looksLike404Html
+              ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
+              : '';
+            console.error('[gltf-load lod]', u, base + hint);
+            clearGltfLodUrls(state, eid);
+            if (
+              state.exists(eid) &&
+              state.hasComponent(eid, GltfPhysicsPending)
+            ) {
+              GltfPhysicsPending.ready[eid] = 1;
+            }
+          })
+          .finally(() => {
+            GltfPending.loaded[eid] = 1;
+            setGltfInFlight(state, eid, false);
+          });
+        continue;
+      }
+
       if (!url) {
         GltfPending.loaded[eid] = 1;
         if (state.hasComponent(eid, GltfPhysicsPending)) {
@@ -72,7 +116,7 @@ export const GltfXmlLoadSystem: System = {
           }
         })
         .catch((err: unknown) => {
-          const url = getGltfUrl(state, eid);
+          const failedUrl = getGltfUrl(state, eid);
           const base = err instanceof Error ? err.message : String(err);
           const looksLike404Html =
             base.includes('JSON') ||
@@ -81,7 +125,7 @@ export const GltfXmlLoadSystem: System = {
           const hint = looksLike404Html
             ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
             : '';
-          console.error('[gltf-load]', url ?? '(sem url)', base + hint);
+          console.error('[gltf-load]', failedUrl ?? '(sem url)', base + hint);
           if (
             state.exists(eid) &&
             state.hasComponent(eid, GltfPhysicsPending)
