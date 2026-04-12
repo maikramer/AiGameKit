@@ -140,6 +140,8 @@ def run_text3d(_job_id: str, params: Text3DParams, out_dir: Path) -> list[str]:
                     smooth_iterations=max(0, params.mesh_smooth),
                     remesh=params.remesh,
                     remesh_resolution=params.remesh_resolution,
+                    remesh_iterations=params.remesh_iterations,
+                    remesh_max_surf_dist_factor=params.remesh_max_surf_dist_factor,
                 )
 
             mesh_name = f"{params.output_basename}.{params.output_format}"

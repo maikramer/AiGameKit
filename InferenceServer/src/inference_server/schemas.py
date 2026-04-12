@@ -59,7 +59,9 @@ class Text3DParams(BaseModel):
     ground_shadow_very_aggressive: bool = False
     mesh_smooth: int = Field(default=0, ge=0, le=5)
     remesh: bool = True
-    remesh_resolution: int = Field(default=150, ge=10, le=500)
+    remesh_resolution: int = Field(default=180, ge=10, le=500)
+    remesh_iterations: int = Field(default=6, ge=1, le=30)
+    remesh_max_surf_dist_factor: float = Field(default=0.38, gt=0.0, le=1.0)
 
     model_subfolder: str | None = None
     hunyuan_model_id: str | None = None
