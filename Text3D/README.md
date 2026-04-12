@@ -1,4 +1,4 @@
-﻿# Text3D
+# Text3D
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
@@ -107,6 +107,17 @@ See [`defaults.py`](src/text3d/defaults.py). Summary:
 | `--seed` | — | — |
 | `--preset` | — | `fast` / `balanced` / `hq` (replaces steps+octree+chunks) |
 | `--mc-level` | 0 | Hunyuan iso-surface (fine tuning) |
+
+### Mesh LOD (post-process, sem GPU)
+
+Gera três GLB com decimação quadric (`fast-simplification`) a partir de qualquer mesh:
+
+```bash
+text3d lod modelo.glb -o ./out_dir --basename prop
+# → prop_lod0.glb (cheio), prop_lod1.glb (~42% faces), prop_lod2.glb (~14% faces)
+```
+
+Opções: `--lod1-ratio`, `--lod2-ratio`, `--min-faces-lod1`, `--min-faces-lod2`.
 
 ## Python
 

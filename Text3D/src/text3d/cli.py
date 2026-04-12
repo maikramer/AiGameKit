@@ -32,6 +32,7 @@ from .utils.memory import (
     format_bytes,
     kill_gpu_compute_processes_aggressive,
 )
+from .utils.mesh_lod import generate_lod_glb_triplet
 
 console = Console()
 
@@ -80,6 +81,7 @@ def cli(ctx, verbose):
         text3d generate -i ref.png -o mesh.glb
         text3d doctor
         text3d repair-ground modelo.glb --y-up-flip-x-180 --no-keep-largest
+        text3d lod modelo.glb -o ./out --basename prop
         text3d -v generate "prompt"
         text3d info
     """
@@ -294,6 +296,20 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Resolução do remeshing (~nº subdivisões na diagonal). Maior = mais detalhe.",
 )
 @click.option(
+    "--remesh-iterations",
+    default=_defaults.DEFAULT_REMESH_ITERATIONS,
+    show_default=True,
+    type=int,
+    help="Iterações do remesh isotrópico (mais = converge melhor; mais lento).",
+)
+@click.option(
+    "--remesh-surf-dist-factor",
+    default=_defaults.DEFAULT_REMESH_MAX_SURF_DIST_FACTOR,
+    show_default=True,
+    type=float,
+    help="Fator para maxsurfdist vs target edge (menor ≈ mais fiel à superfície original).",
+)
+@click.option(
     "--model-subfolder",
     default=_defaults.DEFAULT_SUBFOLDER,
     show_default=True,
@@ -414,6 +430,8 @@ def generate(
     mesh_smooth,
     remesh,
     remesh_resolution,
+    remesh_iterations,
+    remesh_surf_dist_factor,
     generate_verbose,
     allow_shared_gpu,
     gpu_kill_others,
@@ -493,7 +511,10 @@ def generate(
         elif ground_shadow_aggressive:
             rep += " (agressivo)"
     if remesh and not no_mesh_repair:
-        rep += f", remesh(res={remesh_resolution})"
+        rep += (
+            f", remesh(res={remesh_resolution}, it={remesh_iterations}, "
+            f"surf={remesh_surf_dist_factor})"
+        )
     if mesh_smooth > 0 and not no_mesh_repair:
         rep += f", smooth={mesh_smooth}"
     if not no_remove_plates:
@@ -520,6 +541,8 @@ def generate(
         "mesh_smooth": mesh_smooth,
         "remesh": remesh,
         "remesh_resolution": remesh_resolution,
+        "remesh_iterations": remesh_iterations,
+        "remesh_surf_dist_factor": remesh_surf_dist_factor,
         "model_subfolder": model_subfolder,
         "from_image": bool(from_image),
     }
@@ -674,6 +697,8 @@ def generate(
                         smooth_iterations=max(0, mesh_smooth),
                         remesh=remesh,
                         remesh_resolution=remesh_resolution,
+                        remesh_iterations=remesh_iterations,
+                        remesh_max_surf_dist_factor=remesh_surf_dist_factor,
                     )
 
                 if not no_remove_plates:
@@ -883,6 +908,20 @@ def info():
     type=int,
     help="Resolução do remeshing (~nº subdivisões na diagonal).",
 )
+@click.option(
+    "--remesh-iterations",
+    default=_defaults.DEFAULT_REMESH_ITERATIONS,
+    show_default=True,
+    type=int,
+    help="Iterações do remesh isotrópico.",
+)
+@click.option(
+    "--remesh-surf-dist-factor",
+    default=_defaults.DEFAULT_REMESH_MAX_SURF_DIST_FACTOR,
+    show_default=True,
+    type=float,
+    help="Fator maxsurfdist vs target edge (menor ≈ mais fiel à superfície).",
+)
 def repair_ground_cmd(
     input_glb: Path,
     output,
@@ -895,6 +934,8 @@ def repair_ground_cmd(
     ground_shadow_very_aggressive: bool,
     remesh: bool,
     remesh_resolution: int,
+    remesh_iterations: int,
+    remesh_surf_dist_factor: float,
 ):
     """Pós-processa um GLB: anti-sombra na base (e opcionalmente corrige orientação)."""
     import trimesh as tm
@@ -925,6 +966,8 @@ def repair_ground_cmd(
             smooth_iterations=0,
             remesh=remesh,
             remesh_resolution=remesh_resolution,
+            remesh_iterations=remesh_iterations,
+            remesh_max_surf_dist_factor=remesh_surf_dist_factor,
         )
 
         out_path = Path(output) if output else input_glb
@@ -1020,6 +1063,108 @@ def gpu_processes_cmd() -> None:
             "ou [bold]TEXT3D_ALLOW_SHARED_GPU=1[/bold] só se aceitares OOM.[/dim]",
             border_style="dim",
             title="Dica",
+        )
+    )
+
+
+@cli.command("lod")
+@click.argument(
+    "input_mesh",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(file_okay=False, path_type=Path),
+    required=True,
+    help="Pasta de saída para os três GLB (lod0, lod1, lod2)",
+)
+@click.option(
+    "--basename",
+    "-n",
+    "basename_opt",
+    type=str,
+    default=None,
+    help="Prefixo dos ficheiros (defeito: nome do ficheiro de entrada sem extensão)",
+)
+@click.option(
+    "--lod1-ratio",
+    type=float,
+    default=0.42,
+    show_default=True,
+    help="Rácio aproximado de faces do LOD1 face ao original",
+)
+@click.option(
+    "--lod2-ratio",
+    type=float,
+    default=0.14,
+    show_default=True,
+    help="Rácio aproximado de faces do LOD2 face ao original",
+)
+@click.option(
+    "--min-faces-lod1",
+    type=int,
+    default=500,
+    show_default=True,
+    help="Mínimo de faces no LOD1",
+)
+@click.option(
+    "--min-faces-lod2",
+    type=int,
+    default=150,
+    show_default=True,
+    help="Mínimo de faces no LOD2",
+)
+@click.option(
+    "--meshfix",
+    is_flag=True,
+    default=False,
+    help="Aplicar pymeshfix só ``fill_small_boundaries`` após cada nível (opcional; por defeito desligado)",
+)
+def lod_cmd(
+    input_mesh: Path,
+    output_dir: Path,
+    basename_opt: str | None,
+    lod1_ratio: float,
+    lod2_ratio: float,
+    min_faces_lod1: int,
+    min_faces_lod2: int,
+    meshfix: bool,
+) -> None:
+    """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
+
+    Requer ``fast-simplification`` (dependência do pacote text3d). Saída:
+    ``<basename>_lod0.glb``, ``<basename>_lod1.glb``, ``<basename>_lod2.glb``.
+
+    Antes da decimação aplica-se ``prepare_mesh_topology`` (fundir vértices,
+    manifold) para reduzir rachas nos LODs; ``<basename>_lod0.glb`` é a mesh corrigida em
+    resolução total (podes copiar para substituir o GLB fonte se quiseres alinhar o jogo).
+
+    Por defeito **não** corre pymeshfix (decimação pura). Usa ``--meshfix`` só se precisares
+    de fechar buracos pequenos; evita-se ``clean()`` do PyTMesh que destrói LODs decimados.
+    """
+    stem = basename_opt if basename_opt else input_mesh.stem
+    try:
+        paths = generate_lod_glb_triplet(
+            input_mesh,
+            output_dir,
+            stem,
+            lod1_ratio=lod1_ratio,
+            lod2_ratio=lod2_ratio,
+            min_faces_lod1=min_faces_lod1,
+            min_faces_lod2=min_faces_lod2,
+            meshfix=meshfix,
+        )
+    except RuntimeError as e:
+        raise click.ClickException(str(e)) from e
+    except ValueError as e:
+        raise click.ClickException(str(e)) from e
+
+    console.print(
+        Panel(
+            "\n".join(f"• [cyan]{p}[/cyan]" for p in paths),
+            title="[bold green]LOD gerado[/bold green]",
+            border_style="green",
         )
     )
 

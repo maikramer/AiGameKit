@@ -1,0 +1,35 @@
+Técnicas avançadas de simplificação / otimização de malhas (backlog Text3D)
+============================================================================
+
+Referências úteis: Garland & Heckbert (QEM), Hoppe (progressive meshes), CGAL surface mesh,
+OpenMesh Decimater, libigl (per-edge collapse, isotropic remeshing).
+
+1) Quadric Error Metrics (QEM) com atributos
+   - Já usamos trimesh.simplify_quadric_decimation (fast-simplification) para LOD.
+   - Melhorias: pesos por curvatura/bordas salientes; QEM com normais/UV (Garland 1999+);
+     limitar colapsos que invertem normais.
+
+2) Pair contraction / topology-aware decimation
+   - Colapsos que respeitam arestas de corte e bordas abertas; evita "rachas" em malhas
+     image-to-3D não manifold.
+
+3) Remeshing isotrópico + decimação em dois passos
+   - Já temos isotropic_remesh em mesh_repair (pymeshlab). Pipeline: remesh leve → QEM
+     para LOD estáveis.
+
+4) Progressive / hierarchical LOD
+   - Representação PM (Hoppe): sequência de colapsos reversíveis; streaming e LOD contínuo.
+   - Alinhado com generate_lod_glb_triplet mas com registo explícito de vsplit.
+
+5) Otimização variacional (energia: fidelidade + regularidade)
+   - Laplacian / bi-Laplacian com restrições; ou Instant Meshes (campo de orientação) para
+     quad-dominant em assets hero.
+
+6) Malha em GPU / paralelo
+   - NVIDIA meshoptimizer (simplificação e vertex cache); útil para build de assets Web.
+
+Baseline de teste (cru + repaired + full)
+------------------------------------------
+Ver scripts/generate_baseline_raw_meshes.sh — gera **8** stems stress-test (GLB cru
+com --no-mesh-repair --no-remove-plates), depois scripts/baseline_apply_repair.py
+produz *_repaired.glb e *_full.glb. Opção --clean apaga GLB/PNG antigos na pasta.

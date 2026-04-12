@@ -85,7 +85,7 @@ def _remove_flat_bottom_islands(
     if h_global < 1e-8:
         return mesh_yup
 
-    bottom_eps = (0.055 if aggressive else 0.035) * h_global
+    bottom_eps = (0.065 if aggressive else 0.042) * h_global
     thin_ratio = 0.28 if aggressive else 0.085
     vol_ratio_max = 0.52 if aggressive else 0.22
 
@@ -123,9 +123,9 @@ def _remove_flat_bottom_islands(
 def _peel_bottom_upward_faces(
     mesh_yup: trimesh.Trimesh,
     *,
-    band_frac: float = 0.018,
+    band_frac: float = 0.042,
     min_normal_y: float = 0.82,
-    max_remove_frac: float = 0.11,
+    max_remove_frac: float = 0.14,
 ) -> trimesh.Trimesh:
     """
     Remove faces **quase horizontais** (|ny| alto) na faixa mais baixa do bbox.
@@ -174,7 +174,7 @@ def _peel_bottom_upward_faces(
 def _remove_bottom_center_cylinder(
     mesh_yup: trimesh.Trimesh,
     *,
-    height_frac: float = 0.15,
+    height_frac: float = 0.17,
     radius_frac: float = 0.9,
     min_normal_y: float | None = 0.4,
     max_remove_frac: float = 0.52,
@@ -227,7 +227,7 @@ def _remove_bottom_center_cylinder(
 def _remove_connected_ground_plinth(
     mesh_yup: trimesh.Trimesh,
     *,
-    bottom_frac: float = 0.12,
+    bottom_frac: float = 0.15,
     min_normal_y: float = 0.35,
     max_remove_frac: float = 0.35,
     min_expansion: float = 1.15,
@@ -700,7 +700,8 @@ def remove_ground_shadow_artifacts(
 
     ``aggressive``: opt-in — cilindro estreito sob o centro + peel mais forte (só para
     cascas enormes na base; pode comer geometria lateral se estiver no cone).
-    O defeito é conservador (placa fina + peel leve).
+    O defeito usa peel na faixa inferior (~2,8% da altura do bbox) para cortar restos
+    de pedestal/sombra um pouco mais acima que antes.
 
     ``very_aggressive``: modo extremo para pedestais muito grudados ao modelo.
     Usa flood-fill para detectar e remover geometria conectada na base que parece
@@ -718,25 +719,25 @@ def remove_ground_shadow_artifacts(
         # puramente horizontais, parando quando encontra geometria curva (pés, cauda)
         yup = _remove_pedestal_by_layers(
             yup,
-            layer_depth_frac=0.015,
+            layer_depth_frac=0.018,
             min_horizontal_pct=0.80,
             normal_threshold=0.95,
-            max_layers=5,
+            max_layers=7,
             max_remove_frac=0.35,
             cleanup_small_components=2000,
         )
         # Fallback: modo antigo para casos onde o novo não removeu nada
         yup = _remove_connected_ground_plinth(
             yup,
-            bottom_frac=0.15,
+            bottom_frac=0.20,
             min_normal_y=0.25,
             max_remove_frac=0.40,
             min_expansion=1.08,
         )
-        # Cilindro mais agressivo
+        # Cilindro mais agressivo (corte mais alto na base)
         yup = _remove_bottom_center_cylinder(
             yup,
-            height_frac=0.18,
+            height_frac=0.22,
             radius_frac=0.75,
             min_normal_y=0.45,
             max_remove_frac=0.40,
@@ -744,7 +745,7 @@ def remove_ground_shadow_artifacts(
         # Peel mais forte
         yup = _peel_bottom_upward_faces(
             yup,
-            band_frac=0.065,
+            band_frac=0.078,
             min_normal_y=0.55,
             max_remove_frac=0.30,
         )
@@ -752,16 +753,16 @@ def remove_ground_shadow_artifacts(
         # Cilindro mais estreito e normais mais horizontais — menos risco nas laterais.
         yup = _remove_bottom_center_cylinder(
             yup,
-            height_frac=0.13,
+            height_frac=0.16,
             radius_frac=0.58,
             min_normal_y=0.68,
             max_remove_frac=0.3,
         )
         yup = _peel_bottom_upward_faces(
             yup,
-            band_frac=0.045,
+            band_frac=0.055,
             min_normal_y=0.62,
-            max_remove_frac=0.24,
+            max_remove_frac=0.26,
         )
     else:
         yup = _peel_bottom_upward_faces(yup)
@@ -849,12 +850,96 @@ def keep_largest_component(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     return max(parts, key=_component_score)
 
 
+def _mean_edge_length(mesh: trimesh.Trimesh) -> float:
+    """Comprimento médio das arestas únicas da mesh (0.0 se vazia)."""
+    try:
+        edges = mesh.edges_unique
+        if len(edges) == 0:
+            return 0.0
+        vecs = mesh.vertices[edges[:, 1]] - mesh.vertices[edges[:, 0]]
+        return float(np.mean(np.linalg.norm(vecs, axis=1)))
+    except Exception:
+        return 0.0
+
+
 def _boundary_edge_count(mesh: trimesh.Trimesh) -> int:
     """Conta arestas de fronteira (buracos abertos)."""
     try:
         return len(group_rows(mesh.edges_sorted, require_count=1))
     except Exception:
         return -1
+
+
+def _boundary_holes_info(
+    mesh: trimesh.Trimesh,
+) -> list[dict]:
+    """Informação sobre cada boundary loop: area, centroid, n_edges.
+
+    Retorna lista de dicts com chaves ``area``, ``centroid`` (ndarray 3D),
+    ``n_edges``, ``vertex_ids`` (ndarray de índices).
+    """
+    if nx is None:
+        return []
+    try:
+        boundary_groups = group_rows(mesh.edges_sorted, require_count=1)
+        if len(boundary_groups) < 3:
+            return []
+        be = mesh.edges[boundary_groups]
+        if len(be) > 60_000:
+            return []
+        g = nx.from_edgelist(be)
+        holes: list[dict] = []
+        for cycle in nx.cycle_basis(g):
+            if len(cycle) < 3:
+                continue
+            ids = np.array(cycle)
+            pts = mesh.vertices[ids]
+            centroid = pts.mean(axis=0)
+            area = 0.0
+            n = len(pts)
+            for i in range(n):
+                v1 = pts[i] - centroid
+                v2 = pts[(i + 1) % n] - centroid
+                area += float(np.linalg.norm(np.cross(v1, v2))) * 0.5
+            holes.append({
+                "area": area,
+                "centroid": centroid,
+                "n_edges": n,
+                "vertex_ids": ids,
+            })
+        return holes
+    except Exception:
+        return []
+
+
+def _has_large_base_hole_fn(mesh: trimesh.Trimesh, area_frac_threshold: float = 0.05) -> bool:
+    """Verifica se existe um buraco grande **na base** da mesh.
+
+    Um buraco é considerado "na base" se o centróide do loop estiver nos 15%
+    inferiores da altura (eixo Y). "Grande" = área > ``area_frac_threshold``
+    da área total da mesh.
+    """
+    try:
+        total_area = float(mesh.area)
+        if total_area < 1e-12:
+            return False
+        holes = _boundary_holes_info(mesh)
+        if not holes:
+            return False
+        ymin = float(mesh.vertices[:, 1].min())
+        ymax = float(mesh.vertices[:, 1].max())
+        h = ymax - ymin
+        if h < 1e-8:
+            return False
+        base_threshold = ymin + h * 0.15
+        for hole in holes:
+            cy = float(hole["centroid"][1])
+            frac = hole["area"] / total_area
+            if cy <= base_threshold and frac > area_frac_threshold:
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def _detect_base_axis_mesh(mesh: trimesh.Trimesh) -> tuple[int, int]:
@@ -1156,6 +1241,40 @@ def manifold_repair(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         return m
 
 
+def prepare_mesh_topology(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Prepara topologia antes de export, LOD ou :func:`repair_mesh`.
+
+    Funde vértices duplicados e quase coincidentes (export GLB), remove duplicatas e aplica
+    :func:`manifold_repair` (sem remoção de bases, sem pymeshfix ``clean()``). Reduz
+    tamanho em disco e evita faces soltas após decimação ou pipelines seguintes.
+
+    Usada por defeito no início de :func:`repair_mesh` e antes de gerar LODs.
+    """
+    m = mesh.copy()
+    with contextlib.suppress(Exception):
+        m.merge_vertices(merge_tex=True)
+    with contextlib.suppress(Exception):
+        m.remove_duplicate_faces()
+    with contextlib.suppress(Exception):
+        m.remove_unreferenced_vertices()
+    # Aproximar vértices quase coincidentes (tolerância por casas decimais)
+    with contextlib.suppress(Exception):
+        m.merge_vertices(merge_tex=True, digits_vertex=5)
+    m = manifold_repair(m)
+    with contextlib.suppress(Exception):
+        m.merge_vertices(merge_tex=True)
+    with contextlib.suppress(Exception):
+        m.remove_duplicate_faces()
+    with contextlib.suppress(Exception):
+        m.remove_unreferenced_vertices()
+    with contextlib.suppress(Exception):
+        trimesh_repair.fix_normals(m, multibody=True)
+    return m
+
+
+prepare_mesh_for_lod_decimation = prepare_mesh_topology
+
+
 def make_watertight(
     mesh: trimesh.Trimesh,
     *,
@@ -1258,6 +1377,41 @@ def make_watertight(
     return m
 
 
+def pymeshfix_mesh_repair_only(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Só PyTMesh ``fill_small_boundaries`` (sem ``clean``).
+
+    ``clean()`` remove triângulos com auto-intersecções; em meshes decimadas (LOD) isso
+    costuma eliminar troncos ou quase toda a geometria. Não usa pymeshlab nem
+    ``repair_mesh``.
+
+    Se ``pymeshfix`` não estiver instalado ou não houver fronteira aberta, devolve a mesh
+    inalterada.
+    """
+    m = mesh.copy()
+    try:
+        from pymeshfix import PyTMesh
+    except ImportError:
+        return m
+
+    if _boundary_edge_count(m) <= 0:
+        return m
+
+    try:
+        verts = np.asarray(m.vertices, dtype=np.float64)
+        faces = np.asarray(m.faces, dtype=np.int64)
+        mfix = PyTMesh()
+        mfix.load_array(verts, faces)
+        mfix.fill_small_boundaries(nbe=0, refine=True)
+        v, f = mfix.return_arrays()
+        return trimesh.Trimesh(
+            vertices=np.asarray(v, dtype=np.float64),
+            faces=np.asarray(f, dtype=np.int64),
+            process=True,
+        )
+    except Exception:
+        return m
+
+
 def taubin_smooth(
     mesh: trimesh.Trimesh,
     *,
@@ -1321,6 +1475,7 @@ def isotropic_remesh(
     resolution: int = 150,
     iterations: int = 5,
     adaptive: bool = True,
+    max_surf_dist_factor: float = 0.42,
     close_holes: bool = True,
     close_holes_max_edges: int = 300,
     taubin_steps: int = 3,
@@ -1334,6 +1489,8 @@ def isotropic_remesh(
     degeneradas (spikes) sem perder as features da superfície.
 
     ``resolution`` controla o nível de detalhe (~nº de subdivisões na diagonal).
+    ``max_surf_dist_factor`` multiplica o target edge para ``maxsurfdist`` (menor =
+    mais fiel à superfície original; típico 0.35-0.5).
     ``close_holes`` fecha buracos (marching cubes deixa buracos nas bordas do volume).
     ``taubin_steps`` controla suavização pós-remesh (0 = desliga).
     """
@@ -1371,13 +1528,17 @@ def isotropic_remesh(
         diag = ms.current_mesh().bounding_box().diagonal()
         target_edge = diag / max(resolution, 10)
 
+        avg_edge = _mean_edge_length(mesh)
+        if avg_edge > 0:
+            target_edge = max(target_edge, avg_edge * 0.80)
+
         ms.meshing_isotropic_explicit_remeshing(
             iterations=iterations,
             targetlen=pymeshlab.PureValue(target_edge),
             adaptive=adaptive,
             selectedonly=False,
             checksurfdist=True,
-            maxsurfdist=pymeshlab.PureValue(target_edge * 0.5),
+            maxsurfdist=pymeshlab.PureValue(target_edge * max_surf_dist_factor),
         )
 
         if taubin_steps > 0:
@@ -1987,6 +2148,7 @@ def remove_backing_plates(
 def repair_mesh(
     mesh: trimesh.Trimesh,
     *,
+    topology_prep: bool = True,
     keep_largest: bool = True,
     merge_vertices: bool = True,
     remove_ground_shadow: bool = True,
@@ -2001,27 +2163,34 @@ def repair_mesh(
     smooth_iterations: int = 0,
     smooth_lamb: float = 0.45,
     remesh: bool = False,
-    remesh_resolution: int = 150,
+    remesh_resolution: int = 180,
+    remesh_iterations: int = 6,
+    remesh_max_surf_dist_factor: float = 0.38,
     remesh_taubin_steps: int = 3,
     watertight: bool = True,
     taubin_smooth_steps: int = 0,
 ) -> trimesh.Trimesh:
-    """Pipeline de reparo completa: limpeza → watertight → remesh → smooth.
+    """Pipeline de reparo completa: pedestais → topologia → watertight → remesh → smooth.
 
     Produz mesh watertight por defeito (``watertight=True``), pronta para
     Hunyuan3D-Paint, rigging (UniRig) e animação.
 
     Ordem de operações:
-    1. Remoção de sombras/pedestais na base
+    1. Remoção de sombras/pedestais na base (antes de fundir vértices)
     2. Remoção de ilhas minúsculas (fragmentos flutuantes)
-    3. Merge de vértices duplicados
-    4. Manifold repair (pymeshlab: non-manifold edges/vertices, duplicatas)
-    5. Watertight cascade (pymeshlab → pymeshfix → trimesh)
+    3. :func:`prepare_mesh_topology` **ou** merge + manifold (conforme ``topology_prep``)
+    4. Fechar buracos minúsculos (rachas do marching cubes) para solidificar paredes
+    5. Watertight cascade — só se não existirem buracos estruturais grandes (>5% da
+       área da mesh); se existirem, preserva a abertura (ex. base de crate)
     6. Remoção de spikes na base (se very_aggressive)
-    7. Keep largest component
-    8. Isotropic remesh (opcional, reconstrói topologia uniforme)
+    7. Remover componentes-placa separadas; maior componente (se ``keep_largest``)
+    8. Isotropic remesh (opcional; ``remesh_max_surf_dist_factor`` baixo = mais fiel)
     9. Taubin smoothing volume-preserving (opcional, ideal para rigging)
     10. Laplacian smoothing legacy (opcional, se smooth_iterations > 0)
+
+    Args:
+        topology_prep: Se ``True`` (defeito), aplica :func:`prepare_mesh_topology` após
+            pedestais/ilhas e evita duplicar merge+manifold soltos.
     """
     m = mesh.copy()
 
@@ -2048,42 +2217,83 @@ def repair_mesh(
         except Exception:
             pass
 
-    # 3. Merge de vértices
-    if merge_vertices:
+    # 3. Topologia: weld/manifold depois de cortar pedestais — solda paredes
+    #    duplas do marching cubes e corrige arestas non-manifold.
+    if topology_prep:
         with contextlib.suppress(Exception):
-            m.merge_vertices()
+            m = prepare_mesh_topology(m)
+    else:
+        if merge_vertices:
+            with contextlib.suppress(Exception):
+                m.merge_vertices()
+        with contextlib.suppress(Exception):
+            m = manifold_repair(m)
 
-    # 4. Manifold repair
+    # 4. Fechar rachas minúsculas (marching cubes): solidifica paredes grossas
+    #    sem tocar em aberturas estruturais. Após este passo as paredes espessas
+    #    (ex. crate) ficam reconhecidas como sólidas.
     with contextlib.suppress(Exception):
-        m = manifold_repair(m)
+        _fill_small_boundary_holes_inplace(m, max(fill_small_holes_max_edges, 16))
 
-    # 5. Watertight
+    # 5. Watertight — inteligente: se existe um buraco grande na BASE (>5% da
+    #    área, centróide nos 15% inferiores), aplica watertight mas depois
+    #    remove as faces criadas na base para preservar a abertura estrutural
+    #    (ex. fundo do crate). Buracos no topo/laterais (tábuas, rachas) são
+    #    sempre fechados.
+    _has_large_base_hole = False
     if watertight:
-        with contextlib.suppress(Exception):
-            m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
+        _has_large_base_hole = _has_large_base_hole_fn(m)
+        if _has_large_base_hole:
+            n_faces_before = len(m.faces)
+            ymin_before = float(m.vertices[:, 1].min())
+            ymax_before = float(m.vertices[:, 1].max())
+            h_before = ymax_before - ymin_before
+            base_band = ymin_before + h_before * 0.12
+
+            with contextlib.suppress(Exception):
+                m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
+
+            if len(m.faces) > n_faces_before:
+                centers_y = m.triangles_center[:, 1]
+                normals_y = np.abs(m.face_normals[:, 1])
+                new_base_faces = (centers_y <= base_band) & (normals_y > 0.85)
+                n_new_base = int(np.count_nonzero(new_base_faces))
+                if 0 < n_new_base < len(m.faces) * 0.35:
+                    keep = ~new_base_faces
+                    with contextlib.suppress(Exception):
+                        sub = m.submesh([np.where(keep)[0]], append=True, only_watertight=False)
+                        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                            m = sub
+                            m.remove_unreferenced_vertices()
+        else:
+            with contextlib.suppress(Exception):
+                m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
     elif fill_small_holes_max_edges > 0:
         with contextlib.suppress(Exception):
             _fill_small_boundary_holes_inplace(m, fill_small_holes_max_edges)
 
-    # 6. Spikes na base (very_aggressive pós-watertight)
+    # 5. Spikes na base (very_aggressive pós-watertight)
     if ground_shadow_very_aggressive:
         with contextlib.suppress(Exception):
             m = _remove_spikes_and_repair(m)
 
-    # 7a. Remover componentes-placa separadas
+    # 6. Remover componentes-placa separadas
     with contextlib.suppress(Exception):
         m = remove_plate_components(m)
 
-    # 8b. Keep best component
+    # 7. Keep best component
     if keep_largest:
         m = keep_largest_component(m)
 
-    # 8. Isotropic remesh
+    # 8. Isotropic remesh (após topologia estável e maior componente)
     if remesh:
         with contextlib.suppress(Exception):
             m = isotropic_remesh(
                 m,
                 resolution=remesh_resolution,
+                iterations=remesh_iterations,
+                max_surf_dist_factor=remesh_max_surf_dist_factor,
+                close_holes=not _has_large_base_hole,
                 taubin_steps=remesh_taubin_steps,
             )
 
@@ -2092,7 +2302,7 @@ def repair_mesh(
         with contextlib.suppress(Exception):
             m = taubin_smooth(m, iterations=taubin_smooth_steps)
 
-    # 10. Legacy Laplacian
+    # 10. Laplacian legacy
     if smooth_iterations > 0:
         m = laplacian_smooth(m, iterations=smooth_iterations, lamb=smooth_lamb)
 

@@ -103,7 +103,10 @@ DEFAULT_MESH_SMOOTH = 0
 # Isotropic remeshing (pymeshlab): reconstrói topologia com triângulos uniformes,
 # fecha buracos do marching cubes e elimina faces degeneradas. Padrão: ligado.
 DEFAULT_REMESH = True
-DEFAULT_REMESH_RESOLUTION = 150
+# Resolução mais alta + iterações/surf-dist conservadores = menos perda de detalhe.
+DEFAULT_REMESH_RESOLUTION = 180
+DEFAULT_REMESH_ITERATIONS = 6
+DEFAULT_REMESH_MAX_SURF_DIST_FACTOR = 0.38
 
 # --- Referência "alta qualidade" (model card HF / GPU com bastante VRAM) ---
 # Ex.: --octree-resolution 384 --num-chunks 20000 --steps 30
