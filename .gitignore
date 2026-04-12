@@ -76,7 +76,13 @@ __pycache__
 *.egg-info
 build
 dist
-*.png
+# Text3D — meshes baseline cruas geradas localmente (ver testdata/.../README.txt)
+Text3D/testdata/baseline_meshes_raw/*
+!Text3D/testdata/baseline_meshes_raw/README.txt
+
+# Screenshots / QA locais na raiz do monorepo (não versionar)
+/qa-*.png
+/f3-game-loaded.png
 
 # Agent tool artifacts
 .sisyphus/
