@@ -121,9 +121,22 @@ def emit_world_xml(plan: DreamPlan) -> str:
     if has_sky_image:
         lines.append('  <Skybox url="/assets/sky/sky.png"></Skybox>')
 
-    gs = plan.scene.ground_size or 50
-    ground_color = _ground_color_for_genre(plan.genre)
-    lines.append(f'  <static-part pos="0 -0.5 0" shape="box" size="{gs} 1 {gs}" color="{ground_color}"></static-part>')
+    terrain_enabled = plan.terrain is not None and plan.terrain.enabled
+    if terrain_enabled:
+        tp = plan.terrain
+        ws = tp.world_size or plan.scene.ground_size or 256
+        mh = tp.max_height or 50
+        lines.append(
+            f'  <Terrain heightmap="/assets/terrain/heightmap.png"'
+            f' terrain-data-url="/assets/terrain/terrain.json"'
+            f' world-size="{ws}" max-height="{mh}"></Terrain>'
+        )
+    else:
+        gs = plan.scene.ground_size or 50
+        ground_color = _ground_color_for_genre(plan.genre)
+        lines.append(
+            f'  <static-part pos="0 -0.5 0" shape="box" size="{gs} 1 {gs}" color="{ground_color}"></static-part>'
+        )
 
     spawn_y = plan.scene.spawn_y if plan.scene.spawn_y is not None else 3
     lines.append(f'  <Player pos="0 {spawn_y} 0"></Player>')

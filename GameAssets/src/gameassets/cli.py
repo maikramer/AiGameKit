@@ -3013,6 +3013,11 @@ def debug_compare(
 @click.option("--max-assets", default=8, type=int, help="Número máximo de assets.")
 @click.option("--with-audio/--no-audio", default=True, help="Incluir assets de áudio.")
 @click.option("--with-sky/--no-sky", default=True, help="Gerar sky equirectangular.")
+@click.option("--terrain/--no-terrain", default=None, help="Enable/disable terrain (default: auto via LLM plan).")
+@click.option("--terrain-seed", default=None, type=int, help="Override terrain seed.")
+@click.option("--terrain-size", default=None, type=int, help="Heightmap resolution (default: 1024).")
+@click.option("--terrain-world-size", default=None, type=float, help="World size in meters (default: 256).")
+@click.option("--terrain-max-height", default=None, type=float, help="Max terrain height (default: 50).")
 @click.option("--presets-local", type=Path, default=None, help="Ficheiro de presets local.")
 @click.option("--dry-run", is_flag=True, default=False, help="Gerar ficheiros sem executar batch/sky (sem GPU).")
 @click.option("--plan-json", type=Path, default=None, help="Exportar dream_plan.json para este caminho.")
@@ -3027,6 +3032,11 @@ def dream_cmd(
     max_assets: int,
     with_audio: bool,
     with_sky: bool,
+    terrain: bool | None,
+    terrain_seed: int | None,
+    terrain_size: int | None,
+    terrain_world_size: float | None,
+    terrain_max_height: float | None,
     presets_local: Path | None,
     dry_run: bool,
     plan_json: Path | None,
@@ -3054,6 +3064,23 @@ def dream_cmd(
         base_url=llm_base_url,
         plan_json_path=str(plan_json) if plan_json else None,
     )
+
+    if terrain is not None:
+        from .dream.planner import TerrainPlan
+
+        if terrain and plan.terrain is None:
+            plan.terrain = TerrainPlan(enabled=True)
+        elif not terrain and plan.terrain is not None:
+            plan.terrain.enabled = False
+    if plan.terrain is not None:
+        if terrain_seed is not None:
+            plan.terrain.seed = terrain_seed
+        if terrain_size is not None:
+            plan.terrain.size = terrain_size
+        if terrain_world_size is not None:
+            plan.terrain.world_size = terrain_world_size
+        if terrain_max_height is not None:
+            plan.terrain.max_height = terrain_max_height
 
     report = run_dream(
         plan,

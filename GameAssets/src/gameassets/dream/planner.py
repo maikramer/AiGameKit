@@ -34,6 +34,20 @@ class Placement:
 
 
 @dataclass
+class TerrainPlan:
+    enabled: bool = False
+    seed: int | None = None
+    prompt: str = ""
+    world_size: float = 768.0
+    max_height: float = 50.0
+    size: int = 2048
+    river_threshold: float = 4000.0
+    erosion_particles: int = 80000
+    lake_min_area: int = 20000
+    lake_max_count: int = 3
+
+
+@dataclass
 class SceneLayout:
     sky_color: str = "#87CEEB"
     ground_size: float = 50
@@ -51,9 +65,10 @@ class DreamPlan:
     scene: SceneLayout
     sky_prompt: str = ""
     negative_keywords: list[str] = field(default_factory=list)
+    terrain: TerrainPlan | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result: dict[str, Any] = {
             "title": self.title,
             "genre": self.genre,
             "tone": self.tone,
@@ -80,6 +95,20 @@ class DreamPlan:
                 "placements": [{"asset_id": p.asset_id, "pos": p.pos, "scale": p.scale} for p in self.scene.placements],
             },
         }
+        if self.terrain is not None:
+            result["terrain"] = {
+                "enabled": self.terrain.enabled,
+                "seed": self.terrain.seed,
+                "prompt": self.terrain.prompt,
+                "world_size": self.terrain.world_size,
+                "max_height": self.terrain.max_height,
+                "size": self.terrain.size,
+                "river_threshold": self.terrain.river_threshold,
+                "erosion_particles": self.terrain.erosion_particles,
+                "lake_min_area": self.terrain.lake_min_area,
+                "lake_max_count": self.terrain.lake_max_count,
+            }
+        return result
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> DreamPlan:
@@ -105,6 +134,21 @@ class DreamPlan:
             )
             for p in sc.get("placements", [])
         ]
+        terrain_data = d.get("terrain")
+        terrain: TerrainPlan | None = None
+        if terrain_data and isinstance(terrain_data, dict):
+            terrain = TerrainPlan(
+                enabled=terrain_data.get("enabled", False),
+                seed=terrain_data.get("seed"),
+                prompt=terrain_data.get("prompt", ""),
+                world_size=float(terrain_data.get("world_size", 768.0)),
+                max_height=float(terrain_data.get("max_height", 50.0)),
+                size=int(terrain_data.get("size", 2048)),
+                river_threshold=float(terrain_data.get("river_threshold", 4000.0)),
+                erosion_particles=int(terrain_data.get("erosion_particles", 80000)),
+                lake_min_area=int(terrain_data.get("lake_min_area", 20000)),
+                lake_max_count=int(terrain_data.get("lake_max_count", 3)),
+            )
         return cls(
             title=d.get("title", "Untitled"),
             genre=d.get("genre", ""),
@@ -119,6 +163,7 @@ class DreamPlan:
                 spawn_y=sc.get("spawn_y", 5),
                 placements=placements,
             ),
+            terrain=terrain,
         )
 
 

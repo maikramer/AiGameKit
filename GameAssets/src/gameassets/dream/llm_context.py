@@ -52,6 +52,39 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
                 },
             },
         },
+        "terrain": {
+            "type": "object",
+            "properties": {
+                "enabled": {"type": "boolean", "description": "Whether to generate procedural terrain"},
+                "seed": {"type": "integer", "description": "Random seed for terrain generation (omit for random)"},
+                "prompt": {
+                    "type": "string",
+                    "description": "Terrain description, e.g. mountain island, flat plains with river, volcanic island",
+                },
+                "world_size": {"type": "number", "description": "World extent in meters (default: 768)"},
+                "max_height": {"type": "number", "description": "Max terrain height in meters (default: 50)"},
+                "size": {
+                    "type": "integer",
+                    "description": "Heightmap resolution in pixels (default: 2048; larger = more detail)",
+                },
+                "river_threshold": {
+                    "type": "number",
+                    "description": "Flow accumulation threshold for rivers (default: 4000; lower = more rivers)",
+                },
+                "erosion_particles": {
+                    "type": "integer",
+                    "description": "Erosion particle count (default: 80000)",
+                },
+                "lake_min_area": {
+                    "type": "integer",
+                    "description": "Minimum lake size in heightmap pixels (default: 20000; higher = only large basins)",
+                },
+                "lake_max_count": {
+                    "type": "integer",
+                    "description": "Max lakes to place (default: 3; each is one Water entity; 0 = unlimited)",
+                },
+            },
+        },
     },
 }
 
@@ -94,7 +127,17 @@ SCENE_RULES = """\
 - sky_prompt should describe a 360-degree equirectangular panoramic sky.
 - Provide varied, creative ideas for each asset — avoid generic descriptions.
 - All string values in the JSON must be valid JSON (escaped quotes if needed).
-- Characters with generate_rig=true must use `<PlayerGLTF>` instead of `<GLTFLoader>` in the scene XML.\
+- Characters with generate_rig=true must use `<PlayerGLTF>` instead of `<GLTFLoader>` in the scene XML.
+- Enable terrain (terrain.enabled=true) for open-world, exploration, RPG, or outdoor games that benefit
+  from a procedural landscape instead of a flat ground plane.
+- Do NOT enable terrain for simple platformers, interior scenes, or games that only need a flat arena.
+- terrain.prompt should describe the landscape character (e.g. "mountain island",
+  "rolling hills with scattered lakes", "volcanic terrain").
+- terrain.world_size should match the scale of the game: 128-384 for small arenas,
+  512-768 for exploration, 768+ for large worlds.
+- terrain.max_height controls elevation range: 20-30 for gentle hills, 40-80 for mountains,
+  100+ for dramatic peaks.
+- terrain.lake_max_count: use 2-3 for believable open worlds (each lake is a Water entity); avoid large values.\
 """
 
 

@@ -14,6 +14,7 @@ from rich.panel import Panel
 
 from .emitter import emit_all
 from .planner import DreamPlan
+from .terrain_stage import TerrainConfig, TerrainStage
 
 console = Console()
 
@@ -145,6 +146,32 @@ def run_dream(
     _step("gameassets batch", ok=ok, detail=f"exit {rc}")
     if not ok and fail_fast:
         return report
+
+    # --- 3b. Terrain generation (se terrain enabled) ---
+    terrain_enabled = plan.terrain is not None and plan.terrain.enabled
+    if terrain_enabled:
+        tp = plan.terrain
+        terrain_dir = public_dir / "assets" / "terrain"
+        terrain_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            tcfg = TerrainConfig(
+                seed=tp.seed or 42,
+                prompt=tp.prompt,
+                world_size=tp.world_size,
+                max_height=tp.max_height,
+                size=tp.size,
+                river_threshold=tp.river_threshold,
+                erosion_particles=tp.erosion_particles,
+                lake_min_area=tp.lake_min_area,
+                lake_max_count=tp.lake_max_count,
+            )
+            stage = TerrainStage()
+            result = stage.run(tcfg, terrain_dir)
+            _step("terrain generation", detail=f"{result.heightmap_path.name} + {result.metadata_path.name}")
+        except Exception as exc:
+            _step("terrain generation", ok=False, detail=str(exc))
+            if fail_fast:
+                return report
 
     # --- 4. skymap2d generate (se sky_prompt) ---
     if with_sky and plan.sky_prompt:
