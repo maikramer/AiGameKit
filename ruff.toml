@@ -10,6 +10,7 @@ src = [
     "Texture2D/src",
     "Text2Sound/src",
     "Skymap2D/src",
+    "TerrainGen/src",
     "GameDevLab/src",
     "Animator3D/src",
     "Rigging3D/src/rigging3d",

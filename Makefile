@@ -1,11 +1,11 @@
 # GameDev monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text2Sound GameDevLab
+PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text2Sound GameDevLab TerrainGen
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-terraingen test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
 # Prefer .venv only if pytest is installed there; else python3, then python.
 define run-pytest
@@ -71,6 +71,9 @@ test-text2sound: ## pytest only in Text2Sound/
 
 test-gamedevlab: ## pytest only in GameDevLab/
 	$(call run-pytest,GameDevLab)
+
+test-terraingen: ## pytest only in TerrainGen/
+	$(call run-pytest,TerrainGen)
 
 test-materialize: ## cargo test in Materialize/
 	cd Materialize && cargo test
