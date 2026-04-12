@@ -1,5 +1,5 @@
 import { defineQuery } from 'bitecs';
-import type { MonoBehaviourContext, CollisionOther } from 'vibegame';
+import type { MonoBehaviourContext } from 'vibegame';
 import { Transform, PlayerController, SteeringAgent, SteeringTarget } from 'vibegame';
 import { Health, damageHealth, isDead } from '../../../../src/plugins/combat/components.ts';
 import { CollisionEvents } from '../../../../src/plugins/physics/components.ts';
@@ -96,14 +96,5 @@ export function update(ctx: MonoBehaviourContext): void {
   } else {
     SteeringAgent.behavior[eid] = 1;
     SteeringAgent.active[eid] = 1;
-  }
-}
-
-export function onCollisionEnter(ctx: MonoBehaviourContext, other: CollisionOther): void {
-  const config = configs.get(ctx.entity);
-  if (!config) return;
-
-  if (other.entity === cachedPlayerEid && Health.max[other.entity]) {
-    damageHealth(other.entity, config.attackDamage);
   }
 }

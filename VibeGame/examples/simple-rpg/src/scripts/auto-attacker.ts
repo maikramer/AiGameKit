@@ -2,7 +2,8 @@ import { defineQuery } from 'bitecs';
 import type { MonoBehaviourContext } from 'vibegame';
 import { Transform } from 'vibegame';
 import { Health, ProjectileData } from '../../../../src/plugins/combat/components.ts';
-import { Collider, CollisionEvents, SetLinearVelocity } from '../../../../src/plugins/physics/components.ts';
+import { Collider, CollisionEvents, Rigidbody, SetLinearVelocity } from '../../../../src/plugins/physics/components.ts';
+import { MeshRenderer } from '../../../../src/plugins/rendering/components.ts';
 
 interface AttackConfig {
   cooldown: number;
@@ -102,6 +103,10 @@ export function update(ctx: MonoBehaviourContext): void {
     pos: spawnPos,
     scale: '0.2 0.2 0.2',
   });
+
+  Rigidbody.gravityScale[projectileEid] = 0;
+  MeshRenderer.shape[projectileEid] = 1; // SPHERE
+  MeshRenderer.color[projectileEid] = 0xff6600; // orange
 
   ctx.state.addComponent(projectileEid, ProjectileData);
   ProjectileData.damage[projectileEid] = config.damage;

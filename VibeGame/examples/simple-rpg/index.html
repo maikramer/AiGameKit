@@ -169,132 +169,51 @@
         ></ParticleSystem>
       </GameObject>
 
-      <GameObject place="at: 5 3">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/wooden_crate.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 6.2 3.5">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/wooden_crate.glb"
-          transform="scale: 0.8 0.8 0.8"
-        ></GLTFLoader>
-      </GameObject>
 
-      <GameObject place="at: 4.2 2.8">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/wooden_barrel.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 3.4 4.1">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/wooden_barrel.glb"
-          transform="scale: 0.95 0.95 0.95"
-        ></GLTFLoader>
-      </GameObject>
 
       <GameObject place="at: -1.5 -9">
-        <GLTFLoader
-          role="visual"
+        <GLTFDynamic
+          role="dynamic"
           url="/assets/models/treasure_chest.glb"
+          body-type="fixed"
+          collider-shape="box"
+          script="chest-interaction.ts"
           transform="scale: 1.1 1.1 1.1"
-        ></GLTFLoader>
+        ></GLTFDynamic>
       </GameObject>
 
-      <GameObject place="at: -14 2">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/stone_well.glb"
-          transform="scale: 1.2 1.2 1.2"
-        ></GLTFLoader>
-      </GameObject>
 
-      <GameObject place="at: 8 -12">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/milestone_stone.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </GameObject>
 
       <GameObject place="at: -18 -6">
-        <GLTFLoader
-          role="visual"
+        <GLTFDynamic
+          role="dynamic"
           url="/assets/models/rock_boulder.glb"
+          body-type="fixed"
+          collider-shape="sphere"
           transform="scale: 1.4 1.4 1.4"
-        ></GLTFLoader>
+        ></GLTFDynamic>
       </GameObject>
       <GameObject place="at: 22 6">
-        <GLTFLoader
-          role="visual"
+        <GLTFDynamic
+          role="dynamic"
           url="/assets/models/rock_boulder.glb"
+          body-type="fixed"
+          collider-shape="sphere"
           transform="scale: 1.1 1.1 1.1"
-        ></GLTFLoader>
+        ></GLTFDynamic>
       </GameObject>
       <GameObject place="at: -8 18">
-        <GLTFLoader
-          role="visual"
+        <GLTFDynamic
+          role="dynamic"
           url="/assets/models/rock_boulder.glb"
+          body-type="fixed"
+          collider-shape="sphere"
           transform="scale: 0.9 0.9 0.9"
-        ></GLTFLoader>
+        ></GLTFDynamic>
       </GameObject>
 
-      <GameObject place="at: -2 -7.5; y-offset: 1.1; ground-align: none">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/torch_stand.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 2 -7.5; y-offset: 1.1; ground-align: none">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/torch_stand.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </GameObject>
 
-      <GameObject place="at: -11 9">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/hay_bale.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: -9.5 10.2">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/hay_bale.glb"
-          transform="scale: 0.9 0.9 0.9"
-        ></GLTFLoader>
-      </GameObject>
 
-      <GameObject
-        place="at: 12 8; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
-      >
-        <NPC behavior="wander" max-speed="1.1" max-force="3.5"></NPC>
-      </GameObject>
-      <GameObject
-        place="at: -15 -10; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
-      >
-        <NPC behavior="wander" max-speed="1.25" max-force="4"></NPC>
-      </GameObject>
-      <GameObject
-        place="at: 20 -18; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
-      >
-        <NPC behavior="wander" max-speed="0.95" max-force="3"></NPC>
-      </GameObject>
-      <GameObject
-        place="at: -6 14; align-to-terrain: 0; ground-align: none; y-offset: 0.44"
-      >
-        <NPC behavior="wander" max-speed="1.05" max-force="3.2"></NPC>
-      </GameObject>
 
       <SpawnGroup
         profile="tree"
@@ -304,70 +223,20 @@
         region-max="55 0 55"
         pick-strategy="random"
       >
-        <GLTFLoader
-          role="visual"
+        <GLTFDynamic
+          role="dynamic"
+          profile="tree"
           url="/assets/models/tree_lowpoly.glb"
-          transform="scale: 1 1 1"
-        ></GLTFLoader>
-      </SpawnGroup>
-
-      <SpawnGroup
-        profile="tree"
-        count="14"
-        seed="23"
-        region-min="-50 0 -50"
-        region-max="50 0 50"
-        pick-strategy="random"
-      >
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/bush_small.glb"
-          transform="scale: 0.55 0.55 0.55"
-        ></GLTFLoader>
-      </SpawnGroup>
-
-      <SpawnGroup
-        profile="physics-box"
-        count="5"
-        seed="3"
-        region-min="4 0 2"
-        region-max="10 0 6"
-        pick-strategy="random"
-      >
-        <dynamic-part role="dynamic" profile="physics-crate"></dynamic-part>
-      </SpawnGroup>
-
-      <SpawnGroup
-        profile="gltf-crate"
-        count="4"
-        seed="11"
-        region-min="-6 0 8"
-        region-max="-2 0 12"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="gltf-crate"
-          url="/assets/models/wooden_crate.glb"
+          body-type="fixed"
           collider-shape="box"
           transform="scale: 1 1 1"
         ></GLTFDynamic>
       </SpawnGroup>
 
-      <SpawnGroup
-        profile="gltf-crate"
-        count="3"
-        seed="19"
-        region-min="14 0 -8"
-        region-max="22 0 -2"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="gltf-crate"
-          url="/assets/models/wooden_crate.glb"
-          collider-shape="box"
-          transform="scale: 0.9 0.9 0.9"
-        ></GLTFDynamic>
+      <SpawnGroup profile="tree" count="10" seed="42" region-min="-45 0 -45" region-max="45 0 45" pick-strategy="random">
+        <GLTFDynamic role="dynamic" profile="tree" url="/assets/models/rock_boulder.glb" collider-shape="sphere" body-type="fixed" transform="scale: 1.2 1.2 1.2"></GLTFDynamic>
       </SpawnGroup>
+
     </Scene>
 
     <canvas id="game-canvas"></canvas>
