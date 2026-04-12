@@ -303,7 +303,9 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-    const playerQuery = defineQuery([PlayerController, WorldTransform])(state.world);
+    const playerQuery = defineQuery([PlayerController, WorldTransform])(
+      state.world
+    );
     const cameraQuery = defineQuery([MainCamera, WorldTransform])(state.world);
     const dofQuery = defineQuery([DepthOfField])(state.world);
 

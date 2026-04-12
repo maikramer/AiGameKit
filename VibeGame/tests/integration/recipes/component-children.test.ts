@@ -9,16 +9,35 @@ import { FogPlugin } from '../../../src/plugins/fog/plugin';
 import { Fog } from '../../../src/plugins/fog/components';
 import { Water, WaterPlugin } from '../../../src/plugins/water';
 import { Terrain, TerrainPlugin } from '../../../src/plugins/terrain';
-import { NavMeshAgent, NavMeshSurface, NavmeshPlugin } from '../../../src/plugins/navmesh';
+import {
+  NavMeshAgent,
+  NavMeshSurface,
+  NavmeshPlugin,
+} from '../../../src/plugins/navmesh';
 import { TextMesh, Text3dPlugin } from '../../../src/plugins/text-3d';
 import { HudPanel, HudPlugin } from '../../../src/plugins/hud';
 import { Joint, JointsPlugin } from '../../../src/plugins/joints';
-import { FollowCamera, FollowCameraPlugin } from '../../../src/plugins/follow-camera';
-import { GltfPending, GltfPhysicsPending, GltfXmlPlugin } from '../../../src/plugins/gltf-xml';
-import { RaycastPlugin, RaycastHit, RaycastSource } from '../../../src/plugins/raycast';
+import {
+  FollowCamera,
+  FollowCameraPlugin,
+} from '../../../src/plugins/follow-camera';
+import {
+  GltfPending,
+  GltfPhysicsPending,
+  GltfXmlPlugin,
+} from '../../../src/plugins/gltf-xml';
+import {
+  RaycastPlugin,
+  RaycastHit,
+  RaycastSource,
+} from '../../../src/plugins/raycast';
 import { I18nPlugin, I18nText } from '../../../src/plugins/i18n';
 import { TextPlugin, Word, Paragraph } from '../../../src/plugins/text';
-import { NetworkPlugin, Networked, NetworkBuffer } from '../../../src/plugins/network';
+import {
+  NetworkPlugin,
+  Networked,
+  NetworkBuffer,
+} from '../../../src/plugins/network';
 import { SkyPlugin, Skybox } from '../../../src/plugins/sky';
 import { PhysicsPlugin } from '../../../src/plugins/physics';
 import { InputPlugin } from '../../../src/plugins/input';
@@ -74,9 +93,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('Skybox works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Skybox url="test-sky.png" /></root>'
-    );
+    const entities = parse('<root><Skybox url="test-sky.png" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Skybox)).toBe(true);
   });
@@ -93,9 +110,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('Fog works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Fog mode="linear" /></root>'
-    );
+    const entities = parse('<root><Fog mode="linear" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Fog)).toBe(true);
   });
@@ -112,9 +127,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('Water works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Water size="128" /></root>'
-    );
+    const entities = parse('<root><Water size="128" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Water)).toBe(true);
   });
@@ -122,18 +135,14 @@ describe('Component-children merge:true integration', () => {
   // --- Terrain ---
 
   it('Terrain works as child of GameObject', () => {
-    const entities = parse(
-      '<root><GameObject><Terrain /></GameObject></root>'
-    );
+    const entities = parse('<root><GameObject><Terrain /></GameObject></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Terrain)).toBe(true);
     expect(state.hasComponent(entity, Transform)).toBe(true);
   });
 
   it('Terrain works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Terrain /></root>'
-    );
+    const entities = parse('<root><Terrain /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Terrain)).toBe(true);
   });
@@ -150,9 +159,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('NavMeshSurface works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><NavMeshSurface /></root>'
-    );
+    const entities = parse('<root><NavMeshSurface /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, NavMeshSurface)).toBe(true);
   });
@@ -169,9 +176,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('NavMeshAgent works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><NavMeshAgent /></root>'
-    );
+    const entities = parse('<root><NavMeshAgent /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, NavMeshAgent)).toBe(true);
   });
@@ -188,9 +193,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('TextMesh works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><TextMesh /></root>'
-    );
+    const entities = parse('<root><TextMesh /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, TextMesh)).toBe(true);
   });
@@ -207,9 +210,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('HudPanel works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><HudPanel /></root>'
-    );
+    const entities = parse('<root><HudPanel /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, HudPanel)).toBe(true);
   });
@@ -226,9 +227,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('Joint works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Joint joint-type="1" /></root>'
-    );
+    const entities = parse('<root><Joint joint-type="1" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Joint)).toBe(true);
   });
@@ -246,9 +245,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('FollowCamera works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><FollowCamera /></root>'
-    );
+    const entities = parse('<root><FollowCamera /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, FollowCamera)).toBe(true);
   });
@@ -266,9 +263,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('OrbitCamera works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><OrbitCamera /></root>'
-    );
+    const entities = parse('<root><OrbitCamera /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, OrbitCamera)).toBe(true);
   });
@@ -285,9 +280,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('GLTFLoader works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><GLTFLoader url="model.glb" /></root>'
-    );
+    const entities = parse('<root><GLTFLoader url="model.glb" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, GltfPending)).toBe(true);
   });
@@ -305,9 +298,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('GLTFDynamic works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><GLTFDynamic url="box.glb" /></root>'
-    );
+    const entities = parse('<root><GLTFDynamic url="box.glb" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, GltfPending)).toBe(true);
     expect(state.hasComponent(entity, GltfPhysicsPending)).toBe(true);
@@ -326,9 +317,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('RaycastSource works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><RaycastSource /></root>'
-    );
+    const entities = parse('<root><RaycastSource /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, RaycastSource)).toBe(true);
   });
@@ -345,9 +334,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('I18nText works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><I18nText key="hello" /></root>'
-    );
+    const entities = parse('<root><I18nText key="hello" /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, I18nText)).toBe(true);
   });
@@ -364,9 +351,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('Paragraph works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Paragraph /></root>'
-    );
+    const entities = parse('<root><Paragraph /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Paragraph)).toBe(true);
   });
@@ -374,18 +359,14 @@ describe('Component-children merge:true integration', () => {
   // --- Word ---
 
   it('Word works as child of GameObject', () => {
-    const entities = parse(
-      '<root><GameObject><Word /></GameObject></root>'
-    );
+    const entities = parse('<root><GameObject><Word /></GameObject></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Word)).toBe(true);
     expect(state.hasComponent(entity, Transform)).toBe(true);
   });
 
   it('Word works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><Word /></root>'
-    );
+    const entities = parse('<root><Word /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Word)).toBe(true);
   });
@@ -403,9 +384,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('NetworkedPlayer works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><NetworkedPlayer /></root>'
-    );
+    const entities = parse('<root><NetworkedPlayer /></root>');
     const entity = entities[0].entity;
     expect(state.hasComponent(entity, Networked)).toBe(true);
     expect(state.hasComponent(entity, NetworkBuffer)).toBe(true);
@@ -425,9 +404,7 @@ describe('Component-children merge:true integration', () => {
   });
 
   it('PlayerGLTF works standalone (backward compat)', () => {
-    const entities = parse(
-      '<root><PlayerGLTF model-url="hero.glb" /></root>'
-    );
+    const entities = parse('<root><PlayerGLTF model-url="hero.glb" /></root>');
     const entity = entities[0].entity;
     const PlayerController = state.getComponent('playerController')!;
     expect(state.hasComponent(entity, PlayerController)).toBe(true);

@@ -19,10 +19,7 @@ describe('ParticlesPlugin Registration', () => {
       (r) => r.name === 'ParticleSystem'
     );
     expect(emitterRecipe).toBeDefined();
-    expect(emitterRecipe!.components).toEqual([
-      'transform',
-      'particleSystem',
-    ]);
+    expect(emitterRecipe!.components).toEqual(['transform', 'particleSystem']);
   });
 
   it('should have a recipe named "ParticleBurst" with components ["transform", "particleBurst"]', () => {

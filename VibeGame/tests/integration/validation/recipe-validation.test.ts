@@ -94,7 +94,9 @@ describe('Recipe Validation Integration', () => {
       };
 
       const result = validateRecipeAttributes('dynamic-part', attributes);
-      expect(result.rigidbody).toBe('type: dynamic; mass: 10; linear-damping: 0.5');
+      expect(result.rigidbody).toBe(
+        'type: dynamic; mass: 10; linear-damping: 0.5'
+      );
     });
   });
 

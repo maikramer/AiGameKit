@@ -1,8 +1,8 @@
-import { defineComponent, Types } from "bitecs";
-import { beforeEach, describe, expect, it } from "bun:test";
-import { State } from "vibegame";
+import { defineComponent, Types } from 'bitecs';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { State } from 'vibegame';
 
-describe("destroyEntity callbacks", () => {
+describe('destroyEntity callbacks', () => {
   let state: State;
 
   const TestComponent = defineComponent({
@@ -13,7 +13,7 @@ describe("destroyEntity callbacks", () => {
     state = new State();
   });
 
-  it("fires per-entity callback registered with onDestroy", () => {
+  it('fires per-entity callback registered with onDestroy', () => {
     const eid = state.createEntity();
     let fired = false;
     state.onDestroy(eid, () => {
@@ -23,7 +23,7 @@ describe("destroyEntity callbacks", () => {
     expect(fired).toBe(true);
   });
 
-  it("fires callbacks BEFORE removeEntity — component still accessible inside callback", () => {
+  it('fires callbacks BEFORE removeEntity — component still accessible inside callback', () => {
     const eid = state.createEntity();
     state.addComponent(eid, TestComponent, { value: 42 });
 
@@ -35,7 +35,7 @@ describe("destroyEntity callbacks", () => {
     expect(valueInsideCallback!).toBe(42);
   });
 
-  it("passes correct entity id to per-entity callback", () => {
+  it('passes correct entity id to per-entity callback', () => {
     const eid = state.createEntity();
     let receivedEid: number | null = null;
     state.onDestroy(eid, (id) => {
@@ -45,7 +45,7 @@ describe("destroyEntity callbacks", () => {
     expect(receivedEid!).toBe(eid);
   });
 
-  it("fires global onDestroyAll callback for every destroyed entity", () => {
+  it('fires global onDestroyAll callback for every destroyed entity', () => {
     const eid1 = state.createEntity();
     const eid2 = state.createEntity();
     const received: number[] = [];
@@ -57,7 +57,7 @@ describe("destroyEntity callbacks", () => {
     expect(received).toEqual([eid1, eid2]);
   });
 
-  it("fires global callback with correct entity id", () => {
+  it('fires global callback with correct entity id', () => {
     const eid = state.createEntity();
     let receivedEid: number | null = null;
     state.onDestroyAll((id) => {
@@ -67,7 +67,7 @@ describe("destroyEntity callbacks", () => {
     expect(receivedEid!).toBe(eid);
   });
 
-  it("fires multiple per-entity callbacks in registration order", () => {
+  it('fires multiple per-entity callbacks in registration order', () => {
     const eid = state.createEntity();
     const order: number[] = [];
     state.onDestroy(eid, () => {
@@ -83,20 +83,20 @@ describe("destroyEntity callbacks", () => {
     expect(order).toEqual([1, 2, 3]);
   });
 
-  it("fires per-entity callbacks before global callbacks", () => {
+  it('fires per-entity callbacks before global callbacks', () => {
     const eid = state.createEntity();
     const order: string[] = [];
     state.onDestroy(eid, () => {
-      order.push("per-entity");
+      order.push('per-entity');
     });
     state.onDestroyAll(() => {
-      order.push("global");
+      order.push('global');
     });
     state.destroyEntity(eid);
-    expect(order).toEqual(["per-entity", "global"]);
+    expect(order).toEqual(['per-entity', 'global']);
   });
 
-  it("does not fire callbacks for entity with no registered callbacks", () => {
+  it('does not fire callbacks for entity with no registered callbacks', () => {
     const eid = state.createEntity();
     let globalFired = false;
     state.onDestroyAll(() => {
@@ -107,14 +107,14 @@ describe("destroyEntity callbacks", () => {
     expect(globalFired).toBe(true);
   });
 
-  it("continues firing remaining callbacks if one throws", () => {
+  it('continues firing remaining callbacks if one throws', () => {
     const eid = state.createEntity();
     const order: number[] = [];
     state.onDestroy(eid, () => {
       order.push(1);
     });
     state.onDestroy(eid, () => {
-      throw new Error("test error");
+      throw new Error('test error');
     });
     state.onDestroy(eid, () => {
       order.push(3);
@@ -123,7 +123,7 @@ describe("destroyEntity callbacks", () => {
     expect(order).toEqual([1, 3]);
   });
 
-  it("removes specific callback with offDestroy", () => {
+  it('removes specific callback with offDestroy', () => {
     const eid = state.createEntity();
     let count = 0;
     const cb = () => {
@@ -135,7 +135,7 @@ describe("destroyEntity callbacks", () => {
     expect(count).toBe(0);
   });
 
-  it("only removes the specified callback, keeping others", () => {
+  it('only removes the specified callback, keeping others', () => {
     const eid = state.createEntity();
     const order: number[] = [];
     const cb1 = () => order.push(1);
@@ -149,7 +149,7 @@ describe("destroyEntity callbacks", () => {
     expect(order).toEqual([1, 3]);
   });
 
-  it("cleans up per-entity callbacks after firing", () => {
+  it('cleans up per-entity callbacks after firing', () => {
     const eid = state.createEntity();
     let count = 0;
     state.onDestroy(eid, () => {

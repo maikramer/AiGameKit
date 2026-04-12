@@ -20,7 +20,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should parse position from XML', () => {
-    const xml = '<root><GameObject transform="pos: 10 20 30"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="pos: 10 20 30"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -32,7 +33,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should parse euler rotation from XML', () => {
-    const xml = '<root><GameObject transform="euler: 45 90 135"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="euler: 45 90 135"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -44,7 +46,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should parse scale from XML', () => {
-    const xml = '<root><GameObject transform="scale: 2 3 4"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="scale: 2 3 4"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -87,7 +90,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should handle rotation as alias for euler', () => {
-    const xml = '<root><GameObject transform="rotation: 15 30 45"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="rotation: 15 30 45"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -99,7 +103,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should convert euler to quaternion automatically', () => {
-    const xml = '<root><GameObject transform="euler: 0 90 0"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="euler: 0 90 0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -273,7 +278,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should create transform with partial properties', () => {
-    const xml = '<root><GameObject transform="pos: 5 10 15"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="pos: 5 10 15"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -288,7 +294,8 @@ describe('Transform XML Behavior', () => {
   });
 
   it('should handle transforms with only rotation', () => {
-    const xml = '<root><GameObject transform="rotation: 45 0 0"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="rotation: 45 0 0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;

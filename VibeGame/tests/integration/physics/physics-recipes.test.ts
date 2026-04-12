@@ -160,7 +160,9 @@ describe('Physics Recipes', () => {
       const kinematicEntity = entities[0].entity;
 
       // Verify body type is Kinematic
-      expect(Rigidbody.type[kinematicEntity]).toBe(BodyType.KinematicVelocityBased);
+      expect(Rigidbody.type[kinematicEntity]).toBe(
+        BodyType.KinematicVelocityBased
+      );
       expect(Rigidbody.mass[kinematicEntity]).toBe(1);
       expect(Rigidbody.gravityScale[kinematicEntity]).toBe(0);
 
@@ -431,7 +433,9 @@ describe('Physics Recipes', () => {
       // Verify body types
       expect(Rigidbody.type[staticEnt]).toBe(BodyType.Fixed);
       expect(Rigidbody.type[dynamicEnt]).toBe(BodyType.Dynamic);
-      expect(Rigidbody.type[kinematicEnt]).toBe(BodyType.KinematicVelocityBased);
+      expect(Rigidbody.type[kinematicEnt]).toBe(
+        BodyType.KinematicVelocityBased
+      );
 
       // Verify gravity scales
       expect(Rigidbody.gravityScale[staticEnt]).toBe(0);

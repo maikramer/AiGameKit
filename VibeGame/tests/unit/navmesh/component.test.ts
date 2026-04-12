@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
-import { NavMeshSurface, NavMeshAgent } from '../../../src/plugins/navmesh/components';
+import {
+  NavMeshSurface,
+  NavMeshAgent,
+} from '../../../src/plugins/navmesh/components';
 
 const NAVMESH_FIELDS = ['loaded', 'buildFromScene'] as const;
 

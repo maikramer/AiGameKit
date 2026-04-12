@@ -50,7 +50,14 @@ describe('GameObject Container Syntax', () => {
 
     state.registerConfig({
       defaults: {
-        transform: { posX: 0, posY: 0, posZ: 0, scaleX: 1, scaleY: 1, scaleZ: 1 },
+        transform: {
+          posX: 0,
+          posY: 0,
+          posZ: 0,
+          scaleX: 1,
+          scaleY: 1,
+          scaleZ: 1,
+        },
         rigidbody: { type: 0, mass: 1 },
         collider: { shape: 0, radius: 0.5, height: 1 },
         meshRenderer: { visible: 1, shape: 0 },
@@ -129,7 +136,8 @@ describe('GameObject Container Syntax', () => {
 
   it('should auto-add Transform when no <Transform> child is present', () => {
     const Transform = state.getComponent('transform')!;
-    const xml = '<root><GameObject name="NoTransformChild"></GameObject></root>';
+    const xml =
+      '<root><GameObject name="NoTransformChild"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

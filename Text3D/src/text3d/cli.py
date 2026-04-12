@@ -511,10 +511,7 @@ def generate(
         elif ground_shadow_aggressive:
             rep += " (agressivo)"
     if remesh and not no_mesh_repair:
-        rep += (
-            f", remesh(res={remesh_resolution}, it={remesh_iterations}, "
-            f"surf={remesh_surf_dist_factor})"
-        )
+        rep += f", remesh(res={remesh_resolution}, it={remesh_iterations}, surf={remesh_surf_dist_factor})"
     if mesh_smooth > 0 and not no_mesh_repair:
         rep += f", smooth={mesh_smooth}"
     if not no_remove_plates:

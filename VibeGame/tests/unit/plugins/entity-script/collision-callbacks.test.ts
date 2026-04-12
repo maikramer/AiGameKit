@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
 import { State } from '../../../../src/core/ecs/state';
-import { Collider, TouchedEvent, TouchEndedEvent } from '../../../../src/plugins/physics/components';
+import {
+  Collider,
+  TouchedEvent,
+  TouchEndedEvent,
+} from '../../../../src/plugins/physics/components';
 import { MonoBehaviour } from '../../../../src/plugins/entity-script/components';
 import {
   addActiveCollisionPair,
@@ -28,7 +32,7 @@ describe('entity-script collision/trigger callbacks', () => {
   function createScriptedEntity(
     file: string,
     mod: Record<string, unknown>,
-    options: { enabled?: number; isSensor?: number } = {},
+    options: { enabled?: number; isSensor?: number } = {}
   ): number {
     const { enabled = 1, isSensor = 0 } = options;
     const eid = state.createEntity();
@@ -199,8 +203,12 @@ describe('entity-script collision/trigger callbacks', () => {
       const otherEid = createColliderEntity(0);
       const eid = createScriptedEntity('test.ts', {
         start: () => {},
-        onCollisionEnter: () => { events.push('enter'); },
-        onCollisionStay: () => { events.push('stay'); },
+        onCollisionEnter: () => {
+          events.push('enter');
+        },
+        onCollisionStay: () => {
+          events.push('stay');
+        },
       });
 
       addTouchedEvent(eid, otherEid);
@@ -214,8 +222,12 @@ describe('entity-script collision/trigger callbacks', () => {
       const otherEid = createColliderEntity(0);
       const eid = createScriptedEntity('test.ts', {
         start: () => {},
-        onCollisionEnter: () => { events.push('enter'); },
-        onCollisionStay: () => { events.push('stay'); },
+        onCollisionEnter: () => {
+          events.push('enter');
+        },
+        onCollisionStay: () => {
+          events.push('stay');
+        },
       });
 
       addTouchedEvent(eid, otherEid);
@@ -231,13 +243,19 @@ describe('entity-script collision/trigger callbacks', () => {
     it('fires when one entity is a sensor', () => {
       const events: string[] = [];
       const otherEid = createColliderEntity(0);
-      const eid = createScriptedEntity('test.ts', {
-        start: () => {},
-        onTriggerEnter: (_ctx: unknown, other: { entity: number }) => {
-          events.push(`trigger-enter:${other.entity}`);
+      const eid = createScriptedEntity(
+        'test.ts',
+        {
+          start: () => {},
+          onTriggerEnter: (_ctx: unknown, other: { entity: number }) => {
+            events.push(`trigger-enter:${other.entity}`);
+          },
+          onCollisionEnter: () => {
+            events.push('collision-enter');
+          },
         },
-        onCollisionEnter: () => { events.push('collision-enter'); },
-      }, { isSensor: 1 });
+        { isSensor: 1 }
+      );
 
       addTouchedEvent(eid, otherEid);
       runBridge();
@@ -253,7 +271,9 @@ describe('entity-script collision/trigger callbacks', () => {
         onTriggerEnter: (_ctx: unknown, other: { entity: number }) => {
           events.push(`trigger-enter:${other.entity}`);
         },
-        onCollisionEnter: () => { events.push('collision-enter'); },
+        onCollisionEnter: () => {
+          events.push('collision-enter');
+        },
       });
 
       addTouchedEvent(eid, otherEid);
@@ -267,12 +287,16 @@ describe('entity-script collision/trigger callbacks', () => {
     it('fires when sensor overlap ends', () => {
       const events: string[] = [];
       const otherEid = createColliderEntity(0);
-      const eid = createScriptedEntity('test.ts', {
-        start: () => {},
-        onTriggerExit: (_ctx: unknown, other: { entity: number }) => {
-          events.push(`trigger-exit:${other.entity}`);
+      const eid = createScriptedEntity(
+        'test.ts',
+        {
+          start: () => {},
+          onTriggerExit: (_ctx: unknown, other: { entity: number }) => {
+            events.push(`trigger-exit:${other.entity}`);
+          },
         },
-      }, { isSensor: 1 });
+        { isSensor: 1 }
+      );
 
       addActiveCollisionPair(state, eid, otherEid, true);
       addTouchEndedEvent(eid, otherEid);
@@ -286,12 +310,16 @@ describe('entity-script collision/trigger callbacks', () => {
     it('fires while sensor overlap persists', () => {
       const events: string[] = [];
       const otherEid = createColliderEntity(0);
-      const eid = createScriptedEntity('test.ts', {
-        start: () => {},
-        onTriggerStay: (_ctx: unknown, other: { entity: number }) => {
-          events.push(`trigger-stay:${other.entity}`);
+      const eid = createScriptedEntity(
+        'test.ts',
+        {
+          start: () => {},
+          onTriggerStay: (_ctx: unknown, other: { entity: number }) => {
+            events.push(`trigger-stay:${other.entity}`);
+          },
         },
-      }, { isSensor: 1 });
+        { isSensor: 1 }
+      );
 
       addActiveCollisionPair(state, eid, otherEid, true);
       runBridge();
@@ -306,8 +334,12 @@ describe('entity-script collision/trigger callbacks', () => {
       const otherEid = createColliderEntity(0);
       const eid = createScriptedEntity('test.ts', {
         start: () => {},
-        onCollisionEnter: () => { collisionEvents.push('collision'); },
-        onTriggerEnter: () => { collisionEvents.push('trigger'); },
+        onCollisionEnter: () => {
+          collisionEvents.push('collision');
+        },
+        onTriggerEnter: () => {
+          collisionEvents.push('trigger');
+        },
       });
 
       addTouchedEvent(eid, otherEid);
@@ -319,11 +351,19 @@ describe('entity-script collision/trigger callbacks', () => {
     it('self is sensor → trigger callbacks', () => {
       const events: string[] = [];
       const otherEid = createColliderEntity(0);
-      const eid = createScriptedEntity('test.ts', {
-        start: () => {},
-        onCollisionEnter: () => { events.push('collision'); },
-        onTriggerEnter: () => { events.push('trigger'); },
-      }, { isSensor: 1 });
+      const eid = createScriptedEntity(
+        'test.ts',
+        {
+          start: () => {},
+          onCollisionEnter: () => {
+            events.push('collision');
+          },
+          onTriggerEnter: () => {
+            events.push('trigger');
+          },
+        },
+        { isSensor: 1 }
+      );
 
       addTouchedEvent(eid, otherEid);
       runBridge();
@@ -336,8 +376,12 @@ describe('entity-script collision/trigger callbacks', () => {
       const otherEid = createColliderEntity(1);
       const eid = createScriptedEntity('test.ts', {
         start: () => {},
-        onCollisionEnter: () => { events.push('collision'); },
-        onTriggerEnter: () => { events.push('trigger'); },
+        onCollisionEnter: () => {
+          events.push('collision');
+        },
+        onTriggerEnter: () => {
+          events.push('trigger');
+        },
       });
 
       addTouchedEvent(eid, otherEid);
@@ -364,10 +408,16 @@ describe('entity-script collision/trigger callbacks', () => {
     it('does not fire callbacks when entity is disabled', () => {
       const events: string[] = [];
       const otherEid = createColliderEntity(0);
-      const eid = createScriptedEntity('test.ts', {
-        start: () => {},
-        onCollisionEnter: () => { events.push('enter'); },
-      }, { enabled: 0 });
+      const eid = createScriptedEntity(
+        'test.ts',
+        {
+          start: () => {},
+          onCollisionEnter: () => {
+            events.push('enter');
+          },
+        },
+        { enabled: 0 }
+      );
 
       addTouchedEvent(eid, otherEid);
       runBridge();
@@ -466,9 +516,15 @@ describe('entity-script collision/trigger callbacks', () => {
       const otherEid = createColliderEntity(0);
       const eid = createScriptedEntity('test.ts', {
         start: () => {},
-        onCollisionEnter: () => { events.push('enter'); },
-        onCollisionStay: () => { events.push('stay'); },
-        onCollisionExit: () => { events.push('exit'); },
+        onCollisionEnter: () => {
+          events.push('enter');
+        },
+        onCollisionStay: () => {
+          events.push('stay');
+        },
+        onCollisionExit: () => {
+          events.push('exit');
+        },
       });
 
       addTouchedEvent(eid, otherEid);
@@ -493,12 +549,22 @@ describe('entity-script collision/trigger callbacks', () => {
     it('fires trigger enter then stay then exit across frames', () => {
       const events: string[] = [];
       const otherEid = createColliderEntity(0);
-      const eid = createScriptedEntity('test.ts', {
-        start: () => {},
-        onTriggerEnter: () => { events.push('trigger-enter'); },
-        onTriggerStay: () => { events.push('trigger-stay'); },
-        onTriggerExit: () => { events.push('trigger-exit'); },
-      }, { isSensor: 1 });
+      const eid = createScriptedEntity(
+        'test.ts',
+        {
+          start: () => {},
+          onTriggerEnter: () => {
+            events.push('trigger-enter');
+          },
+          onTriggerStay: () => {
+            events.push('trigger-stay');
+          },
+          onTriggerExit: () => {
+            events.push('trigger-exit');
+          },
+        },
+        { isSensor: 1 }
+      );
 
       addTouchedEvent(eid, otherEid);
       runBridge();

@@ -2,7 +2,10 @@ import type { State } from '../../core';
 
 const urlByState = new WeakMap<State, Map<number, string>>();
 const inFlightByState = new WeakMap<State, Set<number>>();
-const lodUrlsByState = new WeakMap<State, Map<number, readonly [string, string, string]>>();
+const lodUrlsByState = new WeakMap<
+  State,
+  Map<number, readonly [string, string, string]>
+>();
 const pendingLodThresholdsByState = new WeakMap<
   State,
   Map<number, { near?: number; mid?: number }>

@@ -70,9 +70,9 @@ def generate_heightmap(size: int = 2048, roughness: float = 0.85, seed: int = 42
 
         # --- Diamond step (vectorised) ---
         tl = hm[0 : gs - step : step, 0 : gs - step : step]
-        tr = hm[0 : gs - step : step, step : gs : step]
-        bl = hm[step : gs : step, 0 : gs - step : step]
-        br = hm[step : gs : step, step : gs : step]
+        tr = hm[0 : gs - step : step, step:gs:step]
+        bl = hm[step:gs:step, 0 : gs - step : step]
+        br = hm[step:gs:step, step:gs:step]
         avg = (tl + tr + bl + br) * 0.25
         hm[half : gs - half : step, half : gs - half : step] = avg + (rng.random(avg.shape) - 0.5) * scale
 

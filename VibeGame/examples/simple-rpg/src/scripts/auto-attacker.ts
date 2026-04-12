@@ -1,8 +1,16 @@
 import { defineQuery } from 'bitecs';
 import type { MonoBehaviourContext } from 'vibegame';
 import { Transform } from 'vibegame';
-import { Health, ProjectileData } from '../../../../src/plugins/combat/components.ts';
-import { Collider, CollisionEvents, Rigidbody, SetLinearVelocity } from '../../../../src/plugins/physics/components.ts';
+import {
+  Health,
+  ProjectileData,
+} from '../../../../src/plugins/combat/components.ts';
+import {
+  Collider,
+  CollisionEvents,
+  Rigidbody,
+  SetLinearVelocity,
+} from '../../../../src/plugins/physics/components.ts';
 import { MeshRenderer } from '../../../../src/plugins/rendering/components.ts';
 
 interface AttackConfig {
@@ -44,7 +52,9 @@ export function update(ctx: MonoBehaviourContext): void {
   }
 
   const projectiles = projectileQuery(ctx.state.world);
-  const ownCount = projectiles.filter((p) => ProjectileData.ownerEid[p] === eid).length;
+  const ownCount = projectiles.filter(
+    (p) => ProjectileData.ownerEid[p] === eid
+  ).length;
   if (ownCount >= config.maxProjectiles) {
     cooldownTimers.set(eid, timer);
     return;

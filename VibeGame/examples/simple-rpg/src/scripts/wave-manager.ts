@@ -1,16 +1,16 @@
-import { defineQuery } from "bitecs";
-import type { MonoBehaviourContext } from "vibegame";
+import { defineQuery } from 'bitecs';
+import type { MonoBehaviourContext } from 'vibegame';
 import {
   Transform,
   PlayerController,
   SteeringAgent,
   SteeringTarget,
   MonoBehaviour,
-} from "vibegame";
-import { Health, isDead } from "../../../../src/plugins/combat/components.ts";
-import { CollisionEvents } from "../../../../src/plugins/physics/components.ts";
-import { getTerrainHeightAt } from "../../../../src/plugins/terrain/systems.ts";
-import { setScriptFile } from "../../../../src/plugins/entity-script/context.ts";
+} from 'vibegame';
+import { Health, isDead } from '../../../../src/plugins/combat/components.ts';
+import { CollisionEvents } from '../../../../src/plugins/physics/components.ts';
+import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
+import { setScriptFile } from '../../../../src/plugins/entity-script/context.ts';
 
 const WATER_LEVEL = 1.25;
 const HEAL_DROP_CHANCE = 0.4;
@@ -76,16 +76,17 @@ function spawnWave(ctx: MonoBehaviourContext, waveNum: number): void {
   while (spawned < count && attempts < maxAttempts) {
     attempts++;
     const angle = Math.random() * Math.PI * 2;
-    const radius = SPAWN_RADIUS_MIN + Math.random() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
+    const radius =
+      SPAWN_RADIUS_MIN + Math.random() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
     const x = px + Math.cos(angle) * radius;
     const z = pz + Math.sin(angle) * radius;
     const height = getTerrainHeightAt(ctx.state, x, z);
 
     if (height < WATER_LEVEL) continue;
 
-    const eid = ctx.state.createFromRecipe("dynamic-part", {
+    const eid = ctx.state.createFromRecipe('dynamic-part', {
       pos: `${x} ${height + 0.5} ${z}`,
-      scale: "0.44 0.88 0.44",
+      scale: '0.44 0.88 0.44',
     });
 
     ctx.state.addComponent(eid, SteeringAgent);
@@ -101,7 +102,7 @@ function spawnWave(ctx: MonoBehaviourContext, waveNum: number): void {
     ctx.state.addComponent(eid, MonoBehaviour);
     MonoBehaviour.enabled[eid] = 1;
     MonoBehaviour.ready[eid] = 0;
-    setScriptFile(ctx.state, eid, "enemy.ts");
+    setScriptFile(ctx.state, eid, 'enemy.ts');
 
     enemyMap.set(eid, { x, y: height + 0.5, z, alive: true });
     spawned++;
@@ -112,17 +113,17 @@ function spawnHealDrop(
   ctx: MonoBehaviourContext,
   x: number,
   y: number,
-  z: number,
+  z: number
 ): void {
-  const eid = ctx.state.createFromRecipe("dynamic-part", {
+  const eid = ctx.state.createFromRecipe('dynamic-part', {
     pos: `${x} ${y + 0.5} ${z}`,
-    scale: "0.3 0.3 0.3",
+    scale: '0.3 0.3 0.3',
   });
 
   ctx.state.addComponent(eid, MonoBehaviour);
   MonoBehaviour.enabled[eid] = 1;
   MonoBehaviour.ready[eid] = 0;
-  setScriptFile(ctx.state, eid, "heal-drop.ts");
+  setScriptFile(ctx.state, eid, 'heal-drop.ts');
 
   healDrops.push({ eid, x, y: y + 0.5, z });
 }

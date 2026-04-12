@@ -28,7 +28,7 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   function createScriptedEntity(
     file: string,
     mod: Record<string, unknown>,
-    enabled = 1,
+    enabled = 1
   ): number {
     const eid = state.createEntity();
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled });
@@ -46,7 +46,9 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   it('update fires each time EntityScriptSystem.update runs', () => {
     let updateCount = 0;
     createScriptedEntity('test.ts', {
-      update: () => { updateCount++; },
+      update: () => {
+        updateCount++;
+      },
     });
 
     EntityScriptSystem.update!(state);
@@ -58,9 +60,15 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
 
   it('update does NOT fire when entity is disabled', () => {
     let updateCount = 0;
-    createScriptedEntity('test.ts', {
-      update: () => { updateCount++; },
-    }, 0);
+    createScriptedEntity(
+      'test.ts',
+      {
+        update: () => {
+          updateCount++;
+        },
+      },
+      0
+    );
 
     EntityScriptSystem.update!(state);
     EntityScriptSystem.update!(state);
@@ -71,7 +79,9 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   it('fixedUpdate fires when entity is enabled and ready', () => {
     let fixedCount = 0;
     createScriptedEntity('test.ts', {
-      fixedUpdate: () => { fixedCount++; },
+      fixedUpdate: () => {
+        fixedCount++;
+      },
       update: () => {},
     });
 
@@ -83,10 +93,16 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
 
   it('fixedUpdate does NOT fire when entity is disabled', () => {
     let fixedCount = 0;
-    createScriptedEntity('test.ts', {
-      fixedUpdate: () => { fixedCount++; },
-      update: () => {},
-    }, 0);
+    createScriptedEntity(
+      'test.ts',
+      {
+        fixedUpdate: () => {
+          fixedCount++;
+        },
+        update: () => {},
+      },
+      0
+    );
 
     EntityScriptFixedUpdateSystem.update!(state);
 
@@ -98,8 +114,25 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     const eid = state.createEntity();
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, 'notready.ts');
-    registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ fixedUpdate: () => { fixedCount++; }, update: () => {} }) });
-    setCachedMonoBehaviourModule(state, './scripts/notready.ts', coerceMonoBehaviourModule({ fixedUpdate: () => { fixedCount++; }, update: () => {} })!);
+    registerEntityScripts(state, {
+      './scripts/notready.ts': () =>
+        Promise.resolve({
+          fixedUpdate: () => {
+            fixedCount++;
+          },
+          update: () => {},
+        }),
+    });
+    setCachedMonoBehaviourModule(
+      state,
+      './scripts/notready.ts',
+      coerceMonoBehaviourModule({
+        fixedUpdate: () => {
+          fixedCount++;
+        },
+        update: () => {},
+      })!
+    );
 
     EntityScriptFixedUpdateSystem.update!(state);
 
@@ -109,7 +142,9 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
   it('lateUpdate fires when entity is enabled and ready', () => {
     let lateCount = 0;
     createScriptedEntity('test.ts', {
-      lateUpdate: () => { lateCount++; },
+      lateUpdate: () => {
+        lateCount++;
+      },
       update: () => {},
     });
 
@@ -121,10 +156,16 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
 
   it('lateUpdate does NOT fire when entity is disabled', () => {
     let lateCount = 0;
-    createScriptedEntity('test.ts', {
-      lateUpdate: () => { lateCount++; },
-      update: () => {},
-    }, 0);
+    createScriptedEntity(
+      'test.ts',
+      {
+        lateUpdate: () => {
+          lateCount++;
+        },
+        update: () => {},
+      },
+      0
+    );
 
     EntityScriptLateUpdateSystem.update!(state);
 
@@ -136,8 +177,25 @@ describe('entity-script fixedUpdate / lateUpdate', () => {
     const eid = state.createEntity();
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });
     setScriptFile(state, eid, 'notready.ts');
-    registerEntityScripts(state, { './scripts/notready.ts': () => Promise.resolve({ lateUpdate: () => { lateCount++; }, update: () => {} }) });
-    setCachedMonoBehaviourModule(state, './scripts/notready.ts', coerceMonoBehaviourModule({ lateUpdate: () => { lateCount++; }, update: () => {} })!);
+    registerEntityScripts(state, {
+      './scripts/notready.ts': () =>
+        Promise.resolve({
+          lateUpdate: () => {
+            lateCount++;
+          },
+          update: () => {},
+        }),
+    });
+    setCachedMonoBehaviourModule(
+      state,
+      './scripts/notready.ts',
+      coerceMonoBehaviourModule({
+        lateUpdate: () => {
+          lateCount++;
+        },
+        update: () => {},
+      })!
+    );
 
     EntityScriptLateUpdateSystem.update!(state);
 

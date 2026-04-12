@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { SteeringRow } from '../../../src/plugins/ai-steering/context';
-import { SteeringAgent, SteeringTarget } from '../../../src/plugins/ai-steering/components';
+import {
+  SteeringAgent,
+  SteeringTarget,
+} from '../../../src/plugins/ai-steering/components';
 import { Transform } from '../../../src/plugins/transforms';
 import { Rigidbody } from '../../../src/plugins/physics/components';
 import { Collider } from '../../../src/plugins/physics/components';

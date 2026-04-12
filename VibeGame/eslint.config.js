@@ -20,6 +20,8 @@ export default [
         window: 'readonly',
         document: 'readonly',
         navigator: 'readonly',
+        Response: 'readonly',
+        fetch: 'readonly',
         HTMLElement: 'readonly',
         HTMLCanvasElement: 'readonly',
         HTMLImageElement: 'readonly',

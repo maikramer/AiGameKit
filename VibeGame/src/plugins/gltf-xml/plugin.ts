@@ -33,10 +33,7 @@ export const GltfXmlPlugin: Plugin = {
           setGltfUrl(state, entity, value);
         }) as Adapter,
         'lod-urls': ((entity, value, state) => {
-          const parts = String(value)
-            .trim()
-            .split(/\s+/)
-            .filter(Boolean);
+          const parts = String(value).trim().split(/\s+/).filter(Boolean);
           if (parts.length !== 3) return;
           const triple = [parts[0], parts[1], parts[2]] as [
             string,

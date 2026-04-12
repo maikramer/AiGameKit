@@ -1,7 +1,10 @@
-import { defineQuery } from "bitecs";
-import type { MonoBehaviourContext } from "vibegame";
-import { Transform, PlayerController } from "vibegame";
-import { Health, healHealth } from "../../../../src/plugins/combat/components.ts";
+import { defineQuery } from 'bitecs';
+import type { MonoBehaviourContext } from 'vibegame';
+import { Transform, PlayerController } from 'vibegame';
+import {
+  Health,
+  healHealth,
+} from '../../../../src/plugins/combat/components.ts';
 
 const PICKUP_RANGE = 2.5;
 const GLOW_RANGE = 4.0;
@@ -12,7 +15,8 @@ const playerQuery = defineQuery([PlayerController]);
 let cachedPlayerEid = 0;
 
 function findPlayer(ctx: MonoBehaviourContext): number {
-  if (cachedPlayerEid && Health.current[cachedPlayerEid] > 0) return cachedPlayerEid;
+  if (cachedPlayerEid && Health.current[cachedPlayerEid] > 0)
+    return cachedPlayerEid;
   const players = playerQuery(ctx.state.world);
   cachedPlayerEid = players[0] ?? 0;
   return cachedPlayerEid;
@@ -53,7 +57,10 @@ export function update(ctx: MonoBehaviourContext): void {
     } else if (roll < 0.66) {
       PlayerController.maxSpeed[playerEid] *= 1.3;
       setTimeout(() => {
-        if (Health.current[playerEid] !== undefined && Health.current[playerEid] > 0) {
+        if (
+          Health.current[playerEid] !== undefined &&
+          Health.current[playerEid] > 0
+        ) {
           PlayerController.maxSpeed[playerEid] /= 1.3;
         }
       }, 10000);

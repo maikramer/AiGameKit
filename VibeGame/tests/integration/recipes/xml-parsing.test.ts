@@ -102,7 +102,8 @@ describe('XML Recipe Integration', () => {
       components: [],
     });
 
-    const xml = '<root><GameObject test="value: 42; pos: 1 2 3"></GameObject></root>';
+    const xml =
+      '<root><GameObject test="value: 42; pos: 1 2 3"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -213,7 +214,8 @@ describe('XML Recipe Integration', () => {
 
     state.registerComponent('meshRenderer', MeshRenderer);
 
-    const xml = '<root><GameObject meshRenderer="" size="2 3 4"></GameObject></root>';
+    const xml =
+      '<root><GameObject meshRenderer="" size="2 3 4"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const entities = parseXMLToEntities(state, parsed.root);
@@ -249,7 +251,8 @@ describe('XML Recipe Integration', () => {
     });
 
     warning = '';
-    const xml2 = '<root><GameObject my-component="value: 20"></GameObject></root>';
+    const xml2 =
+      '<root><GameObject my-component="value: 20"></GameObject></root>';
     const parsed2 = XMLParser.parse(xml2);
     const entities = parseXMLToEntities(state, parsed2.root);
 
@@ -263,7 +266,8 @@ describe('XML Recipe Integration', () => {
   it('should handle component registration before and after recipe registration', () => {
     const MyComponent = defineComponent({ value: Types.f32 });
 
-    const xml = '<root><GameObject my-component="value: 42"></GameObject></root>';
+    const xml =
+      '<root><GameObject my-component="value: 42"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
 
     const consoleWarnSpy = console.warn;
@@ -343,7 +347,8 @@ describe('XML Recipe Integration', () => {
       },
     });
 
-    const xml = '<root><GameObject transform="euler: 0 90 0"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="euler: 0 90 0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -384,7 +389,8 @@ describe('XML Recipe Integration', () => {
       },
     });
 
-    const xml = '<root><GameObject transform="rotation: 0 90 0"></GameObject></root>';
+    const xml =
+      '<root><GameObject transform="rotation: 0 90 0"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -474,7 +480,8 @@ describe('XML Recipe Integration', () => {
       },
     });
 
-    const xml = '<root><GameObject rigidbody="type: dynamic"></GameObject></root>';
+    const xml =
+      '<root><GameObject rigidbody="type: dynamic"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
     const entity = entities[0].entity;
@@ -506,7 +513,8 @@ describe('XML Recipe Integration', () => {
     });
 
     warning = '';
-    const xml2 = '<root><GameObject my-component="value: 10"></GameObject></root>';
+    const xml2 =
+      '<root><GameObject my-component="value: 10"></GameObject></root>';
     const parsed2 = XMLParser.parse(xml2);
     const entities = parseXMLToEntities(state, parsed2.root);
 

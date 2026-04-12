@@ -7,7 +7,11 @@ import {
 } from 'vibegame/cli';
 import { DefaultPlugins } from 'vibegame/defaults';
 import { InputState } from 'vibegame/input';
-import { Rigidbody, CharacterController, CharacterMovement } from 'vibegame/physics';
+import {
+  Rigidbody,
+  CharacterController,
+  CharacterMovement,
+} from 'vibegame/physics';
 import { PlayerController } from 'vibegame/player';
 
 describe('E2E: Player Jump Mechanics', () => {
@@ -165,7 +169,9 @@ describe('E2E: Player Jump Mechanics', () => {
       expect(CharacterController.grounded[playerEntity]).toBe(1);
       expect(PlayerController.canJump[playerEntity]).toBe(1);
       expect(PlayerController.isJumping[playerEntity]).toBe(0);
-      expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
+      expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(
+        0
+      );
 
       const beforeJumpY = Rigidbody.posY[playerEntity];
       console.log(`Before jump Y: ${beforeJumpY}`);
@@ -227,7 +233,9 @@ describe('E2E: Player Jump Mechanics', () => {
       expect(CharacterController.grounded[playerEntity]).toBe(1);
       expect(PlayerController.isJumping[playerEntity]).toBe(0);
       expect(PlayerController.canJump[playerEntity]).toBe(1);
-      expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(0);
+      expect(PlayerController.jumpCooldown[playerEntity]).toBeLessThanOrEqual(
+        0
+      );
 
       // Add extra settling time between jumps
       for (let i = 0; i < 10; i++) {

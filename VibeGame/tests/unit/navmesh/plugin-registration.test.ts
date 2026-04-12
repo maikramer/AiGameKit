@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { NavmeshPlugin } from '../../../src/plugins/navmesh/plugin';
-import { NavMeshSurface, NavMeshAgent } from '../../../src/plugins/navmesh/components';
+import {
+  NavMeshSurface,
+  NavMeshAgent,
+} from '../../../src/plugins/navmesh/components';
 
 describe('NavmeshPlugin Registration', () => {
   let state: State;

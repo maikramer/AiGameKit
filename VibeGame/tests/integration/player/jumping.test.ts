@@ -211,7 +211,9 @@ describe('Player Jumping', () => {
         // Manually set it for test purposes
         PlayerController.jumpBufferTime[player] = state.time.elapsed * 1000;
       }
-      expect(PlayerController.jumpBufferTime[player]).toBeGreaterThanOrEqual(-10000);
+      expect(PlayerController.jumpBufferTime[player]).toBeGreaterThanOrEqual(
+        -10000
+      );
 
       let jumped = false;
       for (let i = 0; i < 20; i++) {
@@ -362,8 +364,14 @@ describe('Player Jumping', () => {
 
       for (let i = 0; i < 60; i++) {
         state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-        normalMaxHeight = Math.max(normalMaxHeight, Rigidbody.posY[normalPlayer]);
-        lowGravMaxHeight = Math.max(lowGravMaxHeight, Rigidbody.posY[lowGravPlayer]);
+        normalMaxHeight = Math.max(
+          normalMaxHeight,
+          Rigidbody.posY[normalPlayer]
+        );
+        lowGravMaxHeight = Math.max(
+          lowGravMaxHeight,
+          Rigidbody.posY[lowGravPlayer]
+        );
       }
 
       const normalHeightReached = normalMaxHeight - 2;

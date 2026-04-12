@@ -86,10 +86,20 @@ export const SteeringSyncSystem: System = {
         ge = new GameEntity();
         _obstacleCache[obstacleCount] = ge;
       }
-      ge.position.set(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
+      ge.position.set(
+        Transform.posX[eid],
+        Transform.posY[eid],
+        Transform.posZ[eid]
+      );
       const r = Collider.radius[eid];
       ge.boundingRadius =
-        r > 0 ? r : Math.max(Collider.sizeX[eid], Collider.sizeY[eid], Collider.sizeZ[eid]) / 2;
+        r > 0
+          ? r
+          : Math.max(
+              Collider.sizeX[eid],
+              Collider.sizeY[eid],
+              Collider.sizeZ[eid]
+            ) / 2;
       obstacleCount++;
     }
     const obstacles = _obstacleCache.slice(0, obstacleCount);

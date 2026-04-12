@@ -1,18 +1,22 @@
-import { describe, expect, it, mock } from "bun:test";
+import { describe, expect, it, mock } from 'bun:test';
 import {
   parseTerrainData,
   spawnWaterEntitiesFromTerrainData,
   type TerrainData,
-} from "../../../src/plugins/terrain/terrain-data-loader";
+} from '../../../src/plugins/terrain/terrain-data-loader';
 
 const VALID_TERRAIN_JSON = {
-  version: "1.0",
+  version: '1.0',
   terrain: { size: 1024, world_size: 256.0, max_height: 50.0 },
   rivers: [
     {
       id: 0,
       source: [512, 0] as [number, number],
-      path: [[512, 0], [511, 1], [510, 2]] as Array<[number, number]>,
+      path: [
+        [512, 0],
+        [511, 1],
+        [510, 2],
+      ] as Array<[number, number]>,
       length: 30,
     },
   ],
@@ -37,12 +41,12 @@ const VALID_TERRAIN_JSON = {
   ],
 };
 
-describe("terrain-data-loader", () => {
-  describe("parseTerrainData", () => {
-    it("parses valid terrain JSON with all fields", () => {
+describe('terrain-data-loader', () => {
+  describe('parseTerrainData', () => {
+    it('parses valid terrain JSON with all fields', () => {
       const result = parseTerrainData(VALID_TERRAIN_JSON);
 
-      expect(result.version).toBe("1.0");
+      expect(result.version).toBe('1.0');
       expect(result.terrain.size).toBe(1024);
       expect(result.terrain.world_size).toBe(256.0);
       expect(result.terrain.max_height).toBe(50.0);
@@ -56,9 +60,9 @@ describe("terrain-data-loader", () => {
       expect(result.lake_planes[0].pos_y).toBe(25.0);
     });
 
-    it("handles missing optional fields (empty rivers and lakes)", () => {
+    it('handles missing optional fields (empty rivers and lakes)', () => {
       const minimal = {
-        version: "1.0",
+        version: '1.0',
         terrain: { size: 512, world_size: 128.0, max_height: 30.0 },
       };
 
@@ -69,9 +73,9 @@ describe("terrain-data-loader", () => {
       expect(result.lake_planes).toEqual([]);
     });
 
-    it("handles empty arrays for rivers, lakes, and lake_planes", () => {
+    it('handles empty arrays for rivers, lakes, and lake_planes', () => {
       const data = {
-        version: "1.0",
+        version: '1.0',
         terrain: { size: 256, world_size: 64.0, max_height: 20.0 },
         rivers: [],
         lakes: [],
@@ -85,9 +89,9 @@ describe("terrain-data-loader", () => {
       expect(result.lake_planes).toEqual([]);
     });
 
-    it("preserves optional height stats when present", () => {
+    it('preserves optional height stats when present', () => {
       const data = {
-        version: "1.0",
+        version: '1.0',
         terrain: {
           size: 1024,
           world_size: 256.0,
@@ -108,40 +112,43 @@ describe("terrain-data-loader", () => {
       expect(result.terrain.height_mean).toBe(0.45);
     });
 
-    it("throws on non-object input", () => {
-      expect(() => parseTerrainData(null)).toThrow("non-null object");
-      expect(() => parseTerrainData("string")).toThrow("non-null object");
-      expect(() => parseTerrainData(42)).toThrow("non-null object");
+    it('throws on non-object input', () => {
+      expect(() => parseTerrainData(null)).toThrow('non-null object');
+      expect(() => parseTerrainData('string')).toThrow('non-null object');
+      expect(() => parseTerrainData(42)).toThrow('non-null object');
     });
 
-    it("throws on missing version", () => {
+    it('throws on missing version', () => {
       const data = { terrain: { size: 1, world_size: 1, max_height: 1 } };
       expect(() => parseTerrainData(data)).toThrow('"version"');
     });
 
-    it("throws on missing terrain", () => {
-      const data = { version: "1.0" };
+    it('throws on missing terrain', () => {
+      const data = { version: '1.0' };
       expect(() => parseTerrainData(data)).toThrow('"terrain"');
     });
 
-    it("throws on missing terrain.size", () => {
-      const data = { version: "1.0", terrain: { world_size: 1, max_height: 1 } };
+    it('throws on missing terrain.size', () => {
+      const data = {
+        version: '1.0',
+        terrain: { world_size: 1, max_height: 1 },
+      };
       expect(() => parseTerrainData(data)).toThrow('"terrain.size"');
     });
 
-    it("throws on missing terrain.world_size", () => {
-      const data = { version: "1.0", terrain: { size: 1, max_height: 1 } };
+    it('throws on missing terrain.world_size', () => {
+      const data = { version: '1.0', terrain: { size: 1, max_height: 1 } };
       expect(() => parseTerrainData(data)).toThrow('"terrain.world_size"');
     });
 
-    it("throws on missing terrain.max_height", () => {
-      const data = { version: "1.0", terrain: { size: 1, world_size: 1 } };
+    it('throws on missing terrain.max_height', () => {
+      const data = { version: '1.0', terrain: { size: 1, world_size: 1 } };
       expect(() => parseTerrainData(data)).toThrow('"terrain.max_height"');
     });
   });
 
-  describe("spawnWaterEntitiesFromTerrainData", () => {
-    it("logs lake planes without throwing", () => {
+  describe('spawnWaterEntitiesFromTerrainData', () => {
+    it('logs lake planes without throwing', () => {
       const consoleSpy = mock(() => {});
       const originalLog = console.log;
       console.log = consoleSpy as typeof console.log;
@@ -152,7 +159,7 @@ describe("terrain-data-loader", () => {
 
         const calls = consoleSpy.mock.calls;
         const lakeCall = calls.find((c: string[]) =>
-          c.some((s: string) => s.includes("lake_id=0"))
+          c.some((s: string) => s.includes('lake_id=0'))
         );
         expect(lakeCall).toBeDefined();
       } finally {
@@ -160,9 +167,9 @@ describe("terrain-data-loader", () => {
       }
     });
 
-    it("handles empty terrain data without error", () => {
+    it('handles empty terrain data without error', () => {
       const data: TerrainData = {
-        version: "1.0",
+        version: '1.0',
         terrain: { size: 256, world_size: 64.0, max_height: 20.0 },
         rivers: [],
         lakes: [],
@@ -172,7 +179,7 @@ describe("terrain-data-loader", () => {
       expect(() => spawnWaterEntitiesFromTerrainData(data)).not.toThrow();
     });
 
-    it("logs river info for rivers with paths", () => {
+    it('logs river info for rivers with paths', () => {
       const consoleSpy = mock(() => {});
       const originalLog = console.log;
       console.log = consoleSpy as typeof console.log;
@@ -182,7 +189,7 @@ describe("terrain-data-loader", () => {
 
         const calls = consoleSpy.mock.calls;
         const riverCall = calls.find((c: string[]) =>
-          c.some((s: string) => s.includes("river id=0"))
+          c.some((s: string) => s.includes('river id=0'))
         );
         expect(riverCall).toBeDefined();
       } finally {

@@ -7,7 +7,6 @@
  * O Three.js assume exatamente essa convenção, portanto **não** é necessário rodar ou transpor
  * o bitmap — basta garantir que a textura é 2:1 (paisagem) e usar EquirectangularReflectionMapping.
  */
-/* global fetch */
 import * as THREE from 'three';
 
 import type { State } from '../core';

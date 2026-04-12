@@ -41,7 +41,8 @@ describe('No Fog Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><GameObject></GameObject><GameObject></GameObject></root>';
+    const xml =
+      '<root><GameObject></GameObject><GameObject></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 
@@ -91,7 +92,8 @@ describe('No Fog Integration', () => {
     const state = new State();
     state.registerPlugin(FogPlugin);
 
-    const xml = '<root><Fog density="0.02"></Fog><GameObject></GameObject></root>';
+    const xml =
+      '<root><Fog density="0.02"></Fog><GameObject></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

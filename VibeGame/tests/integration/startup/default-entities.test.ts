@@ -140,7 +140,8 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
   });
 
   it('should not create lighting when ambient light already exists from XML', () => {
-    const xml = '<root><GameObject ambient-light="sky-color: 0xff0000" /></root>';
+    const xml =
+      '<root><GameObject ambient-light="sky-color: 0xff0000" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -169,7 +170,8 @@ describe('Startup Plugin - Preventing Auto-Creation', () => {
   });
 
   it('should not create lighting when combined light already exists from XML', () => {
-    const xml = '<root><GameObject directional-light="" ambient-light="" /></root>';
+    const xml =
+      '<root><GameObject directional-light="" ambient-light="" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 
@@ -302,22 +304,34 @@ describe('Startup Plugin - Component Defaults', () => {
     parseXMLToEntities(state, parsed.root);
 
     const xmlPlayer = defineQuery([PlayerController])(state.world)[0];
-    const startupPlayer = defineQuery([PlayerController])(startupState.world)[0];
+    const startupPlayer = defineQuery([PlayerController])(
+      startupState.world
+    )[0];
 
     expect(Transform.posX[xmlPlayer]).toBe(Transform.posX[startupPlayer]);
     expect(Transform.posY[xmlPlayer]).toBe(Transform.posY[startupPlayer]);
     expect(Transform.posZ[xmlPlayer]).toBe(Transform.posZ[startupPlayer]);
 
-    expect(PlayerController.speed[xmlPlayer]).toBe(PlayerController.speed[startupPlayer]);
-    expect(PlayerController.jumpHeight[xmlPlayer]).toBe(PlayerController.jumpHeight[startupPlayer]);
+    expect(PlayerController.speed[xmlPlayer]).toBe(
+      PlayerController.speed[startupPlayer]
+    );
+    expect(PlayerController.jumpHeight[xmlPlayer]).toBe(
+      PlayerController.jumpHeight[startupPlayer]
+    );
     expect(PlayerController.rotationSpeed[xmlPlayer]).toBe(
       PlayerController.rotationSpeed[startupPlayer]
     );
 
     expect(Rigidbody.type[xmlPlayer]).toBe(Rigidbody.type[startupPlayer]);
-    expect(Rigidbody.lockRotX[xmlPlayer]).toBe(Rigidbody.lockRotX[startupPlayer]);
-    expect(Rigidbody.lockRotY[xmlPlayer]).toBe(Rigidbody.lockRotY[startupPlayer]);
-    expect(Rigidbody.lockRotZ[xmlPlayer]).toBe(Rigidbody.lockRotZ[startupPlayer]);
+    expect(Rigidbody.lockRotX[xmlPlayer]).toBe(
+      Rigidbody.lockRotX[startupPlayer]
+    );
+    expect(Rigidbody.lockRotY[xmlPlayer]).toBe(
+      Rigidbody.lockRotY[startupPlayer]
+    );
+    expect(Rigidbody.lockRotZ[xmlPlayer]).toBe(
+      Rigidbody.lockRotZ[startupPlayer]
+    );
 
     expect(Collider.shape[xmlPlayer]).toBe(Collider.shape[startupPlayer]);
     expect(Collider.radius[xmlPlayer]).toBe(Collider.radius[startupPlayer]);
@@ -361,7 +375,8 @@ describe('Startup Plugin - Component Defaults', () => {
   });
 
   it('should match lighting defaults between XML and startup system', () => {
-    const xml = '<root><GameObject directional-light="" ambient-light="" /></root>';
+    const xml =
+      '<root><GameObject directional-light="" ambient-light="" /></root>';
     const parsed = XMLParser.parse(xml);
     parseXMLToEntities(state, parsed.root);
 

@@ -59,8 +59,7 @@ describe('Raycast XML recipe', () => {
     const state = new State();
     state.registerPlugin(RaycastPlugin);
 
-    const xml =
-      '<root><RaycastSource layer-mask="255"></RaycastSource></root>';
+    const xml = '<root><RaycastSource layer-mask="255"></RaycastSource></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

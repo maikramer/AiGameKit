@@ -137,7 +137,11 @@ function updateHealthBar(heroEid: number, state: State): void {
   });
 }
 
-function showDamageNumber(amount: number, screenX: number, screenY: number): void {
+function showDamageNumber(
+  amount: number,
+  screenX: number,
+  screenY: number
+): void {
   if (damageNumberPool.length === 0) return;
   const el = damageNumberPool[damageNumberIndex % DAMAGE_NUMBER_POOL_SIZE];
   damageNumberIndex++;
@@ -413,8 +417,7 @@ function createOverlayHud(state: State): void {
 
   const goWave = document.createElement('div');
   goWave.className = 'go-wave';
-  goWave.style.cssText =
-    'color:#b8c8e8;font-size:20px;margin-bottom:32px;';
+  goWave.style.cssText = 'color:#b8c8e8;font-size:20px;margin-bottom:32px;';
   goWave.textContent = t(state, 'hud.waveReached', { wave: '1' });
 
   const goBtn = document.createElement('button');

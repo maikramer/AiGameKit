@@ -1,4 +1,3 @@
-/* global fetch */
 import * as THREE from 'three';
 
 import { createGLTFLoader } from '../../extras/gltf-bridge';

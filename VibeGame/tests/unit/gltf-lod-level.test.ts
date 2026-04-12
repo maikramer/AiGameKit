@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
+// eslint-disable-next-line no-restricted-imports
 import { pickLodLevel } from '../../src/plugins/gltf-xml/gltf-lod-level';
 
 describe('pickLodLevel', () => {

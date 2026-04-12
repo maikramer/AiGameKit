@@ -40,8 +40,14 @@ describe('Scheduler late group', () => {
     const order: string[] = [];
 
     state.registerSystem({ group: 'setup', update: () => order.push('setup') });
-    state.registerSystem({ group: 'simulation', update: () => order.push('sim1') });
-    state.registerSystem({ group: 'simulation', update: () => order.push('sim2') });
+    state.registerSystem({
+      group: 'simulation',
+      update: () => order.push('sim1'),
+    });
+    state.registerSystem({
+      group: 'simulation',
+      update: () => order.push('sim2'),
+    });
     state.registerSystem({ group: 'late', update: () => order.push('late1') });
     state.registerSystem({ group: 'late', update: () => order.push('late2') });
     state.registerSystem({ group: 'draw', update: () => order.push('draw') });

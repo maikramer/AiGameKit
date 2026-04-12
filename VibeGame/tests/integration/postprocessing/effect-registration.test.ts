@@ -282,7 +282,8 @@ describe('Postprocessing Effect Registration', () => {
 
     const defaults = PostprocessingPlugin.config!.defaults!.vignette;
 
-    const xml = '<root><GameObject vignette="darkness: 0.9"></GameObject></root>';
+    const xml =
+      '<root><GameObject vignette="darkness: 0.9"></GameObject></root>';
     const parsed = XMLParser.parse(xml);
     const entities = parseXMLToEntities(state, parsed.root);
 

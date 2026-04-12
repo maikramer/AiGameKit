@@ -47,16 +47,47 @@ def _from_export_y_up(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
 
 
 def _is_thin_plaque(part: trimesh.Trimesh, *, thin_ratio: float) -> bool:
-    """
-    Placa fina (disco de sombra, pedestal) em qualquer orientação na AABB.
+    """Placa fina (disco de sombra, pedestal) — ignora protrusões verticais.
 
-    Usa min(extents) vs max(extents): sombras podem vir com a malha fina em Y, Z ou X
-    conforme o triângulo original (ex.: cilindro Z-up do trimesh).
+    Uma placa de sombra é fina no eixo VERTICAL (Y) mas larga no plano horizontal (XZ).
+    Uma protrusão vertical (ponta de espada) é fina no plano HORIZONTAL mas estendida
+    no eixo vertical — NÃO é placa de sombra.
     """
     e = sorted(float(x) for x in part.extents)
     if len(e) != 3:
         return False
-    return e[0] < thin_ratio * e[2]
+
+    if e[0] >= thin_ratio * e[2]:
+        return False
+
+    raw_extents = [float(x) for x in part.extents]
+    y_extent = raw_extents[1]
+    max_other = max(raw_extents[0], raw_extents[2])
+
+    return not (y_extent > max_other * 1.5)
+
+
+def _normal_concentration(part: trimesh.Trimesh) -> float:
+    """O quanto as normais estão concentradas num eixo cardenal (1 = placa plana, <0.5 = orgânico).
+
+    Placas de sombra (discos, pedestais) têm >80% da área com normais alinhadas a um eixo.
+    Geometria orgânica (rochas, anatomia) tem normais espalhadas por muitos eixos.
+    """
+    if len(part.faces) < 4:
+        return 0.0
+    try:
+        normals = part.face_normals
+        areas = part.area_faces
+        total_area = float(areas.sum())
+        if total_area < 1e-12:
+            return 0.0
+        max_aligned = 0.0
+        for ax in range(3):
+            aligned = float(areas[np.abs(normals[:, ax]) >= 0.7].sum()) / total_area
+            max_aligned = max(max_aligned, aligned)
+        return max_aligned
+    except Exception:
+        return 0.0
 
 
 def _remove_flat_bottom_islands(
@@ -107,7 +138,11 @@ def _remove_flat_bottom_islands(
     kept: list[trimesh.Trimesh] = []
     for p in parts:
         if touches_bottom(p) and _is_thin_plaque(p, thin_ratio=thin_ratio) and bbox_volume(p) < vol_ratio_max * max_vol:
+            if _normal_concentration(p) < 0.45:
+                kept.append(p)
+                continue
             continue
+
         kept.append(p)
 
     if not kept:
@@ -126,6 +161,7 @@ def _peel_bottom_upward_faces(
     band_frac: float = 0.042,
     min_normal_y: float = 0.82,
     max_remove_frac: float = 0.14,
+    max_iterations: int = 3,
 ) -> trimesh.Trimesh:
     """
     Remove faces **quase horizontais** (|ny| alto) na faixa mais baixa do bbox.
@@ -134,41 +170,52 @@ def _peel_bottom_upward_faces(
     só aceitar +Y falhava em muitos GLB (ex.: Godot / pintura).
 
     Conservador: aborta se a remoção afectar demasiadas faces (p.ex. sola inteira).
+
+    Iterativo: se uma passagem removida faces e a nova base ainda tem concentração
+    de faces horizontais, faz outra passagem. Até ``max_iterations`` vezes.
+    Isto permite remover pedestais mais espessos (ex.: base de rocha) sem sacrificar
+    geometria orgânica — faces curvas não passam no filtro ``min_normal_y``.
     """
-    if len(mesh_yup.faces) == 0:
-        return mesh_yup
+    result = mesh_yup
+    original_n = len(mesh_yup.faces)
+    for _ in range(max_iterations):
+        if len(result.faces) == 0:
+            break
 
-    _ = np.asarray(mesh_yup.face_normals)
+        _ = np.asarray(result.face_normals)
 
-    ymin = float(mesh_yup.vertices[:, 1].min())
-    ymax = float(mesh_yup.vertices[:, 1].max())
-    h = ymax - ymin
-    if h < 1e-8:
-        return mesh_yup
+        ymin = float(result.vertices[:, 1].min())
+        ymax = float(result.vertices[:, 1].max())
+        h = ymax - ymin
+        if h < 1e-8:
+            break
 
-    band = max(band_frac * h, 1e-6)
-    centers = mesh_yup.triangles_center
-    normals = mesh_yup.face_normals
-    if normals is None or len(normals) != len(mesh_yup.faces):
-        return mesh_yup
+        band = max(band_frac * h, 1e-6)
+        centers = result.triangles_center
+        normals = result.face_normals
+        if normals is None or len(normals) != len(result.faces):
+            break
 
-    ny = np.asarray(normals[:, 1], dtype=np.float64)
-    horizontal = np.abs(ny) >= min_normal_y
-    remove = (centers[:, 1] <= ymin + band) & horizontal
-    n_remove = int(np.count_nonzero(remove))
-    if n_remove == 0:
-        return mesh_yup
-    if n_remove > max_remove_frac * len(mesh_yup.faces):
-        return mesh_yup
+        ny = np.asarray(normals[:, 1], dtype=np.float64)
+        horizontal = np.abs(ny) >= min_normal_y
+        remove = (centers[:, 1] <= ymin + band) & horizontal
+        n_remove = int(np.count_nonzero(remove))
+        if n_remove == 0:
+            break
+        # Check against ORIGINAL face count to prevent cascading removal
+        if n_remove > max_remove_frac * original_n:
+            break
 
-    keep = ~remove
-    try:
-        sub = mesh_yup.submesh([np.where(keep)[0]], append=True, only_watertight=False)
-        if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
-            return sub
-    except Exception:
-        pass
-    return mesh_yup
+        keep = ~remove
+        try:
+            sub = result.submesh([np.where(keep)[0]], append=True, only_watertight=False)
+            if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
+                result = sub
+            else:
+                break
+        except Exception:
+            break
+    return result
 
 
 def _remove_bottom_center_cylinder(
@@ -901,13 +948,97 @@ def _boundary_holes_info(
                 v1 = pts[i] - centroid
                 v2 = pts[(i + 1) % n] - centroid
                 area += float(np.linalg.norm(np.cross(v1, v2))) * 0.5
-            holes.append({
-                "area": area,
-                "centroid": centroid,
-                "n_edges": n,
-                "vertex_ids": ids,
-            })
+            holes.append(
+                {
+                    "area": area,
+                    "centroid": centroid,
+                    "n_edges": n,
+                    "vertex_ids": ids,
+                }
+            )
         return holes
+    except Exception:
+        return []
+
+
+def _detect_structural_openings(
+    mesh: trimesh.Trimesh,
+    *,
+    area_frac_threshold: float = 0.15,
+    min_hole_edges: int = 50,
+) -> list[dict]:
+    """Detecta aberturas estruturais grandes (buracos de fronteira) em qualquer posição.
+
+    Uma abertura é "estrutural" se: area > ``area_frac_threshold`` x area total da mesh
+    **e** o boundary loop tem pelo menos ``min_hole_edges`` arestas (filtra rachas
+    entre tábuas de crate, que são pequenos mas podem ter area relativa elevada).
+
+    Retorna lista de dicts com: area, centroid, n_edges, axis, side, band coords.
+    """
+    try:
+        total_area = float(mesh.area)
+        if total_area < 1e-12:
+            return []
+        holes = _boundary_holes_info(mesh)
+        if not holes:
+            return []
+        bounds = mesh.bounds
+        openings: list[dict] = []
+        for hole in holes:
+            frac = hole["area"] / total_area
+            if frac <= area_frac_threshold:
+                continue
+            # Filtrar buracos com boundary loop demasiado curto (rachas entre tábuas)
+            if hole["n_edges"] < min_hole_edges:
+                continue
+            centroid = hole["centroid"]
+            # Determinar eixo e lado mais próximo ao centróide
+            best_axis = 0
+            best_side = "min"
+            best_dist = float("inf")
+            for ax in range(3):
+                lo = float(bounds[0, ax])
+                hi = float(bounds[1, ax])
+                h_ax = hi - lo
+                if h_ax < 1e-9:
+                    continue
+                dist_min = float(abs(centroid[ax] - lo))
+                dist_max = float(abs(centroid[ax] - hi))
+                dist = min(dist_min, dist_max)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_axis = ax
+                    best_side = "min" if dist_min < dist_max else "max"
+            # Verificar consistência axial: vértices do buraco devem estar
+            # próximos do lado detectado (min/max) dentro de 20% da extensão.
+            # Isso impede que gaps entre planks (vértices distribuídos por
+            # toda a extensão Y) sejam classificados como aberturas.
+            ax_lo = float(bounds[0, best_axis])
+            ax_hi = float(bounds[1, best_axis])
+            ax_extent = ax_hi - ax_lo
+            if ax_extent > 1e-9 and len(hole["vertex_ids"]) > 0:
+                vert_coords = mesh.vertices[hole["vertex_ids"], best_axis]
+                if best_side == "min":
+                    # Maioria dos vértices deve estar perto de ax_lo
+                    ref = ax_lo + 0.20 * ax_extent
+                    near_side = float(np.count_nonzero(vert_coords <= ref)) / len(vert_coords)
+                else:
+                    # Maioria dos vértices deve estar perto de ax_hi
+                    ref = ax_hi - 0.20 * ax_extent
+                    near_side = float(np.count_nonzero(vert_coords >= ref)) / len(vert_coords)
+                if near_side < 0.5:
+                    continue  # Buraco não está concentrado no lado — ignorar
+            openings.append(
+                {
+                    "area": hole["area"],
+                    "centroid": centroid,
+                    "n_edges": hole["n_edges"],
+                    "vertex_ids": hole["vertex_ids"],
+                    "axis": best_axis,
+                    "side": best_side,
+                }
+            )
+        return openings
     except Exception:
         return []
 
@@ -915,31 +1046,10 @@ def _boundary_holes_info(
 def _has_large_base_hole_fn(mesh: trimesh.Trimesh, area_frac_threshold: float = 0.05) -> bool:
     """Verifica se existe um buraco grande **na base** da mesh.
 
-    Um buraco é considerado "na base" se o centróide do loop estiver nos 15%
-    inferiores da altura (eixo Y). "Grande" = área > ``area_frac_threshold``
-    da área total da mesh.
+    .. deprecated::
+        Mantida para compatibilidade. Usa :func:`_detect_structural_openings` internamente.
     """
-    try:
-        total_area = float(mesh.area)
-        if total_area < 1e-12:
-            return False
-        holes = _boundary_holes_info(mesh)
-        if not holes:
-            return False
-        ymin = float(mesh.vertices[:, 1].min())
-        ymax = float(mesh.vertices[:, 1].max())
-        h = ymax - ymin
-        if h < 1e-8:
-            return False
-        base_threshold = ymin + h * 0.15
-        for hole in holes:
-            cy = float(hole["centroid"][1])
-            frac = hole["area"] / total_area
-            if cy <= base_threshold and frac > area_frac_threshold:
-                return True
-        return False
-    except Exception:
-        return False
+    return len(_detect_structural_openings(mesh, area_frac_threshold=area_frac_threshold)) > 0
 
 
 def _detect_base_axis_mesh(mesh: trimesh.Trimesh) -> tuple[int, int]:
@@ -1751,11 +1861,16 @@ def _detect_artifact_plates(
     if len(mesh.faces) == 0:
         return []
 
+    extents = [float(x) for x in mesh.extents]
+    y_extent = extents[1]
+    max_other = max(extents[0], extents[2])
+    if y_extent > max_other * 1.5:
+        return []
+
     normals = mesh.face_normals
     areas = mesh.area_faces
     centers = mesh.triangles_center
     bounds = mesh.bounds
-    extents = mesh.extents
     n_total = len(mesh.faces)
 
     plates: list[dict] = []
@@ -2145,6 +2260,131 @@ def remove_backing_plates(
     return repaired, info
 
 
+def _is_box_cage(part: trimesh.Trimesh, *, cardinal_ratio_threshold: float = 0.85) -> bool:
+    """Detecta se uma componente é uma caixa/jaula (normais quase todas cardinais).
+
+    Uma jaula tem >85% da área de superfície com normais alinhadas a eixos cardinais
+    (±X, ±Y, ±Z). Modelos reais têm normais variadas (curvas, formas orgânicas).
+    """
+    if len(part.faces) < 12:
+        return False
+    try:
+        normals = part.face_normals
+        areas = part.area_faces
+        total_area = float(areas.sum())
+        if total_area < 1e-12:
+            return False
+        cardinal = np.any(np.abs(normals) >= 0.85, axis=1)
+        cardinal_ratio = float(areas[cardinal].sum() / total_area)
+        return cardinal_ratio >= cardinal_ratio_threshold
+    except Exception:
+        return False
+
+
+def _try_remove_single_component_cage(
+    mesh: trimesh.Trimesh,
+    *,
+    band_frac: float = 0.06,
+    cardinal_threshold: float = 0.70,
+    min_face_ratio: float = 0.30,
+) -> trimesh.Trimesh:
+    """Tenta remover faces de jaula/caixa quando o mesh é um único componente.
+
+    Remove faces dentro de ``band_frac`` de qualquer face do bbox cujas normais
+    estejam alinhadas a esse eixo (|n_ax| >= cardinal_threshold). Depois faz split
+    e fica com componentes não-cage. Aborta se remover < min_face_ratio das faces.
+
+    Não faz pré-gate com ``_is_box_cage``: o mesh misto (modelo + cage) pode não
+    passar no teste de cardinalidade global, mas as paredes da jaula ainda têm
+    normais fortemente cardinais.
+    """
+    try:
+        bounds = mesh.bounds
+        centers = mesh.triangles_center
+        normals = mesh.face_normals
+        n_faces = len(mesh.faces)
+        remove = np.zeros(n_faces, dtype=bool)
+
+        for ax in range(3):
+            lo = float(bounds[0, ax])
+            hi = float(bounds[1, ax])
+            h = hi - lo
+            if h < 1e-9:
+                continue
+            ax_aligned = np.abs(normals[:, ax]) >= cardinal_threshold
+            near_lo = centers[:, ax] <= lo + band_frac * h
+            near_hi = centers[:, ax] >= hi - band_frac * h
+            remove |= ax_aligned & (near_lo | near_hi)
+
+        n_remove = int(np.count_nonzero(remove))
+        if n_remove == 0:
+            return mesh
+
+        keep = ~remove
+        try:
+            sub = mesh.submesh([np.where(keep)[0]], append=True, only_watertight=False)
+        except Exception:
+            return mesh
+        if not isinstance(sub, trimesh.Trimesh) or len(sub.faces) < 12:
+            return mesh
+
+        parts = sub.split(only_watertight=False)
+        if len(parts) <= 1:
+            return sub if not _is_box_cage(sub) else mesh
+
+        parts_is_cage = [_is_box_cage(p) for p in parts]
+        max_idx = max(range(len(parts)), key=lambda i: len(parts[i].faces))
+        if parts_is_cage[max_idx]:
+            parts_is_cage[max_idx] = False
+
+        kept = [p for p, cage in zip(parts, parts_is_cage, strict=True) if not cage]
+        if not kept:
+            return mesh
+        if len(kept) == 1:
+            return kept[0]
+        with contextlib.suppress(Exception):
+            return trimesh.util.concatenate(kept)
+        return sub
+    except Exception:
+        return mesh
+
+
+def _remove_box_cage_components(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Remove componentes caixa/jaula que envolvem o modelo real.
+
+    Só remove componentes cage quando há pelo menos uma componente não-cage
+    restante (o modelo actual).
+    """
+    try:
+        parts = mesh.split(only_watertight=False)
+    except Exception:
+        return mesh
+    if len(parts) <= 1:
+        return _try_remove_single_component_cage(mesh)
+
+    is_cage = [_is_box_cage(p) for p in parts]
+
+    # Never remove the largest component as a cage — it IS the model.
+    # A cage must SURROUND another model; the largest part is always the model itself.
+    max_idx = max(range(len(parts)), key=lambda i: len(parts[i].faces))
+    if is_cage[max_idx]:
+        is_cage[max_idx] = False
+
+    has_model = any(not c for c in is_cage)
+    if not has_model:
+        return mesh
+
+    kept = [p for p, cage in zip(parts, is_cage, strict=True) if not cage]
+    if not kept:
+        return mesh
+    if len(kept) == 1:
+        return kept[0]
+    try:
+        return trimesh.util.concatenate(kept)
+    except Exception:
+        return mesh
+
+
 def repair_mesh(
     mesh: trimesh.Trimesh,
     *,
@@ -2217,6 +2457,10 @@ def repair_mesh(
         except Exception:
             pass
 
+    # 2.5. Remover caixas/jaulas que envolvem o modelo
+    with contextlib.suppress(Exception):
+        m = _remove_box_cage_components(m)
+
     # 3. Topologia: weld/manifold depois de cortar pedestais — solda paredes
     #    duplas do marching cubes e corrige arestas non-manifold.
     if topology_prep:
@@ -2235,31 +2479,62 @@ def repair_mesh(
     with contextlib.suppress(Exception):
         _fill_small_boundary_holes_inplace(m, max(fill_small_holes_max_edges, 16))
 
-    # 5. Watertight — inteligente: se existe um buraco grande na BASE (>5% da
-    #    área, centróide nos 15% inferiores), aplica watertight mas depois
-    #    remove as faces criadas na base para preservar a abertura estrutural
-    #    (ex. fundo do crate). Buracos no topo/laterais (tábuas, rachas) são
-    #    sempre fechados.
-    _has_large_base_hole = False
+    # 5. Watertight — inteligente: detecta aberturas estruturais em QUALQUER
+    #    posição (base, topo, laterais) antes de make_watertight; depois remove
+    #    faces que o watertight criou para selar essas aberturas, preservando-as.
+    _has_structural_opening = False
     if watertight:
-        _has_large_base_hole = _has_large_base_hole_fn(m)
-        if _has_large_base_hole:
+        structural_openings = _detect_structural_openings(m)
+        _has_structural_opening = len(structural_openings) > 0
+        if _has_structural_opening:
             n_faces_before = len(m.faces)
-            ymin_before = float(m.vertices[:, 1].min())
-            ymax_before = float(m.vertices[:, 1].max())
-            h_before = ymax_before - ymin_before
-            base_band = ymin_before + h_before * 0.12
+
+            # Guardar região espacial de cada abertura (centróide + raio aproximado)
+            opening_regions: list[dict] = []
+            for op in structural_openings:
+                ax = op["axis"]
+                side = op["side"]
+                centroid = op["centroid"]
+                verts = m.vertices[op["vertex_ids"]]
+                if len(verts) < 3:
+                    continue
+                # Raio aproximado do buraco (desvio-padrão dos vértices no plano perpendicular)
+                ax1, ax2 = (ax + 1) % 3, (ax + 2) % 3
+                spread = max(float(verts[:, ax1].std()), float(verts[:, ax2].std()), 1e-9)
+                opening_regions.append(
+                    {
+                        "axis": ax,
+                        "side": side,
+                        "centroid": centroid,
+                        "radius": spread * 1.5,
+                    }
+                )
 
             with contextlib.suppress(Exception):
                 m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
 
-            if len(m.faces) > n_faces_before:
-                centers_y = m.triangles_center[:, 1]
-                normals_y = np.abs(m.face_normals[:, 1])
-                new_base_faces = (centers_y <= base_band) & (normals_y > 0.85)
-                n_new_base = int(np.count_nonzero(new_base_faces))
-                if 0 < n_new_base < len(m.faces) * 0.35:
-                    keep = ~new_base_faces
+            # Remover faces que o watertight adicionou perto de cada abertura
+            if len(m.faces) > n_faces_before and opening_regions:
+                centers = m.triangles_center
+                to_remove = np.zeros(len(m.faces), dtype=bool)
+                for region in opening_regions:
+                    ax = region["axis"]
+                    centroid = region["centroid"]
+                    r = region["radius"]
+                    ax1, ax2 = (ax + 1) % 3, (ax + 2) % 3
+                    dx = centers[:, ax1] - centroid[ax1]
+                    dz = centers[:, ax2] - centroid[ax2]
+                    dist_perp = np.sqrt(dx * dx + dz * dz)
+                    near_opening = dist_perp <= r
+
+                    # Faces na banda espacial perto do centróide da abertura
+                    n_ax = np.abs(m.face_normals[:, ax])
+                    in_region = near_opening & (n_ax > 0.75)
+                    to_remove |= in_region
+
+                n_new_faces = int(np.count_nonzero(to_remove))
+                if 0 < n_new_faces < len(m.faces) * 0.35:
+                    keep = ~to_remove
                     with contextlib.suppress(Exception):
                         sub = m.submesh([np.where(keep)[0]], append=True, only_watertight=False)
                         if isinstance(sub, trimesh.Trimesh) and len(sub.faces) > 0:
@@ -2293,7 +2568,7 @@ def repair_mesh(
                 resolution=remesh_resolution,
                 iterations=remesh_iterations,
                 max_surf_dist_factor=remesh_max_surf_dist_factor,
-                close_holes=not _has_large_base_hole,
+                close_holes=not _has_structural_opening,
                 taubin_steps=remesh_taubin_steps,
             )
 

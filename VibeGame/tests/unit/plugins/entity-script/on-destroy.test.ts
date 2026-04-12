@@ -26,7 +26,11 @@ describe('entity-script onDestroy', () => {
 
   function createScriptedEntity(
     file: string,
-    mod: { start?: (ctx: MonoBehaviourContext) => void; update?: (ctx: MonoBehaviourContext) => void; onDestroy?: (ctx: MonoBehaviourContext) => void }
+    mod: {
+      start?: (ctx: MonoBehaviourContext) => void;
+      update?: (ctx: MonoBehaviourContext) => void;
+      onDestroy?: (ctx: MonoBehaviourContext) => void;
+    }
   ): number {
     const eid = state.createEntity();
     state.addComponent(eid, MonoBehaviour, { ready: 0, enabled: 1 });

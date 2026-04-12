@@ -47,7 +47,12 @@ describe('entity-script awake/onEnable/onDisable', () => {
   function simulateSetup(eid: number, globKey: string): void {
     const mod = getCachedMonoBehaviourModule(state, globKey);
     if (!mod) return;
-    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
+    const ctx = {
+      state,
+      entity: eid,
+      object3d: null,
+      deltaTime: 0,
+    } as MonoBehaviourContext;
     if (mod.awake) mod.awake(ctx);
     const isEnabled = MonoBehaviour.enabled[eid] === 1;
     if (isEnabled && mod.onEnable) mod.onEnable(ctx);
@@ -59,7 +64,12 @@ describe('entity-script awake/onEnable/onDisable', () => {
     state.onDestroy(eid, () => {
       const mod = getCachedMonoBehaviourModule(state, globKey);
       if (mod) {
-        const destroyCtx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
+        const destroyCtx = {
+          state,
+          entity: eid,
+          object3d: null,
+          deltaTime: 0,
+        } as MonoBehaviourContext;
         if (MonoBehaviour.enabled[eid] === 1 && mod.onDisable) {
           mod.onDisable(destroyCtx);
         }
@@ -73,7 +83,9 @@ describe('entity-script awake/onEnable/onDisable', () => {
   it('awake fires once on first creation', () => {
     let awakeCount = 0;
     const eid = createScriptedEntity('test.ts', {
-      awake: () => { awakeCount++; },
+      awake: () => {
+        awakeCount++;
+      },
       start: () => {},
     });
     simulateSetup(eid, './scripts/test.ts');
@@ -82,10 +94,16 @@ describe('entity-script awake/onEnable/onDisable', () => {
 
   it('awake fires even if entity starts disabled', () => {
     let awakeFired = false;
-    const eid = createScriptedEntity('test.ts', {
-      awake: () => { awakeFired = true; },
-      start: () => {},
-    }, 0);
+    const eid = createScriptedEntity(
+      'test.ts',
+      {
+        awake: () => {
+          awakeFired = true;
+        },
+        start: () => {},
+      },
+      0
+    );
     simulateSetup(eid, './scripts/test.ts');
     expect(awakeFired).toBe(true);
     expect(MonoBehaviour.enabled[eid]).toBe(0);
@@ -94,9 +112,15 @@ describe('entity-script awake/onEnable/onDisable', () => {
   it('lifecycle order is awake → onEnable → start for enabled=1', () => {
     const order: string[] = [];
     const eid = createScriptedEntity('test.ts', {
-      awake: () => { order.push('awake'); },
-      onEnable: () => { order.push('onEnable'); },
-      start: () => { order.push('start'); },
+      awake: () => {
+        order.push('awake');
+      },
+      onEnable: () => {
+        order.push('onEnable');
+      },
+      start: () => {
+        order.push('start');
+      },
     });
     simulateSetup(eid, './scripts/test.ts');
     expect(order).toEqual(['awake', 'onEnable', 'start']);
@@ -104,11 +128,17 @@ describe('entity-script awake/onEnable/onDisable', () => {
 
   it('onEnable does NOT fire if entity created with enabled=0', () => {
     let onEnableFired = false;
-    const eid = createScriptedEntity('test.ts', {
-      awake: () => {},
-      onEnable: () => { onEnableFired = true; },
-      start: () => {},
-    }, 0);
+    const eid = createScriptedEntity(
+      'test.ts',
+      {
+        awake: () => {},
+        onEnable: () => {
+          onEnableFired = true;
+        },
+        start: () => {},
+      },
+      0
+    );
     simulateSetup(eid, './scripts/test.ts');
     expect(onEnableFired).toBe(false);
   });
@@ -116,14 +146,23 @@ describe('entity-script awake/onEnable/onDisable', () => {
   it('toggling enabled fires onEnable on 0→1 and onDisable on 1→0', () => {
     const order: string[] = [];
     const eid = createScriptedEntity('test.ts', {
-      onEnable: () => { order.push('onEnable'); },
-      onDisable: () => { order.push('onDisable'); },
+      onEnable: () => {
+        order.push('onEnable');
+      },
+      onDisable: () => {
+        order.push('onDisable');
+      },
       update: () => {},
     });
     simulateSetup(eid, './scripts/test.ts');
 
     const mod = getCachedMonoBehaviourModule(state, './scripts/test.ts')!;
-    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
+    const ctx = {
+      state,
+      entity: eid,
+      object3d: null,
+      deltaTime: 0,
+    } as MonoBehaviourContext;
 
     MonoBehaviour.enabled[eid] = 0;
     if (mod.onDisable) mod.onDisable(ctx);
@@ -139,8 +178,12 @@ describe('entity-script awake/onEnable/onDisable', () => {
   it('destroying enabled entity fires onDisable then onDestroy', () => {
     const order: string[] = [];
     const eid = createScriptedEntity('test.ts', {
-      onDisable: () => { order.push('onDisable'); },
-      onDestroy: () => { order.push('onDestroy'); },
+      onDisable: () => {
+        order.push('onDisable');
+      },
+      onDestroy: () => {
+        order.push('onDestroy');
+      },
       start: () => {},
     });
     simulateSetup(eid, './scripts/test.ts');
@@ -152,7 +195,9 @@ describe('entity-script awake/onEnable/onDisable', () => {
   it('re-enabling does NOT fire awake again', () => {
     let awakeCount = 0;
     const eid = createScriptedEntity('test.ts', {
-      awake: () => { awakeCount++; },
+      awake: () => {
+        awakeCount++;
+      },
       onEnable: () => {},
       onDisable: () => {},
       start: () => {},
@@ -160,7 +205,12 @@ describe('entity-script awake/onEnable/onDisable', () => {
     simulateSetup(eid, './scripts/test.ts');
 
     const mod = getCachedMonoBehaviourModule(state, './scripts/test.ts')!;
-    const ctx = { state, entity: eid, object3d: null, deltaTime: 0 } as MonoBehaviourContext;
+    const ctx = {
+      state,
+      entity: eid,
+      object3d: null,
+      deltaTime: 0,
+    } as MonoBehaviourContext;
 
     MonoBehaviour.enabled[eid] = 0;
     if (mod.onDisable) mod.onDisable(ctx);

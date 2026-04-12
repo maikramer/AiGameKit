@@ -1,4 +1,10 @@
-import type { FleeBehavior, ObstacleAvoidanceBehavior, SeekBehavior, Vehicle, WanderBehavior } from 'yuka';
+import type {
+  FleeBehavior,
+  ObstacleAvoidanceBehavior,
+  SeekBehavior,
+  Vehicle,
+  WanderBehavior,
+} from 'yuka';
 
 import type { State } from '../../core';
 

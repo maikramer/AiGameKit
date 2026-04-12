@@ -1,5 +1,4 @@
 import { type State, type System } from '../../core';
-/* global fetch */
 import { loadGltfToSceneWithAnimator } from '../../extras/gltf-bridge';
 import type { GltfAnimator } from '../../extras/gltf-animator';
 import { AudioSource } from '../audio/components';

@@ -1,10 +1,20 @@
-import { defineComponent, Types } from "bitecs";
-import { beforeEach, describe, expect, it } from "bun:test";
-import { JSDOM } from "jsdom";
-import { Scene, State, XMLParser, parseXMLToEntities, getAllEntities } from "vibegame";
-import { startCoroutine, getActiveCoroutines, CoroutineRunnerSystem } from "vibegame";
+import { defineComponent, Types } from 'bitecs';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { JSDOM } from 'jsdom';
+import {
+  Scene,
+  State,
+  XMLParser,
+  parseXMLToEntities,
+  getAllEntities,
+} from 'vibegame';
+import {
+  startCoroutine,
+  getActiveCoroutines,
+  CoroutineRunnerSystem,
+} from 'vibegame';
 
-describe("Scene reload", () => {
+describe('Scene reload', () => {
   let state: State;
 
   const TestValue = defineComponent({ value: Types.f32 });
@@ -14,26 +24,27 @@ describe("Scene reload", () => {
     global.DOMParser = dom.window.DOMParser;
 
     state = new State();
-    state.registerComponent("test-value", TestValue);
+    state.registerComponent('test-value', TestValue);
   });
 
-  describe("state.xmlSource", () => {
-    it("stores XML source string on state", () => {
-      const xml = "<Scene><GameObject></GameObject></Scene>";
+  describe('state.xmlSource', () => {
+    it('stores XML source string on state', () => {
+      const xml = '<Scene><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
       state.xmlSource = xml;
       expect(state.xmlSource).toBe(xml);
     });
 
-    it("is undefined by default", () => {
+    it('is undefined by default', () => {
       expect(state.xmlSource).toBeUndefined();
     });
   });
 
-  describe("Scene.reload", () => {
-    it("destroys all entities and re-parses XML from xmlSource", () => {
-      const xml = "<Scene><GameObject></GameObject><GameObject></GameObject></Scene>";
+  describe('Scene.reload', () => {
+    it('destroys all entities and re-parses XML from xmlSource', () => {
+      const xml =
+        '<Scene><GameObject></GameObject><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -48,8 +59,8 @@ describe("Scene reload", () => {
       expect(entitiesAfter.length).toBe(entitiesBefore.length);
     });
 
-    it("fires OnDestroy callbacks for all entities before destruction", () => {
-      const xml = "<Scene><GameObject></GameObject></Scene>";
+    it('fires OnDestroy callbacks for all entities before destruction', () => {
+      const xml = '<Scene><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -69,10 +80,10 @@ describe("Scene reload", () => {
       }
     });
 
-    it("stops all coroutines during reload", () => {
+    it('stops all coroutines during reload', () => {
       state.registerSystem(CoroutineRunnerSystem);
 
-      const xml = "<Scene><GameObject></GameObject></Scene>";
+      const xml = '<Scene><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -93,24 +104,25 @@ describe("Scene reload", () => {
       }
     });
 
-    it("clears all template registrations on reload", () => {
-      state.registerTemplate("test-tpl", {
-        components: { "test-value": { value: 42 } },
+    it('clears all template registrations on reload', () => {
+      state.registerTemplate('test-tpl', {
+        components: { 'test-value': { value: 42 } },
       });
-      expect(state.getTemplate("test-tpl")).toBeDefined();
+      expect(state.getTemplate('test-tpl')).toBeDefined();
 
-      const xml = "<Scene><GameObject></GameObject></Scene>";
+      const xml = '<Scene><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
       state.xmlSource = xml;
       Scene.reload(state);
 
-      expect(state.getTemplate("test-tpl")).toBeUndefined();
+      expect(state.getTemplate('test-tpl')).toBeUndefined();
     });
 
-    it("creates new entities from re-parsed XML", () => {
-      const xml = "<Scene><GameObject></GameObject><GameObject></GameObject></Scene>";
+    it('creates new entities from re-parsed XML', () => {
+      const xml =
+        '<Scene><GameObject></GameObject><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -125,8 +137,8 @@ describe("Scene reload", () => {
       }
     });
 
-    it("handles multiple reloads without issues", () => {
-      const xml = "<Scene><GameObject></GameObject></Scene>";
+    it('handles multiple reloads without issues', () => {
+      const xml = '<Scene><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -139,14 +151,14 @@ describe("Scene reload", () => {
       }
     });
 
-    it("throws if xmlSource is not set", () => {
+    it('throws if xmlSource is not set', () => {
       expect(() => Scene.reload(state)).toThrow(/xmlSource/);
     });
   });
 
-  describe("Scene.reloadAsync", () => {
-    it("returns a promise that resolves after reload", async () => {
-      const xml = "<Scene><GameObject></GameObject></Scene>";
+  describe('Scene.reloadAsync', () => {
+    it('returns a promise that resolves after reload', async () => {
+      const xml = '<Scene><GameObject></GameObject></Scene>';
       const parsed = XMLParser.parse(xml);
       parseXMLToEntities(state, parsed.root);
 
@@ -157,7 +169,7 @@ describe("Scene reload", () => {
       expect(entities.length).toBeGreaterThan(0);
     });
 
-    it("throws if xmlSource is not set", async () => {
+    it('throws if xmlSource is not set', async () => {
       await expect(Scene.reloadAsync(state)).rejects.toThrow(/xmlSource/);
     });
   });

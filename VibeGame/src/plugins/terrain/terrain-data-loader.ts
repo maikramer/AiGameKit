@@ -37,47 +37,59 @@ export async function loadTerrainData(url: string): Promise<TerrainData> {
   try {
     response = await fetch(url);
   } catch (err) {
-    throw new Error(`Failed to fetch terrain data from ${url}: ${(err as Error).message}`);
+    throw new Error(
+      `Failed to fetch terrain data from ${url}: ${(err as Error).message}`
+    );
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch terrain data from ${url}: HTTP ${response.status}`);
+    throw new Error(
+      `Failed to fetch terrain data from ${url}: HTTP ${response.status}`
+    );
   }
 
   let json: unknown;
   try {
     json = await response.json();
   } catch (err) {
-    throw new Error(`Invalid JSON in terrain data from ${url}: ${(err as Error).message}`);
+    throw new Error(
+      `Invalid JSON in terrain data from ${url}: ${(err as Error).message}`
+    );
   }
 
   return parseTerrainData(json);
 }
 
 export function parseTerrainData(data: unknown): TerrainData {
-  if (!data || typeof data !== "object") {
-    throw new Error("Terrain data must be a non-null object");
+  if (!data || typeof data !== 'object') {
+    throw new Error('Terrain data must be a non-null object');
   }
 
   const root = data as Record<string, unknown>;
 
-  if (typeof root.version !== "string") {
+  if (typeof root.version !== 'string') {
     throw new Error('Terrain data missing required field: "version" (string)');
   }
 
-  if (!root.terrain || typeof root.terrain !== "object") {
+  if (!root.terrain || typeof root.terrain !== 'object') {
     throw new Error('Terrain data missing required field: "terrain" (object)');
   }
 
   const terrain = root.terrain as Record<string, unknown>;
-  if (typeof terrain.size !== "number") {
-    throw new Error('Terrain data missing required field: "terrain.size" (number)');
+  if (typeof terrain.size !== 'number') {
+    throw new Error(
+      'Terrain data missing required field: "terrain.size" (number)'
+    );
   }
-  if (typeof terrain.world_size !== "number") {
-    throw new Error('Terrain data missing required field: "terrain.world_size" (number)');
+  if (typeof terrain.world_size !== 'number') {
+    throw new Error(
+      'Terrain data missing required field: "terrain.world_size" (number)'
+    );
   }
-  if (typeof terrain.max_height !== "number") {
-    throw new Error('Terrain data missing required field: "terrain.max_height" (number)');
+  if (typeof terrain.max_height !== 'number') {
+    throw new Error(
+      'Terrain data missing required field: "terrain.max_height" (number)'
+    );
   }
 
   const rivers = Array.isArray(root.rivers) ? root.rivers : [];
@@ -90,9 +102,14 @@ export function parseTerrainData(data: unknown): TerrainData {
       size: terrain.size,
       world_size: terrain.world_size,
       max_height: terrain.max_height,
-      height_min: typeof terrain.height_min === "number" ? terrain.height_min : undefined,
-      height_max: typeof terrain.height_max === "number" ? terrain.height_max : undefined,
-      height_mean: typeof terrain.height_mean === "number" ? terrain.height_mean : undefined,
+      height_min:
+        typeof terrain.height_min === 'number' ? terrain.height_min : undefined,
+      height_max:
+        typeof terrain.height_max === 'number' ? terrain.height_max : undefined,
+      height_mean:
+        typeof terrain.height_mean === 'number'
+          ? terrain.height_mean
+          : undefined,
     },
     rivers,
     lakes,
@@ -100,7 +117,9 @@ export function parseTerrainData(data: unknown): TerrainData {
   };
 }
 
-export function spawnWaterEntitiesFromTerrainData(terrainData: TerrainData): void {
+export function spawnWaterEntitiesFromTerrainData(
+  terrainData: TerrainData
+): void {
   for (const plane of terrainData.lake_planes) {
     console.log(
       `[terrain-data-loader] Would spawn <Water> entity: pos="${plane.pos_x} ${plane.pos_y} ${plane.pos_z}" size-x="${plane.size_x}" size-z="${plane.size_z}"> (lake_id=${plane.lake_id})`

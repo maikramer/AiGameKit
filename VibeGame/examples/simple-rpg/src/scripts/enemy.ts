@@ -1,7 +1,16 @@
 import { defineQuery } from 'bitecs';
 import type { MonoBehaviourContext } from 'vibegame';
-import { Transform, PlayerController, SteeringAgent, SteeringTarget } from 'vibegame';
-import { Health, damageHealth, isDead } from '../../../../src/plugins/combat/components.ts';
+import {
+  Transform,
+  PlayerController,
+  SteeringAgent,
+  SteeringTarget,
+} from 'vibegame';
+import {
+  Health,
+  damageHealth,
+  isDead,
+} from '../../../../src/plugins/combat/components.ts';
 import { CollisionEvents } from '../../../../src/plugins/physics/components.ts';
 
 interface EnemyConfig {
@@ -29,7 +38,8 @@ const playerQuery = defineQuery([PlayerController]);
 let cachedPlayerEid = 0;
 
 function findPlayer(ctx: MonoBehaviourContext): number {
-  if (cachedPlayerEid && Health.current[cachedPlayerEid] > 0) return cachedPlayerEid;
+  if (cachedPlayerEid && Health.current[cachedPlayerEid] > 0)
+    return cachedPlayerEid;
   const players = playerQuery(ctx.state.world);
   cachedPlayerEid = players[0] ?? 0;
   return cachedPlayerEid;

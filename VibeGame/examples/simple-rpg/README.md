@@ -8,43 +8,43 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 
 ## What is in the scene
 
-| Element                      | Source / Plugin                        | How it loads                                                 |
-| ---------------------------- | -------------------------------------- | ------------------------------------------------------------ |
-| Terrain (256m, LOD)          | Built-in `<Terrain>`                   | Declarative in `index.html`                                  |
-| Ocean water plane            | Built-in `<Water>`                     | Declarative                                                  |
-| Atmospheric fog              | Built-in `<Fog>`                       | Declarative                                                  |
-| Player (animated GLB + WASD) | Built-in `<PlayerGLTF`               | Declarative                                                  |
-| Follow camera + post-fx      | Built-in `<FollowCamera>`             | Declarative (bloom, vignette, chromatic aberration)          |
-| Hero character (GLB, rigged) | Text3D + Paint3D + Rigging3D           | `<PlayerGLTF model-url="...">`                              |
-| Stone pillar                 | Text3D + Paint3D                       | **`<GameObject place="at: x z">`** (terrain height + AABB)       |
-| Wooden crates (x2)           | Text3D + Paint3D                       | **`<GameObject place="at: x z">`**                               |
-| Blue crystals (x2)           | Text3D + Paint3D                       | **`<GameObject place="at: x z; base-y-offset: …">`**             |
-| Lowpoly trees (x24 spawned)  | Text3D + Paint3D + Spawner             | `<SpawnGroup profile="tree">`                               |
-| Physics crates (x6 spawned)  | Spawner + Physics                      | `<SpawnGroup profile="physics-box">`                        |
-| GLB pushable crates (x3)     | Spawner + Physics                      | `<SpawnGroup profile="gltf-crate">`                         |
+| Element                      | Source / Plugin                        | How it loads                                                   |
+| ---------------------------- | -------------------------------------- | -------------------------------------------------------------- |
+| Terrain (256m, LOD)          | Built-in `<Terrain>`                   | Declarative in `index.html`                                    |
+| Ocean water plane            | Built-in `<Water>`                     | Declarative                                                    |
+| Atmospheric fog              | Built-in `<Fog>`                       | Declarative                                                    |
+| Player (animated GLB + WASD) | Built-in `<PlayerGLTF`                 | Declarative                                                    |
+| Follow camera + post-fx      | Built-in `<FollowCamera>`              | Declarative (bloom, vignette, chromatic aberration)            |
+| Hero character (GLB, rigged) | Text3D + Paint3D + Rigging3D           | `<PlayerGLTF model-url="...">`                                 |
+| Stone pillar                 | Text3D + Paint3D                       | **`<GameObject place="at: x z">`** (terrain height + AABB)     |
+| Wooden crates (x2)           | Text3D + Paint3D                       | **`<GameObject place="at: x z">`**                             |
+| Blue crystals (x2)           | Text3D + Paint3D                       | **`<GameObject place="at: x z; base-y-offset: …">`**           |
+| Lowpoly trees (x24 spawned)  | Text3D + Paint3D + Spawner             | `<SpawnGroup profile="tree">`                                  |
+| Physics crates (x6 spawned)  | Spawner + Physics                      | `<SpawnGroup profile="physics-box">`                           |
+| GLB pushable crates (x3)     | Spawner + Physics                      | `<SpawnGroup profile="gltf-crate">`                            |
 | Campfire (fire + smoke)      | **Particles + Spawner**                | `<GameObject place="at: x z; y-offset: …">` + `ParticleSystem` |
 | Crystal sparkles (x2)        | **Particles + Spawner**                | `<GameObject place="at: x z; …">` + `ParticleSystem`           |
-| Ambient rain                 | **Particles plugin**                   | `<ParticleSystem preset="rain">` (high Y)                  |
-| Wandering NPCs (x3)          | **AI Steering + Spawner**              | `<GameObject place="at: x z; align-to-terrain: 0; …"><NPC>`      |
-| Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`                |
-| Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`                  |
-| On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`             |
+| Ambient rain                 | **Particles plugin**                   | `<ParticleSystem preset="rain">` (high Y)                      |
+| Wandering NPCs (x3)          | **AI Steering + Spawner**              | `<GameObject place="at: x z; align-to-terrain: 0; …"><NPC>`    |
+| Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`                  |
+| Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`                    |
+| On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`               |
 | Sky IBL + background         | Skymap2D (equirect PNG) + `sky` plugin | **`<Skyboxurl="/assets/sky/sky.png">`** em `index.html`        |
-| BGM + SFX (jump, save, load) | Text2Sound + `audio` plugin            | **`<AudioSource>`** + `playAudioEmitter` em `src/main.ts`     |
+| BGM + SFX (jump, save, load) | Text2Sound + `audio` plugin            | **`<AudioSource>`** + `playAudioEmitter` em `src/main.ts`      |
 
 ## Engine features demonstrated
 
-| Feature              | Plugin             | Usage in this demo                                                                     |
-| -------------------- | ------------------ | -------------------------------------------------------------------------------------- |
-| Particles            | `ParticlesPlugin`  | Fire, smoke, sparks, rain (often under `<GameObject place="…">` for ground height)         |
+| Feature                  | Plugin             | Usage in this demo                                                                     |
+| ------------------------ | ------------------ | -------------------------------------------------------------------------------------- |
+| Particles                | `ParticlesPlugin`  | Fire, smoke, sparks, rain (often under `<GameObject place="…">` for ground height)     |
 | `<GameObject place="…">` | `SpawnerPlugin`    | Deterministic XZ + terrain Y on the root entity; children are local transforms / merge |
-| AI Steering          | `AiSteeringPlugin` | 3 NPCs wandering autonomously (Yuka)                                                   |
-| Save / Load          | `SaveLoadPlugin`   | Q = save, E = load via localStorage + msgpackr                                         |
-| i18n                 | `I18nPlugin`       | Auto-detect PT/EN; overlay messages localized                                          |
-| Audio                | `AudioPlugin`      | `<AudioSource>` + `resume-audio-on-user-gesture`; SFX por nome                          |
-| Raycast              | `RaycastPlugin`    | Available (not used directly in this demo yet)                                         |
-| Joints               | `JointsPlugin`     | Available (not used directly in this demo yet)                                         |
-| Navmesh              | `NavmeshPlugin`    | Available (not used directly in this demo yet)                                         |
+| AI Steering              | `AiSteeringPlugin` | 3 NPCs wandering autonomously (Yuka)                                                   |
+| Save / Load              | `SaveLoadPlugin`   | Q = save, E = load via localStorage + msgpackr                                         |
+| i18n                     | `I18nPlugin`       | Auto-detect PT/EN; overlay messages localized                                          |
+| Audio                    | `AudioPlugin`      | `<AudioSource>` + `resume-audio-on-user-gesture`; SFX por nome                         |
+| Raycast                  | `RaycastPlugin`    | Available (not used directly in this demo yet)                                         |
+| Joints                   | `JointsPlugin`     | Available (not used directly in this demo yet)                                         |
+| Navmesh                  | `NavmeshPlugin`    | Available (not used directly in this demo yet)                                         |
 
 ## Pipeline (step by step)
 

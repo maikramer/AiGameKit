@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from "bun:test";
-import { Parent, State } from "vibegame";
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { Parent, State } from 'vibegame';
 
-describe("cascade destroy", () => {
+describe('cascade destroy', () => {
   let state: State;
 
   beforeEach(() => {
@@ -14,7 +14,7 @@ describe("cascade destroy", () => {
     return child;
   }
 
-  it("destroying parent destroys immediate children", () => {
+  it('destroying parent destroys immediate children', () => {
     const parent = state.createEntity();
     const child1 = addChild(parent);
     const child2 = addChild(parent);
@@ -26,7 +26,7 @@ describe("cascade destroy", () => {
     expect(state.exists(child2)).toBe(false);
   });
 
-  it("destroying parent destroys grandchildren (deep hierarchy)", () => {
+  it('destroying parent destroys grandchildren (deep hierarchy)', () => {
     const root = state.createEntity();
     const child = addChild(root);
     const grandchild1 = addChild(child);
@@ -42,7 +42,7 @@ describe("cascade destroy", () => {
     expect(state.exists(greatGrandchild)).toBe(false);
   });
 
-  it("destroying a leaf child does NOT destroy parent or siblings", () => {
+  it('destroying a leaf child does NOT destroy parent or siblings', () => {
     const parent = state.createEntity();
     const child1 = addChild(parent);
     const child2 = addChild(parent);
@@ -54,7 +54,7 @@ describe("cascade destroy", () => {
     expect(state.exists(child1)).toBe(false);
   });
 
-  it("onDestroy callbacks fire for all descendants", () => {
+  it('onDestroy callbacks fire for all descendants', () => {
     const root = state.createEntity();
     const child = addChild(root);
     const grandchild = addChild(child);
@@ -72,7 +72,7 @@ describe("cascade destroy", () => {
     expect(destroyed.length).toBe(3);
   });
 
-  it("destroying entity with no children works as before (backward compat)", () => {
+  it('destroying entity with no children works as before (backward compat)', () => {
     const eid = state.createEntity();
     let callbackFired = false;
     state.onDestroy(eid, () => {
@@ -85,7 +85,7 @@ describe("cascade destroy", () => {
     expect(state.exists(eid)).toBe(false);
   });
 
-  it("global onDestroyAll fires for every destroyed entity in cascade", () => {
+  it('global onDestroyAll fires for every destroyed entity in cascade', () => {
     const parent = state.createEntity();
     const child1 = addChild(parent);
     const child2 = addChild(parent);
@@ -101,13 +101,13 @@ describe("cascade destroy", () => {
     expect(destroyed.length).toBe(3);
   });
 
-  it("getDescendants returns empty array for entity with no children", () => {
+  it('getDescendants returns empty array for entity with no children', () => {
     const eid = state.createEntity();
     const desc = state.getDescendants(eid);
     expect(desc).toEqual([]);
   });
 
-  it("getDescendants returns deepest-first order", () => {
+  it('getDescendants returns deepest-first order', () => {
     const root = state.createEntity();
     const child = addChild(root);
     const grandchild = addChild(child);
@@ -117,22 +117,22 @@ describe("cascade destroy", () => {
     expect(desc).toEqual([grandchild, child]);
   });
 
-  it("descendants are destroyed deepest-first", () => {
+  it('descendants are destroyed deepest-first', () => {
     const root = state.createEntity();
     const child = addChild(root);
     const grandchild = addChild(child);
 
     const order: string[] = [];
-    state.onDestroy(grandchild, () => order.push("grandchild"));
-    state.onDestroy(child, () => order.push("child"));
-    state.onDestroy(root, () => order.push("root"));
+    state.onDestroy(grandchild, () => order.push('grandchild'));
+    state.onDestroy(child, () => order.push('child'));
+    state.onDestroy(root, () => order.push('root'));
 
     state.destroyEntity(root);
 
-    expect(order).toEqual(["grandchild", "child", "root"]);
+    expect(order).toEqual(['grandchild', 'child', 'root']);
   });
 
-  it("cascade destroys siblings at same depth", () => {
+  it('cascade destroys siblings at same depth', () => {
     const parent = state.createEntity();
     const child1 = addChild(parent);
     const child2 = addChild(parent);
