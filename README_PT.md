@@ -27,6 +27,7 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.1; Python **3.13**; clips procedimentais, **`game-pack`** (presets humanoid/creature/flying), export GLB após rigging. |
 | [**Materialize**](Materialize/) | CLI **PBR maps** (Rust/wgpu): gera normal, AO, metallic, smoothness a partir de textura difusa. |
 | [**GameDevLab**](GameDevLab/) | **Lab CLI**: debug 3D, bancos de quantização, profiling, otimização de pipeline. |
+| [**TerrainGen**](TerrainGen/) | **terraingen** — Geração procedural de terreno: heightmaps, erosão, rios, lagos (Python 3.10+). |
 | [**VibeGame**](VibeGame/) | **vibegame** — motor 3D em TypeScript (ECS, Three.js, XML declarativo); **Bun** + **Vite**. Ver [VibeGame/README.md](VibeGame/README.md). |
 
 Cada projeto tem o seu próprio `README`, `setup`, requisitos e licença.
@@ -47,6 +48,7 @@ GameDev/
   Rigging3D/         ← rigging3d (pip) — Shared; inferência Py 3.11 + bpy 5.0.x
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.1 (animação)
   GameDevLab/        ← gamedev-lab (pip) — depende de Shared; debug 3D, benches, profiling
+  TerrainGen/        ← terraingen (pip) — depende de Shared; geração procedural de terreno
   Materialize/       ← materialize-cli (cargo) — instalador Python usa Shared
   VibeGame/          ← vibegame (npm/Bun + Vite) — motor 3D no browser; standalone, não é pip
 ```
@@ -95,6 +97,7 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 ./install.sh paint3d                    # Paint3D (textura + nvdiffrast)
 ./install.sh rigging3d                  # Rigging3D (UniRig empacotado + PyTorch/CUDA via instalador)
 ./install.sh animator3d                 # Animator3D (bpy / animação; sem PyTorch)
+./install.sh terraingen                 # TerrainGen (terreno procedural; sem GPU)
 ./install.sh all                        # Instalar tudo
 
 # Windows PowerShell (recomendado no Windows: o script detecta `python` e passa-o ao instalador)
@@ -110,6 +113,7 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 .\install.ps1 paint3d
 .\install.ps1 rigging3d
 .\install.ps1 animator3d
+.\install.ps1 terraingen
 .\install.ps1 all
 
 # Windows CMD (idem: `install.bat` passa o interpretador ao instalador)
@@ -186,7 +190,7 @@ Instruções completas: [docs/INSTALLING_PT.md](docs/INSTALLING_PT.md), [docs/NE
 
 | Componente | Licença | Nota |
 |-----------|---------|------|
-| Código do monorepo (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, Shared) | MIT | Ver `LICENSE` em cada pasta |
+| Código do monorepo (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, TerrainGen, Shared) | MIT | Ver `LICENSE` em cada pasta |
 | Materialize CLI (Rust) | MIT | [Materialize/LICENSE](Materialize/LICENSE) |
 | FLUX.2 Klein 4B (oficial, BF16) | Apache 2.0 | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — uso comercial permitido segundo o model card; mais VRAM que o SDNQ |
 | FLUX.2 Klein 4B SDNQ (default Text2D) | FLUX Non-Commercial (metadata HF) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declara `flux-non-commercial-license`; **não** é o mesmo regime que o checkpoint oficial Apache 2.0. Para produto comercial, prefira `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` ou acordo com a BFL |
@@ -210,6 +214,7 @@ O monorepo usa variáveis de ambiente para localizar binários e configurar comp
 | `TEXTURE2D_BIN` | GameAssets | Caminho para o binário `texture2d` |
 | `TEXT2SOUND_BIN` | GameAssets | Caminho para o binário `text2sound` |
 | `MATERIALIZE_BIN` | GameAssets, Text3D | Caminho para o binário `materialize` |
+| `TERRAINGEN_BIN` | GameAssets | Caminho para o binário `terraingen` |
 | `TEXT2D_MODEL_ID` | Text2D | Override do modelo HF para Text2D |
 | `TEXTURE2D_MODEL_ID` | Texture2D | Override do modelo HF para Texture2D |
 | `SKYMAP2D_MODEL_ID` | Skymap2D | Override do modelo HF para Skymap2D |
