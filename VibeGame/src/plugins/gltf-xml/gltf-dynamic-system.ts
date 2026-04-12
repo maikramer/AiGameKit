@@ -67,8 +67,12 @@ export const GltfDynamicPhysicsSystem: System = {
         state.addComponent(eid, Collider);
       }
 
-      Rigidbody.type[eid] = BodyType.Dynamic;
-      Rigidbody.mass[eid] = GltfPhysicsPending.mass[eid];
+      const bodyType = GltfPhysicsPending.bodyType[eid];
+
+      Rigidbody.type[eid] = bodyType;
+      if (bodyType !== BodyType.Fixed) {
+        Rigidbody.mass[eid] = GltfPhysicsPending.mass[eid];
+      }
       Rigidbody.gravityScale[eid] = 1;
       Rigidbody.posX[eid] = Transform.posX[eid];
       Rigidbody.posY[eid] = Transform.posY[eid];
@@ -121,9 +125,11 @@ export const GltfDynamicPhysicsSystem: System = {
       Collider.posOffsetZ[eid] = _offsetLocal.z;
       Collider.rotOffsetW[eid] = 1;
 
-      Rigidbody.ccd[eid] = 1;
-      Rigidbody.linearDamping[eid] = 0.2;
-      Rigidbody.angularDamping[eid] = 0.4;
+      if (bodyType !== BodyType.Fixed) {
+        Rigidbody.ccd[eid] = 1;
+        Rigidbody.linearDamping[eid] = 0.2;
+        Rigidbody.angularDamping[eid] = 0.4;
+      }
 
       GltfPhysicsPending.ready[eid] = 1;
     }

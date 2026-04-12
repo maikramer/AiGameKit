@@ -32,6 +32,7 @@ export const GltfXmlPlugin: Plugin = {
         friction: 0.5,
         restitution: 0,
         colliderShape: 0,
+        bodyType: 0,
       },
     },
     enums: {
@@ -40,6 +41,12 @@ export const GltfXmlPlugin: Plugin = {
           box: 0,
           sphere: 1,
           capsule: 2,
+        },
+        bodyType: {
+          dynamic: 0,
+          fixed: 1,
+          'kinematic-position': 2,
+          'kinematic-velocity': 3,
         },
       },
     },

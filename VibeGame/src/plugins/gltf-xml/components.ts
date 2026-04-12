@@ -19,4 +19,6 @@ export const GltfPhysicsPending = defineComponent({
   restitution: Types.f32,
   /** `ColliderShape` (0 = box, 1 = sphere, 2 = capsule). */
   colliderShape: Types.ui8,
+  /** `BodyType` (0 = dynamic, 1 = fixed, 2 = kinematic-position, 3 = kinematic-velocity). */
+  bodyType: Types.ui8,
 });
