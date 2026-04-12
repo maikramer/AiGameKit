@@ -1,17 +1,22 @@
 import { hasComponent } from 'bitecs';
 import {
   FleeBehavior,
+  GameEntity,
+  ObstacleAvoidanceBehavior,
   SeekBehavior,
   Vector3,
   Vehicle,
   WanderBehavior,
 } from 'yuka';
 import { defineQuery, type State, type System } from '../../core';
+import { BodyType, Collider, Rigidbody } from '../physics/components';
 import { Transform, WorldTransform } from '../transforms';
 import { SteeringAgent, SteeringTarget } from './components';
 import { getSteeringMap, type SteeringRow } from './context';
 
 const steerQuery = defineQuery([SteeringAgent, SteeringTarget, Transform]);
+const obstacleQuery = defineQuery([Rigidbody, Collider, Transform]);
+const _obstacleCache: GameEntity[] = [];
 
 function ensureVehicle(state: State, eid: number): SteeringRow {
   const map = getSteeringMap(state);
@@ -22,16 +27,20 @@ function ensureVehicle(state: State, eid: number): SteeringRow {
   const seek = new SeekBehavior(new Vector3());
   const flee = new FleeBehavior(new Vector3(), 500);
   const wander = new WanderBehavior();
+  const obstacle = new ObstacleAvoidanceBehavior([]);
 
   vehicle.steering.add(seek);
   vehicle.steering.add(flee);
   vehicle.steering.add(wander);
+  vehicle.steering.add(obstacle);
 
   seek.active = true;
   flee.active = false;
   wander.active = false;
+  obstacle.active = true;
+  obstacle.weight = 1.5;
 
-  row = { vehicle, seek, flee, wander };
+  row = { vehicle, seek, flee, wander, obstacle };
   map.set(eid, row);
   return row;
 }
@@ -69,6 +78,22 @@ export const SteeringSyncSystem: System = {
   update: (state) => {
     const dt = state.time.deltaTime || 1 / 60;
 
+    let obstacleCount = 0;
+    for (const eid of obstacleQuery(state.world)) {
+      if (Rigidbody.type[eid] !== BodyType.Fixed) continue;
+      let ge = _obstacleCache[obstacleCount];
+      if (!ge) {
+        ge = new GameEntity();
+        _obstacleCache[obstacleCount] = ge;
+      }
+      ge.position.set(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
+      const r = Collider.radius[eid];
+      ge.boundingRadius =
+        r > 0 ? r : Math.max(Collider.sizeX[eid], Collider.sizeY[eid], Collider.sizeZ[eid]) / 2;
+      obstacleCount++;
+    }
+    const obstacles = _obstacleCache.slice(0, obstacleCount);
+
     for (const eid of steerQuery(state.world)) {
       if (!SteeringAgent.active[eid]) continue;
 
@@ -78,6 +103,7 @@ export const SteeringSyncSystem: System = {
       syncFromEcs(eid, row);
       syncTarget(state, eid, row);
       applyBehavior(eid, row);
+      row.obstacle!.obstacles = obstacles;
 
       row.vehicle.update(dt);
 

@@ -1,4 +1,4 @@
-import type { FleeBehavior, SeekBehavior, Vehicle, WanderBehavior } from 'yuka';
+import type { FleeBehavior, ObstacleAvoidanceBehavior, SeekBehavior, Vehicle, WanderBehavior } from 'yuka';
 
 import type { State } from '../../core';
 
@@ -7,6 +7,7 @@ export interface SteeringRow {
   seek?: SeekBehavior;
   flee?: FleeBehavior;
   wander?: WanderBehavior;
+  obstacle?: ObstacleAvoidanceBehavior;
 }
 
 const stateToSteering = new WeakMap<State, Map<number, SteeringRow>>();

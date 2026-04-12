@@ -33,6 +33,7 @@ declare module 'yuka' {
 
   export abstract class SteeringBehavior {
     active: boolean;
+    weight: number;
     calculate(vehicle: Vehicle, force: Vector3): Vector3;
   }
 
@@ -54,10 +55,16 @@ declare module 'yuka' {
     constructor();
   }
 
+  export class GameEntity {
+    position: Vector3;
+    boundingRadius: number;
+    constructor();
+  }
+
   export class ObstacleAvoidanceBehavior extends SteeringBehavior {
     maxSightRange: number;
-    obstacles: unknown[];
-    constructor(obstacles?: unknown[]);
+    obstacles: GameEntity[];
+    constructor(obstacles?: GameEntity[]);
   }
 
   export class SteeringManager {
