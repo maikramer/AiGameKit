@@ -162,50 +162,62 @@ def _peel_bottom_upward_faces(
     min_normal_y: float = 0.82,
     max_remove_frac: float = 0.14,
     max_iterations: int = 3,
+    scan_frac: float = 0.30,
+    max_cross_section_frac: float = 0.45,
 ) -> trimesh.Trimesh:
-    """
-    Remove faces **quase horizontais** (|ny| alto) na faixa mais baixa do bbox.
+    """Remove pedestal / shadow disc by cross-section and iterative peel.
 
-    Sombras modeladas como placa têm normais para +Y ou -Y (face de cima/baixo);
-    só aceitar +Y falhava em muitos GLB (ex.: Godot / pintura).
-
-    Conservador: aborta se a remoção afectar demasiadas faces (p.ex. sola inteira).
-
-    Iterativo: se uma passagem removida faces e a nova base ainda tem concentração
-    de faces horizontais, faz outra passagem. Até ``max_iterations`` vezes.
-    Isto permite remover pedestais mais espessos (ex.: base de rocha) sem sacrificar
-    geometria orgânica — faces curvas não passam no filtro ``min_normal_y``.
+    Detects which end of the Y axis has higher horizontal-face density,
+    then slices the mesh on a plane and lets downstream ``make_watertight``
+    seal the flat cut.
     """
     result = mesh_yup
     original_n = len(mesh_yup.faces)
+    if original_n == 0:
+        return result
+
+    ymin = float(result.vertices[:, 1].min())
+    ymax = float(result.vertices[:, 1].max())
+    h = ymax - ymin
+    if h < 1e-8:
+        return result
+
+    centers = result.triangles_center
+    normals = result.face_normals
+    if normals is None or len(normals) != len(result.faces):
+        return result
+    ny = np.abs(np.asarray(normals[:, 1], dtype=np.float64))
+    horizontal = ny >= min_normal_y
+
+    # Determine which end has denser horizontal faces (that is the pedestal end).
+    bottom_horiz = float(np.count_nonzero(horizontal & (centers[:, 1] <= ymin + scan_frac * h)))
+    top_horiz = float(np.count_nonzero(horizontal & (centers[:, 1] >= ymax - scan_frac * h)))
+    pedestal_at_max = top_horiz >= bottom_horiz
+
+    # Phase 1: iterative peel from the pedestal end (light cases only).
+    # Skipped entirely when pedestal is large — Phase 2 cross-section handles those.
     for _ in range(max_iterations):
         if len(result.faces) == 0:
             break
-
-        _ = np.asarray(result.face_normals)
-
-        ymin = float(result.vertices[:, 1].min())
-        ymax = float(result.vertices[:, 1].max())
-        h = ymax - ymin
-        if h < 1e-8:
+        r_ymin = float(result.vertices[:, 1].min())
+        r_ymax = float(result.vertices[:, 1].max())
+        r_h = r_ymax - r_ymin
+        if r_h < 1e-8:
             break
-
-        band = max(band_frac * h, 1e-6)
-        centers = result.triangles_center
-        normals = result.face_normals
-        if normals is None or len(normals) != len(result.faces):
+        band = max(band_frac * r_h, 1e-6)
+        r_centers = result.triangles_center
+        r_normals = result.face_normals
+        if r_normals is None or len(r_normals) != len(result.faces):
             break
-
-        ny = np.asarray(normals[:, 1], dtype=np.float64)
-        horizontal = np.abs(ny) >= min_normal_y
-        remove = (centers[:, 1] <= ymin + band) & horizontal
+        r_ny = np.abs(np.asarray(r_normals[:, 1], dtype=np.float64))
+        r_horizontal = r_ny >= min_normal_y
+        if pedestal_at_max:
+            remove = (r_centers[:, 1] >= r_ymax - band) & r_horizontal
+        else:
+            remove = (r_centers[:, 1] <= r_ymin + band) & r_horizontal
         n_remove = int(np.count_nonzero(remove))
-        if n_remove == 0:
+        if n_remove == 0 or n_remove > max_remove_frac * original_n:
             break
-        # Check against ORIGINAL face count to prevent cascading removal
-        if n_remove > max_remove_frac * original_n:
-            break
-
         keep = ~remove
         try:
             sub = result.submesh([np.where(keep)[0]], append=True, only_watertight=False)
@@ -215,7 +227,89 @@ def _peel_bottom_upward_faces(
                 break
         except Exception:
             break
-    return result
+
+    # Phase 2: cross-section cut at the pedestal boundary.
+    # Scan from the pedestal end; find the transition from dense-horizontal
+    # to organic, then slice the mesh on that plane.
+    if len(result.faces) == 0:
+        return result
+    r_ymin = float(result.vertices[:, 1].min())
+    r_ymax = float(result.vertices[:, 1].max())
+    r_h = r_ymax - r_ymin
+    if r_h < 1e-8:
+        return result
+
+    r_centers = result.triangles_center
+    r_normals = result.face_normals
+    if r_normals is None or len(r_normals) != len(result.faces):
+        return result
+    r_ny = np.abs(np.asarray(r_normals[:, 1], dtype=np.float64))
+    r_horizontal = r_ny >= min_normal_y
+
+    n_bins = max(int(scan_frac * 50), 10)
+    bin_size = r_h / n_bins
+    min_dense_bins = 1
+    dense_run = 0
+    cut_frac: float | None = None
+
+    if pedestal_at_max:
+        for i in range(n_bins):
+            lo = r_ymax - (i + 1) * bin_size
+            hi_y = r_ymax - i * bin_size
+            in_bin = (r_centers[:, 1] >= lo) & (r_centers[:, 1] < hi_y)
+            n_bin = int(np.count_nonzero(in_bin))
+            if n_bin < 3:
+                dense_run = 0
+                continue
+            pct = float(np.count_nonzero(r_horizontal & in_bin)) / n_bin
+            if pct >= 0.40:
+                dense_run += 1
+            else:
+                if dense_run >= min_dense_bins:
+                    cut_frac = 1.0 - i / n_bins
+                    break
+                dense_run = 0
+    else:
+        for i in range(n_bins):
+            lo = r_ymin + i * bin_size
+            hi_y = r_ymin + (i + 1) * bin_size
+            in_bin = (r_centers[:, 1] >= lo) & (r_centers[:, 1] < hi_y)
+            n_bin = int(np.count_nonzero(in_bin))
+            if n_bin < 3:
+                dense_run = 0
+                continue
+            pct = float(np.count_nonzero(r_horizontal & in_bin)) / n_bin
+            if pct >= 0.40:
+                dense_run += 1
+            else:
+                if dense_run >= min_dense_bins:
+                    cut_frac = i / n_bins
+                    break
+                dense_run = 0
+
+    if cut_frac is None or cut_frac < 0.02:
+        return result
+
+    cut_y = r_ymin + cut_frac * r_h
+    from trimesh.intersections import slice_faces_plane
+
+    plane_normal = np.array([0.0, -1.0, 0.0]) if pedestal_at_max else np.array([0.0, 1.0, 0.0])
+
+    new_verts, new_faces, _ = slice_faces_plane(
+        result.vertices.copy(),
+        result.faces.copy(),
+        plane_normal=plane_normal,
+        plane_origin=np.array([0.0, cut_y, 0.0]),
+    )
+    if len(new_faces) < 4:
+        return result
+
+    sub = trimesh.Trimesh(vertices=new_verts, faces=new_faces, process=False)
+    already_removed = original_n - len(result.faces)
+    if len(sub.faces) + already_removed < (1.0 - max_cross_section_frac) * original_n:
+        return result
+
+    return sub
 
 
 def _remove_bottom_center_cylinder(
@@ -1330,6 +1424,45 @@ def _pymeshlab_roundtrip(mesh: trimesh.Trimesh, apply_fn) -> trimesh.Trimesh:
     return mesh
 
 
+def _pymeshlab_close_holes(mesh: trimesh.Trimesh, *, max_hole_edges: int = 2000) -> trimesh.Trimesh:
+    """Close boundary holes using pymeshlab only (no remeshing/clean)."""
+    try:
+
+        def _apply(ms):
+            ms.meshing_close_holes(maxholesize=max_hole_edges)
+
+        return _pymeshlab_roundtrip(mesh, _apply)
+    except Exception:
+        return mesh
+
+
+def _pymeshfix_fill_gentle(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Close boundary holes via pymeshfix without aggressive decimation.
+
+    ``fill_small_boundaries(nbe=0, refine=True)`` creates new triangles to seal
+    holes while preserving existing geometry.  ``clean(max_iters=3, inner_loops=1)``
+    removes only degenerate faces introduced by the fill.
+    """
+    try:
+        from pymeshfix import PyTMesh
+
+        verts = np.asarray(mesh.vertices, dtype=np.float64)
+        faces = np.asarray(mesh.faces, dtype=np.int64)
+        mfix = PyTMesh()
+        mfix.load_array(verts, faces)
+        mfix.fill_small_boundaries(nbe=0, refine=True)
+        mfix.clean(max_iters=3, inner_loops=1)
+        v, f = mfix.return_arrays()
+        result = trimesh.Trimesh(
+            vertices=np.asarray(v, dtype=np.float64),
+            faces=np.asarray(f, dtype=np.int64),
+            process=True,
+        )
+        return result
+    except Exception:
+        return mesh
+
+
 def manifold_repair(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     """Repara topologia non-manifold, duplicatas e vértices órfãos via pymeshlab."""
     try:
@@ -2276,7 +2409,12 @@ def _is_box_cage(part: trimesh.Trimesh, *, cardinal_ratio_threshold: float = 0.8
             return False
         cardinal = np.any(np.abs(normals) >= 0.85, axis=1)
         cardinal_ratio = float(areas[cardinal].sum() / total_area)
-        return cardinal_ratio >= cardinal_ratio_threshold
+        if cardinal_ratio < cardinal_ratio_threshold:
+            return False
+        # Elongated shapes (pillars, poles, swords) are never cages — a cage must be
+        # roughly cubic to surround another model.
+        extents_sorted = sorted(float(x) for x in part.extents)
+        return extents_sorted[2] / max(extents_sorted[0], 1e-9) <= 2.5
     except Exception:
         return False
 
@@ -2297,8 +2435,17 @@ def _try_remove_single_component_cage(
     Não faz pré-gate com ``_is_box_cage``: o mesh misto (modelo + cage) pode não
     passar no teste de cardinalidade global, mas as paredes da jaula ainda têm
     normais fortemente cardinais.
+
+    No entanto, rejeita meshes que não são aproximadamente cúbicos (cube_ratio > 2.5):
+    uma cage deve ser cúbica para envolver outro modelo; meshes alongados (como crates)
+    não podem conter uma cage interna significativa.
     """
     try:
+        # Quick check: a cage must be roughly cubic to surround another model.
+        extents_sorted = sorted(float(x) for x in mesh.extents)
+        if extents_sorted[2] / max(extents_sorted[0], 1e-9) > 2.5:
+            return mesh
+
         bounds = mesh.bounds
         centers = mesh.triangles_center
         normals = mesh.face_normals
@@ -2333,9 +2480,6 @@ def _try_remove_single_component_cage(
             return sub if not _is_box_cage(sub) else mesh
 
         parts_is_cage = [_is_box_cage(p) for p in parts]
-        max_idx = max(range(len(parts)), key=lambda i: len(parts[i].faces))
-        if parts_is_cage[max_idx]:
-            parts_is_cage[max_idx] = False
 
         kept = [p for p, cage in zip(parts, parts_is_cage, strict=True) if not cage]
         if not kept:
@@ -2363,12 +2507,6 @@ def _remove_box_cage_components(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
         return _try_remove_single_component_cage(mesh)
 
     is_cage = [_is_box_cage(p) for p in parts]
-
-    # Never remove the largest component as a cage — it IS the model.
-    # A cage must SURROUND another model; the largest part is always the model itself.
-    max_idx = max(range(len(parts)), key=lambda i: len(parts[i].faces))
-    if is_cage[max_idx]:
-        is_cage[max_idx] = False
 
     has_model = any(not c for c in is_cage)
     if not has_model:
@@ -2541,8 +2679,21 @@ def repair_mesh(
                             m = sub
                             m.remove_unreferenced_vertices()
         else:
-            with contextlib.suppress(Exception):
-                m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
+            n_boundary = _boundary_edge_count(m)
+            if n_boundary > 200:
+                # Cross-sectioned mesh: full make_watertight over-decimates.
+                # Try pymeshlab close_holes only (no pymeshfix clean/remesh).
+                m_backup = m.copy()
+                with contextlib.suppress(Exception):
+                    m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
+                if len(m.faces) < 0.70 * len(m_backup.faces):
+                    # Over-decimated — revert and try gentle fill via pymeshfix.
+                    m = m_backup
+                    with contextlib.suppress(Exception):
+                        m = _pymeshfix_fill_gentle(m)
+            else:
+                with contextlib.suppress(Exception):
+                    m = make_watertight(m, max_hole_edges=max(fill_small_holes_max_edges, 500))
     elif fill_small_holes_max_edges > 0:
         with contextlib.suppress(Exception):
             _fill_small_boundary_holes_inplace(m, fill_small_holes_max_edges)
