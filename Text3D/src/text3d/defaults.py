@@ -100,6 +100,19 @@ DEFAULT_NUM_CHUNKS = 8000
 # Pós-processo ao gravar mesh (CLI): 0 = só maior componente + merge; 1-2 suaviza superfície.
 DEFAULT_MESH_SMOOTH = 0
 
+# Após ``repair_mesh`` em ``text3d generate``: fusão por distância inteligente
+# (``mesh_beautify.suggest_smart_weld_params``). Ver também ``--no-post-weld-beautify``.
+DEFAULT_POST_WELD_BEAUTIFY = True
+# Manter alinhado com ``mesh_beautify.WELD_SMART_AGGRESSIVENESS_DEFAULT``.
+DEFAULT_POST_WELD_AGGRESSIVENESS = 1.14
+DEFAULT_POST_WELD_TAUBIN_STEPS = 7
+DEFAULT_POST_WELD_CLOSE_HOLES_MAX_EDGES = 130
+
+# Após reparo/beautify (e antes de gravar): plano médio da base → horizontal (−Y) e Y=0.
+# Ver ``--no-base-plane-align`` / ``--base-plane-bottom-frac``.
+DEFAULT_BASE_PLANE_ALIGN = True
+DEFAULT_BASE_PLANE_BOTTOM_FRAC = 0.14
+
 # Isotropic remeshing (pymeshlab): reconstrói topologia com triângulos uniformes,
 # fecha buracos do marching cubes e elimina faces degeneradas. Padrão: ligado.
 DEFAULT_REMESH = True

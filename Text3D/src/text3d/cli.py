@@ -33,6 +33,8 @@ from .utils.memory import (
     kill_gpu_compute_processes_aggressive,
 )
 from .utils.mesh_lod import generate_lod_glb_triplet
+from .utils.mesh_align_hunyuan import align_glb_plus_z_safe
+from .utils.mesh_simplify_textured import simplify_glb_preserving_texture
 
 console = Console()
 
@@ -81,7 +83,12 @@ def cli(ctx, verbose):
         text3d generate -i ref.png -o mesh.glb
         text3d doctor
         text3d repair-ground modelo.glb --y-up-flip-x-180 --no-keep-largest
+        text3d mesh-beautify modelo.glb -o leve.glb --face-ratio 0.45
+        text3d mesh-beautify hunyuan.glb -o soldado.glb --weld-only --weld-aggressiveness 1.2 --taubin-steps 12
         text3d lod modelo.glb -o ./out --basename prop
+        text3d simplify-textured pintado.glb -o leve.glb --face-ratio 0.45
+        text3d align-plus-z modelo.glb -o corrigido.glb
+        text3d generate "prompt" --no-base-plane-align
         text3d -v generate "prompt"
         text3d info
     """
@@ -243,6 +250,46 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     is_flag=True,
     default=False,
     help="Desliga pós-processo: maior componente conexa + merge de vértices (ilhas/pés soltos).",
+)
+@click.option(
+    "--no-post-weld-beautify",
+    "no_post_weld_beautify",
+    is_flag=True,
+    default=False,
+    help=(
+        "Desliga a fusão inteligente por distância (pymeshlab) aplicada após o reparo de mesh. "
+        "Por defeito ligada (costuras Hunyuan)."
+    ),
+)
+@click.option(
+    "--post-weld-aggressiveness",
+    "post_weld_aggressiveness",
+    default=None,
+    type=float,
+    help=(
+        "Multiplica o ratio da fusão pós-reparo (omitir = "
+        f"{_defaults.DEFAULT_POST_WELD_AGGRESSIVENESS}; só se a fusão estiver ligada)."
+    ),
+)
+@click.option(
+    "--no-base-plane-align",
+    "no_base_plane_align",
+    is_flag=True,
+    default=False,
+    help=(
+        "Desliga o alinhamento do plano médio da base ao chão (−Y): corrige inclinação leve da "
+        "base antes de gravar (por defeito ligado)."
+    ),
+)
+@click.option(
+    "--base-plane-bottom-frac",
+    "base_plane_bottom_frac",
+    default=None,
+    type=float,
+    help=(
+        "Fraccão da altura (Y) usada para amostrar vértices da base ao ajustar o plano; "
+        f"omitir = {_defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC}."
+    ),
 )
 @click.option(
     "--no-remove-plates",
@@ -423,6 +470,10 @@ def generate(
     preset,
     mc_level,
     no_mesh_repair,
+    no_post_weld_beautify,
+    post_weld_aggressiveness,
+    no_base_plane_align,
+    base_plane_bottom_frac,
     no_remove_plates,
     no_ground_shadow_removal,
     ground_shadow_aggressive,
@@ -517,6 +568,26 @@ def generate(
     if not no_remove_plates:
         rep += ", anti-placa (detect+cut+fillet)"
     info_table.add_row("[bold]Pós-mesh[/bold]", rep)
+    if not no_post_weld_beautify:
+        _pwa = (
+            f"{float(post_weld_aggressiveness):g}"
+            if post_weld_aggressiveness is not None
+            else f"{_defaults.DEFAULT_POST_WELD_AGGRESSIVENESS:g} (inteligente)"
+        )
+        info_table.add_row(
+            "[bold]Fusão costuras[/bold]",
+            f"pós-reparo pymeshlab, agg={_pwa}, Taubin={_defaults.DEFAULT_POST_WELD_TAUBIN_STEPS}",
+        )
+    if _defaults.DEFAULT_BASE_PLANE_ALIGN and not no_base_plane_align:
+        _bpf = (
+            f"{float(base_plane_bottom_frac):g}"
+            if base_plane_bottom_frac is not None
+            else f"{_defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC:g}"
+        )
+        info_table.add_row(
+            "[bold]Plano base[/bold]",
+            f"horizontal (frac amostra Y={_bpf})",
+        )
     info_table.add_row("[bold]Formato[/bold]", output_format.upper())
     info_table.add_row(
         "[bold]Export[/bold]",
@@ -698,6 +769,30 @@ def generate(
                         remesh_max_surf_dist_factor=remesh_surf_dist_factor,
                     )
 
+                if not no_post_weld_beautify:
+                    from .mesh_beautify import beautify_geometry, suggest_smart_weld_params
+
+                    agg = float(
+                        post_weld_aggressiveness
+                        if post_weld_aggressiveness is not None
+                        else _defaults.DEFAULT_POST_WELD_AGGRESSIVENESS
+                    )
+                    if verbose:
+                        sr, si, ss = suggest_smart_weld_params(result, aggressiveness=agg)
+                        console.print(
+                            "[dim]Pós-reparo — fusão inteligente: ratio≈"
+                            f"{sr:.5f} · iter={si} · sec={ss} (agg={agg:.3f})[/dim]"
+                        )
+                    result = beautify_geometry(
+                        result,
+                        weld_diagonal_ratio=None,
+                        weld_smart_aggressiveness=agg,
+                        close_holes_max_edges=_defaults.DEFAULT_POST_WELD_CLOSE_HOLES_MAX_EDGES,
+                        repair_non_manifold_after_weld=True,
+                        weld_only=True,
+                        taubin_steps=_defaults.DEFAULT_POST_WELD_TAUBIN_STEPS,
+                    )
+
                 if not no_remove_plates:
                     from .utils.mesh_repair import remove_backing_plates
 
@@ -712,6 +807,27 @@ def generate(
                             "[yellow]Aviso: mesh tem placa conectada irrecuperável "
                             "(considere regenerar com seed diferente)[/yellow]"
                         )
+
+                if _defaults.DEFAULT_BASE_PLANE_ALIGN and not no_base_plane_align:
+                    from .utils.mesh_base_plane import align_mesh_base_plane_to_ground
+
+                    _bf = float(
+                        base_plane_bottom_frac
+                        if base_plane_bottom_frac is not None
+                        else _defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC
+                    )
+                    if not (0.04 <= _bf <= 0.5):
+                        raise click.UsageError(
+                            "--base-plane-bottom-frac deve estar entre 0.04 e 0.5"
+                        )
+                    if verbose:
+                        console.print(
+                            f"[dim]Alinhamento do plano médio da base (frac={_bf:g})…[/dim]"
+                        )
+                    result = align_mesh_base_plane_to_ground(
+                        result,
+                        bottom_frac=_bf,
+                    )
 
                 from .utils.export import save_mesh
 
@@ -981,6 +1097,225 @@ def repair_ground_cmd(
         sys.exit(1)
 
 
+@cli.command("mesh-beautify")
+@click.argument("mesh_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    required=True,
+    type=click.Path(),
+    help="GLB de saída (só geometria; sem materiais PBR).",
+)
+@click.option(
+    "--weld-diagonal-ratio",
+    default=None,
+    type=float,
+    help="Limiar = ratio×diagonal AABB. **Omitir = modo inteligente** (ratio ~ K×aresta_média/diagonal, limitado). Sobrepõe o automático.",
+)
+@click.option(
+    "--weld-aggressiveness",
+    default=1.14,
+    show_default=True,
+    type=float,
+    help="Só modo inteligente: multiplica o ratio derivado (p.ex. 1,15–1,25 para Hunyuan agressivo).",
+)
+@click.option(
+    "--no-weld",
+    is_flag=True,
+    help="Não aplicar fusão pymeshlab por distância (só merge exacto trimesh).",
+)
+@click.option(
+    "--weld-only",
+    is_flag=True,
+    help="Só soldar vértices (não decimar); usa --taubin-steps para suavizar costuras (default 12).",
+)
+@click.option(
+    "--weld-iterations",
+    default=None,
+    type=int,
+    help="Repetições do merge; omitir = sugerido pelo modo inteligente (ou 10 com ratio fixo).",
+)
+@click.option(
+    "--weld-secondary-factor",
+    default=None,
+    type=float,
+    help="Passagem extra com limiar maior (ex. 1.4); omitir = só repetições no mesmo limiar.",
+)
+@click.option(
+    "--face-ratio",
+    default=0.45,
+    show_default=True,
+    type=float,
+    help="Proporção alvo de faces (vs entrada), no mínimo ~800 triângulos (ignorado com --weld-only).",
+)
+@click.option(
+    "--face-count",
+    default=None,
+    type=int,
+    help="Número máximo de triângulos (sobrepõe --face-ratio).",
+)
+@click.option(
+    "--taubin-steps",
+    default=12,
+    show_default=True,
+    type=int,
+    help="Passos Taubin (pymeshlab, via mesh_repair).",
+)
+@click.option(
+    "--taubin-lambda",
+    default=0.33,
+    show_default=True,
+    type=float,
+    help="λ Taubin.",
+)
+@click.option(
+    "--taubin-mu",
+    default=-0.33,
+    show_default=True,
+    type=float,
+    help="μ Taubin (negativo = contraciclo, preserva volume).",
+)
+@click.option(
+    "--close-holes-max-edges",
+    default=120,
+    show_default=True,
+    type=int,
+    help="Fechar buracos de contorno (costuras) até este tamanho em arestas; 0 = desligado.",
+)
+@click.option(
+    "--no-repair-non-manifold",
+    is_flag=True,
+    help="Não aplicar reparo pymeshlab non-manifold após fundir.",
+)
+@click.option(
+    "--post-rotate-x-deg",
+    default=0.0,
+    show_default=True,
+    type=float,
+    help="Rotação final em X (graus), pós‑Taubin — corrige base/encosto se o modelo ficou de lado.",
+)
+@click.option(
+    "--post-rotate-y-deg",
+    default=0.0,
+    show_default=True,
+    type=float,
+    help="Rotação final em Y (graus).",
+)
+@click.option(
+    "--post-rotate-z-deg",
+    default=0.0,
+    show_default=True,
+    type=float,
+    help="Rotação final em Z (graus).",
+)
+@click.option(
+    "--align-plus-z-to-ground",
+    is_flag=True,
+    help="Cristais Hunyuan: alinhar cluster de faces com normal ~+Z à base -Y (chão) e recentrar.",
+)
+@click.option(
+    "--align-plus-z-dot-min",
+    default=0.82,
+    show_default=True,
+    type=float,
+    help="Cosseno mínimo com +Z para marcar faces da “base” errada (0,82 ≈ 35°).",
+)
+@click.option(
+    "--align-bottom-percentile",
+    default=48.0,
+    show_default=True,
+    type=float,
+    help="Só faces com centro Y abaixo deste percentil entram na média (+Z cortado).",
+)
+@click.option(
+    "--remesh-resolution",
+    default=None,
+    type=int,
+    help="Remesh isotrópico pymeshlab (diagonal/resolução); omitir = não remesh. Props orgânicos: ~110.",
+)
+def mesh_beautify_cmd(
+    mesh_file: Path,
+    output_path: str,
+    weld_diagonal_ratio: float | None,
+    weld_aggressiveness: float,
+    no_weld: bool,
+    weld_only: bool,
+    weld_iterations: int | None,
+    weld_secondary_factor: float | None,
+    close_holes_max_edges: int,
+    no_repair_non_manifold: bool,
+    post_rotate_x_deg: float,
+    post_rotate_y_deg: float,
+    post_rotate_z_deg: float,
+    align_plus_z_to_ground: bool,
+    align_plus_z_dot_min: float,
+    align_bottom_percentile: float,
+    remesh_resolution: int | None,
+    face_ratio: float,
+    face_count: int | None,
+    taubin_steps: int,
+    taubin_lambda: float,
+    taubin_mu: float,
+) -> None:
+    """Fundir vértices por distância, decimar (quadric) e suavizar Taubin — útil antes do paint3d."""
+    from .mesh_beautify import beautify_glb_file
+    from .utils.export import _load_as_trimesh
+
+    out_p = Path(output_path)
+    before = _load_as_trimesh(mesh_file)
+    ch = None if int(close_holes_max_edges) <= 0 else int(close_holes_max_edges)
+
+    if not no_weld and weld_diagonal_ratio is None:
+        from .mesh_beautify import suggest_smart_weld_params
+
+        sr, si_def, ss_def = suggest_smart_weld_params(
+            before,
+            aggressiveness=float(weld_aggressiveness),
+        )
+        it_show = si_def if weld_iterations is None else int(weld_iterations)
+        sec_show = ss_def if weld_secondary_factor is None else weld_secondary_factor
+        console.print(
+            "[dim]Fusão inteligente · "
+            f"ratio≈{sr:.5f} · iter={it_show} · sec={sec_show} "
+            f"(agressividade {float(weld_aggressiveness):.3f})[/dim]"
+        )
+
+    beautify_glb_file(
+        mesh_file,
+        out_p,
+        skip_distance_weld=no_weld,
+        weld_diagonal_ratio=None if no_weld else weld_diagonal_ratio,
+        weld_smart_aggressiveness=float(weld_aggressiveness),
+        weld_iterations=weld_iterations,
+        weld_secondary_factor=weld_secondary_factor,
+        close_holes_max_edges=ch,
+        repair_non_manifold_after_weld=not no_repair_non_manifold,
+        post_rotate_x_deg=float(post_rotate_x_deg),
+        post_rotate_y_deg=float(post_rotate_y_deg),
+        post_rotate_z_deg=float(post_rotate_z_deg),
+        align_plus_z_cluster_to_ground=align_plus_z_to_ground,
+        align_plus_z_dot_min=float(align_plus_z_dot_min),
+        align_plus_z_bottom_percentile=float(align_bottom_percentile),
+        isotropic_remesh_resolution=remesh_resolution,
+        weld_only=weld_only,
+        face_count=face_count,
+        face_ratio=None if face_count is not None else face_ratio,
+        taubin_steps=taubin_steps,
+        taubin_lambda=taubin_lambda,
+        taubin_mu=taubin_mu,
+    )
+    after = _load_as_trimesh(out_p)
+    console.print(
+        Rule("[bold green]mesh-beautify", style="green"),
+    )
+    console.print(
+        f"[bold green]✓[/bold green] [cyan]{out_p.resolve()}[/cyan]\n"
+        f"[dim]faces {len(before.faces):,} → {len(after.faces):,} · "
+        f"verts {len(before.vertices):,} → {len(after.vertices):,}[/dim]",
+    )
+
+
 @cli.command()
 @click.argument("input_file", type=click.Path(exists=True))
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída")
@@ -1164,6 +1499,106 @@ def lod_cmd(
             border_style="green",
         )
     )
+
+
+@cli.command("simplify-textured")
+@click.argument("input_mesh", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="GLB de saída (uma mesh fundida).",
+)
+@click.option(
+    "--face-ratio",
+    type=float,
+    default=0.45,
+    show_default=True,
+    help="Rácio alvo de faces (0–1) face ao original. Ignorado se já ≤ mínimo.",
+)
+@click.option(
+    "--qualitythr",
+    type=float,
+    default=0.5,
+    show_default=True,
+    help="Qualidade / erro máximo permitido (PyMeshLab, só malhas texturadas).",
+)
+@click.option(
+    "--extratcoordw",
+    type=float,
+    default=1.0,
+    show_default=True,
+    help="Peso extra dos UV na decimação com textura (PyMeshLab).",
+)
+def simplify_textured_cmd(
+    input_mesh: Path,
+    output: Path,
+    face_ratio: float,
+    qualitythr: float,
+    extratcoordw: float,
+) -> None:
+    """Reduz faces num GLB: preserva textura (UV+mapa) via PyMeshLab; sem textura, quadric trimesh.
+
+    Malhas só com cor de vértice uniforme (ex.: placeholder) usam o mesmo rácio sem passo de textura.
+    """
+    if not 0 < face_ratio <= 1.0:
+        raise click.ClickException("--face-ratio deve estar entre 0 e 1")
+    try:
+        simplify_glb_preserving_texture(
+            input_mesh,
+            output,
+            face_ratio=face_ratio,
+            qualitythr=qualitythr,
+            extratcoordw=extratcoordw,
+        )
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+
+    console.print(
+        Rule("[bold green]simplify-textured", style="green"),
+    )
+    console.print(f"[bold green]✓[/bold green] [cyan]{output.resolve()}[/cyan]")
+
+
+@cli.command("align-plus-z")
+@click.argument("input_mesh", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="GLB de saída.",
+)
+@click.option(
+    "--min-height-ratio",
+    type=float,
+    default=0.25,
+    show_default=True,
+    help=(
+        "Se a altura (AABB Y) após alinhamento for inferior a este factor da original, "
+        "mantém o ficheiro sem rotação (ex.: personagens onde a heurística falha)."
+    ),
+)
+def align_plus_z_cmd(
+    input_mesh: Path,
+    output: Path,
+    min_height_ratio: float,
+) -> None:
+    """Alinha faces ~+Z em baixo ao chão -Y (estilo Hunyuan/cristal); preserva textura no GLB."""
+    if not 0 < min_height_ratio <= 1.0:
+        raise click.ClickException("--min-height-ratio deve estar entre 0 e 1")
+    try:
+        align_glb_plus_z_safe(
+            input_mesh, output, min_height_ratio=min_height_ratio
+        )
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+
+    console.print(
+        Rule("[bold green]align-plus-z", style="green"),
+    )
+    console.print(f"[bold green]✓[/bold green] [cyan]{output.resolve()}[/cyan]")
 
 
 @cli.command()

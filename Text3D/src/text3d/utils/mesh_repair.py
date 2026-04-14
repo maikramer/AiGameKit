@@ -1436,6 +1436,19 @@ def _pymeshlab_close_holes(mesh: trimesh.Trimesh, *, max_hole_edges: int = 2000)
         return mesh
 
 
+def pymeshlab_repair_non_manifold(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+    """Repara arestas e vértices não‑manifold (útil após merge_close_vertices)."""
+    try:
+
+        def _apply(ms):
+            ms.meshing_repair_non_manifold_edges()
+            ms.meshing_repair_non_manifold_vertices()
+
+        return _pymeshlab_roundtrip(mesh, _apply)
+    except Exception:
+        return mesh
+
+
 def _pymeshfix_fill_gentle(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     """Close boundary holes via pymeshfix without aggressive decimation.
 

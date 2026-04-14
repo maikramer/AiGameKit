@@ -64,6 +64,7 @@ pip install -e .
 | `text3d info` | Show config, GPU, cache, environment |
 | `text3d models` | List available models |
 | `text3d convert FILE` | Convert mesh formats (PLY → GLB, etc.) |
+| `text3d mesh-beautify` | Weld-by-distance (smart default), optional remesh / Taubin — before Paint3D |
 | `text3d skill install` | Install Cursor Agent Skill in the project |
 
 ```bash
@@ -86,7 +87,14 @@ text3d convert mesh.ply --output mesh.glb
 
 # Texture an existing mesh (Paint3D project)
 paint3d texture outputs/meshes/robot.glb -i my_ref.png -o robot_tex.glb
+
+# Weld Hunyuan-style seams (omitting --weld-diagonal-ratio uses mesh-based ratio ~ K·mean_edge/diagonal)
+text3d mesh-beautify lumpy.glb -o welded.glb --weld-only
 ```
+
+### `mesh-beautify` (vertex welding)
+
+By default **`--weld-diagonal-ratio` is omitted**: pymeshlab distance merge uses a ratio derived from the mesh (**~K × mean edge length / bounding-box diagonal**, clamped). Use **`--weld-aggressiveness`** (default `1.14`) to scale that ratio for more or less weld. Pass **`--weld-diagonal-ratio 0.01`** to force a fixed ratio. **`--no-weld`** skips pymeshlab merge (only trimesh `merge_vertices`).
 
 ### Texture and PBR
 
