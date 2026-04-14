@@ -1517,11 +1517,16 @@ def batch_cmd(
         if with_3d and text3d_bin and any(r.generate_3d for r in rows):
             t3d = profile.text3d
             phased = bool(t3d and t3d.texture)
+            ps3 = (t3d.paint_style or "hunyuan").strip().lower() if t3d else "hunyuan"
+            quick_paint = ps3 in ("solid", "perlin")
             if phased:
                 _dry_run_header(
                     dry_plan,
-                    "--- Text3D + paint3d: shape → texture (PBR no GLB via Paint 2.1) ---",
+                    "--- Text3D + paint3d: shape → quick (cor / Perlin) ---"
+                    if quick_paint
+                    else "--- Text3D + paint3d: shape → texture (PBR no GLB via Paint 2.1) ---",
                 )
+                phase_paint = "paint3d quick" if quick_paint else "paint3d texture"
                 for row in rows:
                     if not row.generate_3d:
                         continue
@@ -1551,10 +1556,11 @@ def batch_cmd(
                         Path(tw),
                         img_path,
                         mesh_path,
+                        row_id=row.id,
                     )
                     _dry_run_emit(
                         dry_plan,
-                        phase="paint3d texture",
+                        phase=phase_paint,
                         row_id=row.id,
                         argv=a2,
                     )
@@ -2053,8 +2059,18 @@ def batch_cmd(
                                     shutil.rmtree(row_work, ignore_errors=True)
                                 progress.advance(task_shape)
 
+                        _ps = (
+                            (profile.text3d.paint_style or "hunyuan").strip().lower()
+                            if profile.text3d
+                            else "hunyuan"
+                        )
+                        _paint_label = (
+                            "paint3d quick (todos)"
+                            if _ps in ("solid", "perlin")
+                            else "paint3d texture (todos)"
+                        )
                         task_paint = progress.add_task(
-                            "[cyan]paint3d texture (todos)[/cyan]",
+                            f"[cyan]{_paint_label}[/cyan]",
                             total=len(shape_ok),
                         )
                         for idx in shape_ok:
@@ -2075,10 +2091,19 @@ def batch_cmd(
                                     mesh_shape,
                                     img_final,
                                     mesh_final,
+                                    row_id=row.id,
                                 )
                                 t_paint = time.perf_counter()
                                 r4 = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(rec, "paint3d_texture", time.perf_counter() - t_paint)
+                                _timing_append(
+                                    rec,
+                                    "paint3d_quick"
+                                    if (profile.text3d
+                                        and (profile.text3d.paint_style or "hunyuan").strip().lower()
+                                        in ("solid", "perlin"))
+                                    else "paint3d_texture",
+                                    time.perf_counter() - t_paint,
+                                )
                                 if r4.returncode != 0:
                                     failures += 1
                                     err = merge_subprocess_output(r4) or "paint3d texture falhou"
@@ -2190,6 +2215,60 @@ def _try_paint3d_bin() -> str | None:
         return None
 
 
+def _paint3d_quick_argv(
+    paint3d_bin: str,
+    profile: GameProfile,
+    mesh_in: Path,
+    mesh_out: Path,
+    *,
+    row_seed: int | None,
+) -> list[str]:
+    """Subcomando ``paint3d quick`` — cor sólida ou ruído Perlin/FBM (sem IA)."""
+    t3 = profile.text3d
+    if not t3:
+        raise RuntimeError("perfil text3d em falta para paint3d quick")
+    style = (t3.paint_style or "hunyuan").strip().lower()
+    if style not in ("solid", "perlin"):
+        raise RuntimeError(f"paint_style inválido para quick: {style!r}")
+    eff = t3.paint_perlin_seed
+    if eff is None:
+        eff = row_seed
+    if eff is None:
+        eff = 0
+
+    args: list[str | Path] = [
+        paint3d_bin,
+        "quick",
+        str(mesh_in),
+        "-o",
+        str(mesh_out),
+        "--style",
+        style,
+    ]
+    if style == "solid":
+        args.extend(["--color", t3.paint_solid_color])
+    else:
+        args.extend(
+            [
+                "--tint",
+                t3.paint_perlin_tint,
+                "--frequency",
+                str(t3.paint_perlin_frequency),
+                "--octaves",
+                str(t3.paint_perlin_octaves),
+                "--seed",
+                str(int(eff)),
+                "--contrast",
+                str(t3.paint_perlin_contrast),
+            ]
+        )
+    if t3.paint_preserve_origin:
+        args.append("--preserve-origin")
+    else:
+        args.append("--no-preserve-origin")
+    return [str(x) for x in args]
+
+
 def _paint3d_texture_argv(
     paint3d_bin: str,
     profile: GameProfile,
@@ -2249,7 +2328,15 @@ def _texture_subprocess_argv(
     mesh_in: Path,
     image_path: Path,
     mesh_out: Path,
+    *,
+    row_id: str | None = None,
 ) -> list[str]:
+    t3 = profile.text3d
+    if t3 and (t3.paint_style or "hunyuan").strip().lower() in ("solid", "perlin"):
+        row_seed = _seed_for_row(profile, row_id) if row_id else None
+        return _paint3d_quick_argv(
+            paint3d_bin, profile, mesh_in, mesh_out, row_seed=row_seed
+        )
     return _paint3d_texture_argv(
         paint3d_bin,
         profile,
@@ -2649,6 +2736,7 @@ def resume_cmd(
                     it["shape_path"],
                     it["img_final"],
                     mesh_out,
+                    row_id=row.id,
                 )
                 r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
                 if r.returncode == 0 and mesh_out.is_file():

@@ -29,6 +29,15 @@ class Text3DProfile:
     export_origin: str = "feet"
     # Após paint3d texture: repor convenção "pés" na mesh final (alinhado com Text3D).
     paint_preserve_origin: bool = True
+    # Textura no GLB: hunyuan = Paint 2.1 IA (lento); solid / perlin = ``paint3d quick`` (rápido, cor por vértice).
+    paint_style: str = "hunyuan"
+    paint_solid_color: str = "#888888"
+    paint_perlin_tint: str = "#7a7268"
+    paint_perlin_frequency: float = 4.0
+    paint_perlin_octaves: int = 4
+    paint_perlin_contrast: float = 0.55
+    # None = usar o mesmo seed estável da linha no batch (ver ``_seed_for_row``).
+    paint_perlin_seed: int | None = None
     # Se qualquer um estiver definido, não se passa --preset (o text3d aplica preset por cima de --steps)
     steps: int | None = None
     octree_resolution: int | None = None
@@ -446,12 +455,48 @@ class GameProfile:
             if eo not in valid_eo:
                 raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
             paint_preserve = bool(raw_t3.get("paint_preserve_origin", True))
+            ps_raw = raw_t3.get("paint_style", "hunyuan")
+            ps = str(ps_raw).strip().lower() if ps_raw not in (None, "") else "hunyuan"
+            valid_ps = frozenset({"hunyuan", "solid", "perlin"})
+            if ps not in valid_ps:
+                raise ValueError(
+                    "text3d.paint_style deve ser hunyuan (Paint 2.1 IA), solid ou perlin (paint3d quick)"
+                )
+            psc = raw_t3.get("paint_solid_color", "#888888")
+            psc_s = str(psc).strip() if psc not in (None, "") else "#888888"
+            ptint = raw_t3.get("paint_perlin_tint", "#7a7268")
+            ptint_s = str(ptint).strip() if ptint not in (None, "") else "#7a7268"
+            try:
+                pf = float(raw_t3.get("paint_perlin_frequency", 4.0))
+                pcon = float(raw_t3.get("paint_perlin_contrast", 0.55))
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.paint_perlin_frequency e paint_perlin_contrast devem ser números") from e
+            try:
+                po = int(raw_t3.get("paint_perlin_octaves", 4))
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.paint_perlin_octaves deve ser inteiro") from e
+            pps = raw_t3.get("paint_perlin_seed")
+            pps_i: int | None
+            if pps is None or (isinstance(pps, str) and str(pps).strip() == ""):
+                pps_i = None
+            else:
+                try:
+                    pps_i = int(pps)
+                except (TypeError, ValueError) as e:
+                    raise ValueError("text3d.paint_perlin_seed deve ser inteiro ou omitido") from e
             t3 = Text3DProfile(
                 preset=pr,
                 low_vram=bool(raw_t3.get("low_vram", False)),
                 texture=tx,
                 export_origin=eo,
                 paint_preserve_origin=paint_preserve,
+                paint_style=ps,
+                paint_solid_color=psc_s,
+                paint_perlin_tint=ptint_s,
+                paint_perlin_frequency=pf,
+                paint_perlin_octaves=po,
+                paint_perlin_contrast=pcon,
+                paint_perlin_seed=pps_i,
                 steps=st_i,
                 octree_resolution=oc_i,
                 num_chunks=nc_i,
@@ -473,6 +518,10 @@ class GameProfile:
                 paint_torch_compile=bool(raw_t3.get("paint_torch_compile", False)),
                 paint_low_vram_mode=bool(raw_t3.get("paint_low_vram_mode", False)),
             )
+            if ps in ("solid", "perlin") and not tx:
+                raise ValueError(
+                    "text3d.paint_style solid/perlin exige text3d.texture: true (fase shape → quick bake)"
+                )
         rg3: Rigging3DProfile | None = None
         raw_rg = data.get("rigging3d")
         if isinstance(raw_rg, dict):

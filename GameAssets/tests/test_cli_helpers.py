@@ -251,6 +251,57 @@ def test_texture_subprocess_delegates_to_paint3d() -> None:
     assert argv[1] == "texture"
 
 
+def test_texture_subprocess_solid_uses_quick() -> None:
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        text3d=Text3DProfile(
+            texture=True,
+            paint_style="solid",
+            paint_solid_color="#ff00aa",
+        ),
+    )
+    argv = _texture_subprocess_argv(
+        "/bin/paint3d",
+        p,
+        Path("/shape.glb"),
+        Path("/ref.png"),
+        Path("/out.glb"),
+        row_id="Props/rock",
+    )
+    assert argv[:2] == ["/bin/paint3d", "quick"]
+    assert "--style" in argv
+    assert argv[argv.index("--style") + 1] == "solid"
+    assert "--color" in argv
+    assert argv[argv.index("--color") + 1] == "#ff00aa"
+
+
+def test_texture_subprocess_perlin_uses_row_seed_when_unset() -> None:
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        seed_base=1000,
+        text3d=Text3DProfile(texture=True, paint_style="perlin", paint_perlin_seed=None),
+    )
+    rid = "Env/stone_01"
+    expected = _seed_for_row(p, rid)
+    assert expected is not None
+    argv = _texture_subprocess_argv(
+        "/bin/paint3d",
+        p,
+        Path("/s.glb"),
+        Path("/i.png"),
+        Path("/o.glb"),
+        row_id=rid,
+    )
+    assert argv[1] == "quick"
+    assert argv[argv.index("--seed") + 1] == str(expected)
+
+
 def test_text3d_argv_allow_shared_and_no_gpu_kill() -> None:
     p = GameProfile(
         title="T",
