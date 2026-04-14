@@ -139,68 +139,73 @@
         tonemapping="mode: aces-filmic; middle-grey: 0.82; white-point: 6.8; average-luminance: 1.2; adaptation-rate: 1.0"
       ></FollowCamera>
 
-      <!-- Props: <GameObject place="at: …"> = XZ fixo + altura/alinhamento ao terreno -->
-      <GameObject place="at: 0 -8">
-        <GLTFLoader
-          role="visual"
-          url="/assets/models/stone_pillar.glb"
-          transform="scale: 1.5 1.5 1.5"
-        ></GLTFLoader>
-        <ParticleSystem
-          preset="sparks"
-          rate="28"
-          lifetime="0.9"
-          size="0.12"
-          transform="pos: 0 1.4 0"
-        ></ParticleSystem>
-      </GameObject>
-
-      <GameObject place="at: -1.5 -9">
-        <GLTFDynamic
-          role="dynamic"
-          url="/assets/models/treasure_chest.glb"
-          body-type="fixed"
-          collider-shape="box"
-          script="chest-interaction.ts"
-          transform="scale: 1.1 1.1 1.1"
-        ></GLTFDynamic>
-      </GameObject>
-
-      <GameObject place="at: -18 -6">
-        <GLTFDynamic
-          role="dynamic"
-          url="/assets/models/rock_boulder.glb"
-          body-type="fixed"
-          collider-shape="capsule"
-          collider-margin="-0.12"
-          transform="scale: 1.4 1.4 1.4"
-        ></GLTFDynamic>
-      </GameObject>
-      <GameObject place="at: 22 6">
-        <GLTFDynamic
-          role="dynamic"
-          url="/assets/models/rock_boulder.glb"
-          body-type="fixed"
-          collider-shape="capsule"
-          collider-margin="-0.12"
-          transform="scale: 1.1 1.1 1.1"
-        ></GLTFDynamic>
-      </GameObject>
-      <GameObject place="at: -8 18">
-        <GLTFDynamic
-          role="dynamic"
-          url="/assets/models/rock_boulder.glb"
-          body-type="fixed"
-          collider-shape="capsule"
-          collider-margin="-0.12"
-          transform="scale: 0.9 0.9 0.9"
-        ></GLTFDynamic>
-      </GameObject>
-
-      <!-- Árvores: LOD1 (text3d lod) para ~200 instâncias; lod0/lod2 em disco para herói/LOD runtime futuro -->
+      <!-- Modelos em disco neste exemplo: hero, stone_pillar, tree_lowpoly, wooden_crate (resto removido sem PNG de pintura). -->
       <SpawnGroup
         profile="tree"
-        count="200"
+        count="15"
+        seed="11"
+        region-min="-330 0 -330"
+        region-max="330 0 330"
+        max-slope-attempts="180"
+        pick-strategy="random"
+        scale-min="1.5"
+        scale-max="1.5"
+      >
+        <GLTFDynamic
+          role="dynamic"
+          profile="tree"
+          url="/assets/models/stone_pillar.glb"
+          body-type="fixed"
+          collider-shape="capsule"
+          collider-margin="-0.12"
+          transform="euler: 0 0 0"
+        ></GLTFDynamic>
+      </SpawnGroup>
+
+      <SpawnGroup
+        profile="tree"
+        count="15"
+        seed="19"
+        region-min="-330 0 -330"
+        region-max="330 0 330"
+        max-slope-attempts="180"
+        pick-strategy="random"
+        scale-min="1.5"
+        scale-max="1.5"
+      >
+        <GLTFDynamic
+          role="dynamic"
+          profile="tree"
+          url="/assets/models/stone_pillar.glb"
+          body-type="fixed"
+          collider-shape="capsule"
+          collider-margin="-0.12"
+          transform="euler: 90 0 0"
+        ></GLTFDynamic>
+      </SpawnGroup>
+
+      <SpawnGroup
+        profile="gltf-crate"
+        count="30"
+        seed="23"
+        region-min="-280 0 -280"
+        region-max="280 0 280"
+        max-slope-attempts="120"
+        pick-strategy="random"
+      >
+        <GLTFDynamic
+          role="dynamic"
+          profile="gltf-crate"
+          url="/assets/models/wooden_crate.glb"
+          body-type="dynamic"
+          collider-shape="box"
+          transform="scale: 1 1 1"
+        ></GLTFDynamic>
+      </SpawnGroup>
+
+      <SpawnGroup
+        profile="tree"
+        count="80"
         seed="7"
         region-min="-330 0 -330"
         region-max="330 0 330"
@@ -210,31 +215,11 @@
         <GLTFDynamic
           role="dynamic"
           profile="tree"
-          url="/assets/models/tree_lowpoly_lod1.glb"
+          url="/assets/models/tree_lowpoly.glb"
           body-type="fixed"
           collider-shape="capsule"
           collider-margin="-0.18"
           transform="scale: 1 1 1"
-        ></GLTFDynamic>
-      </SpawnGroup>
-
-      <SpawnGroup
-        profile="tree"
-        count="10"
-        seed="42"
-        region-min="-330 0 -330"
-        region-max="330 0 330"
-        max-slope-attempts="72"
-        pick-strategy="random"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="tree"
-          url="/assets/models/rock_boulder.glb"
-          collider-shape="capsule"
-          collider-margin="-0.12"
-          body-type="fixed"
-          transform="scale: 1.2 1.2 1.2"
         ></GLTFDynamic>
       </SpawnGroup>
     </Scene>

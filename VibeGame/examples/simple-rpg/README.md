@@ -15,17 +15,10 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 | Atmospheric fog              | Built-in `<Fog>`                       | Declarative                                                    |
 | Player (animated GLB + WASD) | Built-in `<PlayerGLTF`                 | Declarative                                                    |
 | Follow camera + post-fx      | Built-in `<FollowCamera>`              | Declarative (bloom, vignette, chromatic aberration)            |
-| Hero character (GLB, rigged) | Text3D + Paint3D + Rigging3D           | `<PlayerGLTF model-url="...">`                                 |
-| Stone pillar                 | Text3D + Paint3D                       | **`<GameObject place="at: x z">`** (terrain height + AABB)     |
-| Wooden crates (x2)           | Text3D + Paint3D                       | **`<GameObject place="at: x z">`**                             |
-| Blue crystals (x2)           | Text3D + Paint3D                       | **`<GameObject place="at: x z; base-y-offset: …">`**           |
-| Lowpoly trees (x24 spawned)  | Text3D + Paint3D + Spawner             | `<SpawnGroup profile="tree">`                                  |
-| Physics crates (x6 spawned)  | Spawner + Physics                      | `<SpawnGroup profile="physics-box">`                           |
-| GLB pushable crates (x3)     | Spawner + Physics                      | `<SpawnGroup profile="gltf-crate">`                            |
-| Campfire (fire + smoke)      | **Particles + Spawner**                | `<GameObject place="at: x z; y-offset: …">` + `ParticleSystem` |
-| Crystal sparkles (x2)        | **Particles + Spawner**                | `<GameObject place="at: x z; …">` + `ParticleSystem`           |
-| Ambient rain                 | **Particles plugin**                   | `<ParticleSystem preset="rain">` (high Y)                      |
-| Wandering NPCs (x3)          | **AI Steering + Spawner**              | `<GameObject place="at: x z; align-to-terrain: 0; …"><NPC>`    |
+| Hero character (GLB)       | Player asset                           | `<PlayerGLTF model-url="/assets/models/hero.glb">`             |
+| Stone pillars (15 + 15)    | Spawner + terrain align               | `stone_pillar.glb` — em pé e deitados (`euler: 90 0 0`)          |
+| Lowpoly trees (80)         | Spawner                                | `tree_lowpoly.glb` (`<SpawnGroup profile="tree">`)             |
+| Pushable wooden crates (30)| Spawner + Physics                     | `wooden_crate.glb` (`<SpawnGroup profile="gltf-crate">`, dynamic) |
 | Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`                  |
 | Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`                    |
 | On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`               |
