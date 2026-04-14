@@ -17,7 +17,7 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 | Follow camera + post-fx      | Built-in `<FollowCamera>`              | Declarative (bloom, vignette, chromatic aberration)            |
 | Hero character (GLB)       | Player asset                           | `<PlayerGLTF model-url="/assets/models/hero.glb">`             |
 | Stone pillars (30)         | Spawner + terrain align               | `stone_pillar.glb` (Y-up + pés; ver `scripts/fix-glb-yup-feet.py`)   |
-| Lowpoly trees (80)         | Spawner                                | `tree_lowpoly.glb` (`<SpawnGroup profile="tree">`)             |
+| Lowpoly trees (densidade)  | Spawner                                | `tree_lowpoly.glb`; `density-per-km2`, escala 1.5–4×, yaw em passos de 45° |
 | Pushable wooden crates (30)| Spawner + Physics                     | `wooden_crate.glb` (`<SpawnGroup profile="gltf-crate">`, dynamic) |
 | Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`                  |
 | Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`                    |

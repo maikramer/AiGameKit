@@ -1,209 +1,169 @@
 #!/usr/bin/env python3
 """
-Alinha GLBs do exemplo a glTF Y-up (Three.js).
+Correção de origem para GLBs usados no exemplo simple-rpg (motor Y-up, “pés” na base).
 
-**Paridade com Text3D** (`Text3D/src/text3d/utils/export.py`):
-rotação = ``get_export_rotation_x_rad()`` (defeito π/2 em X) + origem ``feet`` =
-mesmas fórmulas que ``_apply_rotation_trimesh`` e ``_apply_origin_trimesh(..., 'feet')``.
-O ``text3d generate`` aplica **sempre** essa rotação à malha Hunyuan; este script só
-adiciona a rotação quando o GLB ainda tem altura dominante em Z (reparo de ficheiros
-exportados sem esse passo).
+Delega no Blender: ``VibeGame/tools/blender_reorigin_glb_feet.py``
+(import glTF Y-up → Blender Z-up; por defeito a base da AABB usa o eixo **Z** no Blender).
 
-Modelos com skeleton: não re-exportar com trimesh; opcionalmente transladar o nó raiz
-com pygltflib.
+Uso (Python normal, não o bpy):
 
-Requisitos: pip install trimesh numpy pygltflib
+  python3 scripts/fix-glb-yup-feet.py path/to/a.glb [outro.glb ...]
+
+  python3 scripts/fix-glb-yup-feet.py \\
+    public/assets/models/crystal_blue.glb \\
+    public/assets/models/wooden_crate.glb
+
+Se a **base estiver virada para a frente** (+Z) em vez de assentar no chão (−Y),
+experimenta **+90° em X** no Blender (e depois assentar em Y no glTF):
+
+  python3 scripts/fix-glb-yup-feet.py public/assets/models/algo.glb --rotate 90 0 0
+
+(são graus nos eixos globais X, Y, Z no Blender, após import glTF e antes de repor a origem.)
+
+Após o Blender, o wrapper **re-centra em XZ** e põe **min Y = 0** no espaço glTF (trimesh).
+
+Requer ``blender`` no PATH (ex.: /snap/bin/blender) e ``trimesh`` para o passo glTF.
 """
+
 from __future__ import annotations
 
 import argparse
-import json
-import struct
+import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
-import numpy as np
-import trimesh
-from trimesh.transformations import rotation_matrix
 
-try:
-    from pygltflib import GLTF2
-except ImportError:
-    GLTF2 = None  # type: ignore
-
-# Ângulo X idêntico ao CLI Text3D / env TEXT3D_EXPORT_ROTATION_X_*.
-try:
-    from text3d.defaults import get_export_rotation_x_rad
-except ImportError:
-    def get_export_rotation_x_rad() -> float:  # type: ignore[misc]
-        return float(np.pi / 2)
+def _repo_tools_script() -> Path:
+    here = Path(__file__).resolve()
+    vibr = here.parents[3]  # .../VibeGame
+    return vibr / "tools" / "blender_reorigin_glb_feet.py"
 
 
-def _scene_bounds(scene: trimesh.Scene) -> np.ndarray:
-    return scene.bounds
+def _align_feet_y_gltf(path: Path) -> None:
+    """Base da AABB em Y=0 e centro em XZ (espaço glTF / Three.js Y-up)."""
+    import trimesh
 
-
-def _feet_translation(bounds: np.ndarray) -> np.ndarray:
-    """Mesmo vector que ``_apply_origin_trimesh(..., 'feet')`` aplica em export.py."""
-    b = bounds
-    dx = -0.5 * (b[0][0] + b[1][0])
-    dy = -float(b[0][1])
-    dz = -0.5 * (b[0][2] + b[1][2])
-    return np.array([dx, dy, dz], dtype=np.float64)
-
-
-def _needs_z_up_fix(extents: np.ndarray) -> bool:
-    """True se a maior extensão for Z e Z claramente > Y (malha tipo Hunyuan Z-up)."""
-    ex, ey, ez = float(extents[0]), float(extents[1]), float(extents[2])
-    if max(ex, ey, ez) < 1e-9:
-        return False
-    j = int(np.argmax([ex, ey, ez]))
-    if j != 2:
-        return False
-    return ez > ey * 1.08
-
-
-def _trimesh_export_glb(scene: trimesh.Scene, out_path: Path) -> None:
-    for geom in scene.geometry.values():
-        if hasattr(geom, "vertex_normals"):
-            _ = geom.vertex_normals
-        vis = getattr(geom, "visual", None)
-        if vis is not None and hasattr(vis, "material"):
-            vis.material.doubleSided = True
-    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    try:
-        tmp.write_bytes(scene.export(file_type="glb", include_normals=True))
-        tmp.replace(out_path)
-    except OSError:
-        if tmp.is_file():
-            tmp.unlink(missing_ok=True)
-        raise
-
-
-def _gltf_skin_count(path: Path) -> int:
-    buf = path.read_bytes()
-    if len(buf) < 20 or buf[:4] != b"glTF":
-        return 0
-    json_len = struct.unpack_from("<I", buf, 12)[0]
-    j = json.loads(buf[20 : 20 + json_len].decode())
-    return len(j.get("skins", []))
-
-
-def fix_mesh_only_glb(path: Path, *, dry_run: bool) -> bool:
-    """Props sem skeleton: rotação X opcional + pés; trimesh preserva materiais/UVs no export."""
-    scene = trimesh.load(str(path), force=None)
-    if isinstance(scene, trimesh.Trimesh):
-        scene = trimesh.Scene(geometry={"mesh": scene})
-
-    b0 = _scene_bounds(scene)
-    ext0 = b0[1] - b0[0]
-    rot = _needs_z_up_fix(ext0)
-
-    if rot:
-        scene.apply_transform(
-            rotation_matrix(float(get_export_rotation_x_rad()), [1, 0, 0])
-        )
-    b1 = _scene_bounds(scene)
-    delta = _feet_translation(b1)
-    if np.linalg.norm(delta) > 1e-9:
-        scene.apply_transform(trimesh.transformations.translation_matrix(delta))
-
-    changed = rot or np.linalg.norm(delta) > 1e-9
-    if not changed:
-        if dry_run:
-            print(f"[dry-run] {path.name}: sem alteração (já Y-up + pés)")
-        else:
-            print(f"[skip] {path.name}: sem alteração (já Y-up + pés)")
-        return False
-    if dry_run:
-        print(
-            f"[dry-run] {path.name}: rotate_x_90={rot} "
-            f"ext_before={np.round(ext0, 4)} delta={np.round(delta, 6)}"
-        )
-        return changed
-
-    _trimesh_export_glb(scene, path)
-    b2 = _scene_bounds(scene)
-    ext2 = b2[1] - b2[0]
-    print(
-        f"[ok] {path.name}: rotate_x_90={rot} "
-        f"ext_final={np.round(ext2, 4)} minY={float(b2[0][1]):.6f}"
-    )
-    return changed
-
-
-def fix_skinned_translation_only(path: Path, *, dry_run: bool) -> bool:
-    if GLTF2 is None:
-        raise RuntimeError("pygltflib é necessário para GLBs com skeleton: pip install pygltflib")
-
-    scene = trimesh.load(str(path), force=None)
-    if isinstance(scene, trimesh.Trimesh):
-        scene = trimesh.Scene(geometry={"m": scene})
-    delta = _feet_translation(scene.bounds)
-    if np.linalg.norm(delta) < 1e-6:
-        print(f"[skip] {path.name}: já centrado (|delta|≈0)")
-        return False
-
-    gltf = GLTF2().load_binary(str(path))
-    scene_idx = gltf.scene if gltf.scene is not None else 0
-    roots = gltf.scenes[scene_idx].nodes
-    world_idx = roots[0] if roots else 0
-    # Prefer nó nomeado "world" se existir e for raiz da cena
-    for ri in roots:
-        nm = gltf.nodes[ri].name
-        if nm and str(nm).lower() == "world":
-            world_idx = ri
-            break
-
-    n = gltf.nodes[world_idx]
-    t0 = np.array(n.translation or [0, 0, 0], dtype=np.float64)
-    t1 = t0 + delta
-    if dry_run:
-        print(f"[dry-run] {path.name}: skinned translation {t0} -> {t1}")
-        return True
-
-    n.translation = [float(t1[0]), float(t1[1]), float(t1[2])]
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    gltf.save_binary(str(tmp))
-    tmp.replace(path)
-    print(f"[ok] {path.name}: skinned root translation += {np.round(delta, 6)}")
-    return True
+    loaded = trimesh.load(str(path), force="scene")
+    if isinstance(loaded, trimesh.Scene):
+        for geom in loaded.geometry.values():
+            b = geom.bounds
+            cx = (b[0][0] + b[1][0]) * 0.5
+            cy = float(b[0][1])
+            cz = (b[0][2] + b[1][2]) * 0.5
+            geom.apply_translation([-cx, -cy, -cz])
+        loaded.export(str(path))
+        return
+    if isinstance(loaded, trimesh.Trimesh):
+        b = loaded.bounds
+        cx = (b[0][0] + b[1][0]) * 0.5
+        cy = float(b[0][1])
+        cz = (b[0][2] + b[1][2]) * 0.5
+        loaded.apply_translation([-cx, -cy, -cz])
+        loaded.export(str(path))
+        return
+    raise TypeError(f"Formato inesperado: {type(loaded)}")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
-        "dir",
-        nargs="?",
+        "glbs",
+        nargs="+",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "public" / "assets" / "models",
-        help="Pasta com .glb (defeito: …/public/assets/models)",
+        help="Ficheiros .glb a corrigir (in-place).",
     )
-    ap.add_argument("--dry-run", action="store_true", help="Só mostrar o que faria")
+    ap.add_argument(
+        "--axis",
+        choices=("Z", "Y", "X"),
+        default="Z",
+        help="Eixo vertical no Blender para a base da AABB (glTF import: Z por defeito).",
+    )
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Apenas import/export em memória no Blender (não substitui os GLB).",
+    )
+    ap.add_argument(
+        "--blender",
+        default=os.environ.get("BLENDER_BIN", "blender"),
+        help="Executável Blender (ou env BLENDER_BIN).",
+    )
+    ap.add_argument(
+        "--rotate",
+        nargs=3,
+        type=float,
+        default=None,
+        metavar=("RX", "RY", "RZ"),
+        help="Euler XYZ em graus (Blender), repassado a blender_reorigin_glb_feet.py --rotate.",
+    )
+    ap.add_argument(
+        "--no-gltf-feet",
+        action="store_true",
+        help="Não aplicar min Y=0 / centro XZ em espaço glTF após o Blender.",
+    )
     args = ap.parse_args()
-    root: Path = args.dir
-    if not root.is_dir():
-        print(f"Pasta não existe: {root}", file=sys.stderr)
-        return 1
 
-    glbs = sorted(root.glob("*.glb"))
-    if not glbs:
-        print(f"Nenhum .glb em {root}")
+    blender_bin = shutil.which(args.blender) or args.blender
+    if not Path(blender_bin).is_file() and not shutil.which(args.blender):
+        print(f"Blender não encontrado: {args.blender}", file=sys.stderr)
+        return 2
+
+    bpy_script = _repo_tools_script()
+    if not bpy_script.is_file():
+        print(f"Script Blender em falta: {bpy_script}", file=sys.stderr)
+        return 2
+
+    glbs: list[Path] = []
+    for g in args.glbs:
+        p = g.expanduser().resolve()
+        if not p.is_file():
+            print(f"Ficheiro inexistente: {p}", file=sys.stderr)
+            return 1
+        if p.suffix.lower() != ".glb":
+            print(f"Esperado .glb: {p}", file=sys.stderr)
+            return 1
+        glbs.append(p)
+
+    argv = [
+        blender_bin,
+        "--background",
+        "--python",
+        str(bpy_script),
+        "--",
+    ]
+    for p in glbs:
+        argv.extend(["--only", str(p)])
+    argv.extend(["--axis", args.axis])
+    if args.rotate is not None:
+        argv.extend(
+            ["--rotate", str(args.rotate[0]), str(args.rotate[1]), str(args.rotate[2])]
+        )
+    if args.dry_run:
+        argv.append("--dry-run")
+
+    print("[fix-glb-yup-feet]", " ".join(argv), flush=True)
+    proc = subprocess.run(argv, check=False)
+    if proc.returncode != 0 or args.dry_run or args.no_gltf_feet:
+        return proc.returncode
+
+    try:
+        import trimesh  # noqa: F401
+    except ImportError:
+        print(
+            "[fix-glb-yup-feet] aviso: trimesh não instalado — a ignorar assentamento glTF (min Y=0).",
+            file=sys.stderr,
+        )
         return 0
 
-    any_change = False
-    for path in glbs:
+    for p in glbs:
         try:
-            if _gltf_skin_count(path) > 0:
-                any_change = fix_skinned_translation_only(path, dry_run=args.dry_run) or any_change
-            else:
-                any_change = fix_mesh_only_glb(path, dry_run=args.dry_run) or any_change
+            _align_feet_y_gltf(p)
+            print(f"[fix-glb-yup-feet] glTF: min Y=0 + centro XZ → {p}", flush=True)
         except Exception as e:
-            print(f"[erro] {path.name}: {e}", file=sys.stderr)
+            print(f"[fix-glb-yup-feet] erro glTF {p}: {e}", file=sys.stderr)
             return 1
-
-    if not args.dry_run and any_change:
-        print("Concluído. Recomendação: abrir um modelo no viewer e confirmar texturas PBR.")
     return 0
 
 

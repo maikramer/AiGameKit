@@ -182,14 +182,20 @@
         ></GLTFDynamic>
       </SpawnGroup>
 
+      <!-- ~660×660 m² → ~0,436 km²; 200 obj/km² → ~87 árvores (ajusta density-per-km2). Escala 1,5–4× linear; yaw só em múltiplos de 45°. -->
       <SpawnGroup
         profile="tree"
-        count="80"
+        density-per-km2="200"
         seed="7"
         region-min="-330 0 -330"
         region-max="330 0 330"
         max-slope-attempts="220"
         pick-strategy="random"
+        scale-min="1.5"
+        scale-max="4"
+        scale-distribution="linear"
+        yaw-distribution="discrete"
+        yaw-step-deg="45"
       >
         <GLTFDynamic
           role="dynamic"
