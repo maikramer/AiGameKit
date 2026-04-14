@@ -140,9 +140,10 @@
       ></FollowCamera>
 
       <!-- Modelos em disco neste exemplo: hero, stone_pillar, tree_lowpoly, wooden_crate (resto removido sem PNG de pintura). -->
+      <!-- Pilares Y-up (GLB corrigido com scripts/fix-glb-yup-feet.py); só euler 0 no spawn. -->
       <SpawnGroup
         profile="tree"
-        count="15"
+        count="30"
         seed="11"
         region-min="-330 0 -330"
         region-max="330 0 330"
@@ -159,28 +160,6 @@
           collider-shape="capsule"
           collider-margin="-0.12"
           transform="euler: 0 0 0"
-        ></GLTFDynamic>
-      </SpawnGroup>
-
-      <SpawnGroup
-        profile="tree"
-        count="15"
-        seed="19"
-        region-min="-330 0 -330"
-        region-max="330 0 330"
-        max-slope-attempts="180"
-        pick-strategy="random"
-        scale-min="1.5"
-        scale-max="1.5"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="tree"
-          url="/assets/models/stone_pillar.glb"
-          body-type="fixed"
-          collider-shape="capsule"
-          collider-margin="-0.12"
-          transform="euler: 90 0 0"
         ></GLTFDynamic>
       </SpawnGroup>
 
