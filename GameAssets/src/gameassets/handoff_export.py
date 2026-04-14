@@ -23,6 +23,11 @@ def _safe_public_id(row_id: str) -> str:
 
 
 def _install_file(src: Path, dst: Path, *, copy: bool) -> None:
+    try:
+        if src.resolve() == dst.resolve():
+            return
+    except OSError:
+        pass
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() or dst.is_symlink():
         dst.unlink()

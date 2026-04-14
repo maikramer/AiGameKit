@@ -88,3 +88,13 @@ Text3D/testdata/baseline_meshes_raw/*
 # Agent tool artifacts
 .sisyphus/
 .playwright-mcp/
+
+# Cursor — estado local dos hooks (não versionar)
+.cursor/hooks/
+
+# VibeGame simple-rpg — saída intermédia do batch (duplica models/textures)
+VibeGame/examples/simple-rpg/public/assets/meshes/
+VibeGame/examples/simple-rpg/public/assets/images/
+
+# Screenshots de teste no exemplo
+VibeGame/examples/simple-rpg/screenshot*.png

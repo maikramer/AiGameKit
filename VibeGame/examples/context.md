@@ -26,7 +26,7 @@ examples/
     ├── index.html
     ├── src/main.ts
     ├── public/assets/  # After handoff / batch
-    └── sample-gameassets/  # Optional gameassets dream + batch profile
+    └── sample-gameassets/  # game.yaml + manifest (sem GLB/PNG; saída em public/assets/)
 ```
 
 ## Deterministic terrain placement (entity-centric)

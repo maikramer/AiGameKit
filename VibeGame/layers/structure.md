@@ -86,7 +86,7 @@ vibegame/
 │       ├── index.html
 │       ├── src/main.ts
 │       ├── public/assets/
-│       └── sample-gameassets/
+│       └── sample-gameassets/  # perfis batch (binários em public/assets/)
 ├── layers/
 │   ├── structure.md  # Project-level context (Tier 1)
 │   ├── context-template.md  # Template for context files
