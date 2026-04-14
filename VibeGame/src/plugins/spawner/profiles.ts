@@ -1,4 +1,5 @@
 import type { XMLValue } from '../../core';
+import type { ScaleDistributionMode, YawDistributionMode } from './types';
 
 /** Perfis de `<spawn-group profile="...">`. `none` = legado (mesmos fallbacks do parser antes dos perfis). */
 export type SpawnGroupProfileId =
@@ -32,6 +33,12 @@ export interface GroupSpawnDefaults {
   maxSlopePlacementAttempts: number;
   /** Re-amostra posições que cairiam sob planos de água (lagos). */
   avoidWater: boolean;
+  scaleDistribution: ScaleDistributionMode;
+  yawDistribution: YawDistributionMode;
+  /** Valores positivos para `scale-distribution=discrete` (XML `scale-discrete`). */
+  scaleDiscreteValues: number[];
+  /** Graus para yaw discreto (XML `yaw-discrete-deg` / `yaw-step-deg`). */
+  yawDiscreteDeg: number[];
 }
 
 const LEGACY: GroupSpawnDefaults = {
@@ -45,6 +52,10 @@ const LEGACY: GroupSpawnDefaults = {
   maxSlopeDeg: 45,
   maxSlopePlacementAttempts: 32,
   avoidWater: false,
+  scaleDistribution: 'linear',
+  yawDistribution: 'linear',
+  scaleDiscreteValues: [],
+  yawDiscreteDeg: [],
 };
 
 const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
@@ -60,6 +71,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    scaleDistribution: 'linear',
+    yawDistribution: 'linear',
+    scaleDiscreteValues: [],
+    yawDiscreteDeg: [],
   },
   foliage: {
     alignToTerrain: true,
@@ -72,6 +87,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    scaleDistribution: 'linear',
+    yawDistribution: 'linear',
+    scaleDiscreteValues: [],
+    yawDiscreteDeg: [],
   },
   'physics-box': {
     alignToTerrain: false,
@@ -84,6 +103,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
     avoidWater: false,
+    scaleDistribution: 'linear',
+    yawDistribution: 'linear',
+    scaleDiscreteValues: [],
+    yawDiscreteDeg: [],
   },
   'gltf-crate': {
     alignToTerrain: false,
@@ -96,6 +119,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
     avoidWater: false,
+    scaleDistribution: 'linear',
+    yawDistribution: 'linear',
+    scaleDiscreteValues: [],
+    yawDiscreteDeg: [],
   },
   place: {
     alignToTerrain: true,
@@ -108,6 +135,10 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 90,
     maxSlopePlacementAttempts: 1,
     avoidWater: false,
+    scaleDistribution: 'linear',
+    yawDistribution: 'linear',
+    scaleDiscreteValues: [],
+    yawDiscreteDeg: [],
   },
 };
 
@@ -242,11 +273,79 @@ function optGroundAlign(
   return profileVal;
 }
 
+function optScaleDistribution(
+  attr: XMLValue | undefined,
+  profileVal: ScaleDistributionMode
+): ScaleDistributionMode {
+  if (attr === undefined || attr === null) return profileVal;
+  const s = String(attr).trim().toLowerCase();
+  if (s === 'linear' || s === 'continuous') return 'linear';
+  if (s === 'discrete') return 'discrete';
+  return profileVal;
+}
+
+function optYawDistribution(
+  attr: XMLValue | undefined,
+  profileVal: YawDistributionMode
+): YawDistributionMode {
+  if (attr === undefined || attr === null) return profileVal;
+  const s = String(attr).trim().toLowerCase();
+  if (s === 'linear' || s === 'continuous') return 'linear';
+  if (s === 'discrete') return 'discrete';
+  return profileVal;
+}
+
+/** Números separados por espaço (XML `scale-discrete`, `yaw-discrete-deg`). */
+export function parseSpaceSeparatedNumbers(raw: XMLValue | undefined): number[] {
+  if (raw === undefined || raw === null) return [];
+  const s = String(raw).trim();
+  if (!s) return [];
+  return s
+    .split(/\s+/)
+    .map((x) => parseFloat(x))
+    .filter((n) => !Number.isNaN(n));
+}
+
+/** Ângulos 0, step, 2·step, … &lt; 360° para yaw discreto (atributo `yaw-step-deg`). */
+export function yawAnglesFromStepDeg(stepDeg: number): number[] {
+  if (!(stepDeg > 0) || stepDeg > 360) return [];
+  const out: number[] = [];
+  for (let a = 0; a < 360 - 1e-9; a += stepDeg) {
+    out.push(Math.round(a * 1000) / 1000);
+  }
+  return out;
+}
+
 export function resolveGroupSpawnFields(
   attrs: Record<string, XMLValue>,
   profileId: SpawnGroupProfileId
 ): GroupSpawnDefaults {
   const p = getGroupSpawnDefaults(profileId);
+
+  let scaleDiscrete = parseSpaceSeparatedNumbers(attrs['scale-discrete']).filter(
+    (x) => x > 0
+  );
+  let yawDeg = parseSpaceSeparatedNumbers(attrs['yaw-discrete-deg']);
+  const stepYaw = optNumber(attrs['yaw-step-deg'], NaN);
+  if (yawDeg.length === 0 && Number.isFinite(stepYaw) && stepYaw > 0) {
+    yawDeg = yawAnglesFromStepDeg(stepYaw);
+  }
+  yawDeg = yawDeg.map((d) => {
+    const m = d % 360;
+    return m < 0 ? m + 360 : m;
+  });
+
+  let scaleDistribution = optScaleDistribution(
+    attrs['scale-distribution'],
+    p.scaleDistribution
+  );
+  let yawDistribution = optYawDistribution(
+    attrs['yaw-distribution'],
+    p.yawDistribution
+  );
+  if (scaleDiscrete.length > 0) scaleDistribution = 'discrete';
+  if (yawDeg.length > 0) yawDistribution = 'discrete';
+
   return {
     alignToTerrain: optBool(attrs['align-to-terrain'], p.alignToTerrain),
     baseYOffset: optNumber(attrs['base-y-offset'], p.baseYOffset),
@@ -263,5 +362,10 @@ export function resolveGroupSpawnFields(
       )
     ),
     avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
+    scaleDistribution,
+    yawDistribution,
+    scaleDiscreteValues:
+      scaleDiscrete.length > 0 ? scaleDiscrete : [...p.scaleDiscreteValues],
+    yawDiscreteDeg: yawDeg.length > 0 ? yawDeg : [...p.yawDiscreteDeg],
   };
 }

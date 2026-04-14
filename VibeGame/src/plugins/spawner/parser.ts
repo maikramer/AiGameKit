@@ -9,6 +9,7 @@ import {
   resolveGroupSpawnFields,
 } from './profiles';
 import type {
+  SpawnCountMode,
   SpawnGroupSpec,
   SpawnTemplateRole,
   SpawnTemplateSpec,
@@ -75,14 +76,6 @@ function vec3FromAttr(
 export const spawnGroupParser: Parser = ({ entity, element, state }) => {
   if (element.tagName.toLowerCase() !== 'spawngroup') return;
 
-  const count = toNumber(element.attributes.count, 0);
-  if (count < 1) {
-    throw new Error(
-      '[spawn-group] Atributo "count" deve ser um inteiro >= 1.\n' +
-        '  Exemplo: <spawn-group count="12" ...>'
-    );
-  }
-
   const children = element.children.filter(
     (c) => c.tagName && c.tagName !== 'parsererror'
   );
@@ -142,6 +135,86 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     groupProfileId
   );
 
+  const densityRaw = element.attributes['density-per-km2'];
+  const hasDensity =
+    densityRaw !== undefined &&
+    densityRaw !== null &&
+    String(densityRaw).trim() !== '';
+  const cminRaw = element.attributes['count-min'];
+  const cmaxRaw = element.attributes['count-max'];
+  const hasRange =
+    cminRaw !== undefined &&
+    cminRaw !== null &&
+    String(cminRaw).trim() !== '' &&
+    cmaxRaw !== undefined &&
+    cmaxRaw !== null &&
+    String(cmaxRaw).trim() !== '';
+
+  let spawnCountMode: SpawnCountMode = 'fixed';
+  let count = 0;
+  let densityPerKm2 = 0;
+  let countRangeMin = 0;
+  let countRangeMax = 0;
+
+  if (hasDensity) {
+    spawnCountMode = 'density';
+    densityPerKm2 = toNumber(densityRaw, 0);
+    if (!Number.isFinite(densityPerKm2) || densityPerKm2 < 0) {
+      throw new Error(
+        '[spawn-group] density-per-km2 deve ser um número ≥ 0 (objetos por km² na área XZ).'
+      );
+    }
+  } else if (hasRange) {
+    spawnCountMode = 'random-range';
+    countRangeMin = Math.floor(toNumber(cminRaw, 1));
+    countRangeMax = Math.floor(toNumber(cmaxRaw, 1));
+    if (countRangeMax < countRangeMin) {
+      const t = countRangeMin;
+      countRangeMin = countRangeMax;
+      countRangeMax = t;
+    }
+    if (countRangeMin < 0) {
+      throw new Error(
+        '[spawn-group] count-min / count-max devem ser inteiros ≥ 0.'
+      );
+    }
+  } else {
+    spawnCountMode = 'fixed';
+    count = Math.floor(toNumber(element.attributes.count, 0));
+    if (count < 1) {
+      throw new Error(
+        '[spawn-group] Usa count="N" (N≥1), ou density-per-km2="…", ou count-min + count-max.\n' +
+          '  Exemplo: <spawn-group count="12" …>'
+      );
+    }
+  }
+
+  const sdRaw = (element.attributes['scale-distribution'] as string | undefined)
+    ?.trim()
+    .toLowerCase();
+  if (sdRaw === 'discrete' && resolvedSpawn.scaleDiscreteValues.length === 0) {
+    throw new Error(
+      '[spawn-group] scale-distribution="discrete" exige scale-discrete="1.5 2 3" (valores positivos).'
+    );
+  }
+  const ydRaw = (element.attributes['yaw-distribution'] as string | undefined)
+    ?.trim()
+    .toLowerCase();
+  const hasYawStep =
+    element.attributes['yaw-step-deg'] !== undefined &&
+    element.attributes['yaw-step-deg'] !== null &&
+    String(element.attributes['yaw-step-deg']).trim() !== '';
+  if (
+    ydRaw === 'discrete' &&
+    resolvedSpawn.randomYaw &&
+    resolvedSpawn.yawDiscreteDeg.length === 0 &&
+    !hasYawStep
+  ) {
+    throw new Error(
+      '[spawn-group] yaw-distribution="discrete" exige yaw-discrete-deg="…" ou yaw-step-deg="45".'
+    );
+  }
+
   const pickRaw = (element.attributes['pick-strategy'] as string | undefined)
     ?.trim()
     .toLowerCase();
@@ -158,7 +231,11 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
 
   const spec: SpawnGroupSpec = {
     spawnGroupProfile: groupProfileId,
+    spawnCountMode,
     count: Math.floor(count),
+    densityPerKm2,
+    countRangeMin,
+    countRangeMax,
     seed: Math.floor(toNumber(element.attributes.seed, 1)),
     regionMin: vec3FromAttr(element.attributes['region-min'], [0, 0, 0]),
     regionMax: vec3FromAttr(element.attributes['region-max'], [0, 0, 0]),
@@ -166,8 +243,12 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     baseYOffset: resolvedSpawn.baseYOffset,
     groundAlign: resolvedSpawn.groundAlign,
     randomYaw: resolvedSpawn.randomYaw,
+    scaleDistribution: resolvedSpawn.scaleDistribution,
+    scaleDiscreteValues: resolvedSpawn.scaleDiscreteValues,
     scaleMin: resolvedSpawn.scaleMin,
     scaleMax: resolvedSpawn.scaleMax,
+    yawDistribution: resolvedSpawn.yawDistribution,
+    yawDiscreteDeg: resolvedSpawn.yawDiscreteDeg,
     surfaceEpsilon: resolvedSpawn.surfaceEpsilon,
     maxSlopeDeg: resolvedSpawn.maxSlopeDeg,
     maxSlopePlacementAttempts: resolvedSpawn.maxSlopePlacementAttempts,

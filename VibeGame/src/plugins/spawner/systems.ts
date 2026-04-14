@@ -55,6 +55,27 @@ function spawnOne(
   spawnTemplateAtTerrain(state, spec, rand, wx, wy, wz, template);
 }
 
+/** Instâncias a colocar: fixo, densidade (obj/km² × área XZ em km²), ou inteiro uniforme no intervalo. */
+function resolveSpawnInstanceCount(
+  spec: SpawnGroupSpec,
+  rand: () => number,
+  areaKm2: number
+): number {
+  switch (spec.spawnCountMode) {
+    case 'fixed':
+      return Math.max(0, Math.floor(spec.count));
+    case 'density':
+      return Math.max(0, Math.round(spec.densityPerKm2 * areaKm2));
+    case 'random-range': {
+      const lo = Math.min(spec.countRangeMin, spec.countRangeMax);
+      const hi = Math.max(spec.countRangeMin, spec.countRangeMax);
+      return lo + Math.floor(rand() * (hi - lo + 1));
+    }
+    default:
+      return Math.max(0, Math.floor(spec.count));
+  }
+}
+
 export const TerrainSpawnSystem: System = {
   group: 'simulation',
   after: [TransformHierarchySystem],
@@ -88,12 +109,17 @@ export const TerrainSpawnSystem: System = {
       const minZ = spec.regionMin[2] + az;
       const maxZ = spec.regionMax[2] + az;
 
+      const width = Math.abs(maxX - minX);
+      const depth = Math.abs(maxZ - minZ);
+      const areaKm2 = (width * depth) / 1_000_000;
+      const instanceCount = resolveSpawnInstanceCount(spec, rand, areaKm2);
+
       const maxSlope = Number.isFinite(spec.maxSlopeDeg)
         ? spec.maxSlopeDeg
         : 45;
       const acceptAnySlope = maxSlope >= 90 - 1e-6;
 
-      for (let i = 0; i < spec.count; i++) {
+      for (let i = 0; i < instanceCount; i++) {
         let wx = minX;
         let wz = minZ;
         let s: TerrainSurfaceSample | null = null;

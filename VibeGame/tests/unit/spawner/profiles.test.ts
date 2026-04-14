@@ -4,7 +4,9 @@ import {
   getGroupSpawnDefaults,
   optBool,
   optNumber,
+  parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
+  yawAnglesFromStepDeg,
 } from 'vibegame';
 
 describe('spawn profiles', () => {
@@ -27,6 +29,10 @@ describe('spawn profiles', () => {
     expect(r.maxSlopeDeg).toBe(45);
     expect(r.maxSlopePlacementAttempts).toBe(48);
     expect(r.avoidWater).toBe(true);
+    expect(r.scaleDistribution).toBe('linear');
+    expect(r.yawDistribution).toBe('linear');
+    expect(r.scaleDiscreteValues.length).toBe(0);
+    expect(r.yawDiscreteDeg.length).toBe(0);
   });
 
   it('resolveGroupSpawnFields XML explícito sobrescreve perfil', () => {
@@ -50,6 +56,22 @@ describe('spawn profiles', () => {
     expect(optNumber('3', 7)).toBe(3);
     expect(optBool(undefined, true)).toBe(true);
     expect(optBool('0', true)).toBe(false);
+  });
+
+  it('yawAnglesFromStepDeg e escala discreta via resolveGroupSpawnFields', () => {
+    expect(yawAnglesFromStepDeg(90)).toEqual([0, 90, 180, 270]);
+    expect(parseSpaceSeparatedNumbers('1.5 2 3')).toEqual([1.5, 2, 3]);
+    const r = resolveGroupSpawnFields(
+      {
+        'scale-discrete': '1.5 2 4',
+        'yaw-step-deg': '45',
+      },
+      'tree'
+    );
+    expect(r.scaleDistribution).toBe('discrete');
+    expect(r.scaleDiscreteValues).toEqual([1.5, 2, 4]);
+    expect(r.yawDistribution).toBe('discrete');
+    expect(r.yawDiscreteDeg.length).toBe(8);
   });
 
   it('applyChildTemplateProfile physics-crate em dynamic-part', () => {

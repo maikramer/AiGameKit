@@ -39,6 +39,44 @@ function mergeTemplateAttributes(
  * Spawns one entity from a template at world (wx, wy, wz) using the same rules as
  * {@link TerrainSpawnSystem} / spawn-group (scale jitter, terrain normal, AABB ground align).
  */
+function pickScaleJitter(
+  spec: Pick<
+    SpawnGroupSpec,
+    'scaleDistribution' | 'scaleDiscreteValues' | 'scaleMin' | 'scaleMax'
+  >,
+  rand: () => number
+): number {
+  if (
+    spec.scaleDistribution === 'discrete' &&
+    spec.scaleDiscreteValues.length > 0
+  ) {
+    const arr = spec.scaleDiscreteValues;
+    return arr[Math.floor(rand() * arr.length)]!;
+  }
+  return spec.scaleMin + rand() * (spec.scaleMax - spec.scaleMin);
+}
+
+function pickYawRad(
+  spec: Pick<
+    SpawnGroupSpec,
+    | 'randomYaw'
+    | 'yawDistribution'
+    | 'yawDiscreteDeg'
+  >,
+  rand: () => number
+): number {
+  if (!spec.randomYaw) return 0;
+  if (
+    spec.yawDistribution === 'discrete' &&
+    spec.yawDiscreteDeg.length > 0
+  ) {
+    const arr = spec.yawDiscreteDeg;
+    const deg = arr[Math.floor(rand() * arr.length)]!;
+    return (deg * Math.PI) / 180;
+  }
+  return rand() * Math.PI * 2;
+}
+
 export function spawnTemplateAtTerrain(
   state: State,
   spec: Pick<
@@ -47,8 +85,12 @@ export function spawnTemplateAtTerrain(
     | 'baseYOffset'
     | 'groundAlign'
     | 'randomYaw'
+    | 'scaleDistribution'
+    | 'scaleDiscreteValues'
     | 'scaleMin'
     | 'scaleMax'
+    | 'yawDistribution'
+    | 'yawDiscreteDeg'
     | 'surfaceEpsilon'
   >,
   rand: () => number,
@@ -63,7 +105,7 @@ export function spawnTemplateAtTerrain(
       : undefined;
   const parts = parseTransformAttr(tmplTransform);
   const base = defaultTransformParts();
-  const scaleJitter = spec.scaleMin + rand() * (spec.scaleMax - spec.scaleMin);
+  const scaleJitter = pickScaleJitter(spec, rand);
   base.scale = [
     parts.scale[0] * scaleJitter,
     parts.scale[1] * scaleJitter,
@@ -73,10 +115,7 @@ export function spawnTemplateAtTerrain(
   const surface = sampleTerrainSurface(state, wx, wz, spec.surfaceEpsilon);
   const normal = surface?.normal ?? upNormal;
 
-  let yawRad = 0;
-  if (spec.randomYaw) {
-    yawRad = rand() * Math.PI * 2;
-  }
+  const yawRad = pickYawRad(spec, rand);
 
   const euler = composeSpawnRotation(
     normal,

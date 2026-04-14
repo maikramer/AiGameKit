@@ -23,10 +23,28 @@ export interface SpawnTemplateSpec {
   entityChildren?: ParsedElement[];
 }
 
+/** `fixed` = `count`; `density` = `density-per-km2` × área XZ (unidades mundo = m); `random-range` = inteiro uniforme em `[count-min, count-max]`. */
+export type SpawnCountMode = 'fixed' | 'density' | 'random-range';
+
+/** Escala uniforme no intervalo ou escolha entre valores listados. */
+export type ScaleDistributionMode = 'linear' | 'discrete';
+
+/** Rotação (yaw em torno da normal do terreno se `align-to-terrain`, senão Y) contínua ou ângulos listados. */
+export type YawDistributionMode = 'linear' | 'discrete';
+
 export interface SpawnGroupSpec {
   /** Perfil do grupo (`profile` no XML), ex.: `tree`, `none`. */
   spawnGroupProfile: SpawnGroupProfileId;
+  /** Modo de contagem de instâncias (ver `count`, `density-per-km2`, `count-min` / `count-max`). */
+  spawnCountMode: SpawnCountMode;
+  /** Instâncias quando `spawn-count-mode` implícito fixo (atributo `count`). */
   count: number;
+  /** Objetos por km² na projeção XZ (região × largura×profundidade em m² ÷ 10⁶). Só com `spawnCountMode=density`. */
+  densityPerKm2: number;
+  /** Inclusive; só com `spawnCountMode=random-range`. */
+  countRangeMin: number;
+  /** Inclusive; só com `spawnCountMode=random-range`. */
+  countRangeMax: number;
   seed: number;
   regionMin: [number, number, number];
   regionMax: [number, number, number];
@@ -34,8 +52,14 @@ export interface SpawnGroupSpec {
   baseYOffset: number;
   groundAlign: GroundAlignMode;
   randomYaw: boolean;
+  scaleDistribution: ScaleDistributionMode;
+  /** Ângulos em graus; se não vazio e `scale-distribution=discrete`, escolha uniforme. */
+  scaleDiscreteValues: number[];
   scaleMin: number;
   scaleMax: number;
+  yawDistribution: YawDistributionMode;
+  /** Yaw extra em graus (0–360); vazio = linear em `[0, 360)` se `yaw-distribution=linear`. */
+  yawDiscreteDeg: number[];
   surfaceEpsilon: number;
   /** Inclinação máxima (graus) entre normal do terreno e +Y; acima re-amostra posição. */
   maxSlopeDeg: number;

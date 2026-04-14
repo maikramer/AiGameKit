@@ -97,13 +97,21 @@ Nos filhos do `<SpawnGroup>` pode usar **`role="visual" | "dynamic" | "static" |
 ## Tag `<SpawnGroup>`
 
 - **profile**: `none` | `tree` | `foliage` | `physics-box` | `gltf-crate` — defaults do grupo (ver tabela acima).
-- **count** (obrigatório): número de instâncias.
+- **Contagem** (uma das opções):
+  - **count** — número fixo de instâncias (`≥ 1`).
+  - **density-per-km2** — densidade na projeção horizontal **XZ** (unidades mundo = **metros**): `instâncias ≈ arredondar(densidade × área_km²)`, com `área_km² = (maxX−minX)×(maxZ−minZ) / 10⁶`. Não uses `count` ao mesmo tempo.
+  - **count-min** + **count-max** — inteiro **uniforme** nesse intervalo (inclusivo) por grupo, com o mesmo **seed**; primeiro sorteio do PRNG é a contagem, depois posições/escala/yaw.
 - **seed**: inteiro para PRNG (padrão `1`).
 - **region-min** / **region-max**: `"x y z"`; só **x** e **z** definem a caixa no chão; **y** é ignorado.
 - **align-to-terrain**: `1` alinha o eixo +Y do modelo à normal do terreno.
 - **base-y-offset**: somado em Y mundo após o posicionamento no solo (nos perfis `tree`/`foliage` costuma ser um afastamento pequeno, ex. `0.02`, depois do assentamento por AABB).
-- **random-yaw**: `1` aplica rotação aleatória (eixo vertical se não alinhado; eixo normal se alinhado).
-- **scale-min** / **scale-max**: multiplicador uniforme extra sobre o `scale` do template.
+- **random-yaw**: `1` aplica rotação aleatória em torno do eixo adequado (ver **yaw-distribution**).
+- **scale-min** / **scale-max**: multiplicador uniforme sobre o `scale` do template (modo **linear**; intervalo contínuo).
+- **scale-distribution**: `linear` (defeito) — uniforme em `[scale-min, scale-max]`; `discrete` — exige **scale-discrete** (lista de valores positivos, ex. `1.5 2 3 4`), escolha uniforme.
+- **scale-discrete**: números separados por espaço; se não vazio, força escala discreta (equivalente a `scale-distribution=discrete`).
+- **yaw-distribution**: `linear` (defeito) — yaw contínuo em `[0, 360°)`; `discrete` — exige **yaw-discrete-deg** e/ou **yaw-step-deg**.
+- **yaw-discrete-deg**: graus permitidos (ex. `0 45 90 180`), escolha uniforme.
+- **yaw-step-deg**: atalho (ex. `45`) → `0, 45, 90, …, 315°` se **yaw-discrete-deg** estiver vazio.
 - **surface-epsilon**: passo em unidades mundo para a normal (padrão `0.75`).
 - **max-slope-deg** (padrão `45`): inclinação máxima aceite — ângulo entre a **normal do terreno** e **+Y**. A normal é calculada a partir do **heightmap bruto** (sem o mesmo smoothing do shader), para não subestimar encostas íngremes. Se a amostra for mais íngreme, o spawner escolhe **outra posição aleatória** na mesma região e tenta de novo.
 - **max-slope-attempts** (padrão `32`): tentativas por instância. Se **nenhuma** amostra cumprir o declive e `max-slope-deg` for **menor que 90°**, essa instância **não é criada** (o `count` pode ficar abaixo do pedido em regiões muito íngremes). Com `max-slope-deg` ≥ 90° aceita-se qualquer inclinação.

@@ -111,11 +111,14 @@ export type {
   GroundAlignMode,
   GroupSpawnDefaults,
   PlacementSpec,
+  ScaleDistributionMode,
+  SpawnCountMode,
   SpawnGroupProfileId,
   SpawnGroupSpec,
   SpawnTemplateRole,
   SpawnTemplateSpec,
   TerrainSurfaceSample,
+  YawDistributionMode,
 } from './plugins/spawner';
 export {
   applyChildTemplateProfile,
@@ -124,7 +127,9 @@ export {
   normalizeGroupProfileId,
   optBool,
   optNumber,
+  parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
+  yawAnglesFromStepDeg,
 } from './plugins/spawner';
 export type { TerrainEntityData } from './plugins/terrain';
 export {

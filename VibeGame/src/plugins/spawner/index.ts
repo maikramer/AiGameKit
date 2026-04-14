@@ -21,7 +21,9 @@ export {
   normalizeGroupProfileId,
   optBool,
   optNumber,
+  parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
+  yawAnglesFromStepDeg,
 } from './profiles';
 export type {
   ChildTemplateProfileId,
@@ -30,7 +32,10 @@ export type {
   SpawnGroupProfileId,
 } from './profiles';
 export type {
+  ScaleDistributionMode,
+  SpawnCountMode,
   SpawnGroupSpec,
   SpawnTemplateRole,
   SpawnTemplateSpec,
+  YawDistributionMode,
 } from './types';
