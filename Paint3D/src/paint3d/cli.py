@@ -280,6 +280,166 @@ def texture(
         sys.exit(1)
 
 
+@cli.command("quick")
+@click.argument("mesh_file", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    required=True,
+    type=click.Path(),
+    help="GLB de saída (cor por vértice; sem IA).",
+)
+@click.option(
+    "--style",
+    type=click.Choice(["solid", "perlin"], case_sensitive=False),
+    required=True,
+    help="solid = cor única; perlin = FBM 3D no tom (tipo pedra).",
+)
+@click.option(
+    "--color",
+    default="#888888",
+    show_default=True,
+    help="Cor sólida #RGB ou #RRGGBB (só style=solid).",
+)
+@click.option(
+    "--tint",
+    default="#7a7268",
+    show_default=True,
+    help="Tom base #RRGGBB (só style=perlin).",
+)
+@click.option(
+    "--frequency",
+    default=4.0,
+    show_default=True,
+    type=float,
+    help="Escala espacial do ruído (perlin).",
+)
+@click.option(
+    "--octaves",
+    default=4,
+    show_default=True,
+    type=int,
+    help="Camadas FBM (perlin).",
+)
+@click.option("--seed", default=0, show_default=True, type=int, help="Seed reprodutível.")
+@click.option(
+    "--contrast",
+    default=0.55,
+    show_default=True,
+    type=float,
+    help="Quanto o ruído modula o tom [0–1] (perlin).",
+)
+@click.option(
+    "--preserve-origin/--no-preserve-origin",
+    default=True,
+    show_default=True,
+    help="Reposicionar AABB como em paint texture (base Y=0, XZ centrados).",
+)
+def quick_cmd(
+    mesh_file,
+    output_path,
+    style,
+    color,
+    tint,
+    frequency,
+    octaves,
+    seed,
+    contrast,
+    preserve_origin,
+):
+    """Textura rápida sem Hunyuan: cor sólida ou ruído procedural (segundos, só CPU)."""
+    from pathlib import Path
+
+    from .quick_bake import bake_perlin_vertex, bake_solid_color
+
+    mesh_in = Path(mesh_file)
+    mesh_out = Path(output_path)
+    if style.lower() == "solid":
+        out = bake_solid_color(
+            mesh_in,
+            mesh_out,
+            color_hex=color,
+            preserve_origin=preserve_origin,
+        )
+    else:
+        out = bake_perlin_vertex(
+            mesh_in,
+            mesh_out,
+            frequency=frequency,
+            octaves=octaves,
+            seed=seed,
+            tint_hex=tint,
+            contrast=contrast,
+            preserve_origin=preserve_origin,
+        )
+    console.print(
+        Panel(
+            f"[green]OK[/green] → [cyan]{out}[/cyan]  (style={style})",
+            title="[bold]paint3d quick",
+            border_style="green",
+        )
+    )
+
+
+@cli.command("vertex-pbr")
+@click.argument("mesh_file", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--output",
+    "-o",
+    "output_path",
+    required=True,
+    type=click.Path(),
+    help="GLB de saída com PBR (baseColor + normal + ORM).",
+)
+@click.option(
+    "--texture-size",
+    default=1024,
+    show_default=True,
+    type=int,
+    help="Resolução do mapa difuso (unwrap UV + raster das cores de vértice).",
+)
+@click.option(
+    "--materialize-bin",
+    default="materialize",
+    show_default=True,
+    help="Executável CLI Materialize (wgpu).",
+)
+@click.option(
+    "--preset",
+    "-p",
+    default="default",
+    show_default=True,
+    type=click.Choice(
+        ["default", "skin", "floor", "metal", "fabric", "wood", "stone"],
+        case_sensitive=False,
+    ),
+    help="Preset Materialize (p.ex. fabric para folhagem, metal para cristal).",
+)
+@click.option("-v", "--verbose", is_flag=True, help="Passar -v ao materialize.")
+def vertex_pbr_cmd(mesh_file, output_path, texture_size, materialize_bin, preset, verbose):
+    """Cor por vértice → difuso (UV) → Materialize → GLB PBR (sem Hunyuan)."""
+    from pathlib import Path
+
+    from .vertex_pbr import vertex_color_glb_to_pbr_glb
+
+    out = vertex_color_glb_to_pbr_glb(
+        Path(mesh_file),
+        Path(output_path),
+        texture_size=texture_size,
+        materialize_bin=materialize_bin,
+        materialize_preset=preset,
+        verbose=verbose,
+    )
+    console.print(
+        Panel(
+            f"[green]OK[/green] → [cyan]{out}[/cyan]",
+            title="[bold]paint3d vertex-pbr",
+            border_style="green",
+        )
+    )
+
+
 @cli.command("doctor")
 def doctor():
     """Verifica ambiente: PyTorch, CUDA, VRAM, modelos e rasterizador."""
