@@ -6,6 +6,10 @@ Executar com o Python do Blender (não com python.exe normal):
 
   blender --background --python blender_reorigin_glb_feet.py -- <pasta_public>
 
+  # Só alguns modelos (repetir --only por ficheiro):
+  blender --background --python blender_reorigin_glb_feet.py -- \\
+    --only path/para/a.glb --only path/para/b.glb
+
 Exemplo:
 
   blender --background --python VibeGame/tools/blender_reorigin_glb_feet.py -- VibeGame/examples/simple-rpg/public
@@ -18,6 +22,7 @@ estiverem orientados com Y para cima no Blender.
 from __future__ import annotations
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -76,6 +81,53 @@ def _should_skip_mesh(obj) -> bool:
     return bool(obj.parent and obj.parent.type == "ARMATURE")
 
 
+def _apply_euler_rotation_xyz_deg(rx: float, ry: float, rz: float) -> None:
+    """
+    Rotações em graus nos eixos globais X, depois Y, depois Z.
+
+    A mesh glTF costuma vir sob um Empty ``world``. Após
+    ``parent_clear(KEEP_TRANSFORM)``, definir ``rotation_euler`` + ``apply`` pode
+    não alterar vértices no Blender 5 — usamos ``transform.rotate`` (GLOBAL) e
+    assamos com ``transform_apply``.
+    """
+    import bpy
+
+    ctx = bpy.context
+    mesh_objs = [
+        o
+        for o in bpy.data.objects
+        if o.type == "MESH" and not (o.parent and o.parent.type == "ARMATURE")
+    ]
+    if not mesh_objs:
+        return
+
+    for obj in mesh_objs:
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        ctx.view_layer.objects.active = obj
+        if obj.parent is not None:
+            bpy.ops.object.parent_clear(type="CLEAR_KEEP_TRANSFORM")
+        if abs(rx) > 1e-9:
+            bpy.ops.transform.rotate(
+                value=math.radians(rx),
+                orient_axis="X",
+                orient_type="GLOBAL",
+            )
+        if abs(ry) > 1e-9:
+            bpy.ops.transform.rotate(
+                value=math.radians(ry),
+                orient_axis="Y",
+                orient_type="GLOBAL",
+            )
+        if abs(rz) > 1e-9:
+            bpy.ops.transform.rotate(
+                value=math.radians(rz),
+                orient_axis="Z",
+                orient_type="GLOBAL",
+            )
+        bpy.ops.object.transform_apply(rotation=True, location=False, scale=True)
+
+
 def _set_origins_to_base(axis: str) -> None:
     import bpy
     from mathutils import Vector
@@ -106,16 +158,26 @@ def _export_gltf(path: Path, *, as_glb: bool) -> None:
     )
 
 
-def _process_file(glb: Path, axis: str, dry_run: bool) -> bool:
+def _process_file(
+    glb: Path,
+    axis: str,
+    dry_run: bool,
+    *,
+    rotate_xyz_deg: tuple[float, float, float] | None = None,
+) -> bool:
     import bpy
 
     _clear_scene()
     bpy.ops.import_scene.gltf(filepath=str(glb))
+    if rotate_xyz_deg is not None and any(rotate_xyz_deg):
+        _apply_euler_rotation_xyz_deg(*rotate_xyz_deg)
     _set_origins_to_base(axis)
     if dry_run:
         return True
     as_glb = glb.suffix.lower() == ".glb"
-    out = glb.with_name(glb.name + ".reorigin.tmp")
+    # O exportador glTF exige extensão final .glb/.gltf; evitar ``nome.glb.reorigin.tmp``.
+    suf = ".glb" if as_glb else ".gltf"
+    out = glb.with_name(f"{glb.stem}.reorigin{suf}")
     try:
         _export_gltf(out, as_glb=as_glb)
         out.replace(glb)
@@ -134,13 +196,29 @@ def main() -> int:
         type=Path,
         nargs="?",
         default=None,
-        help="Pasta public (ex.: .../simple-rpg/public)",
+        help="Pasta public (ex.: .../simple-rpg/public); ignorado se usar --only",
+    )
+    ap.add_argument(
+        "--only",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="Processar só este GLB/GLTF (repetir para vários ficheiros).",
     )
     ap.add_argument(
         "--axis",
         choices=("Z", "Y", "X"),
         default="Z",
         help="Eixo vertical após import no Blender (glTF→Blender: Z por defeito)",
+    )
+    ap.add_argument(
+        "--rotate",
+        nargs=3,
+        type=float,
+        default=None,
+        metavar=("RX", "RY", "RZ"),
+        help="Euler XYZ em graus (Blender): rodar a mesh após import e antes de repor a origem "
+        "(ex.: -90 0 0 se o modelo ficou “de lado”).",
     )
     ap.add_argument("--dry-run", action="store_true", help="Importa e altera em memória sem gravar")
     args = ap.parse_args(raw if raw else [])
@@ -154,35 +232,67 @@ def main() -> int:
         )
         return 2
 
-    if args.public_dir is None:
-        here = Path(__file__).resolve()
-        guess = here.parents[2] / "examples" / "simple-rpg" / "public"
-        if guess.is_dir():
-            public = guess
-        else:
-            ap.print_help()
-            print("\nIndica a pasta public ou coloca o script em VibeGame/tools/.", file=sys.stderr)
-            return 2
-    else:
-        public = args.public_dir.resolve()
-    if not public.is_dir():
-        print(f"Pasta inexistente: {public}", file=sys.stderr)
-        return 1
+    public: Path | None = None
+    glbs: list[Path]
 
-    glbs = sorted(public.rglob("*.glb")) + sorted(public.rglob("*.gltf"))
+    if args.only:
+        glbs = []
+        for raw_p in args.only:
+            p = Path(raw_p).expanduser().resolve()
+            if not p.is_file():
+                print(f"Ficheiro inexistente: {p}", file=sys.stderr)
+                return 1
+            if p.suffix.lower() not in (".glb", ".gltf"):
+                print(f"Não é .glb/.gltf: {p}", file=sys.stderr)
+                return 1
+            glbs.append(p)
+        glbs.sort(key=lambda x: str(x))
+        if args.public_dir is not None:
+            public = args.public_dir.resolve()
+    else:
+        if args.public_dir is None:
+            here = Path(__file__).resolve()
+            guess = here.parents[2] / "examples" / "simple-rpg" / "public"
+            if guess.is_dir():
+                public = guess
+            else:
+                ap.print_help()
+                print(
+                    "\nIndica a pasta public, ou usa --only ficheiro.glb (repetível).",
+                    file=sys.stderr,
+                )
+                return 2
+        else:
+            public = args.public_dir.resolve()
+        if not public.is_dir():
+            print(f"Pasta inexistente: {public}", file=sys.stderr)
+            return 1
+
+        glbs = sorted(public.rglob("*.glb")) + sorted(public.rglob("*.gltf"))
+
     if not glbs:
-        print(f"Nenhum .glb/.gltf em {public}")
+        scope = public if public is not None else "(lista --only vazia)"
+        print(f"Nenhum .glb/.gltf: {scope}")
         return 0
 
     import bpy
 
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
+    def _label(p: Path) -> str:
+        if public is not None and p.is_relative_to(public):
+            return str(p.relative_to(public))
+        return str(p)
+
+    rot = None
+    if args.rotate is not None:
+        rot = (args.rotate[0], args.rotate[1], args.rotate[2])
+
     ok = 0
     for p in glbs:
         try:
-            print(f"  {p.relative_to(public) if p.is_relative_to(public) else p}")
-            _process_file(p, args.axis, args.dry_run)
+            print(f"  {_label(p)}")
+            _process_file(p, args.axis, args.dry_run, rotate_xyz_deg=rot)
             ok += 1
         except Exception as e:
             print(f"  [erro] {p}: {e}", file=sys.stderr)
