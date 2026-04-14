@@ -11,6 +11,9 @@ venv/
 .env.*
 !.env.example
 
+# BFG Repo Cleaner — JAR descarregado localmente (ver tools/install-bfg.sh)
+tools/bfg-*.jar
+
 # Packaging / build
 *.egg
 *.egg-info/
@@ -88,6 +91,9 @@ Text3D/testdata/baseline_meshes_raw/*
 # Agent tool artifacts
 .sisyphus/
 .playwright-mcp/
+
+# Backup de .git antes de reescrita de histórico (BFG / filter-repo)
+.git.bak-pre-bfg*/
 
 # Cursor — estado local dos hooks (não versionar)
 .cursor/hooks/
