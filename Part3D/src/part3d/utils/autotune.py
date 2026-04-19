@@ -206,6 +206,7 @@ def autotune_generate(
     *,
     vram_gb: float | None = None,
     dit_quantized: bool = False,
+    low_vram: bool = False,
 ) -> GenerateAutotune:
     """
     Parâmetros X-Part depois de conhecer o número real de partes.
@@ -214,6 +215,8 @@ def autotune_generate(
     O ``cond_batch_size`` controla quantas partes são codificadas de cada vez
     (chunked encoding) para evitar OOM na VRAM.
     """
+    if not low_vram:
+        dit_quantized = False
     if vram_gb is None:
         vram_gb = get_vram_gb()
     tier = _vram_tier_gb(vram_gb)

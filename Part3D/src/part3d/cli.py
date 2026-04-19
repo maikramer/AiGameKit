@@ -78,6 +78,11 @@ def main() -> None:
     help="Desactivar attention slicing.",
 )
 @click.option(
+    "--low-vram-mode",
+    is_flag=True,
+    help="Activar modo baixa VRAM: quantização automática + CPU offload.",
+)
+@click.option(
     "--profile",
     is_flag=True,
     help="Medir tempos, CPU, RAM e VRAM.",
@@ -99,6 +104,7 @@ def decompose(
     no_quantize_dit: bool,
     torch_compile: bool,
     no_attention_slicing: bool,
+    low_vram_mode: bool,
     profile: bool,
 ) -> None:
     """Decompõe uma mesh 3D em partes semânticas.
@@ -112,6 +118,13 @@ def decompose(
         format_quantization_info,
         get_quantization_config,
     )
+
+    # --low-vram-mode overrides: activar quantização + CPU offload
+    if low_vram_mode:
+        quantization = "auto"
+        no_quantize_dit = False
+        no_cpu_offload = False
+        no_attention_slicing = False
 
     ensure_pytorch_cuda_alloc_conf()
 
@@ -208,6 +221,7 @@ def decompose(
             quantize_dit=not no_quantize_dit,
             enable_torch_compile=torch_compile,
             enable_attention_slicing=not no_attention_slicing,
+            low_vram=low_vram_mode,
         ) as pipe,
     ):
         if segment_only:

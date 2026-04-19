@@ -1,9 +1,11 @@
 """
 Valores por defeito do Part3D.
 
-**Perfil padrão:** FP16 + CPU offloading sequencial em ~6 GB VRAM (CUDA).
-Cada componente do pipeline (P3-SAM, Conditioner, DiT, ShapeVAE) é carregado
-na GPU apenas quando necessário e descarregado após uso.
+**Perfil padrão:** FP16 em alta VRAM (≥10 GB CUDA).
+Todos os componentes permanecem na GPU; sem quantização.
+
+Para GPUs com ~6 GB VRAM, usar ``--low-vram-mode`` que activa
+CPU offloading sequencial + quantização automática.
 
 Tamanhos dos pesos (FP16):
   model (DiT):     ~3.3 GB
@@ -29,10 +31,11 @@ DEFAULT_POSTPROCESS = True
 DEFAULT_POSTPROCESS_THRESHOLD = 0.95
 
 DEFAULT_DTYPE = "float16"
-DEFAULT_CPU_OFFLOAD = True
+DEFAULT_CPU_OFFLOAD = False
+DEFAULT_LOW_VRAM_MODE = False
 
-DEFAULT_QUANTIZATION_MODE = "auto"
-DEFAULT_QUANTIZE_DIT = True
+DEFAULT_QUANTIZATION_MODE = "none"
+DEFAULT_QUANTIZE_DIT = False
 
 DEFAULT_ENABLE_ATTENTION_SLICING = True
 DEFAULT_TORCH_COMPILE = False

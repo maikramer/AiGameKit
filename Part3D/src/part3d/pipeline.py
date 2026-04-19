@@ -119,6 +119,7 @@ class Part3DPipeline:
         quantize_dit: bool = _d.DEFAULT_QUANTIZE_DIT,
         enable_torch_compile: bool = _d.DEFAULT_TORCH_COMPILE,
         enable_attention_slicing: bool = _d.DEFAULT_ENABLE_ATTENTION_SLICING,
+        low_vram: bool = _d.DEFAULT_LOW_VRAM_MODE,
     ):
         self.model_path = model_path
         self.cpu_offload = cpu_offload
@@ -128,6 +129,7 @@ class Part3DPipeline:
         self.quantize_dit = quantize_dit
         self.enable_torch_compile = enable_torch_compile
         self.enable_attention_slicing = enable_attention_slicing
+        self.low_vram = low_vram
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -211,7 +213,7 @@ class Part3DPipeline:
         model_config = EasyDict(configs["model"])
         self._model = instantiate_from_config(model_config)
         self._dit_quantized = False
-        use_q = want_quantized_dit(self.device, model_dir)
+        use_q = self.low_vram and want_quantized_dit(self.device, model_dir)
         if use_q:
             try:
                 if load_dit_quantized(self._model, model_dir):
@@ -234,7 +236,7 @@ class Part3DPipeline:
             self._log(f"  DiT: {_count_params(self._model):.0f}M params")
 
         # Aplicar quantização adicional via torchao se solicitado
-        if self.quantize_dit and self.quantization_mode.startswith("torchao"):
+        if self.low_vram and self.quantize_dit and self.quantization_mode.startswith("torchao"):
             self._log(f"A aplicar quantização torchao ({self.quantization_mode}) ao DiT...")
             try:
                 from gamedev_shared.quantization import apply_torchao_quantization
@@ -247,7 +249,7 @@ class Part3DPipeline:
                 self._log(f"  AVISO: torchao quantização falhou ({e})")
 
         # Aplicar quantização via SDNQ se solicitado
-        if self.quantize_dit and self.quantization_mode.startswith("sdnq"):
+        if self.low_vram and self.quantize_dit and self.quantization_mode.startswith("sdnq"):
             self._log(f"A aplicar quantização SDNQ ({self.quantization_mode}) ao DiT...")
             try:
                 from gamedev_shared.sdnq import quantize_model
@@ -691,7 +693,9 @@ class Part3DPipeline:
             except Exception:
                 vram_gb = None
         if self.autotune:
-            gt = autotune_generate(mesh, num_parts_aabb, vram_gb=vram_gb, dit_quantized=self._dit_quantized)
+            gt = autotune_generate(
+                mesh, num_parts_aabb, vram_gb=vram_gb, dit_quantized=self._dit_quantized, low_vram=self.low_vram
+            )
             octree_res = gt.octree_resolution if octree_resolution is None else octree_resolution
             n_steps = gt.num_inference_steps if num_inference_steps is None else num_inference_steps
             n_chunks = gt.num_chunks if num_chunks is None else num_chunks
