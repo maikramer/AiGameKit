@@ -144,6 +144,11 @@ def cli(ctx, verbose):
 )
 @click.option("-v", "--verbose", "texture_verbose", is_flag=True, help="Logs detalhados.")
 @click.option(
+    "--low-vram-mode",
+    is_flag=True,
+    help="Modo baixa VRAM: SDNQ uint8, render 1024, texture 2048, CPU offload (GPUs ≤8 GB).",
+)
+@click.option(
     "--preserve-origin/--no-preserve-origin",
     default=True,
     show_default=True,
@@ -172,6 +177,7 @@ def texture(
     smooth,
     smooth_passes,
     texture_verbose,
+    low_vram_mode,
     preserve_origin,
     allow_shared_gpu,
     gpu_kill_others,
@@ -190,16 +196,17 @@ def texture(
         "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
     )
 
-    rs_label = render_size or "1024 (cpu_offload)" if render_size is None else render_size
-    ts_label = texture_size or "2048 (cpu_offload)" if texture_size is None else texture_size
+    rs_label = render_size or ("1024 (low-vram)" if low_vram_mode else "2048")
+    ts_label = texture_size or ("2048 (low-vram)" if low_vram_mode else "4096")
 
     info_table = Table(show_header=False, box=box.SIMPLE)
     info_table.add_row("[bold]Mesh[/bold]", f"[cyan]{mesh_path}[/cyan]")
     info_table.add_row("[bold]Imagem[/bold]", f"[cyan]{image_file}[/cyan]")
     info_table.add_row("[bold]Saída[/bold]", f"[cyan]{output}[/cyan]")
+    quant_label = "SDNQ uint8 (low-vram)" if low_vram_mode else "FP16 (sem quantização)"
     info_table.add_row(
         "[bold]Config[/bold]",
-        f"{max_views} vistas @ {view_resolution}px · SDNQ uint8 · VAE tiling",
+        f"{max_views} vistas @ {view_resolution}px · {quant_label} · VAE tiling",
     )
     info_table.add_row(
         "[bold]Bake[/bold]",
@@ -234,6 +241,7 @@ def texture(
                     bake_exp=bake_exp,
                     verbose=verbose,
                     preserve_origin=preserve_origin,
+                    low_vram=low_vram_mode,
                 )
 
             if smooth:

@@ -102,12 +102,13 @@ def apply_hunyuan_paint(
     enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
     vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
     preserve_origin: bool = True,
+    low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
 ) -> trimesh.Trimesh:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
 
-    SDNQ uint8 é aplicado automaticamente ao UNet quando disponível (``gamedev_shared.sdnq``).
-    Sem SDNQ, o pipeline usa qint8 pré-quantizado do upstream ou FP16.
+    Por defeito corre em alta precisão (FP16, sem quantização, render 2048, texture 4096).
+    Com ``low_vram=True`` ativa quantização SDNQ uint8 e resoluções reduzidas (1024/2048).
 
     Com ``preserve_origin=True`` (padrão), a mesh texturizada é recentrada na convenção
     "pés": base do AABB em Y=0 e centro em XZ, alinhando com saídas Text3D após normalização interna do paint.
@@ -173,13 +174,17 @@ def apply_hunyuan_paint(
 
             if render_size is not None:
                 config.render_size = render_size
-            elif paint_cpu_offload and torch.cuda.is_available():
-                config.render_size = 1024
+            elif low_vram:
+                config.render_size = _defaults.LOW_VRAM_RENDER_SIZE
+            else:
+                config.render_size = _defaults.DEFAULT_PAINT_RENDER_SIZE
 
             if texture_size is not None:
                 config.texture_size = texture_size
-            elif paint_cpu_offload and torch.cuda.is_available():
-                config.texture_size = 2048
+            elif low_vram:
+                config.texture_size = _defaults.LOW_VRAM_TEXTURE_SIZE
+            else:
+                config.texture_size = _defaults.DEFAULT_PAINT_TEXTURE_SIZE
 
             if not torch.cuda.is_available():
                 config.render_size = min(config.render_size, 1024)
@@ -187,19 +192,25 @@ def apply_hunyuan_paint(
 
             config.bake_exp = bake_exp
 
+            if not low_vram:
+                config.quantization_config = {"type": "none"}
+
         with profile_span("paint_load_pipeline"):
             pipe = Hunyuan3DPaintPipeline(config)
 
         with profile_span("paint_optimize_pipeline"):
             try:
-                if _sdnq_available() and pipe.unet is not None:
+                if low_vram and _sdnq_available() and pipe.unet is not None:
                     from gamedev_shared.sdnq import quantize_model
 
                     if verbose:
-                        print("[Paint 2.1] Aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                        print("[Paint 2.1] Modo low-VRAM: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
                 elif verbose:
-                    print("[Paint 2.1] SDNQ indisponivel — UNet em FP16/qint8")
+                    if low_vram:
+                        print("[Paint 2.1] Modo low-VRAM: SDNQ indisponível — UNet em FP16/qint8")
+                    else:
+                        print("[Paint 2.1] Modo alta VRAM — UNet em FP16 (sem quantização)")
                 if pipe.vae is not None:
                     enable_vae_optimizations(
                         pipe.vae,
@@ -260,6 +271,7 @@ def paint_file_to_file(
     enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
     vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
     preserve_origin: bool = True,
+    low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
 ) -> Path:
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
@@ -290,6 +302,7 @@ def paint_file_to_file(
         enable_vae_tiling=enable_vae_tiling,
         vae_tile_size=vae_tile_size,
         preserve_origin=preserve_origin,
+        low_vram=low_vram,
     )
 
     output_path = Path(output_path)
