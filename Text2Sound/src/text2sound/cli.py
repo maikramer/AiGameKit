@@ -243,6 +243,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Float16 (auto: ativado em GPUs <= 8 GB VRAM)",
 )
 @click.option(
+    "--low-vram",
+    is_flag=True,
+    default=False,
+    help="Enable low-VRAM mode (auto float16, reduced settings)",
+)
+@click.option(
     "--verbose",
     "-v",
     "verbose_flag",
@@ -273,6 +279,7 @@ def generate_cmd(
     trim: bool,
     model_id: str | None,
     half_precision: bool | None,
+    low_vram: bool,
     verbose_flag: bool,
     profiler_flag: bool,
 ) -> None:
@@ -353,6 +360,7 @@ def generate_cmd(
             gen = AudioGenerator.get_instance(
                 model_id=resolved_model_id,
                 half_precision=half_precision,
+                low_vram=low_vram,
             )
 
             if output is None:
@@ -483,6 +491,12 @@ def generate_cmd(
     help="Float16 (auto em GPUs modestas)",
 )
 @click.option(
+    "--low-vram",
+    is_flag=True,
+    default=False,
+    help="Enable low-VRAM mode (auto float16, reduced settings)",
+)
+@click.option(
     "--seed",
     type=int,
     default=None,
@@ -505,6 +519,7 @@ def batch_cmd(
     trim: bool,
     model_id: str | None,
     half_precision: bool | None,
+    low_vram: bool,
     seed: int | None,
 ) -> None:
     """Gera áudios em batch a partir de um ficheiro de prompts (um por linha)."""
@@ -559,6 +574,7 @@ def batch_cmd(
     gen = AudioGenerator.get_instance(
         model_id=resolved_model_id,
         half_precision=half_precision,
+        low_vram=low_vram,
     )
     with _quiet_third_party_tqdm(verbose):
         gen.load()

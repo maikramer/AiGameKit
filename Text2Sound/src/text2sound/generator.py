@@ -63,12 +63,13 @@ class AudioGenerator:
         device: str | None = None,
         auto_clear: bool = True,
         half_precision: bool | None = None,
+        low_vram: bool = False,
     ) -> None:
         self._model_id = model_id
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._auto_clear = auto_clear
         if half_precision is None:
-            self._half = self._device == "cuda" and self._should_use_half()
+            self._half = self._device == "cuda" and low_vram and self._should_use_half()
         else:
             self._half = half_precision
         self._model: Any = None
@@ -92,6 +93,7 @@ class AudioGenerator:
         model_id: str = DEFAULT_MODEL_ID,
         device: str | None = None,
         half_precision: bool | None = None,
+        low_vram: bool = False,
     ) -> AudioGenerator:
         """Singleton thread-safe — reutiliza modelo já carregado."""
         with cls._lock:
@@ -100,6 +102,7 @@ class AudioGenerator:
                     model_id=model_id,
                     device=device,
                     half_precision=half_precision,
+                    low_vram=low_vram,
                 )
             return cls._instance
 
