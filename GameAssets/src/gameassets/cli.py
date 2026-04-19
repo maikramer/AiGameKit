@@ -33,7 +33,9 @@ from .profile import (
     GameProfile,
     Part3DProfile,
     Rigging3DProfile,
+    Text2DProfile,
     Text2SoundProfile,
+    Text3DProfile,
     Texture2DProfile,
     load_profile,
 )
@@ -404,6 +406,8 @@ def _rigging3d_pipeline_failed(
         seed=seed,
         rig_profile=rg,
     )
+    if profile.text3d and profile.text3d.low_vram:
+        argv.append("--low-vram")
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
     _timing_append(rec, "rigging3d", time.perf_counter() - t0)
@@ -1148,6 +1152,11 @@ def handoff_cmd(
     default=None,
     help="JSONL para spans (defeito: gameassets_profile.jsonl na pasta do manifest).",
 )
+@click.option(
+    "--low-vram",
+    is_flag=True,
+    help="Modo baixa VRAM: propaga --low-vram / --low-vram-mode a todos os sub-tools.",
+)
 def batch_cmd(
     profile_path: Path,
     manifest_path: Path,
@@ -1166,9 +1175,24 @@ def batch_cmd(
     with_animate: bool,
     profile_tools: bool,
     profile_tools_log: Path | None,
+    low_vram: bool,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
+
+    if low_vram:
+        if profile.text2d is None:
+            profile.text2d = Text2DProfile()
+        profile.text2d.low_vram = True
+        if profile.text3d is None:
+            profile.text3d = Text3DProfile()
+        profile.text3d.low_vram = True
+        profile.text3d.paint_low_vram_mode = True
+        profile.text3d.paint_quantization = "auto"
+        if profile.part3d is None:
+            profile.part3d = Part3DProfile()
+        profile.part3d.low_vram_mode = True
+        profile.part3d.quantization = "auto"
 
     if dry_run_json is not None and not dry_run:
         raise click.ClickException("--dry-run-json requer --dry-run")
@@ -1483,6 +1507,8 @@ def batch_cmd(
                     if seed_a is not None:
                         argv_au.extend(["--seed", str(seed_a)])
                     _append_text2sound_profile_args(ts_line, argv_au)
+                    if profile.text3d and profile.text3d.low_vram:
+                        argv_au.append("--low-vram")
                     _dry_run_emit(dry_plan, phase=p1_title + " text2sound", row_id=row.id, argv=argv_au)
         else:
             _dry_run_header(dry_plan, "--- Text2D omitido (--skip-text2d) ---")
@@ -1508,6 +1534,8 @@ def batch_cmd(
                     if seed_a is not None:
                         argv_au.extend(["--seed", str(seed_a)])
                     _append_text2sound_profile_args(ts_line, argv_au)
+                    if profile.text3d and profile.text3d.low_vram:
+                        argv_au.append("--low-vram")
                     _dry_run_emit(
                         dry_plan,
                         phase="text2sound (skip-text2d)",
@@ -1619,6 +1647,8 @@ def batch_cmd(
                     seed=seed,
                     rig_profile=rg,
                 )
+                if profile.text3d and profile.text3d.low_vram:
+                    rg_args.append("--low-vram")
                 _dry_run_emit(dry_plan, phase="rigging3d", row_id=row.id, argv=rg_args)
         if with_animate and animator3d_bin and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows):
             _dry_run_header(
@@ -1943,6 +1973,8 @@ def batch_cmd(
                             if seed_a is not None:
                                 argv_au.extend(["--seed", str(seed_a)])
                             _append_text2sound_profile_args(ts_line, argv_au)
+                            if profile.text3d and profile.text3d.low_vram:
+                                argv_au.append("--low-vram")
                             t_au = time.perf_counter()
                             r_au = run_cmd(argv_au, extra_env=child_env, cwd=manifest_dir)
                             _timing_append(rec, "text2sound", time.perf_counter() - t_au)
@@ -2059,15 +2091,9 @@ def batch_cmd(
                                     shutil.rmtree(row_work, ignore_errors=True)
                                 progress.advance(task_shape)
 
-                        _ps = (
-                            (profile.text3d.paint_style or "hunyuan").strip().lower()
-                            if profile.text3d
-                            else "hunyuan"
-                        )
+                        _ps = (profile.text3d.paint_style or "hunyuan").strip().lower() if profile.text3d else "hunyuan"
                         _paint_label = (
-                            "paint3d quick (todos)"
-                            if _ps in ("solid", "perlin")
-                            else "paint3d texture (todos)"
+                            "paint3d quick (todos)" if _ps in ("solid", "perlin") else "paint3d texture (todos)"
                         )
                         task_paint = progress.add_task(
                             f"[cyan]{_paint_label}[/cyan]",
@@ -2098,9 +2124,11 @@ def batch_cmd(
                                 _timing_append(
                                     rec,
                                     "paint3d_quick"
-                                    if (profile.text3d
+                                    if (
+                                        profile.text3d
                                         and (profile.text3d.paint_style or "hunyuan").strip().lower()
-                                        in ("solid", "perlin"))
+                                        in ("solid", "perlin")
+                                    )
                                     else "paint3d_texture",
                                     time.perf_counter() - t_paint,
                                 )
@@ -2334,9 +2362,7 @@ def _texture_subprocess_argv(
     t3 = profile.text3d
     if t3 and (t3.paint_style or "hunyuan").strip().lower() in ("solid", "perlin"):
         row_seed = _seed_for_row(profile, row_id) if row_id else None
-        return _paint3d_quick_argv(
-            paint3d_bin, profile, mesh_in, mesh_out, row_seed=row_seed
-        )
+        return _paint3d_quick_argv(paint3d_bin, profile, mesh_in, mesh_out, row_seed=row_seed)
     return _paint3d_texture_argv(
         paint3d_bin,
         profile,
@@ -3109,6 +3135,11 @@ def debug_compare(
 @click.option("--presets-local", type=Path, default=None, help="Ficheiro de presets local.")
 @click.option("--dry-run", is_flag=True, default=False, help="Gerar ficheiros sem executar batch/sky (sem GPU).")
 @click.option("--plan-json", type=Path, default=None, help="Exportar dream_plan.json para este caminho.")
+@click.option(
+    "--low-vram",
+    is_flag=True,
+    help="Modo baixa VRAM: propaga --low-vram a todos os sub-tools.",
+)
 def dream_cmd(
     description: str,
     output_dir: Path,
@@ -3128,6 +3159,7 @@ def dream_cmd(
     presets_local: Path | None,
     dry_run: bool,
     plan_json: Path | None,
+    low_vram: bool,
 ) -> None:
     """Da ideia ao jogo: gera assets, cena e projecto Vite com IA.
 
@@ -3176,6 +3208,7 @@ def dream_cmd(
         with_sky=with_sky,
         with_audio=with_audio,
         dry_run=dry_run,
+        low_vram=low_vram,
     )
 
     if plan_json:

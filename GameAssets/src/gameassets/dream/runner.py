@@ -68,6 +68,7 @@ def run_dream(
     with_audio: bool = True,
     dry_run: bool = False,
     fail_fast: bool = True,
+    low_vram: bool = False,
 ) -> dict[str, Any]:
     """Executa o pipeline completo ou dry-run (só ficheiros, sem GPU)."""
     output_dir = output_dir.resolve()
@@ -140,6 +141,8 @@ def run_dream(
         str(batch_dir / "manifest.csv"),
         *batch_flags,
     ]
+    if low_vram:
+        batch_argv.append("--low-vram")
     console.print(f"[dim]$ {' '.join(batch_argv)}[/dim]")
     rc = subprocess.call(batch_argv, cwd=str(batch_dir))
     ok = rc == 0

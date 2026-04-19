@@ -459,9 +459,7 @@ class GameProfile:
             ps = str(ps_raw).strip().lower() if ps_raw not in (None, "") else "hunyuan"
             valid_ps = frozenset({"hunyuan", "solid", "perlin"})
             if ps not in valid_ps:
-                raise ValueError(
-                    "text3d.paint_style deve ser hunyuan (Paint 2.1 IA), solid ou perlin (paint3d quick)"
-                )
+                raise ValueError("text3d.paint_style deve ser hunyuan (Paint 2.1 IA), solid ou perlin (paint3d quick)")
             psc = raw_t3.get("paint_solid_color", "#888888")
             psc_s = str(psc).strip() if psc not in (None, "") else "#888888"
             ptint = raw_t3.get("paint_perlin_tint", "#7a7268")
@@ -519,9 +517,7 @@ class GameProfile:
                 paint_low_vram_mode=bool(raw_t3.get("paint_low_vram_mode", False)),
             )
             if ps in ("solid", "perlin") and not tx:
-                raise ValueError(
-                    "text3d.paint_style solid/perlin exige text3d.texture: true (fase shape → quick bake)"
-                )
+                raise ValueError("text3d.paint_style solid/perlin exige text3d.texture: true (fase shape → quick bake)")
         rg3: Rigging3DProfile | None = None
         raw_rg = data.get("rigging3d")
         if isinstance(raw_rg, dict):
