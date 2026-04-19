@@ -70,11 +70,7 @@ def suggest_smart_weld_params(
     )
     thr_abs = ratio * diag
     cap = diag * WELD_SMART_SECONDARY_CAP_DIAG_RATIO
-    sec = (
-        WELD_SMART_SECONDARY_FACTOR
-        if thr_abs * WELD_SMART_SECONDARY_FACTOR <= cap
-        else None
-    )
+    sec = WELD_SMART_SECONDARY_FACTOR if thr_abs * WELD_SMART_SECONDARY_FACTOR <= cap else None
     return ratio, it, sec
 
 
@@ -301,7 +297,7 @@ def beautify_geometry(
     isotropic_remesh_resolution: int | None = None,
     weld_only: bool = False,
     face_count: int | None = None,
-    face_ratio: float | None = 0.45,
+    face_ratio: float | None = 0.85,
     taubin_steps: int = 10,
     taubin_lambda: float = 0.33,
     taubin_mu: float = -0.33,
@@ -327,9 +323,7 @@ def beautify_geometry(
 
     if not skip_distance_weld:
         if weld_diagonal_ratio is None:
-            ar, ait, asec = suggest_smart_weld_params(
-                m, aggressiveness=float(weld_smart_aggressiveness)
-            )
+            ar, ait, asec = suggest_smart_weld_params(m, aggressiveness=float(weld_smart_aggressiveness))
             resolved_ratio = ar
             resolved_iter = ait if weld_iterations is None else int(weld_iterations)
             resolved_sec = asec if weld_secondary_factor is None else weld_secondary_factor

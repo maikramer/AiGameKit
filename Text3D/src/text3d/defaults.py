@@ -1,12 +1,12 @@
 """
 Valores por defeito do Text3D.
 
-**Perfil padrão (validado):** combinação estável em ~6 GB VRAM (CUDA) com boa qualidade
-na prática (text-to-3D: robô, veículo, planta, etc.). O pico de VRAM costuma ser no
-*volume decoding* do Hunyuan; estes valores evitam OOM nessa fase.
+**Perfil padrão:** qualidade elevada (model card HF), pensado para GPUs com >= 8 GB VRAM.
+Octree 384, 20000 chunks, 30 steps Hunyuan, sem quantização SDNQ, remesh desligado,
+reparo "light" (merge+weld+normals).
 
-Para hardware mais capaz, usa as constantes *HQ* ou flags CLI maiores
-(--octree-resolution, --num-chunks, --steps).
+Para hardware modesto (~6 GB VRAM), usar ``--low-vram`` que activa o perfil antigo:
+SDNQ INT4, octree 256, 8000 chunks, 24 steps, remesh ligado, reparo "full".
 """
 
 from __future__ import annotations
@@ -15,10 +15,6 @@ import math
 import os
 
 # --- Orientação ao gravar mesh (Hunyuan3D → motor Y-up) ---
-# Rotação em torno do eixo X (radianos). O pipeline hy3dshape devolve malha numa convenção
-# onde -90° em X fazia o modelo sair de cabeça para baixo no Godot; +90° alinha com Y+.
-# Sobrescrever: TEXT3D_EXPORT_ROTATION_X_RAD ou TEXT3D_EXPORT_ROTATION_X_DEG, ou
-# ``text3d generate --export-rotation-x-deg``.
 _rotation_x_rad_override: float | None = None
 
 
@@ -42,9 +38,6 @@ def get_export_rotation_x_rad() -> float:
 
 
 # --- Origem ao gravar mesh (após rotação Y-up) ---
-# Godot/Blender: personagens costumam ter origem entre os pés, Y=0 no chão, X/Z centrados.
-# ``feet`` = base da AABB em Y=0 e centro em XZ. ``center`` = centro da caixa em (0,0,0).
-# ``none`` = não transladar (útil para depuração ou viewers que já centram).
 DEFAULT_EXPORT_ORIGIN = "feet"
 
 _origin_override: str | None = None
@@ -71,73 +64,52 @@ def get_export_origin() -> str:
 
 
 # --- Text2D (imagem intermédia) ---
-# 1024² puxa muita VRAM no FLUX; 768 é um compromisso estável em ~6GB.
 DEFAULT_T2D_WIDTH = 768
 DEFAULT_T2D_HEIGHT = 768
 
-# 8 steps com prompt enhancement v2 produz imagens mais limpas de sombra/iluminação.
-# O modelo SDNQ ignora guidance (step-wise distilled), mas 8 steps dá melhor aderência.
 DEFAULT_T2D_STEPS = 8
 DEFAULT_T2D_GUIDANCE = 1.0
 
-# FLUX.2 Klein 4B não cabe em ~5-6GB com pipe.to(cuda); usar enable_model_cpu_offload.
-# Desliga com t2d_full_gpu=True (CLI --t2d-full-gpu) em GPUs grandes.
 DEFAULT_T2D_CPU_OFFLOAD = True
 
-# --- Hunyuan3D-2.1 (shape) — mesmo perfil que o CLI usa por defeito ---
+# --- Hunyuan3D-2.1 (shape) — perfil padrão (qualidade elevada) ---
 DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-1"
 
-DEFAULT_HY_STEPS = 24
+DEFAULT_HY_STEPS = 30
 DEFAULT_HY_GUIDANCE = 5.0
-# octree_resolution controla a grelha do volume (grid (N+1)³) onde o marching cubes extrai
-# a superfície. Valores baixos (128) geram triângulos degenerados em zonas de curvatura
-# alta (cabeça, dedos). 256 produz triângulos ~4x mais uniformes sem impacto significativo
-# em VRAM (~65 MB vs ~8 MB para o grid; o gargalo real é o volume decoding em chunks).
-# O default do Hunyuan3D upstream é 384; usamos 256 como compromisso para ~6GB VRAM.
-DEFAULT_OCTREE_RESOLUTION = 256
-DEFAULT_NUM_CHUNKS = 8000
+DEFAULT_OCTREE_RESOLUTION = 384
+DEFAULT_NUM_CHUNKS = 20000
 
-# Pós-processo ao gravar mesh (CLI): 0 = só maior componente + merge; 1-2 suaviza superfície.
 DEFAULT_MESH_SMOOTH = 0
 
-# Após ``repair_mesh`` em ``text3d generate``: fusão por distância inteligente
-# (``mesh_beautify.suggest_smart_weld_params``). Ver também ``--no-post-weld-beautify``.
 DEFAULT_POST_WELD_BEAUTIFY = True
-# Manter alinhado com ``mesh_beautify.WELD_SMART_AGGRESSIVENESS_DEFAULT``.
 DEFAULT_POST_WELD_AGGRESSIVENESS = 1.14
 DEFAULT_POST_WELD_TAUBIN_STEPS = 7
 DEFAULT_POST_WELD_CLOSE_HOLES_MAX_EDGES = 130
 
-# Após reparo/beautify (e antes de gravar): plano médio da base → horizontal (−Y) e Y=0.
-# Ver ``--no-base-plane-align`` / ``--base-plane-bottom-frac``.
 DEFAULT_BASE_PLANE_ALIGN = True
 DEFAULT_BASE_PLANE_BOTTOM_FRAC = 0.14
 
-# Isotropic remeshing (pymeshlab): reconstrói topologia com triângulos uniformes,
-# fecha buracos do marching cubes e elimina faces degeneradas. Padrão: ligado.
-DEFAULT_REMESH = True
-# Resolução mais alta + iterações/surf-dist conservadores = menos perda de detalhe.
+# Isotropic remeshing desligado por defeito (perfil high-quality).
+DEFAULT_REMESH = False
 DEFAULT_REMESH_RESOLUTION = 180
 DEFAULT_REMESH_ITERATIONS = 6
 DEFAULT_REMESH_MAX_SURF_DIST_FACTOR = 0.38
 
-# --- Referência "alta qualidade" (model card HF / GPU com bastante VRAM) ---
-# Ex.: --octree-resolution 384 --num-chunks 20000 --steps 30
-HUNYUAN_HQ_OCTREE = 384
-HUNYUAN_HQ_NUM_CHUNKS = 20000
-HUNYUAN_HQ_STEPS = 30
+# --- Perfil "low VRAM" (~6 GB): activado com ``--low-vram`` ---
+LOW_VRAM_OCTREE = 256
+LOW_VRAM_NUM_CHUNKS = 8000
+LOW_VRAM_STEPS = 24
 
-# Marching cubes (Hunyuan): 0 = defeito do pipeline; valores pequenos podem alterar superfície.
 DEFAULT_MC_LEVEL = 0.0
 
-# Perfis CLI `--preset`: substituem steps + octree + num_chunks de uma vez.
-# fast: qualidade razoável, menos VRAM/tempo; balanced: boa qualidade ~6GB; hq: model card HF.
+# Perfis CLI `--preset`: fast=baixo VRAM, balanced=~6GB, hq=padrão actual.
 PRESET_HUNYUAN = {
     "fast": {"steps": 18, "octree": 128, "chunks": 4096},
     "balanced": {
-        "steps": DEFAULT_HY_STEPS,
-        "octree": DEFAULT_OCTREE_RESOLUTION,
-        "chunks": DEFAULT_NUM_CHUNKS,
+        "steps": LOW_VRAM_STEPS,
+        "octree": LOW_VRAM_OCTREE,
+        "chunks": LOW_VRAM_NUM_CHUNKS,
     },
-    "hq": {"steps": HUNYUAN_HQ_STEPS, "octree": HUNYUAN_HQ_OCTREE, "chunks": HUNYUAN_HQ_NUM_CHUNKS},
+    "hq": {"steps": DEFAULT_HY_STEPS, "octree": DEFAULT_OCTREE_RESOLUTION, "chunks": DEFAULT_NUM_CHUNKS},
 }

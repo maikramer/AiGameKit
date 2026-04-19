@@ -55,7 +55,7 @@ def simplify_glb_preserving_texture(
     path_in: str | Path,
     path_out: str | Path,
     *,
-    face_ratio: float = 0.45,
+    face_ratio: float = 0.85,
     qualitythr: float = 0.5,
     extratcoordw: float = 1.0,
 ) -> Path:
@@ -84,8 +84,7 @@ def simplify_glb_preserving_texture(
             import pymeshlab  # noqa: PLC0415
         except ImportError as e:
             raise RuntimeError(
-                "Malha texturada requer pymeshlab para decimação com textura. "
-                "Instala o pacote `pymeshlab`."
+                "Malha texturada requer pymeshlab para decimação com textura. Instala o pacote `pymeshlab`."
             ) from e
 
         with tempfile.TemporaryDirectory(prefix="t3d_texsimp_") as tmp:

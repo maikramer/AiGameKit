@@ -2,7 +2,7 @@
 Text3D — Text-to-3D via Text2D (texto → imagem) e Hunyuan3D-2.1 (imagem → mesh).
 
 Fluxo: KleinFluxGenerator → unload explícito → Hunyuan3DDiTFlowMatchingPipeline.
-O DiT v2.1 é quantizado com SDNQ int4 em runtime (post-load, em CPU) para caber em ~6GB VRAM.
+SDNQ quantization é opcional (activada via ``sdnq_preset`` ou ``--low-vram``).
 Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguos do SDNQ int4.
 """
 
@@ -39,15 +39,14 @@ class HunyuanTextTo3DGenerator:
     Gera mesh 3D a partir de texto: primeiro Text2D, depois Hunyuan3D-2.1 (image-to-3D).
 
     Por defeito os parâmetros de shape seguem ``text3d.defaults`` (perfil ~6-8GB VRAM em CUDA).
-    O DiT v2.1 é quantizado com SDNQ int4 em runtime (post-load) para reduzir VRAM (~3 GB vs ~5.8 GB fp16).
-    Pre-quantização (save/load de state_dict) não funciona — tensores SVD são não-contíguos.
+    SDNQ quantization é opcional (activada via ``sdnq_preset`` ou ``--low-vram``).
     Com ``low_vram_mode=True`` e CUDA, o Hunyuan corre em CPU (lento, último recurso).
     O modelo 2D é sempre descarregado antes de carregar o Hunyuan.
     """
 
     DEFAULT_HF_ID = "tencent/Hunyuan3D-2.1"
     DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-1"
-    DEFAULT_SDNQ_PRESET = "sdnq-int4"
+    DEFAULT_SDNQ_PRESET = ""
 
     def __init__(
         self,

@@ -32,8 +32,8 @@ from .utils.memory import (
     format_bytes,
     kill_gpu_compute_processes_aggressive,
 )
-from .utils.mesh_lod import generate_lod_glb_triplet
 from .utils.mesh_align_hunyuan import align_glb_plus_z_safe
+from .utils.mesh_lod import generate_lod_glb_triplet
 from .utils.mesh_simplify_textured import simplify_glb_preserving_texture
 
 console = Console()
@@ -73,7 +73,7 @@ def ensure_dirs():
 @click.pass_context
 def cli(ctx, verbose):
     """
-    Text3D — mesh 3D a partir de texto (só geometria: Text2D → Hunyuan3D-2.1 SDNQ INT4 → repair → remesh).
+    Text3D — mesh 3D a partir de texto (só geometria: Text2D → Hunyuan3D-2.1 → repair → remesh).
 
     Textura e PBR: usa o CLI **paint3d** ou um batch **gameassets** com perfil text3d.texture.
 
@@ -152,7 +152,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--low-vram",
     is_flag=True,
-    help="Força Hunyuan3D em CPU (muito lento). O perfil por defeito já é para ~6GB VRAM em CUDA.",
+    help="Perfil ~6GB VRAM: SDNQ INT4, octree 256, 8000 chunks, 24 steps, remesh ligado, reparo full.",
 )
 @click.option(
     "--image-width",
@@ -203,7 +203,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=_defaults.DEFAULT_HY_STEPS,
     show_default=True,
     type=int,
-    help=f"Passos Hunyuan3D (alta qualidade HF: {_defaults.HUNYUAN_HQ_STEPS})",
+    help=f"Passos Hunyuan3D (low VRAM com --low-vram: {_defaults.LOW_VRAM_STEPS})",
 )
 @click.option(
     "--guidance",
@@ -218,14 +218,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=_defaults.DEFAULT_OCTREE_RESOLUTION,
     show_default=True,
     type=int,
-    help=(f"Octree Hunyuan (VRAM no decode). HQ em GPU grande: {_defaults.HUNYUAN_HQ_OCTREE}"),
+    help=(f"Octree Hunyuan (VRAM no decode). low VRAM: {_defaults.LOW_VRAM_OCTREE}"),
 )
 @click.option(
     "--num-chunks",
     default=_defaults.DEFAULT_NUM_CHUNKS,
     show_default=True,
     type=int,
-    help=(f"Chunks extração de superfície. HQ: {_defaults.HUNYUAN_HQ_NUM_CHUNKS}"),
+    help=(f"Chunks extração de superfície. low VRAM: {_defaults.LOW_VRAM_NUM_CHUNKS}"),
 )
 @click.option(
     "--preset",
@@ -364,10 +364,9 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 )
 @click.option(
     "--sdnq-preset",
-    default=HunyuanTextTo3DGenerator.DEFAULT_SDNQ_PRESET,
-    show_default=True,
+    default=None,
     type=click.Choice(["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-fp8", "none"]),
-    help="Preset SDNQ para quantização do DiT (none = sem quantização, mais VRAM).",
+    help=("Preset SDNQ para quantização do DiT. Defeito: none (full precision), ou sdnq-int4 com --low-vram."),
 )
 @click.option(
     "-v",
@@ -506,6 +505,20 @@ def generate(
         steps = pv["steps"]
         octree_resolution = pv["octree"]
         num_chunks = pv["chunks"]
+
+    # --low-vram: override defaults to the old ~6GB profile
+    _repair_mode = "light"
+    if low_vram and preset is None:
+        steps = _defaults.LOW_VRAM_STEPS
+        octree_resolution = _defaults.LOW_VRAM_OCTREE
+        num_chunks = _defaults.LOW_VRAM_NUM_CHUNKS
+        remesh = True
+        _repair_mode = "full"
+        if sdnq_preset is None:
+            sdnq_preset = "sdnq-int4"
+
+    if sdnq_preset is None:
+        sdnq_preset = "none"
 
     if not from_image and not (prompt and str(prompt).strip()):
         raise click.UsageError("Indica um PROMPT em texto ou --from-image /path/to.png")
@@ -756,6 +769,7 @@ def generate(
 
                     result = repair_mesh(
                         result,
+                        repair_mode=_repair_mode,
                         keep_largest=True,
                         merge_vertices=True,
                         remove_ground_shadow=not no_ground_shadow_removal,
@@ -817,13 +831,9 @@ def generate(
                         else _defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC
                     )
                     if not (0.04 <= _bf <= 0.5):
-                        raise click.UsageError(
-                            "--base-plane-bottom-frac deve estar entre 0.04 e 0.5"
-                        )
+                        raise click.UsageError("--base-plane-bottom-frac deve estar entre 0.04 e 0.5")
                     if verbose:
-                        console.print(
-                            f"[dim]Alinhamento do plano médio da base (frac={_bf:g})…[/dim]"
-                        )
+                        console.print(f"[dim]Alinhamento do plano médio da base (frac={_bf:g})…[/dim]")
                     result = align_mesh_base_plane_to_ground(
                         result,
                         bottom_frac=_bf,
@@ -1513,7 +1523,7 @@ def lod_cmd(
 @click.option(
     "--face-ratio",
     type=float,
-    default=0.45,
+    default=0.85,
     show_default=True,
     help="Rácio alvo de faces (0–1) face ao original. Ignorado se já ≤ mínimo.",
 )
@@ -1589,9 +1599,7 @@ def align_plus_z_cmd(
     if not 0 < min_height_ratio <= 1.0:
         raise click.ClickException("--min-height-ratio deve estar entre 0 e 1")
     try:
-        align_glb_plus_z_safe(
-            input_mesh, output, min_height_ratio=min_height_ratio
-        )
+        align_glb_plus_z_safe(input_mesh, output, min_height_ratio=min_height_ratio)
     except (RuntimeError, TypeError, ValueError) as e:
         raise click.ClickException(str(e)) from e
 

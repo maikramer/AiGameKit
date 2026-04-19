@@ -1,8 +1,8 @@
 """
-Text3D — Text-to-3D com Text2D + Hunyuan3D-2.1 SDNQ INT4 (image-to-3D).
+Text3D — Text-to-3D com Text2D + Hunyuan3D-2.1 (image-to-3D).
 
-Descarrega o modelo 2D antes de carregar o Hunyuan3D. Padrões de inferência em
-``text3d.defaults`` (perfil ~6-8GB VRAM CUDA com SDNQ INT4); constantes ``HUNYUAN_HQ_*`` para GPU grande.
+Descarrega o modelo 2D antes de carregar o Hunyuan3D. Por defeito corre em full precision
+(sem SDNQ). Constantes ``LOW_VRAM_*`` em ``text3d.defaults`` para o perfil ~6GB (activado com ``--low-vram``).
 
 Textura e PBR: CLI ``paint3d`` ou orquestração ``gameassets`` — não fazem parte deste pacote.
 """

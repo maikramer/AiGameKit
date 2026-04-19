@@ -2539,6 +2539,7 @@ def _remove_box_cage_components(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
 def repair_mesh(
     mesh: trimesh.Trimesh,
     *,
+    repair_mode: Literal["light", "full"] = "light",
     topology_prep: bool = True,
     keep_largest: bool = True,
     merge_vertices: bool = True,
@@ -2563,27 +2564,25 @@ def repair_mesh(
 ) -> trimesh.Trimesh:
     """Pipeline de reparo completa: pedestais → topologia → watertight → remesh → smooth.
 
-    Produz mesh watertight por defeito (``watertight=True``), pronta para
-    Hunyuan3D-Paint, rigging (UniRig) e animação.
-
-    Ordem de operações:
-    1. Remoção de sombras/pedestais na base (antes de fundir vértices)
-    2. Remoção de ilhas minúsculas (fragmentos flutuantes)
-    3. :func:`prepare_mesh_topology` **ou** merge + manifold (conforme ``topology_prep``)
-    4. Fechar buracos minúsculos (rachas do marching cubes) para solidificar paredes
-    5. Watertight cascade — só se não existirem buracos estruturais grandes (>5% da
-       área da mesh); se existirem, preserva a abertura (ex. base de crate)
-    6. Remoção de spikes na base (se very_aggressive)
-    7. Remover componentes-placa separadas; maior componente (se ``keep_largest``)
-    8. Isotropic remesh (opcional; ``remesh_max_surf_dist_factor`` baixo = mais fiel)
-    9. Taubin smoothing volume-preserving (opcional, ideal para rigging)
-    10. Laplacian smoothing legacy (opcional, se smooth_iterations > 0)
+    ``repair_mode``:
+    - ``"light"`` (defeito): apenas ``prepare_mesh_topology`` (merge vertices +
+      fix normals + remove unreferenced). Rápido, preserva geometria.
+    - ``"full"``: pipeline completa de 10 passos (sombras, ilhas, watertight,
+      remesh, smooth).
 
     Args:
+        repair_mode: ``"light"`` para topologia leve, ``"full"`` para pipeline completa.
         topology_prep: Se ``True`` (defeito), aplica :func:`prepare_mesh_topology` após
             pedestais/ilhas e evita duplicar merge+manifold soltos.
     """
     m = mesh.copy()
+
+    if repair_mode == "light":
+        with contextlib.suppress(Exception):
+            m = prepare_mesh_topology(m)
+        with contextlib.suppress(Exception):
+            m.remove_unreferenced_vertices()
+        return m
 
     # 1. Remoção de sombras/pedestais
     if remove_ground_shadow:
