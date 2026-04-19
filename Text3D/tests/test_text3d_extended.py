@@ -77,9 +77,9 @@ def test_default_subfolder_string() -> None:
 
 def test_hq_constants_match_preset() -> None:
     hq = d.PRESET_HUNYUAN["hq"]
-    assert hq["steps"] == d.HUNYUAN_HQ_STEPS
-    assert hq["octree"] == d.HUNYUAN_HQ_OCTREE
-    assert hq["chunks"] == d.HUNYUAN_HQ_NUM_CHUNKS
+    assert hq["steps"] == d.DEFAULT_HY_STEPS
+    assert hq["octree"] == d.DEFAULT_OCTREE_RESOLUTION
+    assert hq["chunks"] == d.DEFAULT_NUM_CHUNKS
 
 
 def test_default_hy_steps_positive() -> None:
@@ -106,9 +106,9 @@ def test_default_octree_and_chunks() -> None:
 
 def test_balanced_preset_equals_constants() -> None:
     b = d.PRESET_HUNYUAN["balanced"]
-    assert b["steps"] == d.DEFAULT_HY_STEPS
-    assert b["octree"] == d.DEFAULT_OCTREE_RESOLUTION
-    assert b["chunks"] == d.DEFAULT_NUM_CHUNKS
+    assert b["steps"] == d.LOW_VRAM_STEPS
+    assert b["octree"] == d.LOW_VRAM_OCTREE
+    assert b["chunks"] == d.LOW_VRAM_NUM_CHUNKS
 
 
 def test_fast_preset_smaller_than_balanced_steps() -> None:
