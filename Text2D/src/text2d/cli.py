@@ -95,7 +95,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help="ID Hugging Face (default: Disty0 SDNQ ou TEXT2D_MODEL_ID)",
+    help="ID Hugging Face (default: 9B SDNQ, 4B com --low-vram, ou TEXT2D_MODEL_ID)",
 )
 @click.option(
     "--verbose",
@@ -260,8 +260,12 @@ def models_cmd() -> None:
     t.add_column("ID", style="cyan")
     t.add_column("Notas", style="white")
     t.add_row(
+        "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32",
+        "Padrão (high-VRAM), SDNQ 4-bit, 9B parâmetros",
+    )
+    t.add_row(
         "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
-        "Padrão (~2.5 GB pesos), SDNQ 4-bit, Apache 2.0 (base BFL)",
+        "Padrão com --low-vram, SDNQ 4-bit, 4B parâmetros",
     )
     t.add_row(
         "black-forest-labs/FLUX.2-klein-4B",

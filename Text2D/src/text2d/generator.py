@@ -1,6 +1,7 @@
 """
-Text2D — Geração de imagens com FLUX.2 Klein 4B (SDNQ / Disty0).
+Text2D — Geração de imagens com FLUX.2 Klein (SDNQ / Disty0).
 
+Default: 9B SDNQ (high-VRAM), 4B SDNQ (--low-vram).
 Requer `sdnq` instalado para registar quantização no diffusers/transformers.
 """
 
@@ -16,11 +17,14 @@ from typing import Any
 import torch
 from PIL import Image
 
-_DEFAULT_MODEL = "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic"
+HIGH_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32"
+LOW_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic"
 
 
-def _model_id() -> str:
-    return os.environ.get("TEXT2D_MODEL_ID", _DEFAULT_MODEL)
+def _model_id(low_vram: bool = False) -> str:
+    if os.environ.get("TEXT2D_MODEL_ID"):
+        return os.environ["TEXT2D_MODEL_ID"]
+    return LOW_VRAM_MODEL_ID if low_vram else HIGH_VRAM_MODEL_ID
 
 
 def default_model_id() -> str:
@@ -71,7 +75,7 @@ class KleinFluxGenerator:
     ):
         self.verbose = verbose
         self.low_vram = low_vram
-        self.model_id = model_id or _model_id()
+        self.model_id = model_id or _model_id(low_vram=self.low_vram)
         self.cache_dir = cache_dir
 
         if device is None:
