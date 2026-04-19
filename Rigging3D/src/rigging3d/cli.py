@@ -10,6 +10,7 @@ import tempfile
 from collections.abc import Sequence
 from pathlib import Path
 
+import yaml
 from gamedev_shared.profiler.session import ProfilerSession
 from rich.console import Console
 
@@ -426,6 +427,7 @@ print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
 )
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
 @click.option("--no-prep", is_flag=True, help="Não preparar mesh (skip remesh/repair).")
+@click.option("--low-vram", is_flag=True, help="Modo baixa VRAM: num_train_vertex 256 (padrão: 512).")
 @click.pass_context
 def pipeline_cmd(
     ctx: click.Context,
@@ -437,6 +439,7 @@ def pipeline_cmd(
     smooth_iterations: int,
     groups_per_vertex: int,
     no_prep: bool,
+    low_vram: bool,
 ) -> None:
     """Encadeia skeleton → skin → merge até um GLB rigado."""
     root, py = _ctx_root_py(ctx)
@@ -467,6 +470,7 @@ def pipeline_cmd(
 
         skel = wd / "_skeleton.glb"
         skin = wd / "_skin.glb"
+        _low_vram_cleanup: list[Path] = []
         try:
             rc = _run_bash(
                 root,
@@ -480,10 +484,43 @@ def pipeline_cmd(
                     f"skeleton falhou (código {rc} ou GLB em falta). Confirma deps inferência, pesos HF e logs acima."
                 )
 
+            skin_task_path = DEFAULT_SKIN_TASK
+            if low_vram:
+                model_yaml_path = root / "configs" / "model" / "unirig_skin.yaml"
+                with open(model_yaml_path) as f:
+                    model_cfg = yaml.safe_load(f)
+                model_cfg["num_train_vertex"] = 256
+
+                low_vram_model = wd / "_low_vram_unirig_skin.yaml"
+                with open(low_vram_model, "w") as f:
+                    yaml.dump(model_cfg, f, default_flow_style=False)
+
+                task_yaml_path = root / "configs" / "task" / "quick_inference_unirig_skin.yaml"
+                with open(task_yaml_path) as f:
+                    task_cfg = yaml.safe_load(f)
+                task_cfg["components"]["model"] = "_low_vram_unirig_skin"
+
+                low_vram_task = wd / "_low_vram_skin_task.yaml"
+                with open(low_vram_task, "w") as f:
+                    yaml.dump(task_cfg, f, default_flow_style=False)
+
+                skin_task_path = str(low_vram_task)
+                _low_vram_cleanup.extend([low_vram_model, low_vram_task])
+                console.print("[dim]Low-VRAM: num_train_vertex=256[/dim]")
+
             rc = _run_bash(
                 root,
                 "launch/inference/generate_skin.sh",
-                ["--input", _shell_path(skel), "--output", _shell_path(skin), "--seed", str(seed)],
+                [
+                    "--input",
+                    _shell_path(skel),
+                    "--output",
+                    _shell_path(skin),
+                    "--seed",
+                    str(seed),
+                    "--skin_task",
+                    skin_task_path,
+                ],
                 python_bin=py,
                 propagate_profile=do_profile,
             )
@@ -520,6 +557,9 @@ def pipeline_cmd(
         finally:
             if cleanup is not None and not keep_temp:
                 shutil.rmtree(cleanup, ignore_errors=True)
+            elif low_vram:
+                for p in _low_vram_cleanup:
+                    p.unlink(missing_ok=True)
 
     console.print(f"[green]Pipeline concluído:[/green] {out}")
 
