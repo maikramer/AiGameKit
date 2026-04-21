@@ -751,7 +751,7 @@ class SelfAttnProcessor2_0(BaseAttnProcessor):
         # Process each PBR setting
         results = []
         for token, pbr_hs in zip(self.pbr_setting, pbr_hidden_states, strict=False):
-            processed_hs = rearrange(pbr_hs, "b n_pbrs n l c -> (b n_pbrs n) l c").to("cuda:0")
+            processed_hs = rearrange(pbr_hs, "b n_pbrs n l c -> (b n_pbrs n) l c")
             result = self.process_single(attn, processed_hs, None, attention_mask, temb, token, False)
             results.append(result)
 

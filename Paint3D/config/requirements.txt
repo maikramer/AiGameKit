@@ -32,6 +32,7 @@ bitsandbytes>=0.45.0
 torchao>=0.10.0; sys_platform != 'darwin'
 xformers>=0.0.28; sys_platform == 'linux'
 sdnq>=0.1.0
+einops>=0.8.0
 # API Blender (conversão OBJ→GLB em mesh_utils); PyPI alinha com Blender 5.1
 bpy==5.1.0
 # basicsr / realesrgan PyPI: build quebrado no Python 3.13 (basicsr setup KeyError __version__);

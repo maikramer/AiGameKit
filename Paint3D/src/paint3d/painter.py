@@ -12,6 +12,7 @@ O rasterizador CUDA é fornecido por **nvdiffrast** (NVIDIA), registado como
 
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 import tempfile
@@ -220,6 +221,25 @@ def apply_hunyuan_paint(
                     )
                     if verbose and enable_vae_tiling:
                         print(f"[Paint 2.1] VAE tiling ativo (tile_size={vae_tile_size})")
+
+                if torch.cuda.device_count() >= 2 and not low_vram and verbose:
+                    gpu0_name = torch.cuda.get_device_name(0)
+                    gpu1_name = torch.cuda.get_device_name(1)
+                    print(
+                        f"[Paint 2.1] Multi-GPU disponível: cuda:0 ({gpu0_name}), cuda:1 ({gpu1_name}). "
+                        f"VAE split desactivado — usar PAINT3D_MULTI_GPU=1 para activar."
+                    )
+                multi_gpu_env = os.environ.get("PAINT3D_MULTI_GPU", "").strip()
+                if torch.cuda.device_count() >= 2 and not low_vram and multi_gpu_env in ("1", "true", "yes"):
+                    vae = pipe.vae
+                    if vae is not None:
+                        if verbose:
+                            gpu0_name = torch.cuda.get_device_name(0)
+                            gpu1_name = torch.cuda.get_device_name(1)
+                            print(
+                                f"[Paint 2.1] Multi-GPU: VAE → cuda:1 ({gpu1_name}), UNet+CLIP → cuda:0 ({gpu0_name})"
+                            )
+                        vae.to("cuda:1")
             except Exception as e:
                 if verbose:
                     print(f"[Paint 2.1] Aviso: otimizações opcionais falharam: {e}")
@@ -277,8 +297,14 @@ def paint_file_to_file(
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
     sub = subfolder or _defaults.DEFAULT_PAINT_SUBFOLDER
     offload = _defaults.DEFAULT_PAINT_CPU_OFFLOAD if paint_cpu_offload is None else paint_cpu_offload
-    nviews = _defaults.DEFAULT_PAINT_MAX_VIEWS if max_num_view is None else max_num_view
-    vres = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION if view_resolution is None else view_resolution
+    if max_num_view is None:
+        nviews = _defaults.LOW_VRAM_MAX_VIEWS if low_vram else _defaults.DEFAULT_PAINT_MAX_VIEWS
+    else:
+        nviews = max_num_view
+    if view_resolution is None:
+        vres = _defaults.LOW_VRAM_VIEW_RESOLUTION if low_vram else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+    else:
+        vres = view_resolution
     bexp = _defaults.DEFAULT_PAINT_BAKE_EXP if bake_exp is None else bake_exp
 
     from gamedev_shared.profiler import profile_span

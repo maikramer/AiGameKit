@@ -47,7 +47,7 @@ def _env_bool(env_var: str, cli_wants: bool) -> bool:
     return cli_wants
 
 
-def _prepare_gpu(allow_shared: bool, kill_others: bool) -> None:
+def _prepare_gpu(allow_shared: bool, kill_others: bool, low_vram: bool = False) -> None:
     kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
     allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
     if kill:
@@ -62,8 +62,9 @@ def _prepare_gpu(allow_shared: bool, kill_others: bool) -> None:
             console.print(f"[dim]{line}[/dim]")
         clear_cuda_memory()
         time.sleep(0.5)
+    gpu_max_mib = 300 if low_vram else 1024
     try:
-        enforce_exclusive_gpu(allow_shared=allow)
+        enforce_exclusive_gpu(allow_shared=allow, max_used_mib=gpu_max_mib)
     except RuntimeError as e:
         raise click.ClickException(str(e)) from e
 
@@ -127,7 +128,7 @@ def cli(ctx, verbose):
     default=_defaults.DEFAULT_PAINT_BAKE_EXP,
     show_default=True,
     type=int,
-    help="Expoente de blending entre vistas (maior = costuras mais nítidas, menos sangramento).",
+    help="Expoente de blending entre vistas (upstream=4: suave, 6: nítido, menos sangramento).",
 )
 @click.option(
     "--smooth/--no-smooth",
@@ -146,7 +147,7 @@ def cli(ctx, verbose):
 @click.option(
     "--low-vram-mode",
     is_flag=True,
-    help="Modo baixa VRAM: SDNQ uint8, render 1024, texture 2048, CPU offload (GPUs ≤8 GB).",
+    help="Modo baixa VRAM: SDNQ uint8, 6 views @ 512px, render 1024, texture 2048.",
 )
 @click.option(
     "--preserve-origin/--no-preserve-origin",
@@ -195,6 +196,7 @@ def texture(
         "PYTORCH_CUDA_ALLOC_CONF",
         "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
     )
+    os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
     rs_label = render_size or ("1024 (low-vram)" if low_vram_mode else "2048")
     ts_label = texture_size or ("2048 (low-vram)" if low_vram_mode else "4096")
@@ -218,7 +220,7 @@ def texture(
         info_table.add_row("[bold]Upscale[/bold]", f"Real-ESRGAN {upscale_factor}x")
     console.print(Panel(info_table, title="[bold green]Hunyuan3D-Paint 2.1", border_style="green"))
 
-    _prepare_gpu(allow_shared_gpu, gpu_kill_others)
+    _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
 
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
