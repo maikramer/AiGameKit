@@ -27,7 +27,7 @@ def test_export_rotation_default(monkeypatch: pytest.MonkeyPatch) -> None:
     d.set_export_rotation_x_rad_override(None)
     monkeypatch.delenv("TEXT3D_EXPORT_ROTATION_X_RAD", raising=False)
     monkeypatch.delenv("TEXT3D_EXPORT_ROTATION_X_DEG", raising=False)
-    assert d.get_export_rotation_x_rad() == pytest.approx(math.pi / 2)
+    assert d.get_export_rotation_x_rad() == pytest.approx(0.0)
 
 
 def test_export_rotation_rad_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,8 +95,12 @@ def test_cpu_offload_defaults_are_bool() -> None:
     assert isinstance(d.DEFAULT_T2D_CPU_OFFLOAD, bool)
 
 
-def test_mesh_smooth_default() -> None:
-    assert d.DEFAULT_MESH_SMOOTH == 0
+def test_default_remove_bg() -> None:
+    assert d.DEFAULT_REMOVE_BG is True
+
+
+def test_default_max_faces() -> None:
+    assert d.DEFAULT_MAX_FACES == 40000
 
 
 def test_default_octree_and_chunks() -> None:

@@ -34,7 +34,7 @@ def get_export_rotation_x_rad() -> float:
     env_deg = os.environ.get("TEXT3D_EXPORT_ROTATION_X_DEG")
     if env_deg is not None and str(env_deg).strip() != "":
         return float(env_deg) * math.pi / 180.0
-    return math.pi / 2
+    return 0.0
 
 
 # --- Origem ao gravar mesh (após rotação Y-up) ---
@@ -80,28 +80,15 @@ DEFAULT_HY_GUIDANCE = 5.0
 DEFAULT_OCTREE_RESOLUTION = 384
 DEFAULT_NUM_CHUNKS = 20000
 
-DEFAULT_MESH_SMOOTH = 0
+DEFAULT_MC_LEVEL = 0.0
 
-DEFAULT_POST_WELD_BEAUTIFY = True
-DEFAULT_POST_WELD_AGGRESSIVENESS = 1.14
-DEFAULT_POST_WELD_TAUBIN_STEPS = 7
-DEFAULT_POST_WELD_CLOSE_HOLES_MAX_EDGES = 130
-
-DEFAULT_BASE_PLANE_ALIGN = True
-DEFAULT_BASE_PLANE_BOTTOM_FRAC = 0.14
-
-# Isotropic remeshing desligado por defeito (perfil high-quality).
-DEFAULT_REMESH = False
-DEFAULT_REMESH_RESOLUTION = 180
-DEFAULT_REMESH_ITERATIONS = 6
-DEFAULT_REMESH_MAX_SURF_DIST_FACTOR = 0.38
+DEFAULT_REMOVE_BG = True
+DEFAULT_MAX_FACES = 40000
 
 # --- Perfil "low VRAM" (~6 GB): activado com ``--low-vram`` ---
 LOW_VRAM_OCTREE = 256
 LOW_VRAM_NUM_CHUNKS = 8000
 LOW_VRAM_STEPS = 24
-
-DEFAULT_MC_LEVEL = 0.0
 
 # Perfis CLI `--preset`: fast=baixo VRAM, balanced=~6GB, hq=padrão actual.
 PRESET_HUNYUAN = {

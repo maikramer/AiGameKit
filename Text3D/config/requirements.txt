@@ -36,7 +36,8 @@ opencv-python>=4.8.0
 # diffusers export_to_gif ainda usado em save_gif
 # (Hunyuan devolve trimesh; GIF permanece utilitário opcional)
 
-# gamedev-shared: não repetir aqui — vem como dependência do text2d (evita conflito pip file://).
+# BiRefNet background removal (zhengpeng7/BiRefNet via transformers)
+kornia>=0.7.0
 
 # Texturização (Paint, Materialize, Upscale): pacote Paint3D separado (../Paint3D).
 # Instalar: pip install -e ../Paint3D  ou  gamedev-install paint3d
