@@ -3,6 +3,7 @@
 Text2D — CLI principal (text-to-2D).
 """
 
+import os
 import sys
 import time
 from pathlib import Path
@@ -251,6 +252,48 @@ def info_cmd() -> None:
     t.add_row("Saída padrão (pasta)", str(DEFAULT_IMAGE_DIR.resolve()))
     t.add_row("Modelo (default)", default_model_id())
     console.print(t)
+
+
+@cli.command("doctor")
+def doctor_cmd() -> None:
+    """Verifica ambiente: PyTorch, CUDA, VRAM e cache HF."""
+    from gamedev_shared.gpu import (
+        DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB,
+        get_system_info,
+        gpu_bytes_in_use,
+    )
+
+    console.print(
+        Panel.fit(
+            "[bold]text2d doctor[/bold] — PyTorch, CUDA, ambiente",
+            border_style="blue",
+        )
+    )
+    info_data = get_system_info()
+    table = Table(title="[bold blue]Diagnóstico", box=box.ROUNDED)
+    table.add_column("Item", style="cyan", no_wrap=True)
+    table.add_column("Estado", style="green")
+
+    alloc = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
+    table.add_row("PYTORCH_CUDA_ALLOC_CONF", alloc or "[dim](não definido)[/dim]")
+    table.add_row("PyTorch", info_data.get("torch_version", "N/A"))
+    table.add_row("CUDA", str(info_data.get("cuda_available", False)))
+    if info_data.get("cuda_available"):
+        table.add_row("CUDA versão", info_data.get("cuda_version", "N/A"))
+        for i, gpu in enumerate(info_data.get("gpus", [])):
+            table.add_row(
+                f"GPU {i}",
+                f"{gpu['name']} — {format_bytes(gpu['total_memory'])} total, {format_bytes(gpu['free_memory'])} livre",
+            )
+        used = gpu_bytes_in_use(0)
+        if used is not None:
+            table.add_row(
+                "GPU em uso",
+                f"~{used / (1024**2):.0f} MiB (limite: {DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB} MiB)",
+            )
+    table.add_row("HF_HOME (cache)", hf_home_display_rich())
+
+    console.print(table)
 
 
 @cli.command("models")
