@@ -10,7 +10,6 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Literal
 
 from rich import box
 from rich.console import Console
@@ -73,7 +72,7 @@ def ensure_dirs():
 @click.pass_context
 def cli(ctx, verbose):
     """
-    Text3D — mesh 3D a partir de texto (só geometria: Text2D → Hunyuan3D-2.1 → repair → remesh).
+    Text3D — mesh 3D a partir de texto (geometria: Text2D → Hunyuan3D-2.1).
 
     Textura e PBR: usa o CLI **paint3d** ou um batch **gameassets** com perfil text3d.texture.
 
@@ -82,13 +81,9 @@ def cli(ctx, verbose):
         text3d generate "carro" --preset hq -o carro.glb
         text3d generate -i ref.png -o mesh.glb
         text3d doctor
-        text3d repair-ground modelo.glb --y-up-flip-x-180 --no-keep-largest
-        text3d mesh-beautify modelo.glb -o leve.glb --face-ratio 0.45
-        text3d mesh-beautify hunyuan.glb -o soldado.glb --weld-only --weld-aggressiveness 1.2 --taubin-steps 12
         text3d lod modelo.glb -o ./out --basename prop
         text3d simplify-textured pintado.glb -o leve.glb --face-ratio 0.45
         text3d align-plus-z modelo.glb -o corrigido.glb
-        text3d generate "prompt" --no-base-plane-align
         text3d -v generate "prompt"
         text3d info
     """
@@ -152,7 +147,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--low-vram",
     is_flag=True,
-    help="Perfil ~6GB VRAM: SDNQ INT4, octree 256, 8000 chunks, 24 steps, remesh ligado, reparo full.",
+    help="Perfil ~6GB VRAM: SDNQ INT4, octree 256, 8000 chunks, 24 steps.",
 )
 @click.option(
     "--image-width",
@@ -245,116 +240,11 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Nível marching cubes Hunyuan (0 = defeito; ajustes finos à iso-superfície).",
 )
 @click.option(
-    "--no-mesh-repair",
-    "no_mesh_repair",
+    "--no-remove-bg",
+    "no_remove_bg",
     is_flag=True,
     default=False,
-    help="Desliga pós-processo: maior componente conexa + merge de vértices (ilhas/pés soltos).",
-)
-@click.option(
-    "--no-post-weld-beautify",
-    "no_post_weld_beautify",
-    is_flag=True,
-    default=False,
-    help=(
-        "Desliga a fusão inteligente por distância (pymeshlab) aplicada após o reparo de mesh. "
-        "Por defeito ligada (costuras Hunyuan)."
-    ),
-)
-@click.option(
-    "--post-weld-aggressiveness",
-    "post_weld_aggressiveness",
-    default=None,
-    type=float,
-    help=(
-        "Multiplica o ratio da fusão pós-reparo (omitir = "
-        f"{_defaults.DEFAULT_POST_WELD_AGGRESSIVENESS}; só se a fusão estiver ligada)."
-    ),
-)
-@click.option(
-    "--no-base-plane-align",
-    "no_base_plane_align",
-    is_flag=True,
-    default=False,
-    help=(
-        "Desliga o alinhamento do plano médio da base ao chão (−Y): corrige inclinação leve da "
-        "base antes de gravar (por defeito ligado)."
-    ),
-)
-@click.option(
-    "--base-plane-bottom-frac",
-    "base_plane_bottom_frac",
-    default=None,
-    type=float,
-    help=(
-        "Fraccão da altura (Y) usada para amostrar vértices da base ao ajustar o plano; "
-        f"omitir = {_defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC}."
-    ),
-)
-@click.option(
-    "--no-remove-plates",
-    "no_remove_plates",
-    is_flag=True,
-    default=False,
-    help=(
-        "Desliga remoção automática de backing plates (artefatos de chão na base). "
-        "Por defeito, placas são detectadas e removidas com reparo pymeshlab + fillet."
-    ),
-)
-@click.option(
-    "--no-ground-shadow-removal",
-    "no_ground_shadow_removal",
-    is_flag=True,
-    default=False,
-    help="Não remove disco/placa de sombra na base (heurística geométrica; defeito: ligado).",
-)
-@click.option(
-    "--ground-shadow-aggressive",
-    "ground_shadow_aggressive",
-    is_flag=True,
-    default=False,
-    help="Anti-sombra forte (cilindro na base + peel; só para cascas enormes).",
-)
-@click.option(
-    "--ground-shadow-very-aggressive",
-    "ground_shadow_very_aggressive",
-    is_flag=True,
-    default=False,
-    help="Anti-sombra EXTREMO para pedestais. Flood-fill + silhueta.",
-)
-@click.option(
-    "--mesh-smooth",
-    default=_defaults.DEFAULT_MESH_SMOOTH,
-    show_default=True,
-    type=int,
-    help="Suavização Laplaciana (1-2 reduz aspereza; pode arredondar detalhes finos).",
-)
-@click.option(
-    "--remesh/--no-remesh",
-    default=_defaults.DEFAULT_REMESH,
-    show_default=True,
-    help="Isotropic remeshing: reconstrói topologia, fecha buracos, elimina spikes. Requer pymeshlab.",
-)
-@click.option(
-    "--remesh-resolution",
-    default=_defaults.DEFAULT_REMESH_RESOLUTION,
-    show_default=True,
-    type=int,
-    help="Resolução do remeshing (~nº subdivisões na diagonal). Maior = mais detalhe.",
-)
-@click.option(
-    "--remesh-iterations",
-    default=_defaults.DEFAULT_REMESH_ITERATIONS,
-    show_default=True,
-    type=int,
-    help="Iterações do remesh isotrópico (mais = converge melhor; mais lento).",
-)
-@click.option(
-    "--remesh-surf-dist-factor",
-    default=_defaults.DEFAULT_REMESH_MAX_SURF_DIST_FACTOR,
-    show_default=True,
-    type=float,
-    help="Fator para maxsurfdist vs target edge (menor ≈ mais fiel à superfície original).",
+    help="Desactivar remoção de fundo com BiRefNet (defeito: remoção activa).",
 )
 @click.option(
     "--model-subfolder",
@@ -430,21 +320,18 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     ),
 )
 @click.option(
-    "--max-retries",
-    "max_retries",
-    default=3,
-    show_default=True,
-    type=int,
-    help=(
-        "Tentativas máximas de geração. Verifica qualidade da mesh (backing plates, "
-        "flat cutouts) e regenera com seed aleatória se falhar. 1 = sem retry."
-    ),
-)
-@click.option(
     "--profile",
     "prof_profile",
     is_flag=True,
     help="Medir tempos, CPU, RAM e VRAM (JSONL: GAMEDEV_PROFILE_LOG; SQLite automático).",
+)
+@click.option(
+    "--max-faces",
+    "max_faces",
+    type=int,
+    default=40000,
+    show_default=True,
+    help="Número máximo de faces (0 = sem redução). Usa quadric edge collapse do PyMeshLab.",
 )
 @click.pass_context
 def generate(
@@ -468,20 +355,7 @@ def generate(
     num_chunks,
     preset,
     mc_level,
-    no_mesh_repair,
-    no_post_weld_beautify,
-    post_weld_aggressiveness,
-    no_base_plane_align,
-    base_plane_bottom_frac,
-    no_remove_plates,
-    no_ground_shadow_removal,
-    ground_shadow_aggressive,
-    ground_shadow_very_aggressive,
-    mesh_smooth,
-    remesh,
-    remesh_resolution,
-    remesh_iterations,
-    remesh_surf_dist_factor,
+    no_remove_bg,
     generate_verbose,
     allow_shared_gpu,
     gpu_kill_others,
@@ -491,8 +365,8 @@ def generate(
     export_rotation_x_deg,
     save_reference_image,
     no_prompt_optimize,
-    max_retries,
     prof_profile,
+    max_faces,
 ):
     """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
     from gamedev_shared.profiler import ProfilerSession
@@ -507,13 +381,10 @@ def generate(
         num_chunks = pv["chunks"]
 
     # --low-vram: override defaults to the old ~6GB profile
-    _repair_mode = "light"
     if low_vram and preset is None:
         steps = _defaults.LOW_VRAM_STEPS
         octree_resolution = _defaults.LOW_VRAM_OCTREE
         num_chunks = _defaults.LOW_VRAM_NUM_CHUNKS
-        remesh = True
-        _repair_mode = "full"
         if sdnq_preset is None:
             sdnq_preset = "sdnq-int4"
 
@@ -539,8 +410,9 @@ def generate(
         clear_cuda_memory()
         time.sleep(0.5)
     if not cpu:
+        gpu_max_mib = 300 if low_vram else 1024
         try:
-            enforce_exclusive_gpu(allow_shared=allow_shared)
+            enforce_exclusive_gpu(allow_shared=allow_shared, max_used_mib=gpu_max_mib)
         except RuntimeError as e:
             raise click.ClickException(str(e)) from e
 
@@ -565,42 +437,11 @@ def generate(
     if not from_image:
         opt_label = "desligada" if no_prompt_optimize else "ativa (anti-placa)"
         info_table.add_row("[bold]Otimização prompt[/bold]", opt_label)
-    if max_retries > 1:
-        info_table.add_row("[bold]Auto-retry[/bold]", f"até {max_retries}x (verifica placas/flat)")
-    rep = "desligado" if no_mesh_repair else "maior componente + merge"
-    if not no_mesh_repair and not no_ground_shadow_removal:
-        rep += ", anti-sombra base"
-        if ground_shadow_very_aggressive:
-            rep += " (EXTREMO)"
-        elif ground_shadow_aggressive:
-            rep += " (agressivo)"
-    if remesh and not no_mesh_repair:
-        rep += f", remesh(res={remesh_resolution}, it={remesh_iterations}, surf={remesh_surf_dist_factor})"
-    if mesh_smooth > 0 and not no_mesh_repair:
-        rep += f", smooth={mesh_smooth}"
-    if not no_remove_plates:
-        rep += ", anti-placa (detect+cut+fillet)"
-    info_table.add_row("[bold]Pós-mesh[/bold]", rep)
-    if not no_post_weld_beautify:
-        _pwa = (
-            f"{float(post_weld_aggressiveness):g}"
-            if post_weld_aggressiveness is not None
-            else f"{_defaults.DEFAULT_POST_WELD_AGGRESSIVENESS:g} (inteligente)"
-        )
-        info_table.add_row(
-            "[bold]Fusão costuras[/bold]",
-            f"pós-reparo pymeshlab, agg={_pwa}, Taubin={_defaults.DEFAULT_POST_WELD_TAUBIN_STEPS}",
-        )
-    if _defaults.DEFAULT_BASE_PLANE_ALIGN and not no_base_plane_align:
-        _bpf = (
-            f"{float(base_plane_bottom_frac):g}"
-            if base_plane_bottom_frac is not None
-            else f"{_defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC:g}"
-        )
-        info_table.add_row(
-            "[bold]Plano base[/bold]",
-            f"horizontal (frac amostra Y={_bpf})",
-        )
+    info_table.add_row("[bold]BG removal[/bold]", "desactivada" if no_remove_bg else "BiRefNet")
+    if max_faces > 0:
+        info_table.add_row("[bold]Max faces[/bold]", f"{max_faces} (PyMeshLab quadric)")
+    else:
+        info_table.add_row("[bold]Max faces[/bold]", "sem redução")
     info_table.add_row("[bold]Formato[/bold]", output_format.upper())
     info_table.add_row(
         "[bold]Export[/bold]",
@@ -619,11 +460,6 @@ def generate(
         "guidance": guidance,
         "octree_resolution": octree_resolution,
         "num_chunks": num_chunks,
-        "mesh_smooth": mesh_smooth,
-        "remesh": remesh,
-        "remesh_resolution": remesh_resolution,
-        "remesh_iterations": remesh_iterations,
-        "remesh_surf_dist_factor": remesh_surf_dist_factor,
         "model_subfolder": model_subfolder,
         "from_image": bool(from_image),
     }
@@ -668,40 +504,23 @@ def generate(
                     console=console,
                 ) as progress:
                     if from_image:
-                        if max_retries > 1:
-                            task = progress.add_task(
-                                f"[cyan]Hunyuan3D imagem → mesh (até {max_retries} tentativas)...",
-                                total=None,
-                            )
-
-                            def _on_retry_img(attempt, new_seed, quality):
-                                issues = ", ".join(quality.get("issues", []))
-                                console.print(f"[yellow]Tentativa {attempt} falhou: {issues}. Retry...[/yellow]")
-
-                            result = generator.generate_from_image_with_quality_check(
-                                from_image,
-                                max_retries=max_retries,
-                                hy_seed=seed,
-                                on_retry=_on_retry_img,
-                                num_inference_steps=steps,
-                                guidance_scale=guidance,
-                                octree_resolution=octree_resolution,
-                                num_chunks=num_chunks,
-                                mc_level=mc_level,
-                            )
-                        else:
-                            task = progress.add_task("[cyan]Hunyuan3D (imagem → mesh)...", total=None)
-                            result = generator.generate_from_image(
-                                from_image,
-                                num_inference_steps=steps,
-                                guidance_scale=guidance,
-                                octree_resolution=octree_resolution,
-                                num_chunks=num_chunks,
-                                hy_seed=seed,
-                                mc_level=mc_level,
-                            )
+                        task = progress.add_task("[cyan]Hunyuan3D (imagem → mesh)...", total=None)
+                        result = generator.generate_from_image(
+                            from_image,
+                            num_inference_steps=steps,
+                            guidance_scale=guidance,
+                            octree_resolution=octree_resolution,
+                            num_chunks=num_chunks,
+                            hy_seed=seed,
+                            mc_level=mc_level,
+                            remove_bg=not no_remove_bg,
+                        )
                     else:
-                        _gen_kwargs = dict(
+                        task = progress.add_task("[cyan]Text2D → Hunyuan3D...", total=None)
+                        result, ref_img = generator.generate(
+                            prompt=prompt,
+                            t2d_seed=seed,
+                            return_reference_image=True,
                             t2d_width=image_width,
                             t2d_height=image_height,
                             t2d_steps=t2d_steps,
@@ -715,37 +534,8 @@ def generate(
                             mc_level=mc_level,
                             t2d_full_gpu=t2d_full_gpu,
                             optimize_prompt=not no_prompt_optimize,
+                            remove_bg=not no_remove_bg,
                         )
-
-                        if max_retries > 1:
-                            task = progress.add_task(
-                                f"[cyan]Text2D → Hunyuan3D (até {max_retries} tentativas)...",
-                                total=None,
-                            )
-
-                            def _on_retry(attempt, new_seed, quality):
-                                issues = ", ".join(quality.get("issues", []))
-                                console.print(
-                                    f"[yellow]  Tentativa {attempt} falhou: {issues}."
-                                    f" Retry com seed {new_seed}...[/yellow]"
-                                )
-
-                            result, ref_img = generator.generate_with_quality_check(
-                                prompt=prompt,
-                                max_retries=max_retries,
-                                t2d_seed=seed,
-                                return_reference_image=True,
-                                on_retry=_on_retry,
-                                **_gen_kwargs,
-                            )
-                        else:
-                            task = progress.add_task("[cyan]Text2D → Hunyuan3D...", total=None)
-                            result, ref_img = generator.generate(
-                                prompt=prompt,
-                                t2d_seed=seed,
-                                return_reference_image=True,
-                                **_gen_kwargs,
-                            )
 
                         if save_reference_image:
                             out_png = output.parent / f"{output.stem}_text2d.png"
@@ -755,6 +545,12 @@ def generate(
 
                     progress.update(task, description="[green]Concluído")
 
+                if max_faces > 0:
+                    from text3d.hy3dshape.postprocessors import FaceReducer
+
+                    face_reducer = FaceReducer()
+                    result = face_reducer(result, max_facenum=max_faces)
+
                 if save_reference_image and from_image:
                     import shutil
 
@@ -763,81 +559,6 @@ def generate(
                     out_copy.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(from_image, out_copy)
                     console.print(f"[dim]Imagem de entrada copiada: [cyan]{out_copy.resolve()}[/cyan][/dim]")
-
-                if not no_mesh_repair:
-                    from .utils.mesh_repair import repair_mesh
-
-                    result = repair_mesh(
-                        result,
-                        repair_mode=_repair_mode,
-                        keep_largest=True,
-                        merge_vertices=True,
-                        remove_ground_shadow=not no_ground_shadow_removal,
-                        ground_artifact_mesh_space="hunyuan",
-                        ground_shadow_aggressive=ground_shadow_aggressive and not ground_shadow_very_aggressive,
-                        ground_shadow_very_aggressive=ground_shadow_very_aggressive,
-                        smooth_iterations=max(0, mesh_smooth),
-                        remesh=remesh,
-                        remesh_resolution=remesh_resolution,
-                        remesh_iterations=remesh_iterations,
-                        remesh_max_surf_dist_factor=remesh_surf_dist_factor,
-                    )
-
-                if not no_post_weld_beautify:
-                    from .mesh_beautify import beautify_geometry, suggest_smart_weld_params
-
-                    agg = float(
-                        post_weld_aggressiveness
-                        if post_weld_aggressiveness is not None
-                        else _defaults.DEFAULT_POST_WELD_AGGRESSIVENESS
-                    )
-                    if verbose:
-                        sr, si, ss = suggest_smart_weld_params(result, aggressiveness=agg)
-                        console.print(
-                            "[dim]Pós-reparo — fusão inteligente: ratio≈"
-                            f"{sr:.5f} · iter={si} · sec={ss} (agg={agg:.3f})[/dim]"
-                        )
-                    result = beautify_geometry(
-                        result,
-                        weld_diagonal_ratio=None,
-                        weld_smart_aggressiveness=agg,
-                        close_holes_max_edges=_defaults.DEFAULT_POST_WELD_CLOSE_HOLES_MAX_EDGES,
-                        repair_non_manifold_after_weld=True,
-                        weld_only=True,
-                        taubin_steps=_defaults.DEFAULT_POST_WELD_TAUBIN_STEPS,
-                    )
-
-                if not no_remove_plates:
-                    from .utils.mesh_repair import remove_backing_plates
-
-                    result, plate_info = remove_backing_plates(result)
-                    if plate_info["plates_removed"] > 0:
-                        console.print(
-                            f"[dim]Placas removidas: {plate_info['plates_removed']}, "
-                            f"componentes: {plate_info['components_removed']}[/dim]"
-                        )
-                    if plate_info["needs_discard"]:
-                        console.print(
-                            "[yellow]Aviso: mesh tem placa conectada irrecuperável "
-                            "(considere regenerar com seed diferente)[/yellow]"
-                        )
-
-                if _defaults.DEFAULT_BASE_PLANE_ALIGN and not no_base_plane_align:
-                    from .utils.mesh_base_plane import align_mesh_base_plane_to_ground
-
-                    _bf = float(
-                        base_plane_bottom_frac
-                        if base_plane_bottom_frac is not None
-                        else _defaults.DEFAULT_BASE_PLANE_BOTTOM_FRAC
-                    )
-                    if not (0.04 <= _bf <= 0.5):
-                        raise click.UsageError("--base-plane-bottom-frac deve estar entre 0.04 e 0.5")
-                    if verbose:
-                        console.print(f"[dim]Alinhamento do plano médio da base (frac={_bf:g})…[/dim]")
-                    result = align_mesh_base_plane_to_ground(
-                        result,
-                        bottom_frac=_bf,
-                    )
 
                 from .utils.export import save_mesh
 
@@ -867,7 +588,6 @@ def generate(
 def doctor():
     """Verifica ambiente: PyTorch, CUDA e VRAM."""
     from .utils.memory import (
-        DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB,
         get_system_info,
         gpu_bytes_in_use,
     )
@@ -902,7 +622,7 @@ def doctor():
             table.add_row(
                 "Política GPU exclusiva",
                 f"~{used / (1024**2):.0f} MiB em uso agora — "
-                f"generate recusa se > {DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB} MiB "
+                f"generate recusa se > 1024 MiB (300 MiB em --low-vram) "
                 f"(ou TEXT3D_ALLOW_SHARED_GPU=1 / --allow-shared-gpu)",
             )
 
@@ -961,369 +681,6 @@ def info():
                     border_style="yellow",
                 )
             )
-
-
-@cli.command("repair-ground")
-@click.argument("input_glb", type=click.Path(exists=True, path_type=Path))
-@click.option(
-    "--output",
-    "-o",
-    type=click.Path(),
-    default=None,
-    help="Ficheiro GLB de saída (defeito: sobrescreve o de entrada).",
-)
-@click.option(
-    "--mesh-space",
-    type=click.Choice(["hunyuan", "y_up"]),
-    default="y_up",
-    show_default=True,
-    help="hunyuan: malha no espaço Hunyuan3D; y_up: já orientada como no Godot.",
-)
-@click.option(
-    "--y-up-flip-x-180",
-    "y_up_flip_x_180",
-    is_flag=True,
-    help="Rota 180° em X antes do peel (modelo gravado de cabeça para baixo).",
-)
-@click.option(
-    "--no-keep-largest",
-    is_flag=True,
-    help="Não descartar ilhas (malhas com muitas componentes, ex.: Paint).",
-)
-@click.option(
-    "--no-small-islands",
-    "no_small_islands",
-    is_flag=True,
-    help="Não remover fragmentos flutuantes (ilhas minúsculas).",
-)
-@click.option(
-    "--fill-holes-max-edges",
-    "fill_holes_max_edges",
-    default=16,
-    show_default=True,
-    type=int,
-    help="Fechar buracos com contorno até N arestas (0 = desligar).",
-)
-@click.option(
-    "--ground-shadow-aggressive",
-    "ground_shadow_aggressive",
-    is_flag=True,
-    default=False,
-    help="Anti-sombra forte (cilindro + peel; cascas grandes na base).",
-)
-@click.option(
-    "--ground-shadow-very-aggressive",
-    "ground_shadow_very_aggressive",
-    is_flag=True,
-    default=False,
-    help="Anti-sombra EXTREMO — flood-fill + análise de silhueta para pedestais grudados.",
-)
-@click.option(
-    "--remesh/--no-remesh",
-    default=_defaults.DEFAULT_REMESH,
-    show_default=True,
-    help="Isotropic remeshing: reconstrói topologia, fecha buracos, elimina spikes. Requer pymeshlab.",
-)
-@click.option(
-    "--remesh-resolution",
-    default=_defaults.DEFAULT_REMESH_RESOLUTION,
-    show_default=True,
-    type=int,
-    help="Resolução do remeshing (~nº subdivisões na diagonal).",
-)
-@click.option(
-    "--remesh-iterations",
-    default=_defaults.DEFAULT_REMESH_ITERATIONS,
-    show_default=True,
-    type=int,
-    help="Iterações do remesh isotrópico.",
-)
-@click.option(
-    "--remesh-surf-dist-factor",
-    default=_defaults.DEFAULT_REMESH_MAX_SURF_DIST_FACTOR,
-    show_default=True,
-    type=float,
-    help="Fator maxsurfdist vs target edge (menor ≈ mais fiel à superfície).",
-)
-def repair_ground_cmd(
-    input_glb: Path,
-    output,
-    mesh_space: Literal["hunyuan", "y_up"],
-    y_up_flip_x_180: bool,
-    no_keep_largest: bool,
-    no_small_islands: bool,
-    fill_holes_max_edges: int,
-    ground_shadow_aggressive: bool,
-    ground_shadow_very_aggressive: bool,
-    remesh: bool,
-    remesh_resolution: int,
-    remesh_iterations: int,
-    remesh_surf_dist_factor: float,
-):
-    """Pós-processa um GLB: anti-sombra na base (e opcionalmente corrige orientação)."""
-    import trimesh as tm
-
-    from .utils.mesh_repair import repair_mesh
-
-    flip = math.pi if y_up_flip_x_180 else 0.0
-    try:
-        loaded = tm.load(str(input_glb))
-        if isinstance(loaded, tm.Scene):
-            mesh = loaded.to_geometry()
-        elif isinstance(loaded, tm.Trimesh):
-            mesh = loaded
-        else:
-            raise click.ClickException(f"Tipo de mesh não suportado: {type(loaded)}")
-
-        out = repair_mesh(
-            mesh,
-            keep_largest=not no_keep_largest,
-            merge_vertices=True,
-            remove_ground_shadow=True,
-            ground_artifact_mesh_space=mesh_space,
-            ground_artifact_y_up_flip_x_rad=flip,
-            ground_shadow_aggressive=ground_shadow_aggressive and not ground_shadow_very_aggressive,
-            ground_shadow_very_aggressive=ground_shadow_very_aggressive,
-            remove_small_island_fragments=not no_small_islands,
-            fill_small_holes_max_edges=max(0, int(fill_holes_max_edges)),
-            smooth_iterations=0,
-            remesh=remesh,
-            remesh_resolution=remesh_resolution,
-            remesh_iterations=remesh_iterations,
-            remesh_max_surf_dist_factor=remesh_surf_dist_factor,
-        )
-
-        out_path = Path(output) if output else input_glb
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out.export(str(out_path), file_type="glb")
-        try:
-            sz = format_bytes(out_path.stat().st_size)
-        except OSError:
-            sz = "?"
-        console.print(Rule("[bold green]repair-ground", style="green"))
-        console.print(f"[bold green]✓[/bold green] [cyan]{out_path.resolve()}[/cyan] [dim]({sz})[/dim]")
-    except Exception as e:
-        console.print(f"[bold red]✗[/bold red] {e}")
-        sys.exit(1)
-
-
-@cli.command("mesh-beautify")
-@click.argument("mesh_file", type=click.Path(exists=True, path_type=Path))
-@click.option(
-    "--output",
-    "-o",
-    "output_path",
-    required=True,
-    type=click.Path(),
-    help="GLB de saída (só geometria; sem materiais PBR).",
-)
-@click.option(
-    "--weld-diagonal-ratio",
-    default=None,
-    type=float,
-    help="Limiar = ratio×diagonal AABB. **Omitir = modo inteligente** (ratio ~ K×aresta_média/diagonal, limitado). Sobrepõe o automático.",
-)
-@click.option(
-    "--weld-aggressiveness",
-    default=1.14,
-    show_default=True,
-    type=float,
-    help="Só modo inteligente: multiplica o ratio derivado (p.ex. 1,15–1,25 para Hunyuan agressivo).",
-)
-@click.option(
-    "--no-weld",
-    is_flag=True,
-    help="Não aplicar fusão pymeshlab por distância (só merge exacto trimesh).",
-)
-@click.option(
-    "--weld-only",
-    is_flag=True,
-    help="Só soldar vértices (não decimar); usa --taubin-steps para suavizar costuras (default 12).",
-)
-@click.option(
-    "--weld-iterations",
-    default=None,
-    type=int,
-    help="Repetições do merge; omitir = sugerido pelo modo inteligente (ou 10 com ratio fixo).",
-)
-@click.option(
-    "--weld-secondary-factor",
-    default=None,
-    type=float,
-    help="Passagem extra com limiar maior (ex. 1.4); omitir = só repetições no mesmo limiar.",
-)
-@click.option(
-    "--face-ratio",
-    default=0.45,
-    show_default=True,
-    type=float,
-    help="Proporção alvo de faces (vs entrada), no mínimo ~800 triângulos (ignorado com --weld-only).",
-)
-@click.option(
-    "--face-count",
-    default=None,
-    type=int,
-    help="Número máximo de triângulos (sobrepõe --face-ratio).",
-)
-@click.option(
-    "--taubin-steps",
-    default=12,
-    show_default=True,
-    type=int,
-    help="Passos Taubin (pymeshlab, via mesh_repair).",
-)
-@click.option(
-    "--taubin-lambda",
-    default=0.33,
-    show_default=True,
-    type=float,
-    help="λ Taubin.",
-)
-@click.option(
-    "--taubin-mu",
-    default=-0.33,
-    show_default=True,
-    type=float,
-    help="μ Taubin (negativo = contraciclo, preserva volume).",
-)
-@click.option(
-    "--close-holes-max-edges",
-    default=120,
-    show_default=True,
-    type=int,
-    help="Fechar buracos de contorno (costuras) até este tamanho em arestas; 0 = desligado.",
-)
-@click.option(
-    "--no-repair-non-manifold",
-    is_flag=True,
-    help="Não aplicar reparo pymeshlab non-manifold após fundir.",
-)
-@click.option(
-    "--post-rotate-x-deg",
-    default=0.0,
-    show_default=True,
-    type=float,
-    help="Rotação final em X (graus), pós‑Taubin — corrige base/encosto se o modelo ficou de lado.",
-)
-@click.option(
-    "--post-rotate-y-deg",
-    default=0.0,
-    show_default=True,
-    type=float,
-    help="Rotação final em Y (graus).",
-)
-@click.option(
-    "--post-rotate-z-deg",
-    default=0.0,
-    show_default=True,
-    type=float,
-    help="Rotação final em Z (graus).",
-)
-@click.option(
-    "--align-plus-z-to-ground",
-    is_flag=True,
-    help="Cristais Hunyuan: alinhar cluster de faces com normal ~+Z à base -Y (chão) e recentrar.",
-)
-@click.option(
-    "--align-plus-z-dot-min",
-    default=0.82,
-    show_default=True,
-    type=float,
-    help="Cosseno mínimo com +Z para marcar faces da “base” errada (0,82 ≈ 35°).",
-)
-@click.option(
-    "--align-bottom-percentile",
-    default=48.0,
-    show_default=True,
-    type=float,
-    help="Só faces com centro Y abaixo deste percentil entram na média (+Z cortado).",
-)
-@click.option(
-    "--remesh-resolution",
-    default=None,
-    type=int,
-    help="Remesh isotrópico pymeshlab (diagonal/resolução); omitir = não remesh. Props orgânicos: ~110.",
-)
-def mesh_beautify_cmd(
-    mesh_file: Path,
-    output_path: str,
-    weld_diagonal_ratio: float | None,
-    weld_aggressiveness: float,
-    no_weld: bool,
-    weld_only: bool,
-    weld_iterations: int | None,
-    weld_secondary_factor: float | None,
-    close_holes_max_edges: int,
-    no_repair_non_manifold: bool,
-    post_rotate_x_deg: float,
-    post_rotate_y_deg: float,
-    post_rotate_z_deg: float,
-    align_plus_z_to_ground: bool,
-    align_plus_z_dot_min: float,
-    align_bottom_percentile: float,
-    remesh_resolution: int | None,
-    face_ratio: float,
-    face_count: int | None,
-    taubin_steps: int,
-    taubin_lambda: float,
-    taubin_mu: float,
-) -> None:
-    """Fundir vértices por distância, decimar (quadric) e suavizar Taubin — útil antes do paint3d."""
-    from .mesh_beautify import beautify_glb_file
-    from .utils.export import _load_as_trimesh
-
-    out_p = Path(output_path)
-    before = _load_as_trimesh(mesh_file)
-    ch = None if int(close_holes_max_edges) <= 0 else int(close_holes_max_edges)
-
-    if not no_weld and weld_diagonal_ratio is None:
-        from .mesh_beautify import suggest_smart_weld_params
-
-        sr, si_def, ss_def = suggest_smart_weld_params(
-            before,
-            aggressiveness=float(weld_aggressiveness),
-        )
-        it_show = si_def if weld_iterations is None else int(weld_iterations)
-        sec_show = ss_def if weld_secondary_factor is None else weld_secondary_factor
-        console.print(
-            "[dim]Fusão inteligente · "
-            f"ratio≈{sr:.5f} · iter={it_show} · sec={sec_show} "
-            f"(agressividade {float(weld_aggressiveness):.3f})[/dim]"
-        )
-
-    beautify_glb_file(
-        mesh_file,
-        out_p,
-        skip_distance_weld=no_weld,
-        weld_diagonal_ratio=None if no_weld else weld_diagonal_ratio,
-        weld_smart_aggressiveness=float(weld_aggressiveness),
-        weld_iterations=weld_iterations,
-        weld_secondary_factor=weld_secondary_factor,
-        close_holes_max_edges=ch,
-        repair_non_manifold_after_weld=not no_repair_non_manifold,
-        post_rotate_x_deg=float(post_rotate_x_deg),
-        post_rotate_y_deg=float(post_rotate_y_deg),
-        post_rotate_z_deg=float(post_rotate_z_deg),
-        align_plus_z_cluster_to_ground=align_plus_z_to_ground,
-        align_plus_z_dot_min=float(align_plus_z_dot_min),
-        align_plus_z_bottom_percentile=float(align_bottom_percentile),
-        isotropic_remesh_resolution=remesh_resolution,
-        weld_only=weld_only,
-        face_count=face_count,
-        face_ratio=None if face_count is not None else face_ratio,
-        taubin_steps=taubin_steps,
-        taubin_lambda=taubin_lambda,
-        taubin_mu=taubin_mu,
-    )
-    after = _load_as_trimesh(out_p)
-    console.print(
-        Rule("[bold green]mesh-beautify", style="green"),
-    )
-    console.print(
-        f"[bold green]✓[/bold green] [cyan]{out_p.resolve()}[/cyan]\n"
-        f"[dim]faces {len(before.faces):,} → {len(after.faces):,} · "
-        f"verts {len(before.vertices):,} → {len(after.vertices):,}[/dim]",
-    )
 
 
 @cli.command()

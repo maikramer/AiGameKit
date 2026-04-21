@@ -12,7 +12,37 @@ import numpy as np
 import trimesh
 from trimesh.transformations import translation_matrix
 
-from ..mesh_beautify import _rotmat_unit_a_to_b
+
+def _rotmat_unit_a_to_b(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Matriz 3×3 R com R @ a = b (a, b não nulos; normalizados internamente)."""
+    a = np.asarray(a, dtype=np.float64).reshape(3)
+    b = np.asarray(b, dtype=np.float64).reshape(3)
+    na = np.linalg.norm(a)
+    nb = np.linalg.norm(b)
+    if na < 1e-12 or nb < 1e-12:
+        return np.eye(3)
+    a = a / na
+    b = b / nb
+    v = np.cross(a, b)
+    s = float(np.linalg.norm(v))
+    c = float(np.dot(a, b))
+    if s < 1e-10:
+        if c > 0.9999:
+            return np.eye(3)
+        if abs(a[0]) < 0.9:
+            ortho = np.array([1.0, 0.0, 0.0])
+        else:
+            ortho = np.array([0.0, 1.0, 0.0])
+        axis = np.cross(a, ortho)
+        axis = axis / np.linalg.norm(axis)
+        from trimesh.transformations import rotation_matrix
+
+        return rotation_matrix(np.pi, axis)[:3, :3].astype(np.float64)
+    vx = np.array(
+        [[0.0, -v[2], v[1]], [v[2], 0.0, -v[0]], [-v[1], v[0], 0.0]],
+        dtype=np.float64,
+    )
+    return (np.eye(3) + vx + vx @ vx * ((1.0 - c) / (s * s))).astype(np.float64)
 
 
 def _weighted_median_1d(values: np.ndarray, weights: np.ndarray) -> float:

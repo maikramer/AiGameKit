@@ -221,13 +221,12 @@ def _apply_origin_only_path(path: Path, *, origin_mode: str | None = None) -> No
 
 
 def _apply_rotation_trimesh(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """
-    Rotação X Hunyuan3D → Y-up (Godot/Blender). Ângulo: ``get_export_rotation_x_rad()`` (+90° por defeito).
-    """
+    """Rotação X configurável (defeito 0 = sem rotação). Usar ``--export-rotation-x-deg`` para override."""
     angle = float(get_export_rotation_x_rad())
-    axis = [1, 0, 0]
-    rotation_matrix = trimesh.transformations.rotation_matrix(angle, axis)
-    mesh.apply_transform(rotation_matrix)
+    if angle == 0.0:
+        return mesh
+    rx = trimesh.transformations.rotation_matrix(angle, [1, 0, 0])
+    mesh.apply_transform(rx)
     return mesh
 
 

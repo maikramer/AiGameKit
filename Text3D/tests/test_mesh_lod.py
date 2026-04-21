@@ -6,8 +6,7 @@ from pathlib import Path
 
 import trimesh
 
-from text3d.utils.mesh_lod import generate_lod_glb_triplet, simplify_to_face_count
-from text3d.utils.mesh_repair import prepare_mesh_topology
+from text3d.utils.mesh_lod import generate_lod_glb_triplet, prepare_mesh_topology, simplify_to_face_count
 
 
 def test_prepare_mesh_topology_keeps_solid_box() -> None:
