@@ -68,7 +68,7 @@ def test_default_mc_level() -> None:
 
 
 def test_default_t2d_dims() -> None:
-    assert d.DEFAULT_T2D_WIDTH == d.DEFAULT_T2D_HEIGHT == 768
+    assert d.DEFAULT_T2D_WIDTH == d.DEFAULT_T2D_HEIGHT == 2048
 
 
 def test_default_subfolder_string() -> None:

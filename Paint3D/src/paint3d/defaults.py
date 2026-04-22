@@ -17,7 +17,7 @@ Configuracao por defeito (6 views @ 512px, single GPU 12GB):
 
 Modo low-VRAM (``--low-vram-mode``):
 - UNet: SDNQ uint8 (pos-load) via gamedev_shared.sdnq
-- render_size=1024, texture_size=2048, max_views=6, view_resolution=512
+- render_size=1024, texture_size=2048, max_views=4, view_resolution=384
 
 Qualidade de bake:
 - bake_exp=4 (upstream): blending suave entre vistas.
@@ -37,12 +37,12 @@ DEFAULT_LOW_VRAM = False
 LOW_VRAM_RENDER_SIZE = 1024
 LOW_VRAM_TEXTURE_SIZE = 2048
 
-DEFAULT_PAINT_MAX_VIEWS = 4
+DEFAULT_PAINT_MAX_VIEWS = 6
 DEFAULT_PAINT_VIEW_RESOLUTION = 512
 
-# Low-VRAM: 6 views @ 512px (clone demo defaults)
-LOW_VRAM_MAX_VIEWS = 6
-LOW_VRAM_VIEW_RESOLUTION = 512
+# Low-VRAM: 4 views @ 384px
+LOW_VRAM_MAX_VIEWS = 4
+LOW_VRAM_VIEW_RESOLUTION = 384
 
 # bake_exp=4 (upstream): blending suave. Antes era 6 (transicoes mais nítidas).
 DEFAULT_PAINT_BAKE_EXP = 4
@@ -52,14 +52,14 @@ DEFAULT_ENABLE_VAE_SLICING = True
 DEFAULT_ENABLE_VAE_TILING = True
 
 DEFAULT_SMOOTH = True
-DEFAULT_SMOOTH_PASSES = 2
-DEFAULT_SMOOTH_DIAMETER = 9
-DEFAULT_SMOOTH_SIGMA_COLOR = 50.0
+DEFAULT_SMOOTH_PASSES = 6
+DEFAULT_SMOOTH_DIAMETER = 11
+DEFAULT_SMOOTH_SIGMA_COLOR = 75.0
 DEFAULT_SMOOTH_SIGMA_SPACE = 50.0
 
 DEFAULT_UPSCALE = False
 DEFAULT_UPSCALE_FACTOR = 4
 
 # GPU exclusive limit (MiB) — multi-GPU: checked only on device 0
-DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB = 1024
+DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB = 1536
 LOW_VRAM_EXCLUSIVE_GPU_MAX_USED_MIB = 300

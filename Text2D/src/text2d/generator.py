@@ -175,8 +175,8 @@ class KleinFluxGenerator:
     def generate(
         self,
         prompt: str,
-        height: int = 1024,
-        width: int = 1024,
+        height: int = 2048,
+        width: int = 2048,
         guidance_scale: float = 1.0,
         num_inference_steps: int = 4,
         seed: int | None = None,

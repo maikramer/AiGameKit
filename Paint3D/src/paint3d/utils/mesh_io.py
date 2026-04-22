@@ -12,12 +12,7 @@ def load_mesh_trimesh(path: str | Path) -> trimesh.Trimesh:
     path = Path(path)
     loaded = trimesh.load(str(path), force=None)
     if isinstance(loaded, trimesh.Scene):
-        if not loaded.geometry:
-            raise ValueError(f"Mesh vazia: {path}")
-        meshes = list(loaded.geometry.values())
-        if len(meshes) == 1:
-            return meshes[0]
-        return trimesh.util.concatenate(meshes)
+        return loaded.dump(concatenate=True)
     if isinstance(loaded, trimesh.Trimesh):
         return loaded
     raise TypeError(f"Formato não suportado: {type(loaded)}")

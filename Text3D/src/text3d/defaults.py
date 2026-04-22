@@ -64,8 +64,8 @@ def get_export_origin() -> str:
 
 
 # --- Text2D (imagem intermédia) ---
-DEFAULT_T2D_WIDTH = 768
-DEFAULT_T2D_HEIGHT = 768
+DEFAULT_T2D_WIDTH = 2048
+DEFAULT_T2D_HEIGHT = 2048
 
 DEFAULT_T2D_STEPS = 8
 DEFAULT_T2D_GUIDANCE = 1.0

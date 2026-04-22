@@ -77,8 +77,8 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @cli.command("generate")
 @click.argument("prompt")
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png ou .jpg)")
-@click.option("--width", "-W", default=1024, show_default=True, type=int)
-@click.option("--height", "-H", default=1024, show_default=True, type=int)
+@click.option("--width", "-W", default=2048, show_default=True, type=int)
+@click.option("--height", "-H", default=2048, show_default=True, type=int)
 @click.option("--steps", "-s", default=4, show_default=True, help="Passos de inferência")
 @click.option(
     "--guidance",
@@ -142,6 +142,8 @@ def generate_cmd(
 
     device = "cpu" if cpu else None
     low = low_vram or cpu
+    if low and width == 2048 and height == 2048:
+        width, height = 1024, 1024
     resolved_model = model_id or default_model_id()
 
     log_p = env_profile_log_path()

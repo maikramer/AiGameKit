@@ -109,8 +109,8 @@ def cli(ctx, verbose):
     type=click.Choice(["2", "4"], case_sensitive=False),
     help="Factor de upscale (2 = 1024→2048, 4 = 1024→4096).",
 )
-@click.option("--max-views", default=_defaults.DEFAULT_PAINT_MAX_VIEWS, show_default=True, type=int)
-@click.option("--view-resolution", default=_defaults.DEFAULT_PAINT_VIEW_RESOLUTION, show_default=True, type=int)
+@click.option("--max-views", default=None, show_default=False, type=int)
+@click.option("--view-resolution", default=None, show_default=False, type=int)
 @click.option(
     "--render-size",
     default=None,
@@ -147,7 +147,7 @@ def cli(ctx, verbose):
 @click.option(
     "--low-vram-mode",
     is_flag=True,
-    help="Modo baixa VRAM: SDNQ uint8, 6 views @ 512px, render 1024, texture 2048.",
+    help="Modo baixa VRAM: SDNQ uint8, 4 views @ 384px, render 1024, texture 2048.",
 )
 @click.option(
     "--preserve-origin/--no-preserve-origin",
@@ -222,6 +222,11 @@ def texture(
 
     _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
 
+    if max_views is None and not low_vram_mode:
+        max_views = _defaults.DEFAULT_PAINT_MAX_VIEWS
+    if view_resolution is None and not low_vram_mode:
+        view_resolution = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
 
@@ -258,6 +263,9 @@ def texture(
                     mesh = smooth_trimesh_texture(
                         mesh,
                         passes=smooth_passes,
+                        diameter=_defaults.DEFAULT_SMOOTH_DIAMETER,
+                        sigma_color=_defaults.DEFAULT_SMOOTH_SIGMA_COLOR,
+                        sigma_space=_defaults.DEFAULT_SMOOTH_SIGMA_SPACE,
                         verbose=verbose,
                     )
                     save_glb(mesh, out)

@@ -18,7 +18,7 @@ from PIL import Image
 from text2d.generator import KleinFluxGenerator
 
 from . import defaults as _defaults
-from .utils.bg_removal import BiRefNetBGRemover
+from .utils.bg_removal import BiRefNetBGRemover, crop_to_content
 from .utils.memory import clear_cuda_memory as _clear_cuda_cache
 from .utils.prompt_enhance import create_optimized_prompt as _optimize_prompt
 
@@ -255,6 +255,7 @@ class HunyuanTextTo3DGenerator:
             self._log("A remover fundo com BiRefNet...")
             bg_remover = BiRefNetBGRemover(device=self.device)
             image = bg_remover.remove_background(image)
+            image = crop_to_content(image)
             bg_remover.unload()
 
         self._log("Fase 2: Hunyuan3D-2.1 (imagem → mesh)")

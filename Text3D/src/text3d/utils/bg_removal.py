@@ -34,9 +34,7 @@ class BiRefNetBGRemover:
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
-        self._model = AutoModelForImageSegmentation.from_pretrained(
-            _MODEL_ID, trust_remote_code=True
-        )
+        self._model = AutoModelForImageSegmentation.from_pretrained(_MODEL_ID, trust_remote_code=True)
         self._model.to(self._device)
         self._model.eval()
 
@@ -71,3 +69,30 @@ class BiRefNetBGRemover:
             del self._model
             self._model = None
             clear_cuda_memory()
+
+
+def crop_to_content(image: Image.Image, pad_ratio: float = 0.05) -> Image.Image:
+    """Crop RGBA image to the bounding box of non-transparent content.
+
+    Adds a small padding (``pad_ratio`` of bbox size) to avoid tight edges.
+    If the image is fully transparent (getbbox returns None), returns as-is.
+
+    Args:
+        image: RGBA PIL Image (typically from BiRefNet background removal).
+        pad_ratio: Fraction of bbox dimensions to pad on each side (default 5%).
+
+    Returns:
+        Cropped RGBA PIL Image, or the original if no content found.
+    """
+    bbox = image.getbbox()
+    if bbox is None:
+        return image
+    left, top, right, bottom = bbox
+    w = right - left
+    h = bottom - top
+    pad_x = int(w * pad_ratio)
+    pad_y = int(h * pad_ratio)
+    cropped = image.crop(
+        (max(0, left - pad_x), max(0, top - pad_y), min(image.width, right + pad_x), min(image.height, bottom + pad_y))
+    )
+    return cropped

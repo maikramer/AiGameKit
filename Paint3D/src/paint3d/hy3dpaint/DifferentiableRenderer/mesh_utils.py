@@ -263,7 +263,14 @@ def _apply_auto_smooth(auto_smooth_angle: float):
 
 
 def _convert_obj_to_glb_trimesh(obj_path: str, glb_path: str) -> bool:
-    """Conversão OBJ→GLB sem Blender (trimesh + materiais em MTL)."""
+    """Conversão OBJ→GLB sem Blender (trimesh + materiais em MTL).
+
+    When trimesh loads an OBJ it may return a Scene with a non-identity
+    world transform on the root node.  Exporting that Scene bakes the
+    transform into the GLB vertex positions, rotating the mesh.
+    To preserve the vertex coordinates exactly as written by the
+    pipeline, we rebuild the Scene with identity transforms.
+    """
     import trimesh
 
     try:
@@ -272,7 +279,12 @@ def _convert_obj_to_glb_trimesh(obj_path: str, glb_path: str) -> bool:
         loaded = trimesh.load(obj_path)
     try:
         if isinstance(loaded, trimesh.Scene):
-            loaded.export(glb_path, file_type="glb")
+            # Rebuild with identity transforms so vertex positions are
+            # preserved exactly (no scene-graph rotation baked in).
+            clean = trimesh.Scene()
+            for name, geom in loaded.geometry.items():
+                clean.add_geometry(geom, geom_name=name, transform=np.eye(4))
+            clean.export(glb_path, file_type="glb")
         else:
             loaded.export(glb_path, file_type="glb")
     except Exception:

@@ -551,6 +551,11 @@ def generate(
                     face_reducer = FaceReducer()
                     result = face_reducer(result, max_facenum=max_faces)
 
+                if result is not None:
+                    from text3d.utils.mesh_lod import prepare_mesh_topology
+
+                    result = prepare_mesh_topology(result)
+
                 if save_reference_image and from_image:
                     import shutil
 
