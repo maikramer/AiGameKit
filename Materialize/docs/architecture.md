@@ -13,7 +13,8 @@ O Materialize CLI segue uma arquitetura em camadas com processamento GPU via com
                          ▼
 ┌────────────────────────────────────────────────────────────────┐
 │                      Pipeline (pipeline.rs)                    │
-│  Orquestra: Diffuse → Height → Normal → Metallic              │
+│  Orquestra: Diffuse → Height → Normal → Metallic → Smoothness │
+│              → Edge → AO                                       │
 │  Gerencia dependências entre mapas (Height necessário p/ Normal) │
 └────────────────────────┬───────────────────────────────────────┘
                          │
@@ -28,10 +29,10 @@ O Materialize CLI segue uma arquitetura em camadas com processamento GPU via com
                          ▼
 ┌────────────────────────────────────────────────────────────────┐
 │                    Compute Shaders (WGSL)                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
-│  │  height     │  │   normal    │  │  metallic   │             │
-│  │  .wgsl      │  │   .wgsl     │  │  .wgsl      │             │
-│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ height   │ │  normal  │ │ metallic │ │smoothness│ │   edge   │ │    ao    │  │
+│  │  .wgsl   │ │  .wgsl   │ │  .wgsl   │ │  .wgsl   │ │  .wgsl   │ │  .wgsl   │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
 └────────────────────────┬───────────────────────────────────────┘
                          │
                          ▼
@@ -82,6 +83,24 @@ Diffuse Input
 ┌─────────────┐
 │  Metallic   │ ──► metallic_texture (R8Unorm)
 │  Shader     │     (usa diffuse original)
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│  Smoothness │ ──► smoothness_texture (R8Unorm)
+│  Shader     │     (usa diffuse + metallic)
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│    Edge     │ ──► edge_texture (R8Unorm)
+│   Shader    │     (usa normal como input)
+└─────────────┘
+      │
+      ▼
+┌─────────────┐
+│     AO      │ ──► ao_texture (R8Unorm)
+│   Shader    │     (usa height como input)
 └─────────────┘
 ```
 
@@ -175,24 +194,42 @@ GPU Texture (RGBA8Unorm)
 
 ```
 input_texture (RGBA8Unorm)
-         │
-         ▼
-    ┌─────────┐
-    │ Height  │ ──► height_texture (R32Float)
-    │ Shader  │
-    └────┬────┘
-         │
-         ▼
-    ┌─────────┐
-    │ Normal  │ ──► normal_texture (RGBA8Unorm)
-    │ Shader  │
-    └────┬────┘
-         │
-         ▼
-    ┌─────────┐
-    │Metallic │ ──► metallic_texture (R8Unorm)
-    │ Shader  │
-    └─────────┘
+          │
+          ▼
+     ┌─────────┐
+     │ Height  │ ──► height_texture (R32Float)
+     │ Shader  │
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │ Normal  │ ──► normal_texture (RGBA8Unorm)
+     │ Shader  │
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │Metallic │ ──► metallic_texture (R8Unorm)
+     │ Shader  │
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │Smoothness│ ──► smoothness_texture (R8Unorm)
+     │ Shader  │
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │  Edge   │ ──► edge_texture (R8Unorm)
+     │ Shader  │
+     └────┬────┘
+          │
+          ▼
+     ┌─────────┐
+     │   AO    │ ──► ao_texture (R8Unorm)
+     │ Shader  │
+     └─────────┘
 ```
 
 ### Download (GPU → CPU)
@@ -241,20 +278,20 @@ materialize-cli/
 │   └── (documentação)
 ├── src/
 │   ├── main.rs          # Entry point
-│   ├── lib.rs           # Public API (para usar como crate)
 │   ├── cli.rs           # CLI argument parsing
 │   ├── pipeline.rs      # Pipeline orquestração
 │   ├── gpu.rs           # GPU abstraction
 │   ├── io.rs            # Image I/O
+│   ├── preset.rs        # Material presets
 │   └── shaders/
-│       ├── height.wgsl   # Height map shader
-│       ├── normal.wgsl   # Normal map shader
-│       └── metallic.wgsl # Metallic map shader
-├── tests/
-│   ├── integration_tests.rs
-│   └── fixtures/         # Imagens de teste
-└── examples/
-    └── batch_convert.rs  # Exemplo de uso programático
+│       ├── height.wgsl
+│       ├── normal.wgsl
+│       ├── metallic.wgsl
+│       ├── smoothness.wgsl
+│       ├── edge.wgsl
+│       └── ao.wgsl
+└── tests/
+    └── integration_test.rs
 ```
 
 ## Dependências
@@ -263,17 +300,17 @@ materialize-cli/
 
 | Crate | Versão | Propósito |
 |-------|--------|-----------|
-| wgpu | 0.19 | Compute shaders GPU |
-| pollster | 0.3 | Runtime async blocking |
-| image | 0.24 | Decode/encode de imagens |
-| clap | 4.5 | CLI argument parsing |
+| wgpu | 29 | Compute shaders GPU |
+| pollster | 0.4 | Runtime async blocking |
+| image | 0.25 | Decode/encode de imagens |
+| clap | 4.6 | CLI argument parsing |
 | anyhow | 1.0 | Error handling |
 
 ### Dev
 
 | Crate | Versão | Propósito |
 |-------|--------|-----------|
-| tempfile | 3.10 | Arquivos temporários para testes |
+| tempfile | 3.27 | Arquivos temporários para testes |
 
 ## Decisões de Design
 

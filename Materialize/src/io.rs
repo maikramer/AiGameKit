@@ -115,54 +115,30 @@ pub fn normal_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     DynamicImage::ImageRgb8(img)
 }
 
+fn channel_r8_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
+    let img = image::GrayImage::from_raw(width, height, data.to_vec())
+        .expect("Invalid image dimensions for channel data");
+    DynamicImage::ImageLuma8(img)
+}
+
 /// Convert metallic map (R8) to grayscale image
 pub fn metallic_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
-    use image::{ImageBuffer, Luma};
-
-    let mut img = ImageBuffer::new(width, height);
-
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = (y * width + x) as usize;
-        *pixel = Luma([data[idx]]);
-    }
-
-    DynamicImage::ImageLuma8(img)
+    channel_r8_to_image(width, height, data)
 }
 
 /// Convert smoothness map (R8) to grayscale image
 pub fn smoothness_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
-    use image::{ImageBuffer, Luma};
-
-    let mut img = ImageBuffer::new(width, height);
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = (y * width + x) as usize;
-        *pixel = Luma([data[idx]]);
-    }
-    DynamicImage::ImageLuma8(img)
+    channel_r8_to_image(width, height, data)
 }
 
 /// Convert edge map (R8) to grayscale image
 pub fn edge_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
-    use image::{ImageBuffer, Luma};
-
-    let mut img = ImageBuffer::new(width, height);
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = (y * width + x) as usize;
-        *pixel = Luma([data[idx]]);
-    }
-    DynamicImage::ImageLuma8(img)
+    channel_r8_to_image(width, height, data)
 }
 
 /// Convert AO map (R8) to grayscale image
 pub fn ao_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
-    use image::{ImageBuffer, Luma};
-
-    let mut img = ImageBuffer::new(width, height);
-    for (x, y, pixel) in img.enumerate_pixels_mut() {
-        let idx = (y * width + x) as usize;
-        *pixel = Luma([data[idx]]);
-    }
-    DynamicImage::ImageLuma8(img)
+    channel_r8_to_image(width, height, data)
 }
 
 /// Map OutputFormat to ImageFormat
