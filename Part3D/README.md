@@ -45,6 +45,9 @@ python3 scripts/installer.py
 ```bash
 part3d --help
 part3d decompose mesh.glb -o parts.glb -v
+
+# Multi-GPU: dispatch DiT across GPUs (only affects the DiT stage)
+part3d decompose input.glb output/ --gpu-ids 0,1
 ```
 
 General install docs: [docs/INSTALLING.md](../docs/INSTALLING.md).

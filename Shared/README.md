@@ -13,7 +13,7 @@ Shared library for the **GameDev** monorepo — common code for Text2D, Text3D, 
 | `gamedev_shared.hf` | HF token (`get_hf_token`) and cache text for Rich (`hf_home_display_rich`) — no `huggingface_hub` dependency |
 | `gamedev_shared.skill_install` | Generic Cursor Agent Skill install by `tool_name` (e.g. `rigging3d` when `SKILL.md` exists) |
 | `gamedev_shared.gpu` | GPU/memory helpers (`format_bytes`, `get_gpu_info`, `clear_cuda_memory`, …) |
-| `gamedev_shared.profiler` | Spans com tempo, CPU, RSS e VRAM CUDA (`ProfilerSession`, `profile_span`; extra `[profiler]` → `psutil`) |
+| `gamedev_shared.profiler` | Spans com tempo, CPU, RSS e VRAM CUDA (`ProfilerSession`, `profile_span`, `cuda_memory_snapshot_all` for all GPUs; extra `[profiler]` → `psutil`) |
 | `gamedev_shared.subprocess_utils` | Subprocess execution (`resolve_binary`, `run_cmd`, `RunResult`) |
 | `gamedev_shared.env` | Constants and helpers for monorepo env vars (`TOOL_BINS`, `get_tool_bin`, …) |
 | `gamedev_shared.installer` | Base classes for installers (Python and Rust) |
@@ -21,6 +21,7 @@ Shared library for the **GameDev** monorepo — common code for Text2D, Text3D, 
 | `gamedev_shared.installer.unified` | Unified installer — installs any tool (`gamedev-install` CLI) |
 | `gamedev_shared.installer.text3d_extras` | Post-venv Text3D (nvdiffrast, `~/.config/text3d`, wrappers) |
 | `gamedev_shared.installer.part3d_extras` | PyG extras (torch-scatter, torch-cluster) and Part3D summary |
+| `gamedev_shared.multi_gpu` | Multi-GPU weight splitting planner (MultiGPUPlanner, DevicePlan, ModelArchitectureRegistry) — wraps accelerate for intelligent device placement |
 
 ## Usage example
 
@@ -38,6 +39,19 @@ from gamedev_shared.subprocess_utils import resolve_binary, run_cmd
 
 bin_path = resolve_binary("TEXT2D_BIN", "text2d")
 result = run_cmd([bin_path, "generate", "a cat"], verbose=True)
+```
+
+```python
+from gamedev_shared import MultiGPUPlanner
+
+planner = (
+    MultiGPUPlanner()
+    .for_model(model)
+    .with_gpus([0, 1])
+    .architecture("hunyuan3d")
+)
+plan = planner.plan()  # DevicePlan with device_map
+model = planner.apply()  # Model dispatched across GPUs
 ```
 
 ## Unified installer

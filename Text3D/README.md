@@ -115,6 +115,7 @@ See [`defaults.py`](src/text3d/defaults.py). Summary:
 | `--seed` | — | — |
 | `--preset` | — | `fast` / `balanced` / `hq` (replaces steps+octree+chunks) |
 | `--mc-level` | 0 | Hunyuan iso-surface (fine tuning) |
+| `--gpu-ids` | off | Multi-GPU weight split via accelerate (e.g. `0,1`) |
 
 ### Mesh LOD (post-process, sem GPU)
 

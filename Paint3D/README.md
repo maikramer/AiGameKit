@@ -48,6 +48,9 @@ paint3d texture mesh.glb -i ref.png --render-size 2048 --texture-size 4096
 # AI upscale (optional, requires: pip install spandrel)
 paint3d texture mesh.glb -i ref.png --upscale
 
+# Multi-GPU: split model weights across GPUs 0 and 1
+paint3d texture input.glb reference.png -o output.glb --gpu-ids 0,1
+
 # Diagnostics (rasterizer, GPU)
 paint3d doctor
 
@@ -65,6 +68,7 @@ paint3d models
 | `--render-size` | 1024 | Back-projection rasterization resolution (higher needs more VRAM) |
 | `--texture-size` | 2048 | UV atlas resolution (higher needs more VRAM) |
 | `--upscale` | off | AI upscale via Real-ESRGAN (CPU, requires `spandrel`) |
+| `--gpu-ids` | — | Comma-separated GPU IDs for multi-GPU weight split (e.g. `0,1`). Replaces `PAINT3D_MULTI_GPU` env var. |
 
 ## Python API
 
@@ -84,5 +88,7 @@ textured = apply_hunyuan_paint(mesh, "reference.png", bake_exp=6)
 - **spandrel** (optional — AI upscale on exported GLB)
 
 ## Documentation
+
+> **Deprecation:** `PAINT3D_MULTI_GPU` environment variable is deprecated. Use `--gpu-ids 0,1` instead.
 
 - [Rasterizer setup](docs/PAINT_SETUP.md)

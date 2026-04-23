@@ -122,7 +122,12 @@ gameassets batch --profile game.yaml --manifest manifest.csv --with-3d \
   --presets-local presets-local.yaml --log run.jsonl
 ```
 
-- Sem `--with-3d`, **nunca** corre `text3d`, mesmo com coluna `generate_3d=true` (apenas aviso).
+```bash
+# Multi-GPU batch: auto-detetar GPUs e dividir entre elas
+gameassets batch --profile game.yaml --manifest manifest.csv --gpu-ids 0,1
+```
+
+- `--with-3d`/`--no-3d` é um flag tri-state (auto-deteta da coluna `generate_3d` por defeito). O mesmo para `--with-rig`/`--no-rig`, `--with-parts`/`--no-parts`, `--with-animate`/`--no-animate` — auto-deteção do manifest quando não especificado. Omite o flag para auto-detetar, ou usa `--no-*` para desativar explicitamente.
 - Com **`--with-3d`** e **`--with-rig`**, linhas com **`generate_rig=true`** (e GLB do Text3D gerado com sucesso) chamam o **Rigging3D**; o GLB rigado aparece no log em **`rig_mesh_path`** (sufixo configurável em `rigging3d.output_suffix` no `game.yaml`). Requer **`RIGGING3D_BIN`** ou `rigging3d` no `PATH`.
 - Com **`--with-3d`**, **`--with-rig`** e **`--with-animate`**, após rig com sucesso o batch corre **`animator3d game-pack`** quando a linha pede animação: **`generate_animate=true`**, ou **`generate_rig=true`** com **`--with-rig`** (perfil Animator3D no bloco opcional **`animator3d`** no `game.yaml`, preset por defeito `humanoid`). Requer **`ANIMATOR3D_BIN`** ou `animator3d` no `PATH`. Ver [Animator3D após rig](../docs/ANIMATOR3D_AFTER_RIG.md).
 - Com **`--with-3d`** e **`--with-parts`**, linhas com **`generate_parts=true`** chamam o **Part3D** (`part3d decompose`) sobre o GLB do Text3D **antes** do rig: saídas **`parts_mesh_path`** (cena multi-parte) e **`segmented_mesh_path`** (malha com cores por parte), junto ao GLB principal; opções em **`part3d`** no `game.yaml`. Requer **`PART3D_BIN`** ou `part3d` no `PATH`.
@@ -132,6 +137,7 @@ gameassets batch --profile game.yaml --manifest manifest.csv --with-3d \
 - **Lock exclusivo:** na pasta do manifest é criado `.gameassets_batch.lock` (ficheiro `fcntl`) para **impedir dois batches na mesma pasta** — evita disputa de VRAM entre `text2d`/`text3d` em paralelo. Se o PID no lock já não existir, o lock é recuperado. `--skip-batch-lock` desliga (avançado).
 - **VRAM:** antes da execução, se `nvidia-smi` existir e a VRAM livre for inferior a ~1,8 GiB, mostra-se um aviso. `--skip-gpu-preflight` desliga o aviso.
 - **CUDA:** os subprocessos `text2d`/`text3d` recebem `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` se a variável ainda não estiver definida no ambiente (reduz falhas por fragmentação).
+- **Multi-GPU:** `--gpu-ids 0,1` auto-deteta as GPUs disponíveis via `nvidia-smi` (ou aceita IDs explícitos separados por vírgula) e propaga `CUDA_VISIBLE_DEVICES` e `--gpu-ids` a todos os sub-tools (text2d, text3d, paint3d, part3d, rigging3d, animator3d).
 
 ### Text2Sound (`generate_audio`)
 
@@ -188,6 +194,8 @@ Campos principais:
 | `rigging3d` | Bloco opcional (rig após Text3D): `output_suffix` (ex. `_rigged`), `root` (código do pacote Rigging3D), `python` (interprete). Usado com `batch --with-rig` e linhas `generate_rig=true` |
 | `animator3d` | Bloco opcional (**Animator3D** após rig): `preset` (`humanoid` \| `creature` \| `flying`, …). Usado com `batch --with-rig --with-animate` e linhas elegíveis para animação (ver bullets do batch). Requer `animator3d` no `PATH` ou `ANIMATOR3D_BIN` |
 | `part3d` | Bloco opcional (Part3D após Text3D, antes do rig): `steps`, `octree_resolution`, `num_chunks`, `segment_only`, `no_cpu_offload`, `verbose`, `parts_suffix`, `segmented_suffix`. Usado com `batch --with-parts` e linhas `generate_parts=true` |
+
+Todos os sub-tools também aceitam `--gpu-ids` propagado pelo comando batch.
 
 ### Hunyuan3D e qualidade
 

@@ -57,7 +57,7 @@ GameDev/
 
 - **Python**: most tools require **3.10+**; exceptions: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). See each folder’s README.
 - **VibeGame** uses **Bun** and **Node**-compatible tooling (see `VibeGame/package.json`); run `make test-vibegame` from the repo root after installing Bun.
-- **GPU** optional for Text2D; for Text3D/Paint3D/Part3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** and **Skymap2D** do not need a local GPU (Hugging Face API). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d).
+- **GPU** optional for Text2D; for Text3D/Paint3D/Part3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** and **Skymap2D** do not need a local GPU (Hugging Face API). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d). **Multi-GPU:** most GPU tools accept `--gpu-ids 0,1` to split model weights across multiple NVIDIA GPUs via accelerate dispatch.
 - **Model weights** (Hugging Face, etc.) have their own licenses — read the model cards before shipping or using in production.
 
 ## Quick start
@@ -235,6 +235,7 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `TEXT3D_EXPORT_ROTATION_X_DEG` | Text3D | X rotation when exporting mesh (degrees) |
 | `PAINT3D_ALLOW_SHARED_GPU` | Paint3D | Allow GPU sharing with other processes |
 | `PAINT3D_GPU_KILL_OTHERS` | Paint3D | Control termination of competing GPU processes |
+| `PAINT3D_MULTI_GPU` | Paint3D | **Deprecated** — use `--gpu-ids 0,1` instead. Legacy env var to split VAE across GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Inference tree root (default: bundled package) |
 | `RIGGING3D_PYTHON` | Rigging3D | Python interpreter for the inference environment |
 

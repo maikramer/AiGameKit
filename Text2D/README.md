@@ -10,7 +10,7 @@
 |--------|---------|--------|
 | Python | 3.10+   | Tested on 3.10–3.13 |
 | GPU    | Optional | NVIDIA + CUDA recommended for reasonable inference |
-| VRAM   | ~6 GB+ with `--low-vram` and 512² | Depends on checkpoint; modest GPUs: `--low-vram` |
+| VRAM   | ~6 GB+ with `--low-vram` and 512² | Depends on checkpoint; modest GPUs: `--low-vram`. Multi-GPU with `--gpu-ids` splits model across devices |
 | Disk   | ~8 GB   | HF cache + SDNQ weights (~2.5 GB on disk) |
 
 **Weight license:** the default is the SDNQ checkpoint [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic), which on Hugging Face is tied to **FLUX Non-Commercial** (`flux-non-commercial-license` in metadata), **distinct** from the official [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0** on the model card). For commercial use with less ambiguity, set `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` (more VRAM). Summary: [Licenses in the monorepo](../README.md).
@@ -83,6 +83,9 @@ text2d generate "a cat holding a sign that says hello world"
 text2d generate "sunset landscape" --width 768 --height 768 --steps 4 --guidance 1.0
 
 text2d generate "portrait" --low-vram -o mine.png --seed 42
+
+# Multi-GPU: split model across GPUs 0 and 1
+text2d generate "portrait" --gpu-ids 0,1 -o mine.png
 
 text2d generate "test" -v          # --verbose on this subcommand
 text2d -v generate "test"          # or verbose on the group

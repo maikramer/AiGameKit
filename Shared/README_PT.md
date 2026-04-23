@@ -20,6 +20,8 @@ Biblioteca partilhada do monorepo **GameDev** — código comum entre Text2D, Te
 | `gamedev_shared.installer.unified` | Instalador unificado — instala qualquer ferramenta (`gamedev-install` CLI) |
 | `gamedev_shared.installer.text3d_extras` | Pós-venv Text3D (nvdiffrast, `~/.config/text3d`, wrappers) |
 | `gamedev_shared.installer.part3d_extras` | Extras PyG (torch-scatter, torch-cluster) e resumo Part3D |
+| `gamedev_shared.multi_gpu` | Planeador de split multi-GPU (MultiGPUPlanner, DevicePlan, ModelArchitectureRegistry) — envolve o accelerate para colocação inteligente de dispositivos |
+| `gamedev_shared.profiler` | Spans com tempo, CPU, RSS e VRAM CUDA (`ProfilerSession`, `profile_span`, `cuda_memory_snapshot_all` para todas as GPUs; extra `[profiler]` → `psutil`) |
 
 ## Exemplo de uso
 
@@ -37,6 +39,19 @@ from gamedev_shared.subprocess_utils import resolve_binary, run_cmd
 
 bin_path = resolve_binary("TEXT2D_BIN", "text2d")
 result = run_cmd([bin_path, "generate", "um gato"], verbose=True)
+```
+
+```python
+from gamedev_shared import MultiGPUPlanner
+
+planner = (
+    MultiGPUPlanner()
+    .for_model(model)
+    .with_gpus([0, 1])
+    .architecture("hunyuan3d")
+)
+plan = planner.plan()  # DevicePlan com device_map
+model = planner.apply()  # Modelo despachado pelas GPUs
 ```
 
 ## Instalador unificado

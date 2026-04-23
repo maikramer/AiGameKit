@@ -1,4 +1,4 @@
-﻿# Text3D
+# Text3D
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
@@ -115,6 +115,7 @@ Ver [`defaults.py`](src/text3d/defaults.py). Resumo:
 | `--seed` | — | — |
 | `--preset` | — | `fast` / `balanced` / `hq` (substitui steps+octree+chunks) |
 | `--mc-level` | 0 | Iso-superfície Hunyuan (ajuste fino) |
+| `--gpu-ids` | off | Split multi-GPU via accelerate (ex. `0,1`) |
 
 ## Python
 

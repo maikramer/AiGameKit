@@ -92,6 +92,9 @@ rigging3d pipeline --input mesh.glb --output rigged.glb
 rigging3d skeleton --input mesh.glb --output skel.glb
 rigging3d skin    --input skel.glb --output skin.glb
 rigging3d merge   --source skin.glb --target mesh.glb --output rigged.glb
+
+# Multi-GPU: propagar CUDA_VISIBLE_DEVICES para subprocessos (skeleton, skin, merge)
+rigging3d --gpu-ids 0,1 pipeline --input mesh.glb --output rigged.glb
 ```
 
 Para apontar a outra árvore de inferência:
