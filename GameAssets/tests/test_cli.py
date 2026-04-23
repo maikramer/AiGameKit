@@ -223,7 +223,7 @@ def test_dream_dry_run_plan_json(runner: CliRunner, tmp_path: Path) -> None:
     assert "assets" in data
 
 
-def test_batch_skip_text2d_requires_with_3d(runner: CliRunner, tmp_path: Path) -> None:
+def test_batch_skip_text2d_requires_3d_generation(runner: CliRunner, tmp_path: Path) -> None:
     runner.invoke(cli, ["init", "--path", str(tmp_path)])
     r = runner.invoke(
         cli,

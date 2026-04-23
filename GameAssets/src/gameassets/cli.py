@@ -340,9 +340,24 @@ def _animator3d_output_path(base_output: Path) -> Path:
     return base_output.with_name(f"{base_output.stem}_animated.glb")
 
 
-def _row_wants_animate(row: ManifestRow, with_rig: bool) -> bool:
-    """Linha elegível para game-pack quando ``--with-animate`` está activo."""
-    return bool(row.generate_animate or (with_rig and row.generate_rig))
+def _row_wants_rig(row: ManifestRow, has_rigging_profile: bool) -> bool:
+    """Auto-detect rig eligibility: explicit column OR character kind + profile block."""
+    return bool(row.generate_rig or (has_rigging_profile and row.kind == "character"))
+
+
+def _row_wants_parts(row: ManifestRow, has_parts_profile: bool) -> bool:
+    """Auto-detect parts eligibility: explicit column OR profile block + 3D."""
+    return bool(row.generate_parts or (has_parts_profile and row.generate_3d))
+
+
+def _row_wants_audio(row: ManifestRow, has_audio_profile: bool) -> bool:
+    """Auto-detect audio eligibility: explicit column OR profile block."""
+    return bool(row.generate_audio or has_audio_profile)
+
+
+def _row_wants_animate(row: ManifestRow, with_rig: bool, has_rigging_profile: bool) -> bool:
+    """Linha elegível para game-pack quando animate está activo."""
+    return bool(row.generate_animate or (with_rig and _row_wants_rig(row, has_rigging_profile)))
 
 
 def _resolve_animator3d_bin() -> str | None:
@@ -385,10 +400,11 @@ def _rigging3d_pipeline_failed(
     child_env: dict[str, str],
     rigging3d_bin: str | None,
     with_rig: bool,
+    has_rigging_profile: bool = False,
     gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``rigging3d pipeline`` após Text3D (GLB base ou ``*_parts.glb`` se parts+rig). Devolve True se falhou."""
-    if not with_rig or not row.generate_rig or not rigging3d_bin:
+    if not with_rig or not _row_wants_rig(row, has_rigging_profile) or not rigging3d_bin:
         return False
     if not row.generate_3d:
         return False
@@ -455,11 +471,12 @@ def _animator3d_game_pack_failed(
     child_env: dict[str, str],
     with_animate: bool,
     with_rig: bool,
+    has_rigging_profile: bool = False,
     preset: str = "humanoid",
     gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``animator3d game-pack`` no GLB rigado. Devolve True se falhou."""
-    if not with_animate or not _row_wants_animate(row, with_rig):
+    if not with_animate or not _row_wants_animate(row, with_rig, has_rigging_profile):
         return False
     if not row.generate_3d:
         return False
@@ -591,10 +608,11 @@ def _part3d_pipeline_failed(
     child_env: dict[str, str],
     part3d_bin: str | None,
     with_parts: bool,
+    has_parts_profile: bool = False,
     gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``part3d decompose`` após GLB do Text3D. Devolve True se falhou."""
-    if not with_parts or not row.generate_parts or not part3d_bin:
+    if not with_parts or not _row_wants_parts(row, has_parts_profile) or not part3d_bin:
         return False
     if not row.generate_3d:
         return False
@@ -672,6 +690,8 @@ def _post_text3d_mesh_extras(
     with_rig: bool,
     with_animate: bool,
     animator3d_bin: str | None = None,
+    has_rigging_profile: bool = False,
+    has_parts_profile: bool = False,
     gpu_ids: list[int] | None = None,
 ) -> bool:
     """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
@@ -685,13 +705,20 @@ def _post_text3d_mesh_extras(
         child_env,
         part3d_bin,
         with_parts,
+        has_parts_profile=has_parts_profile,
         gpu_ids=gpu_ids,
     )
-    if not part3d_fail and with_parts and row.generate_parts and animator3d_bin and mesh_final.is_file():
+    if (
+        not part3d_fail
+        and with_parts
+        and _row_wants_parts(row, has_parts_profile)
+        and animator3d_bin
+        and mesh_final.is_file()
+    ):
         p3 = _part3d_profile_effective(profile, row)
         out_parts, _out_seg = _part3d_output_paths(mesh_final, p3)
         if out_parts.is_file():
-            _texture_project_pipeline_failed(
+            tp_fail = _texture_project_pipeline_failed(
                 animator3d_bin,
                 mesh_final,
                 out_parts,
@@ -700,6 +727,8 @@ def _post_text3d_mesh_extras(
                 child_env,
                 gpu_ids=gpu_ids,
             )
+            if tp_fail:
+                console.print(f"[yellow]texture-project falhou (não bloqueante)[/yellow] {row.id}")
     rig_mesh_in = mesh_final
     rec["rig_input_path"] = _path_for_log(rig_mesh_in, manifest_dir)
     rig_fail = _rigging3d_pipeline_failed(
@@ -711,6 +740,7 @@ def _post_text3d_mesh_extras(
         child_env,
         rigging3d_bin,
         with_rig,
+        has_rigging_profile=has_rigging_profile,
         gpu_ids=gpu_ids,
     )
     if part3d_fail or rig_fail:
@@ -729,6 +759,7 @@ def _post_text3d_mesh_extras(
         child_env,
         with_animate,
         with_rig,
+        has_rigging_profile=has_rigging_profile,
         gpu_ids=gpu_ids,
     )
 
@@ -1112,10 +1143,10 @@ def handoff_cmd(
     default=None,
 )
 @click.option(
-    "--with-3d/--no-3d",
-    "with_3d",
-    default=None,
-    help="Forçar 3D on/off (auto-detectado do manifest: generate_3d=true).",
+    "--no-3d",
+    is_flag=True,
+    default=False,
+    help="Skip 3D generation even if manifest has generate_3d=true.",
 )
 @click.option(
     "--dry-run",
@@ -1167,22 +1198,22 @@ def handoff_cmd(
     help="Não gerar áudio Text2Sound (ignora coluna generate_audio).",
 )
 @click.option(
-    "--with-rig/--no-rig",
-    "with_rig",
-    default=None,
-    help="Forçar rig on/off (auto-detectado: generate_rig=true no manifest).",
+    "--no-rig",
+    is_flag=True,
+    default=False,
+    help="Skip rigging even if rigging3d is configured.",
 )
 @click.option(
-    "--with-parts/--no-parts",
-    "with_parts",
-    default=None,
-    help="Forçar parts on/off (auto-detectado: generate_parts=true no manifest).",
+    "--no-parts",
+    is_flag=True,
+    default=False,
+    help="Skip part decomposition even if part3d is configured.",
 )
 @click.option(
-    "--with-animate/--no-animate",
-    "with_animate",
-    default=None,
-    help="Forçar animate on/off (auto-detectado: generate_animate ou generate_rig no manifest).",
+    "--no-animate",
+    is_flag=True,
+    default=False,
+    help="Skip animation even for rigged models.",
 )
 @click.option(
     "--profile-tools",
@@ -1211,7 +1242,7 @@ def batch_cmd(
     profile_path: Path,
     manifest_path: Path,
     presets_local: Path | None,
-    with_3d: bool | None,
+    no_3d: bool,
     dry_run: bool,
     dry_run_json: Path | None,
     fail_fast: bool,
@@ -1220,9 +1251,9 @@ def batch_cmd(
     skip_gpu_preflight: bool,
     skip_text2d: bool,
     skip_audio: bool,
-    with_rig: bool | None,
-    with_parts: bool | None,
-    with_animate: bool | None,
+    no_rig: bool,
+    no_parts: bool,
+    no_animate: bool,
     profile_tools: bool,
     profile_tools_log: Path | None,
     low_vram: bool,
@@ -1231,14 +1262,14 @@ def batch_cmd(
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
 
-    if with_3d is None:
-        with_3d = any(r.generate_3d for r in rows)
-    if with_rig is None:
-        with_rig = with_3d and any(r.generate_rig for r in rows)
-    if with_animate is None:
-        with_animate = with_rig and any(r.generate_animate or r.generate_rig for r in rows)
-    if with_parts is None:
-        with_parts = with_3d and any(r.generate_parts for r in rows)
+    has_rigging_profile = profile.rigging3d is not None
+    has_parts_profile = profile.part3d is not None
+    has_audio_profile = profile.text2sound is not None
+
+    with_3d = not no_3d and any(r.generate_3d for r in rows)
+    with_rig = not no_rig and with_3d and (any(r.generate_rig for r in rows) or has_rigging_profile)
+    with_parts = not no_parts and with_3d and (any(r.generate_parts for r in rows) or has_parts_profile)
+    with_animate = not no_animate and with_rig
 
     if low_vram:
         if profile.text2d is None:
@@ -1267,7 +1298,7 @@ def batch_cmd(
         raise click.ClickException("--dry-run-json requer --dry-run")
 
     if skip_text2d and not with_3d:
-        raise click.ClickException("--skip-text2d só é válido com geração 3D (PNGs já existem; só corre Text3D).")
+        raise click.ClickException("--skip-text2d requires 3D generation (generate_3d in manifest).")
 
     def _row_sources() -> tuple[bool, bool]:
         any_t2d = False
@@ -1313,15 +1344,15 @@ def batch_cmd(
                 raise click.ClickException("Perfil com text3d.texture requer paint3d no PATH ou PAINT3D_BIN.") from e
 
     rigging3d_bin: str | None = None
-    if with_rig and any(r.generate_rig for r in rows):
+    if with_rig and any(_row_wants_rig(r, has_rigging_profile) for r in rows):
         try:
             rigging3d_bin = resolve_binary("RIGGING3D_BIN", "rigging3d")
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
     animator3d_bin: str | None = None
-    if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows)) or (
-        with_parts and any(r.generate_parts for r in rows)
+    if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows)) or (
+        with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows)
     ):
         animator3d_bin = _resolve_animator3d_bin()
         if not animator3d_bin and with_animate:
@@ -1330,13 +1361,13 @@ def batch_cmd(
             )
 
     part3d_bin: str | None = None
-    if with_parts and any(r.generate_parts for r in rows):
+    if with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows):
         try:
             part3d_bin = resolve_binary("PART3D_BIN", "part3d")
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
-    any_audio_row = any(r.generate_audio for r in rows)
+    any_audio_row = any(_row_wants_audio(r, has_audio_profile) for r in rows)
     text2sound_bin: str | None = None
     if any_audio_row and not skip_audio:
         try:
@@ -1498,7 +1529,7 @@ def batch_cmd(
                             mbin_dr = "materialize"
                         margv = _materialize_diffuse_argv(mbin_dr, tt_line, img_path, maps_ph)
                         _dry_run_emit(dry_plan, phase=p1_title + " materialize", row_id=row.id, argv=margv)
-                if not skip_audio and text2sound_bin and row.generate_audio:
+                if not skip_audio and text2sound_bin and _row_wants_audio(row, has_audio_profile):
                     ts_line = _text2sound_profile_effective(profile)
                     audio_final = _audio_path_for_row_manifest(profile, manifest_dir, row)
                     prompt_a = build_audio_prompt(profile, preset, row)
@@ -1518,13 +1549,13 @@ def batch_cmd(
                     _dry_run_emit(dry_plan, phase=p1_title + " text2sound", row_id=row.id, argv=argv_au)
         else:
             _dry_run_header(dry_plan, "--- Text2D omitido (--skip-text2d) ---")
-            if not skip_audio and text2sound_bin and any(r.generate_audio for r in rows):
+            if not skip_audio and text2sound_bin and any(_row_wants_audio(r, has_audio_profile) for r in rows):
                 _dry_run_header(
                     dry_plan,
                     "--- Text2Sound (generate_audio; PNG em output_dir) ---",
                 )
                 for row in rows:
-                    if not row.generate_audio:
+                    if not _row_wants_audio(row, has_audio_profile):
                         continue
                     ts_line = _text2sound_profile_effective(profile)
                     audio_final = _audio_path_for_row_manifest(profile, manifest_dir, row)
@@ -1616,13 +1647,13 @@ def batch_cmd(
                         row_id=row.id,
                         argv=t3d_args,
                     )
-        if with_parts and part3d_bin and any(r.generate_3d and r.generate_parts for r in rows):
+        if with_parts and part3d_bin and any(r.generate_3d and _row_wants_parts(r, has_parts_profile) for r in rows):
             _dry_run_header(
                 dry_plan,
-                "--- Part3D (após GLB Text3D; generate_parts=true) ---",
+                "--- Part3D (após GLB Text3D; generate_parts=true ou part3d profile) ---",
             )
             for row in rows:
-                if not row.generate_3d or not row.generate_parts:
+                if not row.generate_3d or not _row_wants_parts(row, has_parts_profile):
                     continue
                 _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                 p3 = _part3d_profile_effective(profile, row)
@@ -1630,13 +1661,13 @@ def batch_cmd(
                 seed = _seed_for_row(profile, f"{row.id}:part3d")
                 pa = _part3d_decompose_argv(part3d_bin, mesh_path, out_p, out_s, p3, seed, gpu_ids=gpu_ids)
                 _dry_run_emit(dry_plan, phase="part3d", row_id=row.id, argv=pa)
-        if with_rig and rigging3d_bin and any(r.generate_3d and r.generate_rig for r in rows):
+        if with_rig and rigging3d_bin and any(r.generate_3d and _row_wants_rig(r, has_rigging_profile) for r in rows):
             _dry_run_header(
                 dry_plan,
                 "--- Rigging3D (entrada: *_parts.glb se parts+rig; senão GLB base) ---",
             )
             for row in rows:
-                if not row.generate_3d or not row.generate_rig:
+                if not row.generate_3d or not _row_wants_rig(row, has_rigging_profile):
                     continue
                 _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                 seed = _seed_for_row(profile, row.id)
@@ -1644,7 +1675,7 @@ def batch_cmd(
                 sfx = rg.output_suffix if rg else "_rigged"
                 rig_in = mesh_path
                 p3_row = _part3d_profile_effective(profile, row)
-                if with_parts and row.generate_parts and not p3_row.segment_only:
+                if with_parts and _row_wants_parts(row, has_parts_profile) and not p3_row.segment_only:
                     out_p, _ = _part3d_output_paths(mesh_path, p3_row)
                     rig_in = out_p
                 rig_out = _rigging3d_output_path(rig_in, sfx)
@@ -1659,20 +1690,24 @@ def batch_cmd(
                 if profile.text3d and profile.text3d.low_vram:
                     rg_args.append("--low-vram")
                 _dry_run_emit(dry_plan, phase="rigging3d", row_id=row.id, argv=rg_args)
-        if with_animate and animator3d_bin and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows):
+        if (
+            with_animate
+            and animator3d_bin
+            and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows)
+        ):
             _dry_run_header(
                 dry_plan,
-                "--- Animator3D game-pack (após rig; generate_animate ou generate_rig + --with-rig) ---",
+                "--- Animator3D game-pack (após rig; auto-detectado de manifest + game.yaml) ---",
             )
             for row in rows:
-                if not row.generate_3d or not _row_wants_animate(row, with_rig):
+                if not row.generate_3d or not _row_wants_animate(row, with_rig, has_rigging_profile):
                     continue
                 _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                 rg = profile.rigging3d
                 sfx = rg.output_suffix if rg else "_rigged"
                 rig_in = mesh_path
                 p3_row = _part3d_profile_effective(profile, row)
-                if with_parts and row.generate_parts and not p3_row.segment_only:
+                if with_parts and _row_wants_parts(row, has_parts_profile) and not p3_row.segment_only:
                     out_p, _ = _part3d_output_paths(mesh_path, p3_row)
                     rig_in = out_p
                 rig_out = _rigging3d_output_path(rig_in, sfx)
@@ -1817,7 +1852,9 @@ def batch_cmd(
                             continue
                         results.append(rec)
                         do_3d = with_3d and row.generate_3d
-                        defer_audio = row.generate_audio and not skip_audio and bool(text2sound_bin)
+                        defer_audio = (
+                            _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                        )
                         if do_3d and text3d_bin:
                             pending_3d_indices.append(idx)
                         else:
@@ -1829,7 +1866,9 @@ def batch_cmd(
                     if not row.generate_3d:
                         progress.update(task1, description=f"[cyan]{row.id}[/cyan] · skip 2D")
                         results.append(rec)
-                        defer_audio = row.generate_audio and not skip_audio and bool(text2sound_bin)
+                        defer_audio = (
+                            _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                        )
                         if not defer_audio:
                             append_log(rec)
                         progress.advance(task1)
@@ -1944,7 +1983,9 @@ def batch_cmd(
 
                         results.append(rec)
                         do_3d = with_3d and row.generate_3d
-                        defer_audio = row.generate_audio and not skip_audio and bool(text2sound_bin)
+                        defer_audio = (
+                            _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                        )
                         if do_3d and text3d_bin:
                             pending_3d_indices.append(idx)
                         else:
@@ -1954,8 +1995,12 @@ def batch_cmd(
                         shutil.rmtree(row_work, ignore_errors=True)
                         progress.advance(task1)
 
-                if not skip_audio and text2sound_bin and any(r.generate_audio for r in rows):
-                    au_indices = [i for i, r in enumerate(rows) if r.generate_audio and results[i]["status"] == "ok"]
+                if not skip_audio and text2sound_bin and any(_row_wants_audio(r, has_audio_profile) for r in rows):
+                    au_indices = [
+                        i
+                        for i, r in enumerate(rows)
+                        if _row_wants_audio(r, has_audio_profile) and results[i]["status"] == "ok"
+                    ]
                     if au_indices:
                         task_au = progress.add_task(
                             "[cyan]Fase 1b: Text2Sound[/cyan]",
@@ -2000,7 +2045,7 @@ def batch_cmd(
                             progress.advance(task_au)
 
                 for idx, row in enumerate(rows):
-                    if not row.generate_audio or skip_audio or not text2sound_bin:
+                    if not _row_wants_audio(row, has_audio_profile) or skip_audio or not text2sound_bin:
                         continue
                     if results[idx]["status"] != "ok":
                         continue
@@ -2043,6 +2088,8 @@ def batch_cmd(
                             with_rig,
                             with_animate,
                             animator3d_bin=animator3d_bin,
+                            has_rigging_profile=has_rigging_profile,
+                            has_parts_profile=has_parts_profile,
                             gpu_ids=gpu_ids,
                         ):
                             failures += 1
@@ -2229,6 +2276,8 @@ def batch_cmd(
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
+                                        has_rigging_profile=has_rigging_profile,
+                                        has_parts_profile=has_parts_profile,
                                         gpu_ids=gpu_ids,
                                     ):
                                         failures += 1
