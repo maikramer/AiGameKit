@@ -66,6 +66,8 @@ animator3d game-pack rigged.glb animated.glb --preset humanoid
 | `fire` | Fire breath |
 | `land` | Landing |
 | `roar` | Victory roar |
+| **Texture** | |
+| `texture-project` | Project textures from an original mesh onto Part3D part meshes (Cycles bake, diffuse color) |
 | **Batch** | |
 | `game-pack` | Generate all game animations in one command (`--preset humanoid` / `creature` / `flying`; optional `--clips` filter) |
 
@@ -85,6 +87,23 @@ animator3d game-pack dragon.glb dragon_anim.glb --preset flying
 animator3d game-pack monster.glb monster_anim.glb --preset creature
 animator3d game-pack hero.glb hero_anim.glb --preset humanoid --clips idle,walk,run
 ```
+
+### `texture-project`
+
+Projects textures from a source mesh onto Part3D decomposed parts using Blender Cycles bake (selected-to-active, diffuse color only). Useful after `part3d decompose` when parts lose the original texture.
+
+```bash
+animator3d texture-project original_textured.glb parts.glb -o parts_textured.glb
+animator3d texture-project original.glb parts.glb -o out.glb --resolution 2048 --margin 16
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o` / `--output` | `<input>_textured.glb` | Output GLB path |
+| `--resolution` | `1024` | Bake texture resolution (px) |
+| `--margin` | `16` | Bake margin in pixels (extends UV islands) |
+
+Automatically invoked by `gameassets batch` when Part3D is enabled and `animator3d` is available.
 
 ## Flow with Rigging3D
 

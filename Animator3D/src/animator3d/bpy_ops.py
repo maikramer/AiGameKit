@@ -2040,6 +2040,9 @@ def project_texture_to_parts(
             mat.use_nodes = True
 
         nodes = mat.node_tree.nodes
+        # Clean up any leftover __bake_target__ nodes from previous iterations
+        for old in [n for n in nodes if n.name == "__bake_target__"]:
+            nodes.remove(old)
         tex_node = nodes.new("ShaderNodeTexImage")
         tex_node.name = "__bake_target__"
         tex_node.image = bake_img

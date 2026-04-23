@@ -33,7 +33,7 @@ def test_export_glb_uses_actions_mode_for_multi_clip_exports(tmp_path: Path, mon
     assert calls[0]["export_format"] == "GLB"
     assert calls[0]["export_animations"] is True
     assert calls[0]["export_animation_mode"] == "ACTIONS"
-    assert calls[0]["export_all_influences"] is True
+    assert calls[0]["export_all_influences"] is False
 
 
 def test_get_pose_bone_preserves_quaternion_mode(monkeypatch) -> None:
