@@ -15,6 +15,10 @@ import torch
 import trimesh
 from PIL import Image
 
+from gamedev_shared.logging import Logger
+
+_logger = Logger("paint3d.upscale")
+
 _MODEL_REPO = "ai-forever/Real-ESRGAN"
 _MODEL_FILENAME = "RealESRGAN_x4.pth"
 _SCALE = 4
@@ -91,8 +95,8 @@ def upscale_image(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     if verbose:
-        print(f"[Upscale] device={device}, scale={scale}, tile={tile_size}, half={half}")
-        print(f"[Upscale] Input: {image.size[0]}x{image.size[1]}")
+        _logger.info(f"device={device}, scale={scale}, tile={tile_size}, half={half}")
+        _logger.info(f"Input: {image.size[0]}x{image.size[1]}")
 
     model = _load_model(device)
     if half and device != "cpu":
@@ -122,7 +126,7 @@ def upscale_image(
         result = result.resize((target_w, target_h), Image.LANCZOS)
 
     if verbose:
-        print(f"[Upscale] Output: {result.size[0]}x{result.size[1]}")
+        _logger.info(f"Output: {result.size[0]}x{result.size[1]}")
 
     del model, img_tensor, output
     if device != "cpu":
@@ -153,7 +157,7 @@ def _tiled_inference(
         for xi in range(tiles_x):
             idx = yi * tiles_x + xi + 1
             if verbose and idx % 4 == 1:
-                print(f"[Upscale] tile {idx}/{total}")
+                _logger.dim(f"tile {idx}/{total}")
 
             x_start = xi * tile_size
             y_start = yi * tile_size
@@ -207,7 +211,7 @@ def upscale_trimesh_texture(
     vis = mesh.visual
     if not hasattr(vis, "material"):
         if verbose:
-            print("[Upscale] Mesh sem material — nada a fazer.")
+            _logger.dim("Mesh sem material — nada a fazer.")
         return mesh
 
     mat = vis.material
@@ -220,11 +224,11 @@ def upscale_trimesh_texture(
 
     if texture is None:
         if verbose:
-            print("[Upscale] Mesh sem textura baseColor — nada a fazer.")
+            _logger.dim("Mesh sem textura baseColor — nada a fazer.")
         return mesh
 
     if verbose:
-        print(f"[Upscale] Textura original: {texture.size[0]}x{texture.size[1]}")
+        _logger.info(f"Textura original: {texture.size[0]}x{texture.size[1]}")
 
     upscaled = upscale_image(
         texture,
@@ -241,6 +245,6 @@ def upscale_trimesh_texture(
         mat.image = upscaled
 
     if verbose:
-        print(f"[Upscale] Textura upscaled: {upscaled.size[0]}x{upscaled.size[1]}")
+        _logger.info(f"Textura upscaled: {upscaled.size[0]}x{upscaled.size[1]}")
 
     return mesh

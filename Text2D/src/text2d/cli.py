@@ -134,10 +134,14 @@ def generate_cmd(
     gpu_ids_str: str | None,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
+    from gamedev_shared.gpu import warn_if_vram_occupied
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    if not cpu:
+        warn_if_vram_occupied()
 
     low = low_vram or cpu
     if low and width == 2048 and height == 2048:

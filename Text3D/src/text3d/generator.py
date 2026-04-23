@@ -15,12 +15,15 @@ import torch
 import trimesh
 from PIL import Image
 
+from gamedev_shared.logging import Logger
 from text2d.generator import KleinFluxGenerator
 
 from . import defaults as _defaults
 from .utils.bg_removal import BiRefNetBGRemover, crop_to_content
 from .utils.memory import clear_cuda_memory as _clear_cuda_cache
 from .utils.prompt_enhance import create_optimized_prompt as _optimize_prompt
+
+_logger = Logger("text3d")
 
 
 def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:
@@ -76,14 +79,14 @@ class HunyuanTextTo3DGenerator:
         self._hunyuan_pipeline: Any = None
 
         if self.verbose:
-            print(f"[Text3D] device={self.device} low_vram={self.low_vram_mode}")
-            print(f"[Text3D] Hunyuan: {self.hunyuan_model_id} / {self.hunyuan_subfolder}")
+            _logger.info(f"device={self.device} low_vram={self.low_vram_mode}")
+            _logger.info(f"Hunyuan: {self.hunyuan_model_id} / {self.hunyuan_subfolder}")
             if gpu_ids is not None:
-                print(f"[Text3D] Multi-GPU IDs: {gpu_ids}")
+                _logger.info(f"Multi-GPU IDs: {gpu_ids}")
 
     def _log(self, msg: str) -> None:
         if self.verbose:
-            print(f"[Text3D] {msg}")
+            _logger.info(msg)
 
     def _unload_hunyuan(self) -> None:
         if self._hunyuan_pipeline is None:

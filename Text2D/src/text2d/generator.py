@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import gc
 import os
-import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import torch
 from PIL import Image
+
+from gamedev_shared.logging import Logger
+
+_logger = Logger("text2d")
 
 HIGH_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32"
 LOW_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic"
@@ -91,7 +94,7 @@ class KleinFluxGenerator:
         self._multi_gpu: bool = False
 
         if self.verbose:
-            print(f"[Text2D] device={self.device} dtype={self.torch_dtype} model={self.model_id}")
+            _logger.info(f"device={self.device} dtype={self.torch_dtype} model={self.model_id}")
 
     def set_status_callback(self, fn: Callable[[str], None] | None) -> None:
         """Callback opcional (ex. Rich) para mensagens de fase durante o load."""
@@ -99,7 +102,7 @@ class KleinFluxGenerator:
 
     def _log(self, msg: str) -> None:
         if self.verbose:
-            print(f"[Text2D] {msg}")
+            _logger.info(msg)
 
     def _clear_cache(self) -> None:
         gc.collect()
@@ -110,7 +113,7 @@ class KleinFluxGenerator:
         if self._on_status:
             self._on_status(msg)
         else:
-            print(f"[Text2D] {msg}", file=sys.stderr, flush=True)
+            _logger.step(msg)
 
     def warmup(self) -> None:
         """Carrega o pipeline (download HF + pesos). Idempotente."""

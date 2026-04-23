@@ -16,6 +16,10 @@ import numpy as np
 import trimesh
 from PIL import Image
 
+from gamedev_shared.logging import Logger
+
+_logger = Logger("paint3d.smooth")
+
 
 def smooth_texture(
     image: Image.Image,
@@ -48,14 +52,14 @@ def smooth_texture(
     arr = np.array(image.convert("RGB"), dtype=np.uint8)
 
     if verbose:
-        print(
-            f"[Smooth] {arr.shape[1]}x{arr.shape[0]} · {passes} passes · d={diameter} sc={sigma_color} ss={sigma_space}"
+        _logger.info(
+            f"{arr.shape[1]}x{arr.shape[0]} · {passes} passes · d={diameter} sc={sigma_color} ss={sigma_space}"
         )
 
     for i in range(passes):
         arr = cv2.bilateralFilter(arr, diameter, sigma_color, sigma_space)
         if verbose and passes > 1:
-            print(f"[Smooth] pass {i + 1}/{passes}")
+            _logger.dim(f"pass {i + 1}/{passes}")
 
     return Image.fromarray(arr)
 
@@ -80,7 +84,7 @@ def smooth_trimesh_texture(
     vis = mesh.visual
     if not hasattr(vis, "material"):
         if verbose:
-            print("[Smooth] Mesh sem material — nada a fazer.")
+            _logger.dim("Mesh sem material — nada a fazer.")
         return mesh
 
     mat = vis.material
@@ -93,7 +97,7 @@ def smooth_trimesh_texture(
 
     if texture is None:
         if verbose:
-            print("[Smooth] Mesh sem textura baseColor — nada a fazer.")
+            _logger.dim("Mesh sem textura baseColor — nada a fazer.")
         return mesh
 
     smoothed = smooth_texture(

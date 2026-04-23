@@ -31,6 +31,7 @@ import torch
 import trimesh
 from tqdm import tqdm
 
+from gamedev_shared.logging import Logger
 from gamedev_shared.profiler import profile_span
 
 from . import defaults as _d
@@ -38,6 +39,8 @@ from .utils.autotune import autotune_generate, autotune_segment, get_max_parts_f
 from .utils.dit_quantization import load_dit_quantized, want_quantized_dit
 from .utils.flash_attn_shim import install_shim as _install_flash_shim
 from .utils.memory import clear_cuda_memory, format_bytes
+
+_logger = Logger("part3d")
 
 # Injetar shim de flash_attn ANTES de qualquer import do XPart/Sonata
 _install_flash_shim()
@@ -80,10 +83,7 @@ def _log_vram(prefix: str = "") -> None:
     if torch.cuda.is_available():
         alloc = torch.cuda.memory_allocated()
         reserved = torch.cuda.memory_reserved()
-        print(
-            f"  [VRAM] {prefix}alocado={format_bytes(alloc)} reservado={format_bytes(reserved)}",
-            flush=True,
-        )
+        _logger.dim(f"{prefix}alocado={format_bytes(alloc)} reservado={format_bytes(reserved)}")
 
 
 def _to_device(module: torch.nn.Module, device: str, dtype: torch.dtype | None = None) -> None:
@@ -162,7 +162,7 @@ class Part3DPipeline:
 
     def _log(self, msg: str) -> None:
         if self.verbose:
-            print(f"[Part3D] {msg}", flush=True)
+            _logger.info(msg)
 
     # ------------------------------------------------------------------
     # Loading

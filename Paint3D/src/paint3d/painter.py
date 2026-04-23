@@ -36,6 +36,7 @@ from diffusers.utils import logging as _diffusers_logging  # isort: skip  # noqa
 _diffusers_logging.set_verbosity(50)
 
 from gamedev_shared.gpu import clear_cuda_memory  # noqa: E402
+from gamedev_shared.logging import Logger  # noqa: E402
 from gamedev_shared.sdnq import is_available as _sdnq_available  # noqa: E402
 
 from . import defaults as _defaults  # noqa: E402
@@ -46,6 +47,8 @@ from .hy3d21_paths import (  # noqa: E402
     resolve_hy3dpaint_root,
 )
 from .utils.mesh_io import load_mesh_trimesh, save_glb  # noqa: E402
+
+_logger = Logger("paint3d")
 
 
 def _ensure_custom_rasterizer_shim() -> None:
@@ -136,8 +139,8 @@ def _apply_paint_multi_gpu(
         gpu1 = torch.cuda.get_device_name(gpu_ids[1])
         unet_mem = sum(p.numel() * p.element_size() for p in diff_pipe.unet.parameters()) / (1024**3)
         vae_mem = sum(p.numel() * p.element_size() for p in diff_pipe.vae.parameters()) / (1024**3)
-        print(
-            f"[Paint 2.1] Multi-GPU:\n"
+        _logger.info(
+            f"Multi-GPU:\n"
             f"  {primary_dev} ({gpu0}): UNet ({unet_mem:.2f} GB)\n"
             f"  {secondary_dev} ({gpu1}): VAE ({vae_mem:.2f} GB)"
         )
@@ -190,8 +193,8 @@ def apply_hunyuan_paint(
     from .hy3dpaint.textureGenPipeline import Hunyuan3DPaintConfig, Hunyuan3DPaintPipeline
 
     if verbose:
-        print(
-            f"[Paint 2.1] hy3dpaint={hy3dpaint_root}\n"
+        _logger.info(
+            f"hy3dpaint={hy3dpaint_root}\n"
             f"  repo={model_repo} weights_subfolder={subfolder} offload={paint_cpu_offload} "
             f"max_views={max_num_view} res={view_resolution}"
         )
@@ -208,9 +211,8 @@ def apply_hunyuan_paint(
         with profile_span("paint_prepare_io"):
             bounds_before = mesh.bounds.copy()
             if verbose:
-                print(
-                    "[Paint 2.1] input AABB (antes do pipeline): "
-                    f"min={bounds_before[0].tolist()} max={bounds_before[1].tolist()}"
+                _logger.info(
+                    f"input AABB (antes do pipeline): min={bounds_before[0].tolist()} max={bounds_before[1].tolist()}"
                 )
             save_glb(mesh, mesh_in)
 
@@ -264,13 +266,13 @@ def apply_hunyuan_paint(
                     from gamedev_shared.sdnq import quantize_model
 
                     if verbose:
-                        print("[Paint 2.1] Modo low-VRAM: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                        _logger.info("Modo low-VRAM: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
                 elif verbose:
                     if low_vram:
-                        print("[Paint 2.1] Modo low-VRAM: SDNQ indisponível — UNet em FP16/qint8")
+                        _logger.warn("Modo low-VRAM: SDNQ indisponível — UNet em FP16/qint8")
                     else:
-                        print("[Paint 2.1] Modo alta VRAM — UNet em FP16 (sem quantização)")
+                        _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
                 if pipe.vae is not None:
                     enable_vae_optimizations(
                         pipe.vae,
@@ -279,7 +281,7 @@ def apply_hunyuan_paint(
                         tile_sample_min_size=vae_tile_size,
                     )
                     if verbose and enable_vae_tiling:
-                        print(f"[Paint 2.1] VAE tiling ativo (tile_size={vae_tile_size})")
+                        _logger.info(f"VAE tiling ativo (tile_size={vae_tile_size})")
 
                 # --- Multi-GPU component placement (see _apply_paint_multi_gpu) ---
                 multi_gpu_env = os.environ.get("PAINT3D_MULTI_GPU", "").strip()
@@ -299,13 +301,13 @@ def apply_hunyuan_paint(
                 elif torch.cuda.device_count() >= 2 and not low_vram and verbose:
                     gpu0_name = torch.cuda.get_device_name(0)
                     gpu1_name = torch.cuda.get_device_name(1)
-                    print(
-                        f"[Paint 2.1] Multi-GPU disponível: cuda:0 ({gpu0_name}), "
+                    _logger.info(
+                        f"Multi-GPU disponível: cuda:0 ({gpu0_name}), "
                         f"cuda:1 ({gpu1_name}). Usar --gpu-ids 0,1 para activar."
                     )
             except Exception as e:
                 if verbose:
-                    print(f"[Paint 2.1] Aviso: otimizações opcionais falharam: {e}")
+                    _logger.warn(f"Aviso: otimizações opcionais falharam: {e}")
 
         with profile_span("paint_inference", sync_cuda=True):
             try:
