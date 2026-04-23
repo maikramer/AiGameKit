@@ -211,7 +211,7 @@ def _run_module(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
-    help="IDs de GPU visíveis aos subprocessos (ex: \"0,1\"). Propaga CUDA_VISIBLE_DEVICES.",
+    help='IDs de GPU visíveis aos subprocessos (ex: "0,1"). Propaga CUDA_VISIBLE_DEVICES.',
 )
 @click.pass_context
 def cli(
@@ -513,13 +513,18 @@ def pipeline_cmd(
         skin = wd / "_skin.glb"
         _low_vram_cleanup: list[Path] = []
         try:
+            skel_gpu = gpu_ids[:1] if gpu_ids and len(gpu_ids) >= 2 else gpu_ids
+            skin_gpu = gpu_ids[1:2] if gpu_ids and len(gpu_ids) >= 2 else gpu_ids
+            if gpu_ids and len(gpu_ids) >= 2:
+                console.print(f"[dim]Multi-GPU: skeleton→cuda:{gpu_ids[0]}, skin→cuda:{gpu_ids[1]}[/dim]")
+
             rc = _run_bash(
                 root,
                 "launch/inference/generate_skeleton.sh",
                 ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel), "--seed", str(seed)],
                 python_bin=py,
                 propagate_profile=do_profile,
-                gpu_ids=gpu_ids,
+                gpu_ids=skel_gpu,
             )
             if rc != 0 or not skel.is_file() or skel.stat().st_size == 0:
                 raise click.ClickException(
@@ -565,7 +570,7 @@ def pipeline_cmd(
                 ],
                 python_bin=py,
                 propagate_profile=do_profile,
-                gpu_ids=gpu_ids,
+                gpu_ids=skin_gpu,
             )
             if rc != 0 or not skin.is_file() or skin.stat().st_size == 0:
                 raise click.ClickException(
@@ -589,7 +594,7 @@ def pipeline_cmd(
                     f"--output={_shell_path(out)}",
                 ],
                 env=merge_env,
-                gpu_ids=gpu_ids,
+                gpu_ids=None,
             )
             if not out.is_file() or out.stat().st_size == 0:
                 raise click.ClickException(
