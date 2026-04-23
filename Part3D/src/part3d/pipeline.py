@@ -1,13 +1,18 @@
 """
 Part3D pipeline — Hunyuan3D-Part com CPU offloading sequencial para ~6 GB VRAM.
 
-Estratégia de memória:
+Estratégia de memória (single-GPU):
   1. Carregar P3-SAM na GPU, segmentar, mover para CPU
   2. Carregar Conditioner, codificar condições, mover para CPU
   3. Carregar DiT, denoising loop (pico VRAM ~3.5 GB em FP16), mover para CPU
   4. Carregar ShapeVAE, decode latents → mesh por parte, mover para CPU
 
 Cada fase limpa o cache CUDA entre transições.
+
+Multi-GPU (--gpu-ids 0,1):
+  - DiT: dispatchado em múltiplas GPUs via accelerate (MultiGPUPlanner)
+  - Conditioner + P3-SAM + ShapeVAE: residentes na GPU secundária (~1.4 GB)
+  - Sem CPU offloading — componentes ficam nas respetivas GPUs
 """
 
 from __future__ import annotations
@@ -148,6 +153,9 @@ class Part3DPipeline:
         self._dit_quantized = False
         self._gpu_ids = gpu_ids
         self._dit_multi_gpu = False
+        self._secondary_device: str | None = None
+        if gpu_ids is not None and len(gpu_ids) >= 2 and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
+            self._secondary_device = f"cuda:{gpu_ids[1]}"
 
         self._loaded = False
 
@@ -283,12 +291,7 @@ class Part3DPipeline:
             try:
                 from gamedev_shared.multi_gpu import MultiGPUPlanner
 
-                planner = (
-                    MultiGPUPlanner()
-                    .for_model(self._model)
-                    .with_gpus(self._gpu_ids)
-                    .architecture("dit")
-                )
+                planner = MultiGPUPlanner().for_model(self._model).with_gpus(self._gpu_ids).architecture("dit")
                 plan = planner.plan()
                 if plan.status == "multi_gpu":
                     self._model = planner.apply()
@@ -341,7 +344,13 @@ class Part3DPipeline:
 
         gc.collect()
         elapsed = time.time() - t0
-        self._log(f"Modelos carregados em {elapsed:.1f}s (CPU, FP16)")
+        if self._secondary_device:
+            self._log(
+                f"Modelos carregados em {elapsed:.1f}s (CPU, FP16) — "
+                f"multi-GPU: DiT em {self._gpu_ids}, auxiliares em {self._secondary_device}"
+            )
+        else:
+            self._log(f"Modelos carregados em {elapsed:.1f}s (CPU, FP16)")
         self._loaded = True
 
     # ------------------------------------------------------------------
@@ -389,10 +398,12 @@ class Part3DPipeline:
                 pn = 50000 if point_num is None else point_num
                 pr = 128 if prompt_num is None else prompt_num
 
+            # Escolher device para P3-SAM: secondary GPU se multi-GPU, senão primário
+            sam_device = self._secondary_device if self._secondary_device else self.device
             if self.device == "cuda" and self.cpu_offload:
-                self._log("  Movendo P3-SAM para GPU...")
+                self._log(f"  Movendo P3-SAM para {sam_device}...")
                 if hasattr(self._bbox_predictor, "to"):
-                    _to_device(self._bbox_predictor, self.device)
+                    _to_device(self._bbox_predictor, sam_device)
                 _log_vram("P3-SAM na GPU: ") if self.verbose else None
 
             aabb, face_ids, clean_mesh = self._bbox_predictor.predict_aabb(
@@ -404,7 +415,7 @@ class Part3DPipeline:
                 prompt_num=pr,
             )
 
-            if self.device == "cuda" and self.cpu_offload:
+            if self.device == "cuda" and self.cpu_offload and not self._secondary_device:
                 self._log("  Offloading P3-SAM para CPU...")
                 if hasattr(self._bbox_predictor, "to"):
                     _offload_to_cpu(self._bbox_predictor)
@@ -471,11 +482,12 @@ class Part3DPipeline:
             pass
 
         effective_cond_bs = min(cond_bs, total_parts)
+        cond_device = self._secondary_device if self._secondary_device else device
         self._log(
-            f"  [A] Conditioner → GPU (batch {batch_offset}-{batch_offset + num_parts}, "
+            f"  [A] Conditioner → {cond_device} (batch {batch_offset}-{batch_offset + num_parts}, "
             f"{num_parts} partes em lotes de {effective_cond_bs})..."
         )
-        _to_device(self._conditioner, device)
+        _to_device(self._conditioner, cond_device)
         if self.verbose:
             _log_vram("Conditioner na GPU: ")
 
@@ -486,8 +498,8 @@ class Part3DPipeline:
         failed_part_indices: list[int] = []
         for chunk_start in range(0, total_parts, effective_cond_bs):
             chunk_end = min(chunk_start + effective_cond_bs, total_parts)
-            ps = part_surf_flat[chunk_start:chunk_end].to(device=device, dtype=dtype)
-            os_ = obj_surf_flat[chunk_start:chunk_end].to(device=device, dtype=dtype)
+            ps = part_surf_flat[chunk_start:chunk_end].to(device=cond_device, dtype=dtype)
+            os_ = obj_surf_flat[chunk_start:chunk_end].to(device=cond_device, dtype=dtype)
             try:
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     c = self._conditioner(ps, os_)
@@ -530,7 +542,7 @@ class Part3DPipeline:
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
 
-        if self.cpu_offload:
+        if self.cpu_offload and not self._secondary_device:
             self._log("  [A] Offloading Conditioner para CPU...")
             _offload_to_cpu(self._conditioner)
             # AGRESSIVO: deletar conditioner temporariamente para garantir liberação de memória
@@ -628,7 +640,7 @@ class Part3DPipeline:
         latents_cpu = latents.cpu()
         del latents
 
-        if self.cpu_offload and dit_device == "cuda":
+        if self.cpu_offload and dit_device == "cuda" and not self._secondary_device:
             if not self._dit_multi_gpu:
                 self._log("  [B] Offloading DiT para CPU...")
                 _offload_to_cpu(self._model)
@@ -639,8 +651,9 @@ class Part3DPipeline:
                 gc.collect()
 
         # ---- FASE C: Decode latents → mesh (VAE na GPU) ----
-        self._log(f"  [C] ShapeVAE → GPU (decode {num_parts} partes)...")
-        _to_device(self._vae, device)
+        vae_device = self._secondary_device if self._secondary_device else device
+        self._log(f"  [C] ShapeVAE → {vae_device} (decode {num_parts} partes)...")
+        _to_device(self._vae, vae_device)
         if self.verbose:
             _log_vram("ShapeVAE na GPU: ")
 
@@ -648,7 +661,7 @@ class Part3DPipeline:
 
         for i in tqdm(range(num_parts), desc="Decode partes", mininterval=0.5):
             try:
-                part_latent = latents_cpu[i].unsqueeze(0).to(device=device, dtype=dtype)
+                part_latent = latents_cpu[i].unsqueeze(0).to(device=vae_device, dtype=dtype)
                 with torch.autocast("cuda", dtype=torch.bfloat16):
                     decoded = 1.0 / self._vae.scale_factor * part_latent
                     decoded = self._vae(decoded)
@@ -675,7 +688,7 @@ class Part3DPipeline:
                 self._log(f"    Parte {batch_offset + i} falhou: {e}")
 
         del latents_cpu
-        if self.cpu_offload:
+        if self.cpu_offload and not self._secondary_device:
             self._log("  [C] Offloading ShapeVAE para CPU...")
             _offload_to_cpu(self._vae)
 
