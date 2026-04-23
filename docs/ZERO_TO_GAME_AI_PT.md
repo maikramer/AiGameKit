@@ -12,7 +12,7 @@ Documento de apoio ao fluxo **conteúdo gerado + orquestração + agentes de có
 
 1. Instalar ferramentas ([INSTALLING_PT.md](INSTALLING_PT.md)).
 2. Definir `game.yaml` + `manifest.csv` + presets; opcionalmente `gameassets prompts` antes do batch.
-3. Correr `gameassets batch` com as flags necessárias (`--with-3d`, `--with-rig`, **`--with-animate`** para pipeline completo com Animator3D, áudio, etc.).
+3. Correr `gameassets batch` — pipeline stages (3D, rig, parts, animate) são auto-detetados do manifest + `game.yaml`.
 4. Opcional: validar GLBs com GameDevLab.
 5. Copiar outputs para `public/assets/…` (ou `gameassets handoff --public-dir …`) e usar `loadGltfToScene`, `<GLTFLoader url="…">`, ou os exemplos [simple-rpg](../VibeGame/examples/simple-rpg/) (completo) / [hello-world](../VibeGame/examples/hello-world/) (mínimo).
 6. Iterar **código e XML** com o assistente, usando `llms.txt` para VibeGame e AGENTS.md para o resto do repositório.
@@ -35,8 +35,8 @@ O preset `humanoid` cria cinco clips: **BreatheIdle**, **Walk**, **Run**, **Jump
 
 ### Integração GameAssets
 
-- **`gameassets batch --with-3d --with-rig --with-animate`** corre o pipeline completo, incluindo **Animator3D** game-pack quando o manifesto pede animação (após rig).
-- **`gameassets dream`** anima personagens automaticamente: o batch emitido inclui **`--with-animate`** juntamente com `--with-3d` e `--with-rig`.
+- **`gameassets batch`** auto-deteta o pipeline completo a partir do manifest + perfil, incluindo **Animator3D** game-pack quando o manifesto pede animação (após rig).
+- **`gameassets dream`** anima personagens automaticamente: o batch usa auto-deteção a partir do manifest + perfil.
 
 ### VibeGame: personagem animada declarativa
 
@@ -87,7 +87,7 @@ Novo comando que recebe uma **descrição em linguagem natural**, chama um **LLM
 gameassets dream "idle clicker de fazenda, estilo pixel art" --dry-run
 ```
 
-Fases: Plan (LLM) → Emit (yaml/csv/xml/ts) → Batch (`--with-3d --with-rig --with-animate`) → Sky → Handoff → Scaffold. `--dry-run` gera ficheiros sem GPU. Providers: `openai`, `huggingface`, `stdin`.
+Fases: Plan (LLM) → Emit (yaml/csv/xml/ts) → Batch (auto-deteção 3D/rig/animate) → Sky → Handoff → Scaffold. `--dry-run` gera ficheiros sem GPU. Providers: `openai`, `huggingface`, `stdin`.
 
 Código: `GameAssets/src/gameassets/dream/`.
 

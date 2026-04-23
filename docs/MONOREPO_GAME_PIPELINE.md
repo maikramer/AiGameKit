@@ -52,13 +52,13 @@ For the runtime to load content **without** a custom CMS:
 
 1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `vibegame`, etc.
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
-3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv --with-3d`, adding **`--with-rig`** for Rigging3D when `generate_rig=true`, **`--with-animate`** for **Animator3D `game-pack`** after rig (requires `animator3d` on `PATH` or `ANIMATOR3D_BIN`; optional `animator3d` preset in `game.yaml`), **`--with-parts`** and audio columns as needed.
+3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. Pipeline stages (3D, rig, parts, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Add `--no-rig` / `--no-animate` / `--no-parts` to opt out of specific stages.
 4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) for a full handoff layout).
 5. **Run** the web app: `bun dev` / `npm run dev`; load GLBs as above. **Skymap2D** equirect PNG/JPG: `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
 
-**Animator3D** can run **inside** `gameassets batch` (`--with-animate`) or **standalone** on a rigged GLB — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
+**Animator3D** can run **inside** `gameassets batch` (auto-detected when `animator3d` profile block exists) or **standalone** on a rigged GLB — see [ANIMATOR3D_AFTER_RIG.md](ANIMATOR3D_AFTER_RIG.md).
 
-**Idea-to-scaffold:** **`gameassets dream`** plans assets + scene, runs batch (including `--with-animate` when the plan includes rigged characters), skymap, handoff, and emits a Vite + VibeGame project — details in [ZERO_TO_GAME_AI.md](ZERO_TO_GAME_AI.md).
+**Idea-to-scaffold:** **`gameassets dream`** plans assets + scene, runs batch (auto-detecting rig + animate from the plan), skymap, handoff, and emits a Vite + VibeGame project — details in [ZERO_TO_GAME_AI.md](ZERO_TO_GAME_AI.md).
 
 ## 5. Synergy limits (honest scope)
 

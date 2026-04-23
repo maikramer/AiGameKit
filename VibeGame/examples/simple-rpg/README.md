@@ -65,7 +65,7 @@ From the `sample-gameassets/` directory:
 cd VibeGame/examples/simple-rpg/sample-gameassets
 
 # 2D images + 3D meshes + PBR textures + rigging
-gameassets batch --profile game.yaml --manifest manifest.csv --with-3d --with-rig
+gameassets batch --profile game.yaml --manifest manifest.csv
 
 # Sky (separate CLI) — escrever directamente em public/assets/sky/
 skymap2d generate "bright blue sky with soft clouds over green plains, equirectangular 360" -o ../public/assets/sky/sky.png

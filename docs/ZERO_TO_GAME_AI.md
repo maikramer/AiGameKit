@@ -41,7 +41,7 @@ None of these replaces the others: **prompts become files**, **files become URLs
 
 1. **Install** the CLIs you need from the repo root ([INSTALLING.md](INSTALLING.md)): at minimum `gameassets`, tools referenced by your profile, and optionally `./install.sh vibegame` for the scaffold CLI.
 2. **Author style and scope** in `game.yaml` + `manifest.csv` + presets; use `gameassets prompts` to review prompts before spending GPU/API quota.
-3. **Run batch**: `gameassets batch --profile … --manifest …` with `--with-3d`, and optionally `--with-rig`, **`--with-animate`** (full character pipeline: rig + Animator3D game-pack), `--with-parts`, audio columns as needed ([GameAssets README](../GameAssets/README.md)).
+3. **Run batch**: `gameassets batch --profile … --manifest …`. Pipeline stages (3D, rig, parts, animate) are auto-detected from manifest columns and `game.yaml` profile blocks ([GameAssets README](../GameAssets/README.md)).
 4. **Validate assets**: optional `gamedev-lab debug …` on critical GLBs ([GameDevLab](../GameDevLab/)).
 5. **Hand off to the web**: copy GLBs/audio into `public/assets/…` per [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md); use [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) as a full template or [VibeGame/examples/hello-world](../VibeGame/examples/hello-world/) for a minimal app.
 6. **Iterate with an agent**: keep [AGENTS.md](../AGENTS.md) in context for monorepo conventions; for VibeGame-specific XML/API, attach or resolve [VibeGame/llms.txt](../VibeGame/llms.txt) (built for LLM system prompts). For GameAssets-only tasks, the [GameAssets skill](../GameAssets/src/gameassets/cursor_skill/SKILL.md) describes when to use which flags and env vars.
@@ -64,8 +64,8 @@ The `humanoid` preset creates five clips: **BreatheIdle**, **Walk**, **Run**, **
 
 ### GameAssets integration
 
-- **`gameassets batch --with-3d --with-rig --with-animate`** runs the full pipeline, including **Animator3D** game-pack when the manifest marks rows for animation (after rig).
-- **`gameassets dream`** auto-animates characters: the emitted batch step includes **`--with-animate`** alongside `--with-3d` and `--with-rig`.
+- **`gameassets batch`** auto-detects the full pipeline from manifest + profile, including **Animator3D** game-pack when the manifest marks rows for animation (after rig).
+- **`gameassets dream`** auto-animates characters: the batch step uses auto-detection from manifest + profile.
 
 ### VibeGame: declarative animated player
 
@@ -127,7 +127,7 @@ gameassets dream "platformer 3D com cristais num mundo de nuvens, estilo lowpoly
 |-------|--------------|
 | 1. Plan | LLM generates `dream_plan.json` (title, genre, assets, scene placements, sky prompt) |
 | 2. Emit | Converts plan into `game.yaml`, `manifest.csv`, `world.xml`, `main.ts`, `index.html` |
-| 3. Batch | `gameassets batch --with-3d --with-rig --with-animate` on the emitted profile/manifest |
+| 3. Batch | `gameassets batch` on the emitted profile/manifest (auto-detects 3D, rig, animate) |
 | 4. Sky | `skymap2d generate` from the sky prompt (equirect PNG) |
 | 5. Handoff | `gameassets handoff --public-dir <project>/public` |
 | 6. Scaffold | Creates `package.json`, `vite.config.ts`, copies emitted `main.ts` + `index.html` |

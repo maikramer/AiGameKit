@@ -19,7 +19,7 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**Text3D**](Text3D/) | Pipeline **text-to-3D**: imagem 2D (via Text2D) → mesh GLB com Hunyuan3D-2.1 (SDNQ INT4). Textura via Paint3D (opcional). |
 | [**Part3D**](Part3D/) | **Partes semânticas 3D**: Hunyuan3D-Part (segmentação / partes em mesh). |
 | [**Paint3D**](Paint3D/) | **Texturização 3D**: Hunyuan3D-Paint 2.1 (PBR multivista) + Materialize PBR + Upscale IA (Real-ESRGAN). Standalone ou via Text3D. |
-| [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: perfil + CSV → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (`--with-animate`), **`gameassets dream`** (ideia → scaffold Vite). |
+| [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: perfil + CSV → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
 | [**Texture2D**](Texture2D/) | **Texturas 2D seamless** (tileable) via HF Inference API — sem GPU local. |
 | [**Skymap2D**](Skymap2D/) | **Skymaps equirectangular 360°** via HF Inference API — skyboxes para game dev, sem GPU local. |
 | [**Text2Sound**](Text2Sound/) | CLI **text-to-audio** com Stable Audio Open 1.0: áudio estéreo 44.1 kHz, presets para game dev. |

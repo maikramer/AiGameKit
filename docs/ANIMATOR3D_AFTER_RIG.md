@@ -1,12 +1,13 @@
 # Animator3D after Rigging3D (animation pass)
 
-[Rigging3D](../Rigging3D/) produces a **rigged GLB** from the GameAssets batch when you use **`--with-rig`**. [Animator3D](../Animator3D/) runs **Blender (bpy)** to bake procedural animation clips into a GLB (e.g. idle, walk, run).
+[Rigging3D](../Rigging3D/) produces a **rigged GLB** from the GameAssets batch when rigging is enabled (via `rigging3d` profile block or `generate_rig=true`). [Animator3D](../Animator3D/) runs **Blender (bpy)** to bake procedural animation clips into a GLB (e.g. idle, walk, run).
 
 ## Option A — Integrated in `gameassets batch` (recommended)
 
 1. Install **Animator3D** so **`animator3d`** is on `PATH`, or set **`ANIMATOR3D_BIN`**.
-2. Run **`gameassets batch --with-3d --with-rig --with-animate`**.
-3. For each row where animation should run after rig, set **`generate_animate=true`** in the manifest (or rely on the default that ties animation to rigged rows when `--with-rig` is used — see [GameAssets README](../GameAssets/README.md)).
+2. Run **`gameassets batch --profile game.yaml --manifest manifest.csv`**. Animation is auto-detected from the manifest and profile.
+3. For each row where animation should run after rig, set **`generate_animate=true`** in the manifest (or rely on auto-detection: rigged rows animate when the `animator3d` profile block exists — see [GameAssets README](../GameAssets/README.md)).
+4. When Part3D is enabled, Animator3D also runs **`texture-project`** to bake the original texture onto Part3D part meshes automatically.
 
 Optional **`animator3d`** block in **`game.yaml`** (e.g. `preset: humanoid`) selects the **`animator3d game-pack`** preset.
 
@@ -31,6 +32,16 @@ Inspect bones if needed:
 ```bash
 animator3d inspect hero_rigged.glb --json-out
 ```
+
+### Texture projection (Part3D parts)
+
+After [Part3D](../Part3D/) decomposition, parts lose the original texture. `texture-project` bakes it back via Cycles:
+
+```bash
+animator3d texture-project hero_textured.glb hero_parts.glb -o hero_parts_textured.glb
+```
+
+This step is automatic when using `gameassets batch` with Part3D enabled and `animator3d` available.
 
 ## Handoff to VibeGame
 
