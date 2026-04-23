@@ -1170,10 +1170,7 @@ def handoff_cmd(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
-    help=(
-        "IDs de GPU (ex.: '0,1'). "
-        "Defeito: auto-deteta todas as GPUs via nvidia-smi."
-    ),
+    help=("IDs de GPU (ex.: '0,1'). Defeito: auto-deteta todas as GPUs via nvidia-smi."),
 )
 def batch_cmd(
     profile_path: Path,
@@ -1204,9 +1201,7 @@ def batch_cmd(
     if with_rig is None:
         with_rig = with_3d and any(r.generate_rig for r in rows)
     if with_animate is None:
-        with_animate = with_rig and any(
-            r.generate_animate or r.generate_rig for r in rows
-        )
+        with_animate = with_rig and any(r.generate_animate or r.generate_rig for r in rows)
     if with_parts is None:
         with_parts = with_3d and any(r.generate_parts for r in rows)
 
@@ -1229,9 +1224,7 @@ def batch_cmd(
         try:
             gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")]
         except ValueError as _err:
-            raise click.ClickException(
-                "--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')"
-            ) from _err
+            raise click.ClickException("--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')") from _err
     else:
         gpu_ids = detect_gpu_ids()
 
@@ -1700,8 +1693,8 @@ def batch_cmd(
                     "se ainda não estiver no ambiente.",
                     title="Aviso GPU",
                     border_style="yellow",
+                )
             )
-        )
 
     child_env = subprocess_gpu_env(gpu_ids=gpu_ids)
     if profile_tools:
@@ -2457,10 +2450,7 @@ def _text3d_argv(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
-    help=(
-        "IDs de GPU para multi-GPU (ex.: '0,1'). "
-        "Propaga --gpu-ids e CUDA_VISIBLE_DEVICES aos subprocessos."
-    ),
+    help=("IDs de GPU para multi-GPU (ex.: '0,1'). Propaga --gpu-ids e CUDA_VISIBLE_DEVICES aos subprocessos."),
 )
 def resume_cmd(
     profile_path: Path,
@@ -2486,9 +2476,7 @@ def resume_cmd(
         try:
             gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")]
         except ValueError as _err:
-            raise click.ClickException(
-                "--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')"
-            ) from _err
+            raise click.ClickException("--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')") from _err
 
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
     manifest_dir = manifest_path.resolve().parent
