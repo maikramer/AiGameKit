@@ -1,0 +1,2 @@
+# Raster data — auto-downloaded on first run if stats cache is missing
+src/terrain3d/vendor/data/global/*.tif
