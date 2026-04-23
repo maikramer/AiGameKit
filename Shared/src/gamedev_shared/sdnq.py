@@ -105,6 +105,52 @@ def is_available() -> bool:
         return False
 
 
+def patch_lora_shape_calculation() -> None:
+    """Monkey-patch diffusers' ``_calculate_module_shape`` to handle SDNQ weights.
+
+    SDNQ stores quantized weights as 1D uint8 tensors with a ``scale`` attribute
+    on the parent module. Without this patch, ``load_lora_weights`` fails with
+    ``ValueError: not enough values to unpack (expected 2, got 1)``.
+
+    Idempotent — safe to call multiple times.
+    """
+    try:
+        from diffusers.loaders.lora_pipeline import FluxLoraLoaderMixin, get_submodule_by_name
+    except ImportError:
+        return
+
+    if getattr(FluxLoraLoaderMixin, "_sdnq_patched", False):
+        return
+
+    import torch
+
+    def _sdnq_weight_shape(weight: Any, module: Any) -> Any:
+        if hasattr(module, "scale") and weight.ndim == 1 and weight.dtype == torch.uint8:
+            out_features = module.scale.shape[0]
+            in_features = weight.shape[0] * 2 // out_features
+            return (out_features, in_features)
+        if weight.__class__.__name__ == "Params4bit":
+            return weight.quant_state.shape
+        if weight.__class__.__name__ == "GGUFParameter":
+            return weight.quant_shape
+        return weight.shape
+
+    @staticmethod  # type: ignore[misc]
+    def _patched(model: Any, base_module: Any = None, base_weight_param_name: str | None = None) -> Any:
+        if base_module is not None:
+            return _sdnq_weight_shape(base_module.weight, base_module)
+        if base_weight_param_name is not None:
+            if not base_weight_param_name.endswith(".weight"):
+                raise ValueError(f"Invalid {base_weight_param_name=}")
+            module_path = base_weight_param_name.rsplit(".weight", 1)[0]
+            submod = get_submodule_by_name(model, module_path)
+            return _sdnq_weight_shape(submod.weight, submod)
+        raise ValueError("Either base_module or base_weight_param_name must be provided.")
+
+    FluxLoraLoaderMixin._calculate_module_shape = _patched
+    FluxLoraLoaderMixin._sdnq_patched = True
+
+
 def _check_cuda() -> bool:
     """Check if CUDA is available (lazy import)."""
     try:
