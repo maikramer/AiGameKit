@@ -115,7 +115,8 @@ class multiviewDiffusionNet:
                     self._unet_quantized = True
                     print(f"[Paint 2.1] UNet quantizado com {explicit_quant_type}.")
                 else:
-                    print(f"[Paint 2.1] Quantização explícita não suportada neste pipeline: {explicit_quant_type}")
+                    if explicit_quant_type not in ("none", None):
+                        print(f"[Paint 2.1] Quantização explícita não suportada neste pipeline: {explicit_quant_type}")
             except Exception as e:
                 print(f"[Paint 2.1] AVISO: quantização explícita {explicit_quant_type} falhou ({e}); UNet original.")
 

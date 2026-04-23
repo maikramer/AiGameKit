@@ -12,6 +12,7 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import contextlib
 import math
 import os
 
@@ -308,7 +309,8 @@ def convert_obj_to_glb(
             _select_mesh_objects()
             _merge_vertices_if_needed(merge_vertices)
             _apply_shading(shade_type, auto_smooth_angle)
-            bpy.ops.export_scene.gltf(filepath=glb_path, use_active_scene=True)
+            with contextlib.redirect_stdout(StringIO()):
+                bpy.ops.export_scene.gltf(filepath=glb_path, use_active_scene=True)
             return True
         except Exception:
             pass

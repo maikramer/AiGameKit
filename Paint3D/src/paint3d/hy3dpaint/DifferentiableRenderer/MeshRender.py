@@ -12,6 +12,7 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import logging
 from dataclasses import dataclass
 from enum import Enum
 
@@ -29,10 +30,12 @@ from .camera_utils import (
     transform_pos,
 )
 
+_logger = logging.getLogger(__name__)
+
 try:
     from .mesh_utils import load_mesh, save_mesh
-except:
-    print("Bpy IO CAN NOT BE Imported!!!")
+except Exception:
+    _logger.debug("mesh_utils (bpy IO) not available")
 
 try:
     from .mesh_inpaint_processor import meshVerticeInpaint  # , meshVerticeColor
@@ -40,7 +43,7 @@ try:
     _HAS_VERTEX_INPAINT = True
 except Exception:
     _HAS_VERTEX_INPAINT = False
-    print("InPaint Function CAN NOT BE Imported!!!")
+    _logger.debug("mesh_inpaint_processor not available — using OpenCV fallback")
 
 
 class RenderMode(Enum):

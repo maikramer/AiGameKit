@@ -205,6 +205,14 @@ def texture(
     )
     os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
+    # Resolve defaults BEFORE building the config panel (avoids "None vistas @ Nonepx")
+    if max_views is None:
+        max_views = _defaults.LOW_VRAM_MAX_VIEWS if low_vram_mode else _defaults.DEFAULT_PAINT_MAX_VIEWS
+    if view_resolution is None:
+        view_resolution = (
+            _defaults.LOW_VRAM_VIEW_RESOLUTION if low_vram_mode else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+        )
+
     rs_label = render_size or ("1024 (low-vram)" if low_vram_mode else "2048")
     ts_label = texture_size or ("2048 (low-vram)" if low_vram_mode else "4096")
 
@@ -235,11 +243,6 @@ def texture(
             parsed_gpu_ids = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
         except ValueError as exc:
             raise click.ClickException(f"--gpu-ids inválido: '{gpu_ids}'. Esperado: 0,1") from exc
-
-    if max_views is None and not low_vram_mode:
-        max_views = _defaults.DEFAULT_PAINT_MAX_VIEWS
-    if view_resolution is None and not low_vram_mode:
-        view_resolution = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
 
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
@@ -361,7 +364,7 @@ def texture(
     default=0.55,
     show_default=True,
     type=float,
-    help="Quanto o ruído modula o tom [0–1] (perlin).",
+    help="Quanto o ruído modula o tom [0-1] (perlin).",
 )
 @click.option(
     "--preserve-origin/--no-preserve-origin",

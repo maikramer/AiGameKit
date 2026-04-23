@@ -425,7 +425,7 @@ def merge(
     Merge skin and bone into original file.
     '''
     if group_per_vertex is None:
-        group_per_vertex = int(os.environ.get("RIGGING3D_GROUPS_PER_VERTEX", "8"))
+        group_per_vertex = int(os.environ.get("RIGGING3D_GROUPS_PER_VERTEX", "4"))
     if smooth_iterations is None:
         smooth_iterations = int(os.environ.get("RIGGING3D_SMOOTH_ITERATIONS", "2"))
 
@@ -462,8 +462,9 @@ def merge(
         elif output_path.endswith(".glb") or output_path.endswith(".gltf"):
             bpy.ops.export_scene.gltf(
                 filepath=output_path,
-                export_draco_mesh_compression_enable=False,
-                export_all_influences=True,
+                export_draco_mesh_compression_enable=True,
+                export_draco_mesh_compression_level=6,
+                export_all_influences=False,
             )
         elif output_path.endswith(".dae"):
             bpy.ops.wm.collada_export(filepath=output_path)

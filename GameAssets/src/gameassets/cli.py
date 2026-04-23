@@ -661,12 +661,7 @@ def _post_text3d_mesh_extras(
         gpu_ids=gpu_ids,
     )
     rig_mesh_in = mesh_final
-    if not part3d_fail and with_rig and row.generate_rig and with_parts and row.generate_parts:
-        p3 = _part3d_profile_effective(profile, row)
-        out_parts, _out_seg = _part3d_output_paths(mesh_final, p3)
-        if not p3.segment_only and out_parts.is_file():
-            rig_mesh_in = out_parts
-            rec["rig_input_path"] = _path_for_log(rig_mesh_in, manifest_dir)
+    rec["rig_input_path"] = _path_for_log(rig_mesh_in, manifest_dir)
     rig_fail = _rigging3d_pipeline_failed(
         profile,
         row,

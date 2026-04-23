@@ -1955,7 +1955,9 @@ def export_glb(path: Path) -> None:
         use_selection=False,
         export_animations=True,
         export_animation_mode="ACTIONS",
-        export_all_influences=True,
+        export_draco_mesh_compression_enable=True,
+        export_draco_mesh_compression_level=6,
+        export_all_influences=False,
     )
 
 

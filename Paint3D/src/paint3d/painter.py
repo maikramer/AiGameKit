@@ -12,28 +12,40 @@ O rasterizador CUDA é fornecido por **nvdiffrast** (NVIDIA), registado como
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import sys
 import tempfile
+import warnings
 from pathlib import Path
 from typing import Any
 
-import torch
-import trimesh
-from PIL import Image
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 
-from gamedev_shared.gpu import clear_cuda_memory
-from gamedev_shared.sdnq import is_available as _sdnq_available
+warnings.filterwarnings("ignore", message=".*torchao.*")
+warnings.filterwarnings("ignore", message=".*xformers.*")
+logging.getLogger("xformers").setLevel(logging.ERROR)
 
-from . import defaults as _defaults
-from .hy3d21_paths import (
+import torch  # noqa: E402
+import trimesh  # noqa: E402
+from PIL import Image  # noqa: E402
+
+from diffusers.utils import logging as _diffusers_logging  # isort: skip  # noqa: E402
+
+_diffusers_logging.set_verbosity(50)
+
+from gamedev_shared.gpu import clear_cuda_memory  # noqa: E402
+from gamedev_shared.sdnq import is_available as _sdnq_available  # noqa: E402
+
+from . import defaults as _defaults  # noqa: E402
+from .hy3d21_paths import (  # noqa: E402
     default_cfg_yaml,
     ensure_hy3dpaint_on_path,
     ensure_realesrgan_ckpt,
     resolve_hy3dpaint_root,
 )
-from .utils.mesh_io import load_mesh_trimesh, save_glb
+from .utils.mesh_io import load_mesh_trimesh, save_glb  # noqa: E402
 
 
 def _ensure_custom_rasterizer_shim() -> None:

@@ -10,13 +10,14 @@ Estratégia de memória (single-GPU):
 Cada fase limpa o cache CUDA entre transições.
 
 Multi-GPU (--gpu-ids 0,1):
-  - DiT: dispatchado em múltiplas GPUs via accelerate (MultiGPUPlanner)
+  - DiT: residente na GPU primária (inteiro, ~3.3 GB FP16)
   - Conditioner + P3-SAM + ShapeVAE: residentes na GPU secundária (~1.4 GB)
   - Sem CPU offloading — componentes ficam nas respetivas GPUs
 """
 
 from __future__ import annotations
 
+import contextlib
 import gc
 import inspect
 import json
@@ -285,29 +286,13 @@ class Part3DPipeline:
             except Exception as e:
                 self._log(f"  AVISO: torch.compile falhou ({e})")
 
-        # --- Multi-GPU dispatch for DiT ---
+        # --- Multi-GPU: DiT on primary GPU, auxiliaries on secondary ---
         if self._gpu_ids is not None and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
-            self._log(f"A configurar multi-GPU para DiT (GPUs {self._gpu_ids})...")
-            try:
-                from gamedev_shared.multi_gpu import MultiGPUPlanner
-
-                planner = MultiGPUPlanner().for_model(self._model).with_gpus(self._gpu_ids).architecture("dit")
-                plan = planner.plan()
-                if plan.status == "multi_gpu":
-                    self._model = planner.apply()
-                    self._dit_multi_gpu = True
-                    self._log(f"  DiT dispatchado em multi-GPU (dispositivo principal: {plan.primary_device})")
-                    for w in plan.warnings:
-                        self._log(f"  AVISO: {w}")
-                else:
-                    self._log(f"  Multi-GPU indisponível ({plan.status}). A usar modo single-GPU.")
-            except RuntimeError as e:
-                if "out of memory" in str(e).lower():
-                    self._log("  OOM ao dispatchar DiT em multi-GPU. A usar modo single-GPU...")
-                    torch.cuda.empty_cache()
-                    gc.collect()
-                else:
-                    raise
+            self._log(f"A configurar multi-GPU (GPUs {self._gpu_ids})...")
+            self._dit_device = f"cuda:{self._gpu_ids[0]}"
+            self._secondary_device = f"cuda:{self._gpu_ids[1]}"
+            self._dit_multi_gpu = True
+            self._log(f"  DiT → {self._dit_device}, auxiliares → {self._secondary_device}")
 
         # --- Conditioner ---
         self._log("A carregar Conditioner (1.76 GB FP32 → ~880 MB FP16)...")
@@ -560,7 +545,12 @@ class Part3DPipeline:
         # ---- FASE B: Denoising loop (DiT na GPU ou CPU) ----
         dit_device = device
         if self._dit_multi_gpu:
+            dit_device = self._dit_device
             self._log(f"  [B] DiT multi-GPU (denoising {n_steps} steps)...")
+            _to_device(self._model, dit_device)
+            if self.enable_attention_slicing and hasattr(self._model, "enable_attention_slicing"):
+                with contextlib.suppress(Exception):
+                    self._model.enable_attention_slicing()
         else:
             self._log(f"  [B] DiT → GPU (denoising {n_steps} steps)...")
             try:
@@ -595,9 +585,9 @@ class Part3DPipeline:
         else:
             cond = cond_cpu.to(device=dit_device, dtype=dtype)
         del cond_cpu
-        if self.verbose and dit_device == "cuda":
+        if self.verbose and str(dit_device).startswith("cuda"):
             _log_vram("DiT na GPU: ")
-        elif self.verbose:
+        elif self.verbose and dit_device == "cpu":
             self._log("  [B] DiT na CPU (modo lento)")
 
         latent_shape = self._vae.latent_shape
@@ -613,11 +603,12 @@ class Part3DPipeline:
         self._scheduler.set_timesteps(sigmas=sigmas, device=dit_device)
         timesteps = self._scheduler.timesteps
 
-        if dit_device == "cuda":
+        if str(dit_device).startswith("cuda"):
             torch.cuda.empty_cache()
 
-        # Usar autocast apenas se estiver na GPU
-        autocast_ctx = torch.autocast("cuda", dtype=torch.bfloat16) if dit_device == "cuda" else torch.no_grad()
+        autocast_ctx = (
+            torch.autocast("cuda", dtype=torch.bfloat16) if str(dit_device).startswith("cuda") else torch.no_grad()
+        )
         with autocast_ctx:
             for _i, t in enumerate(tqdm(timesteps, desc="Denoising", mininterval=0.5)):
                 latent_model_input = latents
@@ -640,7 +631,7 @@ class Part3DPipeline:
         latents_cpu = latents.cpu()
         del latents
 
-        if self.cpu_offload and dit_device == "cuda" and not self._secondary_device:
+        if self.cpu_offload and str(dit_device).startswith("cuda") and not self._secondary_device:
             if not self._dit_multi_gpu:
                 self._log("  [B] Offloading DiT para CPU...")
                 _offload_to_cpu(self._model)
