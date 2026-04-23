@@ -1,4 +1,8 @@
-"""Pipeline utilities: GLB metadata, manifest, validation, caching."""
+"""Pipeline utilities: GLB metadata, manifest, validation, caching.
+
+NOTE: This module is not currently used by any downstream package.
+Candidate for removal in a future cleanup pass.
+"""
 
 from .cache import PipelineCache, get_cache
 from .glb_metadata import GlbMetadata, extract_glb_metadata, write_metadata_sidecar

@@ -1,4 +1,8 @@
-"""Extract metadata from GLB files for pipeline→engine handoff."""
+"""Extract metadata from GLB files for pipeline→engine handoff.
+
+NOTE: This module is not currently used by any downstream package.
+Candidate for removal in a future cleanup pass.
+"""
 
 from __future__ import annotations
 

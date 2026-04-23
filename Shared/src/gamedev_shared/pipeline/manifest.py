@@ -1,4 +1,8 @@
-"""GameAssets manifest — machine-readable asset index for engine consumption."""
+"""GameAssets manifest — machine-readable asset index for engine consumption.
+
+NOTE: This module is not currently used by any downstream package.
+Candidate for removal in a future cleanup pass.
+"""
 
 from __future__ import annotations
 

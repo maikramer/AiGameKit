@@ -1,4 +1,8 @@
-"""Allow running pipeline modules directly: python -m gamedev_shared.pipeline.<module>"""
+"""Allow running pipeline modules directly: python -m gamedev_shared.pipeline.<module>
+
+NOTE: This module is not currently used by any downstream package.
+Candidate for removal in a future cleanup pass.
+"""
 
 import sys
 

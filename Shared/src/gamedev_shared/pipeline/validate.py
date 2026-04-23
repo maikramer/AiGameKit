@@ -1,4 +1,8 @@
-"""Validate pipeline outputs before handoff to engine."""
+"""Validate pipeline outputs before handoff to engine.
+
+NOTE: This module is not currently used by any downstream package.
+Candidate for removal in a future cleanup pass.
+"""
 
 from __future__ import annotations
 
