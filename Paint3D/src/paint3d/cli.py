@@ -162,6 +162,12 @@ def cli(ctx, verbose):
     help="Termina outros processos GPU antes de inferir.",
 )
 @click.option("--profile", is_flag=True, help="Medir tempos e VRAM.")
+@click.option(
+    "--gpu-ids",
+    default=None,
+    show_default=False,
+    help="IDs de GPU para multi-GPU, separados por vírgula (ex: 0,1).",
+)
 @click.pass_context
 def texture(
     ctx,
@@ -183,6 +189,7 @@ def texture(
     allow_shared_gpu,
     gpu_kill_others,
     profile,
+    gpu_ids,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
@@ -222,6 +229,13 @@ def texture(
 
     _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
 
+    parsed_gpu_ids = None
+    if gpu_ids is not None:
+        try:
+            parsed_gpu_ids = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
+        except ValueError as exc:
+            raise click.ClickException(f"--gpu-ids inválido: '{gpu_ids}'. Esperado: 0,1") from exc
+
     if max_views is None and not low_vram_mode:
         max_views = _defaults.DEFAULT_PAINT_MAX_VIEWS
     if view_resolution is None and not low_vram_mode:
@@ -249,6 +263,7 @@ def texture(
                     verbose=verbose,
                     preserve_origin=preserve_origin,
                     low_vram=low_vram_mode,
+                    gpu_ids=parsed_gpu_ids,
                 )
 
             if smooth:

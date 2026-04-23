@@ -104,6 +104,7 @@ def apply_hunyuan_paint(
     vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
     preserve_origin: bool = True,
     low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
+    gpu_ids: list[int] | None = None,
 ) -> trimesh.Trimesh:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
@@ -222,24 +223,63 @@ def apply_hunyuan_paint(
                     if verbose and enable_vae_tiling:
                         print(f"[Paint 2.1] VAE tiling ativo (tile_size={vae_tile_size})")
 
-                if torch.cuda.device_count() >= 2 and not low_vram and verbose:
-                    gpu0_name = torch.cuda.get_device_name(0)
-                    gpu1_name = torch.cuda.get_device_name(1)
-                    print(
-                        f"[Paint 2.1] Multi-GPU disponível: cuda:0 ({gpu0_name}), cuda:1 ({gpu1_name}). "
-                        f"VAE split desactivado — usar PAINT3D_MULTI_GPU=1 para activar."
-                    )
+                # --- Multi-GPU placement ---
                 multi_gpu_env = os.environ.get("PAINT3D_MULTI_GPU", "").strip()
-                if torch.cuda.device_count() >= 2 and not low_vram and multi_gpu_env in ("1", "true", "yes"):
-                    vae = pipe.vae
-                    if vae is not None:
+                if multi_gpu_env in ("1", "true", "yes"):
+                    import warnings
+
+                    warnings.warn(
+                        "PAINT3D_MULTI_GPU está obsoleto — use --gpu-ids (ex: --gpu-ids 0,1). "
+                        "O env var será removido numa versão futura.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
+                    if verbose:
+                        print(
+                            "[Paint 2.1] Aviso: PAINT3D_MULTI_GPU obsoleto — use --gpu-ids 0,1. "
+                            "A aplicar comportamento legado (VAE → cuda:1)."
+                        )
+                    if torch.cuda.device_count() >= 2 and not low_vram:
+                        vae = pipe.vae
+                        if vae is not None:
+                            if verbose:
+                                gpu0_name = torch.cuda.get_device_name(0)
+                                gpu1_name = torch.cuda.get_device_name(1)
+                                print(
+                                    f"[Paint 2.1] Multi-GPU (legado): VAE → cuda:1 ({gpu1_name}), "
+                                    f"UNet+CLIP → cuda:0 ({gpu0_name})"
+                                )
+                            vae.to("cuda:1")
+                elif gpu_ids and len(gpu_ids) >= 2 and not low_vram:
+                    from gamedev_shared.multi_gpu import MultiGPUPlanner
+
+                    planner = (
+                        MultiGPUPlanner()
+                        .for_model(pipe)
+                        .model_attr("model")
+                        .with_gpus(gpu_ids)
+                        .architecture("hunyuan3d")
+                    )
+                    plan = planner.plan()
+                    if plan.status == "multi_gpu":
+                        pipe = planner.apply()
                         if verbose:
-                            gpu0_name = torch.cuda.get_device_name(0)
-                            gpu1_name = torch.cuda.get_device_name(1)
                             print(
-                                f"[Paint 2.1] Multi-GPU: VAE → cuda:1 ({gpu1_name}), UNet+CLIP → cuda:0 ({gpu0_name})"
+                                f"[Paint 2.1] Multi-GPU (planner): status={plan.status}, "
+                                f"primary={plan.primary_device}, devices={set(plan.device_map.values())}"
                             )
-                        vae.to("cuda:1")
+                    else:
+                        pipe.to(config.device)
+                        if verbose:
+                            print(f"[Paint 2.1] Planner: {plan.status} — a usar {config.device}")
+                else:
+                    if torch.cuda.device_count() >= 2 and not low_vram and verbose:
+                        gpu0_name = torch.cuda.get_device_name(0)
+                        gpu1_name = torch.cuda.get_device_name(1)
+                        print(
+                            f"[Paint 2.1] Multi-GPU disponível: cuda:0 ({gpu0_name}), "
+                            f"cuda:1 ({gpu1_name}). Usar --gpu-ids 0,1 para activar."
+                        )
             except Exception as e:
                 if verbose:
                     print(f"[Paint 2.1] Aviso: otimizações opcionais falharam: {e}")
@@ -292,6 +332,7 @@ def paint_file_to_file(
     vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
     preserve_origin: bool = True,
     low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
+    gpu_ids: list[int] | None = None,
 ) -> Path:
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
@@ -329,6 +370,7 @@ def paint_file_to_file(
         vae_tile_size=vae_tile_size,
         preserve_origin=preserve_origin,
         low_vram=low_vram,
+        gpu_ids=gpu_ids,
     )
 
     output_path = Path(output_path)
