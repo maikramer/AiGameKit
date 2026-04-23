@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from .categories import get_category
 from .manifest import ManifestRow
 from .profile import GameProfile
 
@@ -74,6 +75,61 @@ def _mood_atmosphere(genre: str, tone: str) -> str:
     return ", ".join(p for p in (genre.strip(), tone.strip()) if p)
 
 
+def _append_if_new(prompt: str, hint: str) -> str:
+    if not hint or hint.lower() in prompt.lower():
+        return prompt
+    return f"{prompt} {hint}."
+
+
+def enhance_prompt_for_pipeline(
+    prompt: str,
+    *,
+    category: str = "",
+    generate_3d: bool = False,
+    generate_rig: bool = False,
+    generate_parts: bool = False,
+    image_source: str = "text2d",
+    for_3d: bool = False,
+) -> str:
+    cat = get_category(category)
+    if cat is None:
+        return prompt
+    if image_source == "texture2d":
+        prompt = _append_if_new(prompt, cat.hint_texture)
+    elif generate_3d and not for_3d:
+        prompt = _append_if_new(prompt, cat.hint_3d)
+    else:
+        prompt = _append_if_new(prompt, cat.hint_2d)
+    if generate_rig:
+        prompt = _append_if_new(prompt, cat.hint_rig)
+    if generate_parts:
+        prompt = _append_if_new(prompt, cat.hint_parts)
+    if cat.extra_negatives:
+        lower_prompt = prompt.lower()
+        new_negs = [n for n in cat.extra_negatives if n.lower() not in lower_prompt]
+        if new_negs:
+            prompt = f"{prompt} Avoid: {', '.join(new_negs)}."
+    return prompt
+    if image_source == "texture2d":
+        prompt = _append_if_new(prompt, cat.hint_texture)
+    elif generate_3d and not for_3d:
+        prompt = _append_if_new(prompt, cat.hint_3d)
+    else:
+        prompt = _append_if_new(prompt, cat.hint_2d)
+    if generate_rig:
+        prompt = _append_if_new(prompt, cat.hint_rig)
+    if generate_parts:
+        prompt = _append_if_new(prompt, cat.hint_parts)
+    # Cross-contamination negatives: prevent accessory leakage between asset types
+    if cat.extra_negatives:
+        existing_lower = prompt.lower()
+        new_negs = [n for n in cat.extra_negatives if n.lower() not in existing_lower]
+        if new_negs:
+            neg_block = ", ".join(new_negs)
+            prompt = f"{prompt} Avoid: {neg_block}."
+    return prompt
+
+
 def build_prompt(
     profile: GameProfile,
     preset: dict[str, Any],
@@ -126,6 +182,16 @@ def build_prompt(
     if neg_parts:
         neg_joined = ", ".join(neg_parts)
         main = f"{main} Avoid: {neg_joined}."
+
+    if row.category:
+        main = enhance_prompt_for_pipeline(
+            main,
+            category=row.category,
+            generate_3d=row.generate_3d,
+            generate_rig=row.generate_rig,
+            generate_parts=row.generate_parts,
+            for_3d=for_3d,
+        )
 
     return main
 

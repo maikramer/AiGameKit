@@ -26,6 +26,8 @@ class ManifestRow:
     generate_animate: bool = False
     # Decomposição semântica (Part3D) após Text3D; requer --with-parts e generate_3d=true
     generate_parts: bool = False
+    # Asset category (e.g. humanoid, chest, weapon) — drives prompt hints and generation params
+    category: str = ""
     # Part3D por linha: sobrepõe part3d.{steps,octree_resolution,segment_only} do perfil
     part3d_steps: int | None = None
     part3d_octree_resolution: int | None = None
@@ -66,8 +68,8 @@ def _parse_int(value: str | None) -> int | None:
 
 def load_manifest(path: Path) -> list[ManifestRow]:
     """Lê CSV: id, idea; opcionais kind, generate_3d, image_source, generate_audio,
-    generate_rig, generate_animate, generate_parts, part3d_steps, part3d_octree_resolution,
-    part3d_segment_only."""
+    generate_rig, generate_animate, generate_parts, category, part3d_steps,
+    part3d_octree_resolution, part3d_segment_only."""
     rows: list[ManifestRow] = []
     import io
 
@@ -96,6 +98,7 @@ def load_manifest(path: Path) -> list[ManifestRow]:
         gr_key = fields.get("generate_rig")
         gan_key = fields.get("generate_animate")
         gp_key = fields.get("generate_parts")
+        cat_key = fields.get("category")
         # Part3D per-row overrides
         p3_steps_key = fields.get("part3d_steps")
         p3_oct_key = fields.get("part3d_octree_resolution") or fields.get("part3d_octree")
@@ -127,6 +130,10 @@ def load_manifest(path: Path) -> list[ManifestRow]:
             gp = False
             if gp_key:
                 gp = _parse_bool(raw.get(gp_key))
+            cat = ""
+            if cat_key:
+                c = (raw.get(cat_key) or "").strip().lower()
+                cat = c if c else ""
             # Part3D per-row
             p3_steps: int | None = None
             if p3_steps_key:
@@ -148,6 +155,7 @@ def load_manifest(path: Path) -> list[ManifestRow]:
                     generate_rig=gr,
                     generate_animate=gan,
                     generate_parts=gp,
+                    category=cat,
                     part3d_steps=p3_steps,
                     part3d_octree_resolution=p3_oct,
                     part3d_segment_only=p3_seg,
