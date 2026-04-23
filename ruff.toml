@@ -10,8 +10,9 @@ src = [
     "Texture2D/src",
     "Text2Sound/src",
     "Skymap2D/src",
-    "TerrainGen/src",
+
     "GameDevLab/src",
+    "Terrain3D/src",
     "Animator3D/src",
     "Rigging3D/src/rigging3d",
 ]
@@ -29,6 +30,7 @@ exclude = [
     ".git",
     "Rigging3D/src/rigging3d/unirig",
     "Text3D/src/text3d/hy3dshape",
+    "Terrain3D/src/terrain3d/vendor",
 ]
 
 [lint]

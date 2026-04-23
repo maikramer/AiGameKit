@@ -128,15 +128,16 @@ TOOLS: dict[str, ToolSpec] = {
         extra_aliases=("skymap2d-generate",),
         needs_pytorch=False,
     ),
-    "terraingen": ToolSpec(
-        name="TerrainGen",
+    "terrain3d": ToolSpec(
+        name="Terrain3D",
         kind=ToolKind.PYTHON,
-        folder="TerrainGen",
-        cli_name="terraingen",
-        python_module="terraingen",
-        description="Geração procedural de terrenos (diamond-square, erosão, rios, lagos)",
+        folder="Terrain3D",
+        cli_name="terrain3d",
+        python_module="terrain3d",
+        description="AI terrain generation via diffusion models (terrain-diffusion; vendored; CUDA GPU)",
         min_python=(3, 10),
-        needs_pytorch=False,
+        needs_pytorch=True,
+        needs_cuda=True,
     ),
     "rigging3d": ToolSpec(
         name="Rigging3D",

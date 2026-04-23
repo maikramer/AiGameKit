@@ -23,6 +23,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `GameDevLab/` | Python | `gamedev-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
+| `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
 | `VibeGame/` | TypeScript | `vibegame` (npm) | 3D game engine (bitecs, Three.js, Vite build; Bun tests); `gltf-anim` plugin; `PlayerGLTF` recipe |
 
 All Python packages depend on `gamedev-shared` (install Shared first). VibeGame is standalone (Bun + Vite); it does not use `gamedev-shared`.
@@ -80,6 +81,7 @@ make test-gameassets   # pytest GameAssets only
 make test-texture2d    # pytest Texture2D only
 make test-text2sound   # pytest Text2Sound only
 make test-materialize  # cargo test in Materialize/
+make test-terrain3d    # pytest Terrain3D only
 make test-vibegame     # bun install (frozen) + bun test in VibeGame/
 ```
 
@@ -327,7 +329,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Skymap2D e equirect/PMREM: o modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir. O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas). Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir. Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
 - Dependências de screen-space / pós-processamento (ex. `screen-space-reflections`) podem importar símbolos removidos ou renomeados no Three.js (ex. `WebGLMultipleRenderTargets`), falhando no Vite com «No matching export» até alinhar versões do Three ou substituir o efeito. Em áudio Web, `AudioContext` bloqueado ou `listener.positionX` indisponível costuma ligar-se a autoplay sem gesto do utilizador e/ou à ausência de cadeia válida `AudioListener` + câmera principal.
 - O conteúdo sob `<Scene>` no VibeGame é injetado como HTML (`innerHTML`); a tag nativa **`<script>`** não serve para marcar módulos TS do motor — usar atributo `script` nos recipes ou um nome de elemento que não colida com HTML.
-- Sem URL de heightmap no terreno, `TerrainLOD` / `@interverse/three-terrain-lod` pode gerar um heightmap procedural internamente; os ficheiros exportados pelo TerrainGen (`terrain.json`, `heightmap.png`, etc.) só têm efeito se o recipe/plugin apontar para eles — atributos XML não suportados podem ser ignorados em silêncio.
+- Sem URL de heightmap no terreno, `TerrainLOD` / `@interverse/three-terrain-lod` pode gerar um heightmap procedural internamente; os ficheiros exportados pelo Terrain3D (`terrain.json`, `heightmap.png`, etc.) só têm efeito se o recipe/plugin apontar para eles — atributos XML não suportados podem ser ignorados em silêncio.
 - OpenCode (`opencode.json` no repositório): entradas MCP locais devem declarar `type: "local"` e `command` como array de strings com executável e argumentos (não o par `command` + `args` usado noutras ferramentas).
 - VibeGame: corpos dinâmicos GLTF podem ter colisor desalinhado do mesh se o centro do AABB não coincidir com a origem da entidade — definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local. No plugin de partículas (`three.quarks`), usar o emissor interno `ParticleSystem.emitter`; um wrapper `ParticleEmitter` à parte faz o batch descartar o sistema no update e as partículas deixam de aparecer.
 - No PyPI, `bpy==5.1.0` exige Python 3.13; o Rigging3D (inferência UniRig) fixa Python 3.11 com `bpy==5.0.1` e `open3d` porque não há combinação estável Open3D + `bpy` 5.1 no mesmo venv. O **Animator3D** usa stack **3.13 + `bpy==5.1.0`** em paralelo — não assumir um único Python/`bpy` para todo o monorepo.

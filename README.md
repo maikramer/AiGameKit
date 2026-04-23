@@ -27,7 +27,7 @@ Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures an
 | [**Animator3D**](Animator3D/) | **animator3d** — **bpy** 5.1; Python **3.13**; procedural clips, **`game-pack`** (humanoid/creature/flying presets), GLB export after rigging. |
 | [**Materialize**](Materialize/) | **PBR maps** CLI (Rust/wgpu): normal, AO, metallic, smoothness from a diffuse texture. |
 | [**GameDevLab**](GameDevLab/) | **Lab CLI**: debug 3D, quantization benches, profiling, pipeline optimization. |
-| [**TerrainGen**](TerrainGen/) | **terraingen** — Procedural terrain generation: heightmaps, erosion, rivers, lakes (Python 3.10+). |
+| [**Terrain3D**](Terrain3D/) | **terrain3d** — AI terrain generation via diffusion models (terrain-diffusion; CUDA GPU). |
 | [**VibeGame**](VibeGame/) | **vibegame** — TypeScript 3D engine (ECS, Three.js, declarative XML); **Bun** + **Vite**. See [VibeGame/README.md](VibeGame/README.md). |
 
 Each project has its own `README`, setup, requirements, and license. Portuguese: [`README_PT.md`](README_PT.md) (root) and per-package `README_PT.md` where provided.
@@ -48,7 +48,7 @@ GameDev/
   Rigging3D/         ← rigging3d (pip) — Shared; inference Py 3.11 + bpy 5.0.x
   Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.1 (animation)
   GameDevLab/        ← gamedev-lab (pip) — depends on Shared; debug 3D, benches, profiling
-  TerrainGen/        ← terraingen (pip) — depends on Shared; procedural terrain generation
+  Terrain3D/        ← terrain3d (pip) — depends on Shared; AI terrain generation via diffusion
   Materialize/       ← materialize-cli (cargo) — Python installer uses Shared
   VibeGame/          ← vibegame (npm/Bun + Vite) — browser 3D engine; standalone, not pip
 ```
@@ -98,7 +98,7 @@ The monorepo includes a unified installer for every registered tool:
 ./install.sh rigging3d                  # Rigging3D (bundled UniRig + PyTorch/CUDA via installer)
 ./install.sh animator3d                 # Animator3D (bpy / animation; no PyTorch)
 ./install.sh gamedevlab                 # GameDevLab (debug 3D, benches, profiling)
-./install.sh terraingen                 # TerrainGen (procedural terrain; no GPU)
+./install.sh terrain3d                   # Terrain3D (AI terrain; CUDA GPU)
 ./install.sh all                        # Install everything present
 
 # Windows PowerShell (recommended on Windows: script detects `python` and passes it to the installer)
@@ -115,7 +115,7 @@ The monorepo includes a unified installer for every registered tool:
 .\install.ps1 rigging3d
 .\install.ps1 animator3d
 .\install.ps1 gamedevlab
-.\install.ps1 terraingen
+.\install.ps1 terrain3d
 .\install.ps1 all
 
 # Windows CMD (same: `install.bat` passes the interpreter to the installer)
@@ -188,8 +188,8 @@ cd ../Materialize && ./install.sh
 # 13. GameDevLab (debug 3D, benches, profiling; no PyTorch required)
 cd ../GameDevLab && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && gamedev-lab --help
 
-# 14. TerrainGen (procedural terrain; no GPU required)
-cd ../TerrainGen && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && terraingen --help
+# 14. Terrain3D (AI terrain; CUDA GPU)
+cd ../Terrain3D && python -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && terrain3d --help
 ```
 
 Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md](docs/NEW_TOOLS.md) (registering new tools), [Shared/README.md](Shared/README.md), and each package README.
@@ -198,7 +198,7 @@ Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md]
 
 | Component | License | Note |
 |-----------|---------|------|
-| Monorepo code (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, TerrainGen, Shared) | MIT | See `LICENSE` in each folder |
+| Monorepo code (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, Terrain3D, Shared) | MIT | See `LICENSE` in each folder |
 | Materialize CLI (Rust) | MIT | [Materialize/LICENSE](Materialize/LICENSE) |
 | FLUX.2 Klein 4B (official, BF16) | Apache 2.0 | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — commercial use allowed per model card; more VRAM than SDNQ |
 | FLUX.2 Klein 4B SDNQ (Text2D default) | FLUX Non-Commercial (HF metadata) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declares `flux-non-commercial-license`; **not** the same as the official Apache 2.0 checkpoint. For commercial products prefer `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` or a BFL agreement |
@@ -223,7 +223,7 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `TEXT2SOUND_BIN` | GameAssets | Path to `text2sound` |
 | `MATERIALIZE_BIN` | GameAssets, Text3D | Path to `materialize` |
 | `GAMEDEVLAB_BIN` | GameAssets | Path to `gamedev-lab` |
-| `TERRAINGEN_BIN` | GameAssets | Path to `terraingen` |
+| `TERRAIN3D_BIN` | GameAssets | Path to `terrain3d` |
 | `TEXT2D_MODEL_ID` | Text2D | HF model override for Text2D |
 | `TEXTURE2D_MODEL_ID` | Texture2D | HF model override for Texture2D |
 | `SKYMAP2D_MODEL_ID` | Skymap2D | HF model override for Skymap2D |
@@ -263,7 +263,7 @@ make test            # Pytest all packages + Cargo test
 make test-shared     # Pytest Shared only
 make test-text2d     # Pytest Text2D only
 make test-gamedevlab # Pytest GameDevLab only
-make test-terraingen # Pytest TerrainGen only
+make test-terrain3d # Pytest Terrain3D only
 make typecheck       # MyPy on Shared/src
 make check           # lint + fmt-check + typecheck + test (full CI)
 make clean           # Remove __pycache__, caches, builds

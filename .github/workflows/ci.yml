@@ -71,11 +71,6 @@ jobs:
             python-version: "3.10"
           - package: GameDevLab
             python-version: "3.12"
-          # TerrainGen
-          - package: TerrainGen
-            python-version: "3.10"
-          - package: TerrainGen
-            python-version: "3.12"
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"
