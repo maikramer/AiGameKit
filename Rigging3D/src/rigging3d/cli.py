@@ -106,6 +106,7 @@ def _make_env(
     *,
     python_bin: str | None = None,
     propagate_profile: bool = False,
+    gpu_ids: list[int] | None = None,
 ) -> dict[str, str]:
     merged = {**os.environ, **(extra or {})}
     root_s = str(root)
@@ -122,6 +123,8 @@ def _make_env(
         merged.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
     if propagate_profile:
         merged["GAMEDEV_PROFILE"] = "1"
+    if gpu_ids:
+        merged["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
     return merged
 
 
@@ -132,9 +135,12 @@ def _run(
     env: dict[str, str] | None = None,
     python_bin: str | None = None,
     propagate_profile: bool = False,
+    gpu_ids: list[int] | None = None,
 ) -> int:
     return subprocess.run(
-        cmd, cwd=str(root), env=_make_env(root, env, python_bin=python_bin, propagate_profile=propagate_profile)
+        cmd,
+        cwd=str(root),
+        env=_make_env(root, env, python_bin=python_bin, propagate_profile=propagate_profile, gpu_ids=gpu_ids),
     ).returncode
 
 
@@ -145,6 +151,7 @@ def _run_bash(
     *,
     python_bin: str | None = None,
     propagate_profile: bool = False,
+    gpu_ids: list[int] | None = None,
 ) -> int:
     bash = _find_bash()
     if not bash:
@@ -152,7 +159,13 @@ def _run_bash(
     full = root / script
     if not full.is_file():
         raise FileNotFoundError(f"Script em falta: {full}")
-    return _run([bash, _shell_path(full), *args], root=root, python_bin=python_bin, propagate_profile=propagate_profile)
+    return _run(
+        [bash, _shell_path(full), *args],
+        root=root,
+        python_bin=python_bin,
+        propagate_profile=propagate_profile,
+        gpu_ids=gpu_ids,
+    )
 
 
 def _run_module(
@@ -162,8 +175,9 @@ def _run_module(
     args: Sequence[str],
     *,
     env: dict[str, str] | None = None,
+    gpu_ids: list[int] | None = None,
 ) -> int:
-    return _run([py, "-m", module, *args], root=root, env=env, python_bin=py)
+    return _run([py, "-m", module, *args], root=root, env=env, python_bin=py, gpu_ids=gpu_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -193,11 +207,27 @@ def _run_module(
     is_flag=True,
     help="Gravar métricas de performance (perf DB).",
 )
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs de GPU visíveis aos subprocessos (ex: \"0,1\"). Propaga CUDA_VISIBLE_DEVICES.",
+)
 @click.pass_context
-def cli(ctx: click.Context, root: Path | None, python_cmd: str | None, profiler_flag: bool) -> None:
+def cli(
+    ctx: click.Context,
+    root: Path | None,
+    python_cmd: str | None,
+    profiler_flag: bool,
+    gpu_ids_str: str | None,
+) -> None:
     """Rigging3D — auto-rigging 3D (skeleton, skinning, merge)."""
     ctx.ensure_object(dict)
     ctx.obj["PROFILER"] = profiler_flag
+    gpu_ids: list[int] | None = None
+    if gpu_ids_str:
+        gpu_ids = [int(x) for x in gpu_ids_str.split(",") if x.strip()]
+    ctx.obj["GPU_IDS"] = gpu_ids
     if profiler_flag:
         os.environ["GAMEDEV_PROFILE"] = "1"
 
@@ -216,6 +246,13 @@ def _ctx_profiler(ctx: click.Context) -> bool:
     if parent is None:
         return False
     return bool(parent.obj.get("PROFILER"))
+
+
+def _ctx_gpu_ids(ctx: click.Context) -> list[int] | None:
+    parent = ctx.parent
+    if parent is None:
+        return None
+    return parent.obj.get("GPU_IDS")
 
 
 # --- skeleton ---
@@ -240,11 +277,12 @@ def skeleton_cmd(
 ) -> None:
     """Gera skeleton (GLB por defeito; .fbx ainda suportado) a partir de mesh (.glb/.obj/…)."""
     root, py = _ctx_root_py(ctx)
+    gpu_ids = _ctx_gpu_ids(ctx)
     _require_bash()
     _validate_io(input_path, output_path, input_dir, output_dir)
     args: list[str] = ["--seed", str(seed), "--skeleton_task", skeleton_task]
     args += _io_args(input_path, output_path, input_dir, output_dir)
-    rc = _run_bash(root, "launch/inference/generate_skeleton.sh", args, python_bin=py)
+    rc = _run_bash(root, "launch/inference/generate_skeleton.sh", args, python_bin=py, gpu_ids=gpu_ids)
     if rc != 0:
         raise click.ClickException(f"generate_skeleton.sh terminou com código {rc}")
     console.print("[green]Skeleton concluído.[/green]")
@@ -274,11 +312,12 @@ def skin_cmd(
 ) -> None:
     """Prevê pesos de skinning a partir do GLB/FBX com skeleton."""
     root, py = _ctx_root_py(ctx)
+    gpu_ids = _ctx_gpu_ids(ctx)
     _require_bash()
     _validate_io(input_path, output_path, input_dir, output_dir)
     args: list[str] = ["--seed", str(seed), "--skin_task", skin_task, "--data_name", data_name]
     args += _io_args(input_path, output_path, input_dir, output_dir)
-    rc = _run_bash(root, "launch/inference/generate_skin.sh", args, python_bin=py)
+    rc = _run_bash(root, "launch/inference/generate_skin.sh", args, python_bin=py, gpu_ids=gpu_ids)
     if rc != 0:
         raise click.ClickException(f"generate_skin.sh terminou com código {rc}")
     console.print("[green]Skinning concluído.[/green]")
@@ -306,6 +345,7 @@ def merge_cmd(
 ) -> None:
     """Combina resultado da fase skin com o mesh original (GLB rigado)."""
     root, py = _ctx_root_py(ctx)
+    gpu_ids = _ctx_gpu_ids(ctx)
     args = [
         f"--require_suffix={require_suffix}",
         "--num_runs=1",
@@ -318,7 +358,7 @@ def merge_cmd(
         "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
         "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
     }
-    rc = _run_module(root, py, "src.inference.merge", args, env=merge_env)
+    rc = _run_module(root, py, "src.inference.merge", args, env=merge_env, gpu_ids=gpu_ids)
     if rc != 0:
         raise click.ClickException(f"merge terminou com código {rc}")
     console.print("[green]Merge concluído.[/green]")
@@ -443,6 +483,7 @@ def pipeline_cmd(
 ) -> None:
     """Encadeia skeleton → skin → merge até um GLB rigado."""
     root, py = _ctx_root_py(ctx)
+    gpu_ids = _ctx_gpu_ids(ctx)
     _require_bash()
     do_profile = _ctx_profiler(ctx)
 
@@ -478,6 +519,7 @@ def pipeline_cmd(
                 ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel), "--seed", str(seed)],
                 python_bin=py,
                 propagate_profile=do_profile,
+                gpu_ids=gpu_ids,
             )
             if rc != 0 or not skel.is_file() or skel.stat().st_size == 0:
                 raise click.ClickException(
@@ -523,6 +565,7 @@ def pipeline_cmd(
                 ],
                 python_bin=py,
                 propagate_profile=do_profile,
+                gpu_ids=gpu_ids,
             )
             if rc != 0 or not skin.is_file() or skin.stat().st_size == 0:
                 raise click.ClickException(
@@ -546,6 +589,7 @@ def pipeline_cmd(
                     f"--output={_shell_path(out)}",
                 ],
                 env=merge_env,
+                gpu_ids=gpu_ids,
             )
             if not out.is_file() or out.stat().st_size == 0:
                 raise click.ClickException(
