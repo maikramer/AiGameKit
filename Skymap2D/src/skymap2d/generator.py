@@ -87,6 +87,10 @@ def _register_sdnq() -> tuple[Any, Any]:
         from sdnq.common import use_torch_compile as triton_is_available
         from sdnq.loader import apply_sdnq_options_to_model
 
+        from gamedev_shared.sdnq import patch_lora_shape_calculation
+
+        patch_lora_shape_calculation()
+
         return triton_is_available, apply_sdnq_options_to_model
     except ImportError as e:
         raise ImportError("O pacote 'sdnq' é necessário. Instale com: pip install sdnq") from e

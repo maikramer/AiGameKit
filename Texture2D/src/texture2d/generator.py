@@ -63,11 +63,14 @@ def _torch_dtype_for(device: str) -> torch.dtype:
 
 
 def _register_sdnq() -> tuple[Any, Any]:
-    """Importa SDNQ e devolve (triton_is_available, apply_sdnq_options_to_model)."""
     try:
-        from sdnq import SDNQConfig  # noqa: F401 — registo diffusers/transformers
+        from sdnq import SDNQConfig  # noqa: F401
         from sdnq.common import use_torch_compile as triton_is_available
         from sdnq.loader import apply_sdnq_options_to_model
+
+        from gamedev_shared.sdnq import patch_lora_shape_calculation
+
+        patch_lora_shape_calculation()
 
         return triton_is_available, apply_sdnq_options_to_model
     except ImportError as e:
