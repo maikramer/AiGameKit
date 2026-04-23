@@ -333,6 +333,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Número máximo de faces (0 = sem redução). Usa quadric edge collapse do PyMeshLab.",
 )
+@click.option(
+    "--gpu-ids",
+    "gpu_ids",
+    type=str,
+    default=None,
+    help=(
+        "IDs de GPU para multi-GPU (separados por vírgula, ex.: 0,1). "
+        "Usa accelerate para dividir pesos do Hunyuan3D entre GPUs."
+    ),
+)
 @click.pass_context
 def generate(
     ctx,
@@ -367,12 +377,17 @@ def generate(
     no_prompt_optimize,
     prof_profile,
     max_faces,
+    gpu_ids,
 ):
     """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or generate_verbose
+
+    parsed_gpu_ids: list[int] | None = None
+    if gpu_ids is not None:
+        parsed_gpu_ids = [int(x) for x in gpu_ids.split(",") if x.strip()]
 
     if preset is not None:
         pv = _defaults.PRESET_HUNYUAN[preset]
@@ -449,6 +464,8 @@ def generate(
         + (f", rotação X={export_rotation_x_deg}°" if export_rotation_x_deg is not None else ""),
     )
     info_table.add_row("[bold]Modo[/bold]", "economia VRAM" if low_vram else "normal")
+    if parsed_gpu_ids:
+        info_table.add_row("[bold]Multi-GPU[/bold]", f"IDs: {parsed_gpu_ids} (accelerate dispatch)")
 
     console.print(Panel(info_table, title="[bold green]Configuração", border_style="green"))
 
@@ -482,6 +499,7 @@ def generate(
                         verbose=verbose,
                         hunyuan_subfolder=model_subfolder,
                         sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
+                        gpu_ids=parsed_gpu_ids,
                     )
 
                 if output is None:

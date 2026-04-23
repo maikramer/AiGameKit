@@ -58,6 +58,7 @@ class HunyuanTextTo3DGenerator:
         hunyuan_model_id: str = DEFAULT_HF_ID,
         hunyuan_subfolder: str = DEFAULT_SUBFOLDER,
         sdnq_preset: str = DEFAULT_SDNQ_PRESET,
+        gpu_ids: list[int] | None = None,
     ):
         self.verbose = verbose
         self.low_vram_mode = low_vram_mode
@@ -65,6 +66,7 @@ class HunyuanTextTo3DGenerator:
         self.hunyuan_model_id = hunyuan_model_id
         self.hunyuan_subfolder = hunyuan_subfolder
         self.sdnq_preset = sdnq_preset
+        self._gpu_ids = gpu_ids
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -76,6 +78,8 @@ class HunyuanTextTo3DGenerator:
         if self.verbose:
             print(f"[Text3D] device={self.device} low_vram={self.low_vram_mode}")
             print(f"[Text3D] Hunyuan: {self.hunyuan_model_id} / {self.hunyuan_subfolder}")
+            if gpu_ids is not None:
+                print(f"[Text3D] Multi-GPU IDs: {gpu_ids}")
 
     def _log(self, msg: str) -> None:
         if self.verbose:
@@ -146,6 +150,29 @@ class HunyuanTextTo3DGenerator:
             else:
                 wants_quant = False
                 self._log("SDNQ não disponível — a correr sem quantização (VRAM elevada).")
+
+        if self._gpu_ids is not None and hunyuan_device == "cuda":
+            from gamedev_shared.multi_gpu import MultiGPUPlanner
+
+            planner = (
+                MultiGPUPlanner()
+                .for_model(pipe)
+                .model_attr("model")
+                .with_gpus(self._gpu_ids)
+                .architecture("hunyuan3d")
+            )
+            plan = planner.plan()
+            if plan.status == "multi_gpu":
+                pipe = planner.apply()
+                primary = plan.primary_device
+                primary_dev = f"cuda:{primary}" if isinstance(primary, int) else primary
+                pipe.conditioner.to(primary_dev)
+                pipe.vae.to(primary_dev)
+                pipe.device = torch.device(primary_dev)
+                self._log(f"Multi-GPU dispatch: GPUs {self._gpu_ids}, primary={primary_dev}")
+                self._hunyuan_pipeline = pipe
+                return pipe
+            self._log(f"Multi-GPU plan: {plan.status} — a usar colocação simples.")
 
         if hunyuan_device == "cuda":
             _clear_cuda_cache()
