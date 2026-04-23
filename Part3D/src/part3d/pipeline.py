@@ -120,6 +120,7 @@ class Part3DPipeline:
         enable_torch_compile: bool = _d.DEFAULT_TORCH_COMPILE,
         enable_attention_slicing: bool = _d.DEFAULT_ENABLE_ATTENTION_SLICING,
         low_vram: bool = _d.DEFAULT_LOW_VRAM_MODE,
+        gpu_ids: list[int] | None = None,
     ):
         self.model_path = model_path
         self.cpu_offload = cpu_offload
@@ -145,6 +146,8 @@ class Part3DPipeline:
         self._bbox_predictor: Any = None
         self._model_dir: str | None = None
         self._dit_quantized = False
+        self._gpu_ids = gpu_ids
+        self._dit_multi_gpu = False
 
         self._loaded = False
 
@@ -273,6 +276,35 @@ class Part3DPipeline:
                 self._log("  DiT compilado com torch.compile")
             except Exception as e:
                 self._log(f"  AVISO: torch.compile falhou ({e})")
+
+        # --- Multi-GPU dispatch for DiT ---
+        if self._gpu_ids is not None and torch.cuda.is_available() and torch.cuda.device_count() >= 2:
+            self._log(f"A configurar multi-GPU para DiT (GPUs {self._gpu_ids})...")
+            try:
+                from gamedev_shared.multi_gpu import MultiGPUPlanner
+
+                planner = (
+                    MultiGPUPlanner()
+                    .for_model(self._model)
+                    .with_gpus(self._gpu_ids)
+                    .architecture("dit")
+                )
+                plan = planner.plan()
+                if plan.status == "multi_gpu":
+                    self._model = planner.apply()
+                    self._dit_multi_gpu = True
+                    self._log(f"  DiT dispatchado em multi-GPU (dispositivo principal: {plan.primary_device})")
+                    for w in plan.warnings:
+                        self._log(f"  AVISO: {w}")
+                else:
+                    self._log(f"  Multi-GPU indisponível ({plan.status}). A usar modo single-GPU.")
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    self._log("  OOM ao dispatchar DiT em multi-GPU. A usar modo single-GPU...")
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                else:
+                    raise
 
         # --- Conditioner ---
         self._log("A carregar Conditioner (1.76 GB FP32 → ~880 MB FP16)...")
@@ -514,32 +546,36 @@ class Part3DPipeline:
                 _log_vram("Após remover Conditioner: ")
 
         # ---- FASE B: Denoising loop (DiT na GPU ou CPU) ----
-        self._log(f"  [B] DiT → GPU (denoising {n_steps} steps)...")
         dit_device = device
-        # Tentar carregar DiT na GPU
-        try:
-            _to_device(self._model, device)
-            # Aplicar attention slicing se habilitado
-            if self.enable_attention_slicing and hasattr(self._model, "enable_attention_slicing"):
-                try:
-                    self._model.enable_attention_slicing()
-                    self._log("  [B] Attention slicing habilitado no DiT")
-                except Exception as e:
-                    if self.verbose:
-                        self._log(f"  [B] AVISO: attention slicing não aplicado: {e}")
-        except RuntimeError as e:
-            if "out of memory" in str(e).lower():
-                self._log("  [B] OOM ao carregar DiT. Usando CPU (mais lento)...")
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-                gc.collect()
-                dit_device = "cpu"
-                # Mover condições para CPU também
-                cond_cpu = {k: v.cpu() for k, v in cond_cpu.items()} if isinstance(cond_cpu, dict) else cond_cpu.cpu()
-                _to_device(self._model, "cpu")
-                self._log("  [B] DiT carregado na CPU. Denoising será ~10x mais lento.")
-            else:
-                raise
+        if self._dit_multi_gpu:
+            self._log(f"  [B] DiT multi-GPU (denoising {n_steps} steps)...")
+        else:
+            self._log(f"  [B] DiT → GPU (denoising {n_steps} steps)...")
+            try:
+                _to_device(self._model, device)
+                # Aplicar attention slicing se habilitado
+                if self.enable_attention_slicing and hasattr(self._model, "enable_attention_slicing"):
+                    try:
+                        self._model.enable_attention_slicing()
+                        self._log("  [B] Attention slicing habilitado no DiT")
+                    except Exception as e:
+                        if self.verbose:
+                            self._log(f"  [B] AVISO: attention slicing não aplicado: {e}")
+            except RuntimeError as e:
+                if "out of memory" in str(e).lower():
+                    self._log("  [B] OOM ao carregar DiT. Usando CPU (mais lento)...")
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+                    gc.collect()
+                    dit_device = "cpu"
+                    # Mover condições para CPU também
+                    cond_cpu = (
+                        {k: v.cpu() for k, v in cond_cpu.items()} if isinstance(cond_cpu, dict) else cond_cpu.cpu()
+                    )
+                    _to_device(self._model, "cpu")
+                    self._log("  [B] DiT carregado na CPU. Denoising será ~10x mais lento.")
+                else:
+                    raise
 
         # Mover condições para o device do DiT (GPU ou CPU)
         if isinstance(cond_cpu, dict):
@@ -593,8 +629,9 @@ class Part3DPipeline:
         del latents
 
         if self.cpu_offload and dit_device == "cuda":
-            self._log("  [B] Offloading DiT para CPU...")
-            _offload_to_cpu(self._model)
+            if not self._dit_multi_gpu:
+                self._log("  [B] Offloading DiT para CPU...")
+                _offload_to_cpu(self._model)
             # Restaurar conditioner para próximo batch
             if "temp_conditioner" in locals() and temp_conditioner is not None:
                 self._conditioner = temp_conditioner

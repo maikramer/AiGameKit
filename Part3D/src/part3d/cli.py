@@ -87,6 +87,12 @@ def main() -> None:
     is_flag=True,
     help="Medir tempos, CPU, RAM e VRAM.",
 )
+@click.option(
+    "--gpu-ids",
+    type=str,
+    default=None,
+    help="IDs de GPU para multi-GPU (ex: '0,1'). Só afecta o DiT.",
+)
 def decompose(
     mesh_path: str,
     output_path: str | None,
@@ -106,6 +112,7 @@ def decompose(
     no_attention_slicing: bool,
     low_vram_mode: bool,
     profile: bool,
+    gpu_ids: str | None,
 ) -> None:
     """Decompõe uma mesh 3D em partes semânticas.
 
@@ -188,6 +195,8 @@ def decompose(
 
     from .pipeline import Part3DPipeline
 
+    parsed_gpu_ids = [int(x.strip()) for x in gpu_ids.split(",")] if gpu_ids else None
+
     t_start = time.time()
     log_p = env_profile_log_path()
     prof_log = Path(log_p) if log_p else None
@@ -222,6 +231,7 @@ def decompose(
             enable_torch_compile=torch_compile,
             enable_attention_slicing=not no_attention_slicing,
             low_vram=low_vram_mode,
+            gpu_ids=parsed_gpu_ids,
         ) as pipe,
     ):
         if segment_only:
