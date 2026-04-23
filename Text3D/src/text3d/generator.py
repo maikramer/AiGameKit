@@ -155,11 +155,7 @@ class HunyuanTextTo3DGenerator:
             from gamedev_shared.multi_gpu import MultiGPUPlanner
 
             planner = (
-                MultiGPUPlanner()
-                .for_model(pipe)
-                .model_attr("model")
-                .with_gpus(self._gpu_ids)
-                .architecture("hunyuan3d")
+                MultiGPUPlanner().for_model(pipe).model_attr("model").with_gpus(self._gpu_ids).architecture("hunyuan3d")
             )
             plan = planner.plan()
             if plan.status == "multi_gpu":
@@ -202,6 +198,7 @@ class HunyuanTextTo3DGenerator:
         t2d_full_gpu: bool = False,
         return_reference_image: bool = False,
         optimize_prompt: bool = True,
+        remove_bg: bool = True,
     ) -> trimesh.Trimesh | tuple[trimesh.Trimesh, Image.Image]:
         """
         Text-to-3D: gera imagem com Text2D, descarrega Text2D, gera mesh com Hunyuan3D-2.1.
@@ -258,6 +255,7 @@ class HunyuanTextTo3DGenerator:
             num_chunks=num_chunks,
             hy_seed=hy_seed,
             mc_level=mc_level,
+            remove_bg=remove_bg,
         )
         if return_reference_image:
             return mesh, pil_image
