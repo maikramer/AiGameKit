@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 
 # ---------------------------------------------------------------------------
 # Nomes canónicos das variáveis de ambiente
@@ -103,3 +104,29 @@ def get_tool_bin(tool_name: str) -> str | None:
     if env_name is None:
         return None
     return os.environ.get(env_name, "").strip() or None
+
+
+def detect_low_vram(threshold_mb: int = 8192) -> bool:
+    """Detect if the primary GPU has less than *threshold_mb* MiB of total VRAM.
+
+    Uses ``nvidia-smi`` to query total memory.  Returns ``False`` if
+    ``nvidia-smi`` is not available or parsing fails (conservative: assume
+    not low-VRAM when detection fails).
+
+    Args:
+        threshold_mb: VRAM threshold in MiB.  GPUs below this are "low VRAM".
+
+    Returns:
+        ``True`` if the primary GPU has less than *threshold_mb* MiB total VRAM.
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        total_mb = int(result.stdout.strip().split("\n", 1)[0].strip())
+        return total_mb < threshold_mb
+    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError, IndexError, OSError):
+        return False

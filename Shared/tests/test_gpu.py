@@ -2,7 +2,8 @@
 
 import pytest
 
-from gamedev_shared.gpu import estimate_vram_requirement, format_bytes
+import gamedev_shared.gpu as gpu_module
+from gamedev_shared.gpu import estimate_vram_requirement, format_bytes, warn_if_vram_occupied
 
 
 class TestFormatBytes:
@@ -44,3 +45,38 @@ class TestEstimateVram:
         single = estimate_vram_requirement(batch_size=1)
         double = estimate_vram_requirement(batch_size=2)
         assert double == pytest.approx(single * 2, rel=0.01)
+
+
+class TestWarnIfVramOccupied:
+    def test_no_warning_when_empty(self, monkeypatch):
+        monkeypatch.setattr(gpu_module, "list_nvidia_compute_apps", lambda: [])
+        result = warn_if_vram_occupied()
+        assert result == []
+
+    def test_warning_when_occupied(self, monkeypatch, capsys):
+        monkeypatch.setattr(
+            gpu_module,
+            "list_nvidia_compute_apps",
+            lambda: [(12345, "python", 2048)],
+        )
+        result = warn_if_vram_occupied(threshold_mib=1024)
+        assert len(result) == 1
+        assert "12345" in result[0]
+
+    def test_below_threshold_no_warning(self, monkeypatch):
+        monkeypatch.setattr(
+            gpu_module,
+            "list_nvidia_compute_apps",
+            lambda: [(12345, "python", 512)],
+        )
+        result = warn_if_vram_occupied(threshold_mib=1024)
+        assert result == []
+
+    def test_null_mib_ignored(self, monkeypatch):
+        monkeypatch.setattr(
+            gpu_module,
+            "list_nvidia_compute_apps",
+            lambda: [(12345, "python", None)],
+        )
+        result = warn_if_vram_occupied(threshold_mib=1024)
+        assert result == []

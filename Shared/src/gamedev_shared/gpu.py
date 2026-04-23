@@ -279,6 +279,46 @@ def list_nvidia_compute_apps() -> list[tuple[int, str, int | None]]:
     return out
 
 
+def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
+    """Warn if significant GPU VRAM is in use by other processes.
+
+    Checks ``nvidia-smi`` for compute processes using more than
+    *threshold_mib* MiB.  Prints a yellow warning via :mod:`rich` if
+    any are found, but **never blocks or kills** — the caller should
+    proceed regardless.
+
+    Args:
+        threshold_mib: Minimum VRAM usage (MiB) per process to trigger warning.
+
+    Returns:
+        List of process descriptions (name, PID, VRAM) for testing.
+    """
+    apps = list_nvidia_compute_apps()
+    big: list[str] = []
+    total_mib = 0
+    for pid, name, mib in apps:
+        if mib is not None and mib > threshold_mib:
+            big.append(f"{name} (PID {pid}): {mib} MiB")
+            total_mib += mib
+    if big:
+        try:
+            from rich.console import Console
+
+            c = Console()
+        except ImportError:
+            c = None  # type: ignore[assignment]
+        msg = (
+            f"\u26a0 VRAM preflight: {len(big)} GPU process(es) detected using {total_mib} MiB total:\n"
+            + "\n".join(f"  - {line}" for line in big)
+            + "\nProceeding anyway \u2014 if OOM occurs, close other GPU apps."
+        )
+        if c is not None:
+            c.print(f"[yellow]{msg}[/yellow]")
+        else:
+            print(msg)
+    return big
+
+
 def kill_gpu_compute_processes_aggressive(
     *,
     exclude_pid: int,
@@ -341,3 +381,58 @@ def kill_gpu_compute_processes_aggressive(
             logs.append(f"PID {pid} ({name}): sem permissão (SIGKILL)")
 
     return logs
+
+
+# ---------------------------------------------------------------------------
+# nvidia-smi: VRAM livre e detecção de GPUs (sem torch)
+# ---------------------------------------------------------------------------
+
+
+def query_gpu_free_mib() -> int | None:
+    """VRAM livre na GPU 0 (MiB), ou ``None`` se nvidia-smi não existir / falhar."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    try:
+        r = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        if r.returncode != 0 or not (r.stdout or "").strip():
+            return None
+        line = (r.stdout or "").strip().splitlines()[0].strip()
+        return int(float(line))
+    except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
+        return None
+
+
+def detect_gpu_ids() -> list[int] | None:
+    """Detecta GPUs disponíveis via nvidia-smi. Retorna lista de IDs ou ``None``."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    try:
+        r = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        if r.returncode != 0 or not (r.stdout or "").strip():
+            return None
+        ids: list[int] = []
+        for line in (r.stdout or "").strip().splitlines():
+            line = line.strip()
+            if line:
+                ids.append(int(line))
+        return ids if ids else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return None

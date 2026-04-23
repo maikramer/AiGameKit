@@ -1,10 +1,12 @@
 """Testes para gamedev_shared.env."""
 
 import os
-from unittest.mock import patch
+import subprocess
+from unittest.mock import MagicMock, patch
 
 from gamedev_shared.env import (
     TOOL_BINS,
+    detect_low_vram,
     ensure_pytorch_cuda_alloc_conf,
     get_tool_bin,
     subprocess_gpu_env,
@@ -75,6 +77,40 @@ class TestGetToolBin:
             assert get_tool_bin("rigging3d") == "/x/rigging3d"
             assert get_tool_bin("gameassets") == "/x/gameassets"
             assert get_tool_bin("gamedevlab") == "/x/gamedev-lab"
+
+
+class TestDetectLowVram:
+    def test_returns_false_when_no_nvidia_smi(self, monkeypatch):
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            MagicMock(side_effect=FileNotFoundError("nvidia-smi not found")),
+        )
+        assert detect_low_vram() is False
+
+    def test_returns_true_below_threshold(self, monkeypatch):
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            MagicMock(return_value=MagicMock(stdout="4096\n", stderr="")),
+        )
+        assert detect_low_vram(threshold_mb=8192) is True
+
+    def test_returns_false_above_threshold(self, monkeypatch):
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            MagicMock(return_value=MagicMock(stdout="12288\n", stderr="")),
+        )
+        assert detect_low_vram(threshold_mb=8192) is False
+
+    def test_returns_false_on_parse_error(self, monkeypatch):
+        monkeypatch.setattr(
+            subprocess,
+            "run",
+            MagicMock(return_value=MagicMock(stdout="not_a_number\n", stderr="")),
+        )
+        assert detect_low_vram() is False
 
 
 class TestToolBins:
