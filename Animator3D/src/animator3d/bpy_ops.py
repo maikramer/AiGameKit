@@ -2074,11 +2074,11 @@ def project_texture_to_parts(
             margin=margin,
             cage_extrusion=0.1,
         )
+        bake_img.pack()
 
         bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
         if bsdf and "Base Color" in bsdf.inputs:
             mat.node_tree.links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
-        # Remove the __bake_target__ node from active (cleanup)
         nodes.active = bsdf if bsdf else nodes[0]
 
     bpy.ops.object.select_all(action="DESELECT")
