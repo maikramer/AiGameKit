@@ -12,7 +12,8 @@ from gameassets.batch_guard import query_gpu_free_mib, subprocess_gpu_env
 
 def test_subprocess_gpu_env_respects_existing_pytorch_conf(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:512")
-    assert subprocess_gpu_env() == {}
+    env = subprocess_gpu_env()
+    assert env["PYTORCH_CUDA_ALLOC_CONF"] == "max_split_size_mb:512"
 
 
 def test_subprocess_gpu_env_sets_expandable_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -22,7 +23,7 @@ def test_subprocess_gpu_env_sets_expandable_when_empty(monkeypatch: pytest.Monke
 
 
 def test_query_gpu_free_mib_none_without_nvidia_smi(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("gameassets.batch_guard.shutil.which", lambda _x: None)
+    monkeypatch.setattr("gamedev_shared.gpu.shutil.which", lambda _x: None)
     assert query_gpu_free_mib() is None
 
 

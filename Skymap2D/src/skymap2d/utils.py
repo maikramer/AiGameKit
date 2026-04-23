@@ -1,21 +1,17 @@
 """Funções utilitárias para Skymap2D."""
 
 import logging
-import random
 from datetime import datetime
-from pathlib import Path
 from typing import Any
+
+from gamedev_shared.path_utils import ensure_directory  # noqa: F401
+from gamedev_shared.seed_utils import generate_seed  # noqa: F401
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
-
-
-def generate_seed() -> int:
-    """Gera uma seed aleatória."""
-    return random.randint(0, 2**32 - 1)
 
 
 def validate_prompt(prompt: str, max_length: int = 500) -> tuple[bool, str | None]:
@@ -98,9 +94,3 @@ def format_bytes(size: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024.0  # type: ignore[assignment]
     return f"{size:.1f} TB"
-
-
-def ensure_directory(path: Path) -> Path:
-    """Garante que um diretório existe, criando se necessário."""
-    path.mkdir(parents=True, exist_ok=True)
-    return path

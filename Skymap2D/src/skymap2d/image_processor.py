@@ -1,13 +1,21 @@
-"""Utilitários de processamento de imagem para Skymap2D."""
+"""Utilitários de processamento de imagem para Skymap2D.
+
+Image I/O and metadata helpers are imported from ``gamedev_shared.image_utils``.
+This module re-exports them for backward compatibility and adds Skymap2D-specific
+defaults (EXR export, 2:1 thumbnail ratio).
+"""
+
+from __future__ import annotations
 
 import json
 import logging
-import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
+
+from gamedev_shared.image_utils import save_image_with_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -40,21 +48,26 @@ def save_image(
     if fmt not in ("png", "exr"):
         raise ValueError(f"image_format deve ser png ou exr, recebido: {image_format}")
 
-    if filename is None:
-        ts = int(datetime.now().timestamp())
-        ext = ".exr" if fmt == "exr" else ".png"
-        filename = f"skymap_{ts}{ext}"
-
-    filepath = out_dir / filename
     if fmt == "exr":
         from .exr_export import pil_rgb_to_linear_f32, write_exr_rgb_linear
 
+        if filename is None:
+            ts = int(datetime.now().timestamp())
+            filename = f"skymap_{ts}.exr"
+        filepath = out_dir / filename
         linear = pil_rgb_to_linear_f32(image)
         write_exr_rgb_linear(filepath, linear, scale=exr_scale)
-        logger.info(f"EXR gravado em {filepath}")
+        logger.info("EXR gravado em %s", filepath)
     else:
-        image.save(filepath, "PNG")
-        logger.info(f"Imagem gravada em {filepath}")
+        return save_image_with_metadata(
+            image,
+            prompt,
+            params,
+            output_dir=out_dir,
+            filename=filename,
+            metadata=metadata,
+            image_format="PNG",
+        )
 
     metadata_path = filepath.with_suffix(".json")
     metadata_dict: dict[str, Any] = {
@@ -77,29 +90,6 @@ def save_image(
 
 def create_thumbnail(image: Image.Image, size: tuple[int, int] = (512, 256)) -> Image.Image:
     """Cria um thumbnail da imagem (2:1 por defeito para skymaps)."""
-    thumb = image.copy()
-    thumb.thumbnail(size, Image.Resampling.LANCZOS)
-    return thumb
+    from gamedev_shared.image_utils import create_thumbnail as _create_thumbnail
 
-
-def create_zip(files: list[Path], output_path: Path) -> Path:
-    """Cria um arquivo ZIP a partir de uma lista de ficheiros."""
-    with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-        for file in files:
-            if file.exists():
-                zipf.write(file, file.name)
-    logger.info(f"ZIP criado em {output_path}")
-    return output_path
-
-
-def load_metadata(image_path: Path) -> dict[str, Any] | None:
-    """Carrega metadata JSON de uma imagem."""
-    metadata_path = image_path.with_suffix(".json")
-    if not metadata_path.exists():
-        return None
-    try:
-        with open(metadata_path, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Erro a carregar metadata: {e}")
-        return None
+    return _create_thumbnail(image, size)

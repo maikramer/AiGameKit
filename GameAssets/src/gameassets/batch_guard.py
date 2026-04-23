@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import os
-import shutil
-import subprocess
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
@@ -12,67 +10,8 @@ from pathlib import Path
 
 import click
 
-from gamedev_shared.env import PYTORCH_CUDA_ALLOC_CONF
-
-
-def subprocess_gpu_env(gpu_ids: list[int] | None = None) -> dict[str, str]:
-    """Variáveis extra para subprocessos text2d/text3d (não sobrescreve o ambiente do utilizador)."""
-    extra: dict[str, str] = {}
-    if not os.environ.get(PYTORCH_CUDA_ALLOC_CONF, "").strip():
-        extra[PYTORCH_CUDA_ALLOC_CONF] = "expandable_segments:True"
-    if gpu_ids:
-        extra["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
-    return extra
-
-
-def query_gpu_free_mib() -> int | None:
-    """VRAM livre na GPU 0 (MiB), ou None se nvidia-smi não existir / falhar."""
-    if not shutil.which("nvidia-smi"):
-        return None
-    try:
-        r = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=memory.free",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        if r.returncode != 0 or not (r.stdout or "").strip():
-            return None
-        line = (r.stdout or "").strip().splitlines()[0].strip()
-        return int(float(line))
-    except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
-        return None
-
-
-def detect_gpu_ids() -> list[int] | None:
-    """Detecta GPUs disponíveis via nvidia-smi. Retorna lista de IDs ou None."""
-    if not shutil.which("nvidia-smi"):
-        return None
-    try:
-        r = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=index",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=8,
-        )
-        if r.returncode != 0 or not (r.stdout or "").strip():
-            return None
-        ids: list[int] = []
-        for line in (r.stdout or "").strip().splitlines():
-            line = line.strip()
-            if line:
-                ids.append(int(line))
-        return ids if ids else None
-    except (OSError, ValueError, subprocess.TimeoutExpired):
-        return None
+from gamedev_shared.env import subprocess_gpu_env  # noqa: F401
+from gamedev_shared.gpu import detect_gpu_ids, query_gpu_free_mib  # noqa: F401
 
 
 def _pid_alive(pid: int) -> bool:
