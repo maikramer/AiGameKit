@@ -978,6 +978,52 @@ def cmd_list_clips(input_path: Path) -> None:
     sys.stdout.write(json.dumps(out, indent=2, ensure_ascii=False) + "\n")
 
 
+@main.command("texture-project")
+@click.argument("original_glb", type=click.Path(path_type=Path, exists=True))
+@click.argument("parts_glb", type=click.Path(path_type=Path, exists=True))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="Output GLB path (textured parts).",
+)
+@click.option(
+    "--resolution",
+    type=int,
+    default=1024,
+    show_default=True,
+    help="Bake texture resolution (square).",
+)
+@click.option(
+    "--margin",
+    type=int,
+    default=16,
+    show_default=True,
+    help="Bake margin in pixels (edge bleed).",
+)
+def cmd_texture_project(
+    original_glb: Path,
+    parts_glb: Path,
+    output: Path,
+    resolution: int,
+    margin: int,
+) -> None:
+    """Projeta textura do modelo original nas partes (Part3D)."""
+    _require_bpy()
+    from . import bpy_ops
+
+    bpy_ops.clear_scene()
+    bpy_ops.project_texture_to_parts(
+        original_glb=original_glb,
+        parts_glb=parts_glb,
+        output_path=output,
+        resolution=resolution,
+        margin=margin,
+    )
+    console.print(f"[green]texture-project[/green] {resolution}px → {output.resolve()}")
+
+
 @main.command("screenshot")
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.option(

@@ -633,6 +633,32 @@ def _part3d_pipeline_failed(
     return False
 
 
+def _texture_project_pipeline_failed(
+    animator3d_bin: str,
+    mesh_final: Path,
+    out_parts: Path,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    child_env: dict[str, str],
+    gpu_ids: list[int] | None = None,
+) -> bool:
+    """Projeta textura do modelo original nas partes via ``animator3d texture-project``."""
+    out_textured = out_parts.with_name(f"{out_parts.stem}_textured{out_parts.suffix}")
+    if out_textured.is_file():
+        rec["parts_textured_mesh_path"] = _path_for_log(out_textured, manifest_dir)
+        return False
+    argv = [animator3d_bin, "texture-project", str(mesh_final), str(out_parts), "-o", str(out_textured)]
+    t0 = time.perf_counter()
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    _timing_append(rec, "texture_project", time.perf_counter() - t0)
+    if r.returncode != 0:
+        err = merge_subprocess_output(r) or "texture-project falhou"
+        console.print(f"[yellow]texture-project falhou[/yellow] {rec.get('id', '?')}: {err[:200]}")
+        return True
+    rec["parts_textured_mesh_path"] = _path_for_log(out_textured, manifest_dir)
+    return False
+
+
 def _post_text3d_mesh_extras(
     profile: GameProfile,
     row: ManifestRow,
@@ -645,6 +671,7 @@ def _post_text3d_mesh_extras(
     rigging3d_bin: str | None,
     with_rig: bool,
     with_animate: bool,
+    animator3d_bin: str | None = None,
     gpu_ids: list[int] | None = None,
 ) -> bool:
     """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
@@ -660,6 +687,19 @@ def _post_text3d_mesh_extras(
         with_parts,
         gpu_ids=gpu_ids,
     )
+    if not part3d_fail and with_parts and row.generate_parts and animator3d_bin and mesh_final.is_file():
+        p3 = _part3d_profile_effective(profile, row)
+        out_parts, _out_seg = _part3d_output_paths(mesh_final, p3)
+        if out_parts.is_file():
+            _texture_project_pipeline_failed(
+                animator3d_bin,
+                mesh_final,
+                out_parts,
+                rec,
+                manifest_dir,
+                child_env,
+                gpu_ids=gpu_ids,
+            )
     rig_mesh_in = mesh_final
     rec["rig_input_path"] = _path_for_log(rig_mesh_in, manifest_dir)
     rig_fail = _rigging3d_pipeline_failed(
@@ -1280,9 +1320,11 @@ def batch_cmd(
             raise click.ClickException(str(e)) from e
 
     animator3d_bin: str | None = None
-    if with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows):
+    if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig) for r in rows)) or (
+        with_parts and any(r.generate_parts for r in rows)
+    ):
         animator3d_bin = _resolve_animator3d_bin()
-        if not animator3d_bin:
+        if not animator3d_bin and with_animate:
             raise click.ClickException(
                 "Comando não encontrado: 'animator3d'. Instala Animator3D ou define ANIMATOR3D_BIN."
             )
@@ -2000,6 +2042,7 @@ def batch_cmd(
                             rigging3d_bin,
                             with_rig,
                             with_animate,
+                            animator3d_bin=animator3d_bin,
                             gpu_ids=gpu_ids,
                         ):
                             failures += 1
@@ -2185,6 +2228,7 @@ def batch_cmd(
                                         rigging3d_bin,
                                         with_rig,
                                         with_animate,
+                                        animator3d_bin=animator3d_bin,
                                         gpu_ids=gpu_ids,
                                     ):
                                         failures += 1

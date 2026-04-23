@@ -1981,3 +1981,119 @@ def export_auto(path: Path) -> None:
         export_glb(path)
     else:
         raise ValueError(f"Extensão de saída não suportada: {suf}")
+
+
+def project_texture_to_parts(
+    original_glb: Path,
+    parts_glb: Path,
+    output_path: Path,
+    resolution: int = 1024,
+    margin: int = 16,
+) -> None:
+    """Project textures from an original textured mesh onto Part3D part meshes via Cycles bake."""
+    import math
+
+    bpy = _bpy()
+    clear_scene()
+
+    bpy.ops.import_scene.gltf(filepath=str(original_glb.resolve()))
+    source_objs = [o for o in bpy.context.selected_objects if o.type == "MESH"]
+
+    bpy.ops.import_scene.gltf(filepath=str(parts_glb.resolve()))
+    all_objs = list(bpy.context.selected_objects)
+    part_objs = [o for o in all_objs if o not in source_objs and o.type == "MESH"]
+
+    bpy.context.scene.render.engine = "CYCLES"
+
+    for part_obj in part_objs:
+        if part_obj.type != "MESH":
+            continue
+
+        if not part_obj.data.uv_layers:
+            bpy.ops.object.select_all(action="DESELECT")
+            part_obj.select_set(True)
+            bpy.context.view_layer.objects.active = part_obj
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.select_all(action="SELECT")
+            try:
+                area = next((a for a in bpy.context.screen.areas if a.type == "VIEW_3D"), None)
+                if area:
+                    with bpy.context.temp_override(area=area):
+                        bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.01)
+                else:
+                    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.01)
+            except Exception:
+                bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.01)
+            bpy.ops.mesh.select_all(action="DESELECT")
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        img_name = f"{part_obj.name}_baked"
+        bake_img = bpy.data.images.new(img_name, width=resolution, height=resolution, alpha=True)
+        bake_img.colorspace_settings.name = "sRGB"
+
+        if not part_obj.data.materials:
+            mat = bpy.data.materials.new(f"{part_obj.name}_mat")
+            mat.use_nodes = True
+            part_obj.data.materials.append(mat)
+        mat = part_obj.data.materials[0]
+        if not mat.use_nodes:
+            mat.use_nodes = True
+
+        nodes = mat.node_tree.nodes
+        tex_node = nodes.new("ShaderNodeTexImage")
+        tex_node.name = "__bake_target__"
+        tex_node.image = bake_img
+        tex_node.select = True
+        nodes.active = tex_node  # CRITICAL: Cycles bakes to the active node
+
+        bpy.ops.object.select_all(action="DESELECT")
+        for src in source_objs:
+            src.select_set(True)
+        part_obj.select_set(True)
+        bpy.context.view_layer.objects.active = part_obj  # part = bake target
+
+        scene = bpy.context.scene
+        scene.cycles.bake_type = "DIFFUSE"
+        scene.cycles.samples = 1
+        scene.cycles.use_denoising = False
+        bake = scene.render.bake
+        bake.use_pass_direct = False
+        bake.use_pass_indirect = False
+        bake.use_pass_color = True  # only base color
+        bake.use_selected_to_active = True
+        bake.margin = margin
+        bake.margin_type = "EXTEND"
+        bake.cage_extrusion = 0.1
+        bake.target = "IMAGE_TEXTURES"
+        bake.use_clear = True
+
+        bpy.ops.object.bake(
+            type="DIFFUSE",
+            use_selected_to_active=True,
+            use_clear=True,
+            margin=margin,
+            cage_extrusion=0.1,
+        )
+
+        bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+        if bsdf and "Base Color" in bsdf.inputs:
+            mat.node_tree.links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+        # Remove the __bake_target__ node from active (cleanup)
+        nodes.active = bsdf if bsdf else nodes[0]
+
+    bpy.ops.object.select_all(action="DESELECT")
+    for src in source_objs:
+        src.select_set(True)
+    bpy.ops.object.delete()
+
+    bpy.ops.object.select_all(action="SELECT")
+    output_path = output_path.expanduser().resolve()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    bpy.ops.export_scene.gltf(
+        filepath=str(output_path),
+        export_format="GLB",
+        use_selection=True,
+        export_draco_mesh_compression_enable=True,
+        export_draco_mesh_compression_level=6,
+        export_all_influences=False,
+    )
