@@ -65,14 +65,29 @@ def ensure_pytorch_cuda_alloc_conf(
     os.environ[PYTORCH_CUDA_ALLOC_CONF] = value
 
 
-def subprocess_gpu_env(extra: dict[str, str] | None = None) -> dict[str, str]:
+def subprocess_gpu_env(
+    extra: dict[str, str] | None = None,
+    gpu_ids: list[int] | None = None,
+) -> dict[str, str]:
     """Ambiente para subprocessos GPU: copia env e aplica CUDA alloc se vazio.
 
     Útil para o GameAssets ao lançar text2d/text3d como filhos.
+
+    Args:
+        extra: Additional env vars to merge into the returned dict.
+        gpu_ids: GPU device IDs to expose via ``CUDA_VISIBLE_DEVICES``.
+            When provided and non-empty, sets ``CUDA_VISIBLE_DEVICES`` to a
+            comma-separated string (e.g. ``[0, 1]`` → ``"0,1"``).
+            Pass ``None`` (default) to omit the variable.
+
+    Returns:
+        Environment dict ready for ``subprocess.run(env=…)``.
     """
     env = os.environ.copy()
     if not env.get(PYTORCH_CUDA_ALLOC_CONF):
         env[PYTORCH_CUDA_ALLOC_CONF] = "expandable_segments:True"
+    if gpu_ids:
+        env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
     if extra:
         env.update(extra)
     return env

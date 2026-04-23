@@ -135,12 +135,25 @@ def estimate_vram_requirement(
 # ---------------------------------------------------------------------------
 
 
-def clear_cuda_memory() -> None:
-    """Força GC e esvazia cache CUDA — útil entre fases pesadas."""
+def clear_cuda_memory(devices: list[int] | None = None) -> None:
+    """Força GC e esvazia cache CUDA — útil entre fases pesadas.
+
+    Args:
+        devices: Lista de índices GPU para limpar. Se ``None``, limpa apenas
+            o dispositivo atual (comportamento original).
+    """
     torch = _torch()
     gc.collect()
-    if torch.cuda.is_available():
+    if not torch.cuda.is_available():
+        return
+    if devices is None:
         torch.cuda.empty_cache()
+        return
+    original = torch.cuda.current_device()
+    for d in devices:
+        torch.cuda.set_device(d)
+        torch.cuda.empty_cache()
+    torch.cuda.set_device(original)
 
 
 DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB = 300

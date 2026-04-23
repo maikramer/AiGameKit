@@ -63,5 +63,74 @@ def print_summary_table(events: list[dict[str, Any]], file: TextIO | None = None
             )
 
 
+def print_gpu_summary(events: list[dict[str, Any]], file: TextIO | None = None) -> None:
+    """Imprime tabela de max VRAM por GPU (multi-GPU)."""
+    out = file or sys.stdout
+    if not events:
+        return
+
+    # Collect per-device max allocated from cuda_before/cuda_after + cuda_all
+    gpu_max: dict[int | str, float] = {}
+    gpu_names: dict[int | str, str] = {}
+
+    for ev in events:
+        for key in ("cuda_before", "cuda_after"):
+            snap = ev.get(key)
+            if not snap or not snap.get("cuda_available"):
+                continue
+            dev = snap.get("cuda_device")
+            if dev is None:
+                continue
+            alloc = snap.get("cuda_allocated_mb", 0) or 0
+            peak = snap.get("cuda_peak_allocated_mb", 0) or 0
+            val = max(alloc, peak)
+            gpu_max[dev] = max(gpu_max.get(dev, 0.0), val)
+            name = snap.get("cuda_device_name", "")
+            if name:
+                gpu_names[dev] = name
+
+        # NEW: cuda_all is a list of snapshots for all GPUs
+        for snap in ev.get("cuda_all", []):
+            if not snap or not snap.get("cuda_available"):
+                continue
+            dev = snap.get("cuda_device")
+            if dev is None:
+                continue
+            alloc = snap.get("cuda_allocated_mb", 0) or 0
+            peak = snap.get("cuda_peak_allocated_mb", 0) or 0
+            val = max(alloc, peak)
+            gpu_max[dev] = max(gpu_max.get(dev, 0.0), val)
+            name = snap.get("cuda_device_name", "")
+            if name:
+                gpu_names[dev] = name
+
+    if not gpu_max:
+        return
+
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        console = Console(file=out, force_terminal=False)
+        table = Table(title="Profiler — VRAM máxima por GPU", show_header=True, header_style="bold")
+        table.add_column("GPU", style="cyan")
+        table.add_column("Nome")
+        table.add_column("VRAM máx (MB)", justify="right")
+        table.add_column("VRAM máx (GB)", justify="right")
+
+        for dev in sorted(gpu_max.keys()):
+            mb = round(gpu_max[dev], 1)
+            gb = round(mb / 1024, 2)
+            table.add_row(str(dev), gpu_names.get(dev, "—"), f"{mb}", f"{gb}")
+        console.print(table)
+    except ImportError:
+        print("Profiler — VRAM máxima por GPU", file=out)
+        print("-" * 50, file=out)
+        for dev in sorted(gpu_max.keys()):
+            mb = round(gpu_max[dev], 1)
+            gb = round(mb / 1024, 2)
+            print(f"  GPU {dev} ({gpu_names.get(dev, '')}): {mb} MB ({gb} GB)", file=out)
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()

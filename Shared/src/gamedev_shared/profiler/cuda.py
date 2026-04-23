@@ -104,6 +104,23 @@ def cuda_memory_snapshot(device_index: int = 0) -> CudaMemorySnapshot:
     )
 
 
+def cuda_memory_snapshot_all() -> list[CudaMemorySnapshot]:
+    """Snapshots de VRAM para todas as GPUs disponíveis."""
+    try:
+        import torch
+    except ImportError:
+        return []
+
+    if not torch.cuda.is_available():
+        return []
+
+    out: list[CudaMemorySnapshot] = []
+    for idx in range(torch.cuda.device_count()):
+        torch.cuda.set_device(idx)
+        out.append(cuda_memory_snapshot(idx))
+    return out
+
+
 def cuda_synchronize(device_index: int = 0) -> None:
     """``torch.cuda.synchronize`` se CUDA disponível; caso contrário no-op."""
     try:
