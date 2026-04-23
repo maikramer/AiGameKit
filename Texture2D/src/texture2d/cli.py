@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""
-Texture2D — CLI principal (texturas 2D seamless).
-"""
+"""Texture2D — CLI principal (texturas 2D seamless)."""
+
+from __future__ import annotations
 
 import sys
 import time
@@ -14,7 +14,9 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.hf import get_hf_token, hf_home_display_rich
+from gamedev_shared.gpu import get_system_info
+from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.path_utils import safe_filename
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
 from .generator import TextureGenerator, default_model_id
@@ -36,7 +38,7 @@ def ensure_dirs() -> None:
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
-    """Texture2D — texturas 2D seamless via HF Inference API (Flux LoRA)."""
+    """Texture2D — texturas 2D seamless (FLUX.1-dev + LoRA local)."""
     ctx.ensure_object(dict)
     ctx.obj["VERBOSE"] = verbose
 
@@ -79,12 +81,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png)")
 @click.option("--width", "-W", default=1024, show_default=True, type=int)
 @click.option("--height", "-H", default=1024, show_default=True, type=int)
-@click.option("--steps", "-s", default=50, show_default=True, help="Passos de inferência")
+@click.option("--steps", "-s", default=28, show_default=True, help="Passos de inferência")
 @click.option(
     "--guidance",
     "-g",
     "guidance_scale",
-    default=7.5,
+    default=3.5,
     show_default=True,
     help="Guidance scale",
 )
@@ -110,7 +112,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help="ID do modelo HF (default: Flux-Seamless-Texture-LoRA)",
+    help="ID do modelo LoRA HF (default: Flux-Seamless-Texture-LoRA)",
 )
 @click.option(
     "--verbose",
@@ -118,6 +120,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "verbose_flag",
     is_flag=True,
     help="Logs detalhados",
+)
+@click.option("--cpu", is_flag=True, help="Forçar CPU")
+@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
 )
 @click.pass_context
 def generate_cmd(
@@ -135,9 +145,21 @@ def generate_cmd(
     lora_strength: float,
     model_id: str | None,
     verbose_flag: bool,
+    cpu: bool,
+    low_vram: bool,
+    gpu_ids_str: str | None,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT."""
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    if not cpu:
+        warn_if_vram_occupied()
+
+    device = "cpu" if cpu else None
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    resolved_model = model_id or default_model_id()
 
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
@@ -146,26 +168,40 @@ def generate_cmd(
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
-    table.add_row("[bold]Modelo[/bold]", model_id or default_model_id())
+    table.add_row("[bold]Modelo LoRA[/bold]", resolved_model)
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
+    t_start = time.time()
+
     try:
-        gen = TextureGenerator(model_id=model_id)
+        gen = TextureGenerator(
+            device=device,
+            low_vram=low_vram or cpu,
+            verbose=verbose,
+            model_id=model_id,
+            gpu_ids=gpu_ids,
+        )
+
+        with console.status(
+            "[bold yellow]1/2 — Download HF + carregamento de pesos "
+            "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 3/3)",
+            spinner="dots",
+        ):
+            gen.warmup()
 
         if output is None:
             ensure_dirs()
             ts = int(time.time())
-            safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
+            safe = safe_filename(prompt)
             output = str(DEFAULT_TEXTURE_DIR / f"{safe}_{ts}.png")
         out_path = Path(output)
 
-        start = time.time()
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Gerando textura via API...", total=None)
+            task = progress.add_task("[cyan]2/2 — Inferência na GPU...", total=None)
             image, metadata = gen.generate(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -190,17 +226,19 @@ def generate_cmd(
             filename=out_path.name,
         )
 
-        elapsed = time.time() - start
+        elapsed = time.time() - t_start
         try:
             sz = format_bytes(saved.stat().st_size)
         except OSError:
             sz = "?"
-
         console.print(Rule("[bold green]Resultado", style="green"))
         console.print(f"[bold green]\u2713[/bold green] Textura: [cyan]{saved.resolve()}[/cyan] [dim]({sz})[/dim]")
         console.print(f"[dim]Seed: {metadata.get('seed', '?')}[/dim]")
-        console.print(f"[dim]Tempo: {elapsed:.1f}s[/dim]")
+        console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
 
+    except ImportError as e:
+        console.print(f"\n[bold red]\u2717[/bold red] {e}")
+        sys.exit(1)
     except Exception as e:
         console.print(f"\n[bold red]\u2717 Erro:[/bold red] {e}")
         if verbose:
@@ -221,8 +259,8 @@ def presets_cmd() -> None:
         t.add_row(
             name,
             preset["prompt"][:60] + "..." if len(preset["prompt"]) > 60 else preset["prompt"],
-            str(preset.get("num_inference_steps", 50)),
-            str(preset.get("guidance_scale", 7.5)),
+            str(preset.get("num_inference_steps", 28)),
+            str(preset.get("guidance_scale", 3.5)),
         )
     console.print(t)
 
@@ -233,9 +271,16 @@ def presets_cmd() -> None:
 @click.option("--preset", "-p", default=None, help="Preset aplicado a todos os prompts")
 @click.option("--width", "-W", default=1024, type=int)
 @click.option("--height", "-H", default=1024, type=int)
-@click.option("--steps", "-s", default=50, type=int)
-@click.option("--guidance", "-g", "guidance_scale", default=7.5, type=float)
+@click.option("--steps", "-s", default=28, type=int)
+@click.option("--guidance", "-g", "guidance_scale", default=3.5, type=float)
 @click.option("--model", "-m", "model_id", default=None)
+@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1')",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -247,8 +292,12 @@ def batch_cmd(
     steps: int,
     guidance_scale: float,
     model_id: str | None,
+    low_vram: bool,
+    gpu_ids_str: str | None,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
     prompts = [
         line.strip()
         for line in file.read_text(encoding="utf-8").splitlines()
@@ -263,7 +312,12 @@ def batch_cmd(
     out = output_dir or DEFAULT_TEXTURE_DIR
     out.mkdir(parents=True, exist_ok=True)
 
-    gen = TextureGenerator(model_id=model_id)
+    gen = TextureGenerator(
+        low_vram=low_vram,
+        verbose=bool(ctx.obj.get("VERBOSE")),
+        model_id=model_id,
+        gpu_ids=gpu_ids,
+    )
     base_params = {
         "guidance_scale": guidance_scale,
         "num_inference_steps": steps,
@@ -282,7 +336,7 @@ def batch_cmd(
             continue
 
         ts = int(time.time())
-        safe = "".join(c if c.isalnum() else "_" for c in prompts[idx][:30])
+        safe = safe_filename(prompts[idx])
         fname = f"{safe}_{ts}.png"
         saved = save_image(
             image,
@@ -308,23 +362,30 @@ def info_cmd() -> None:
     """Informações de configuração e ambiente."""
     console.print(
         Panel.fit(
-            "[bold]texture2d info[/bold] — configuração e ambiente",
+            "[bold]texture2d info[/bold] — ambiente de execução e cache Hugging Face",
             border_style="blue",
         )
     )
 
-    t = Table(title="[bold blue]Configuração", box=box.ROUNDED)
-    t.add_column("Item", style="cyan", no_wrap=True)
+    data = get_system_info()
+    t = Table(title="[bold blue]Sistema", box=box.ROUNDED)
+    t.add_column("Componente", style="cyan", no_wrap=True)
     t.add_column("Valor", style="green")
 
-    t.add_row("Modelo (default)", default_model_id())
-
-    token = get_hf_token()
-    t.add_row("HF Token", "[green]configurado[/green]" if token else "[red]não definido[/red]")
+    t.add_row("Modelo LoRA (default)", default_model_id())
+    t.add_row("Modelo base", "black-forest-labs/FLUX.1-dev")
+    t.add_row("Python", data.get("python_version", "N/A"))
+    t.add_row("PyTorch", data.get("torch_version", "N/A"))
+    t.add_row("CUDA", str(data.get("cuda_available", False)))
+    if data.get("cuda_available"):
+        t.add_row("CUDA (versão)", str(data.get("cuda_version", "N/A")))
+        for i, gpu in enumerate(data.get("gpus", [])):
+            t.add_row(f"GPU {i}", str(gpu.get("name", "")))
+            t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
+            t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
     t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
     t.add_row("Saída padrão", str(DEFAULT_TEXTURE_DIR.resolve()))
     t.add_row("Presets disponíveis", str(len(TEXTURE_PRESETS)))
-    t.add_row("Python", sys.version.split()[0])
 
     console.print(t)
 

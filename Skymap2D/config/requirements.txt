@@ -1,8 +1,18 @@
-# Skymap2D — dependências de runtime (skymaps equirectangular via HF Inference API)
+# Skymap2D — dependências de runtime (skymaps equirectangular com FLUX.1-dev + LoRA local)
 # Uso: pip install -r config/requirements.txt
-# Nota: NÃO usa PyTorch/Diffusers — geração é 100% cloud (InferenceClient).
+# Nota: torch/torchvision são instalados por scripts/setup.sh ou installer.py (CUDA/CPU).
 
-huggingface-hub>=0.24.0
+torch>=2.1.0
+torchvision>=0.16.0
+
+# Pipeline FLUX.1-dev + LoRA (FluxPipeline); testado com 0.37.x
+diffusers>=0.37.0
+transformers>=4.40.0
+accelerate>=0.24.0
+huggingface-hub>=0.20.0
+safetensors>=0.4.0
+sdnq>=0.1.0
+
 numpy>=1.24.0
 OpenEXR>=3.2.0
 Pillow>=10.0.0

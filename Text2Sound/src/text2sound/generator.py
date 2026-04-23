@@ -64,6 +64,7 @@ class AudioGenerator:
         auto_clear: bool = True,
         half_precision: bool | None = None,
         low_vram: bool = False,
+        gpu_ids: list[int] | None = None,
     ) -> None:
         self._model_id = model_id
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -72,6 +73,8 @@ class AudioGenerator:
             self._half = self._device == "cuda" and low_vram and self._should_use_half()
         else:
             self._half = half_precision
+        self._gpu_ids = gpu_ids
+        self._multi_gpu: bool = False
         self._model: Any = None
         self._model_config: dict[str, Any] = {}
         self._loaded = False
@@ -94,6 +97,7 @@ class AudioGenerator:
         device: str | None = None,
         half_precision: bool | None = None,
         low_vram: bool = False,
+        gpu_ids: list[int] | None = None,
     ) -> AudioGenerator:
         """Singleton thread-safe — reutiliza modelo já carregado."""
         with cls._lock:
@@ -103,6 +107,7 @@ class AudioGenerator:
                     device=device,
                     half_precision=half_precision,
                     low_vram=low_vram,
+                    gpu_ids=gpu_ids,
                 )
             return cls._instance
 
@@ -158,7 +163,31 @@ class AudioGenerator:
         if self._half:
             self._model = self._model.half()
         self._model = self._model.to(self._device)
+
+        if self._gpu_ids and len(self._gpu_ids) >= 2 and self._device == "cuda":
+            self._try_multi_gpu()
+
         self._loaded = True
+
+    def _try_multi_gpu(self) -> None:
+        """Tenta dispatch multi-GPU via accelerate (MultiGPUPlanner)."""
+        try:
+            from gamedev_shared.multi_gpu import MultiGPUPlanner
+
+            planner = (
+                MultiGPUPlanner()
+                .for_model(self._model)
+                .with_gpus(self._gpu_ids)  # type: ignore[arg-type]
+                .no_split(["DiTBlock", "AudioDiTBlock"])
+            )
+            plan = planner.plan()
+            if plan.status == "multi_gpu":
+                self._model = planner.apply()
+                primary = plan.primary_device
+                self._device = f"cuda:{primary}" if isinstance(primary, int) else primary
+                self._multi_gpu = True
+        except Exception:
+            pass
 
     def unload(self) -> None:
         """Descarrega modelo e libera VRAM."""
@@ -230,6 +259,7 @@ class AudioGenerator:
         ]
 
         with self._generation_context():
+            gen_device = f"cuda:{self._gpu_ids[0]}" if self._multi_gpu and self._gpu_ids else self._device
             output = generate_diffusion_cond(
                 self._model,
                 steps=steps,
@@ -239,7 +269,7 @@ class AudioGenerator:
                 sigma_min=sigma_min,
                 sigma_max=sigma_max,
                 sampler_type=sampler_type,
-                device=self._device,
+                device=gen_device,
             )
 
         audio = rearrange(output, "b d n -> d (b n)")

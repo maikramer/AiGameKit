@@ -1,8 +1,16 @@
-# Texture2D — dependências de runtime (texturas seamless via HF Inference API)
+# Texture2D — dependências de runtime (texturas seamless via FLUX.1-dev + LoRA local)
 # Uso: pip install -r config/requirements.txt
-# Nota: NÃO usa PyTorch/Diffusers — geração é 100% cloud (InferenceClient).
+# Requer PyTorch + CUDA para inferência local.
 
-huggingface-hub>=0.24.0
+torch>=2.1.0
+torchvision>=0.16.0
+diffusers>=0.37.0
+transformers>=4.40.0
+accelerate>=0.24.0
+huggingface-hub>=0.20.0
+safetensors>=0.4.0
+sdnq>=0.1.0
+numpy>=1.24.0
 Pillow>=10.0.0
 python-dotenv>=1.0.0
 

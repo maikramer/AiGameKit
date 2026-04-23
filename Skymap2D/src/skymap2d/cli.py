@@ -1,19 +1,10 @@
 #!/usr/bin/env python3
-"""
-Skymap2D — CLI principal (skymaps equirectangular 360°).
-"""
+"""Skymap2D — CLI principal (skymaps equirectangular 360°)."""
 
-import contextlib
 import sys
 import time
 from pathlib import Path
-
-# Windows (cp1252): Rich spinners/símbolos exigem UTF-8 no stdout/stderr.
-if sys.platform == "win32":
-    for _stream in (sys.stdout, sys.stderr):
-        if _stream is not None and hasattr(_stream, "reconfigure"):
-            with contextlib.suppress(OSError, ValueError):
-                _stream.reconfigure(encoding="utf-8")
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -22,10 +13,11 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.hf import get_hf_token, hf_home_display_rich
+from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.path_utils import safe_filename
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
-from .generator import SkymapGenerator, default_model_id
+from .generator import SkymapGenerator, default_base_model_id, default_model_id
 from .presets import SKYMAP_PRESETS, list_presets
 from .utils import format_bytes
 
@@ -44,7 +36,7 @@ def ensure_dirs() -> None:
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
-    """Skymap2D — skymaps equirectangular 360° via HF Inference API (Flux LoRA)."""
+    """Skymap2D — skymaps equirectangular 360° com FLUX.1-dev + LoRA local."""
     ctx.ensure_object(dict)
     ctx.obj["VERBOSE"] = verbose
 
@@ -87,12 +79,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png ou .exr)")
 @click.option("--width", "-W", default=2048, show_default=True, type=int)
 @click.option("--height", "-H", default=1024, show_default=True, type=int)
-@click.option("--steps", "-s", default=40, show_default=True, help="Passos de inferência")
+@click.option("--steps", "-s", default=28, show_default=True, help="Passos de inferência")
 @click.option(
     "--guidance",
     "-g",
     "guidance_scale",
-    default=6.0,
+    default=3.5,
     show_default=True,
     help="Guidance scale",
 )
@@ -118,7 +110,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help="ID do modelo HF (default: Flux-LoRA-Equirectangular-v3)",
+    help="ID do LoRA HF (default: Flux-LoRA-Equirectangular-v3)",
 )
 @click.option(
     "--verbose",
@@ -126,6 +118,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "verbose_flag",
     is_flag=True,
     help="Logs detalhados",
+)
+@click.option("--cpu", is_flag=True, help="Forçar CPU")
+@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
 )
 @click.option(
     "--format",
@@ -157,11 +157,23 @@ def generate_cmd(
     lora_strength: float,
     model_id: str | None,
     verbose_flag: bool,
+    cpu: bool,
+    low_vram: bool,
+    gpu_ids_str: str | None,
     image_format: str,
     exr_scale: float,
 ) -> None:
     """Gera um skymap equirectangular 360° a partir do PROMPT."""
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    if not cpu:
+        warn_if_vram_occupied()
+
+    device = "cpu" if cpu else None
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    resolved_model = model_id or default_model_id()
 
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
@@ -170,20 +182,27 @@ def generate_cmd(
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
-    table.add_row("[bold]Modelo[/bold]", model_id or default_model_id())
+    table.add_row("[bold]Base[/bold]", default_base_model_id())
+    table.add_row("[bold]LoRA[/bold]", resolved_model)
     table.add_row("[bold]Formato[/bold]", image_format.lower())
     if image_format.lower() == "exr" and exr_scale != 1.0:
         table.add_row("[bold]EXR scale[/bold]", str(exr_scale))
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     try:
-        gen = SkymapGenerator(model_id=model_id)
+        gen = SkymapGenerator(
+            device=device,
+            low_vram=low_vram or cpu,
+            verbose=verbose,
+            model_id=model_id,
+            gpu_ids=gpu_ids,
+        )
 
         fmt_opt = image_format.lower()
         if output is None:
             ensure_dirs()
             ts = int(time.time())
-            safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
+            safe = safe_filename(prompt)
             ext = ".exr" if fmt_opt == "exr" else ".png"
             output = str(DEFAULT_SKYMAP_DIR / f"{safe}_{ts}{ext}")
         out_path = Path(output)
@@ -198,12 +217,20 @@ def generate_cmd(
             raise click.BadParameter("Extensão de saída deve ser .png ou .exr (ou omite a extensão e usa --format).")
 
         start = time.time()
+
+        with console.status(
+            "[bold yellow]1/2 — Download HF + carregamento de pesos "
+            "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 4/4)",
+            spinner="dots",
+        ):
+            gen.warmup()
+
         with Progress(
             SpinnerColumn(),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Gerando skymap via API...", total=None)
+            task = progress.add_task("[cyan]2/2 — Inferência na GPU...", total=None)
             image, metadata = gen.generate(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -261,8 +288,8 @@ def presets_cmd() -> None:
         t.add_row(
             name,
             preset["prompt"][:60] + "..." if len(preset["prompt"]) > 60 else preset["prompt"],
-            str(preset.get("num_inference_steps", 40)),
-            str(preset.get("guidance_scale", 6.0)),
+            str(preset.get("num_inference_steps", 28)),
+            str(preset.get("guidance_scale", 3.5)),
         )
     console.print(t)
 
@@ -273,9 +300,17 @@ def presets_cmd() -> None:
 @click.option("--preset", "-p", default=None, help="Preset aplicado a todos os prompts")
 @click.option("--width", "-W", default=2048, type=int)
 @click.option("--height", "-H", default=1024, type=int)
-@click.option("--steps", "-s", default=40, type=int)
-@click.option("--guidance", "-g", "guidance_scale", default=6.0, type=float)
+@click.option("--steps", "-s", default=28, type=int)
+@click.option("--guidance", "-g", "guidance_scale", default=3.5, type=float)
 @click.option("--model", "-m", "model_id", default=None)
+@click.option("--cpu", is_flag=True, help="Forçar CPU")
+@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1').",
+)
 @click.option(
     "--format",
     "image_format",
@@ -301,10 +336,18 @@ def batch_cmd(
     steps: int,
     guidance_scale: float,
     model_id: str | None,
+    cpu: bool,
+    low_vram: bool,
+    gpu_ids_str: str | None,
     image_format: str,
     exr_scale: float,
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
+    if not cpu:
+        warn_if_vram_occupied()
+
     prompts = [
         line.strip()
         for line in file.read_text(encoding="utf-8").splitlines()
@@ -319,8 +362,16 @@ def batch_cmd(
     out = output_dir or DEFAULT_SKYMAP_DIR
     out.mkdir(parents=True, exist_ok=True)
 
-    gen = SkymapGenerator(model_id=model_id)
-    base_params = {
+    device = "cpu" if cpu else None
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
+    gen = SkymapGenerator(
+        device=device,
+        low_vram=low_vram or cpu,
+        model_id=model_id,
+        gpu_ids=gpu_ids,
+    )
+    base_params: dict[str, Any] = {
         "guidance_scale": guidance_scale,
         "num_inference_steps": steps,
         "width": width,
@@ -338,7 +389,7 @@ def batch_cmd(
             continue
 
         ts = int(time.time())
-        safe = "".join(c if c.isalnum() else "_" for c in prompts[idx][:30])
+        safe = safe_filename(prompts[idx])
         ext = ".exr" if image_format.lower() == "exr" else ".png"
         fname = f"{safe}_{ts}{ext}"
         saved = save_image(
@@ -365,6 +416,8 @@ def batch_cmd(
 @cli.command("info")
 def info_cmd() -> None:
     """Informações de configuração e ambiente."""
+    from gamedev_shared.gpu import get_system_info
+
     console.print(
         Panel.fit(
             "[bold]skymap2d info[/bold] — configuração e ambiente",
@@ -376,14 +429,22 @@ def info_cmd() -> None:
     t.add_column("Item", style="cyan", no_wrap=True)
     t.add_column("Valor", style="green")
 
-    t.add_row("Modelo (default)", default_model_id())
-
-    token = get_hf_token()
-    t.add_row("HF Token", "[green]configurado[/green]" if token else "[red]não definido[/red]")
+    t.add_row("Modelo base (FLUX)", default_base_model_id())
+    t.add_row("LoRA equirectangular", default_model_id())
     t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
     t.add_row("Saída padrão", str(DEFAULT_SKYMAP_DIR.resolve()))
     t.add_row("Presets disponíveis", str(len(SKYMAP_PRESETS)))
-    t.add_row("Python", sys.version.split()[0])
+
+    info = get_system_info()
+    t.add_row("Python", info.get("python_version", sys.version.split()[0]))
+    t.add_row("PyTorch", info.get("torch_version", "N/A"))
+    t.add_row("CUDA", str(info.get("cuda_available", False)))
+    if info.get("cuda_available"):
+        t.add_row("CUDA versão", str(info.get("cuda_version", "N/A")))
+        for i, gpu in enumerate(info.get("gpus", [])):
+            t.add_row(f"GPU {i}", str(gpu.get("name", "")))
+            t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
+            t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
 
     console.print(t)
 

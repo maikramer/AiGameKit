@@ -3,6 +3,8 @@
 Text2Sound — CLI principal (text-to-audio).
 """
 
+from __future__ import annotations
+
 import os
 import sys
 import time
@@ -249,6 +251,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Enable low-VRAM mode (auto float16, reduced settings)",
 )
 @click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1')",
+)
+@click.option(
     "--verbose",
     "-v",
     "verbose_flag",
@@ -280,11 +288,21 @@ def generate_cmd(
     model_id: str | None,
     half_precision: bool | None,
     low_vram: bool,
+    gpu_ids_str: str | None,
     verbose_flag: bool,
     profiler_flag: bool,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
+    try:
+        from gamedev_shared.gpu import warn_if_vram_occupied
+
+        warn_if_vram_occupied()
+    except ImportError:
+        pass
 
     if preset and preset != "None":
         try:
@@ -361,6 +379,7 @@ def generate_cmd(
                 model_id=resolved_model_id,
                 half_precision=half_precision,
                 low_vram=low_vram,
+                gpu_ids=gpu_ids,
             )
 
             if output is None:
@@ -497,6 +516,12 @@ def generate_cmd(
     help="Enable low-VRAM mode (auto float16, reduced settings)",
 )
 @click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1')",
+)
+@click.option(
     "--seed",
     type=int,
     default=None,
@@ -520,10 +545,21 @@ def batch_cmd(
     model_id: str | None,
     half_precision: bool | None,
     low_vram: bool,
+    gpu_ids_str: str | None,
     seed: int | None,
 ) -> None:
     """Gera áudios em batch a partir de um ficheiro de prompts (um por linha)."""
     verbose = bool(ctx.obj.get("VERBOSE"))
+
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
+    try:
+        from gamedev_shared.gpu import warn_if_vram_occupied
+
+        warn_if_vram_occupied()
+    except ImportError:
+        pass
+
     prompts = [
         line.strip()
         for line in file.read_text(encoding="utf-8").splitlines()
@@ -575,6 +611,7 @@ def batch_cmd(
         model_id=resolved_model_id,
         half_precision=half_precision,
         low_vram=low_vram,
+        gpu_ids=gpu_ids,
     )
     with _quiet_third_party_tqdm(verbose):
         gen.load()

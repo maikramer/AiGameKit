@@ -1,17 +1,16 @@
 """Funções utilitárias para Skymap2D."""
 
-import logging
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Any
 
+from gamedev_shared.gpu import format_bytes  # noqa: F401
+from gamedev_shared.logging import Logger as _Logger
 from gamedev_shared.path_utils import ensure_directory  # noqa: F401
 from gamedev_shared.seed_utils import generate_seed  # noqa: F401
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger(__name__)
+_logger = _Logger("skymap2d.utils")
 
 
 def validate_prompt(prompt: str, max_length: int = 500) -> tuple[bool, str | None]:
@@ -52,7 +51,7 @@ def validate_dimensions(width: int, height: int) -> tuple[bool, str | None]:
 
     ratio = width / height
     if abs(ratio - 2.0) > 0.1:
-        logger.warning(
+        _logger.warning(
             f"Ratio {ratio:.2f}:1 não é 2:1. Skymaps equirectangular funcionam melhor com ratio 2:1 (ex: 2048x1024)."
         )
 
@@ -85,12 +84,3 @@ def validate_params(params: dict[str, Any]) -> tuple[bool, str | None]:
 def format_timestamp(timestamp: float) -> str:
     """Formata um timestamp Unix para string legível."""
     return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-
-
-def format_bytes(size: int) -> str:
-    """Formata bytes para string legível (KB, MB, GB)."""
-    for unit in ("B", "KB", "MB", "GB"):
-        if abs(size) < 1024.0:
-            return f"{size:.1f} {unit}"
-        size /= 1024.0  # type: ignore[assignment]
-    return f"{size:.1f} TB"
