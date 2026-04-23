@@ -72,11 +72,13 @@ class KleinFluxGenerator:
         verbose: bool = False,
         model_id: str | None = None,
         cache_dir: str | None = None,
+        gpu_ids: list[int] | None = None,
     ):
         self.verbose = verbose
         self.low_vram = low_vram
         self.model_id = model_id or _model_id(low_vram=self.low_vram)
         self.cache_dir = cache_dir
+        self.gpu_ids = gpu_ids
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -86,6 +88,7 @@ class KleinFluxGenerator:
         self.torch_dtype = _torch_dtype_for(self.device)
         self._pipe: Any = None
         self._on_status: Callable[[str], None] | None = None
+        self._multi_gpu: bool = False
 
         if self.verbose:
             print(f"[Text2D] device={self.device} dtype={self.torch_dtype} model={self.model_id}")
@@ -147,23 +150,90 @@ class KleinFluxGenerator:
         self._clear_cache()
 
         if torch.cuda.is_available() and self.device == "cuda":
-            torch.cuda.reset_peak_memory_stats(0)
+            for gid in self.gpu_ids or range(torch.cuda.device_count()):
+                if gid < torch.cuda.device_count():
+                    torch.cuda.reset_peak_memory_stats(gid)
 
         if self.device == "cpu":
             pipe.to("cpu")
         elif self.low_vram:
             pipe.enable_model_cpu_offload()
+        elif self._try_multi_gpu(pipe):
+            self._status("Modelo carregado — split multi-GPU (accelerate)")
         else:
             pipe.to(self.device)
 
         if torch.cuda.is_available() and self.device == "cuda" and not self.low_vram:
-            torch.cuda.synchronize()
-            alloc = torch.cuda.memory_allocated(0) / (1024**3)
-            peak = torch.cuda.max_memory_allocated(0) / (1024**3)
-            self._status(f"Modelo carregado — VRAM ~{alloc:.2f} GB (pico após load ~{peak:.2f} GB)")
+            if self._multi_gpu:
+                gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
+                parts = []
+                for gid in gpu_ids:
+                    torch.cuda.synchronize(gid)
+                    alloc = torch.cuda.memory_allocated(gid) / (1024**3)
+                    peak = torch.cuda.max_memory_allocated(gid) / (1024**3)
+                    parts.append(f"cuda:{gid} ~{alloc:.2f} GB (pico ~{peak:.2f} GB)")
+                self._status("Modelo carregado — " + ", ".join(parts))
+            else:
+                torch.cuda.synchronize()
+                alloc = torch.cuda.memory_allocated(0) / (1024**3)
+                peak = torch.cuda.max_memory_allocated(0) / (1024**3)
+                self._status(f"Modelo carregado — VRAM ~{alloc:.2f} GB (pico após load ~{peak:.2f} GB)")
 
         self._pipe = pipe
         return pipe
+
+    def _try_multi_gpu(self, pipe: Any) -> bool:
+        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
+            return False
+
+        gpu_ids = self.gpu_ids
+        if not gpu_ids or len(gpu_ids) < 2:
+            gpu_ids = list(range(torch.cuda.device_count()))
+
+        primary, secondary = gpu_ids[0], gpu_ids[1]
+
+        try:
+            pipe.transformer.to(f"cuda:{primary}")
+            pipe.vae.to(f"cuda:{primary}")
+            pipe.text_encoder.to(f"cuda:{secondary}")
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+            self._log(f"Multi-GPU placement falhou ({exc})")
+            return False
+
+        self._patch_cross_device(pipe, primary, secondary)
+
+        for gid in gpu_ids:
+            alloc = torch.cuda.memory_allocated(gid) / (1024**3)
+            self._log(f"  cuda:{gid} — {alloc:.2f} GB alocados")
+
+        self._multi_gpu = True
+        return True
+
+    def _patch_cross_device(self, pipe: Any, primary: int, secondary: int) -> None:
+        primary_dev = f"cuda:{primary}"
+        secondary_dev = f"cuda:{secondary}"
+
+        pipe._text2d_primary_device = torch.device(primary_dev)
+
+        if not hasattr(pipe, "_orig_encode_prompt"):
+            pipe._orig_encode_prompt = pipe.encode_prompt
+
+        def _patched_encode_prompt(*args: Any, **kwargs: Any) -> Any:
+            kwargs["device"] = secondary_dev
+            result = pipe._orig_encode_prompt(*args, **kwargs)
+            if isinstance(result, torch.Tensor):
+                return result.to(primary_dev)
+            if isinstance(result, (tuple, list)):
+                return type(result)(r.to(primary_dev) if isinstance(r, torch.Tensor) else r for r in result)
+            return result
+
+        pipe.encode_prompt = _patched_encode_prompt
+
+        @property  # type: ignore[misc]
+        def _patched_execution_device(self: Any) -> torch.device:
+            return self._text2d_primary_device
+
+        pipe.__class__._execution_device = _patched_execution_device
 
     def unload(self) -> None:
         if self._pipe is None:
@@ -175,15 +245,20 @@ class KleinFluxGenerator:
     def generate(
         self,
         prompt: str,
-        height: int = 2048,
-        width: int = 2048,
+        height: int = 1024,
+        width: int = 1024,
         guidance_scale: float = 1.0,
         num_inference_steps: int = 4,
         seed: int | None = None,
     ) -> Image.Image:
         pipe = self._load_pipeline()
 
-        gen_device = self.device if self.device != "cpu" else "cpu"
+        if self._multi_gpu and self.gpu_ids:
+            gen_device = f"cuda:{self.gpu_ids[0]}"
+        elif self.device != "cpu":
+            gen_device = "cuda"
+        else:
+            gen_device = "cpu"
         generator = torch.Generator(device=gen_device)
         if seed is not None:
             generator.manual_seed(seed)

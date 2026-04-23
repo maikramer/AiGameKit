@@ -19,7 +19,7 @@ from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.skill_install import install_my_skill
 
 from .cli_rich import click
-from .generator import KleinFluxGenerator, default_model_id
+from .generator import KleinFluxGenerator, _model_id, default_model_id
 from .utils.memory import format_bytes, get_system_info
 
 console = Console()
@@ -77,8 +77,8 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @cli.command("generate")
 @click.argument("prompt")
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png ou .jpg)")
-@click.option("--width", "-W", default=2048, show_default=True, type=int)
-@click.option("--height", "-H", default=2048, show_default=True, type=int)
+@click.option("--width", "-W", default=1024, show_default=True, type=int)
+@click.option("--height", "-H", default=1024, show_default=True, type=int)
 @click.option("--steps", "-s", default=4, show_default=True, help="Passos de inferência")
 @click.option(
     "--guidance",
@@ -110,6 +110,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     is_flag=True,
     help="Medir tempos, CPU, RAM e VRAM (JSONL opcional: GAMEDEV_PROFILE_LOG).",
 )
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -125,6 +131,7 @@ def generate_cmd(
     model_id: str | None,
     verbose_flag: bool,
     profile: bool,
+    gpu_ids_str: str | None,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
     from gamedev_shared.profiler import ProfilerSession
@@ -132,19 +139,20 @@ def generate_cmd(
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
+    low = low_vram or cpu
+    if low and width == 2048 and height == 2048:
+        width, height = 1024, 1024
+    resolved_model = model_id or _model_id(low_vram=low)
+    device = "cpu" if cpu else None
+    gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    console = Console()
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
     table.add_row("[bold]Resolução[/bold]", f"{width}x{height}")
     table.add_row("[bold]Passos[/bold]", str(steps))
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
-    table.add_row("[bold]Modelo[/bold]", model_id or default_model_id())
+    table.add_row("[bold]Modelo[/bold]", resolved_model)
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
-
-    device = "cpu" if cpu else None
-    low = low_vram or cpu
-    if low and width == 2048 and height == 2048:
-        width, height = 1024, 1024
-    resolved_model = model_id or default_model_id()
 
     log_p = env_profile_log_path()
     prof_log = Path(log_p) if log_p else None
@@ -163,6 +171,7 @@ def generate_cmd(
                 low_vram=low,
                 verbose=verbose,
                 model_id=model_id,
+                gpu_ids=gpu_ids,
             )
 
             with (
