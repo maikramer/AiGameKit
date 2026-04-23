@@ -17,6 +17,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import torch
 import trimesh
@@ -83,6 +84,51 @@ def _restore_feet_origin(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
     cz = (bounds[0][2] + bounds[1][2]) * 0.5
     mesh.apply_translation([-cx, -cy, -cz])
     return mesh
+
+
+def _apply_paint_multi_gpu(
+    pipe: Any,
+    gpu_ids: list[int],
+    verbose: bool = False,
+) -> None:
+    primary_dev = f"cuda:{gpu_ids[0]}"
+    secondary_dev = f"cuda:{gpu_ids[1]}"
+
+    inner_mv = pipe.models.get("multiview_model")
+    if inner_mv is None or not hasattr(inner_mv, "pipeline"):
+        raise RuntimeError("Multiview model not loaded — cannot apply multi-GPU")
+
+    diff_pipe = inner_mv.pipeline
+
+    diff_pipe.unet.to(primary_dev)
+    diff_pipe.vae.to(secondary_dev)
+    if hasattr(diff_pipe, "text_encoder") and diff_pipe.text_encoder is not None:
+        diff_pipe.text_encoder.to(secondary_dev)
+
+    diff_pipe._multi_gpu_primary = primary_dev
+    _orig_exec_device_prop = type(diff_pipe)._execution_device
+
+    def _patched_exec_device(self: Any) -> torch.device:
+        if hasattr(self, "_multi_gpu_primary"):
+            return torch.device(self._multi_gpu_primary)
+        return _orig_exec_device_prop.fget(self)
+
+    type(diff_pipe)._execution_device = property(_patched_exec_device)
+
+    inner_mv.device = primary_dev
+    if hasattr(pipe, "config") and hasattr(pipe.config, "device"):
+        pipe.config.device = primary_dev
+
+    if verbose:
+        gpu0 = torch.cuda.get_device_name(gpu_ids[0])
+        gpu1 = torch.cuda.get_device_name(gpu_ids[1])
+        unet_mem = sum(p.numel() * p.element_size() for p in diff_pipe.unet.parameters()) / (1024**3)
+        vae_mem = sum(p.numel() * p.element_size() for p in diff_pipe.vae.parameters()) / (1024**3)
+        print(
+            f"[Paint 2.1] Multi-GPU:\n"
+            f"  {primary_dev} ({gpu0}): UNet ({unet_mem:.2f} GB)\n"
+            f"  {secondary_dev} ({gpu1}): VAE ({vae_mem:.2f} GB)"
+        )
 
 
 def apply_hunyuan_paint(
@@ -223,63 +269,28 @@ def apply_hunyuan_paint(
                     if verbose and enable_vae_tiling:
                         print(f"[Paint 2.1] VAE tiling ativo (tile_size={vae_tile_size})")
 
-                # --- Multi-GPU placement ---
+                # --- Multi-GPU component placement (see _apply_paint_multi_gpu) ---
                 multi_gpu_env = os.environ.get("PAINT3D_MULTI_GPU", "").strip()
                 if multi_gpu_env in ("1", "true", "yes"):
                     import warnings
 
                     warnings.warn(
-                        "PAINT3D_MULTI_GPU está obsoleto — use --gpu-ids (ex: --gpu-ids 0,1). "
-                        "O env var será removido numa versão futura.",
+                        "PAINT3D_MULTI_GPU está obsoleto — use --gpu-ids (ex: --gpu-ids 0,1).",
                         DeprecationWarning,
                         stacklevel=2,
                     )
-                    if verbose:
-                        print(
-                            "[Paint 2.1] Aviso: PAINT3D_MULTI_GPU obsoleto — use --gpu-ids 0,1. "
-                            "A aplicar comportamento legado (VAE → cuda:1)."
-                        )
-                    if torch.cuda.device_count() >= 2 and not low_vram:
-                        vae = pipe.vae
-                        if vae is not None:
-                            if verbose:
-                                gpu0_name = torch.cuda.get_device_name(0)
-                                gpu1_name = torch.cuda.get_device_name(1)
-                                print(
-                                    f"[Paint 2.1] Multi-GPU (legado): VAE → cuda:1 ({gpu1_name}), "
-                                    f"UNet+CLIP → cuda:0 ({gpu0_name})"
-                                )
-                            vae.to("cuda:1")
-                elif gpu_ids and len(gpu_ids) >= 2 and not low_vram:
-                    from gamedev_shared.multi_gpu import MultiGPUPlanner
+                    if gpu_ids is None and torch.cuda.device_count() >= 2:
+                        gpu_ids = [0, 1]
 
-                    planner = (
-                        MultiGPUPlanner()
-                        .for_model(pipe)
-                        .model_attr("model")
-                        .with_gpus(gpu_ids)
-                        .architecture("hunyuan3d")
+                if gpu_ids and len(gpu_ids) >= 2 and not low_vram:
+                    _apply_paint_multi_gpu(pipe, gpu_ids, verbose=verbose)
+                elif torch.cuda.device_count() >= 2 and not low_vram and verbose:
+                    gpu0_name = torch.cuda.get_device_name(0)
+                    gpu1_name = torch.cuda.get_device_name(1)
+                    print(
+                        f"[Paint 2.1] Multi-GPU disponível: cuda:0 ({gpu0_name}), "
+                        f"cuda:1 ({gpu1_name}). Usar --gpu-ids 0,1 para activar."
                     )
-                    plan = planner.plan()
-                    if plan.status == "multi_gpu":
-                        pipe = planner.apply()
-                        if verbose:
-                            print(
-                                f"[Paint 2.1] Multi-GPU (planner): status={plan.status}, "
-                                f"primary={plan.primary_device}, devices={set(plan.device_map.values())}"
-                            )
-                    else:
-                        pipe.to(config.device)
-                        if verbose:
-                            print(f"[Paint 2.1] Planner: {plan.status} — a usar {config.device}")
-                else:
-                    if torch.cuda.device_count() >= 2 and not low_vram and verbose:
-                        gpu0_name = torch.cuda.get_device_name(0)
-                        gpu1_name = torch.cuda.get_device_name(1)
-                        print(
-                            f"[Paint 2.1] Multi-GPU disponível: cuda:0 ({gpu0_name}), "
-                            f"cuda:1 ({gpu1_name}). Usar --gpu-ids 0,1 para activar."
-                        )
             except Exception as e:
                 if verbose:
                     print(f"[Paint 2.1] Aviso: otimizações opcionais falharam: {e}")
