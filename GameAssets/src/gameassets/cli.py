@@ -24,6 +24,7 @@ from gamedev_shared.skill_install import install_my_skill
 
 from . import __version__
 from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mib, subprocess_gpu_env
+from .categories import get_target_faces
 from .cli_rich import click
 from .manifest import ManifestRow, effective_image_source, load_manifest
 from .mesh_reorigin import collect_glb_paths, filter_excluded_paths, reorigin_glb_file
@@ -997,6 +998,8 @@ def prompts_cmd(
                 "generate_audio": row.generate_audio,
                 "generate_rig": row.generate_rig,
                 "generate_animate": row.generate_animate,
+                "category": row.category or "",
+                "target_faces": get_target_faces(row.category) if row.category else None,
             }
         )
     if output:
@@ -1018,19 +1021,23 @@ def prompts_cmd(
         header_style="bold magenta",
     )
     table.add_column("id", style="cyan", no_wrap=True)
+    table.add_column("cat", style="yellow", no_wrap=True, max_width=10)
+    table.add_column("faces", justify="right", style="dim")
     table.add_column("3D?", justify="center")
     table.add_column("áudio?", justify="center")
     table.add_column("rig?", justify="center")
     table.add_column("anim?", justify="center")
-    table.add_column("prompt (início)", overflow="ellipsis", max_width=64)
+    table.add_column("prompt (início)", overflow="ellipsis", max_width=50)
     for e in entries:
         p = e["prompt"]
-        preview = p if len(p) <= 64 else p[:61] + "..."
+        preview = p if len(p) <= 50 else p[:47] + "..."
         flag3 = "sim" if e["generate_3d"] else "não"
         flag_a = "sim" if e["generate_audio"] else "não"
         flag_r = "sim" if e["generate_rig"] else "não"
         flag_anim = "sim" if e["generate_animate"] else "não"
-        table.add_row(e["id"], flag3, flag_a, flag_r, flag_anim, preview)
+        cat = e["category"] or "-"
+        tf = str(e["target_faces"]) if e["target_faces"] else "-"
+        table.add_row(e["id"], cat, tf, flag3, flag_a, flag_r, flag_anim, preview)
     console.print(table)
 
 
@@ -2213,6 +2220,17 @@ def batch_cmd(
                                     if not continue_on_error:
                                         raise click.Abort()
                                 else:
+                                    _simplify_mesh_to_target(
+                                        mesh_final,
+                                        row,
+                                        text3d_bin,
+                                        run_cmd=run_cmd,
+                                        child_env=child_env,
+                                        cwd=manifest_dir,
+                                        manifest_dir=manifest_dir,
+                                        rec=rec,
+                                        gpu_ids=gpu_ids,
+                                    )
                                     _finalize_mesh_ok(rec, mesh_final, row)
                                     append_log(rec)
                                     if not continue_on_error and rec["status"] == "error":
@@ -2263,6 +2281,17 @@ def batch_cmd(
                                     console.print(f"[red]text3d sem GLB[/red] {row.id}")
                                 else:
                                     _install_file(mesh_tmp, mesh_final)
+                                    _simplify_mesh_to_target(
+                                        mesh_final,
+                                        row,
+                                        text3d_bin,
+                                        run_cmd=run_cmd,
+                                        child_env=child_env,
+                                        cwd=manifest_dir,
+                                        manifest_dir=manifest_dir,
+                                        rec=rec,
+                                        gpu_ids=gpu_ids,
+                                    )
                                     if _post_text3d_mesh_extras(
                                         profile,
                                         row,
@@ -2442,6 +2471,58 @@ def _texture_subprocess_argv(
         mesh_out,
         gpu_ids=gpu_ids,
     )
+
+
+def _simplify_mesh_to_target(
+    mesh_path: Path,
+    row: ManifestRow,
+    text3d_bin: str,
+    *,
+    run_cmd,
+    child_env: dict[str, str],
+    cwd: Path,
+    manifest_dir: Path,
+    rec: dict[str, Any],
+    gpu_ids: list[int] | None = None,
+) -> bool:
+    """Simplify mesh to category target_faces via text3d simplify-textured.
+
+    Returns True on error.
+    """
+    if not row.category:
+        return False
+    target = get_target_faces(row.category)
+    if target <= 0:
+        return False
+    try:
+        import trimesh
+
+        m = trimesh.load(str(mesh_path), force="mesh")
+        current_faces = m.faces.shape[0]
+    except Exception:
+        return False
+    if current_faces <= target:
+        return False
+    ratio = max(0.05, target / current_faces)
+    simplified = mesh_path.parent / f"{mesh_path.stem}_simplified{mesh_path.suffix}"
+    argv = [
+        text3d_bin,
+        "simplify-textured",
+        str(mesh_path),
+        "-o",
+        str(simplified),
+        "--face-ratio",
+        f"{ratio:.4f}",
+    ]
+    if gpu_ids:
+        argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    r = run_cmd(argv, extra_env=child_env, cwd=cwd)
+    if r.returncode == 0 and simplified.is_file():
+        simplified.replace(mesh_path)
+        rec["simplify_ratio"] = round(ratio, 4)
+        rec["simplify_faces_before"] = current_faces
+        return False
+    return True
 
 
 def _text3d_argv(
