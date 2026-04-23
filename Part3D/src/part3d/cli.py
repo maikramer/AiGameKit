@@ -42,7 +42,7 @@ def main() -> None:
     default=None,
     help="Chunks marching cubes (default: autotune)",
 )
-@click.option("--seed", type=int, default=42, show_default=True)
+@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
 @click.option(
     "--no-auto-tune",
     is_flag=True,
@@ -100,7 +100,7 @@ def decompose(
     octree_resolution: int | None,
     steps: int | None,
     num_chunks: int | None,
-    seed: int,
+    seed: int | None,
     no_auto_tune: bool,
     no_cpu_offload: bool,
     device: str | None,
@@ -184,6 +184,9 @@ def decompose(
         console.print(f"GPU: {gpu_info.name} ({vram_gb:.1f} GB VRAM)")
         if vram_gb < 6.0 and not no_cpu_offload:
             console.print("[yellow]Aviso: VRAM < 6 GB — resultado pode ser instável[/]")
+        from gamedev_shared.gpu import warn_if_vram_occupied
+
+        warn_if_vram_occupied()
     else:
         console.print("[yellow]Sem CUDA — execução em CPU (muito lento)[/]")
 

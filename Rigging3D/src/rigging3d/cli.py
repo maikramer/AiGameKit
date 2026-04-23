@@ -261,7 +261,7 @@ def _ctx_gpu_ids(ctx: click.Context) -> list[int] | None:
 @cli.command("skeleton")
 @click.option("--input", "-i", "input_path", type=click.Path(path_type=Path), default=None)
 @click.option("--output", "-o", "output_path", type=click.Path(path_type=Path), default=None)
-@click.option("--seed", type=int, default=12345, show_default=True)
+@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
 @click.option("--skeleton-task", default=DEFAULT_SKELETON_TASK, show_default=True, help="YAML de task")
 @click.option("--input-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
 @click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
@@ -270,7 +270,7 @@ def skeleton_cmd(
     ctx: click.Context,
     input_path: Path | None,
     output_path: Path | None,
-    seed: int,
+    seed: int | None,
     skeleton_task: str,
     input_dir: Path | None,
     output_dir: Path | None,
@@ -280,7 +280,10 @@ def skeleton_cmd(
     gpu_ids = _ctx_gpu_ids(ctx)
     _require_bash()
     _validate_io(input_path, output_path, input_dir, output_dir)
-    args: list[str] = ["--seed", str(seed), "--skeleton_task", skeleton_task]
+    seed_args: list[str] = []
+    if seed is not None:
+        seed_args = ["--seed", str(seed)]
+    args: list[str] = [*seed_args, "--skeleton_task", skeleton_task]
     args += _io_args(input_path, output_path, input_dir, output_dir)
     rc = _run_bash(root, "launch/inference/generate_skeleton.sh", args, python_bin=py, gpu_ids=gpu_ids)
     if rc != 0:
@@ -294,7 +297,7 @@ def skeleton_cmd(
 @cli.command("skin")
 @click.option("--input", "-i", "input_path", type=click.Path(path_type=Path), default=None)
 @click.option("--output", "-o", "output_path", type=click.Path(path_type=Path), default=None)
-@click.option("--seed", type=int, default=12345, show_default=True)
+@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
 @click.option("--skin-task", default=DEFAULT_SKIN_TASK, show_default=True, help="YAML de task")
 @click.option("--input-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
 @click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
@@ -304,7 +307,7 @@ def skin_cmd(
     ctx: click.Context,
     input_path: Path | None,
     output_path: Path | None,
-    seed: int,
+    seed: int | None,
     skin_task: str,
     input_dir: Path | None,
     output_dir: Path | None,
@@ -315,7 +318,10 @@ def skin_cmd(
     gpu_ids = _ctx_gpu_ids(ctx)
     _require_bash()
     _validate_io(input_path, output_path, input_dir, output_dir)
-    args: list[str] = ["--seed", str(seed), "--skin_task", skin_task, "--data_name", data_name]
+    seed_args: list[str] = []
+    if seed is not None:
+        seed_args = ["--seed", str(seed)]
+    args: list[str] = [*seed_args, "--skin_task", skin_task, "--data_name", data_name]
     args += _io_args(input_path, output_path, input_dir, output_dir)
     rc = _run_bash(root, "launch/inference/generate_skin.sh", args, python_bin=py, gpu_ids=gpu_ids)
     if rc != 0:
@@ -460,10 +466,10 @@ print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
 @click.option("--input", "-i", "mesh", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--output", "-o", "out", type=click.Path(path_type=Path), required=True)
 @click.option("--work-dir", type=click.Path(file_okay=False, path_type=Path), default=None, help="Dir intermédio")
-@click.option("--seed", type=int, default=12345, show_default=True)
+@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
 @click.option("--keep-temp", is_flag=True, help="Não apagar work-dir temporário")
 @click.option(
-    "--smooth-iterations", type=int, default=2, show_default=True, help="Passagens de suavização Laplaciana no merge."
+    "--smooth-iterations", type=int, default=2, show_default=True, help="Passadas de suavização Laplaciana no merge."
 )
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
 @click.option("--no-prep", is_flag=True, help="Não preparar mesh (skip remesh/repair).")
@@ -474,7 +480,7 @@ def pipeline_cmd(
     mesh: Path,
     out: Path,
     work_dir: Path | None,
-    seed: int,
+    seed: int | None,
     keep_temp: bool,
     smooth_iterations: int,
     groups_per_vertex: int,
@@ -482,10 +488,14 @@ def pipeline_cmd(
     low_vram: bool,
 ) -> None:
     """Encadeia skeleton → skin → merge até um GLB rigado."""
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
     root, py = _ctx_root_py(ctx)
     gpu_ids = _ctx_gpu_ids(ctx)
     _require_bash()
     do_profile = _ctx_profiler(ctx)
+
+    warn_if_vram_occupied()
 
     cleanup: Path | None = None
     if work_dir is None:
@@ -518,10 +528,13 @@ def pipeline_cmd(
             if gpu_ids and len(gpu_ids) >= 2:
                 console.print(f"[dim]Multi-GPU: skeleton→cuda:{gpu_ids[0]}, skin→cuda:{gpu_ids[1]}[/dim]")
 
+            skel_args = ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel)]
+            if seed is not None:
+                skel_args += ["--seed", str(seed)]
             rc = _run_bash(
                 root,
                 "launch/inference/generate_skeleton.sh",
-                ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel), "--seed", str(seed)],
+                skel_args,
                 python_bin=py,
                 propagate_profile=do_profile,
                 gpu_ids=skel_gpu,
@@ -555,19 +568,20 @@ def pipeline_cmd(
                 _low_vram_cleanup.extend([low_vram_model, low_vram_task])
                 console.print("[dim]Low-VRAM: num_train_vertex=256[/dim]")
 
+            skin_args = [
+                "--input",
+                _shell_path(skel),
+                "--output",
+                _shell_path(skin),
+                "--skin_task",
+                skin_task_path,
+            ]
+            if seed is not None:
+                skin_args += ["--seed", str(seed)]
             rc = _run_bash(
                 root,
                 "launch/inference/generate_skin.sh",
-                [
-                    "--input",
-                    _shell_path(skel),
-                    "--output",
-                    _shell_path(skin),
-                    "--seed",
-                    str(seed),
-                    "--skin_task",
-                    skin_task_path,
-                ],
+                skin_args,
                 python_bin=py,
                 propagate_profile=do_profile,
                 gpu_ids=skin_gpu,

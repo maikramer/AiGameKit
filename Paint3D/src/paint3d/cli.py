@@ -48,6 +48,8 @@ def _env_bool(env_var: str, cli_wants: bool) -> bool:
 
 
 def _prepare_gpu(allow_shared: bool, kill_others: bool, low_vram: bool = False) -> None:
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
     kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
     allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
     if kill:
@@ -67,6 +69,7 @@ def _prepare_gpu(allow_shared: bool, kill_others: bool, low_vram: bool = False) 
         enforce_exclusive_gpu(allow_shared=allow, max_used_mib=gpu_max_mib)
     except RuntimeError as e:
         raise click.ClickException(str(e)) from e
+    warn_if_vram_occupied()
 
 
 @click.group()
@@ -158,8 +161,8 @@ def cli(ctx, verbose):
 @click.option("--allow-shared-gpu", is_flag=True, help="Permite GPU com outros processos.")
 @click.option(
     "--gpu-kill-others/--no-gpu-kill-others",
-    default=True,
-    help="Termina outros processos GPU antes de inferir.",
+    default=False,
+    help="DEPRECATED: terminates competing GPU processes; will be removed in a future version. Default: off.",
 )
 @click.option("--profile", is_flag=True, help="Medir tempos e VRAM.")
 @click.option(

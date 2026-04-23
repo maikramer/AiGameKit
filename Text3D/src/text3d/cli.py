@@ -225,7 +225,8 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--preset",
     type=click.Choice(["fast", "balanced", "hq"]),
-    default=None,
+    default="balanced",
+    show_default=True,
     help=(
         "Perfil Hunyuan (steps + octree + chunks): fast (rápido, menos VRAM), "
         "balanced (defeito), hq (alta qualidade, GPU grande). "
@@ -274,8 +275,8 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--gpu-kill-others/--no-gpu-kill-others",
     "gpu_kill_others",
-    default=True,
-    help="Termina outros processos GPU (nvidia-smi) antes de inferir; defeito: ligado.",
+    default=False,
+    help="DEPRECATED: terminates competing GPU processes; will be removed in a future version. Default: off.",
 )
 @click.option(
     "--export-rotation-x-deg",
@@ -395,8 +396,8 @@ def generate(
         octree_resolution = pv["octree"]
         num_chunks = pv["chunks"]
 
-    # --low-vram: override defaults to the old ~6GB profile
-    if low_vram and preset is None:
+    # --low-vram: override to the low-VRAM profile (overrides balanced/fast/hq)
+    if low_vram:
         steps = _defaults.LOW_VRAM_STEPS
         octree_resolution = _defaults.LOW_VRAM_OCTREE
         num_chunks = _defaults.LOW_VRAM_NUM_CHUNKS
@@ -430,6 +431,11 @@ def generate(
             enforce_exclusive_gpu(allow_shared=allow_shared, max_used_mib=gpu_max_mib)
         except RuntimeError as e:
             raise click.ClickException(str(e)) from e
+
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
+    if not cpu:
+        warn_if_vram_occupied()
 
     info_table = Table(show_header=False, box=box.SIMPLE)
     if from_image:
