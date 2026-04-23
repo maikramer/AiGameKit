@@ -23,7 +23,7 @@ from gamedev_shared.profiler.session import ProfilerSession
 from gamedev_shared.skill_install import install_my_skill
 
 from . import __version__
-from .batch_guard import batch_directory_lock, query_gpu_free_mib, subprocess_gpu_env
+from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mib, subprocess_gpu_env
 from .cli_rich import click
 from .manifest import ManifestRow, effective_image_source, load_manifest
 from .mesh_reorigin import collect_glb_paths, filter_excluded_paths, reorigin_glb_file
@@ -359,15 +359,13 @@ def _rigging3d_pipeline_argv(
     *,
     seed: int | None,
     rig_profile: Rigging3DProfile | None,
+    gpu_ids: list[int] | None = None,
 ) -> list[str]:
-    args = [
-        rigging3d_bin,
-        "pipeline",
-        "--input",
-        str(mesh_in),
-        "--output",
-        str(mesh_out),
-    ]
+    args = [rigging3d_bin]
+    if gpu_ids:
+        args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    args.append("pipeline")
+    args.extend(["--input", str(mesh_in), "--output", str(mesh_out)])
     if seed is not None:
         args.extend(["--seed", str(seed)])
     if rig_profile:
@@ -387,6 +385,7 @@ def _rigging3d_pipeline_failed(
     child_env: dict[str, str],
     rigging3d_bin: str | None,
     with_rig: bool,
+    gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``rigging3d pipeline`` após Text3D (GLB base ou ``*_parts.glb`` se parts+rig). Devolve True se falhou."""
     if not with_rig or not row.generate_rig or not rigging3d_bin:
@@ -405,6 +404,7 @@ def _rigging3d_pipeline_failed(
         rig_out,
         seed=seed,
         rig_profile=rg,
+        gpu_ids=gpu_ids,
     )
     if profile.text3d and profile.text3d.low_vram:
         argv.append("--low-vram")
@@ -433,6 +433,7 @@ def _animator3d_game_pack_argv(
     anim_out: Path,
     *,
     preset: str,
+    gpu_ids: list[int] | None = None,
 ) -> list[str]:
     return [
         animator3d_bin,
@@ -455,6 +456,7 @@ def _animator3d_game_pack_failed(
     with_animate: bool,
     with_rig: bool,
     preset: str = "humanoid",
+    gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``animator3d game-pack`` no GLB rigado. Devolve True se falhou."""
     if not with_animate or not _row_wants_animate(row, with_rig):
@@ -471,7 +473,7 @@ def _animator3d_game_pack_failed(
         return True
     anim_prof = profile.animator3d or Animator3DProfile()
     preset_eff = (anim_prof.preset or preset).strip().lower()
-    argv = _animator3d_game_pack_argv(abin, rigged_glb, animated_glb, preset=preset_eff)
+    argv = _animator3d_game_pack_argv(abin, rigged_glb, animated_glb, preset=preset_eff, gpu_ids=gpu_ids)
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
     _timing_append(rec, "animator3d", time.perf_counter() - t0)
@@ -539,6 +541,7 @@ def _part3d_decompose_argv(
     out_seg: Path,
     p3: Part3DProfile,
     seed: int | None,
+    gpu_ids: list[int] | None = None,
 ) -> list[str]:
     args = [
         part3d_bin,
@@ -574,6 +577,8 @@ def _part3d_decompose_argv(
         args.append("--no-attention-slicing")
     if p3.low_vram_mode:
         args.append("--low-vram-mode")
+    if gpu_ids:
+        args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     return args
 
 
@@ -586,6 +591,7 @@ def _part3d_pipeline_failed(
     child_env: dict[str, str],
     part3d_bin: str | None,
     with_parts: bool,
+    gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``part3d decompose`` após GLB do Text3D. Devolve True se falhou."""
     if not with_parts or not row.generate_parts or not part3d_bin:
@@ -597,7 +603,7 @@ def _part3d_pipeline_failed(
     p3 = _part3d_profile_effective(profile, row)  # ← Usa overrides por linha
     out_parts, out_seg = _part3d_output_paths(mesh_final, p3)
     seed = _seed_for_row(profile, f"{row.id}:part3d")
-    argv = _part3d_decompose_argv(part3d_bin, mesh_final, out_parts, out_seg, p3, seed)
+    argv = _part3d_decompose_argv(part3d_bin, mesh_final, out_parts, out_seg, p3, seed, gpu_ids=gpu_ids)
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
     _timing_append(rec, "part3d", time.perf_counter() - t0)
@@ -639,6 +645,7 @@ def _post_text3d_mesh_extras(
     rigging3d_bin: str | None,
     with_rig: bool,
     with_animate: bool,
+    gpu_ids: list[int] | None = None,
 ) -> bool:
     """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
@@ -651,6 +658,7 @@ def _post_text3d_mesh_extras(
         child_env,
         part3d_bin,
         with_parts,
+        gpu_ids=gpu_ids,
     )
     rig_mesh_in = mesh_final
     if not part3d_fail and with_rig and row.generate_rig and with_parts and row.generate_parts:
@@ -668,6 +676,7 @@ def _post_text3d_mesh_extras(
         child_env,
         rigging3d_bin,
         with_rig,
+        gpu_ids=gpu_ids,
     )
     if part3d_fail or rig_fail:
         return True
@@ -685,6 +694,7 @@ def _post_text3d_mesh_extras(
         child_env,
         with_animate,
         with_rig,
+        gpu_ids=gpu_ids,
     )
 
 
@@ -1067,10 +1077,10 @@ def handoff_cmd(
     default=None,
 )
 @click.option(
-    "--with-3d",
+    "--with-3d/--no-3d",
     "with_3d",
-    is_flag=True,
-    help="Gera GLB quando generate_3d=true no manifest",
+    default=None,
+    help="Forçar 3D on/off (auto-detectado do manifest: generate_3d=true).",
 )
 @click.option(
     "--dry-run",
@@ -1112,7 +1122,7 @@ def handoff_cmd(
     is_flag=True,
     help=(
         "Não gerar imagens 2D (Text2D ou Texture2D): usa PNG já em output_dir "
-        "(exige --with-3d; valida PNG por linha com generate_3d)."
+        "(exige geração 3D; valida PNG por linha com generate_3d)."
     ),
 )
 @click.option(
@@ -1122,23 +1132,22 @@ def handoff_cmd(
     help="Não gerar áudio Text2Sound (ignora coluna generate_audio).",
 )
 @click.option(
-    "--with-rig",
+    "--with-rig/--no-rig",
     "with_rig",
-    is_flag=True,
-    help="Após Text3D, corre rigging3d pipeline nas linhas com generate_rig=true (GLB rigado).",
+    default=None,
+    help="Forçar rig on/off (auto-detectado: generate_rig=true no manifest).",
 )
 @click.option(
-    "--with-parts",
+    "--with-parts/--no-parts",
     "with_parts",
-    is_flag=True,
-    help="Após Text3D, corre part3d decompose nas linhas com generate_parts=true (partes semânticas).",
+    default=None,
+    help="Forçar parts on/off (auto-detectado: generate_parts=true no manifest).",
 )
 @click.option(
-    "--with-animate/--skip-animate",
+    "--with-animate/--no-animate",
     "with_animate",
-    default=False,
-    show_default=True,
-    help="Run Animator3D game-pack on rigged GLBs.",
+    default=None,
+    help="Forçar animate on/off (auto-detectado: generate_animate ou generate_rig no manifest).",
 )
 @click.option(
     "--profile-tools",
@@ -1157,11 +1166,20 @@ def handoff_cmd(
     is_flag=True,
     help="Modo baixa VRAM: propaga --low-vram / --low-vram-mode a todos os sub-tools.",
 )
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help=(
+        "IDs de GPU (ex.: '0,1'). "
+        "Defeito: auto-deteta todas as GPUs via nvidia-smi."
+    ),
+)
 def batch_cmd(
     profile_path: Path,
     manifest_path: Path,
     presets_local: Path | None,
-    with_3d: bool,
+    with_3d: bool | None,
     dry_run: bool,
     dry_run_json: Path | None,
     fail_fast: bool,
@@ -1170,15 +1188,27 @@ def batch_cmd(
     skip_gpu_preflight: bool,
     skip_text2d: bool,
     skip_audio: bool,
-    with_rig: bool,
-    with_parts: bool,
-    with_animate: bool,
+    with_rig: bool | None,
+    with_parts: bool | None,
+    with_animate: bool | None,
     profile_tools: bool,
     profile_tools_log: Path | None,
     low_vram: bool,
+    gpu_ids_str: str | None,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
+
+    if with_3d is None:
+        with_3d = any(r.generate_3d for r in rows)
+    if with_rig is None:
+        with_rig = with_3d and any(r.generate_rig for r in rows)
+    if with_animate is None:
+        with_animate = with_rig and any(
+            r.generate_animate or r.generate_rig for r in rows
+        )
+    if with_parts is None:
+        with_parts = with_3d and any(r.generate_parts for r in rows)
 
     if low_vram:
         if profile.text2d is None:
@@ -1194,80 +1224,22 @@ def batch_cmd(
         profile.part3d.low_vram_mode = True
         profile.part3d.quantization = "auto"
 
+    gpu_ids: list[int] | None = None
+    if gpu_ids_str:
+        try:
+            gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")]
+        except ValueError as _err:
+            raise click.ClickException(
+                "--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')"
+            ) from _err
+    else:
+        gpu_ids = detect_gpu_ids()
+
     if dry_run_json is not None and not dry_run:
         raise click.ClickException("--dry-run-json requer --dry-run")
 
     if skip_text2d and not with_3d:
-        raise click.ClickException("--skip-text2d só é válido com --with-3d (PNGs já existem; só corre Text3D).")
-
-    if not with_3d and any(r.generate_3d for r in rows):
-        console.print(
-            Panel(
-                "[yellow]Há linhas com generate_3d=true mas 3D está desligado.[/yellow]\n"
-                "Usa [bold]--with-3d[/bold] para gerar meshes.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
-
-    if not with_3d and any(r.generate_rig for r in rows):
-        console.print(
-            Panel(
-                "[yellow]Há linhas com generate_rig=true mas --with-3d está desligado.[/yellow]\n"
-                "O rigging3d só corre após Text3D; activa [bold]--with-3d[/bold] e generate_3d.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
-
-    if not with_rig and any(r.generate_rig for r in rows):
-        console.print(
-            Panel(
-                "[yellow]Há linhas com generate_rig=true mas o rig está desligado.[/yellow]\n"
-                "Usa [bold]--with-rig[/bold] para correr rigging3d após o GLB do Text3D.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
-
-    if not with_3d and any(r.generate_parts for r in rows):
-        console.print(
-            Panel(
-                "[yellow]Há linhas com generate_parts=true mas --with-3d está desligado.[/yellow]\n"
-                "O Part3D corre após o GLB do Text3D; activa [bold]--with-3d[/bold] e generate_3d.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
-
-    if not with_parts and any(r.generate_parts for r in rows):
-        console.print(
-            Panel(
-                "[yellow]Há linhas com generate_parts=true mas Part3D está desligado.[/yellow]\n"
-                "Usa [bold]--with-parts[/bold] para correr part3d após o GLB do Text3D.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
-
-    if not with_animate and any(r.generate_animate for r in rows):
-        console.print(
-            Panel(
-                "[yellow]Há linhas com generate_animate=true mas Animator3D está desligado.[/yellow]\n"
-                "Usa [bold]--with-animate[/bold] após [bold]--with-rig[/bold] para game-pack no GLB rigado.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
-
-    if with_animate and not with_rig and any(r.generate_animate for r in rows):
-        console.print(
-            Panel(
-                "[yellow]--with-animate sem --with-rig[/yellow]: animação precisa de GLB rigado primeiro.",
-                title="Aviso",
-                border_style="yellow",
-            )
-        )
+        raise click.ClickException("--skip-text2d só é válido com geração 3D (PNGs já existem; só corre Text3D).")
 
     def _row_sources() -> tuple[bool, bool]:
         any_t2d = False
@@ -1376,6 +1348,8 @@ def batch_cmd(
     meta.add_row("animator3d", animator3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("part3d", part3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("Modo", "[cyan]dry-run[/cyan]" if dry_run else "execução")
+    if gpu_ids:
+        meta.add_row("GPUs", ",".join(str(g) for g in gpu_ids))
     if profile_tools:
         _plog = profile_tools_log or (manifest_path.parent / "gameassets_profile.jsonl")
         meta.add_row("Profiler (GPU)", f"activo → [dim]{_plog.resolve()}[/dim]")
@@ -1483,6 +1457,8 @@ def batch_cmd(
                         if seed is not None:
                             t2d_args.extend(["--seed", str(seed)])
                         _append_text2d_profile_args(profile, t2d_args)
+                        if gpu_ids:
+                            t2d_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
                     _dry_run_emit(dry_plan, phase=p1_title, row_id=row.id, argv=t2d_args)
                     if _row_uses_texture2d(profile, row) and tt_line.materialize:
                         maps_ph = _texture2d_material_maps_path(profile, row)
@@ -1568,6 +1544,7 @@ def batch_cmd(
                         Path(tw),
                         row,
                         shape_only=True,
+                        gpu_ids=gpu_ids,
                     )
                     if seed is not None:
                         a1 = [*a1, "--seed", str(seed)]
@@ -1585,6 +1562,7 @@ def batch_cmd(
                         img_path,
                         mesh_path,
                         row_id=row.id,
+                        gpu_ids=gpu_ids,
                     )
                     _dry_run_emit(
                         dry_plan,
@@ -1599,7 +1577,7 @@ def batch_cmd(
                         continue
                     img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                     seed = _seed_for_row(profile, row.id)
-                    t3d_args = _text3d_argv(text3d_bin, profile, img_path, mesh_path, row)
+                    t3d_args = _text3d_argv(text3d_bin, profile, img_path, mesh_path, row, gpu_ids=gpu_ids)
                     if seed is not None:
                         t3d_args.extend(["--seed", str(seed)])
                     _dry_run_emit(
@@ -1620,7 +1598,7 @@ def batch_cmd(
                 p3 = _part3d_profile_effective(profile, row)
                 out_p, out_s = _part3d_output_paths(mesh_path, p3)
                 seed = _seed_for_row(profile, f"{row.id}:part3d")
-                pa = _part3d_decompose_argv(part3d_bin, mesh_path, out_p, out_s, p3, seed)
+                pa = _part3d_decompose_argv(part3d_bin, mesh_path, out_p, out_s, p3, seed, gpu_ids=gpu_ids)
                 _dry_run_emit(dry_plan, phase="part3d", row_id=row.id, argv=pa)
         if with_rig and rigging3d_bin and any(r.generate_3d and r.generate_rig for r in rows):
             _dry_run_header(
@@ -1646,6 +1624,7 @@ def batch_cmd(
                     rig_out,
                     seed=seed,
                     rig_profile=rg,
+                    gpu_ids=gpu_ids,
                 )
                 if profile.text3d and profile.text3d.low_vram:
                     rg_args.append("--low-vram")
@@ -1670,7 +1649,7 @@ def batch_cmd(
                 anim_out = _animator3d_output_path(rig_out)
                 anim_prof = profile.animator3d or Animator3DProfile()
                 preset = (anim_prof.preset or "humanoid").strip().lower()
-                ap_args = _animator3d_game_pack_argv(animator3d_bin, rig_out, anim_out, preset=preset)
+                ap_args = _animator3d_game_pack_argv(animator3d_bin, rig_out, anim_out, preset=preset, gpu_ids=gpu_ids)
                 _dry_run_emit(dry_plan, phase="animator3d", row_id=row.id, argv=ap_args)
         if dry_run_json is not None and dry_plan is not None:
             payload = {
@@ -1721,10 +1700,10 @@ def batch_cmd(
                     "se ainda não estiver no ambiente.",
                     title="Aviso GPU",
                     border_style="yellow",
-                )
             )
+        )
 
-    child_env = subprocess_gpu_env()
+    child_env = subprocess_gpu_env(gpu_ids=gpu_ids)
     if profile_tools:
         child_env = dict(child_env)
         child_env["GAMEDEV_PROFILE"] = "1"
@@ -1862,6 +1841,8 @@ def batch_cmd(
                             if seed is not None:
                                 t2d_args.extend(["--seed", str(seed)])
                             _append_text2d_profile_args(profile, t2d_args)
+                            if gpu_ids:
+                                t2d_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
                             tool_fail = "text2d falhou"
                             tool_empty = "text2d não produziu ficheiro de imagem"
                             tool_short = "text2d"
@@ -2031,6 +2012,7 @@ def batch_cmd(
                             rigging3d_bin,
                             with_rig,
                             with_animate,
+                            gpu_ids=gpu_ids,
                         ):
                             failures += 1
 
@@ -2060,6 +2042,7 @@ def batch_cmd(
                                     mesh_shape,
                                     row,
                                     shape_only=True,
+                                    gpu_ids=gpu_ids,
                                 )
                                 if seed is not None:
                                     t3d_args.extend(["--seed", str(seed)])
@@ -2118,6 +2101,7 @@ def batch_cmd(
                                     img_final,
                                     mesh_final,
                                     row_id=row.id,
+                                    gpu_ids=gpu_ids,
                                 )
                                 t_paint = time.perf_counter()
                                 r4 = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
@@ -2180,6 +2164,7 @@ def batch_cmd(
                                     img_final,
                                     mesh_tmp,
                                     row,
+                                    gpu_ids=gpu_ids,
                                 )
                                 if seed is not None:
                                     t3d_args.extend(["--seed", str(seed)])
@@ -2212,6 +2197,7 @@ def batch_cmd(
                                         rigging3d_bin,
                                         with_rig,
                                         with_animate,
+                                        gpu_ids=gpu_ids,
                                     ):
                                         failures += 1
                                 append_log(rec)
@@ -2303,6 +2289,7 @@ def _paint3d_texture_argv(
     mesh_in: Path,
     image_path: Path,
     mesh_out: Path,
+    gpu_ids: list[int] | None = None,
 ) -> list[str]:
     """Subcomando ``paint3d texture`` (Hunyuan3D-Paint 2.1; saída GLB com material PBR)."""
     args = [
@@ -2347,6 +2334,8 @@ def _paint3d_texture_argv(
             args.append("--tiny-vae")
         if t3.paint_torch_compile:
             args.append("--torch-compile")
+    if gpu_ids:
+        args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     return args
 
 
@@ -2358,6 +2347,7 @@ def _texture_subprocess_argv(
     mesh_out: Path,
     *,
     row_id: str | None = None,
+    gpu_ids: list[int] | None = None,
 ) -> list[str]:
     t3 = profile.text3d
     if t3 and (t3.paint_style or "hunyuan").strip().lower() in ("solid", "perlin"):
@@ -2369,6 +2359,7 @@ def _texture_subprocess_argv(
         mesh_in,
         image_path,
         mesh_out,
+        gpu_ids=gpu_ids,
     )
 
 
@@ -2380,6 +2371,7 @@ def _text3d_argv(
     row: ManifestRow | None = None,
     *,
     shape_only: bool = False,
+    gpu_ids: list[int] | None = None,
 ) -> list[str]:
     """
     ``shape_only=True``: só Hunyuan (imagem → mesh), sem --texture
@@ -2423,6 +2415,8 @@ def _text3d_argv(
     if t3.full_gpu:
         args.append("--t2d-full-gpu")
     args.extend(["--export-origin", t3.export_origin])
+    if gpu_ids:
+        args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     return args
 
 
@@ -2459,6 +2453,15 @@ def _text3d_argv(
     default=None,
     help="Pasta de trabalho persistente para shapes (defeito: .gameassets_work/ junto ao manifest)",
 )
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help=(
+        "IDs de GPU para multi-GPU (ex.: '0,1'). "
+        "Propaga --gpu-ids e CUDA_VISIBLE_DEVICES aos subprocessos."
+    ),
+)
 def resume_cmd(
     profile_path: Path,
     manifest_path: Path,
@@ -2467,6 +2470,7 @@ def resume_cmd(
     dry_run: bool,
     fail_fast: bool,
     work_dir: Path | None,
+    gpu_ids_str: str | None,
 ) -> None:
     """Batch inteligente: analisa o estado de cada asset e executa apenas as fases pendentes.
 
@@ -2477,6 +2481,14 @@ def resume_cmd(
       - paint em falta → paint3d texture (GLB final com PBR)
       - tudo OK       → skip
     """
+    gpu_ids: list[int] | None = None
+    if gpu_ids_str:
+        try:
+            gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")]
+        except ValueError as _err:
+            raise click.ClickException(
+                "--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')"
+            ) from _err
 
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
     manifest_dir = manifest_path.resolve().parent
@@ -2501,7 +2513,7 @@ def resume_cmd(
     work_dir = manifest_dir / ".gameassets_work" if work_dir is None else work_dir.resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    child_env = subprocess_gpu_env()
+    child_env = subprocess_gpu_env(gpu_ids=gpu_ids)
 
     log_file = None
     if log_path:
@@ -2664,6 +2676,8 @@ def resume_cmd(
                         continue
                     argv = [img_bin, "generate", prompt_2d, "-o", str(tmp_img)]
                     _append_text2d_profile_args(profile, argv)
+                    if gpu_ids:
+                        argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
                 seed = _seed_for_row(profile, row.id)
                 if seed is not None:
                     argv.extend(["--seed", str(seed)])
@@ -2723,6 +2737,7 @@ def resume_cmd(
                     it["shape_path"],
                     row,
                     shape_only=True,
+                    gpu_ids=gpu_ids,
                 )
                 if seed is not None:
                     t3d_args.extend(["--seed", str(seed)])
@@ -2763,6 +2778,7 @@ def resume_cmd(
                     it["img_final"],
                     mesh_out,
                     row_id=row.id,
+                    gpu_ids=gpu_ids,
                 )
                 r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
                 if r.returncode == 0 and mesh_out.is_file():

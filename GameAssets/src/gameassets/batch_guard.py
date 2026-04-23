@@ -15,11 +15,13 @@ import click
 from gamedev_shared.env import PYTORCH_CUDA_ALLOC_CONF
 
 
-def subprocess_gpu_env() -> dict[str, str]:
+def subprocess_gpu_env(gpu_ids: list[int] | None = None) -> dict[str, str]:
     """Variáveis extra para subprocessos text2d/text3d (não sobrescreve o ambiente do utilizador)."""
     extra: dict[str, str] = {}
     if not os.environ.get(PYTORCH_CUDA_ALLOC_CONF, "").strip():
         extra[PYTORCH_CUDA_ALLOC_CONF] = "expandable_segments:True"
+    if gpu_ids:
+        extra["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
     return extra
 
 
@@ -43,6 +45,33 @@ def query_gpu_free_mib() -> int | None:
         line = (r.stdout or "").strip().splitlines()[0].strip()
         return int(float(line))
     except (OSError, ValueError, subprocess.TimeoutExpired, IndexError):
+        return None
+
+
+def detect_gpu_ids() -> list[int] | None:
+    """Detecta GPUs disponíveis via nvidia-smi. Retorna lista de IDs ou None."""
+    if not shutil.which("nvidia-smi"):
+        return None
+    try:
+        r = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=index",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=8,
+        )
+        if r.returncode != 0 or not (r.stdout or "").strip():
+            return None
+        ids: list[int] = []
+        for line in (r.stdout or "").strip().splitlines():
+            line = line.strip()
+            if line:
+                ids.append(int(line))
+        return ids if ids else None
+    except (OSError, ValueError, subprocess.TimeoutExpired):
         return None
 
 

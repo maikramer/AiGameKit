@@ -230,6 +230,7 @@ def test_batch_skip_text2d_requires_with_3d(runner: CliRunner, tmp_path: Path) -
         [
             "batch",
             "--skip-text2d",
+            "--no-3d",
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
@@ -237,4 +238,4 @@ def test_batch_skip_text2d_requires_with_3d(runner: CliRunner, tmp_path: Path) -
         ],
     )
     assert r.exit_code != 0
-    assert "skip-text2d" in r.output.lower() or "with-3d" in r.output.lower()
+    assert "skip-text2d" in r.output.lower() or "3d" in r.output.lower()

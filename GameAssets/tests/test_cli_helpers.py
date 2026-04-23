@@ -371,3 +371,18 @@ def test_rigging3d_pipeline_argv_with_profile() -> None:
     assert argv.index("--root") + 1 < len(argv)
     assert argv[argv.index("--root") + 1] == "/u"
     assert argv[argv.index("--python") + 1] == "/py/bin/python"
+
+
+def test_rigging3d_pipeline_argv_with_gpu_ids() -> None:
+    argv = _rigging3d_pipeline_argv(
+        "rigging3d",
+        Path("/in.glb"),
+        Path("/out.glb"),
+        seed=None,
+        rig_profile=None,
+        gpu_ids=[0, 1],
+    )
+    gpu_idx = argv.index("--gpu-ids")
+    assert argv[gpu_idx + 1] == "0,1"
+    assert "pipeline" in argv
+    assert argv.index("--gpu-ids") < argv.index("pipeline")
