@@ -51,8 +51,8 @@ class ModelArchitectureRegistry:
     """
 
     DEFAULTS: ClassVar[dict[str, list[str]]] = {
-        "hunyuan3d": ["Hunyuan3DBlock"],
-        "flux": ["FluxSingleTransformerBlock"],
+        "hunyuan3d": ["DoubleStreamBlock", "SingleStreamBlock"],
+        "flux": ["FluxSingleTransformerBlock", "FluxTransformerBlock"],
         "dit": ["DiTBlock"],
         "unet": ["BasicTransformerBlock", "UNetMidBlock2D"],
     }
