@@ -640,6 +640,123 @@ def _part3d_decompose_argv(
     return args
 
 
+def _lod_output_paths(mesh_path: Path, basename: str) -> list[Path]:
+    """Espera-se: {mesh_dir}/{basename}_lod0.glb … _lod2.glb."""
+    d = mesh_path.parent
+    return [d / f"{basename}_lod{i}.glb" for i in range(3)]
+
+
+def _lod_pipeline_failed(
+    profile: GameProfile,
+    row: ManifestRow,
+    mesh_final: Path,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    child_env: dict[str, str],
+    with_lod: bool,
+    gpu_ids: list[int] | None = None,
+) -> bool:
+    """Corre ``text3d lod`` para gerar triplet LOD. Devolve True se falhou."""
+    if not with_lod or not row.generate_lod or not row.generate_3d:
+        return False
+    if not mesh_final.is_file():
+        return False
+    from .profile import LODProfile
+
+    lod_prof = profile.lod
+    if lod_prof is None:
+        lod_prof = LODProfile()
+    text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
+    basename = row.id.replace("/", "_")
+    out_dir = mesh_final.parent
+    argv = [
+        text3d_bin,
+        "lod",
+        str(mesh_final),
+        "-o",
+        str(out_dir),
+        "--basename",
+        basename,
+        "--lod1-ratio",
+        str(lod_prof.lod1_ratio),
+        "--lod2-ratio",
+        str(lod_prof.lod2_ratio),
+        "--min-faces-lod1",
+        str(lod_prof.min_faces_lod1),
+        "--min-faces-lod2",
+        str(lod_prof.min_faces_lod2),
+    ]
+    if lod_prof.meshfix:
+        argv.append("--meshfix")
+    if gpu_ids:
+        argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    t0 = time.perf_counter()
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    _timing_append(rec, "lod", time.perf_counter() - t0)
+    if r.returncode != 0:
+        err = merge_subprocess_output(r) or "text3d lod falhou"
+        rec["status"] = "error"
+        rec["error"] = err
+        console.print(f"[red]LOD falhou[/red] {row.id}: {err[:200]}")
+        return True
+    paths = _lod_output_paths(mesh_final, basename)
+    rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
+    return False
+
+
+def _collision_output_path(mesh_path: Path) -> Path:
+    """Espera-se: {mesh_dir}/{stem}_collision.glb."""
+    return mesh_path.parent / f"{mesh_path.stem}_collision.glb"
+
+
+def _collision_pipeline_failed(
+    profile: GameProfile,
+    row: ManifestRow,
+    mesh_final: Path,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    child_env: dict[str, str],
+    with_collision: bool,
+    gpu_ids: list[int] | None = None,
+) -> bool:
+    """Corre ``text3d collision`` para gerar mesh de colisão. Devolve True se falhou."""
+    if not with_collision or not row.generate_collision or not row.generate_3d:
+        return False
+    if not mesh_final.is_file():
+        return False
+    from .profile import CollisionProfile
+
+    coll_prof = profile.collision
+    if coll_prof is None:
+        coll_prof = CollisionProfile()
+    text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
+    coll_out = _collision_output_path(mesh_final)
+    argv = [
+        text3d_bin,
+        "collision",
+        str(mesh_final),
+        "-o",
+        str(coll_out),
+        "--max-faces",
+        str(coll_prof.max_faces),
+    ]
+    if not coll_prof.convex_hull:
+        argv.append("--no-convex-hull")
+    if gpu_ids:
+        argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    t0 = time.perf_counter()
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    _timing_append(rec, "collision", time.perf_counter() - t0)
+    if r.returncode != 0:
+        err = merge_subprocess_output(r) or "text3d collision falhou"
+        rec["status"] = "error"
+        rec["error"] = err
+        console.print(f"[red]Collision falhou[/red] {row.id}: {err[:200]}")
+        return True
+    rec["collision_path"] = _path_for_log(coll_out, manifest_dir)
+    return False
+
+
 def _part3d_pipeline_failed(
     profile: GameProfile,
     row: ManifestRow,
@@ -734,9 +851,31 @@ def _post_text3d_mesh_extras(
     has_rigging_profile: bool = False,
     has_parts_profile: bool = False,
     gpu_ids: list[int] | None = None,
+    with_lod: bool = False,
+    with_collision: bool = False,
 ) -> bool:
     """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
+    lod_fail = _lod_pipeline_failed(
+        profile,
+        row,
+        mesh_final,
+        rec,
+        manifest_dir,
+        child_env,
+        with_lod=with_lod,
+        gpu_ids=gpu_ids,
+    )
+    coll_fail = _collision_pipeline_failed(
+        profile,
+        row,
+        mesh_final,
+        rec,
+        manifest_dir,
+        child_env,
+        with_collision=with_collision,
+        gpu_ids=gpu_ids,
+    )
     part3d_fail = _part3d_pipeline_failed(
         profile,
         row,
@@ -784,7 +923,7 @@ def _post_text3d_mesh_extras(
         has_rigging_profile=has_rigging_profile,
         gpu_ids=gpu_ids,
     )
-    if part3d_fail or rig_fail:
+    if lod_fail or coll_fail or part3d_fail or rig_fail:
         return True
     rg = profile.rigging3d
     sfx = rg.output_suffix if rg else "_rigged"
@@ -1153,6 +1292,14 @@ def prompts_cmd(
     help="Copiar também PNGs 2D para assets/textures/",
 )
 @click.option(
+    "--audio-format",
+    type=click.Choice(["copy", "wav", "ogg"]),
+    default="copy",
+    help="Audio format for handoff (copy/ogg)",
+)
+@click.option("--sfx-sample-rate", type=int, default=22050, show_default=True, help="Sample rate for SFX in ogg mode")
+@click.option("--bgm-sample-rate", type=int, default=44100, show_default=True, help="Sample rate for BGM in ogg mode")
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Mostra o manifest JSON sem escrever ficheiros",
@@ -1167,6 +1314,9 @@ def handoff_cmd(
     prefer_rigged: bool,
     prefer_parts: bool,
     with_textures: bool,
+    audio_format: str,
+    sfx_sample_rate: int,
+    bgm_sample_rate: int,
     dry_run: bool,
 ) -> None:
     """Copia GLB/áudio do ``output_dir`` do perfil para ``public/assets`` e grava ``gameassets_handoff.json``."""
@@ -1186,6 +1336,9 @@ def handoff_cmd(
         prefer_rigged=prefer_rigged,
         prefer_parts=prefer_parts,
         with_textures=with_textures,
+        audio_format=audio_format,
+        sfx_sample_rate=sfx_sample_rate,
+        bgm_sample_rate=bgm_sample_rate,
         dry_run=dry_run,
     )
 
@@ -1282,6 +1435,18 @@ def handoff_cmd(
     help="Skip animation even for rigged models.",
 )
 @click.option(
+    "--no-lod",
+    is_flag=True,
+    default=False,
+    help="Skip LOD generation even if enabled in manifest/profile",
+)
+@click.option(
+    "--no-collision",
+    is_flag=True,
+    default=False,
+    help="Skip collision mesh generation even if enabled",
+)
+@click.option(
     "--profile-tools",
     is_flag=True,
     help="Activar profiling (CPU/RAM/GPU) em paint3d e part3d via GAMEDEV_PROFILE.",
@@ -1320,6 +1485,8 @@ def batch_cmd(
     no_rig: bool,
     no_parts: bool,
     no_animate: bool,
+    no_lod: bool,
+    no_collision: bool,
     profile_tools: bool,
     profile_tools_log: Path | None,
     low_vram: bool,
@@ -1337,6 +1504,10 @@ def batch_cmd(
     with_rig = not no_rig and with_3d and (any(r.generate_rig for r in rows) or has_rigging_profile)
     with_parts = not no_parts and with_3d and (any(r.generate_parts for r in rows) or has_parts_profile)
     with_animate = not no_animate and with_rig
+    has_lod_profile = profile.lod is not None
+    with_lod = not no_lod and with_3d and (any(r.generate_lod for r in rows) or has_lod_profile)
+    has_collision_profile = profile.collision is not None
+    with_collision = not no_collision and with_3d and (any(r.generate_collision for r in rows) or has_collision_profile)
 
     if low_vram:
         if profile.text2d is None:
@@ -2158,6 +2329,8 @@ def batch_cmd(
                             has_rigging_profile=has_rigging_profile,
                             has_parts_profile=has_parts_profile,
                             gpu_ids=gpu_ids,
+                            with_lod=with_lod,
+                            with_collision=with_collision,
                         ):
                             failures += 1
 
@@ -2368,6 +2541,8 @@ def batch_cmd(
                                         has_rigging_profile=has_rigging_profile,
                                         has_parts_profile=has_parts_profile,
                                         gpu_ids=gpu_ids,
+                                        with_lod=with_lod,
+                                        with_collision=with_collision,
                                     ):
                                         failures += 1
                                 append_log(rec)
@@ -3346,6 +3521,68 @@ def debug_compare(
     console.print(f"[green]Comparacao:[/green] {output_dir}")
     n = len(side_by_side_paths)
     console.print(f"  {n} imagens side-by-side, report em {diff_path}")
+
+
+@main.command("validate")
+@click.option(
+    "--profile",
+    "profile_path",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default="game.yaml",
+)
+@click.option(
+    "--manifest",
+    "manifest_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="manifest",
+)
+@click.option(
+    "--presets-local",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+)
+@click.option("--max-poly-count", type=int, default=100_000, show_default=True, help="Maximum face count per mesh")
+@click.option("--max-file-size-mb", type=float, default=50.0, show_default=True, help="Maximum file size in MB")
+def validate_cmd(
+    profile_path: Path,
+    manifest_path: Path,
+    presets_local: Path | None,
+    max_poly_count: int,
+    max_file_size_mb: float,
+) -> None:
+    """Validate generated assets against quality thresholds."""
+    from .validator import validate_row
+
+    profile, rows, _bundle, _preset = _build_context(profile_path, manifest_path, presets_local)
+    manifest_dir = manifest_path.parent.resolve()
+
+    results = []
+    for row in rows:
+        r = validate_row(row, profile, manifest_dir, max_poly_count=max_poly_count, max_file_size_mb=max_file_size_mb)
+        results.append(r)
+
+    total = len(results)
+    errors = sum(len(r.errors) for r in results)
+    warnings = sum(len(r.warnings) for r in results)
+    ok_count = sum(1 for r in results if r.ok)
+
+    table = Table(title="Validação de Assets", box=box.SIMPLE, show_header=True)
+    table.add_column("ID", style="bold")
+    table.add_column("Status")
+    table.add_column("Erros", style="red")
+    table.add_column("Avisos", style="yellow")
+
+    for r in results:
+        status = "[green]✓[/green]" if r.ok else "[red]✗[/red]"
+        err_text = "; ".join(r.errors) if r.errors else "—"
+        warn_text = "; ".join(r.warnings) if r.warnings else "—"
+        table.add_row(r.row_id, status, err_text, warn_text)
+
+    console.print(table)
+    console.print(f"\n[bold]{ok_count}/{total}[/bold] assets OK, {errors} erros, {warnings} avisos")
+
+    if errors:
+        sys.exit(1)
 
 
 @main.command("dream")

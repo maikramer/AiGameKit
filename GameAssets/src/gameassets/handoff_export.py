@@ -18,6 +18,18 @@ from .profile import GameProfile
 console = Console()
 
 
+def _convert_audio(src: Path, dst: Path, *, sample_rate: int, dry_run: bool) -> bool:
+    """Convert audio file using ffmpeg. Returns True on success."""
+    import subprocess
+
+    if dry_run:
+        return True
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    argv = ["ffmpeg", "-y", "-i", str(src), "-ar", str(sample_rate), "-vn", "-c:a", "libvorbis", "-q:a", "4", str(dst)]
+    r = subprocess.run(argv, capture_output=True, text=True)
+    return r.returncode == 0
+
+
 def _safe_public_id(row_id: str) -> str:
     return row_id.replace("/", "__").replace("\\", "_")
 
@@ -48,6 +60,9 @@ def run_handoff(
     prefer_rigged: bool,
     prefer_parts: bool,
     with_textures: bool,
+    audio_format: str = "copy",
+    sfx_sample_rate: int = 22050,
+    bgm_sample_rate: int = 44100,
     dry_run: bool,
 ) -> dict[str, Any]:
     """Resolve meshes/áudio, copia ou symlink, devolve manifest dict."""
@@ -118,19 +133,60 @@ def run_handoff(
             if not dry_run:
                 _install_file(chosen, dst, copy=copy)
 
+            # LOD triplet
+            lod_basename = row.id.replace("/", "_")
+            lod_urls = []
+            for level in range(3):
+                lod_src = chosen.parent / f"{lod_basename}_lod{level}.glb"
+                if lod_src.is_file():
+                    dst_lod = models_dir / f"{pid}_lod{level}.glb"
+                    rel_lod = f"/assets/models/{pid}_lod{level}.glb"
+                    lod_urls.append(rel_lod)
+                    if not dry_run:
+                        _install_file(lod_src, dst_lod, copy=copy)
+            if lod_urls:
+                entry["model"]["lod"] = lod_urls
+
+            # Collision mesh
+            coll_src = chosen.parent / f"{chosen.stem}_collision.glb"
+            if coll_src.is_file():
+                dst_coll = models_dir / f"{pid}_collision.glb"
+                rel_coll = f"/assets/models/{pid}_collision.glb"
+                entry["model"]["collision"] = {"url": rel_coll, "source": str(coll_src), "dest": str(dst_coll)}
+                if not dry_run:
+                    _install_file(coll_src, dst_coll, copy=copy)
+
         if row.generate_audio:
             audio_src = _audio_path_for_row_manifest(profile, manifest_dir, row)
             if audio_src.is_file():
-                ext = audio_src.suffix.lower().lstrip(".") or "wav"
-                dst_a = audio_dir / f"{pid}.{ext}"
-                rel_a = f"/assets/audio/{pid}.{ext}"
-                entry["audio"] = {
-                    "source": str(audio_src),
-                    "url": rel_a,
-                    "dest": str(dst_a),
-                }
-                if not dry_run:
+                src_ext = audio_src.suffix.lower().lstrip(".") or "wav"
+                is_sfx = row.audio_profile == "effects" or (row.audio_profile is None and src_ext != "wav")
+                sample_rate = sfx_sample_rate if is_sfx else bgm_sample_rate
+
+                if audio_format == "ogg":
+                    dst_a = audio_dir / f"{pid}.ogg"
+                    rel_a = f"/assets/audio/{pid}.ogg"
+                    if dry_run or _convert_audio(
+                        audio_src, dst_a, sample_rate=sample_rate, dry_run=dry_run
+                    ):
+                        entry["audio"] = {
+                            "source": str(audio_src),
+                            "url": rel_a,
+                            "dest": str(dst_a),
+                            "format": "ogg",
+                            "sample_rate": sample_rate,
+                        }
+                    else:
+                        dst_a = audio_dir / f"{pid}.{src_ext}"
+                        rel_a = f"/assets/audio/{pid}.{src_ext}"
+                        _install_file(audio_src, dst_a, copy=copy)
+                        entry["audio"] = {"source": str(audio_src), "url": rel_a, "dest": str(dst_a), "format": src_ext}
+                        entry["audio_warning"] = "ffmpeg conversion failed, copied original"
+                else:
+                    dst_a = audio_dir / f"{pid}.{src_ext}"
+                    rel_a = f"/assets/audio/{pid}.{src_ext}"
                     _install_file(audio_src, dst_a, copy=copy)
+                    entry["audio"] = {"source": str(audio_src), "url": rel_a, "dest": str(dst_a), "format": src_ext}
             else:
                 entry["audio_error"] = f"Ficheiro em falta: {audio_src}"
 
@@ -194,6 +250,9 @@ def handoff_command_impl(
     prefer_rigged: bool,
     prefer_parts: bool,
     with_textures: bool,
+    audio_format: str = "copy",
+    sfx_sample_rate: int = 22050,
+    bgm_sample_rate: int = 44100,
     dry_run: bool,
 ) -> None:
     from .cli import _build_context
@@ -210,6 +269,9 @@ def handoff_command_impl(
         prefer_rigged=prefer_rigged,
         prefer_parts=prefer_parts,
         with_textures=with_textures,
+        audio_format=audio_format,
+        sfx_sample_rate=sfx_sample_rate,
+        bgm_sample_rate=bgm_sample_rate,
         dry_run=dry_run,
     )
     title = "[bold]Handoff[/bold]" + (" [cyan](dry-run)[/cyan]" if dry_run else "")
