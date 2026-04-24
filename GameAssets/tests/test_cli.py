@@ -33,7 +33,7 @@ def test_init_creates_files(runner: CliRunner, tmp_path: Path) -> None:
     r = runner.invoke(cli, ["init", "--path", str(tmp_path)])
     assert r.exit_code == 0
     assert (tmp_path / "game.yaml").is_file()
-    assert (tmp_path / "manifest.csv").is_file()
+    assert (tmp_path / "manifest.yaml").is_file()
 
 
 def test_init_refuses_overwrite_without_force(runner: CliRunner, tmp_path: Path) -> None:
@@ -60,7 +60,7 @@ def test_prompts_after_init(runner: CliRunner, tmp_path: Path) -> None:
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
         ],
     )
     assert r2.exit_code == 0
@@ -77,7 +77,7 @@ def test_prompts_jsonl_output(runner: CliRunner, tmp_path: Path) -> None:
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
             "-o",
             str(out),
         ],
@@ -106,7 +106,7 @@ def test_batch_dry_run_json(runner: CliRunner, tmp_path: Path, monkeypatch: pyte
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
         ],
     )
     assert r.exit_code == 0
@@ -128,7 +128,7 @@ def test_handoff_dry_run(runner: CliRunner, tmp_path: Path) -> None:
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
             "--public-dir",
             str(pub),
             "--dry-run",
@@ -153,7 +153,7 @@ def test_batch_dry_run(runner: CliRunner, tmp_path: Path, monkeypatch: pytest.Mo
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
         ],
     )
     assert r.exit_code == 0
@@ -172,7 +172,7 @@ def test_batch_dry_run_json_requires_dry_run(runner: CliRunner, tmp_path: Path) 
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
         ],
     )
     assert r.exit_code != 0
@@ -197,7 +197,7 @@ def test_dream_dry_run(runner: CliRunner, tmp_path: Path) -> None:
     project = project_dirs[0]
     batch_dir = project / "_batch"
     assert (batch_dir / "game.yaml").is_file()
-    assert (batch_dir / "manifest.csv").is_file()
+    assert (batch_dir / "manifest.yaml").is_file()
     assert (batch_dir / "dream_plan.json").is_file()
 
 
@@ -234,7 +234,7 @@ def test_batch_skip_text2d_requires_3d_generation(runner: CliRunner, tmp_path: P
             "--profile",
             str(tmp_path / "game.yaml"),
             "--manifest",
-            str(tmp_path / "manifest.csv"),
+            str(tmp_path / "manifest.yaml"),
         ],
     )
     assert r.exit_code != 0

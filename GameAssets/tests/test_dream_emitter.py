@@ -209,7 +209,7 @@ class TestEmitAll:
     def test_creates_files(self, tmp_path: Path) -> None:
         paths = emit_all(_sample_plan(), tmp_path)
         assert paths["game_yaml"].is_file()
-        assert paths["manifest_csv"].is_file()
+        assert paths["manifest_yaml"].is_file()
         assert paths["world_xml"].is_file()
         assert paths["main_ts"].is_file()
         assert paths["index_html"].is_file()
