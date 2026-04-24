@@ -88,6 +88,13 @@ text3d:
 #   segment_only: false
 #   parts_suffix: "_parts"
 #   segmented_suffix: "_segmented"
+
+# LOD (3 níveis de detalhe via text3d lod): pipeline "lod" no manifest.
+# lod:
+#   lod1_ratio: 0.42
+#   lod2_ratio: 0.14
+#   min_faces_lod1: 500
+#   min_faces_lod2: 150
 """
 
 MANIFEST_CSV = """id,idea,kind,generate_3d,generate_audio,generate_rig,generate_animate,generate_parts,image_source
@@ -109,7 +116,7 @@ assets:
   - id: hero_sword
     idea: "espada longa com gema azul no punho"
     kind: prop
-    pipeline: [3d]
+    pipeline: [3d, lod]
 
   - id: forest_bg
     idea: "floresta densa ao entardecer"
