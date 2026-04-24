@@ -156,7 +156,19 @@ def clear_cuda_memory(devices: list[int] | None = None) -> None:
     torch.cuda.set_device(original)
 
 
-DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB = 300
+DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT = 0.15
+
+
+def gpu_total_mib(device: int = 0) -> int | None:
+    """Total VRAM (MiB) on *device*, or ``None`` if unavailable."""
+    torch = _torch()
+    if not torch.cuda.is_available():
+        return None
+    if not hasattr(torch.cuda, "mem_get_info"):
+        props = torch.cuda.get_device_properties(device)
+        return int(props.total_memory // (1024 * 1024))
+    _free, total = torch.cuda.mem_get_info(device)
+    return int(total // (1024 * 1024))
 
 
 def gpu_bytes_in_use(device: int = 0) -> int | None:
@@ -176,24 +188,38 @@ def gpu_bytes_in_use(device: int = 0) -> int | None:
 def enforce_exclusive_gpu(
     *,
     device: int = 0,
-    max_used_mib: int = DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB,
+    max_used_pct: float = DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT,
     allow_shared: bool = False,
 ) -> None:
     """Garante GPU quase livre antes de carregar modelos grandes.
 
+    Uses a **percentage of total VRAM** as the threshold (default 15 %).
+    If occupied VRAM is below the threshold, a warning is printed but
+    execution proceeds.  Above the threshold a :class:`RuntimeError` is
+    raised so the caller can decide to kill competing processes.
+
+    Args:
+        device: CUDA device index.
+        max_used_pct: Fraction of total VRAM (0.0-1.0) that is the
+            "occupied" threshold.  Default: 0.15 (15 %).
+        allow_shared: Skip the check entirely.
+
     Raises:
-        RuntimeError: VRAM já ocupada acima de ``max_used_mib``.
+        RuntimeError: VRAM ocupação acima do limiar.
     """
     if allow_shared:
         return
     used = gpu_bytes_in_use(device)
     if used is None:
         return
-    max_bytes = max_used_mib * 1024 * 1024
-    if used > max_bytes:
-        mib = used / (1024 * 1024)
+    total_mib = gpu_total_mib(device)
+    used_mib = used / (1024 * 1024)
+    threshold_mib = total_mib * max_used_pct if total_mib is not None else 1024
+    if used_mib > threshold_mib:
+        pct = (used_mib / total_mib * 100) if total_mib else 0
         raise RuntimeError(
-            f"GPU com ~{mib:.0f} MiB já em uso (limite: {max_used_mib} MiB). "
+            f"GPU com ~{used_mib:.0f} MiB já em uso ({pct:.0f}% de {total_mib} MiB; "
+            f"limite: {max_used_pct:.0%}). "
             "Fecha outras aplicações ou usa --allow-shared-gpu."
         )
 
@@ -243,6 +269,39 @@ def _is_protected_gpu_process(proc_name: str) -> bool:
     if b in _GPU_KILL_PROTECTED_NAMES:
         return True
     return "xwayland" in proc_name.lower()
+
+
+def _current_uid() -> int:
+    return os.getuid() if hasattr(os, "getuid") else os.getpid()
+
+
+def _process_uid(pid: int) -> int | None:
+    """UID do processo *pid*, ou ``None`` se não conseguir determinar."""
+    try:
+        status = Path(f"/proc/{pid}/status").read_text()
+        for line in status.splitlines():
+            if line.startswith("Uid:"):
+                return int(line.split()[1])
+    except (OSError, ValueError, IndexError):
+        pass
+    if sys.platform == "win32":
+        try:
+            r = subprocess.run(
+                ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                return None
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return None
+
+
+def _is_user_process(pid: int) -> bool:
+    uid = _process_uid(pid)
+    if uid is None:
+        return False
+    return uid == _current_uid()
 
 
 def list_nvidia_compute_apps() -> list[tuple[int, str, int | None]]:
@@ -324,7 +383,10 @@ def kill_gpu_compute_processes_aggressive(
     exclude_pid: int,
     term_wait_seconds: float = 2.0,
 ) -> list[str]:
-    """SIGTERM + SIGKILL em processos GPU (excluindo PID actual e protegidos).
+    """SIGTERM + SIGKILL em processos GPU do utilizador actual (excluindo PID actual e protegidos).
+
+    Only targets processes owned by the **current user** — system / root /
+    other-user processes are never touched.
 
     Returns:
         Linhas de log legíveis.
@@ -337,6 +399,10 @@ def kill_gpu_compute_processes_aggressive(
             continue
         if _is_protected_gpu_process(name):
             logs.append(f"[ignorado] PID {pid} ({name}) — protegido")
+            continue
+        if not _is_user_process(pid):
+            uid_info = _process_uid(pid)
+            logs.append(f"[ignorado] PID {pid} ({name}) — UID {uid_info} ≠ actual")
             continue
         extra = f" ~{mib} MiB" if mib is not None else ""
         targets.append((pid, name))
