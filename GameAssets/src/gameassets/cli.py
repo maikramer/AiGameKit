@@ -1470,6 +1470,12 @@ def handoff_cmd(
     help="Modo baixa VRAM: propaga --low-vram / --low-vram-mode a todos os sub-tools.",
 )
 @click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Regenerar tudo, mesmo outputs que já existem (passa --force aos sub-commands).",
+)
+@click.option(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
@@ -1496,6 +1502,7 @@ def batch_cmd(
     profile_tools: bool,
     profile_tools_log: Path | None,
     low_vram: bool,
+    force: bool,
     gpu_ids_str: str | None,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
@@ -1734,6 +1741,7 @@ def batch_cmd(
             else:
                 p1_title = "--- Fase 1: Text2D (todas as linhas) ---"
             _dry_run_header(dry_plan, p1_title)
+            dry_text2d_items: list[dict[str, Any]] = []
             for row in rows:
                 if row.generate_3d:
                     prompt = build_prompt(profile, preset, row, for_3d=False)
@@ -1751,28 +1759,29 @@ def batch_cmd(
                         if seed is not None:
                             t2d_args.extend(["--seed", str(seed)])
                         _append_texture2d_profile_args(tt_line, t2d_args)
+                        _dry_run_emit(dry_plan, phase=p1_title, row_id=row.id, argv=t2d_args)
+                        if tt_line.materialize:
+                            maps_ph = _texture2d_material_maps_path(profile, row)
+                            try:
+                                mbin_dr = _resolve_materialize_bin_texture2d(tt_line)
+                            except FileNotFoundError:
+                                mbin_dr = "materialize"
+                            margv = _materialize_diffuse_argv(mbin_dr, tt_line, img_path, maps_ph)
+                            _dry_run_emit(dry_plan, phase=p1_title + " materialize", row_id=row.id, argv=margv)
                     else:
-                        t2d_args = [
-                            text2d_bin or "",
-                            "generate",
-                            prompt,
-                            "-o",
-                            str(img_path),
-                        ]
+                        dry_item: dict[str, Any] = {"id": row.id, "prompt": prompt, "output": str(img_path)}
                         if seed is not None:
-                            t2d_args.extend(["--seed", str(seed)])
-                        _append_text2d_profile_args(profile, t2d_args)
-                        if gpu_ids:
-                            t2d_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-                    _dry_run_emit(dry_plan, phase=p1_title, row_id=row.id, argv=t2d_args)
-                    if _row_uses_texture2d(profile, row) and tt_line.materialize:
-                        maps_ph = _texture2d_material_maps_path(profile, row)
-                        try:
-                            mbin_dr = _resolve_materialize_bin_texture2d(tt_line)
-                        except FileNotFoundError:
-                            mbin_dr = "materialize"
-                        margv = _materialize_diffuse_argv(mbin_dr, tt_line, img_path, maps_ph)
-                        _dry_run_emit(dry_plan, phase=p1_title + " materialize", row_id=row.id, argv=margv)
+                            dry_item["seed"] = seed
+                        dry_text2d_items.append(dry_item)
+            if dry_text2d_items:
+                batch_argv = [text2d_bin or "", "generate-batch", "<text2d_manifest.json>"]
+                _append_text2d_profile_args(profile, batch_argv)
+                if force:
+                    batch_argv.append("--force")
+                if gpu_ids:
+                    batch_argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                _dry_run_emit(dry_plan, phase="text2d generate-batch", row_id="(batch)", argv=batch_argv)
+            for row in rows:
                 if not skip_audio and text2sound_bin and _row_wants_audio(row, has_audio_profile):
                     ts_line = _text2sound_profile_effective(profile)
                     audio_final = _audio_path_for_row_manifest(profile, manifest_dir, row)
@@ -1833,48 +1842,80 @@ def batch_cmd(
                     dry_plan,
                     "--- Text3D + paint3d: shape → quick (cor / Perlin) ---"
                     if quick_paint
-                    else "--- Text3D + paint3d: shape → texture (PBR no GLB via Paint 2.1) ---",
+                    else "--- Text3D + paint3d: shape-batch → texture-batch (PBR no GLB via Paint 2.1) ---",
                 )
-                phase_paint = "paint3d quick" if quick_paint else "paint3d texture"
-                for row in rows:
-                    if not row.generate_3d:
-                        continue
-                    img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
-                    seed = _seed_for_row(profile, row.id)
-                    tw = "<tmp>/shape.glb"
-                    a1 = _text3d_argv(
-                        text3d_bin,
-                        profile,
-                        img_path,
-                        Path(tw),
-                        row,
-                        shape_only=True,
-                        gpu_ids=gpu_ids,
-                    )
-                    if seed is not None:
-                        a1 = [*a1, "--seed", str(seed)]
-                    _dry_run_emit(
-                        dry_plan,
-                        phase="text3d shape",
-                        row_id=row.id,
-                        argv=a1,
-                    )
+                phase_paint = "paint3d quick" if quick_paint else "paint3d texture-batch"
+
+                # Shape batch dry-run
+                shape_argv = [text3d_bin, "generate-batch", "<shape_manifest.json>"]
+                if t3d:
+                    if not should_optimize_text3d(t3d):
+                        if t3d.preset:
+                            shape_argv.extend(["--preset", t3d.preset])
+                        if t3d.steps is not None:
+                            shape_argv.extend(["--steps", str(t3d.steps)])
+                        if t3d.octree_resolution is not None:
+                            shape_argv.extend(["--octree-resolution", str(t3d.octree_resolution)])
+                        if t3d.num_chunks is not None:
+                            shape_argv.extend(["--num-chunks", str(t3d.num_chunks)])
+                    if t3d.low_vram:
+                        shape_argv.append("--low-vram")
+                    if t3d.allow_shared_gpu:
+                        shape_argv.append("--allow-shared-gpu")
+                    if not t3d.gpu_kill_others:
+                        shape_argv.append("--no-gpu-kill-others")
+                if force:
+                    shape_argv.append("--force")
+                if gpu_ids:
+                    shape_argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                _dry_run_emit(
+                    dry_plan,
+                    phase="text3d generate-batch",
+                    row_id="(batch)",
+                    argv=shape_argv,
+                )
+
+                if quick_paint:
+                    # Quick paint stays per-row in dry-run
                     pbin = paint3d_bin or "paint3d"
-                    a2 = _texture_subprocess_argv(
-                        pbin,
-                        profile,
-                        Path(tw),
-                        img_path,
-                        mesh_path,
-                        row_id=row.id,
-                        row=row,
-                        gpu_ids=gpu_ids,
-                    )
+                    for row in rows:
+                        if not row.generate_3d:
+                            continue
+                        img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
+                        tw = "<tmp>/shape.glb"
+                        a2 = _texture_subprocess_argv(
+                            pbin,
+                            profile,
+                            Path(tw),
+                            img_path,
+                            mesh_path,
+                            row_id=row.id,
+                            row=row,
+                            gpu_ids=gpu_ids,
+                        )
+                        _dry_run_emit(
+                            dry_plan,
+                            phase=phase_paint,
+                            row_id=row.id,
+                            argv=a2,
+                        )
+                else:
+                    # Paint batch dry-run
+                    paint_argv = [paint3d_bin or "paint3d", "texture-batch", "<paint_manifest.json>"]
+                    if t3d:
+                        if t3d.allow_shared_gpu:
+                            paint_argv.append("--allow-shared-gpu")
+                        if not t3d.gpu_kill_others:
+                            paint_argv.append("--no-gpu-kill-others")
+                    if force:
+                        paint_argv.append("--force")
+                    if gpu_ids:
+                        paint_argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
                     _dry_run_emit(
                         dry_plan,
-                        phase=phase_paint,
-                        row_id=row.id,
-                        argv=a2,
+                        phase="paint3d texture-batch",
+                        row_id="(batch)",
+                        argv=paint_argv,
                     )
             else:
                 _dry_run_header(dry_plan, "--- Fase 2: Text3D (generate_3d=true) ---")
@@ -2062,6 +2103,55 @@ def batch_cmd(
                 results: list[dict[str, Any]] = []
                 pending_3d_indices: list[int] = []
 
+                # --- Text2D batch: pre-generate all Text2D images in one subprocess ---
+                text2d_batch_done: dict[int, dict[str, Any]] = {}
+                if not skip_text2d and any_text2d_row and text2d_bin:
+                    t2d_items: list[dict[str, Any]] = []
+                    t2d_indices: list[int] = []
+                    for _bi, _brow in enumerate(rows):
+                        if not _brow.generate_3d or _row_uses_texture2d(profile, _brow):
+                            continue
+                        _bprompt = build_prompt(profile, preset, _brow, for_3d=False)
+                        _bimg, _ = _paths_for_row_manifest(profile, manifest_dir, _brow)
+                        _bseed = _seed_for_row(profile, _brow.id)
+                        _bitem: dict[str, Any] = {"id": _brow.id, "prompt": _bprompt, "output": str(_bimg)}
+                        if _bseed is not None:
+                            _bitem["seed"] = _bseed
+                        t2d_items.append(_bitem)
+                        t2d_indices.append(_bi)
+
+                    if t2d_items:
+                        t2d_manifest_path = batch_tmp / "text2d_manifest.json"
+                        t2d_manifest_path.write_text(json.dumps(t2d_items, indent=2), encoding="utf-8")
+                        batch_args = [text2d_bin, "generate-batch", str(t2d_manifest_path)]
+                        if force:
+                            batch_args.append("--force")
+                        _append_text2d_profile_args(profile, batch_args)
+                        if gpu_ids:
+                            batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+                        progress.update(task1, description="[cyan]Text2D batch[/cyan]")
+                        t_batch = time.perf_counter()
+                        r_batch = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                        _ = time.perf_counter() - t_batch
+                        for _line in (r_batch.stdout or "").strip().splitlines():
+                            try:
+                                _ir = json.loads(_line.strip())
+                            except (json.JSONDecodeError, AttributeError):
+                                continue
+                            _bid = _ir.get("id", "")
+                            for _mi, _bidx in zip(t2d_items, t2d_indices, strict=True):
+                                if _mi["id"] == _bid:
+                                    text2d_batch_done[_bidx] = _ir
+                                    break
+                        if r_batch.returncode != 0:
+                            for _mi, _bidx in zip(t2d_items, t2d_indices, strict=True):
+                                if _bidx not in text2d_batch_done:
+                                    text2d_batch_done[_bidx] = {
+                                        "id": _mi["id"],
+                                        "status": "error",
+                                        "error": merge_subprocess_output(r_batch) or "text2d batch falhou",
+                                    }
+
                 for idx, row in enumerate(rows):
                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                     rec: dict[str, Any] = {
@@ -2116,6 +2206,47 @@ def batch_cmd(
                         )
                         if not defer_audio:
                             append_log(rec)
+                        progress.advance(task1)
+                        continue
+
+                    if idx in text2d_batch_done:
+                        progress.update(task1, description=f"[cyan]{row.id}[/cyan] · Text2D (batch)")
+                        ir = text2d_batch_done[idx]
+                        if ir.get("status") in ("ok", "skipped"):
+                            if ir.get("status") == "ok":
+                                _timing_append(rec, "image_text2d", ir.get("seconds", 0))
+                            if not img_final.is_file():
+                                failures += 1
+                                rec["status"] = "error"
+                                rec["error"] = "text2d não produziu ficheiro de imagem"
+                                console.print(f"[red]text2d sem saída[/red] {row.id}")
+                                results.append(rec)
+                                append_log(rec)
+                                if not continue_on_error:
+                                    raise click.Abort()
+                                progress.advance(task1)
+                                continue
+                        else:
+                            failures += 1
+                            rec["status"] = "error"
+                            rec["error"] = ir.get("error", "text2d falhou")
+                            console.print(f"[red]text2d falhou[/red] {row.id}: {rec['error']}")
+                            results.append(rec)
+                            append_log(rec)
+                            if not continue_on_error:
+                                raise click.Abort()
+                            progress.advance(task1)
+                            continue
+                        results.append(rec)
+                        do_3d = with_3d and row.generate_3d
+                        defer_audio = (
+                            _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                        )
+                        if do_3d and text3d_bin:
+                            pending_3d_indices.append(idx)
+                        else:
+                            if not defer_audio:
+                                append_log(rec)
                         progress.advance(task1)
                         continue
 
@@ -2342,143 +2473,351 @@ def batch_cmd(
                             failures += 1
 
                     if use_phased:
-                        task_shape = progress.add_task(
-                            "[cyan]Text3D: shape (todos)[/cyan]",
-                            total=len(pending_3d_indices),
-                        )
-                        shape_ok: list[int] = []
+                        # === SHAPE BATCH ===
+                        shape_manifest_items: list[dict[str, Any]] = []
+                        shape_idx_map: dict[str, int] = {}
+
                         for idx in pending_3d_indices:
                             row = rows[idx]
-                            rec = results[idx]
-                            progress.update(
-                                task_shape,
-                                description=f"[cyan]{row.id}[/cyan] · shape",
-                            )
                             row_work = batch_tmp / f"{idx:04d}_{_safe_row_dirname(row.id)}_3d"
                             row_work.mkdir(parents=True, exist_ok=True)
-                            try:
-                                img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                mesh_shape = row_work / "shape.glb"
-                                seed = _seed_for_row(profile, row.id)
-                                t3d_args = _text3d_argv(
-                                    text3d_bin,
-                                    profile,
-                                    img_final,
-                                    mesh_shape,
-                                    row,
-                                    shape_only=True,
-                                    gpu_ids=gpu_ids,
-                                )
-                                if seed is not None:
-                                    t3d_args.extend(["--seed", str(seed)])
-                                t_shape = time.perf_counter()
-                                r3 = run_cmd(t3d_args, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(rec, "text3d_shape", time.perf_counter() - t_shape)
-                                if r3.returncode != 0:
-                                    failures += 1
-                                    err = merge_subprocess_output(r3) or "text3d generate (shape) falhou"
-                                    rec["status"] = "error"
-                                    rec["error"] = err
-                                    preview = merge_subprocess_output(r3, max_chars=4000) or err
-                                    console.print(f"[red]text3d shape falhou[/red] {row.id}: {preview}")
-                                    append_log(rec)
-                                    if not continue_on_error:
-                                        raise click.Abort()
-                                elif not mesh_shape.is_file():
-                                    failures += 1
-                                    rec["status"] = "error"
-                                    rec["error"] = "text3d não produziu shape.glb"
-                                    console.print(f"[red]text3d sem shape.glb[/red] {row.id}")
-                                    append_log(rec)
-                                    if not continue_on_error:
-                                        raise click.Abort()
-                                else:
+                            img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+                            mesh_shape = row_work / "shape.glb"
+                            seed = _seed_for_row(profile, row.id)
+
+                            item: dict[str, Any] = {
+                                "id": row.id,
+                                "image": str(img_final),
+                                "output": str(mesh_shape),
+                            }
+                            if seed is not None:
+                                item["seed"] = seed
+
+                            # Per-item params when dynamic optimization is active
+                            t3 = profile.text3d
+                            if t3 and should_optimize_text3d(t3) and row.category:
+                                target = get_target_faces(row.category)
+                                opts = optimize_text3d_for_target(target)
+                                item["steps"] = opts.steps
+                                item["octree_resolution"] = opts.octree_resolution
+                                item["num_chunks"] = opts.num_chunks
+
+                            shape_manifest_items.append(item)
+                            shape_idx_map[row.id] = idx
+
+                        shape_ok: list[int] = []
+                        finalized_indices: set[int] = set()
+
+                        if shape_manifest_items:
+                            task_shape = progress.add_task(
+                                "[cyan]Text3D: generate-batch (shape)[/cyan]",
+                                total=len(shape_manifest_items),
+                            )
+                            shape_manifest_path = batch_tmp / "shape_manifest.json"
+                            shape_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
+
+                            batch_args = [text3d_bin, "generate-batch", str(shape_manifest_path)]
+                            if force:
+                                batch_args.append("--force")
+                            t3 = profile.text3d
+                            if t3:
+                                # Global params only when NOT using per-item optimization
+                                if not should_optimize_text3d(t3):
+                                    explicit_hunyuan = (
+                                        t3.steps is not None
+                                        or t3.octree_resolution is not None
+                                        or t3.num_chunks is not None
+                                    )
+                                    if t3.preset and not explicit_hunyuan:
+                                        batch_args.extend(["--preset", t3.preset])
+                                    if t3.steps is not None:
+                                        batch_args.extend(["--steps", str(t3.steps)])
+                                    if t3.octree_resolution is not None:
+                                        batch_args.extend(["--octree-resolution", str(t3.octree_resolution)])
+                                    if t3.num_chunks is not None:
+                                        batch_args.extend(["--num-chunks", str(t3.num_chunks)])
+                                if t3.model_subfolder:
+                                    batch_args.extend(["--model-subfolder", t3.model_subfolder])
+                                if t3.low_vram:
+                                    batch_args.append("--low-vram")
+                                if t3.mc_level is not None:
+                                    batch_args.extend(["--mc-level", str(t3.mc_level)])
+                                if t3.no_mesh_repair:
+                                    batch_args.append("--no-mesh-repair")
+                                if t3.mesh_smooth is not None:
+                                    batch_args.extend(["--mesh-smooth", str(t3.mesh_smooth)])
+                                if t3.allow_shared_gpu:
+                                    batch_args.append("--allow-shared-gpu")
+                                if not t3.gpu_kill_others:
+                                    batch_args.append("--no-gpu-kill-others")
+                                if t3.full_gpu:
+                                    batch_args.append("--t2d-full-gpu")
+                                batch_args.extend(["--export-origin", t3.export_origin])
+                            if gpu_ids:
+                                batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                            t_shape_total = time.perf_counter()
+                            r3 = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                            _timing_append(results[0], "text3d_shape_batch_total", time.perf_counter() - t_shape_total)
+
+                            # Parse JSONL output
+                            jsonl_output = r3.stdout.strip() if r3.stdout else ""
+                            for line in jsonl_output.split("\n"):
+                                if not line.strip():
+                                    continue
+                                try:
+                                    item_result = json.loads(line)
+                                except json.JSONDecodeError:
+                                    continue
+                                item_id = item_result.get("id", "")
+                                idx = shape_idx_map.get(item_id)
+                                if idx is None:
+                                    continue
+                                rec = results[idx]
+                                row = rows[idx]
+                                row_work = batch_tmp / f"{idx:04d}_{_safe_row_dirname(row.id)}_3d"
+
+                                if item_result.get("status") in ("ok", "skipped"):
                                     shape_ok.append(idx)
-                            finally:
-                                if idx not in shape_ok:
+                                    if item_result.get("status") == "ok":
+                                        _timing_append(rec, "text3d_shape", item_result.get("seconds", 0))
+                                        rec["shape_faces"] = item_result.get("faces", 0)
+                                else:
+                                    failures += 1
+                                    rec["status"] = "error"
+                                    rec["error"] = item_result.get("error", "text3d shape falhou")
+                                    console.print(f"[red]text3d shape falhou[/red] {row.id}: {rec['error']}")
+                                    append_log(rec)
                                     shutil.rmtree(row_work, ignore_errors=True)
+                                    if not continue_on_error:
+                                        raise click.Abort()
                                 progress.advance(task_shape)
 
+                            # Check for overall batch failure (no items succeeded)
+                            if r3.returncode != 0 and not shape_ok:
+                                console.print(f"[red]text3d generate-batch falhou (código {r3.returncode})[/red]")
+                                if r3.stderr:
+                                    console.print(f"[dim]{r3.stderr[:2000]}[/dim]")
+
+                        # === PAINT BATCH ===
                         _ps = (profile.text3d.paint_style or "hunyuan").strip().lower() if profile.text3d else "hunyuan"
                         _paint_label = (
-                            "paint3d quick (todos)" if _ps in ("solid", "perlin") else "paint3d texture (todos)"
+                            "paint3d quick (todos)" if _ps in ("solid", "perlin") else "paint3d texture-batch (todos)"
                         )
                         task_paint = progress.add_task(
                             f"[cyan]{_paint_label}[/cyan]",
                             total=len(shape_ok),
                         )
-                        for idx in shape_ok:
-                            row = rows[idx]
-                            rec = results[idx]
-                            progress.update(
-                                task_paint,
-                                description=f"[cyan]{row.id}[/cyan] · Paint",
-                            )
-                            row_work = batch_tmp / f"{idx:04d}_{_safe_row_dirname(row.id)}_3d"
-                            mesh_shape = row_work / "shape.glb"
-                            img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                            try:
-                                assert paint3d_bin is not None
-                                t_tex = _texture_subprocess_argv(
-                                    paint3d_bin,
-                                    profile,
-                                    mesh_shape,
-                                    img_final,
-                                    mesh_final,
-                                    row_id=row.id,
-                                    row=row,
-                                    gpu_ids=gpu_ids,
-                                )
-                                t_paint = time.perf_counter()
-                                r4 = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(
-                                    rec,
-                                    "paint3d_quick"
-                                    if (
-                                        profile.text3d
-                                        and (profile.text3d.paint_style or "hunyuan").strip().lower()
-                                        in ("solid", "perlin")
-                                    )
-                                    else "paint3d_texture",
-                                    time.perf_counter() - t_paint,
-                                )
-                                if r4.returncode != 0:
-                                    failures += 1
-                                    err = merge_subprocess_output(r4) or "paint3d texture falhou"
-                                    rec["status"] = "error"
-                                    rec["error"] = err
-                                    preview = merge_subprocess_output(r4, max_chars=4000) or err
-                                    console.print(f"[red]texture (paint) falhou[/red] {row.id}: {preview}")
-                                    append_log(rec)
-                                    if not continue_on_error:
-                                        raise click.Abort()
-                                elif not mesh_final.is_file():
-                                    failures += 1
-                                    rec["status"] = "error"
-                                    rec["error"] = "texture não produziu GLB"
-                                    console.print(f"[red]texture sem GLB[/red] {row.id}")
-                                    append_log(rec)
-                                    if not continue_on_error:
-                                        raise click.Abort()
-                                else:
-                                    _simplify_mesh_to_target(
+
+                        if _ps in ("solid", "perlin"):
+                            # Quick paint: lightweight, per-row subprocess (no AI model)
+                            for idx in shape_ok:
+                                row = rows[idx]
+                                rec = results[idx]
+                                progress.update(task_paint, description=f"[cyan]{row.id}[/cyan] · quick paint")
+                                row_work = batch_tmp / f"{idx:04d}_{_safe_row_dirname(row.id)}_3d"
+                                mesh_shape = row_work / "shape.glb"
+                                img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+                                try:
+                                    assert paint3d_bin is not None
+                                    t_tex = _texture_subprocess_argv(
+                                        paint3d_bin,
+                                        profile,
+                                        mesh_shape,
+                                        img_final,
                                         mesh_final,
-                                        row,
-                                        text3d_bin,
-                                        run_cmd=run_cmd,
-                                        child_env=child_env,
-                                        cwd=manifest_dir,
-                                        manifest_dir=manifest_dir,
-                                        rec=rec,
+                                        row_id=row.id,
+                                        row=row,
                                         gpu_ids=gpu_ids,
                                     )
-                                    _finalize_mesh_ok(rec, mesh_final, row)
-                                    append_log(rec)
-                                    if not continue_on_error and rec["status"] == "error":
-                                        raise click.Abort()
-                            finally:
-                                shutil.rmtree(row_work, ignore_errors=True)
-                                progress.advance(task_paint)
+                                    t_paint = time.perf_counter()
+                                    r4 = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
+                                    _timing_append(rec, "paint3d_quick", time.perf_counter() - t_paint)
+                                    if r4.returncode != 0:
+                                        failures += 1
+                                        err = merge_subprocess_output(r4) or "paint3d quick falhou"
+                                        rec["status"] = "error"
+                                        rec["error"] = err
+                                        preview = merge_subprocess_output(r4, max_chars=4000) or err
+                                        console.print(f"[red]paint3d quick falhou[/red] {row.id}: {preview}")
+                                        append_log(rec)
+                                        if not continue_on_error:
+                                            raise click.Abort()
+                                    elif not mesh_final.is_file():
+                                        failures += 1
+                                        rec["status"] = "error"
+                                        rec["error"] = "quick paint não produziu GLB"
+                                        console.print(f"[red]quick paint sem GLB[/red] {row.id}")
+                                        append_log(rec)
+                                        if not continue_on_error:
+                                            raise click.Abort()
+                                    else:
+                                        _simplify_mesh_to_target(
+                                            mesh_final,
+                                            row,
+                                            text3d_bin,
+                                            run_cmd=run_cmd,
+                                            child_env=child_env,
+                                            cwd=manifest_dir,
+                                            manifest_dir=manifest_dir,
+                                            rec=rec,
+                                            gpu_ids=gpu_ids,
+                                        )
+                                        _finalize_mesh_ok(rec, mesh_final, row)
+                                        finalized_indices.add(idx)
+                                        append_log(rec)
+                                        if not continue_on_error and rec["status"] == "error":
+                                            raise click.Abort()
+                                finally:
+                                    shutil.rmtree(row_work, ignore_errors=True)
+                                    progress.advance(task_paint)
+                        elif shape_ok:
+                            # Hunyuan paint: batch via paint3d texture-batch
+                            paint_manifest_items: list[dict[str, Any]] = []
+                            paint_idx_map: dict[str, int] = {}
+
+                            for idx in shape_ok:
+                                row = rows[idx]
+                                row_work = batch_tmp / f"{idx:04d}_{_safe_row_dirname(row.id)}_3d"
+                                mesh_shape = row_work / "shape.glb"
+                                img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+
+                                paint_manifest_items.append(
+                                    {
+                                        "id": row.id,
+                                        "mesh": str(mesh_shape),
+                                        "image": str(img_final),
+                                        "output": str(mesh_final),
+                                    }
+                                )
+                                paint_idx_map[row.id] = idx
+
+                            if paint_manifest_items:
+                                paint_manifest_path = batch_tmp / "paint_manifest.json"
+                                paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
+
+                                batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
+                                if force:
+                                    batch_args.append("--force")
+                                t3 = profile.text3d
+                                if t3:
+                                    if t3.allow_shared_gpu:
+                                        batch_args.append("--allow-shared-gpu")
+                                    if not t3.gpu_kill_others:
+                                        batch_args.append("--no-gpu-kill-others")
+                                    if t3.full_gpu:
+                                        batch_args.append("--paint-full-gpu")
+                                    if t3.paint_max_views is not None:
+                                        batch_args.extend(["--max-views", str(t3.paint_max_views)])
+                                    if t3.paint_view_resolution is not None:
+                                        batch_args.extend(["--view-resolution", str(t3.paint_view_resolution)])
+                                    if t3.paint_render_size is not None:
+                                        batch_args.extend(["--render-size", str(t3.paint_render_size)])
+                                    if t3.paint_texture_size is not None:
+                                        batch_args.extend(["--texture-size", str(t3.paint_texture_size)])
+                                    if t3.paint_bake_exp is not None:
+                                        batch_args.extend(["--bake-exp", str(t3.paint_bake_exp)])
+                                    if not t3.paint_preserve_origin:
+                                        batch_args.append("--no-preserve-origin")
+                                    else:
+                                        batch_args.append("--preserve-origin")
+                                    if t3.paint_low_vram_mode:
+                                        batch_args.append("--low-vram-mode")
+                                    else:
+                                        if t3.paint_quantization:
+                                            batch_args.extend(["--quantization", t3.paint_quantization])
+                                        if t3.paint_tiny_vae:
+                                            batch_args.append("--tiny-vae")
+                                        if t3.paint_torch_compile:
+                                            batch_args.append("--torch-compile")
+                                if gpu_ids:
+                                    batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                                t_paint_total = time.perf_counter()
+                                r4 = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                                _timing_append(results[0], "paint3d_batch_total", time.perf_counter() - t_paint_total)
+
+                                for line in (r4.stdout.strip() if r4.stdout else "").split("\n"):
+                                    if not line.strip():
+                                        continue
+                                    try:
+                                        item_result = json.loads(line)
+                                    except json.JSONDecodeError:
+                                        continue
+
+                                    item_id = item_result.get("id", "")
+                                    idx = paint_idx_map.get(item_id)
+                                    if idx is None:
+                                        continue
+
+                                    rec = results[idx]
+                                    row = rows[idx]
+                                    row_work = batch_tmp / f"{idx:04d}_{_safe_row_dirname(row.id)}_3d"
+                                    img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+
+                                    try:
+                                        if item_result.get("status") in ("ok", "skipped"):
+                                            if item_result.get("status") == "ok":
+                                                _timing_append(rec, "paint3d_texture", item_result.get("seconds", 0))
+                                            _simplify_mesh_to_target(
+                                                mesh_final,
+                                                row,
+                                                text3d_bin,
+                                                run_cmd=run_cmd,
+                                                child_env=child_env,
+                                                cwd=manifest_dir,
+                                                manifest_dir=manifest_dir,
+                                                rec=rec,
+                                                gpu_ids=gpu_ids,
+                                            )
+                                            _finalize_mesh_ok(rec, mesh_final, row)
+                                            finalized_indices.add(idx)
+                                            append_log(rec)
+                                            if not continue_on_error and rec["status"] == "error":
+                                                raise click.Abort()
+                                        else:
+                                            failures += 1
+                                            rec["status"] = "error"
+                                            rec["error"] = item_result.get("error", "paint3d texture falhou")
+                                            console.print(f"[red]texture (paint) falhou[/red] {row.id}: {rec['error']}")
+                                            append_log(rec)
+                                            if not continue_on_error:
+                                                raise click.Abort()
+                                    finally:
+                                        shutil.rmtree(row_work, ignore_errors=True)
+                                        progress.advance(task_paint)
+
+                                # Check for overall batch failure
+                                if r4.returncode != 0:
+                                    err_batch = (
+                                        merge_subprocess_output(r4, max_chars=200) or "paint3d texture-batch falhou"
+                                    )
+                                    console.print(f"[red]paint3d texture-batch erro[/red]: {err_batch}")
+
+                        # === CATCH-UP: rig/animate/LOD/collision for items whose shape+paint already existed ===
+                        needs_post = [i for i in pending_3d_indices if i not in finalized_indices]
+
+                        if needs_post:
+                            task_post = progress.add_task(
+                                "[cyan]Pós-processamento (rig/animate/LOD/collision)[/cyan]",
+                                total=len(needs_post),
+                            )
+                            for idx in needs_post:
+                                row = rows[idx]
+                                rec = results[idx]
+                                img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+
+                                if not mesh_final.is_file():
+                                    progress.advance(task_post)
+                                    continue
+
+                                progress.update(task_post, description=f"[cyan]{row.id}[/cyan] · pós-processamento")
+                                rec["image_path"] = _path_for_log(img_final, manifest_dir)
+                                _finalize_mesh_ok(rec, mesh_final, row)
+                                append_log(rec)
+                                if not continue_on_error and rec["status"] == "error":
+                                    raise click.Abort()
+                                progress.advance(task_post)
                     else:
                         task2 = progress.add_task(
                             "[cyan]Fase 2: Text3D[/cyan]",
@@ -2873,6 +3212,12 @@ def _text3d_argv(
     help="Pasta de trabalho persistente para shapes (defeito: .gameassets_work/ junto ao manifest)",
 )
 @click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Regenerar tudo (passa --force aos sub-commands).",
+)
+@click.option(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
@@ -2886,6 +3231,7 @@ def resume_cmd(
     dry_run: bool,
     fail_fast: bool,
     work_dir: Path | None,
+    force: bool,
     gpu_ids_str: str | None,
 ) -> None:
     """Batch inteligente: analisa o estado de cada asset e executa apenas as fases pendentes.
@@ -3127,9 +3473,10 @@ def resume_cmd(
                         break
                 progress.advance(task)
 
-    # --- Fase 2: Shape ---
+    # --- Fase 2: Shape (batch) ---
     need_shape = [it for it in items if it["state"] == NEED_SHAPE]
     if need_shape and text3d_bin:
+        _ps = (t3_opts.paint_style or "hunyuan").strip().lower() if t3_opts else "hunyuan"
         console.print(f"\n[bold cyan]Fase 2: Shape ({len(need_shape)} meshes)[/bold cyan]")
         with Progress(
             SpinnerColumn(),
@@ -3139,39 +3486,99 @@ def resume_cmd(
             TimeElapsedColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Shape[/cyan]", total=len(need_shape))
-            for it in need_shape:
+            task = progress.add_task("[cyan]Shape (batch)[/cyan]", total=len(need_shape))
+
+            shape_manifest_items: list[dict[str, Any]] = []
+            shape_item_map: dict[str, int] = {}
+            for i, it in enumerate(need_shape):
                 row = it["row"]
-                progress.update(task, description=f"[cyan]{row.id}[/cyan] · shape")
                 it["row_work"].mkdir(parents=True, exist_ok=True)
                 seed = _seed_for_row(profile, row.id)
-                t3d_args = _text3d_argv(
-                    text3d_bin,
-                    profile,
-                    it["img_final"],
-                    it["shape_path"],
-                    row,
-                    shape_only=True,
-                    gpu_ids=gpu_ids,
-                )
+                item: dict[str, Any] = {
+                    "id": row.id,
+                    "image": str(it["img_final"]),
+                    "output": str(it["shape_path"]),
+                }
                 if seed is not None:
-                    t3d_args.extend(["--seed", str(seed)])
-                r = run_cmd(t3d_args, extra_env=child_env, cwd=manifest_dir)
-                if r.returncode == 0 and it["shape_path"].is_file():
-                    it["state"] = NEED_PAINT if want_texture else DONE
-                    console.print(f"  [green]OK[/green] {row.id}")
-                else:
-                    failures += 1
-                    err = merge_subprocess_output(r, max_chars=200) or "shape falhou"
-                    console.print(f"  [red]FAIL[/red] {row.id}: {err}")
-                    append_log({"id": row.id, "status": "error", "error": err})
-                    if not continue_on_error:
-                        break
-                progress.advance(task)
+                    item["seed"] = seed
+                if t3_opts and should_optimize_text3d(t3_opts) and row.category:
+                    target = get_target_faces(row.category)
+                    opts = optimize_text3d_for_target(target)
+                    item["steps"] = opts.steps
+                    item["octree_resolution"] = opts.octree_resolution
+                    item["num_chunks"] = opts.num_chunks
+                shape_manifest_items.append(item)
+                shape_item_map[row.id] = i
+
+            if shape_manifest_items:
+                manifest_path = work_dir / "resume_shape_manifest.json"
+                manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
+                batch_args = [text3d_bin, "generate-batch", str(manifest_path)]
+                if force:
+                    batch_args.append("--force")
+                if t3_opts:
+                    if not should_optimize_text3d(t3_opts):
+                        explicit_hunyuan = (
+                            t3_opts.steps is not None
+                            or t3_opts.octree_resolution is not None
+                            or t3_opts.num_chunks is not None
+                        )
+                        if t3_opts.preset and not explicit_hunyuan:
+                            batch_args.extend(["--preset", t3_opts.preset])
+                        if t3_opts.steps is not None:
+                            batch_args.extend(["--steps", str(t3_opts.steps)])
+                        if t3_opts.octree_resolution is not None:
+                            batch_args.extend(["--octree-resolution", str(t3_opts.octree_resolution)])
+                        if t3_opts.num_chunks is not None:
+                            batch_args.extend(["--num-chunks", str(t3_opts.num_chunks)])
+                    if t3_opts.model_subfolder:
+                        batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
+                    if t3_opts.low_vram:
+                        batch_args.append("--low-vram")
+                    if t3_opts.allow_shared_gpu:
+                        batch_args.append("--allow-shared-gpu")
+                    if not t3_opts.gpu_kill_others:
+                        batch_args.append("--no-gpu-kill-others")
+                    batch_args.extend(["--export-origin", t3_opts.export_origin])
+                if gpu_ids:
+                    batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                r = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                jsonl_output = r.stdout.strip() if r.stdout else ""
+                for line in jsonl_output.split("\n"):
+                    if not line.strip():
+                        continue
+                    try:
+                        item_result = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    item_id = item_result.get("id", "")
+                    item_idx = shape_item_map.get(item_id)
+                    if item_idx is None:
+                        continue
+                    it = need_shape[item_idx]
+                    row = it["row"]
+                    if item_result.get("status") in ("ok", "skipped"):
+                        it["state"] = NEED_PAINT if want_texture else DONE
+                        console.print(f"  [green]OK[/green] {row.id}")
+                    else:
+                        failures += 1
+                        err = item_result.get("error", "shape falhou")
+                        console.print(f"  [red]FAIL[/red] {row.id}: {err}")
+                        append_log({"id": row.id, "status": "error", "error": err})
+                        if not continue_on_error:
+                            break
+                    progress.advance(task)
+
+                if r.returncode != 0 and not any(it["state"] in (NEED_PAINT, DONE) for it in need_shape):
+                    console.print(f"[red]text3d generate-batch falhou (código {r.returncode})[/red]")
+                    if r.stderr:
+                        console.print(f"[dim]{r.stderr[:2000]}[/dim]")
 
     # --- Fase 3: Paint ---
     need_paint = [it for it in items if it["state"] == NEED_PAINT]
     if need_paint and paint3d_bin:
+        _ps = (t3_opts.paint_style or "hunyuan").strip().lower() if t3_opts else "hunyuan"
         console.print(f"\n[bold cyan]Fase 3: Paint ({len(need_paint)} texturas)[/bold cyan]")
         with Progress(
             SpinnerColumn(),
@@ -3181,34 +3588,113 @@ def resume_cmd(
             TimeElapsedColumn(),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]Paint[/cyan]", total=len(need_paint))
-            for it in need_paint:
-                row = it["row"]
-                progress.update(task, description=f"[cyan]{row.id}[/cyan] · Paint")
-                mesh_out = it["mesh_final"]
-                t_tex = _texture_subprocess_argv(
-                    paint3d_bin,
-                    profile,
-                    it["shape_path"],
-                    it["img_final"],
-                    mesh_out,
-                    row_id=row.id,
-                    row=row,
-                    gpu_ids=gpu_ids,
-                )
-                r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
-                if r.returncode == 0 and mesh_out.is_file():
-                    it["state"] = DONE
-                    append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
-                    console.print(f"  [green]OK[/green] {row.id}")
-                else:
-                    failures += 1
-                    err = merge_subprocess_output(r, max_chars=200) or "paint falhou"
-                    console.print(f"  [red]FAIL[/red] {row.id}: {err}")
-                    append_log({"id": row.id, "status": "error", "error": err})
-                    if not continue_on_error:
-                        break
-                progress.advance(task)
+            if _ps in ("solid", "perlin"):
+                # Quick paint: per-row (lightweight, no AI model)
+                task = progress.add_task("[cyan]Quick Paint[/cyan]", total=len(need_paint))
+                for it in need_paint:
+                    row = it["row"]
+                    progress.update(task, description=f"[cyan]{row.id}[/cyan] · quick paint")
+                    mesh_out = it["mesh_final"]
+                    t_tex = _texture_subprocess_argv(
+                        paint3d_bin,
+                        profile,
+                        it["shape_path"],
+                        it["img_final"],
+                        mesh_out,
+                        row_id=row.id,
+                        row=row,
+                        gpu_ids=gpu_ids,
+                    )
+                    r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
+                    if r.returncode == 0 and mesh_out.is_file():
+                        it["state"] = DONE
+                        append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
+                        console.print(f"  [green]OK[/green] {row.id}")
+                    else:
+                        failures += 1
+                        err = merge_subprocess_output(r, max_chars=200) or "paint falhou"
+                        console.print(f"  [red]FAIL[/red] {row.id}: {err}")
+                        append_log({"id": row.id, "status": "error", "error": err})
+                        if not continue_on_error:
+                            break
+                    progress.advance(task)
+            else:
+                # Hunyuan paint: batch via paint3d texture-batch
+                task = progress.add_task("[cyan]Paint (batch)[/cyan]", total=len(need_paint))
+                paint_manifest_items: list[dict[str, Any]] = []
+                paint_item_map: dict[str, int] = {}
+                for i, it in enumerate(need_paint):
+                    row = it["row"]
+                    paint_manifest_items.append(
+                        {
+                            "id": row.id,
+                            "mesh": str(it["shape_path"]),
+                            "image": str(it["img_final"]),
+                            "output": str(it["mesh_final"]),
+                        }
+                    )
+                    paint_item_map[row.id] = i
+
+                if paint_manifest_items:
+                    paint_manifest_path = work_dir / "resume_paint_manifest.json"
+                    paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
+                    batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
+                    if force:
+                        batch_args.append("--force")
+                    if t3_opts:
+                        if t3_opts.allow_shared_gpu:
+                            batch_args.append("--allow-shared-gpu")
+                        if not t3_opts.gpu_kill_others:
+                            batch_args.append("--no-gpu-kill-others")
+                        if t3_opts.paint_max_views is not None:
+                            batch_args.extend(["--max-views", str(t3_opts.paint_max_views)])
+                        if t3_opts.paint_view_resolution is not None:
+                            batch_args.extend(["--view-resolution", str(t3_opts.paint_view_resolution)])
+                        if t3_opts.paint_render_size is not None:
+                            batch_args.extend(["--render-size", str(t3_opts.paint_render_size)])
+                        if t3_opts.paint_texture_size is not None:
+                            batch_args.extend(["--texture-size", str(t3_opts.paint_texture_size)])
+                        if t3_opts.paint_bake_exp is not None:
+                            batch_args.extend(["--bake-exp", str(t3_opts.paint_bake_exp)])
+                        if not t3_opts.paint_preserve_origin:
+                            batch_args.append("--no-preserve-origin")
+                        else:
+                            batch_args.append("--preserve-origin")
+                        if t3_opts.paint_low_vram_mode:
+                            batch_args.append("--low-vram-mode")
+                    if gpu_ids:
+                        batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+
+                    r = run_cmd(batch_args, extra_env=child_env, cwd=manifest_dir)
+                    for line in (r.stdout.strip() if r.stdout else "").split("\n"):
+                        if not line.strip():
+                            continue
+                        try:
+                            item_result = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        item_id = item_result.get("id", "")
+                        item_idx = paint_item_map.get(item_id)
+                        if item_idx is None:
+                            continue
+                        it = need_paint[item_idx]
+                        row = it["row"]
+                        if item_result.get("status") in ("ok", "skipped"):
+                            it["state"] = DONE
+                            append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"])})
+                            console.print(f"  [green]OK[/green] {row.id}")
+                        else:
+                            failures += 1
+                            err = item_result.get("error", "paint falhou")
+                            console.print(f"  [red]FAIL[/red] {row.id}: {err}")
+                            append_log({"id": row.id, "status": "error", "error": err})
+                            if not continue_on_error:
+                                break
+                        progress.advance(task)
+
+                    if r.returncode != 0:
+                        err_batch = merge_subprocess_output(r, max_chars=200) or "paint3d texture-batch falhou"
+                        console.print(f"[red]paint3d texture-batch erro[/red]: {err_batch}")
 
     if log_file:
         log_file.close()
