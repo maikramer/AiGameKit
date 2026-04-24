@@ -96,3 +96,23 @@ hero_sword,"espada longa com gema azul no punho",prop,true,false,false,false,fal
 forest_bg,"floresta densa ao entardecer",environment,false,false,false,false,false,
 sky_sunset,"pôr do sol sobre montanhas, nuvens douradas",skymap,false,false,false,false,false,skymap2d
 """
+
+MANIFEST_YAML = """# Manifest — assets do jogo (gameassets batch)
+# pipeline: combinações de [3d, audio, rig, animate, parts]
+
+assets:
+  - id: chest_01
+    idea: "baú de madeira com ferrolhos dourados"
+    kind: prop
+    pipeline: []
+
+  - id: hero_sword
+    idea: "espada longa com gema azul no punho"
+    kind: prop
+    pipeline: [3d]
+
+  - id: forest_bg
+    idea: "floresta densa ao entardecer"
+    kind: environment
+    pipeline: []
+"""

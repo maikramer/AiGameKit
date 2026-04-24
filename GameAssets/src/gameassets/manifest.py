@@ -1,8 +1,9 @@
-"""Leitura do manifest CSV."""
+"""Leitura do manifest CSV ou YAML."""
 
 from __future__ import annotations
 
 import csv
+import io
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,6 +33,13 @@ class ManifestRow:
     part3d_steps: int | None = None
     part3d_octree_resolution: int | None = None
     part3d_segment_only: bool | None = None
+    # Per-row audio config (from YAML only; CSV falls back to profile global)
+    audio_duration: float | None = None
+    audio_profile: str | None = None  # "music" or "effects"
+    audio_trim: bool | None = None
+    audio_preset: str | None = None
+    audio_steps: int | None = None
+    audio_cfg_scale: float | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -66,12 +74,20 @@ def _parse_int(value: str | None) -> int | None:
         return None
 
 
-def load_manifest(path: Path) -> list[ManifestRow]:
+def _parse_float(value: str | None) -> float | None:
+    if value is None or str(value).strip() == "":
+        return None
+    try:
+        return float(str(value).strip())
+    except ValueError:
+        return None
+
+
+def _load_manifest_csv(path: Path) -> list[ManifestRow]:
     """Lê CSV: id, idea; opcionais kind, generate_3d, image_source, generate_audio,
     generate_rig, generate_animate, generate_parts, category, part3d_steps,
     part3d_octree_resolution, part3d_segment_only."""
     rows: list[ManifestRow] = []
-    import io
 
     with path.open("r", encoding="utf-8", newline="") as f:
         # Skip comment lines (starting with #) and blank lines before the header
@@ -164,6 +180,61 @@ def load_manifest(path: Path) -> list[ManifestRow]:
     if not rows:
         raise ValueError("Nenhuma linha válida no manifest (id + idea obrigatórios)")
     return rows
+
+
+def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
+    """Lê YAML: assets com pipeline, audio, part3d sub-configs."""
+    import yaml
+
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    assets = doc if isinstance(doc, list) else doc.get("assets", [])
+    rows: list[ManifestRow] = []
+    for entry in assets:
+        pipeline = entry.get("pipeline", [])
+        pipeline_items = [p.strip().lower() for p in pipeline] if isinstance(pipeline, list) else []
+
+        audio_cfg = entry.get("audio") or {}
+        if not isinstance(audio_cfg, dict):
+            audio_cfg = {}
+
+        part3d_cfg = entry.get("part3d") or {}
+        if not isinstance(part3d_cfg, dict):
+            part3d_cfg = {}
+
+        rows.append(
+            ManifestRow(
+                id=entry["id"],
+                idea=entry["idea"],
+                kind=entry.get("kind"),
+                generate_3d="3d" in pipeline_items,
+                generate_audio="audio" in pipeline_items,
+                generate_rig="rig" in pipeline_items,
+                generate_animate="animate" in pipeline_items,
+                generate_parts="parts" in pipeline_items,
+                image_source=entry.get("image_source"),
+                category=(entry.get("category") or "").lower(),
+                part3d_steps=part3d_cfg.get("steps"),
+                part3d_octree_resolution=part3d_cfg.get("octree_resolution"),
+                part3d_segment_only=part3d_cfg.get("segment_only"),
+                audio_duration=audio_cfg.get("duration"),
+                audio_profile=audio_cfg.get("profile"),
+                audio_trim=audio_cfg.get("trim"),
+                audio_preset=audio_cfg.get("preset"),
+                audio_steps=audio_cfg.get("steps"),
+                audio_cfg_scale=audio_cfg.get("cfg_scale"),
+            )
+        )
+    if not rows:
+        raise ValueError("Nenhuma linha válida no manifest (id + idea obrigatórios)")
+    return rows
+
+
+def load_manifest(path: Path) -> list[ManifestRow]:
+    """Lê manifest CSV ou YAML (auto-detect pela extensão)."""
+    suffix = path.suffix.lower()
+    if suffix in (".yaml", ".yml"):
+        return _load_manifest_yaml(path)
+    return _load_manifest_csv(path)
 
 
 def iter_manifest(path: Path) -> Iterator[ManifestRow]:

@@ -42,7 +42,7 @@ from .profile import (
 )
 from .prompt_builder import build_audio_prompt, build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
-from .templates import GAME_YAML, MANIFEST_CSV
+from .templates import GAME_YAML, MANIFEST_YAML
 
 console = Console()
 
@@ -164,6 +164,46 @@ def _append_text2sound_profile_args(ts: Text2SoundProfile, argv: list[str]) -> N
     if ts.half_precision is True:
         argv.append("--half")
     elif ts.half_precision is False:
+        argv.append("--no-half")
+
+
+def _text2sound_args_for_row(
+    profile: Text2SoundProfile,
+    row: ManifestRow,
+    argv: list[str],
+) -> None:
+    """Append text2sound args: per-row overrides take precedence over global profile."""
+    duration = row.audio_duration if row.audio_duration is not None else profile.duration
+    steps = row.audio_steps if row.audio_steps is not None else profile.steps
+    cfg = row.audio_cfg_scale if row.audio_cfg_scale is not None else profile.cfg_scale
+    trim = row.audio_trim if row.audio_trim is not None else profile.trim
+    preset = row.audio_preset if row.audio_preset is not None else profile.preset
+
+    if duration is not None:
+        argv.extend(["-d", str(duration)])
+    if steps is not None:
+        argv.extend(["-s", str(steps)])
+    if cfg is not None:
+        argv.extend(["-c", str(cfg)])
+    fmt = (profile.audio_format or "wav").lower().strip().lstrip(".")
+    argv.extend(["-f", fmt])
+    if preset and preset.lower() != "none":
+        argv.extend(["-p", preset])
+    if profile.sigma_min is not None:
+        argv.extend(["--sigma-min", str(profile.sigma_min)])
+    if profile.sigma_max is not None:
+        argv.extend(["--sigma-max", str(profile.sigma_max)])
+    if profile.sampler:
+        argv.extend(["--sampler", profile.sampler])
+    if trim is not None:
+        argv.append("--trim" if trim else "--no-trim")
+    if row.audio_profile:
+        argv.extend(["--profile", row.audio_profile])
+    elif profile.model_id:
+        argv.extend(["-m", profile.model_id])
+    if profile.half_precision is True:
+        argv.append("--half")
+    elif profile.half_precision is False:
         argv.append("--no-half")
 
 
@@ -770,8 +810,11 @@ def _build_context(
     manifest_path: Path,
     presets_local: Path | None,
 ) -> tuple[GameProfile, list[ManifestRow], dict[str, Any], dict[str, Any]]:
+    resolved = _resolve_manifest_path(manifest_path)
+    if not resolved.is_file():
+        raise click.ClickException(f"Manifest não encontrado: {manifest_path} (tentado {resolved})")
     profile = load_profile(profile_path)
-    rows = load_manifest(manifest_path)
+    rows = load_manifest(resolved)
     bundle = load_presets_bundle(presets_local)
     preset = get_preset(bundle, profile.style_preset)
     return profile, rows, bundle, preset
@@ -871,30 +914,42 @@ def mesh_reorigin_feet_cmd(path: Path, recursive: bool, dry_run: bool, excludes:
     console.print(Panel(f"[bold green]{ok}[/bold green] GLB(s) actualizados.", border_style="green"))
 
 
+def _resolve_manifest_path(raw: str | Path) -> Path:
+    """Resolve manifest path: if no extension, try .yaml, .yml, then .csv."""
+    p = Path(raw)
+    if p.suffix.lower() in (".csv", ".yaml", ".yml"):
+        return p
+    for ext in (".yaml", ".yml", ".csv"):
+        candidate = p.with_suffix(ext)
+        if candidate.is_file():
+            return candidate
+    return p.with_suffix(".yaml")
+
+
 @main.command("init")
 @click.option(
     "--path",
     "target_dir",
     type=click.Path(file_okay=False, writable=True, path_type=Path),
     default=".",
-    help="Diretório onde criar game.yaml e manifest.csv",
+    help="Diretório onde criar game.yaml e manifest.yaml",
 )
 @click.option("--force", is_flag=True, help="Sobrescrever ficheiros existentes")
 def init_cmd(target_dir: Path, force: bool) -> None:
-    """Cria game.yaml e manifest.csv de exemplo."""
+    """Cria game.yaml e manifest.yaml de exemplo."""
     target_dir = target_dir.resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
     gy = target_dir / "game.yaml"
-    mc = target_dir / "manifest.csv"
+    my = target_dir / "manifest.yaml"
     if gy.exists() and not force:
         raise click.ClickException(f"Já existe {gy} (usa --force para sobrescrever)")
-    if mc.exists() and not force:
-        raise click.ClickException(f"Já existe {mc} (usa --force para sobrescrever)")
+    if my.exists() and not force:
+        raise click.ClickException(f"Já existe {my} (usa --force para sobrescrever)")
     gy.write_text(GAME_YAML, encoding="utf-8")
-    mc.write_text(MANIFEST_CSV, encoding="utf-8")
+    my.write_text(MANIFEST_YAML, encoding="utf-8")
     console.print(
         Panel(
-            f"Criados [bold cyan]{gy}[/bold cyan] e [bold cyan]{mc}[/bold cyan].\n\n"
+            f"Criados [bold cyan]{gy}[/bold cyan] e [bold cyan]{my}[/bold cyan].\n\n"
             "Seguinte: edita o perfil, preenche o manifest, depois "
             "[bold]gameassets prompts[/bold] ou [bold]gameassets batch[/bold].",
             title="[bold green]init[/bold green]",
@@ -958,9 +1013,9 @@ def info_cmd() -> None:
 @click.option(
     "--manifest",
     "manifest_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default="manifest.csv",
-    help="CSV com id, idea e colunas opcionais",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="manifest",
+    help="CSV/YAML com id, idea e colunas opcionais",
 )
 @click.option(
     "--presets-local",
@@ -1052,8 +1107,8 @@ def prompts_cmd(
 @click.option(
     "--manifest",
     "manifest_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default="manifest.csv",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="manifest",
 )
 @click.option(
     "--presets-local",
@@ -1117,9 +1172,13 @@ def handoff_cmd(
     """Copia GLB/áudio do ``output_dir`` do perfil para ``public/assets`` e grava ``gameassets_handoff.json``."""
     from .handoff_export import handoff_command_impl
 
+    resolved = _resolve_manifest_path(manifest_path)
+    if not resolved.is_file():
+        raise click.ClickException(f"Manifest não encontrado: {manifest_path} (tentado {resolved})")
+
     handoff_command_impl(
         profile_path,
-        manifest_path,
+        resolved,
         presets_local,
         public_dir,
         copy=use_copy,
@@ -1141,8 +1200,8 @@ def handoff_cmd(
 @click.option(
     "--manifest",
     "manifest_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default="manifest.csv",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="manifest",
 )
 @click.option(
     "--presets-local",
@@ -1268,6 +1327,7 @@ def batch_cmd(
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
+    manifest_path = _resolve_manifest_path(manifest_path)
 
     has_rigging_profile = profile.rigging3d is not None
     has_parts_profile = profile.part3d is not None
@@ -1550,7 +1610,7 @@ def batch_cmd(
                     seed_a = _seed_for_row(profile, f"{row.id}:audio")
                     if seed_a is not None:
                         argv_au.extend(["--seed", str(seed_a)])
-                    _append_text2sound_profile_args(ts_line, argv_au)
+                    _text2sound_args_for_row(ts_line, row, argv_au)
                     if profile.text3d and profile.text3d.low_vram:
                         argv_au.append("--low-vram")
                     _dry_run_emit(dry_plan, phase=p1_title + " text2sound", row_id=row.id, argv=argv_au)
@@ -1577,7 +1637,7 @@ def batch_cmd(
                     seed_a = _seed_for_row(profile, f"{row.id}:audio")
                     if seed_a is not None:
                         argv_au.extend(["--seed", str(seed_a)])
-                    _append_text2sound_profile_args(ts_line, argv_au)
+                    _text2sound_args_for_row(ts_line, row, argv_au)
                     if profile.text3d and profile.text3d.low_vram:
                         argv_au.append("--low-vram")
                     _dry_run_emit(
@@ -2035,7 +2095,7 @@ def batch_cmd(
                             seed_a = _seed_for_row(profile, f"{row.id}:audio")
                             if seed_a is not None:
                                 argv_au.extend(["--seed", str(seed_a)])
-                            _append_text2sound_profile_args(ts_line, argv_au)
+                            _text2sound_args_for_row(ts_line, row, argv_au)
                             if profile.text3d and profile.text3d.low_vram:
                                 argv_au.append("--low-vram")
                             t_au = time.perf_counter()
@@ -2592,8 +2652,8 @@ def _text3d_argv(
 @click.option(
     "--manifest",
     "manifest_path",
-    type=click.Path(exists=True, dir_okay=False, path_type=Path),
-    default="manifest.csv",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default="manifest",
 )
 @click.option(
     "--presets-local",
@@ -2648,6 +2708,7 @@ def resume_cmd(
             raise click.ClickException("--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')") from _err
 
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
+    manifest_path = _resolve_manifest_path(manifest_path)
     manifest_dir = manifest_path.resolve().parent
     t3_opts = profile.text3d
 

@@ -221,6 +221,22 @@ def build_audio_prompt(
     if label_hint:
         chunks.append(label_hint + ".")
 
+    dur = row.audio_duration
+    if row.audio_profile == "effects" or (dur is not None and dur <= 5):
+        chunks.append("brief single occurrence, no repetition, no looping")
+    elif dur is not None and dur <= 10:
+        chunks.append("short concise sound, minimal repetition")
+    elif dur is not None and dur >= 20:
+        chunks.append("loop-friendly, seamless loop, continuous atmosphere")
+
+    if dur is not None and dur <= 5:
+        chunks.append("immediate start, no silence at beginning")
+
+    if row.audio_profile == "effects":
+        chunks.append("crisp punchy sound effect, clean transients")
+    elif row.audio_profile == "music":
+        chunks.append("musical composition, melodic, harmonic")
+
     main = " ".join(chunks)
     main = re.sub(r"\s+", " ", main).strip()
 
@@ -232,6 +248,10 @@ def build_audio_prompt(
         kw = str(kw).strip()
         if kw:
             neg_parts.append(kw)
+    if dur is not None and dur <= 5:
+        neg_parts.append("long fade-out")
+        neg_parts.append("extended reverb tail")
+        neg_parts.append("repetition")
     if neg_parts:
         neg_joined = ", ".join(neg_parts)
         main = f"{main} Avoid: {neg_joined}."

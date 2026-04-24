@@ -100,6 +100,33 @@ def emit_manifest_csv(plan: DreamPlan) -> str:
     return buf.getvalue()
 
 
+def emit_manifest_yaml(plan: DreamPlan) -> str:
+    """Gera string YAML do manifest a partir do DreamPlan."""
+    assets: list[dict[str, Any]] = []
+    for a in plan.assets:
+        pipeline: list[str] = []
+        if a.generate_3d:
+            pipeline.append("3d")
+        if a.generate_audio:
+            pipeline.append("audio")
+        if a.generate_rig:
+            pipeline.append("rig")
+        if a.generate_animate:
+            pipeline.append("animate")
+        if a.generate_parts:
+            pipeline.append("parts")
+        entry: dict[str, Any] = {
+            "id": a.id,
+            "idea": a.idea,
+            "kind": a.kind or "prop",
+            "pipeline": pipeline,
+        }
+        if a.generate_audio:
+            entry["audio"] = {"duration": 2, "profile": "effects"}
+        assets.append(entry)
+    return yaml.dump({"assets": assets}, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
 # ---------------------------------------------------------------------------
 # world XML (scene for VibeGame <Scene>)
 # ---------------------------------------------------------------------------
@@ -255,9 +282,9 @@ def emit_all(
     game_yaml.write_text(emit_game_yaml(plan, with_audio=with_audio), encoding="utf-8")
     paths["game_yaml"] = game_yaml
 
-    manifest = output_dir / "manifest.csv"
-    manifest.write_text(emit_manifest_csv(plan), encoding="utf-8")
-    paths["manifest_csv"] = manifest
+    manifest = output_dir / "manifest.yaml"
+    manifest.write_text(emit_manifest_yaml(plan), encoding="utf-8")
+    paths["manifest_yaml"] = manifest
 
     world_xml_str = emit_world_xml(plan)
     world_xml_path = output_dir / "world.xml"
