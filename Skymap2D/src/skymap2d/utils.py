@@ -10,7 +10,7 @@ from gamedev_shared.logging import Logger as _Logger
 from gamedev_shared.path_utils import ensure_directory  # noqa: F401
 from gamedev_shared.seed_utils import generate_seed  # noqa: F401
 
-_logger = _Logger("skymap2d.utils")
+_logger = _Logger()
 
 
 def validate_prompt(prompt: str, max_length: int = 500) -> tuple[bool, str | None]:

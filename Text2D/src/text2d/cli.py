@@ -273,9 +273,10 @@ def info_cmd() -> None:
 def doctor_cmd() -> None:
     """Verifica ambiente: PyTorch, CUDA, VRAM e cache HF."""
     from gamedev_shared.gpu import (
-        DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB,
+        DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT,
         get_system_info,
         gpu_bytes_in_use,
+        gpu_total_mib,
     )
 
     console.print(
@@ -302,9 +303,11 @@ def doctor_cmd() -> None:
             )
         used = gpu_bytes_in_use(0)
         if used is not None:
+            total = gpu_total_mib(0)
+            pct_now = (used / (total * 1024 * 1024) * 100) if total else 0
             table.add_row(
                 "GPU em uso",
-                f"~{used / (1024**2):.0f} MiB (limite: {DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB} MiB)",
+                f"~{used / (1024**2):.0f} MiB ({pct_now:.0f}%; limite: {DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT:.0%})",
             )
     table.add_row("HF_HOME (cache)", hf_home_display_rich())
 

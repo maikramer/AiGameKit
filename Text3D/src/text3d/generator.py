@@ -23,7 +23,7 @@ from .utils.bg_removal import BiRefNetBGRemover, crop_to_content
 from .utils.memory import clear_cuda_memory as _clear_cuda_cache
 from .utils.prompt_enhance import create_optimized_prompt as _optimize_prompt
 
-_logger = Logger("text3d")
+_logger = Logger()
 
 
 def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:

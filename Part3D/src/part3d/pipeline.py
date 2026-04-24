@@ -40,7 +40,7 @@ from .utils.dit_quantization import load_dit_quantized, want_quantized_dit
 from .utils.flash_attn_shim import install_shim as _install_flash_shim
 from .utils.memory import clear_cuda_memory, format_bytes
 
-_logger = Logger("part3d")
+_logger = Logger()
 
 # Injetar shim de flash_attn ANTES de qualquer import do XPart/Sonata
 _install_flash_shim()

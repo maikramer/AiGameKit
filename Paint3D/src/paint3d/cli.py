@@ -64,9 +64,8 @@ def _prepare_gpu(allow_shared: bool, kill_others: bool, low_vram: bool = False) 
             console.print(f"[dim]{line}[/dim]")
         clear_cuda_memory()
         time.sleep(0.5)
-    gpu_max_mib = 300 if low_vram else 1024
     try:
-        enforce_exclusive_gpu(allow_shared=allow, max_used_mib=gpu_max_mib)
+        enforce_exclusive_gpu(allow_shared=allow)
     except RuntimeError as e:
         raise click.ClickException(str(e)) from e
     warn_if_vram_occupied()
@@ -483,9 +482,10 @@ def vertex_pbr_cmd(mesh_file, output_path, texture_size, materialize_bin, preset
 def doctor():
     """Verifica ambiente: PyTorch, CUDA, VRAM, modelos e rasterizador."""
     from gamedev_shared.gpu import (
-        DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB,
+        DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT,
         get_system_info,
         gpu_bytes_in_use,
+        gpu_total_mib,
     )
 
     from .painter import check_hunyuan3d21_environment, check_paint_rasterizer_available
@@ -514,9 +514,11 @@ def doctor():
             )
         used = gpu_bytes_in_use(0)
         if used is not None:
+            total = gpu_total_mib(0)
+            pct_now = (used / (total * 1024 * 1024) * 100) if total else 0
             table.add_row(
                 "GPU em uso",
-                f"~{used / (1024**2):.0f} MiB (limite: {DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB} MiB)",
+                f"~{used / (1024**2):.0f} MiB ({pct_now:.0f}%; limite: {DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT:.0%})",
             )
 
     try:

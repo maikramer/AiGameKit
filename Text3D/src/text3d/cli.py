@@ -426,9 +426,8 @@ def generate(
         clear_cuda_memory()
         time.sleep(0.5)
     if not cpu:
-        gpu_max_mib = 300 if low_vram else 1024
         try:
-            enforce_exclusive_gpu(allow_shared=allow_shared, max_used_mib=gpu_max_mib)
+            enforce_exclusive_gpu(allow_shared=allow_shared)
         except RuntimeError as e:
             raise click.ClickException(str(e)) from e
 
@@ -619,6 +618,7 @@ def doctor():
     from .utils.memory import (
         get_system_info,
         gpu_bytes_in_use,
+        gpu_total_mib,
     )
 
     console.print(
@@ -648,10 +648,12 @@ def doctor():
             )
         used = gpu_bytes_in_use(0)
         if used is not None:
+            total = gpu_total_mib(0)
+            pct_now = (used / (total * 1024 * 1024) * 100) if total else 0
             table.add_row(
                 "Política GPU exclusiva",
-                f"~{used / (1024**2):.0f} MiB em uso agora — "
-                f"generate recusa se > 1024 MiB (300 MiB em --low-vram) "
+                f"~{used / (1024**2):.0f} MiB em uso agora ({pct_now:.0f}%) — "
+                f"generate recusa se > 15% da VRAM total "
                 f"(ou TEXT3D_ALLOW_SHARED_GPU=1 / --allow-shared-gpu)",
             )
 

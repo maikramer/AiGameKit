@@ -18,7 +18,7 @@ from PIL import Image
 
 from gamedev_shared.logging import Logger
 
-_logger = Logger("text2d")
+_logger = Logger()
 
 HIGH_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32"
 LOW_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic"

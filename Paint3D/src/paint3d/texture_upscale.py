@@ -17,7 +17,7 @@ from PIL import Image
 
 from gamedev_shared.logging import Logger
 
-_logger = Logger("paint3d.upscale")
+_logger = Logger()
 
 _MODEL_REPO = "ai-forever/Real-ESRGAN"
 _MODEL_FILENAME = "RealESRGAN_x4.pth"

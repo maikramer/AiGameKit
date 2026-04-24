@@ -60,6 +60,5 @@ DEFAULT_SMOOTH_SIGMA_SPACE = 50.0
 DEFAULT_UPSCALE = False
 DEFAULT_UPSCALE_FACTOR = 4
 
-# GPU exclusive limit (MiB) — multi-GPU: checked only on device 0
-DEFAULT_EXCLUSIVE_GPU_MAX_USED_MIB = 1536
-LOW_VRAM_EXCLUSIVE_GPU_MAX_USED_MIB = 300
+# GPU exclusive limit — percentage of total VRAM (shared default is 15%)
+DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT = 0.15

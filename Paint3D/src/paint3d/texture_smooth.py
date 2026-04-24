@@ -18,7 +18,7 @@ from PIL import Image
 
 from gamedev_shared.logging import Logger
 
-_logger = Logger("paint3d.smooth")
+_logger = Logger()
 
 
 def smooth_texture(

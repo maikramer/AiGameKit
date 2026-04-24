@@ -48,7 +48,7 @@ from .hy3d21_paths import (  # noqa: E402
 )
 from .utils.mesh_io import load_mesh_trimesh, save_glb  # noqa: E402
 
-_logger = Logger("paint3d")
+_logger = Logger()
 
 
 def _ensure_custom_rasterizer_shim() -> None:
