@@ -28,6 +28,12 @@ from .categories import get_target_faces
 from .cli_rich import click
 from .manifest import ManifestRow, effective_image_source, load_manifest
 from .mesh_reorigin import collect_glb_paths, filter_excluded_paths, reorigin_glb_file
+from .param_optimizer import (
+    optimize_paint_for_target,
+    optimize_text3d_for_target,
+    should_optimize_paint,
+    should_optimize_text3d,
+)
 from .presets import get_preset, load_presets_bundle
 from .profile import (
     Animator3DProfile,
@@ -1861,6 +1867,7 @@ def batch_cmd(
                         img_path,
                         mesh_path,
                         row_id=row.id,
+                        row=row,
                         gpu_ids=gpu_ids,
                     )
                     _dry_run_emit(
@@ -2419,6 +2426,7 @@ def batch_cmd(
                                     img_final,
                                     mesh_final,
                                     row_id=row.id,
+                                    row=row,
                                     gpu_ids=gpu_ids,
                                 )
                                 t_paint = time.perf_counter()
@@ -2692,10 +2700,17 @@ def _texture_subprocess_argv(
     mesh_out: Path,
     *,
     row_id: str | None = None,
+    row: ManifestRow | None = None,
     gpu_ids: list[int] | None = None,
 ) -> list[str]:
     t3 = profile.text3d
-    if t3 and (t3.paint_style or "hunyuan").strip().lower() in ("solid", "perlin"):
+    effective_style = (t3.paint_style or "hunyuan").strip().lower() if t3 else "hunyuan"
+    if t3 and row and row.category and should_optimize_paint(t3):
+        target = get_target_faces(row.category)
+        paint_opts = optimize_paint_for_target(target)
+        if paint_opts.paint_style:
+            effective_style = paint_opts.paint_style
+    if effective_style in ("solid", "perlin"):
         row_seed = _seed_for_row(profile, row_id) if row_id else None
         return _paint3d_quick_argv(paint3d_bin, profile, mesh_in, mesh_out, row_seed=row_seed)
     return _paint3d_texture_argv(
@@ -2786,15 +2801,22 @@ def _text3d_argv(
     if not t3:
         return args
 
-    explicit_hunyuan = t3.steps is not None or t3.octree_resolution is not None or t3.num_chunks is not None
-    if t3.preset and not explicit_hunyuan:
-        args.extend(["--preset", t3.preset])
-    if t3.steps is not None:
-        args.extend(["--steps", str(t3.steps)])
-    if t3.octree_resolution is not None:
-        args.extend(["--octree-resolution", str(t3.octree_resolution)])
-    if t3.num_chunks is not None:
-        args.extend(["--num-chunks", str(t3.num_chunks)])
+    if should_optimize_text3d(t3) and row is not None and row.category:
+        target = get_target_faces(row.category)
+        opts = optimize_text3d_for_target(target)
+        args.extend(["--steps", str(opts.steps)])
+        args.extend(["--octree-resolution", str(opts.octree_resolution)])
+        args.extend(["--num-chunks", str(opts.num_chunks)])
+    else:
+        explicit_hunyuan = t3.steps is not None or t3.octree_resolution is not None or t3.num_chunks is not None
+        if t3.preset and not explicit_hunyuan:
+            args.extend(["--preset", t3.preset])
+        if t3.steps is not None:
+            args.extend(["--steps", str(t3.steps)])
+        if t3.octree_resolution is not None:
+            args.extend(["--octree-resolution", str(t3.octree_resolution)])
+        if t3.num_chunks is not None:
+            args.extend(["--num-chunks", str(t3.num_chunks)])
     if t3.model_subfolder:
         args.extend(["--model-subfolder", t3.model_subfolder])
     if t3.low_vram:
@@ -3171,6 +3193,7 @@ def resume_cmd(
                     it["img_final"],
                     mesh_out,
                     row_id=row.id,
+                    row=row,
                     gpu_ids=gpu_ids,
                 )
                 r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
