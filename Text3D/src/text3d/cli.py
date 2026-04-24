@@ -83,6 +83,7 @@ def cli(ctx, verbose):
         text3d doctor
         text3d lod modelo.glb -o ./out --basename prop
         text3d simplify-textured pintado.glb -o leve.glb --face-ratio 0.45
+        text3d collision modelo.glb -o collision.glb
         text3d align-plus-z modelo.glb -o corrigido.glb
         text3d -v generate "prompt"
         text3d info
@@ -957,6 +958,31 @@ def simplify_textured_cmd(
         Rule("[bold green]simplify-textured", style="green"),
     )
     console.print(f"[bold green]✓[/bold green] [cyan]{output.resolve()}[/cyan]")
+
+
+@cli.command("collision")
+@click.argument("input_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--output", "-o", type=click.Path(path_type=Path), required=True, help="Output collision GLB")
+@click.option("--max-faces", type=int, default=300, show_default=True, help="Target face count for collision mesh")
+@click.option(
+    "--convex-hull/--no-convex-hull",
+    default=True,
+    help="Compute convex hull before simplification (default: yes)",
+)
+def collision_cmd(input_mesh: Path, output: Path, max_faces: int, convex_hull: bool) -> None:
+    """Generate a simplified collision mesh from any GLB/OBJ/PLY.
+
+    Produces a low-poly mesh suitable for physics collision in Unity/Godot/Unreal.
+    Default: convex hull + quadric decimation to 300 faces.
+
+    \b
+    text3d collision modelo.glb -o collision.glb
+    text3d collision modelo.glb -o coll.glb --max-faces 500 --no-convex-hull
+    """
+    from .utils.collision import generate_collision_mesh
+
+    out = generate_collision_mesh(input_mesh, output, max_faces=max_faces, convex_hull=convex_hull)
+    console.print(Rule(f"[bold green]collision[/bold green] → {out}", style="green"))
 
 
 @cli.command("align-plus-z")
