@@ -3,10 +3,14 @@
 Text2D — CLI principal (text-to-2D).
 """
 
+import atexit
+import json
 import os
+import signal
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -237,6 +241,161 @@ def generate_cmd(
     except Exception as e:
         console.print(f"\n[bold red]✗ Erro:[/bold red] {e}")
         if verbose:
+            console.print_exception()
+        sys.exit(1)
+
+
+_batch_gen = None
+
+
+def _batch_cleanup() -> None:
+    global _batch_gen
+    if _batch_gen is not None:
+        _batch_gen.unload()
+        _batch_gen = None
+
+
+def _batch_signal_handler(signum: int, frame: object) -> None:
+    _batch_cleanup()
+    sys.exit(128 + signum)
+
+
+atexit.register(_batch_cleanup)
+
+
+@cli.command("generate-batch")
+@click.argument("manifest", type=click.Path(exists=True, dir_okay=False))
+@click.option("--output-dir", "-O", type=click.Path(), default=".", help="Diretório base para outputs relativos.")
+@click.option("--width", "-W", default=1024, type=int)
+@click.option("--height", "-H", default=1024, type=int)
+@click.option("--steps", "-s", default=4, type=int, help="Passos de inferência")
+@click.option(
+    "--guidance",
+    "-g",
+    "guidance_scale",
+    default=1.0,
+    type=float,
+    help="Guidance scale (recomendado 1.0 para SDNQ)",
+)
+@click.option("--cpu", is_flag=True, help="Forçar CPU")
+@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
+@click.option(
+    "--model",
+    "-m",
+    "model_id",
+    default=None,
+    help="ID Hugging Face (default: SDNQ, ou TEXT2D_MODEL_ID)",
+)
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help="IDs das GPUs para split multi-GPU (ex: '0,1').",
+)
+@click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
+@click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+def generate_batch_cmd(
+    manifest: str,
+    output_dir: str,
+    width: int,
+    height: int,
+    steps: int,
+    guidance_scale: float,
+    cpu: bool,
+    low_vram: bool,
+    model_id: str | None,
+    gpu_ids_str: str | None,
+    force: bool,
+    batch_verbose: bool,
+) -> None:
+    """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
+    global _batch_gen
+
+    from gamedev_shared.gpu import warn_if_vram_occupied
+
+    manifest_path = Path(manifest)
+    out_root = Path(output_dir)
+
+    try:
+        items: list[dict[str, Any]] = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        console.print(f"[red]Manifesto inválido:[/red] {exc}")
+        sys.exit(1)
+
+    for i, item in enumerate(items):
+        missing = [k for k in ("id", "prompt", "output") if k not in item]
+        if missing:
+            console.print(f"[red]Item {i} falta:[/red] {', '.join(missing)}")
+            sys.exit(1)
+
+    if not cpu:
+        warn_if_vram_occupied()
+
+    low = low_vram or cpu
+    parsed_gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
+    try:
+        gen = KleinFluxGenerator(
+            device="cpu" if cpu else None,
+            low_vram=low,
+            verbose=batch_verbose,
+            model_id=model_id,
+            gpu_ids=parsed_gpu_ids,
+        )
+        _batch_gen = gen
+
+        with Console(stderr=True).status("[bold yellow]A carregar pipeline...", spinner="dots"):
+            gen.warmup()
+
+        signal.signal(signal.SIGTERM, _batch_signal_handler)
+        signal.signal(signal.SIGINT, _batch_signal_handler)
+
+        need_load = force or any(not (out_root / Path(it["output"])).is_file() for it in items if "output" in it)
+        if need_load:
+            with Console(stderr=True).status("[bold yellow]A carregar pipeline...", spinner="dots"):
+                gen.warmup()
+
+        for item in items:
+            t0 = time.time()
+            item_id = item["id"]
+            prompt = item["prompt"]
+            out_rel = Path(item["output"])
+            out_path = out_root / out_rel if not out_rel.is_absolute() else out_rel
+
+            if not force and out_path.is_file():
+                print(json.dumps({"id": item_id, "status": "skipped", "output": str(out_rel)}))
+                continue
+
+            item_w = item.get("width", width)
+            item_h = item.get("height", height)
+            item_steps = item.get("steps", steps)
+            item_guidance = item.get("guidance_scale", guidance_scale)
+            item_seed = item.get("seed")
+
+            try:
+                image = gen.generate(
+                    prompt=prompt,
+                    height=item_h,
+                    width=item_w,
+                    guidance_scale=item_guidance,
+                    num_inference_steps=item_steps,
+                    seed=item_seed,
+                )
+                ext = out_path.suffix.lower().lstrip(".")
+                img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
+                KleinFluxGenerator.save_image(image, out_path, image_format=img_format)
+                elapsed = time.time() - t0
+                print(json.dumps({"id": item_id, "status": "ok", "output": str(out_rel), "seconds": round(elapsed, 3)}))
+            except Exception as exc:
+                print(json.dumps({"id": item_id, "status": "error", "error": str(exc)}))
+
+        _batch_cleanup()
+    except ImportError as exc:
+        console.print(f"\n[bold red]✗[/bold red] {exc}")
+        sys.exit(1)
+    except Exception as exc:
+        console.print(f"\n[bold red]✗ Erro:[/bold red] {exc}")
+        if batch_verbose:
             console.print_exception()
         sys.exit(1)
 
