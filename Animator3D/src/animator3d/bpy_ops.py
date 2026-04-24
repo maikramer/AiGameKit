@@ -1943,7 +1943,7 @@ def fall_keyframes(
     return chains
 
 
-def export_glb(path: Path) -> None:
+def export_glb(path: Path, *, draco: bool = False) -> None:
     bpy = _bpy()
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1955,8 +1955,8 @@ def export_glb(path: Path) -> None:
         use_selection=False,
         export_animations=True,
         export_animation_mode="ACTIONS",
-        export_draco_mesh_compression_enable=True,
-        export_draco_mesh_compression_level=6,
+        export_draco_mesh_compression_enable=draco,
+        export_draco_mesh_compression_level=6 if draco else 0,
         export_all_influences=False,
     )
 
@@ -1972,13 +1972,13 @@ def export_fbx(path: Path) -> None:
     )
 
 
-def export_auto(path: Path) -> None:
+def export_auto(path: Path, *, draco: bool = False) -> None:
     """Exporta conforme extensão (.glb/.gltf → GLB/GLTF; .fbx → FBX)."""
     suf = path.suffix.lower()
     if suf == ".fbx":
         export_fbx(path)
     elif suf in {".glb", ".gltf"}:
-        export_glb(path)
+        export_glb(path, draco=draco)
     else:
         raise ValueError(f"Extensão de saída não suportada: {suf}")
 
@@ -1989,6 +1989,8 @@ def project_texture_to_parts(
     output_path: Path,
     resolution: int = 1024,
     margin: int = 16,
+    *,
+    draco: bool = False,
 ) -> None:
     """Project textures from an original textured mesh onto Part3D part meshes via Cycles bake."""
     import math
@@ -2096,7 +2098,7 @@ def project_texture_to_parts(
         filepath=str(output_path),
         export_format="GLB",
         use_selection=True,
-        export_draco_mesh_compression_enable=True,
-        export_draco_mesh_compression_level=6,
+        export_draco_mesh_compression_enable=draco,
+        export_draco_mesh_compression_level=6 if draco else 0,
         export_all_influences=False,
     )

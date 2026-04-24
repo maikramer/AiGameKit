@@ -15,6 +15,15 @@ from .cli_rich import click
 console = Console()
 
 
+def _draco_option(func):
+    return click.option(
+        "--draco/--no-draco",
+        default=False,
+        show_default=True,
+        help="Comprimir meshes do GLB com Draco (menor tamanho, compatibilidade limitada).",
+    )(func)
+
+
 def _clip_name_or_default(clip_name: str | None, default: str) -> str:
     """Nome do clip no glTF; caracteres seguros para motores de jogo."""
     if clip_name is None or not str(clip_name).strip():
@@ -71,20 +80,22 @@ def cmd_inspect(input_path: Path, json_out: bool) -> None:
 
 
 @main.command("export")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
-def cmd_export(input_path: Path, output_path: Path) -> None:
+def cmd_export(input_path: Path, output_path: Path, draco: bool) -> None:
     """Importa o ficheiro e exporta de novo (útil para validar roundtrip GLB/FBX)."""
     _require_bpy()
     from . import bpy_ops
 
     bpy_ops.clear_scene()
     bpy_ops.import_asset(input_path)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     console.print(f"[green]Exportado:[/green] {output_path.resolve()}")
 
 
 @main.command("wave-idle")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=60, show_default=True, type=int, help="Número de frames da animação.")
@@ -111,6 +122,7 @@ def cmd_wave_idle(
     bone: str | None,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Cria uma animação de teste (oscilação) no primeiro armature e exporta."""
     _require_bpy()
@@ -139,7 +151,7 @@ def cmd_wave_idle(
         action_name=_clip_name_or_default(clip_name, "Animator3D_WaveIdle"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     console.print(
         f"[green]Animado[/green] armature={arm_name!r} osso={bone_name!r} "
         f"· {nclips} clip(s) no GLB → {output_path.resolve()}"
@@ -147,6 +159,7 @@ def cmd_wave_idle(
 
 
 @main.command("breathe-idle")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=120, show_default=True, type=int, help="Número de frames da animação.")
@@ -179,6 +192,7 @@ def cmd_breathe_idle(
     neck_amp: float,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Animação idle multi-osso: respiração, asas, cauda, pescoço — classifica ossos automaticamente."""
     _require_bpy()
@@ -207,7 +221,7 @@ def cmd_breathe_idle(
         action_name=_clip_name_or_default(clip_name, "Animator3D_BreatheIdle"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
 
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
@@ -217,6 +231,7 @@ def cmd_breathe_idle(
 
 
 @main.command("attack")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=72, show_default=True, type=int, help="Duracao do clip (1 ou mais golpes).")
@@ -254,6 +269,7 @@ def cmd_attack(
     tail_amp: float,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Investida / mordida: tronco e pescoço para a frente, asas à frente, cauda em contrapeso (patas fixas)."""
     _require_bpy()
@@ -284,7 +300,7 @@ def cmd_attack(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Attack"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
 
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
@@ -294,6 +310,7 @@ def cmd_attack(
 
 
 @main.command("walk")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=48, show_default=True, type=int, help="Duração do ciclo de passada.")
@@ -321,6 +338,7 @@ def cmd_walk(
     leg_amp: float,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Ciclo de caminhada: patas alternadas (se o rig tiver), tronco e cauda."""
     _require_bpy()
@@ -347,7 +365,7 @@ def cmd_walk(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Walk"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Walk[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -356,6 +374,7 @@ def cmd_walk(
 
 
 @main.command("hover")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=60, show_default=True, type=int, help="Duração do clip.")
@@ -383,6 +402,7 @@ def cmd_hover(
     wing_amp: float,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Pairar: batimento de asas rápido, tronco estável."""
     _require_bpy()
@@ -409,7 +429,7 @@ def cmd_hover(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Hover"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Hover[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -418,6 +438,7 @@ def cmd_hover(
 
 
 @main.command("soar")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=90, show_default=True, type=int, help="Duração do clip de plano.")
@@ -443,6 +464,7 @@ def cmd_soar(
     cycles: float,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Planar majestoso: batidas de asa largas e lentas, cauda como leme."""
     _require_bpy()
@@ -468,7 +490,7 @@ def cmd_soar(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Soar"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Soar[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -477,6 +499,7 @@ def cmd_soar(
 
 
 @main.command("dive")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=48, show_default=True, type=int, help="Duração do mergulho.")
@@ -500,6 +523,7 @@ def cmd_dive(
     frames: int,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Ataque em picada: asas recolhidas, mergulho e impacto brusco."""
     _require_bpy()
@@ -524,7 +548,7 @@ def cmd_dive(
         action_name=_clip_name_or_default(clip_name, "Animator3D_DiveAttack"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Dive[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -533,6 +557,7 @@ def cmd_dive(
 
 
 @main.command("fire")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=64, show_default=True, type=int, help="Duração do sopro.")
@@ -558,6 +583,7 @@ def cmd_fire(
     bursts: int,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Sopro de fogo: peito expande, pescoço avança, rajadas poderosas."""
     _require_bpy()
@@ -585,7 +611,7 @@ def cmd_fire(
         action_name=_clip_name_or_default(clip_name, "Animator3D_FireBreath"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Fire[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -594,6 +620,7 @@ def cmd_fire(
 
 
 @main.command("land")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=80, show_default=True, type=int, help="Duração do pouso.")
@@ -617,6 +644,7 @@ def cmd_land(
     frames: int,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Pouso majestoso: descida controlada, freio aerodinâmico, impacto suave."""
     _require_bpy()
@@ -641,7 +669,7 @@ def cmd_land(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Land"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Land[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -650,6 +678,7 @@ def cmd_land(
 
 
 @main.command("roar")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=96, show_default=True, type=int, help="Duração do rugido.")
@@ -673,6 +702,7 @@ def cmd_roar(
     frames: int,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Rugido de vitória: peito inflado, cabeça erguida, pose majestosa."""
     _require_bpy()
@@ -697,7 +727,7 @@ def cmd_roar(
         action_name=_clip_name_or_default(clip_name, "Animator3D_VictoryRoar"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Roar[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -706,6 +736,7 @@ def cmd_roar(
 
 
 @main.command("run")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=36, show_default=True, type=int, help="Duração do ciclo de corrida.")
@@ -727,6 +758,7 @@ def cmd_run(
     leg_amp: float,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Ciclo de corrida: cadência rápida, amplitude alta, balanço de braços."""
     _require_bpy()
@@ -753,7 +785,7 @@ def cmd_run(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Run"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Run[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -762,6 +794,7 @@ def cmd_run(
 
 
 @main.command("jump")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=36, show_default=True, type=int, help="Duração do salto.")
@@ -779,6 +812,7 @@ def cmd_jump(
     frames: int,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Salto: agachar → estender → aéreo → aterrar. Não-cíclico."""
     _require_bpy()
@@ -803,7 +837,7 @@ def cmd_jump(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Jump"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Jump[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -812,6 +846,7 @@ def cmd_jump(
 
 
 @main.command("fall")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option("--frames", default=24, show_default=True, type=int, help="Duração da queda.")
@@ -829,6 +864,7 @@ def cmd_fall(
     frames: int,
     append_mode: bool,
     clip_name: str | None,
+    draco: bool,
 ) -> None:
     """Pose de queda: braços abertos, balanço de vento. Não-cíclico."""
     _require_bpy()
@@ -853,7 +889,7 @@ def cmd_fall(
         action_name=_clip_name_or_default(clip_name, "Animator3D_Fall"),
     )
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     chain_info = ", ".join(f"{k}({len(v)})" for k, v in chains.items())
     console.print(
         f"[green]Fall[/green] armature={arm_name!r} cadeias=\\[{chain_info}] "
@@ -888,6 +924,7 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
 
 
 @main.command("game-pack")
+@_draco_option
 @click.argument("input_path", type=click.Path(path_type=Path, exists=True))
 @click.argument("output_path", type=click.Path(path_type=Path))
 @click.option(
@@ -909,6 +946,7 @@ def cmd_game_pack(
     output_path: Path,
     preset: str,
     clip_filter: str | None,
+    draco: bool,
 ) -> None:
     """Gera todas as animações de um preset num único comando."""
     _require_bpy()
@@ -937,7 +975,7 @@ def cmd_game_pack(
         console.print(f"  [dim]✓[/dim] {kwargs['action_name']}")
 
     nclips = bpy_ops.count_nla_tracks(arm_name)
-    bpy_ops.export_auto(output_path)
+    bpy_ops.export_auto(output_path, draco=draco)
     console.print(
         f"[green]game-pack[/green] preset={preset!r} armature={arm_name!r} "
         f"· {nclips} clip(s) no GLB → {output_path.resolve()}"
@@ -979,6 +1017,7 @@ def cmd_list_clips(input_path: Path) -> None:
 
 
 @main.command("texture-project")
+@_draco_option
 @click.argument("original_glb", type=click.Path(path_type=Path, exists=True))
 @click.argument("parts_glb", type=click.Path(path_type=Path, exists=True))
 @click.option(
@@ -1008,6 +1047,7 @@ def cmd_texture_project(
     output: Path,
     resolution: int,
     margin: int,
+    draco: bool,
 ) -> None:
     """Projeta textura do modelo original nas partes (Part3D)."""
     _require_bpy()
@@ -1020,6 +1060,7 @@ def cmd_texture_project(
         output_path=output,
         resolution=resolution,
         margin=margin,
+        draco=draco,
     )
     console.print(f"[green]texture-project[/green] {resolution}px → {output.resolve()}")
 
