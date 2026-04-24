@@ -402,3 +402,210 @@ def paint_file_to_file(
     with profile_span("paint_save_glb"):
         save_glb(out, output_path)
     return output_path
+
+
+class PaintBatchProcessor:
+    """Context manager: carrega Hunyuan3D-Paint uma vez, pinta múltiplas meshes.
+
+    Mantém o pipeline carregado entre chamadas para evitar o custo de
+    inicialização (~30-60s) em cada item de um batch.
+
+    Uso::
+
+        with PaintBatchProcessor(verbose=True) as proc:
+            for mesh, img in items:
+                textured = proc.paint_mesh(mesh, img)
+    """
+
+    def __init__(
+        self,
+        *,
+        model_repo: str = _defaults.DEFAULT_PAINT_HF_REPO,
+        subfolder: str = _defaults.DEFAULT_PAINT_SUBFOLDER,
+        paint_cpu_offload: bool = _defaults.DEFAULT_PAINT_CPU_OFFLOAD,
+        max_num_view: int = _defaults.DEFAULT_PAINT_MAX_VIEWS,
+        view_resolution: int = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION,
+        render_size: int | None = None,
+        texture_size: int | None = None,
+        bake_exp: int = _defaults.DEFAULT_PAINT_BAKE_EXP,
+        use_remesh: bool = True,
+        verbose: bool = False,
+        enable_vae_slicing: bool = _defaults.DEFAULT_ENABLE_VAE_SLICING,
+        enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
+        vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
+        preserve_origin: bool = True,
+        low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
+        gpu_ids: list[int] | None = None,
+    ):
+        self._model_repo = model_repo
+        self._subfolder = subfolder
+        self._paint_cpu_offload = paint_cpu_offload
+        self._max_num_view = max_num_view
+        self._view_resolution = view_resolution
+        self._render_size = render_size
+        self._texture_size = texture_size
+        self._bake_exp = bake_exp
+        self._use_remesh = use_remesh
+        self._verbose = verbose
+        self._enable_vae_slicing = enable_vae_slicing
+        self._enable_vae_tiling = enable_vae_tiling
+        self._vae_tile_size = vae_tile_size
+        self._preserve_origin = preserve_origin
+        self._low_vram = low_vram
+        self._gpu_ids = gpu_ids
+        self._pipe: Any = None
+        self._config: Any = None
+
+    def __enter__(self) -> PaintBatchProcessor:
+        from gamedev_shared.profiler import profile_span
+        from gamedev_shared.quantization import enable_vae_optimizations
+
+        with profile_span("paint_check_env"):
+            check_paint_rasterizer_available()
+            ok, msg = check_hunyuan3d21_environment()
+            if not ok:
+                raise RuntimeError(msg)
+            hy3dpaint_root = ensure_hy3dpaint_on_path()
+            cfg_yaml = default_cfg_yaml()
+            ckpt_path = ensure_realesrgan_ckpt()
+
+        from .hy3dpaint.textureGenPipeline import Hunyuan3DPaintConfig, Hunyuan3DPaintPipeline
+
+        if self._verbose:
+            _logger.info(
+                f"[batch] hy3dpaint={hy3dpaint_root}\n"
+                f"  repo={self._model_repo} weights_subfolder={self._subfolder} "
+                f"offload={self._paint_cpu_offload} max_views={self._max_num_view} "
+                f"res={self._view_resolution}"
+            )
+
+        clear_cuda_memory()
+
+        with profile_span("paint_configure"):
+            config = Hunyuan3DPaintConfig(self._max_num_view, self._view_resolution)
+            config.multiview_pretrained_path = self._model_repo
+            config.multiview_weights_subfolder = self._subfolder
+            config.multiview_cfg_path = str(cfg_yaml)
+            config.realesrgan_ckpt_path = str(ckpt_path)
+
+            if torch.cuda.is_available():
+                config.device = "cuda"
+            else:
+                config.device = "cpu"
+
+            if self._render_size is not None:
+                config.render_size = self._render_size
+            elif self._low_vram:
+                config.render_size = _defaults.LOW_VRAM_RENDER_SIZE
+            else:
+                config.render_size = _defaults.DEFAULT_PAINT_RENDER_SIZE
+
+            if self._texture_size is not None:
+                config.texture_size = self._texture_size
+            elif self._low_vram:
+                config.texture_size = _defaults.LOW_VRAM_TEXTURE_SIZE
+            else:
+                config.texture_size = _defaults.DEFAULT_PAINT_TEXTURE_SIZE
+
+            if not torch.cuda.is_available():
+                config.render_size = min(config.render_size, 1024)
+                config.texture_size = min(config.texture_size, 2048)
+
+            config.bake_exp = self._bake_exp
+
+            if not self._low_vram:
+                config.quantization_config = {"type": "none"}
+
+        with profile_span("paint_load_pipeline"):
+            pipe = Hunyuan3DPaintPipeline(config)
+
+        with profile_span("paint_optimize_pipeline"):
+            try:
+                if self._low_vram and _sdnq_available() and pipe.unet is not None:
+                    from gamedev_shared.sdnq import quantize_model
+
+                    if self._verbose:
+                        _logger.info("[batch] Modo low-VRAM: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                    pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
+                elif self._verbose:
+                    if self._low_vram:
+                        _logger.warn("[batch] Modo low-VRAM: SDNQ indisponível — UNet em FP16/qint8")
+                    else:
+                        _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")
+                if pipe.vae is not None:
+                    enable_vae_optimizations(
+                        pipe.vae,
+                        enable_slicing=self._enable_vae_slicing,
+                        enable_tiling=self._enable_vae_tiling,
+                        tile_sample_min_size=self._vae_tile_size,
+                    )
+                    if self._verbose and self._enable_vae_tiling:
+                        _logger.info(f"[batch] VAE tiling ativo (tile_size={self._vae_tile_size})")
+
+                if self._gpu_ids and len(self._gpu_ids) >= 2 and not self._low_vram:
+                    _apply_paint_multi_gpu(pipe, self._gpu_ids, verbose=self._verbose)
+                elif torch.cuda.device_count() >= 2 and not self._low_vram and self._verbose:
+                    gpu0_name = torch.cuda.get_device_name(0)
+                    gpu1_name = torch.cuda.get_device_name(1)
+                    _logger.info(
+                        f"[batch] Multi-GPU disponível: cuda:0 ({gpu0_name}), "
+                        f"cuda:1 ({gpu1_name}). Usar --gpu-ids 0,1 para activar."
+                    )
+            except Exception as e:
+                if self._verbose:
+                    _logger.warn(f"[batch] Aviso: otimizações opcionais falharam: {e}")
+
+        self._pipe = pipe
+        self._config = config
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        if self._pipe is not None:
+            del self._pipe
+            self._pipe = None
+        self._config = None
+        clear_cuda_memory()
+
+    def paint_mesh(self, mesh: trimesh.Trimesh, image: str | Path | Image.Image) -> trimesh.Trimesh:
+        """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → Trimesh texturizado."""
+        from gamedev_shared.profiler import profile_span
+
+        if self._pipe is None:
+            raise RuntimeError("Pipeline não inicializado — use `with PaintBatchProcessor(...) as p:`")
+
+        with tempfile.TemporaryDirectory(prefix="paint3d_batch_") as td_raw:
+            tdir = Path(td_raw)
+            mesh_in = tdir / "input_mesh.glb"
+            ref_path = tdir / "ref.png"
+            out_obj = tdir / "textured_mesh.obj"
+            out_glb = tdir / "textured_mesh.glb"
+
+            with profile_span("paint_batch_prepare_io"):
+                save_glb(mesh, mesh_in)
+                if isinstance(image, (str, Path)):
+                    shutil.copy2(image, ref_path)
+                else:
+                    im = image.convert("RGB") if image.mode != "RGB" else image
+                    im.save(ref_path)
+
+            with profile_span("paint_batch_inference", sync_cuda=True), torch.no_grad():
+                self._pipe(
+                    mesh_path=str(mesh_in),
+                    image_path=str(ref_path),
+                    output_mesh_path=str(out_obj),
+                    use_remesh=self._use_remesh,
+                    save_glb=True,
+                )
+
+            if not out_glb.is_file():
+                raise FileNotFoundError(f"Paint 2.1 não gerou GLB esperado: {out_glb}")
+
+            textured = load_mesh_trimesh(out_glb)
+
+        if not isinstance(textured, trimesh.Trimesh):
+            raise TypeError(f"Paint devolveu {type(textured)}, esperado Trimesh")
+
+        if self._preserve_origin:
+            _restore_feet_origin(textured)
+
+        return textured

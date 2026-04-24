@@ -13,7 +13,11 @@ Uso::
     paint3d info
 """
 
+import atexit
+import contextlib
+import json
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -316,6 +320,170 @@ def texture(
         if verbose:
             console.print_exception()
         sys.exit(1)
+
+
+@cli.command("texture-batch")
+@click.argument("manifest", type=click.Path(exists=True, dir_okay=False))
+@click.option("--output-dir", "-O", type=click.Path(), default=".", help="Diretório base para outputs.")
+@click.option("--max-views", default=None, type=int)
+@click.option("--view-resolution", default=None, type=int)
+@click.option("--render-size", default=None, type=int)
+@click.option("--texture-size", default=None, type=int)
+@click.option("--bake-exp", default=_defaults.DEFAULT_PAINT_BAKE_EXP, type=int)
+@click.option("--smooth/--no-smooth", default=_defaults.DEFAULT_SMOOTH)
+@click.option("--smooth-passes", default=_defaults.DEFAULT_SMOOTH_PASSES, type=int)
+@click.option("--low-vram-mode", is_flag=True)
+@click.option("--preserve-origin/--no-preserve-origin", default=True)
+@click.option("--allow-shared-gpu", is_flag=True)
+@click.option("--gpu-kill-others/--no-gpu-kill-others", default=False)
+@click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
+@click.option("--gpu-ids", default=None)
+@click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+@click.pass_context
+def texture_batch(
+    ctx,
+    manifest,
+    output_dir,
+    max_views,
+    view_resolution,
+    render_size,
+    texture_size,
+    bake_exp,
+    smooth,
+    smooth_passes,
+    low_vram_mode,
+    preserve_origin,
+    allow_shared_gpu,
+    gpu_kill_others,
+    gpu_ids,
+    force,
+    batch_verbose,
+):
+    """Texturizar batch via manifest JSON. Saída JSONL em stdout."""
+    from .painter import PaintBatchProcessor
+    from .texture_smooth import smooth_trimesh_texture
+    from .utils.mesh_io import load_mesh_trimesh, save_glb
+
+    verbose = bool(ctx.obj.get("VERBOSE")) or batch_verbose
+
+    os.environ.setdefault(
+        "PYTORCH_CUDA_ALLOC_CONF",
+        "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
+    )
+    os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+
+    if max_views is None:
+        max_views = _defaults.LOW_VRAM_MAX_VIEWS if low_vram_mode else _defaults.DEFAULT_PAINT_MAX_VIEWS
+    if view_resolution is None:
+        view_resolution = (
+            _defaults.LOW_VRAM_VIEW_RESOLUTION if low_vram_mode else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+        )
+
+    _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
+
+    parsed_gpu_ids = None
+    if gpu_ids is not None:
+        try:
+            parsed_gpu_ids = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
+        except ValueError as exc:
+            raise click.ClickException(f"--gpu-ids inválido: '{gpu_ids}'. Esperado: 0,1") from exc
+
+    manifest_path = Path(manifest).resolve()
+    manifest_dir = manifest_path.parent
+    out_base = Path(output_dir).resolve()
+
+    try:
+        items = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        raise click.ClickException(f"Erro ao ler manifest: {exc}") from exc
+
+    if not isinstance(items, list):
+        raise click.ClickException("Manifest deve ser uma lista JSON de objetos.")
+
+    for idx, item in enumerate(items):
+        for key in ("id", "mesh", "image", "output"):
+            if key not in item:
+                raise click.ClickException(f"Item {idx}: campo obrigatório '{key}' em falta.")
+
+    _batch_proc: PaintBatchProcessor | None = None
+
+    def _cleanup() -> None:
+        nonlocal _batch_proc
+        if _batch_proc is not None:
+            _batch_proc.__exit__(None, None, None)
+            _batch_proc = None
+
+    def _signal_handler(signum: int, frame: object) -> None:
+        _cleanup()
+        sys.exit(128 + signum)
+
+    atexit.register(_cleanup)
+    signal.signal(signal.SIGTERM, _signal_handler)
+    signal.signal(signal.SIGINT, _signal_handler)
+
+    need_load = force or any(not (out_base / it["output"]).is_file() for it in items if "output" in it)
+
+    try:
+        if need_load:
+            _batch_proc = PaintBatchProcessor(
+                max_num_view=max_views,
+                view_resolution=view_resolution,
+                render_size=render_size,
+                texture_size=texture_size,
+                bake_exp=bake_exp,
+                verbose=verbose,
+                preserve_origin=preserve_origin,
+                low_vram=low_vram_mode,
+                gpu_ids=parsed_gpu_ids,
+            )
+            _batch_proc.__enter__()
+
+        for item in items:
+            item_id = item["id"]
+            mesh_path = (manifest_dir / item["mesh"]).resolve()
+            image_path = (manifest_dir / item["image"]).resolve()
+            output_path = (out_base / item["output"]).resolve()
+            t0 = time.time()
+
+            if not force and output_path.is_file():
+                sys.stdout.write(json.dumps({"id": item_id, "status": "skipped", "output": str(output_path)}) + "\n")
+                sys.stdout.flush()
+                continue
+
+            try:
+                if not mesh_path.is_file():
+                    raise FileNotFoundError(f"Mesh não encontrada: {mesh_path}")
+                if not image_path.is_file():
+                    raise FileNotFoundError(f"Imagem não encontrada: {image_path}")
+
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+
+                mesh_obj = load_mesh_trimesh(mesh_path)
+                textured = _batch_proc.paint_mesh(mesh_obj, str(image_path))
+
+                if smooth:
+                    textured = smooth_trimesh_texture(
+                        textured,
+                        passes=smooth_passes,
+                        diameter=_defaults.DEFAULT_SMOOTH_DIAMETER,
+                        sigma_color=_defaults.DEFAULT_SMOOTH_SIGMA_COLOR,
+                        sigma_space=_defaults.DEFAULT_SMOOTH_SIGMA_SPACE,
+                        verbose=verbose,
+                    )
+
+                save_glb(textured, output_path)
+                elapsed = time.time() - t0
+                line = {"id": item_id, "status": "ok", "output": str(output_path), "seconds": round(elapsed, 1)}
+            except Exception as exc:
+                elapsed = time.time() - t0
+                line = {"id": item_id, "status": "error", "error": str(exc), "seconds": round(elapsed, 1)}
+
+            sys.stdout.write(json.dumps(line, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+    finally:
+        _cleanup()
+        with contextlib.suppress(Exception):
+            atexit.unregister(_cleanup)
 
 
 @cli.command("quick")
