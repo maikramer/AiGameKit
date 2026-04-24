@@ -454,6 +454,7 @@ def merge(
     dirpath = os.path.dirname(output_path)
     if dirpath != '':
         os.makedirs(dirpath, exist_ok=True)
+    use_draco = os.environ.get("RIGGING3D_DRACO", "").strip().lower() in ("1", "true", "yes")
     try:
         if is_vrm:
             bpy.ops.export_scene.vrm(filepath=output_path)
@@ -462,8 +463,8 @@ def merge(
         elif output_path.endswith(".glb") or output_path.endswith(".gltf"):
             bpy.ops.export_scene.gltf(
                 filepath=output_path,
-                export_draco_mesh_compression_enable=True,
-                export_draco_mesh_compression_level=6,
+                export_draco_mesh_compression_enable=use_draco,
+                export_draco_mesh_compression_level=6 if use_draco else 0,
                 export_all_influences=False,
             )
         elif output_path.endswith(".dae"):

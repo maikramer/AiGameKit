@@ -339,6 +339,9 @@ def skin_cmd(
 @click.option("--require-suffix", default="obj,fbx,FBX,dae,glb,gltf,vrm", show_default=True)
 @click.option("--smooth-iterations", type=int, default=2, show_default=True, help="Passagens de suavização Laplaciana.")
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
+@click.option(
+    "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
+)
 @click.pass_context
 def merge_cmd(
     ctx: click.Context,
@@ -348,6 +351,7 @@ def merge_cmd(
     require_suffix: str,
     smooth_iterations: int,
     groups_per_vertex: int,
+    draco: bool,
 ) -> None:
     """Combina resultado da fase skin com o mesh original (GLB rigado)."""
     root, py = _ctx_root_py(ctx)
@@ -363,6 +367,7 @@ def merge_cmd(
     merge_env = {
         "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
         "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
+        "RIGGING3D_DRACO": "1" if draco else "0",
     }
     rc = _run_module(root, py, "src.inference.merge", args, env=merge_env, gpu_ids=gpu_ids)
     if rc != 0:
@@ -474,6 +479,9 @@ print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
 @click.option("--no-prep", is_flag=True, help="Não preparar mesh (skip remesh/repair).")
 @click.option("--low-vram", is_flag=True, help="Modo baixa VRAM: num_train_vertex 256 (padrão: 512).")
+@click.option(
+    "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
+)
 @click.pass_context
 def pipeline_cmd(
     ctx: click.Context,
@@ -486,6 +494,7 @@ def pipeline_cmd(
     groups_per_vertex: int,
     no_prep: bool,
     low_vram: bool,
+    draco: bool,
 ) -> None:
     """Encadeia skeleton → skin → merge até um GLB rigado."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -594,6 +603,7 @@ def pipeline_cmd(
             merge_env = {
                 "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
                 "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
+                "RIGGING3D_DRACO": "1" if draco else "0",
             }
             rc = _run_module(
                 root,
