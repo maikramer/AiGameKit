@@ -34,6 +34,7 @@ class ToolSpec:
     extra_aliases: tuple[str, ...] = ()
     needs_pytorch: bool = False
     needs_cuda: bool = False
+    cross_deps: tuple[str, ...] = ()
 
     def project_root(self, monorepo: Path) -> Path:
         return monorepo / self.folder
@@ -73,6 +74,7 @@ TOOLS: dict[str, ToolSpec] = {
         extra_aliases=("text3d-generate",),
         needs_pytorch=True,
         needs_cuda=True,
+        cross_deps=("Text2D",),
     ),
     "gameassets": ToolSpec(
         name="GameAssets",

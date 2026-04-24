@@ -47,11 +47,25 @@ class _ToolPythonInstaller(PythonProjectInstaller):
             force=force,
             skip_pytorch=not spec.needs_pytorch,
             min_python=spec.min_python,
+            cross_dep_folders=self._resolve_cross_deps(spec, monorepo),
         )
         self.spec = spec
         self.skip_env_config = skip_env_config
         self.text2d_venv_only = text2d_venv_only
         self._monorepo_root = monorepo
+
+    @staticmethod
+    def _resolve_cross_deps(spec: ToolSpec, monorepo: Path) -> list[tuple[Path, str]]:
+        result: list[tuple[Path, str]] = []
+        for folder in spec.cross_deps:
+            try:
+                sibling = get_tool(folder)
+            except KeyError:
+                continue
+            src_dir = (monorepo / folder / "src").resolve()
+            if sibling.python_module and src_dir.is_dir():
+                result.append((src_dir, sibling.python_module))
+        return result
 
     def check_python(self, min_version: tuple[int, int] = (3, 10)) -> bool:
         if self._use_uv:

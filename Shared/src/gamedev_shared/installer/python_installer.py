@@ -15,12 +15,31 @@ from pathlib import Path
 
 from .base import BaseInstaller, has_uv, uv_cmd
 
-# Política do monorepo: o pacote do projecto é sempre instalado com
-# ``pip install -e`` (modo editável). Alterações ao código-fonte refletem-se
-# no venv ou no prefix — não há modo wheel-only neste instalador.
-
-# PyTorch (p.ex. 2.11+) declara ``setuptools<82``; builds [build-system] usam tipicamente >=68.
 _PIP_BOOTSTRAP = ("pip", "setuptools>=68,<82", "wheel")
+
+MONOREPO_LOCAL_SRC: dict[str, str] = {
+    "Shared": "gamedev_shared",
+}
+
+
+def _find_site_packages(venv_dir: Path) -> Path | None:
+    for sp in venv_dir.glob("lib/*/site-packages"):
+        return sp
+    return None
+
+
+def link_local_src(*, venv_dir: Path, src_dir: Path, import_name: str) -> bool:
+    sp = _find_site_packages(venv_dir)
+    if sp is None:
+        return False
+    pth = sp / f"_monorepo_{import_name}.pth"
+    pth.write_text(str(src_dir), encoding="utf-8")
+    for old in sp.glob("__editable__.*.pth"):
+        old.unlink(missing_ok=True)
+    for dist in sp.glob(f"{import_name}*.dist-info"):
+        if dist.is_dir():
+            shutil.rmtree(dist, ignore_errors=True)
+    return True
 
 
 class PythonProjectInstaller(BaseInstaller):
@@ -46,6 +65,7 @@ class PythonProjectInstaller(BaseInstaller):
         force: bool = False,
         skip_pytorch: bool = False,
         min_python: tuple[int, int] = (3, 10),
+        cross_dep_folders: list[tuple[Path, str]] | None = None,
     ) -> None:
         super().__init__(
             project_name=project_name,
@@ -61,6 +81,7 @@ class PythonProjectInstaller(BaseInstaller):
         self.skip_pytorch = skip_pytorch
         self.min_python = min_python
         self._use_uv = has_uv()
+        self.cross_dep_folders: list[tuple[Path, str]] = cross_dep_folders or []
 
         self.venv_dir = self.project_root / ".venv"
         if self.is_windows:
@@ -258,7 +279,28 @@ class PythonProjectInstaller(BaseInstaller):
             check=True,
             cwd=_root,
         )
+
+        # Após pip: .pth files substituem editable installs locais do monorepo
+        # (source changes reflectem imediatamente sem pip reinstall).
+        self._write_pth_files()
+
         self.logger.success("Instalado no venv")
+
+    # ------------------------------------------------------------------
+    # .pth files (monorepo local packages)
+    # ------------------------------------------------------------------
+
+    def _write_pth_files(self) -> None:
+        shared_src = (self.project_root.parent / "Shared" / "src").resolve()
+        if shared_src.is_dir():
+            ok = link_local_src(venv_dir=self.venv_dir, src_dir=shared_src, import_name="gamedev_shared")
+            if ok:
+                self.logger.info(f"PTH: gamedev_shared → {shared_src}")
+        for src_dir, import_name in self.cross_dep_folders:
+            if src_dir.is_dir():
+                ok = link_local_src(venv_dir=self.venv_dir, src_dir=src_dir, import_name=import_name)
+                if ok:
+                    self.logger.info(f"PTH: {import_name} → {src_dir}")
 
     # ------------------------------------------------------------------
     # Instalação system-wide
