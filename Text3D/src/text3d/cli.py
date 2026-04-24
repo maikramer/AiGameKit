@@ -5,8 +5,11 @@ Text3D - CLI Principal
 Text-to-3D: Text2D (texto → imagem) + Hunyuan3D-2.1 SDNQ INT4 (imagem → mesh).
 """
 
+import atexit
+import json
 import math
 import os
+import signal
 import sys
 import time
 from pathlib import Path
@@ -57,6 +60,25 @@ def _gpu_kill_others_effective(cli_wants: bool) -> bool:
     if v in ("1", "true", "yes", "on"):
         return True
     return cli_wants
+
+
+_batch_generator: HunyuanTextTo3DGenerator | None = None
+
+
+def _batch_cleanup() -> None:
+    """Idempotente: segura chamar de atexit, signal handler e finally."""
+    global _batch_generator
+    if _batch_generator is not None:
+        _batch_generator.unload_hunyuan()
+        _batch_generator = None
+
+
+def _batch_signal_handler(signum: int, frame) -> None:
+    _batch_cleanup()
+    sys.exit(128 + signum)
+
+
+atexit.register(_batch_cleanup)
 
 
 DEFAULT_MESH_DIR = DEFAULT_OUTPUT_DIR / "meshes"
@@ -1021,6 +1043,165 @@ def align_plus_z_cmd(
         Rule("[bold green]align-plus-z", style="green"),
     )
     console.print(f"[bold green]✓[/bold green] [cyan]{output.resolve()}[/cyan]")
+
+
+@cli.command("generate-batch")
+@click.argument("manifest", type=click.Path(exists=True, dir_okay=False))
+@click.option("--output-dir", "-O", type=click.Path(), default=".", help="Diretório base para outputs relativos.")
+@click.option("--preset", type=click.Choice(["fast", "balanced", "hq"]), default=None)
+@click.option("--steps", type=int, default=None)
+@click.option("--guidance", type=float, default=5.0)
+@click.option("--octree-resolution", type=int, default=None)
+@click.option("--num-chunks", type=int, default=None)
+@click.option("--sdnq-preset", type=str, default=None)
+@click.option("--model-subfolder", default="hunyuan3d-dit-v2-1")
+@click.option("--allow-shared-gpu", is_flag=True)
+@click.option("--gpu-kill-others/--no-gpu-kill-others", default=False)
+@click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
+@click.option("--gpu-ids", type=str, default=None)
+@click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+def generate_batch(
+    manifest: str,
+    output_dir: str,
+    preset: str | None,
+    steps: int | None,
+    guidance: float,
+    octree_resolution: int | None,
+    num_chunks: int | None,
+    sdnq_preset: str | None,
+    model_subfolder: str,
+    allow_shared_gpu: bool,
+    gpu_kill_others: bool,
+    gpu_ids: str | None,
+    force: bool,
+    batch_verbose: bool,
+) -> None:
+    """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout)."""
+    from .utils.export import save_mesh
+    from .utils.mesh_lod import prepare_mesh_topology
+
+    _err = Console(stderr=True)
+    manifest_path = Path(manifest).resolve()
+    manifest_dir = manifest_path.parent
+    out_base = Path(output_dir).resolve()
+
+    with open(manifest_path) as f:
+        items = json.load(f)
+    if not isinstance(items, list) or not items:
+        raise click.ClickException("Manifest deve ser uma lista JSON não-vazia.")
+    for i, item in enumerate(items):
+        for key in ("id", "image", "output"):
+            if key not in item:
+                raise click.ClickException(f"Item {i}: campo '{key}' em falta.")
+
+    base_steps = steps
+    base_octree = octree_resolution
+    base_chunks = num_chunks
+    if preset is not None:
+        pv = _defaults.PRESET_HUNYUAN[preset]
+        base_steps = base_steps if base_steps is not None else pv["steps"]
+        base_octree = base_octree if base_octree is not None else pv["octree"]
+        base_chunks = base_chunks if base_chunks is not None else pv["chunks"]
+    if base_steps is None:
+        base_steps = _defaults.DEFAULT_HY_STEPS
+    if base_octree is None:
+        base_octree = _defaults.DEFAULT_OCTREE_RESOLUTION
+    if base_chunks is None:
+        base_chunks = _defaults.DEFAULT_NUM_CHUNKS
+
+    parsed_gpu_ids: list[int] | None = None
+    if gpu_ids is not None:
+        parsed_gpu_ids = [int(x) for x in gpu_ids.split(",") if x.strip()]
+
+    allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
+    gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
+    if gpu_kill:
+        for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
+            _err.print(f"[dim]{line}[/dim]")
+        clear_cuda_memory()
+        time.sleep(0.5)
+    try:
+        enforce_exclusive_gpu(allow_shared=allow_shared)
+    except RuntimeError as e:
+        raise click.ClickException(str(e)) from e
+
+    resolved_sdnq = sdnq_preset if sdnq_preset else ""
+
+    need_load = force or any(not (out_base / it["output"]).is_file() for it in items if "output" in it)
+
+    old_sigterm = signal.signal(signal.SIGTERM, _batch_signal_handler)
+    old_sigint = signal.signal(signal.SIGINT, _batch_signal_handler)
+
+    global _batch_generator
+    try:
+        if need_load:
+            with _err.status("[bold yellow]A preparar gerador batch...", spinner="dots"):
+                _batch_generator = HunyuanTextTo3DGenerator(
+                    verbose=batch_verbose,
+                    hunyuan_subfolder=model_subfolder,
+                    sdnq_preset=resolved_sdnq,
+                    gpu_ids=parsed_gpu_ids,
+                )
+
+        _err.print(
+            f"[dim]Itens: {len(items)} | preset={preset} "
+            f"steps={base_steps} octree={base_octree} chunks={base_chunks}[/dim]"
+        )
+
+        for item in items:
+            item_id = item["id"]
+            try:
+                img_path = (manifest_dir / item["image"]).resolve()
+                out_path = (out_base / item["output"]).resolve()
+
+                if not force and out_path.is_file():
+                    print(json.dumps({"id": item_id, "status": "skipped", "output": item["output"]}), flush=True)
+                    continue
+
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+
+                item_steps = item.get("steps", base_steps)
+                item_octree = item.get("octree_resolution", base_octree)
+                item_chunks = item.get("num_chunks", base_chunks)
+                item_seed = item.get("seed", None)
+
+                t0 = time.time()
+                mesh = _batch_generator.generate_from_image(
+                    str(img_path),
+                    num_inference_steps=item_steps,
+                    guidance_scale=guidance,
+                    octree_resolution=item_octree,
+                    num_chunks=item_chunks,
+                    hy_seed=item_seed,
+                    keep_loaded=True,
+                )
+
+                mesh = prepare_mesh_topology(mesh)
+                faces = len(mesh.faces)
+                save_mesh(mesh, str(out_path), format="glb", origin_mode=_defaults.get_export_origin())
+                elapsed = time.time() - t0
+
+                record = {
+                    "id": item_id,
+                    "status": "ok",
+                    "output": item["output"],
+                    "faces": faces,
+                    "seconds": round(elapsed, 1),
+                }
+                print(json.dumps(record), flush=True)
+
+            except Exception as exc:
+                record = {
+                    "id": item_id,
+                    "status": "error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+                print(json.dumps(record), flush=True)
+
+    finally:
+        _batch_cleanup()
+        signal.signal(signal.SIGTERM, old_sigterm)
+        signal.signal(signal.SIGINT, old_sigint)
 
 
 @cli.command()

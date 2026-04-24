@@ -274,8 +274,14 @@ class HunyuanTextTo3DGenerator:
         hy_seed: int | None = None,
         mc_level: float = 0.0,
         remove_bg: bool = True,
+        keep_loaded: bool = False,
     ) -> trimesh.Trimesh:
-        """Image-to-3D apenas com Hunyuan (sem Text2D)."""
+        """Image-to-3D apenas com Hunyuan (sem Text2D).
+
+        Args:
+            keep_loaded: Se True, não descarrega o pipeline Hunyuan após inferência
+                (útil para processamento batch onde o modelo é reutilizado).
+        """
         if isinstance(image, (str, Path)):
             image = Image.open(image).convert("RGB")
 
@@ -316,9 +322,8 @@ class HunyuanTextTo3DGenerator:
 
         mesh = _as_trimesh(raw)
 
-        # Libertar sempre o pipeline de shape antes de repair/Paint: em GPUs ~6 GB
-        # manter o Hunyuan residente até ao unload do CLI causava picos de VRAM no Paint.
-        self._unload_hunyuan()
+        if not keep_loaded:
+            self._unload_hunyuan()
 
         return mesh
 
