@@ -27,6 +27,8 @@ class ManifestRow:
     generate_animate: bool = False
     # Decomposição semântica (Part3D) após Text3D; requer --with-parts e generate_3d=true
     generate_parts: bool = False
+    generate_lod: bool = False
+    generate_collision: bool = False
     # Asset category (e.g. humanoid, chest, weapon) — drives prompt hints and generation params
     category: str = ""
     # Part3D por linha: sobrepõe part3d.{steps,octree_resolution,segment_only} do perfil
@@ -114,6 +116,8 @@ def _load_manifest_csv(path: Path) -> list[ManifestRow]:
         gr_key = fields.get("generate_rig")
         gan_key = fields.get("generate_animate")
         gp_key = fields.get("generate_parts")
+        glod_key = fields.get("generate_lod")
+        gcol_key = fields.get("generate_collision")
         cat_key = fields.get("category")
         # Part3D per-row overrides
         p3_steps_key = fields.get("part3d_steps")
@@ -146,6 +150,12 @@ def _load_manifest_csv(path: Path) -> list[ManifestRow]:
             gp = False
             if gp_key:
                 gp = _parse_bool(raw.get(gp_key))
+            glod = False
+            if glod_key:
+                glod = _parse_bool(raw.get(glod_key))
+            gcol = False
+            if gcol_key:
+                gcol = _parse_bool(raw.get(gcol_key))
             cat = ""
             if cat_key:
                 c = (raw.get(cat_key) or "").strip().lower()
@@ -171,6 +181,8 @@ def _load_manifest_csv(path: Path) -> list[ManifestRow]:
                     generate_rig=gr,
                     generate_animate=gan,
                     generate_parts=gp,
+                    generate_lod=glod,
+                    generate_collision=gcol,
                     category=cat,
                     part3d_steps=p3_steps,
                     part3d_octree_resolution=p3_oct,
@@ -211,6 +223,8 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 generate_rig="rig" in pipeline_items,
                 generate_animate="animate" in pipeline_items,
                 generate_parts="parts" in pipeline_items,
+                generate_lod="lod" in pipeline_items,
+                generate_collision="collision" in pipeline_items,
                 image_source=entry.get("image_source"),
                 category=(entry.get("category") or "").lower(),
                 part3d_steps=part3d_cfg.get("steps"),

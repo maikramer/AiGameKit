@@ -173,6 +173,25 @@ class Part3DProfile:
 
 
 @dataclass
+class LODProfile:
+    """LOD triplet generation via ``text3d lod``."""
+
+    lod1_ratio: float = 0.42
+    lod2_ratio: float = 0.14
+    min_faces_lod1: int = 500
+    min_faces_lod2: int = 150
+    meshfix: bool = False
+
+
+@dataclass
+class CollisionProfile:
+    """Mesh de colisão via ``text3d collision`` (convex hull simplificado)."""
+
+    max_faces: int = 300
+    convex_hull: bool = True
+
+
+@dataclass
 class Skymap2DProfile:
     """Opções passadas ao CLI skymap2d generate (HF equirectangular 360°)."""
 
@@ -213,6 +232,8 @@ class GameProfile:
     rigging3d: Rigging3DProfile | None = None
     animator3d: Animator3DProfile | None = None
     part3d: Part3DProfile | None = None
+    lod: LODProfile | None = None
+    collision: CollisionProfile | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GameProfile:
@@ -590,6 +611,44 @@ class GameProfile:
                 no_attention_slicing=bool(raw_p3.get("no_attention_slicing", False)),
                 low_vram_mode=bool(raw_p3.get("low_vram_mode", False)),
             )
+        lod: LODProfile | None = None
+        raw_lod = data.get("lod")
+        if isinstance(raw_lod, dict):
+            lr1 = raw_lod.get("lod1_ratio")
+            lr2 = raw_lod.get("lod2_ratio")
+            mf1 = raw_lod.get("min_faces_lod1")
+            mf2 = raw_lod.get("min_faces_lod2")
+            try:
+                lr1_f = float(lr1) if lr1 is not None else 0.42
+                lr2_f = float(lr2) if lr2 is not None else 0.14
+                mf1_i = int(mf1) if mf1 is not None else 500
+                mf2_i = int(mf2) if mf2 is not None else 150
+            except (TypeError, ValueError) as e:
+                raise ValueError("lod.lod1_ratio, lod2_ratio, min_faces_lod1, min_faces_lod2 devem ser números") from e
+            if not 0 < lr2_f < lr1_f <= 1.0:
+                raise ValueError("lod: esperado 0 < lod2_ratio < lod1_ratio <= 1.0")
+            lod = LODProfile(
+                lod1_ratio=lr1_f,
+                lod2_ratio=lr2_f,
+                min_faces_lod1=mf1_i,
+                min_faces_lod2=mf2_i,
+                meshfix=bool(raw_lod.get("meshfix", False)),
+            )
+        coll: CollisionProfile | None = None
+        raw_coll = data.get("collision")
+        if isinstance(raw_coll, dict):
+            mf = raw_coll.get("max_faces")
+            ch = raw_coll.get("convex_hull")
+            try:
+                mf_i = int(mf) if mf is not None else 300
+            except (TypeError, ValueError) as e:
+                raise ValueError("collision.max_faces deve ser um número inteiro") from e
+            if mf_i < 4:
+                raise ValueError("collision.max_faces deve ser ≥ 4")
+            coll = CollisionProfile(
+                max_faces=mf_i,
+                convex_hull=bool(ch) if ch is not None else True,
+            )
         sb = data.get("seed_base")
         if sb is not None:
             try:
@@ -629,6 +688,8 @@ class GameProfile:
             rigging3d=rg3,
             animator3d=anim3,
             part3d=p3,
+            lod=lod,
+            collision=coll,
         )
 
 
