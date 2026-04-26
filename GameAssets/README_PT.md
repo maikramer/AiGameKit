@@ -2,19 +2,19 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu jogo. Combina um perfil YAML (`game.yaml`), um manifest CSV e presets de estilo, e orquestra **`text2d`** ou **`texture2d`** (texturas seamless via API), opcionalmente **`text2sound`** (áudio por linha), **`text3d`** (só geometria), **`paint3d`** (Hunyuan3D-Paint 2.1 — textura + PBR no GLB com `text3d.texture`) e **Materialize** só para **mapas PBR a partir da imagem difusa** no fluxo Texture2D (`texture2d.materialize`).
+CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu jogo. Combina um perfil YAML (`game.yaml`), um manifest YAML e presets de estilo, e orquestra **`text2d`** ou **`texture2d`** (texturas seamless via API), opcionalmente **`text2sound`** (áudio por linha), **`text3d`** (só geometria), **`paint3d`** (Hunyuan3D-Paint 2.1 — textura + PBR no GLB com `text3d.texture`) e **Materialize** só para **mapas PBR a partir da imagem difusa** no fluxo Texture2D (`texture2d.materialize`).
 
 ## Requisitos
 
 - Python 3.10+
 - Comandos no `PATH` conforme o fluxo (instala os pacotes nos respetivos ambientes) ou variáveis de ambiente:
   - `TEXT2D_BIN` — executável `text2d` ([Text2D](../Text2D)) quando usas geração 2D **FLUX** (`image_source: text2d` ou coluna `image_source` por linha)
-  - `TEXTURE2D_BIN` — executável `texture2d` ([Texture2D](../Texture2D)) quando usas **texturas seamless** (`image_source: texture2d` ou por linha no CSV)
+  - `TEXTURE2D_BIN` — executável `texture2d` ([Texture2D](../Texture2D)) quando usas **texturas seamless** (`image_source: texture2d` ou por linha no manifest)
   - `TEXT3D_BIN` — executável `text3d` ([Text3D](../Text3D)) quando o 3D está activo via coluna `generate_3d`
   - `PAINT3D_BIN` — executável `paint3d` ([Paint3D](../Paint3D)) quando no `game.yaml` tiveres **`text3d.texture: true`** (o batch chama `paint3d texture` após o shape; o GLB já sai PBR do Paint 2.1)
-  - `TEXT2SOUND_BIN` — executável `text2sound` ([Text2Sound](../Text2Sound)) quando há linhas com **`generate_audio=true`** no CSV (e não usas `--skip-audio`)
+  - `TEXT2SOUND_BIN` — executável `text2sound` ([Text2Sound](../Text2Sound)) quando há linhas com **`generate_audio=true`** no manifest (e não usas `--skip-audio`)
   - `MATERIALIZE_BIN` — opcional; **mapas PBR a partir da difusa** com Texture2D + `texture2d.materialize` (ver [Materialize](../Materialize) e [Text3D/docs/PBR_MATERIALIZE.md](../Text3D/docs/PBR_MATERIALIZE.md))
-  - `PART3D_BIN` — executável `part3d` ([Part3D](../Part3D)) quando Part3D está activo via bloco `part3d` no perfil ou coluna **`generate_parts=true`** no CSV
+  - `PART3D_BIN` — executável `part3d` ([Part3D](../Part3D)) quando Part3D está activo via bloco `part3d` no perfil ou campo **`generate_parts=true`** no manifest
   - `ANIMATOR3D_BIN` — executável `animator3d` ([Animator3D](../Animator3D)) após rig com sucesso (`animator3d game-pack`; auto-detetado quando o bloco `rigging3d` existe no perfil — ver secção do batch abaixo)
 
 ## Debug / laboratório
@@ -63,7 +63,7 @@ source /caminho/para/GameDev/GameAssets/.venv/bin/activate
 O ficheiro `activate.sh` segue o padrão do Text2D: corre um comando já com o venv ativo, por exemplo:
 
 ```bash
-./activate.sh gameassets prompts --profile game.yaml --manifest manifest.csv
+./activate.sh gameassets prompts --profile game.yaml --manifest manifest.yaml
 ```
 
 **Dependências:** listadas em [`config/requirements.txt`](config/requirements.txt) (instaladas automaticamente pelo `setup.py` ao fazer `pip install -e .`). Desenvolvimento: [`config/requirements-dev.txt`](config/requirements-dev.txt) ou `./scripts/setup.sh --dev`.
@@ -72,7 +72,7 @@ O ficheiro `activate.sh` segue o padrão do Text2D: corre um comando já com o v
 
 | Subcomando | Descrição |
 |-----------|-----------|
-| `gameassets init` | Cria `game.yaml` e `manifest.csv` numa pasta |
+| `gameassets init` | Cria `game.yaml` e `manifest.yaml` numa pasta |
 | `gameassets prompts` | Pré-visualiza prompts sem gerar imagens |
 | `gameassets batch` | Gera imagens (e opcionalmente 3D/áudio) em batch |
 | `gameassets handoff` | Copia/symlink do `output_dir` para `public/assets` e grava `assets/gameassets_handoff.json` |
@@ -87,18 +87,18 @@ gameassets init --path ./meu_jogo
 cd meu_jogo
 ```
 
-Isto cria `game.yaml` (perfil) e `manifest.csv` (lista de assets).
+Isto cria `game.yaml` (perfil) e `manifest.yaml` (lista de assets).
 
 ### 2. Rever prompts (sem GPU)
 
 ```bash
-gameassets prompts --profile game.yaml --manifest manifest.csv
+gameassets prompts --profile game.yaml --manifest manifest.yaml
 ```
 
 Ou gravar JSONL:
 
 ```bash
-gameassets prompts -o prompts.jsonl --profile game.yaml --manifest manifest.csv
+gameassets prompts -o prompts.jsonl --profile game.yaml --manifest manifest.yaml
 ```
 
 ### 3. Gerar imagens (e opcionalmente 3D)
@@ -106,28 +106,28 @@ gameassets prompts -o prompts.jsonl --profile game.yaml --manifest manifest.csv
 Só **2D**:
 
 ```bash
-gameassets batch --profile game.yaml --manifest manifest.csv
+gameassets batch --profile game.yaml --manifest manifest.yaml
 ```
 
-**2D + 3D** onde `generate_3d=true` no CSV:
+**2D + 3D** onde `generate_3d=true` no manifest:
 
 ```bash
-gameassets batch --profile game.yaml --manifest manifest.csv
+gameassets batch --profile game.yaml --manifest manifest.yaml
 ```
 
 **Preset personalizado** (chave só no teu `presets-local.yaml`, não em `data/presets.yaml`): tens de passar **`--presets-local caminho.yaml`**, caso contrário o comando falha com `Preset desconhecido`.
 
 ```bash
-gameassets batch --profile game.yaml --manifest manifest.csv \
+gameassets batch --profile game.yaml --manifest manifest.yaml \
   --presets-local presets-local.yaml --log run.jsonl
 ```
 
 ```bash
 # Multi-GPU batch: auto-detetar GPUs e dividir entre elas
-gameassets batch --profile game.yaml --manifest manifest.csv --gpu-ids 0,1
+gameassets batch --profile game.yaml --manifest manifest.yaml --gpu-ids 0,1
 ```
 
-- As etapas do pipeline (3D, rig, parts, animate) são **auto-detetadas** a partir das colunas do manifest CSV (`generate_3d`, `generate_rig`, `generate_parts`, `generate_animate`) e dos blocos de perfil em `game.yaml` (`rigging3d`, `part3d`, `animator3d`). Usa **`--no-3d`**, **`--no-rig`**, **`--no-parts`**, **`--no-animate`** para desativar explicitamente uma etapa. Por exemplo, um bloco `rigging3d: {}` em `game.yaml` activa o rig para personagens mesmo sem `generate_rig=true` no CSV.
+- As etapas do pipeline (3D, rig, parts, animate) são **auto-detetadas** a partir dos campos do manifest YAML (`generate_3d`, `generate_rig`, `generate_parts`, `generate_animate`) e dos blocos de perfil em `game.yaml` (`rigging3d`, `part3d`, `animator3d`). Usa **`--no-3d`**, **`--no-rig`**, **`--no-parts`**, **`--no-animate`** para desativar explicitamente uma etapa. Por exemplo, um bloco `rigging3d: {}` em `game.yaml` activa o rig para personagens mesmo sem `generate_rig=true` no manifest.
 - Com 3D activo e um bloco **`rigging3d`** no perfil (ou `generate_rig=true`), linhas elegíveis para rig chamam o **Rigging3D**; o GLB rigado aparece no log em **`rig_mesh_path`** (sufixo configurável em `rigging3d.output_suffix` no `game.yaml`). Personagens (`kind: character`) são auto-rigadas quando o perfil tem um bloco `rigging3d`. Requer **`RIGGING3D_BIN`** ou `rigging3d` no `PATH`.
 - Após rig com sucesso, o batch corre **`animator3d game-pack`** para linhas elegíveis para animação: **`generate_animate=true`** explícito, ou linhas rigadas quando o perfil tem o bloco **`animator3d`** (preset por defeito `humanoid`). Requer **`ANIMATOR3D_BIN`** ou `animator3d` no `PATH`. Ver [Animator3D após rig](../docs/ANIMATOR3D_AFTER_RIG.md).
 - Com 3D activo e um bloco **`part3d`** no perfil (ou `generate_parts=true`), linhas elegíveis chamam o **Part3D** (`part3d decompose`) sobre o GLB do Text3D **antes** do rig: saídas **`parts_mesh_path`** (cena multi-parte) e **`segmented_mesh_path`** (malha com cores por parte), junto ao GLB principal; opções em **`part3d`** no `game.yaml`. Requer **`PART3D_BIN`** ou `part3d` no `PATH`.
@@ -141,7 +141,7 @@ gameassets batch --profile game.yaml --manifest manifest.csv --gpu-ids 0,1
 
 ### Text2Sound (`generate_audio`)
 
-- No CSV, coluna opcional **`generate_audio`** (`true`/`false`): quando `true`, após a imagem 2D (Fase 1) corre **Text2Sound** (Fase 1b) antes do Text3D.
+- No manifest, campo opcional **`generate_audio`** (`true`/`false`): quando `true`, após a imagem 2D (Fase 1) corre **Text2Sound** (Fase 1b) antes do Text3D.
 - Perfil: `audio_subdir` (defeito `audio`) e bloco opcional **`text2sound`** (duração, passos, formato `wav`/`flac`/`ogg`, etc.) — ver [Text2Sound](../Text2Sound).
 - **`--skip-audio`:** ignora a coluna e não invoca `text2sound`.
 - **`prompts`** inclui `prompt_audio` e `generate_audio` no JSONL / pré-visualização.
@@ -155,7 +155,7 @@ No **`game.yaml`**, **`image_source`** escolhe a ferramenta de imagem por defeit
 | `text2d` (defeito) | FLUX Klein — imagens gerais, referência para 3D | Consome VRAM local; bloco `text2d` no YAML |
 | `texture2d` | [Texture2D](../Texture2D) — texturas **seamless** (HF Inference API) | Pouca VRAM local; bloco `texture2d` no YAML (resolução, `materialize` para PBR em ficheiros separados, etc.) |
 
-**Por linha no CSV:** coluna opcional **`image_source`** (`text2d` ou `texture2d`) sobrepõe o defeito do perfil para essa linha (útil para misturar *props* com FLUX e *tiles* com Texture2D no mesmo manifest).
+**Por entrada no manifest:** campo opcional **`image_source`** (`text2d` ou `texture2d`) sobrepõe o defeito do perfil para essa linha (útil para misturar *props* com FLUX e *tiles* com Texture2D no mesmo manifest).
 
 Variável **`TEXTURE2D_BIN`** se `texture2d` não estiver no `PATH`.
 
@@ -173,6 +173,31 @@ text3d:
 
 Contexto e Texture2D + Materialize: [Text3D/docs/PBR_MATERIALIZE.md](../Text3D/docs/PBR_MATERIALIZE.md).
 
+### Categorias de assets e targets de mesh
+
+Cada asset é classificado numa categoria (via `infer_category()` por palavras-chave ou campo `category` explícito). A categoria determina o **target de faces** usado pelo `text3d remesh-textured` (remesh isotrópico + reprojeção de textura) ao decimar meshes pintadas high-poly para resolução game-ready.
+
+| Categoria | Tipo padrão | Target faces | Notas |
+|-----------|------------|-------------|-------|
+| humanoid | character | 16.000 | Humanoides, goblins, orcs — faces suficientes para rigging/skinning limpo |
+| building | environment | 12.000 | Estruturas grandes com detalhe arquitetónico |
+| creature | character | 12.000 | Animais, monstros, dragões |
+| vehicle | prop | 8.000 | Geometria mecânica (rodas, carroçaria) |
+| terrain | environment | 8.000 | Tiles de chão com camadas de superfície |
+| tree | environment | 6.000 | Tronco + separação de copa |
+| armor | prop | 5.000 | Detalhe de placas e correias |
+| vegetation | environment | 5.000 | Folhas, caules, flores |
+| chest | prop | 4.000 | Dobradiças e detalhe do ferrolho |
+| furniture | prop | 4.000 | Pernas, encosto, braços |
+| weapon | prop | 3.000 | Fio da lâmina e pega |
+| mineral | prop | 2.400 | Facetas e fragmentos de cristal |
+| tool | prop | 2.000 | Cabo e cabeça de trabalho |
+| rock | prop | 1.600 | Geometria simples de rocha |
+| food | prop | 1.600 | Formas orgânicas |
+| effects | prop | 1.000 | Elementos abstractos low-poly |
+
+Categorias e defaults estão definidos em `src/gameassets/categories.py`. A função `infer_category()` mapeia palavras-chave (incluindo termos em português como `goblin`, `orc`, `guerreiro`, `dragao`) para a categoria adequada.
+
 ## Perfil (`game.yaml`)
 
 Campos principais:
@@ -187,13 +212,13 @@ Campos principais:
 | `images_subdir` / `meshes_subdir` | Usados em `split`: subpastas para PNG/JPG e GLB |
 | `image_ext` | `png` ou `jpg` |
 | `seed_base` | Opcional; seeds derivados por `id` para reprodutibilidade |
-| `image_source` | `text2d` (defeito), `texture2d` ou `skymap2d` — ferramenta de imagem por defeito (sobreponível por coluna no CSV) |
+| `image_source` | `text2d` (defeito), `texture2d` ou `skymap2d` — ferramenta de imagem por defeito (sobreponível por campo no manifest) |
 | `text2d` | Bloco opcional: `low_vram`, `cpu`, `width`, `height` |
-| `texture2d` | Bloco opcional se usas Texture2D (global ou só com linhas CSV `texture2d`): resolução, `steps`, `guidance_scale`, `preset`, … e **PBR em difusa:** `materialize`, `materialize_maps_subdir`, `materialize_bin`, `materialize_format`, etc. |
-| `text3d` | Bloco opcional: `preset`, `low_vram`, `texture` (omitido = **`true`**), `steps` / `octree_resolution` / `num_chunks` (alternativa mútua a `preset`), `no_mesh_repair`, `mesh_smooth`, `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder`. **Tuning Paint3D:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (defeito 6 — costuras mais nítidas) |
-| `rigging3d` | Bloco opcional (rig após Text3D): `output_suffix` (ex. `_rigged`), `root` (código do pacote Rigging3D), `python` (interprete). Presença activa rig para personagens; combina com `generate_rig=true` no CSV para linhas não-personagem |
+| `texture2d` | Bloco opcional se usas Texture2D (global ou só com linhas do manifest `texture2d`): resolução, `steps`, `guidance_scale`, `preset`, … e **PBR em difusa:** `materialize`, `materialize_maps_subdir`, `materialize_bin`, `materialize_format`, etc. |
+| `text3d` | Bloco opcional: `preset`, `low_vram`, `texture` (omitido = **`true`**), `steps` / `octree_resolution` / `num_chunks` (alternativa mútua a `preset`), `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder`. **Tuning Paint3D:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (defeito 6 — costuras mais nítidas) |
+| `rigging3d` | Bloco opcional (rig após Text3D): `output_suffix` (ex. `_rigged`), `root` (código do pacote Rigging3D), `python` (interprete). Presença activa rig para personagens; combina com `generate_rig=true` no manifest para linhas não-personagem |
 | `animator3d` | Bloco opcional (**Animator3D** após rig): `preset` (`humanoid` \| `creature` \| `flying`, …). Presença activa animação automática após rig com sucesso. Requer `animator3d` no `PATH` ou `ANIMATOR3D_BIN` |
-| `part3d` | Bloco opcional (Part3D após Text3D, antes do rig): `steps`, `octree_resolution`, `num_chunks`, `segment_only`, `no_cpu_offload`, `verbose`, `parts_suffix`, `segmented_suffix`. Presença activa parts para linhas 3D; combina com `generate_parts=true` no CSV para controlo explícito por linha |
+| `part3d` | Bloco opcional (Part3D após Text3D, antes do rig): `steps`, `octree_resolution`, `num_chunks`, `segment_only`, `no_cpu_offload`, `verbose`, `parts_suffix`, `segmented_suffix`. Presença activa parts para linhas 3D; combina com `generate_parts=true` no manifest para controlo explícito por linha |
 
 Todos os sub-tools também aceitam `--gpu-ids` propagado pelo comando batch.
 
@@ -208,7 +233,7 @@ Com `text3d.low_vram: true` e GPU CUDA, o **Text3D** envia o Hunyuan3D shape par
 
 Podes criar `presets.local.yaml` ao lado do perfil e passar `--presets-local presets.local.yaml` para fundir presets personalizados.
 
-## Manifest (`manifest.csv`)
+## Manifest (`manifest.yaml`)
 
 Cabeçalhos: **`id`**, **`idea`** (obrigatórios); opcionais: **`kind`** (`prop`, `character`, `environment`), **`generate_3d`**, **`generate_audio`**, **`generate_rig`** (`true`/`false`/… — rig do GLB após Text3D; auto-activado para personagens quando o bloco `rigging3d` existe no perfil), **`generate_animate`** (`true`/`false`/… — correr **Animator3D** após rig; auto-activado para linhas rigadas quando o bloco `animator3d` existe no perfil), **`generate_parts`** (`true`/`false`/… — decomposição Part3D após Text3D; auto-activado quando o bloco `part3d` existe no perfil), **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`) para sobrepor o `image_source` do `game.yaml` nessa linha. Com `path_layout: flat`, usa `id` com barra, por exemplo `Crystals/shard_blue`, para gravar ficheiros dentro de `Crystals/`.
 
@@ -219,7 +244,7 @@ GameAssets/
 ├── src/gameassets/
 │   ├── cli.py             # CLI Click (init, prompts, batch, handoff, dream, info, …)
 │   ├── profile.py         # Parsing do game.yaml
-│   ├── manifest.py        # Parsing do manifest.csv
+│   ├── manifest.py        # Parsing do manifest.yaml
 │   ├── prompt_builder.py  # Construção de prompts com perfil + preset
 │   ├── runner.py          # Execução de subprocessos (text2d, text3d, etc.)
 │   ├── presets.py         # Carregamento de presets YAML

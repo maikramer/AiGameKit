@@ -166,9 +166,7 @@ def run_handoff(
                 if audio_format == "ogg":
                     dst_a = audio_dir / f"{pid}.ogg"
                     rel_a = f"/assets/audio/{pid}.ogg"
-                    if dry_run or _convert_audio(
-                        audio_src, dst_a, sample_rate=sample_rate, dry_run=dry_run
-                    ):
+                    if dry_run or _convert_audio(audio_src, dst_a, sample_rate=sample_rate, dry_run=dry_run):
                         entry["audio"] = {
                             "source": str(audio_src),
                             "url": rel_a,

@@ -1,4 +1,4 @@
-"""Templates YAML/CSV para gameassets init."""
+"""Templates YAML para gameassets init."""
 
 GAME_YAML = """# Perfil do jogo — edita os campos e escolhe style_preset
 # (ver GameAssets/src/gameassets/data/presets.yaml)
@@ -53,7 +53,7 @@ text2d:
 #   width: 2048
 #   height: 1024
 
-# Text2Sound com generate_audio no CSV: áudio por linha (Stable Audio Open); audio_subdir + bloco opcional.
+# Text2Sound com generate_audio no manifest: áudio por linha (Stable Audio Open); audio_subdir + bloco opcional.
 # audio_subdir: audio
 # text2sound:
 #   duration: 10
@@ -62,22 +62,18 @@ text2d:
 #   audio_format: wav
 
 # Text3D with --with-3d: preset fast balances time/VRAM.
-# texture=true => paint3d texture after shape (Hunyuan3D-Paint 2.1; GLB já PBR).
 # low_vram=true => Hunyuan shape on CPU (much worse quality).
-# phased_batch: true (with texture) => batch em 2 passos (shape → paint).
-# Requires PAINT3D_BIN or paint3d in PATH when texture is true.
+# Requires PAINT3D_BIN or paint3d in PATH when paint3d block is present.
 # PBR a partir de PNG (não GLB): texture2d.materialize — ver bloco texture2d.
 text3d:
   preset: fast
   low_vram: false
-  texture: true
-  # feet = base do modelo em Y=0 (recomendado para a maioria dos props/personagens).
-  # export_origin: center  # só para excepções (pivô no centro da caixa)
   export_origin: feet
-  paint_preserve_origin: true
-  # phased_batch: false
 
-# Rigging3D após Text3D (--with-rig + coluna generate_rig=true no CSV). Requer bash, GPU CUDA; ver Rigging3D/README.md.
+paint3d:
+  preserve_origin: true
+
+# Rigging3D após Text3D (--with-rig + pipeline "rig" no manifest). Requer bash, GPU CUDA; ver Rigging3D/README.md.
 # rigging3d:
 #   output_suffix: "_rigged"
 
@@ -95,13 +91,6 @@ text3d:
 #   lod2_ratio: 0.14
 #   min_faces_lod1: 500
 #   min_faces_lod2: 150
-"""
-
-MANIFEST_CSV = """id,idea,kind,generate_3d,generate_audio,generate_rig,generate_animate,generate_parts,image_source
-chest_01,"baú de madeira com ferrolhos dourados",prop,false,false,false,false,false,
-hero_sword,"espada longa com gema azul no punho",prop,true,false,false,false,false,
-forest_bg,"floresta densa ao entardecer",environment,false,false,false,false,false,
-sky_sunset,"pôr do sol sobre montanhas, nuvens douradas",skymap,false,false,false,false,false,skymap2d
 """
 
 MANIFEST_YAML = """# Manifest — assets do jogo (gameassets batch)

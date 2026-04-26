@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 from pathlib import Path
 from typing import Any
 
@@ -40,10 +38,9 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
         doc["text3d"] = {
             "preset": "fast",
             "low_vram": False,
-            "texture": True,
             "export_origin": "feet",
-            "paint_preserve_origin": True,
         }
+        doc["paint3d"] = {"preserve_origin": True}
 
     has_rig = any(a.generate_rig for a in plan.assets)
     if has_rig:
@@ -60,44 +57,6 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
         }
 
     return yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False)
-
-
-# ---------------------------------------------------------------------------
-# manifest.csv
-# ---------------------------------------------------------------------------
-
-CSV_HEADERS = [
-    "id",
-    "idea",
-    "kind",
-    "generate_3d",
-    "generate_audio",
-    "generate_rig",
-    "generate_animate",
-    "generate_parts",
-    "image_source",
-]
-
-
-def emit_manifest_csv(plan: DreamPlan) -> str:
-    buf = io.StringIO()
-    writer = csv.DictWriter(buf, fieldnames=CSV_HEADERS)
-    writer.writeheader()
-    for a in plan.assets:
-        writer.writerow(
-            {
-                "id": a.id,
-                "idea": a.idea,
-                "kind": a.kind,
-                "generate_3d": str(a.generate_3d).lower(),
-                "generate_audio": str(a.generate_audio).lower(),
-                "generate_rig": str(a.generate_rig).lower(),
-                "generate_animate": str(a.generate_animate).lower(),
-                "generate_parts": str(a.generate_parts).lower(),
-                "image_source": "",
-            }
-        )
-    return buf.getvalue()
 
 
 def emit_manifest_yaml(plan: DreamPlan) -> str:

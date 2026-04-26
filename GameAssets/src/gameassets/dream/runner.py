@@ -111,8 +111,8 @@ def run_dream(
                 f"[cyan]dry-run[/cyan] — ficheiros em [bold]{project_dir}[/bold]\n"
                 "Para gerar assets, corre:\n"
                 f"  cd {batch_dir}\n"
-                f"  gameassets batch --profile game.yaml --manifest manifest.csv\n"
-                f"  gameassets handoff --profile game.yaml --manifest manifest.csv --public-dir {public_dir}",
+                f"  gameassets batch --profile game.yaml --manifest manifest.yaml\n"
+                f"  gameassets handoff --profile game.yaml --manifest manifest.yaml --public-dir {public_dir}",
                 border_style="green",
                 title="Dream (dry-run)",
             )
@@ -132,7 +132,7 @@ def run_dream(
         "--profile",
         str(batch_dir / "game.yaml"),
         "--manifest",
-        str(batch_dir / "manifest.csv"),
+        str(batch_dir / "manifest.yaml"),
         *batch_flags,
     ]
     if low_vram:
@@ -200,7 +200,7 @@ def run_dream(
         "--profile",
         str(batch_dir / "game.yaml"),
         "--manifest",
-        str(batch_dir / "manifest.csv"),
+        str(batch_dir / "manifest.yaml"),
         "--public-dir",
         str(public_dir),
     ]
