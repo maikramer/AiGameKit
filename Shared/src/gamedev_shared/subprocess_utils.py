@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -93,4 +93,77 @@ def run_cmd(
         returncode=r.returncode,
         stdout=r.stdout or "",
         stderr=r.stderr or "",
+    )
+
+
+def run_cmd_streaming(
+    argv: Sequence[str],
+    *,
+    on_stdout_line: Callable[[str], None] | None = None,
+    on_stderr_line: Callable[[str], None] | None = None,
+    cwd: Path | None = None,
+    timeout: float | None = None,
+    extra_env: dict[str, str] | None = None,
+) -> RunResult:
+    """Run a subprocess, streaming stdout/stderr line-by-line to callbacks.
+
+    Unlike :func:`run_cmd` (which blocks until completion and returns all output),
+    this yields each stdout line as it arrives via ``on_stdout_line``.
+    Stderr lines are also streamed if ``on_stderr_line`` is provided.
+
+    Args:
+        argv: Command and arguments.
+        on_stdout_line: Called for each stdout line (including newline).
+        on_stderr_line: Called for each stderr line (including newline).
+        cwd: Working directory.
+        timeout: Timeout in seconds (applied to the full run, not per-line).
+        extra_env: Extra environment variables merged into ``os.environ``.
+
+    Returns:
+        :class:`RunResult` with full stdout/stderr accumulated during the run.
+    """
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
+    proc = subprocess.Popen(
+        list(argv),
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+
+    import threading
+
+    def _read_stderr() -> None:
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            stderr_lines.append(line)
+            if on_stderr_line:
+                on_stderr_line(line)
+
+    stderr_thread = threading.Thread(target=_read_stderr, daemon=True)
+    stderr_thread.start()
+
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        stdout_lines.append(line)
+        if on_stdout_line:
+            on_stdout_line(line)
+
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+    stderr_thread.join(timeout=5)
+
+    return RunResult(
+        returncode=proc.returncode,
+        stdout="".join(stdout_lines),
+        stderr="".join(stderr_lines),
     )
