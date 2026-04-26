@@ -60,7 +60,6 @@ pip install -e .
 | Subcomando | Descrição |
 |-----------|-----------|
 | `text3d generate PROMPT` | Gera mesh 3D a partir de texto (Text2D → Hunyuan3D) |
-| `text3d mesh-beautify` | Fusão por distância (ratio inteligente por defeito), remesh/Taubin opcional — antes do Paint3D |
 | `text3d doctor` | Verifica PyTorch, VRAM e dependências nativas |
 | `text3d info` | Mostra configuração, GPU, cache e ambiente |
 | `text3d models` | Lista modelos disponíveis |
@@ -87,14 +86,7 @@ text3d convert mesh.ply --output mesh.glb
 
 # Textura num mesh já gerado (projeto Paint3D)
 paint3d texture outputs/meshes/robo.glb -i minha_ref.png -o robo_tex.glb
-
-# Unir costuras estilo Hunyuan (omitir --weld-diagonal-ratio = ratio automático ~K·aresta_média/diagonal)
-text3d mesh-beautify modelo.glb -o soldado.glb --weld-only
 ```
-
-### `mesh-beautify` (fusão de vértices)
-
-Por defeito **não** passas `--weld-diagonal-ratio`: o merge em pymeshlab usa um ratio derivado da malha (**~K × comprimento médio de aresta / diagonal da AABB**, com limites). Escala com **`--weld-aggressiveness`** (defeito `1.14`). Para um ratio fixo, usa **`--weld-diagonal-ratio 0.01`**. **`--no-weld`** desliga a fusão por distância no pymeshlab.
 
 ### Textura e PBR
 
@@ -151,17 +143,11 @@ Text3D/
 
 ## Limitações do image-to-3D e pós-processo
 
-O Hunyuan3D gera **superfície a partir de uma vista**: geometria fina (pernas, espelhos) pode desaparecer, aparecer **várias ilhas** (pés separados) ou aspereza tipo “argila”. Por defeito o CLI aplica **pós-processo**: maior **componente conexa** (remove ilhas pequenas), **merge de vértices** e opcionalmente `--mesh-smooth N` (suavização Laplaciana).
+O Hunyuan3D gera **superfície a partir de uma vista**: geometria fina (pernas, espelhos) pode desaparecer, aparecer **várias ilhas** (pés separados) ou aspereza tipo "argila". Por defeito o CLI aplica **reparo de mesh** via `prepare_mesh_topology`: merge de vértices, reparo non-manifold, weld por distância (0.01% da diagonal), Taubin smoothing (3 iterações, preserva volume) e isotropic remeshing adaptativo — fecha micro-cracks invisíveis do marching cubes que abriam ao decimar ou aplicar skinning.
 
 ```bash
 # Mais detalhe geométrico (mais VRAM/tempo)
 text3d generate "robô" --octree-resolution 256 --num-chunks 8000 --steps 28
-
-# Suavizar ligeiramente a superfície
-text3d generate "carro" --mesh-smooth 1
-
-# Manter todas as ilhas (se precisares de peças separadas)
-text3d generate "objeto" --no-mesh-repair
 ```
 
 ## Documentação adicional

@@ -22,6 +22,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
 from gamedev_shared.skill_install import install_my_skill
 
 from . import defaults as _defaults
@@ -36,7 +37,7 @@ from .utils.memory import (
 )
 from .utils.mesh_align_hunyuan import align_glb_plus_z_safe
 from .utils.mesh_lod import generate_lod_glb_triplet
-from .utils.mesh_simplify_textured import simplify_glb_preserving_texture
+from .utils.mesh_remesh_textured import remesh_geometry_only_glb, remesh_textured_glb
 
 console = Console()
 
@@ -78,6 +79,16 @@ def _batch_signal_handler(signum: int, frame) -> None:
     sys.exit(128 + signum)
 
 
+def _make_step_callback(item_id: str, total_steps: int):
+    """Return a diffusion-step callback that emits per-step progress."""
+
+    def _callback(step_idx: int, _t, _outputs) -> None:
+        pct = round(min(100.0, step_idx / total_steps * 100), 1)
+        emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=pct)
+
+    return _callback
+
+
 atexit.register(_batch_cleanup)
 
 
@@ -104,7 +115,8 @@ def cli(ctx, verbose):
         text3d generate -i ref.png -o mesh.glb
         text3d doctor
         text3d lod modelo.glb -o ./out --basename prop
-        text3d simplify-textured pintado.glb -o leve.glb --face-ratio 0.45
+        text3d remesh modelo.glb -o simplificado.glb --target-faces 24000
+        text3d remesh-textured pintado.glb -o remeshed.glb --target-faces 6000
         text3d collision modelo.glb -o collision.glb
         text3d align-plus-z modelo.glb -o corrigido.glb
         text3d -v generate "prompt"
@@ -367,6 +379,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "Usa accelerate para dividir pesos do Hunyuan3D entre GPUs."
     ),
 )
+@click.option(
+    "--skip-remesh",
+    "skip_remesh",
+    is_flag=True,
+    default=False,
+    help=(
+        "Salta isotropic remeshing no prepare_mesh_topology. "
+        "Usar quando o mesh será texturizado (Paint3D) — mantém high-poly para melhor qualidade de pintura."
+    ),
+)
 @click.pass_context
 def generate(
     ctx,
@@ -402,6 +424,7 @@ def generate(
     prof_profile,
     max_faces,
     gpu_ids,
+    skip_remesh,
 ):
     """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
     from gamedev_shared.profiler import ProfilerSession
@@ -543,6 +566,9 @@ def generate(
                     output = Path(output)
 
                 start_time = time.time()
+                item_id = output.stem if output else "text3d_single"
+
+                emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
 
                 with Progress(
                     SpinnerColumn(),
@@ -560,9 +586,11 @@ def generate(
                             hy_seed=seed,
                             mc_level=mc_level,
                             remove_bg=not no_remove_bg,
+                            step_callback=_make_step_callback(item_id, steps),
                         )
                     else:
                         task = progress.add_task("[cyan]Text2D → Hunyuan3D...", total=None)
+                        emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=0)
                         result, ref_img = generator.generate(
                             prompt=prompt,
                             t2d_seed=seed,
@@ -582,6 +610,7 @@ def generate(
                             optimize_prompt=not no_prompt_optimize,
                             remove_bg=not no_remove_bg,
                         )
+                        emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=100)
 
                         if save_reference_image:
                             out_png = output.parent / f"{output.stem}_text2d.png"
@@ -600,7 +629,9 @@ def generate(
                 if result is not None:
                     from text3d.utils.mesh_lod import prepare_mesh_topology
 
-                    result = prepare_mesh_topology(result)
+                    emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=0)
+                    result = prepare_mesh_topology(result, skip_remesh=skip_remesh)
+                    emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=100)
 
                 if save_reference_image and from_image:
                     import shutil
@@ -611,9 +642,11 @@ def generate(
                     shutil.copy2(from_image, out_copy)
                     console.print(f"[dim]Imagem de entrada copiada: [cyan]{out_copy.resolve()}[/cyan][/dim]")
 
+                emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=0)
                 from .utils.export import save_mesh
 
                 mesh_path = save_mesh(result, output, format=output_format, origin_mode=export_origin)
+                emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)
                 mp = Path(mesh_path).resolve()
                 try:
                     sz = format_bytes(mp.stat().st_size)
@@ -625,6 +658,17 @@ def generate(
                 elapsed = time.time() - start_time
                 console.print(f"\n[dim]Tempo total: {elapsed:.1f}s[/dim]")
                 console.print("[bold green]Sucesso.[/bold green]")
+
+                faces = len(result.faces) if result is not None else 0
+                emit_result(
+                    item_id,
+                    TOOL_TEXT3D,
+                    STATUS_OK,
+                    phase="shape",
+                    output=str(mp),
+                    faces=faces,
+                    seconds=round(elapsed, 1),
+                )
 
             finally:
                 _defaults.set_export_rotation_x_rad_override(None)
@@ -922,64 +966,115 @@ def lod_cmd(
     )
 
 
-@cli.command("simplify-textured")
+@cli.command("remesh")
 @click.argument("input_mesh", type=click.Path(exists=True, path_type=Path))
 @click.option(
     "--output",
     "-o",
     type=click.Path(path_type=Path),
     required=True,
-    help="GLB de saída (uma mesh fundida).",
+    help="GLB de saída (remeshed, sem textura).",
 )
 @click.option(
-    "--face-ratio",
-    type=float,
-    default=0.85,
-    show_default=True,
-    help="Rácio alvo de faces (0–1) face ao original. Ignorado se já ≤ mínimo.",
+    "--target-faces",
+    type=int,
+    required=True,
+    help="Número alvo de faces após remesh isotrópico.",
 )
-@click.option(
-    "--qualitythr",
-    type=float,
-    default=0.5,
-    show_default=True,
-    help="Qualidade / erro máximo permitido (PyMeshLab, só malhas texturadas).",
-)
-@click.option(
-    "--extratcoordw",
-    type=float,
-    default=1.0,
-    show_default=True,
-    help="Peso extra dos UV na decimação com textura (PyMeshLab).",
-)
-def simplify_textured_cmd(
+def remesh_cmd(
     input_mesh: Path,
     output: Path,
-    face_ratio: float,
-    qualitythr: float,
-    extratcoordw: float,
+    target_faces: int,
 ) -> None:
-    """Reduz faces num GLB: preserva textura (UV+mapa) via PyMeshLab; sem textura, quadric trimesh.
+    """Isotropic remesh de GLB (só geometria, sem textura/UV).
 
-    Malhas só com cor de vértice uniforme (ex.: placeholder) usam o mesmo rácio sem passo de textura.
+    Re-malha para ``--target-faces`` triângulos regulares (pymeshlab isotropic).
+    Ideal para simplificar antes de texturizar com Paint3D.
+
+    \b
+        text3d remesh modelo.glb -o simplificado.glb --target-faces 24000
     """
-    if not 0 < face_ratio <= 1.0:
-        raise click.ClickException("--face-ratio deve estar entre 0 e 1")
+    if target_faces < 4:
+        raise click.ClickException("--target-faces deve ser >= 4")
     try:
-        simplify_glb_preserving_texture(
-            input_mesh,
-            output,
-            face_ratio=face_ratio,
-            qualitythr=qualitythr,
-            extratcoordw=extratcoordw,
-        )
+        with console.status(
+            f"[bold yellow]Remeshing para ~{target_faces} faces (geometria)...",
+            spinner="dots",
+        ):
+            remesh_geometry_only_glb(input_mesh, output, target_faces=target_faces)
     except (RuntimeError, TypeError, ValueError) as e:
         raise click.ClickException(str(e)) from e
 
-    console.print(
-        Rule("[bold green]simplify-textured", style="green"),
-    )
-    console.print(f"[bold green]✓[/bold green] [cyan]{output.resolve()}[/cyan]")
+    out_p = output.resolve()
+    try:
+        sz = format_bytes(out_p.stat().st_size)
+    except OSError:
+        sz = "?"
+    console.print(Rule("[bold green]remesh", style="green"))
+    console.print(f"[bold green]✓[/bold green] [cyan]{out_p}[/cyan] [dim]({sz})[/dim]")
+
+
+@cli.command("remesh-textured")
+@click.argument("input_mesh", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="GLB de saída (remeshed com textura reprojetada).",
+)
+@click.option(
+    "--target-faces",
+    type=int,
+    required=True,
+    help="Número alvo de faces após remesh isotrópico.",
+)
+@click.option(
+    "--texture-size",
+    type=int,
+    default=2048,
+    show_default=True,
+    help="Resolução da textura de saída (pixels).",
+)
+def remesh_textured_cmd(
+    input_mesh: Path,
+    output: Path,
+    target_faces: int,
+    texture_size: int,
+) -> None:
+    """Remesh isotrópico de GLB texturado com reprojeção de textura.
+
+    Re-malha para ``--target-faces`` triângulos regulares (pymeshlab isotropic)
+    e re-projeta a textura original no novo layout UV (xatlas + closest-point
+    sampling + rasterização).
+
+    \b
+        text3d remesh-textured pintado.glb -o remeshed.glb --target-faces 6000
+        text3d remesh-textured model.glb -o out.glb --target-faces 10000 --texture-size 4096
+    """
+    if target_faces < 4:
+        raise click.ClickException("--target-faces deve ser >= 4")
+    try:
+        with console.status(
+            f"[bold yellow]Remeshing para ~{target_faces} faces + reprojeção de textura...",
+            spinner="dots",
+        ):
+            remesh_textured_glb(
+                input_mesh,
+                output,
+                target_faces=target_faces,
+                texture_size=texture_size,
+            )
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+
+    out_p = output.resolve()
+    try:
+        sz = format_bytes(out_p.stat().st_size)
+    except OSError:
+        sz = "?"
+    console.print(Rule("[bold green]remesh-textured", style="green"))
+    console.print(f"[bold green]✓[/bold green] [cyan]{out_p}[/cyan] [dim]({sz})[/dim]")
 
 
 @cli.command("collision")
@@ -1053,8 +1148,16 @@ def align_plus_z_cmd(
 @click.option("--guidance", type=float, default=5.0)
 @click.option("--octree-resolution", type=int, default=None)
 @click.option("--num-chunks", type=int, default=None)
+@click.option("--mc-level", type=float, default=_defaults.DEFAULT_MC_LEVEL, help="Nível marching cubes (0 = defeito).")
 @click.option("--sdnq-preset", type=str, default=None)
 @click.option("--model-subfolder", default="hunyuan3d-dit-v2-1")
+@click.option(
+    "--export-origin",
+    "export_origin",
+    type=click.Choice(["feet", "center", "none"]),
+    default=_defaults.DEFAULT_EXPORT_ORIGIN,
+    help="Origem ao gravar: feet=pés no chão, center=centro da caixa, none=não mover.",
+)
 @click.option("--allow-shared-gpu", is_flag=True)
 @click.option("--gpu-kill-others/--no-gpu-kill-others", default=False)
 @click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
@@ -1068,8 +1171,10 @@ def generate_batch(
     guidance: float,
     octree_resolution: int | None,
     num_chunks: int | None,
+    mc_level: float,
     sdnq_preset: str | None,
     model_subfolder: str,
+    export_origin: str,
     allow_shared_gpu: bool,
     gpu_kill_others: bool,
     gpu_ids: str | None,
@@ -1155,7 +1260,7 @@ def generate_batch(
                 out_path = (out_base / item["output"]).resolve()
 
                 if not force and out_path.is_file():
-                    print(json.dumps({"id": item_id, "status": "skipped", "output": item["output"]}), flush=True)
+                    emit_result(item_id, TOOL_TEXT3D, STATUS_SKIPPED, output=item["output"])
                     continue
 
                 out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1165,6 +1270,7 @@ def generate_batch(
                 item_chunks = item.get("num_chunks", base_chunks)
                 item_seed = item.get("seed", None)
 
+                emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
                 t0 = time.time()
                 mesh = _batch_generator.generate_from_image(
                     str(img_path),
@@ -1173,30 +1279,38 @@ def generate_batch(
                     octree_resolution=item_octree,
                     num_chunks=item_chunks,
                     hy_seed=item_seed,
+                    mc_level=mc_level,
                     keep_loaded=True,
+                    step_callback=_make_step_callback(item_id, item_steps),
                 )
 
-                mesh = prepare_mesh_topology(mesh)
+                emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=0)
+                mesh = prepare_mesh_topology(mesh, skip_remesh=item.get("skip_remesh", False))
+                emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=100)
                 faces = len(mesh.faces)
-                save_mesh(mesh, str(out_path), format="glb", origin_mode=_defaults.get_export_origin())
+
+                emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=0)
+                save_mesh(mesh, str(out_path), format="glb", origin_mode=export_origin)
+                emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)
                 elapsed = time.time() - t0
 
-                record = {
-                    "id": item_id,
-                    "status": "ok",
-                    "output": item["output"],
-                    "faces": faces,
-                    "seconds": round(elapsed, 1),
-                }
-                print(json.dumps(record), flush=True)
+                emit_result(
+                    item_id,
+                    TOOL_TEXT3D,
+                    STATUS_OK,
+                    phase="shape",
+                    output=item["output"],
+                    faces=faces,
+                    seconds=round(elapsed, 1),
+                )
 
             except Exception as exc:
-                record = {
-                    "id": item_id,
-                    "status": "error",
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
-                print(json.dumps(record), flush=True)
+                emit_result(
+                    item_id,
+                    TOOL_TEXT3D,
+                    STATUS_ERROR,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
     finally:
         _batch_cleanup()

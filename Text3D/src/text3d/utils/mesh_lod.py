@@ -65,34 +65,151 @@ def _boundary_edge_count(mesh: trimesh.Trimesh) -> int:
         return -1
 
 
-def prepare_mesh_topology(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
+def _mesh_repair_pymeshlab(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) -> trimesh.Trimesh:
+    """Weld por distância, close holes, Taubin smoothing e isotropic remesh via pymeshlab.
+
+    Pipeline de reparo 4-fases para micro-cracks do marching cubes:
+    1. Merge close vertices (0.1% diagonal — fecha cracks do octree/MC)
+    2. Close small holes (boundary loops ≤ 30 edges — cracks residuais)
+    3. Taubin smoothing (preserva volume, sem shrinkage)
+    4. Isotropic remeshing adaptativo (saltar com ``skip_remesh=True``)
+
+    Tudo numa única ronda pymeshlab para minimizar export/import.
+    """
+    try:
+        import logging
+
+        log = logging.getLogger(__name__)
+
+        bbox_diag = float(np.linalg.norm(mesh.bounds[1] - mesh.bounds[0]))
+        if bbox_diag < 1e-10:
+            log.warning("Mesh com bounding box degenerada — skip weld/smooth/remesh")
+            return mesh
+
+        def _apply(ms):
+            import pymeshlab
+
+            # FASE 1 — Topologia: merge vértices próximos (0.1% diagonal)
+            ms.meshing_merge_close_vertices(threshold=pymeshlab.PureValue(bbox_diag * 0.001))
+
+            # Non-manifold repair pós-merge
+            ms.meshing_repair_non_manifold_edges()
+            ms.meshing_repair_non_manifold_vertices()
+            ms.meshing_remove_duplicate_faces()
+            ms.meshing_remove_unreferenced_vertices()
+
+            # FASE 2 — Fechar buracos pequenos (rachaduras MC = 3-15 arestas de boundary)
+            ms.meshing_close_holes(maxholesize=30)
+
+            # Remover debris/flotadores (componentes < 1% diagonal)
+            ms.meshing_remove_connected_component_by_diameter(mincomponentdiag=pymeshlab.PercentageValue(1))
+
+            # FASE 3 — Taubin smoothing (λ/μ low-pass, preserva volume)
+            ms.apply_coord_taubin_smoothing(stepsmoothnum=3)
+
+            # FASE 4 — Isotropic remeshing (regulariza triângulos)
+            if not skip_remesh:
+                ms.meshing_isotropic_explicit_remeshing(
+                    iterations=3,
+                    targetlen=pymeshlab.PercentageValue(1),
+                    adaptive=True,
+                )
+
+            # Cleanup final
+            ms.meshing_remove_duplicate_faces()
+            ms.meshing_remove_duplicate_vertices()
+            ms.meshing_remove_unreferenced_vertices()
+
+        result = _pymeshlab_roundtrip(mesh, _apply)
+        log.info(
+            "Reparo pymeshlab: %d→%d faces, %d→%d vértices",
+            len(mesh.faces),
+            len(result.faces),
+            len(mesh.vertices),
+            len(result.vertices),
+        )
+        return result
+    except Exception as exc:
+        import logging
+
+        logging.getLogger(__name__).warning("Reparo pymeshlab falhou (%s) — mesh inalterada", exc)
+        return mesh
+
+
+def prepare_mesh_topology(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) -> trimesh.Trimesh:
     """Prepara topologia antes de export, LOD ou :func:`repair_mesh`.
 
-    Funde vértices duplicados e quase coincidentes (export GLB), remove duplicatas e aplica
-    :func:`_manifold_repair` (sem remoção de bases, sem pymeshfix ``clean()``). Reduz
-    tamanho em disco e evita faces soltas após decimação ou pipelines seguintes.
+    Pipeline completo de reparo pós-marching-cubes:
 
-    Usada por defeito antes de gerar LODs.
+    1. Merge vertices exactos + quase coincidentes (``digits_vertex=4``)
+    2. Remove faces duplicadas e vértices órfãos
+    3. Repara non-manifold edges/vertices (pymeshlab)
+    4. Weld por distância adaptativa (0.1% diagonal), close holes ≤ 30 edges,
+       Taubin smoothing, isotropic remesh — fecha micro-cracks e regulariza
+    5. Cleanup final
+
+    Usada por defeito em ``text3d generate``, ``generate-batch`` e ``text3d lod``.
     """
+    import logging
+
+    log = logging.getLogger(__name__)
+
     m = mesh.copy()
-    with contextlib.suppress(Exception):
+    n_faces_before = len(m.faces)
+
+    # 1. Merge vertices exactos
+    try:
         m.merge_vertices(merge_tex=True)
-    with contextlib.suppress(Exception):
-        m.remove_duplicate_faces()
-    with contextlib.suppress(Exception):
+    except Exception as exc:
+        log.warning("merge_vertices exacto falhou: %s", exc)
+
+    # 2. Remove duplicatas e órfãos
+    try:
+        m.process(validate=True, merge_tex=True)
+    except Exception as exc:
+        log.warning("process(validate=True) falhou: %s", exc)
+    try:
         m.remove_unreferenced_vertices()
-    # Aproximar vértices quase coincidentes (tolerância por casas decimais)
-    with contextlib.suppress(Exception):
-        m.merge_vertices(merge_tex=True, digits_vertex=5)
+    except Exception as exc:
+        log.warning("remove_unreferenced_vertices falhou: %s", exc)
+
+    # 3. Merge por casas decimais (digits_vertex=4 — alinhado com Rigging3D)
+    try:
+        m.merge_vertices(merge_tex=True, digits_vertex=4)
+    except Exception as exc:
+        log.warning("merge_vertices(digits_vertex=4) falhou: %s", exc)
+
+    # 4. Non-manifold repair
     m = _manifold_repair(m)
-    with contextlib.suppress(Exception):
+
+    # 5. Weld + close holes + smooth + remesh (pipeline pymeshlab completa)
+    m = _mesh_repair_pymeshlab(m, skip_remesh=skip_remesh)
+
+    # 6. Cleanup final
+    try:
         m.merge_vertices(merge_tex=True)
-    with contextlib.suppress(Exception):
-        m.remove_duplicate_faces()
-    with contextlib.suppress(Exception):
+    except Exception as exc:
+        log.warning("merge_vertices final falhou: %s", exc)
+    try:
+        m.process(validate=True, merge_tex=True)
+    except Exception as exc:
+        log.warning("process(validate=True) final falhou: %s", exc)
+    try:
         m.remove_unreferenced_vertices()
-    with contextlib.suppress(Exception):
+    except Exception as exc:
+        log.warning("remove_unreferenced_vertices final falhou: %s", exc)
+    try:
         trimesh_repair.fix_normals(m, multibody=True)
+    except Exception as exc:
+        log.warning("fix_normals falhou: %s", exc)
+
+    log.info(
+        "prepare_mesh_topology: %d→%d faces, %d→%d vértices",
+        n_faces_before,
+        len(m.faces),
+        len(mesh.vertices),
+        len(m.vertices),
+    )
     return m
 
 

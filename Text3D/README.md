@@ -64,7 +64,6 @@ pip install -e .
 | `text3d info` | Show config, GPU, cache, environment |
 | `text3d models` | List available models |
 | `text3d convert FILE` | Convert mesh formats (PLY → GLB, etc.) |
-| `text3d mesh-beautify` | Weld-by-distance (smart default), optional remesh / Taubin — before Paint3D |
 | `text3d skill install` | Install Cursor Agent Skill in the project |
 
 ```bash
@@ -87,14 +86,7 @@ text3d convert mesh.ply --output mesh.glb
 
 # Texture an existing mesh (Paint3D project)
 paint3d texture outputs/meshes/robot.glb -i my_ref.png -o robot_tex.glb
-
-# Weld Hunyuan-style seams (omitting --weld-diagonal-ratio uses mesh-based ratio ~ K·mean_edge/diagonal)
-text3d mesh-beautify lumpy.glb -o welded.glb --weld-only
 ```
-
-### `mesh-beautify` (vertex welding)
-
-By default **`--weld-diagonal-ratio` is omitted**: pymeshlab distance merge uses a ratio derived from the mesh (**~K × mean edge length / bounding-box diagonal**, clamped). Use **`--weld-aggressiveness`** (default `1.14`) to scale that ratio for more or less weld. Pass **`--weld-diagonal-ratio 0.01`** to force a fixed ratio. **`--no-weld`** skips pymeshlab merge (only trimesh `merge_vertices`).
 
 ### Texture and PBR
 
@@ -162,17 +154,11 @@ Text3D/
 
 ## Image-to-3D limitations and post-processing
 
-Hunyuan3D generates **surface from one view**: fine geometry (legs, mirrors) may disappear, **multiple islands** (separate feet) or clay-like roughness may appear. By default the CLI applies **post-processing**: largest **connected component** (removes small islands), **vertex merge**, and optionally `--mesh-smooth N` (Laplacian smoothing).
+Hunyuan3D generates **surface from one view**: fine geometry (legs, mirrors) may disappear, **multiple islands** (separate feet) or clay-like roughness may appear. By default the CLI applies **mesh repair** via `prepare_mesh_topology`: vertex merge, non-manifold repair, weld-by-distance (0.01% diagonal), Taubin smoothing (3 iterations, volume-preserving), and adaptive isotropic remeshing — this closes invisible micro-cracks from marching cubes that would open during decimation or skinning.
 
 ```bash
 # More geometric detail (more VRAM/time)
 text3d generate "robot" --octree-resolution 256 --num-chunks 8000 --steps 28
-
-# Slightly smooth the surface
-text3d generate "car" --mesh-smooth 1
-
-# Keep all islands (if you need separate pieces)
-text3d generate "object" --no-mesh-repair
 ```
 
 ## Additional documentation

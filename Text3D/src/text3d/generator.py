@@ -8,6 +8,7 @@ Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguo
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -275,12 +276,16 @@ class HunyuanTextTo3DGenerator:
         mc_level: float = 0.0,
         remove_bg: bool = True,
         keep_loaded: bool = False,
+        step_callback: Callable[[int, Any, Any], None] | None = None,
     ) -> trimesh.Trimesh:
         """Image-to-3D apenas com Hunyuan (sem Text2D).
 
         Args:
             keep_loaded: Se True, não descarrega o pipeline Hunyuan após inferência
                 (útil para processamento batch onde o modelo é reutilizado).
+            step_callback: Optional callback invoked after each diffusion step with
+                ``(step_idx, t, outputs)``. When provided, ``callback`` and
+                ``callback_steps=1`` are forwarded to the pipeline.
         """
         if isinstance(image, (str, Path)):
             image = Image.open(image).convert("RGB")
@@ -309,7 +314,7 @@ class HunyuanTextTo3DGenerator:
             f"chunks={num_chunks} guidance={guidance_scale}"
         )
         with torch.inference_mode():
-            raw = pipe(
+            pipe_kwargs: dict[str, Any] = dict(
                 image=image,
                 num_inference_steps=num_inference_steps,
                 guidance_scale=guidance_scale,
@@ -319,6 +324,10 @@ class HunyuanTextTo3DGenerator:
                 output_type="trimesh",
                 mc_level=mc_level,
             )
+            if step_callback is not None:
+                pipe_kwargs["callback"] = step_callback
+                pipe_kwargs["callback_steps"] = 1
+            raw = pipe(**pipe_kwargs)
 
         mesh = _as_trimesh(raw)
 

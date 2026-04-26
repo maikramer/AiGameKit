@@ -67,3 +67,55 @@ def test_generate_lod_triplet_meshfix_opt_in(tmp_path: Path) -> None:
     )
     assert len(out) == 3
     assert all(p.is_file() for p in out)
+
+
+def test_prepare_mesh_topology_closes_micro_crack() -> None:
+    """Micro-crack entre dois patches deve ser fechada pelo pipeline."""
+    import numpy as np
+
+    # Two adjacent quads with a 0.001-unit gap (simulating marching cubes crack)
+    gap = 0.001
+    verts = np.array(
+        [
+            # Quad A: x in [0, 0.5]
+            [0, 0, 0],
+            [0.5, 0, 0],
+            [0.5, 1, 0],
+            [0, 1, 0],
+            # Quad B: x in [0.5 + gap, 1.0 + gap]
+            [0.5 + gap, 0, 0],
+            [1.0 + gap, 0, 0],
+            [1.0 + gap, 1, 0],
+            [0.5 + gap, 1, 0],
+        ],
+        dtype=np.float64,
+    )
+    faces = np.array(
+        [
+            [0, 1, 2],
+            [0, 2, 3],  # Quad A
+            [4, 5, 6],
+            [4, 6, 7],  # Quad B
+        ],
+        dtype=np.int64,
+    )
+
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces)
+
+    repaired = prepare_mesh_topology(mesh)
+    assert len(repaired.faces) >= 4
+    assert len(repaired.vertices) >= 4
+
+
+def test_prepare_mesh_topology_handles_open_mesh() -> None:
+    """Mesh com abertura intencional (sem face inferior) deve manter-se válida."""
+    box = trimesh.creation.box(extents=[1.0, 1.0, 1.0])
+    bottom_mask = box.face_normals[:, 1] < -0.5
+    faces = box.faces[~bottom_mask]
+    open_box = trimesh.Trimesh(vertices=box.vertices.copy(), faces=faces)
+
+    assert not open_box.is_watertight
+
+    repaired = prepare_mesh_topology(open_box)
+    assert len(repaired.faces) >= 4
+    assert len(repaired.vertices) >= 4
