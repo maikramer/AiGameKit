@@ -20,6 +20,7 @@ from rich.rule import Rule
 from rich.table import Table
 
 from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
 from gamedev_shared.skill_install import install_my_skill
 
 from .cli_rich import click
@@ -166,7 +167,11 @@ def generate_cmd(
     prof_log = Path(log_p) if log_p else None
     t_start = time.time()
 
+    safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
+    item_id = safe or "single"
+
     try:
+        emit_progress(item_id, TOOL_TEXT2D, phase="loading_model", percent=0)
         with ProfilerSession(
             "text2d",
             log_path=prof_log,
@@ -195,10 +200,10 @@ def generate_cmd(
             if output is None:
                 ensure_dirs()
                 ts = int(time.time())
-                safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
                 output = str(DEFAULT_IMAGE_DIR / f"{safe}_{ts}.png")
             out_path = Path(output)
 
+            emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=0)
             with (
                 prof.span("generate", sync_cuda=True),
                 Progress(
@@ -217,7 +222,9 @@ def generate_cmd(
                     seed=seed,
                 )
                 progress.update(task, description="[green]Concluído")
+            emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
 
+            emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
             with prof.span("save"):
                 ext = out_path.suffix.lower().lstrip(".")
                 img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
@@ -226,6 +233,7 @@ def generate_cmd(
                     out_path,
                     image_format=img_format if img_format == "JPEG" else "PNG",
                 )
+            emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 
         elapsed = time.time() - t_start
         try:
@@ -235,13 +243,16 @@ def generate_cmd(
         console.print(Rule("[bold green]Resultado", style="green"))
         console.print(f"[bold green]✓[/bold green] Imagem: [cyan]{out_path.resolve()}[/cyan] [dim]({sz})[/dim]")
         console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+        emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_path), seconds=elapsed)
     except ImportError as e:
         console.print(f"\n[bold red]✗[/bold red] {e}")
+        emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(e))
         sys.exit(1)
     except Exception as e:
         console.print(f"\n[bold red]✗ Erro:[/bold red] {e}")
         if verbose:
             console.print_exception()
+        emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(e))
         sys.exit(1)
 
 
@@ -363,7 +374,7 @@ def generate_batch_cmd(
             out_path = out_root / out_rel if not out_rel.is_absolute() else out_rel
 
             if not force and out_path.is_file():
-                print(json.dumps({"id": item_id, "status": "skipped", "output": str(out_rel)}))
+                emit_result(item_id, TOOL_TEXT2D, STATUS_SKIPPED, output=str(out_rel))
                 continue
 
             item_w = item.get("width", width)
@@ -373,6 +384,7 @@ def generate_batch_cmd(
             item_seed = item.get("seed")
 
             try:
+                emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=0)
                 image = gen.generate(
                     prompt=prompt,
                     height=item_h,
@@ -381,13 +393,18 @@ def generate_batch_cmd(
                     num_inference_steps=item_steps,
                     seed=item_seed,
                 )
+                emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
+
+                emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
                 ext = out_path.suffix.lower().lstrip(".")
                 img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
                 KleinFluxGenerator.save_image(image, out_path, image_format=img_format)
+                emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
+
                 elapsed = time.time() - t0
-                print(json.dumps({"id": item_id, "status": "ok", "output": str(out_rel), "seconds": round(elapsed, 3)}))
+                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_rel), seconds=round(elapsed, 3))
             except Exception as exc:
-                print(json.dumps({"id": item_id, "status": "error", "error": str(exc)}))
+                emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(exc))
 
         _batch_cleanup()
     except ImportError as exc:

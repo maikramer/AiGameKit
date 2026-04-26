@@ -1172,5 +1172,116 @@ def mesh_render_views_cmd(
         console.print("[dim]Instale Animator3D ou defina ANIMATOR3D_BIN para renderizar vistas.[/dim]")
 
 
+@mesh_group.command("diff")
+@click.argument("mesh_a", type=click.Path(exists=True, path_type=Path))
+@click.argument("mesh_b", type=click.Path(exists=True, path_type=Path))
+@click.option("--json-out", type=click.Path(path_type=Path), default=None, help="Gravar diff JSON em ficheiro.")
+def mesh_diff_cmd(mesh_a: Path, mesh_b: Path, json_out: Path | None) -> None:
+    """Compara dois meshes topologicamente (vértices, faces, buracos, UV seams, Euler, volume)."""
+    from rich.table import Table
+
+    from gamedev_lab.mesh_inspector import MeshInspector
+
+    inspector_a = MeshInspector(mesh_a)
+    inspector_b = MeshInspector(mesh_b)
+    report_a = inspector_a.inspect()
+    report_b = inspector_b.inspect()
+
+    ta = report_a.topology
+    tb = report_b.topology
+    ga = report_a.geometry
+    gb = report_b.geometry
+
+    def _delta(a: int | float, b: int | float) -> str:
+        d = b - a
+        if d > 0:
+            return f"[green]+{d}[/green]"
+        elif d < 0:
+            return f"[red]{d}[/red]"
+        return "[dim]0[/dim]"
+
+    t = Table(title=f"Mesh Diff: {mesh_a.name} vs {mesh_b.name}")
+    t.add_column("Metric", style="cyan")
+    t.add_column(mesh_a.name, justify="right")
+    t.add_column(mesh_b.name, justify="right")
+    t.add_column("Delta", justify="right")
+
+    t.add_row("Vertices", f"{ta.vertices:,}", f"{tb.vertices:,}", _delta(ta.vertices, tb.vertices))
+    t.add_row("Faces", f"{ta.faces:,}", f"{tb.faces:,}", _delta(ta.faces, tb.faces))
+    t.add_row("Edges", f"{ta.edges:,}", f"{tb.edges:,}", _delta(ta.edges, tb.edges))
+    t.add_row(
+        "Boundary Edges",
+        str(ta.boundary_edges),
+        str(tb.boundary_edges),
+        _delta(ta.boundary_edges, tb.boundary_edges),
+    )
+    t.add_row("  Real Holes", str(ta.real_holes), str(tb.real_holes), _delta(ta.real_holes, tb.real_holes))
+    t.add_row(
+        "  UV Seam Edges",
+        str(ta.uv_seam_edges),
+        str(tb.uv_seam_edges),
+        _delta(ta.uv_seam_edges, tb.uv_seam_edges),
+    )
+    t.add_row("Euler Number", str(ta.euler_number), str(tb.euler_number), _delta(ta.euler_number, tb.euler_number))
+    t.add_row("Watertight", "Yes" if ta.watertight else "No", "Yes" if tb.watertight else "No", "")
+    t.add_row(
+        "Degenerate Faces",
+        str(ta.degenerate_faces),
+        str(tb.degenerate_faces),
+        _delta(ta.degenerate_faces, tb.degenerate_faces),
+    )
+    t.add_row(
+        "Duplicate Vertices",
+        str(ta.duplicate_vertices),
+        str(tb.duplicate_vertices),
+        _delta(ta.duplicate_vertices, tb.duplicate_vertices),
+    )
+
+    vol_a = f"{ga.volume:.4f}" if ga.volume is not None else "N/A"
+    vol_b = f"{gb.volume:.4f}" if gb.volume is not None else "N/A"
+    t.add_row("Volume", vol_a, vol_b, "")
+
+    console.print(t)
+
+    diff_report: dict[str, Any] = {
+        "mesh_a": str(mesh_a.resolve()),
+        "mesh_b": str(mesh_b.resolve()),
+        "vertices": {"a": ta.vertices, "b": tb.vertices, "delta": tb.vertices - ta.vertices},
+        "faces": {"a": ta.faces, "b": tb.faces, "delta": tb.faces - ta.faces},
+        "edges": {"a": ta.edges, "b": tb.edges, "delta": tb.edges - ta.edges},
+        "boundary_edges": {
+            "a": ta.boundary_edges,
+            "b": tb.boundary_edges,
+            "delta": tb.boundary_edges - ta.boundary_edges,
+        },
+        "real_holes": {"a": ta.real_holes, "b": tb.real_holes, "delta": tb.real_holes - ta.real_holes},
+        "uv_seam_edges": {
+            "a": ta.uv_seam_edges,
+            "b": tb.uv_seam_edges,
+            "delta": tb.uv_seam_edges - ta.uv_seam_edges,
+        },
+        "euler_number": {"a": ta.euler_number, "b": tb.euler_number, "delta": tb.euler_number - ta.euler_number},
+        "watertight": {"a": ta.watertight, "b": tb.watertight},
+        "degenerate_faces": {
+            "a": ta.degenerate_faces,
+            "b": tb.degenerate_faces,
+            "delta": tb.degenerate_faces - ta.degenerate_faces,
+        },
+        "duplicate_vertices": {
+            "a": ta.duplicate_vertices,
+            "b": tb.duplicate_vertices,
+            "delta": tb.duplicate_vertices - ta.duplicate_vertices,
+        },
+        "volume": {"a": ga.volume, "b": gb.volume},
+        "volume_efficiency": {"a": ga.volume_efficiency, "b": gb.volume_efficiency},
+        "area": {"a": ga.area, "b": gb.area, "delta": round(gb.area - ga.area, 4)},
+    }
+
+    if json_out:
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_text(json.dumps(diff_report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        console.print(f"[dim]Diff report: {json_out}[/dim]")
+
+
 if __name__ == "__main__":
     main()

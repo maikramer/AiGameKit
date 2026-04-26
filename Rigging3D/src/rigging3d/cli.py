@@ -7,11 +7,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
 from gamedev_shared.profiler.session import ProfilerSession
+from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_RIGGING3D, emit_progress, emit_result
 from rich.console import Console
 
 from . import __version__
@@ -506,6 +508,9 @@ def pipeline_cmd(
 
     warn_if_vram_occupied()
 
+    item_id = mesh.stem
+    t0 = time.monotonic()
+
     cleanup: Path | None = None
     if work_dir is None:
         cleanup = Path(tempfile.mkdtemp(prefix="rigging3d_"))
@@ -521,12 +526,14 @@ def pipeline_cmd(
     ):
         actual_mesh = mesh
         if not no_prep:
+            emit_progress(item_id, TOOL_RIGGING3D, phase="preparing_mesh", percent=0)
             prepped = wd / "_prepped.glb"
             console.print("[dim]Preparando mesh (remesh + repair)...[/dim]")
             if _prep_mesh_for_rigging(mesh, prepped, py):
                 actual_mesh = prepped
             else:
                 console.print("[yellow]Prep falhou; a usar mesh original.[/yellow]")
+            emit_progress(item_id, TOOL_RIGGING3D, phase="preparing_mesh", percent=100)
 
         skel = wd / "_skeleton.glb"
         skin = wd / "_skin.glb"
@@ -537,6 +544,7 @@ def pipeline_cmd(
             if gpu_ids and len(gpu_ids) >= 2:
                 console.print(f"[dim]Multi-GPU: skeleton→cuda:{gpu_ids[0]}, skin→cuda:{gpu_ids[1]}[/dim]")
 
+            emit_progress(item_id, TOOL_RIGGING3D, phase="skeleton", percent=0)
             skel_args = ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel)]
             if seed is not None:
                 skel_args += ["--seed", str(seed)]
@@ -549,9 +557,18 @@ def pipeline_cmd(
                 gpu_ids=skel_gpu,
             )
             if rc != 0 or not skel.is_file() or skel.stat().st_size == 0:
+                emit_result(
+                    item_id,
+                    TOOL_RIGGING3D,
+                    STATUS_ERROR,
+                    phase="skeleton",
+                    error=f"skeleton falhou (código {rc})",
+                    seconds=time.monotonic() - t0,
+                )
                 raise click.ClickException(
                     f"skeleton falhou (código {rc} ou GLB em falta). Confirma deps inferência, pesos HF e logs acima."
                 )
+            emit_progress(item_id, TOOL_RIGGING3D, phase="skeleton", percent=100)
 
             skin_task_path = DEFAULT_SKIN_TASK
             if low_vram:
@@ -577,6 +594,7 @@ def pipeline_cmd(
                 _low_vram_cleanup.extend([low_vram_model, low_vram_task])
                 console.print("[dim]Low-VRAM: num_train_vertex=256[/dim]")
 
+            emit_progress(item_id, TOOL_RIGGING3D, phase="skin", percent=0)
             skin_args = [
                 "--input",
                 _shell_path(skel),
@@ -596,10 +614,20 @@ def pipeline_cmd(
                 gpu_ids=skin_gpu,
             )
             if rc != 0 or not skin.is_file() or skin.stat().st_size == 0:
+                emit_result(
+                    item_id,
+                    TOOL_RIGGING3D,
+                    STATUS_ERROR,
+                    phase="skin",
+                    error=f"skin falhou (código {rc})",
+                    seconds=time.monotonic() - t0,
+                )
                 raise click.ClickException(
                     f"skin falhou (código {rc} ou GLB em falta). Confirma spconv, VRAM e logs acima."
                 )
+            emit_progress(item_id, TOOL_RIGGING3D, phase="skin", percent=100)
 
+            emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=0)
             merge_env = {
                 "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
                 "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
@@ -621,11 +649,20 @@ def pipeline_cmd(
                 gpu_ids=None,
             )
             if not out.is_file() or out.stat().st_size == 0:
+                emit_result(
+                    item_id,
+                    TOOL_RIGGING3D,
+                    STATUS_ERROR,
+                    phase="merge",
+                    error=f"merge falhou (código {rc})",
+                    seconds=time.monotonic() - t0,
+                )
                 raise click.ClickException(
                     f"merge falhou (código {rc} ou GLB vazio). Confirma bpy/open3d e caminhos acima."
                 )
             if rc != 0:
                 console.print(f"[yellow]merge rc={rc}, output={out.stat().st_size}B- prosseguindo.[/yellow]")
+            emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=100)
             _validate_and_fix_origin(out)
         finally:
             if cleanup is not None and not keep_temp:
@@ -635,6 +672,7 @@ def pipeline_cmd(
                     p.unlink(missing_ok=True)
 
     console.print(f"[green]Pipeline concluído:[/green] {out}")
+    emit_result(item_id, TOOL_RIGGING3D, STATUS_OK, output=str(out), seconds=time.monotonic() - t0)
 
 
 # ---------------------------------------------------------------------------

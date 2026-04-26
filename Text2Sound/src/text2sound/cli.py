@@ -29,6 +29,7 @@ from rich.table import Table
 
 from gamedev_shared.hf import get_hf_token, hf_home_display_rich
 from gamedev_shared.profiler.session import ProfilerSession, profile_span
+from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
 
 from .audio_processor import SUPPORTED_FORMATS, save_audio
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
@@ -368,6 +369,9 @@ def generate_cmd(
         "sigma_max": sigma_max,
         "trim": trim,
     }
+    item_id = Path(output).stem if output else prompt[:40].replace(" ", "_")
+    start = time.time()
+
     with ProfilerSession(
         "text2sound",
         cli_profile=profiler_flag,
@@ -388,16 +392,19 @@ def generate_cmd(
             else:
                 out_path = Path(output)
 
-            start = time.time()
+            item_id = out_path.stem
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
             ) as progress:
                 task = progress.add_task("[cyan]Carregando modelo...", total=None)
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="loading_model", percent=0)
                 with profile_span("load"), _quiet_third_party_tqdm(verbose):
                     gen.load()
+
                 progress.update(task, description="[cyan]Gerando áudio...")
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=0)
 
                 with profile_span("generate"), _quiet_third_party_tqdm(verbose):
                     result = gen.generate(
@@ -411,7 +418,9 @@ def generate_cmd(
                         sampler_type=sampler,
                     )
 
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=100)
                 progress.update(task, description="[cyan]Processando e gravando...")
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=0)
 
                 metadata = {
                     "prompt": prompt,
@@ -446,6 +455,7 @@ def generate_cmd(
                         metadata=metadata,
                     )
 
+                emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
                 progress.update(task, description="[green]Concluído")
 
             elapsed = time.time() - start
@@ -453,6 +463,14 @@ def generate_cmd(
                 sz = format_bytes(saved.stat().st_size)
             except OSError:
                 sz = "?"
+
+            emit_result(
+                item_id,
+                TOOL_TEXT2SOUND,
+                STATUS_OK,
+                output=str(saved.resolve()),
+                seconds=elapsed,
+            )
 
             console.print(Rule("[bold green]Resultado", style="green"))
             console.print(f"[bold green]\u2713[/bold green] Áudio: [cyan]{saved.resolve()}[/cyan] [dim]({sz})[/dim]")
@@ -466,6 +484,8 @@ def generate_cmd(
         except click.ClickException:
             raise
         except Exception as e:
+            elapsed = time.time() - start
+            emit_result(item_id, TOOL_TEXT2SOUND, STATUS_ERROR, error=str(e), seconds=elapsed)
             console.print(f"\n[bold red]\u2717 Erro:[/bold red] {e}")
             if verbose:
                 console.print_exception()
@@ -613,6 +633,7 @@ def batch_cmd(
         low_vram=low_vram,
         gpu_ids=gpu_ids,
     )
+    emit_progress("batch", TOOL_TEXT2SOUND, phase="loading_model", percent=0)
     with _quiet_third_party_tqdm(verbose):
         gen.load()
 
@@ -621,8 +642,11 @@ def batch_cmd(
         full_prompt = f"{prompt_text}, {preset_data['prompt']}" if preset and preset != "None" else prompt_text
 
         line_seed = int(seed) + idx if seed is not None else resolve_effective_seed(None)
+        item_id = generate_output_path(prompt_text, out, fmt).stem
+        item_start = time.time()
 
         try:
+            emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=0)
             with _quiet_third_party_tqdm(verbose):
                 result = gen.generate(
                     prompt=full_prompt,
@@ -634,6 +658,8 @@ def batch_cmd(
                     sigma_max=sigma_max,
                     sampler_type=sampler,
                 )
+
+            emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=100)
 
             out_path = generate_output_path(prompt_text, out, fmt)
             metadata = {
@@ -660,6 +686,7 @@ def batch_cmd(
             if preset and preset != "None":
                 metadata["preset"] = preset
 
+            emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=0)
             saved = save_audio(
                 audio=result.audio,
                 sample_rate=result.sample_rate,
@@ -668,9 +695,21 @@ def batch_cmd(
                 trim=trim,
                 metadata=metadata,
             )
+            emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
+
             ok_count += 1
+            elapsed = time.time() - item_start
+            emit_result(
+                item_id,
+                TOOL_TEXT2SOUND,
+                STATUS_OK,
+                output=str(saved.resolve()),
+                seconds=elapsed,
+            )
             console.print(f"  [green]\u2713[/green] {idx + 1}/{len(prompts)}: [cyan]{saved.name}[/cyan]")
         except Exception as e:
+            elapsed = time.time() - item_start
+            emit_result(item_id, TOOL_TEXT2SOUND, STATUS_ERROR, error=str(e), seconds=elapsed)
             console.print(f"  [red]\u2717[/red] {idx + 1}/{len(prompts)}: {e}")
 
     console.print(

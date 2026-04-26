@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
+from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_ANIMATOR3D, emit_progress, emit_result
 from rich.console import Console
 from rich.json import JSON
 
@@ -949,15 +951,32 @@ def cmd_game_pack(
     draco: bool,
 ) -> None:
     """Gera todas as animações de um preset num único comando."""
+    item_id = input_path.stem
+    t0 = time.monotonic()
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=0)
+
     _require_bpy()
     from . import bpy_ops
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=50)
 
     bpy_ops.clear_scene()
     bpy_ops.import_asset(input_path)
     arms = bpy_ops.list_armatures()
     if not arms:
+        elapsed = time.monotonic() - t0
+        emit_result(
+            item_id,
+            TOOL_ANIMATOR3D,
+            STATUS_ERROR,
+            error="Nenhum armature encontrado no ficheiro.",
+            seconds=elapsed,
+        )
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=100)
 
     steps = _PRESETS[preset.lower()]
 
@@ -965,20 +984,45 @@ def cmd_game_pack(
         allowed = {s.strip().lower() for s in clip_filter.split(",")}
         steps = [(fn, kw) for fn, kw in steps if any(a in kw["action_name"].lower() for a in allowed)]
         if not steps:
+            elapsed = time.monotonic() - t0
+            emit_result(
+                item_id,
+                TOOL_ANIMATOR3D,
+                STATUS_ERROR,
+                error=f"Nenhum clip corresponde ao filtro: {clip_filter}",
+                seconds=elapsed,
+            )
             raise click.ClickException(f"Nenhum clip corresponde ao filtro: {clip_filter}")
 
+    total = len(steps)
     generated = []
-    for fn_name, kwargs in steps:
+    for i, (fn_name, kwargs) in enumerate(steps):
+        pct = round((i / total) * 100) if total > 1 else 0
+        emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=pct, clip=kwargs["action_name"])
         fn = getattr(bpy_ops, fn_name)
         fn(arm_name, frame_start=1, **kwargs)
         generated.append(kwargs["action_name"])
         console.print(f"  [dim]✓[/dim] {kwargs['action_name']}")
 
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=100)
+
     nclips = bpy_ops.count_nla_tracks(arm_name)
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
     bpy_ops.export_auto(output_path, draco=draco)
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=100)
+
+    elapsed = time.monotonic() - t0
     console.print(
         f"[green]game-pack[/green] preset={preset!r} armature={arm_name!r} "
         f"· {nclips} clip(s) no GLB → {output_path.resolve()}"
+    )
+    emit_result(
+        item_id,
+        TOOL_ANIMATOR3D,
+        STATUS_OK,
+        output=str(output_path.resolve()),
+        seconds=elapsed,
     )
 
 

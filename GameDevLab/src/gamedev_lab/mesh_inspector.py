@@ -19,6 +19,8 @@ class TopologyReport:
     watertight: bool = False
     euler_number: int = 0
     boundary_edges: int = 0
+    real_holes: int = 0
+    uv_seam_edges: int = 0
     connected_components: int = 1
     degenerate_faces: int = 0
     duplicate_vertices: int = 0
@@ -153,6 +155,49 @@ class MeshInspector:
     # Topology
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _classify_boundary_edges(mesh: trimesh.Trimesh) -> tuple[int, int, dict[tuple[int, ...], int]]:
+        """Classify boundary edges into real holes vs UV seam edges.
+
+        A UV seam edge has both vertices duplicated at the same rounded position
+        (i.e. multiple vertex indices share the same spatial location due to UV
+        splits). A real hole has at least one vertex that is *not* duplicated —
+        the edge truly lies on an open boundary of the mesh surface.
+
+        Returns:
+            (real_holes, uv_seam_edges, edge_count) where edge_count maps each
+            sorted edge tuple to the number of adjacent faces.
+        """
+        edge_count: dict[tuple[int, ...], int] = {}
+        for face in mesh.faces:
+            for i in range(3):
+                e = tuple(sorted((face[i], face[(i + 1) % 3])))
+                edge_count[e] = edge_count.get(e, 0) + 1
+
+        boundary = [e for e, c in edge_count.items() if c == 1]
+        if not boundary:
+            return 0, 0, edge_count
+
+        rounded = np.round(mesh.vertices, decimals=6)
+        pos_to_indices: dict[tuple[float, ...], list[int]] = {}
+        for idx in range(len(mesh.vertices)):
+            key = tuple(rounded[idx].tolist())
+            pos_to_indices.setdefault(key, []).append(idx)
+
+        real_holes = 0
+        uv_seam_edges = 0
+        for va, vb in boundary:
+            ka = tuple(rounded[va].tolist())
+            kb = tuple(rounded[vb].tolist())
+            a_dup = len(pos_to_indices.get(ka, [])) > 1
+            b_dup = len(pos_to_indices.get(kb, [])) > 1
+            if a_dup and b_dup:
+                uv_seam_edges += 1
+            else:
+                real_holes += 1
+
+        return real_holes, uv_seam_edges, edge_count
+
     def _inspect_topology(self, mesh: trimesh.Trimesh) -> TopologyReport:
         r = TopologyReport()
         r.vertices = len(mesh.vertices)
@@ -164,12 +209,10 @@ class MeshInspector:
         except Exception:
             r.euler_number = 0
 
-        edge_count: dict[tuple[int, ...], int] = {}
-        for face in mesh.faces:
-            for i in range(3):
-                e = tuple(sorted((face[i], face[(i + 1) % 3])))
-                edge_count[e] = edge_count.get(e, 0) + 1
+        real_holes, uv_seam_edges, edge_count = self._classify_boundary_edges(mesh)
         r.boundary_edges = sum(1 for c in edge_count.values() if c == 1)
+        r.real_holes = real_holes
+        r.uv_seam_edges = uv_seam_edges
 
         try:
             components = mesh.split(only_watertight=False)
@@ -474,6 +517,9 @@ def print_qa_report(report: MeshQAReport) -> None:
     t.add_row("Watertight", "Yes" if report.topology.watertight else "No")
     t.add_row("Euler Number", str(report.topology.euler_number))
     t.add_row("Boundary Edges", str(report.topology.boundary_edges))
+    if report.topology.boundary_edges > 0:
+        t.add_row("  Real Holes", str(report.topology.real_holes))
+        t.add_row("  UV Seam Edges", str(report.topology.uv_seam_edges))
     t.add_row("Connected Components", str(report.topology.connected_components))
     t.add_row("Degenerate Faces", str(report.topology.degenerate_faces))
     t.add_row("Duplicate Vertices", str(report.topology.duplicate_vertices))
