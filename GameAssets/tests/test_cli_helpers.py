@@ -320,7 +320,7 @@ def test_text3d_argv_allow_shared_and_no_gpu_kill() -> None:
     assert "--no-gpu-kill-others" in argv
 
 
-def test_text3d_argv_mesh_flags() -> None:
+def test_text3d_argv_mc_level() -> None:
     p = GameProfile(
         title="T",
         genre="G",
@@ -329,14 +329,11 @@ def test_text3d_argv_mesh_flags() -> None:
         text3d=Text3DProfile(
             preset="balanced",
             texture=True,
-            no_mesh_repair=True,
-            mesh_smooth=1,
             mc_level=0.0,
         ),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
-    assert "--no-mesh-repair" in argv
-    assert "--mesh-smooth" in argv and "1" in argv
+    assert "--mc-level" in argv and "0.0" in argv
 
 
 def test_rigging3d_output_path() -> None:

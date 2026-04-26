@@ -31,7 +31,7 @@ def test_query_gpu_free_mib_none_without_nvidia_smi(monkeypatch: pytest.MonkeyPa
 def test_batch_lock_skip_no_block(tmp_path: Path) -> None:
     from gameassets.batch_guard import batch_directory_lock
 
-    manifest = tmp_path / "manifest.csv"
-    manifest.write_text("id,idea\na,b\n", encoding="utf-8")
+    manifest = tmp_path / "manifest.yaml"
+    manifest.write_text("assets:\n  - id: a\n    idea: b\n    pipeline: []\n", encoding="utf-8")
     with batch_directory_lock(manifest, skip=True), batch_directory_lock(manifest, skip=True):
         pass

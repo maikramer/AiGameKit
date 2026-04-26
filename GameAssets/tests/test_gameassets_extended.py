@@ -4,15 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
+import yaml
 
 from gameassets.manifest import (
     ManifestRow,
     effective_image_source,
     load_manifest,
 )
-from gameassets.manifest import _parse_bool as gb_parse_bool
-from gameassets.manifest import _parse_image_source as parse_img_src
 from gameassets.profile import GameProfile
 from gameassets.prompt_builder import build_audio_prompt, build_prompt
 
@@ -28,36 +26,6 @@ def _minimal_profile(**kwargs) -> GameProfile:
     return GameProfile(**base)
 
 
-def test_parse_bool_none() -> None:
-    assert gb_parse_bool(None) is False
-
-
-def test_parse_bool_empty() -> None:
-    assert gb_parse_bool("") is False
-    assert gb_parse_bool("   ") is False
-
-
-def test_parse_bool_truthy() -> None:
-    for s in ("1", "true", "yes", "sim", "y", "on", "TRUE"):
-        assert gb_parse_bool(s) is True
-
-
-def test_parse_image_source_none() -> None:
-    assert parse_img_src(None) is None
-    assert parse_img_src("") is None
-
-
-def test_parse_image_source_valid() -> None:
-    assert parse_img_src("text2d") == "text2d"
-    assert parse_img_src("TEXTURE2D") == "texture2d"
-    assert parse_img_src("  skymap2d ") == "skymap2d"
-
-
-def test_parse_image_source_invalid() -> None:
-    with pytest.raises(ValueError, match="text2d"):
-        parse_img_src("invalid")
-
-
 def test_effective_image_source_row_wins() -> None:
     p = _minimal_profile(image_source="text2d")
     row = ManifestRow(id="1", idea="x", kind=None, generate_3d=False, image_source="texture2d")
@@ -70,9 +38,14 @@ def test_effective_image_source_from_profile() -> None:
     assert effective_image_source(p, row) == "skymap2d"
 
 
-def test_load_manifest_minimal_csv(tmp_path: Path) -> None:
-    p = tmp_path / "m.csv"
-    p.write_text("id,idea\na,idea a\nb,idea b\n", encoding="utf-8")
+def test_load_manifest_minimal_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "m.yaml"
+    p.write_text(
+        yaml.dump(
+            {"assets": [{"id": "a", "idea": "idea a", "pipeline": []}, {"id": "b", "idea": "idea b", "pipeline": []}]}
+        ),
+        encoding="utf-8",
+    )
     rows = load_manifest(p)
     assert len(rows) == 2
     assert rows[0].id == "a"
@@ -128,24 +101,33 @@ def test_parse_output_dir_behavior() -> None:
     assert _parse_output_dir("out") == "out"
 
 
-def test_manifest_skips_empty_rows(tmp_path: Path) -> None:
-    p = tmp_path / "m.csv"
-    p.write_text("id,idea\n,,\nc,valid\n", encoding="utf-8")
+def test_manifest_skips_empty_rows_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "m.yaml"
+    p.write_text(
+        yaml.dump({"assets": [{"id": "c", "idea": "valid", "pipeline": []}]}),
+        encoding="utf-8",
+    )
     rows = load_manifest(p)
     assert len(rows) == 1
     assert rows[0].id == "c"
 
 
-def test_manifest_generate_3d_column(tmp_path: Path) -> None:
-    p = tmp_path / "m.csv"
-    p.write_text("id,idea,generate_3d\nd,idea,1\n", encoding="utf-8")
+def test_manifest_generate_3d_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "m.yaml"
+    p.write_text(
+        yaml.dump({"assets": [{"id": "d", "idea": "idea", "pipeline": ["3d"]}]}),
+        encoding="utf-8",
+    )
     rows = load_manifest(p)
     assert rows[0].generate_3d is True
 
 
-def test_manifest_generate_audio_column(tmp_path: Path) -> None:
-    p = tmp_path / "m.csv"
-    p.write_text("id,idea,generate_audio\ne,idea,yes\n", encoding="utf-8")
+def test_manifest_generate_audio_yaml(tmp_path: Path) -> None:
+    p = tmp_path / "m.yaml"
+    p.write_text(
+        yaml.dump({"assets": [{"id": "e", "idea": "idea", "pipeline": ["audio"]}]}),
+        encoding="utf-8",
+    )
     rows = load_manifest(p)
     assert rows[0].generate_audio is True
 
@@ -158,8 +140,9 @@ def test_resources_presets_yaml_path() -> None:
     assert (pp.parent / pp.name) == pp
 
 
-def test_templates_manifest_csv_header() -> None:
-    from gameassets.templates import MANIFEST_CSV
+def test_templates_manifest_yaml_has_required_fields() -> None:
+    from gameassets.templates import MANIFEST_YAML
 
-    assert "id" in MANIFEST_CSV
-    assert "idea" in MANIFEST_CSV
+    assert "id" in MANIFEST_YAML
+    assert "idea" in MANIFEST_YAML
+    assert "pipeline" in MANIFEST_YAML

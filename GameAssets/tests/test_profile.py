@@ -130,7 +130,6 @@ def test_from_dict_text3d_hunyuan_explicit() -> None:
                 "octree_resolution": 160,
                 "low_vram": False,
                 "texture": True,
-                "no_mesh_repair": False,
             },
         }
     )

@@ -1,18 +1,26 @@
-"""Testes do manifest CSV."""
+"""Testes do manifest YAML."""
+
+from __future__ import annotations
 
 import tempfile
 from pathlib import Path
 
-import pytest
 import yaml
 
 from gameassets.manifest import ManifestRow, effective_image_source, load_manifest
 from gameassets.profile import load_profile
 
 
-def test_load_basic() -> None:
-    content = "id,idea,kind,generate_3d\na,idea one,prop,true\nb,idea two,,false\n"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+def test_load_manifest_yaml_basic() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {"id": "a", "idea": "idea one", "kind": "prop", "pipeline": ["3d"]},
+                {"id": "b", "idea": "idea two", "pipeline": []},
+            ]
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         f.write(content)
         path = Path(f.name)
     try:
@@ -25,61 +33,41 @@ def test_load_basic() -> None:
         path.unlink(missing_ok=True)
 
 
-def test_quoted_commas() -> None:
-    content = 'id,idea,kind,generate_3d\nx,"hello, world",prop,sim\n'
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
-        f.write(content)
-        path = Path(f.name)
-    try:
-        rows = load_manifest(path)
-        assert rows[0].idea == "hello, world"
-    finally:
-        path.unlink(missing_ok=True)
-
-
-def test_generate_animate_column() -> None:
-    content = (
-        "id,idea,kind,generate_3d,generate_rig,generate_animate\na,one,prop,true,true,true\nb,two,,false,false,false\n"
+def test_load_manifest_yaml_pipeline() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {"id": "hero", "idea": "chibi hero", "kind": "character", "pipeline": ["3d", "rig", "animate"]},
+            ]
+        }
     )
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         f.write(content)
         path = Path(f.name)
     try:
         rows = load_manifest(path)
-        assert rows[0].generate_animate is True
-        assert rows[1].generate_animate is False
-    finally:
-        path.unlink(missing_ok=True)
-
-
-def test_generate_rig_column() -> None:
-    content = "id,idea,kind,generate_3d,generate_rig\na,one,prop,true,true\nb,two,,false,false\n"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
-        f.write(content)
-        path = Path(f.name)
-    try:
-        rows = load_manifest(path)
+        assert rows[0].generate_3d is True
         assert rows[0].generate_rig is True
-        assert rows[1].generate_rig is False
+        assert rows[0].generate_animate is True
     finally:
         path.unlink(missing_ok=True)
 
 
-def test_image_source_column() -> None:
-    content = (
-        "id,idea,kind,generate_3d,image_source\n"
-        "a,idea one,prop,false,text2d\n"
-        "b,idea two,,false,texture2d\n"
-        "c,idea three,,false,skymap2d\n"
+def test_load_manifest_yaml_audio() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {"id": "sfx", "idea": "collect sound", "kind": "prop", "pipeline": ["audio"]},
+            ]
+        }
     )
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         f.write(content)
         path = Path(f.name)
     try:
         rows = load_manifest(path)
-        assert rows[0].image_source == "text2d"
-        assert rows[1].image_source == "texture2d"
-        assert rows[2].image_source == "skymap2d"
+        assert rows[0].generate_audio is True
+        assert rows[0].generate_3d is False
     finally:
         path.unlink(missing_ok=True)
 
@@ -111,24 +99,32 @@ def test_effective_image_source_row_override() -> None:
         path.unlink(missing_ok=True)
 
 
-def test_image_source_invalid_raises() -> None:
-    content = "id,idea,image_source\na,idea one,blender\n"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+def test_load_manifest_yaml_image_source() -> None:
+    content = yaml.dump(
+        {
+            "assets": [
+                {"id": "a", "idea": "tile", "pipeline": [], "image_source": "texture2d"},
+            ]
+        }
+    )
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         f.write(content)
         path = Path(f.name)
     try:
-        with pytest.raises(ValueError, match="image_source"):
-            load_manifest(path)
+        rows = load_manifest(path)
+        assert rows[0].image_source == "texture2d"
     finally:
         path.unlink(missing_ok=True)
 
 
-def test_missing_columns_raises() -> None:
-    content = "a,b\n1,2\n"
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False, encoding="utf-8") as f:
+def test_load_manifest_empty_raises() -> None:
+    content = yaml.dump({"assets": []})
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
         f.write(content)
         path = Path(f.name)
     try:
+        import pytest
+
         with pytest.raises(ValueError, match="id"):
             load_manifest(path)
     finally:

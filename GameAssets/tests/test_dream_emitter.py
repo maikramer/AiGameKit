@@ -11,7 +11,6 @@ from gameassets.dream.emitter import (
     emit_game_yaml,
     emit_index_html,
     emit_main_ts,
-    emit_manifest_csv,
     emit_world_xml,
 )
 from gameassets.dream.planner import AssetEntry, DreamPlan, Placement, SceneLayout
@@ -87,28 +86,6 @@ class TestEmitGameYaml:
         out = emit_game_yaml(_sample_plan(), with_audio=False)
         doc = yaml.safe_load(out)
         assert "text2sound" not in doc
-
-
-class TestEmitManifestCsv:
-    def test_has_headers(self) -> None:
-        out = emit_manifest_csv(_sample_plan())
-        lines = out.strip().splitlines()
-        header = lines[0]
-        assert "id" in header
-        assert "idea" in header
-        assert "kind" in header
-        assert "generate_animate" in header
-
-    def test_hero_row_has_generate_animate_when_rig(self) -> None:
-        out = emit_manifest_csv(_sample_plan())
-        lines = out.strip().splitlines()
-        hero_line = next(L for L in lines if L.startswith("hero,"))
-        assert hero_line.split(",")[6] == "true"
-
-    def test_row_count(self) -> None:
-        out = emit_manifest_csv(_sample_plan())
-        lines = out.strip().splitlines()
-        assert len(lines) == 5  # header + 4 assets
 
 
 class TestEmitWorldXml:
