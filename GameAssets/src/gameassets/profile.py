@@ -18,62 +18,45 @@ def _parse_output_dir(raw: Any) -> str:
 
 
 @dataclass
+class Paint3DProfile:
+    """Opções passadas ao CLI paint3d texture / texture-batch."""
+
+    style: str = "hunyuan"
+    preserve_origin: bool = True
+    max_views: int | None = None
+    view_resolution: int | None = None
+    render_size: int | None = None
+    texture_size: int | None = None
+    bake_exp: int | None = None
+    smooth: bool = True
+    smooth_passes: int | None = None
+    low_vram_mode: bool = False
+    # Quick paint (solid / perlin)
+    solid_color: str = "#888888"
+    perlin_tint: str = "#7a7268"
+    perlin_frequency: float = 4.0
+    perlin_octaves: int = 4
+    perlin_contrast: float = 0.55
+    perlin_seed: int | None = None
+
+
+@dataclass
 class Text3DProfile:
     """Opções passadas ao CLI text3d generate (subconjunto)."""
 
     preset: str | None = None  # fast | balanced | hq
     low_vram: bool = False
-    texture: bool = False
-    # Origem ao exportar GLB (shape): feet = base AABB em Y=0 e XZ centrado (defeito para props/personagens).
-    # Sobrescreve TEXT3D_EXPORT_ORIGIN no batch gameassets (reprodutibilidade).
     export_origin: str = "feet"
-    # Após paint3d texture: repor convenção "pés" na mesh final (alinhado com Text3D).
-    paint_preserve_origin: bool = True
-    # Textura no GLB: hunyuan = Paint 2.1 IA (lento); solid / perlin = ``paint3d quick`` (rápido, cor por vértice).
-    paint_style: str = "hunyuan"
-    paint_solid_color: str = "#888888"
-    paint_perlin_tint: str = "#7a7268"
-    paint_perlin_frequency: float = 4.0
-    paint_perlin_octaves: int = 4
-    paint_perlin_contrast: float = 0.55
-    # None = usar o mesmo seed estável da linha no batch (ver ``_seed_for_row``).
-    paint_perlin_seed: int | None = None
-    # Se qualquer um estiver definido, não se passa --preset (o text3d aplica preset por cima de --steps)
     steps: int | None = None
     octree_resolution: int | None = None
     num_chunks: int | None = None
-    no_mesh_repair: bool = False
-    mesh_smooth: int | None = None
     mc_level: float | None = None
-    # Repasse aos CLIs text3d generate / paint3d (VRAM / exclusividade GPU)
     allow_shared_gpu: bool = False
     gpu_kill_others: bool = True
-    # Com textura o batch corre em fases (shape → paint3d texture).
-    phased_batch: bool = False
-    # GPU pura: Text2D inteiro na GPU; no paint3d activa --paint-full-gpu quando aplicável.
     full_gpu: bool = False
-    # Subpasta do modelo Hunyuan3D shape (ex.: hunyuan3d-dit-v2-1)
     model_subfolder: str | None = None
-    # --- Paint3D texture options (aplicáveis quando texture=true) ---
-    # Número de vistas multiview para texturização (menos = mais rápido; padrão 4)
-    paint_max_views: int | None = None
-    # Resolução das vistas internas (menor = mais rápido; padrão 512)
-    paint_view_resolution: int | None = None
-    # Resolução de rasterização para back-projection (padrão upstream: 2048)
-    paint_render_size: int | None = None
-    # Resolução do atlas UV final (padrão upstream: 4096)
-    paint_texture_size: int | None = None
-    # Expoente de blending entre vistas (maior = costuras mais nítidas; padrão 6)
-    paint_bake_exp: int | None = None
-    # --- Otimizações de VRAM para Paint3D ---
-    # Modo de quantização: auto, none, fp8, int8, int4, quanto-int8, quanto-int4
-    paint_quantization: str | None = None
-    # Usar Tiny VAE (TAESD) para reduzir VRAM do VAE
-    paint_tiny_vae: bool = False
-    # Habilitar torch.compile para acelerar inferência
-    paint_torch_compile: bool = False
-    # Modo low-vram (ativa todas as otimizações agressivas)
-    paint_low_vram_mode: bool = False
+    guidance: float | None = None
+    simplify_texture_size: int | None = None
 
 
 @dataclass
@@ -84,6 +67,8 @@ class Text2DProfile:
     cpu: bool = False
     width: int | None = None
     height: int | None = None
+    steps: int | None = None
+    guidance_scale: float | None = None
 
 
 @dataclass
@@ -228,12 +213,14 @@ class GameProfile:
     texture2d: Texture2DProfile | None = None
     skymap2d: Skymap2DProfile | None = None
     text3d: Text3DProfile | None = None
+    paint3d: Paint3DProfile | None = None
     text2sound: Text2SoundProfile | None = None
     rigging3d: Rigging3DProfile | None = None
     animator3d: Animator3DProfile | None = None
     part3d: Part3DProfile | None = None
     lod: LODProfile | None = None
     collision: CollisionProfile | None = None
+    generation: str | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GameProfile:
@@ -256,16 +243,22 @@ class GameProfile:
         if isinstance(raw_t2, dict):
             w = raw_t2.get("width")
             h = raw_t2.get("height")
+            t2s = raw_t2.get("steps")
+            t2g = raw_t2.get("guidance_scale")
             try:
                 wi = int(w) if w is not None else None
                 he = int(h) if h is not None else None
+                t2s_i = int(t2s) if t2s is not None else None
+                t2g_f = float(t2g) if t2g is not None else None
             except (TypeError, ValueError) as e:
-                raise ValueError("text2d.width e text2d.height devem ser inteiros") from e
+                raise ValueError("text2d.width, height, steps e guidance_scale devem ser números válidos") from e
             t2 = Text2DProfile(
                 low_vram=bool(raw_t2.get("low_vram", False)),
                 cpu=bool(raw_t2.get("cpu", False)),
                 width=wi,
                 height=he,
+                steps=t2s_i,
+                guidance_scale=t2g_f,
             )
         tex2: Texture2DProfile | None = None
         raw_tex2 = data.get("texture2d")
@@ -412,89 +405,95 @@ class GameProfile:
             pr = raw_t3.get("preset")
             if pr is not None and pr not in ("fast", "balanced", "hq"):
                 raise ValueError("text3d.preset deve ser fast, balanced ou hq")
-            tx = raw_t3.get("texture")
-            tx = True if tx is None else bool(tx)
             st = raw_t3.get("steps")
             oc = raw_t3.get("octree_resolution")
             nc = raw_t3.get("num_chunks")
-            ms = raw_t3.get("mesh_smooth")
             mcl = raw_t3.get("mc_level")
             try:
                 st_i = int(st) if st is not None else None
                 oc_i = int(oc) if oc is not None else None
                 nc_i = int(nc) if nc is not None else None
-                ms_i = int(ms) if ms is not None else None
                 mcl_f = float(mcl) if mcl is not None else None
             except (TypeError, ValueError) as e:
                 raise ValueError(
-                    "text3d.steps, octree_resolution, num_chunks, mesh_smooth e mc_level devem ser números válidos"
+                    "text3d.steps, octree_resolution, num_chunks e mc_level devem ser números válidos"
                 ) from e
+            hy_guid = raw_t3.get("guidance")
+            try:
+                hy_guid_f = float(hy_guid) if hy_guid is not None else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.guidance deve ser um número") from e
             allow_sg = bool(raw_t3.get("allow_shared_gpu", False))
             gko = raw_t3.get("gpu_kill_others")
             g_kill = True if gko is None else bool(gko)
-            phased = bool(raw_t3.get("phased_batch", False))
             full_gpu = bool(raw_t3.get("full_gpu", False))
             model_sub = raw_t3.get("model_subfolder")
             model_sub_s = str(model_sub).strip() if model_sub not in (None, "") else None
-            # Paint3D texture options (performance tuning)
-            pmv = raw_t3.get("paint_max_views")
-            pvr = raw_t3.get("paint_view_resolution")
-            prs = raw_t3.get("paint_render_size")
-            pts = raw_t3.get("paint_texture_size")
-            pbe = raw_t3.get("paint_bake_exp")
+            sts = raw_t3.get("simplify_texture_size")
+            try:
+                sts_i = int(sts) if sts is not None else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.simplify_texture_size deve ser inteiro") from e
+            eo_raw = raw_t3.get("export_origin", "feet")
+            eo = str(eo_raw).strip().lower() if eo_raw not in (None, "") else "feet"
+            valid_eo = frozenset({"feet", "center", "none"})
+            if eo not in valid_eo:
+                raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
+            t3 = Text3DProfile(
+                preset=pr,
+                low_vram=bool(raw_t3.get("low_vram", False)),
+                export_origin=eo,
+                steps=st_i,
+                octree_resolution=oc_i,
+                num_chunks=nc_i,
+                mc_level=mcl_f,
+                allow_shared_gpu=allow_sg,
+                gpu_kill_others=g_kill,
+                full_gpu=full_gpu,
+                model_subfolder=model_sub_s,
+                guidance=hy_guid_f,
+                simplify_texture_size=sts_i,
+            )
+        p3d: Paint3DProfile | None = None
+        raw_p3d = data.get("paint3d")
+        if isinstance(raw_p3d, dict):
+            ps_raw = raw_p3d.get("style", "hunyuan")
+            ps = str(ps_raw).strip().lower() if ps_raw not in (None, "") else "hunyuan"
+            valid_ps = frozenset({"hunyuan", "solid", "perlin"})
+            if ps not in valid_ps:
+                raise ValueError("paint3d.style deve ser hunyuan (Paint 2.1 IA), solid ou perlin (paint3d quick)")
+            pmv = raw_p3d.get("max_views")
+            pvr = raw_p3d.get("view_resolution")
+            prs = raw_p3d.get("render_size")
+            pts = raw_p3d.get("texture_size")
+            pbe = raw_p3d.get("bake_exp")
+            psp = raw_p3d.get("smooth_passes")
             try:
                 pmv_i = int(pmv) if pmv is not None else None
                 pvr_i = int(pvr) if pvr is not None else None
                 prs_i = int(prs) if prs is not None else None
                 pts_i = int(pts) if pts is not None else None
                 pbe_i = int(pbe) if pbe is not None else None
+                psp_i = int(psp) if psp is not None else None
             except (TypeError, ValueError) as e:
                 raise ValueError(
-                    "text3d.paint_max_views, paint_view_resolution, paint_render_size, "
-                    "paint_texture_size e paint_bake_exp devem ser inteiros"
+                    "paint3d.max_views, view_resolution, render_size, "
+                    "texture_size, bake_exp e smooth_passes devem ser inteiros"
                 ) from e
-            # Paint3D otimizações de VRAM
-            paint_quant = raw_t3.get("paint_quantization")
-            paint_quant_s = str(paint_quant).strip().lower() if paint_quant not in (None, "") else None
-            valid_quant_modes = (
-                "auto",
-                "none",
-                "fp8",
-                "int8",
-                "int4",
-                "quanto-int8",
-                "quanto-int4",
-                "sdnq-int8",
-                "sdnq-uint8",
-                "sdnq-int4",
-            )
-            if paint_quant_s and paint_quant_s not in valid_quant_modes:
-                raise ValueError(f"text3d.paint_quantization deve ser um de: {', '.join(valid_quant_modes)}")
-            eo_raw = raw_t3.get("export_origin", "feet")
-            eo = str(eo_raw).strip().lower() if eo_raw not in (None, "") else "feet"
-            valid_eo = frozenset({"feet", "center", "none"})
-            if eo not in valid_eo:
-                raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
-            paint_preserve = bool(raw_t3.get("paint_preserve_origin", True))
-            ps_raw = raw_t3.get("paint_style", "hunyuan")
-            ps = str(ps_raw).strip().lower() if ps_raw not in (None, "") else "hunyuan"
-            valid_ps = frozenset({"hunyuan", "solid", "perlin"})
-            if ps not in valid_ps:
-                raise ValueError("text3d.paint_style deve ser hunyuan (Paint 2.1 IA), solid ou perlin (paint3d quick)")
-            psc = raw_t3.get("paint_solid_color", "#888888")
+            psc = raw_p3d.get("solid_color", "#888888")
             psc_s = str(psc).strip() if psc not in (None, "") else "#888888"
-            ptint = raw_t3.get("paint_perlin_tint", "#7a7268")
-            ptint_s = str(ptint).strip() if ptint not in (None, "") else "#7a7268"
+            ptint = raw_p3d.get("perlin_tint", "#7a7268")
+            ptint_s = str(ptint) if ptint not in (None, "") else "#7a7268"
             try:
-                pf = float(raw_t3.get("paint_perlin_frequency", 4.0))
-                pcon = float(raw_t3.get("paint_perlin_contrast", 0.55))
+                pf = float(raw_p3d.get("perlin_frequency", 4.0))
+                pcon = float(raw_p3d.get("perlin_contrast", 0.55))
             except (TypeError, ValueError) as e:
-                raise ValueError("text3d.paint_perlin_frequency e paint_perlin_contrast devem ser números") from e
+                raise ValueError("paint3d.perlin_frequency e perlin_contrast devem ser números") from e
             try:
-                po = int(raw_t3.get("paint_perlin_octaves", 4))
+                po = int(raw_p3d.get("perlin_octaves", 4))
             except (TypeError, ValueError) as e:
-                raise ValueError("text3d.paint_perlin_octaves deve ser inteiro") from e
-            pps = raw_t3.get("paint_perlin_seed")
+                raise ValueError("paint3d.perlin_octaves deve ser inteiro") from e
+            pps = raw_p3d.get("perlin_seed")
             pps_i: int | None
             if pps is None or (isinstance(pps, str) and str(pps).strip() == ""):
                 pps_i = None
@@ -502,43 +501,27 @@ class GameProfile:
                 try:
                     pps_i = int(pps)
                 except (TypeError, ValueError) as e:
-                    raise ValueError("text3d.paint_perlin_seed deve ser inteiro ou omitido") from e
-            t3 = Text3DProfile(
-                preset=pr,
-                low_vram=bool(raw_t3.get("low_vram", False)),
-                texture=tx,
-                export_origin=eo,
-                paint_preserve_origin=paint_preserve,
-                paint_style=ps,
-                paint_solid_color=psc_s,
-                paint_perlin_tint=ptint_s,
-                paint_perlin_frequency=pf,
-                paint_perlin_octaves=po,
-                paint_perlin_contrast=pcon,
-                paint_perlin_seed=pps_i,
-                steps=st_i,
-                octree_resolution=oc_i,
-                num_chunks=nc_i,
-                no_mesh_repair=bool(raw_t3.get("no_mesh_repair", False)),
-                mesh_smooth=ms_i,
-                mc_level=mcl_f,
-                allow_shared_gpu=allow_sg,
-                gpu_kill_others=g_kill,
-                phased_batch=phased,
-                full_gpu=full_gpu,
-                model_subfolder=model_sub_s,
-                paint_max_views=pmv_i,
-                paint_view_resolution=pvr_i,
-                paint_render_size=prs_i,
-                paint_texture_size=pts_i,
-                paint_bake_exp=pbe_i,
-                paint_quantization=paint_quant_s,
-                paint_tiny_vae=bool(raw_t3.get("paint_tiny_vae", False)),
-                paint_torch_compile=bool(raw_t3.get("paint_torch_compile", False)),
-                paint_low_vram_mode=bool(raw_t3.get("paint_low_vram_mode", False)),
+                    raise ValueError("paint3d.perlin_seed deve ser inteiro ou omitido") from e
+            paint_smooth_val = raw_p3d.get("smooth")
+            paint_smooth = bool(paint_smooth_val) if paint_smooth_val is not None else True
+            p3d = Paint3DProfile(
+                style=ps,
+                preserve_origin=bool(raw_p3d.get("preserve_origin", True)),
+                max_views=pmv_i,
+                view_resolution=pvr_i,
+                render_size=prs_i,
+                texture_size=pts_i,
+                bake_exp=pbe_i,
+                smooth=paint_smooth,
+                smooth_passes=psp_i,
+                low_vram_mode=bool(raw_p3d.get("low_vram_mode", False)),
+                solid_color=psc_s,
+                perlin_tint=ptint_s,
+                perlin_frequency=pf,
+                perlin_octaves=po,
+                perlin_contrast=pcon,
+                perlin_seed=pps_i,
             )
-            if ps in ("solid", "perlin") and not tx:
-                raise ValueError("text3d.paint_style solid/perlin exige text3d.texture: true (fase shape → quick bake)")
         rg3: Rigging3DProfile | None = None
         raw_rg = data.get("rigging3d")
         if isinstance(raw_rg, dict):
@@ -666,6 +649,14 @@ class GameProfile:
         if isrc == "skymap2d" and sky2 is None:
             sky2 = Skymap2DProfile()
         audio_sd = str(data.get("audio_subdir") or "audio").strip() or "audio"
+        gen_raw = data.get("generation")
+        gen_name: str | None = None
+        if gen_raw is not None:
+            gen_name = str(gen_raw).strip().lower()
+            from .generation_profiles import VALID_GENERATION_PROFILES
+
+            if gen_name not in VALID_GENERATION_PROFILES:
+                raise ValueError(f"generation deve ser um de: {', '.join(VALID_GENERATION_PROFILES)}")
         return cls(
             title=str(data["title"]),
             genre=str(data["genre"]),
@@ -684,12 +675,14 @@ class GameProfile:
             texture2d=tex2,
             skymap2d=sky2,
             text3d=t3,
+            paint3d=p3d,
             text2sound=ts2,
             rigging3d=rg3,
             animator3d=anim3,
             part3d=p3,
             lod=lod,
             collision=coll,
+            generation=gen_name,
         )
 
 
@@ -697,3 +690,88 @@ def load_profile(path: Path) -> GameProfile:
     with path.open("r", encoding="utf-8") as f:
         raw = yaml.safe_load(f)
     return GameProfile.from_dict(raw or {})
+
+
+def apply_generation_profile(profile: GameProfile, generation_name: str) -> GameProfile:
+    """Merge generation profile defaults into *profile*, preserving explicit settings.
+
+    Only fills ``None`` / default fields in Text2DProfile, Text3DProfile, Text2SoundProfile.
+    Returns a new GameProfile — the original is not mutated.
+    """
+    from .generation_profiles import get_profile
+
+    gp = get_profile(generation_name)
+
+    t2 = profile.text2d or Text2DProfile()
+    t2 = Text2DProfile(
+        low_vram=t2.low_vram,
+        cpu=t2.cpu,
+        width=t2.width if t2.width is not None else gp.text2d_width,
+        height=t2.height if t2.height is not None else gp.text2d_height,
+        steps=t2.steps if t2.steps is not None else gp.text2d_steps,
+        guidance_scale=t2.guidance_scale if t2.guidance_scale is not None else gp.text2d_guidance,
+    )
+
+    t3 = profile.text3d or Text3DProfile()
+    t3 = Text3DProfile(
+        preset=t3.preset if t3.preset is not None else gp.text3d_preset,
+        low_vram=t3.low_vram,
+        export_origin=t3.export_origin,
+        steps=t3.steps,
+        octree_resolution=t3.octree_resolution,
+        num_chunks=t3.num_chunks,
+        mc_level=t3.mc_level,
+        allow_shared_gpu=t3.allow_shared_gpu,
+        gpu_kill_others=t3.gpu_kill_others,
+        full_gpu=t3.full_gpu,
+        model_subfolder=t3.model_subfolder,
+        guidance=t3.guidance if t3.guidance is not None else gp.text3d_guidance,
+        simplify_texture_size=(
+            t3.simplify_texture_size if t3.simplify_texture_size is not None else gp.simplify_texture_size
+        ),
+    )
+
+    p3d = profile.paint3d or Paint3DProfile()
+    p3d = Paint3DProfile(
+        style=p3d.style,
+        preserve_origin=p3d.preserve_origin,
+        max_views=p3d.max_views if p3d.max_views is not None else gp.paint_max_views,
+        view_resolution=p3d.view_resolution if p3d.view_resolution is not None else gp.paint_view_resolution,
+        render_size=p3d.render_size if p3d.render_size is not None else gp.paint_render_size,
+        texture_size=p3d.texture_size if p3d.texture_size is not None else gp.paint_texture_size,
+        bake_exp=p3d.bake_exp if p3d.bake_exp is not None else gp.paint_bake_exp,
+        smooth=p3d.smooth if p3d.smooth else gp.paint_smooth,
+        smooth_passes=p3d.smooth_passes if p3d.smooth_passes is not None else gp.paint_smooth_passes,
+        low_vram_mode=p3d.low_vram_mode,
+        solid_color=p3d.solid_color,
+        perlin_tint=p3d.perlin_tint,
+        perlin_frequency=p3d.perlin_frequency,
+        perlin_octaves=p3d.perlin_octaves,
+        perlin_contrast=p3d.perlin_contrast,
+        perlin_seed=p3d.perlin_seed,
+    )
+
+    ts2 = profile.text2sound or Text2SoundProfile()
+    ts2 = Text2SoundProfile(
+        duration=ts2.duration,
+        steps=ts2.steps if ts2.steps is not None else gp.text2sound_steps,
+        cfg_scale=ts2.cfg_scale,
+        audio_format=ts2.audio_format,
+        preset=ts2.preset,
+        sigma_min=ts2.sigma_min,
+        sigma_max=ts2.sigma_max,
+        sampler=ts2.sampler,
+        trim=ts2.trim,
+        model_id=ts2.model_id,
+        half_precision=ts2.half_precision,
+    )
+
+    import copy
+
+    merged = copy.copy(profile)
+    merged.text2d = t2
+    merged.text3d = t3
+    merged.paint3d = p3d
+    merged.text2sound = ts2
+    merged.generation = generation_name
+    return merged

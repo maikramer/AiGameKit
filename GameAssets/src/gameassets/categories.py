@@ -22,7 +22,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "humanoid": AssetCategory(
         name="humanoid",
         default_kind="character",
-        target_faces=8000,
+        target_faces=32000,
         hint_2d="full-body character concept, front-facing view, clean silhouette on white background",
         hint_3d="single character model, no weapons or props attached, clean mesh with clear limb separation",
         hint_rig=(
@@ -54,7 +54,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "creature": AssetCategory(
         name="creature",
         default_kind="character",
-        target_faces=6000,
+        target_faces=24000,
         hint_2d="creature concept art, side view, clear silhouette on white background",
         hint_3d="single creature model, no rider or accessories, clean organic mesh",
         hint_rig="standing in neutral pose with legs apart, arms or forelimbs extended, symmetrical stance",
@@ -76,7 +76,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "chest": AssetCategory(
         name="chest",
         default_kind="prop",
-        target_faces=2000,
+        target_faces=8000,
         hint_2d="game chest or treasure box, front view, clear lid visible on white background",
         hint_3d="isolated chest or container, no hands or characters, clean geometry with visible lid seam",
         hint_rig="",
@@ -95,7 +95,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "weapon": AssetCategory(
         name="weapon",
         default_kind="prop",
-        target_faces=1500,
+        target_faces=6000,
         hint_2d="game weapon, side view, clean silhouette on white background",
         hint_3d="single clean weapon, no hands or characters holding it, isolated tool",
         hint_rig="",
@@ -114,7 +114,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "tree": AssetCategory(
         name="tree",
         default_kind="environment",
-        target_faces=3000,
+        target_faces=12000,
         hint_2d="game-ready tree, full view, trunk and canopy visible on white background",
         hint_3d="stylized game tree, clean trunk and canopy separation",
         hint_rig="",
@@ -124,7 +124,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "rock": AssetCategory(
         name="rock",
         default_kind="prop",
-        target_faces=800,
+        target_faces=3200,
         hint_2d="game-ready rock formation, single isolated boulder, white background",
         hint_3d="simple rock or boulder, low-poly friendly, no attached ground plane",
         hint_rig="",
@@ -134,7 +134,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "mineral": AssetCategory(
         name="mineral",
         default_kind="prop",
-        target_faces=1200,
+        target_faces=4800,
         hint_2d="crystal or mineral cluster, front view, faceted surfaces on white background",
         hint_3d="crystal formation with distinct facets, clean geometry, no ground attachment",
         hint_rig="",
@@ -144,7 +144,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "building": AssetCategory(
         name="building",
         default_kind="environment",
-        target_faces=6000,
+        target_faces=24000,
         hint_2d="game building or structure, front view, architectural detail on white background",
         hint_3d="isolated building model, no terrain or ground plane, clean structural geometry",
         hint_rig="",
@@ -154,7 +154,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "furniture": AssetCategory(
         name="furniture",
         default_kind="prop",
-        target_faces=2000,
+        target_faces=8000,
         hint_2d="game furniture piece, front view, clean proportions on white background",
         hint_3d="isolated furniture item, no room or floor, clean geometry with visible part lines",
         hint_rig="",
@@ -164,7 +164,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "vegetation": AssetCategory(
         name="vegetation",
         default_kind="environment",
-        target_faces=2500,
+        target_faces=10000,
         hint_2d="game vegetation or plant, full view, leaf detail visible on white background",
         hint_3d="vegetation cluster, clean stem and leaf separation, no ground plane",
         hint_rig="",
@@ -174,7 +174,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "vehicle": AssetCategory(
         name="vehicle",
         default_kind="prop",
-        target_faces=4000,
+        target_faces=16000,
         hint_2d="game vehicle, side view, mechanical detail on white background",
         hint_3d="isolated vehicle model, no driver or terrain, clean mechanical geometry",
         hint_rig="",
@@ -184,7 +184,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "armor": AssetCategory(
         name="armor",
         default_kind="prop",
-        target_faces=2500,
+        target_faces=10000,
         hint_2d="game armor piece, front view, clean surfaces on white background",
         hint_3d="isolated armor piece, no body or character inside, clean plate geometry",
         hint_rig="laid flat or in T-pose arrangement, armor open and unfolded",
@@ -194,7 +194,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "food": AssetCategory(
         name="food",
         default_kind="prop",
-        target_faces=800,
+        target_faces=3200,
         hint_2d="game food item, top-down or front view, simple organic shape on white background",
         hint_3d="isolated food item, no plate or table, clean simple organic geometry",
         hint_rig="",
@@ -204,7 +204,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "tool": AssetCategory(
         name="tool",
         default_kind="prop",
-        target_faces=1000,
+        target_faces=4000,
         hint_2d="game tool or implement, side view, clean handle and head on white background",
         hint_3d="single clean tool, no hands or characters, clean silhouette with handle and head",
         hint_rig="",
@@ -214,7 +214,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "terrain": AssetCategory(
         name="terrain",
         default_kind="environment",
-        target_faces=4000,
+        target_faces=16000,
         hint_2d="terrain tile or ground chunk, top-down view, surface detail on white background",
         hint_3d="ground chunk or terrain tile, flat bottom surface, no full landscape",
         hint_rig="",
@@ -224,7 +224,7 @@ CATEGORIES: dict[str, AssetCategory] = {
     "effects": AssetCategory(
         name="effects",
         default_kind="prop",
-        target_faces=500,
+        target_faces=2000,
         hint_2d="visual effect element, abstract shape, simple form on white background",
         hint_3d="abstract effect mesh, very low complexity, single element",
         hint_rig="",
@@ -269,8 +269,8 @@ _KEYWORD_MAP: dict[str, str] = {
     "dragao": "creature",
     "demon": "creature",
     "demônio": "creature",
-    "goblin": "creature",
-    "orc": "creature",
+    "goblin": "humanoid",
+    "orc": "humanoid",
     "wolf": "creature",
     "lobo": "creature",
     "bear": "creature",
@@ -500,6 +500,9 @@ def infer_category(idea: str, kind: str) -> str:
     return ""
 
 
-def get_target_faces(category: str, default: int = 3000) -> int:
+def get_target_faces(category: str, default: int = 3000, face_ratio: float = 1.0) -> int:
     cat = CATEGORIES.get(category)
-    return cat.target_faces if cat else default
+    base = cat.target_faces if cat else default
+    if face_ratio <= 0:
+        return 0
+    return max(4, int(base * face_ratio))

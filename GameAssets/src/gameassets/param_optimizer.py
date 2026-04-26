@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .profile import Text3DProfile
+from .profile import Paint3DProfile, Text3DProfile
 
 
 @dataclass(frozen=True)
@@ -25,14 +25,14 @@ class OptimizedText3DParams:
 class OptimizedPaint3DParams:
     """Optimal Paint3D parameters for a given target_faces tier.
 
-    ``paint_style`` is ``"perlin"`` for simple categories (fast, no AI paint),
+    ``style`` is ``"perlin"`` for simple categories (fast, no AI paint),
     or ``None`` to keep the default Hunyuan painting pipeline.
     """
 
-    paint_style: str | None = None
-    paint_max_views: int | None = None
-    paint_view_resolution: int | None = None
-    paint_texture_size: int | None = None
+    style: str | None = None
+    max_views: int | None = None
+    view_resolution: int | None = None
+    texture_size: int | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ def optimize_text3d_for_target(target_faces: int) -> OptimizedText3DParams:
 def optimize_paint_for_target(target_faces: int) -> OptimizedPaint3DParams:
     """Return optimal Paint3D parameters for the given ``target_faces``.
 
-    Simple categories (target ≤ 1200) get ``paint_style="perlin"`` — no AI
+    Simple categories (target ≤ 1200) get ``style="perlin"`` — no AI
     painting at all.  Medium targets get fewer views at lower resolution.
     High targets use full-quality AI paint.
 
@@ -95,17 +95,17 @@ def optimize_paint_for_target(target_faces: int) -> OptimizedPaint3DParams:
     for max_faces, style, views, view_res, tex_size in _PAINT_TIERS:
         if target_faces <= max_faces:
             return OptimizedPaint3DParams(
-                paint_style=style,
-                paint_max_views=views,
-                paint_view_resolution=view_res,
-                paint_texture_size=tex_size,
+                style=style,
+                max_views=views,
+                view_resolution=view_res,
+                texture_size=tex_size,
             )
     style, views, view_res, tex_size = _PAINT_HIGH
     return OptimizedPaint3DParams(
-        paint_style=style,
-        paint_max_views=views,
-        paint_view_resolution=view_res,
-        paint_texture_size=tex_size,
+        style=style,
+        max_views=views,
+        view_resolution=view_res,
+        texture_size=tex_size,
     )
 
 
@@ -118,9 +118,9 @@ def should_optimize_text3d(t3: Text3DProfile) -> bool:
     return t3.steps is None and t3.octree_resolution is None and t3.num_chunks is None and t3.preset is None
 
 
-def should_optimize_paint(t3: Text3DProfile) -> bool:
+def should_optimize_paint(p3: Paint3DProfile) -> bool:
     """Return True if paint params should be auto-tuned.
 
     Only activates when the user has not explicitly set any paint tuning options.
     """
-    return t3.paint_max_views is None and t3.paint_view_resolution is None and t3.paint_texture_size is None
+    return p3.max_views is None and p3.view_resolution is None and p3.texture_size is None
