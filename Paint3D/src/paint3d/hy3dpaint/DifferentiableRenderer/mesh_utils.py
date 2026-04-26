@@ -196,11 +196,122 @@ def _create_mtl_file(base_path: str, texture_maps: dict[str, str], is_pbr: bool)
             _write_mtl_properties(f, properties)
 
 
-def save_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
-    """Save mesh using OBJ format."""
-    save_obj_mesh(
-        mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=metallic, roughness=roughness, normal=normal
+def _dilate_texture_at_seams(texture_np, vtx_uv, uv_idx, dilation_pixels=4):
+    """Dilate texture at UV island boundaries to prevent visible seam cracks.
+
+    Rasterizes UV triangles into a mask, then dilates painted regions outward
+    so GPU sampling near seam edges picks up correct color instead of background.
+    """
+    h, w = texture_np.shape[:2]
+    uv_triangles = vtx_uv[uv_idx]
+    coverage = np.zeros((h, w), dtype=np.uint8)
+    pts = (uv_triangles * [w, h]).astype(np.float32)
+    pts[:, :, 1] = np.clip(h - pts[:, :, 1], 0, h - 1)
+    for tri in pts:
+        cv2.fillConvexPoly(coverage, tri.astype(np.int32), 255)
+    kernel = np.ones((dilation_pixels * 2 + 1, dilation_pixels * 2 + 1), np.uint8)
+    dilated = cv2.dilate(coverage, kernel, iterations=1)
+    border_mask = (dilated > 0) & (coverage == 0)
+    if not border_mask.any():
+        return texture_np
+    if texture_np.ndim == 3:
+        filled = np.zeros_like(texture_np)
+        for c in range(texture_np.shape[2]):
+            filled[:, :, c] = cv2.dilate(texture_np[:, :, c], kernel, iterations=1)
+        texture_np[border_mask] = filled[border_mask]
+    else:
+        filled = cv2.dilate(texture_np, kernel, iterations=1)
+        texture_np[border_mask] = filled[border_mask]
+    return texture_np
+
+
+def _weld_seam_vertices(vtx_pos, pos_idx, tolerance=1e-4):
+    """Snap UV-seam duplicate vertices to shared positions.
+
+    Groups vertices within *tolerance* and snaps all to centroid.
+    Preserves face structure and UV coordinates — only moves positions.
+    """
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    for i, v in enumerate(vtx_pos):
+        key = tuple(np.round(v / tolerance) * tolerance)
+        groups[key].append(i)
+
+    moved = 0
+    for key, indices in groups.items():
+        if len(indices) < 2:
+            continue
+        centroid = vtx_pos[indices].mean(axis=0)
+        for idx in indices:
+            vtx_pos[idx] = centroid
+        moved += len(indices)
+    return moved
+
+
+def save_glb_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
+    """Save mesh as GLB with embedded PBR textures (replaces OBJ+MTL+JPG pipeline).
+
+    Applies seam-aware texture dilation and vertex welding to prevent visible cracks
+    at UV island boundaries.
+    """
+    import trimesh
+    from PIL import Image as PILImage
+    from trimesh.visual.texture import TextureVisuals
+
+    vtx_pos = _convert_to_numpy(vtx_pos, np.float32)
+    pos_idx = _convert_to_numpy(pos_idx, np.int32)
+    vtx_uv = _convert_to_numpy(vtx_uv, np.float32)
+
+    # Disabled: moves UV-seam verts to centroids → geometry cracks.
+    # _dilate_texture_at_seams handles seam artifacts instead.
+    # _weld_seam_vertices(vtx_pos, pos_idx)
+
+    # Dilate texture at UV seams to prevent sampling artifacts
+    texture_uint8 = (texture * 255).astype(np.uint8)
+    texture_uint8 = _dilate_texture_at_seams(texture_uint8, vtx_uv, uv_idx, dilation_pixels=4)
+
+    albedo_img = PILImage.fromarray(texture_uint8)
+    material = trimesh.visual.material.SimpleMaterial(
+        image=albedo_img,
+        diffuse=[255, 255, 255, 255],
     )
+    if metallic is not None:
+        material.metallicFactor = 1.0
+        material.roughnessFactor = 1.0
+
+    visual = TextureVisuals(uv=vtx_uv, material=material)
+    mesh = trimesh.Trimesh(vertices=vtx_pos, faces=pos_idx, visual=visual, process=False)
+
+    scene = trimesh.Scene(geometry={"Mesh": mesh})
+    scene.export(mesh_path, file_type="glb")
+
+
+def save_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
+    if mesh_path.endswith(".glb"):
+        save_glb_mesh(
+            mesh_path,
+            vtx_pos,
+            pos_idx,
+            vtx_uv,
+            uv_idx,
+            texture,
+            metallic=metallic,
+            roughness=roughness,
+            normal=normal,
+        )
+    else:
+        save_obj_mesh(
+            mesh_path,
+            vtx_pos,
+            pos_idx,
+            vtx_uv,
+            uv_idx,
+            texture,
+            metallic=metallic,
+            roughness=roughness,
+            normal=normal,
+        )
 
 
 def _setup_blender_scene():

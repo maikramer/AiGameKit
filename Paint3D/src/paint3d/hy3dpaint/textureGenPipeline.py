@@ -21,7 +21,6 @@ import torch
 import trimesh
 from PIL import Image
 
-from .DifferentiableRenderer.mesh_utils import convert_obj_to_glb
 from .DifferentiableRenderer.MeshRender import MeshRender
 from .utils.image_super_utils import imageSuperNet
 from .utils.multiview_utils import multiviewDiffusionNet
@@ -118,8 +117,15 @@ class Hunyuan3DPaintPipeline:
         print("Models Loaded.")
 
     @torch.no_grad()
-    def __call__(self, mesh_path=None, image_path=None, output_mesh_path=None, use_remesh=True, save_glb=True):
+    def __call__(
+        self, mesh_path=None, image_path=None, output_mesh_path=None, use_remesh=True, save_glb=True, step_callback=None
+    ):
         """Generate texture for 3D mesh using multiview diffusion"""
+
+        def _step(phase, pct):
+            if step_callback:
+                step_callback(phase, pct)
+
         # Ensure image_prompt is a list
         if isinstance(image_path, str):
             image_prompt = Image.open(image_path)
@@ -127,29 +133,85 @@ class Hunyuan3DPaintPipeline:
             image_prompt = image_path
         image_prompt = [image_prompt] if not isinstance(image_prompt, list) else image_path
 
+        _step("uv_unwrap", 0)
         # Process mesh
         path = os.path.dirname(mesh_path)
         if use_remesh:
-            processed_mesh_path = os.path.join(path, "white_mesh_remesh.obj")
+            processed_mesh_path = os.path.join(path, "white_mesh_remesh.glb")
             remesh_mesh(mesh_path, processed_mesh_path)
         else:
             processed_mesh_path = mesh_path
 
         # Output path
         if output_mesh_path is None:
-            output_mesh_path = os.path.join(path, "textured_mesh.obj")
+            output_mesh_path = os.path.join(path, "textured_mesh.glb")
+
+        if output_mesh_path.endswith(".obj"):
+            output_mesh_path = output_mesh_path.replace(".obj", ".glb")
 
         # Load mesh
         mesh = trimesh.load(processed_mesh_path)
         mesh = mesh_uv_wrap(mesh)
         self.render.load_mesh(mesh=mesh)
+        _step("uv_unwrap", 100)
 
         ########### View Selection #########
+        _step("view_selection", 0)
         selected_camera_elevs, selected_camera_azims, selected_view_weights = self.view_processor.bake_view_selection(
             self.config.candidate_camera_elevs,
             self.config.candidate_camera_azims,
             self.config.candidate_view_weights,
             self.config.max_selected_view_num,
+        )
+
+        normal_maps = self.view_processor.render_normal_multiview(
+            selected_camera_elevs, selected_camera_azims, use_abs_coor=True
+        )
+        position_maps = self.view_processor.render_position_multiview(selected_camera_elevs, selected_camera_azims)
+        _step("view_selection", 100)
+
+        ##########  Style  ###########
+        image_caption = "high quality"
+        image_style = []
+        for image in image_prompt:
+            image = image.resize((512, 512))
+            if image.mode == "RGBA":
+                white_bg = Image.new("RGB", image.size, (255, 255, 255))
+                white_bg.paste(image, mask=image.getchannel("A"))
+                image = white_bg
+            image_style.append(image)
+        image_style = [image.convert("RGB") for image in image_style]
+
+        ###########  Multiview  ##########
+        _step("multiview_render", 0)
+        multiviews_pbr = self.models["multiview_model"](
+            image_style,
+            normal_maps + position_maps,
+            prompt=image_caption,
+            custom_view_size=self.config.resolution,
+            resize_input=True,
+        )
+        _step("multiview_render", 100)
+        ###########  Enhance  ##########
+        _step("enhance", 0)
+        enhance_images = {}
+        enhance_images["albedo"] = copy.deepcopy(multiviews_pbr["albedo"])
+        enhance_images["mr"] = copy.deepcopy(multiviews_pbr["mr"])
+
+        for i in range(len(enhance_images["albedo"])):
+            enhance_images["albedo"][i] = self.models["super_model"](enhance_images["albedo"][i])
+            enhance_images["mr"][i] = self.models["super_model"](enhance_images["mr"][i])
+        _step("enhance", 100)
+
+        ###########  Bake  ##########
+        _step("bake", 0)
+        for i in range(len(enhance_images["albedo"])):
+            enhance_images["albedo"][i] = enhance_images["albedo"][i].resize(
+                (self.config.render_size, self.config.render_size)
+            )
+            enhance_images["mr"][i] = enhance_images["mr"][i].resize((self.config.render_size, self.config.render_size))
+        texture, mask = self.view_processor.bake_from_multiview(
+            enhance_images["albedo"], selected_camera_elevs, selected_camera_azims, selected_view_weights
         )
 
         normal_maps = self.view_processor.render_normal_multiview(
@@ -201,17 +263,19 @@ class Hunyuan3DPaintPipeline:
         )
         mask_mr_np = (mask_mr.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
+        _step("bake", 100)
+
         ##########  inpaint  ###########
+        _step("inpaint", 0)
         texture = self.view_processor.texture_inpaint(texture, mask_np)
         self.render.set_texture(texture, force_set=True)
         if "mr" in enhance_images:
             texture_mr = self.view_processor.texture_inpaint(texture_mr, mask_mr_np)
             self.render.set_texture_mr(texture_mr)
+        _step("inpaint", 100)
 
+        _step("save", 0)
         self.render.save_mesh(output_mesh_path, downsample=True)
-
-        if save_glb:
-            convert_obj_to_glb(output_mesh_path, output_mesh_path.replace(".obj", ".glb"))
-            output_mesh_path.replace(".obj", ".glb")
+        _step("save", 100)
 
         return output_mesh_path

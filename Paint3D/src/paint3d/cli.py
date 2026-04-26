@@ -35,6 +35,14 @@ from gamedev_shared.gpu import (
     kill_gpu_compute_processes_aggressive,
 )
 from gamedev_shared.hf import hf_home_display_rich
+from gamedev_shared.progress import (
+    STATUS_ERROR,
+    STATUS_OK,
+    STATUS_SKIPPED,
+    TOOL_PAINT3D,
+    emit_progress,
+    emit_result,
+)
 
 from . import defaults as _defaults
 from .cli_rich import click
@@ -258,6 +266,8 @@ def texture(
 
     try:
         start = time.time()
+        item_id = mesh_path.stem
+        emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=0)
         with ProfilerSession("paint3d", log_path=prof_log, cli_profile=profile) as prof:  # noqa: F841
             with console.status("[bold yellow]A carregar modelos (1ª vez: download HF)...", spinner="dots"):
                 out = paint_file_to_file(
@@ -274,6 +284,9 @@ def texture(
                     low_vram=low_vram_mode,
                     gpu_ids=parsed_gpu_ids,
                 )
+            emit_progress(item_id, TOOL_PAINT3D, phase="multiview_render", percent=100)
+            emit_progress(item_id, TOOL_PAINT3D, phase="bake", percent=100)
+            emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=100)
 
             if smooth:
                 from .texture_smooth import smooth_trimesh_texture
@@ -308,14 +321,18 @@ def texture(
                     save_glb(mesh, out)
 
         out_p = Path(out).resolve()
+        elapsed = time.time() - start
         try:
             sz = format_bytes(out_p.stat().st_size)
         except OSError:
             sz = "?"
+        emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(out_p), seconds=round(elapsed, 2))
         console.print(Rule("[bold green]Resultado", style="green"))
         console.print(f"[bold green]✓[/bold green] GLB texturizado: [cyan]{out_p}[/cyan] [dim]({sz})[/dim]")
-        console.print(f"\n[dim]Tempo: {time.time() - start:.1f}s[/dim]")
+        console.print(f"\n[dim]Tempo: {elapsed:.1f}s[/dim]")
     except Exception as e:
+        elapsed = time.time() - start
+        emit_result(item_id, TOOL_PAINT3D, STATUS_ERROR, error=str(e), seconds=round(elapsed, 2))
         console.print(f"\n[bold red]✗ Erro:[/bold red] {e!s}")
         if verbose:
             console.print_exception()
@@ -446,8 +463,7 @@ def texture_batch(
             t0 = time.time()
 
             if not force and output_path.is_file():
-                sys.stdout.write(json.dumps({"id": item_id, "status": "skipped", "output": str(output_path)}) + "\n")
-                sys.stdout.flush()
+                emit_result(item_id, TOOL_PAINT3D, STATUS_SKIPPED, output=str(output_path))
                 continue
 
             try:
@@ -458,8 +474,14 @@ def texture_batch(
 
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
+                emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=0)
                 mesh_obj = load_mesh_trimesh(mesh_path)
-                textured = _batch_proc.paint_mesh(mesh_obj, str(image_path))
+                emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=100)
+
+                def _paint_step(phase, pct, _id=item_id):
+                    emit_progress(_id, TOOL_PAINT3D, phase=phase, percent=pct)
+
+                textured = _batch_proc.paint_mesh(mesh_obj, str(image_path), step_callback=_paint_step)
 
                 if smooth:
                     textured = smooth_trimesh_texture(
@@ -471,15 +493,14 @@ def texture_batch(
                         verbose=verbose,
                     )
 
+                emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=0)
                 save_glb(textured, output_path)
+                emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=100)
                 elapsed = time.time() - t0
-                line = {"id": item_id, "status": "ok", "output": str(output_path), "seconds": round(elapsed, 1)}
+                emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))
             except Exception as exc:
                 elapsed = time.time() - t0
-                line = {"id": item_id, "status": "error", "error": str(exc), "seconds": round(elapsed, 1)}
-
-            sys.stdout.write(json.dumps(line, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
+                emit_result(item_id, TOOL_PAINT3D, STATUS_ERROR, error=str(exc), seconds=round(elapsed, 2))
     finally:
         _cleanup()
         with contextlib.suppress(Exception):

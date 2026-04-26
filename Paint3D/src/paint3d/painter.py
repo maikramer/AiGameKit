@@ -158,7 +158,7 @@ def apply_hunyuan_paint(
     render_size: int | None = None,
     texture_size: int | None = None,
     bake_exp: int = _defaults.DEFAULT_PAINT_BAKE_EXP,
-    use_remesh: bool = True,
+    use_remesh: bool = False,
     verbose: bool = False,
     enable_vae_slicing: bool = _defaults.DEFAULT_ENABLE_VAE_SLICING,
     enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
@@ -205,7 +205,7 @@ def apply_hunyuan_paint(
         tdir = Path(td_raw)
         mesh_in = tdir / "input_mesh.glb"
         ref_path = tdir / "ref.png"
-        out_obj = tdir / "textured_mesh.obj"
+        out_obj = tdir / "textured_mesh.glb"
         out_glb = tdir / "textured_mesh.glb"
 
         with profile_span("paint_prepare_io"):
@@ -350,7 +350,7 @@ def paint_file_to_file(
     render_size: int | None = None,
     texture_size: int | None = None,
     bake_exp: int | None = None,
-    use_remesh: bool = True,
+    use_remesh: bool = False,
     verbose: bool = False,
     enable_vae_slicing: bool = _defaults.DEFAULT_ENABLE_VAE_SLICING,
     enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
@@ -428,7 +428,7 @@ class PaintBatchProcessor:
         render_size: int | None = None,
         texture_size: int | None = None,
         bake_exp: int = _defaults.DEFAULT_PAINT_BAKE_EXP,
-        use_remesh: bool = True,
+        use_remesh: bool = False,
         verbose: bool = False,
         enable_vae_slicing: bool = _defaults.DEFAULT_ENABLE_VAE_SLICING,
         enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
@@ -566,7 +566,9 @@ class PaintBatchProcessor:
         self._config = None
         clear_cuda_memory()
 
-    def paint_mesh(self, mesh: trimesh.Trimesh, image: str | Path | Image.Image) -> trimesh.Trimesh:
+    def paint_mesh(
+        self, mesh: trimesh.Trimesh, image: str | Path | Image.Image, *, step_callback=None
+    ) -> trimesh.Trimesh:
         """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → Trimesh texturizado."""
         from gamedev_shared.profiler import profile_span
 
@@ -577,7 +579,7 @@ class PaintBatchProcessor:
             tdir = Path(td_raw)
             mesh_in = tdir / "input_mesh.glb"
             ref_path = tdir / "ref.png"
-            out_obj = tdir / "textured_mesh.obj"
+            out_obj = tdir / "textured_mesh.glb"
             out_glb = tdir / "textured_mesh.glb"
 
             with profile_span("paint_batch_prepare_io"):
@@ -595,6 +597,7 @@ class PaintBatchProcessor:
                     output_mesh_path=str(out_obj),
                     use_remesh=self._use_remesh,
                     save_glb=True,
+                    step_callback=step_callback,
                 )
 
             if not out_glb.is_file():
