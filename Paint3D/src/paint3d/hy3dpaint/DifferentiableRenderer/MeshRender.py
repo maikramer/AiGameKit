@@ -376,7 +376,7 @@ class MeshRender:
         self.use_antialias = use_antialias
         self.max_mip_level = max_mip_level
         self.filter_mode = filter_mode
-        self.bake_angle_thres = 75
+        self.bake_angle_thres = 85
         self.set_boundary_unreliable_scale(2)
         self.bake_mode = bake_mode
         self.shader_type = shader_type
@@ -1226,19 +1226,21 @@ class MeshRender:
         if self.bake_unreliable_kernel_size > 0:
             kernel_size = self.bake_unreliable_kernel_size * 2 + 1
             kernel = torch.ones((1, 1, kernel_size, kernel_size), dtype=torch.float32).to(sketch_image.device)
+            kernel_norm = kernel / kernel.sum()
 
             visible_mask = visible_mask.permute(2, 0, 1).unsqueeze(0).float()
-            visible_mask = F.conv2d(1.0 - visible_mask, kernel, padding=kernel_size // 2)
-            visible_mask = 1.0 - (visible_mask > 0).float()  # 二值化
+            outside_proximity = F.conv2d(1.0 - visible_mask, kernel_norm, padding=kernel_size // 2)
+            visible_mask = (1.0 - outside_proximity).clamp(0, 1)
             visible_mask = visible_mask.squeeze(0).permute(1, 2, 0)
 
             sketch_image = sketch_image.permute(2, 0, 1).unsqueeze(0)
-            sketch_image = F.conv2d(sketch_image, kernel, padding=kernel_size // 2)
-            sketch_image = (sketch_image > 0).float()  # 二值化
+            edge_proximity = F.conv2d(sketch_image, kernel_norm, padding=kernel_size // 2)
+            sketch_image = (1.0 - edge_proximity).clamp(0, 1)
             sketch_image = sketch_image.squeeze(0).permute(1, 2, 0)
-            visible_mask = visible_mask * (sketch_image < 0.5)
 
-        cos_image[visible_mask == 0] = 0
+            visible_mask = visible_mask * sketch_image
+
+        cos_image = cos_image * visible_mask
 
         method = self.bake_mode if method is None else method
 
@@ -1337,6 +1339,7 @@ class MeshRender:
 
             texture = texture.view(self.texture_size[0], self.texture_size[1], channel)
             cos_map = cos_map.view(self.texture_size[0], self.texture_size[1], 1)
+            boundary_map = boundary_map.view(self.texture_size[0], self.texture_size[1], 1)
             # texture = torch.clamp(texture,0,1)
 
         else:
