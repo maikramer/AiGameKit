@@ -23,34 +23,17 @@ from gamedev_shared.progress import (
     parse_progress_line,
 )
 
-ICON_PENDING = "·"
-ICON_RUNNING = "⠋"
-ICON_OK = "✓"
-ICON_SKIP = "◌"
-ICON_FAIL = "✗"
+ICON_PENDING = "\u00b7"
+ICON_RUNNING = "\u280b"
+ICON_OK = "\u2713"
+ICON_SKIP = "\u25cc"
+ICON_FAIL = "\u2717"
 
 COLOR_OK = "green"
 COLOR_SKIP = "dim cyan"
 COLOR_FAIL = "red"
 COLOR_RUNNING = "cyan"
 COLOR_PENDING = "dim"
-COLOR_QUEUED = "dim yellow"
-
-STAGE_COLORS: dict[str, str] = {
-    "text2d": "bright_cyan",
-    "texture2d": "bright_magenta",
-    "skymap2d": "bright_blue",
-    "text2sound": "yellow",
-    "text3d": "bright_green",
-    "paint3d": "green",
-    "part3d": "bright_yellow",
-    "rigging3d": "cyan",
-    "animator3d": "magenta",
-    "lod": "dim cyan",
-    "collision": "dim magenta",
-    "simplify": "dim green",
-    "materialize": "bright_red",
-}
 
 
 class AssetStatus(str, Enum):
@@ -65,7 +48,6 @@ class AssetStatus(str, Enum):
 class AssetState:
     id: str
     pipeline_stages: list[str] = field(default_factory=list)
-    current_stage: str = ""
     current_tool: str = ""
     current_phase: str = ""
     phase_percent: float = 0.0
@@ -73,25 +55,8 @@ class AssetState:
     timings: dict[str, float] = field(default_factory=dict)
     error: str | None = None
     faces: int | None = None
-    _stage_idx: int = -1
-
-    def _advance_stage(self, tool: str) -> None:
-        if not self.pipeline_stages:
-            return
-        for i, stage in enumerate(self.pipeline_stages):
-            if stage.lower() == tool.lower() or tool.lower() in stage.lower():
-                if i != self._stage_idx:
-                    self._stage_idx = i
-                    self.current_stage = stage
-                return
-        if tool != self.current_stage:
-            self.current_stage = tool
 
     def update_from_progress(self, data: dict[str, Any]) -> None:
-        tool = data.get("tool", "")
-        if tool:
-            self._advance_stage(tool)
-
         if data["status"] == STATUS_PROGRESS:
             self.status = AssetStatus.RUNNING
             self.current_tool = data.get("tool", self.current_tool)
@@ -102,7 +67,7 @@ class AssetState:
             self.current_phase = ""
             self.phase_percent = 100.0
             if "seconds" in data:
-                phase = data.get("phase", data.get("tool", self.current_stage))
+                phase = data.get("phase", data.get("tool", ""))
                 self.timings[phase] = data["seconds"]
             if "faces" in data:
                 self.faces = data["faces"]
@@ -135,13 +100,10 @@ class AssetState:
         return label
 
     @property
-    def stage_display(self) -> str:
-        if self.status in (AssetStatus.QUEUED,):
-            return "queued"
-        if self.current_stage and self._stage_idx >= 0:
-            total = len(self.pipeline_stages)
-            return f"[{self._stage_idx + 1}/{total}] {self.current_stage}"
-        return self.current_tool or "..."
+    def pipeline_info(self) -> str:
+        if self.pipeline_stages:
+            return " \u2192 ".join(self.pipeline_stages)
+        return ""
 
     @property
     def color(self) -> str:
@@ -152,14 +114,6 @@ class AssetState:
             AssetStatus.SKIPPED: COLOR_SKIP,
             AssetStatus.FAILED: COLOR_FAIL,
         }[self.status]
-
-    @property
-    def stage_color(self) -> str:
-        tool_lower = self.current_tool.lower()
-        for key, color in STAGE_COLORS.items():
-            if key in tool_lower:
-                return color
-        return COLOR_RUNNING
 
 
 def _fmt_duration(seconds: float) -> str:
@@ -181,15 +135,15 @@ class StatsBar(Static):
 
     def render(self) -> Text:
         t = Text()
-        t.append(f"✓ {self.ok_count}", style=COLOR_OK)
-        t.append(" │ ")
-        t.append(f"◌ {self.skip_count}", style=COLOR_SKIP)
-        t.append(" │ ")
-        t.append(f"✗ {self.fail_count}", style=COLOR_FAIL)
-        t.append(" │ ")
-        t.append(f"Σ {self.total}", style="bold dim")
+        t.append(f"\u2713 {self.ok_count}", style=COLOR_OK)
+        t.append("  ")
+        t.append(f"\u25cc {self.skip_count}", style=COLOR_SKIP)
+        t.append("  ")
+        t.append(f"\u2717 {self.fail_count}", style=COLOR_FAIL)
+        t.append("  ")
+        t.append(f"\u03a3 {self.total}", style="bold dim")
         t.append("   ")
-        t.append(f"⏱ {_fmt_duration(self.elapsed)}", style="dim")
+        t.append(f"\u23f1 {_fmt_duration(self.elapsed)}", style="dim")
         return t
 
 
@@ -200,7 +154,7 @@ class PhaseLabel(Static):
     def render(self) -> Text:
         t = Text()
         if self.phase_name:
-            t.append(f"⏳ {self.phase_name}", style="bold cyan")
+            t.append(f"\u23f3 {self.phase_name}", style="bold cyan")
         if self.phase_detail:
             t.append(f"  {self.phase_detail}", style="dim")
         return t
@@ -208,33 +162,13 @@ class PhaseLabel(Static):
 
 class BatchDashboard(App):
     CSS = """
-    #main-container {
-        layout: vertical;
-        padding: 0 1;
-        height: 100%;
-    }
-    #info-panel {
-        height: auto;
-        margin-bottom: 1;
-    }
-    #progress-section {
-        height: auto;
-        margin-bottom: 1;
-    }
-    #stats-row {
-        height: 1;
-        margin-bottom: 1;
-    }
-    #asset-table {
-        height: 1fr;
-    }
-    ProgressBar {
-        margin-bottom: 0;
-    }
-    .phase-label {
-        margin-bottom: 0;
-        height: 1;
-    }
+    #main-container { layout: vertical; padding: 0 1; height: 100%; }
+    #info-panel { height: auto; margin-bottom: 1; }
+    #progress-section { height: auto; margin-bottom: 1; }
+    #stats-row { height: 1; margin-bottom: 1; }
+    #asset-table { height: 1fr; }
+    ProgressBar { margin-bottom: 0; }
+    .phase-label { margin-bottom: 0; height: 1; }
     """
 
     TITLE = "GameAssets Batch"
@@ -271,7 +205,7 @@ class BatchDashboard(App):
         with Container(id="main-container"):
             with Vertical(id="info-panel"):
                 yield Label(
-                    f"🎮 {self.game_title}" if self.game_title else "🎮 GameAssets Batch",
+                    f"\U0001f3ae {self.game_title}" if self.game_title else "\U0001f3ae GameAssets Batch",
                     id="game-label",
                 )
                 if self.pipeline_desc:
@@ -297,23 +231,19 @@ class BatchDashboard(App):
         self._col_keys = [
             table.add_column("", width=1),
             table.add_column("Asset", width=20),
-            table.add_column("Stage", width=16),
-            table.add_column("Progress", width=30),
-            table.add_column("Timing", width=16),
+            table.add_column("Pipeline", width=40),
+            table.add_column("Timing", width=18),
         ]
         table.cursor_type = "none"
         table.zebra_stripes = True
 
     def _setup_assets(self) -> None:
         table = self.query_one("#asset-table", DataTable)
-        for aid, state in self._assets.items():
-            stages = state.pipeline_stages
-            stage_info = f"[{len(stages)} stage{'s' if len(stages) != 1 else ''}]" if stages else "queued"
+        for aid, _state in self._assets.items():
             rk = table.add_row(
                 Text(ICON_PENDING, style=COLOR_PENDING),
                 Text(aid, style="bold"),
-                Text(stage_info, style=COLOR_PENDING),
-                Text("waiting...", style=COLOR_PENDING),
+                Text("queued", style=COLOR_PENDING),
                 Text(""),
                 key=aid,
             )
@@ -347,8 +277,6 @@ class BatchDashboard(App):
         if not state:
             return
 
-        prev_status = state.status
-        prev_stage = state.current_stage
         state.update_from_progress(data)
 
         table = self.query_one("#asset-table", DataTable)
@@ -357,48 +285,28 @@ class BatchDashboard(App):
             return
 
         col_icon = self._col_keys[0]
-        col_stage = self._col_keys[2]
-        col_progress = self._col_keys[3]
-        col_timing = self._col_keys[4]
+        col_pipeline = self._col_keys[2]
+        col_timing = self._col_keys[3]
 
         table.update_cell(row_key, col_icon, Text(state.icon, style=state.color))
 
-        stage_style = state.stage_color if state.status == AssetStatus.RUNNING else "dim"
-        table.update_cell(row_key, col_stage, Text(state.stage_display, style=stage_style))
-
         if state.status == AssetStatus.RUNNING:
-            progress_text = Text()
-            progress_text.append(state.phase_label, style=state.stage_color)
-            table.update_cell(row_key, col_progress, progress_text)
+            table.update_cell(row_key, col_pipeline, Text(state.phase_label, style=COLOR_RUNNING))
         elif state.status == AssetStatus.OK:
-            table.update_cell(row_key, col_progress, Text("✓ done", style=COLOR_OK))
+            parts = [f"{k}({_fmt_duration(v)})" for k, v in state.timings.items()]
+            pipeline_str = " ".join(parts) if parts else "\u2713 done"
+            table.update_cell(row_key, col_pipeline, Text(pipeline_str, style=COLOR_OK))
+            table.update_cell(row_key, col_timing, Text("", style="dim"))
+            self._increment_done()
         elif state.status == AssetStatus.SKIPPED:
-            table.update_cell(row_key, col_progress, Text("skipped", style=COLOR_SKIP))
+            table.update_cell(row_key, col_pipeline, Text("skipped", style=COLOR_SKIP))
+            self._increment_done()
         elif state.status == AssetStatus.FAILED:
             err = state.error or "failed"
-            if len(err) > 40:
-                err = err[:37] + "..."
-            table.update_cell(row_key, col_progress, Text(f"✗ {err}", style=COLOR_FAIL))
-
-        if state.status in (AssetStatus.OK, AssetStatus.FAILED):
-            parts = [f"{k}({_fmt_duration(v)})" for k, v in state.timings.items()]
-            timing_str = " ".join(parts) if parts else "—"
-            table.update_cell(row_key, col_timing, Text(timing_str, style="dim"))
-
-        if prev_status != state.status and state.status in (
-            AssetStatus.OK,
-            AssetStatus.SKIPPED,
-            AssetStatus.FAILED,
-        ):
+            if len(err) > 45:
+                err = err[:42] + "..."
+            table.update_cell(row_key, col_pipeline, Text(f"\u2717 {err}", style=COLOR_FAIL))
             self._increment_done()
-
-        if (
-            prev_stage
-            and state.current_stage
-            and prev_stage != state.current_stage
-            and state.status == AssetStatus.RUNNING
-        ):
-            self.advance_phase()
 
         self._update_stats()
 
@@ -433,7 +341,7 @@ class BatchDashboard(App):
     def _advance_phase_ui(self, n: int = 1) -> None:
         phase_bar = self.query_one("#phase-bar", ProgressBar)
         phase_bar.advance(n)
-        completed = int(phase_bar.progress * phase_bar.total / 100) if phase_bar.total else 0
+        completed = int(phase_bar.progress)
         if phase_bar.total > 0:
             pct = int(100 * min(completed, phase_bar.total) / phase_bar.total)
             phase_label = self.query_one("#phase-label", PhaseLabel)
@@ -446,5 +354,5 @@ class BatchDashboard(App):
         stats = self.query_one("#stats-row", StatsBar)
         stats.elapsed = time.monotonic() - self._start_time
         phase_label = self.query_one("#phase-label", PhaseLabel)
-        phase_label.phase_name = "Batch concluído"
+        phase_label.phase_name = "Batch conclu\u00eddo"
         phase_label.phase_detail = ""
