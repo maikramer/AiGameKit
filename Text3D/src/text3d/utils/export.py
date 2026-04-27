@@ -10,8 +10,6 @@ import numpy as np
 import trimesh
 from diffusers.utils import export_to_gif, export_to_obj, export_to_ply
 
-from gamedev_shared.mesh_utils import weld_glb as _weld_glb
-
 from ..defaults import get_export_origin, get_export_rotation_x_rad
 
 
@@ -39,8 +37,13 @@ def _export_glb_with_normals(mesh: trimesh.Trimesh, output_path: Path) -> None:
     glb_bytes = scene.export(file_type="glb", include_normals=True)
     with open(str(output_path), "wb") as f:
         f.write(glb_bytes)
-    with contextlib.suppress(Exception):  # weld is best-effort, don't fail the pipeline
-        _weld_glb(str(output_path))
+    with contextlib.suppress(Exception):
+        try:
+            from gamedev_shared.mesh_utils import weld_glb as _weld_glb
+
+            _weld_glb(str(output_path))
+        except ImportError:
+            pass
 
 
 def save_mesh(
