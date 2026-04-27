@@ -56,7 +56,7 @@ class Hunyuan3DPaintConfig:
         # view selection
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
-        self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.05, 0.05]
+        self.candidate_view_weights = [1, 0.25, 0.7, 0.25, 0.05, 0.05]
 
         for azim in range(0, 360, 30):
             self.candidate_camera_azims.append(azim)
@@ -205,50 +205,6 @@ class Hunyuan3DPaintPipeline:
 
         ###########  Bake  ##########
         _step("bake", 0)
-        for i in range(len(enhance_images["albedo"])):
-            enhance_images["albedo"][i] = enhance_images["albedo"][i].resize(
-                (self.config.render_size, self.config.render_size)
-            )
-            enhance_images["mr"][i] = enhance_images["mr"][i].resize((self.config.render_size, self.config.render_size))
-        texture, mask = self.view_processor.bake_from_multiview(
-            enhance_images["albedo"], selected_camera_elevs, selected_camera_azims, selected_view_weights
-        )
-
-        normal_maps = self.view_processor.render_normal_multiview(
-            selected_camera_elevs, selected_camera_azims, use_abs_coor=True
-        )
-        position_maps = self.view_processor.render_position_multiview(selected_camera_elevs, selected_camera_azims)
-
-        ##########  Style  ###########
-        image_caption = "high quality"
-        image_style = []
-        for image in image_prompt:
-            image = image.resize((512, 512))
-            if image.mode == "RGBA":
-                white_bg = Image.new("RGB", image.size, (255, 255, 255))
-                white_bg.paste(image, mask=image.getchannel("A"))
-                image = white_bg
-            image_style.append(image)
-        image_style = [image.convert("RGB") for image in image_style]
-
-        ###########  Multiview  ##########
-        multiviews_pbr = self.models["multiview_model"](
-            image_style,
-            normal_maps + position_maps,
-            prompt=image_caption,
-            custom_view_size=self.config.resolution,
-            resize_input=True,
-        )
-        ###########  Enhance  ##########
-        enhance_images = {}
-        enhance_images["albedo"] = copy.deepcopy(multiviews_pbr["albedo"])
-        enhance_images["mr"] = copy.deepcopy(multiviews_pbr["mr"])
-
-        for i in range(len(enhance_images["albedo"])):
-            enhance_images["albedo"][i] = self.models["super_model"](enhance_images["albedo"][i])
-            enhance_images["mr"][i] = self.models["super_model"](enhance_images["mr"][i])
-
-        ###########  Bake  ##########
         for i in range(len(enhance_images["albedo"])):
             enhance_images["albedo"][i] = enhance_images["albedo"][i].resize(
                 (self.config.render_size, self.config.render_size)
