@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import trimesh
+
+from gamedev_shared.mesh_utils import weld_glb as _weld_glb
 
 
 def load_mesh_trimesh(path: str | Path) -> trimesh.Trimesh:
@@ -30,4 +33,6 @@ def save_glb(mesh: trimesh.Trimesh, output_path: str | Path) -> Path:
     glb_bytes = scene.export(file_type="glb", include_normals=True)
     with open(str(output_path), "wb") as f:
         f.write(glb_bytes)
+    with contextlib.suppress(Exception):  # weld is best-effort, don't fail the pipeline
+        _weld_glb(str(output_path))
     return output_path

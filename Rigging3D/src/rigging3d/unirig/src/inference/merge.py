@@ -425,9 +425,9 @@ def merge(
     Merge skin and bone into original file.
     '''
     if group_per_vertex is None:
-        group_per_vertex = int(os.environ.get("RIGGING3D_GROUPS_PER_VERTEX", "4"))
+        group_per_vertex = int(os.environ.get("RIGGING3D_GROUPS_PER_VERTEX", "8"))
     if smooth_iterations is None:
-        smooth_iterations = int(os.environ.get("RIGGING3D_SMOOTH_ITERATIONS", "2"))
+        smooth_iterations = int(os.environ.get("RIGGING3D_SMOOTH_ITERATIONS", "3"))
 
     clean_bpy()
     try:

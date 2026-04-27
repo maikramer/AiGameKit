@@ -262,7 +262,7 @@ class SkinWriter(BasePredictionWriter):
                 sampled_skin=skin_pred,
                 sample_method='mean',
                 alpha=2.0,
-                threshold=0.01,
+                threshold=0.005,
                 nearest_samples=12,
                 iter_steps=3,
             )
@@ -334,7 +334,7 @@ def reskin(
 ) -> ndarray:
     nearest_samples = kwargs.get('nearest_samples', 7)
     iter_steps = kwargs.get('iter_steps', 1)
-    threshold = kwargs.get('threshold', 0.01)
+    threshold = kwargs.get('threshold', 0.005)
     alpha = kwargs.get('alpha', 2)
     
     assert sample_method in ['mean', 'median']

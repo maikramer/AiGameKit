@@ -802,7 +802,7 @@ def _remesh_shape_to_target(
         return False
     if current_faces <= target:
         return False
-    if current_faces < target * 1.1:
+    if current_faces < target * 1.2:
         return False
 
     console.print(f"[cyan]⏳ Remesh[/cyan] {row.id} ({current_faces:,} → ~{target:,} faces)")
@@ -862,7 +862,7 @@ def _remesh_textured_to_target(
         return False
     if current_faces <= target:
         return False
-    if current_faces < target * 1.1:
+    if current_faces < target * 1.2:
         return False
 
     console.print(f"[cyan]⏳ Simplify (textured)[/cyan] {row.id} ({current_faces:,} → ~{target:,} faces)")
@@ -921,7 +921,7 @@ def _bpy_simplify_to_target(
         return False
     if current_faces <= target:
         return False
-    if current_faces < target * 1.1:
+    if current_faces < target * 1.2:
         return False
 
     bpy_python = _resolve_bpy_python()

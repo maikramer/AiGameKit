@@ -30,6 +30,7 @@ Or programmatically::
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 MERGE_DIST = 0.0001
@@ -58,6 +59,29 @@ def _load_glb(input_path: Path) -> tuple:
     return mesh_obj, arm_objs
 
 
+def _weld_scene_meshes() -> None:
+    import bpy
+
+    for obj in bpy.data.objects:
+        if obj.type != "MESH":
+            continue
+        nv = len(obj.data.vertices)
+        if nv > 150_000:
+            dist = 0.003
+        elif nv > 100_000:
+            dist = 0.005
+        elif nv > 50_000:
+            dist = 0.008
+        else:
+            dist = 0.01
+
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.remove_doubles(threshold=dist)
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+
 def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
     import bpy
 
@@ -66,6 +90,8 @@ def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
         o.select_set(True)
     bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else mesh_obj
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(Exception):
+        _weld_scene_meshes()
     bpy.ops.export_scene.gltf(
         filepath=str(output_path),
         export_format="GLB",

@@ -11,6 +11,7 @@ order_config: &order_config
   skeleton_path:
     vroid: ./configs/skeleton/vroid.yaml
     mixamo: ./configs/skeleton/mixamo.yaml
+    articulationxl: ./configs/skeleton/articulationxl.yaml
 
 vertex_group_config: &vertex_group_config
 

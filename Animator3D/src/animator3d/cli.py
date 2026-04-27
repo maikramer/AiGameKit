@@ -139,6 +139,7 @@ def cmd_wave_idle(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
     bone_name = bone or bpy_ops.pick_demo_bone(arm_name)
@@ -209,6 +210,7 @@ def cmd_breathe_idle(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -288,6 +290,7 @@ def cmd_attack(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -355,6 +358,7 @@ def cmd_walk(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -419,6 +423,7 @@ def cmd_hover(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -481,6 +486,7 @@ def cmd_soar(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -540,6 +546,7 @@ def cmd_dive(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -602,6 +609,7 @@ def cmd_fire(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -661,6 +669,7 @@ def cmd_land(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -719,6 +728,7 @@ def cmd_roar(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -775,6 +785,7 @@ def cmd_run(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -829,6 +840,7 @@ def cmd_jump(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -881,6 +893,7 @@ def cmd_fall(
     if not arms:
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+    bpy_ops.rename_bones_from_chains(arm_name)
     if not append_mode:
         bpy_ops.clear_armature_animations(arm_name)
 
@@ -975,6 +988,8 @@ def cmd_game_pack(
         )
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
+
+    bpy_ops.rename_bones_from_chains(arm_name)
 
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=100)
 

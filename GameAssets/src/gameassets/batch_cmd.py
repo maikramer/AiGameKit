@@ -1095,18 +1095,28 @@ def batch_cmd(
                                 tool_fail = "text2d falhou"
                                 tool_empty = "text2d não produziu ficheiro de imagem"
 
+                            tool_short = "texture2d" if _row_uses_texture2d(profile, row) else "text2d"
+
+                            dash.feed_event(row.id, tool_short, "progress", phase="generating", percent=0)
                             t_img_d = time.perf_counter()
-                            r2d = run_cmd(t2d_args, extra_env=child_env, cwd=manifest_dir)
+                            r2d = run_cmd_streaming(
+                                t2d_args,
+                                extra_env=child_env,
+                                cwd=manifest_dir,
+                                on_stdout_line=dash.feed_line,
+                            )
+                            elapsed_img = time.perf_counter() - t_img_d
                             _timing_append(
                                 rec_d,
                                 "image_texture2d" if _row_uses_texture2d(profile, row) else "image_text2d",
-                                time.perf_counter() - t_img_d,
+                                elapsed_img,
                             )
                             if r2d.returncode != 0:
                                 failures += 1
                                 err = merge_subprocess_output(r2d) or tool_fail
                                 rec_d["status"] = "error"
                                 rec_d["error"] = err
+                                dash.feed_event(row.id, tool_short, "error", error=err)
                                 results_d.append(rec_d)
                                 append_log(rec_d)
                                 if not continue_on_error:
@@ -1117,6 +1127,7 @@ def batch_cmd(
                                 failures += 1
                                 rec_d["status"] = "error"
                                 rec_d["error"] = tool_empty
+                                dash.feed_event(row.id, tool_short, "error", error=tool_empty)
                                 results_d.append(rec_d)
                                 append_log(rec_d)
                                 if not continue_on_error:
@@ -1124,6 +1135,7 @@ def batch_cmd(
                                 continue
 
                             _install_file(img_tmp_d, img_final)
+                            dash.feed_event(row.id, tool_short, "ok", phase="generating", seconds=elapsed_img)
 
                             if _row_uses_texture2d(profile, row) and tt_line.materialize:
                                 try:
@@ -1140,9 +1152,11 @@ def batch_cmd(
                                 maps_dst = _texture2d_material_maps_path_manifest(profile, manifest_dir, row)
                                 maps_dst.mkdir(parents=True, exist_ok=True)
                                 margv = _materialize_diffuse_argv(mat_bin, tt_line, img_final, maps_dst)
+                                dash.feed_event(row.id, "materialize", "progress", phase="pbr_maps", percent=0)
                                 t_mat_d = time.perf_counter()
                                 r_mat_d = run_cmd(margv, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(rec_d, "materialize_diffuse", time.perf_counter() - t_mat_d)
+                                elapsed_mat = time.perf_counter() - t_mat_d
+                                _timing_append(rec_d, "materialize_diffuse", elapsed_mat)
                                 if r_mat_d.returncode != 0:
                                     failures += 1
                                     err = merge_subprocess_output(r_mat_d) or "materialize falhou"
@@ -1192,15 +1206,24 @@ def batch_cmd(
                                 _text2sound_args_for_row(ts_line, row, argv_au)
                                 if profile.text3d and profile.text3d.low_vram:
                                     argv_au.append("--low-vram")
+                                dash.feed_event(row.id, "text2sound", "progress", phase="generating", percent=0)
                                 t_au_d = time.perf_counter()
-                                r_au_d = run_cmd(argv_au, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(rec_d, "text2sound", time.perf_counter() - t_au_d)
+                                r_au_d = run_cmd_streaming(
+                                    argv_au,
+                                    extra_env=child_env,
+                                    cwd=manifest_dir,
+                                    on_stdout_line=dash.feed_line,
+                                )
+                                elapsed_au = time.perf_counter() - t_au_d
+                                _timing_append(rec_d, "text2sound", elapsed_au)
                                 if r_au_d.returncode == 0 and audio_tmp_d.is_file():
                                     _install_file(audio_tmp_d, audio_final)
                                     rec_d["audio_path"] = _path_for_log(audio_final, manifest_dir)
+                                    dash.feed_event(row.id, "text2sound", "ok", phase="generating", seconds=elapsed_au)
                                 else:
                                     err_au = merge_subprocess_output(r_au_d) or "text2sound falhou"
                                     rec_d["audio_error"] = err_au
+                                    dash.feed_event(row.id, "text2sound", "error", phase="generating", error=err_au)
                                 dash.advance_phase()
 
                     for idx in range(len(rows)):
@@ -1366,6 +1389,8 @@ def batch_cmd(
                                 dash.set_phase("Text3D shape", len(shape_skipped_d))
                                 for idx in shape_skipped_d:
                                     shape_ok_d.append(idx)
+                                    row = rows[idx]
+                                    dash.feed_event(row.id, "text3d", "skipped", phase="shape")
                                     dash.advance_phase()
 
                             # === PAINT BATCH ===
@@ -1392,14 +1417,22 @@ def batch_cmd(
                                                 row=row,
                                                 gpu_ids=gpu_ids,
                                             )
+                                            dash.feed_event(row.id, "paint3d", "progress", phase="quick", percent=0)
                                             t_qp = time.perf_counter()
-                                            r_qp = run_cmd(tex_argv, extra_env=child_env, cwd=manifest_dir)
-                                            _timing_append(rec_d, "paint3d_quick", time.perf_counter() - t_qp)
+                                            r_qp = run_cmd_streaming(
+                                                tex_argv,
+                                                extra_env=child_env,
+                                                cwd=manifest_dir,
+                                                on_stdout_line=dash.feed_line,
+                                            )
+                                            elapsed_qp = time.perf_counter() - t_qp
+                                            _timing_append(rec_d, "paint3d_quick", elapsed_qp)
                                             if r_qp.returncode != 0:
                                                 failures += 1
                                                 err = merge_subprocess_output(r_qp) or "paint3d quick falhou"
                                                 rec_d["status"] = "error"
                                                 rec_d["error"] = err
+                                                dash.feed_event(row.id, "paint3d", "error", error=err)
                                                 append_log(rec_d)
                                                 if not continue_on_error:
                                                     raise click.Abort()
@@ -1410,8 +1443,12 @@ def batch_cmd(
                                                 append_log(rec_d)
                                                 if not continue_on_error:
                                                     raise click.Abort()
+                                                dash.feed_event(row.id, "paint3d", "error", error="quick paint sem GLB")
                                             else:
                                                 _install_file(mesh_painted, mesh_f)
+                                                dash.feed_event(
+                                                    row.id, "paint3d", "ok", phase="quick", seconds=elapsed_qp
+                                                )
                                                 _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                                 finalized_d.add(idx)
                                                 append_log(rec_d)
@@ -1540,6 +1577,7 @@ def batch_cmd(
                                             row = rows[idx]
                                             rec_d = results_d[idx]
                                             img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+                                            dash.feed_event(row.id, "paint3d", "skipped", phase="texture")
                                             _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                             finalized_d.add(idx)
                                             append_log(rec_d)
@@ -1555,6 +1593,7 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec_d = results_d[idx]
                                     _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+                                    dash.feed_event(row.id, "simplify", "progress", phase="decimating", percent=0)
                                     _bpy_simplify_to_target(
                                         mesh_f,
                                         row,
@@ -1566,6 +1605,7 @@ def batch_cmd(
                                         manifest_dir=manifest_dir,
                                         rec=rec_d,
                                     )
+                                    dash.feed_event(row.id, "simplify", "ok", phase="decimating")
                                     dash.advance_phase()
 
                             # === CATCH-UP: rig/animate/LOD/collision ===
@@ -1580,7 +1620,18 @@ def batch_cmd(
                                         dash.advance_phase()
                                         continue
                                     rec_d["image_path"] = _path_for_log(img_f, manifest_dir)
+                                    dash.feed_event(row.id, "post3d", "progress", phase="rig/animate", percent=0)
                                     _finalize_mesh_ok_d(rec_d, mesh_f, row)
+                                    if rec_d["status"] == "ok":
+                                        dash.feed_event(row.id, "post3d", "ok", phase="rig/animate")
+                                    else:
+                                        dash.feed_event(
+                                            row.id,
+                                            "post3d",
+                                            "error",
+                                            phase="rig/animate",
+                                            error=rec_d.get("error", "post-processing falhou"),
+                                        )
                                     append_log(rec_d)
                                     if not continue_on_error and rec_d["status"] == "error":
                                         raise click.Abort()
@@ -1597,20 +1648,36 @@ def batch_cmd(
                                 t3d_args = _text3d_argv(text3d_bin, profile, img_f, mesh_shape, row, gpu_ids=gpu_ids)
                                 if seed is not None:
                                     t3d_args.extend(["--seed", str(seed)])
+                                dash.feed_event(row.id, "text3d", "progress", phase="generating", percent=0)
                                 t_t3d = time.perf_counter()
-                                r3d = run_cmd(t3d_args, extra_env=child_env, cwd=manifest_dir)
-                                _timing_append(rec_d, "text3d", time.perf_counter() - t_t3d)
+                                r3d = run_cmd_streaming(
+                                    t3d_args,
+                                    extra_env=child_env,
+                                    cwd=manifest_dir,
+                                    on_stdout_line=dash.feed_line,
+                                )
+                                elapsed_t3d = time.perf_counter() - t_t3d
+                                _timing_append(rec_d, "text3d", elapsed_t3d)
                                 if r3d.returncode != 0:
                                     failures += 1
                                     err = merge_subprocess_output(r3d) or "text3d falhou"
                                     rec_d["status"] = "error"
                                     rec_d["error"] = err
+                                    dash.feed_event(row.id, "text3d", "error", error=err)
                                 elif not mesh_shape.is_file():
                                     failures += 1
                                     rec_d["status"] = "error"
                                     rec_d["error"] = "text3d não produziu ficheiro GLB"
+                                    dash.feed_event(row.id, "text3d", "error", error=rec_d["error"])
                                 else:
                                     _install_file(mesh_shape, mesh_f)
+                                    dash.feed_event(row.id, "text3d", "ok", phase="shape", seconds=elapsed_t3d)
+                                    _bpy_simplify_to_target(
+                                        mesh_f, row, text3d_bin,
+                                        profile=profile, run_cmd=run_cmd,
+                                        child_env=child_env, cwd=manifest_dir,
+                                        manifest_dir=manifest_dir, rec=rec_d,
+                                    )
                                     if _post_text3d_mesh_extras(
                                         profile,
                                         row,
@@ -1638,10 +1705,36 @@ def batch_cmd(
 
                     dash.finish()
 
+                asset_pipelines: dict[str, list[str]] = {}
+                for row in rows:
+                    stages: list[str] = []
+                    if not skip_text2d:
+                        if _row_uses_texture2d(profile, row):
+                            stages.append("Texture2D")
+                        else:
+                            stages.append("Text2D")
+                    if any_audio_row and not skip_audio and _row_wants_audio(row, has_audio_profile):
+                        stages.append("Text2Sound")
+                    if with_3d and row.generate_3d:
+                        if profile.paint3d:
+                            stages.append("Text3D shape")
+                            p3_style = (profile.paint3d.style or "hunyuan").strip().lower()
+                            stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
+                        else:
+                            stages.append("Text3D")
+                        if with_parts and _row_wants_parts(row, has_parts_profile):
+                            stages.append("Part3D")
+                        if with_rig and _row_wants_rig(row, has_rigging_profile):
+                            stages.append("Rigging3D")
+                        if with_animate and _row_wants_animate(row, with_rig, has_rigging_profile):
+                            stages.append("Animator3D")
+                    asset_pipelines[row.id] = stages
+
                 app = BatchDashboard(
                     game_title=profile.title or "",
                     asset_ids=asset_ids,
                     pipeline_desc=pipeline_desc,
+                    asset_pipelines=asset_pipelines,
                     batch_fn=_batch_fn,
                 )
                 app.run()
@@ -2471,6 +2564,12 @@ def batch_cmd(
 
                                     progress.update(task_post, description=f"[cyan]{row.id}[/cyan] · pós-processamento")
                                     rec["image_path"] = _path_for_log(img_final, manifest_dir)
+                                    _bpy_simplify_to_target(
+                                        mesh_final, row, text3d_bin,
+                                        profile=profile, run_cmd=run_cmd,
+                                        child_env=child_env, cwd=manifest_dir,
+                                        manifest_dir=manifest_dir, rec=rec,
+                                    )
                                     _finalize_mesh_ok(rec, mesh_final, row)
                                     append_log(rec)
                                     if not continue_on_error and rec["status"] == "error":
@@ -2542,6 +2641,12 @@ def batch_cmd(
                                     console.print(f"[red]text3d sem GLB[/red] {row.id}")
                                 else:
                                     _install_file(mesh_shape, mesh_final)
+                                    _bpy_simplify_to_target(
+                                        mesh_final, row, text3d_bin,
+                                        profile=profile, run_cmd=run_cmd,
+                                        child_env=child_env, cwd=manifest_dir,
+                                        manifest_dir=manifest_dir, rec=rec,
+                                    )
                                     if _post_text3d_mesh_extras(
                                         profile,
                                         row,

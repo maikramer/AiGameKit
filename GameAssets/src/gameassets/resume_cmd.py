@@ -49,6 +49,7 @@ from .paths import (
 )
 from .pipeline import (
     _animator3d_game_pack_failed,
+    _bpy_simplify_to_target,
     _resolve_animator3d_bin,
     _rigging3d_pipeline_failed,
     _texture_subprocess_argv,
@@ -359,6 +360,26 @@ def resume_cmd(
             _pipeline_stages.append("Animation")
         pipeline_desc = " → ".join(_pipeline_stages) if _pipeline_stages else "N/A"
 
+        asset_pipelines: dict[str, list[str]] = {}
+        for it in items:
+            row = it["row"]
+            stages: list[str] = []
+            if it["state"] in (_ROW_NEED_IMAGE, _ROW_NEED_SHAPE, _ROW_NEED_PAINT, _ROW_NEED_RIG, _ROW_NEED_ANIMATE):
+                src = effective_image_source(profile, row)
+                stages.append("Texture2D" if src == "texture2d" else "Text2D")
+            if it["state"] in (_ROW_NEED_SHAPE, _ROW_NEED_PAINT, _ROW_NEED_RIG, _ROW_NEED_ANIMATE):
+                stages.append("Shape")
+            if it["state"] in (_ROW_NEED_PAINT, _ROW_NEED_RIG, _ROW_NEED_ANIMATE) and want_texture:
+                p3_style = (p3.style or "hunyuan").strip().lower() if p3 else "hunyuan"
+                stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
+            if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE) and it["wants_rig"]:
+                stages.append("Rigging3D")
+            if it["state"] == _ROW_NEED_ANIMATE and it["wants_animate"]:
+                stages.append("Animator3D")
+            if it["state"] == _ROW_DONE:
+                stages = ["Complete"]
+            asset_pipelines[row.id] = stages
+
         def _resume_fn(dash: BatchDashboard) -> None:  # type: ignore[name-defined]
             nonlocal failures
 
@@ -406,9 +427,17 @@ def resume_cmd(
                     seed = _seed_for_row(profile, row.id)
                     if seed is not None:
                         argv.extend(["--seed", str(seed)])
-                    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+                    tool_short = "texture2d" if src == "texture2d" else "text2d"
+                    dash.feed_event(row.id, tool_short, "progress", phase="generating", percent=0)
+                    r = run_cmd_streaming(
+                        argv,
+                        extra_env=child_env,
+                        cwd=manifest_dir,
+                        on_stdout_line=dash.feed_line,
+                    )
                     if r.returncode == 0 and tmp_img.is_file():
                         _install_file(tmp_img, it["img_final"])
+                        dash.feed_event(row.id, tool_short, "ok", phase="generating")
                         mat_ok = True
                         if src == "texture2d" and tt_line.materialize:
                             try:
@@ -428,6 +457,7 @@ def resume_cmd(
                             it["state"] = _ROW_NEED_SHAPE
                     else:
                         failures += 1
+                        dash.feed_event(row.id, tool_short, "error", error="image generation failed")
                         if not continue_on_error:
                             raise click.Abort()
                     dash.advance_phase()
@@ -555,9 +585,16 @@ def resume_cmd(
                             row=row,
                             gpu_ids=gpu_ids,
                         )
-                        r = run_cmd(t_tex, extra_env=child_env, cwd=manifest_dir)
+                        dash.feed_event(row.id, "paint3d", "progress", phase="quick", percent=0)
+                        r = run_cmd_streaming(
+                            t_tex,
+                            extra_env=child_env,
+                            cwd=manifest_dir,
+                            on_stdout_line=dash.feed_line,
+                        )
                         if r.returncode == 0 and painted_out.is_file():
                             _install_file(painted_out, it["mesh_final"])
+                            dash.feed_event(row.id, "paint3d", "ok", phase="quick")
                             it["state"] = (
                                 _ROW_NEED_RIG
                                 if it["wants_rig"]
@@ -567,6 +604,7 @@ def resume_cmd(
                         else:
                             failures += 1
                             err = merge_subprocess_output(r, max_chars=200) or "paint falhou"
+                            dash.feed_event(row.id, "paint3d", "error", error=err)
                             append_log({"id": row.id, "status": "error", "error": err})
                             if not continue_on_error:
                                 raise click.Abort()
@@ -658,6 +696,27 @@ def resume_cmd(
                         if r.returncode != 0:
                             pass  # batch-level failure already handled per-item
 
+            # --- Fase 3.5: Simplify (bpy decimate) após Paint, antes de Rigging ---
+            simplify_items = [
+                it for it in items
+                if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE)
+                and it["mesh_final"].is_file()
+            ]
+            if simplify_items and text3d_bin:
+                dash.set_phase("Simplify", len(simplify_items))
+                for it in simplify_items:
+                    row = it["row"]
+                    rec: dict[str, Any] = {"id": row.id}
+                    dash.feed_event(row.id, "simplify", "progress", phase="decimating", percent=0)
+                    _bpy_simplify_to_target(
+                        it["mesh_final"], row, text3d_bin,
+                        profile=profile, run_cmd=run_cmd,
+                        child_env=child_env, cwd=manifest_dir,
+                        manifest_dir=manifest_dir, rec=rec,
+                    )
+                    dash.feed_event(row.id, "simplify", "ok", phase="decimating")
+                    dash.advance_phase()
+
             # --- Fase 4: Rigging ---
             need_rig = [it for it in items if it["state"] == _ROW_NEED_RIG]
             if need_rig and rigging3d_bin:
@@ -665,6 +724,7 @@ def resume_cmd(
                 for it in need_rig:
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
+                    dash.feed_event(row.id, "rigging3d", "progress", phase="rigging", percent=0)
                     rig_failed = _rigging3d_pipeline_failed(
                         profile,
                         row,
@@ -679,10 +739,17 @@ def resume_cmd(
                     )
                     if rig_failed:
                         failures += 1
+                        dash.feed_event(
+                            row.id,
+                            "rigging3d",
+                            "error",
+                            error=rec.get("error", "rigging failed"),
+                        )
                         append_log(rec)
                         if not continue_on_error:
                             raise click.Abort()
                     else:
+                        dash.feed_event(row.id, "rigging3d", "ok", phase="rigging")
                         it["state"] = _ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE
                         append_log(rec)
                     dash.advance_phase()
@@ -694,6 +761,7 @@ def resume_cmd(
                 for it in need_anim:
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
+                    dash.feed_event(row.id, "animator3d", "progress", phase="animation", percent=0)
                     anim_failed = _animator3d_game_pack_failed(
                         profile,
                         row,
@@ -709,10 +777,17 @@ def resume_cmd(
                     )
                     if anim_failed:
                         failures += 1
+                        dash.feed_event(
+                            row.id,
+                            "animator3d",
+                            "error",
+                            error=rec.get("error", "animation failed"),
+                        )
                         append_log(rec)
                         if not continue_on_error:
                             raise click.Abort()
                     else:
+                        dash.feed_event(row.id, "animator3d", "ok", phase="animation")
                         it["state"] = _ROW_DONE
                         append_log(rec)
                     dash.advance_phase()
@@ -723,6 +798,7 @@ def resume_cmd(
             game_title=profile.title or "",
             asset_ids=asset_ids,
             pipeline_desc=pipeline_desc,
+            asset_pipelines=asset_pipelines,
             batch_fn=_resume_fn,
         )
         app.run()
@@ -1063,6 +1139,36 @@ def resume_cmd(
                         if r.returncode != 0:
                             err_batch = merge_subprocess_output(r, max_chars=200) or "paint3d texture-batch falhou"
                             console.print(f"[red]paint3d texture-batch erro[/red]: {err_batch}")
+
+        # --- Fase 3.5: Simplify ---
+        simplify_items = [
+            it for it in items
+            if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE)
+            and it["mesh_final"].is_file()
+        ]
+        if simplify_items and text3d_bin:
+            console.print(f"\n[bold cyan]Fase 3.5: Simplify ({len(simplify_items)} meshes)[/bold cyan]")
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("{task.description}"),
+                BarColumn(),
+                TextColumn("{task.completed}/{task.total}"),
+                TimeElapsedColumn(),
+                console=console,
+            ) as progress:
+                task = progress.add_task("[cyan]Simplify[/cyan]", total=len(simplify_items))
+                for it in simplify_items:
+                    row = it["row"]
+                    progress.update(task, description=f"[cyan]{row.id}[/cyan] · simplify")
+                    rec: dict[str, Any] = {"id": row.id}
+                    _bpy_simplify_to_target(
+                        it["mesh_final"], row, text3d_bin,
+                        profile=profile, run_cmd=run_cmd,
+                        child_env=child_env, cwd=manifest_dir,
+                        manifest_dir=manifest_dir, rec=rec,
+                    )
+                    console.print(f"  [green]OK[/green] {row.id}")
+                    progress.advance(task)
 
         # --- Fase 4: Rigging ---
         need_rig = [it for it in items if it["state"] == _ROW_NEED_RIG]

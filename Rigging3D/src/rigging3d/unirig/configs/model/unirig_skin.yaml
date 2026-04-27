@@ -8,7 +8,7 @@ mlp_dim: 512
 num_bone_attn: 8
 num_mesh_bone_attn: 16
 bone_embed_dim: 1024
-voxel_mask: 3.0
+voxel_mask: 2.5
 
 mesh_encoder:
   # vertex groups are handled in model

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -592,6 +593,54 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
     return chains
 
 
+def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
+    bpy = _bpy()
+    arm = bpy.data.objects.get(armature_name)
+    if arm is None or arm.type != "ARMATURE":
+        return {}
+
+    chains = _classify_bone_chains(armature_name)
+    if not chains:
+        return {}
+
+    _CHAIN_NAMES: dict[str, list[str]] = {
+        "body": ["Hips"],
+        "spine": ["Spine", "Spine1", "Spine2", "Spine3", "Spine4"],
+        "neck": ["Neck", "Neck1", "Neck2"],
+        "head": ["Head"],
+        "leg_r": ["RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"],
+        "leg_l": ["LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase"],
+        "arm_r": ["RightShoulder", "RightArm", "RightForeArm", "RightHand"],
+        "arm_l": ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand"],
+        "tail": ["Tail", "Tail1", "Tail2", "Tail3", "Tail4", "Tail5", "Tail6", "Tail7"],
+        "wing_r": ["RightWing", "RightWing1", "RightWing2", "RightWing3"],
+        "wing_l": ["LeftWing", "LeftWing1", "LeftWing2", "LeftWing3"],
+        "wing_r_fingers": ["RightWingFinger1", "RightWingFinger2", "RightWingFinger3"],
+        "wing_l_fingers": ["LeftWingFinger1", "LeftWingFinger2", "LeftWingFinger3"],
+    }
+
+    renamed: dict[str, str] = {}
+
+    for chain_key, bone_names in chains.items():
+        name_pool = _CHAIN_NAMES.get(chain_key, [])
+        for ci, old_name in enumerate(bone_names):
+            new_name = name_pool[ci] if ci < len(name_pool) else f"{name_pool[-1]}_{ci}"
+            bone = arm.pose.bones.get(old_name) if old_name else None
+            if bone is None:
+                continue
+            if old_name.startswith("bone_"):
+                bone.name = new_name
+                renamed[old_name] = new_name
+
+    if renamed:
+        updated_chains: dict[str, list[str]] = {}
+        for chain_key, bone_names in chains.items():
+            updated_chains[chain_key] = [renamed.get(b, b) for b in bone_names]
+        return updated_chains
+
+    return chains
+
+
 def breathe_idle_keyframes(
     armature_name: str,
     *,
@@ -898,7 +947,7 @@ def walk_cycle_keyframes(
     tail_amp: float = 0.1,
     action_name: str = "Animator3D_Walk",
 ) -> dict[str, list[str]]:
-    """Ciclo de caminhada: patas alternadas (se existirem), tronco a balançar, asas discretas."""
+    """Ciclo de caminhada: modelo multi-fase com contato, apoio, impulso e balanco."""
     import math
 
     bpy = _bpy()
@@ -913,7 +962,69 @@ def walk_cycle_keyframes(
     arm = bpy.data.objects[armature_name]
     total = frame_end - frame_start + 1
 
-    def _anim_chain(
+    def _step_phase(t: float, *, phase_offset: float = 0.0) -> float:
+        """Fase normalizada em [0,1] para um ciclo de passo."""
+        return (t * cycles + phase_offset) % 1.0
+
+    def _hip_swing_profile(phi: float) -> float:
+        """Balanco anterior/posterior do quadril. Ciclico em phi=0/1."""
+        if phi < 0.15:  # contato do calcaneo: quadril a frente
+            return leg_amp * (1.0 - 0.08 * math.sin(phi / 0.15 * math.pi))
+        elif phi < 0.5:  # apoio: frente para tras
+            w = (phi - 0.15) / 0.35
+            return leg_amp * math.cos(w * math.pi)
+        elif phi < 0.65:  # impulso: quadril atras
+            return -leg_amp * (1.0 - 0.08 * math.sin((phi - 0.5) / 0.15 * math.pi))
+        else:  # balanco: tras para frente
+            w = (phi - 0.65) / 0.35
+            return -leg_amp * math.cos(w * math.pi)
+
+    def _knee_bend_profile(phi: float) -> float:
+        """Flexao do joelho. Negativo = flexao anterior. Ciclico em phi=0/1."""
+        knee_peak = leg_amp * 1.2
+        if phi < 0.15:  # contato: quase reto
+            return 0.0
+        elif phi < 0.5:  # apoio: reto
+            return 0.0
+        elif phi < 0.65:  # impulso: leve flexao
+            w = (phi - 0.5) / 0.15
+            return -(knee_peak * 0.2) * _smoothstep01(w)
+        else:  # balanco: flexao para limpar o chao, depois extensao
+            w = (phi - 0.65) / 0.35
+            start_bend = knee_peak * 0.2
+            if w < 0.35:
+                t2 = w / 0.35
+                return -(start_bend + (knee_peak - start_bend) * _smoothstep01(t2))
+            else:
+                t2 = (w - 0.35) / 0.65
+                return -knee_peak * (1.0 - _smoothstep01(t2))
+
+    def _anim_leg(bone_names: list[str], phase_global: float = 0.0):
+        """Anima cadeia da pata com modelo multi-fase de locomocao."""
+        for ci, bname in enumerate(bone_names):
+            pb = arm.pose.bones.get(bname)
+            if pb is None:
+                continue
+            scale = max(0.25, 1.0 - ci * 0.25)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                phi = _step_phase(t, phase_offset=phase_global)
+                bpy.context.scene.frame_set(frame)
+                euler = list(pb.rotation_euler)
+                if ci == 0:  # quadril: balanco anterior/posterior + lateral sutil
+                    euler[0] = _hip_swing_profile(phi) * scale
+                    euler[2] = 0.02 * math.sin(phi * math.pi * 2)
+                elif ci == 1:  # joelho: flexao principal + acompanhamento do quadril
+                    euler[2] = _knee_bend_profile(phi) * scale
+                    euler[0] = _hip_swing_profile(phi) * scale * 0.3
+                else:  # pe/tornozelo: mistura sutil de ambos os eixos
+                    euler[0] = _hip_swing_profile(phi) * scale * 0.15
+                    euler[2] = _knee_bend_profile(phi) * scale * 0.2
+                _set_pose_bone_rotation(pb, tuple(euler))
+                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
+
+    def _anim_simple(
         bone_names: list[str],
         axis: int,
         amp: float,
@@ -922,10 +1033,9 @@ def walk_cycle_keyframes(
         phase_step: float = 0.35,
         phase_global: float = 0.0,
         decay: float = 0.0,
-        max_bones: int | None = None,
     ):
-        names = bone_names[:max_bones] if max_bones else bone_names
-        for ci, bname in enumerate(names):
+        """Animacao sinusoidal para cadeias nao-locomotoras."""
+        for ci, bname in enumerate(bone_names):
             pb = arm.pose.bones.get(bname)
             if pb is None:
                 continue
@@ -941,52 +1051,61 @@ def walk_cycle_keyframes(
                 _set_pose_bone_rotation(pb, tuple(euler))
                 pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
+    # Corpo: inclinacao frontal sutil com oscilacao.
     if "body" in chains:
-        _anim_chain(chains["body"], axis=0, amp=body_amp, freq=cycles, phase_global=0.0)
+        for bname in chains["body"]:
+            pb = arm.pose.bones.get(bname)
+            if pb is None:
+                continue
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                phi = _step_phase(t)
+                bpy.context.scene.frame_set(frame)
+                euler = list(pb.rotation_euler)
+                euler[0] = body_amp * 0.6 + body_amp * 0.4 * math.cos(phi * math.pi * 2)
+                _set_pose_bone_rotation(pb, tuple(euler))
+                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
+    # Coluna: contra-rotacao para estabilizar a parte superior.
     if "spine" in chains:
-        _anim_chain(
-            chains["spine"],
-            axis=0,
-            amp=body_amp * 0.8,
-            freq=cycles,
-            phase_step=0.2,
-            phase_global=0.15,
-        )
+        for ci, bname in enumerate(chains["spine"]):
+            pb = arm.pose.bones.get(bname)
+            if pb is None:
+                continue
+            scale = max(0.25, 1.0 - ci * 0.2)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                phi = _step_phase(t)
+                bpy.context.scene.frame_set(frame)
+                euler = list(pb.rotation_euler)
+                euler[0] = -body_amp * 0.6 * scale * math.cos(phi * math.pi * 2)
+                _set_pose_bone_rotation(pb, tuple(euler))
+                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
+    # Patas: modelo multi-fase de locomocao (contato/apoio/impulso/balanco).
     if "leg_r" in chains:
-        _anim_chain(chains["leg_r"], axis=0, amp=leg_amp, freq=cycles, phase_global=0.0, decay=0.12)
+        _anim_leg(chains["leg_r"], phase_global=0.0)
     if "leg_l" in chains:
-        _anim_chain(chains["leg_l"], axis=0, amp=leg_amp, freq=cycles, phase_global=math.pi, decay=0.12)
+        _anim_leg(chains["leg_l"], phase_global=0.5)
 
-    # Arms swing opposite to legs (natural human gait).
-    arm_amp = leg_amp * 0.7
+    # Bracos: balanco contralateral (oposto a pata do mesmo lado).
+    arm_swing_amp = leg_amp * 0.7
     if "arm_r" in chains:
-        _anim_chain(chains["arm_r"], axis=0, amp=arm_amp, freq=cycles, phase_global=math.pi, decay=0.1)
+        _anim_simple(chains["arm_r"], axis=0, amp=arm_swing_amp, freq=cycles, phase_global=math.pi, decay=0.1)
     if "arm_l" in chains:
-        _anim_chain(chains["arm_l"], axis=0, amp=arm_amp, freq=cycles, phase_global=0.0, decay=0.1)
+        _anim_simple(chains["arm_l"], axis=0, amp=arm_swing_amp, freq=cycles, phase_global=0.0, decay=0.1)
 
+    # Cauda: balanco suave.
     if "tail" in chains:
-        _anim_chain(
-            chains["tail"],
-            axis=2,
-            amp=tail_amp,
-            freq=cycles * 0.9,
-            phase_step=0.4,
-            decay=0.1,
-        )
+        _anim_simple(chains["tail"], axis=2, amp=tail_amp, freq=cycles * 0.9, phase_step=0.4, decay=0.1)
 
+    # Asas: batimento discreto.
     if "wing_r" in chains:
-        _anim_chain(chains["wing_r"], axis=1, amp=wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
+        _anim_simple(chains["wing_r"], axis=1, amp=wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
     if "wing_l" in chains:
-        _anim_chain(
-            chains["wing_l"],
-            axis=1,
-            amp=-wing_amp,
-            freq=cycles,
-            phase_step=0.25,
-            decay=0.15,
-        )
+        _anim_simple(chains["wing_l"], axis=1, amp=-wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
 
     finalize_current_action_to_nla(armature_name)
     return chains
@@ -1724,7 +1843,7 @@ def run_cycle_keyframes(
     tail_amp: float = 0.12,
     action_name: str = "Animator3D_Run",
 ) -> dict[str, list[str]]:
-    """Running cycle: faster cadence, larger leg amplitude, vertical body bounce."""
+    """Running cycle: modelo multi-fase com amplitude e flexao de joelho maiores."""
     import math
 
     bpy = _bpy()
@@ -1739,7 +1858,67 @@ def run_cycle_keyframes(
     arm_obj = bpy.data.objects[armature_name]
     total = frame_end - frame_start + 1
 
-    def _anim_chain(
+    def _step_phase(t: float, *, phase_offset: float = 0.0) -> float:
+        return (t * cycles + phase_offset) % 1.0
+
+    def _hip_swing_profile(phi: float) -> float:
+        """Balanco do quadril com amplitude maior para corrida."""
+        if phi < 0.15:
+            return leg_amp * (1.0 - 0.1 * math.sin(phi / 0.15 * math.pi))
+        elif phi < 0.5:
+            w = (phi - 0.15) / 0.35
+            return leg_amp * math.cos(w * math.pi)
+        elif phi < 0.65:
+            return -leg_amp * (1.0 - 0.1 * math.sin((phi - 0.5) / 0.15 * math.pi))
+        else:
+            w = (phi - 0.65) / 0.35
+            return -leg_amp * math.cos(w * math.pi)
+
+    def _knee_bend_profile(phi: float) -> float:
+        """Flexao do joelho para corrida: amplitude ~2.5x leg_amp durante balanco."""
+        knee_peak = leg_amp * 2.5
+        if phi < 0.15:
+            return 0.0
+        elif phi < 0.5:
+            return 0.0
+        elif phi < 0.65:
+            w = (phi - 0.5) / 0.15
+            return -(knee_peak * 0.25) * _smoothstep01(w)
+        else:
+            w = (phi - 0.65) / 0.35
+            start_bend = knee_peak * 0.25
+            if w < 0.35:
+                t2 = w / 0.35
+                return -(start_bend + (knee_peak - start_bend) * _smoothstep01(t2))
+            else:
+                t2 = (w - 0.35) / 0.65
+                return -knee_peak * (1.0 - _smoothstep01(t2))
+
+    def _anim_leg(bone_names: list[str], phase_global: float = 0.0):
+        for ci, bname in enumerate(bone_names):
+            pb = arm_obj.pose.bones.get(bname)
+            if pb is None:
+                continue
+            scale = max(0.25, 1.0 - ci * 0.25)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                phi = _step_phase(t, phase_offset=phase_global)
+                bpy.context.scene.frame_set(frame)
+                euler = list(pb.rotation_euler)
+                if ci == 0:  # quadril
+                    euler[0] = _hip_swing_profile(phi) * scale
+                    euler[2] = 0.03 * math.sin(phi * math.pi * 2)
+                elif ci == 1:  # joelho
+                    euler[2] = _knee_bend_profile(phi) * scale
+                    euler[0] = _hip_swing_profile(phi) * scale * 0.3
+                else:  # pe/tornozelo
+                    euler[0] = _hip_swing_profile(phi) * scale * 0.15
+                    euler[2] = _knee_bend_profile(phi) * scale * 0.2
+                _set_pose_bone_rotation(pb, tuple(euler))
+                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
+
+    def _anim_simple(
         bone_names: list[str],
         axis: int,
         amp: float,
@@ -1765,32 +1944,64 @@ def run_cycle_keyframes(
                 _set_pose_bone_rotation(pb, tuple(euler))
                 pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
+    # Corpo: inclinacao frontal pronunciada + bounce no impulso.
     if "body" in chains:
-        _anim_chain(chains["body"], axis=0, amp=body_amp, freq=cycles, phase_global=0.0)
+        for bname in chains["body"]:
+            pb = arm_obj.pose.bones.get(bname)
+            if pb is None:
+                continue
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                phi = _step_phase(t)
+                bpy.context.scene.frame_set(frame)
+                euler = list(pb.rotation_euler)
+                euler[0] = body_amp * 0.8 + body_amp * 0.6 * math.cos(phi * math.pi * 2)
+                _set_pose_bone_rotation(pb, tuple(euler))
+                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
+    # Coluna: contra-rotacao mais forte.
     if "spine" in chains:
-        _anim_chain(chains["spine"], axis=0, amp=body_amp * 0.6, freq=cycles, phase_step=0.15, phase_global=0.2)
+        for ci, bname in enumerate(chains["spine"]):
+            pb = arm_obj.pose.bones.get(bname)
+            if pb is None:
+                continue
+            scale = max(0.25, 1.0 - ci * 0.15)
+            for fi in range(total):
+                t = fi / max(total - 1, 1)
+                frame = frame_start + fi
+                phi = _step_phase(t)
+                bpy.context.scene.frame_set(frame)
+                euler = list(pb.rotation_euler)
+                euler[0] = -body_amp * 0.7 * scale * math.cos(phi * math.pi * 2)
+                _set_pose_bone_rotation(pb, tuple(euler))
+                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
+    # Patas: modelo multi-fase com flexao de joelho profunda.
     if "leg_r" in chains:
-        _anim_chain(chains["leg_r"], axis=0, amp=leg_amp, freq=cycles, phase_global=0.0, decay=0.1)
+        _anim_leg(chains["leg_r"], phase_global=0.0)
     if "leg_l" in chains:
-        _anim_chain(chains["leg_l"], axis=0, amp=leg_amp, freq=cycles, phase_global=math.pi, decay=0.1)
+        _anim_leg(chains["leg_l"], phase_global=0.5)
 
+    # Bracos: balanco mais alto para corrida.
     if "arm_r" in chains:
-        _anim_chain(chains["arm_r"], axis=0, amp=arm_amp, freq=cycles, phase_global=math.pi, decay=0.08)
+        _anim_simple(chains["arm_r"], axis=0, amp=arm_amp, freq=cycles, phase_global=math.pi, decay=0.08)
     if "arm_l" in chains:
-        _anim_chain(chains["arm_l"], axis=0, amp=arm_amp, freq=cycles, phase_global=0.0, decay=0.08)
+        _anim_simple(chains["arm_l"], axis=0, amp=arm_amp, freq=cycles, phase_global=0.0, decay=0.08)
 
+    # Asas: batimento.
     if "wing_r" in chains:
-        _anim_chain(chains["wing_r"], axis=1, amp=wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
+        _anim_simple(chains["wing_r"], axis=1, amp=wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
     if "wing_l" in chains:
-        _anim_chain(chains["wing_l"], axis=1, amp=-wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
+        _anim_simple(chains["wing_l"], axis=1, amp=-wing_amp, freq=cycles, phase_step=0.25, decay=0.15)
 
+    # Cauda: balanco.
     if "tail" in chains:
-        _anim_chain(chains["tail"], axis=2, amp=tail_amp, freq=cycles * 0.9, phase_step=0.4, decay=0.1)
+        _anim_simple(chains["tail"], axis=2, amp=tail_amp, freq=cycles * 0.9, phase_step=0.4, decay=0.1)
 
+    # Pescoco: oscilacao sutil.
     if "neck" in chains:
-        _anim_chain(chains["neck"], axis=0, amp=body_amp * 0.3, freq=cycles, phase_step=0.2, decay=0.15)
+        _anim_simple(chains["neck"], axis=0, amp=body_amp * 0.3, freq=cycles, phase_step=0.2, decay=0.15)
 
     finalize_current_action_to_nla(armature_name)
     return chains
@@ -1806,7 +2017,7 @@ def jump_keyframes(
     body_amp: float = 0.1,
     action_name: str = "Animator3D_Jump",
 ) -> dict[str, list[str]]:
-    """Jump: crouch -> extend -> airborne -> land. Non-looping."""
+    """Jump: anticipation -> crouch -> extend -> airborne -> descend -> land. Non-looping."""
     import math
 
     bpy = _bpy()
@@ -1821,24 +2032,9 @@ def jump_keyframes(
     arm_obj = bpy.data.objects[armature_name]
     total = frame_end - frame_start + 1
 
-    def _jump_profile(t: float) -> tuple[float, float, float]:
-        """Returns (leg_bend, arm_raise, body_lean) for normalized t."""
-        if t < 0.2:
-            p = t / 0.2
-            return (-leg_amp * p, -arm_amp * 0.3 * p, body_amp * p)
-        elif t < 0.4:
-            p = (t - 0.2) / 0.2
-            return (-leg_amp * (1 - p * 1.5), arm_amp * p, -body_amp * 0.5 * p)
-        elif t < 0.75:
-            p = (t - 0.4) / 0.35
-            tuck = 0.3 * math.sin(p * math.pi)
-            return (-leg_amp * 0.15 - tuck * 0.1, arm_amp * (1 - p * 0.3), -body_amp * 0.3)
-        else:
-            p = (t - 0.75) / 0.25
-            return (-leg_amp * 0.3 * (1 - p), arm_amp * 0.2 * (1 - p), body_amp * 0.4 * (1 - p))
-
-    def _pose_chain(bone_names: list[str], axis: int, value: float, decay: float = 0.1):
-        for ci, bname in enumerate(bone_names):
+    def _set_bone(bone_names: list[str], axis: int, value: float, decay: float = 0.1):
+        """Set rotation on one axis for a chain of bones with distance decay."""
+        for ci, bname in enumerate(bone_names[:3]):
             pb = arm_obj.pose.bones.get(bname)
             if pb is None:
                 continue
@@ -1848,30 +2044,104 @@ def jump_keyframes(
             _set_pose_bone_rotation(pb, tuple(euler))
             pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=bpy.context.scene.frame_current)
 
+    def _set_bone_multi(bone_name: str, rotations: list[tuple[int, float]]):
+        """Set multiple rotation axes on a single bone. rotations = [(axis, value), ...]."""
+        pb = arm_obj.pose.bones.get(bone_name)
+        if pb is None:
+            return
+        euler = list(pb.rotation_euler)
+        for axis, value in rotations:
+            euler[axis] = value
+        _set_pose_bone_rotation(pb, tuple(euler))
+        pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=bpy.context.scene.frame_current)
+
     for fi in range(total):
         t = fi / max(total - 1, 1)
         frame = frame_start + fi
         bpy.context.scene.frame_set(frame)
-        leg_bend, arm_raise, body_lean = _jump_profile(t)
+
+        # --- Phase weights (smooth transitions via smoothstep) ---
+        # ANTICIPATION: 0.00 - 0.18
+        # CROUCH:       0.18 - 0.35
+        # EXTEND:       0.35 - 0.50
+        # AIRBORNE:     0.50 - 0.70
+        # DESCEND:      0.70 - 0.85
+        # LAND:         0.85 - 1.00
+
+        if t < 0.18:
+            # ANTICIPATION: small counter-movement
+            p = _smoothstep01(t / 0.18)
+            knee_bend = leg_amp * 0.15 * p
+            hip_fwd = -body_amp * 0.2 * p
+            arm_swing = -arm_amp * 0.25 * p
+            body_lean = body_amp * 0.15 * p
+            neck_lean = -body_amp * 0.1 * p
+        elif t < 0.35:
+            # CROUCH: deep knee bend, body forward, arms back
+            p = _smoothstep01((t - 0.18) / 0.17)
+            knee_bend = leg_amp * (0.15 + 0.45 * p)
+            hip_fwd = -body_amp * 0.2 + body_amp * 0.5 * p
+            arm_swing = -arm_amp * 0.25 - arm_amp * 0.55 * p
+            body_lean = body_amp * 0.15 + body_amp * 0.55 * p
+            neck_lean = -body_amp * 0.1 - body_amp * 0.25 * p
+        elif t < 0.50:
+            # EXTEND/LAUNCH: rapid knee extension, body straightens, arms swing up
+            p = _smoothstep01((t - 0.35) / 0.15)
+            knee_bend = leg_amp * 0.6 * (1.0 - p)
+            hip_fwd = body_amp * 0.3 * (1.0 - p)
+            arm_swing = -arm_amp * 0.8 + arm_amp * 1.6 * p
+            body_lean = body_amp * 0.7 * (1.0 - p) - body_amp * 0.2 * p
+            neck_lean = -body_amp * 0.35 * (1.0 - p)
+        elif t < 0.70:
+            # AIRBORNE: legs slightly tucked, body slight forward, arms raised
+            p = _smoothstep01((t - 0.50) / 0.20)
+            knee_bend = leg_amp * 0.2 * (0.5 + 0.5 * math.sin(p * math.pi))
+            hip_fwd = 0.0
+            arm_swing = arm_amp * 0.8 * (1.0 - p * 0.2)
+            body_lean = -body_amp * 0.2 * (1.0 - p * 0.5)
+            neck_lean = body_amp * 0.05 * p
+        elif t < 0.85:
+            # DESCEND: legs extend to prepare for landing, arms come down
+            p = _smoothstep01((t - 0.70) / 0.15)
+            knee_bend = leg_amp * 0.2 * (1.0 - p * 0.6)
+            hip_fwd = 0.0
+            arm_swing = arm_amp * 0.64 * (1.0 - p * 0.6)
+            body_lean = -body_amp * 0.1 * (1.0 - p)
+            neck_lean = body_amp * 0.05 * (1.0 - p)
+        else:
+            # LAND: knees bend to absorb impact, body forward, arms settle
+            p = _smoothstep01((t - 0.85) / 0.15)
+            # Impact absorption: ramp up quickly then ease off
+            absorb = math.sin(p * math.pi) if p < 0.6 else 0.4 * (1.0 - (p - 0.6) / 0.4)
+            knee_bend = leg_amp * (0.08 + 0.35 * absorb)
+            hip_fwd = body_amp * 0.3 * absorb
+            arm_swing = arm_amp * 0.25 * (1.0 - p)
+            body_lean = body_amp * 0.3 * absorb
+            neck_lean = -body_amp * 0.15 * absorb
 
         if "body" in chains:
-            _pose_chain(chains["body"], axis=0, value=body_lean)
+            _set_bone(chains["body"], axis=0, value=body_lean, decay=0.08)
         if "spine" in chains:
-            _pose_chain(chains["spine"], axis=0, value=body_lean * 0.5, decay=0.15)
-        if "leg_r" in chains:
-            _pose_chain(chains["leg_r"], axis=0, value=leg_bend, decay=0.12)
-        if "leg_l" in chains:
-            _pose_chain(chains["leg_l"], axis=0, value=leg_bend, decay=0.12)
-        if "arm_r" in chains:
-            _pose_chain(chains["arm_r"], axis=0, value=arm_raise, decay=0.1)
-        if "arm_l" in chains:
-            _pose_chain(chains["arm_l"], axis=0, value=arm_raise, decay=0.1)
+            _set_bone(chains["spine"], axis=0, value=body_lean * 0.6, decay=0.15)
+        # Hip: axis 0 (forward/back) + axis 2 (abduction); Knee: axis 2 (bend); Ankle: follow-through
+        for leg_key in ("leg_r", "leg_l"):
+            if leg_key not in chains:
+                continue
+            leg = chains[leg_key]
+            _set_bone_multi(leg[0], [(0, hip_fwd * 0.7), (2, hip_fwd * 0.3)])
+            if len(leg) > 1:
+                _set_bone_multi(leg[1], [(0, knee_bend * 0.2), (2, knee_bend)])
+            if len(leg) > 2:
+                _set_bone_multi(leg[2], [(2, -knee_bend * 0.25)])
+        for arm_key in ("arm_r", "arm_l"):
+            if arm_key in chains:
+                _set_bone(chains[arm_key], axis=0, value=arm_swing, decay=0.1)
         if "wing_r" in chains:
-            _pose_chain(chains["wing_r"], axis=1, value=arm_raise * 0.5, decay=0.12)
+            _set_bone(chains["wing_r"], axis=1, value=arm_swing * 0.5, decay=0.12)
         if "wing_l" in chains:
-            _pose_chain(chains["wing_l"], axis=1, value=-arm_raise * 0.5, decay=0.12)
+            _set_bone(chains["wing_l"], axis=1, value=-arm_swing * 0.5, decay=0.12)
         if "neck" in chains:
-            _pose_chain(chains["neck"], axis=0, value=-body_lean * 0.4, decay=0.15)
+            _set_bone(chains["neck"], axis=0, value=neck_lean, decay=0.15)
 
     finalize_current_action_to_nla(armature_name)
     return chains
@@ -1887,7 +2157,7 @@ def fall_keyframes(
     body_lean: float = 0.06,
     action_name: str = "Animator3D_Fall",
 ) -> dict[str, list[str]]:
-    """Falling pose: slight spread, gentle wind sway. Non-looping."""
+    """Falling: splay -> mid-fall sway -> terminal velocity -> impact prep. Non-looping."""
     import math
 
     bpy = _bpy()
@@ -1902,51 +2172,128 @@ def fall_keyframes(
     arm_obj = bpy.data.objects[armature_name]
     total = frame_end - frame_start + 1
 
+    def _set(bone_names: list[str], axis: int, val: float, decay: float = 0.1):
+        for ci, bname in enumerate(bone_names):
+            pb = arm_obj.pose.bones.get(bname)
+            if pb is None:
+                continue
+            s = max(0.3, 1.0 - ci * decay)
+            euler = list(pb.rotation_euler)
+            euler[axis] = val * s
+            _set_pose_bone_rotation(pb, tuple(euler))
+            pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=bpy.context.scene.frame_current)
+
+    def _set_bone_multi(bone_name: str, rotations: list[tuple[int, float]]):
+        pb = arm_obj.pose.bones.get(bone_name)
+        if pb is None:
+            return
+        euler = list(pb.rotation_euler)
+        for axis, value in rotations:
+            euler[axis] = value
+        _set_pose_bone_rotation(pb, tuple(euler))
+        pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=bpy.context.scene.frame_current)
+
     for fi in range(total):
         t = fi / max(total - 1, 1)
         frame = frame_start + fi
         bpy.context.scene.frame_set(frame)
-        wind = 0.03 * math.sin(t * math.pi * 4)
-        settle = min(t / 0.3, 1.0)
 
-        def _set(bone_names: list[str], axis: int, val: float, decay: float = 0.1):
-            for ci, bname in enumerate(bone_names):
-                pb = arm_obj.pose.bones.get(bname)
-                if pb is None:
-                    continue
-                s = max(0.3, 1.0 - ci * decay)
-                euler = list(pb.rotation_euler)
-                euler[axis] = val * s
-                _set_pose_bone_rotation(pb, tuple(euler))
-                pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
+        # INITIAL_FALL: 0.00-0.25 — limbs splay outward smoothly
+        # MID_FALL:     0.25-0.50 — wind sway begins (lateral oscillation)
+        # TERMINAL:     0.50-0.85 — stabilize with continuous subtle sway
+        # IMPACT_PREP:  0.85-1.00 — slight limb tuck
+        settle = _smoothstep01(min(t / 0.25, 1.0))
+        wind = 0.04 * math.sin(t * 2 * math.pi * 2.0)
+        wind_secondary = 0.02 * math.sin(t * 2 * math.pi * 3.0 + 0.5)
+
+        if t < 0.25:
+            spread_blend = settle
+            tuck = 0.0
+        elif t < 0.50:
+            p = _smoothstep01((t - 0.25) / 0.25)
+            spread_blend = 1.0
+            tuck = 0.0
+            wind = 0.06 * math.sin(t * 2 * math.pi * 2.0) * p
+            wind_secondary = 0.03 * math.sin(t * 2 * math.pi * 3.0 + 0.5) * p
+        elif t < 0.85:
+            spread_blend = 1.0
+            tuck = 0.0
+            wind = 0.05 * math.sin(t * 2 * math.pi * 2.0)
+            wind_secondary = 0.025 * math.sin(t * 2 * math.pi * 3.0 + 0.5)
+        else:
+            p = _smoothstep01((t - 0.85) / 0.15)
+            spread_blend = 1.0 - 0.15 * p
+            tuck = p * 0.15
+            wind = 0.03 * math.sin(t * 2 * math.pi * 2.0)
+            wind_secondary = 0.015 * math.sin(t * 2 * math.pi * 3.0 + 0.5)
+
+        leg_val = leg_spread * spread_blend - tuck * leg_spread
+        arm_sway = arm_spread * spread_blend - tuck * arm_spread
 
         if "body" in chains:
-            _set(chains["body"], 0, body_lean * settle + wind)
+            _set(chains["body"], 0, body_lean * spread_blend + wind, decay=0.08)
         if "spine" in chains:
-            _set(chains["spine"], 0, body_lean * 0.5 * settle + wind * 0.5, decay=0.15)
-        if "leg_r" in chains:
-            _set(chains["leg_r"], 0, -leg_spread * settle, decay=0.12)
-        if "leg_l" in chains:
-            _set(chains["leg_l"], 0, -leg_spread * settle, decay=0.12)
-        if "arm_r" in chains:
-            _set(chains["arm_r"], 2, arm_spread * settle + wind, decay=0.08)
-        if "arm_l" in chains:
-            _set(chains["arm_l"], 2, -arm_spread * settle - wind, decay=0.08)
+            _set(chains["spine"], 0, body_lean * 0.5 * spread_blend + wind_secondary, decay=0.15)
+        # Legs: axis 1 (abduction/spread) + axis 0 (wind sway)
+        for leg_key in ("leg_r", "leg_l"):
+            if leg_key not in chains:
+                continue
+            leg = chains[leg_key]
+            sign = 1.0 if leg_key == "leg_r" else -1.0
+            _set_bone_multi(leg[0], [(0, -leg_val + wind_secondary), (1, sign * leg_spread * 0.4 * spread_blend)])
+            if len(leg) > 1:
+                _set_bone_multi(leg[1], [(0, wind * 0.5), (2, -leg_val * 0.3)])
+            if len(leg) > 2:
+                _set_bone_multi(leg[2], [(2, leg_val * 0.15)])
+        # Arms: axis 2 (elbow out/spread) + axis 0 (wind sway)
+        for arm_key in ("arm_r", "arm_l"):
+            if arm_key not in chains:
+                continue
+            arm_chain = chains[arm_key]
+            sign = 1.0 if arm_key == "arm_r" else -1.0
+            _set_bone_multi(arm_chain[0], [(0, arm_sway * 0.3 * sign + wind), (2, arm_sway * sign)])
+            if len(arm_chain) > 1:
+                _set_bone_multi(arm_chain[1], [(0, wind_secondary * 0.5), (2, arm_sway * 0.4 * sign)])
         if "wing_r" in chains:
-            _set(chains["wing_r"], 1, arm_spread * 2 * settle + wind, decay=0.1)
+            _set(chains["wing_r"], 1, arm_spread * 2 * spread_blend + wind, decay=0.1)
         if "wing_l" in chains:
-            _set(chains["wing_l"], 1, -arm_spread * 2 * settle - wind, decay=0.1)
+            _set(chains["wing_l"], 1, -arm_spread * 2 * spread_blend - wind, decay=0.1)
         if "neck" in chains:
-            _set(chains["neck"], 0, -body_lean * 0.3 * settle, decay=0.15)
+            _set(chains["neck"], 0, -body_lean * 0.4 * spread_blend + wind_secondary, decay=0.15)
 
     finalize_current_action_to_nla(armature_name)
     return chains
+
+
+def _weld_scene_meshes() -> None:
+    bpy = _bpy()
+
+    for obj in bpy.data.objects:
+        if obj.type != "MESH":
+            continue
+        nv = len(obj.data.vertices)
+        if nv > 150_000:
+            dist = 0.003
+        elif nv > 100_000:
+            dist = 0.005
+        elif nv > 50_000:
+            dist = 0.008
+        else:
+            dist = 0.01
+
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.mesh.remove_doubles(threshold=dist)
+        bpy.ops.object.mode_set(mode="OBJECT")
 
 
 def export_glb(path: Path, *, draco: bool = False) -> None:
     bpy = _bpy()
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(Exception):
+        _weld_scene_meshes()
     # ACTIONS: no Blender 5.1 preserva melhor clips múltiplos do que NLA_TRACKS
     # quando as animações são reimportadas/empilhadas via NLA.
     bpy.ops.export_scene.gltf(

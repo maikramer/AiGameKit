@@ -339,7 +339,7 @@ def skin_cmd(
 @click.option("--target", "-t", type=click.Path(path_type=Path), required=True, help="Mesh original")
 @click.option("--output", "-o", type=click.Path(path_type=Path), required=True)
 @click.option("--require-suffix", default="obj,fbx,FBX,dae,glb,gltf,vrm", show_default=True)
-@click.option("--smooth-iterations", type=int, default=2, show_default=True, help="Passagens de suavização Laplaciana.")
+@click.option("--smooth-iterations", type=int, default=3, show_default=True, help="Passagens de suavização Laplaciana.")
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
 @click.option(
     "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
@@ -435,13 +435,13 @@ try:
     ms.meshing_repair_non_manifold_vertices()
     ms.meshing_remove_duplicate_faces()
     ms.meshing_remove_duplicate_vertices()
-    ms.meshing_close_holes(maxholesize=300)
+    ms.meshing_close_holes(maxholesize=80)
     ms.meshing_isotropic_explicit_remeshing(
         targetlen=pymeshlab.PercentageValue(1.0),
         adaptive=True,
-        iterations=5,
+        iterations=3,
     )
-    ms.apply_coord_taubin_smoothing(stepsmoothnum=3)
+    ms.apply_coord_taubin_smoothing(stepsmoothnum=2)
     ms.meshing_remove_unreferenced_vertices()
     out = ms.current_mesh()
     mesh = trimesh.Trimesh(vertices=out.vertex_matrix(), faces=out.face_matrix())
@@ -476,7 +476,7 @@ print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
 @click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
 @click.option("--keep-temp", is_flag=True, help="Não apagar work-dir temporário")
 @click.option(
-    "--smooth-iterations", type=int, default=2, show_default=True, help="Passadas de suavização Laplaciana no merge."
+    "--smooth-iterations", type=int, default=3, show_default=True, help="Passadas de suavização Laplaciana no merge."
 )
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
 @click.option("--no-prep", is_flag=True, help="Não preparar mesh (skip remesh/repair).")
@@ -642,7 +642,7 @@ def pipeline_cmd(
                     "--num_runs=1",
                     "--id=0",
                     f"--source={_shell_path(skin)}",
-                    f"--target={_shell_path(mesh)}",
+                    f"--target={_shell_path(actual_mesh)}",
                     f"--output={_shell_path(out)}",
                 ],
                 env=merge_env,

@@ -65,6 +65,22 @@ def _boundary_edge_count(mesh: trimesh.Trimesh) -> int:
         return -1
 
 
+def _dynamic_weld_distance(vertex_count: int) -> float:
+    """Distância de weld adaptativa baseada na densidade de vértices.
+
+    Malhas mais densas (>150k vértices) usam thresholds menores para
+    preservar detalhes; malhas leves (<50k) usam thresholds maiores
+    para fechar rachaduras de marching cubes.
+    """
+    if vertex_count > 150_000:
+        return 0.003
+    if vertex_count > 100_000:
+        return 0.005
+    if vertex_count > 50_000:
+        return 0.008
+    return 0.01
+
+
 def _mesh_repair_pymeshlab(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) -> trimesh.Trimesh:
     """Weld por distância, close holes, Taubin smoothing e isotropic remesh via pymeshlab.
 
@@ -89,8 +105,8 @@ def _mesh_repair_pymeshlab(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) 
         def _apply(ms):
             import pymeshlab
 
-            # FASE 1 — Topologia: merge vértices próximos (0.1% diagonal)
-            ms.meshing_merge_close_vertices(threshold=pymeshlab.PureValue(bbox_diag * 0.001))
+            weld_dist = _dynamic_weld_distance(len(mesh.vertices))
+            ms.meshing_merge_close_vertices(threshold=pymeshlab.PureValue(weld_dist))
 
             # Non-manifold repair pós-merge
             ms.meshing_repair_non_manifold_edges()
@@ -173,11 +189,25 @@ def prepare_mesh_topology(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) -
     except Exception as exc:
         log.warning("remove_unreferenced_vertices falhou: %s", exc)
 
-    # 3. Merge por casas decimais (digits_vertex=4 — alinhado com Rigging3D)
+    # 3. Weld adaptativo por densidade de vértices (fecha micro-cracks)
     try:
-        m.merge_vertices(merge_tex=True, digits_vertex=4)
+        import pymeshlab
+
+        weld_dist = _dynamic_weld_distance(len(m.vertices))
+        with tempfile.TemporaryDirectory(prefix="pml_weld_") as tmpdir:
+            in_ply = str(Path(tmpdir) / "in.ply")
+            out_ply = str(Path(tmpdir) / "out.ply")
+            m.export(in_ply)
+            ms = pymeshlab.MeshSet()
+            ms.load_new_mesh(in_ply)
+            ms.meshing_merge_close_vertices(threshold=pymeshlab.PureValue(weld_dist))
+            ms.save_current_mesh(out_ply)
+            m_new = trimesh.load(out_ply, force="mesh")
+            if isinstance(m_new, trimesh.Trimesh) and len(m_new.faces) > 0:
+                log.info("Weld adaptativo (%.4f): %d→%d vértices", weld_dist, len(m.vertices), len(m_new.vertices))
+                m = m_new
     except Exception as exc:
-        log.warning("merge_vertices(digits_vertex=4) falhou: %s", exc)
+        log.warning("weld adaptativo falhou: %s", exc)
 
     # 4. Non-manifold repair
     m = _manifold_repair(m)

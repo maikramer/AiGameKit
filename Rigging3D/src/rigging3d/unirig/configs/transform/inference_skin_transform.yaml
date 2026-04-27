@@ -22,7 +22,7 @@ predict_transform_config:
     names: ['voxel_skin']
     kwargs:
       voxel_skin:
-        grid: 196 # increase this for better results
+        grid: 256
         alpha: 0.5
         link_dis: 0.00001
         grid_query: 7
