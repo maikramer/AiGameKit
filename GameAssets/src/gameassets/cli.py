@@ -138,7 +138,7 @@ def mesh_reorigin_feet_cmd(path: Path, recursive: bool, dry_run: bool, excludes:
     Move a **cena inteira** (um único deslocamento por ficheiro). Malhas com armature/animação
     podem ficar incorrectas; preferir props estáticos.
 
-    Requer ``trimesh`` (dependência do GameAssets).
+    Requer ``bpy`` (dependência do GameAssets).
     """
     paths = collect_glb_paths(path, recursive=recursive)
     paths = filter_excluded_paths(paths, excludes)

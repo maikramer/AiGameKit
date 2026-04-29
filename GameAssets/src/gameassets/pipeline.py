@@ -386,9 +386,10 @@ def _lod_pipeline_rigged_bpy(
 
         _objs = load_glb(mesh_final)
         current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception:
-        console.print(f"[yellow]LOD rigged: não foi possível contar faces[/yellow] {row.id}")
-        return False
+    except Exception as exc:
+        console.print(f"[red]LOD rigged: não foi possível contar faces[/red] {row.id}: {exc}")
+        rec["lod_error"] = f"face count failed: {exc}"
+        return True
 
     from .bpy_simplify import simplify_glb
 
@@ -1063,8 +1064,8 @@ def _rigged_lod_simplify(
     except Exception as exc:
         err = str(exc)[:200]
         rec["rigged_lod0_error"] = err
-        console.print(f"[yellow]LOD0 (rigged) falhou (não bloqueante)[/yellow] {row.id}: {err}")
-        return False
+        console.print(f"[red]LOD0 (rigged) falhou[/red] {row.id}: {err}")
+        return True
 
 
 def _text3d_argv(
