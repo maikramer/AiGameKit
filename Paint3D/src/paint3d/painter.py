@@ -27,8 +27,8 @@ warnings.filterwarnings("ignore", message=".*torchao.*")
 warnings.filterwarnings("ignore", message=".*xformers.*")
 logging.getLogger("xformers").setLevel(logging.ERROR)
 
+import numpy as np  # noqa: E402
 import torch  # noqa: E402
-import trimesh  # noqa: E402
 from PIL import Image  # noqa: E402
 
 from diffusers.utils import logging as _diffusers_logging  # isort: skip  # noqa: E402
@@ -91,16 +91,6 @@ def check_hunyuan3d21_environment() -> tuple[bool, str]:
     return True, str(root)
 
 
-def _restore_feet_origin(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """Re-center mesh with base at Y=0 and XZ centered (feet convention)."""
-    bounds = mesh.bounds
-    cx = (bounds[0][0] + bounds[1][0]) * 0.5
-    cy = float(bounds[0][1])
-    cz = (bounds[0][2] + bounds[1][2]) * 0.5
-    mesh.apply_translation([-cx, -cy, -cz])
-    return mesh
-
-
 def _apply_paint_multi_gpu(
     pipe: Any,
     gpu_ids: list[int],
@@ -146,8 +136,29 @@ def _apply_paint_multi_gpu(
         )
 
 
+def _get_combined_bounds(objects: list) -> tuple[np.ndarray, np.ndarray]:
+    """AABB combinado ``(min_corner, max_corner)`` de uma lista de objectos bpy."""
+    from gamedev_shared.bpy_mesh import get_bounds
+
+    all_mins = [np.array(get_bounds(o)[0]) for o in objects]
+    all_maxs = [np.array(get_bounds(o)[1]) for o in objects]
+    if not all_mins:
+        return np.zeros(3), np.zeros(3)
+    return np.min(all_mins, axis=0), np.max(all_maxs, axis=0)
+
+
+def _apply_translation(objects: list, offset: np.ndarray) -> None:
+    """Desloca vértices de todos os objectos (in-place)."""
+    for obj in objects:
+        for v in obj.data.vertices:
+            v.co[0] += float(offset[0])
+            v.co[1] += float(offset[1])
+            v.co[2] += float(offset[2])
+        obj.data.update()
+
+
 def apply_hunyuan_paint(
-    mesh: trimesh.Trimesh,
+    mesh: Any,
     image: str | Path | Image.Image,
     *,
     model_repo: str = _defaults.DEFAULT_PAINT_HF_REPO,
@@ -166,15 +177,16 @@ def apply_hunyuan_paint(
     preserve_origin: bool = True,
     low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
     gpu_ids: list[int] | None = None,
-) -> trimesh.Trimesh:
+) -> Any:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
 
     Por defeito corre em alta precisão (FP16, sem quantização, render 2048, texture 4096).
     Com ``low_vram=True`` ativa quantização SDNQ uint8 e resoluções reduzidas (1024/2048).
 
-    Com ``preserve_origin=True`` (padrão), a mesh texturizada é recentrada na convenção
-    "pés": base do AABB em Y=0 e centro em XZ, alinhando com saídas Text3D após normalização interna do paint.
+    Com ``preserve_origin=True`` (padrão), a mesh texturizada preserva a posição
+    original: o centroide do AABB da saída é alinhado ao do input, corrigindo qualquer
+    renormalização interna do pipeline de pintura.
     """
     from gamedev_shared.profiler import profile_span
     from gamedev_shared.quantization import enable_vae_optimizations
@@ -209,10 +221,10 @@ def apply_hunyuan_paint(
         out_glb = tdir / "textured_mesh.glb"
 
         with profile_span("paint_prepare_io"):
-            bounds_before = mesh.bounds.copy()
+            bounds_min_before, bounds_max_before = _get_combined_bounds(mesh)
             if verbose:
                 _logger.info(
-                    f"input AABB (antes do pipeline): min={bounds_before[0].tolist()} max={bounds_before[1].tolist()}"
+                    f"input AABB (antes do pipeline): min={bounds_min_before.tolist()} max={bounds_max_before.tolist()}"
                 )
             save_glb(mesh, mesh_in)
 
@@ -328,11 +340,21 @@ def apply_hunyuan_paint(
 
         textured = load_mesh_trimesh(out_glb)
 
-    if not isinstance(textured, trimesh.Trimesh):
-        raise TypeError(f"Paint devolveu {type(textured)}, esperado Trimesh")
+    if not textured or not all(hasattr(o, "data") and getattr(o, "type", "") == "MESH" for o in textured):
+        raise TypeError(f"Paint devolveu tipos inesperados: {[type(o) for o in textured]}")
 
     if preserve_origin:
-        _restore_feet_origin(textured)
+        bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
+        centroid_before = (bounds_min_before + bounds_max_before) * 0.5
+        centroid_after = (bounds_min_after + bounds_max_after) * 0.5
+        offset = centroid_before - centroid_after
+        if np.dot(offset, offset) > 1e-12:
+            _apply_translation(textured, offset)
+            if verbose:
+                _logger.info(
+                    f"origin corrigido: offset={offset.tolist()} "
+                    f"(antes={centroid_before.tolist()}, depois_pintura={centroid_after.tolist()})"
+                )
 
     return textured
 
@@ -567,9 +589,9 @@ class PaintBatchProcessor:
         clear_cuda_memory()
 
     def paint_mesh(
-        self, mesh: trimesh.Trimesh, image: str | Path | Image.Image, *, step_callback=None
-    ) -> trimesh.Trimesh:
-        """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → Trimesh texturizado."""
+        self, mesh: Any, image: str | Path | Image.Image, *, step_callback=None
+    ) -> Any:
+        """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → objectos bpy texturizados."""
         from gamedev_shared.profiler import profile_span
 
         if self._pipe is None:
@@ -583,6 +605,7 @@ class PaintBatchProcessor:
             out_glb = tdir / "textured_mesh.glb"
 
             with profile_span("paint_batch_prepare_io"):
+                bounds_min_before, bounds_max_before = _get_combined_bounds(mesh)
                 save_glb(mesh, mesh_in)
                 if isinstance(image, (str, Path)):
                     shutil.copy2(image, ref_path)
@@ -605,10 +628,15 @@ class PaintBatchProcessor:
 
             textured = load_mesh_trimesh(out_glb)
 
-        if not isinstance(textured, trimesh.Trimesh):
-            raise TypeError(f"Paint devolveu {type(textured)}, esperado Trimesh")
+        if not textured or not all(hasattr(o, "data") and getattr(o, "type", "") == "MESH" for o in textured):
+            raise TypeError(f"Paint devolveu tipos inesperados: {[type(o) for o in textured]}")
 
         if self._preserve_origin:
-            _restore_feet_origin(textured)
+            bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
+            centroid_before = (bounds_min_before + bounds_max_before) * 0.5
+            centroid_after = (bounds_min_after + bounds_max_after) * 0.5
+            offset = centroid_before - centroid_after
+            if np.dot(offset, offset) > 1e-12:
+                _apply_translation(textured, offset)
 
         return textured

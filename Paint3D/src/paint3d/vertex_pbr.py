@@ -5,12 +5,14 @@ from __future__ import annotations
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
-import trimesh
 import xatlas
 from PIL import Image
+
+from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
 
 from .utils.mesh_io import load_mesh_trimesh, save_glb
 
@@ -26,7 +28,6 @@ def _rasterize_vertex_colors_to_texture(
     Devolve ``(H,W,3)`` uint8 sRGB por pixel.
     """
     h = w = int(size)
-    # Acumular em RGB linear e contar sobreposições (média simples)
     acc = np.zeros((h, w, 3), dtype=np.float64)
     cnt = np.zeros((h, w, 1), dtype=np.float64)
 
@@ -62,11 +63,9 @@ def _rasterize_vertex_colors_to_texture(
     out_lin = np.zeros_like(acc)
     out_lin[mask] = acc[mask] / cnt[mask]
 
-    # Buracos: inpainting OpenCV sobre máscara de buracos
     hole = ~mask
     if hole.any():
         base = np.clip(out_lin, 0.0, 1.0)
-        # linear → uint8 para inpaint (aproximação)
         u8 = np.zeros((h, w, 3), dtype=np.uint8)
         for ch in range(3):
             lin = base[..., ch]
@@ -76,10 +75,8 @@ def _rasterize_vertex_colors_to_texture(
         u8_bgr = cv2.cvtColor(u8, cv2.COLOR_RGB2BGR)
         inp = cv2.inpaint(u8_bgr, mask_u8, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
         u8_rgb = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB).astype(np.float64) / 255.0
-        # Mesclar: só buracos
         out_lin = np.where(hole[..., None], u8_rgb, out_lin)
 
-    # Linear → sRGB (display / glTF baseColor típico)
     out_srgb = np.clip(out_lin, 0, 1)
     out_srgb = np.where(
         out_srgb <= 0.0031308,
@@ -89,25 +86,72 @@ def _rasterize_vertex_colors_to_texture(
     return (np.clip(out_srgb * 255.0, 0, 255)).astype(np.uint8)
 
 
-def _unwrap_vertex_colors(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, np.ndarray]:
-    """xatlas + cores nos novos vértices. Devolve mesh com UV em ``mesh.visual.uv``."""
-    if not hasattr(mesh.visual, "vertex_colors") or mesh.visual.vertex_colors is None:
+def _extract_vertex_colors(obj: Any) -> np.ndarray:
+    """Extrai ``(N, 3)`` vertex colors em [0,1] de um objecto bpy."""
+    mesh = obj.data
+    if hasattr(mesh, "color_attributes") and mesh.color_attributes.active is not None:
+        col_attr = mesh.color_attributes.active
+    elif hasattr(mesh, "vertex_colors") and mesh.vertex_colors.active is not None:
+        col_attr = mesh.vertex_colors.active
+    else:
         raise ValueError("A mesh precisa de vertex_colors (GLB cor por vértice).")
-    rgba = mesh.visual.vertex_colors
-    rgb = rgba[:, :3].astype(np.float64) / 255.0
 
-    vmapping, indices, uvs = xatlas.parametrize(mesh.vertices, mesh.faces)
-    verts_new = mesh.vertices[vmapping]
+    n_verts = len(mesh.vertices)
+    rgb = np.zeros((n_verts, 3), dtype=np.float64)
+    for loop in mesh.loops:
+        vi = loop.vertex_index
+        c = col_attr.data[loop.index].color
+        rgb[vi] = [c[0], c[1], c[2]]
+    return rgb
+
+
+def _unwrap_vertex_colors(obj: Any) -> tuple[Any, np.ndarray, np.ndarray, np.ndarray]:
+    """xatlas unwrap + cores nos novos vértices.
+
+    Returns:
+        new_obj: bpy object com UV layer.
+        rgb_new: ``(N, 3)`` cores por vértice.
+        uvs: ``(N, 2)`` coordenadas UV.
+        faces: ``(M, 3)`` índices de faces.
+    """
+    mesh = obj.data
+    rgb = _extract_vertex_colors(obj)
+
+    verts = np.array([tuple(v.co) for v in mesh.vertices], dtype=np.float64)
+    faces_np = np.array([tuple(p.vertices) for p in mesh.polygons], dtype=np.int64)
+
+    vmapping, indices, uvs = xatlas.parametrize(verts, faces_np)
+    verts_new = verts[vmapping]
     rgb_new = rgb[vmapping]
 
-    m2 = trimesh.Trimesh(vertices=verts_new, faces=indices, process=False)
-    m2.visual = trimesh.visual.texture.TextureVisuals(uv=uvs.astype(np.float64))
-    return m2, rgb_new
+    clear_scene()
+    new_obj = create_mesh_from_arrays(verts_new, indices, name="Unwrapped")
+
+    new_mesh = new_obj.data
+    uv_layer = new_mesh.uv_layers.new(name="UVMap")
+    loop_vert_indices = np.zeros(len(new_mesh.loops), dtype=np.int32)
+    new_mesh.loops.foreach_get("vertex_index", loop_vert_indices)
+    flat_uvs = uvs[loop_vert_indices].ravel().astype(np.float32)
+    uv_layer.data.foreach_set("uv", flat_uvs)
+
+    return new_obj, rgb_new, uvs, indices
+
+
+def _pil_to_bpy_image(pil_img: Image.Image, name: str) -> Any:
+    """Cria ``bpy.data.images`` a partir de uma PIL Image."""
+    import bpy
+
+    img = pil_img.convert("RGBA")
+    w, h = img.size
+    pixels = np.array(img, dtype=np.float32) / 255.0
+    bpy_img = bpy.data.images.new(name, width=w, height=h)
+    bpy_img.pixels[:] = pixels.flatten()
+    bpy_img.pack()
+    return bpy_img
 
 
 def _mesh_with_pbr_textures(
-    mesh: trimesh.Trimesh,
-    uvs: np.ndarray,
+    obj: Any,
     diffuse_rgb_u8: np.ndarray,
     normal_pil: Image.Image,
     metallic_pil: Image.Image,
@@ -115,9 +159,9 @@ def _mesh_with_pbr_textures(
     ao_pil: Image.Image,
     *,
     double_sided: bool = True,
-) -> trimesh.Trimesh:
-    """Define TextureVisuals + PBRMaterial (ORM + oclusão em R)."""
-    from trimesh.visual.material import PBRMaterial
+) -> Any:
+    """Cria material Principled BSDF com texturas PBR e atribui ao objecto bpy."""
+    import bpy
 
     h, w = diffuse_rgb_u8.shape[:2]
     diffuse_pil = Image.fromarray(diffuse_rgb_u8, mode="RGB")
@@ -133,20 +177,53 @@ def _mesh_with_pbr_textures(
     orm[:, :, 2] = (mt * 255.0).astype(np.uint8)
     orm_pil = Image.fromarray(orm, mode="RGB")
 
-    mat = PBRMaterial(
-        baseColorTexture=diffuse_pil,
-        normalTexture=normal_pil.convert("RGB"),
-        metallicRoughnessTexture=orm_pil,
-        occlusionTexture=Image.fromarray((ao * 255).astype(np.uint8), mode="L"),
-        metallicFactor=1.0,
-        roughnessFactor=1.0,
-        doubleSided=double_sided,
-    )
+    diff_bpy = _pil_to_bpy_image(diffuse_pil, "Diffuse")
+    norm_bpy = _pil_to_bpy_image(normal_pil.convert("RGB"), "Normal")
+    orm_bpy = _pil_to_bpy_image(orm_pil, "ORM")
 
-    vis = trimesh.visual.texture.TextureVisuals(uv=uvs, material=mat, image=diffuse_pil)
-    out = mesh.copy()
-    out.visual = vis
-    return out
+    mat = bpy.data.materials.new(name="PBRMaterial")
+    mat.use_nodes = True
+    mat.use_backface_culling = not double_sided
+
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+    nodes.clear()
+
+    bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.location = (0, 0)
+
+    output = nodes.new("ShaderNodeOutputMaterial")
+    output.location = (300, 0)
+    links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+
+    diff_tex = nodes.new("ShaderNodeTexImage")
+    diff_tex.image = diff_bpy
+    diff_tex.location = (-600, 200)
+    links.new(diff_tex.outputs["Color"], bsdf.inputs["Base Color"])
+
+    norm_tex = nodes.new("ShaderNodeTexImage")
+    norm_tex.image = norm_bpy
+    norm_tex.location = (-600, -300)
+    normal_map_node = nodes.new("ShaderNodeNormalMap")
+    normal_map_node.location = (-300, -300)
+    links.new(norm_tex.outputs["Color"], normal_map_node.inputs["Color"])
+    links.new(normal_map_node.outputs["Normal"], bsdf.inputs["Normal"])
+
+    orm_tex = nodes.new("ShaderNodeTexImage")
+    orm_tex.image = orm_bpy
+    orm_tex.location = (-600, 0)
+    sep = nodes.new("ShaderNodeSeparateColor")
+    sep.location = (-300, 0)
+    links.new(orm_tex.outputs["Color"], sep.inputs["Color"])
+    links.new(sep.outputs["G"], bsdf.inputs["Roughness"])
+    links.new(sep.outputs["B"], bsdf.inputs["Metallic"])
+
+    if obj.data.materials:
+        obj.data.materials[0] = mat
+    else:
+        obj.data.materials.append(mat)
+
+    return obj
 
 
 def vertex_color_glb_to_pbr_glb(
@@ -169,11 +246,11 @@ def vertex_color_glb_to_pbr_glb(
     glb_out = Path(glb_out).resolve()
     base = glb_in.stem
 
-    mesh0 = load_mesh_trimesh(glb_in)
-    mesh_u, vrgb = _unwrap_vertex_colors(mesh0)
-    uvs = mesh_u.visual.uv
-    assert uvs is not None
-    faces = mesh_u.faces
+    objs = load_mesh_trimesh(glb_in)
+    if not objs:
+        raise ValueError(f"Sem mesh objects em {glb_in}")
+
+    obj_u, vrgb, uvs, faces = _unwrap_vertex_colors(objs[0])
 
     tex_u8 = _rasterize_vertex_colors_to_texture(uvs, faces, vrgb, texture_size)
 
@@ -209,7 +286,6 @@ def vertex_color_glb_to_pbr_glb(
         s_img = Image.open(p_smooth).convert("L")
         ao_img = Image.open(p_ao).convert("L")
 
-        # Redimensionar mapas PBR ao tamanho do difuso se Materialize alterou resolução
         tw, th = tex_u8.shape[1], tex_u8.shape[0]
         if n_img.size != (tw, th):
             n_img = n_img.resize((tw, th), Image.Resampling.LANCZOS)
@@ -221,14 +297,13 @@ def vertex_color_glb_to_pbr_glb(
             ao_img = ao_img.resize((tw, th), Image.Resampling.LANCZOS)
 
         mesh_pbr = _mesh_with_pbr_textures(
-            mesh_u,
-            uvs,
+            obj_u,
             tex_u8,
             n_img,
             m_img,
             s_img,
             ao_img,
         )
-        save_glb(mesh_pbr, glb_out)
+        save_glb([mesh_pbr], glb_out)
 
     return glb_out

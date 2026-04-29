@@ -28,7 +28,6 @@ dependencies = [
     "tqdm>=4.66.0",
     "omegaconf>=2.3.0",
     "opencv-python-headless>=4.8.0,<4.12",
-    "pymeshlab>=2022.2",
     "xatlas>=0.0.9",
     "scipy>=1.10.0",
     "optimum-quanto>=0.2.0",

@@ -1,41 +1,53 @@
-"""Carregamento e exportação de meshes 3D (GLB/OBJ/PLY)."""
+"""Carregamento e exportação de meshes 3D (GLB/GLTF via bpy)."""
 
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
 
-import trimesh
+from gamedev_shared.bpy_mesh import load_glb
+from gamedev_shared.bpy_mesh import save_glb as _bpy_save_glb
+
+_MERGE_THRESHOLD = 2e-4
 
 
-def load_mesh_trimesh(path: str | Path) -> trimesh.Trimesh:
-    """Carrega GLB/OBJ/PLY e devolve um único Trimesh (fundir cenas)."""
-    path = Path(path)
-    loaded = trimesh.load(str(path), force=None)
-    if isinstance(loaded, trimesh.Scene):
-        return loaded.dump(concatenate=True)
-    if isinstance(loaded, trimesh.Trimesh):
-        return loaded
-    raise TypeError(f"Formato não suportado: {type(loaded)}")
+def load_mesh_bpy(path: str | Path) -> list:
+    """Carrega GLB/GLTF via bpy e devolve lista de mesh objects."""
+    return load_glb(path)
 
 
-def save_glb(mesh: trimesh.Trimesh, output_path: str | Path) -> Path:
-    """Exporta mesh como GLB com vertex normals e doubleSided."""
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+def _merge_duplicates_bmesh(obj, threshold: float = _MERGE_THRESHOLD) -> None:
+    """Merge duplicate vertices via bmesh (no EDIT mode needed)."""
+    import bmesh
 
-    _ = mesh.vertex_normals
-    if hasattr(mesh, "visual") and hasattr(mesh.visual, "material"):
-        mesh.visual.material.doubleSided = True
-    scene = trimesh.Scene(geometry={"mesh": mesh})
-    glb_bytes = scene.export(file_type="glb", include_normals=True)
-    with open(str(output_path), "wb") as f:
-        f.write(glb_bytes)
-    with contextlib.suppress(Exception):
-        try:
-            from gamedev_shared.mesh_utils import weld_glb as _weld_glb
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    before = len(bm.verts)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=threshold)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    _after = len(obj.data.vertices)
+    import logging
 
-            _weld_glb(str(output_path))
-        except ImportError:
-            pass
+    logging.getLogger("paint3d.save_glb").info("bmesh merge: %d → %d verts", before, _after)
+
+
+def save_glb(objects, output_path: str | Path) -> Path:
+    """Exporta mesh objects como GLB com merge de vértices, sem normals, JPEG."""
+    if not isinstance(objects, (list, tuple)):
+        objects = [objects]
+
+    for obj in objects:
+        if obj.type == "MESH" and obj.data.uv_layers:
+            _merge_duplicates_bmesh(obj)
+
+    _bpy_save_glb(
+        objects,
+        output_path,
+        export_normals=False,
+        export_image_format="JPEG",
+    )
     return output_path
+
+
+load_mesh_trimesh = load_mesh_bpy
