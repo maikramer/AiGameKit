@@ -2284,7 +2284,10 @@ def _weld_scene_meshes() -> None:
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.mesh.remove_doubles(threshold=dist)
+        obj.data.calc_normals_split()
+        bpy.ops.mesh.remove_doubles(threshold=dist, use_sharp_edge_from_normals=True)
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+        bpy.ops.mesh.faces_shade_smooth()
         bpy.ops.object.mode_set(mode="OBJECT")
 
 

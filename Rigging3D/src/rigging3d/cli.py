@@ -642,7 +642,7 @@ def pipeline_cmd(
                     "--num_runs=1",
                     "--id=0",
                     f"--source={_shell_path(skin)}",
-                    f"--target={_shell_path(actual_mesh)}",
+                    f"--target={_shell_path(mesh)}",
                     f"--output={_shell_path(out)}",
                 ],
                 env=merge_env,
