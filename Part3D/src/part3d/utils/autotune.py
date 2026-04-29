@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-import trimesh
 
 # ---------------------------------------------------------------------------
 # Limites (alinhados a defaults.py)
@@ -78,17 +77,27 @@ class GenerateAutotune:
     geometry_score: float
 
 
-def mesh_geometry_score(mesh: trimesh.Trimesh) -> float:
+def _mesh_surface_area(mesh: Any) -> float:
+    """Compute total surface area from vertices/faces (triangulated meshes)."""
+    v = np.asarray(mesh.vertices, dtype=np.float64)
+    f = np.asarray(mesh.faces)
+    if len(f) == 0 or len(v) == 0:
+        return 0.0
+    v0, v1, v2 = v[f[:, 0]], v[f[:, 1]], v[f[:, 2]]
+    return float(np.sum(0.5 * np.linalg.norm(np.cross(v1 - v0, v2 - v0), axis=1)))
+
+
+def mesh_geometry_score(mesh: Any) -> float:
     """Escalar ~0-4+ conforme complexidade (faces, vértices, extensão espacial)."""
     n_f = max(0, len(mesh.faces))
     n_v = max(0, len(mesh.vertices))
-    verts = mesh.vertices.astype(np.float64)
+    verts = np.asarray(mesh.vertices, dtype=np.float64)
     if n_v < 2:
         return 0.0
     ext_vec = np.max(verts, axis=0) - np.min(verts, axis=0)
     extent = float(np.max(ext_vec))
     extent = max(extent, 1e-8)
-    area = float(mesh.area) if hasattr(mesh, "area") and mesh.area > 0 else 0.0
+    area = _mesh_surface_area(mesh)
     # Log-scale para não dominar meshes enormes
     g_faces = float(np.log1p(n_f / 4000.0))
     g_verts = 0.5 * float(np.log1p(n_v / 4000.0))
@@ -129,7 +138,7 @@ def get_vram_gb() -> float | None:
 
 
 def autotune_segment(
-    mesh: trimesh.Trimesh,
+    mesh: Any,
     *,
     vram_gb: float | None = None,
     estimated_num_parts: int | None = None,
@@ -201,7 +210,7 @@ def get_max_parts_for_vram(vram_gb: float | None, *, dit_quantized: bool = False
 
 
 def autotune_generate(
-    mesh: trimesh.Trimesh,
+    mesh: Any,
     num_parts: int,
     *,
     vram_gb: float | None = None,

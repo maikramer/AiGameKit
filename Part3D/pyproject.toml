@@ -23,7 +23,6 @@ dependencies = [
     "transformers>=4.46.0",
     "easydict>=1.10",
     "pytorch-lightning>=1.9.0",
-    "pymeshlab>=2023.12",
     "optimum-quanto>=0.2.0",
     "bitsandbytes>=0.45.0",
     "torchao>=0.10.0; sys_platform != 'darwin'",

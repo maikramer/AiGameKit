@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
-pytest.importorskip("trimesh")
+pytest.importorskip("bpy")
 
+import bpy
 import numpy as np
-import trimesh
 
+from gamedev_shared.bpy_mesh import clear_scene
 from part3d.utils.autotune import (
     _compute_cond_batch_size,
     autotune_generate,
@@ -18,12 +21,24 @@ from part3d.utils.autotune import (
 )
 
 
-def _box_mesh() -> trimesh.Trimesh:
-    return trimesh.creation.box(extents=[1, 1, 1])
+def _obj_to_mesh(obj: object) -> SimpleNamespace:
+    mesh = obj.data  # type: ignore[union-attr]
+    mesh.calc_loop_triangles()
+    verts = np.array([tuple(v.co) for v in mesh.vertices], dtype=np.float64)
+    faces = np.array([tuple(t.vertices) for t in mesh.loop_triangles], dtype=np.int64)
+    return SimpleNamespace(vertices=verts, faces=faces)
 
 
-def _dense_sphere() -> trimesh.Trimesh:
-    return trimesh.creation.icosphere(subdivisions=4)
+def _box_mesh() -> SimpleNamespace:
+    clear_scene()
+    bpy.ops.mesh.primitive_cube_add(size=1.0)
+    return _obj_to_mesh(bpy.context.active_object)
+
+
+def _dense_sphere() -> SimpleNamespace:
+    clear_scene()
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=4)
+    return _obj_to_mesh(bpy.context.active_object)
 
 
 def test_geometry_score_increases_with_complexity() -> None:

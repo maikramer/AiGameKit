@@ -191,8 +191,13 @@ def decompose(
         console.print("[yellow]Sem CUDA — execução em CPU (muito lento)[/]")
 
     import numpy as np
-    import trimesh
 
+    from gamedev_shared.bpy_mesh import (
+        load_mesh_as_trimesh,
+        save_colored_mesh,
+        save_empty_glb,
+        save_scene_geometries,
+    )
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
 
@@ -238,7 +243,7 @@ def decompose(
         ) as pipe,
     ):
         if segment_only:
-            mesh = trimesh.load(mesh_path, force="mesh", process=False)
+            mesh = load_mesh_as_trimesh(mesh_path)
             _aabb, face_ids, clean_mesh = pipe.segment(mesh, seed=seed)
 
             color_map = {}
@@ -248,8 +253,7 @@ def decompose(
                 color_map[uid] = np.random.randint(0, 255, size=3)
 
             face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
-            clean_mesh.visual.face_colors = face_colors
-            clean_mesh.export(output_segmented)
+            save_colored_mesh(clean_mesh, face_colors, output_segmented)
             console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
 
         else:
@@ -266,16 +270,14 @@ def decompose(
                     color_map[uid] = np.random.randint(0, 255, size=3)
 
                 face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
-                clean_mesh.visual.face_colors = face_colors
-                clean_mesh.export(output_segmented)
+                save_colored_mesh(clean_mesh, face_colors, output_segmented)
                 console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
 
                 # Criar GLB vazio de partes (placeholder) para não quebrar pipeline
-                placeholder = trimesh.Scene()
-                placeholder.export(output_path)
+                save_empty_glb(output_path)
                 console.print(f"[dim]Partes (placeholder vazio):[/] {output_path}")
             else:
-                parts_scene.export(output_path)
+                save_scene_geometries(parts_scene, output_path)
                 console.print(f"[green]Partes gravadas em:[/] {output_path}")
 
                 # Gravar segmentação também
@@ -286,8 +288,7 @@ def decompose(
                     color_map[uid] = np.random.randint(0, 255, size=3)
 
                 face_colors = np.array([color_map.get(fid, [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
-                clean_mesh.visual.face_colors = face_colors
-                clean_mesh.export(output_segmented)
+                save_colored_mesh(clean_mesh, face_colors, output_segmented)
                 console.print(f"[green]Mesh segmentada gravada em:[/] {output_segmented}")
 
     elapsed = time.time() - t_start
