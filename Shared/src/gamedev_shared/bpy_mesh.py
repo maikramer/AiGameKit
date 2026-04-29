@@ -1,0 +1,245 @@
+"""Shared bpy mesh utilities — load, save, query, clear scene.
+
+Provides I/O helpers that use bpy as the backend instead of trimesh,
+plus conversion functions for trimesh compatibility at package boundaries.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+
+def _require_bpy():
+    try:
+        import bpy
+
+        return bpy
+    except ImportError:
+        raise ImportError("bpy is required but not installed. Install with: pip install bpy") from None
+
+
+def load_glb(path: str | Path) -> list:
+    """Import GLB/GLTF via bpy, return all imported mesh objects.
+
+    Clears scene before import to avoid object pollution.
+    Preserves transforms, armatures, shape keys, materials.
+    """
+    bpy = _require_bpy()
+    path = Path(path).expanduser().resolve()
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(path))
+    return [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+
+def save_glb(objects, path: str | Path, **kwargs) -> None:
+    """Export scene/objects to GLB via bpy.
+
+    *objects* can be a single object, a list, or None (entire scene).
+    Defaults include ``export_animations=True`` and ``export_skins=True``
+    to preserve rig data.
+    """
+    bpy = _require_bpy()
+    path = Path(path).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if objects is not None:
+        bpy.ops.object.select_all(action="DESELECT")
+        if not isinstance(objects, (list, tuple)):
+            objects = [objects]
+        for o in objects:
+            o.select_set(True)
+        use_selection = True
+    else:
+        use_selection = False
+
+    defaults = {
+        "export_format": "GLB",
+        "use_selection": use_selection,
+        "export_apply": False,
+        "export_animations": True,
+        "export_skins": True,
+        "export_image_format": "AUTO",
+    }
+    defaults.update(kwargs)
+    bpy.ops.export_scene.gltf(filepath=str(path), **defaults)
+
+
+def get_mesh_objects() -> list:
+    """Return all mesh objects in current scene."""
+    bpy = _require_bpy()
+    return [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+
+def get_bounds(obj) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """World-space AABB of *obj* as (min_corner, max_corner)."""
+    _require_bpy()
+    verts_world = [obj.matrix_world @ v.co for v in obj.data.vertices]
+    if not verts_world:
+        return ((0.0, 0.0, 0.0), (0.0, 0.0, 0.0))
+    xs = [v.x for v in verts_world]
+    ys = [v.y for v in verts_world]
+    zs = [v.z for v in verts_world]
+    return ((min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)))
+
+
+def face_count(obj) -> int:
+    """Total polygon count of *obj*."""
+    return len(obj.data.polygons)
+
+
+def vertex_count(obj) -> int:
+    """Total vertex count of *obj*."""
+    return len(obj.data.vertices)
+
+
+def clear_scene() -> None:
+    """Delete ALL objects in current scene (canonical Blender reset).
+
+    Uses ``bpy.ops.wm.read_factory_settings(use_empty=True)`` to reset
+    to a clean state — removes objects, meshes, armatures, cameras, lights,
+    materials, images, textures, shape keys.
+    """
+    bpy = _require_bpy()
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+
+
+def load_any(path: str | Path) -> list:
+    """Dispatch to GLB/GLTF or PLY importer based on file extension."""
+    bpy = _require_bpy()
+    path = Path(path).expanduser().resolve()
+    clear_scene()
+    ext = path.suffix.lower()
+    if ext in (".glb", ".gltf"):
+        bpy.ops.import_scene.gltf(filepath=str(path))
+    elif ext == ".ply":
+        bpy.ops.import_mesh.ply(filepath=str(path))
+    else:
+        raise ValueError(f"Unsupported format: {ext}")
+    return [o for o in bpy.context.scene.objects if o.type == "MESH"]
+
+
+# ---------------------------------------------------------------------------
+# Conversion helpers — numpy arrays ↔ bpy meshes (no trimesh dependency)
+# ---------------------------------------------------------------------------
+
+
+def create_mesh_from_arrays(
+    vertices: Any,
+    faces: Any,
+    name: str = "Mesh",
+) -> Any:
+    """Create a bpy mesh object from numpy-compatible vertex/face arrays.
+
+    Args:
+        vertices: (N, 3) array-like of vertex positions.
+        faces: (M, K) array-like of face indices (triangles or quads).
+        name: Object/mesh name in Blender.
+
+    Returns:
+        The created bpy object.
+    """
+    import numpy as np
+
+    bpy = _require_bpy()
+
+    verts_np = np.asarray(vertices, dtype=np.float64)
+    faces_np = np.asarray(faces, dtype=np.int64)
+
+    mesh_data = bpy.data.meshes.new(name)
+    obj = bpy.data.objects.new(name, mesh_data)
+    bpy.context.collection.objects.link(obj)
+
+    mesh_data.from_pydata(verts_np.tolist(), [], faces_np.tolist())
+    mesh_data.update()
+    return obj
+
+
+def apply_face_colors(obj: Any, face_colors: Any) -> None:
+    """Apply per-face RGB colors as a vertex color (color attribute) layer.
+
+    Args:
+        obj: bpy mesh object (must have polygons).
+        face_colors: (F, 3) uint8 array of RGB colours, one per face.
+    """
+    import numpy as np
+
+    _require_bpy()
+    mesh = obj.data
+    colors = np.asarray(face_colors, dtype=np.float64) / 255.0
+
+    # Use modern color_attributes API (Blender 4.x+ / bpy 4.x+)
+    if hasattr(mesh, "color_attributes") and hasattr(mesh.color_attributes, "new"):
+        color_attr = mesh.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="CORNER")
+    elif hasattr(mesh, "vertex_colors") and hasattr(mesh.vertex_colors, "new"):
+        color_attr = mesh.vertex_colors.new(name="Col")
+    else:
+        raise RuntimeError("bpy mesh has no color_attributes or vertex_colors API")
+
+    for i, poly in enumerate(mesh.polygons):
+        r, g, b = float(colors[i, 0]), float(colors[i, 1]), float(colors[i, 2])
+        for loop_idx in poly.loop_indices:
+            color_attr.data[loop_idx].color = (r, g, b, 1.0)
+
+
+def save_empty_glb(path: str | Path) -> None:
+    """Export an empty GLB (no geometry). Useful as placeholder."""
+    clear_scene()
+    save_glb(None, path)
+
+
+def save_colored_mesh(mesh: Any, face_colors: Any, path: str | Path) -> None:
+    """Save a mesh-like object with per-face colours as GLB via bpy.
+
+    *mesh* only needs ``.vertices`` (Nx3) and ``.faces`` (MxK) attributes.
+    """
+    import numpy as np
+
+    clear_scene()
+    verts = np.asarray(mesh.vertices)
+    faces = np.asarray(mesh.faces)
+    obj = create_mesh_from_arrays(verts, faces)
+    apply_face_colors(obj, np.asarray(face_colors))
+    save_glb([obj], path)
+
+
+def save_scene_geometries(scene: Any, path: str | Path) -> None:
+    """Save a trimesh.Scene-like object as GLB via bpy.
+
+    Iterates *scene.geometry* (dict of name → mesh-like with .vertices/.faces)
+    and exports all meshes.
+    """
+    import numpy as np
+
+    clear_scene()
+    for name, geom in scene.geometry.items():
+        verts = np.asarray(geom.vertices)
+        faces = np.asarray(geom.faces)
+        create_mesh_from_arrays(verts, faces, name=str(name))
+    save_glb(None, path)
+
+
+def load_mesh_as_trimesh(path: str | Path):
+    """Load mesh via bpy, return trimesh.Trimesh for pipeline compatibility.
+
+    Lazy-imports trimesh internally so the calling module stays trimesh-free.
+    Used at package boundaries where the pipeline still expects trimesh input.
+    """
+    import numpy as np
+    import trimesh
+
+    bpy = _require_bpy()
+    objs = load_glb(path)
+    if not objs:
+        raise ValueError(f"No mesh objects found in {path}")
+    obj = objs[0]
+
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    obj_eval = obj.evaluated_get(depsgraph)
+    mesh_eval = obj_eval.to_mesh()
+
+    verts = np.array([tuple(v.co) for v in mesh_eval.vertices], dtype=np.float64)
+    faces = np.array([tuple(p.vertices) for p in mesh_eval.polygons], dtype=np.int64)
+
+    obj_eval.to_mesh_clear()
+    return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
