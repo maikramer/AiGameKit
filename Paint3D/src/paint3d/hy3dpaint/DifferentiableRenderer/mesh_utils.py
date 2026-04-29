@@ -13,23 +13,47 @@
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
 import contextlib
-import math
 import os
-
-import cv2
-import numpy as np
-
-try:
-    import bpy  # Blender embutido; opcional (conversão OBJ→GLB usa trimesh se ausente)
-except ImportError:
-    bpy = None  # type: ignore[misc, assignment]
 from io import StringIO
 from typing import Any
 
+import bpy
+import cv2
+import numpy as np
+
 
 def _safe_extract_attribute(obj: Any, attr_path: str, default: Any = None) -> Any:
-    """Extract nested attribute safely from object."""
+    """Extract nested attribute safely from object. Handles bpy Object (.data.vertices)."""
     try:
+        # bpy Object: route .vertices → obj.data.vertices, .faces → obj.data.polygons
+        if hasattr(obj, "data") and hasattr(obj, "type"):
+            if attr_path == "vertices":
+                verts = obj.data.vertices
+                n = len(verts)
+                co = np.zeros(n * 3, dtype=np.float32)
+                verts.foreach_get("co", co)
+                return co.reshape(n, 3)
+            if attr_path == "faces":
+                polys = obj.data.polygons
+                triangles = np.zeros(len(polys) * 3, dtype=np.int32)
+                polys.foreach_get("vertices", triangles)
+                return triangles.reshape(-1, 3)
+            if attr_path == "visual.uv":
+                uv_layer = obj.data.uv_layers.active
+                if uv_layer is not None:
+                    n_loops = len(uv_layer.data)
+                    uv_flat = np.zeros(n_loops * 2, dtype=np.float32)
+                    uv_layer.data.foreach_get("uv", uv_flat)
+                    per_loop_uv = uv_flat.reshape(n_loops, 2)
+                    loop_verts = np.zeros(n_loops, dtype=np.int32)
+                    obj.data.loops.foreach_get("vertex_index", loop_verts)
+                    n_verts = len(obj.data.vertices)
+                    vtx_uvs = np.zeros((n_verts, 2), dtype=np.float32)
+                    np.add.at(vtx_uvs, (loop_verts, slice(None)), per_loop_uv)
+                    counts = np.bincount(loop_verts, minlength=n_verts).clip(min=1)
+                    vtx_uvs /= counts.reshape(-1, 1)
+                    return vtx_uvs
+                return default
         for attr in attr_path.split("."):
             obj = getattr(obj, attr)
         return obj
@@ -166,10 +190,10 @@ def _create_mtl_file(base_path: str, texture_maps: dict[str, str], is_pbr: bool)
             # PBR material properties
             properties = {
                 "Kd": [0.800, 0.800, 0.800],
-                "Ke": [0.000, 0.000, 0.000],  # 鐜鍏夐伄钄�
-                "Ni": 1.500,  # 鎶樺皠绯绘暟
-                "d": 1.0,  # 閫忔槑搴�
-                "illum": 2,  # 鍏夌収妯″瀷
+                "Ke": [0.000, 0.000, 0.000],
+                "Ni": 1.500,
+                "d": 1.0,
+                "illum": 2,
                 "map_Kd": texture_maps["diffuse"],
             }
             _write_mtl_properties(f, properties)
@@ -249,42 +273,94 @@ def _weld_seam_vertices(vtx_pos, pos_idx, tolerance=1e-4):
     return moved
 
 
+def _save_glb_mesh_bpy(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
+    """Export mesh as GLB via bpy — create mesh from arrays, apply texture, export.
+
+    No scene switching, no EDIT mode, no vertex merge.  Keeps the pipeline
+    context intact and avoids the hangs caused by ``bpy.ops.object.mode_set``
+    with large meshes in headless bpy.
+    """
+    import logging
+    import tempfile
+    import time as _time
+
+    _log = logging.getLogger("paint3d.save_glb")
+    _t0 = _time.time()
+
+    # 1. Save texture to temp PNG
+    texture_uint8 = (texture * 255).astype(np.uint8)
+    texture_uint8 = _dilate_texture_at_seams(texture_uint8, vtx_uv, uv_idx, dilation_pixels=4)
+    tmp_fd, tmp_tex_path = tempfile.mkstemp(suffix=".png")
+    os.close(tmp_fd)
+    try:
+        cv2.imwrite(tmp_tex_path, texture_uint8[..., ::-1])
+        _log.info("texture: %dx%d (%.1fs)", texture_uint8.shape[1], texture_uint8.shape[0], _time.time() - _t0)
+
+        # 2. Clear current scene objects (no scene switching, no factory settings)
+        for obj in list(bpy.context.scene.objects):
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+        # 3. Create mesh
+        mesh = bpy.data.meshes.new("Mesh")
+        mesh.vertices.add(len(vtx_pos))
+        mesh.vertices.foreach_set("co", vtx_pos.ravel())
+
+        num_faces = len(pos_idx)
+        mesh.loops.add(pos_idx.size)
+        mesh.loops.foreach_set("vertex_index", pos_idx.ravel())
+        mesh.polygons.add(num_faces)
+        loop_start = np.arange(num_faces, dtype=np.int32) * pos_idx.shape[1]
+        mesh.polygons.foreach_set("loop_start", loop_start)
+        mesh.polygons.foreach_set("loop_total", np.full(num_faces, pos_idx.shape[1], dtype=np.int32))
+
+        # 4. UV layer
+        uv_layer = mesh.uv_layers.new(name="UVMap")
+        flat_uvs = vtx_uv[uv_idx.ravel()].ravel().astype(np.float32)
+        uv_layer.data.foreach_set("uv", flat_uvs)
+
+        # 5. Material + texture
+        mat = bpy.data.materials.new(name="Material")
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        tex_node = mat.node_tree.nodes.new("ShaderNodeTexImage")
+        tex_node.image = bpy.data.images.load(tmp_tex_path)
+        mat.node_tree.links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+        if metallic is not None:
+            bsdf.inputs["Metallic"].default_value = 1.0
+            bsdf.inputs["Roughness"].default_value = 1.0
+        mesh.materials.append(mat)
+
+        # 6. Link + export
+        obj = bpy.data.objects.new("Mesh", mesh)
+        bpy.context.scene.collection.objects.link(obj)
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+        _log.info("exporting %d verts, %d faces → %s", len(vtx_pos), num_faces, mesh_path)
+        with contextlib.redirect_stdout(StringIO()):
+            bpy.ops.export_scene.gltf(
+                filepath=mesh_path,
+                use_active_scene=True,
+                export_normals=False,
+                export_image_format="JPEG",
+            )
+        _log.info("done (%.1fs) — %d bytes", _time.time() - _t0, os.path.getsize(mesh_path))
+
+        # 7. Cleanup scene
+        for obj in list(bpy.context.scene.objects):
+            bpy.data.objects.remove(obj, do_unlink=True)
+    finally:
+        with contextlib.suppress(OSError):
+            os.remove(tmp_tex_path)
+
+
 def save_glb_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
-    """Save mesh as GLB with embedded PBR textures (replaces OBJ+MTL+JPG pipeline).
+    """Save mesh as GLB with embedded PBR textures (bpy-only).
 
     Applies seam-aware texture dilation and vertex welding to prevent visible cracks
     at UV island boundaries.
     """
-    import trimesh
-    from PIL import Image as PILImage
-    from trimesh.visual.texture import TextureVisuals
-
-    vtx_pos = _convert_to_numpy(vtx_pos, np.float32)
-    pos_idx = _convert_to_numpy(pos_idx, np.int32)
-    vtx_uv = _convert_to_numpy(vtx_uv, np.float32)
-
-    # Disabled: moves UV-seam verts to centroids → geometry cracks.
-    # _dilate_texture_at_seams handles seam artifacts instead.
-    # _weld_seam_vertices(vtx_pos, pos_idx)
-
-    # Dilate texture at UV seams to prevent sampling artifacts
-    texture_uint8 = (texture * 255).astype(np.uint8)
-    texture_uint8 = _dilate_texture_at_seams(texture_uint8, vtx_uv, uv_idx, dilation_pixels=4)
-
-    albedo_img = PILImage.fromarray(texture_uint8)
-    material = trimesh.visual.material.SimpleMaterial(
-        image=albedo_img,
-        diffuse=[255, 255, 255, 255],
-    )
-    if metallic is not None:
-        material.metallicFactor = 1.0
-        material.roughnessFactor = 1.0
-
-    visual = TextureVisuals(uv=vtx_uv, material=material)
-    mesh = trimesh.Trimesh(vertices=vtx_pos, faces=pos_idx, visual=visual, process=False)
-
-    scene = trimesh.Scene(geometry={"Mesh": mesh})
-    scene.export(mesh_path, file_type="glb")
+    _save_glb_mesh_bpy(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic, roughness, normal)
 
 
 def save_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
@@ -314,115 +390,4 @@ def save_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=Non
         )
 
 
-def _setup_blender_scene():
-    """Setup Blender scene for conversion."""
-    if "convert" not in bpy.data.scenes:
-        bpy.data.scenes.new("convert")
-    bpy.context.window.scene = bpy.data.scenes["convert"]
 
-
-def _clear_scene_objects():
-    """Clear all objects from current Blender scene."""
-    for obj in bpy.context.scene.objects:
-        obj.select_set(True)
-        bpy.data.objects.remove(obj, do_unlink=True)
-
-
-def _select_mesh_objects():
-    """Select all mesh objects in scene."""
-    bpy.ops.object.select_all(action="DESELECT")
-    for obj in bpy.context.scene.objects:
-        if obj.type == "MESH":
-            obj.select_set(True)
-
-
-def _merge_vertices_if_needed(merge_vertices: bool):
-    """Merge duplicate vertices if requested."""
-    if not merge_vertices:
-        return
-
-    for obj in bpy.context.selected_objects:
-        if obj.type == "MESH":
-            bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_all(action="SELECT")
-            bpy.ops.mesh.remove_doubles()
-            bpy.ops.object.mode_set(mode="OBJECT")
-
-
-def _apply_shading(shade_type: str, auto_smooth_angle: float):
-    """Apply shading to selected objects."""
-    shading_ops = {
-        "SMOOTH": lambda: bpy.ops.object.shade_smooth(),
-        "FLAT": lambda: bpy.ops.object.shade_flat(),
-        "AUTO_SMOOTH": lambda: _apply_auto_smooth(auto_smooth_angle),
-    }
-
-    if shade_type in shading_ops:
-        shading_ops[shade_type]()
-
-
-def _apply_auto_smooth(auto_smooth_angle: float):
-    """Apply auto smooth based on Blender version."""
-    angle_rad = math.radians(auto_smooth_angle)
-
-    if bpy.app.version < (4, 1, 0):
-        bpy.ops.object.shade_smooth(use_auto_smooth=True, auto_smooth_angle=angle_rad)
-    elif bpy.app.version < (4, 2, 0):
-        bpy.ops.object.shade_smooth_by_angle(angle=angle_rad)
-    else:
-        bpy.ops.object.shade_auto_smooth(angle=angle_rad)
-
-
-def _convert_obj_to_glb_trimesh(obj_path: str, glb_path: str) -> bool:
-    """Conversão OBJ→GLB sem Blender (trimesh + materiais em MTL).
-
-    When trimesh loads an OBJ it may return a Scene with a non-identity
-    world transform on the root node.  Exporting that Scene bakes the
-    transform into the GLB vertex positions, rotating the mesh.
-    To preserve the vertex coordinates exactly as written by the
-    pipeline, we rebuild the Scene with identity transforms.
-    """
-    import trimesh
-
-    try:
-        loaded = trimesh.load(obj_path, process=False)
-    except Exception:
-        loaded = trimesh.load(obj_path)
-    try:
-        if isinstance(loaded, trimesh.Scene):
-            # Rebuild with identity transforms so vertex positions are
-            # preserved exactly (no scene-graph rotation baked in).
-            clean = trimesh.Scene()
-            for name, geom in loaded.geometry.items():
-                clean.add_geometry(geom, geom_name=name, transform=np.eye(4))
-            clean.export(glb_path, file_type="glb")
-        else:
-            loaded.export(glb_path, file_type="glb")
-    except Exception:
-        return False
-    return os.path.isfile(glb_path)
-
-
-def convert_obj_to_glb(
-    obj_path: str,
-    glb_path: str,
-    shade_type: str = "SMOOTH",
-    auto_smooth_angle: float = 60,
-    merge_vertices: bool = False,
-) -> bool:
-    """Converte OBJ para GLB: Blender (se ``bpy`` disponível) ou trimesh."""
-    if bpy is not None:
-        try:
-            _setup_blender_scene()
-            _clear_scene_objects()
-            bpy.ops.wm.obj_import(filepath=obj_path)
-            _select_mesh_objects()
-            _merge_vertices_if_needed(merge_vertices)
-            _apply_shading(shade_type, auto_smooth_angle)
-            with contextlib.redirect_stdout(StringIO()):
-                bpy.ops.export_scene.gltf(filepath=glb_path, use_active_scene=True)
-            return True
-        except Exception:
-            pass
-    return _convert_obj_to_glb_trimesh(obj_path, glb_path)

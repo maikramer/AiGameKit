@@ -20,7 +20,6 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-import trimesh
 from PIL import Image
 
 from .camera_utils import (
@@ -31,6 +30,21 @@ from .camera_utils import (
 )
 
 _logger = logging.getLogger(__name__)
+
+
+def _mean_vertex_normals(vertex_count: int, faces: np.ndarray, face_normals: np.ndarray) -> np.ndarray:
+    """Compute mean vertex normals by accumulating face normals per vertex.
+
+    Replaces ``trimesh.geometry.mean_vertex_normals`` with a pure numpy
+    implementation using ``np.add.at`` for scatter-add and ``bincount`` for
+    counting, then L2-normalising per vertex.
+    """
+    vn = np.zeros((vertex_count, 3), dtype=np.float32)
+    np.add.at(vn, faces.ravel(), np.repeat(face_normals, 3, axis=0))
+    norms = np.linalg.norm(vn, axis=1, keepdims=True)
+    norms[norms < 1e-10] = 1.0
+    return vn / norms
+
 
 try:
     from .mesh_utils import load_mesh, save_mesh
@@ -441,10 +455,10 @@ class MeshRender:
         rast_out, _ = self.raster_rasterize(view_state.pos_clip, self.pos_idx, resolution=view_state.resolution)
 
         if self.shader_type == "vertex":
-            vertex_normals = trimesh.geometry.mean_vertex_normals(
-                vertex_count=self.vtx_pos.shape[0],
-                faces=self.pos_idx.cpu(),
-                face_normals=face_normals.cpu(),
+            vertex_normals = _mean_vertex_normals(
+                self.vtx_pos.shape[0],
+                self.pos_idx.cpu(),
+                face_normals.cpu(),
             )
             vertex_normals = torch.from_numpy(vertex_normals).float().to(self.device).contiguous()
             normal, _ = self.raster_interpolate(vertex_normals[None, ...], rast_out, self.pos_idx)
@@ -953,10 +967,10 @@ class MeshRender:
         v1 = self.vtx_pos[self.pos_idx[:, 1], :]
         v2 = self.vtx_pos[self.pos_idx[:, 2], :]
         face_normals = F.normalize(torch.cross(v1 - v0, v2 - v0, dim=-1), dim=-1)
-        vertex_normals = trimesh.geometry.mean_vertex_normals(
-            vertex_count=self.vtx_pos.shape[0],
-            faces=self.pos_idx.cpu(),
-            face_normals=face_normals.cpu(),
+        vertex_normals = _mean_vertex_normals(
+            self.vtx_pos.shape[0],
+            self.pos_idx.cpu(),
+            face_normals.cpu(),
         )
         vertex_normals = torch.from_numpy(vertex_normals).to(self.vtx_pos).contiguous()
         position_normal, _ = self.raster_interpolate(vertex_normals[None, ...], rast_out, self.pos_idx)
@@ -1190,10 +1204,10 @@ class MeshRender:
         visible_mask = torch.clamp(rast_out[..., -1:], 0, 1)[0, ...]
 
         if self.shader_type == "vertex":
-            vertex_normals = trimesh.geometry.mean_vertex_normals(
-                vertex_count=self.vtx_pos.shape[0],
-                faces=self.pos_idx.cpu(),
-                face_normals=face_normals.cpu(),
+            vertex_normals = _mean_vertex_normals(
+                self.vtx_pos.shape[0],
+                self.pos_idx.cpu(),
+                face_normals.cpu(),
             )
             vertex_normals = torch.from_numpy(vertex_normals).float().to(self.device).contiguous()
             normal, _ = self.raster_interpolate(vertex_normals[None, ...], rast_out, self.pos_idx)

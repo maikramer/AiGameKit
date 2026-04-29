@@ -18,8 +18,9 @@ import warnings
 
 import numpy as np
 import torch
-import trimesh
 from PIL import Image
+
+from gamedev_shared.bpy_mesh import load_glb
 
 from .DifferentiableRenderer.MeshRender import MeshRender
 from .utils.image_super_utils import imageSuperNet
@@ -150,7 +151,7 @@ class Hunyuan3DPaintPipeline:
             output_mesh_path = output_mesh_path.replace(".obj", ".glb")
 
         # Load mesh
-        mesh = trimesh.load(processed_mesh_path)
+        mesh = load_glb(processed_mesh_path)
         mesh = mesh_uv_wrap(mesh)
         self.render.load_mesh(mesh=mesh)
         _step("uv_unwrap", 100)
@@ -231,7 +232,7 @@ class Hunyuan3DPaintPipeline:
         _step("inpaint", 100)
 
         _step("save", 0)
-        self.render.save_mesh(output_mesh_path, downsample=True)
+        self.render.save_mesh(output_mesh_path, downsample=False)
         _step("save", 100)
 
         return output_mesh_path

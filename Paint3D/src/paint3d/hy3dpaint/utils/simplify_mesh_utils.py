@@ -12,26 +12,33 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
-import pymeshlab
-import trimesh
+from __future__ import annotations
+
+from gamedev_shared.bpy_mesh import load_glb, save_glb
 
 
-def remesh_mesh(mesh_path, remesh_path):
+def remesh_mesh(mesh_path: str, remesh_path: str) -> None:
     mesh_simplify_trimesh(mesh_path, remesh_path)
 
 
-def mesh_simplify_trimesh(inputpath, outputpath, target_count=40000):
-    ms = pymeshlab.MeshSet()
-    if inputpath.endswith(".glb"):
-        ms.load_new_mesh(inputpath, load_in_a_single_layer=True)
-    else:
-        ms.load_new_mesh(inputpath)
-    # Export directly as GLB instead of OBJ (preserves vertex precision)
-    glb_path = outputpath if outputpath.endswith(".glb") else outputpath.rsplit(".", 1)[0] + ".glb"
-    ms.save_current_mesh(glb_path, save_textures=False)
-    courent = trimesh.load(glb_path, force="mesh")
-    face_num = courent.faces.shape[0]
+def mesh_simplify_trimesh(inputpath: str, outputpath: str, target_count: int = 40000) -> None:
+    """Simplify mesh to *target_count* faces using bpy Decimate modifier."""
+    import bpy
 
-    if face_num > target_count:
-        courent = courent.simplify_quadric_decimation(face_count=target_count)
-    courent.export(outputpath)
+    mesh_objs = load_glb(inputpath)
+    if not mesh_objs:
+        raise RuntimeError(f"No mesh objects found in {inputpath}")
+
+    # Pick the largest mesh by face count
+    mesh_obj = max(mesh_objs, key=lambda o: len(o.data.polygons))
+    current_faces = len(mesh_obj.data.polygons)
+
+    if current_faces > target_count:
+        ratio = target_count / current_faces
+        mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
+        mod.decimate_type = "COLLAPSE"
+        mod.ratio = ratio
+        bpy.context.view_layer.objects.active = mesh_obj
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    save_glb(mesh_obj, outputpath)
