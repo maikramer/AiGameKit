@@ -276,6 +276,52 @@ Each Python package follows this layout:
     installer.py          # Package installer (uses gamedev-shared)
 ```
 
+## GameDevLab — Debug & Mesh Comparison
+
+The monorepo includes **GameDevLab** (`gamedev-lab`) for GLB debugging, inspection, and automated comparison. It is the primary tool for verifying mesh quality in the pipeline.
+
+### Key Commands
+
+| Command | Purpose |
+|---------|---------|
+| `gamedev-lab debug screenshot <glb> -o <dir>` | Multi-angle PNG screenshots (4 views default) |
+| `gamedev-lab debug compare <a.glb> <b.glb> --struct-diff --image-metrics` | Side-by-side structural + visual comparison |
+| `gamedev-lab debug inspect <glb>` | JSON metadata dump (mesh, armature, animation, materials) |
+| `gamedev-lab debug bundle <glb> -o <dir>` | Full bundle: inspect + screenshots + bundle.json |
+| `gamedev-lab check glb <glb> <rules.yaml>` | Validate GLB against JSON/YAML rules (CI-ready, exit 0/1) |
+
+### Mesh Comparison Workflow
+
+```bash
+# 1. Capture screenshots for baseline
+gamedev-lab debug screenshot before.glb -o baseline/
+
+# 2. After changes, capture new screenshots
+gamedev-lab debug screenshot after.glb -o after/
+
+# 3. Automated structural + visual comparison
+gamedev-lab debug compare before.glb after.glb \
+  --image-metrics \
+  --fail-below-ssim 0.85
+```
+
+`--struct-diff` is on by default and generates an `inspect_diff` section inside `diff_report.json` with per-view vertex/face counts. `--image-metrics` adds MAE, RMSE, and SSIM scores. The `--fail-below-ssim` flag exits with code 1 if any view falls below the threshold, useful in CI or pre-commit hooks.
+
+### Render Options
+
+| Flag | Effect |
+|------|--------|
+| `--engine workbench\|eevee` | Render engine selection |
+| `--ortho` | Orthographic camera |
+| `--no-transparent-film` | Opaque background |
+| `--views 4` | Number of evenly-spaced camera angles |
+
+### Requirements
+
+Requires `animator3d` on PATH or `ANIMATOR3D_BIN` set (delegates rendering to Animator3D). For Python script-based inspection, `gamedev_lab` must be installed in the same venv as `bpy`.
+
+See `GameDevLab/README.md` for full documentation.
+
 ## Commit Conventions
 
 Use Conventional Commits:
