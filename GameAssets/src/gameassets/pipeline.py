@@ -295,7 +295,8 @@ def _lod_pipeline_failed(
     with_rig: bool = False,
     has_rigging_profile: bool = False,
 ) -> bool:
-    """Gera triplet LOD. Rigged assets usam ``bpy_simplify.simplify_glb()``, static usam ``text3d lod``. Devolve True se falhou."""
+    """Gera triplet LOD. Rigged assets usam ``bpy_simplify.simplify_glb()``,
+    static usam ``text3d lod``. Devolve True se falhou."""
     if not with_lod or not row.generate_lod or not row.generate_3d:
         return False
     if not mesh_final.is_file():
@@ -376,7 +377,8 @@ def _lod_pipeline_rigged_bpy(
     manifest_dir: Path,
     lod_prof,  # LODProfile
 ) -> bool:
-    """Gera LOD triplet para assets rigados via ``bpy_simplify.simplify_glb()`` (preserva rig+animation). Devolve True se falhou."""
+    """Gera LOD triplet para assets rigados via ``bpy_simplify.simplify_glb()``
+    (preserva rig+animation). Devolve True se falhou."""
     basename = row.id.replace("/", "_")
     paths = _lod_output_paths(mesh_final, basename)
 
@@ -399,7 +401,7 @@ def _lod_pipeline_rigged_bpy(
     console.print(f"[cyan]⏳ LOD (rigged, bpy)[/cyan] {row.id} ...")
     t0 = time.perf_counter()
 
-    for i, (ratio, min_f) in enumerate(zip(ratios, min_faces)):
+    for i, (ratio, min_f) in enumerate(zip(ratios, min_faces, strict=True)):
         target = max(int(current_faces * ratio), min_f)
         out = paths[i]
         try:
