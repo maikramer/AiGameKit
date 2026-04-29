@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
-import trimesh
 
 from .procedural_noise import fbm3, normalize_to_unit_cube
 from .utils.mesh_io import load_mesh_trimesh, save_glb
@@ -26,28 +26,55 @@ def parse_hex_rgb(hex_raw: str) -> tuple[float, float, float]:
     return (r, g, b)
 
 
-def mesh_with_vertex_color(mesh: trimesh.Trimesh, rgb: np.ndarray) -> trimesh.Trimesh:
-    """
-    ``rgb`` (N,3) em [0,1]. Aplica ColorVisuals ao mesh (export glTF com cor por vértice).
-    """
-    m = mesh.copy()
-    n = len(m.vertices)
+def _apply_vertex_colors(obj: Any, rgb: np.ndarray) -> None:
+    """Aplica cores por vértice ``(N, 3)`` em ``[0, 1]`` ao objecto bpy via color attribute."""
+    mesh = obj.data
+    n = len(mesh.vertices)
     if rgb.shape[0] != n:
-        raise ValueError(
-            f"cores {rgb.shape[0]} ≠ {n} vértices"
-        )
-    rgba = np.concatenate([np.clip(rgb, 0, 1), np.ones((n, 1), dtype=np.float64)], axis=1)
-    m.visual = trimesh.visual.color.ColorVisuals(vertex_colors=(rgba * 255).astype(np.uint8))
-    return m
+        raise ValueError(f"cores {rgb.shape[0]} ≠ {n} vértices")
+
+    rgb_clamped = np.clip(rgb, 0, 1)
+
+    # Modern color_attributes API (Blender 4.x+ / bpy 4.x+)
+    if hasattr(mesh, "color_attributes") and hasattr(mesh.color_attributes, "new"):
+        color_attr = mesh.color_attributes.new(name="Col", type="FLOAT_COLOR", domain="CORNER")
+    elif hasattr(mesh, "vertex_colors") and hasattr(mesh.vertex_colors, "new"):
+        color_attr = mesh.vertex_colors.new(name="Col")
+    else:
+        raise RuntimeError("bpy mesh has no color_attributes or vertex_colors API")
+
+    for poly in mesh.polygons:
+        for loop_idx in poly.loop_indices:
+            vi = mesh.loops[loop_idx].vertex_index
+            r, g, b = float(rgb_clamped[vi, 0]), float(rgb_clamped[vi, 1]), float(rgb_clamped[vi, 2])
+            color_attr.data[loop_idx].color = (r, g, b, 1.0)
 
 
-def _restore_feet_origin(mesh: trimesh.Trimesh) -> None:
-    """Igual ao pós-Paint: base AABB em Y=0, XZ centrados."""
-    bounds = mesh.bounds
-    cx = (bounds[0][0] + bounds[1][0]) * 0.5
-    cy = float(bounds[0][1])
-    cz = (bounds[0][2] + bounds[1][2]) * 0.5
-    mesh.apply_translation([-cx, -cy, -cz])
+def _get_combined_bounds(objects: list) -> tuple[np.ndarray, np.ndarray]:
+    """AABB combinado ``(min_corner, max_corner)`` de uma lista de objectos bpy."""
+    from gamedev_shared.bpy_mesh import get_bounds
+
+    all_mins = []
+    all_maxs = []
+    for obj in objects:
+        mn, mx = get_bounds(obj)
+        all_mins.append(np.array(mn))
+        all_maxs.append(np.array(mx))
+    if not all_mins:
+        return np.zeros(3), np.zeros(3)
+    min_corner = np.min(all_mins, axis=0)
+    max_corner = np.max(all_maxs, axis=0)
+    return min_corner, max_corner
+
+
+def _apply_translation(objects: list, offset: np.ndarray) -> None:
+    """Desloca vértices de todos os objectos (in-place, sem alterar location)."""
+    for obj in objects:
+        for v in obj.data.vertices:
+            v.co[0] += float(offset[0])
+            v.co[1] += float(offset[1])
+            v.co[2] += float(offset[2])
+        obj.data.update()
 
 
 def bake_solid_color(
@@ -58,13 +85,27 @@ def bake_solid_color(
     preserve_origin: bool = True,
 ) -> Path:
     r, g, b = parse_hex_rgb(color_hex)
-    mesh = load_mesh_trimesh(mesh_in)
+    objects = load_mesh_trimesh(mesh_in)
+    if not objects:
+        raise ValueError(f"Sem mesh objects em {mesh_in}")
+
     if preserve_origin:
-        _restore_feet_origin(mesh)
-    n = len(mesh.vertices)
+        bounds_min_before, bounds_max_before = _get_combined_bounds(objects)
+
+    obj = objects[0]
+    n = len(obj.data.vertices)
     rgb = np.tile(np.array([[r, g, b]], dtype=np.float64), (n, 1))
-    out = mesh_with_vertex_color(mesh, rgb)
-    return save_glb(out, mesh_out)
+    _apply_vertex_colors(obj, rgb)
+
+    if preserve_origin:
+        bounds_min_after, bounds_max_after = _get_combined_bounds(objects)
+        centroid_before = (bounds_min_before + bounds_max_before) * 0.5
+        centroid_after = (bounds_min_after + bounds_max_after) * 0.5
+        offset = centroid_before - centroid_after
+        if np.dot(offset, offset) > 1e-12:
+            _apply_translation(objects, offset)
+
+    return save_glb(objects, mesh_out)
 
 
 def bake_perlin_vertex(
@@ -83,10 +124,16 @@ def bake_perlin_vertex(
     ``contrast`` ∈ [0,1] controla quanto o ruído modula o tom (estilo pedra).
     """
     r0, g0, b0 = parse_hex_rgb(tint_hex)
-    mesh = load_mesh_trimesh(mesh_in)
+    objects = load_mesh_trimesh(mesh_in)
+    if not objects:
+        raise ValueError(f"Sem mesh objects em {mesh_in}")
+
     if preserve_origin:
-        _restore_feet_origin(mesh)
-    v = mesh.vertices
+        bounds_min_before, bounds_max_before = _get_combined_bounds(objects)
+
+    obj = objects[0]
+    mesh_data = obj.data
+    v = np.array([tuple(vv.co) for vv in mesh_data.vertices], dtype=np.float64)
     q = normalize_to_unit_cube(v)
     noise = fbm3(q, frequency=frequency, octaves=octaves, seed=seed)
     # map [-1,1] -> multiplicador [1-c, 1+c] do tom base
@@ -96,5 +143,14 @@ def bake_perlin_vertex(
     g = np.clip(g0 * m, 0, 1)
     b = np.clip(b0 * m, 0, 1)
     rgb = np.stack([r, g, b], axis=1)
-    out = mesh_with_vertex_color(mesh, rgb)
-    return save_glb(out, mesh_out)
+    _apply_vertex_colors(obj, rgb)
+
+    if preserve_origin:
+        bounds_min_after, bounds_max_after = _get_combined_bounds(objects)
+        centroid_before = (bounds_min_before + bounds_max_before) * 0.5
+        centroid_after = (bounds_min_after + bounds_max_after) * 0.5
+        offset = centroid_before - centroid_after
+        if np.dot(offset, offset) > 1e-12:
+            _apply_translation(objects, offset)
+
+    return save_glb(objects, mesh_out)

@@ -10,9 +10,9 @@ from __future__ import annotations
 import math
 from pathlib import Path
 
+import bpy
 import numpy as np
 import torch
-import trimesh
 from PIL import Image
 
 from gamedev_shared.logging import Logger
@@ -190,42 +190,81 @@ def _tiled_inference(
     return output / weights.clamp(min=1.0)
 
 
+def _get_base_color_image(
+    obj: bpy.types.Object,
+) -> tuple[bpy.types.Image | None, bpy.types.ShaderNodeTexImage | None]:
+    """Extract the base color image and its texture node from a bpy mesh object."""
+    if not obj.data.materials:
+        return None, None
+    mat = obj.data.materials[0]
+    if not mat.use_nodes:
+        return None, None
+
+    bsdf = None
+    tex_node = None
+    for node in mat.node_tree.nodes:
+        if node.type == "BSDF_PRINCIPLED" and bsdf is None:
+            bsdf = node
+        if node.type == "TEX_IMAGE" and tex_node is None:
+            tex_node = node
+
+    if bsdf is not None:
+        for link in mat.node_tree.links:
+            if link.to_node == bsdf and link.to_socket.name == "Base Color" and link.from_node.type == "TEX_IMAGE":
+                tex_node = link.from_node
+                break
+
+    if tex_node is None or tex_node.image is None:
+        return None, None
+    return tex_node.image, tex_node
+
+
+def _bpy_image_to_pil(bpy_image: bpy.types.Image) -> Image.Image:
+    """Convert a bpy Image to a PIL Image (RGB)."""
+    w, h = bpy_image.size
+    pixels = np.array(bpy_image.pixels[:]).reshape(h, w, 4)
+    return Image.fromarray((pixels[:, :, :3] * 255).astype(np.uint8))
+
+
+def _write_pil_to_bpy(pil_image: Image.Image, bpy_image: bpy.types.Image) -> None:
+    """Write a PIL Image back into an existing bpy Image in-place."""
+    new_w, new_h = pil_image.size
+    arr = np.array(pil_image.convert("RGB"), dtype=np.float32) / 255.0
+    if bpy_image.size[0] != new_w or bpy_image.size[1] != new_h:
+        bpy_image.scale(new_w, new_h)
+    rgba = np.ones((new_h, new_w, 4), dtype=np.float32)
+    rgba[:, :, :3] = arr
+    bpy_image.pixels = rgba.ravel().tolist()
+    bpy_image.update()
+    bpy_image.pack()
+
+
 def upscale_trimesh_texture(
-    mesh: trimesh.Trimesh,
+    obj: bpy.types.Object,
     *,
     scale: int = 4,
     tile_size: int = 512,
     device: str | None = None,
     half: bool = True,
     verbose: bool = False,
-) -> trimesh.Trimesh:
-    """
-    Upscale the baseColor texture of a textured trimesh in-place.
-    Returns the same mesh with higher-resolution texture.
-    """
-    import trimesh
+) -> bpy.types.Object:
+    """Upscale the baseColor texture of a bpy mesh object in-place. Aceita lista — usa o primeiro MESH."""
+    if isinstance(obj, list):
+        meshes = [o for o in obj if hasattr(o, "data") and o.type == "MESH"]
+        if not meshes:
+            return obj
+        obj = meshes[0]
+    if not (hasattr(obj, "data") and obj.type == "MESH"):
+        raise TypeError(f"Expected bpy MESH object, got {type(obj)}")
 
-    if not isinstance(mesh, trimesh.Trimesh):
-        raise TypeError(f"Expected Trimesh, got {type(mesh)}")
+    bpy_image, _tex_node = _get_base_color_image(obj)
 
-    vis = mesh.visual
-    if not hasattr(vis, "material"):
-        if verbose:
-            _logger.dim("Mesh sem material — nada a fazer.")
-        return mesh
-
-    mat = vis.material
-    texture = None
-
-    if hasattr(mat, "baseColorTexture") and mat.baseColorTexture is not None:
-        texture = mat.baseColorTexture
-    elif hasattr(mat, "image") and mat.image is not None:
-        texture = mat.image
-
-    if texture is None:
+    if bpy_image is None:
         if verbose:
             _logger.dim("Mesh sem textura baseColor — nada a fazer.")
-        return mesh
+        return obj
+
+    texture = _bpy_image_to_pil(bpy_image)
 
     if verbose:
         _logger.info(f"Textura original: {texture.size[0]}x{texture.size[1]}")
@@ -239,12 +278,9 @@ def upscale_trimesh_texture(
         verbose=verbose,
     )
 
-    if hasattr(mat, "baseColorTexture"):
-        mat.baseColorTexture = upscaled
-    elif hasattr(mat, "image"):
-        mat.image = upscaled
+    _write_pil_to_bpy(upscaled, bpy_image)
 
     if verbose:
         _logger.info(f"Textura upscaled: {upscaled.size[0]}x{upscaled.size[1]}")
 
-    return mesh
+    return obj
