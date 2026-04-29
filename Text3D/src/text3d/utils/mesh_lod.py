@@ -1,68 +1,29 @@
-"""Geração de variantes LOD (níveis de detalhe) de meshes GLB para uso offline e em runtime."""
+"""Geração de variantes LOD (níveis de detalhe) de meshes GLB via bpy.
+
+Cada função opera sobre ficheiros GLB e preserva armatures, skin weights e
+animações quando presentes no input.
+"""
 
 from __future__ import annotations
 
-import contextlib
-import tempfile
+import logging
 from pathlib import Path
 
-import numpy as np
-import trimesh
-import trimesh.repair as trimesh_repair
-from trimesh.grouping import group_rows
-
-from .export import _export_glb_with_normals, _load_as_trimesh
+from gamedev_shared.bpy_mesh import clear_scene
 
 # ---------------------------------------------------------------------------
-# Helpers inlined to break the import dependency on mesh_repair
+# bpy helpers (lazy import inside functions — bpy may not be installed)
 # ---------------------------------------------------------------------------
 
 
-def _pymeshlab_roundtrip(mesh: trimesh.Trimesh, apply_fn) -> trimesh.Trimesh:
-    """Exporta → aplica filtros pymeshlab via callback → reimporta."""
-    with tempfile.TemporaryDirectory(prefix="pml_") as tmpdir:
-        in_ply = str(Path(tmpdir) / "in.ply")
-        out_ply = str(Path(tmpdir) / "out.ply")
-        mesh.export(in_ply)
-        import pymeshlab
-
-        ms = pymeshlab.MeshSet()
-        ms.load_new_mesh(in_ply)
-        apply_fn(ms)
-        ms.save_current_mesh(out_ply)
-        m_new = trimesh.load(out_ply, force="mesh")
-        if isinstance(m_new, trimesh.Trimesh) and len(m_new.faces) > 0:
-            return m_new
-    return mesh
-
-
-def _manifold_repair(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """Repara topologia non-manifold, duplicatas e vértices órfãos via pymeshlab."""
+def _require_bpy():
+    """Importa bpy ou levanta ImportError com mensagem útil."""
     try:
+        import bpy
 
-        def _apply(ms):
-            ms.meshing_repair_non_manifold_edges()
-            ms.meshing_repair_non_manifold_vertices()
-            ms.meshing_remove_duplicate_faces()
-            ms.meshing_remove_duplicate_vertices()
-            ms.meshing_remove_unreferenced_vertices()
-
-        return _pymeshlab_roundtrip(mesh, _apply)
-    except Exception:
-        m = mesh.copy()
-        with contextlib.suppress(Exception):
-            m.merge_vertices()
-            m.remove_unreferenced_vertices()
-            trimesh_repair.fix_normals(m, multibody=True)
-        return m
-
-
-def _boundary_edge_count(mesh: trimesh.Trimesh) -> int:
-    """Conta arestas de fronteira (buracos abertos)."""
-    try:
-        return len(group_rows(mesh.edges_sorted, require_count=1))
-    except Exception:
-        return -1
+        return bpy
+    except ImportError:
+        raise ImportError("bpy is required for LOD generation. Install with: pip install bpy") from None
 
 
 def _dynamic_weld_distance(vertex_count: int) -> float:
@@ -81,229 +42,248 @@ def _dynamic_weld_distance(vertex_count: int) -> float:
     return 0.01
 
 
-def _mesh_repair_pymeshlab(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) -> trimesh.Trimesh:
-    """Weld por distância, close holes, Taubin smoothing e isotropic remesh via pymeshlab.
+def _load_glb_with_armatures(path: Path) -> tuple:
+    """Importa GLB via bpy, devolve (mesh_obj, armature_objs).
 
-    Pipeline de reparo 4-fases para micro-cracks do marching cubes:
-    1. Merge close vertices (0.1% diagonal — fecha cracks do octree/MC)
-    2. Close small holes (boundary loops ≤ 30 edges — cracks residuais)
-    3. Taubin smoothing (preserva volume, sem shrinkage)
-    4. Isotropic remeshing adaptativo (saltar com ``skip_remesh=True``)
-
-    Tudo numa única ronda pymeshlab para minimizar export/import.
+    Limpa a cena antes de importar. Preserva transforms, armatures,
+    shape keys e materiais.
     """
-    try:
-        import logging
+    import bpy
 
-        log = logging.getLogger(__name__)
-
-        bbox_diag = float(np.linalg.norm(mesh.bounds[1] - mesh.bounds[0]))
-        if bbox_diag < 1e-10:
-            log.warning("Mesh com bounding box degenerada — skip weld/smooth/remesh")
-            return mesh
-
-        def _apply(ms):
-            import pymeshlab
-
-            weld_dist = _dynamic_weld_distance(len(mesh.vertices))
-            ms.meshing_merge_close_vertices(threshold=pymeshlab.PureValue(weld_dist))
-
-            # Non-manifold repair pós-merge
-            ms.meshing_repair_non_manifold_edges()
-            ms.meshing_repair_non_manifold_vertices()
-            ms.meshing_remove_duplicate_faces()
-            ms.meshing_remove_unreferenced_vertices()
-
-            # FASE 2 — Fechar buracos pequenos (rachaduras MC = 3-15 arestas de boundary)
-            ms.meshing_close_holes(maxholesize=30)
-
-            # Remover debris/flotadores (componentes < 1% diagonal)
-            ms.meshing_remove_connected_component_by_diameter(mincomponentdiag=pymeshlab.PercentageValue(1))
-
-            # FASE 3 — Taubin smoothing (λ/μ low-pass, preserva volume)
-            ms.apply_coord_taubin_smoothing(stepsmoothnum=3)
-
-            # FASE 4 — Isotropic remeshing (regulariza triângulos)
-            if not skip_remesh:
-                ms.meshing_isotropic_explicit_remeshing(
-                    iterations=3,
-                    targetlen=pymeshlab.PercentageValue(1),
-                    adaptive=True,
-                )
-
-            # Cleanup final
-            ms.meshing_remove_duplicate_faces()
-            ms.meshing_remove_duplicate_vertices()
-            ms.meshing_remove_unreferenced_vertices()
-
-        result = _pymeshlab_roundtrip(mesh, _apply)
-        log.info(
-            "Reparo pymeshlab: %d→%d faces, %d→%d vértices",
-            len(mesh.faces),
-            len(result.faces),
-            len(mesh.vertices),
-            len(result.vertices),
-        )
-        return result
-    except Exception as exc:
-        import logging
-
-        logging.getLogger(__name__).warning("Reparo pymeshlab falhou (%s) — mesh inalterada", exc)
-        return mesh
+    path = Path(path).expanduser().resolve()
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(path))
+    mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    if not mesh_objs:
+        raise ValueError(f"No mesh objects found in {path}")
+    # Usa a mesh com mais polígonos (mesh principal)
+    mesh_obj = max(mesh_objs, key=lambda o: len(o.data.polygons))
+    arm_objs = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
+    return mesh_obj, arm_objs
 
 
-def prepare_mesh_topology(mesh: trimesh.Trimesh, *, skip_remesh: bool = False) -> trimesh.Trimesh:
-    """Prepara topologia antes de export, LOD ou :func:`repair_mesh`.
+def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
+    """Exporta mesh + armatures para GLB, preservando animações e skins.
 
-    Pipeline completo de reparo pós-marching-cubes:
-
-    1. Merge vertices exactos + quase coincidentes (``digits_vertex=4``)
-    2. Remove faces duplicadas e vértices órfãos
-    3. Repara non-manifold edges/vertices (pymeshlab)
-    4. Weld por distância adaptativa (0.1% diagonal), close holes ≤ 30 edges,
-       Taubin smoothing, isotropic remesh — fecha micro-cracks e regulariza
-    5. Cleanup final
-
-    Usada por defeito em ``text3d generate``, ``generate-batch`` e ``text3d lod``.
+    Selecciona mesh_obj e todos os armatures; o objecto activo é o
+    armature (se existir) para garantir que as animações são exportadas.
     """
-    import logging
+    import bpy
 
+    export_objects = [mesh_obj, *arm_objs]
+    bpy.ops.object.select_all(action="DESELECT")
+    for o in export_objects:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else mesh_obj
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    bpy.ops.export_scene.gltf(
+        filepath=str(output_path),
+        export_format="GLB",
+        use_selection=True,
+        export_apply=False,
+        export_animations=True,
+        export_skins=True,
+        export_all_influences=False,
+        export_image_format="AUTO",
+    )
+
+
+def _remove_doubles(obj, threshold: float) -> int:
+    """Remove vértices duplicados dentro de *threshold*. Devolve vértices removidos."""
+    import bpy
+
+    before = len(obj.data.vertices)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=True)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return before - len(obj.data.vertices)
+
+
+def _fill_holes_bpy(obj, sides: int = 30) -> None:
+    """Preenche buracos com até *sides* arestas via bpy.ops.mesh.fill_holes."""
+    import bpy
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="DESELECT")
+    bpy.ops.mesh.select_non_manifold()
+    bpy.ops.mesh.fill_holes(sides=sides)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _make_normals_consistent(obj) -> None:
+    """Recalcula normais para ficarem consistentes (para fora)."""
+    import bpy
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.normals_make_consistent()
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _prepare_topology_bpy(mesh_obj) -> None:
+    """Pipeline de preparação de topologia sobre um bpy mesh object (in-place).
+
+    1. Remove doubles exactos (threshold baixo)
+    2. Weld por distância adaptativa (fecha micro-cracks)
+    3. Normais consistentes
+    4. Fill holes pequenos (≤30 lados)
+    """
     log = logging.getLogger(__name__)
 
-    m = mesh.copy()
-    n_faces_before = len(m.faces)
+    n_faces_before = len(mesh_obj.data.polygons)
+    n_verts_before = len(mesh_obj.data.vertices)
 
-    # 1. Merge vertices exactos
-    try:
-        m.merge_vertices(merge_tex=True)
-    except Exception as exc:
-        log.warning("merge_vertices exacto falhou: %s", exc)
+    # 1. Remove doubles exactos
+    removed = _remove_doubles(mesh_obj, threshold=0.0001)
+    if removed:
+        log.info("Remove doubles exactos: %d vértices removidos", removed)
 
-    # 2. Remove duplicatas e órfãos
-    try:
-        m.process(validate=True, merge_tex=True)
-    except Exception as exc:
-        log.warning("process(validate=True) falhou: %s", exc)
-    try:
-        m.remove_unreferenced_vertices()
-    except Exception as exc:
-        log.warning("remove_unreferenced_vertices falhou: %s", exc)
+    # 2. Weld por distância adaptativa
+    weld_dist = _dynamic_weld_distance(len(mesh_obj.data.vertices))
+    removed = _remove_doubles(mesh_obj, threshold=weld_dist)
+    if removed:
+        log.info("Weld adaptativo (%.4f): %d vértices removidos", weld_dist, removed)
 
-    # 3. Weld adaptativo por densidade de vértices (fecha micro-cracks)
+    # 3. Normais consistentes
     try:
-        import pymeshlab
+        _make_normals_consistent(mesh_obj)
+    except Exception as exc:
+        log.warning("normals_make_consistent falhou: %s", exc)
 
-        weld_dist = _dynamic_weld_distance(len(m.vertices))
-        with tempfile.TemporaryDirectory(prefix="pml_weld_") as tmpdir:
-            in_ply = str(Path(tmpdir) / "in.ply")
-            out_ply = str(Path(tmpdir) / "out.ply")
-            m.export(in_ply)
-            ms = pymeshlab.MeshSet()
-            ms.load_new_mesh(in_ply)
-            ms.meshing_merge_close_vertices(threshold=pymeshlab.PureValue(weld_dist))
-            ms.save_current_mesh(out_ply)
-            m_new = trimesh.load(out_ply, force="mesh")
-            if isinstance(m_new, trimesh.Trimesh) and len(m_new.faces) > 0:
-                log.info("Weld adaptativo (%.4f): %d→%d vértices", weld_dist, len(m.vertices), len(m_new.vertices))
-                m = m_new
-    except Exception as exc:
-        log.warning("weld adaptativo falhou: %s", exc)
-
-    # 4. Non-manifold repair
-    m = _manifold_repair(m)
-
-    # 5. Weld + close holes + smooth + remesh (pipeline pymeshlab completa)
-    m = _mesh_repair_pymeshlab(m, skip_remesh=skip_remesh)
-
-    # 6. Cleanup final
+    # 4. Fill holes pequenos
     try:
-        m.merge_vertices(merge_tex=True)
+        _fill_holes_bpy(mesh_obj, sides=30)
     except Exception as exc:
-        log.warning("merge_vertices final falhou: %s", exc)
-    try:
-        m.process(validate=True, merge_tex=True)
-    except Exception as exc:
-        log.warning("process(validate=True) final falhou: %s", exc)
-    try:
-        m.remove_unreferenced_vertices()
-    except Exception as exc:
-        log.warning("remove_unreferenced_vertices final falhou: %s", exc)
-    try:
-        trimesh_repair.fix_normals(m, multibody=True)
-    except Exception as exc:
-        log.warning("fix_normals falhou: %s", exc)
+        log.warning("fill_holes falhou: %s", exc)
 
     log.info(
-        "prepare_mesh_topology: %d→%d faces, %d→%d vértices",
+        "prepare_topology: %d→%d faces, %d→%d vértices",
         n_faces_before,
-        len(m.faces),
-        len(mesh.vertices),
-        len(m.vertices),
+        len(mesh_obj.data.polygons),
+        n_verts_before,
+        len(mesh_obj.data.vertices),
     )
-    return m
 
 
-def pymeshfix_mesh_repair_only(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """Só PyTMesh ``fill_small_boundaries`` (sem ``clean``).
+def _decimate_to_target(mesh_obj, target_faces: int) -> int:
+    """Decimation via bpy Decimate modifier (quadric edge collapse).
 
-    ``clean()`` remove triângulos com auto-intersecções; em meshes decimadas (LOD) isso
-    costuma eliminar troncos ou quase toda a geometria. Não usa pymeshlab nem
-    ``repair_mesh``.
-
-    Se ``pymeshfix`` não estiver instalado ou não houver fronteira aberta, devolve a mesh
-    inalterada.
+    Devolve número real de faces após decimação.
     """
-    m = mesh.copy()
+    import bpy
+
+    current = len(mesh_obj.data.polygons)
+    if current <= target_faces:
+        return current
+    t = max(4, min(int(target_faces), current - 1))
+    if t >= current:
+        return current
+    ratio = t / current
+    mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
+    mod.decimate_type = "COLLAPSE"
+    mod.ratio = ratio
+    bpy.context.view_layer.objects.active = mesh_obj
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    return len(mesh_obj.data.polygons)
+
+
+# ---------------------------------------------------------------------------
+# Public API — path-based (GLB → GLB)
+# ---------------------------------------------------------------------------
+
+
+def prepare_mesh_topology(
+    input_path: Path | str, output_path: Path | str | None = None, **kwargs: object
+) -> Path:
+    """Prepara topologia de um GLB: remove doubles, weld, normais, fill holes.
+
+    Carrega o GLB via bpy, aplica o pipeline de reparo e exporta. Preserva
+    armatures, skins e animações quando presentes. Se bpy não estiver
+    disponível, devolve o input inalterado com um warning.
+
+    Args:
+        input_path: GLB de entrada (ou objeto trimesh — backward compat).
+        output_path: GLB de saída (se None, sobrepõe o ficheiro de entrada).
+
+    Returns:
+        Path para o GLB preparado (ou trimesh.Trimesh se input for trimesh).
+    """
+    _was_trimesh = hasattr(input_path, "export")
     try:
-        from pymeshfix import PyTMesh
+        return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh)
     except ImportError:
-        return m
-
-    if _boundary_edge_count(m) <= 0:
-        return m
-
-    try:
-        verts = np.asarray(m.vertices, dtype=np.float64)
-        faces = np.asarray(m.faces, dtype=np.int64)
-        mfix = PyTMesh()
-        mfix.load_array(verts, faces)
-        mfix.fill_small_boundaries(nbe=0, refine=True)
-        v, f = mfix.return_arrays()
-        return trimesh.Trimesh(
-            vertices=np.asarray(v, dtype=np.float64),
-            faces=np.asarray(f, dtype=np.int64),
-            process=True,
+        logging.getLogger(__name__).warning(
+            "bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)"
         )
-    except Exception:
-        return m
+        if _was_trimesh:
+            return input_path
+        return Path(input_path)
 
 
-def apply_lod_meshfix(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """Opcional: só ``fill_small_boundaries`` via ``pymeshfix_mesh_repair_only``."""
-    return pymeshfix_mesh_repair_only(mesh)
+def _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh):
+    if _was_trimesh:
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(suffix=".glb", delete=False) as tf:
+            tf.close()
+            tmp = Path(tf.name)
+        input_path.export(str(tmp), file_type="glb")
+        _input = tmp
+        _output = Path(output_path) if output_path else tmp
+    else:
+        _input = Path(input_path)
+        _output = Path(output_path) if output_path else _input
+
+    mesh_obj, arm_objs = _load_glb_with_armatures(_input)
+    _prepare_topology_bpy(mesh_obj)
+    _export_glb(_output, mesh_obj, arm_objs)
+
+    if _was_trimesh:
+        import trimesh
+
+        return trimesh.load(str(_output), force="mesh")
+    return _output
 
 
-def _require_fast_simplification() -> None:
+def pymeshfix_mesh_repair_only(input_path: Path | str, output_path: Path | str | None = None) -> Path:
+    """Preenche buracos pequenos (≤30 lados) via bpy.ops.mesh.fill_holes."""
+    input_path = Path(input_path)
+    output_path = Path(output_path) if output_path else input_path
     try:
-        import fast_simplification  # noqa: F401
-    except ImportError as e:
-        msg = (
-            "LOD requer o pacote 'fast-simplification' (usado pelo trimesh). "
-            "Instala: pip install 'fast-simplification>=0.1.7'"
-        )
-        raise RuntimeError(msg) from e
+        mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
+        _fill_holes_bpy(mesh_obj, sides=30)
+        _export_glb(output_path, mesh_obj, arm_objs)
+    except ImportError:
+        logging.getLogger(__name__).warning("bpy indisponível — pymeshfix_mesh_repair_only ignorado")
+        return input_path
+    return output_path
 
 
-def simplify_to_face_count(mesh: trimesh.Trimesh, target_faces: int) -> trimesh.Trimesh:
-    """Quadric edge collapse até ~target_faces (mínimo 4 faces)."""
-    _require_fast_simplification()
-    n = len(mesh.faces)
-    if n <= 4:
-        return mesh.copy()
-    t = max(4, min(int(target_faces), n - 1))
-    if t >= n:
-        return mesh.copy()
-    return mesh.simplify_quadric_decimation(face_count=t)
+def apply_lod_meshfix(input_path: Path | str, output_path: Path | str | None = None) -> Path:
+    """Opcional: só ``fill_small_boundaries`` (agora via bpy fill_holes)."""
+    return pymeshfix_mesh_repair_only(input_path, output_path)
+
+
+def simplify_to_face_count(input_path: Path | str, target_faces: int, output_path: Path | str | None = None) -> Path:
+    """Quadric edge collapse via bpy Decimate modifier. Preserva armatures/skins/animações."""
+    input_path = Path(input_path)
+    output_path = Path(output_path) if output_path else input_path
+    try:
+        mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
+    except ImportError:
+        logging.getLogger(__name__).warning("bpy indisponível — simplify_to_face_count ignorado")
+        return input_path
+    n = len(mesh_obj.data.polygons)
+    if n < 4:
+        raise ValueError(f"Mesh com poucas faces ({n}); simplificação não aplicável.")
+    _decimate_to_target(mesh_obj, target_faces)
+    _export_glb(output_path, mesh_obj, arm_objs)
+    return output_path
 
 
 def generate_lod_glb_triplet(
@@ -319,31 +299,9 @@ def generate_lod_glb_triplet(
 ) -> list[Path]:
     """Gera três GLB: ``{basename}_lod0.glb`` … ``{basename}_lod2.glb``.
 
-    * LOD0 — mesma resolução que a fonte após :func:`prepare_mesh_topology`
-      (vértices fundidos / manifold); não é a mesh crua do disco.
-    * LOD1 — ~``lod1_ratio`` das faces (mínimo ``min_faces_lod1``).
-    * LOD2 — ~``lod2_ratio`` das faces (mínimo ``min_faces_lod2``).
-
-    Por defeito **não** aplica pymeshfix: decimação deixa malhas abertas mas o ``clean()`` do
-    PyTMesh costuma destruir troncos/LOD2. Com ``meshfix=True`` aplica-se só
-    ``fill_small_boundaries`` (buracos pequenos), nunca ``clean()``.
-
-    Args:
-        input_path: GLB/OBJ/PLY de entrada.
-        output_dir: Pasta de saída (criada se não existir).
-        basename: Prefixo dos ficheiros (ex.: ``tree_lowpoly``).
-        lod1_ratio: Rácio alvo de faces para LOD1 (0-1).
-        lod2_ratio: Rácio alvo de faces para LOD2 (0-1).
-        min_faces_lod1: Piso de faces para LOD1.
-        min_faces_lod2: Piso de faces para LOD2.
-        meshfix: Se verdadeiro, aplica ``fill_small_boundaries`` (pymeshfix) antes de exportar.
-
-    Returns:
-        Lista ordenada com os três ``Path`` escritos.
-
-    Raises:
-        RuntimeError: Se ``fast-simplification`` não estiver instalado.
-        ValueError: Mesh vazia ou rácios inválidos.
+    Pipeline completo via bpy que preserva armatures, skin weights e
+    animações em todos os níveis. Se bpy não estiver disponível,
+    devolve lista vazia com warning.
     """
     if not 0 < lod2_ratio < lod1_ratio <= 1.0:
         raise ValueError("Esperado 0 < lod2_ratio < lod1_ratio <= 1.0")
@@ -351,24 +309,38 @@ def generate_lod_glb_triplet(
     input_path = Path(input_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        return _generate_lod_glb_triplet_impl(
+            input_path, output_dir, basename, lod1_ratio, lod2_ratio,
+            min_faces_lod1, min_faces_lod2, meshfix,
+        )
+    except ImportError:
+        logging.getLogger(__name__).warning("bpy indisponível — generate_lod_glb_triplet ignorado")
+        return []
 
-    base = prepare_mesh_topology(_load_as_trimesh(input_path))
-    n = len(base.faces)
+
+def _generate_lod_glb_triplet_impl(
+    input_path, output_dir, basename, lod1_ratio, lod2_ratio,
+    min_faces_lod1, min_faces_lod2, meshfix,
+):
+    mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
+    _prepare_topology_bpy(mesh_obj)
+    n = len(mesh_obj.data.polygons)
     if n < 4:
         raise ValueError(f"Mesh com poucas faces ({n}); LOD não aplicável.")
-
-    out_paths: list[Path] = []
-    for level, mesh in enumerate(
-        (
-            base,
-            simplify_to_face_count(base, max(min_faces_lod1, int(n * lod1_ratio))),
-            simplify_to_face_count(base, max(min_faces_lod2, int(n * lod2_ratio))),
-        )
-    ):
+    if meshfix:
+        _fill_holes_bpy(mesh_obj, sides=30)
+    lod0_path = output_dir / f"{basename}_lod0.glb"
+    _export_glb(lod0_path, mesh_obj, arm_objs)
+    out_paths: list[Path] = [lod0_path]
+    target_lod1 = max(min_faces_lod1, int(n * lod1_ratio))
+    target_lod2 = max(min_faces_lod2, int(n * lod2_ratio))
+    for level, target in ((1, target_lod1), (2, target_lod2)):
+        mesh_obj_l, arm_objs_l = _load_glb_with_armatures(lod0_path)
+        _decimate_to_target(mesh_obj_l, target)
         if meshfix:
-            mesh = apply_lod_meshfix(mesh)
+            _fill_holes_bpy(mesh_obj_l, sides=30)
         path = output_dir / f"{basename}_lod{level}.glb"
-        _export_glb_with_normals(mesh, path)
+        _export_glb(path, mesh_obj_l, arm_objs_l)
         out_paths.append(path)
-
     return out_paths
