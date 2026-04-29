@@ -3,7 +3,7 @@
 Uses bpy (Decimate modifier with collapse) which preserves topology,
 UVs, vertex groups, and animations natively — zero weight transfer needed.
 
-Run from Animator3D venv:
+Run from Animator3D venv (or any venv with bpy installed):
     cd GameDev/Animator3D && source .venv/bin/activate
     python -m pytest ../GameAssets/tests/test_simplify_rigged.py -v -s
 """
@@ -12,15 +12,13 @@ from __future__ import annotations
 
 import json
 import struct
-import tempfile
 from pathlib import Path
 
 import bpy
 import pytest
 
 GOBLIN_SRC = (
-    Path(__file__).resolve().parents[2]
-    / "VibeGame/examples/simple-rpg/public/assets/meshes/goblin_rigged_animated.glb"
+    Path(__file__).resolve().parents[2] / "VibeGame/examples/simple-rpg/public/assets/meshes/goblin_rigged_animated.glb"
 )
 TARGET_FACES = 16000
 MERGE_DIST = 0.0001
@@ -59,7 +57,7 @@ def simplified_glb(tmp_path_factory):
     bpy.ops.import_scene.gltf(filepath=str(GOBLIN_SRC))
 
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-    assert len(mesh_objs) >= 1, f"No meshes found"
+    assert len(mesh_objs) >= 1, "No meshes found"
     mesh_obj = max(mesh_objs, key=lambda o: len(o.data.polygons))
     src_faces = len(mesh_obj.data.polygons)
     src_verts = len(mesh_obj.data.vertices)
@@ -75,7 +73,7 @@ def simplified_glb(tmp_path_factory):
     bpy.context.view_layer.objects.active = mesh_obj
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=MERGE_DIST)
+    bpy.ops.mesh.remove_doubles(threshold=MERGE_DIST, use_sharp_edge_from_normals=True)
     bpy.ops.object.mode_set(mode="OBJECT")
     after_merge = len(mesh_obj.data.polygons)
     print(f"After merge-by-distance ({MERGE_DIST}): {after_merge:,} faces")
@@ -93,7 +91,7 @@ def simplified_glb(tmp_path_factory):
     # Post-simplify: merge-by-distance + vertex smooth
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=MERGE_DIST)
+    bpy.ops.mesh.remove_doubles(threshold=MERGE_DIST, use_sharp_edge_from_normals=True)
     bpy.ops.mesh.vertices_smooth(factor=0.2, repeat=1)
     bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -117,15 +115,18 @@ def simplified_glb(tmp_path_factory):
     )
 
     print(f"Exported: {out} ({out.stat().st_size / 1024:.0f} KB)")
-    yield out, {
-        "src_faces": src_faces,
-        "src_verts": src_verts,
-        "src_vgroups": src_vgroups,
-        "n_bones": n_bones,
-        "final_faces": final_faces,
-        "final_verts": final_verts,
-        "final_vgroups": final_vgroups,
-    }
+    yield (
+        out,
+        {
+            "src_faces": src_faces,
+            "src_verts": src_verts,
+            "src_vgroups": src_vgroups,
+            "n_bones": n_bones,
+            "final_faces": final_faces,
+            "final_verts": final_verts,
+            "final_vgroups": final_vgroups,
+        },
+    )
     _clean_scene()
 
 
@@ -140,8 +141,10 @@ def test_face_count_within_tolerance(simplified_glb):
 def test_reduced_from_source(simplified_glb):
     _, info = simplified_glb
     assert info["final_faces"] < info["src_faces"], "Mesh should be simplified"
-    print(f"✓ Reduction: {info['src_faces']:,} → {info['final_faces']:,} "
-          f"({info['final_faces'] / info['src_faces'] * 100:.1f}%)")
+    print(
+        f"✓ Reduction: {info['src_faces']:,} → {info['final_faces']:,} "
+        f"({info['final_faces'] / info['src_faces'] * 100:.1f}%)"
+    )
 
 
 def test_preserves_vertex_groups(simplified_glb):
@@ -192,13 +195,6 @@ def test_skin_weights_valid(simplified_glb):
         json_len = struct.unpack("<I", f.read(4))[0]
         f.read(4)
         gltf = json.loads(f.read(json_len))
-
-    accessors = gltf.get("accessors", [])
-    skin_accessor = None
-    for acc_idx in [gltf["skins"][0].get("inverseBindMatrices")] if gltf.get("skins") else []:
-        if acc_idx is not None:
-            skin_accessor = acc_idx
-            break
 
     for mesh_def in gltf.get("meshes", []):
         for prim in mesh_def.get("primitives", []):
