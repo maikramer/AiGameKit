@@ -1,7 +1,6 @@
 """Mesh simplification via bpy (Blender Python): decimate, merge-by-distance, smooth.
 
-Requires the Animator3D venv (bpy 5.1 / Python 3.13).
-Run from: ``cd Animator3D && source .venv/bin/activate``
+Requires ``bpy`` (Blender as Python module) available in the running venv.
 
 Usage from subprocess (GameAssets pipeline)::
 
@@ -78,7 +77,10 @@ def _weld_scene_meshes() -> None:
         bpy.context.view_layer.objects.active = obj
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.mesh.remove_doubles(threshold=dist)
+        obj.data.calc_normals_split()
+        bpy.ops.mesh.remove_doubles(threshold=dist, use_sharp_edge_from_normals=True)
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+        bpy.ops.mesh.faces_shade_smooth()
         bpy.ops.object.mode_set(mode="OBJECT")
 
 
@@ -111,7 +113,7 @@ def merge_by_distance(obj, threshold: float = MERGE_DIST) -> int:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=threshold)
+    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=True)
     bpy.ops.object.mode_set(mode="OBJECT")
     return before - len(obj.data.vertices)
 

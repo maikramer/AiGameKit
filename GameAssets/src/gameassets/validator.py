@@ -107,30 +107,39 @@ def validate_row(
             if size_mb > max_file_size_mb * 0.8:
                 result.warnings.append(f"GLB grande: {size_mb:.1f} MB")
 
-            # Poly count + texture check (requires trimesh)
+            # Poly count + texture check (via bpy)
             try:
-                import trimesh
+                from gamedev_shared.bpy_mesh import face_count as _face_count
+                from gamedev_shared.bpy_mesh import load_glb
 
-                m = trimesh.load(str(mesh_path), force="mesh")
-                if isinstance(m, trimesh.Scene):
-                    meshes = list(m.geometry.values())
-                    if not meshes:
-                        result.errors.append("GLB sem geometria")
-                    else:
-                        m = meshes[0]
-                n_faces = len(m.faces)
-                if n_faces > max_poly_count:
-                    result.errors.append(f"Poly count elevado: {n_faces} faces (máx {max_poly_count})")
-                elif n_faces > max_poly_count * 0.8:
-                    result.warnings.append(f"Poly count alto: {n_faces} faces")
+                mesh_objs = load_glb(mesh_path)
+                if not mesh_objs:
+                    result.errors.append("GLB sem geometria")
+                else:
+                    n_faces = sum(_face_count(o) for o in mesh_objs)
+                    if n_faces > max_poly_count:
+                        result.errors.append(f"Poly count elevado: {n_faces} faces (máx {max_poly_count})")
+                    elif n_faces > max_poly_count * 0.8:
+                        result.warnings.append(f"Poly count alto: {n_faces} faces")
 
-                # Texture check
-                if hasattr(m, "visual") and hasattr(m.visual, "material"):
-                    mat = m.visual.material
-                    if hasattr(mat, "image") and mat.image is None:
+                    # Texture check — at least one material with an image texture node
+                    has_tex = False
+                    for obj in mesh_objs:
+                        for slot in obj.material_slots:
+                            mat = slot.material
+                            if mat and mat.node_tree:
+                                for node in mat.node_tree.nodes:
+                                    if node.type == "TEX_IMAGE" and node.image is not None:
+                                        has_tex = True
+                                        break
+                            if has_tex:
+                                break
+                        if has_tex:
+                            break
+                    if not has_tex:
                         result.warnings.append("GLB sem textura")
             except ImportError:
-                result.warnings.append("trimesh não instalado — validação de geometria ignorada")
+                result.warnings.append("bpy não instalado — validação de geometria ignorada")
             except Exception as e:
                 result.warnings.append(f"Não foi possível validar geometria: {e}")
 
