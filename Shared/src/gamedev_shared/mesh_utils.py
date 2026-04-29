@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import logging
 from pathlib import Path
 
@@ -17,6 +16,32 @@ def _weld_distance(vertex_count: int) -> float:
     if vertex_count > 50_000:
         return 0.008
     return 0.01
+
+
+def normal_preserving_weld(obj: object, threshold: float) -> int:
+    """Weld vertices preserving hard/soft edge information.
+
+    Uses the production-proven pattern from game asset pipelines:
+    1. calc_normals_split — populate custom split normals
+    2. remove_doubles with use_sharp_edge_from_normals=True
+    3. clear custom split normals
+    4. shade smooth
+    """
+    try:
+        import bpy
+    except ImportError:
+        return 0
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    before = len(obj.data.vertices)
+    obj.data.calc_normals_split()
+    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=True)
+    bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    bpy.ops.mesh.faces_shade_smooth()
+    bpy.ops.object.mode_set(mode="OBJECT")
+    return before - len(obj.data.vertices)
 
 
 def weld_glb(path: str | Path) -> None:
@@ -48,11 +73,7 @@ def weld_glb(path: str | Path) -> None:
             nv = len(obj.data.vertices)
             dist = _weld_distance(nv)
 
-            bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.mode_set(mode="EDIT")
-            bpy.ops.mesh.select_all(action="SELECT")
-            bpy.ops.mesh.remove_doubles(threshold=dist)
-            bpy.ops.object.mode_set(mode="OBJECT")
+            normal_preserving_weld(obj, dist)
 
         bpy.ops.export_scene.gltf(
             filepath=str(path),

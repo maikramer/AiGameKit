@@ -126,19 +126,25 @@ def extract_glb_metadata(glb_path: Path, source_pipeline: str | None = None) -> 
         metadata.vertex_count = v
         metadata.triangle_count = t
 
-    # Try to get bounds via trimesh (optional dependency)
+    # Try to get bounds via bpy (optional dependency)
     try:
-        import trimesh
+        from gamedev_shared.bpy_mesh import get_bounds, load_glb
 
-        mesh = trimesh.load(str(glb_path), force="mesh")
-        if hasattr(mesh, "bounds"):
-            bounds = mesh.bounds
+        objects = load_glb(str(glb_path))
+        if objects:
+            all_min = [float("inf")] * 3
+            all_max = [float("-inf")] * 3
+            for obj in objects:
+                bmin, bmax = get_bounds(obj)
+                for i in range(3):
+                    all_min[i] = min(all_min[i], bmin[i])
+                    all_max[i] = max(all_max[i], bmax[i])
             metadata.bounds = {
-                "min": [float(bounds[0][0]), float(bounds[0][1]), float(bounds[0][2])],
-                "max": [float(bounds[1][0]), float(bounds[1][1]), float(bounds[1][2])],
+                "min": list(all_min),
+                "max": list(all_max),
             }
     except Exception:
-        pass  # trimesh not available or load failed
+        pass  # bpy not available or load failed
 
     return metadata
 

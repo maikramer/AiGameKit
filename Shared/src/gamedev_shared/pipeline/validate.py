@@ -56,17 +56,20 @@ def validate_glb(path: Path) -> ValidationResult:
         result.add_error(f"Invalid GLB magic bytes: {path}")
         return result
 
-    # Try trimesh
+    # Try bpy for geometry validation
     try:
-        import trimesh
+        from gamedev_shared.bpy_mesh import face_count, load_glb, vertex_count
 
-        mesh = trimesh.load(str(path), force="mesh")
-        if hasattr(mesh, "vertices") and len(mesh.vertices) == 0:
-            result.add_error(f"No vertices in mesh: {path}")
-        if hasattr(mesh, "faces") and len(mesh.faces) == 0:
-            result.add_warning(f"No faces in mesh: {path}")
+        objects = load_glb(str(path))
+        if objects:
+            total_verts = sum(vertex_count(o) for o in objects)
+            total_faces = sum(face_count(o) for o in objects)
+            if total_verts == 0:
+                result.add_error(f"No vertices in mesh: {path}")
+            if total_faces == 0:
+                result.add_warning(f"No faces in mesh: {path}")
     except ImportError:
-        result.add_warning("trimesh not installed — skipping geometry validation")
+        result.add_warning("bpy not installed — skipping geometry validation")
     except Exception as e:
         result.add_error(f"Failed to load GLB: {e}")
 
