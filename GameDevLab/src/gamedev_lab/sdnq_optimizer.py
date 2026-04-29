@@ -362,8 +362,8 @@ def apply_paint3d_with_sdnq_opt(
                 sys.path.insert(0, sp)
 
         import torch
-        import trimesh
 
+        from gamedev_shared.bpy_mesh import load_glb
         from paint3d.painter import apply_hunyuan_paint
 
         # Limpar VRAM
@@ -371,7 +371,7 @@ def apply_paint3d_with_sdnq_opt(
         torch.cuda.synchronize()
 
         # Carregar mesh
-        mesh = trimesh.load(mesh_path, force="mesh")
+        mesh_objects = load_glb(mesh_path)
 
         # Configurar modo de quantização
         # Configurações paint3d-qint8-* usam quantização nativa do Paint3D (não SDNQ)
@@ -395,7 +395,7 @@ def apply_paint3d_with_sdnq_opt(
 
             # Aplicar paint
             textured_mesh = apply_hunyuan_paint(
-                mesh=mesh,
+                mesh=mesh_objects,
                 image=image_path,
                 quantization_mode=quant_mode,
                 use_tiny_vae=opt_config.use_tiny_vae,

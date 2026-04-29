@@ -7,9 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-pytest.importorskip("trimesh")
+pytest.importorskip("bpy")
 
-import trimesh
+import bpy
+import numpy as np
 
 from gamedev_lab.mesh_inspector import (
     ArtifactReport,
@@ -18,21 +19,40 @@ from gamedev_lab.mesh_inspector import (
     MeshQAReport,
     QualityScore,
     TopologyReport,
+    _MeshData,
     print_qa_report,
 )
+from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
 
 
-def _box_mesh(extents: tuple[float, ...] = (1.0, 1.0, 1.0)) -> trimesh.Trimesh:
-    return trimesh.creation.box(extents=extents)
+def _obj_to_mesh_data(obj: object) -> _MeshData:
+    mesh = obj.data  # type: ignore[union-attr]
+    mesh.calc_loop_triangles()
+    verts = np.array([tuple(obj.matrix_world @ v.co) for v in mesh.vertices], dtype=np.float64)  # type: ignore[union-attr]
+    faces = np.array([tuple(t.vertices) for t in mesh.loop_triangles], dtype=np.int64)
+    return _MeshData(verts, faces)
 
 
-def _sphere_mesh(radius: float = 1.0, subdivisions: int = 2) -> trimesh.Trimesh:
-    return trimesh.creation.icosphere(subdivisions=subdivisions, radius=radius)
+def _box_mesh(extents: tuple[float, ...] = (1.0, 1.0, 1.0)) -> _MeshData:
+    clear_scene()
+    bpy.ops.mesh.primitive_cube_add(size=1.0)
+    obj = bpy.context.active_object
+    obj.scale = (extents[0] / 2, extents[1] / 2, extents[2] / 2)
+    bpy.ops.object.transform_apply(scale=True)
+    return _obj_to_mesh_data(obj)
 
 
-def _save_tmp_mesh(mesh: trimesh.Trimesh, suffix: str = ".glb") -> Path:
+def _sphere_mesh(radius: float = 1.0, subdivisions: int = 2) -> _MeshData:
+    clear_scene()
+    bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=subdivisions, radius=radius)
+    return _obj_to_mesh_data(bpy.context.active_object)
+
+
+def _save_tmp_mesh(mesh_data: _MeshData, suffix: str = ".glb") -> Path:
+    clear_scene()
+    obj = create_mesh_from_arrays(mesh_data.vertices, mesh_data.faces)
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-        mesh.export(tmp.name)
+        save_glb([obj], tmp.name)
         return Path(tmp.name)
 
 
@@ -77,7 +97,7 @@ class TestGeometryReport:
         assert r.volume_efficiency == 0.0
         assert r.area == 0.0
 
-    @pytest.mark.skip(reason="Known issue: trimesh volume_efficiency returns 0 in CI")
+    @pytest.mark.skip(reason="Known issue: volume_efficiency returns 0 in CI")
     def test_box_geometry(self) -> None:
         mesh = _box_mesh((2.0, 3.0, 4.0))
         path = _save_tmp_mesh(mesh)
@@ -105,7 +125,7 @@ class TestGeometryReport:
             path.unlink(missing_ok=True)
 
     def test_empty_mesh(self) -> None:
-        mesh = trimesh.Trimesh()
+        mesh = _MeshData(np.empty((0, 3), dtype=np.float64), np.empty((0, 3), dtype=np.int64))
         path = _save_tmp_mesh(mesh)
         try:
             inspector = MeshInspector(path)
@@ -139,7 +159,7 @@ class TestArtifactReport:
             path.unlink(missing_ok=True)
 
     def test_empty_mesh(self) -> None:
-        mesh = trimesh.Trimesh()
+        mesh = _MeshData(np.empty((0, 3), dtype=np.float64), np.empty((0, 3), dtype=np.int64))
         path = _save_tmp_mesh(mesh)
         try:
             inspector = MeshInspector(path)

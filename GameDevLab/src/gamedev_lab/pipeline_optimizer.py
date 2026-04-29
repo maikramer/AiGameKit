@@ -196,13 +196,12 @@ class GameDevPipelineOptimizer:
                     sys.path.insert(0, sp)
 
             import torch
-            import trimesh
 
+            from gamedev_shared.bpy_mesh import load_glb
             from paint3d.painter import apply_hunyuan_paint
             from paint3d.utils.mesh_io import save_glb
 
-            # Carregar mesh
-            mesh = trimesh.load(input_mesh, force="mesh")
+            mesh_objects = load_glb(input_mesh)
 
             # Limpar VRAM
             torch.cuda.empty_cache()
@@ -215,7 +214,7 @@ class GameDevPipelineOptimizer:
             quant_mode = f"sdnq-{opt_config.weights_dtype}"
 
             textured_mesh = apply_hunyuan_paint(
-                mesh=mesh,
+                mesh=mesh_objects,
                 image=image_path,
                 quantization_mode=quant_mode,
                 use_tiny_vae=opt_config.use_tiny_vae,

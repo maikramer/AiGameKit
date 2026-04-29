@@ -22,7 +22,6 @@ dependencies = [
 [project.optional-dependencies]
 bench = [
     "torch>=2.1.0",
-    "trimesh>=4.0.0",
     "diffusers>=0.30.0",
     "transformers>=4.46.0",
     "huggingface-hub>=0.20.0",
@@ -39,7 +38,7 @@ bench = [
     "xformers>=0.0.28",  # Memory efficient attention
     "accelerate>=0.34.0",  # Otimizações de modelo
 ]
-dev = ["pytest>=7.4.0", "ruff>=0.11.0", "trimesh>=4.0.0"]
+dev = ["pytest>=7.4.0", "ruff>=0.11.0"]
 
 [project.scripts]
 gamedev-lab = "gamedev_lab.cli:main"

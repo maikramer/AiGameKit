@@ -8,7 +8,174 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import trimesh
+
+from gamedev_shared.bpy_mesh import load_glb
+
+# ---------------------------------------------------------------------------
+# Internal mesh-data container (replaces trimesh.Trimesh)
+# ---------------------------------------------------------------------------
+
+
+class _ConvexHullResult:
+    """Minimal wrapper exposing ``volume`` for convex-hull queries."""
+
+    def __init__(self, volume: float | None) -> None:
+        self.volume = volume
+
+
+class _MeshData:
+    """Pre-computed mesh data loaded via bpy — trimesh-compatible read-only interface.
+
+    All heavy computation is performed once at construction time so that
+    inspection methods can read properties cheaply.
+    """
+
+    __slots__ = (
+        "area",
+        "area_faces",
+        "bounds",
+        "centroid",
+        "connected_components",
+        "convex_hull",
+        "duplicate_vertices",
+        "edges_unique",
+        "euler_number",
+        "extents",
+        "face_normals",
+        "faces",
+        "is_watertight",
+        "triangles_center",
+        "vertices",
+        "volume",
+    )
+
+    def __init__(self, vertices: np.ndarray, faces: np.ndarray) -> None:
+        self.vertices = vertices  # (N, 3) float64
+        self.faces = faces  # (F, 3) int64
+        self._precompute()
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    def _precompute(self) -> None:
+        verts = self.vertices
+        tris = self.faces
+        V = len(verts)
+        F = len(tris)
+
+        # --- bounds / extents / centroid ---
+        if V > 0:
+            self.bounds = np.array([verts.min(axis=0), verts.max(axis=0)])
+            self.extents = self.bounds[1] - self.bounds[0]
+            self.centroid = self.bounds.mean(axis=0)
+        else:
+            self.bounds = np.zeros((2, 3))
+            self.extents = np.zeros(3)
+            self.centroid = np.zeros(3)
+
+        # --- edges + edge-face counts ---
+        edge_set: set[tuple[int, int]] = set()
+        edge_count: dict[tuple[int, int], int] = {}
+        if F > 0:
+            for tri in tris:
+                for i in range(3):
+                    a, b = int(tri[i]), int(tri[(i + 1) % 3])
+                    e = (min(a, b), max(a, b))
+                    edge_set.add(e)
+                    edge_count[e] = edge_count.get(e, 0) + 1
+        self.edges_unique = (
+            np.array(sorted(edge_set), dtype=np.int64) if edge_set else np.empty((0, 2), dtype=np.int64)
+        )
+
+        # --- Euler number ---
+        E = len(edge_set)
+        self.euler_number = V - E + F
+
+        # --- face geometry ---
+        if F > 0:
+            v0 = verts[tris[:, 0]]
+            v1 = verts[tris[:, 1]]
+            v2 = verts[tris[:, 2]]
+            cross = np.cross(v1 - v0, v2 - v0)
+            self.area_faces = np.linalg.norm(cross, axis=1) / 2.0
+            norms = np.linalg.norm(cross, axis=1, keepdims=True)
+            norms = np.where(norms < 1e-12, 1.0, norms)
+            self.face_normals = cross / norms
+            self.triangles_center = (v0 + v1 + v2) / 3.0
+            self.area = float(self.area_faces.sum())
+        else:
+            self.area_faces = np.empty(0, dtype=np.float64)
+            self.face_normals = np.empty((0, 3), dtype=np.float64)
+            self.triangles_center = np.empty((0, 3), dtype=np.float64)
+            self.area = 0.0
+
+        # --- watertight ---
+        if F > 0 and edge_count:
+            self.is_watertight = all(c == 2 for c in edge_count.values())
+        else:
+            self.is_watertight = False
+
+        # --- connected components (union-find on face graph) ---
+        if F > 0:
+            parent = list(range(V))
+
+            def find(x: int) -> int:
+                while parent[x] != x:
+                    parent[x] = parent[parent[x]]
+                    x = parent[x]
+                return x
+
+            def union(a: int, b: int) -> None:
+                ra, rb = find(a), find(b)
+                if ra != rb:
+                    parent[ra] = rb
+
+            used: set[int] = set()
+            for tri in tris:
+                for i in range(3):
+                    a, b = int(tri[i]), int(tri[(i + 1) % 3])
+                    union(a, b)
+                    used.add(a)
+                    used.add(b)
+            self.connected_components = len({find(v) for v in used}) if used else 1
+        else:
+            self.connected_components = 1
+
+        # --- duplicate vertices ---
+        if V > 0:
+            rounded = np.round(verts, decimals=6)
+            _, unique_idx = np.unique(rounded, axis=0, return_index=True)
+            self.duplicate_vertices = V - len(unique_idx)
+        else:
+            self.duplicate_vertices = 0
+
+        # --- volume (signed-volume method, watertight only) ---
+        if self.is_watertight and F > 0:
+            v0 = verts[tris[:, 0]]
+            v1 = verts[tris[:, 1]]
+            v2 = verts[tris[:, 2]]
+            sv = np.sum(v0 * np.cross(v1, v2), axis=1)
+            self.volume = float(abs(sv.sum()) / 6.0)
+        else:
+            self.volume = None
+
+        # --- convex hull (optional, needs scipy) ---
+        hull_vol: float | None = None
+        if V >= 4:
+            try:
+                from scipy.spatial import ConvexHull
+
+                hull = ConvexHull(verts)
+                hull_vol = float(hull.volume)
+            except Exception:
+                pass
+        self.convex_hull = _ConvexHullResult(hull_vol)
+
+
+# ---------------------------------------------------------------------------
+# Report dataclasses
+# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -104,11 +271,26 @@ class MeshInspector:
         self._normal_align = normal_align
         self._degen_eps = degenerate_area_eps
 
-    def _load_mesh(self) -> trimesh.Trimesh:
-        mesh = trimesh.load(str(self.path), force="mesh")
-        if not isinstance(mesh, trimesh.Trimesh):
-            raise ValueError(f"Expected a single Trimesh, got {type(mesh).__name__}")
-        return mesh
+    def _load_mesh(self) -> _MeshData:
+        objects = load_glb(self.path)
+        if not objects:
+            raise ValueError(f"No mesh objects found in {self.path}")
+
+        all_verts: list[np.ndarray] = []
+        all_faces: list[list[int]] = []
+        offset = 0
+        for obj in objects:
+            mesh = obj.data
+            mesh.calc_loop_triangles()
+            verts = np.array([tuple(obj.matrix_world @ v.co) for v in mesh.vertices], dtype=np.float64)
+            all_verts.append(verts)
+            for tri in mesh.loop_triangles:
+                all_faces.append([v + offset for v in tri.vertices])
+            offset += len(verts)
+
+        vertices = np.vstack(all_verts) if all_verts else np.empty((0, 3), dtype=np.float64)
+        faces = np.array(all_faces, dtype=np.int64) if all_faces else np.empty((0, 3), dtype=np.int64)
+        return _MeshData(vertices, faces)
 
     def inspect(self) -> MeshQAReport:
         mesh = self._load_mesh()
@@ -156,7 +338,7 @@ class MeshInspector:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _classify_boundary_edges(mesh: trimesh.Trimesh) -> tuple[int, int, dict[tuple[int, ...], int]]:
+    def _classify_boundary_edges(mesh: _MeshData) -> tuple[int, int, dict[tuple[int, ...], int]]:
         """Classify boundary edges into real holes vs UV seam edges.
 
         A UV seam edge has both vertices duplicated at the same rounded position
@@ -198,7 +380,7 @@ class MeshInspector:
 
         return real_holes, uv_seam_edges, edge_count
 
-    def _inspect_topology(self, mesh: trimesh.Trimesh) -> TopologyReport:
+    def _inspect_topology(self, mesh: _MeshData) -> TopologyReport:
         r = TopologyReport()
         r.vertices = len(mesh.vertices)
         r.faces = len(mesh.faces)
@@ -214,18 +396,12 @@ class MeshInspector:
         r.real_holes = real_holes
         r.uv_seam_edges = uv_seam_edges
 
-        try:
-            components = mesh.split(only_watertight=False)
-            r.connected_components = len(components) if components else 1
-        except Exception:
-            r.connected_components = 1
+        r.connected_components = mesh.connected_components
 
         areas = mesh.area_faces
         r.degenerate_faces = int(np.sum(areas < self._degen_eps))
 
-        n_before = len(mesh.vertices)
-        mesh.merge_vertices()
-        r.duplicate_vertices = max(0, n_before - len(mesh.vertices))
+        r.duplicate_vertices = mesh.duplicate_vertices
 
         return r
 
@@ -233,7 +409,7 @@ class MeshInspector:
     # Geometry
     # ------------------------------------------------------------------
 
-    def _inspect_geometry(self, mesh: trimesh.Trimesh) -> GeometryReport:
+    def _inspect_geometry(self, mesh: _MeshData) -> GeometryReport:
         r = GeometryReport()
         if len(mesh.faces) == 0:
             return r
@@ -259,7 +435,7 @@ class MeshInspector:
 
         if mesh.is_watertight:
             try:
-                r.volume = float(mesh.volume)
+                r.volume = float(mesh.volume) if mesh.volume is not None else None
             except Exception:
                 r.volume = None
 
@@ -277,7 +453,7 @@ class MeshInspector:
     # Artifacts (from Text3D mesh_quality_check logic)
     # ------------------------------------------------------------------
 
-    def _inspect_artifacts(self, mesh: trimesh.Trimesh) -> ArtifactReport:
+    def _inspect_artifacts(self, mesh: _MeshData) -> ArtifactReport:
         r = ArtifactReport()
         if len(mesh.faces) == 0:
             r.passed = False

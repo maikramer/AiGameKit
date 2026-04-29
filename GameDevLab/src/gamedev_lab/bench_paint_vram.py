@@ -30,8 +30,8 @@ def run_paint_quantization_bench(
 
     try:
         import torch
-        import trimesh
 
+        from gamedev_shared.bpy_mesh import clear_scene
         from gamedev_shared.quantization import format_quantization_info, get_quantization_config, is_sdnq_available
         from gamedev_shared.vram_monitor import find_quantization_sweet_spot
         from paint3d.painter import apply_hunyuan_paint
@@ -62,12 +62,17 @@ def run_paint_quantization_bench(
 
     def test_paint_quantization(mode: str) -> object:
         print(f"  Carregando Paint3D com quantização: {mode}")
-        mesh = trimesh.creation.box(extents=[1, 1, 1])
+
+        import bpy
+
+        clear_scene()
+        bpy.ops.mesh.primitive_cube_add(size=1.0)
+        mesh_objects = [o for o in bpy.context.scene.objects if o.type == "MESH"]
         quant_config = get_quantization_config(mode)
         if quant_config:
             print(f"    Config: {format_quantization_info(quant_config)}")
         return apply_hunyuan_paint(
-            mesh=mesh,
+            mesh=mesh_objects,
             image=str(image_path),
             quantization_mode=mode,
             max_num_view=2,
