@@ -33,36 +33,42 @@ def load_glb(path: str | Path) -> list:
 
 
 def save_glb(objects, path: str | Path, **kwargs) -> None:
-    """Export scene/objects to GLB via bpy.
+    """Export scene/objects to GLB via bpy native exporter.
 
-    *objects* can be a single object, a list, or None (entire scene).
-    Defaults include ``export_animations=True`` and ``export_skins=True``
-    to preserve rig data.
+    Preserves armature, skinning, animations, materials, normals, UVs.
     """
+    import contextlib
+    import io
+
     bpy = _require_bpy()
     path = Path(path).expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if objects is not None:
-        bpy.ops.object.select_all(action="DESELECT")
         if not isinstance(objects, (list, tuple)):
             objects = [objects]
+        bpy.ops.object.select_all(action="DESELECT")
         for o in objects:
             o.select_set(True)
         use_selection = True
     else:
         use_selection = False
 
-    defaults = {
-        "export_format": "GLB",
-        "use_selection": use_selection,
-        "export_apply": False,
-        "export_animations": True,
-        "export_skins": True,
-        "export_image_format": "AUTO",
-    }
-    defaults.update(kwargs)
-    bpy.ops.export_scene.gltf(filepath=str(path), **defaults)
+    # Suppress bpy stdout spam
+    stdout = io.StringIO()
+    with contextlib.redirect_stdout(stdout):
+        bpy.ops.export_scene.gltf(
+            filepath=str(path),
+            export_apply=True,
+            export_animations=True,
+            export_skins=True,
+            export_morph=True,
+            export_normals=True,
+            export_texcoords=True,
+            export_materials="EXPORT",
+            export_image_format="AUTO",
+            use_selection=use_selection,
+        )
 
 
 def get_mesh_objects() -> list:
