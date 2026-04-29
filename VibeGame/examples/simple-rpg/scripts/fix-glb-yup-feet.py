@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Correção de origem para GLBs usados no exemplo simple-rpg (motor Y-up, “pés” na base).
+Correção de origem para GLBs usados no exemplo simple-rpg (motor Y-up, "pés" na base).
 
 Delega no Blender: ``VibeGame/tools/blender_reorigin_glb_feet.py``
 (import glTF Y-up → Blender Z-up; por defeito a base da AABB usa o eixo **Z** no Blender).
@@ -20,9 +20,9 @@ experimenta **+90° em X** no Blender (e depois assentar em Y no glTF):
 
 (são graus nos eixos globais X, Y, Z no Blender, após import glTF e antes de repor a origem.)
 
-Após o Blender, o wrapper **re-centra em XZ** e põe **min Y = 0** no espaço glTF (trimesh).
+Após o Blender, o wrapper **re-centra em XZ** e põe **min Y = 0** no espaço glTF (via Blender).
 
-Requer ``blender`` no PATH (ex.: /snap/bin/blender) e ``trimesh`` para o passo glTF.
+Requer ``blender`` no PATH (ex.: /snap/bin/blender).
 """
 
 from __future__ import annotations
@@ -41,29 +41,46 @@ def _repo_tools_script() -> Path:
     return vibr / "tools" / "blender_reorigin_glb_feet.py"
 
 
-def _align_feet_y_gltf(path: Path) -> None:
-    """Base da AABB em Y=0 e centro em XZ (espaço glTF / Three.js Y-up)."""
-    import trimesh
+_BPY_ALIGN_SCRIPT = """\
+import bpy
+from mathutils import Vector
 
-    loaded = trimesh.load(str(path), force="scene")
-    if isinstance(loaded, trimesh.Scene):
-        for geom in loaded.geometry.values():
-            b = geom.bounds
-            cx = (b[0][0] + b[1][0]) * 0.5
-            cy = float(b[0][1])
-            cz = (b[0][2] + b[1][2]) * 0.5
-            geom.apply_translation([-cx, -cy, -cz])
-        loaded.export(str(path))
-        return
-    if isinstance(loaded, trimesh.Trimesh):
-        b = loaded.bounds
-        cx = (b[0][0] + b[1][0]) * 0.5
-        cy = float(b[0][1])
-        cz = (b[0][2] + b[1][2]) * 0.5
-        loaded.apply_translation([-cx, -cy, -cz])
-        loaded.export(str(path))
-        return
-    raise TypeError(f"Formato inesperado: {type(loaded)}")
+path = r"{path}"
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.import_scene.gltf(filepath=path)
+
+# Compute combined AABB over all mesh objects.
+meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+if not meshes:
+    raise SystemExit(1)
+
+xs, ys, zs = [], [], []
+for obj in meshes:
+    for v in obj.data.vertices:
+        w = obj.matrix_world @ v.co
+        xs.append(w.x); ys.append(w.y); zs.append(w.z)
+
+cx = (min(xs) + max(xs)) * 0.5
+cy = min(ys)
+cz = (min(zs) + max(zs)) * 0.5
+offset = Vector((-cx, -cy, -cz))
+
+for obj in meshes:
+    obj.location += offset
+
+bpy.ops.export_scene.gltf(filepath=path, export_format="GLB",
+                           export_apply=True, export_animations=True, export_skins=True)
+"""
+
+
+def _align_feet_y_gltf(path: Path, blender_bin: str) -> None:
+    """Base da AABB em Y=0 e centro em XZ (espaço glTF / Three.js Y-up) via Blender."""
+    script = _BPY_ALIGN_SCRIPT.format(path=str(path))
+    subprocess.run(
+        [blender_bin, "--background", "--python-expr", script],
+        check=True,
+        capture_output=True,
+    )
 
 
 def main() -> int:
@@ -148,18 +165,9 @@ def main() -> int:
     if proc.returncode != 0 or args.dry_run or args.no_gltf_feet:
         return proc.returncode
 
-    try:
-        import trimesh  # noqa: F401
-    except ImportError:
-        print(
-            "[fix-glb-yup-feet] aviso: trimesh não instalado — a ignorar assentamento glTF (min Y=0).",
-            file=sys.stderr,
-        )
-        return 0
-
     for p in glbs:
         try:
-            _align_feet_y_gltf(p)
+            _align_feet_y_gltf(p, blender_bin)
             print(f"[fix-glb-yup-feet] glTF: min Y=0 + centro XZ → {p}", flush=True)
         except Exception as e:
             print(f"[fix-glb-yup-feet] erro glTF {p}: {e}", file=sys.stderr)
