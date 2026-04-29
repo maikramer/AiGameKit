@@ -1,8 +1,8 @@
 """
-Isotropic remesh de GLB texturado com reprojeção de textura.
+Isotropic remesh de GLB texturado com reprojeção de textura (bpy backend).
 
-Re-malha para um número alvo de faces usando isotropic explicit remeshing
-(pymeshlab) e re-projeta a textura original no novo layout UV via
+Re-malha para um número alvo de faces usando bpy voxel remesh
+e re-projeta a textura original no novo layout UV via
 transferência directa pixel-a-pixel (closest-point + bilinear sampling).
 """
 
@@ -11,55 +11,216 @@ from __future__ import annotations
 import logging
 import math
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
-import trimesh
-from trimesh.visual.texture import TextureVisuals
 
-from .export import _export_glb_with_normals
+from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb
 
 log = logging.getLogger(__name__)
 
 
-def _load_single_mesh(path: Path) -> trimesh.Trimesh:
-    loaded = trimesh.load(str(path), force=None)
-    if isinstance(loaded, trimesh.Scene):
-        if not loaded.geometry:
-            raise ValueError(f"Mesh vazia: {path}")
-        if len(loaded.geometry) == 1:
-            return next(iter(loaded.geometry.values())).copy()
-        return trimesh.util.concatenate([g.copy() for g in loaded.geometry.values()])
-    if isinstance(loaded, trimesh.Trimesh):
-        return loaded.copy()
-    raise TypeError(f"Formato não suportado: {type(loaded)}")
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
 
 
-def _has_uv_texture_image(mesh: trimesh.Trimesh) -> bool:
-    v = mesh.visual
-    if not isinstance(v, TextureVisuals):
-        return False
-    if getattr(v, "uv", None) is None:
-        return False
-    mat = getattr(v, "material", None)
-    if mat is None:
-        return False
-    img = getattr(mat, "image", None)
-    if img is None and hasattr(mat, "baseColorTexture"):
-        img = mat.baseColorTexture
-    return img is not None
+@dataclass
+class MeshData:
+    """Lightweight mesh data container (no trimesh dependency)."""
+
+    vertices: np.ndarray  # (N, 3) float64
+    faces: np.ndarray  # (F, 3) int32
+    uvs: np.ndarray | None = None  # per-vertex (N, 2) float64
+    texture_image: np.ndarray | None = None  # (H, W, 3) uint8
 
 
-def _get_texture_image(mesh: trimesh.Trimesh) -> np.ndarray:
-    """Retorna a imagem de textura como array numpy HxWx3 uint8."""
-    v = mesh.visual
-    mat = v.material
-    img = getattr(mat, "image", None)
-    if img is None and hasattr(mat, "baseColorTexture"):
-        img = mat.baseColorTexture
-    if img is None:
-        raise ValueError("Mesh sem imagem de textura")
-    return np.array(img.convert("RGB"), dtype=np.uint8)
+# ---------------------------------------------------------------------------
+# bpy helpers
+# ---------------------------------------------------------------------------
+
+
+def _join_objects(objects: list) -> object:
+    """Join multiple bpy mesh objects into one."""
+    import bpy
+
+    if len(objects) <= 1:
+        return objects[0] if objects else None
+    bpy.ops.object.select_all(action="DESELECT")
+    for obj in objects:
+        obj.select_set(True)
+    bpy.context.view_layer.objects.active = objects[0]
+    bpy.ops.object.join()
+    return bpy.context.active_object
+
+
+def _bpy_obj_to_arrays(obj) -> tuple[np.ndarray, np.ndarray]:
+    """Extract vertices and faces from a bpy mesh object as numpy arrays."""
+    mesh = obj.data
+    n_verts = len(mesh.vertices)
+    n_faces = len(mesh.polygons)
+
+    verts = np.empty(n_verts * 3, dtype=np.float64)
+    mesh.vertices.foreach_get("co", verts)
+    verts = verts.reshape(n_verts, 3)
+
+    faces = np.empty(n_faces * 3, dtype=np.int32)
+    mesh.polygons.foreach_get("vertices", faces)
+    faces = faces.reshape(n_faces, 3)
+
+    return verts, faces
+
+
+def _extract_source_data(obj) -> MeshData:
+    """Extract vertices, faces, UVs, and texture from a bpy mesh object.
+
+    Splits vertices at UV seams to produce per-vertex UVs (same convention as
+    the old trimesh-based pipeline).
+    """
+
+    verts, faces = _bpy_obj_to_arrays(obj)
+    mesh = obj.data
+    n_faces = len(mesh.polygons)
+
+    uvs = None
+    texture_image = None
+
+    # --- UVs ---
+    uv_layer = mesh.uv_layers.active
+    if uv_layer is not None:
+        n_loops = len(mesh.loops)
+        loop_uv_flat = np.empty(n_loops * 2, dtype=np.float64)
+        uv_layer.data.foreach_get("uv", loop_uv_flat)
+        loop_uvs = loop_uv_flat.reshape(n_loops, 2)
+
+        loop_starts = np.empty(n_faces, dtype=np.int32)
+        mesh.polygons.foreach_get("loop_start", loop_starts)
+
+        # Per-face-corner UV indices
+        corner_offsets = (loop_starts[:, np.newaxis] + np.arange(3)[np.newaxis, :]).ravel()
+        face_corner_uvs = loop_uvs[corner_offsets].reshape(n_faces, 3, 2)
+
+        # Split vertices at UV seams: deduplicate (vert_idx, u, v)
+        corner_verts = faces.ravel()
+        rounded_uvs = np.round(face_corner_uvs.reshape(-1, 2), 8)
+        combined = np.column_stack([corner_verts.astype(np.float64), rounded_uvs])
+        unique_combined, inverse = np.unique(combined, axis=0, return_inverse=True)
+
+        verts = verts[unique_combined[:, 0].astype(np.int32)]
+        faces = inverse.reshape(n_faces, 3).astype(np.int32)
+        uvs = unique_combined[:, 1:3]
+
+    # --- Texture image from material ---
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat and mat.use_nodes:
+            for node in mat.node_tree.nodes:
+                if node.type == "TEX_IMAGE" and node.image:
+                    bpy_img = node.image
+                    w, h = bpy_img.size
+                    if w > 0 and h > 0:
+                        pixels = np.array(bpy_img.pixels[:]).reshape(h, w, 4)
+                        texture_image = (pixels[:, :, :3] * 255).astype(np.uint8)
+                    break
+        if texture_image is not None:
+            break
+
+    return MeshData(vertices=verts, faces=faces, uvs=uvs, texture_image=texture_image)
+
+
+# ---------------------------------------------------------------------------
+# Geometry operations (bpy-based)
+# ---------------------------------------------------------------------------
+
+
+def _compute_surface_area(verts: np.ndarray, faces: np.ndarray) -> float:
+    """Compute mesh surface area from vertices and face indices."""
+    tri_verts = verts[faces]
+    edge1 = tri_verts[:, 1] - tri_verts[:, 0]
+    edge2 = tri_verts[:, 2] - tri_verts[:, 0]
+    cross = np.cross(edge1, edge2)
+    areas = 0.5 * np.sqrt(np.sum(cross**2, axis=1))
+    return float(areas.sum())
+
+
+def _bpy_remesh(obj, target_faces: int) -> None:
+    """Apply voxel remesh to bpy mesh object, targeting ~target_faces.
+
+    Computes voxel size from surface area and desired face count, then
+    applies a single pass of bpy's voxel remesh modifier.
+    """
+    import bpy
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    verts, faces = _bpy_obj_to_arrays(obj)
+    surface_area = _compute_surface_area(verts, faces)
+    if surface_area < 1e-12:
+        raise ValueError("Mesh com área de superfície zero")
+
+    # Target edge length for desired face count
+    targetlen = math.sqrt(4 * surface_area / (target_faces * math.sqrt(3)))
+
+    mod = obj.modifiers.new(name="Remesh", type="REMESH")
+    mod.mode = "VOXEL"
+    mod.voxel_size = targetlen
+    mod.use_smooth_shade = True
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    actual = len(obj.data.polygons)
+    log.info("Voxel remesh: voxel_size=%.4f, target=%d, actual=%d", targetlen, target_faces, actual)
+
+
+def _bpy_close_holes(obj) -> None:
+    """Close holes and repair non-manifold geometry in bpy mesh."""
+    import bpy
+
+    bpy.context.view_layer.objects.active = obj
+
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+
+    # Delete loose vertices/edges
+    bpy.ops.mesh.delete_loose()
+
+    # Dissolve degenerate faces
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.dissolve_degenerate(threshold=1e-6)
+
+    # Fill holes (up to 30-sided boundary loops)
+    bpy.ops.mesh.select_all(action="DESELECT")
+    bpy.ops.mesh.select_non_manifold()
+    bpy.ops.mesh.fill_holes(sides=30)
+
+    # Remove duplicate vertices
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=1e-6)
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _bpy_fix_normals(obj) -> None:
+    """Make normals consistent (recalculate outside)."""
+    import bpy
+
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.normals_make_consistent(inside=False)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _bpy_post_remesh_repair(obj) -> None:
+    """Post-remesh repair: close holes + fix normals."""
+    _bpy_close_holes(obj)
+    _bpy_fix_normals(obj)
+
+
+# ---------------------------------------------------------------------------
+# Texture / UV helpers (pure numpy — no trimesh)
+# ---------------------------------------------------------------------------
 
 
 def _sample_texture_at_uvs(tex: np.ndarray, uvs: np.ndarray) -> np.ndarray:
@@ -96,122 +257,6 @@ def _sample_texture_at_uvs(tex: np.ndarray, uvs: np.ndarray) -> np.ndarray:
 
     colors = c00 * (1 - fx) * (1 - fy) + c10 * fx * (1 - fy) + c01 * (1 - fx) * fy + c11 * fx * fy
     return np.clip(colors, 0, 255).astype(np.uint8)
-
-
-def _post_remesh_repair(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    """Repara rachaduras e artefactos de topologia introduzidos pelo remesh isotrópico.
-
-    O ``meshing_isotropic_explicit_remeshing`` cria boundary edges em regiões
-    onde edge-splits/collapses abrem pequenos buracos.  Esta função:
-    1. Fecha buracos via pymeshlab (close_holes + non-manifold repair)
-    2. Fallback: fecha buracos restantes via trimesh.fill_holes()
-    3. Remove debris (componentes isolados < 1% diagonal)
-    """
-    result = _pymeshlab_close_holes(mesh)
-    result = _trimesh_close_remaining(result)
-    return result
-
-
-def _pymeshlab_close_holes(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    import contextlib
-
-    try:
-        import pymeshlab
-    except ImportError:
-        return mesh
-
-    with tempfile.TemporaryDirectory(prefix="t3d_repair_") as tmpdir:
-        in_ply = str(Path(tmpdir) / "in.ply")
-        out_ply = str(Path(tmpdir) / "out.ply")
-        mesh.export(in_ply)
-
-        ms = pymeshlab.MeshSet()
-        ms.load_new_mesh(in_ply)
-
-        # Repair non-manifold edges FIRST — close_holes requires 2-manifold input
-        ms.meshing_repair_non_manifold_edges()
-        ms.meshing_repair_non_manifold_vertices()
-        with contextlib.suppress(pymeshlab.pmeshlab.PyMeshLabException):
-            ms.meshing_close_holes(maxholesize=30)
-        ms.meshing_remove_connected_component_by_diameter(
-            mincomponentdiag=pymeshlab.PercentageValue(1),
-        )
-        ms.meshing_remove_duplicate_faces()
-        ms.meshing_remove_duplicate_vertices()
-        ms.meshing_remove_unreferenced_vertices()
-
-        ms.save_current_mesh(out_ply)
-        result = trimesh.load(out_ply, force="mesh")
-        if isinstance(result, trimesh.Trimesh) and len(result.faces) > 0:
-            return result
-    return mesh
-
-
-def _trimesh_close_remaining(mesh: trimesh.Trimesh) -> trimesh.Trimesh:
-    import contextlib
-
-    import trimesh.repair as trimesh_repair
-
-    m = mesh.copy()
-    trimesh_repair.fix_normals(m, multibody=True)
-    with contextlib.suppress(Exception):
-        m.fill_holes()
-    return m
-
-
-def _isotropic_remesh(mesh: trimesh.Trimesh, target_faces: int) -> trimesh.Trimesh:
-    """Isotropic explicit remeshing via pymeshlab para atingir ~target_faces.
-
-    Calcula targetlen a partir da área da superfície e do número alvo de faces.
-    """
-    import pymeshlab
-
-    surface_area = float(mesh.area)
-    if surface_area < 1e-12:
-        raise ValueError("Mesh com área de superfície zero")
-
-    # Target edge length for desired face count
-    # Each equilateral triangle has area = sqrt(3)/4 * edge^2
-    # target_faces ≈ surface_area / (sqrt(3)/4 * edge^2)
-    targetlen = math.sqrt(4 * surface_area / (target_faces * math.sqrt(3)))
-
-    with tempfile.TemporaryDirectory(prefix="t3d_remesh_") as tmpdir:
-        in_ply = str(Path(tmpdir) / "in.ply")
-        out_ply = str(Path(tmpdir) / "out.ply")
-        mesh.export(in_ply)
-
-        ms = pymeshlab.MeshSet()
-        ms.load_new_mesh(in_ply)
-
-        # Run multiple iterations for quality
-        # adaptive=True: shorter edges in high-curvature areas (eyes, ears, fingers),
-        # longer in flat areas (body, clothing) — preserves fine detail.
-        for _ in range(4):
-            ms.meshing_isotropic_explicit_remeshing(
-                iterations=3,
-                targetlen=pymeshlab.PureValue(targetlen),
-                adaptive=True,
-            )
-
-        ms.meshing_remove_duplicate_faces()
-        ms.meshing_remove_duplicate_vertices()
-        ms.meshing_remove_unreferenced_vertices()
-        ms.save_current_mesh(out_ply)
-
-        result = trimesh.load(out_ply, force="mesh")
-        if isinstance(result, trimesh.Trimesh) and len(result.faces) > 0:
-            return result
-        return mesh
-
-
-def _uv_unwrap(mesh: trimesh.Trimesh) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """UV unwrap com xatlas. Retorna (vmapping, indices, uvs)."""
-    import xatlas
-
-    vertices = np.ascontiguousarray(mesh.vertices, dtype=np.float32)
-    faces = np.ascontiguousarray(mesh.faces, dtype=np.int32)
-    vmapping, indices, uvs = xatlas.parametrize(vertices, faces)
-    return vmapping, indices, uvs
 
 
 def _dilate_texture(tex: np.ndarray, filled: np.ndarray, padding: int) -> np.ndarray:
@@ -325,28 +370,31 @@ def _closest_point_kdtree(
 
 
 def _closest_point_batch(
-    source_mesh: trimesh.Trimesh,
+    source_verts: np.ndarray,
+    source_faces: np.ndarray,
     query_points: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Closest-point query — scipy KDTree (fast CPU) with trimesh fallback."""
-    try:
-        return _closest_point_kdtree(
-            source_verts=source_mesh.vertices,
-            source_faces=source_mesh.faces,
-            query_points=query_points,
-        )
-    except ImportError:
-        pass
+    """Closest-point query using scipy KDTree (CPU)."""
+    return _closest_point_kdtree(
+        source_verts=source_verts,
+        source_faces=source_faces,
+        query_points=query_points,
+    )
 
-    log.info("scipy unavailable — falling back to trimesh CPU closest_point (%d queries)", len(query_points))
-    from trimesh.proximity import closest_point
 
-    closest_pts, _distances, face_ids = closest_point(source_mesh, query_points)
-    return closest_pts, face_ids
+def _uv_unwrap(vertices: np.ndarray, faces: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """UV unwrap com xatlas. Retorna (vmapping, indices, uvs)."""
+    import xatlas
+
+    v = np.ascontiguousarray(vertices, dtype=np.float32)
+    f = np.ascontiguousarray(faces, dtype=np.int32)
+    vmapping, indices, uvs = xatlas.parametrize(v, f)
+    return vmapping, indices, uvs
 
 
 def _transfer_texture_direct(
-    source_mesh: trimesh.Trimesh,
+    source_verts: np.ndarray,
+    source_faces: np.ndarray,
     source_tex: np.ndarray,
     source_uvs: np.ndarray,
     remeshed_verts: np.ndarray,
@@ -362,7 +410,8 @@ def _transfer_texture_direct(
     mesh fonte, e amostra a textura fonte via UV interpoladas com bilinear.
 
     Args:
-        source_mesh: Mesh fonte original com geometria e UVs.
+        source_verts: Vértices da mesh fonte (Nx3 float64).
+        source_faces: Faces da mesh fonte (Fx3 int).
         source_tex: Textura fonte HxWx3 uint8.
         source_uvs: UVs da mesh fonte (Nx2 float64).
         remeshed_verts: Vértices da mesh remeshed (Mx3 float64).
@@ -467,14 +516,12 @@ def _transfer_texture_direct(
 
     log.info("Consultando closest_point na mesh fonte (%d pontos)...", n_pixels)
 
-    closest_pts, src_face_ids = _closest_point_batch(source_mesh, positions_3d)
+    closest_pts, src_face_ids = _closest_point_batch(source_verts, source_faces, positions_3d)
 
     log.info("Interpolando UVs fonte e amostrando textura...")
 
     # Phase 4: Coords baricêntricas na face fonte e interpolação de UVs
-    src_verts = source_mesh.vertices
-    src_faces_arr = source_mesh.faces
-    src_tri = src_verts[src_faces_arr[src_face_ids]]  # (N, 3, 3)
+    src_tri = source_verts[source_faces[src_face_ids]]  # (N, 3, 3)
 
     sv0 = src_tri[:, 1] - src_tri[:, 0]
     sv1 = src_tri[:, 2] - src_tri[:, 0]
@@ -497,7 +544,7 @@ def _transfer_texture_direct(
     s_bary_w = np.clip(s_bary_w, 0.0, 1.0)
 
     # Interpolar UVs fonte
-    src_uv_tri = source_uvs[src_faces_arr[src_face_ids]]  # (N, 3, 2)
+    src_uv_tri = source_uvs[source_faces[src_face_ids]]  # (N, 3, 2)
     interp_uv = (
         s_bary_u[:, np.newaxis] * src_uv_tri[:, 0]
         + s_bary_v[:, np.newaxis] * src_uv_tri[:, 1]
@@ -523,40 +570,92 @@ def _transfer_texture_direct(
     return tex
 
 
-def remesh_geometry_only(
-    mesh: trimesh.Trimesh,
-    target_faces: int,
-) -> trimesh.Trimesh:
-    """Isotropic remesh **geometry only** (sem UV/textura) para ~target_faces.
+# ---------------------------------------------------------------------------
+# bpy mesh creation from numpy arrays
+# ---------------------------------------------------------------------------
 
-    Pipeline:
-    1. Isotropic explicit remeshing via pymeshlab (adaptive=True)
-    2. Post-remesh repair (close cracks, remove debris)
-    3. Cleanup final
 
-    Args:
-        mesh: Mesh de entrada (qualquer tipo de visual).
-        target_faces: Número alvo de faces.
+def _build_textured_bpy_mesh(
+    verts: np.ndarray,
+    faces: np.ndarray,
+    uvs: np.ndarray,
+    baked_tex: np.ndarray,
+) -> tuple[object, str]:
+    """Create a bpy mesh with vertices, faces, UVs, and a baked texture material.
 
-    Returns:
-        Nova Trimesh com geometria regularizada e ~target_faces.
-
-    Raises:
-        ValueError: Geometria inválida (área zero, poucas faces).
+    Returns (bpy_object, temp_image_path) — caller should unlink/delete temp file
+    after saving.
     """
-    n = len(mesh.faces)
-    log.info("remesh_geometry_only: %d faces → ~%d", n, target_faces)
+    import bpy
+    from PIL import Image as PILImage
 
-    # Strip visual — só precisamos de geometria
-    geom = trimesh.Trimesh(vertices=mesh.vertices.copy(), faces=mesh.faces.copy(), process=False)
+    n_verts = len(verts)
+    n_faces = len(faces)
 
-    remeshed = _isotropic_remesh(geom, target_faces)
-    log.info("Isotropic remesh: %d → %d faces", n, len(remeshed.faces))
+    clear_scene()
 
-    remeshed = _post_remesh_repair(remeshed)
-    log.info("Post-remesh repair: %d faces, %d vertices", len(remeshed.faces), len(remeshed.vertices))
+    # --- Create mesh data ---
+    mesh = bpy.data.meshes.new(name="Remeshed")
+    mesh.vertices.add(n_verts)
+    mesh.vertices.foreach_set("co", verts.astype(np.float32).ravel())
 
-    return remeshed
+    mesh.loops.add(n_faces * 3)
+    mesh.polygons.add(n_faces)
+    mesh.loops.foreach_set("vertex_index", faces.astype(np.int32).ravel())
+    loop_starts = np.arange(n_faces, dtype=np.int32) * 3
+    mesh.polygons.foreach_set("loop_start", loop_starts)
+    loop_totals = np.full(n_faces, 3, dtype=np.int32)
+    mesh.polygons.foreach_set("loop_total", loop_totals)
+    mesh.update()
+
+    # --- Object ---
+    obj = bpy.data.objects.new(name="Remeshed", object_data=mesh)
+    bpy.context.collection.objects.link(obj)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    # --- UVs (per-loop from per-vertex UVs) ---
+    uv_layer = mesh.uv_layers.new(name="UVMap")
+    loop_vert_indices = faces.ravel()
+    loop_uv_values = uvs[loop_vert_indices].astype(np.float32)
+    uv_layer.data.foreach_set("uv", loop_uv_values.ravel())
+
+    mesh.update()
+
+    # --- Material with baked texture ---
+    # Save baked texture to temp PNG
+    temp_fd, temp_path = tempfile.mkstemp(suffix=".png", prefix="baked_tex_")
+    Path(temp_fd).close()  # close OS fd; we just need the path
+    baked_img = PILImage.fromarray(baked_tex, mode="RGB")
+    baked_img.save(temp_path)
+
+    mat = bpy.data.materials.new(name="BakedMaterial")
+    mat.use_nodes = True
+    mat.use_backface_culling = False  # doubleSided = True
+
+    nodes = mat.node_tree.nodes
+    links = mat.node_tree.links
+
+    # Image texture node
+    tex_node = nodes.new("ShaderNodeTexImage")
+    bpy_image = bpy.data.images.load(temp_path)
+    bpy_image.colorspace_settings.name = "sRGB"
+    tex_node.image = bpy_image
+
+    # Connect to Principled BSDF
+    bsdf = nodes.get("Principled BSDF")
+    if bsdf is None:
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+    links.new(tex_node.outputs["Color"], bsdf.inputs["Base Color"])
+
+    mesh.materials.append(mat)
+
+    return obj, temp_path
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 
 def remesh_geometry_only_glb(
@@ -566,6 +665,8 @@ def remesh_geometry_only_glb(
     target_faces: int,
 ) -> Path:
     """Carrega GLB, aplica isotropic remesh (só geometria) e guarda resultado.
+
+    Uses bpy voxel remesh modifier for topology regularisation.
 
     Args:
         path_in: Caminho do GLB de entrada.
@@ -578,81 +679,83 @@ def remesh_geometry_only_glb(
     path_in = Path(path_in)
     path_out = Path(path_out)
 
-    mesh = _load_single_mesh(path_in)
-    if len(mesh.faces) < 4:
-        raise ValueError(f"Mesh com poucas faces ({len(mesh.faces)}); remesh não aplicável.")
+    objs = load_glb(path_in)
+    if not objs:
+        raise ValueError(f"Mesh vazia: {path_in}")
+    obj = _join_objects(objs)
 
-    result = remesh_geometry_only(mesh, target_faces)
+    n = len(obj.data.polygons)
+    log.info("remesh_geometry_only_glb: %d faces → ~%d", n, target_faces)
+
+    if n < 4:
+        raise ValueError(f"Mesh com poucas faces ({n}); remesh não aplicável.")
+
+    _bpy_remesh(obj, target_faces)
+    log.info("Voxel remesh: %d → %d faces", n, len(obj.data.polygons))
+
+    _bpy_post_remesh_repair(obj)
+    log.info("Post-remesh repair: %d faces, %d vertices", len(obj.data.polygons), len(obj.data.vertices))
 
     path_out.parent.mkdir(parents=True, exist_ok=True)
-    _export_glb_with_normals(result, path_out)
+    save_glb(obj, path_out)
     return path_out
 
 
 def remesh_with_texture_reprojection(
-    mesh: trimesh.Trimesh,
+    source_data: MeshData,
     target_faces: int,
     texture_size: int = 2048,
-) -> trimesh.Trimesh:
-    """Remesh isotrópico com reprojeção de textura via transferência directa pixel-a-pixel.
+) -> MeshData:
+    """Remesh com reprojeção de textura via transferência directa pixel-a-pixel.
 
-    Pipeline:
-    1. Extrair textura e UVs da mesh original
-    2. Isotropic remesh para ~target_faces
-    3. UV unwrap do remesh com xatlas
-    4. Transferência directa: para cada pixel do novo atlas, encontrar o ponto
-       correspondente na mesh fonte via closest_point e amostrar a textura
-       original com interpolação bilinear
-    5. Dilatação nas fronteiras das ilhas UV para evitar costuras pretas
-    6. Construir Trimesh final com TextureVisuals
+    Takes source mesh data, applies remeshing, UV unwrapping, and texture
+    reprojection to produce a new MeshData with baked texture.
 
     Args:
-        mesh: Mesh texturada de entrada (com TextureVisuals).
+        source_data: Source mesh data (vertices, faces, UVs, texture).
         target_faces: Número alvo de faces após remesh.
         texture_size: Resolução da textura de saída (default 2048).
 
     Returns:
-        Nova Trimesh com geometria remeshed e textura reprojetada.
+        New MeshData with remeshed geometry and reprojeted texture.
 
     Raises:
         ValueError: Mesh sem textura/UV ou com geometria inválida.
-        RuntimeError: Dependências em falta (pymeshlab, xatlas).
     """
-    if not _has_uv_texture_image(mesh):
-        raise ValueError("Mesh de entrada não tem textura UV com imagem.")
+    if source_data.uvs is None:
+        raise ValueError("Mesh de entrada não tem UVs.")
+    if source_data.texture_image is None:
+        raise ValueError("Mesh de entrada não tem textura.")
 
-    source_tex = _get_texture_image(mesh)
-    source_uvs = np.array(mesh.visual.uv, dtype=np.float64)
+    source_tex = source_data.texture_image
+    source_uvs = np.array(source_data.uvs, dtype=np.float64)
+    source_verts = source_data.vertices
+    source_faces = source_data.faces
 
-    # Se texture_size não for explicitamente diferente do default, usar
-    # a resolução da textura fonte como referência
     src_h, src_w = source_tex.shape[:2]
     effective_size = max(src_h, src_w) if texture_size == 2048 else texture_size
 
-    n = len(mesh.faces)
-    log.info("Mesh original: %d faces, %d vertices, textura %dx%d", n, len(mesh.vertices), src_w, src_h)
+    n = len(source_faces)
+    log.info(
+        "Mesh original: %d faces, %d vertices, textura %dx%d",
+        n,
+        len(source_verts),
+        src_w,
+        src_h,
+    )
 
-    # Step 1: Isotropic remesh
-    log.info("Remeshing isotrópico para ~%d faces...", target_faces)
-    remeshed = _isotropic_remesh(mesh, target_faces)
-    log.info("Remesh: %d faces, %d vertices", len(remeshed.faces), len(remeshed.vertices))
-
-    # Step 1b: Close cracks introduced by remeshing
-    remeshed = _post_remesh_repair(remeshed)
-    log.info("Post-remesh repair: %d faces, %d vertices", len(remeshed.faces), len(remeshed.vertices))
-
-    # Step 2: UV unwrap
+    # Step 1: UV unwrap
     log.info("UV unwrap com xatlas...")
-    vmapping, indices, uvs = _uv_unwrap(remeshed)
+    vmapping, indices, uvs = _uv_unwrap(source_verts, source_faces)
 
-    # Remap vertices/faces to match xatlas output
-    remapped_verts = remeshed.vertices[vmapping]
+    remapped_verts = source_verts[vmapping]
     remapped_faces = indices
 
-    # Step 3: Direct per-pixel texture transfer
+    # Step 2: Direct per-pixel texture transfer
     log.info("Transferência directa pixel-a-pixel (%dx%d)...", effective_size, effective_size)
     baked_tex = _transfer_texture_direct(
-        source_mesh=mesh,
+        source_verts=source_verts,
+        source_faces=source_faces,
         source_tex=source_tex,
         source_uvs=source_uvs,
         remeshed_verts=remapped_verts,
@@ -662,24 +765,14 @@ def remesh_with_texture_reprojection(
         padding=4,
     )
 
-    # Step 4: Build final mesh with TextureVisuals
-    from PIL import Image
+    log.info("Resultado final: %d faces, %d vertices", len(remapped_faces), len(remapped_verts))
 
-    baked_img = Image.fromarray(baked_tex, mode="RGB")
-
-    material = trimesh.visual.material.SimpleMaterial(image=baked_img)
-    material.doubleSided = True
-    visual = TextureVisuals(uv=uvs, material=material)
-
-    final_mesh = trimesh.Trimesh(
+    return MeshData(
         vertices=remapped_verts,
         faces=remapped_faces,
-        visual=visual,
-        process=False,
+        uvs=uvs,
+        texture_image=baked_tex,
     )
-
-    log.info("Resultado final: %d faces, %d vertices", len(final_mesh.faces), len(final_mesh.vertices))
-    return final_mesh
 
 
 def remesh_textured_glb(
@@ -690,6 +783,14 @@ def remesh_textured_glb(
     texture_size: int = 2048,
 ) -> Path:
     """Carrega GLB texturado, aplica remesh com reprojeção e guarda resultado.
+
+    Pipeline:
+    1. Load GLB via bpy, extract source geometry + texture
+    2. Voxel remesh to ~target_faces
+    3. Post-remesh repair (close holes, fix normals)
+    4. UV unwrap via xatlas
+    5. Direct per-pixel texture reprojection
+    6. Build final bpy mesh + save GLB
 
     Args:
         path_in: Caminho do GLB de entrada.
@@ -703,12 +804,79 @@ def remesh_textured_glb(
     path_in = Path(path_in)
     path_out = Path(path_out)
 
-    mesh = _load_single_mesh(path_in)
-    if len(mesh.faces) < 4:
-        raise ValueError(f"Mesh com poucas faces ({len(mesh.faces)}); remesh não aplicável.")
+    # Step 1: Load and extract source data
+    objs = load_glb(path_in)
+    if not objs:
+        raise ValueError(f"Mesh vazia: {path_in}")
+    obj = _join_objects(objs)
 
-    result = remesh_with_texture_reprojection(mesh, target_faces, texture_size=texture_size)
+    n = len(obj.data.polygons)
+    if n < 4:
+        raise ValueError(f"Mesh com poucas faces ({n}); remesh não aplicável.")
+
+    source_data = _extract_source_data(obj)
+    if source_data.uvs is None:
+        raise ValueError("Mesh de entrada não tem textura UV com imagem.")
+    if source_data.texture_image is None:
+        raise ValueError("Mesh de entrada não tem textura UV com imagem.")
+
+    log.info(
+        "Mesh original: %d faces, %d vertices, textura %s",
+        n,
+        len(source_data.vertices),
+        f"{source_data.texture_image.shape[1]}x{source_data.texture_image.shape[0]}",
+    )
+
+    # Step 2: Voxel remesh
+    log.info("Remeshing isotrópico para ~%d faces...", target_faces)
+    _bpy_remesh(obj, target_faces)
+    log.info("Remesh: %d faces, %d vertices", len(obj.data.polygons), len(obj.data.vertices))
+
+    # Step 3: Post-remesh repair
+    _bpy_post_remesh_repair(obj)
+    log.info("Post-remesh repair: %d faces, %d vertices", len(obj.data.polygons), len(obj.data.vertices))
+
+    # Step 4: Extract remeshed geometry as numpy
+    remeshed_verts, remeshed_faces = _bpy_obj_to_arrays(obj)
+    log.info("Remeshed geometry: %d faces, %d vertices", len(remeshed_faces), len(remeshed_verts))
+
+    # Step 5: UV unwrap
+    log.info("UV unwrap com xatlas...")
+    vmapping, indices, uvs = _uv_unwrap(remeshed_verts, remeshed_faces)
+
+    remapped_verts = remeshed_verts[vmapping]
+    remapped_faces = indices
+
+    # Step 6: Texture reprojection
+    source_tex = source_data.texture_image
+    source_uvs = np.array(source_data.uvs, dtype=np.float64)
+    src_h, src_w = source_tex.shape[:2]
+    effective_size = max(src_h, src_w) if texture_size == 2048 else texture_size
+
+    log.info("Transferência directa pixel-a-pixel (%dx%d)...", effective_size, effective_size)
+    baked_tex = _transfer_texture_direct(
+        source_verts=source_data.vertices,
+        source_faces=source_data.faces,
+        source_tex=source_tex,
+        source_uvs=source_uvs,
+        remeshed_verts=remapped_verts,
+        remeshed_faces=remapped_faces,
+        new_uvs=uvs,
+        texture_size=effective_size,
+        padding=4,
+    )
+
+    # Step 7: Build final bpy mesh and save
+    log.info("Construindo mesh final com textura reprojetada...")
+    final_obj, temp_path = _build_textured_bpy_mesh(remapped_verts, remapped_faces, uvs, baked_tex)
 
     path_out.parent.mkdir(parents=True, exist_ok=True)
-    _export_glb_with_normals(result, path_out)
+    save_glb(final_obj, path_out)
+
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        Path(temp_path).unlink(missing_ok=True)
+
+    log.info("Resultado final: %d faces, %d vertices", len(remapped_faces), len(remapped_verts))
     return path_out
