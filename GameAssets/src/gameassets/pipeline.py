@@ -354,8 +354,7 @@ def _lod_pipeline_failed(
     argv.extend(["--min-faces-lod1", str(lod_prof.min_faces_lod1), "--min-faces-lod2", str(lod_prof.min_faces_lod2)])
     if lod_prof.meshfix:
         argv.append("--meshfix")
-    if gpu_ids:
-        argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    # NOTE: --gpu-ids is not valid for text3d lod (CPU-only), omitted here
     console.print(f"[cyan]⏳ LOD[/cyan] {row.id} ...")
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
@@ -489,8 +488,6 @@ def _collision_pipeline_failed(
     ]
     if not coll_prof.convex_hull:
         argv.append("--no-convex-hull")
-    if gpu_ids:
-        argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     console.print(f"[cyan]⏳ Collision[/cyan] {row.id} ...")
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
