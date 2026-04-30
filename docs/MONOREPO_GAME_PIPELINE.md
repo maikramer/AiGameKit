@@ -60,6 +60,30 @@ For the runtime to load content **without** a custom CMS:
 
 **Idea-to-scaffold:** **`gameassets dream`** plans assets + scene, runs batch (auto-detecting rig + animate from the plan), skymap, handoff, and emits a Vite + VibeGame project — details in [ZERO_TO_GAME_AI.md](ZERO_TO_GAME_AI.md).
 
+## 4.1 Quality Presets (QualityEngine)
+
+All generation tools support a unified `--quality` flag backed by **QualityEngine** in `gamedev-shared`:
+
+```bash
+text3d generate prompt -o out.glb --quality high --category humanoid
+text2sound generate "sword slash" -o sfx.wav --quality medium --category weapon
+terrain3d generate --quality high
+```
+
+**Quality tiers** (`fast | low | medium | high | highest`):
+
+| Tier | Speed | Resolution | Steps | Best for |
+|------|-------|-----------|-------|----------|
+| `fast` | ~30s | Low | Minimal | Drafts, rapid iteration |
+| `low` | ~1min | Basic | Low | Prototyping |
+| `medium` | ~2min | Standard | Moderate | **Default** — game-ready |
+| `high` | ~5min | High | High | Production polish |
+| `highest` | ~10min+ | Max | Full | Showcase / trailers |
+
+**Category** (optional) tailors quality to asset type — e.g., `--category humanoid` uses higher resolution than `--category weapon`. Defined in `Shared/src/gamedev_shared/data/asset-categories.yaml`.
+
+**GameAssets integration:** set `generation: medium` in `game.yaml`. Per-row overrides: `generation: high` in `manifest.yaml`. The `generation:` key maps to `--quality` on all sub-tools.
+
 ## 5. Synergy limits (honest scope)
 
 - **GameAssets** orchestrates batch content; **`gameassets dream`** additionally scaffolds a **playable Vite project** — you still own tuning, gameplay code, and release/CI.
