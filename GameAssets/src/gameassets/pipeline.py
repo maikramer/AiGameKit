@@ -227,10 +227,13 @@ def _part3d_stem_suffix(raw: str | None, default: str) -> str:
 
 
 def _part3d_output_paths(mesh_final: Path, p3: Part3DProfile) -> tuple[Path, Path]:
+    from .paths import _base_stem
+
     ps = _part3d_stem_suffix(p3.parts_suffix, "_parts")
     ss = _part3d_stem_suffix(p3.segmented_suffix, "_segmented")
-    parts = mesh_final.with_name(f"{mesh_final.stem}{ps}.glb")
-    segmented = mesh_final.with_name(f"{mesh_final.stem}{ss}.glb")
+    stem = _base_stem(mesh_final.stem)
+    parts = mesh_final.with_name(f"{stem}{ps}.glb")
+    segmented = mesh_final.with_name(f"{stem}{ss}.glb")
     return parts, segmented
 
 
