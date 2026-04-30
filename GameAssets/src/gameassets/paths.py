@@ -14,6 +14,8 @@ _ROW_NEED_SHAPE = "need_shape"
 _ROW_NEED_PAINT = "need_paint"
 _ROW_NEED_RIG = "need_rig"
 _ROW_NEED_ANIMATE = "need_animate"
+_ROW_NEED_LOD = "need_lod"
+_ROW_NEED_COLLISION = "need_collision"
 
 
 def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
@@ -88,7 +90,12 @@ def _classify_row_state(
     want_texture: bool,
     wants_rig: bool,
     wants_animate: bool,
+    wants_lod: bool = False,
+    wants_collision: bool = False,
+    lod0_path: Path | None = None,
+    collision_path: Path | None = None,
 ) -> str:
+    base = _base_stem(mesh_final.stem)
     shape = _shape_path(mesh_final)
     painted = _painted_path(mesh_final)
     final_exists = (_valid_file(painted) or _valid_file(mesh_final)) if want_texture else _valid_file(shape)
@@ -98,6 +105,10 @@ def _classify_row_state(
             return _ROW_NEED_RIG
         if wants_rig and wants_animate and not _valid_file(anim_out):
             return _ROW_NEED_ANIMATE
+        if wants_lod and lod0_path and not _valid_file(lod0_path):
+            return _ROW_NEED_LOD
+        if wants_collision and collision_path and not _valid_file(collision_path):
+            return _ROW_NEED_COLLISION
         return _ROW_DONE
     if _valid_file(shape):
         return _ROW_NEED_PAINT if want_texture else _ROW_DONE

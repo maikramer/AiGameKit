@@ -321,7 +321,6 @@ def _lod_pipeline_failed(
     # --- Static path: text3d lod subprocess ---
     text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
     basename = row.id.replace("/", "_")
-    out_dir = mesh_final.parent
 
     # Derive base stem and shape/painted paths from mesh_final
     base_stem = mesh_final.stem
@@ -329,9 +328,10 @@ def _lod_pipeline_failed(
         if base_stem.endswith(sfx):
             base_stem = base_stem[: -len(sfx)]
             break
-    shape_input = mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}"
-    painted_input = mesh_final.parent / f"{base_stem}_painted{mesh_final.suffix}"
-    lod_input = shape_input if shape_input.is_file() else mesh_final
+    shape_input = (mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}").resolve()
+    painted_input = (mesh_final.parent / f"{base_stem}_painted{mesh_final.suffix}").resolve()
+    lod_input = shape_input if shape_input.is_file() else mesh_final.resolve()
+    out_dir = mesh_final.parent.resolve()
     has_painted = painted_input.is_file()
 
     argv = [
@@ -474,9 +474,10 @@ def _collision_pipeline_failed(
         if base_stem.endswith(sfx):
             base_stem = base_stem[: -len(sfx)]
             break
-    coll_input = mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}"
+    coll_input = (mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}").resolve()
     if not coll_input.is_file():
-        coll_input = mesh_final
+        coll_input = mesh_final.resolve()
+    coll_out = coll_out.resolve()
     argv = [
         text3d_bin,
         "collision",
