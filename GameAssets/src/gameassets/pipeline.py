@@ -445,10 +445,14 @@ def _collision_pipeline_failed(
         coll_prof = CollisionProfile()
     text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
     coll_out = _collision_output_path(mesh_final)
+    # Use the shape mesh (pre-paint) for cleaner collision geometry
+    coll_input = mesh_final.parent / f"{mesh_final.stem.removesuffix('_painted')}_shape.glb"
+    if not coll_input.is_file():
+        coll_input = mesh_final
     argv = [
         text3d_bin,
         "collision",
-        str(mesh_final),
+        str(coll_input),
         "-o",
         str(coll_out),
         "--max-faces",
