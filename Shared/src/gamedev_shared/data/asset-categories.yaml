@@ -213,73 +213,169 @@ audio_kinds:
   sfx_impact:
     label: "SFX Impact"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 9.0
     trim_default: true
-    trim_buffer_ms: 50
+    trim_buffer_ms: 10
+    trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "immediate attack, no silence at start, powerful transient"
 
   sfx_short:
     label: "SFX Short"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 8.0
     trim_default: true
-    trim_buffer_ms: 50
+    trim_buffer_ms: 10
+    trim_threshold_db: -40.0
     loop_hint: false
 
   sfx_ui:
     label: "SFX UI"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 10.0
     trim_default: true
-    trim_buffer_ms: 30
+    trim_buffer_ms: 5
+    trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "clean, short, digital, no reverb tail"
 
   sfx_movement:
     label: "SFX Movement"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 8.0
     trim_default: true
-    trim_buffer_ms: 80
+    trim_buffer_ms: 20
+    trim_threshold_db: -40.0
     loop_hint: false
 
   sfx_creature:
     label: "SFX Creature"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 9.0
     trim_default: true
-    trim_buffer_ms: 60
+    trim_buffer_ms: 15
+    trim_threshold_db: -40.0
     loop_hint: false
 
   sfx_magic:
     label: "SFX Magic"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 9.0
     trim_default: true
-    trim_buffer_ms: 80
+    trim_buffer_ms: 20
+    trim_threshold_db: -40.0
     loop_hint: false
 
   sfx_vehicle:
     label: "SFX Vehicle"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 8.0
     trim_default: true
-    trim_buffer_ms: 100
+    trim_buffer_ms: 30
+    trim_threshold_db: -40.0
     loop_hint: false
 
   sfx_interact:
     label: "SFX Interact"
     model: effects
-    sampler: pingpong
+    sampler: euler
     cfg_scale_default: 8.0
     trim_default: true
-    trim_buffer_ms: 50
+    trim_buffer_ms: 10
+    trim_threshold_db: -40.0
     loop_hint: false
+
+  sfx_destruction:
+    label: "SFX Destruction"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 9.0
+    trim_default: true
+    trim_buffer_ms: 30
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "sharp break, debris, impact, powerful transient"
+
+  sfx_weapon:
+    label: "SFX Weapon"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 8.5
+    trim_default: true
+    trim_buffer_ms: 15
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "metallic, sharp, clean transient, weapon handling"
+
+  sfx_mechanical:
+    label: "SFX Mechanical"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 20
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "mechanical, gears, metal, machinery"
+
+  sfx_elemental:
+    label: "SFX Elemental"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 20
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "elemental energy, fire, water, electricity, nature force"
+
+  sfx_vocal:
+    label: "SFX Vocal"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 9.0
+    trim_default: true
+    trim_buffer_ms: 15
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "human voice, shout, grunt, vocalization, effort"
+
+  sfx_collectible:
+    label: "SFX Collectible"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 10.0
+    trim_default: true
+    trim_buffer_ms: 5
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "short, magical sparkle, pickup, rewarding chime"
+
+  sfx_alarm:
+    label: "SFX Alarm"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 9.0
+    trim_default: true
+    trim_buffer_ms: 30
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "loud, urgent, siren, alarm, warning signal"
+
+  sfx_ambient_sfx:
+    label: "SFX Ambient Spot"
+    model: effects
+    sampler: euler
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 30
+    trim_threshold_db: -40.0
+    loop_hint: false
+    prompt_hint: "environmental spot effect, weather, nature transient"

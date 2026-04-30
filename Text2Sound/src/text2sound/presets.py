@@ -359,6 +359,200 @@ AUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "steps": 90,
         "cfg_scale": 9.0,
     },
+    # ── SFX Destruction (3) ────────────────────────────────────────────
+    "glass-break": {
+        "prompt": (
+            "Sharp glass shattering with multiple fragments, "
+            "window break with scattered debris, destruction sound effect"
+        ),
+        "kind": "sfx_destruction",
+        "duration": 1.5,
+        "steps": 80,
+        "cfg_scale": 9.0,
+    },
+    "wood-break": {
+        "prompt": ("Wood splintering and cracking, wooden plank snap with breaking timber, destruction sound effect"),
+        "kind": "sfx_destruction",
+        "duration": 2,
+        "steps": 80,
+        "cfg_scale": 9.0,
+    },
+    "stone-crumble": {
+        "prompt": (
+            "Rocks crumbling and stones collapsing, heavy debris falling with dust, cave-in destruction sound effect"
+        ),
+        "kind": "sfx_destruction",
+        "duration": 3,
+        "steps": 80,
+        "cfg_scale": 9.0,
+    },
+    # ── SFX Weapon (3) ─────────────────────────────────────────────────
+    "sword-draw": {
+        "prompt": (
+            "Metal sword drawing from scabbard, blade sliding with sharp metallic ring, unsheathing weapon sound effect"
+        ),
+        "kind": "sfx_weapon",
+        "duration": 1.5,
+        "steps": 80,
+        "cfg_scale": 8.5,
+    },
+    "bow-draw": {
+        "prompt": "Bowstring tension and arrow nock, wooden bow creaking under tension, archery draw sound effect",
+        "kind": "sfx_weapon",
+        "duration": 2,
+        "steps": 80,
+        "cfg_scale": 8.5,
+    },
+    "weapon-reload": {
+        "prompt": (
+            "Mechanical weapon reload, magazine click and slide action, "
+            "firearm reloading sound effect with metallic clicks"
+        ),
+        "kind": "sfx_weapon",
+        "duration": 2,
+        "steps": 80,
+        "cfg_scale": 8.5,
+    },
+    # ── SFX Mechanical (4) ─────────────────────────────────────────────
+    "door-open": {
+        "prompt": "Heavy wooden door opening with creaking hinges, dungeon door swing, mechanical door sound effect",
+        "kind": "sfx_mechanical",
+        "duration": 2,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    "door-close": {
+        "prompt": (
+            "Heavy door closing with solid thud and latch click, wooden door slam shut, mechanical close sound effect"
+        ),
+        "kind": "sfx_mechanical",
+        "duration": 2,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    "lever": {
+        "prompt": (
+            "Mechanical lever being pulled with gear engagement, metallic lever throw with mechanism sound effect"
+        ),
+        "kind": "sfx_mechanical",
+        "duration": 1.5,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    "clockwork": {
+        "prompt": (
+            "Clockwork gears turning with ticking mechanisms, "
+            "intricate mechanical device operating, steampunk machinery sound"
+        ),
+        "kind": "sfx_mechanical",
+        "duration": 3,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    # ── SFX Elemental (3) ──────────────────────────────────────────────
+    "fire-crackle": {
+        "prompt": (
+            "Fire crackling and burning with popping embers, "
+            "campfire flames with wood burning, fire elemental sound effect"
+        ),
+        "kind": "sfx_elemental",
+        "duration": 4,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    "water-splash": {
+        "prompt": (
+            "Object splashing into water with ripples, heavy splash and water droplets, liquid impact sound effect"
+        ),
+        "kind": "sfx_elemental",
+        "duration": 2,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    "electricity-zap": {
+        "prompt": (
+            "Electric discharge zap with buzzing crackle, lightning bolt strike, electricity elemental sound effect"
+        ),
+        "kind": "sfx_elemental",
+        "duration": 1.5,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
+    # ── SFX Vocal (3) ──────────────────────────────────────────────────
+    "grunt-effort": {
+        "prompt": "Short human grunt of physical effort, heavy exertion vocalization, male exertion sound effect",
+        "kind": "sfx_vocal",
+        "duration": 1,
+        "steps": 90,
+        "cfg_scale": 9.0,
+    },
+    "battle-cry": {
+        "prompt": "Powerful battle cry shout, warrior charging with loud yell, battle vocalization sound effect",
+        "kind": "sfx_vocal",
+        "duration": 2,
+        "steps": 90,
+        "cfg_scale": 9.0,
+    },
+    "death-scream": {
+        "prompt": "Short death scream, character final cry, human defeat and dying vocalization sound effect",
+        "kind": "sfx_vocal",
+        "duration": 2,
+        "steps": 90,
+        "cfg_scale": 9.0,
+    },
+    # ── SFX Collectible (3) ────────────────────────────────────────────
+    "coin-pickup": {
+        "prompt": "Magical coin pickup chime, short sparkling coin collection, rewarding currency pickup sound effect",
+        "kind": "sfx_collectible",
+        "duration": 1,
+        "steps": 60,
+        "cfg_scale": 10.0,
+    },
+    "gem-collect": {
+        "prompt": (
+            "Precious gem collection with bright crystalline sparkle, "
+            "valuable treasure pickup, rewarding chime sound effect"
+        ),
+        "kind": "sfx_collectible",
+        "duration": 1.5,
+        "steps": 60,
+        "cfg_scale": 10.0,
+    },
+    "item-drop": {
+        "prompt": (
+            "Object dropping on ground with dull thud, item falling and landing on surface, inventory drop sound effect"
+        ),
+        "kind": "sfx_collectible",
+        "duration": 1.5,
+        "steps": 60,
+        "cfg_scale": 10.0,
+    },
+    # ── SFX Alarm (2) ──────────────────────────────────────────────────
+    "alarm-klaxon": {
+        "prompt": "Loud emergency klaxon alarm siren, rotating warning horn, urgent alert signal sound effect",
+        "kind": "sfx_alarm",
+        "duration": 3,
+        "steps": 80,
+        "cfg_scale": 9.0,
+    },
+    "bell-toll": {
+        "prompt": "Deep bell tolling with resonance decay, church tower bell ring, heavy bell strike sound effect",
+        "kind": "sfx_alarm",
+        "duration": 4,
+        "steps": 80,
+        "cfg_scale": 9.0,
+    },
+    # ── SFX Ambient Spot (1) ───────────────────────────────────────────
+    "thunder-clap": {
+        "prompt": (
+            "Loud thunder clap with deep bass rumble, "
+            "lightning strike with atmospheric boom, storm thunder sound effect"
+        ),
+        "kind": "sfx_ambient_sfx",
+        "duration": 4,
+        "steps": 80,
+        "cfg_scale": 8.0,
+    },
 }
 
 

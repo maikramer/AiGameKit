@@ -39,8 +39,8 @@ class TestCategories:
 
 class TestAudioKinds:
     def test_list_audio_kinds_count(self, engine: QualityEngine) -> None:
-        """Returns 11 audio kinds."""
-        assert len(engine.list_audio_kinds()) == 11
+        """Returns 19 audio kinds."""
+        assert len(engine.list_audio_kinds()) == 19
 
     def test_list_audio_kinds_sorted(self, engine: QualityEngine) -> None:
         kinds = engine.list_audio_kinds()

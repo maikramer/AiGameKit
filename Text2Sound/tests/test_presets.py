@@ -14,7 +14,7 @@ class TestListPresets:
         assert len(list_presets()) > 0
 
     def test_count(self):
-        assert len(list_presets()) == 38
+        assert len(list_presets()) == 60
 
     def test_known_presets(self):
         names = list_presets()
@@ -49,6 +49,36 @@ class TestListPresets:
         assert "creature-growl" in names
         assert "creature-roar" in names
         assert "creature-death" in names
+        # SFX Destruction
+        assert "glass-break" in names
+        assert "wood-break" in names
+        assert "stone-crumble" in names
+        # SFX Weapon
+        assert "sword-draw" in names
+        assert "bow-draw" in names
+        assert "weapon-reload" in names
+        # SFX Mechanical
+        assert "door-open" in names
+        assert "door-close" in names
+        assert "lever" in names
+        assert "clockwork" in names
+        # SFX Elemental
+        assert "fire-crackle" in names
+        assert "water-splash" in names
+        assert "electricity-zap" in names
+        # SFX Vocal
+        assert "grunt-effort" in names
+        assert "battle-cry" in names
+        assert "death-scream" in names
+        # SFX Collectible
+        assert "coin-pickup" in names
+        assert "gem-collect" in names
+        assert "item-drop" in names
+        # SFX Alarm
+        assert "alarm-klaxon" in names
+        assert "bell-toll" in names
+        # SFX Ambient Spot
+        assert "thunder-clap" in names
 
 
 class TestGetPreset:
@@ -108,6 +138,14 @@ class TestPresetStructure:
             "sfx_short",
             "sfx_vehicle",
             "sfx_interact",
+            "sfx_destruction",
+            "sfx_weapon",
+            "sfx_mechanical",
+            "sfx_elemental",
+            "sfx_vocal",
+            "sfx_collectible",
+            "sfx_alarm",
+            "sfx_ambient_sfx",
         }
         assert p["kind"] in valid_kinds, f"{name}: kind={p['kind']!r} not in {valid_kinds}"
 
