@@ -1005,6 +1005,44 @@ def _bpy_simplify_to_target(
     )
 
 
+def _animated_lod_via_subprocess(
+    py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces
+) -> bool:
+    """Run LOD0 for animated GLB via subprocess on a bpy-capable Python."""
+    import json as _json
+    import subprocess as _sp
+    import os
+
+    script = f"""
+import sys
+sys.path.insert(0, '{os.path.dirname(os.path.dirname(__file__))}')
+sys.path.insert(0, '{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'Shared', 'src')}')
+from gameassets.bpy_simplify import simplify_glb
+simplify_glb('{animated_glb}', '{lod0_path}', target_faces={target})
+print('DONE')
+"""
+    try:
+        result = _sp.run(
+            [py, "-c", script],
+            capture_output=True, text=True, timeout=300,
+            env={**os.environ, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
+        )
+    except _sp.TimeoutExpired:
+        rec["rigged_lod0_error"] = "LOD0 subprocess timeout"
+        return False
+    except Exception as exc:
+        rec["rigged_lod0_error"] = str(exc)
+        return False
+
+    if lod0_path.is_file():
+        rec["rigged_lod0_path"] = _path_for_log(lod0_path, out_dir)
+        rec["rigged_lod0_src_faces"] = current_faces
+        console.print(f"[green]✓ LOD0 (rigged, subprocess)[/green] {row.id}")
+        return False
+    rec["rigged_lod0_error"] = "LOD0 subprocess no output"
+    return False
+
+
 def _rigged_lod_simplify(
     animated_glb: Path,
     row: ManifestRow,
@@ -1046,6 +1084,10 @@ def _rigged_lod_simplify(
 
     try:
         from .bpy_simplify import simplify_glb
+    except ImportError:
+        return _animated_lod_via_subprocess(py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces)
+
+    try:
 
         label = f"{current_faces:,}" if current_faces else "?"
         console.print(f"[cyan]⏳ LOD0 (rigged simplify)[/cyan] {row.id} ({label} → ~{target:,} faces)")
