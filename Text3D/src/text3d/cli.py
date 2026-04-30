@@ -922,7 +922,7 @@ def gpu_processes_cmd() -> None:
     "--painted-mesh",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
-    help="GLB texturizado (PBR) para transferir texturas aos LODs. LOD0 = painted, LOD1 textura /2, LOD2 textura /4.",
+    help="GLB texturizado para LOD com texturas. Usa remesh isotrópico + reprojeção. LOD0=painted, LOD1 textura/2, LOD2 textura/4.",
 )
 def lod_cmd(
     input_mesh: Path,
@@ -953,7 +953,6 @@ def lod_cmd(
             from text3d.utils.mesh_lod import generate_lod_textured_glb_triplet
 
             paths = generate_lod_textured_glb_triplet(
-                input_mesh,
                 painted_mesh,
                 output_dir,
                 stem,
@@ -961,7 +960,6 @@ def lod_cmd(
                 lod2_ratio=lod2_ratio,
                 min_faces_lod1=min_faces_lod1,
                 min_faces_lod2=min_faces_lod2,
-                meshfix=meshfix,
             )
         else:
             paths = generate_lod_glb_triplet(

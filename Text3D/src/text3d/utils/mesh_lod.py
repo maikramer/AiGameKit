@@ -171,10 +171,6 @@ def _prepare_topology_bpy(mesh_obj) -> None:
 
 
 def _decimate_to_target(mesh_obj, target_faces: int) -> int:
-    """Decimation via bpy Decimate modifier (quadric edge collapse).
-
-    Devolve número real de faces após decimação.
-    """
     import bpy
 
     current = len(mesh_obj.data.polygons)
@@ -183,12 +179,30 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
     t = max(4, min(int(target_faces), current - 1))
     if t >= current:
         return current
-    ratio = t / current
-    mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
-    mod.decimate_type = "COLLAPSE"
-    mod.ratio = ratio
+
     bpy.context.view_layer.objects.active = mesh_obj
-    bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    # Iteratively decimate using planar collapse — preserves shape much better
+    # than COLLAPSE on thin/non-manifold geometry. Planar collapses faces that
+    # lie on the same plane, preserving the overall silhouette.
+    while len(mesh_obj.data.polygons) > t:
+        current = len(mesh_obj.data.polygons)
+        need = current - t
+        angle = min(math.radians(30), math.radians(5) + need / current * math.radians(25))
+        mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
+        mod.decimate_type = "COLLAPSE"
+        mod.ratio = max(0.01, t / current)
+        mod.use_symmetry = False
+        mod.use_collapse_triangulate = True
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+        if len(mesh_obj.data.polygons) == current:
+            break  # No progress — stop
+
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.normals_make_consistent()
+    bpy.ops.object.mode_set(mode="OBJECT")
+
     return len(mesh_obj.data.polygons)
 
 
@@ -346,7 +360,6 @@ def _generate_lod_glb_triplet_impl(
 
 
 def generate_lod_textured_glb_triplet(
-    input_path: Path,
     painted_path: Path,
     output_dir: Path,
     basename: str,
@@ -355,91 +368,49 @@ def generate_lod_textured_glb_triplet(
     lod2_ratio: float = 0.14,
     min_faces_lod1: int = 500,
     min_faces_lod2: int = 150,
-    meshfix: bool = False,
+    texture_size_lod0: int = 2048,
 ) -> list[Path]:
-    """Gera três GLB texturizados: LOD0 = painted, LOD1 textura /2, LOD2 textura /4.
+    """Gera três GLB texturizados via isotropic remesh + texture reprojection.
 
-    Decima a partir do *painted_path* (que tem UVs + texturas) e redimensiona
-    as texturas proporcionalmente ao nível de detalhe.
+    LOD0 = painted (full res), LOD1 = remeshed a ~42% faces + textura /2,
+    LOD2 = remeshed a ~14% faces + textura /4.
+
+    Usa ``remesh_textured_glb`` (voxel remesh + xatlas UV + reprojeção de
+    textura) que produz malhas sólidas e watertight, ideais para LOD.
     """
-    import bpy
-    from PIL import Image
+    from text3d.utils.mesh_remesh_textured import remesh_textured_glb
 
-    from gamedev_shared.bpy_mesh import clear_scene
-
-    clear_scene()
-    input_path = Path(input_path)
-    painted_path = Path(painted_path)
+    painted = Path(painted_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load painted GLB — this has UVs + textures
-    bpy.ops.import_scene.gltf(filepath=str(painted_path))
+    # Count original faces
+    import bpy
+    from gamedev_shared.bpy_mesh import clear_scene
+
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(painted))
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-    arm_objs = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
-    if not mesh_objs:
-        raise ValueError("No mesh objects in painted GLB")
-    painted_obj = max(mesh_objs, key=lambda o: len(o.data.polygons))
-
-    # Extract texture images from the painted mesh's material
-    textures: dict[str, Image.Image] = {}
-    if painted_obj.data.materials and painted_obj.data.materials[0].use_nodes:
-        for node in painted_obj.data.materials[0].node_tree.nodes:
-            if node.type == "TEX_IMAGE" and node.image:
-                img = node.image
-                w, h = img.size[0], img.size[1]
-                pixels = list(img.pixels[:])
-                pil_img = Image.new("RGBA", (w, h))
-                pil_img.putdata([(int(pixels[i * 4] * 255), int(pixels[i * 4 + 1] * 255), int(pixels[i * 4 + 2] * 255), int(pixels[i * 4 + 3] * 255)) for i in range(w * h)])
-                textures[node.label or node.name or "base_color"] = pil_img
-
-    n = len(painted_obj.data.polygons)
-    target_lod1 = max(min_faces_lod1, int(n * lod1_ratio))
-    target_lod2 = max(min_faces_lod2, int(n * lod2_ratio))
+    n = len(max(mesh_objs, key=lambda o: len(o.data.polygons)).data.polygons)
+    clear_scene()
 
     out_paths: list[Path] = []
 
-    # LOD0 = painted GLB itself (just copy)
+    # LOD0 = painted GLB itself
     lod0_path = output_dir / f"{basename}_lod0.glb"
-    _export_textured_glb(lod0_path, painted_obj, arm_objs)
+    import shutil
+    shutil.copy2(painted, lod0_path)
     out_paths.append(lod0_path)
 
-    for level, target, scale in ((1, target_lod1, 2), (2, target_lod2, 4)):
-        # Reload painted GLB fresh for each LOD level
-        clear_scene()
-        bpy.ops.import_scene.gltf(filepath=str(painted_path))
-        mesh_objs_l = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-        arm_objs_l = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
-        mesh_obj_l = max(mesh_objs_l, key=lambda o: len(o.data.polygons))
+    target_lod1 = max(min_faces_lod1, int(n * lod1_ratio))
+    target_lod2 = max(min_faces_lod2, int(n * lod2_ratio))
 
-        _decimate_to_target(mesh_obj_l, target)
-
-        # Downscale and re-apply textures
-        if mesh_obj_l.data.materials and mesh_obj_l.data.materials[0].use_nodes:
-            for node in mesh_obj_l.data.materials[0].node_tree.nodes:
-                if node.type == "TEX_IMAGE" and node.image:
-                    key = node.label or node.name or ""
-                    if key in textures:
-                        src = textures[key]
-                        new_w = max(1, src.width // scale)
-                        new_h = max(1, src.height // scale)
-                        scaled = src.resize((new_w, new_h), Image.LANCZOS)
-                        # Write scaled pixels back to bpy image
-                        bpy_img = bpy.data.images.new(name=f"{key}_lod{level}", width=new_w, height=new_h, alpha=True)
-                        flat = []
-                        for y in range(new_h):
-                            for x in range(new_w):
-                                r, g, b, a = scaled.getpixel((x, y))
-                                flat.extend([r / 255.0, g / 255.0, b / 255.0, a / 255.0])
-                        bpy_img.pixels = flat
-                        node.image = bpy_img
-
-        if meshfix:
-            _fill_holes_bpy(mesh_obj_l, sides=30)
-
+    for level, target, tex_size in (
+        (1, target_lod1, max(256, texture_size_lod0 // 2)),
+        (2, target_lod2, max(128, texture_size_lod0 // 4)),
+    ):
         path = output_dir / f"{basename}_lod{level}.glb"
-        _export_textured_glb(path, mesh_obj_l, arm_objs_l)
+        remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)
         out_paths.append(path)
 
-    clear_scene()
     return out_paths
