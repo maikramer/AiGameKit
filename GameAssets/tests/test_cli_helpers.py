@@ -16,7 +16,7 @@ from gameassets.cli import (
     _texture_subprocess_argv,
 )
 from gameassets.manifest import ManifestRow
-from gameassets.profile import GameProfile, Rigging3DProfile, Text3DProfile
+from gameassets.profile import GameProfile, Paint3DProfile, Rigging3DProfile, Text3DProfile
 
 
 def test_extract_json_from_mixed_stdout() -> None:
@@ -134,7 +134,7 @@ def test_text3d_argv_with_profile_options() -> None:
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(preset="hq", low_vram=True, texture=True),
+        text3d=Text3DProfile(preset="hq", low_vram=True),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
     assert "--preset" in argv and "hq" in argv
@@ -150,21 +150,22 @@ def test_text3d_argv_export_origin_center() -> None:
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(preset="fast", texture=True, export_origin="center"),
+        text3d=Text3DProfile(preset="fast", export_origin="center"),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
     assert argv[argv.index("--export-origin") + 1] == "center"
 
 
-def test_text3d_argv_shape_only_skips_texture() -> None:
+def test_text3d_argv_shape_only_no_texture_flag() -> None:
+    """_text3d_argv is always shape-only; texture is a separate step."""
     p = GameProfile(
         title="T",
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(preset="fast", texture=True),
+        text3d=Text3DProfile(preset="fast"),
     )
-    argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"), shape_only=True)
+    argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
     assert "--texture" not in argv
 
 
@@ -177,7 +178,6 @@ def test_text3d_argv_explicit_hunyuan_skips_preset() -> None:
         text3d=Text3DProfile(
             preset="fast",
             steps=28,
-            texture=False,
         ),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
@@ -186,21 +186,10 @@ def test_text3d_argv_explicit_hunyuan_skips_preset() -> None:
 
 
 def test_paint3d_texture_argv_gpu_flags() -> None:
-    p = GameProfile(
-        title="T",
-        genre="G",
-        tone="t",
-        style_preset="lowpoly",
-        text3d=Text3DProfile(
-            texture=True,
-            allow_shared_gpu=True,
-            gpu_kill_others=False,
-            full_gpu=True,
-        ),
-    )
+    p3 = Paint3DProfile(preserve_origin=True, low_vram_mode=True)
     argv = _paint3d_texture_argv(
         "/bin/paint3d",
-        p,
+        p3,
         Path("/shape.glb"),
         Path("/ref.png"),
         Path("/out.glb"),
@@ -208,23 +197,15 @@ def test_paint3d_texture_argv_gpu_flags() -> None:
     assert argv[0] == "/bin/paint3d"
     assert argv[1] == "texture"
     assert "--materialize" not in argv
-    assert "--allow-shared-gpu" in argv
-    assert "--no-gpu-kill-others" in argv
-    assert "--paint-full-gpu" in argv
+    assert "--low-vram-mode" in argv
     assert "--preserve-origin" in argv
 
 
 def test_paint3d_texture_argv_no_preserve_origin() -> None:
-    p = GameProfile(
-        title="T",
-        genre="G",
-        tone="t",
-        style_preset="lowpoly",
-        text3d=Text3DProfile(texture=True, paint_preserve_origin=False),
-    )
+    p3 = Paint3DProfile(preserve_origin=False)
     argv = _paint3d_texture_argv(
         "/bin/paint3d",
-        p,
+        p3,
         Path("/shape.glb"),
         Path("/ref.png"),
         Path("/out.glb"),
@@ -238,7 +219,7 @@ def test_texture_subprocess_delegates_to_paint3d() -> None:
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(texture=True),
+        paint3d=Paint3DProfile(style="hunyuan"),
     )
     argv = _texture_subprocess_argv(
         "/bin/paint3d",
@@ -257,10 +238,9 @@ def test_texture_subprocess_solid_uses_quick() -> None:
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(
-            texture=True,
-            paint_style="solid",
-            paint_solid_color="#ff00aa",
+        paint3d=Paint3DProfile(
+            style="solid",
+            solid_color="#ff00aa",
         ),
     )
     argv = _texture_subprocess_argv(
@@ -285,7 +265,7 @@ def test_texture_subprocess_perlin_uses_row_seed_when_unset() -> None:
         tone="t",
         style_preset="lowpoly",
         seed_base=1000,
-        text3d=Text3DProfile(texture=True, paint_style="perlin", paint_perlin_seed=None),
+        paint3d=Paint3DProfile(style="perlin", perlin_seed=None),
     )
     rid = "Env/stone_01"
     expected = _seed_for_row(p, rid)
@@ -310,7 +290,6 @@ def test_text3d_argv_allow_shared_and_no_gpu_kill() -> None:
         style_preset="lowpoly",
         text3d=Text3DProfile(
             preset="fast",
-            texture=True,
             allow_shared_gpu=True,
             gpu_kill_others=False,
         ),
@@ -328,7 +307,6 @@ def test_text3d_argv_mc_level() -> None:
         style_preset="lowpoly",
         text3d=Text3DProfile(
             preset="balanced",
-            texture=True,
             mc_level=0.0,
         ),
     )

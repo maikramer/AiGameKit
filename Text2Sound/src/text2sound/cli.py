@@ -270,6 +270,19 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     is_flag=True,
     help="Gravar métricas de performance (perf DB + JSONL)",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(["fast", "low", "medium", "high", "highest"]),
+    default="medium",
+    show_default=True,
+    help="Quality tier (resolves optimal params from QualityEngine)",
+)
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Asset category for automatic audio tuning (e.g., weapon, humanoid)",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -292,6 +305,8 @@ def generate_cmd(
     gpu_ids_str: str | None,
     verbose_flag: bool,
     profiler_flag: bool,
+    quality: str,
+    category: str | None,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -314,6 +329,47 @@ def generate_cmd(
         duration = preset_data.get("duration", duration)
         steps = preset_data.get("steps", steps)
         cfg_scale = preset_data.get("cfg_scale", cfg_scale)
+
+    # QualityEngine resolution: merge quality + category params (CLI always wins)
+    resolved_hints: list[str] = []
+    trim_buffer_ms: int = 200  # default buffer
+    quality_audio_kind: str | None = None
+
+    try:
+        from gamedev_shared.quality import QualityEngine
+
+        qe = QualityEngine()
+        resolved = qe.resolve(tool="text2sound", quality=quality, category=category)
+
+        # Apply resolved params only if CLI used the default
+        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT and "steps" in resolved.params:
+            steps = int(resolved.params["steps"])
+        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT and "cfg_scale" in resolved.params:
+            cfg_scale = float(resolved.params["cfg_scale"])
+        if ctx.get_parameter_source("sigma_min") == ParameterSource.DEFAULT and "sigma_min" in resolved.params:
+            sigma_min = float(resolved.params["sigma_min"])
+        if ctx.get_parameter_source("sigma_max") == ParameterSource.DEFAULT and "sigma_max" in resolved.params:
+            sigma_max = float(resolved.params["sigma_max"])
+        if ctx.get_parameter_source("sampler") == ParameterSource.DEFAULT and "sampler" in resolved.params:
+            sampler = str(resolved.params["sampler"])
+
+        resolved_hints = resolved.prompt_hints
+        quality_audio_kind = resolved.audio_kind
+
+        # Auto-select model from quality resolution (if set and CLI didn't override)
+        if resolved.model_id is not None and ctx.get_parameter_source("model_id") == ParameterSource.DEFAULT:
+            model_id = resolved.model_id
+
+        # Determine trim buffer from audio_kind_info
+        if quality_audio_kind:
+            try:
+                kind_info = qe.audio_kind_info(quality_audio_kind)
+                trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
+            except KeyError:
+                pass
+
+    except Exception:
+        pass  # QualityEngine unavailable — continue with defaults
 
     try:
         resolved_model_id = resolve_model_from_profile(profile, model_id)
@@ -357,6 +413,12 @@ def generate_cmd(
         table.add_row("[bold]Seed[/bold]", f"[dim]aleatório → {effective_seed}[/dim]")
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
+    if quality != "medium":
+        table.add_row("[bold]Quality[/bold]", quality)
+    if category:
+        table.add_row("[bold]Category[/bold]", category)
+    if quality_audio_kind:
+        table.add_row("[bold]Audio Kind[/bold]", quality_audio_kind)
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     _prof_params = {
@@ -416,6 +478,7 @@ def generate_cmd(
                         sigma_min=sigma_min,
                         sigma_max=sigma_max,
                         sampler_type=sampler,
+                        prompt_hints=resolved_hints or None,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=100)
@@ -444,6 +507,12 @@ def generate_cmd(
                 }
                 if preset and preset != "None":
                     metadata["preset"] = preset
+                if quality != "medium":
+                    metadata["quality"] = quality
+                if category:
+                    metadata["category"] = category
+                if quality_audio_kind:
+                    metadata["audio_kind"] = quality_audio_kind
 
                 with profile_span("save"):
                     saved = save_audio(
@@ -453,6 +522,7 @@ def generate_cmd(
                         fmt=fmt,
                         trim=trim,
                         metadata=metadata,
+                        trim_buffer_ms=trim_buffer_ms,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
@@ -726,7 +796,8 @@ def presets_cmd() -> None:
     """Lista presets de áudio disponíveis."""
     t = Table(title="[bold blue]Presets de Áudio (Game Dev)", box=box.ROUNDED)
     t.add_column("Nome", style="cyan", no_wrap=True)
-    t.add_column("Prompt", style="white", max_width=55)
+    t.add_column("Kind", style="magenta", no_wrap=True)
+    t.add_column("Prompt", style="white", max_width=50)
     t.add_column("Duração", style="green", justify="right")
     t.add_column("Steps", style="green", justify="right")
     t.add_column("CFG", style="green", justify="right")
@@ -734,10 +805,11 @@ def presets_cmd() -> None:
     for name in list_presets():
         p = AUDIO_PRESETS[name]
         prompt_text = p["prompt"]
-        if len(prompt_text) > 55:
-            prompt_text = prompt_text[:52] + "..."
+        if len(prompt_text) > 50:
+            prompt_text = prompt_text[:47] + "..."
         t.add_row(
             name,
+            p.get("kind", "—"),
             prompt_text,
             f"{p['duration']}s",
             str(p["steps"]),

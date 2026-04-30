@@ -47,6 +47,10 @@ class GenerationProfile:
     simplify_face_ratio: float
     simplify_texture_size: int
     # --- Text2Sound ---
+    # NOTE: text2sound_steps is deprecated for direct use by the batch command.
+    # Text2Sound now resolves all parameters internally via QualityEngine
+    # (quality + category). This field is kept as a fallback for backward
+    # compatibility when game.yaml has no quality field set.
     text2sound_steps: int
 
 

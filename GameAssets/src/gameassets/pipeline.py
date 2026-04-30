@@ -25,7 +25,6 @@ from .param_optimizer import (
 )
 from .paths import (
     _animator3d_output_path,
-    _painted_path,
     _path_for_log,
     _rigging3d_output_path,
     _shell_path,
@@ -1055,7 +1054,6 @@ def _resolve_bpy_python() -> str | None:
 
 def _animated_lod_via_subprocess(py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces) -> bool:
     """Run LOD0 for animated GLB via subprocess on a bpy-capable Python."""
-    import os
     import subprocess as _sp
 
     pkg_dir = Path(__file__).resolve().parent
@@ -1090,11 +1088,6 @@ print("DONE")
 
     if lod0_path.is_file():
         rec["rigged_lod0_path"] = _path_for_log(lod0_path, out_dir)
-        rec["rigged_lod0_src_faces"] = current_faces
-        console.print(f"[green]✓ LOD0 (rigged, subprocess)[/green] {row.id}")
-        return False
-    rec["rigged_lod0_error"] = "LOD0 subprocess no output"
-    return False
         rec["rigged_lod0_src_faces"] = current_faces
         console.print(f"[green]✓ LOD0 (rigged, subprocess)[/green] {row.id}")
         return False

@@ -92,25 +92,21 @@ def _audio_path_for_row_manifest(
 
 
 def _append_text2sound_profile_args(ts: Text2SoundProfile, argv: list[str]) -> None:
-    """Extensões do perfil para `text2sound generate`."""
-    if ts.duration is not None:
-        argv.extend(["-d", str(ts.duration)])
-    if ts.steps is not None:
-        argv.extend(["-s", str(ts.steps)])
-    if ts.cfg_scale is not None:
-        argv.extend(["-c", str(ts.cfg_scale)])
-    fmt = (ts.audio_format or "wav").lower().strip().lstrip(".")
-    argv.extend(["-f", fmt])
+    """Add --quality and --category from Text2SoundProfile to argv.
+
+    The text2sound CLI uses QualityEngine internally to resolve all parameters
+    from quality + category. Only explicit user overrides produce additional flags.
+    """
+    if ts.quality:
+        argv.extend(["--quality", ts.quality])
+    if ts.category:
+        argv.extend(["--category", ts.category])
+    # Only add explicit overrides that the user set manually
     if ts.preset and ts.preset.lower() != "none":
         argv.extend(["-p", ts.preset])
-    if ts.sigma_min is not None:
-        argv.extend(["--sigma-min", str(ts.sigma_min)])
-    if ts.sigma_max is not None:
-        argv.extend(["--sigma-max", str(ts.sigma_max)])
-    if ts.sampler:
-        argv.extend(["--sampler", ts.sampler])
-    if ts.trim is not None:
-        argv.append("--trim" if ts.trim else "--no-trim")
+    fmt = (ts.audio_format or "wav").lower().strip().lstrip(".")
+    if fmt != "wav":
+        argv.extend(["-f", fmt])
     if ts.model_id:
         argv.extend(["-m", ts.model_id])
     if ts.half_precision is True:
@@ -124,35 +120,32 @@ def _text2sound_args_for_row(
     row: ManifestRow,
     argv: list[str],
 ) -> None:
-    """Append text2sound args: per-row overrides take precedence over global profile."""
-    duration = row.audio_duration if row.audio_duration is not None else profile.duration
-    steps = row.audio_steps if row.audio_steps is not None else profile.steps
-    cfg = row.audio_cfg_scale if row.audio_cfg_scale is not None else profile.cfg_scale
-    trim = row.audio_trim if row.audio_trim is not None else profile.trim
-    preset = row.audio_preset if row.audio_preset is not None else profile.preset
+    """Add --quality and --category to argv for text2sound generate.
 
-    if duration is not None:
-        argv.extend(["-d", str(duration)])
-    if steps is not None:
-        argv.extend(["-s", str(steps)])
-    if cfg is not None:
-        argv.extend(["-c", str(cfg)])
-    fmt = (profile.audio_format or "wav").lower().strip().lstrip(".")
-    argv.extend(["-f", fmt])
-    if preset and preset.lower() != "none":
-        argv.extend(["-p", preset])
-    if profile.sigma_min is not None:
-        argv.extend(["--sigma-min", str(profile.sigma_min)])
-    if profile.sigma_max is not None:
-        argv.extend(["--sigma-max", str(profile.sigma_max)])
-    if profile.sampler:
-        argv.extend(["--sampler", profile.sampler])
-    if trim is not None:
-        argv.append("--trim" if trim else "--no-trim")
+    The text2sound CLI uses QualityEngine internally to resolve all parameters
+    from quality + category. Only explicit per-row overrides produce additional flags.
+    """
+    quality = profile.quality or "medium"
+    argv.extend(["--quality", quality])
+
+    cat = row.category if row.category else profile.category
+    if cat:
+        argv.extend(["--category", cat])
+
+    # Only add explicit overrides if set
+    if row.audio_duration is not None:
+        argv.extend(["-d", str(row.audio_duration)])
+    if row.audio_steps is not None:
+        argv.extend(["-s", str(row.audio_steps)])
+    if row.audio_cfg_scale is not None:
+        argv.extend(["-c", str(row.audio_cfg_scale)])
     if row.audio_profile:
         argv.extend(["--profile", row.audio_profile])
-    elif profile.model_id:
+    if profile.model_id:
         argv.extend(["-m", profile.model_id])
+    fmt = (profile.audio_format or "wav").lower().strip().lstrip(".")
+    if fmt != "wav":
+        argv.extend(["-f", fmt])
     if profile.half_precision is True:
         argv.append("--half")
     elif profile.half_precision is False:

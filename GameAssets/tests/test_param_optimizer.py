@@ -8,7 +8,7 @@ from gameassets.param_optimizer import (
     should_optimize_paint,
     should_optimize_text3d,
 )
-from gameassets.profile import Text3DProfile
+from gameassets.profile import Paint3DProfile, Text3DProfile
 
 
 class TestOptimizeText3D:
@@ -56,32 +56,32 @@ class TestOptimizeText3D:
 class TestOptimizePaint:
     def test_simple_category_gets_perlin(self) -> None:
         opts = optimize_paint_for_target(800)
-        assert opts.paint_style == "perlin"
-        assert opts.paint_max_views is None
-        assert opts.paint_texture_size is None
+        assert opts.style == "perlin"
+        assert opts.max_views is None
+        assert opts.texture_size is None
 
     def test_simple_boundary(self) -> None:
         opts = optimize_paint_for_target(1200)
-        assert opts.paint_style == "perlin"
+        assert opts.style == "perlin"
 
     def test_medium_category_keeps_hunyuan(self) -> None:
         opts = optimize_paint_for_target(2000)
-        assert opts.paint_style is None
-        assert opts.paint_max_views == 2
-        assert opts.paint_view_resolution == 384
-        assert opts.paint_texture_size == 2048
+        assert opts.style is None
+        assert opts.max_views == 2
+        assert opts.view_resolution == 384
+        assert opts.texture_size == 2048
 
     def test_medium_boundary(self) -> None:
         opts = optimize_paint_for_target(2500)
-        assert opts.paint_style is None
-        assert opts.paint_max_views == 2
+        assert opts.style is None
+        assert opts.max_views == 2
 
     def test_high_category_full_quality(self) -> None:
         opts = optimize_paint_for_target(8000)
-        assert opts.paint_style is None
-        assert opts.paint_max_views == 4
-        assert opts.paint_view_resolution == 512
-        assert opts.paint_texture_size == 4096
+        assert opts.style is None
+        assert opts.max_views == 4
+        assert opts.view_resolution == 512
+        assert opts.texture_size == 4096
 
 
 class TestShouldOptimize:
@@ -106,17 +106,17 @@ class TestShouldOptimize:
         assert should_optimize_text3d(t3) is False
 
     def test_optimize_paint_when_no_overrides(self) -> None:
-        t3 = Text3DProfile()
-        assert should_optimize_paint(t3) is True
+        p3 = Paint3DProfile()
+        assert should_optimize_paint(p3) is True
 
     def test_dont_optimize_paint_with_max_views(self) -> None:
-        t3 = Text3DProfile(paint_max_views=2)
-        assert should_optimize_paint(t3) is False
+        p3 = Paint3DProfile(max_views=2)
+        assert should_optimize_paint(p3) is False
 
     def test_dont_optimize_paint_with_view_resolution(self) -> None:
-        t3 = Text3DProfile(paint_view_resolution=384)
-        assert should_optimize_paint(t3) is False
+        p3 = Paint3DProfile(view_resolution=384)
+        assert should_optimize_paint(p3) is False
 
     def test_dont_optimize_paint_with_texture_size(self) -> None:
-        t3 = Text3DProfile(paint_texture_size=2048)
-        assert should_optimize_paint(t3) is False
+        p3 = Paint3DProfile(texture_size=2048)
+        assert should_optimize_paint(p3) is False

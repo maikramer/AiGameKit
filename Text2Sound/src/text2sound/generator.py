@@ -227,6 +227,7 @@ class AudioGenerator:
         sigma_min: float = DEFAULT_SIGMA_MIN,
         sigma_max: float = DEFAULT_SIGMA_MAX,
         sampler_type: str = DEFAULT_SAMPLER,
+        prompt_hints: list[str] | None = None,
     ) -> GenerationResult:
         """Gera áudio estéreo a partir de um prompt de texto.
 
@@ -239,6 +240,7 @@ class AudioGenerator:
             sigma_min: Mínimo do noise schedule.
             sigma_max: Máximo do noise schedule.
             sampler_type: Tipo de sampler (dpmpp-3m-sde, etc.).
+            prompt_hints: Hints adicionais para enriquecer o prompt (ex.: "seamless loop").
 
         Returns:
             GenerationResult com tensor de áudio raw (float32, 2 canais).
@@ -250,9 +252,13 @@ class AudioGenerator:
             if torch.cuda.is_available():
                 torch.cuda.manual_seed_all(seed)
 
+        final_prompt = prompt
+        if prompt_hints:
+            final_prompt = prompt + ". " + ", ".join(prompt_hints)
+
         conditioning = [
             {
-                "prompt": prompt,
+                "prompt": final_prompt,
                 "seconds_start": 0,
                 "seconds_total": duration,
             }
@@ -277,7 +283,7 @@ class AudioGenerator:
         return GenerationResult(
             audio=audio,
             sample_rate=self.sample_rate,
-            prompt=prompt,
+            prompt=final_prompt,
             duration=duration,
             steps=steps,
             cfg_scale=cfg_scale,

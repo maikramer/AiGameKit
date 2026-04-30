@@ -41,7 +41,7 @@ def trim_silence(
     audio: torch.Tensor,
     sample_rate: int,
     threshold_db: float = -60.0,
-    min_silence_ms: int = 200,
+    buffer_ms: int = 200,
 ) -> torch.Tensor:
     """Remove silêncio no início e no fim do áudio.
 
@@ -52,7 +52,7 @@ def trim_silence(
         audio: Tensor (channels, samples) float.
         sample_rate: Taxa de amostragem.
         threshold_db: Limiar em dB abaixo do qual se considera silêncio.
-        min_silence_ms: Buffer mínimo (ms) antes do primeiro som e após o último.
+        buffer_ms: Buffer mínimo (ms) antes do primeiro som e após o último.
     """
     threshold_linear = 10 ** (threshold_db / 20.0)
     mono = audio.abs().max(dim=0).values
@@ -63,7 +63,7 @@ def trim_silence(
 
     first_sound = above_threshold[0].item()
     last_sound = above_threshold[-1].item()
-    buffer_samples = int(sample_rate * min_silence_ms / 1000)
+    buffer_samples = int(sample_rate * buffer_ms / 1000)
 
     start_idx = max(0, first_sound - buffer_samples)
     end_idx = min(last_sound + buffer_samples, audio.shape[-1])
@@ -72,6 +72,47 @@ def trim_silence(
         return audio
 
     return audio[:, start_idx:end_idx]
+
+
+def apply_edge_fade(
+    audio: torch.Tensor,
+    sample_rate: int,
+    fade_in_ms: float = 5,
+    fade_out_ms: float = 20,
+) -> torch.Tensor:
+    """Micro fade-in/out to eliminate clicks at clip boundaries.
+
+    Applies very short linear fades at the start and end of the audio
+    tensor to prevent audible clicks from abrupt start/stop.
+
+    Args:
+        audio: Tensor (channels, samples) float, modified in-place if possible.
+        sample_rate: Taxa de amostragem.
+        fade_in_ms: Fade-in duration in milliseconds.
+        fade_out_ms: Fade-out duration in milliseconds.
+
+    Returns:
+        Tensor with fades applied (channels, samples).
+    """
+    if audio.shape[-1] == 0:
+        return audio
+
+    fade_in_samples = max(1, int(sample_rate * fade_in_ms / 1000))
+    fade_out_samples = max(1, int(sample_rate * fade_out_ms / 1000))
+    fade_in_samples = min(fade_in_samples, audio.shape[-1] // 2)
+    fade_out_samples = min(fade_out_samples, audio.shape[-1] // 2)
+
+    result = audio.clone()
+
+    if fade_in_samples > 1:
+        fade_in_curve = torch.linspace(0.0, 1.0, fade_in_samples, device=audio.device, dtype=audio.dtype)
+        result[:, :fade_in_samples] = result[:, :fade_in_samples] * fade_in_curve
+
+    if fade_out_samples > 1:
+        fade_out_curve = torch.linspace(1.0, 0.0, fade_out_samples, device=audio.device, dtype=audio.dtype)
+        result[:, -fade_out_samples:] = result[:, -fade_out_samples:] * fade_out_curve
+
+    return result
 
 
 def save_audio(
@@ -83,6 +124,8 @@ def save_audio(
     normalize: bool = True,
     trim: bool = False,
     metadata: dict[str, Any] | None = None,
+    trim_buffer_ms: int = 200,
+    apply_fade: bool = True,
 ) -> Path:
     """Processa e grava áudio num ficheiro.
 
@@ -95,6 +138,8 @@ def save_audio(
         normalize: Aplicar normalização de pico.
         trim: Remover silêncio no início e no fim.
         metadata: Metadados para gravar num .json ao lado do áudio.
+        trim_buffer_ms: Buffer em ms ao cortar silêncio (passado a trim_silence).
+        apply_fade: Aplicar micro fade-in/out nas bordas do clip.
 
     Returns:
         Caminho do ficheiro de áudio gravado.
@@ -109,7 +154,10 @@ def save_audio(
         audio = peak_normalize(audio)
 
     if trim:
-        audio = trim_silence(audio, sample_rate)
+        audio = trim_silence(audio, sample_rate, buffer_ms=trim_buffer_ms)
+
+    if apply_fade:
+        audio = apply_edge_fade(audio, sample_rate)
 
     output_path = output_path.with_suffix(f".{fmt}")
     output_path.parent.mkdir(parents=True, exist_ok=True)

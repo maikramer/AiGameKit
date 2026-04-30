@@ -21,7 +21,7 @@ def test_resolve_effective_seed_explicit() -> None:
 
 
 def test_resolve_effective_seed_random(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("text2sound.utils.secrets.randbelow", lambda n: 7)
+    monkeypatch.setattr("gamedev_shared.seed_utils.secrets.randbelow", lambda n: 7)
     assert resolve_effective_seed(None) == 7
 
 
@@ -43,11 +43,11 @@ def test_format_bytes_tb_path() -> None:
 
 
 def test_safe_filename_alnum() -> None:
-    assert safe_filename("HelloWorld") == "HelloWorld"
+    assert safe_filename("HelloWorld") == "helloworld"
 
 
 def test_safe_filename_specials() -> None:
-    assert safe_filename("a/b@c#d") == "a_b_c_d"
+    assert safe_filename("a/b@c#d") == "abcd"
 
 
 def test_safe_filename_max_len() -> None:

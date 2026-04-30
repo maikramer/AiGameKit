@@ -1,0 +1,285 @@
+# Asset categories — per-category defaults for audio, 3D, and paint.
+# Each category maps to target face counts, audio kind, and tool-specific
+# parameter overrides for the param_optimizer and audio pipeline.
+
+categories:
+  # ── Characters ──
+  humanoid:
+    label: "Humanoid"
+    target_faces: 32000
+    rig: true
+    animate: true
+    audio:
+      profile: music
+      kind: music_loop
+      duration: 30
+      trim: false
+    text3d:
+      octree: 256
+      chunks: 8000
+      steps: 30
+    paint:
+      style: hunyuan
+      max_views: 6
+
+  creature:
+    label: "Creature"
+    target_faces: 25000
+    rig: true
+    animate: true
+    audio:
+      profile: effects
+      kind: sfx_creature
+      duration: 3
+      trim: true
+    text3d:
+      octree: 256
+      chunks: 8000
+      steps: 30
+    paint:
+      style: hunyuan
+      max_views: 6
+
+  # ── Props & Objects ──
+  weapon:
+    label: "Weapon"
+    target_faces: 2500
+    audio:
+      profile: effects
+      kind: sfx_impact
+      duration: 2
+      trim: true
+
+  prop:
+    label: "Prop"
+    target_faces: 5000
+    audio:
+      profile: effects
+      kind: sfx_interact
+      duration: 2
+      trim: true
+
+  chest:
+    label: "Chest / Container"
+    target_faces: 2500
+    audio:
+      profile: effects
+      kind: sfx_interact
+      duration: 2
+      trim: true
+
+  door:
+    label: "Door"
+    target_faces: 1200
+    audio:
+      profile: effects
+      kind: sfx_interact
+      duration: 2
+      trim: true
+
+  # ── Environment ──
+  environment:
+    label: "Environment"
+    target_faces: 8000
+    audio:
+      profile: music
+      kind: ambient_loop
+      duration: 45
+      trim: false
+    text3d:
+      octree: 192
+      chunks: 6000
+      steps: 24
+
+  terrain:
+    label: "Terrain"
+    target_faces: 10000
+    # No audio by default
+
+  vegetation:
+    label: "Vegetation"
+    target_faces: 5000
+    audio:
+      profile: effects
+      kind: ambient_one_shot
+      duration: 5
+      trim: true
+    text3d:
+      octree: 192
+      chunks: 6000
+      steps: 24
+
+  # ── Effects & UI ──
+  effects:
+    label: "VFX / Particle"
+    target_faces: 1200
+    audio:
+      profile: effects
+      kind: sfx_magic
+      duration: 2
+      trim: true
+    text3d:
+      octree: 80
+      chunks: 2048
+      steps: 12
+    paint:
+      style: perlin
+
+  ui:
+    label: "UI Element"
+    target_faces: 0
+    audio:
+      profile: effects
+      kind: sfx_ui
+      duration: 1.5
+      trim: true
+
+  # ── Vehicles & Structures ──
+  vehicle:
+    label: "Vehicle"
+    target_faces: 8000
+    audio:
+      profile: effects
+      kind: sfx_vehicle
+      duration: 4
+      trim: true
+    text3d:
+      octree: 192
+      chunks: 6000
+      steps: 24
+
+  building:
+    label: "Building"
+    target_faces: 15000
+    audio:
+      profile: music
+      kind: ambient_one_shot
+      duration: 8
+      trim: true
+    text3d:
+      octree: 256
+      chunks: 8000
+      steps: 30
+
+  # ── Items & Consumables ──
+  item:
+    label: "Item / Pickup"
+    target_faces: 1200
+    audio:
+      profile: effects
+      kind: sfx_ui
+      duration: 1
+      trim: true
+    text3d:
+      octree: 80
+      chunks: 2048
+      steps: 12
+    paint:
+      style: solid
+
+# ── Audio kinds — fine-grained sound generation parameters ──
+# Each kind determines model selection, sampler, cfgs, trim buffer, and prompt hints.
+
+audio_kinds:
+  music_loop:
+    label: "Music Loop"
+    model: music
+    sampler: dpmpp-3m-sde
+    cfg_scale_default: 7.0
+    trim_default: false
+    trim_buffer_ms: 0
+    loop_hint: true
+    prompt_hint: "seamless loop, consistent volume throughout"
+
+  ambient_loop:
+    label: "Ambient Loop"
+    model: music
+    sampler: dpmpp-3m-sde
+    cfg_scale_default: 6.0
+    trim_default: false
+    trim_buffer_ms: 0
+    loop_hint: true
+    prompt_hint: "seamless loop, immersive atmosphere"
+
+  ambient_one_shot:
+    label: "Ambient One-Shot"
+    model: music
+    sampler: dpmpp-3m-sde
+    cfg_scale_default: 7.0
+    trim_default: true
+    trim_buffer_ms: 400
+    loop_hint: false
+
+  sfx_impact:
+    label: "SFX Impact"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 9.0
+    trim_default: true
+    trim_buffer_ms: 50
+    loop_hint: false
+    prompt_hint: "immediate attack, no silence at start, powerful transient"
+
+  sfx_short:
+    label: "SFX Short"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 50
+    loop_hint: false
+
+  sfx_ui:
+    label: "SFX UI"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 10.0
+    trim_default: true
+    trim_buffer_ms: 30
+    loop_hint: false
+    prompt_hint: "clean, short, digital, no reverb tail"
+
+  sfx_movement:
+    label: "SFX Movement"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 80
+    loop_hint: false
+
+  sfx_creature:
+    label: "SFX Creature"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 9.0
+    trim_default: true
+    trim_buffer_ms: 60
+    loop_hint: false
+
+  sfx_magic:
+    label: "SFX Magic"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 9.0
+    trim_default: true
+    trim_buffer_ms: 80
+    loop_hint: false
+
+  sfx_vehicle:
+    label: "SFX Vehicle"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 100
+    loop_hint: false
+
+  sfx_interact:
+    label: "SFX Interact"
+    model: effects
+    sampler: pingpong
+    cfg_scale_default: 8.0
+    trim_default: true
+    trim_buffer_ms: 50
+    loop_hint: false

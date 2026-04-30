@@ -6,6 +6,8 @@ import sys
 import time
 from pathlib import Path
 
+from gamedev_shared.quality import VALID_QUALITIES
+
 from . import defaults as _d
 from .cli_rich import click
 
@@ -43,6 +45,19 @@ def main() -> None:
     help="Chunks marching cubes (default: autotune)",
 )
 @click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier — controls DiT steps, octree resolution, chunk count.",
+)
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Asset category for category-specific overrides (e.g. humanoid, weapon, prop).",
+)
 @click.option(
     "--no-auto-tune",
     is_flag=True,
@@ -93,7 +108,9 @@ def main() -> None:
     default=None,
     help="IDs de GPU para multi-GPU (ex: '0,1'). Só afecta o DiT.",
 )
+@click.pass_context
 def decompose(
+    ctx,
     mesh_path: str,
     output_path: str | None,
     output_segmented: str | None,
@@ -101,6 +118,8 @@ def decompose(
     steps: int | None,
     num_chunks: int | None,
     seed: int | None,
+    quality: str,
+    category: str | None,
     no_auto_tune: bool,
     no_cpu_offload: bool,
     device: str | None,
@@ -120,6 +139,27 @@ def decompose(
     Optimizado para ~6 GB VRAM com CPU offloading sequencial.
     Suporta quantização 4-bit/8-bit e torch.compile para aceleração.
     """
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    from click.core import ParameterSource
+
+    ctx = click.get_current_context()
+
+    _user_set_steps = ctx.get_parameter_source("steps") != ParameterSource.DEFAULT
+    _user_set_octree = ctx.get_parameter_source("octree_resolution") != ParameterSource.DEFAULT
+    _user_set_chunks = ctx.get_parameter_source("num_chunks") != ParameterSource.DEFAULT
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("part3d", quality=quality, category=category)
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
+    if not _user_set_octree and "octree" in _qresolved.params:
+        octree_resolution = _qresolved.params["octree"]
+    if not _user_set_chunks and "chunks" in _qresolved.params:
+        num_chunks = _qresolved.params["chunks"]
+
     from gamedev_shared.env import ensure_pytorch_cuda_alloc_conf
     from gamedev_shared.quantization import (
         format_quantization_info,

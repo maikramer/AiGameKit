@@ -1,0 +1,217 @@
+# Quality profiles — cross-tool parameter mapping.
+# Each tier maps per-tool settings for the full pipeline.
+#
+# Usage:
+#   engine = QualityEngine()
+#   r = engine.resolve("text2sound", quality="medium", category="weapon")
+
+profiles:
+  fast:
+    label: "Fast (~30s/asset, minimum viable quality)"
+    text2d:
+      width: 512
+      height: 512
+      steps: 4
+      guidance: 1.0
+    text3d:
+      preset: fast
+      guidance: 5.0
+    paint3d:
+      max_views: 2
+      view_resolution: 384
+      render_size: 1024
+      texture_size: 1024
+      bake_exp: 6
+      smooth: true
+      smooth_passes: 2
+    texture2d:
+      width: 512
+      height: 512
+      steps: 14
+      guidance: 3.0
+    skymap2d:
+      width: 1024
+      height: 512
+      steps: 14
+      guidance: 3.0
+    part3d:
+      steps: 12
+      octree: 128
+      chunks: 4096
+    text2sound:
+      steps: 12
+      cfg_scale: 4.0
+      sigma_min: 0.5
+      sigma_max: 500.0
+      sampler: dpmpp-3m-sde
+    simplify:
+      face_ratio: 0.25
+      texture_size: 1024
+
+  low:
+    label: "Low (~1min, basic quality)"
+    text2d:
+      width: 768
+      height: 768
+      steps: 4
+      guidance: 1.0
+    text3d:
+      preset: fast
+      guidance: 5.0
+    paint3d:
+      max_views: 4
+      view_resolution: 384
+      render_size: 1024
+      texture_size: 2048
+      bake_exp: 6
+      smooth: true
+      smooth_passes: 3
+    texture2d:
+      width: 768
+      height: 768
+      steps: 20
+      guidance: 3.5
+    skymap2d:
+      width: 1536
+      height: 768
+      steps: 20
+      guidance: 3.5
+    part3d:
+      steps: 18
+      octree: 192
+      chunks: 6000
+    text2sound:
+      steps: 20
+      cfg_scale: 5.0
+      sigma_min: 0.4
+      sigma_max: 500.0
+      sampler: dpmpp-3m-sde
+    simplify:
+      face_ratio: 0.5
+      texture_size: 1024
+
+  medium:
+    label: "Medium (~2min, standard quality — DEFAULT)"
+    text2d:
+      width: 1024
+      height: 1024
+      steps: 4
+      guidance: 1.0
+    text3d:
+      preset: balanced
+      guidance: 5.0
+    paint3d:
+      max_views: 6
+      view_resolution: 512
+      render_size: 2048
+      texture_size: 2048
+      bake_exp: 6
+      smooth: true
+      smooth_passes: 3
+    texture2d:
+      width: 1024
+      height: 1024
+      steps: 28
+      guidance: 3.5
+    skymap2d:
+      width: 2048
+      height: 1024
+      steps: 28
+      guidance: 3.5
+    part3d:
+      steps: 25
+      octree: 256
+      chunks: 8000
+    text2sound:
+      steps: 32
+      cfg_scale: 6.0
+      sigma_min: 0.3
+      sigma_max: 500.0
+      sampler: dpmpp-3m-sde
+    simplify:
+      face_ratio: 1.0
+      texture_size: 2048
+
+  high:
+    label: "High (~5min, high quality)"
+    text2d:
+      width: 1024
+      height: 1024
+      steps: 8
+      guidance: 1.0
+    text3d:
+      preset: hq
+      guidance: 5.0
+    paint3d:
+      max_views: 8
+      view_resolution: 512
+      render_size: 2048
+      texture_size: 4096
+      bake_exp: 6
+      smooth: true
+      smooth_passes: 3
+    texture2d:
+      width: 1024
+      height: 1024
+      steps: 40
+      guidance: 4.0
+    skymap2d:
+      width: 2048
+      height: 1024
+      steps: 40
+      guidance: 4.0
+    part3d:
+      steps: 30
+      octree: 384
+      chunks: 20000
+    text2sound:
+      steps: 50
+      cfg_scale: 7.0
+      sigma_min: 0.2
+      sigma_max: 500.0
+      sampler: dpmpp-3m-sde
+    simplify:
+      face_ratio: 2.0
+      texture_size: 2048
+
+  highest:
+    label: "Highest (~10min+, maximum quality)"
+    text2d:
+      width: 1024
+      height: 1024
+      steps: 12
+      guidance: 1.5
+    text3d:
+      preset: hq
+      guidance: 5.0
+    paint3d:
+      max_views: 10
+      view_resolution: 512
+      render_size: 2048
+      texture_size: 4096
+      bake_exp: 6
+      smooth: true
+      smooth_passes: 3
+    texture2d:
+      width: 2048
+      height: 2048
+      steps: 50
+      guidance: 4.5
+    skymap2d:
+      width: 4096
+      height: 2048
+      steps: 50
+      guidance: 4.5
+    part3d:
+      steps: 40
+      octree: 512
+      chunks: 30000
+    text2sound:
+      steps: 100
+      cfg_scale: 7.0
+      sigma_min: 0.1
+      sigma_max: 500.0
+      sampler: dpmpp-3m-sde
+    simplify:
+      face_ratio: 0.0
+      texture_size: 4096

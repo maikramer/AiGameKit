@@ -97,7 +97,7 @@ class TestModelArchitectureRegistry:
     def test_get_known_architecture(self):
         reg = ModelArchitectureRegistry()
         result = reg.get("flux")
-        assert result == ["FluxSingleTransformerBlock"]
+        assert result == ["FluxSingleTransformerBlock", "FluxTransformerBlock"]
 
     def test_get_unknown_returns_empty(self):
         reg = ModelArchitectureRegistry()
@@ -190,7 +190,7 @@ class TestMultiGPUPlannerBuilder:
         assert p._model is model
         assert p._gpu_ids == [0, 1]
         assert p._max_memory == {0: "20GiB"}
-        assert p._no_split_classes == ["FluxSingleTransformerBlock"]
+        assert p._no_split_classes == ["FluxSingleTransformerBlock", "FluxTransformerBlock"]
         assert p._dtype == "float16"
 
 

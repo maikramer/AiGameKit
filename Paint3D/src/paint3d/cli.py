@@ -43,6 +43,7 @@ from gamedev_shared.progress import (
     emit_progress,
     emit_result,
 )
+from gamedev_shared.quality import VALID_QUALITIES
 
 from . import defaults as _defaults
 from .cli_rich import click
@@ -182,6 +183,19 @@ def cli(ctx, verbose):
     show_default=False,
     help="IDs de GPU para multi-GPU, separados por vírgula (ex: 0,1).",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
+)
 @click.pass_context
 def texture(
     ctx,
@@ -204,11 +218,34 @@ def texture(
     gpu_kill_others,
     profile,
     gpu_ids,
+    quality,
+    category,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
 
     verbose = bool(ctx.obj.get("VERBOSE")) or texture_verbose
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_views = ctx.get_parameter_source("max_views") not in (_src.DEFAULT,)
+    _user_set_view_res = ctx.get_parameter_source("view_resolution") not in (_src.DEFAULT,)
+    _user_set_render_size = ctx.get_parameter_source("render_size") not in (_src.DEFAULT,)
+    _user_set_tex_size = ctx.get_parameter_source("texture_size") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("paint3d", quality=quality, category=category)
+    if not _user_set_views and "max_views" in _qresolved.params:
+        max_views = _qresolved.params["max_views"]
+    if not _user_set_view_res and "view_resolution" in _qresolved.params:
+        view_resolution = _qresolved.params["view_resolution"]
+    if not _user_set_render_size and "render_size" in _qresolved.params:
+        render_size = _qresolved.params["render_size"]
+    if not _user_set_tex_size and "texture_size" in _qresolved.params:
+        texture_size = _qresolved.params["texture_size"]
+
     mesh_path = Path(mesh_file)
     if output is None:
         output = mesh_path.with_name(f"{mesh_path.stem}_textured.glb")

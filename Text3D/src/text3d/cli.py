@@ -23,6 +23,7 @@ from rich.table import Table
 
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
+from gamedev_shared.quality import VALID_QUALITIES
 from gamedev_shared.skill_install import install_my_skill
 
 from . import defaults as _defaults
@@ -389,6 +390,19 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "Usar quando o mesh será texturizado (Paint3D) — mantém high-poly para melhor qualidade de pintura."
     ),
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
+)
 @click.pass_context
 def generate(
     ctx,
@@ -425,12 +439,37 @@ def generate(
     max_faces,
     gpu_ids,
     skip_remesh,
+    quality,
+    category,
 ):
     """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or generate_verbose
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_preset = ctx.get_parameter_source("preset") not in (_src.DEFAULT,)
+    _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+    _user_set_guidance = ctx.get_parameter_source("guidance") not in (_src.DEFAULT,)
+    _user_set_octree = ctx.get_parameter_source("octree_resolution") not in (_src.DEFAULT,)
+    _user_set_chunks = ctx.get_parameter_source("num_chunks") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("text3d", quality=quality, category=category)
+    if not _user_set_preset and "preset" in _qresolved.params:
+        preset = _qresolved.params["preset"]
+    if not _user_set_guidance and "guidance" in _qresolved.params:
+        guidance = _qresolved.params["guidance"]
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
+    if not _user_set_octree and "octree" in _qresolved.params:
+        octree_resolution = _qresolved.params["octree"]
+    if not _user_set_chunks and "chunks" in _qresolved.params:
+        num_chunks = _qresolved.params["chunks"]
 
     parsed_gpu_ids: list[int] | None = None
     if gpu_ids is not None:
@@ -971,15 +1010,15 @@ def lod_cmd(
             )
         else:
             paths = generate_lod_glb_triplet(
-            input_mesh,
-            output_dir,
-            stem,
-            lod1_ratio=lod1_ratio,
-            lod2_ratio=lod2_ratio,
-            min_faces_lod1=min_faces_lod1,
-            min_faces_lod2=min_faces_lod2,
-            meshfix=meshfix,
-        )
+                input_mesh,
+                output_dir,
+                stem,
+                lod1_ratio=lod1_ratio,
+                lod2_ratio=lod2_ratio,
+                min_faces_lod1=min_faces_lod1,
+                min_faces_lod2=min_faces_lod2,
+                meshfix=meshfix,
+            )
     except RuntimeError as e:
         raise click.ClickException(str(e)) from e
     except ValueError as e:

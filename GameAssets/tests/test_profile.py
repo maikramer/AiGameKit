@@ -81,16 +81,16 @@ def test_from_dict_text3d() -> None:
             "genre": "B",
             "tone": "C",
             "style_preset": "lowpoly",
-            "text3d": {"preset": "fast", "low_vram": True, "texture": False},
+            "text3d": {"preset": "fast", "low_vram": True},
         }
     )
     assert p.text3d is not None
     assert p.text3d.preset == "fast"
     assert p.text3d.low_vram is True
-    assert p.text3d.texture is False
 
 
-def test_from_dict_text3d_texture_defaults_true() -> None:
+def test_from_dict_text3d_with_paint3d() -> None:
+    """Paint config now lives in a separate paint3d block, not inside text3d."""
     p = GameProfile.from_dict(
         {
             "title": "A",
@@ -98,10 +98,13 @@ def test_from_dict_text3d_texture_defaults_true() -> None:
             "tone": "C",
             "style_preset": "lowpoly",
             "text3d": {"preset": "balanced"},
+            "paint3d": {"style": "hunyuan", "preserve_origin": True},
         }
     )
     assert p.text3d is not None
-    assert p.text3d.texture is True
+    assert p.paint3d is not None
+    assert p.paint3d.style == "hunyuan"
+    assert p.paint3d.preserve_origin is True
 
 
 def test_from_dict_path_layout_invalid() -> None:
@@ -129,15 +132,16 @@ def test_from_dict_text3d_hunyuan_explicit() -> None:
                 "steps": 26,
                 "octree_resolution": 160,
                 "low_vram": False,
-                "texture": True,
             },
+            "paint3d": {"preserve_origin": True},
         }
     )
     assert p.text3d is not None
     assert p.text3d.steps == 26
     assert p.text3d.octree_resolution == 160
     assert p.text3d.export_origin == "feet"
-    assert p.text3d.paint_preserve_origin is True
+    assert p.paint3d is not None
+    assert p.paint3d.preserve_origin is True
 
 
 def test_from_dict_text3d_export_origin_center() -> None:
@@ -147,7 +151,7 @@ def test_from_dict_text3d_export_origin_center() -> None:
             "genre": "B",
             "tone": "C",
             "style_preset": "lowpoly",
-            "text3d": {"preset": "fast", "texture": True, "export_origin": "center"},
+            "text3d": {"preset": "fast", "export_origin": "center"},
         }
     )
     assert p.text3d is not None

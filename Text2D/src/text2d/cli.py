@@ -21,6 +21,7 @@ from rich.table import Table
 
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
+from gamedev_shared.quality import VALID_QUALITIES
 from gamedev_shared.skill_install import install_my_skill
 
 from .cli_rich import click
@@ -121,6 +122,13 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="IDs das GPUs para split multi-GPU (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -137,6 +145,7 @@ def generate_cmd(
     verbose_flag: bool,
     profile: bool,
     gpu_ids_str: str | None,
+    quality: str,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -144,6 +153,23 @@ def generate_cmd(
     from gamedev_shared.profiler.env import env_profile_log_path
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
+    _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
+    _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("text2d", quality=quality)
+    if not _user_set_width and "width" in _qresolved.params:
+        width = _qresolved.params["width"]
+    if not _user_set_height and "height" in _qresolved.params:
+        height = _qresolved.params["height"]
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
 
     if not cpu:
         warn_if_vram_occupied()

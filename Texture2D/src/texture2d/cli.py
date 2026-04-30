@@ -17,6 +17,7 @@ from rich.table import Table
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
+from gamedev_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
 from .generator import TextureGenerator, default_model_id
@@ -129,6 +130,13 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="IDs das GPUs para split multi-GPU (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -148,11 +156,32 @@ def generate_cmd(
     cpu: bool,
     low_vram: bool,
     gpu_ids_str: str | None,
+    quality: str,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
+    _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
+    _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+    _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("texture2d", quality=quality)
+    if not _user_set_width and "width" in _qresolved.params:
+        width = _qresolved.params["width"]
+    if not _user_set_height and "height" in _qresolved.params:
+        height = _qresolved.params["height"]
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
+    if not _user_set_guidance and "guidance" in _qresolved.params:
+        guidance_scale = _qresolved.params["guidance"]
 
     if not cpu:
         warn_if_vram_occupied()
@@ -281,6 +310,13 @@ def presets_cmd() -> None:
     default=None,
     help="IDs das GPUs para split multi-GPU (ex: '0,1')",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -294,8 +330,29 @@ def batch_cmd(
     model_id: str | None,
     low_vram: bool,
     gpu_ids_str: str | None,
+    quality: str,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
+    _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
+    _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+    _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("texture2d", quality=quality)
+    if not _user_set_width and "width" in _qresolved.params:
+        width = _qresolved.params["width"]
+    if not _user_set_height and "height" in _qresolved.params:
+        height = _qresolved.params["height"]
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
+    if not _user_set_guidance and "guidance" in _qresolved.params:
+        guidance_scale = _qresolved.params["guidance"]
+
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
 
     prompts = [

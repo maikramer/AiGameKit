@@ -75,6 +75,8 @@ class Text2DProfile:
 class Text2SoundProfile:
     """Opções passadas ao CLI text2sound generate (subconjunto)."""
 
+    quality: str = "medium"  # fast | low | medium | high | highest
+    category: str | None = None  # weapon | humanoid | environment | ...
     duration: float | None = None
     steps: int | None = None
     cfg_scale: float | None = None
@@ -362,6 +364,14 @@ class GameProfile:
             cfg = raw_ts2.get("cfg_scale")
             smin = raw_ts2.get("sigma_min")
             smax = raw_ts2.get("sigma_max")
+            quality_raw = raw_ts2.get("quality")
+            quality_s = str(quality_raw).strip().lower() if quality_raw not in (None, "") else "medium"
+            from gamedev_shared.quality import VALID_QUALITIES
+
+            if quality_s not in VALID_QUALITIES:
+                raise ValueError(f"text2sound.quality deve ser um de: {', '.join(VALID_QUALITIES)}")
+            category_raw = raw_ts2.get("category")
+            category_s = str(category_raw).strip().lower() if category_raw not in (None, "") else None
             try:
                 dur_f = float(dur) if dur is not None else None
                 st_i = int(st) if st is not None else None
@@ -387,6 +397,8 @@ class GameProfile:
             hp_raw = raw_ts2.get("half_precision")
             hp_b: bool | None = None if hp_raw is None else bool(hp_raw)
             ts2 = Text2SoundProfile(
+                quality=quality_s,
+                category=category_s,
                 duration=dur_f,
                 steps=st_i,
                 cfg_scale=cfg_f,
@@ -753,6 +765,8 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
 
     ts2 = profile.text2sound or Text2SoundProfile()
     ts2 = Text2SoundProfile(
+        quality=generation_name if ts2.quality == "medium" else ts2.quality,
+        category=ts2.category,
         duration=ts2.duration,
         steps=ts2.steps if ts2.steps is not None else gp.text2sound_steps,
         cfg_scale=ts2.cfg_scale,

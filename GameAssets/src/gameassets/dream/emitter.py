@@ -27,6 +27,7 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
         "meshes_subdir": "meshes",
         "image_ext": "png",
         "seed_base": 42,
+        "generation": "medium",
     }
     if plan.negative_keywords:
         doc["negative_keywords"] = plan.negative_keywords
@@ -50,9 +51,7 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
     if with_audio and any(a.generate_audio for a in plan.assets):
         doc["audio_subdir"] = "audio"
         doc["text2sound"] = {
-            "duration": 10,
-            "steps": 100,
-            "cfg_scale": 4.5,
+            "quality": "medium",
             "audio_format": "wav",
         }
 
