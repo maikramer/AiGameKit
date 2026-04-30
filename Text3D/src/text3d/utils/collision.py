@@ -12,31 +12,9 @@ def generate_collision_mesh(
     max_faces: int = 300,
     convex_hull: bool = True,
 ) -> Path:
-    """Generate a simplified convex-hull collision mesh from any GLB/OBJ/PLY.
-
-    Produces a **minimal** GLB — only geometry (vertices + faces), no
-    materials, textures, UVs, or normals.  Suitable for physics engines.
-
-    Pipeline (bpy native):
-    1. Load mesh via bpy
-    2. Compute convex hull
-    3. Decimate to ``max_faces``
-    4. Strip all materials/UVs/normals
-    5. Export minimal GLB
-
-    Args:
-        input_path: Source mesh file.
-        output_path: Destination GLB (geometry only).
-        max_faces: Target face count (minimum 4).
-        convex_hull: Compute convex hull before simplification.
-
-    Returns:
-        Path to the written collision GLB.
-
-    Raises:
-        ValueError: Mesh has fewer than 4 faces.
-    """
+    """Generate a simplified convex-hull collision mesh — geometry only, no materials/textures/UVs."""
     import bpy
+    from gamedev_shared.bpy_mesh import clear_scene
 
     clear_scene()
     bpy.ops.import_scene.gltf(filepath=str(Path(input_path)))
@@ -62,6 +40,7 @@ def generate_collision_mesh(
         bpy.ops.object.mode_set(mode="OBJECT")
 
     target = max(4, max_faces)
+    current = len(obj.data.polygons)
     if current > target:
         ratio = target / current
         mod = obj.modifiers.new("CollisionDecimate", "DECIMATE")
@@ -76,9 +55,12 @@ def generate_collision_mesh(
         mesh.uv_layers.remove(uv)
     for attr in list(getattr(mesh, "color_attributes", [])):
         mesh.color_attributes.remove(attr)
-    # Remove custom normals so export doesn't include them
-    mesh.use_auto_smooth = False
-    bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    if hasattr(mesh, "use_auto_smooth"):
+        mesh.use_auto_smooth = False
+    try:
+        bpy.ops.mesh.customdata_custom_splitnormals_clear()
+    except (AttributeError, RuntimeError):
+        pass
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,7 +70,7 @@ def generate_collision_mesh(
         use_selection=True,
         export_apply=True,
         export_normals=False,
-        export_uvs=False,
+        export_texcoords=False,
         export_materials="NONE",
         export_animations=False,
         export_skins=False,
