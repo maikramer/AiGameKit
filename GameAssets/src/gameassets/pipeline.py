@@ -1058,21 +1058,24 @@ def _animated_lod_via_subprocess(py, row, animated_glb, rec, out_dir, lod0_path,
     import os
     import subprocess as _sp
 
+    pkg_dir = Path(__file__).resolve().parent
+    gameassets_src = str(pkg_dir)
+    shared_src = str((pkg_dir / "../../../Shared/src").resolve())
+
     script = f"""
 import sys
-sys.path.insert(0, '{os.path.dirname(os.path.dirname(__file__))}')
-sys.path.insert(0, '{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Shared", "src")}')
+sys.path.insert(0, "{gameassets_src}")
+sys.path.insert(0, "{shared_src}")
 from gameassets.bpy_simplify import simplify_glb
-simplify_glb('{animated_glb}', '{lod0_path}', target_faces={target})
-print('DONE')
+simplify_glb("{animated_glb}", "{lod0_path}", target_faces={target})
+print("DONE")
 """
     try:
-        _sp.run(
+        result = _sp.run(
             [py, "-c", script],
             capture_output=True,
             text=True,
             timeout=300,
-            env={**os.environ, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
         )
     except _sp.TimeoutExpired:
         rec["rigged_lod0_error"] = "LOD0 subprocess timeout"
@@ -1081,8 +1084,17 @@ print('DONE')
         rec["rigged_lod0_error"] = str(exc)
         return False
 
+    if "DONE" not in (result.stdout or ""):
+        rec["rigged_lod0_error"] = f"subprocess failed: {result.stderr[:200]}"
+        return False
+
     if lod0_path.is_file():
         rec["rigged_lod0_path"] = _path_for_log(lod0_path, out_dir)
+        rec["rigged_lod0_src_faces"] = current_faces
+        console.print(f"[green]✓ LOD0 (rigged, subprocess)[/green] {row.id}")
+        return False
+    rec["rigged_lod0_error"] = "LOD0 subprocess no output"
+    return False
         rec["rigged_lod0_src_faces"] = current_faces
         console.print(f"[green]✓ LOD0 (rigged, subprocess)[/green] {row.id}")
         return False
