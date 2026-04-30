@@ -410,7 +410,7 @@ def _transfer_texture_direct(
     remeshed_faces: np.ndarray,
     new_uvs: np.ndarray,
     texture_size: int,
-    padding: int = 4,
+    padding: int = 16,
 ) -> np.ndarray:
     """Transferência directa pixel-a-pixel da textura fonte para o novo atlas UV.
 
