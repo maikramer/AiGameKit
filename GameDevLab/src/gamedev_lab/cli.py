@@ -15,12 +15,7 @@ from rich.console import Console
 from gamedev_lab import __version__
 from gamedev_lab.cli_rich import click
 from gamedev_lab.compare_inspect import diff_inspect
-from gamedev_lab.debug_tools import (
-    extract_json_from_output,
-    merge_subprocess_output,
-    resolve_animator3d_bin,
-    run_cmd,
-)
+from gamedev_lab.debug_tools import extract_json_from_output, inspect_glb
 from gamedev_lab.validate_rules import evaluate_inspect_rules, load_rules_file
 
 console = Console()
@@ -66,20 +61,9 @@ def check_group() -> None:
 )
 @click.option("--quiet", "-q", is_flag=True, help="Só código de saída; erros em stderr.")
 def check_glb_cmd(glb_path: Path, rules_file: Path, json_out: Path | None, quiet: bool) -> None:
-    """Valida um GLB contra regras (via animator3d inspect)."""
-    abin = resolve_animator3d_bin()
-    if not abin:
-        console_err.print("[red]animator3d não encontrado.[/red]")
-        sys.exit(2)
-
+    """Valida um GLB contra regras (via native bpy inspect)."""
     rules = load_rules_file(rules_file)
-    r = run_cmd([abin, "inspect", str(glb_path), "--json-out"])
-    if r.returncode != 0:
-        err = merge_subprocess_output(r, max_chars=2000)
-        console_err.print(f"[red]inspect falhou:[/red] {err}")
-        sys.exit(2)
-
-    inspect_data = extract_json_from_output(r.stdout)
+    inspect_data = inspect_glb(glb_path)
     ok, failures, details = evaluate_inspect_rules(inspect_data, rules)
     report: dict[str, Any] = {
         "ok": ok,
@@ -107,7 +91,7 @@ def check_glb_cmd(glb_path: Path, rules_file: Path, json_out: Path | None, quiet
 
 @main.group("debug")
 def debug_group() -> None:
-    """Screenshots, inspect, compare e bundle (Animator3D)."""
+    """Screenshots, inspect, compare e bundle (native bpy; inspect-rig usa animator3d)."""
 
 
 @debug_group.command("screenshot")
@@ -149,45 +133,29 @@ def debug_screenshot(
     ortho: bool,
     no_transparent_film: bool,
 ) -> None:
-    """Gera screenshots multi-ângulo de um GLB (invoca animator3d)."""
-    abin = resolve_animator3d_bin()
-    if not abin:
-        console.print("[red]animator3d não encontrado.[/red] Defina ANIMATOR3D_BIN ou instale Animator3D.")
-        sys.exit(1)
+    """Gera screenshots multi-ângulo de um GLB (native bpy render)."""
+    from gamedev_lab.renderer import render_screenshots
 
     if output_dir is None:
         output_dir = input_path.parent / f"{input_path.stem}_debug"
 
-    argv = [
-        abin,
-        "screenshot",
-        str(input_path),
-        "--output-dir",
-        str(output_dir),
-        "--views",
-        views,
-        "--resolution",
-        str(resolution),
-    ]
-    if show_bones:
-        argv.append("--show-bones")
-    if frame_list:
-        argv.extend(["--frame-list", frame_list])
-    elif frame is not None:
-        argv.extend(["--frame", str(frame)])
-    argv.extend(["--engine", engine])
-    if ortho:
-        argv.append("--ortho")
-    if no_transparent_film:
-        argv.append("--no-transparent-film")
-
-    r = run_cmd(argv)
-    if r.returncode != 0:
-        err = merge_subprocess_output(r, max_chars=2000) or "animator3d screenshot falhou"
-        console.print(f"[red]Erro:[/red] {err}")
+    try:
+        report = render_screenshots(
+            input_path,
+            output_dir,
+            views=views,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            transparent_film=not no_transparent_film,
+            show_bones=show_bones,
+            frame=frame,
+            frame_list=frame_list,
+        )
+    except Exception as exc:
+        console.print(f"[red]Erro:[/red] {exc}")
         sys.exit(1)
 
-    report = extract_json_from_output(r.stdout)
     report_path = output_dir / "report.json"
     report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
     n = len(report.get("screenshots", []))
@@ -238,55 +206,33 @@ def debug_bundle(
     rig_weights: str | None,
 ) -> None:
     """Pacote único para agentes: inspect JSON + screenshots + bundle.json."""
-    abin = resolve_animator3d_bin()
-    if not abin:
-        console.print("[red]animator3d não encontrado.[/red] Defina ANIMATOR3D_BIN ou instale Animator3D.")
-        sys.exit(1)
+    from gamedev_lab.renderer import render_screenshots
 
     if output_dir is None:
         output_dir = input_path.parent / f"{input_path.stem}_agent_bundle"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     inspect_path = output_dir / "inspect.json"
-    argv_in = [abin, "inspect", str(input_path), "--json-out"]
-    r_in = run_cmd(argv_in)
-    if r_in.returncode != 0:
-        err = merge_subprocess_output(r_in, max_chars=2000) or "inspect falhou"
-        console.print(f"[red]Erro:[/red] {err}")
-        sys.exit(1)
-    inspect_data = extract_json_from_output(r_in.stdout)
+    inspect_data = inspect_glb(input_path)
     inspect_path.write_text(json.dumps(inspect_data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     shot_dir = output_dir / "screenshots"
-    argv_sh = [
-        abin,
-        "screenshot",
-        str(input_path),
-        "--output-dir",
-        str(shot_dir),
-        "--views",
-        views,
-        "--resolution",
-        str(resolution),
-    ]
-    if show_bones:
-        argv_sh.append("--show-bones")
-    if frame_list:
-        argv_sh.extend(["--frame-list", frame_list])
-    elif frame is not None:
-        argv_sh.extend(["--frame", str(frame)])
-    argv_sh.extend(["--engine", engine])
-    if ortho:
-        argv_sh.append("--ortho")
-    if no_transparent_film:
-        argv_sh.append("--no-transparent-film")
-
-    r_sh = run_cmd(argv_sh)
-    if r_sh.returncode != 0:
-        err = merge_subprocess_output(r_sh, max_chars=2000) or "screenshot falhou"
-        console.print(f"[red]Erro:[/red] {err}")
+    try:
+        shot_report = render_screenshots(
+            input_path,
+            shot_dir,
+            views=views,
+            resolution=resolution,
+            engine=engine,
+            ortho=ortho,
+            transparent_film=not no_transparent_film,
+            show_bones=show_bones,
+            frame=frame,
+            frame_list=frame_list,
+        )
+    except Exception as exc:
+        console.print(f"[red]Erro no screenshot:[/red] {exc}")
         sys.exit(1)
-    shot_report = extract_json_from_output(r_sh.stdout)
     (output_dir / "screenshot_report.json").write_text(
         json.dumps(shot_report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
@@ -309,33 +255,43 @@ def debug_bundle(
     bundle_path = output_dir / "bundle.json"
 
     if include_rig:
-        rig_dir = output_dir / "rig"
-        argv_rig = [
-            abin,
-            "inspect-rig",
-            str(input_path),
-            "-o",
-            str(rig_dir),
-            "--views",
-            views,
-            "--resolution",
-            str(resolution),
-            "--engine",
-            engine,
-        ]
-        if ortho:
-            argv_rig.append("--ortho")
-        if no_transparent_film:
-            argv_rig.append("--no-transparent-film")
-        if rig_weights:
-            argv_rig.extend(["--show-weights", rig_weights])
-        r_rig = run_cmd(argv_rig)
-        if r_rig.returncode != 0:
-            err = merge_subprocess_output(r_rig, max_chars=2000) or "inspect-rig falhou"
-            console.print(f"[yellow]inspect-rig:[/yellow] {err}")
+        from gamedev_shared.subprocess_utils import merge_subprocess_output, resolve_binary, run_cmd
+
+        try:
+            abin = resolve_binary("ANIMATOR3D_BIN", "animator3d")
+        except FileNotFoundError:
+            abin = None
+
+        if abin:
+            rig_dir = output_dir / "rig"
+            argv_rig = [
+                abin,
+                "inspect-rig",
+                str(input_path),
+                "-o",
+                str(rig_dir),
+                "--views",
+                views,
+                "--resolution",
+                str(resolution),
+                "--engine",
+                engine,
+            ]
+            if ortho:
+                argv_rig.append("--ortho")
+            if no_transparent_film:
+                argv_rig.append("--no-transparent-film")
+            if rig_weights:
+                argv_rig.extend(["--show-weights", rig_weights])
+            r_rig = run_cmd(argv_rig)
+            if r_rig.returncode != 0:
+                err = merge_subprocess_output(r_rig, max_chars=2000) or "inspect-rig falhou"
+                console.print(f"[yellow]inspect-rig:[/yellow] {err}")
+            else:
+                bundle["rig_report"] = extract_json_from_output(r_rig.stdout)
+                bundle["rig_dir"] = str(rig_dir)
         else:
-            bundle["rig_report"] = extract_json_from_output(r_rig.stdout)
-            bundle["rig_dir"] = str(rig_dir)
+            console.print("[yellow]animator3d não encontrado — rig skip.[/yellow]")
 
     bundle_path.write_text(json.dumps(bundle, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
@@ -349,22 +305,8 @@ def debug_bundle(
 @click.argument("input_path", type=click.Path(exists=True, path_type=Path))
 @click.option("--output", "-o", type=click.Path(path_type=Path), default=None, help="Guardar JSON em ficheiro.")
 def debug_inspect(input_path: Path, output: Path | None) -> None:
-    """Metadados de armature/mesh/animação em JSON (via animator3d)."""
-    abin = resolve_animator3d_bin()
-    if not abin:
-        console.print("[red]animator3d não encontrado.[/red]")
-        sys.exit(1)
-
-    argv = [abin, "inspect", str(input_path), "--json-out"]
-    r = run_cmd(argv)
-    if r.returncode != 0:
-        err = merge_subprocess_output(r, max_chars=2000) or "animator3d inspect falhou"
-        console.print(f"[red]Erro:[/red] {err}")
-        sys.exit(1)
-
-    data = extract_json_from_output(r.stdout)
-    data["file_size_bytes"] = input_path.stat().st_size if input_path.is_file() else 0
-    data["input"] = str(input_path)
+    """Metadados de armature/mesh/animação em JSON (native bpy)."""
+    data = inspect_glb(input_path)
 
     out_str = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
     if output:
@@ -394,9 +336,12 @@ def debug_inspect_rig(
     ortho: bool,
     no_transparent_film: bool,
 ) -> None:
-    """Rig: vistas com ossos e opcional heatmap (animator3d inspect-rig)."""
-    abin = resolve_animator3d_bin()
-    if not abin:
+    """Rig: vistas com ossos e opcional heatmap (delega a animator3d)."""
+    from gamedev_shared.subprocess_utils import merge_subprocess_output, resolve_binary, run_cmd
+
+    try:
+        abin = resolve_binary("ANIMATOR3D_BIN", "animator3d")
+    except FileNotFoundError:
         console.print("[red]animator3d não encontrado.[/red]")
         sys.exit(1)
 
@@ -466,9 +411,9 @@ def debug_inspect_rig(
     "--engine",
     type=click.Choice(["workbench", "eevee"]),
     default=None,
-    help="Motor de render (animator3d screenshot; defeito: workbench no binário).",
+    help="Motor de render (workbench ou eevee).",
 )
-@click.option("--ortho", is_flag=True, help="Câmara ortográfica (animator3d).")
+@click.option("--ortho", is_flag=True, help="Câmara ortográfica.")
 def debug_compare(
     file_a: Path,
     file_b: Path,
@@ -483,10 +428,7 @@ def debug_compare(
     ortho: bool,
 ) -> None:
     """Compara dois modelos lado a lado (screenshots + report JSON)."""
-    abin = resolve_animator3d_bin()
-    if not abin:
-        console.print("[red]animator3d não encontrado.[/red]")
-        sys.exit(1)
+    from gamedev_lab.renderer import render_screenshots
 
     if output_dir is None:
         output_dir = file_a.parent / f"{file_a.stem}_vs_{file_b.stem}"
@@ -497,40 +439,27 @@ def debug_compare(
     inspect_side: dict[str, Any] = {}
     if with_inspect or struct_diff:
         for label, fpath in [("a", file_a), ("b", file_b)]:
-            r_i = run_cmd([abin, "inspect", str(fpath), "--json-out"])
-            if r_i.returncode == 0:
-                inspect_side[label] = extract_json_from_output(r_i.stdout)
-            else:
-                inspect_side[label] = {"_error": merge_subprocess_output(r_i, max_chars=500)}
+            try:
+                inspect_side[label] = inspect_glb(fpath)
+            except Exception as exc:
+                inspect_side[label] = {"_error": str(exc)}
 
-    def _shot_argv(fpath: Path, d: Path) -> list[str]:
-        argv = [
-            abin,
-            "screenshot",
-            str(fpath),
-            "--output-dir",
-            str(d),
-            "--views",
-            views,
-            "--resolution",
-            str(resolution),
-            "--show-bones",
-        ]
-        if engine:
-            argv.extend(["--engine", engine])
-        if ortho:
-            argv.append("--ortho")
-        return argv
-
-    reports = {}
+    render_engine = engine or "workbench"
+    reports: dict[str, Any] = {}
     for label, fpath, d in [("a", file_a, dir_a), ("b", file_b, dir_b)]:
-        r = run_cmd(_shot_argv(fpath, d))
-        if r.returncode != 0:
-            console.print(
-                f"[red]Erro ao gerar screenshots de {label}:[/red] {merge_subprocess_output(r, max_chars=500)}"
+        try:
+            reports[label] = render_screenshots(
+                fpath,
+                d,
+                views=views,
+                resolution=resolution,
+                engine=render_engine,
+                ortho=ortho,
+                show_bones=True,
             )
+        except Exception as exc:
+            console.print(f"[red]Erro ao gerar screenshots de {label}:[/red] {exc}")
             sys.exit(1)
-        reports[label] = extract_json_from_output(r.stdout)
 
     side_by_side_paths = []
     try:
@@ -1105,7 +1034,6 @@ def mesh_qa_cmd(
 
     report = inspector.inspect_with_views(
         out,
-        animator3d_bin=resolve_animator3d_bin(),
         views=views,
         resolution=resolution,
         reference_image=reference_image,
@@ -1157,7 +1085,6 @@ def mesh_render_views_cmd(
 
     rendered = inspector._render_views(
         out,
-        animator3d_bin=resolve_animator3d_bin(),
         views=views,
         resolution=resolution,
         engine=engine,
@@ -1168,8 +1095,8 @@ def mesh_render_views_cmd(
         for p in rendered:
             console.print(f"  {p}")
     else:
-        console.print("[yellow]animator3d não encontrado — sem renderização.[/yellow]")
-        console.print("[dim]Instale Animator3D ou defina ANIMATOR3D_BIN para renderizar vistas.[/dim]")
+        console.print("[yellow]Renderização falhou — sem vistas.[/yellow]")
+        console.print("[dim]Verifique se bpy está instalado.[/dim]")
 
 
 @mesh_group.command("diff")

@@ -1,4 +1,4 @@
-"""Validação declarativa de JSON de inspect (animator3d) contra regras YAML/JSON."""
+"""Validação declarativa de GLB (via inspect nativo) contra regras YAML/JSON."""
 
 from __future__ import annotations
 

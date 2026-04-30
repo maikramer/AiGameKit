@@ -84,9 +84,7 @@ class _MeshData:
                     e = (min(a, b), max(a, b))
                     edge_set.add(e)
                     edge_count[e] = edge_count.get(e, 0) + 1
-        self.edges_unique = (
-            np.array(sorted(edge_set), dtype=np.int64) if edge_set else np.empty((0, 2), dtype=np.int64)
-        )
+        self.edges_unique = np.array(sorted(edge_set), dtype=np.int64) if edge_set else np.empty((0, 2), dtype=np.int64)
 
         # --- Euler number ---
         E = len(edge_set)
@@ -310,7 +308,6 @@ class MeshInspector:
         self,
         output_dir: Path,
         *,
-        animator3d_bin: str | None = None,
         views: str = "front,three_quarter,right,back,top,low_front",
         resolution: int = 512,
         reference_image: Path | None = None,
@@ -322,7 +319,6 @@ class MeshInspector:
         views_dir = output_dir / "views"
         rendered = self._render_views(
             views_dir,
-            animator3d_bin=animator3d_bin,
             views=views,
             resolution=resolution,
             engine=engine,
@@ -604,52 +600,25 @@ class MeshInspector:
         self,
         output_dir: Path,
         *,
-        animator3d_bin: str | None = None,
         views: str = "front,three_quarter,right,back,top,low_front",
         resolution: int = 512,
         engine: str = "workbench",
     ) -> list[str]:
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        abin = animator3d_bin
-        if abin is None:
-            try:
-                from gamedev_lab.debug_tools import resolve_animator3d_bin
+        from gamedev_lab.renderer import render_screenshots
 
-                abin = resolve_animator3d_bin()
-            except Exception:
-                abin = None
-
-        if not abin:
+        try:
+            report = render_screenshots(
+                self.path,
+                output_dir,
+                views=views,
+                resolution=resolution,
+                engine=engine,
+            )
+            return [s["path"] for s in report.get("screenshots", []) if s.get("path")]
+        except Exception:
             return []
-
-        from gamedev_lab.debug_tools import extract_json_from_output, run_cmd
-
-        argv = [
-            abin,
-            "screenshot",
-            str(self.path),
-            "--output-dir",
-            str(output_dir),
-            "--views",
-            views,
-            "--resolution",
-            str(resolution),
-            "--engine",
-            engine,
-        ]
-        r = run_cmd(argv)
-        if r.returncode != 0:
-            return []
-
-        report = extract_json_from_output(r.stdout)
-        screenshots = report.get("screenshots", [])
-        result = []
-        for shot in screenshots:
-            p = shot.get("path", "")
-            if p:
-                result.append(p)
-        return result
 
     # ------------------------------------------------------------------
     # Compare with reference image

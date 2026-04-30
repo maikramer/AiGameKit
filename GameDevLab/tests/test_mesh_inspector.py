@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -264,12 +264,12 @@ class TestInspectIntegration:
 
 
 class TestRenderViews:
-    def test_no_bin_returns_empty(self) -> None:
+    def test_render_failure_returns_empty(self) -> None:
         mesh = _box_mesh()
         path = _save_tmp_mesh(mesh)
         try:
             inspector = MeshInspector(path)
-            with patch("gamedev_lab.debug_tools.resolve_animator3d_bin", return_value=None):
+            with patch("gamedev_lab.renderer.render_screenshots", side_effect=RuntimeError("bpy error")):
                 result = inspector._render_views(Path("/tmp/nonexistent"))
             assert result == []
         finally:
@@ -280,28 +280,21 @@ class TestRenderViews:
         path = _save_tmp_mesh(mesh)
         try:
             inspector = MeshInspector(path)
-            mock_result = MagicMock()
-            mock_result.returncode = 0
-            mock_result.stdout = json.dumps(
-                {
+
+            with patch("gamedev_lab.renderer.render_screenshots") as mock_render:
+                mock_render.return_value = {
                     "screenshots": [
                         {"view": "front", "path": "/tmp/views/front.png"},
                         {"view": "back", "path": "/tmp/views/back.png"},
                     ]
                 }
-            )
-
-            with (
-                patch("gamedev_lab.debug_tools.resolve_animator3d_bin", return_value="animator3d"),
-                patch("gamedev_lab.debug_tools.run_cmd", return_value=mock_result) as mock_run,
-            ):
                 result = inspector._render_views(
                     Path("/tmp/views"),
                     views="front,back",
                 )
                 assert len(result) == 2
                 assert "/tmp/views/front.png" in result
-                mock_run.assert_called_once()
+                mock_render.assert_called_once()
         finally:
             path.unlink(missing_ok=True)
 

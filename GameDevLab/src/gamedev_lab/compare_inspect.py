@@ -1,4 +1,4 @@
-"""Diff estruturado entre dois JSONs de inspect (animator3d)."""
+"""Diff estruturado entre dois JSONs de inspect GLB."""
 
 from __future__ import annotations
 
