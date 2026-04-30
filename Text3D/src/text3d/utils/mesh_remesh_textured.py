@@ -853,13 +853,22 @@ def remesh_textured_glb(
     n_final = len(obj.data.polygons)
     bpy.ops.object.select_all(action="DESELECT")
     obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
+
+    # Also select armature if present (preserve rig + animations)
+    arm_objs = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
+    for a in arm_objs:
+        a.select_set(True)
+    has_armature = bool(arm_objs)
+
+    bpy.context.view_layer.objects.active = arm_objs[0] if has_armature else obj
     bpy.ops.export_scene.gltf(
         filepath=str(path_out),
         use_selection=True,
         export_apply=True,
         export_normals=True,
         export_texcoords=True,
+        export_animations=has_armature,
+        export_skins=has_armature,
         export_materials="EXPORT",
         export_image_format="AUTO",
     )

@@ -27,6 +27,7 @@ class ManifestRow:
     generate_parts: bool = False
     generate_lod: bool = False
     generate_collision: bool = False
+    lod_levels: int = 3
     # Asset category (e.g. humanoid, chest, weapon) — drives prompt hints and generation params
     category: str = ""
     # Part3D por linha: sobrepõe part3d.{steps,octree_resolution,segment_only} do perfil
@@ -81,6 +82,7 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 generate_parts="parts" in pipeline_items,
                 generate_lod="lod" in pipeline_items,
                 generate_collision="collision" in pipeline_items,
+                lod_levels=int(entry.get("lod_levels", 3)),
                 image_source=entry.get("image_source"),
                 category=(entry.get("category") or "").lower(),
                 part3d_steps=part3d_cfg.get("steps"),
