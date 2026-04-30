@@ -388,7 +388,15 @@ def generate_lod_textured_glb_triplet(
     clear_scene()
     bpy.ops.import_scene.gltf(filepath=str(painted))
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
-    n = len(max(mesh_objs, key=lambda o: len(o.data.polygons)).data.polygons)
+    model = max(mesh_objs, key=lambda o: len(o.data.polygons))
+    n = len(model.data.polygons)
+
+    tex_base = texture_size_lod0
+    if model.data.materials and model.data.materials[0].use_nodes:
+        for node in model.data.materials[0].node_tree.nodes:
+            if node.type == "TEX_IMAGE" and node.image:
+                tex_base = max(node.image.size[0], node.image.size[1])
+                break
     clear_scene()
 
     if target_faces and target_faces > 0:
@@ -404,15 +412,15 @@ def generate_lod_textured_glb_triplet(
 
     lod0_path = output_dir / f"{basename}_lod0.glb"
     if lod0_target < n:
-        remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=texture_size_lod0)
+        remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex_base)
     else:
         import shutil
         shutil.copy2(painted, lod0_path)
     out_paths.append(lod0_path)
 
     for level, target, tex_size in (
-        (1, lod1_target, max(256, texture_size_lod0 // 2)),
-        (2, lod2_target, max(128, texture_size_lod0 // 4)),
+        (1, lod1_target, max(64, tex_base // 2)),
+        (2, lod2_target, max(32, tex_base // 4)),
     ):
         path = output_dir / f"{basename}_lod{level}.glb"
         remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)
