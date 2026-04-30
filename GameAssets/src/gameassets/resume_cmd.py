@@ -147,8 +147,9 @@ def resume_cmd(
     p3: Paint3DProfile | None = profile.paint3d
 
     want_texture = bool(profile.paint3d)
-    has_rigging_profile = profile.rigging3d is not None
-    want_rig = has_rigging_profile or any(r.generate_rig for r in rows if r.generate_3d)
+    _rig_prof = False
+    _parts_prof = False
+    want_rig = any(r.generate_rig for r in rows if r.generate_3d)
     want_animate = want_rig and (
         profile.animator3d is not None or any(r.generate_animate for r in rows if r.generate_3d)
     )
@@ -204,8 +205,8 @@ def resume_cmd(
 
         rig_out = _rigging3d_output_path(mesh_final, rig_sfx)
         anim_out = _animator3d_output_path(rig_out)
-        row_wants_rig = _row_wants_rig(row, has_rigging_profile)
-        row_wants_animate = _row_wants_animate(row, want_rig, has_rigging_profile)
+        row_wants_rig = _row_wants_rig(row, _rig_prof)
+        row_wants_animate = _row_wants_animate(row, want_rig, _rig_prof)
 
         state = _classify_row_state(
             img_final=img_final,
@@ -734,7 +735,7 @@ def resume_cmd(
                         child_env,
                         rigging3d_bin,
                         want_rig,
-                        has_rigging_profile=has_rigging_profile,
+                        _rig_prof=_rig_prof,
                         gpu_ids=gpu_ids,
                     )
                     if rig_failed:
@@ -772,7 +773,7 @@ def resume_cmd(
                         child_env,
                         want_animate,
                         want_rig,
-                        has_rigging_profile=has_rigging_profile,
+                        _rig_prof=_rig_prof,
                         gpu_ids=gpu_ids,
                     )
                     if anim_failed:
@@ -1196,7 +1197,7 @@ def resume_cmd(
                         child_env,
                         rigging3d_bin,
                         want_rig,
-                        has_rigging_profile=has_rigging_profile,
+                        _rig_prof=_rig_prof,
                         gpu_ids=gpu_ids,
                     )
                     if rig_failed:
@@ -1238,7 +1239,7 @@ def resume_cmd(
                         child_env,
                         want_animate,
                         want_rig,
-                        has_rigging_profile=has_rigging_profile,
+                        _rig_prof=_rig_prof,
                         gpu_ids=gpu_ids,
                     )
                     if anim_failed:

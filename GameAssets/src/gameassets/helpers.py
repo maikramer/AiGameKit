@@ -256,23 +256,23 @@ def _timing_append(rec: dict[str, Any], key: str, seconds: float) -> None:
 
 
 def _row_wants_rig(row: ManifestRow, has_rigging_profile: bool) -> bool:
-    """Auto-detect rig eligibility: explicit column OR character kind + profile block."""
-    return bool(row.generate_rig or (has_rigging_profile and row.kind == "character"))
+    """Rig eligibility: explicit column only. Manifest controls what is generated."""
+    return bool(row.generate_rig)
 
 
 def _row_wants_parts(row: ManifestRow, has_parts_profile: bool) -> bool:
-    """Auto-detect parts eligibility: explicit column OR profile block + 3D."""
-    return bool(row.generate_parts or (has_parts_profile and row.generate_3d))
+    """Parts eligibility: explicit column only. Manifest controls what is generated."""
+    return bool(row.generate_parts)
 
 
 def _row_wants_audio(row: ManifestRow, has_audio_profile: bool) -> bool:
-    """Auto-detect audio eligibility: explicit column OR profile block."""
-    return bool(row.generate_audio or has_audio_profile)
+    """Audio eligibility: explicit column only. Manifest controls what is generated."""
+    return bool(row.generate_audio)
 
 
 def _row_wants_animate(row: ManifestRow, with_rig: bool, has_rigging_profile: bool) -> bool:
-    """Linha elegível para game-pack quando animate está activo."""
-    return bool(row.generate_animate or (with_rig and _row_wants_rig(row, has_rigging_profile)))
+    """Animation eligibility: explicit column only. Manifest controls what is generated."""
+    return bool(row.generate_animate)
 
 
 def _resolve_manifest_path(raw: str | Path) -> Path:

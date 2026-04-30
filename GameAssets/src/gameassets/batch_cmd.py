@@ -266,18 +266,16 @@ def batch_cmd(
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
     manifest_path = _resolve_manifest_path(manifest_path)
 
-    has_rigging_profile = profile.rigging3d is not None
-    has_parts_profile = profile.part3d is not None
-    has_audio_profile = profile.text2sound is not None
-
-    with_3d = not no_3d and any(r.generate_3d for r in rows)
-    with_rig = not no_rig and with_3d and (any(r.generate_rig for r in rows) or has_rigging_profile)
-    with_parts = not no_parts and with_3d and (any(r.generate_parts for r in rows) or has_parts_profile)
-    with_animate = not no_animate and with_rig
-    has_lod_profile = profile.lod is not None
-    with_lod = not no_lod and with_3d and (any(r.generate_lod for r in rows) or has_lod_profile)
-    has_collision_profile = profile.collision is not None
-    with_collision = not no_collision and with_3d and (any(r.generate_collision for r in rows) or has_collision_profile)
+    with_rig = not no_rig and with_3d and any(r.generate_rig for r in rows)
+    with_parts = not no_parts and with_3d and any(r.generate_parts for r in rows)
+    with_animate = (
+        not no_animate and with_rig and any(r.generate_animate for r in rows)
+    )
+    with_lod = not no_lod and with_3d and any(r.generate_lod for r in rows)
+    with_collision = not no_collision and with_3d and any(r.generate_collision for r in rows)
+    _rig_prof = False
+    _parts_prof = False
+    _audio_prof = False
 
     if low_vram:
         if profile.text2d is None:
@@ -352,15 +350,15 @@ def batch_cmd(
                 raise click.ClickException("Perfil com paint3d requer paint3d no PATH ou PAINT3D_BIN.") from e
 
     rigging3d_bin: str | None = None
-    if with_rig and any(_row_wants_rig(r, has_rigging_profile) for r in rows):
+    if with_rig and any(_row_wants_rig(r, _rig_prof) for r in rows):
         try:
             rigging3d_bin = resolve_binary("RIGGING3D_BIN", "rigging3d")
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
     animator3d_bin: str | None = None
-    if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows)) or (
-        with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows)
+    if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig, _rig_prof) for r in rows)) or (
+        with_parts and any(_row_wants_parts(r, _parts_prof) for r in rows)
     ):
         animator3d_bin = _resolve_animator3d_bin()
         if not animator3d_bin and with_animate:
@@ -369,13 +367,13 @@ def batch_cmd(
             )
 
     part3d_bin: str | None = None
-    if with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows):
+    if with_parts and any(_row_wants_parts(r, _parts_prof) for r in rows):
         try:
             part3d_bin = resolve_binary("PART3D_BIN", "part3d")
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
-    any_audio_row = any(_row_wants_audio(r, has_audio_profile) for r in rows)
+    any_audio_row = any(_row_wants_audio(r, _audio_prof) for r in rows)
     text2sound_bin: str | None = None
     if any_audio_row and not skip_audio:
         try:
@@ -539,7 +537,7 @@ def batch_cmd(
                     batch_argv.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
                 _dry_run_emit(dry_plan, phase="text2d generate-batch", row_id="(batch)", argv=batch_argv)
             for row in rows:
-                if not skip_audio and text2sound_bin and _row_wants_audio(row, has_audio_profile):
+                if not skip_audio and text2sound_bin and _row_wants_audio(row, _audio_prof):
                     ts_line = _text2sound_profile_effective(profile)
                     audio_final = _audio_path_for_row_manifest(profile, manifest_dir, row)
                     prompt_a = build_audio_prompt(profile, preset, row)
@@ -559,13 +557,13 @@ def batch_cmd(
                     _dry_run_emit(dry_plan, phase=p1_title + " text2sound", row_id=row.id, argv=argv_au)
         else:
             _dry_run_header(dry_plan, "--- Text2D omitido (--skip-text2d) ---")
-            if not skip_audio and text2sound_bin and any(_row_wants_audio(r, has_audio_profile) for r in rows):
+            if not skip_audio and text2sound_bin and any(_row_wants_audio(r, _audio_prof) for r in rows):
                 _dry_run_header(
                     dry_plan,
                     "--- Text2Sound (generate_audio; PNG em output_dir) ---",
                 )
                 for row in rows:
-                    if not _row_wants_audio(row, has_audio_profile):
+                    if not _row_wants_audio(row, _audio_prof):
                         continue
                     ts_line = _text2sound_profile_effective(profile)
                     audio_final = _audio_path_for_row_manifest(profile, manifest_dir, row)
@@ -690,13 +688,13 @@ def batch_cmd(
                         row_id=row.id,
                         argv=t3d_args,
                     )
-        if with_parts and part3d_bin and any(r.generate_3d and _row_wants_parts(r, has_parts_profile) for r in rows):
+        if with_parts and part3d_bin and any(r.generate_3d and _row_wants_parts(r, _parts_prof) for r in rows):
             _dry_run_header(
                 dry_plan,
                 "--- Part3D (após GLB Text3D; generate_parts=true ou part3d profile) ---",
             )
             for row in rows:
-                if not row.generate_3d or not _row_wants_parts(row, has_parts_profile):
+                if not row.generate_3d or not _row_wants_parts(row, _parts_prof):
                     continue
                 _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                 p3 = _part3d_profile_effective(profile, row)
@@ -704,13 +702,13 @@ def batch_cmd(
                 seed = _seed_for_row(profile, f"{row.id}:part3d")
                 pa = _part3d_decompose_argv(part3d_bin, mesh_path, out_p, out_s, p3, seed, gpu_ids=gpu_ids)
                 _dry_run_emit(dry_plan, phase="part3d", row_id=row.id, argv=pa)
-        if with_rig and rigging3d_bin and any(r.generate_3d and _row_wants_rig(r, has_rigging_profile) for r in rows):
+        if with_rig and rigging3d_bin and any(r.generate_3d and _row_wants_rig(r, _rig_prof) for r in rows):
             _dry_run_header(
                 dry_plan,
                 "--- Rigging3D (entrada: *_parts.glb se parts+rig; senão GLB base) ---",
             )
             for row in rows:
-                if not row.generate_3d or not _row_wants_rig(row, has_rigging_profile):
+                if not row.generate_3d or not _row_wants_rig(row, _rig_prof):
                     continue
                 _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                 seed = _seed_for_row(profile, row.id)
@@ -718,7 +716,7 @@ def batch_cmd(
                 sfx = rg.output_suffix if rg else "_rigged"
                 rig_in = mesh_path
                 p3_row = _part3d_profile_effective(profile, row)
-                if with_parts and _row_wants_parts(row, has_parts_profile) and not p3_row.segment_only:
+                if with_parts and _row_wants_parts(row, _parts_prof) and not p3_row.segment_only:
                     out_p, _ = _part3d_output_paths(mesh_path, p3_row)
                     rig_in = out_p
                 rig_out = _rigging3d_output_path(rig_in, sfx)
@@ -736,21 +734,21 @@ def batch_cmd(
         if (
             with_animate
             and animator3d_bin
-            and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows)
+            and any(r.generate_3d and _row_wants_animate(r, with_rig, _rig_prof) for r in rows)
         ):
             _dry_run_header(
                 dry_plan,
                 "--- Animator3D game-pack (após rig; auto-detectado de manifest + game.yaml) ---",
             )
             for row in rows:
-                if not row.generate_3d or not _row_wants_animate(row, with_rig, has_rigging_profile):
+                if not row.generate_3d or not _row_wants_animate(row, with_rig, _rig_prof):
                     continue
                 _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                 rg = profile.rigging3d
                 sfx = rg.output_suffix if rg else "_rigged"
                 rig_in = mesh_path
                 p3_row = _part3d_profile_effective(profile, row)
-                if with_parts and _row_wants_parts(row, has_parts_profile) and not p3_row.segment_only:
+                if with_parts and _row_wants_parts(row, _parts_prof) and not p3_row.segment_only:
                     out_p, _ = _part3d_output_paths(mesh_path, p3_row)
                     rig_in = out_p
                 rig_out = _rigging3d_output_path(rig_in, sfx)
@@ -880,8 +878,8 @@ def batch_cmd(
                                 _ci_mesh, (profile.rigging3d.output_suffix if profile.rigging3d else None) or "_rigged"
                             )
                             _ci_anim = _animator3d_output_path(_ci_rig)
-                            _wants_rig = _row_wants_rig(_cr, has_rigging_profile)
-                            _wants_an = _row_wants_animate(_cr, with_rig, has_rigging_profile)
+                            _wants_rig = _row_wants_rig(_cr, _rig_prof)
+                            _wants_an = _row_wants_animate(_cr, with_rig, _rig_prof)
                             row_states_d[_ci] = _classify_row_state(
                                 img_final=_ci_img,
                                 mesh_final=_ci_mesh,
@@ -987,7 +985,7 @@ def batch_cmd(
                             results_d.append(rec_d)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_d.append(idx)
@@ -1011,7 +1009,7 @@ def batch_cmd(
                             results_d.append(rec_d)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_d.append(idx)
@@ -1024,7 +1022,7 @@ def batch_cmd(
                         if not row.generate_3d:
                             results_d.append(rec_d)
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if not defer_audio:
                                 append_log(rec_d)
@@ -1059,7 +1057,7 @@ def batch_cmd(
                             results_d.append(rec_d)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_d.append(idx)
@@ -1171,7 +1169,7 @@ def batch_cmd(
                             results_d.append(rec_d)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_d.append(idx)
@@ -1183,11 +1181,11 @@ def batch_cmd(
                             dash.advance_phase()
 
                     # --- Phase 1b: Text2Sound ---
-                    if not skip_audio and text2sound_bin and any(_row_wants_audio(r, has_audio_profile) for r in rows):
+                    if not skip_audio and text2sound_bin and any(_row_wants_audio(r, _audio_prof) for r in rows):
                         au_indices_d = [
                             i
                             for i, r in enumerate(rows)
-                            if _row_wants_audio(r, has_audio_profile) and results_d[i]["status"] == "ok"
+                            if _row_wants_audio(r, _audio_prof) and results_d[i]["status"] == "ok"
                         ]
                         if au_indices_d:
                             dash.set_phase("Text2Sound", len(au_indices_d))
@@ -1228,7 +1226,7 @@ def batch_cmd(
 
                     for idx in range(len(rows)):
                         row = rows[idx]
-                        if not _row_wants_audio(row, has_audio_profile) or skip_audio or not text2sound_bin:
+                        if not _row_wants_audio(row, _audio_prof) or skip_audio or not text2sound_bin:
                             continue
                         if results_d[idx]["status"] != "ok":
                             continue
@@ -1259,8 +1257,8 @@ def batch_cmd(
                                 with_rig,
                                 with_animate,
                                 animator3d_bin=animator3d_bin,
-                                has_rigging_profile=has_rigging_profile,
-                                has_parts_profile=has_parts_profile,
+                                _rig_prof=_rig_prof,
+                                _parts_prof=_parts_prof,
                                 gpu_ids=gpu_ids,
                                 with_lod=with_lod,
                                 with_collision=with_collision,
@@ -1691,8 +1689,8 @@ def batch_cmd(
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
-                                        has_rigging_profile=has_rigging_profile,
-                                        has_parts_profile=has_parts_profile,
+                                        _rig_prof=_rig_prof,
+                                        _parts_prof=_parts_prof,
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
@@ -1713,7 +1711,7 @@ def batch_cmd(
                             stages.append("Texture2D")
                         else:
                             stages.append("Text2D")
-                    if any_audio_row and not skip_audio and _row_wants_audio(row, has_audio_profile):
+                    if any_audio_row and not skip_audio and _row_wants_audio(row, _audio_prof):
                         stages.append("Text2Sound")
                     if with_3d and row.generate_3d:
                         if profile.paint3d:
@@ -1722,11 +1720,11 @@ def batch_cmd(
                             stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
                         else:
                             stages.append("Text3D")
-                        if with_parts and _row_wants_parts(row, has_parts_profile):
+                        if with_parts and _row_wants_parts(row, _parts_prof):
                             stages.append("Part3D")
-                        if with_rig and _row_wants_rig(row, has_rigging_profile):
+                        if with_rig and _row_wants_rig(row, _rig_prof):
                             stages.append("Rigging3D")
-                        if with_animate and _row_wants_animate(row, with_rig, has_rigging_profile):
+                        if with_animate and _row_wants_animate(row, with_rig, _rig_prof):
                             stages.append("Animator3D")
                     asset_pipelines[row.id] = stages
 
@@ -1777,9 +1775,9 @@ def batch_cmd(
                             rig_out=_ci_rig_out,
                             anim_out=_ci_anim_out,
                             want_texture=want_texture,
-                            wants_rig=_row_wants_rig(_crow, has_rigging_profile),
+                            wants_rig=_row_wants_rig(_crow, _rig_prof),
                             wants_animate=_row_wants_animate(
-                                _crow, _row_wants_rig(_crow, has_rigging_profile), has_rigging_profile
+                                _crow, _row_wants_rig(_crow, _rig_prof), _rig_prof
                             ),
                         )
                         if not force and _ci_state == _ROW_DONE:
@@ -1866,7 +1864,7 @@ def batch_cmd(
                             results.append(rec)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_indices.append(idx)
@@ -1895,7 +1893,7 @@ def batch_cmd(
                             results.append(rec)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_indices.append(idx)
@@ -1909,7 +1907,7 @@ def batch_cmd(
                             progress.update(task1, description=f"[cyan]{row.id}[/cyan] · skip 2D")
                             results.append(rec)
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if not defer_audio:
                                 append_log(rec)
@@ -1947,7 +1945,7 @@ def batch_cmd(
                             results.append(rec)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_indices.append(idx)
@@ -2067,7 +2065,7 @@ def batch_cmd(
                             results.append(rec)
                             do_3d = with_3d and row.generate_3d
                             defer_audio = (
-                                _row_wants_audio(row, has_audio_profile) and not skip_audio and bool(text2sound_bin)
+                                _row_wants_audio(row, _audio_prof) and not skip_audio and bool(text2sound_bin)
                             )
                             if do_3d and text3d_bin:
                                 pending_3d_indices.append(idx)
@@ -2080,11 +2078,11 @@ def batch_cmd(
 
                     progress.update(task1, description=f"[cyan]Fase 1 concluída[/cyan] ({len(rows)} itens)")
 
-                    if not skip_audio and text2sound_bin and any(_row_wants_audio(r, has_audio_profile) for r in rows):
+                    if not skip_audio and text2sound_bin and any(_row_wants_audio(r, _audio_prof) for r in rows):
                         au_indices = [
                             i
                             for i, r in enumerate(rows)
-                            if _row_wants_audio(r, has_audio_profile) and results[i]["status"] == "ok"
+                            if _row_wants_audio(r, _audio_prof) and results[i]["status"] == "ok"
                         ]
                         if au_indices:
                             task_au = progress.add_task(
@@ -2130,7 +2128,7 @@ def batch_cmd(
                                 progress.advance(task_au)
 
                     for idx, row in enumerate(rows):
-                        if not _row_wants_audio(row, has_audio_profile) or skip_audio or not text2sound_bin:
+                        if not _row_wants_audio(row, _audio_prof) or skip_audio or not text2sound_bin:
                             continue
                         if results[idx]["status"] != "ok":
                             continue
@@ -2172,8 +2170,8 @@ def batch_cmd(
                                 with_rig,
                                 with_animate,
                                 animator3d_bin=animator3d_bin,
-                                has_rigging_profile=has_rigging_profile,
-                                has_parts_profile=has_parts_profile,
+                                _rig_prof=_rig_prof,
+                                _parts_prof=_parts_prof,
                                 gpu_ids=gpu_ids,
                                 with_lod=with_lod,
                                 with_collision=with_collision,
@@ -2602,8 +2600,8 @@ def batch_cmd(
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
-                                        has_rigging_profile=has_rigging_profile,
-                                        has_parts_profile=has_parts_profile,
+                                        _rig_prof=_rig_prof,
+                                        _parts_prof=_parts_prof,
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
@@ -2660,8 +2658,8 @@ def batch_cmd(
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
-                                        has_rigging_profile=has_rigging_profile,
-                                        has_parts_profile=has_parts_profile,
+                                        _rig_prof=_rig_prof,
+                                        _parts_prof=_parts_prof,
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
