@@ -410,7 +410,7 @@ def _transfer_texture_direct(
     remeshed_faces: np.ndarray,
     new_uvs: np.ndarray,
     texture_size: int,
-    padding: int = 4,
+    padding: int = 16,
 ) -> np.ndarray:
     """Transferência directa pixel-a-pixel da textura fonte para o novo atlas UV.
 
@@ -575,14 +575,6 @@ def _transfer_texture_direct(
     if padding > 0:
         log.info("Dilatando fronteiras UV (%d pixels)...", padding)
         tex = _dilate_texture(tex, filled, padding)
-
-    # Fill remaining black pixels with dominant color
-    unfilled = ~filled
-    if unfilled.sum() > 0:
-        filled_mask = filled
-        if filled_mask.sum() > 0:
-            mean_color = tex[filled_mask].mean(axis=0).astype(np.uint8)
-            tex[unfilled] = mean_color
 
     return tex
 
@@ -800,15 +792,13 @@ def remesh_textured_glb(
     target_faces: int,
     texture_size: int = 2048,
 ) -> Path:
-    """Carrega GLB texturado, aplica voxel remesh e transfere UVs da mesh original.
+    """Simplifica GLB texturado preservando UVs e textura.
 
-    Pipeline (bpy native):
-    1. Load GLB, duplicate mesh object
-    2. Voxel remesh the duplicate
-    3. Post-remesh repair (close holes, fix normals)
-    4. Transfer UVs from original → remeshed via Data Transfer
-    5. Downscale texture
-    6. Export
+    Pipeline:
+    1. Merge by distance (0.0001) — fecha micro-rachaduras
+    2. Decimate geometry (ratio = target_faces / current_faces)
+    3. Downscale texture
+    4. Export
 
     Args:
         path_in: Caminho do GLB de entrada.
@@ -830,45 +820,40 @@ def remesh_textured_glb(
     mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not mesh_objs:
         raise ValueError(f"Mesh vazia: {path_in}")
-    original = max(mesh_objs, key=lambda o: len(o.data.polygons))
-    n = len(original.data.polygons)
+    obj = max(mesh_objs, key=lambda o: len(o.data.polygons))
+    n = len(obj.data.polygons)
     if n < 4:
         raise ValueError(f"Mesh com poucas faces ({n}); remesh não aplicável.")
     log.info("Original: %d faces", n)
 
-    bpy.ops.object.select_all(action="DESELECT")
-    original.select_set(True)
-    bpy.context.view_layer.objects.active = original
-    bpy.ops.object.duplicate()
-    remeshed = bpy.context.active_object
-    _bpy_remesh(remeshed, target_faces)
-    _bpy_post_remesh_repair(remeshed)
-    log.info("Remeshed: %d faces", len(remeshed.data.polygons))
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
 
-    if not remeshed.data.uv_layers.active:
-        remeshed.data.uv_layers.new(name="UVMap")
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    bpy.ops.object.mode_set(mode="OBJECT")
+    log.info("Após merge by distance: %d faces", len(obj.data.polygons))
 
-    bpy.ops.object.select_all(action="DESELECT")
-    original.select_set(True)
-    remeshed.select_set(True)
-    bpy.context.view_layer.objects.active = remeshed
-    bpy.ops.object.data_transfer(data_type="UV", use_create=True, loop_mapping="POLYINTERP_NEAREST")
-    log.info("UV transfer complete")
+    ratio = target_faces / len(obj.data.polygons)
+    mod = obj.modifiers.new("Decimate", "DECIMATE")
+    mod.decimate_type = "COLLAPSE"
+    mod.ratio = ratio
+    bpy.ops.object.modifier_apply(modifier=mod.name)
+    log.info("Após decimate: %d faces (ratio=%.4f)", len(obj.data.polygons), ratio)
 
-    if not remeshed.data.materials and original.data.materials:
-        remeshed.data.materials.append(original.data.materials[0])
-
-    if texture_size and remeshed.data.materials and remeshed.data.materials[0].use_nodes:
-        for node in remeshed.data.materials[0].node_tree.nodes:
+    if texture_size and obj.data.materials and obj.data.materials[0].use_nodes:
+        for node in obj.data.materials[0].node_tree.nodes:
             if node.type == "TEX_IMAGE" and node.image:
                 w, h = node.image.size[0], node.image.size[1]
                 if max(w, h) != texture_size:
                     node.image.scale(texture_size, texture_size)
                 break
 
-    bpy.data.objects.remove(original, do_unlink=True)
-    bpy.context.view_layer.objects.active = remeshed
-    remeshed.select_set(True)
+    n_final = len(obj.data.polygons)
+    bpy.ops.object.select_all(action="DESELECT")
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
     bpy.ops.export_scene.gltf(
         filepath=str(path_out),
         use_selection=True,
@@ -880,5 +865,5 @@ def remesh_textured_glb(
     )
 
     clear_scene()
-    log.info("Resultado: %s", path_out)
+    log.info("Resultado: %s (%d faces)", path_out, n_final)
     return path_out
