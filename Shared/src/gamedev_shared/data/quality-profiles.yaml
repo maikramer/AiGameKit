@@ -47,6 +47,14 @@ profiles:
     simplify:
       face_ratio: 0.25
       texture_size: 1024
+    rigging3d:
+      smooth_iterations: 1
+      groups_per_vertex: 4
+      low_vram: true
+    terrain3d:
+      size: 512
+      world_size: 256.0
+      coarse_window: 2
 
   low:
     label: "Low (~1min, basic quality)"
@@ -89,6 +97,13 @@ profiles:
     simplify:
       face_ratio: 0.5
       texture_size: 1024
+    rigging3d:
+      smooth_iterations: 2
+      groups_per_vertex: 4
+    terrain3d:
+      size: 1024
+      world_size: 256.0
+      coarse_window: 3
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -131,6 +146,13 @@ profiles:
     simplify:
       face_ratio: 1.0
       texture_size: 2048
+    rigging3d:
+      smooth_iterations: 3
+      groups_per_vertex: 8
+    terrain3d:
+      size: 2048
+      world_size: 512.0
+      coarse_window: 4
 
   high:
     label: "High (~5min, high quality)"
@@ -173,6 +195,13 @@ profiles:
     simplify:
       face_ratio: 2.0
       texture_size: 2048
+    rigging3d:
+      smooth_iterations: 5
+      groups_per_vertex: 12
+    terrain3d:
+      size: 4096
+      world_size: 512.0
+      coarse_window: 6
 
   highest:
     label: "Highest (~10min+, maximum quality)"
@@ -215,3 +244,10 @@ profiles:
     simplify:
       face_ratio: 0.0
       texture_size: 4096
+    rigging3d:
+      smooth_iterations: 8
+      groups_per_vertex: 16
+    terrain3d:
+      size: 4096
+      world_size: 1024.0
+      coarse_window: 8

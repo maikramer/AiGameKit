@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import sys
 
+from gamedev_shared.quality import VALID_QUALITIES
+
 from rich import box
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -43,6 +45,13 @@ def cli() -> None:
     help="World extent in meters (X/Z)",
 )
 @click.option("--max-height", type=float, default=50.0, show_default=True, help="Max terrain height in meters")
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier — controls size, world-size, coarse-window via QualityEngine.",
+)
 @click.option("--device", default=None, help="Device (cuda/cpu, auto-detect by default)")
 @click.option(
     "--dtype",
@@ -68,6 +77,7 @@ def generate_cmd(
     size: int,
     world_size: float,
     max_height: float,
+    quality: str,
     device: str | None,
     dtype: str,
     cache_size: str,
@@ -75,6 +85,30 @@ def generate_cmd(
     quiet: bool,
 ) -> None:
     """Generate an AI terrain heightmap via diffusion."""
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    from click.core import ParameterSource
+
+    ctx = click.get_current_context()
+
+    _user_set_size = ctx.get_parameter_source("size") != ParameterSource.DEFAULT
+    _user_set_world_size = ctx.get_parameter_source("world_size") != ParameterSource.DEFAULT
+    _user_set_coarse_window = ctx.get_parameter_source("coarse_window") != ParameterSource.DEFAULT
+
+    try:
+        from gamedev_shared.quality import QualityEngine
+
+        _qengine = QualityEngine()
+        _qresolved = _qengine.resolve("terrain3d", quality=quality)
+        if not _user_set_size and "size" in _qresolved.params:
+            size = _qresolved.params["size"]
+        if not _user_set_world_size and "world_size" in _qresolved.params:
+            world_size = _qresolved.params["world_size"]
+        if not _user_set_coarse_window and "coarse_window" in _qresolved.params:
+            coarse_window = _qresolved.params["coarse_window"]
+    except Exception:
+        pass  # QualityEngine unavailable — continue with CLI defaults
+
     if seed is None:
         import numpy as np
 

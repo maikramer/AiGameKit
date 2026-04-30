@@ -18,6 +18,7 @@ from rich.console import Console
 
 from . import __version__
 from .cli_rich import click
+from gamedev_shared.quality import VALID_QUALITIES
 
 console = Console()
 
@@ -484,6 +485,13 @@ print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
 @click.option(
     "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
 @click.pass_context
 def pipeline_cmd(
     ctx: click.Context,
@@ -497,9 +505,11 @@ def pipeline_cmd(
     no_prep: bool,
     low_vram: bool,
     draco: bool,
+    quality: str,
 ) -> None:
     """Encadeia skeleton → skin → merge até um GLB rigado."""
     from gamedev_shared.gpu import warn_if_vram_occupied
+    from gamedev_shared.quality import QualityEngine
 
     root, py = _ctx_root_py(ctx)
     gpu_ids = _ctx_gpu_ids(ctx)
@@ -507,6 +517,21 @@ def pipeline_cmd(
     do_profile = _ctx_profiler(ctx)
 
     warn_if_vram_occupied()
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_smooth = ctx.get_parameter_source("smooth_iterations") not in (_src.DEFAULT,)
+    _user_set_groups = ctx.get_parameter_source("groups_per_vertex") not in (_src.DEFAULT,)
+    _user_set_low_vram = ctx.get_parameter_source("low_vram") not in (_src.DEFAULT,)
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("rigging3d", quality=quality)
+    if not _user_set_smooth and "smooth_iterations" in _qresolved.params:
+        smooth_iterations = _qresolved.params["smooth_iterations"]
+    if not _user_set_groups and "groups_per_vertex" in _qresolved.params:
+        groups_per_vertex = _qresolved.params["groups_per_vertex"]
+    if not _user_set_low_vram and "low_vram" in _qresolved.params:
+        low_vram = bool(_qresolved.params["low_vram"])
 
     item_id = mesh.stem
     t0 = time.monotonic()
