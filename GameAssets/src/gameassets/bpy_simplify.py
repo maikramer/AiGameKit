@@ -1,4 +1,4 @@
-"""Mesh simplification via bpy (Blender Python): decimate, merge-by-distance, smooth.
+"""Mesh simplification via bpy (Blender Python): decimate + smooth.
 
 Requires ``bpy`` (Blender as Python module) available in the running venv.
 
@@ -7,14 +7,14 @@ Usage from subprocess (GameAssets pipeline)::
     # Decimate to target face count (default 16 000)
     python -m gameassets.bpy_simplify \\
         goblin_rigged_animated.glb -o goblin_final.glb \\
-        --target-faces 16000 --merge-dist 0.0001 --smooth-factor 0.5
+        --target-faces 16000 --smooth-factor 0.5
 
     # Decimate by ratio (0.0-1.0)
     python -m gameassets.bpy_simplify \\
         goblin_rigged_animated.glb -o goblin_lod1.glb \\
         --ratio 0.5
 
-    # Merge+smooth only (no decimation)
+    # Smooth only (no decimation)
     python -m gameassets.bpy_simplify \\
         goblin_rigged_animated.glb -o goblin_clean.glb \\
         --clean-only
@@ -32,7 +32,6 @@ from __future__ import annotations
 import contextlib
 from pathlib import Path
 
-MERGE_DIST = 0.0001
 SMOOTH_FACTOR = 0.2
 SMOOTH_REPEAT = 1
 
@@ -58,32 +57,6 @@ def _load_glb(input_path: Path) -> tuple:
     return mesh_obj, arm_objs
 
 
-def _weld_scene_meshes() -> None:
-    import bpy
-
-    for obj in bpy.data.objects:
-        if obj.type != "MESH":
-            continue
-        nv = len(obj.data.vertices)
-        if nv > 150_000:
-            dist = 0.003
-        elif nv > 100_000:
-            dist = 0.005
-        elif nv > 50_000:
-            dist = 0.008
-        else:
-            dist = 0.01
-
-        bpy.context.view_layer.objects.active = obj
-        bpy.ops.object.mode_set(mode="EDIT")
-        bpy.ops.mesh.select_all(action="SELECT")
-        obj.data.calc_normals_split()
-        bpy.ops.mesh.remove_doubles(threshold=dist, use_sharp_edge_from_normals=True)
-        bpy.ops.mesh.customdata_custom_splitnormals_clear()
-        bpy.ops.mesh.faces_shade_smooth()
-        bpy.ops.object.mode_set(mode="OBJECT")
-
-
 def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
     import bpy
 
@@ -92,8 +65,6 @@ def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
         o.select_set(True)
     bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else mesh_obj
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with contextlib.suppress(Exception):
-        _weld_scene_meshes()
     bpy.ops.export_scene.gltf(
         filepath=str(output_path),
         export_format="GLB",
@@ -103,19 +74,6 @@ def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
         export_all_influences=False,
         export_image_format="AUTO",
     )
-
-
-def merge_by_distance(obj, threshold: float = MERGE_DIST) -> int:
-    """Remove duplicated vertices closer than *threshold*. Returns vertices removed."""
-    import bpy
-
-    before = len(obj.data.vertices)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=True)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return before - len(obj.data.vertices)
 
 
 def decimate_collapse(obj, target_faces: int) -> int:
@@ -146,22 +104,13 @@ def smooth_mesh(obj, factor: float = SMOOTH_FACTOR, repeat: int = SMOOTH_REPEAT)
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def post_simplify_clean(obj, merge_dist: float = MERGE_DIST, smooth_factor: float = SMOOTH_FACTOR) -> None:
-    """Merge-by-distance + laplacian smooth. Call after ANY simplification step."""
-    removed = merge_by_distance(obj, threshold=merge_dist)
-    if smooth_factor > 0:
-        smooth_mesh(obj, factor=smooth_factor, repeat=SMOOTH_REPEAT)
-    return removed
-
-
 def simplify_glb(
     input_path: str | Path,
     output_path: str | Path,
     target_faces: int = 16000,
-    merge_dist: float = MERGE_DIST,
     smooth_factor: float = SMOOTH_FACTOR,
 ) -> dict:
-    """Full pipeline: load GLB → merge → decimate → merge+smooth → export.
+    """Full pipeline: load GLB → decimate → smooth → export.
 
     Returns dict with stats (src_faces, final_faces, etc.).
     """
@@ -172,12 +121,10 @@ def simplify_glb(
     src_faces = len(mesh_obj.data.polygons)
     src_verts = len(mesh_obj.data.vertices)
 
-    removed_pre = merge_by_distance(mesh_obj, threshold=merge_dist)
-    after_merge = len(mesh_obj.data.polygons)
-
     final_faces = decimate_collapse(mesh_obj, target_faces)
 
-    removed_post = post_simplify_clean(mesh_obj, merge_dist=merge_dist, smooth_factor=smooth_factor)
+    if smooth_factor > 0:
+        smooth_mesh(mesh_obj, factor=smooth_factor, repeat=SMOOTH_REPEAT)
     final_verts = len(mesh_obj.data.vertices)
 
     _export_glb(output_path, mesh_obj, arm_objs)
@@ -185,11 +132,8 @@ def simplify_glb(
     stats = {
         "src_faces": src_faces,
         "src_verts": src_verts,
-        "pre_merge_removed": removed_pre,
-        "after_merge": after_merge,
         "final_faces": final_faces,
         "final_verts": final_verts,
-        "post_merge_removed": removed_post,
         "has_armature": bool(arm_objs),
         "n_bones": len(arm_objs[0].data.bones) if arm_objs else 0,
         "output_size_kb": output_path.stat().st_size / 1024,
@@ -202,10 +146,9 @@ def simplify_lod(
     input_path: str | Path,
     output_path: str | Path,
     ratio: float,
-    merge_dist: float = MERGE_DIST,
     smooth_factor: float = SMOOTH_FACTOR,
 ) -> dict:
-    """Simplify a single LOD level: decimate by *ratio* → merge+smooth → export.
+    """Simplify a single LOD level: decimate by *ratio* → smooth → export.
 
     Preserves armature/skin/animations from the input GLB.
     """
@@ -215,10 +158,10 @@ def simplify_lod(
 
     src_faces = len(mesh_obj.data.polygons)
 
-    merge_by_distance(mesh_obj, threshold=merge_dist)
     target = max(int(src_faces * ratio), 100)
     final_faces = decimate_collapse(mesh_obj, target)
-    post_simplify_clean(mesh_obj, merge_dist=merge_dist, smooth_factor=smooth_factor)
+    if smooth_factor > 0:
+        smooth_mesh(mesh_obj, factor=smooth_factor, repeat=SMOOTH_REPEAT)
 
     _export_glb(output_path, mesh_obj, arm_objs)
 
@@ -234,13 +177,12 @@ def simplify_lod(
 def clean_glb(
     input_path: str | Path,
     output_path: str | Path,
-    merge_dist: float = MERGE_DIST,
     smooth_factor: float = SMOOTH_FACTOR,
 ) -> dict:
-    """Load GLB, run merge+smooth only (no decimation), export.
+    """Load GLB, run smooth only (no decimation), export.
 
     Returns dict with src_faces, src_verts, final_faces, final_verts,
-    merge_removed, output_size_kb.
+    output_size_kb.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -249,7 +191,8 @@ def clean_glb(
     src_faces = len(mesh_obj.data.polygons)
     src_verts = len(mesh_obj.data.vertices)
 
-    merge_removed = post_simplify_clean(mesh_obj, merge_dist=merge_dist, smooth_factor=smooth_factor)
+    if smooth_factor > 0:
+        smooth_mesh(mesh_obj, factor=smooth_factor, repeat=SMOOTH_REPEAT)
 
     final_faces = len(mesh_obj.data.polygons)
     final_verts = len(mesh_obj.data.vertices)
@@ -261,7 +204,6 @@ def clean_glb(
         "src_verts": src_verts,
         "final_faces": final_faces,
         "final_verts": final_verts,
-        "merge_removed": merge_removed,
         "output_size_kb": output_path.stat().st_size / 1024,
     }
     _clean_scene()
@@ -275,21 +217,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Simplify or clean a rigged+animated GLB via bpy")
     parser.add_argument("input", type=Path, help="Input GLB path")
     parser.add_argument("-o", "--output", type=Path, required=True, help="Output GLB path")
-    parser.add_argument("--merge-dist", type=float, default=MERGE_DIST)
     parser.add_argument("--smooth-factor", type=float, default=SMOOTH_FACTOR)
 
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--target-faces", type=int, default=None, help="Target face count (default: 16000)")
     mode.add_argument("--ratio", type=float, default=None, help="Decimation ratio (0.0-1.0)")
-    mode.add_argument("--clean-only", action="store_true", help="Merge+smooth only, no decimation")
+    mode.add_argument("--clean-only", action="store_true", help="Smooth only, no decimation")
 
     args = parser.parse_args()
 
     if args.clean_only:
-        stats = clean_glb(args.input, args.output, merge_dist=args.merge_dist, smooth_factor=args.smooth_factor)
+        stats = clean_glb(args.input, args.output, smooth_factor=args.smooth_factor)
     elif args.ratio is not None:
         stats = simplify_lod(
-            args.input, args.output, ratio=args.ratio, merge_dist=args.merge_dist, smooth_factor=args.smooth_factor
+            args.input, args.output, ratio=args.ratio, smooth_factor=args.smooth_factor
         )
     else:
         target = args.target_faces if args.target_faces is not None else 16000
@@ -297,7 +238,6 @@ if __name__ == "__main__":
             args.input,
             args.output,
             target_faces=target,
-            merge_dist=args.merge_dist,
             smooth_factor=args.smooth_factor,
         )
     print(json.dumps(stats, indent=2))

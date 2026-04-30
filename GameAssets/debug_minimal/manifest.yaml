@@ -1,0 +1,23 @@
+# 3 assets: prop (3D+parts+lod+collision), som (audio), humanoide (3D+rig+animate+parts)
+assets:
+  - id: wooden_crate
+    idea: "caixa de madeira com tábuas e ferrugem nos ferrolhos, low poly, game prop"
+    kind: prop
+    category: chest
+    pipeline: [3d, parts, lod, collision]
+    paint_style: solid
+
+  - id: sfx_coin_pickup
+    idea: "som de moeda de ouro a tilintar, efeito sonoro de pickup"
+    kind: prop
+    pipeline: [audio]
+    audio:
+      duration: 0.5
+      preset: ui-confirm
+      trim: true
+
+  - id: goblin_warrior
+    idea: "goblin guerreiro verde pequeno com armadura de couro e espada enferrujada, low poly"
+    kind: character
+    category: humanoid
+    pipeline: [3d, rig, animate, parts]

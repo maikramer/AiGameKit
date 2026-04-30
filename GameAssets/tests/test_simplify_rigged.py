@@ -21,7 +21,6 @@ GOBLIN_SRC = (
     Path(__file__).resolve().parents[2] / "VibeGame/examples/simple-rpg/public/assets/meshes/goblin_rigged_animated.glb"
 )
 TARGET_FACES = 16000
-MERGE_DIST = 0.0001
 
 
 def _gltf_stats(path: Path) -> dict:
@@ -70,15 +69,7 @@ def simplified_glb(tmp_path_factory):
     n_bones = len(armature.data.bones)
     print(f"Armature: {n_bones} bones")
 
-    bpy.context.view_layer.objects.active = mesh_obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=MERGE_DIST, use_sharp_edge_from_normals=True)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    after_merge = len(mesh_obj.data.polygons)
-    print(f"After merge-by-distance ({MERGE_DIST}): {after_merge:,} faces")
-
-    ratio = TARGET_FACES / max(after_merge, 1)
+    ratio = TARGET_FACES / max(src_faces, 1)
     mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
     mod.decimate_type = "COLLAPSE"
     mod.ratio = ratio
@@ -88,10 +79,9 @@ def simplified_glb(tmp_path_factory):
     final_faces = len(mesh_obj.data.polygons)
     print(f"After decimate: {final_faces:,} faces")
 
-    # Post-simplify: merge-by-distance + vertex smooth
+    # Post-simplify: vertex smooth only (no merge — GLTF split vertices are required)
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=MERGE_DIST, use_sharp_edge_from_normals=True)
     bpy.ops.mesh.vertices_smooth(factor=0.2, repeat=1)
     bpy.ops.object.mode_set(mode="OBJECT")
 

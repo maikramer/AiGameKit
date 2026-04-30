@@ -1,0 +1,49 @@
+# Teste minimal — todas as features no mínimo
+# gameassets batch --profile game.yaml --manifest manifest.yaml --plain
+title: "Minimal Test"
+genre: "test platformer"
+tone: "colorido e simples"
+
+style_preset: lowpoly
+
+negative_keywords:
+  - "text"
+  - "watermark"
+  - "blurry"
+
+output_dir: .
+path_layout: split
+images_subdir: images
+meshes_subdir: meshes
+audio_subdir: audio
+image_ext: png
+
+generation: low
+
+text3d:
+  low_vram: false
+  export_origin: feet
+
+paint3d:
+  preserve_origin: true
+
+text2sound:
+  duration: 1.5
+  audio_format: wav
+  trim: true
+
+rigging3d:
+  output_suffix: "_rigged"
+
+animator3d:
+  preset: humanoid
+
+part3d:
+  segment_only: true
+
+lod:
+  lod1_ratio: 0.42
+  lod2_ratio: 0.14
+
+collision:
+  max_faces: 64
