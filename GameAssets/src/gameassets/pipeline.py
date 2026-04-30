@@ -651,8 +651,9 @@ def _post_text3d_mesh_extras(
         has_rigging_profile=has_rigging_profile,
         gpu_ids=gpu_ids,
     )
-    if lod_fail or coll_fail or part3d_fail or rig_fail:
+    if rig_fail:
         return True
+    # LOD, Collision, and Part3D failures are non-blocking — they already log warnings internally
     rg = profile.rigging3d
     sfx = rg.output_suffix if rg else "_rigged"
     rig_out = _rigging3d_output_path(rig_mesh_in, sfx)
