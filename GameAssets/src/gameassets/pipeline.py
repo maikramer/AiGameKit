@@ -284,10 +284,10 @@ def _part3d_decompose_argv(
     return args
 
 
-def _lod_output_paths(mesh_path: Path, basename: str) -> list[Path]:
-    """Espera-se: {mesh_dir}/{basename}_lod0.glb … _lod2.glb."""
+def _lod_output_paths(mesh_path: Path, basename: str, num_levels: int = 3) -> list[Path]:
+    """Espera-se: {mesh_dir}/{basename}_lod0.glb … _lod{N-1}.glb."""
     d = mesh_path.parent
-    return [d / f"{basename}_lod{i}.glb" for i in range(3)]
+    return [d / f"{basename}_lod{i}.glb" for i in range(num_levels)]
 
 
 def _lod_pipeline_failed(
@@ -370,7 +370,8 @@ def _lod_pipeline_failed(
         rec["error"] = err
         console.print(f"[red]LOD falhou[/red] {row.id}: {err[:200]}")
         return True
-    paths = _lod_output_paths(mesh_final, basename)
+    num_levels = max(1, min(3, row.lod_levels))  # static LOD supports 1-3 levels
+    paths = _lod_output_paths(mesh_final, basename, num_levels)
     rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
 
     try:
@@ -400,7 +401,8 @@ def _lod_pipeline_rigged_bpy(
     """Gera LOD triplet para assets rigados via ``bpy_simplify.simplify_glb()``
     (preserva rig+animation). Devolve True se falhou."""
     basename = row.id.replace("/", "_")
-    paths = _lod_output_paths(mesh_final, basename)
+    num_levels = max(1, row.lod_levels)
+    paths = _lod_output_paths(mesh_final, basename, num_levels)
 
     try:
         from gamedev_shared.bpy_mesh import face_count as _face_count
@@ -415,20 +417,23 @@ def _lod_pipeline_rigged_bpy(
 
     from .bpy_simplify import simplify_glb
 
-    ratios = [1.0, lod_prof.lod1_ratio, lod_prof.lod2_ratio]
-    min_faces = [0, lod_prof.min_faces_lod1, lod_prof.min_faces_lod2]
+    def _lod_ratio(level: int, num: int) -> float:
+        """Compute face ratio for LOD level `level` (0=full) out of `num` total levels."""
+        if num <= 1:
+            return 1.0
+        return max(0.05, 1.0 - (level / (num - 1)) * 0.95)
 
-    console.print(f"[cyan]⏳ LOD (rigged, bpy)[/cyan] {row.id} ...")
+    console.print(f"[cyan]⏳ LOD (rigged, bpy, {num_levels}n)[/cyan] {row.id} ...")
     t0 = time.perf_counter()
 
-    for i, (ratio, min_f) in enumerate(zip(ratios, min_faces, strict=True)):
-        target = max(int(current_faces * ratio), min_f)
+    for i in range(num_levels):
+        ratio = _lod_ratio(i, num_levels)
+        target = max(int(current_faces * ratio), 1)
         out = paths[i]
         try:
             simplify_glb(str(mesh_final), str(out), target_faces=target)
         except Exception as exc:
             console.print(f"[yellow]LOD rigged lvl{i} falhou[/yellow] {row.id}: {exc}")
-            # non-blocking: skip this LOD level
 
     elapsed = time.perf_counter() - t0
     _timing_append(rec, "lod", elapsed)
