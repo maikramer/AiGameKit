@@ -410,7 +410,7 @@ def _transfer_texture_direct(
     remeshed_faces: np.ndarray,
     new_uvs: np.ndarray,
     texture_size: int,
-    padding: int = 16,
+    padding: int = 4,
 ) -> np.ndarray:
     """Transferência directa pixel-a-pixel da textura fonte para o novo atlas UV.
 
@@ -575,6 +575,14 @@ def _transfer_texture_direct(
     if padding > 0:
         log.info("Dilatando fronteiras UV (%d pixels)...", padding)
         tex = _dilate_texture(tex, filled, padding)
+
+    # Fill remaining black pixels with dominant color
+    unfilled = ~filled
+    if unfilled.sum() > 0:
+        filled_mask = filled
+        if filled_mask.sum() > 0:
+            mean_color = tex[filled_mask].mean(axis=0).astype(np.uint8)
+            tex[unfilled] = mean_color
 
     return tex
 
@@ -792,15 +800,15 @@ def remesh_textured_glb(
     target_faces: int,
     texture_size: int = 2048,
 ) -> Path:
-    """Carrega GLB texturado, aplica remesh com reprojeção e guarda resultado.
+    """Carrega GLB texturado, aplica voxel remesh e transfere UVs da mesh original.
 
-    Pipeline:
-    1. Load GLB via bpy, extract source geometry + texture
-    2. Voxel remesh to ~target_faces
+    Pipeline (bpy native):
+    1. Load GLB, duplicate mesh object
+    2. Voxel remesh the duplicate
     3. Post-remesh repair (close holes, fix normals)
-    4. UV unwrap via xatlas
-    5. Direct per-pixel texture reprojection
-    6. Build final bpy mesh + save GLB
+    4. Transfer UVs from original → remeshed via Data Transfer
+    5. Downscale texture
+    6. Export
 
     Args:
         path_in: Caminho do GLB de entrada.
@@ -811,82 +819,66 @@ def remesh_textured_glb(
     Returns:
         Path do ficheiro escrito.
     """
+    import bpy
+
     path_in = Path(path_in)
     path_out = Path(path_out)
+    path_out.parent.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Load and extract source data
-    objs = load_glb(path_in)
-    if not objs:
+    clear_scene()
+    bpy.ops.import_scene.gltf(filepath=str(path_in))
+    mesh_objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+    if not mesh_objs:
         raise ValueError(f"Mesh vazia: {path_in}")
-    obj = _join_objects(objs)
-
-    n = len(obj.data.polygons)
+    original = max(mesh_objs, key=lambda o: len(o.data.polygons))
+    n = len(original.data.polygons)
     if n < 4:
         raise ValueError(f"Mesh com poucas faces ({n}); remesh não aplicável.")
+    log.info("Original: %d faces", n)
 
-    source_data = _extract_source_data(obj)
-    if source_data.uvs is None:
-        raise ValueError("Mesh de entrada não tem textura UV com imagem.")
-    if source_data.texture_image is None:
-        raise ValueError("Mesh de entrada não tem textura UV com imagem.")
+    bpy.ops.object.select_all(action="DESELECT")
+    original.select_set(True)
+    bpy.context.view_layer.objects.active = original
+    bpy.ops.object.duplicate()
+    remeshed = bpy.context.active_object
+    _bpy_remesh(remeshed, target_faces)
+    _bpy_post_remesh_repair(remeshed)
+    log.info("Remeshed: %d faces", len(remeshed.data.polygons))
 
-    log.info(
-        "Mesh original: %d faces, %d vertices, textura %s",
-        n,
-        len(source_data.vertices),
-        f"{source_data.texture_image.shape[1]}x{source_data.texture_image.shape[0]}",
+    if not remeshed.data.uv_layers.active:
+        remeshed.data.uv_layers.new(name="UVMap")
+
+    bpy.ops.object.select_all(action="DESELECT")
+    original.select_set(True)
+    remeshed.select_set(True)
+    bpy.context.view_layer.objects.active = remeshed
+    bpy.ops.object.data_transfer(data_type="UV", use_create=True, loop_mapping="POLYINTERP_NEAREST")
+    log.info("UV transfer complete")
+
+    if not remeshed.data.materials and original.data.materials:
+        remeshed.data.materials.append(original.data.materials[0])
+
+    if texture_size and remeshed.data.materials and remeshed.data.materials[0].use_nodes:
+        for node in remeshed.data.materials[0].node_tree.nodes:
+            if node.type == "TEX_IMAGE" and node.image:
+                w, h = node.image.size[0], node.image.size[1]
+                if max(w, h) != texture_size:
+                    node.image.scale(texture_size, texture_size)
+                break
+
+    bpy.data.objects.remove(original, do_unlink=True)
+    bpy.context.view_layer.objects.active = remeshed
+    remeshed.select_set(True)
+    bpy.ops.export_scene.gltf(
+        filepath=str(path_out),
+        use_selection=True,
+        export_apply=True,
+        export_normals=True,
+        export_texcoords=True,
+        export_materials="EXPORT",
+        export_image_format="AUTO",
     )
 
-    # Step 2: Voxel remesh
-    log.info("Remeshing isotrópico para ~%d faces...", target_faces)
-    _bpy_remesh(obj, target_faces)
-    log.info("Remesh: %d faces, %d vertices", len(obj.data.polygons), len(obj.data.vertices))
-
-    # Step 3: Post-remesh repair
-    _bpy_post_remesh_repair(obj)
-    log.info("Post-remesh repair: %d faces, %d vertices", len(obj.data.polygons), len(obj.data.vertices))
-
-    # Step 4: Extract remeshed geometry as numpy
-    remeshed_verts, remeshed_faces = _bpy_obj_to_arrays(obj)
-    log.info("Remeshed geometry: %d faces, %d vertices", len(remeshed_faces), len(remeshed_verts))
-
-    # Step 5: UV unwrap
-    log.info("UV unwrap com xatlas...")
-    vmapping, indices, uvs = _uv_unwrap(remeshed_verts, remeshed_faces)
-
-    remapped_verts = remeshed_verts[vmapping]
-    remapped_faces = indices
-
-    # Step 6: Texture reprojection
-    source_tex = source_data.texture_image
-    source_uvs = np.array(source_data.uvs, dtype=np.float64)
-    src_h, src_w = source_tex.shape[:2]
-    effective_size = max(src_h, src_w) if texture_size == 2048 else texture_size
-
-    log.info("Transferência directa pixel-a-pixel (%dx%d)...", effective_size, effective_size)
-    baked_tex = _transfer_texture_direct(
-        source_verts=source_data.vertices,
-        source_faces=source_data.faces,
-        source_tex=source_tex,
-        source_uvs=source_uvs,
-        remeshed_verts=remapped_verts,
-        remeshed_faces=remapped_faces,
-        new_uvs=uvs,
-        texture_size=effective_size,
-        padding=4,
-    )
-
-    # Step 7: Build final bpy mesh and save
-    log.info("Construindo mesh final com textura reprojetada...")
-    final_obj, temp_path = _build_textured_bpy_mesh(remapped_verts, remapped_faces, uvs, baked_tex)
-
-    path_out.parent.mkdir(parents=True, exist_ok=True)
-    save_glb(final_obj, path_out)
-
-    import contextlib
-
-    with contextlib.suppress(Exception):
-        Path(temp_path).unlink(missing_ok=True)
-
-    log.info("Resultado final: %d faces, %d vertices", len(remapped_faces), len(remapped_verts))
+    clear_scene()
+    log.info("Resultado: %s", path_out)
     return path_out
