@@ -37,8 +37,10 @@ def _inspect_scene() -> dict[str, Any]:
         "actions": [],
         "meshes": [],
         "mesh_totals": {"vertex_count": 0, "face_count": 0},
+        "textures": [],
         "world_bounds": None,
     }
+    _seen_images: set[int] = set()
 
     for arm in armatures:
         bone_names = [b.name for b in arm.data.bones]
@@ -71,8 +73,32 @@ def _inspect_scene() -> dict[str, Any]:
                 "vertex_count": nv,
                 "face_count": nf,
                 "vertex_groups": len(obj.vertex_groups),
+                "uv_layers": len(data.uv_layers),
             }
         )
+        for mat in obj.data.materials:
+            if mat is None or mat.node_tree is None:
+                continue
+            for node in mat.node_tree.nodes:
+                if node.type != "TEX_IMAGE":
+                    continue
+                img = node.image
+                if img is None:
+                    continue
+                img_id = id(img)
+                if img_id in _seen_images:
+                    continue
+                _seen_images.add(img_id)
+                cs_name = img.colorspace_settings.name if hasattr(img, "colorspace_settings") else None
+                out["textures"].append(
+                    {
+                        "name": img.name,
+                        "width": img.size[0],
+                        "height": img.size[1],
+                        "channels": img.channels,
+                        "colorspace": cs_name,
+                    }
+                )
         for c in obj.bound_box:
             world_corners.append(obj.matrix_world @ Vector(c))
 
@@ -123,7 +149,8 @@ def inspect_glb(glb_path: str | Path) -> dict[str, Any]:
 
     Returns dict matching Animator3D's ``inspect --json-out`` format,
     including ``mesh_totals``, ``world_bounds``, ``armatures``, ``actions``,
-    ``meshes``, ``mesh`` alias, and ``animations`` alias.
+    ``meshes`` (with ``uv_layers``), ``textures``, ``mesh`` alias, and
+    ``animations`` alias.
     """
     from gamedev_shared.bpy_mesh import clear_scene
 
