@@ -879,6 +879,8 @@ def batch_cmd(
                             _ci_anim = _animator3d_output_path(_ci_rig)
                             _wants_rig = _row_wants_rig(_cr, has_rigging_profile)
                             _wants_an = _row_wants_animate(_cr, with_rig, has_rigging_profile)
+                            _lod0 = _ci_mesh.parent / f"{_ci_mesh.stem}_lod0.glb"
+                            _coll = _ci_mesh.parent / f"{_ci_mesh.stem}_collision.glb"
                             row_states_d[_ci] = _classify_row_state(
                                 img_final=_ci_img,
                                 mesh_final=_ci_mesh,
@@ -887,6 +889,10 @@ def batch_cmd(
                                 want_texture=_want_tex,
                                 wants_rig=_wants_rig,
                                 wants_animate=_wants_an,
+                                wants_lod=_cr.generate_lod,
+                                wants_collision=_cr.generate_collision,
+                                lod0_path=_lod0,
+                                collision_path=_coll,
                             )
 
                     # Skip fully-done items: advance all phases and mark skipped in dashboard
@@ -1782,6 +1788,8 @@ def batch_cmd(
                             _ci_mesh, profile.rigging3d.output_suffix if profile.rigging3d else "_rigged"
                         )
                         _ci_anim_out = _animator3d_output_path(_ci_rig_out)
+                        _ci_lod0 = _ci_mesh.parent / f"{_ci_mesh.stem}_lod0.glb"
+                        _ci_coll = _ci_mesh.parent / f"{_ci_mesh.stem}_collision.glb"
                         _ci_state = _classify_row_state(
                             img_final=_ci_img,
                             mesh_final=_ci_mesh,
@@ -1792,6 +1800,10 @@ def batch_cmd(
                             wants_animate=_row_wants_animate(
                                 _crow, _row_wants_rig(_crow, has_rigging_profile), has_rigging_profile
                             ),
+                            wants_lod=_crow.generate_lod,
+                            wants_collision=_crow.generate_collision,
+                            lod0_path=_ci_lod0,
+                            collision_path=_ci_coll,
                         )
                         if not force and _ci_state == _ROW_DONE:
                             done_indices.add(_ci)

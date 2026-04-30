@@ -216,6 +216,10 @@ def resume_cmd(
             want_texture=want_texture,
             wants_rig=row_wants_rig,
             wants_animate=row_wants_animate,
+            wants_lod=row.generate_lod,
+            wants_collision=row.generate_collision,
+            lod0_path=mesh_final.parent / f"{mesh_final.stem}_lod0.glb",
+            collision_path=mesh_final.parent / f"{mesh_final.stem}_collision.glb",
         )
 
         items.append(

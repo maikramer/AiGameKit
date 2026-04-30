@@ -1046,7 +1046,7 @@ def _resolve_bpy_python() -> str | None:
     if py and Path(py).is_file():
         return py
     pkg_dir = Path(__file__).resolve().parent
-    for rel in ("../../Paint3D/.venv/bin/python", "../../Animator3D/.venv/bin/python"):
+    for rel in ("../../../Paint3D/.venv/bin/python", "../../../Animator3D/.venv/bin/python"):
         candidate = (pkg_dir / rel).resolve()
         if candidate.is_file():
             return str(candidate)
