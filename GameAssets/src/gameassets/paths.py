@@ -37,6 +37,14 @@ def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
     return img, mesh
 
 
+def _base_stem(name: str) -> str:
+    """Strip known suffixes from a stem like 'wooden_crate_painted' → 'wooden_crate'."""
+    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented", "_collision", "_lod0", "_lod1", "_lod2"):
+        if name.endswith(sfx):
+            return name[: -len(sfx)]
+    return name
+
+
 def _rigging3d_output_path(mesh_final: Path, suffix: str) -> Path:
     """ex.: ``hero.glb`` + ``_rigged`` → ``hero_rigged.glb``."""
     s = (suffix or "_rigged").strip()
@@ -44,7 +52,8 @@ def _rigging3d_output_path(mesh_final: Path, suffix: str) -> Path:
         s = f"_{s}"
     if not s:
         s = "_rigged"
-    return mesh_final.with_name(f"{mesh_final.stem}{s}.glb")
+    stem = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{stem}{s}.glb")
 
 
 def _shell_path(path: Path) -> str:
@@ -54,7 +63,8 @@ def _shell_path(path: Path) -> str:
 
 def _animator3d_output_path(base_output: Path) -> Path:
     """ex.: ``hero_rigged.glb`` → ``hero_rigged_animated.glb``."""
-    return base_output.with_name(f"{base_output.stem}_animated.glb")
+    stem = _base_stem(base_output.stem)
+    return base_output.with_name(f"{stem}_rigged_animated.glb")
 
 
 def _shape_path(mesh_final: Path) -> Path:
@@ -81,7 +91,7 @@ def _classify_row_state(
 ) -> str:
     shape = _shape_path(mesh_final)
     painted = _painted_path(mesh_final)
-    final_exists = _valid_file(mesh_final) if want_texture else _valid_file(shape)
+    final_exists = (_valid_file(painted) or _valid_file(mesh_final)) if want_texture else _valid_file(shape)
 
     if final_exists:
         if wants_rig and not _valid_file(rig_out):
@@ -89,8 +99,6 @@ def _classify_row_state(
         if wants_rig and wants_animate and not _valid_file(anim_out):
             return _ROW_NEED_ANIMATE
         return _ROW_DONE
-    if want_texture and _valid_file(painted):
-        return _ROW_NEED_PAINT
     if _valid_file(shape):
         return _ROW_NEED_PAINT if want_texture else _ROW_DONE
     if _valid_file(img_final):

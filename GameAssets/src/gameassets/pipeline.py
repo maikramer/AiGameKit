@@ -23,7 +23,13 @@ from .param_optimizer import (
     optimize_text3d_for_target,
     should_optimize_text3d,
 )
-from .paths import _animator3d_output_path, _path_for_log, _rigging3d_output_path, _shell_path
+from .paths import (
+    _animator3d_output_path,
+    _painted_path,
+    _path_for_log,
+    _rigging3d_output_path,
+    _shell_path,
+)
 from .profile import Animator3DProfile, GameProfile, Paint3DProfile, Part3DProfile, Rigging3DProfile
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
 
@@ -316,23 +322,36 @@ def _lod_pipeline_failed(
     text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
     basename = row.id.replace("/", "_")
     out_dir = mesh_final.parent
+
+    # Derive base stem and shape/painted paths from mesh_final
+    base_stem = mesh_final.stem
+    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented", "_collision"):
+        if base_stem.endswith(sfx):
+            base_stem = base_stem[: -len(sfx)]
+            break
+    shape_input = mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}"
+    painted_input = mesh_final.parent / f"{base_stem}_painted{mesh_final.suffix}"
+    lod_input = shape_input if shape_input.is_file() else mesh_final
+    has_painted = painted_input.is_file()
+
     argv = [
         text3d_bin,
         "lod",
-        str(mesh_final),
+        str(lod_input),
         "-o",
         str(out_dir),
         "--basename",
-        basename,
-        "--lod1-ratio",
-        str(lod_prof.lod1_ratio),
-        "--lod2-ratio",
-        str(lod_prof.lod2_ratio),
-        "--min-faces-lod1",
-        str(lod_prof.min_faces_lod1),
-        "--min-faces-lod2",
-        str(lod_prof.min_faces_lod2),
+        base_stem,
     ]
+
+    if has_painted and row.category:
+        fr = effective_face_ratio(profile, row)
+        target = get_target_faces(row.category, face_ratio=fr)
+        argv.extend(["--painted-mesh", str(painted_input), "--target-faces", str(target)])
+    else:
+        argv.extend(["--lod1-ratio", str(lod_prof.lod1_ratio), "--lod2-ratio", str(lod_prof.lod2_ratio)])
+
+    argv.extend(["--min-faces-lod1", str(lod_prof.min_faces_lod1), "--min-faces-lod2", str(lod_prof.min_faces_lod2)])
     if lod_prof.meshfix:
         argv.append("--meshfix")
     if gpu_ids:
@@ -420,7 +439,12 @@ def _lod_pipeline_rigged_bpy(
 
 def _collision_output_path(mesh_path: Path) -> Path:
     """Espera-se: {mesh_dir}/{stem}_collision.glb."""
-    return mesh_path.parent / f"{mesh_path.stem}_collision.glb"
+    stem = mesh_path.stem
+    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented"):
+        if stem.endswith(sfx):
+            stem = stem[: -len(sfx)]
+            break
+    return mesh_path.parent / f"{stem}_collision{mesh_path.suffix}"
 
 
 def _collision_pipeline_failed(
@@ -445,8 +469,12 @@ def _collision_pipeline_failed(
         coll_prof = CollisionProfile()
     text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
     coll_out = _collision_output_path(mesh_final)
-    # Use the shape mesh (pre-paint) for cleaner collision geometry
-    coll_input = mesh_final.parent / f"{mesh_final.stem.removesuffix('_painted')}_shape.glb"
+    base_stem = mesh_final.stem
+    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented", "_collision"):
+        if base_stem.endswith(sfx):
+            base_stem = base_stem[: -len(sfx)]
+            break
+    coll_input = mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}"
     if not coll_input.is_file():
         coll_input = mesh_final
     argv = [
@@ -586,7 +614,7 @@ def _post_text3d_mesh_extras(
 ) -> bool:
     """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
-    lod_fail = _lod_pipeline_failed(
+    _lod_pipeline_failed(
         profile,
         row,
         mesh_final,
@@ -598,7 +626,7 @@ def _post_text3d_mesh_extras(
         with_rig=with_rig,
         has_rigging_profile=has_rigging_profile,
     )
-    coll_fail = _collision_pipeline_failed(
+    _collision_pipeline_failed(
         profile,
         row,
         mesh_final,
@@ -1009,26 +1037,40 @@ def _bpy_simplify_to_target(
     )
 
 
-def _animated_lod_via_subprocess(
-    py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces
-) -> bool:
-    """Run LOD0 for animated GLB via subprocess on a bpy-capable Python."""
-    import json as _json
-    import subprocess as _sp
+def _resolve_bpy_python() -> str | None:
+    """Find a Python interpreter with bpy (Paint3D or Animator3D venv)."""
     import os
+
+    py = os.environ.get("PAINT3D_PYTHON") or os.environ.get("ANIMATOR3D_PYTHON")
+    if py and Path(py).is_file():
+        return py
+    pkg_dir = Path(__file__).resolve().parent
+    for rel in ("../../Paint3D/.venv/bin/python", "../../Animator3D/.venv/bin/python"):
+        candidate = (pkg_dir / rel).resolve()
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def _animated_lod_via_subprocess(py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces) -> bool:
+    """Run LOD0 for animated GLB via subprocess on a bpy-capable Python."""
+    import os
+    import subprocess as _sp
 
     script = f"""
 import sys
 sys.path.insert(0, '{os.path.dirname(os.path.dirname(__file__))}')
-sys.path.insert(0, '{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'Shared', 'src')}')
+sys.path.insert(0, '{os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "Shared", "src")}')
 from gameassets.bpy_simplify import simplify_glb
 simplify_glb('{animated_glb}', '{lod0_path}', target_faces={target})
 print('DONE')
 """
     try:
-        result = _sp.run(
+        _sp.run(
             [py, "-c", script],
-            capture_output=True, text=True, timeout=300,
+            capture_output=True,
+            text=True,
+            timeout=300,
             env={**os.environ, "PYTHONPATH": os.environ.get("PYTHONPATH", "")},
         )
     except _sp.TimeoutExpired:
@@ -1086,13 +1128,18 @@ def _rigged_lod_simplify(
     out_dir = animated_glb.parent
     lod0_path = out_dir / f"{animated_glb.stem}_lod0.glb"
 
+    bpy_py = _resolve_bpy_python()
+
     try:
         from .bpy_simplify import simplify_glb
     except ImportError:
-        return _animated_lod_via_subprocess(py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces)
+        if bpy_py:
+            return _animated_lod_via_subprocess(
+                bpy_py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces
+            )
+        return False
 
     try:
-
         label = f"{current_faces:,}" if current_faces else "?"
         console.print(f"[cyan]⏳ LOD0 (rigged simplify)[/cyan] {row.id} ({label} → ~{target:,} faces)")
         stats = simplify_glb(str(animated_glb), str(lod0_path), target_faces=target)
@@ -1111,6 +1158,11 @@ def _rigged_lod_simplify(
         console.print(f"[yellow]LOD0 (rigged) sem output[/yellow] {row.id}")
         return True
     except Exception as exc:
+        if bpy_py:
+            console.print(f"[yellow]bpy simplify falhou, a usar subprocess fallback[/yellow] {row.id}: {exc}")
+            return _animated_lod_via_subprocess(
+                bpy_py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces
+            )
         err = str(exc)[:200]
         rec["rigged_lod0_error"] = err
         console.print(f"[red]LOD0 (rigged) falhou[/red] {row.id}: {err}")

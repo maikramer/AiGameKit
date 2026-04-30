@@ -269,9 +269,7 @@ def batch_cmd(
     with_3d = not no_3d and any(r.generate_3d for r in rows)
     with_rig = not no_rig and with_3d and any(r.generate_rig for r in rows)
     with_parts = not no_parts and with_3d and any(r.generate_parts for r in rows)
-    with_animate = (
-        not no_animate and with_rig and any(r.generate_animate for r in rows)
-    )
+    with_animate = not no_animate and with_rig and any(r.generate_animate for r in rows)
     with_lod = not no_lod and with_3d and any(r.generate_lod for r in rows)
     with_collision = not no_collision and with_3d and any(r.generate_collision for r in rows)
     has_rigging_profile = False
@@ -1444,11 +1442,11 @@ def batch_cmd(
                                                     raise click.Abort()
                                                 dash.feed_event(row.id, "paint3d", "error", error="quick paint sem GLB")
                                             else:
-                                                _install_file(mesh_painted, mesh_f)
+                                                # mesh_painted already at correct path
                                                 dash.feed_event(
                                                     row.id, "paint3d", "ok", phase="quick", seconds=elapsed_qp
                                                 )
-                                                _finalize_mesh_ok_d(rec_d, mesh_f, row)
+                                                _finalize_mesh_ok_d(rec_d, mesh_painted, row)
                                                 finalized_d.add(idx)
                                                 append_log(rec_d)
                                                 if not continue_on_error and rec_d["status"] == "error":
@@ -1465,7 +1463,7 @@ def batch_cmd(
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                         mesh_shape = _shape_path(mesh_f)
                                         mesh_painted = _painted_path(mesh_f)
-                                        if not force and mesh_painted.is_file() and mesh_f.is_file():
+                                        if not force and mesh_painted.is_file():
                                             paint_skipped_d.add(idx)
                                             paint_idx_map_d[row.id] = idx
                                             continue
@@ -1554,9 +1552,8 @@ def batch_cmd(
                                                         "paint3d_texture",
                                                         item_result.get("seconds", 0),
                                                     )
-                                                if mesh_painted.is_file():
-                                                    _install_file(mesh_painted, mesh_f)
-                                                _finalize_mesh_ok_d(rec_d, mesh_f, row)
+                                                # mesh_painted already at correct path
+                                                _finalize_mesh_ok_d(rec_d, mesh_painted, row)
                                                 finalized_d.add(idx)
                                                 append_log(rec_d)
                                                 if not continue_on_error and rec_d["status"] == "error":
@@ -1576,8 +1573,9 @@ def batch_cmd(
                                             row = rows[idx]
                                             rec_d = results_d[idx]
                                             img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+                                            mesh_painted = _painted_path(mesh_f)
                                             dash.feed_event(row.id, "paint3d", "skipped", phase="texture")
-                                            _finalize_mesh_ok_d(rec_d, mesh_f, row)
+                                            _finalize_mesh_ok_d(rec_d, mesh_painted, row)
                                             finalized_d.add(idx)
                                             append_log(rec_d)
                                             if not continue_on_error and rec_d["status"] == "error":
@@ -1592,9 +1590,11 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec_d = results_d[idx]
                                     _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+                                    mesh_painted = _painted_path(mesh_f)
+                                    simplify_mesh = mesh_painted if mesh_painted.is_file() else mesh_f
                                     dash.feed_event(row.id, "simplify", "progress", phase="decimating", percent=0)
                                     _bpy_simplify_to_target(
-                                        mesh_f,
+                                        simplify_mesh,
                                         row,
                                         text3d_bin,
                                         profile=profile,
@@ -1615,12 +1615,19 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec_d = results_d[idx]
                                     img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    if not mesh_f.is_file():
+                                    mesh_painted = _painted_path(mesh_f)
+                                    mesh_shape = _shape_path(mesh_f)
+                                    actual_mesh = (
+                                        mesh_painted
+                                        if mesh_painted.is_file()
+                                        else (mesh_shape if mesh_shape.is_file() else mesh_f)
+                                    )
+                                    if not actual_mesh.is_file():
                                         dash.advance_phase()
                                         continue
                                     rec_d["image_path"] = _path_for_log(img_f, manifest_dir)
                                     dash.feed_event(row.id, "post3d", "progress", phase="rig/animate", percent=0)
-                                    _finalize_mesh_ok_d(rec_d, mesh_f, row)
+                                    _finalize_mesh_ok_d(rec_d, actual_mesh, row)
                                     if rec_d["status"] == "ok":
                                         dash.feed_event(row.id, "post3d", "ok", phase="rig/animate")
                                     else:
@@ -1669,18 +1676,23 @@ def batch_cmd(
                                     rec_d["error"] = "text3d não produziu ficheiro GLB"
                                     dash.feed_event(row.id, "text3d", "error", error=rec_d["error"])
                                 else:
-                                    _install_file(mesh_shape, mesh_f)
+                                    # mesh_shape already at correct path
                                     dash.feed_event(row.id, "text3d", "ok", phase="shape", seconds=elapsed_t3d)
                                     _bpy_simplify_to_target(
-                                        mesh_f, row, text3d_bin,
-                                        profile=profile, run_cmd=run_cmd,
-                                        child_env=child_env, cwd=manifest_dir,
-                                        manifest_dir=manifest_dir, rec=rec_d,
+                                        mesh_shape,
+                                        row,
+                                        text3d_bin,
+                                        profile=profile,
+                                        run_cmd=run_cmd,
+                                        child_env=child_env,
+                                        cwd=manifest_dir,
+                                        manifest_dir=manifest_dir,
+                                        rec=rec_d,
                                     )
                                     if _post_text3d_mesh_extras(
                                         profile,
                                         row,
-                                        mesh_f,
+                                        mesh_shape,
                                         rec_d,
                                         manifest_dir,
                                         child_env,
@@ -2190,8 +2202,13 @@ def batch_cmd(
                                 row = rows[idx]
                                 img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                                 mesh_shape = _shape_path(mesh_final)
+                                mesh_painted = _painted_path(mesh_final)
 
-                                if not force and mesh_shape.is_file() and mesh_final.is_file():
+                                if (
+                                    not force
+                                    and mesh_shape.is_file()
+                                    and (mesh_final.is_file() or mesh_painted.is_file())
+                                ):
                                     shape_ok.append(idx)
                                     finalized_indices.add(idx)
                                     continue
@@ -2348,6 +2365,8 @@ def batch_cmd(
                                         append_log(rec)
                                         progress.advance(task_paint)
                                         continue
+                                    if mesh_painted.is_file() and not force:
+                                        _finalize_mesh_ok(rec, mesh_painted, row)
 
                                     assert paint3d_bin is not None
                                     t_tex = _texture_subprocess_argv(
@@ -2382,8 +2401,8 @@ def batch_cmd(
                                         if not continue_on_error:
                                             raise click.Abort()
                                     else:
-                                        _install_file(mesh_painted, mesh_final)
-                                        _finalize_mesh_ok(rec, mesh_final, row)
+                                        # mesh_painted already at correct path
+                                        _finalize_mesh_ok(rec, mesh_painted, row)
                                         finalized_indices.add(idx)
                                         append_log(rec)
                                         if not continue_on_error and rec["status"] == "error":
@@ -2407,6 +2426,9 @@ def batch_cmd(
                                         if task_paint is not None:
                                             progress.advance(task_paint)
                                         continue
+                                    if mesh_painted.is_file() and not force:
+                                        rec = results[idx]
+                                        _finalize_mesh_ok(rec, mesh_painted, row)
 
                                     paint_manifest_items.append(
                                         {
@@ -2495,9 +2517,8 @@ def batch_cmd(
                                                     "paint3d_texture",
                                                     item_result.get("seconds", 0),
                                                 )
-                                            if mesh_painted.is_file():
-                                                _install_file(mesh_painted, mesh_final)
-                                            _finalize_mesh_ok(rec, mesh_final, row)
+                                            # mesh_painted already at correct path
+                                            _finalize_mesh_ok(rec, mesh_painted, row)
                                             finalized_indices.add(idx)
                                             append_log(rec)
                                             if not continue_on_error and rec["status"] == "error":
@@ -2529,10 +2550,12 @@ def batch_cmd(
                                 for idx in painted_ok:
                                     row = rows[idx]
                                     rec = results[idx]
-                                    _img_f, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+                                    _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+                                    mesh_painted = _painted_path(mesh_f)
+                                    simplify_mesh = mesh_painted if mesh_painted.is_file() else mesh_f
                                     progress.update(task_simplify, description=f"[cyan]{row.id}[/cyan] · simplify")
                                     _bpy_simplify_to_target(
-                                        mesh_final,
+                                        simplify_mesh,
                                         row,
                                         text3d_bin,
                                         profile=profile,
@@ -2556,20 +2579,32 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec = results[idx]
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
+                                    mesh_painted = _painted_path(mesh_final)
+                                    mesh_shape = _shape_path(mesh_final)
+                                    actual_mesh = (
+                                        mesh_painted
+                                        if mesh_painted.is_file()
+                                        else (mesh_shape if mesh_shape.is_file() else mesh_final)
+                                    )
 
-                                    if not mesh_final.is_file():
+                                    if not actual_mesh.is_file():
                                         progress.advance(task_post)
                                         continue
 
                                     progress.update(task_post, description=f"[cyan]{row.id}[/cyan] · pós-processamento")
                                     rec["image_path"] = _path_for_log(img_final, manifest_dir)
                                     _bpy_simplify_to_target(
-                                        mesh_final, row, text3d_bin,
-                                        profile=profile, run_cmd=run_cmd,
-                                        child_env=child_env, cwd=manifest_dir,
-                                        manifest_dir=manifest_dir, rec=rec,
+                                        actual_mesh,
+                                        row,
+                                        text3d_bin,
+                                        profile=profile,
+                                        run_cmd=run_cmd,
+                                        child_env=child_env,
+                                        cwd=manifest_dir,
+                                        manifest_dir=manifest_dir,
+                                        rec=rec,
                                     )
-                                    _finalize_mesh_ok(rec, mesh_final, row)
+                                    _finalize_mesh_ok(rec, actual_mesh, row)
                                     append_log(rec)
                                     if not continue_on_error and rec["status"] == "error":
                                         raise click.Abort()
@@ -2586,12 +2621,13 @@ def batch_cmd(
                                 img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                                 mesh_shape = _shape_path(mesh_final)
 
-                                if not force and mesh_shape.is_file() and mesh_final.is_file():
-                                    rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
+                                if not force and mesh_shape.is_file():
+                                    actual_mesh = mesh_final if mesh_final.is_file() else mesh_shape
+                                    rec["mesh_path"] = _path_for_log(actual_mesh, manifest_dir)
                                     _post_text3d_mesh_extras(
                                         profile,
                                         row,
-                                        mesh_final,
+                                        actual_mesh,
                                         rec,
                                         manifest_dir,
                                         child_env,
@@ -2639,17 +2675,22 @@ def batch_cmd(
                                     rec["error"] = "text3d não produziu ficheiro GLB"
                                     console.print(f"[red]text3d sem GLB[/red] {row.id}")
                                 else:
-                                    _install_file(mesh_shape, mesh_final)
+                                    # mesh_shape already at correct path
                                     _bpy_simplify_to_target(
-                                        mesh_final, row, text3d_bin,
-                                        profile=profile, run_cmd=run_cmd,
-                                        child_env=child_env, cwd=manifest_dir,
-                                        manifest_dir=manifest_dir, rec=rec,
+                                        mesh_shape,
+                                        row,
+                                        text3d_bin,
+                                        profile=profile,
+                                        run_cmd=run_cmd,
+                                        child_env=child_env,
+                                        cwd=manifest_dir,
+                                        manifest_dir=manifest_dir,
+                                        rec=rec,
                                     )
                                     if _post_text3d_mesh_extras(
                                         profile,
                                         row,
-                                        mesh_final,
+                                        mesh_shape,
                                         rec,
                                         manifest_dir,
                                         child_env,
