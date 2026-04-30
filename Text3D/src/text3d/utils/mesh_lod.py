@@ -63,11 +63,7 @@ def _load_glb_with_armatures(path: Path) -> tuple:
 
 
 def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
-    """Exporta mesh + armatures para GLB, preservando animações e skins.
-
-    Selecciona mesh_obj e todos os armatures; o objecto activo é o
-    armature (se existir) para garantir que as animações são exportadas.
-    """
+    """Exporta mesh + armatures para GLB, preservando animações e skins."""
     import bpy
 
     export_objects = [mesh_obj, *arm_objs]
@@ -77,15 +73,19 @@ def _export_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
     bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else mesh_obj
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    has_armature = bool(arm_objs)
     bpy.ops.export_scene.gltf(
         filepath=str(output_path),
         export_format="GLB",
         use_selection=True,
         export_apply=False,
-        export_animations=True,
-        export_skins=True,
+        export_animations=has_armature,
+        export_skins=has_armature,
         export_all_influences=False,
-        export_image_format="AUTO",
+        export_normals=has_armature,
+        export_texcoords=has_armature,
+        export_materials="NONE",
+        export_image_format="NONE",
     )
 
 
@@ -324,7 +324,6 @@ def _generate_lod_glb_triplet_impl(
     min_faces_lod1, min_faces_lod2, meshfix,
 ):
     mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
-    _prepare_topology_bpy(mesh_obj)
     n = len(mesh_obj.data.polygons)
     if n < 4:
         raise ValueError(f"Mesh com poucas faces ({n}); LOD não aplicável.")
