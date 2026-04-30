@@ -369,14 +369,12 @@ def generate_lod_textured_glb_triplet(
     min_faces_lod1: int = 500,
     min_faces_lod2: int = 150,
     texture_size_lod0: int = 2048,
+    target_faces: int | None = None,
 ) -> list[Path]:
-    """Gera três GLB texturizados via isotropic remesh + texture reprojection.
+    """Gera três GLB texturizados por decimação com preservação de UV.
 
-    LOD0 = painted (full res), LOD1 = remeshed a ~42% faces + textura /2,
-    LOD2 = remeshed a ~14% faces + textura /4.
-
-    Usa ``remesh_textured_glb`` (voxel remesh + xatlas UV + reprojeção de
-    textura) que produz malhas sólidas e watertight, ideais para LOD.
+    Se ``target_faces`` for dado: LOD0 = target_faces, LOD1 = target/2, LOD2 = target/4.
+    Caso contrário usa ``lod1_ratio`` e ``lod2_ratio`` sobre o original.
     """
     from text3d.utils.mesh_remesh_textured import remesh_textured_glb
 
@@ -384,7 +382,6 @@ def generate_lod_textured_glb_triplet(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Count original faces
     import bpy
     from gamedev_shared.bpy_mesh import clear_scene
 
@@ -394,20 +391,28 @@ def generate_lod_textured_glb_triplet(
     n = len(max(mesh_objs, key=lambda o: len(o.data.polygons)).data.polygons)
     clear_scene()
 
+    if target_faces and target_faces > 0:
+        lod0_target = target_faces
+        lod1_target = max(100, target_faces // 2)
+        lod2_target = max(50, target_faces // 4)
+    else:
+        lod0_target = n
+        lod1_target = max(min_faces_lod1, int(n * lod1_ratio))
+        lod2_target = max(min_faces_lod2, int(n * lod2_ratio))
+
     out_paths: list[Path] = []
 
-    # LOD0 = painted GLB itself
     lod0_path = output_dir / f"{basename}_lod0.glb"
-    import shutil
-    shutil.copy2(painted, lod0_path)
+    if lod0_target < n:
+        remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=texture_size_lod0)
+    else:
+        import shutil
+        shutil.copy2(painted, lod0_path)
     out_paths.append(lod0_path)
 
-    target_lod1 = max(min_faces_lod1, int(n * lod1_ratio))
-    target_lod2 = max(min_faces_lod2, int(n * lod2_ratio))
-
     for level, target, tex_size in (
-        (1, target_lod1, max(256, texture_size_lod0 // 2)),
-        (2, target_lod2, max(128, texture_size_lod0 // 4)),
+        (1, lod1_target, max(256, texture_size_lod0 // 2)),
+        (2, lod2_target, max(128, texture_size_lod0 // 4)),
     ):
         path = output_dir / f"{basename}_lod{level}.glb"
         remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)

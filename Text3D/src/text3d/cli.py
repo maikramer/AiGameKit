@@ -922,7 +922,13 @@ def gpu_processes_cmd() -> None:
     "--painted-mesh",
     type=click.Path(exists=True, dir_okay=False, path_type=Path),
     default=None,
-    help="GLB texturizado para LOD com texturas. Usa remesh isotrópico + reprojeção. LOD0=painted, LOD1 textura/2, LOD2 textura/4.",
+    help="GLB texturizado para LOD com texturas. LOD0=painted, LOD1 textura/2, LOD2 textura/4.",
+)
+@click.option(
+    "--target-faces",
+    type=int,
+    default=None,
+    help="Face target para LOD0 (com --painted-mesh). LOD1=target/2, LOD2=target/4.",
 )
 def lod_cmd(
     input_mesh: Path,
@@ -934,6 +940,7 @@ def lod_cmd(
     min_faces_lod2: int,
     meshfix: bool,
     painted_mesh: Path | None,
+    target_faces: int | None,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -960,6 +967,7 @@ def lod_cmd(
                 lod2_ratio=lod2_ratio,
                 min_faces_lod1=min_faces_lod1,
                 min_faces_lod2=min_faces_lod2,
+                target_faces=target_faces,
             )
         else:
             paths = generate_lod_glb_triplet(
