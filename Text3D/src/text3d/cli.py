@@ -918,6 +918,12 @@ def gpu_processes_cmd() -> None:
     default=False,
     help="Aplicar pymeshfix só ``fill_small_boundaries`` após cada nível (opcional; por defeito desligado)",
 )
+@click.option(
+    "--painted-mesh",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="GLB texturizado (PBR) para transferir texturas aos LODs. LOD0 = painted, LOD1 textura /2, LOD2 textura /4.",
+)
 def lod_cmd(
     input_mesh: Path,
     output_dir: Path,
@@ -927,6 +933,7 @@ def lod_cmd(
     min_faces_lod1: int,
     min_faces_lod2: int,
     meshfix: bool,
+    painted_mesh: Path | None,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -942,7 +949,22 @@ def lod_cmd(
     """
     stem = basename_opt if basename_opt else input_mesh.stem
     try:
-        paths = generate_lod_glb_triplet(
+        if painted_mesh:
+            from text3d.utils.mesh_lod import generate_lod_textured_glb_triplet
+
+            paths = generate_lod_textured_glb_triplet(
+                input_mesh,
+                painted_mesh,
+                output_dir,
+                stem,
+                lod1_ratio=lod1_ratio,
+                lod2_ratio=lod2_ratio,
+                min_faces_lod1=min_faces_lod1,
+                min_faces_lod2=min_faces_lod2,
+                meshfix=meshfix,
+            )
+        else:
+            paths = generate_lod_glb_triplet(
             input_mesh,
             output_dir,
             stem,
