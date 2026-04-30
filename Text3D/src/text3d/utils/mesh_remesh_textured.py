@@ -56,18 +56,27 @@ def _join_objects(objects: list) -> object:
 
 
 def _bpy_obj_to_arrays(obj) -> tuple[np.ndarray, np.ndarray]:
-    """Extract vertices and faces from a bpy mesh object as numpy arrays."""
+    """Extract vertices and faces from a bpy mesh object as numpy arrays.
+
+    Triangulates the mesh first (GLTF export always triangulates, so this
+    matches what the user sees in the GLB).
+    """
+    import bpy
+
     mesh = obj.data
     n_verts = len(mesh.vertices)
-    n_faces = len(mesh.polygons)
 
     verts = np.empty(n_verts * 3, dtype=np.float64)
     mesh.vertices.foreach_get("co", verts)
     verts = verts.reshape(n_verts, 3)
 
-    faces = np.empty(n_faces * 3, dtype=np.int32)
-    mesh.polygons.foreach_get("vertices", faces)
-    faces = faces.reshape(n_faces, 3)
+    # Triangulate — polygons can be quads/n-gons
+    mesh.calc_loop_triangles()
+    loop_tris = mesh.loop_triangles
+    n_tris = len(loop_tris)
+    faces = np.empty(n_tris * 3, dtype=np.int32)
+    loop_tris.foreach_get("vertices", faces)
+    faces = faces.reshape(n_tris, 3)
 
     return verts, faces
 
@@ -81,12 +90,14 @@ def _extract_source_data(obj) -> MeshData:
 
     verts, faces = _bpy_obj_to_arrays(obj)
     mesh = obj.data
-    n_faces = len(mesh.polygons)
+    mesh.calc_loop_triangles()
+    loop_tris = mesh.loop_triangles
+    n_tris = len(loop_tris)
 
     uvs = None
     texture_image = None
 
-    # --- UVs ---
+    # --- UVs (from loop_triangles for correctly triangulated data) ---
     uv_layer = mesh.uv_layers.active
     if uv_layer is not None:
         n_loops = len(mesh.loops)
@@ -94,21 +105,19 @@ def _extract_source_data(obj) -> MeshData:
         uv_layer.data.foreach_get("uv", loop_uv_flat)
         loop_uvs = loop_uv_flat.reshape(n_loops, 2)
 
-        loop_starts = np.empty(n_faces, dtype=np.int32)
-        mesh.polygons.foreach_get("loop_start", loop_starts)
+        tri_loops = np.empty(n_tris * 3, dtype=np.int32)
+        loop_tris.foreach_get("loops", tri_loops)
+        tri_loops = tri_loops.reshape(n_tris, 3)
 
-        # Per-face-corner UV indices
-        corner_offsets = (loop_starts[:, np.newaxis] + np.arange(3)[np.newaxis, :]).ravel()
-        face_corner_uvs = loop_uvs[corner_offsets].reshape(n_faces, 3, 2)
+        face_corner_uvs = loop_uvs[tri_loops].reshape(n_tris, 3, 2)
 
-        # Split vertices at UV seams: deduplicate (vert_idx, u, v)
         corner_verts = faces.ravel()
         rounded_uvs = np.round(face_corner_uvs.reshape(-1, 2), 8)
         combined = np.column_stack([corner_verts.astype(np.float64), rounded_uvs])
         unique_combined, inverse = np.unique(combined, axis=0, return_inverse=True)
 
         verts = verts[unique_combined[:, 0].astype(np.int32)]
-        faces = inverse.reshape(n_faces, 3).astype(np.int32)
+        faces = inverse.reshape(n_tris, 3).astype(np.int32)
         uvs = unique_combined[:, 1:3]
 
     # --- Texture image from material ---
@@ -587,6 +596,7 @@ def _build_textured_bpy_mesh(
     after saving.
     """
     import bpy
+    import os
     from PIL import Image as PILImage
 
     n_verts = len(verts)
@@ -625,7 +635,7 @@ def _build_textured_bpy_mesh(
     # --- Material with baked texture ---
     # Save baked texture to temp PNG
     temp_fd, temp_path = tempfile.mkstemp(suffix=".png", prefix="baked_tex_")
-    Path(temp_fd).close()  # close OS fd; we just need the path
+    os.close(temp_fd)
     baked_img = PILImage.fromarray(baked_tex, mode="RGB")
     baked_img.save(temp_path)
 
