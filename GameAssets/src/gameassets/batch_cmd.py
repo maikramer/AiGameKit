@@ -66,13 +66,13 @@ from .paths import (
 )
 from .pipeline import (
     _animator3d_game_pack_argv,
-    _bpy_simplify_to_target,
     _part3d_decompose_argv,
     _part3d_output_paths,
     _part3d_profile_effective,
     _post_text3d_mesh_extras,
     _resolve_animator3d_bin,
     _rigging3d_pipeline_argv,
+    _simplify_to_target,
     _text3d_argv,
     _texture_subprocess_argv,
 )
@@ -1599,7 +1599,7 @@ def batch_cmd(
                                     mesh_painted = _painted_path(mesh_f)
                                     simplify_mesh = mesh_painted if mesh_painted.is_file() else mesh_f
                                     dash.feed_event(row.id, "simplify", "progress", phase="decimating", percent=0)
-                                    _bpy_simplify_to_target(
+                                    _simplify_to_target(
                                         simplify_mesh,
                                         row,
                                         text3d_bin,
@@ -1684,7 +1684,7 @@ def batch_cmd(
                                 else:
                                     # mesh_shape already at correct path
                                     dash.feed_event(row.id, "text3d", "ok", phase="shape", seconds=elapsed_t3d)
-                                    _bpy_simplify_to_target(
+                                    _simplify_to_target(
                                         mesh_shape,
                                         row,
                                         text3d_bin,
@@ -2566,7 +2566,7 @@ def batch_cmd(
                                     mesh_painted = _painted_path(mesh_f)
                                     simplify_mesh = mesh_painted if mesh_painted.is_file() else mesh_f
                                     progress.update(task_simplify, description=f"[cyan]{row.id}[/cyan] · simplify")
-                                    _bpy_simplify_to_target(
+                                    _simplify_to_target(
                                         simplify_mesh,
                                         row,
                                         text3d_bin,
@@ -2605,7 +2605,7 @@ def batch_cmd(
 
                                     progress.update(task_post, description=f"[cyan]{row.id}[/cyan] · pós-processamento")
                                     rec["image_path"] = _path_for_log(img_final, manifest_dir)
-                                    _bpy_simplify_to_target(
+                                    _simplify_to_target(
                                         actual_mesh,
                                         row,
                                         text3d_bin,
@@ -2688,7 +2688,7 @@ def batch_cmd(
                                     console.print(f"[red]text3d sem GLB[/red] {row.id}")
                                 else:
                                     # mesh_shape already at correct path
-                                    _bpy_simplify_to_target(
+                                    _simplify_to_target(
                                         mesh_shape,
                                         row,
                                         text3d_bin,

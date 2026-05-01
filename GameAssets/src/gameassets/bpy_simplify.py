@@ -29,7 +29,6 @@ Or programmatically::
 
 from __future__ import annotations
 
-import contextlib
 from pathlib import Path
 
 SMOOTH_FACTOR = 0.2
@@ -229,9 +228,7 @@ if __name__ == "__main__":
     if args.clean_only:
         stats = clean_glb(args.input, args.output, smooth_factor=args.smooth_factor)
     elif args.ratio is not None:
-        stats = simplify_lod(
-            args.input, args.output, ratio=args.ratio, smooth_factor=args.smooth_factor
-        )
+        stats = simplify_lod(args.input, args.output, ratio=args.ratio, smooth_factor=args.smooth_factor)
     else:
         target = args.target_faces if args.target_faces is not None else 16000
         stats = simplify_glb(

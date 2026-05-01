@@ -297,11 +297,8 @@ def _lod_pipeline_failed(
     rec: dict[str, Any],
     manifest_dir: Path,
     child_env: dict[str, str],
-    with_lod: bool,
-    gpu_ids: list[int] | None = None,
-    *,
-    with_rig: bool = False,
-    has_rigging_profile: bool = False,
+    with_lod: bool = False,
+    text3d_bin: str | None = None,
 ) -> bool:
     """Gera triplet LOD. Rigged assets usam ``bpy_simplify.simplify_glb()``,
     static usam ``text3d lod``. Devolve True se falhou."""
@@ -315,12 +312,7 @@ def _lod_pipeline_failed(
     if lod_prof is None:
         lod_prof = LODProfile()
 
-    is_rigged = with_rig and _row_wants_rig(row, has_rigging_profile)
-
-    if is_rigged:
-        return _lod_pipeline_rigged_bpy(profile, row, mesh_final, rec, manifest_dir, lod_prof)
-
-    # --- Static path: text3d lod subprocess ---
+    # --- Unified path: text3d lod subprocess (handles static + rigged) ---
     text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
     basename = row.id.replace("/", "_")
 
@@ -387,131 +379,6 @@ def _lod_pipeline_failed(
     except Exception:
         pass  # LOD cleanup is best-effort
 
-    return False
-
-
-def _lod_rigged_via_subprocess(
-    py: str,
-    row: ManifestRow,
-    mesh_final: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    num_levels: int,
-    current_faces: int,
-) -> bool:
-    """Run rigged LOD levels via subprocess on a bpy-capable Python."""
-    import subprocess as _sp
-
-    pkg_dir = Path(__file__).resolve().parent.parent  # gameassets/ -> src/
-    gameassets_src = str(pkg_dir)
-    shared_src = str((pkg_dir / "../Shared/src").resolve())
-
-    def _lod_ratio(level: int, num: int) -> float:
-        if num <= 1:
-            return 1.0
-        return max(0.05, 1.0 - (level / (num - 1)) * 0.95)
-
-    basename = row.id.replace("/", "_")
-    paths = _lod_output_paths(mesh_final, basename, num_levels)
-
-    console.print(f"[cyan]⏳ LOD (rigged, bpy subprocess, {num_levels}n)[/cyan] {row.id} ...")
-    t0 = time.perf_counter()
-
-    for i in range(num_levels):
-        ratio = _lod_ratio(i, num_levels)
-        target = max(int(current_faces * ratio), 1) if current_faces else int(32000 * ratio)
-        out = paths[i]
-        script = f"""
-import sys
-sys.path.insert(0, "{gameassets_src}")
-sys.path.insert(0, "{shared_src}")
-from gameassets.bpy_simplify import simplify_glb
-simplify_glb("{mesh_final}", "{out}", target_faces={target})
-print("DONE")
-"""
-        try:
-            result = _sp.run([py, "-c", script], capture_output=True, text=True, timeout=300)
-            if "DONE" not in (result.stdout or ""):
-                console.print(f"[yellow]LOD rigged lvl{i} falhou[/yellow] {row.id}: {result.stderr[:200]}")
-        except _sp.TimeoutExpired:
-            console.print(f"[yellow]LOD rigged lvl{i} timeout[/yellow] {row.id}")
-        except Exception as exc:
-            console.print(f"[yellow]LOD rigged lvl{i} falhou[/yellow] {row.id}: {exc}")
-
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "lod", elapsed)
-    rec["lod_method"] = "bpy_rigged_subprocess"
-    rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
-    console.print(f"[green]✓ LOD (rigged, bpy subprocess)[/green] {row.id} ({elapsed:.1f}s)")
-    return False
-
-
-def _lod_pipeline_rigged_bpy(
-    profile: GameProfile,
-    row: ManifestRow,
-    mesh_final: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    lod_prof,  # LODProfile
-) -> bool:
-    """Gera LOD triplet para assets rigados via ``bpy_simplify.simplify_glb()``
-    (preserva rig+animation). Devolve True se falhou."""
-    basename = row.id.replace("/", "_")
-    num_levels = max(1, row.lod_levels)
-    paths = _lod_output_paths(mesh_final, basename, num_levels)
-
-    try:
-        from gamedev_shared.bpy_mesh import face_count as _face_count
-        from gamedev_shared.bpy_mesh import load_glb
-
-        _objs = load_glb(mesh_final)
-        current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception:
-        current_faces = 0
-
-    try:
-        from .bpy_simplify import simplify_glb
-    except ImportError:
-        bpy_py = _resolve_bpy_python()
-        if bpy_py:
-            return _lod_rigged_via_subprocess(bpy_py, row, mesh_final, rec, manifest_dir, num_levels, current_faces)
-        console.print(f"[red]LOD rigged: bpy indisponível[/red] {row.id}")
-        rec["lod_error"] = "bpy required but not installed"
-        return True
-
-    # Lazily-imported bpy in bpy_simplify means the module loads
-    # but function calls fail. Check actual bpy availability.
-    try:
-        import bpy  # noqa: F401
-    except ImportError:
-        bpy_py = _resolve_bpy_python()
-        if bpy_py:
-            return _lod_rigged_via_subprocess(bpy_py, row, mesh_final, rec, manifest_dir, num_levels, current_faces)
-        rec["lod_error"] = "bpy required but not installed"
-        return True
-
-    def _lod_ratio(level: int, num: int) -> float:
-        if num <= 1:
-            return 1.0
-        return max(0.05, 1.0 - (level / (num - 1)) * 0.95)
-
-    console.print(f"[cyan]⏳ LOD (rigged, bpy, {num_levels}n)[/cyan] {row.id} ...")
-    t0 = time.perf_counter()
-
-    for i in range(num_levels):
-        ratio = _lod_ratio(i, num_levels)
-        target = max(int(current_faces * ratio), 1) if current_faces else int(32000 * ratio)
-        out = paths[i]
-        try:
-            simplify_glb(str(mesh_final), str(out), target_faces=target)
-        except Exception as exc:
-            console.print(f"[yellow]LOD rigged lvl{i} falhou[/yellow] {row.id}: {exc}")
-
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "lod", elapsed)
-    rec["lod_method"] = "bpy_rigged"
-    rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
-    console.print(f"[green]✓ LOD (rigged, bpy)[/green] {row.id} ({elapsed:.1f}s)")
     return False
 
 
@@ -699,9 +566,6 @@ def _post_text3d_mesh_extras(
         manifest_dir,
         child_env,
         with_lod=with_lod,
-        gpu_ids=gpu_ids,
-        with_rig=with_rig,
-        has_rigging_profile=has_rigging_profile,
     )
     _collision_pipeline_failed(
         profile,
@@ -780,8 +644,6 @@ def _post_text3d_mesh_extras(
         has_rigging_profile=has_rigging_profile,
         gpu_ids=gpu_ids,
     )
-    if not anim_fail and anim_out.is_file() and _row_wants_animate(row, with_rig, has_rigging_profile):
-        _rigged_lod_simplify(anim_out, row, profile=profile, rec=rec)
     return anim_fail
 
 
@@ -1053,7 +915,7 @@ def _remesh_textured_to_target(
     return False
 
 
-def _bpy_simplify_to_target(
+def _simplify_to_target(
     mesh_path: Path,
     row: ManifestRow,
     text3d_bin: str,
@@ -1065,6 +927,7 @@ def _bpy_simplify_to_target(
     manifest_dir: Path,
     rec: dict[str, Any],
 ) -> bool:
+    """Simplify mesh via text3d remesh (delegated to text3d via subprocess)."""
     if not row.category:
         return False
     fr = effective_face_ratio(profile, row) if profile else 1.0
@@ -1084,23 +947,6 @@ def _bpy_simplify_to_target(
     if current_faces < target * 1.2:
         return False
 
-    try:
-        from .bpy_simplify import simplify_glb
-
-        console.print(f"[cyan]⏳ Simplify (bpy)[/cyan] {row.id} ({current_faces:,} → ~{target:,} faces)")
-        simplified = mesh_path.parent / f"{mesh_path.stem}_simplified{mesh_path.suffix}"
-        simplify_glb(str(mesh_path), str(simplified), target_faces=target)
-        if simplified.is_file():
-            simplified.replace(mesh_path)
-            rec["simplify_method"] = "bpy"
-            rec["simplify_ratio"] = round(target / current_faces, 4)
-            rec["simplify_faces_before"] = current_faces
-            console.print(f"[green]✓ Simplify (bpy)[/green] {row.id}")
-            return False
-    except Exception as exc:
-        err = str(exc)[:200]
-        console.print(f"[yellow]bpy simplify falhou, a usar text3d fallback[/yellow] {row.id}: {err}")
-
     return _remesh_textured_to_target(
         mesh_path,
         row,
@@ -1112,151 +958,6 @@ def _bpy_simplify_to_target(
         manifest_dir=manifest_dir,
         rec=rec,
     )
-
-
-def _resolve_bpy_python() -> str | None:
-    """Find a Python interpreter with bpy (Paint3D or Animator3D venv).
-
-    Tries env vars first, then searches up from __file__ to find repo-root
-    venvs. Uses resolve() to handle symlinks correctly.
-    """
-    import os
-
-    py = os.environ.get("PAINT3D_PYTHON") or os.environ.get("ANIMATOR3D_PYTHON")
-    if py and Path(py).is_file():
-        return py
-
-    pkg_dir = Path(__file__).resolve().parent
-    for _ in range(8):
-        for sub in ("Paint3D/.venv/bin/python", "Animator3D/.venv/bin/python"):
-            candidate = pkg_dir / sub
-            if candidate.is_file():
-                return str(candidate)
-        pkg_dir = pkg_dir.parent
-    return None
-
-
-def _animated_lod_via_subprocess(py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces) -> bool:
-    """Run LOD0 for animated GLB via subprocess on a bpy-capable Python."""
-    import subprocess as _sp
-
-    pkg_dir = Path(__file__).resolve().parent
-    gameassets_src = str(pkg_dir)
-    shared_src = str((pkg_dir / "../../../Shared/src").resolve())
-
-    script = f"""
-import sys
-sys.path.insert(0, "{gameassets_src}")
-sys.path.insert(0, "{shared_src}")
-from gameassets.bpy_simplify import simplify_glb
-simplify_glb("{animated_glb}", "{lod0_path}", target_faces={target})
-print("DONE")
-"""
-    try:
-        result = _sp.run(
-            [py, "-c", script],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-    except _sp.TimeoutExpired:
-        rec["rigged_lod0_error"] = "LOD0 subprocess timeout"
-        return False
-    except Exception as exc:
-        rec["rigged_lod0_error"] = str(exc)
-        return False
-
-    if "DONE" not in (result.stdout or ""):
-        rec["rigged_lod0_error"] = f"subprocess failed: {result.stderr[:200]}"
-        return False
-
-    if lod0_path.is_file():
-        rec["rigged_lod0_path"] = _path_for_log(lod0_path, out_dir)
-        rec["rigged_lod0_src_faces"] = current_faces
-        console.print(f"[green]✓ LOD0 (rigged, subprocess)[/green] {row.id}")
-        return False
-    rec["rigged_lod0_error"] = "LOD0 subprocess no output"
-    return False
-
-
-def _rigged_lod_simplify(
-    animated_glb: Path,
-    row: ManifestRow,
-    profile: GameProfile | None = None,
-    rec: dict[str, Any] | None = None,
-) -> bool:
-    """Simplify a rigged+animated GLB to category LOD0 using bpy_simplify.
-
-    Preserves armature, skinning, and animation data.  Produces a
-    ``{stem}_lod0.glb`` sibling.  Returns True on error.
-    """
-    if rec is None:
-        rec = {}
-    if not animated_glb.is_file():
-        return False
-    if not row.category:
-        return False
-
-    fr = effective_face_ratio(profile, row) if profile else 1.0
-    target = get_target_faces(row.category, face_ratio=fr)
-    if target <= 0:
-        return False
-
-    try:
-        from gamedev_shared.bpy_mesh import face_count as _face_count
-        from gamedev_shared.bpy_mesh import load_glb
-
-        _objs = load_glb(animated_glb)
-        current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception:
-        current_faces = 0
-    if current_faces > 0 and current_faces <= target:
-        return False
-    if current_faces > 0 and current_faces < target * 1.2:
-        return False
-
-    out_dir = animated_glb.parent
-    lod0_path = out_dir / f"{animated_glb.stem}_lod0.glb"
-
-    bpy_py = _resolve_bpy_python()
-
-    try:
-        from .bpy_simplify import simplify_glb
-    except ImportError:
-        if bpy_py:
-            return _animated_lod_via_subprocess(
-                bpy_py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces
-            )
-        return False
-
-    try:
-        label = f"{current_faces:,}" if current_faces else "?"
-        console.print(f"[cyan]⏳ LOD0 (rigged simplify)[/cyan] {row.id} ({label} → ~{target:,} faces)")
-        stats = simplify_glb(str(animated_glb), str(lod0_path), target_faces=target)
-        if lod0_path.is_file():
-            rec["rigged_lod0_path"] = _path_for_log(lod0_path, out_dir)
-            rec["rigged_lod0_src_faces"] = stats.get("src_faces", current_faces)
-            rec["rigged_lod0_final_faces"] = stats.get("final_faces", 0)
-            rec["rigged_lod0_has_armature"] = stats.get("has_armature", False)
-            rec["rigged_lod0_n_bones"] = stats.get("n_bones", 0)
-            console.print(
-                f"[green]✓ LOD0 (rigged)[/green] {row.id} "
-                f"({stats.get('src_faces', '?'):,} → {stats.get('final_faces', '?'):,} faces)"
-            )
-            return False
-        rec["rigged_lod0_error"] = "simplify_glb produced no output"
-        console.print(f"[yellow]LOD0 (rigged) sem output[/yellow] {row.id}")
-        return True
-    except Exception as exc:
-        if bpy_py:
-            console.print(f"[yellow]bpy simplify falhou, a usar subprocess fallback[/yellow] {row.id}: {exc}")
-            return _animated_lod_via_subprocess(
-                bpy_py, row, animated_glb, rec, out_dir, lod0_path, target, current_faces
-            )
-        err = str(exc)[:200]
-        rec["rigged_lod0_error"] = err
-        console.print(f"[red]LOD0 (rigged) falhou[/red] {row.id}: {err}")
-        return True
 
 
 def _text3d_argv(

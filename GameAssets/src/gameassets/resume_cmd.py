@@ -49,9 +49,9 @@ from .paths import (
 )
 from .pipeline import (
     _animator3d_game_pack_failed,
-    _bpy_simplify_to_target,
     _resolve_animator3d_bin,
     _rigging3d_pipeline_failed,
+    _simplify_to_target,
     _texture_subprocess_argv,
     _try_paint3d_bin,
 )
@@ -148,7 +148,6 @@ def resume_cmd(
 
     want_texture = bool(profile.paint3d)
     has_rigging_profile = False
-    has_parts_profile = False
     want_rig = any(r.generate_rig for r in rows if r.generate_3d)
     want_animate = want_rig and (
         profile.animator3d is not None or any(r.generate_animate for r in rows if r.generate_3d)
@@ -703,9 +702,9 @@ def resume_cmd(
 
             # --- Fase 3.5: Simplify (bpy decimate) após Paint, antes de Rigging ---
             simplify_items = [
-                it for it in items
-                if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE)
-                and it["mesh_final"].is_file()
+                it
+                for it in items
+                if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE) and it["mesh_final"].is_file()
             ]
             if simplify_items and text3d_bin:
                 dash.set_phase("Simplify", len(simplify_items))
@@ -713,11 +712,16 @@ def resume_cmd(
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "simplify", "progress", phase="decimating", percent=0)
-                    _bpy_simplify_to_target(
-                        it["mesh_final"], row, text3d_bin,
-                        profile=profile, run_cmd=run_cmd,
-                        child_env=child_env, cwd=manifest_dir,
-                        manifest_dir=manifest_dir, rec=rec,
+                    _simplify_to_target(
+                        it["mesh_final"],
+                        row,
+                        text3d_bin,
+                        profile=profile,
+                        run_cmd=run_cmd,
+                        child_env=child_env,
+                        cwd=manifest_dir,
+                        manifest_dir=manifest_dir,
+                        rec=rec,
                     )
                     dash.feed_event(row.id, "simplify", "ok", phase="decimating")
                     dash.advance_phase()
@@ -1147,9 +1151,9 @@ def resume_cmd(
 
         # --- Fase 3.5: Simplify ---
         simplify_items = [
-            it for it in items
-            if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE)
-            and it["mesh_final"].is_file()
+            it
+            for it in items
+            if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE) and it["mesh_final"].is_file()
         ]
         if simplify_items and text3d_bin:
             console.print(f"\n[bold cyan]Fase 3.5: Simplify ({len(simplify_items)} meshes)[/bold cyan]")
@@ -1166,11 +1170,16 @@ def resume_cmd(
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · simplify")
                     rec: dict[str, Any] = {"id": row.id}
-                    _bpy_simplify_to_target(
-                        it["mesh_final"], row, text3d_bin,
-                        profile=profile, run_cmd=run_cmd,
-                        child_env=child_env, cwd=manifest_dir,
-                        manifest_dir=manifest_dir, rec=rec,
+                    _simplify_to_target(
+                        it["mesh_final"],
+                        row,
+                        text3d_bin,
+                        profile=profile,
+                        run_cmd=run_cmd,
+                        child_env=child_env,
+                        cwd=manifest_dir,
+                        manifest_dir=manifest_dir,
+                        rec=rec,
                     )
                     console.print(f"  [green]OK[/green] {row.id}")
                     progress.advance(task)

@@ -41,7 +41,17 @@ def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
 
 def _base_stem(name: str) -> str:
     """Strip known suffixes from a stem like 'wooden_crate_painted' → 'wooden_crate'."""
-    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented", "_collision", "_lod0", "_lod1", "_lod2"):
+    for sfx in (
+        "_painted",
+        "_shape",
+        "_rigged_animated",
+        "_rigged",
+        "_segmented",
+        "_collision",
+        "_lod0",
+        "_lod1",
+        "_lod2",
+    ):
         if name.endswith(sfx):
             return name[: -len(sfx)]
     return name
@@ -95,7 +105,6 @@ def _classify_row_state(
     lod0_path: Path | None = None,
     collision_path: Path | None = None,
 ) -> str:
-    base = _base_stem(mesh_final.stem)
     shape = _shape_path(mesh_final)
     painted = _painted_path(mesh_final)
     final_exists = (_valid_file(painted) or _valid_file(mesh_final)) if want_texture else _valid_file(shape)
