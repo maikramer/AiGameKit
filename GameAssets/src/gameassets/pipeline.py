@@ -1104,17 +1104,24 @@ def _bpy_simplify_to_target(
 
 
 def _resolve_bpy_python() -> str | None:
-    """Find a Python interpreter with bpy (Paint3D or Animator3D venv)."""
+    """Find a Python interpreter with bpy (Paint3D or Animator3D venv).
+
+    Tries env vars first, then searches up from __file__ to find repo-root
+    venvs. Uses resolve() to handle symlinks correctly.
+    """
     import os
 
     py = os.environ.get("PAINT3D_PYTHON") or os.environ.get("ANIMATOR3D_PYTHON")
     if py and Path(py).is_file():
         return py
-    pkg_dir = Path(__file__).parent
-    for rel in ("../../../Paint3D/.venv/bin/python", "../../../Animator3D/.venv/bin/python"):
-        candidate = pkg_dir / rel
-        if candidate.is_file():
-            return str(candidate)
+
+    pkg_dir = Path(__file__).resolve().parent
+    for _ in range(8):
+        for sub in ("Paint3D/.venv/bin/python", "Animator3D/.venv/bin/python"):
+            candidate = pkg_dir / sub
+            if candidate.is_file():
+                return str(candidate)
+        pkg_dir = pkg_dir.parent
     return None
 
 
