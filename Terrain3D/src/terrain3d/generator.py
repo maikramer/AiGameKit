@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from terrain3d.postprocess import apply_postprocess_chain
+
 DEFAULT_MODEL_ID = "xandergos/terrain-diffusion-30m"
 
 
@@ -30,6 +32,14 @@ class TerrainConfig:
     cache_size: str = "100M"
     coarse_window: int = 4  # number of coarse tiles to generate (each ~7.7km for 30m model)
     prompt: str | None = None  # stored as metadata only (model is unconditional)
+    # --- Post-processing ---
+    mode: str = "island"  # "island" | "continental"
+    island_falloff: float = 0.35
+    island_noise_scale: float = 0.15
+    island_noise_freq: float = 3.0
+    smooth_iterations: int = 3
+    elevation_gamma: float = 1.2
+    elevation_contrast: float = 0.1
 
 
 @dataclass
@@ -131,6 +141,19 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
             heightmap = (heightmap - h_min) / (h_max - h_min)
         else:
             heightmap = np.zeros_like(heightmap, dtype=np.float64)
+
+        # --- Post-processing chain ---
+        heightmap = apply_postprocess_chain(
+            heightmap,
+            mode=config.mode,
+            seed=config.seed if config.seed is not None else 0,
+            island_falloff_radius=config.island_falloff,
+            island_noise_scale=config.island_noise_scale,
+            island_noise_freq=config.island_noise_freq,
+            smooth_iterations=config.smooth_iterations,
+            elevation_gamma=config.elevation_gamma,
+            elevation_contrast=config.elevation_contrast,
+        )
     finally:
         pipeline.close()
 
