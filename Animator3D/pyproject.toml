@@ -15,8 +15,8 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
     "rich-click>=1.8.0",
-    # PyPI: bpy 5.1.0 wheels só cp313 (alinhado ao Blender 5.1)
-    "bpy==5.1.0",
+    # bpy >=4.5.9 cobre todas as versões de Python usadas no monorepo (3.11–3.13)
+    "bpy>=4.5.9",
 ]
 
 [project.optional-dependencies]

@@ -3,7 +3,8 @@
 # Nota: requer Python 3.13 (bpy 5.1.0 wheels só cp313).
 
 # Blender Python — motor principal de animação
-bpy==5.1.0
+# bpy >=4.5.9 cobre todas as versões de Python usadas no monorepo (3.11–3.13)
+bpy>=4.5.9
 
 click>=8.1.0
 rich>=13.0.0
