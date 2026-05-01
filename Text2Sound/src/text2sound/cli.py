@@ -335,6 +335,8 @@ def generate_cmd(
     trim_buffer_ms: int = 200  # default buffer
     trim_threshold_db: float = -60.0  # default threshold
     quality_audio_kind: str | None = None
+    seamless_loop: bool = False
+    crossfade_ms: float = 500.0
 
     try:
         from gamedev_shared.quality import QualityEngine
@@ -367,6 +369,14 @@ def generate_cmd(
                     kind_info = qe.audio_kind_info(quality_audio_kind)
                     trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
                     trim_threshold_db = float(kind_info.get("trim_threshold_db", -60.0))
+                    # Seamless loop from audio_kind
+                    if kind_info.get("loop_hint"):
+                        seamless_loop = True
+                        # crossfade_ms: quality profile override > audio_kind default
+                        if "crossfade_ms" in resolved.params:
+                            crossfade_ms = float(resolved.params["crossfade_ms"])
+                        elif "crossfade_ms" in kind_info:
+                            crossfade_ms = float(kind_info["crossfade_ms"])
                 except KeyError:
                     pass
 
@@ -421,6 +431,8 @@ def generate_cmd(
         table.add_row("[bold]Category[/bold]", category)
     if quality_audio_kind:
         table.add_row("[bold]Audio Kind[/bold]", quality_audio_kind)
+    if seamless_loop:
+        table.add_row("[bold]Seamless Loop[/bold]", f"[green]ON[/green] ({crossfade_ms:.0f}ms crossfade)")
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     _prof_params = {
@@ -432,6 +444,8 @@ def generate_cmd(
         "sigma_min": sigma_min,
         "sigma_max": sigma_max,
         "trim": trim,
+        "seamless_loop": seamless_loop,
+        "crossfade_ms": crossfade_ms,
     }
     item_id = Path(output).stem if output else prompt[:40].replace(" ", "_")
     start = time.time()
@@ -526,6 +540,8 @@ def generate_cmd(
                         metadata=metadata,
                         trim_buffer_ms=trim_buffer_ms,
                         trim_threshold_db=trim_threshold_db,
+                        seamless_loop=seamless_loop,
+                        crossfade_ms=crossfade_ms,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
