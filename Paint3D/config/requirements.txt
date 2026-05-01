@@ -1,8 +1,8 @@
 # Paint3D — Texturização 3D (Hunyuan3D-Paint + Materialize PBR + Upscale IA)
 # Instalar a partir da pasta GameDev: pip install -r config/requirements.txt
 
-torch>=2.1.0
-torchvision>=0.16.0
+torch>=2.6.0
+torchvision>=2.6.0
 pytorch-lightning>=2.1.0
 
 diffusers>=0.37.0

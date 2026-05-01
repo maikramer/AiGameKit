@@ -2,8 +2,8 @@
 # Instalar a partir da pasta GameDev: pip install -r config/requirements.txt
 # (paths relativos: text2d em ../Text2D)
 
-torch>=2.1.0
-torchvision>=0.16.0
+torch>=2.6.0
+torchvision>=2.6.0
 
 diffusers>=0.37.0
 transformers>=4.48.0

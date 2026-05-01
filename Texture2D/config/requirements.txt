@@ -2,8 +2,8 @@
 # Uso: pip install -r config/requirements.txt
 # Requer PyTorch + CUDA para inferência local.
 
-torch>=2.1.0
-torchvision>=0.16.0
+torch>=2.6.0
+torchvision>=2.6.0
 diffusers>=0.37.0
 transformers>=4.40.0
 accelerate>=0.24.0

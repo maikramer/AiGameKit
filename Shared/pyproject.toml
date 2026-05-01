@@ -7,7 +7,7 @@ name = "gamedev-shared"
 version = "0.2.0"
 description = "Biblioteca partilhada do monorepo GameDev (logging, GPU, instaladores, CLI, subprocess)"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 authors = [{ name = "GameDev" }]
 license = "MIT"
 dependencies = [
@@ -16,14 +16,11 @@ dependencies = [
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 
 [project.optional-dependencies]
-gpu = ["torch>=2.1.0"]
+gpu = ["torch>=2.6.0"]
 cli = ["rich-click>=1.8.0"]
 quantization = [
     "bitsandbytes>=0.45.0",
@@ -37,7 +34,7 @@ low_vram = [
 profiler = [
     "psutil>=5.9.0",
 ]
-mesh = ["bpy>=5.0.1"]
+mesh = ["bpy>=5.1.0"]
 dev = ["pytest>=7.4.0", "pytest-cov>=4.0.0", "ruff>=0.11.0", "mypy>=1.10.0", "Pillow>=10.0.0"]
 
 [project.scripts]

@@ -1,0 +1,18 @@
+{
+  "timestamp": 1777673369.462631,
+  "prompt": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, laje de pedra desgastada, textura tile sem costura",
+  "params": {
+    "seed": 3075578438,
+    "prompt_final": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, laje de pedra desgastada, textura tile sem costura",
+    "prompt": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, laje de pedra desgastada, textura tile sem costura",
+    "negative_prompt": "",
+    "guidance_scale": 3.5,
+    "num_inference_steps": 10,
+    "width": 512,
+    "height": 512,
+    "cfg_scale": 3.5,
+    "lora_strength": 1.0
+  },
+  "image_path": "images/stone_tile_from_texture.png",
+  "filename": "stone_tile_from_texture.png"
+}

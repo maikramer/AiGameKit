@@ -8,11 +8,11 @@ version = "0.1.0"
 description = "Text-to-3D com Text2D + Hunyuan3D-2.1 SDNQ INT4"
 readme = "README.md"
 authors = [{ name = "Text3D Project" }]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
-    "torch>=2.1.0",
-    "torchvision>=0.16.0",
+    "torch>=2.6.0",
+    "torchvision>=2.6.0",
     "diffusers>=0.37.0",
     "transformers>=4.48.0",
     "accelerate>=0.24.0",
@@ -40,9 +40,6 @@ dependencies = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Graphics :: 3D Modeling",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 

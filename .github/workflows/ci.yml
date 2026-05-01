@@ -17,7 +17,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
       - name: Cache pip
         uses: actions/cache@v4
         with:
@@ -42,35 +42,25 @@ jobs:
         include:
           # Shared only (no inter-package dependencies)
           - package: Shared
-            python-version: "3.10"
-          - package: Shared
-            python-version: "3.12"
+            python-version: "3.13"
           # Other packages need Shared installed first via absolute path
           - package: GameAssets
-            python-version: "3.10"
-          - package: GameAssets
-            python-version: "3.12"
+            python-version: "3.13"
           - package: Texture2D
-            python-version: "3.10"
-          - package: Texture2D
-            python-version: "3.12"
+            python-version: "3.13"
           - package: Skymap2D
-            python-version: "3.10"
-          - package: Skymap2D
-            python-version: "3.12"
+            python-version: "3.13"
           # Rigging3D — requires-python >=3.11,<3.12
           - package: Rigging3D
             python-version: "3.11"
-          # Torch on CPU (single Python to keep CI time reasonable)
+          # Torch on CPU
           - package: Part3D
-            python-version: "3.12"
+            python-version: "3.13"
           - package: Text2Sound
-            python-version: "3.12"
+            python-version: "3.13"
           # GameDevLab
           - package: GameDevLab
-            python-version: "3.10"
-          - package: GameDevLab
-            python-version: "3.12"
+            python-version: "3.13"
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"

@@ -2,8 +2,8 @@
 # Uso: pip install -r config/requirements.txt
 # Nota: torch/torchvision são instalados por scripts/setup.sh ou installer.py (CUDA/CPU).
 
-torch>=2.1.0
-torchvision>=0.16.0
+torch>=2.6.0
+torchvision>=2.6.0
 
 # Pipeline FLUX.1-dev + LoRA (FluxPipeline); testado com 0.37.x
 diffusers>=0.37.0

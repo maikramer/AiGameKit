@@ -8,11 +8,11 @@ version = "0.1.0"
 description = "CLI para geração de texturas 2D seamless via FLUX.1-dev + LoRA local"
 readme = "README.md"
 authors = [{ name = "Texture2D Project" }]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
-    "torch>=2.1.0",
-    "torchvision>=0.16.0",
+    "torch>=2.6.0",
+    "torchvision>=2.6.0",
     "diffusers>=0.37.0",
     "transformers>=4.40.0",
     "accelerate>=0.24.0",
@@ -31,9 +31,6 @@ dependencies = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Graphics",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
 

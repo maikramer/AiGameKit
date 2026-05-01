@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "CLI de laboratório: debug 3D, bancadas de quantização, profiling e testes"
 readme = "README.md"
 authors = [{ name = "GameDev" }]
-requires-python = ">=3.10"
+requires-python = ">=3.13"
 dependencies = [
     "click>=8.0",
     "rich>=13.0",
@@ -21,7 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 bench = [
-    "torch>=2.1.0",
+    "torch>=2.6.0",
     "diffusers>=0.30.0",
     "transformers>=4.46.0",
     "huggingface-hub>=0.20.0",

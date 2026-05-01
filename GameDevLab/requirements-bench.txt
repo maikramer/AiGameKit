@@ -2,9 +2,9 @@
 # Instale com: pip install -r requirements-bench.txt
 
 # Core ML
-torch>=2.1.0
-torchvision>=0.16.0
-torchaudio>=2.1.0
+torch>=2.6.0
+torchvision>=2.6.0
+torchaudio>=2.6.0
 
 # Quantização
 optimum-quanto>=0.2.0

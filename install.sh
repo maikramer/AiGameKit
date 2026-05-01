@@ -43,14 +43,14 @@ prepare_installer_environment() {
 
     if ! command -v "$PYTHON_CMD" &> /dev/null; then
         echo -e "${RED}✗ Python 3 não encontrado.${NC}"
-        echo "Instale Python 3.10+:"
+        echo "Instale Python 3.13+:"
         echo "  Ubuntu/Debian: sudo apt install python3"
         echo "  macOS: brew install python3"
         exit 1
     fi
 
-    if ! "$PYTHON_CMD" -c "import sys; assert sys.version_info >= (3, 10)" 2>/dev/null; then
-        echo -e "${RED}✗ Python 3.10 ou superior é necessário.${NC}"
+    if ! "$PYTHON_CMD" -c "import sys; assert sys.version_info >= (3, 13)" 2>/dev/null; then
+        echo -e "${RED}✗ Python 3.13 ou superior é necessário.${NC}"
         "$PYTHON_CMD" -V 2>/dev/null || true
         exit 1
     fi

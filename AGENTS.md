@@ -156,7 +156,7 @@ pip install pre-commit && make install-hooks  # Pre-commit hooks
 
 ### Formatting rules (enforced by ruff)
 
-- **Target version:** Python 3.10+
+- **Target version:** Python 3.13+
 - **Line length:** 120 characters max
 - **Quotes:** Double quotes (`"..."`)
 - **Indentation:** 4 spaces
@@ -191,7 +191,7 @@ from gamedev_shared.logging import Logger
 
 - Required for `gamedev-shared` package (`disallow_untyped_defs = True` in `mypy.ini`).
 - Use modern syntax: `str | None` (not `Optional[str]`), `list[str]` (not `List[str]`).
-- Use `from __future__ import annotations` to enable forward-reference syntax on Python 3.10.
+- Use `from __future__ import annotations` to enable forward-reference syntax on Python 3.13.
 - `Any` is acceptable for dynamic/generic objects (e.g., pipeline objects from diffusers).
 
 ### Naming conventions
@@ -339,7 +339,7 @@ Use Conventional Commits:
 CI runs on push/PR to `main` (`.github/workflows/ci.yml`):
 
 1. **lint:** ruff check + ruff format --check + pre-commit
-2. **test-python:** pytest per package on multiple Python versions (3.10, 3.12, 3.11 for Rigging3D, 3.13 for Animator3D)
+2. **test-python:** pytest per package on Python 3.13 (3.11 for Rigging3D)
 3. **test-rust:** cargo fmt --check + cargo clippy + cargo test (Materialize; continue-on-error)
 
 Excluded from CI (heavy PyTorch / diffusers deps, not viable on GPU-less runners): Text2D, Text3D, Paint3D.

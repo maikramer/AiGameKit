@@ -30,7 +30,7 @@ pyyaml>=6.0.0
 configargparse>=1.7
 
 # Sparse convolutions (Sonata / X-Part conditioner)
-spconv-cu126
+spconv-cu121
 
 # PyG (torch-scatter, torch-cluster): não listar aqui — o instalador universal
 # (gamedev-install part3d / ./install.sh part3d) instala-os após o PyTorch.

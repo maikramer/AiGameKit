@@ -2,8 +2,8 @@
 # Uso: pip install -r config/requirements.txt
 # Nota: torch/torchaudio são instalados por scripts/setup.sh ou installer.py (CUDA/CPU).
 
-torch>=2.1.0
-torchaudio>=0.16.0
+torch>=2.6.0
+torchaudio>=2.6.0
 
 # Wheel cp313 (evita build desde fonte de pandas antigo sem setuptools no isolamento PEP 517)
 pandas>=2.2.3
