@@ -94,7 +94,7 @@ paint3d:
 """
 
 MANIFEST_YAML = """# Manifest — assets do jogo (gameassets batch)
-# pipeline: combinações de [3d, audio, rig, animate, parts]
+# pipeline: combinações de [3d, paint, audio, rig, animate, parts, lod, collision]
 
 assets:
   - id: chest_01
@@ -105,7 +105,7 @@ assets:
   - id: hero_sword
     idea: "espada longa com gema azul no punho"
     kind: prop
-    pipeline: [3d, lod]
+    pipeline: [3d, paint, lod]
 
   - id: forest_bg
     idea: "floresta densa ao entardecer"

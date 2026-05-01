@@ -466,6 +466,8 @@ def merge(
                 export_draco_mesh_compression_enable=use_draco,
                 export_draco_mesh_compression_level=6 if use_draco else 0,
                 export_all_influences=False,
+                export_image_format="JPEG",
+                export_keep_originals=False,
             )
         elif output_path.endswith(".dae"):
             bpy.ops.wm.collada_export(filepath=output_path)

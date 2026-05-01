@@ -141,12 +141,16 @@ def resume_cmd(
             raise click.ClickException("--gpu-ids deve ser lista separada por vírgulas (ex.: '0,1')") from _err
 
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
+    any_row_wants_paint = any(r.generate_3d and r.generate_paint for r in rows)
+    if any_row_wants_paint and profile.paint3d is None:
+        profile.paint3d = Paint3DProfile()
+
     manifest_path = _resolve_manifest_path(manifest_path)
     manifest_dir = manifest_path.resolve().parent
     t3_opts = profile.text3d
     p3: Paint3DProfile | None = profile.paint3d
 
-    want_texture = bool(profile.paint3d)
+    want_texture = any_row_wants_paint
     has_rigging_profile = False
     want_rig = any(r.generate_rig for r in rows if r.generate_3d)
     want_animate = want_rig and (
@@ -166,7 +170,7 @@ def resume_cmd(
     except FileNotFoundError:
         text3d_bin = None
     paint3d_bin: str | None = None
-    if profile.paint3d:
+    if any_row_wants_paint:
         paint3d_bin = _try_paint3d_bin()
     rigging3d_bin: str | None = None
     if want_rig:
@@ -212,7 +216,7 @@ def resume_cmd(
             mesh_final=mesh_final,
             rig_out=rig_out,
             anim_out=anim_out,
-            want_texture=want_texture,
+            want_texture=row.generate_paint,
             wants_rig=row_wants_rig,
             wants_animate=row_wants_animate,
             wants_lod=row.generate_lod,
@@ -373,7 +377,7 @@ def resume_cmd(
                 stages.append("Texture2D" if src == "texture2d" else "Text2D")
             if it["state"] in (_ROW_NEED_SHAPE, _ROW_NEED_PAINT, _ROW_NEED_RIG, _ROW_NEED_ANIMATE):
                 stages.append("Shape")
-            if it["state"] in (_ROW_NEED_PAINT, _ROW_NEED_RIG, _ROW_NEED_ANIMATE) and want_texture:
+            if it["state"] in (_ROW_NEED_PAINT, _ROW_NEED_RIG, _ROW_NEED_ANIMATE) and row.generate_paint:
                 p3_style = (p3.style or "hunyuan").strip().lower() if p3 else "hunyuan"
                 stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
             if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE) and it["wants_rig"]:
@@ -552,7 +556,7 @@ def resume_cmd(
                         if item_result.get("status") in ("ok", "skipped"):
                             it["state"] = (
                                 _ROW_NEED_PAINT
-                                if want_texture
+                                if row.generate_paint
                                 else (
                                     _ROW_NEED_RIG
                                     if it["wants_rig"]
@@ -990,7 +994,7 @@ def resume_cmd(
                         if item_result.get("status") in ("ok", "skipped"):
                             it["state"] = (
                                 _ROW_NEED_PAINT
-                                if want_texture
+                                if row.generate_paint
                                 else (
                                     _ROW_NEED_RIG
                                     if it["wants_rig"]

@@ -28,6 +28,7 @@ def test_load_manifest_yaml_basic() -> None:
         assert len(rows) == 2
         assert rows[0].id == "a"
         assert rows[0].generate_3d is True
+        assert rows[0].generate_paint is False
         assert rows[1].generate_3d is False
     finally:
         path.unlink(missing_ok=True)
@@ -37,7 +38,7 @@ def test_load_manifest_yaml_pipeline() -> None:
     content = yaml.dump(
         {
             "assets": [
-                {"id": "hero", "idea": "chibi hero", "kind": "character", "pipeline": ["3d", "rig", "animate"]},
+                {"id": "hero", "idea": "chibi hero", "kind": "character", "pipeline": ["3d", "paint", "rig", "animate"]},
             ]
         }
     )
@@ -49,6 +50,7 @@ def test_load_manifest_yaml_pipeline() -> None:
         assert rows[0].generate_3d is True
         assert rows[0].generate_rig is True
         assert rows[0].generate_animate is True
+        assert rows[0].generate_paint is True
     finally:
         path.unlink(missing_ok=True)
 

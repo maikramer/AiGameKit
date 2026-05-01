@@ -32,10 +32,24 @@ def load_glb(path: str | Path) -> list:
     return [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
 
-def save_glb(objects, path: str | Path, **kwargs) -> None:
+def save_glb(objects, path: str | Path, **kwargs: Any) -> None:
     """Export scene/objects to GLB via bpy native exporter.
 
-    Preserves armature, skinning, animations, materials, normals, UVs.
+    Preserves armature, skinning, animations, materials, UVs.
+
+    Defaults are conservative for game assets:
+
+    - ``export_image_format="JPEG"``: textures saved as JPEG (3-5 MB total for a
+      typical 2048² PBR set vs 30-40 MB as PNG).
+    - ``export_normals=True``: normals are kept (turn off for shape-only stages
+      where they will be recomputed downstream).
+    - ``export_all_influences=False``: skin weights limited to the 4 most
+      influential joints per vertex (GLTF standard); avoids extra
+      ``JOINTS_n/WEIGHTS_n`` attribute sets.
+
+    Any keyword passed via ``**kwargs`` overrides the corresponding default and
+    is forwarded to ``bpy.ops.export_scene.gltf``. This is what callers like
+    Paint3D rely on to enforce JPEG / no-normals on their stage outputs.
     """
     import contextlib
     import io
@@ -54,21 +68,26 @@ def save_glb(objects, path: str | Path, **kwargs) -> None:
     else:
         use_selection = False
 
+    export_kwargs: dict[str, Any] = {
+        "filepath": str(path),
+        "export_apply": True,
+        "export_animations": True,
+        "export_skins": True,
+        "export_morph": True,
+        "export_normals": True,
+        "export_texcoords": True,
+        "export_materials": "EXPORT",
+        "export_image_format": "JPEG",
+        "export_keep_originals": False,
+        "export_all_influences": False,
+        "use_selection": use_selection,
+    }
+    export_kwargs.update(kwargs)
+
     # Suppress bpy stdout spam
     stdout = io.StringIO()
     with contextlib.redirect_stdout(stdout):
-        bpy.ops.export_scene.gltf(
-            filepath=str(path),
-            export_apply=True,
-            export_animations=True,
-            export_skins=True,
-            export_morph=True,
-            export_normals=True,
-            export_texcoords=True,
-            export_materials="EXPORT",
-            export_image_format="AUTO",
-            use_selection=use_selection,
-        )
+        bpy.ops.export_scene.gltf(**export_kwargs)
 
 
 def get_mesh_objects() -> list:

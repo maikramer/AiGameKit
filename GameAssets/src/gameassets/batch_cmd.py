@@ -291,6 +291,10 @@ def batch_cmd(
         profile.part3d.low_vram_mode = True
         profile.part3d.quantization = "auto"
 
+    any_row_wants_paint = any(r.generate_3d and r.generate_paint for r in rows)
+    if any_row_wants_paint and profile.paint3d is None:
+        profile.paint3d = Paint3DProfile()
+
     gpu_ids: list[int] | None = None
     if gpu_ids_str:
         try:
@@ -342,11 +346,13 @@ def batch_cmd(
             text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
-        if profile.paint3d:
+        if any_row_wants_paint:
             try:
                 paint3d_bin = resolve_binary("PAINT3D_BIN", "paint3d")
             except FileNotFoundError as e:
-                raise click.ClickException("Perfil com paint3d requer paint3d no PATH ou PAINT3D_BIN.") from e
+                raise click.ClickException(
+                    "Linhas com paint no pipeline requerem paint3d no PATH ou PAINT3D_BIN."
+                ) from e
 
     rigging3d_bin: str | None = None
     if with_rig and any(_row_wants_rig(r, has_rigging_profile) for r in rows):
@@ -405,10 +411,10 @@ def batch_cmd(
         )
     meta.add_row("text3d", text3d_bin or "[dim](desligado)[/dim]")
     if with_3d:
-        if profile.paint3d:
+        if any_row_wants_paint:
             meta.add_row("paint3d", paint3d_bin or "[red]em falta[/red]")
         else:
-            meta.add_row("paint3d", "[dim](não necessário — sem textura 3D)[/dim]")
+            meta.add_row("paint3d", "[dim](nenhuma linha com paint no pipeline)[/dim]")
     meta.add_row("rigging3d", rigging3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("animator3d", animator3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("part3d", part3d_bin or "[dim](desligado)[/dim]")
@@ -588,7 +594,7 @@ def batch_cmd(
                     )
         if with_3d and text3d_bin and any(r.generate_3d for r in rows):
             t3d = profile.text3d
-            phased = bool(profile.paint3d)
+            phased = any_row_wants_paint
             ps3 = (profile.paint3d.style if profile.paint3d else None) or "hunyuan"
             quick_paint = ps3 in ("solid", "perlin")
             if phased:
@@ -633,7 +639,7 @@ def batch_cmd(
                     # Quick paint stays per-row in dry-run
                     pbin = paint3d_bin or "paint3d"
                     for row in rows:
-                        if not row.generate_3d:
+                        if not row.generate_3d or not row.generate_paint:
                             continue
                         img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                         tw = "<tmp>/shape.glb"
@@ -854,6 +860,8 @@ def batch_cmd(
                     _pipeline_stages.append("Text2Sound")
                 if with_3d:
                     _pipeline_stages.append("Text3D")
+                if with_3d and any_row_wants_paint:
+                    _pipeline_stages.append("Paint3D")
                 if with_parts:
                     _pipeline_stages.append("Part3D")
                 if with_rig:
@@ -872,7 +880,7 @@ def batch_cmd(
                     if not force:
                         for _ci, _cr in enumerate(rows):
                             _ci_img, _ci_mesh = _paths_for_row_manifest(profile, manifest_dir, _cr)
-                            _want_tex = bool(profile.paint3d)
+                            _want_tex = _cr.generate_paint
                             _ci_rig = _rigging3d_output_path(
                                 _ci_mesh, (profile.rigging3d.output_suffix if profile.rigging3d else None) or "_rigged"
                             )
@@ -1241,7 +1249,7 @@ def batch_cmd(
 
                     # --- Phase 2: Text3D ---
                     if with_3d and text3d_bin and pending_3d_d:
-                        use_phased_d = bool(profile.paint3d)
+                        use_phased_d = any_row_wants_paint
 
                         def _finalize_mesh_ok_d(
                             rec_m: dict[str, Any],
@@ -1396,13 +1404,15 @@ def batch_cmd(
                                     dash.feed_event(row.id, "text3d", "skipped", phase="shape")
                                     dash.advance_phase()
 
+                            shape_ok_paint_d = [i for i in shape_ok_d if rows[i].generate_paint]
+
                             # === PAINT BATCH ===
                             _ps = (profile.paint3d.style or "hunyuan").strip().lower() if profile.paint3d else "hunyuan"
 
-                            if shape_ok_d:
+                            if shape_ok_paint_d:
                                 if _ps in ("solid", "perlin"):
-                                    dash.set_phase("Paint3D quick", len(shape_ok_d))
-                                    for idx in shape_ok_d:
+                                    dash.set_phase("Paint3D quick", len(shape_ok_paint_d))
+                                    for idx in shape_ok_paint_d:
                                         row = rows[idx]
                                         rec_d = results_d[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
@@ -1464,7 +1474,7 @@ def batch_cmd(
                                     paint_items_d: list[dict[str, Any]] = []
                                     paint_idx_map_d: dict[str, int] = {}
                                     paint_skipped_d: set[int] = set()
-                                    for idx in shape_ok_d:
+                                    for idx in shape_ok_paint_d:
                                         row = rows[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                         mesh_shape = _shape_path(mesh_f)
@@ -1588,6 +1598,23 @@ def batch_cmd(
                                                 raise click.Abort()
                                             dash.advance_phase()
 
+                            # Linhas só com shape (sem paint no manifest): seguir com mesh_shape
+                            for idx in shape_ok_d:
+                                row = rows[idx]
+                                if row.generate_paint:
+                                    continue
+                                rec_d = results_d[idx]
+                                if rec_d.get("status") == "error":
+                                    continue
+                                img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
+                                mesh_shape = _shape_path(mesh_f)
+                                if not mesh_shape.is_file():
+                                    continue
+                                rec_d["image_path"] = _path_for_log(img_f, manifest_dir)
+                                _finalize_mesh_ok_d(rec_d, mesh_shape, row)
+                                finalized_d.add(idx)
+                                append_log(rec_d)
+
                             # === SIMPLIFY: bpy decimate (fallback text3d) after painting ===
                             painted_ok_d = [i for i in finalized_d if results_d[i]["status"] == "ok"]
                             if painted_ok_d:
@@ -1597,7 +1624,12 @@ def batch_cmd(
                                     rec_d = results_d[idx]
                                     _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                     mesh_painted = _painted_path(mesh_f)
-                                    simplify_mesh = mesh_painted if mesh_painted.is_file() else mesh_f
+                                    mesh_shape = _shape_path(mesh_f)
+                                    simplify_mesh = (
+                                        mesh_painted
+                                        if mesh_painted.is_file()
+                                        else (mesh_shape if mesh_shape.is_file() else mesh_f)
+                                    )
                                     dash.feed_event(row.id, "simplify", "progress", phase="decimating", percent=0)
                                     _simplify_to_target(
                                         simplify_mesh,
@@ -1733,9 +1765,9 @@ def batch_cmd(
                     if any_audio_row and not skip_audio and _row_wants_audio(row, has_audio_profile):
                         stages.append("Text2Sound")
                     if with_3d and row.generate_3d:
-                        if profile.paint3d:
+                        if row.generate_paint:
                             stages.append("Text3D shape")
-                            p3_style = (profile.paint3d.style or "hunyuan").strip().lower()
+                            p3_style = (profile.paint3d.style or "hunyuan").strip().lower() if profile.paint3d else "hunyuan"
                             stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
                         else:
                             stages.append("Text3D")
@@ -1795,7 +1827,7 @@ def batch_cmd(
                             mesh_final=_ci_mesh,
                             rig_out=_ci_rig_out,
                             anim_out=_ci_anim_out,
-                            want_texture=want_texture,
+                            want_texture=_crow.generate_paint,
                             wants_rig=_row_wants_rig(_crow, has_rigging_profile),
                             wants_animate=_row_wants_animate(
                                 _crow, _row_wants_rig(_crow, has_rigging_profile), has_rigging_profile
@@ -2174,7 +2206,7 @@ def batch_cmd(
                                 title="Antes do 3D",
                             )
                         )
-                        use_phased = bool(profile.paint3d)
+                        use_phased = any_row_wants_paint
 
                         def _finalize_mesh_ok(
                             rec: dict[str, Any],
@@ -2348,10 +2380,12 @@ def batch_cmd(
                                 while progress.tasks[task_shape].completed < progress.tasks[task_shape].total:
                                     progress.advance(task_shape)
 
+                            shape_ok_paint = [i for i in shape_ok if rows[i].generate_paint]
+
                             # === PAINT BATCH ===
                             _ps = (profile.paint3d.style or "hunyuan").strip().lower() if profile.paint3d else "hunyuan"
                             task_paint = None
-                            if shape_ok:
+                            if shape_ok_paint:
                                 _paint_label = (
                                     "paint3d quick (todos)"
                                     if _ps in ("solid", "perlin")
@@ -2359,11 +2393,11 @@ def batch_cmd(
                                 )
                                 task_paint = progress.add_task(
                                     f"[cyan]{_paint_label}[/cyan]",
-                                    total=len(shape_ok),
+                                    total=len(shape_ok_paint),
                                 )
 
                             if _ps in ("solid", "perlin"):
-                                for idx in shape_ok:
+                                for idx in shape_ok_paint:
                                     row = rows[idx]
                                     rec = results[idx]
                                     progress.update(task_paint, description=f"[cyan]{row.id}[/cyan] · quick paint")
@@ -2420,11 +2454,11 @@ def batch_cmd(
                                         if not continue_on_error and rec["status"] == "error":
                                             raise click.Abort()
                                     progress.advance(task_paint)
-                            elif shape_ok:
+                            elif shape_ok_paint:
                                 paint_manifest_items: list[dict[str, Any]] = []
                                 paint_idx_map: dict[str, int] = {}
 
-                                for idx in shape_ok:
+                                for idx in shape_ok_paint:
                                     row = rows[idx]
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                                     mesh_shape = _shape_path(mesh_final)
@@ -2564,7 +2598,12 @@ def batch_cmd(
                                     rec = results[idx]
                                     _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                     mesh_painted = _painted_path(mesh_f)
-                                    simplify_mesh = mesh_painted if mesh_painted.is_file() else mesh_f
+                                    mesh_shape = _shape_path(mesh_f)
+                                    simplify_mesh = (
+                                        mesh_painted
+                                        if mesh_painted.is_file()
+                                        else (mesh_shape if mesh_shape.is_file() else mesh_f)
+                                    )
                                     progress.update(task_simplify, description=f"[cyan]{row.id}[/cyan] · simplify")
                                     _simplify_to_target(
                                         simplify_mesh,

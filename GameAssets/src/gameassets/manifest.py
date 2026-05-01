@@ -27,6 +27,8 @@ class ManifestRow:
     generate_parts: bool = False
     generate_lod: bool = False
     generate_collision: bool = False
+    # Textura 3D (paint3d quick ou Hunyuan) após shape; requer paint no pipeline e opções em paint3d no perfil
+    generate_paint: bool = False
     lod_levels: int = 3
     # Asset category (e.g. humanoid, chest, weapon) — drives prompt hints and generation params
     category: str = ""
@@ -82,6 +84,7 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 generate_parts="parts" in pipeline_items,
                 generate_lod="lod" in pipeline_items,
                 generate_collision="collision" in pipeline_items,
+                generate_paint="paint" in pipeline_items,
                 lod_levels=int(entry.get("lod_levels", 3)),
                 image_source=entry.get("image_source"),
                 category=(entry.get("category") or "").lower(),
