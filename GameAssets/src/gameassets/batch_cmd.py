@@ -24,6 +24,8 @@ from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mi
 from .categories import get_target_faces
 from .cli_rich import click
 from .helpers import (
+    _append_skymap2d_profile_args,
+    _append_terrain3d_profile_args,
     _append_text2d_profile_args,
     _append_texture2d_profile_args,
     _audio_path_for_row_manifest,
@@ -33,6 +35,8 @@ from .helpers import (
     _materialize_diffuse_argv,
     _resolve_manifest_path,
     _resolve_materialize_bin_texture2d,
+    _resolve_skymap2d_bin,
+    _resolve_terrain3d_bin,
     _row_uses_texture2d,
     _row_wants_animate,
     _row_wants_audio,
@@ -40,6 +44,8 @@ from .helpers import (
     _row_wants_rig,
     _safe_row_dirname,
     _seed_for_row,
+    _skymap2d_profile_effective,
+    _terrain3d_profile_effective,
     _text2sound_args_for_row,
     _text2sound_profile_effective,
     _texture2d_material_maps_path,
@@ -193,6 +199,18 @@ console = Console()
     help="Skip collision mesh generation even if enabled",
 )
 @click.option(
+    "--no-terrain",
+    is_flag=True,
+    default=False,
+    help="Skip terrain generation even if terrain3d is configured in game.yaml.",
+)
+@click.option(
+    "--no-skymap",
+    is_flag=True,
+    default=False,
+    help="Skip skymap generation even if skymap2d is configured in game.yaml.",
+)
+@click.option(
     "--profile-tools",
     is_flag=True,
     help="Activar profiling (CPU/RAM/GPU) em paint3d e part3d via GAMEDEV_PROFILE.",
@@ -249,6 +267,8 @@ def batch_cmd(
     no_animate: bool,
     no_lod: bool,
     no_collision: bool,
+    no_terrain: bool,
+    no_skymap: bool,
     profile_tools: bool,
     profile_tools_log: Path | None,
     low_vram: bool,
@@ -386,6 +406,25 @@ def batch_cmd(
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
+    # --- Scene-level tools: Terrain3D and Skymap2D ---
+    with_terrain = not no_terrain and profile.terrain3d is not None
+    terrain3d_bin: str | None = None
+    if with_terrain:
+        try:
+            terrain3d_bin = _resolve_terrain3d_bin()
+        except FileNotFoundError as e:
+            raise click.ClickException(str(e)) from e
+
+    with_skymap = not no_skymap and profile.skymap2d is not None and bool(
+        _skymap2d_profile_effective(profile).prompt
+    )
+    skymap2d_bin: str | None = None
+    if with_skymap:
+        try:
+            skymap2d_bin = _resolve_skymap2d_bin()
+        except FileNotFoundError as e:
+            raise click.ClickException(str(e)) from e
+
     meta = Table(show_header=False, box=box.SIMPLE, title="[bold]Batch[/bold]")
     meta.add_row("Perfil", str(profile_path.resolve()))
     meta.add_row("Manifest", str(manifest_path.resolve()))
@@ -418,14 +457,22 @@ def batch_cmd(
     meta.add_row("rigging3d", rigging3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("animator3d", animator3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("part3d", part3d_bin or "[dim](desligado)[/dim]")
+    meta.add_row("terrain3d", terrain3d_bin or "[dim](desligado)[/dim]")
+    meta.add_row("skymap2d", skymap2d_bin or "[dim](desligado)[/dim]")
     meta.add_row("Modo", "[cyan]dry-run[/cyan]" if dry_run else "execução")
     if gpu_ids:
         meta.add_row("GPUs", ",".join(str(g) for g in gpu_ids))
     if profile_tools:
         _plog = profile_tools_log or (manifest_path.parent / "gameassets_profile.jsonl")
         meta.add_row("Profiler (GPU)", f"activo → [dim]{_plog.resolve()}[/dim]")
+    # Build Ordem string — terrain/skymap prefix, then existing pipeline
+    _ord_prefix: list[str] = []
+    if with_terrain:
+        _ord_prefix.append("Terrain3D")
+    if with_skymap:
+        _ord_prefix.append("Skymap2D")
     if skip_text2d:
-        ord_skip: list[str] = ["Geração 2D omitida"]
+        ord_skip: list[str] = list(_ord_prefix) + ["Geração 2D omitida"]
         if any_audio_row and not skip_audio:
             ord_skip.append("Text2Sound (linhas generate_audio)")
         if with_3d:
@@ -439,11 +486,11 @@ def batch_cmd(
         meta.add_row("Ordem", " → ".join(ord_skip))
     elif any_texture2d_row or any_text2d_row:
         if any_texture2d_row and any_text2d_row:
-            ord_parts = ["Geração 2D por linha (text2d e/ou texture2d)"]
+            ord_parts = list(_ord_prefix) + ["Geração 2D por linha (text2d e/ou texture2d)"]
         elif any_texture2d_row:
-            ord_parts = ["Texture2D (todas as linhas)"]
+            ord_parts = list(_ord_prefix) + ["Texture2D (todas as linhas)"]
         else:
-            ord_parts = ["Text2D (todas as linhas)"]
+            ord_parts = list(_ord_prefix) + ["Text2D (todas as linhas)"]
         if tt_eff.materialize and any_texture2d_row:
             ord_parts.append("Materialize (mapas PBR nas linhas texture2d)")
         if any_audio_row and not skip_audio:
@@ -458,7 +505,7 @@ def batch_cmd(
                 ord_parts.append("Animator3D game-pack")
         meta.add_row("Ordem", " → ".join(ord_parts))
     else:
-        ord_tail = "Text2D (todas as linhas)"
+        ord_tail = " → ".join(_ord_prefix + ["Text2D (todas as linhas)"])
         if any_audio_row and not skip_audio:
             ord_tail += " → Text2Sound (linhas generate_audio)"
         if with_3d:
@@ -493,6 +540,21 @@ def batch_cmd(
 
     if dry_run:
         dry_plan: list[dict[str, Any]] | None = [] if dry_run_json else None
+        # Scene-level: Terrain3D + Skymap2D
+        if with_terrain and terrain3d_bin:
+            ter_eff = _terrain3d_profile_effective(profile)
+            ter_out_dir = Path(profile.output_dir) / "terrain"
+            ter_argv = [terrain3d_bin, "generate", "--output", str(ter_out_dir / "heightmap.png")]
+            if ter_eff.prompt:
+                ter_argv.extend(["--prompt", ter_eff.prompt])
+            _append_terrain3d_profile_args(ter_eff, ter_argv)
+            _dry_run_emit(dry_plan, phase="Terrain3D", row_id=None, argv=ter_argv)
+        if with_skymap and skymap2d_bin:
+            sky_eff = _skymap2d_profile_effective(profile)
+            sky_out_dir = Path(profile.output_dir) / "sky"
+            sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
+            _append_skymap2d_profile_args(sky_eff, sky_argv)
+            _dry_run_emit(dry_plan, phase="Skymap2D", row_id=None, argv=sky_argv)
         if not skip_text2d:
             if any_texture2d_row and any_text2d_row:
                 p1_title = "--- Fase 1: Text2D / Texture2D (por linha) ---"
@@ -909,6 +971,50 @@ def batch_cmd(
                         for _di, _ds in row_states_d.items():
                             if _ds == _ROW_DONE:
                                 done_indices_d.add(_di)
+
+                    # --- Pre-phase: Terrain3D (scene-level, single-shot) ---
+                    if with_terrain and terrain3d_bin:
+                        ter_eff = _terrain3d_profile_effective(profile)
+                        ter_out_dir = Path(profile.output_dir) / "terrain"
+                        ter_out_dir.mkdir(parents=True, exist_ok=True)
+                        ter_argv = [terrain3d_bin, "generate", "--output", str(ter_out_dir / "heightmap.png")]
+                        if ter_eff.prompt:
+                            ter_argv.extend(["--prompt", ter_eff.prompt])
+                        _append_terrain3d_profile_args(ter_eff, ter_argv)
+                        if gpu_ids:
+                            ter_argv.extend(["--device", f"cuda:{gpu_ids[0]}"])
+                        dash.set_phase("Terrain3D", 1)
+                        dash.update_asset("terrain", "running", "A gerar terreno...")
+                        t_ter = time.perf_counter()
+                        r_ter = run_cmd(ter_argv, extra_env=child_env, cwd=manifest_dir)
+                        _timing_append({"id": "terrain"}, "terrain3d_sec", time.perf_counter() - t_ter)
+                        if r_ter.returncode != 0:
+                            dash.update_asset("terrain", "error", merge_subprocess_output(r_ter) or "terrain3d falhou")
+                            failures += 1
+                            if not continue_on_error:
+                                raise click.Abort()
+                        else:
+                            dash.update_asset("terrain", "ok", str(ter_out_dir / "heightmap.png"))
+
+                    # --- Pre-phase: Skymap2D (scene-level, single-shot) ---
+                    if with_skymap and skymap2d_bin:
+                        sky_eff = _skymap2d_profile_effective(profile)
+                        sky_out_dir = Path(profile.output_dir) / "sky"
+                        sky_out_dir.mkdir(parents=True, exist_ok=True)
+                        sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
+                        _append_skymap2d_profile_args(sky_eff, sky_argv)
+                        dash.set_phase("Skymap2D", 1)
+                        dash.update_asset("skymap", "running", "A gerar skymap...")
+                        t_sky = time.perf_counter()
+                        r_sky = run_cmd(sky_argv, extra_env=child_env, cwd=manifest_dir)
+                        _timing_append({"id": "skymap"}, "skymap2d_sec", time.perf_counter() - t_sky)
+                        if r_sky.returncode != 0:
+                            dash.update_asset("skymap", "error", merge_subprocess_output(r_sky) or "skymap2d falhou")
+                            failures += 1
+                            if not continue_on_error:
+                                raise click.Abort()
+                        else:
+                            dash.update_asset("skymap", "ok", str(sky_out_dir / "sky.png"))
 
                     # --- Phase 1: 2D images ---
                     if skip_text2d:
@@ -1797,6 +1903,48 @@ def batch_cmd(
                     TimeElapsedColumn(),
                     console=console,
                 ) as progress:
+                    # --- Pre-phase: Terrain3D (scene-level, single-shot) ---
+                    if with_terrain and terrain3d_bin:
+                        ter_eff = _terrain3d_profile_effective(profile)
+                        ter_out_dir = Path(profile.output_dir) / "terrain"
+                        ter_out_dir.mkdir(parents=True, exist_ok=True)
+                        ter_argv = [terrain3d_bin, "generate", "--output", str(ter_out_dir / "heightmap.png")]
+                        if ter_eff.prompt:
+                            ter_argv.extend(["--prompt", ter_eff.prompt])
+                        _append_terrain3d_profile_args(ter_eff, ter_argv)
+                        if gpu_ids:
+                            ter_argv.extend(["--device", f"cuda:{gpu_ids[0]}"])
+                        progress.console.print("[cyan]Terrain3D[/cyan] — a gerar terreno...")
+                        t_ter = time.perf_counter()
+                        r_ter = run_cmd(ter_argv, extra_env=child_env, cwd=manifest_dir)
+                        _t_ter_s = time.perf_counter() - t_ter
+                        if r_ter.returncode != 0:
+                            failures += 1
+                            progress.console.print(f"[red]Terrain3D falhou[/red]: {merge_subprocess_output(r_ter) or ''}")
+                            if not continue_on_error:
+                                raise click.Abort()
+                        else:
+                            progress.console.print(f"[green]Terrain3D[/green] OK ({_t_ter_s:.1f}s) → {ter_out_dir / 'heightmap.png'}")
+
+                    # --- Pre-phase: Skymap2D (scene-level, single-shot) ---
+                    if with_skymap and skymap2d_bin:
+                        sky_eff = _skymap2d_profile_effective(profile)
+                        sky_out_dir = Path(profile.output_dir) / "sky"
+                        sky_out_dir.mkdir(parents=True, exist_ok=True)
+                        sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
+                        _append_skymap2d_profile_args(sky_eff, sky_argv)
+                        progress.console.print("[cyan]Skymap2D[/cyan] — a gerar skymap...")
+                        t_sky = time.perf_counter()
+                        r_sky = run_cmd(sky_argv, extra_env=child_env, cwd=manifest_dir)
+                        _t_sky_s = time.perf_counter() - t_sky
+                        if r_sky.returncode != 0:
+                            failures += 1
+                            progress.console.print(f"[red]Skymap2D falhou[/red]: {merge_subprocess_output(r_sky) or ''}")
+                            if not continue_on_error:
+                                raise click.Abort()
+                        else:
+                            progress.console.print(f"[green]Skymap2D[/green] OK ({_t_sky_s:.1f}s) → {sky_out_dir / 'sky.png'}")
+
                     f1_label = "[cyan]Fase 1: PNGs existentes[/cyan]"
                     if not skip_text2d:
                         if any_texture2d_row and any_text2d_row:
