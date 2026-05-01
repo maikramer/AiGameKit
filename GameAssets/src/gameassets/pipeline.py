@@ -300,7 +300,7 @@ def _lod_pipeline_failed(
     with_lod: bool = False,
     text3d_bin: str | None = None,
 ) -> bool:
-    """Gera triplet LOD. Rigged assets usam ``bpy_simplify.simplify_glb()``,
+    """Gera triplet LOD via ``text3d lod`` subprocess (static + rigged).
     static usam ``text3d lod``. Devolve True se falhou."""
     if not with_lod or not row.generate_lod or not row.generate_3d:
         return False
@@ -365,19 +365,6 @@ def _lod_pipeline_failed(
     num_levels = max(1, min(3, row.lod_levels))  # static LOD supports 1-3 levels
     paths = _lod_output_paths(mesh_final, basename, num_levels)
     rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
-
-    try:
-        from .bpy_simplify import clean_glb
-
-        for lod_path in paths:
-            if not lod_path.is_file():
-                continue
-            tmp = lod_path.with_name(f"{lod_path.stem}_clean{lod_path.suffix}")
-            clean_glb(str(lod_path), str(tmp))
-            if tmp.is_file():
-                tmp.replace(lod_path)
-    except Exception:
-        pass  # LOD cleanup is best-effort
 
     return False
 
