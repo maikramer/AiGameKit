@@ -415,9 +415,7 @@ def batch_cmd(
         except FileNotFoundError as e:
             raise click.ClickException(str(e)) from e
 
-    with_skymap = not no_skymap and profile.skymap2d is not None and bool(
-        _skymap2d_profile_effective(profile).prompt
-    )
+    with_skymap = not no_skymap and profile.skymap2d is not None and bool(_skymap2d_profile_effective(profile).prompt)
     skymap2d_bin: str | None = None
     if with_skymap:
         try:
@@ -472,7 +470,7 @@ def batch_cmd(
     if with_skymap:
         _ord_prefix.append("Skymap2D")
     if skip_text2d:
-        ord_skip: list[str] = list(_ord_prefix) + ["Geração 2D omitida"]
+        ord_skip: list[str] = [*_ord_prefix, "Geração 2D omitida"]
         if any_audio_row and not skip_audio:
             ord_skip.append("Text2Sound (linhas generate_audio)")
         if with_3d:
@@ -486,11 +484,11 @@ def batch_cmd(
         meta.add_row("Ordem", " → ".join(ord_skip))
     elif any_texture2d_row or any_text2d_row:
         if any_texture2d_row and any_text2d_row:
-            ord_parts = list(_ord_prefix) + ["Geração 2D por linha (text2d e/ou texture2d)"]
+            ord_parts = [*_ord_prefix, "Geração 2D por linha (text2d e/ou texture2d)"]
         elif any_texture2d_row:
-            ord_parts = list(_ord_prefix) + ["Texture2D (todas as linhas)"]
+            ord_parts = [*_ord_prefix, "Texture2D (todas as linhas)"]
         else:
-            ord_parts = list(_ord_prefix) + ["Text2D (todas as linhas)"]
+            ord_parts = [*_ord_prefix, "Text2D (todas as linhas)"]
         if tt_eff.materialize and any_texture2d_row:
             ord_parts.append("Materialize (mapas PBR nas linhas texture2d)")
         if any_audio_row and not skip_audio:
@@ -505,7 +503,7 @@ def batch_cmd(
                 ord_parts.append("Animator3D game-pack")
         meta.add_row("Ordem", " → ".join(ord_parts))
     else:
-        ord_tail = " → ".join(_ord_prefix + ["Text2D (todas as linhas)"])
+        ord_tail = " → ".join([*_ord_prefix, "Text2D (todas as linhas)"])
         if any_audio_row and not skip_audio:
             ord_tail += " → Text2Sound (linhas generate_audio)"
         if with_3d:
@@ -1873,7 +1871,9 @@ def batch_cmd(
                     if with_3d and row.generate_3d:
                         if row.generate_paint:
                             stages.append("Text3D shape")
-                            p3_style = (profile.paint3d.style or "hunyuan").strip().lower() if profile.paint3d else "hunyuan"
+                            p3_style = (
+                                (profile.paint3d.style or "hunyuan").strip().lower() if profile.paint3d else "hunyuan"
+                            )
                             stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
                         else:
                             stages.append("Text3D")
@@ -1920,11 +1920,13 @@ def batch_cmd(
                         _t_ter_s = time.perf_counter() - t_ter
                         if r_ter.returncode != 0:
                             failures += 1
-                            progress.console.print(f"[red]Terrain3D falhou[/red]: {merge_subprocess_output(r_ter) or ''}")
+                            _ter_err = merge_subprocess_output(r_ter) or ""
+                            progress.console.print(f"[red]Terrain3D falhou[/red]: {_ter_err}")
                             if not continue_on_error:
                                 raise click.Abort()
                         else:
-                            progress.console.print(f"[green]Terrain3D[/green] OK ({_t_ter_s:.1f}s) → {ter_out_dir / 'heightmap.png'}")
+                            _ter_out = ter_out_dir / "heightmap.png"
+                            progress.console.print(f"[green]Terrain3D[/green] OK ({_t_ter_s:.1f}s) → {_ter_out}")
 
                     # --- Pre-phase: Skymap2D (scene-level, single-shot) ---
                     if with_skymap and skymap2d_bin:
@@ -1939,11 +1941,13 @@ def batch_cmd(
                         _t_sky_s = time.perf_counter() - t_sky
                         if r_sky.returncode != 0:
                             failures += 1
-                            progress.console.print(f"[red]Skymap2D falhou[/red]: {merge_subprocess_output(r_sky) or ''}")
+                            _sky_err = merge_subprocess_output(r_sky) or ""
+                            progress.console.print(f"[red]Skymap2D falhou[/red]: {_sky_err}")
                             if not continue_on_error:
                                 raise click.Abort()
                         else:
-                            progress.console.print(f"[green]Skymap2D[/green] OK ({_t_sky_s:.1f}s) → {sky_out_dir / 'sky.png'}")
+                            _sky_out = sky_out_dir / "sky.png"
+                            progress.console.print(f"[green]Skymap2D[/green] OK ({_t_sky_s:.1f}s) → {_sky_out}")
 
                     f1_label = "[cyan]Fase 1: PNGs existentes[/cyan]"
                     if not skip_text2d:
