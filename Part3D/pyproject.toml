@@ -41,7 +41,6 @@ dependencies = [
     "fpsample",
     "scikit-learn",
     "onnxruntime>=1.16.0",
-    "pymeshlab>=2023.12",
     "gamedev-shared @ file:../Shared",
 ]
 classifiers = [

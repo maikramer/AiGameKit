@@ -28,7 +28,6 @@ dependencies = [
     "rich-click>=1.8.0",
     "tqdm>=4.66.0",
     "pydantic>=2.0.0",
-    "pymeshlab>=2023.12",
     "sdnq>=0.1.0",
     "einops>=0.7.0",
     "timm>=0.9.0",

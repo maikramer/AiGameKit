@@ -37,7 +37,6 @@ dependencies = [
     "sdnq>=0.1.0",       # Quantização moderna SDNQ
     "einops>=0.8.0",     # Tensor rearrange (pipeline vendored)
     "bpy>=4.5.9",
-    "pymeshlab>=2022.2",
     # Hunyuan3D-2.1: código vendored em paint3d/hy3dpaint/ (de Tencent-Hunyuan/Hunyuan3D-2.1)
     # Real-ESRGAN (RRDBNet + RealESRGANer): vendored — evita basicsr (pip falha no Python 3.13)
     # nvdiffrast: instalar separadamente com --no-build-isolation (requer PyTorch pré-instalado)
