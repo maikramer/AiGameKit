@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from terrain3d.postprocess import island_falloff
+from terrain3d.postprocess import island_falloff, taubin_smooth
 
 
 # --- Fixtures ---
@@ -87,3 +87,38 @@ class TestIslandFalloff:
         """Output should contain no NaN or Inf."""
         result = island_falloff(heightmap_gaussian_peak, seed=0)
         assert np.all(np.isfinite(result))
+
+
+class TestTaubinSmooth:
+    def test_reduces_noise(self, heightmap_noisy: np.ndarray) -> None:
+        """Smoothed heightmap should have lower variance of the gradient."""
+        smoothed = taubin_smooth(heightmap_noisy, iterations=3)
+        # Gradient magnitude (proxy for roughness)
+        orig_grad = np.abs(np.diff(heightmap_noisy, axis=0)).mean()
+        smooth_grad = np.abs(np.diff(smoothed, axis=0)).mean()
+        assert smooth_grad < orig_grad
+
+    def test_preserves_broad_features(self) -> None:
+        """A broad gaussian should be mostly preserved after smoothing."""
+        y, x = np.mgrid[0:256, 0:256]
+        broad = np.exp(-((y - 128) ** 2 + (x - 128) ** 2) / (2 * 80.0**2)).astype(np.float64)
+        smoothed = taubin_smooth(broad, iterations=3)
+        # Peak should be preserved within 10%
+        assert smoothed[128, 128] == pytest.approx(broad[128, 128], rel=0.1)
+
+    def test_flat_unchanged(self, heightmap_flat: np.ndarray) -> None:
+        """Flat heightmap should remain flat after smoothing."""
+        smoothed = taubin_smooth(heightmap_flat, iterations=3)
+        np.testing.assert_allclose(smoothed, heightmap_flat, atol=1e-12)
+
+    def test_zero_iterations_noop(self, heightmap_noisy: np.ndarray) -> None:
+        """iterations=0 should return the input unchanged."""
+        smoothed = taubin_smooth(heightmap_noisy, iterations=0)
+        np.testing.assert_array_equal(smoothed, heightmap_noisy)
+
+    def test_output_range(self, heightmap_noisy: np.ndarray) -> None:
+        """Output should not have extreme outliers (roughly in input range)."""
+        smoothed = taubin_smooth(heightmap_noisy, iterations=3)
+        # Taubin is volume-preserving, so values should stay near [0, 1]
+        assert smoothed.min() >= -0.5
+        assert smoothed.max() <= 1.5

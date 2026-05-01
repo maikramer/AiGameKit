@@ -98,3 +98,43 @@ def _sample_circular_noise(noise_1d: np.ndarray, angles: np.ndarray) -> np.ndarr
     idx_ceil = (idx_floor + 1) % n
     frac = idx_float - np.floor(idx_float)
     return noise_1d[idx_floor] * (1.0 - frac) + noise_1d[idx_ceil] * frac
+
+
+def taubin_smooth(
+    heightmap: np.ndarray,
+    iterations: int = 3,
+    lambda_val: float = 0.5,
+    mu_val: float = -0.53,
+) -> np.ndarray:
+    """Taubin smoothing — removes high-frequency noise while preserving volume.
+
+    Alternates λ-step (smooth) and μ-step (shrinkage compensation) per
+    iteration.  Uses a discrete Laplacian kernel with reflect padding.
+
+    Args:
+        heightmap: 2D float64 array.
+        iterations: Number of λ+μ iteration pairs (0 disables smoothing).
+        lambda_val: Smoothing strength (0–1, typically 0.5).
+        mu_val: Shrinkage compensation (negative, typically -0.53).
+
+    Returns:
+        Smoothed heightmap (same shape, float64).
+    """
+    if iterations <= 0:
+        return heightmap.copy()
+
+    from scipy.ndimage import convolve
+
+    kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], dtype=np.float64) / 4.0
+    h = heightmap.copy()
+
+    for _ in range(iterations):
+        # λ-step (smooth)
+        laplacian = convolve(h, kernel, mode="reflect")
+        h = h + lambda_val * laplacian
+
+        # μ-step (compensate shrinkage)
+        laplacian = convolve(h, kernel, mode="reflect")
+        h = h + mu_val * laplacian
+
+    return h.astype(np.float64)
