@@ -361,3 +361,66 @@ def test_rigging3d_pipeline_argv_with_gpu_ids() -> None:
     assert argv[gpu_idx + 1] == "0,1"
     assert "pipeline" in argv
     assert argv.index("--gpu-ids") < argv.index("pipeline")
+
+
+def test_terrain3d_profile_effective_default() -> None:
+    """When no terrain3d block in profile, returns default Terrain3DProfile."""
+    from gameassets.helpers import _terrain3d_profile_effective
+    from gameassets.profile import GameProfile
+
+    p = GameProfile.from_dict({"title": "X", "genre": "X", "tone": "X", "style_preset": "lowpoly"})
+    ter = _terrain3d_profile_effective(p)
+    assert ter.prompt is None
+    assert ter.seed is None
+
+
+def test_terrain3d_profile_effective_from_yaml() -> None:
+    from gameassets.helpers import _terrain3d_profile_effective
+    from gameassets.profile import GameProfile
+
+    p = GameProfile.from_dict(
+        {
+            "title": "X",
+            "genre": "X",
+            "tone": "X",
+            "style_preset": "lowpoly",
+            "terrain3d": {"prompt": "mountains", "size": 1024, "world_size": 256.0},
+        }
+    )
+    ter = _terrain3d_profile_effective(p)
+    assert ter.prompt == "mountains"
+    assert ter.size == 1024
+
+
+def test_append_terrain3d_profile_args() -> None:
+    from gameassets.helpers import _append_terrain3d_profile_args
+    from gameassets.profile import Terrain3DProfile
+
+    ter = Terrain3DProfile(size=1024, world_size=256.0, quality="high")
+    argv: list[str] = []
+    _append_terrain3d_profile_args(ter, argv)
+    assert "--size" in argv
+    assert "1024" in argv
+    assert "--world-size" in argv
+    assert "--quality" in argv
+
+
+def test_skymap2d_profile_effective_default() -> None:
+    from gameassets.helpers import _skymap2d_profile_effective
+    from gameassets.profile import GameProfile
+
+    p = GameProfile.from_dict({"title": "X", "genre": "X", "tone": "X", "style_preset": "lowpoly"})
+    sky = _skymap2d_profile_effective(p)
+    assert sky.prompt is None
+
+
+def test_append_skymap2d_profile_args() -> None:
+    from gameassets.helpers import _append_skymap2d_profile_args
+    from gameassets.profile import Skymap2DProfile
+
+    sky = Skymap2DProfile(width=2048, height=1024, steps=20)
+    argv: list[str] = []
+    _append_skymap2d_profile_args(sky, argv)
+    assert "-W" in argv
+    assert "2048" in argv
+    assert "-s" in argv

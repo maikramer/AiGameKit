@@ -11,6 +11,8 @@ from .manifest import ManifestRow, effective_image_source, load_manifest
 from .presets import get_preset, load_presets_bundle
 from .profile import (
     GameProfile,
+    Skymap2DProfile,
+    Terrain3DProfile,
     Text2SoundProfile,
     Texture2DProfile,
     load_profile,
@@ -225,6 +227,70 @@ def _resolve_materialize_bin_texture2d(tt: Texture2DProfile) -> str:
     if tt.materialize_bin:
         return tt.materialize_bin
     return resolve_binary("MATERIALIZE_BIN", "materialize")
+
+
+def _terrain3d_profile_effective(profile: GameProfile) -> Terrain3DProfile:
+    """Opções Terrain3D do perfil ou defaults."""
+    return profile.terrain3d or Terrain3DProfile()
+
+
+def _resolve_terrain3d_bin(ter: Terrain3DProfile | None = None) -> str:
+    """Resolve terrain3d binary (TERRAIN3D_BIN env var or PATH fallback)."""
+    return resolve_binary("TERRAIN3D_BIN", "terrain3d")
+
+
+def _append_terrain3d_profile_args(ter: Terrain3DProfile, argv: list[str]) -> None:
+    """Extensões do perfil para `terrain3d generate`."""
+    if ter.seed is not None:
+        argv.extend(["--seed", str(ter.seed)])
+    if ter.size is not None:
+        argv.extend(["--size", str(ter.size)])
+    if ter.world_size is not None:
+        argv.extend(["--world-size", str(ter.world_size)])
+    if ter.max_height is not None:
+        argv.extend(["--max-height", str(ter.max_height)])
+    if ter.quality:
+        argv.extend(["--quality", ter.quality])
+    if ter.device:
+        argv.extend(["--device", ter.device])
+    if ter.dtype:
+        argv.extend(["--dtype", ter.dtype])
+    if ter.cache_size:
+        argv.extend(["--cache-size", ter.cache_size])
+    if ter.coarse_window is not None:
+        argv.extend(["--coarse-window", str(ter.coarse_window)])
+
+
+def _skymap2d_profile_effective(profile: GameProfile) -> Skymap2DProfile:
+    """Opções Skymap2D do perfil ou defaults."""
+    return profile.skymap2d or Skymap2DProfile()
+
+
+def _resolve_skymap2d_bin(sky: Skymap2DProfile | None = None) -> str:
+    """Resolve skymap2d binary (SKYMAP2D_BIN env var or PATH fallback)."""
+    return resolve_binary("SKYMAP2D_BIN", "skymap2d")
+
+
+def _append_skymap2d_profile_args(sky: Skymap2DProfile, argv: list[str]) -> None:
+    """Extensões do perfil para `skymap2d generate`."""
+    if sky.width is not None:
+        argv.extend(["-W", str(sky.width)])
+    if sky.height is not None:
+        argv.extend(["-H", str(sky.height)])
+    if sky.steps is not None:
+        argv.extend(["-s", str(sky.steps)])
+    if sky.guidance_scale is not None:
+        argv.extend(["-g", str(sky.guidance_scale)])
+    if sky.negative_prompt:
+        argv.extend(["-n", sky.negative_prompt])
+    if sky.preset and sky.preset.lower() != "none":
+        argv.extend(["-p", sky.preset])
+    if sky.cfg_scale is not None:
+        argv.extend(["--cfg-scale", str(sky.cfg_scale)])
+    if sky.lora_strength is not None:
+        argv.extend(["--lora-strength", str(sky.lora_strength)])
+    if sky.model_id:
+        argv.extend(["-m", sky.model_id])
 
 
 def _materialize_diffuse_argv(
