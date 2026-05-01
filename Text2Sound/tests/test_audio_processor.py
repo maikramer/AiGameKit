@@ -275,6 +275,36 @@ class TestSaveAudio:
         result = save_audio(audio, 44100, out)
         assert result.exists()
 
+    def test_seamless_loop_applies_crossfade(self, tmp_path):
+        """seamless_loop=True should apply crossfade instead of edge fade."""
+        audio = torch.randn(2, 44100)
+        out = tmp_path / "loop"
+        result = save_audio(audio, 44100, out, seamless_loop=True, crossfade_ms=500.0)
+        assert result.exists()
+
+    def test_seamless_loop_false_uses_edge_fade(self, tmp_path):
+        """seamless_loop=False (default) should use edge fade as before."""
+        audio = torch.randn(2, 44100)
+        out = tmp_path / "no_loop"
+        result = save_audio(audio, 44100, out)
+        assert result.exists()
+
+    def test_seamless_loop_metadata(self, tmp_path):
+        """Metadata should include seamless_loop and crossfade_ms."""
+        audio = torch.randn(2, 44100)
+        meta = {"prompt": "test"}
+        out = tmp_path / "loop_meta"
+        result = save_audio(
+            audio, 44100, out,
+            seamless_loop=True,
+            crossfade_ms=500.0,
+            metadata=meta,
+        )
+        meta_path = result.with_suffix(result.suffix + ".json")
+        data = json.loads(meta_path.read_text())
+        assert data["seamless_loop"] is True
+        assert data["crossfade_ms"] == 500.0
+
 
 class TestConstants:
     def test_supported_formats(self):

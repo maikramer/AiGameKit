@@ -172,6 +172,8 @@ def save_audio(
     trim_buffer_ms: int = 200,
     trim_threshold_db: float = -60.0,
     apply_fade: bool = True,
+    seamless_loop: bool = False,
+    crossfade_ms: float = 500.0,
 ) -> Path:
     """Processa e grava áudio num ficheiro.
 
@@ -187,6 +189,8 @@ def save_audio(
         trim_buffer_ms: Buffer em ms ao cortar silêncio (passado a trim_silence).
         trim_threshold_db: Limiar em dB para o trim de silêncio (-30 mais agressivo, -60 conservador).
         apply_fade: Aplicar micro fade-in/out nas bordas do clip.
+        seamless_loop: Apply equal-power crossfade for seamless loop playback.
+        crossfade_ms: Crossfade duration in milliseconds (only used when seamless_loop=True).
 
     Returns:
         Caminho do ficheiro de áudio gravado.
@@ -203,7 +207,9 @@ def save_audio(
     if trim:
         audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=trim_buffer_ms)
 
-    if apply_fade:
+    if seamless_loop:
+        audio = apply_seamless_loop_crossfade(audio, sample_rate, crossfade_ms=crossfade_ms)
+    elif apply_fade:
         audio = apply_edge_fade(audio, sample_rate)
 
     output_path = output_path.with_suffix(f".{fmt}")
@@ -215,6 +221,9 @@ def save_audio(
     sf.write(str(output_path), audio_np, sample_rate, subtype=subtype)
 
     if metadata:
+        if seamless_loop:
+            metadata["seamless_loop"] = True
+            metadata["crossfade_ms"] = crossfade_ms
         meta_path = output_path.with_suffix(output_path.suffix + ".json")
         meta_path.write_text(
             json.dumps(metadata, indent=2, ensure_ascii=False),
