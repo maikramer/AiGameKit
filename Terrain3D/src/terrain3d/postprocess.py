@@ -178,3 +178,60 @@ def elevation_scurve(
             h = np.full_like(h, 0.5)
 
     return np.clip(h, 0.0, 1.0).astype(np.float64)
+
+
+def apply_postprocess_chain(
+    heightmap: np.ndarray,
+    mode: str = "island",
+    seed: int = 0,
+    island_falloff_radius: float = 0.35,
+    island_noise_scale: float = 0.15,
+    island_noise_freq: float = 3.0,
+    smooth_iterations: int = 3,
+    smooth_lambda: float = 0.5,
+    smooth_mu: float = -0.53,
+    elevation_gamma: float = 1.2,
+    elevation_contrast: float = 0.1,
+) -> np.ndarray:
+    """Run the full post-processing chain on a heightmap.
+
+    Pipeline: island_falloff → taubin_smooth → elevation_scurve → normalise.
+
+    Args:
+        heightmap: 2D float64 array in [0, 1].
+        mode: ``"island"`` (apply falloff) or ``"continental"`` (skip falloff).
+        seed: Random seed for island falloff Perlin noise.
+        island_falloff_radius: Base radius for island falloff.
+        island_noise_scale: Perlin amplitude for coast variation.
+        island_noise_freq: Perlin frequency for coast variation.
+        smooth_iterations: Taubin iterations (0 = disabled).
+        smooth_lambda: Taubin λ parameter.
+        smooth_mu: Taubin μ parameter.
+        elevation_gamma: Gamma exponent (1.0 = neutral).
+        elevation_contrast: Sigmoid contrast strength (0 = disabled).
+
+    Returns:
+        Post-processed heightmap in [0, 1], float64.
+    """
+    h = heightmap.copy()
+
+    # 1. Island falloff
+    if mode == "island":
+        h = island_falloff(h, island_falloff_radius, island_noise_scale, island_noise_freq, seed)
+
+    # 2. Taubin smoothing
+    if smooth_iterations > 0:
+        h = taubin_smooth(h, smooth_iterations, smooth_lambda, smooth_mu)
+
+    # 3. Elevation S-curve
+    if abs(elevation_gamma - 1.0) > 1e-9 or elevation_contrast > 1e-9:
+        h = elevation_scurve(h, elevation_gamma, elevation_contrast)
+
+    # 4. Re-normalise to [0, 1]
+    h_min, h_max = float(h.min()), float(h.max())
+    if h_max - h_min > 1e-12:
+        h = (h - h_min) / (h_max - h_min)
+    else:
+        h = np.zeros_like(h, dtype=np.float64)
+
+    return h.astype(np.float64)

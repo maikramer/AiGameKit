@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from terrain3d.postprocess import elevation_scurve, island_falloff, taubin_smooth
+from terrain3d.postprocess import apply_postprocess_chain, elevation_scurve, island_falloff, taubin_smooth
 
 
 # --- Fixtures ---
@@ -163,3 +163,42 @@ class TestElevationScurve:
         """Output should contain no NaN or Inf."""
         result = elevation_scurve(heightmap_gaussian_peak, gamma=1.5, contrast=0.3)
         assert np.all(np.isfinite(result))
+
+
+class TestPostprocessChain:
+    def test_full_chain_island(self, heightmap_gaussian_peak: np.ndarray) -> None:
+        """Full chain with mode=island should produce output in [0, 1]."""
+        result = apply_postprocess_chain(
+            heightmap_gaussian_peak,
+            mode="island",
+            seed=0,
+        )
+        assert result.min() >= 0.0
+        assert result.max() <= 1.0
+        assert result.dtype == np.float64
+        # Edges should be near zero (island falloff)
+        assert result[0, 0] < 0.01
+
+    def test_continental_skips_falloff(self, heightmap_gaussian_peak: np.ndarray) -> None:
+        """mode=continental should not apply island falloff."""
+        result = apply_postprocess_chain(
+            heightmap_gaussian_peak,
+            mode="continental",
+            seed=0,
+        )
+        # Center should still have high value
+        assert result[128, 128] > 0.5
+        # Continental edges should be higher than island edges
+        result_island = apply_postprocess_chain(
+            heightmap_gaussian_peak,
+            mode="island",
+            seed=0,
+        )
+        # Continental edges should be higher than island edges
+        assert result[0, 0] >= result_island[0, 0]
+
+    def test_chain_deterministic(self, heightmap_gaussian_peak: np.ndarray) -> None:
+        """Same parameters should produce identical results."""
+        r1 = apply_postprocess_chain(heightmap_gaussian_peak, mode="island", seed=42)
+        r2 = apply_postprocess_chain(heightmap_gaussian_peak, mode="island", seed=42)
+        np.testing.assert_array_equal(r1, r2)
