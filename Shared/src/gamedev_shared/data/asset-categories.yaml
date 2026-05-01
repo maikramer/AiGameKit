@@ -189,6 +189,7 @@ audio_kinds:
     trim_default: false
     trim_buffer_ms: 0
     loop_hint: true
+    crossfade_ms: 500
     prompt_hint: "seamless loop, consistent volume throughout"
 
   ambient_loop:
@@ -199,6 +200,7 @@ audio_kinds:
     trim_default: false
     trim_buffer_ms: 0
     loop_hint: true
+    crossfade_ms: 500
     prompt_hint: "seamless loop, immersive atmosphere"
 
   ambient_one_shot:

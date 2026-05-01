@@ -44,6 +44,7 @@ profiles:
       sigma_min: 0.5
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
+      crossfade_ms: 300
     simplify:
       face_ratio: 0.25
       texture_size: 1024
@@ -94,6 +95,7 @@ profiles:
       sigma_min: 0.4
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
+      crossfade_ms: 400
     simplify:
       face_ratio: 0.5
       texture_size: 1024
@@ -143,6 +145,7 @@ profiles:
       sigma_min: 0.3
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
+      crossfade_ms: 500
     simplify:
       face_ratio: 1.0
       texture_size: 2048
@@ -192,6 +195,7 @@ profiles:
       sigma_min: 0.2
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
+      crossfade_ms: 600
     simplify:
       face_ratio: 2.0
       texture_size: 2048
@@ -241,6 +245,7 @@ profiles:
       sigma_min: 0.1
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
+      crossfade_ms: 800
     simplify:
       face_ratio: 0.0
       texture_size: 4096
