@@ -390,6 +390,62 @@ def _lod_pipeline_failed(
     return False
 
 
+def _lod_rigged_via_subprocess(
+    py: str,
+    row: ManifestRow,
+    mesh_final: Path,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    num_levels: int,
+    current_faces: int,
+) -> bool:
+    """Run rigged LOD levels via subprocess on a bpy-capable Python."""
+    import subprocess as _sp
+
+    pkg_dir = Path(__file__).resolve().parent
+    gameassets_src = str(pkg_dir)
+    shared_src = str((pkg_dir / "../../../Shared/src").resolve())
+
+    def _lod_ratio(level: int, num: int) -> float:
+        if num <= 1:
+            return 1.0
+        return max(0.05, 1.0 - (level / (num - 1)) * 0.95)
+
+    basename = row.id.replace("/", "_")
+    paths = _lod_output_paths(mesh_final, basename, num_levels)
+
+    console.print(f"[cyan]⏳ LOD (rigged, bpy subprocess, {num_levels}n)[/cyan] {row.id} ...")
+    t0 = time.perf_counter()
+
+    for i in range(num_levels):
+        ratio = _lod_ratio(i, num_levels)
+        target = max(int(current_faces * ratio), 1) if current_faces else int(32000 * ratio)
+        out = paths[i]
+        script = f"""
+import sys
+sys.path.insert(0, "{gameassets_src}")
+sys.path.insert(0, "{shared_src}")
+from gameassets.bpy_simplify import simplify_glb
+simplify_glb("{mesh_final}", "{out}", target_faces={target})
+print("DONE")
+"""
+        try:
+            result = _sp.run([py, "-c", script], capture_output=True, text=True, timeout=300)
+            if "DONE" not in (result.stdout or ""):
+                console.print(f"[yellow]LOD rigged lvl{i} falhou[/yellow] {row.id}: {result.stderr[:200]}")
+        except _sp.TimeoutExpired:
+            console.print(f"[yellow]LOD rigged lvl{i} timeout[/yellow] {row.id}")
+        except Exception as exc:
+            console.print(f"[yellow]LOD rigged lvl{i} falhou[/yellow] {row.id}: {exc}")
+
+    elapsed = time.perf_counter() - t0
+    _timing_append(rec, "lod", elapsed)
+    rec["lod_method"] = "bpy_rigged_subprocess"
+    rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
+    console.print(f"[green]✓ LOD (rigged, bpy subprocess)[/green] {row.id} ({elapsed:.1f}s)")
+    return False
+
+
 def _lod_pipeline_rigged_bpy(
     profile: GameProfile,
     row: ManifestRow,
@@ -410,15 +466,20 @@ def _lod_pipeline_rigged_bpy(
 
         _objs = load_glb(mesh_final)
         current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception as exc:
-        console.print(f"[red]LOD rigged: não foi possível contar faces[/red] {row.id}: {exc}")
-        rec["lod_error"] = f"face count failed: {exc}"
+    except Exception:
+        current_faces = 0
+
+    try:
+        from .bpy_simplify import simplify_glb
+    except ImportError:
+        bpy_py = _resolve_bpy_python()
+        if bpy_py:
+            return _lod_rigged_via_subprocess(bpy_py, row, mesh_final, rec, manifest_dir, num_levels, current_faces)
+        console.print(f"[red]LOD rigged: bpy indisponível[/red] {row.id}")
+        rec["lod_error"] = "bpy required but not installed"
         return True
 
-    from .bpy_simplify import simplify_glb
-
     def _lod_ratio(level: int, num: int) -> float:
-        """Compute face ratio for LOD level `level` (0=full) out of `num` total levels."""
         if num <= 1:
             return 1.0
         return max(0.05, 1.0 - (level / (num - 1)) * 0.95)
@@ -428,7 +489,7 @@ def _lod_pipeline_rigged_bpy(
 
     for i in range(num_levels):
         ratio = _lod_ratio(i, num_levels)
-        target = max(int(current_faces * ratio), 1)
+        target = max(int(current_faces * ratio), 1) if current_faces else int(32000 * ratio)
         out = paths[i]
         try:
             simplify_glb(str(mesh_final), str(out), target_faces=target)
@@ -1049,9 +1110,9 @@ def _resolve_bpy_python() -> str | None:
     py = os.environ.get("PAINT3D_PYTHON") or os.environ.get("ANIMATOR3D_PYTHON")
     if py and Path(py).is_file():
         return py
-    pkg_dir = Path(__file__).resolve().parent
+    pkg_dir = Path(__file__).parent
     for rel in ("../../../Paint3D/.venv/bin/python", "../../../Animator3D/.venv/bin/python"):
-        candidate = (pkg_dir / rel).resolve()
+        candidate = pkg_dir / rel
         if candidate.is_file():
             return str(candidate)
     return None
