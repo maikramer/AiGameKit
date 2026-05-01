@@ -479,6 +479,17 @@ def _lod_pipeline_rigged_bpy(
         rec["lod_error"] = "bpy required but not installed"
         return True
 
+    # Lazily-imported bpy in bpy_simplify means the module loads
+    # but function calls fail. Check actual bpy availability.
+    try:
+        import bpy  # noqa: F401
+    except ImportError:
+        bpy_py = _resolve_bpy_python()
+        if bpy_py:
+            return _lod_rigged_via_subprocess(bpy_py, row, mesh_final, rec, manifest_dir, num_levels, current_faces)
+        rec["lod_error"] = "bpy required but not installed"
+        return True
+
     def _lod_ratio(level: int, num: int) -> float:
         if num <= 1:
             return 1.0
