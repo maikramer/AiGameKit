@@ -402,9 +402,9 @@ def _lod_rigged_via_subprocess(
     """Run rigged LOD levels via subprocess on a bpy-capable Python."""
     import subprocess as _sp
 
-    pkg_dir = Path(__file__).resolve().parent
+    pkg_dir = Path(__file__).resolve().parent.parent  # gameassets/ -> src/
     gameassets_src = str(pkg_dir)
-    shared_src = str((pkg_dir / "../../../Shared/src").resolve())
+    shared_src = str((pkg_dir / "../Shared/src").resolve())
 
     def _lod_ratio(level: int, num: int) -> float:
         if num <= 1:
