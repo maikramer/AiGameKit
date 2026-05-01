@@ -257,6 +257,8 @@ class TextureGenerator:
             pipe.transformer.to(f"cuda:{primary}")
             pipe.vae.to(f"cuda:{primary}")
             pipe.text_encoder.to(f"cuda:{secondary}")
+            if hasattr(pipe, "text_encoder_2") and pipe.text_encoder_2 is not None:
+                pipe.text_encoder_2.to(f"cuda:{secondary}")
         except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
             self._log(f"Multi-GPU placement falhou ({exc})")
             return False

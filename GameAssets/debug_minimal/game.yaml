@@ -25,7 +25,7 @@ text2d:
 texture2d:
   width: 512
   height: 512
-  steps: 4
+  steps: 10
 
 text3d:
   preset: fast
