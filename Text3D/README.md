@@ -1,49 +1,60 @@
-# Text3D
+# Text3D — AI Text/Image-to-3D Generation
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-**Text-to-3D** in two phases: **[Text2D](../Text2D)** (text → image) and **[Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1)** (image → mesh, SDNQ INT4 quantized). The 2D model is **always unloaded** before loading Hunyuan3D.
+Text-to-3D and image-to-3D generation powered by [Text2D](../Text2D) (FLUX.2 Klein SDNQ) → [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) (SDNQ INT4 quantized). Outputs geometry-only GLB/PLY/OBJ meshes. For texturing and PBR, use [Paint3D](../Paint3D) or [GameAssets](../GameAssets).
 
-**Default** CLI/API values are in [`src/text3d/defaults.py`](src/text3d/defaults.py): **~6 GB VRAM** (CUDA) profile **validated in practice** (good text-to-3D quality with the same numbers as the command without extra flags). **Text2D (FLUX)** uses **CPU offload** by default (`DEFAULT_T2D_CPU_OFFLOAD`), otherwise the model does not fit on the GPU. On a large GPU, `--t2d-full-gpu`. `--low-vram` forces **Hunyuan** on CPU (last resort).
-
-**Shortcuts:** `--preset fast` (less time/VRAM), `balanced` (same as defaults), `hq` (high quality, large GPU) — adjusts `--steps`, `--octree-resolution`, and `--num-chunks` together (if you use `--preset`, do not expect `--steps` / `--octree-resolution` / `--num-chunks` to override the preset — preset wins). **`text3d doctor`** checks PyTorch and VRAM. The CLI sets `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` if the variable is unset (less VRAM fragmentation).
-
-**Texturing and PBR** are not part of this package: use **[Paint3D](../Paint3D)** (`paint3d texture` — GLB is PBR from Hunyuan3D-Paint 2.1) or **[GameAssets](../GameAssets)** with `text3d.texture` in the profile.
-
-> **Hunyuan weight license:** [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-2.1) — read `LICENSE` in the repo ([Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1)): territory restrictions, acceptable use, obligations. **Text2D (FLUX):** default SDNQ in the monorepo is not the same regime as BFL BF16 Apache 2.0 — see [Text2D/README](../Text2D/README.md) and [GameDev/README](../README.md).
+Text3D is also the **central mesh operations hub** in the monorepo — it owns all mesh post-processing (LOD, collision, remesh, simplify, align).
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-## Requirements
+## Overview
 
-| Config | Minimum | Recommended |
-|--------|---------|---------------|
-| Python | 3.10+ | 3.11+ |
-| GPU | Optional | CUDA ~6 GB+ (defaults tuned for this) |
-| RAM | 16GB | 32GB |
-| Disk | ~20 GB free | More (Hugging Face cache) |
+Text3D generates 3D meshes in two phases:
+
+1. **Text2D** (text → reference image) — uses FLUX.2 Klein with CPU offload by default; the model is **always unloaded** before loading Hunyuan3D.
+2. **Hunyuan3D-2.1** (image → mesh) — marching cubes surface extraction with SDNQ INT4 quantization.
+
+Generation presets (`--preset`) adjust steps, octree resolution, and chunk count together:
+
+| Preset | Steps | Octree | Chunks | Profile |
+|--------|-------|--------|--------|---------|
+| `fast` | 18 | 128 | 4 096 | Minimal VRAM, fastest |
+| `balanced` | 24 | 256 | 8 000 | ~6 GB VRAM, good quality |
+| `hq` | 30 | 384 | 20 000 | Large GPU, highest quality |
+
+After generation, `prepare_mesh_topology` runs automatically to repair marching-cubes artifacts (see [Mesh Topology](#mesh-topology)).
+
+> **License:** Tencent Hunyuan3D-2.1 weights are under the [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-2.1) — territory restrictions apply. Text2D (FLUX SDNQ) license: see [Text2D/README](../Text2D/README.md) and root [README](../README.md).
 
 ## Installation
 
-### Official (monorepo)
+### Requirements
 
-At the **GameDev** repo root:
+| Config | Minimum | Recommended |
+|--------|---------|-------------|
+| Python | 3.10+ | 3.11+ |
+| GPU | Optional | CUDA ~6 GB+ (defaults tuned for this) |
+| RAM | 16 GB | 32 GB |
+| Disk | ~20 GB free | More (Hugging Face cache) |
+
+### Monorepo install
 
 ```bash
-cd /path/to/GameDev
+cd Shared && pip install -e .
+cd Text3D && pip install -e .
+```
+
+Or via the unified installer:
+
+```bash
 ./install.sh text3d
 ```
 
-Editable install in `Text3D/.venv`, config in `~/.config/text3d`, wrappers in `~/.local/bin` (all platforms; `%USERPROFILE%\.local\bin` on Windows). Optional variable: `PYTHON_CMD`. CLI flag: `--skip-env-config` (do not write `env.sh` / `env.bat`). Texturing: install **[Paint3D](../Paint3D)** separately.
-
-Equivalent: `gamedev-install text3d`. General guide: [docs/INSTALLING.md](../docs/INSTALLING.md).
-
 ### Manual / advanced
 
-[`config/requirements.txt`](config/requirements.txt) references `text2d @ file:../Text2D`. The `hy3dshape` shape generation code from [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) is vendored in `src/text3d/hy3dshape/`.
-
 ```bash
-cd GameDev/Text3D
+cd Text3D
 python -m venv .venv && source .venv/bin/activate
 pip install -r config/requirements.txt
 pip install -e .
@@ -51,117 +62,352 @@ pip install -e .
 
 **Windows:** `python -m venv .venv` and `.\.venv\Scripts\Activate.ps1`; or `scripts\setup.ps1`.
 
-### Local shortcut
+## Commands
 
-`python scripts/installer.py` (or `scripts/run_installer.sh` / `scripts/install.sh`) uses the same logic as `./install.sh text3d` when run from `Text3D/`.
+Entry point: `text3d` (or `python -m text3d`).
 
-## Usage
+### `text3d generate [PROMPT]`
 
-| Subcommand | Description |
-|------------|-------------|
-| `text3d generate PROMPT` | Generate 3D mesh from text (Text2D → Hunyuan3D) |
-| `text3d doctor` | Check PyTorch, VRAM, native deps |
-| `text3d info` | Show config, GPU, cache, environment |
-| `text3d models` | List available models |
-| `text3d convert FILE` | Convert mesh formats (PLY → GLB, etc.) |
-| `text3d skill install` | Install Cursor Agent Skill in the project |
+Text-to-3D (Text2D → Hunyuan3D) or image-to-3D (`--from-image`).
 
 ```bash
-# Geometry-only mesh (Text2D → Hunyuan3D)
+# Text-to-3D (default: balanced preset, feet origin)
 text3d generate "a futuristic robot" -o robot.glb
 
-# More VRAM (HF HQ triple)
-text3d generate "chair" --preset hq -W 1024 -H 1024
+# High quality (large GPU)
+text3d generate "chair" --preset hq -o chair.glb
 
-# Fast (fewer steps / lower octree)
+# Fast generation (less VRAM/time)
 text3d generate "chair" --preset fast -o chair_fast.glb
 
-# Last resort: Hunyuan on CPU
+# Image-to-3D only (skip Text2D)
+text3d generate -i ref.png -o mesh.glb
+
+# Low VRAM (~6 GB profile, Hunyuan SDNQ INT4)
 text3d generate "object" --low-vram
 
-text3d doctor
-text3d info
-text3d models
-text3d convert mesh.ply --output mesh.glb
+# Reproducible seed
+text3d generate "sword" --seed 42 -o sword.glb
 
-# Texture an existing mesh (Paint3D project)
-paint3d texture outputs/meshes/robot.glb -i my_ref.png -o robot_tex.glb
+# Skip mesh repair (keep high-poly for Paint3D texturing)
+text3d generate "statue" --skip-remesh -o statue.glb
+
+# Multi-GPU (split Hunyuan weights across GPUs)
+text3d generate "scene" --gpu-ids 0,1 -o scene.glb
 ```
 
-### Texture and PBR
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-i, --from-image` | path | None | Input image path (image-to-3D mode, skips Text2D) |
+| `-o, --output` | path | `outputs/meshes/<name>_<ts>.glb` | Output file path |
+| `-f, --format` | str | `glb` | Output format: `glb`, `ply`, `obj` |
+| `--preset` | str | `balanced` | Generation preset: `fast`, `balanced`, `hq` |
+| `--steps` | int | 30 | Hunyuan3D inference steps |
+| `--octree-resolution` | int | 384 | Octree resolution (VRAM in decode phase) |
+| `--num-chunks` | int | 20 000 | Surface extraction chunks |
+| `--mc-level` | float | 0 | Marching cubes iso-surface level (0 = default) |
+| `--guidance` | float | 5.0 | Hunyuan3D guidance scale |
+| `-W, --image-width` | int | 2048 | Text2D reference image width |
+| `-H, --image-height` | int | 2048 | Text2D reference image height |
+| `--t2d-steps` | int | 8 | Text2D inference steps |
+| `--t2d-guidance` | float | 1.0 | Text2D guidance |
+| `--model` | str | None | Text2D model ID override (default: `TEXT2D_MODEL_ID` or Disty0) |
+| `--t2d-full-gpu` | flag | false | Load Text2D fully on GPU (~12 GB+ VRAM required) |
+| `--seed` | int | None | Reproducible seed for Text2D and Hunyuan3D |
+| `--cpu` | flag | false | Force CPU inference (much slower) |
+| `--low-vram` | flag | false | Low VRAM profile (~6 GB: SDNQ INT4, octree 256, 8000 chunks, 24 steps) |
+| `--no-remove-bg` | flag | false | Skip background removal (BiRefNet) |
+| `--sdnq-preset` | str | None | SDNQ quantization: `sdnq-uint8`, `sdnq-int8`, `sdnq-int4`, `sdnq-fp8`, `none` |
+| `--export-origin` | str | `feet` | Origin placement: `feet`, `center`, `none` |
+| `--export-rotation-x-deg` | float | None | X-axis rotation in degrees (overrides env var) |
+| `--save-reference-image` | flag | false | Save the Text2D reference image alongside output |
+| `--no-prompt-optimize` | flag | false | Skip automatic prompt optimization (anti-ground-plane terms) |
+| `--profile` | flag | false | Enable profiling (JSONL + SQLite) |
+| `--max-faces` | int | 40 000 | Max faces via PyMeshLab quadric edge collapse (0 = no reduction) |
+| `--gpu-ids` | str | None | GPU IDs for multi-GPU weight splitting (e.g. `0,1`) |
+| `--skip-remesh` | flag | false | Skip isotropic remeshing in mesh topology prep (keeps high-poly) |
+| `--allow-shared-gpu` | flag | false | Allow GPU sharing with other processes |
+| `--gpu-kill-others` | flag | false | **DEPRECATED:** terminate competing GPU processes |
+| `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
+| `--category` | str | None | Asset category for automatic tuning (e.g. `humanoid`, `weapon`, `prop`) |
 
-Full text → mesh → textured PBR GLB: **[GameAssets](../GameAssets)** (`gameassets batch` with `text3d.texture`) or chain manually `text3d generate` → `paint3d texture`. For **PBR maps from a diffuse image** (not the GLB path), use **[Materialize](../Materialize)** / `texture2d.materialize` — **[docs/PBR_MATERIALIZE.md](docs/PBR_MATERIALIZE.md)** and **[Paint3D/docs/PAINT_SETUP.md](../Paint3D/docs/PAINT_SETUP.md)**.
+> **Preset precedence:** When `--preset` is set, it overrides `--steps`, `--octree-resolution`, and `--num-chunks`. When `--quality` is set, the QualityEngine resolves preset/guidance/steps/octree/chunks only if the user hasn't explicitly provided them.
 
-### Main parameters (defaults = ~6 GB profile, validated)
+### `text3d generate-batch MANIFEST`
 
-See [`defaults.py`](src/text3d/defaults.py). Summary:
-
-| Flag | Current default | Large GPU example (HF) |
-|------|-----------------|-------------------------|
-| `-W` / `-H` | 768 | 1024 |
-| `--steps` | 24 | 30 |
-| `--guidance` | 5.0 | 5.0 |
-| `--octree-resolution` | 256 | 380 |
-| `--num-chunks` | 8000 | 20000 |
-| `--low-vram` | off | forces Hunyuan on CPU if still OOM |
-| `--seed` | — | — |
-| `--preset` | — | `fast` / `balanced` / `hq` (replaces steps+octree+chunks) |
-| `--mc-level` | 0 | Hunyuan iso-surface (fine tuning) |
-| `--gpu-ids` | off | Multi-GPU weight split via accelerate (e.g. `0,1`) |
-
-### Mesh LOD (post-process, sem GPU)
-
-Gera três GLB com decimação quadric (`fast-simplification`) a partir de qualquer mesh:
+Batch image-to-3D from a JSON manifest. Each item must have `id`, `image`, and `output` fields. The Hunyuan3D model stays loaded across all items.
 
 ```bash
-text3d lod modelo.glb -o ./out_dir --basename prop
-# → prop_lod0.glb (cheio), prop_lod1.glb (~42% faces), prop_lod2.glb (~14% faces)
+text3d generate-batch manifest.json --output-dir ./outputs --preset balanced --force
 ```
 
-Opções: `--lod1-ratio`, `--lod2-ratio`, `--min-faces-lod1`, `--min-faces-lod2`.
+**Manifest format:**
 
-## Python
+```json
+[
+  {"id": "item1", "image": "ref1.png", "output": "item1.glb"},
+  {"id": "item2", "image": "ref2.png", "output": "item2.glb", "steps": 28, "seed": 42}
+]
+```
+
+Accepts all generation flags (`--preset`, `--steps`, `--guidance`, `--octree-resolution`, `--num-chunks`, `--mc-level`, `--sdnq-preset`, `--export-origin`, `--gpu-ids`, `--allow-shared-gpu`, `--force`).
+
+### `text3d lod MESH`
+
+Generate a LOD triplet (LOD0/LOD1/LOD2) using quadric decimation. Preserves armatures and animations — no separate path needed for rigged LOD.
+
+```bash
+# Basic LOD generation
+text3d lod model.glb -o ./out_dir --basename prop
+
+# With textured LOD0 (Paint3D output)
+text3d lod model.glb -o ./out_dir --painted-mesh painted.glb --target-faces 30000
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output-dir` | path | **required** | Output directory for the three GLB files |
+| `-n, --basename` | str | input filename stem | Output basename |
+| `--lod1-ratio` | float | 0.42 | LOD1 face ratio relative to original |
+| `--lod2-ratio` | float | 0.14 | LOD2 face ratio relative to original |
+| `--min-faces-lod1` | int | 500 | Minimum face count for LOD1 |
+| `--min-faces-lod2` | int | 150 | Minimum face count for LOD2 |
+| `--meshfix` | flag | false | Apply pymeshfix (fill small boundaries only) |
+| `--painted-mesh` | path | None | Painted GLB for textured LOD (LOD0=painted, LOD1 tex/2, LOD2 tex/4) |
+| `--target-faces` | int | None | Target face count for LOD0 (with `--painted-mesh`) |
+
+**Output files:** `{basename}_lod0.glb`, `{basename}_lod1.glb`, `{basename}_lod2.glb`.
+
+### `text3d remesh MESH`
+
+Isotropic remesh — geometry only, no texture preservation. Ideal for simplifying before texturing with Paint3D.
+
+```bash
+text3d remesh model.glb -o simplified.glb --target-faces 24000
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | **required** | Output GLB file |
+| `--target-faces` | int | **required** | Target face count (min 4) |
+
+### `text3d remesh-textured MESH`
+
+Remesh with texture reprojection — preserves UV layout and materials. Re-meshes to uniform triangles (pymeshlab isotropic) then re-projects the original texture via xatlas + closest-point sampling.
+
+```bash
+text3d remesh-textured painted.glb -o remeshed.glb --target-faces 6000
+text3d remesh-textured model.glb -o out.glb --target-faces 10000 --texture-size 4096
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | **required** | Output GLB file |
+| `--target-faces` | int | **required** | Target face count (min 4) |
+| `--texture-size` | int | 2048 | Output texture resolution in pixels |
+
+### `text3d collision MESH`
+
+Generate a simplified collision mesh (convex hull + quadric decimation) suitable for physics in Unity/Godot/Unreal.
+
+```bash
+text3d collision model.glb -o collision.glb
+text3d collision model.glb -o coll.glb --max-faces 500 --no-convex-hull
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | **required** | Output collision GLB |
+| `--max-faces` | int | 300 | Target face count for collision mesh |
+| `--convex-hull/--no-convex-hull` | flag | true | Apply convex hull before simplification |
+
+### `text3d align-plus-z MESH`
+
+Align the largest +Z face normal to the ground plane. Useful for correcting models generated flat-side-up (e.g., crystal/pedestal orientation). Includes a height-ratio guard to avoid "folding" humanoid models when the heuristic fails.
+
+```bash
+text3d align-plus-z model.glb -o corrected.glb
+text3d align-plus-z model.glb -o corrected.glb --min-height-ratio 0.3
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | **required** | Output GLB file |
+| `--min-height-ratio` | float | 0.25 | Minimum height ratio guard (0–1); aborts if result is too flat |
+
+### `text3d convert INPUT`
+
+Convert mesh between formats (PLY, OBJ, GLB).
+
+```bash
+text3d convert mesh.ply --output mesh.glb
+text3d convert mesh.obj -o mesh.glb --rotate
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-o, --output` | path | auto (`.glb` extension) | Output file path |
+| `-r, --rotate` | flag | false | Apply orientation rotation |
+
+### `text3d gpu-processes`
+
+Show current GPU processes via `nvidia-smi`. Useful when exclusive-GPU checks fail or to identify processes consuming VRAM.
+
+```bash
+text3d gpu-processes
+```
+
+### `text3d doctor`
+
+Check PyTorch, CUDA, and VRAM availability. Reports per-GPU memory, CUDA version, and the `PYTORCH_CUDA_ALLOC_CONF` setting.
+
+```bash
+text3d doctor
+```
+
+### `text3d info`
+
+Show system info, GPU details, HF cache path, and default output directory.
+
+```bash
+text3d info
+```
+
+### `text3d models`
+
+List all models used by Text3D (Text2D, Hunyuan3D shape, Hunyuan3D Paint reference).
+
+```bash
+text3d models
+```
+
+### `text3d skill install`
+
+Install the Cursor Agent Skill (`.cursor/skills/text3d/SKILL.md`) into a game project.
+
+```bash
+text3d skill install --target ./my-game --force
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `-t, --target` | path | `.` | Game project root directory |
+| `--force` | flag | false | Overwrite existing SKILL.md |
+
+## Mesh Topology
+
+`prepare_mesh_topology` runs automatically after every `generate` and `generate-batch` call. It repairs marching-cubes artifacts to produce clean, game-ready meshes:
+
+| Step | Detail |
+|------|--------|
+| Merge vertices | Precision: 5 decimal digits |
+| Non-manifold repair | Via pymeshlab |
+| Weld by distance | 0.01% of bounding-box diagonal |
+| Taubin smoothing | 3 iterations, volume-preserving |
+| Isotropic remeshing | 3 iterations, target edge length = 1% of diagonal |
+
+**Known artifacts:** Hunyuan3D marching-cubes outputs tend to have thick/double walls and tiny cracks. For manual repair: merge/manifold and close only very small holes before making watertight — do not treat the large base opening (e.g., crate after removing pedestal) as a defect.
+
+**Skip for texturing:** Use `--skip-remesh` to disable the isotropic remeshing step, preserving the high-poly mesh for better Paint3D texturing quality.
+
+## Quality Presets
+
+Quality tiers map to generation presets via the [QualityEngine](../Shared/src/gamedev_shared/quality.py) (`quality-profiles.yaml`):
+
+| Quality | Text3D Preset | Guidance | Notes |
+|---------|---------------|----------|-------|
+| `fast` | `fast` | 5.0 | Minimal VRAM, ~30s per asset |
+| `low` | `fast` | 5.0 | Basic quality, ~1min |
+| `medium` | `balanced` | 5.0 | Standard quality (default), ~2min |
+| `high` | `hq` | 5.0 | High quality, ~5min, large GPU |
+| `highest` | `hq` | 5.0 | Maximum quality, ~10min+ |
+
+The QualityEngine uses **soft resolution** — it only fills defaults when the user hasn't explicitly set a parameter. Use `--quality` and optionally `--category` to let the engine tune parameters automatically, or override individual flags as needed.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `TEXT3D_BIN` | Override `text3d` binary path |
+| `TEXT2D_MODEL_ID` | HuggingFace model ID override for the Text2D phase |
+| `HF_HOME` | HuggingFace cache directory (default: `~/.cache/huggingface`) |
+| `PYTORCH_CUDA_ALLOC_CONF` | CUDA memory config (auto-set to `expandable_segments:True` if empty by the CLI) |
+| `TEXT3D_ALLOW_SHARED_GPU` | Allow GPU sharing (`1`/`true`/`yes` = allow) |
+| `TEXT3D_GPU_KILL_OTHERS` | Control GPU process termination (`0` = off, `1` = force, empty = follow CLI) |
+| `TEXT3D_EXPORT_ROTATION_X_DEG` | X rotation in degrees when exporting mesh |
+| `TEXT3D_EXPORT_ROTATION_X_RAD` | Alternative in radians |
+| `TEXT3D_EXPORT_ORIGIN` | Origin mode: `feet`, `center`, `none` |
+| `GAMEDEV_PROFILE_LOG` | Path for profiler JSONL output (used with `--profile`) |
+
+## Output Layout
+
+Default output directory: `outputs/meshes/`.
+
+| File type | Naming |
+|-----------|--------|
+| Generated mesh | `<prompt>_<timestamp>.glb` (or custom via `-o`) |
+| LOD triplet | `{basename}_lod0.glb`, `{basename}_lod1.glb`, `{basename}_lod2.glb` |
+| Collision mesh | `{basename}_collision.glb` (custom via `-o`) |
+| Reference image | `{stem}_text2d.png` (with `--save-reference-image`) |
+| Input copy | `{stem}_input.png` (with `--save-reference-image` + `--from-image`) |
+
+Supported formats: GLB (default), PLY, OBJ.
+
+## Pipeline Integration
+
+Text3D is the **central mesh operations hub** in the monorepo. It owns all mesh operations:
+
+- **LOD generation** — `text3d lod` (preserves armatures/animations)
+- **Collision mesh** — `text3d collision`
+- **Remesh (geometry)** — `text3d remesh`
+- **Remesh (textured)** — `text3d remesh-textured`
+- **Simplify** — via `--max-faces` in generate
+- **Mesh alignment** — `text3d align-plus-z`
+- **Format conversion** — `text3d convert`
+
+[GameAssets](../GameAssets) **delegates all mesh ops to Text3D subprocesses** — it does not contain mesh code. The recommended full pipeline:
+
+```
+text3d generate → paint3d texture → text3d lod → text3d collision → game handoff
+```
+
+Or via [GameAssets](../GameAssets):
+
+```bash
+gameassets batch --manifest manifest.csv
+```
+
+For PBR maps from a diffuse image (not GLB), use [Materialize](../Materialize) / `texture2d materialize`.
+
+## Python API
 
 ```python
 from text3d import HunyuanTextTo3DGenerator
 from text3d.utils import save_mesh
 
+# Text-to-3D
 with HunyuanTextTo3DGenerator(verbose=True) as gen:
     mesh = gen.generate(prompt="a red car")
-    # Optional (large GPU): gen.generate(..., octree_resolution=380, num_chunks=20000, num_inference_steps=30)
     save_mesh(mesh, "car.glb", format="glb")
 
-# Image-to-3D only (Hunyuan)
-# mesh = gen.generate_from_image("ref.png")
+# Image-to-3D (skip Text2D)
+with HunyuanTextTo3DGenerator(verbose=True) as gen:
+    mesh = gen.generate_from_image("ref.png")
+    save_mesh(mesh, "mesh.glb")
 ```
 
-## Layout
-
-```
-Text3D/
-├── src/text3d/
-│   ├── defaults.py        # ~6GB defaults vs HQ constants
-│   ├── generator.py       # HunyuanTextTo3DGenerator
-│   ├── cli.py
-│   └── utils/
-│       └── env.py         # PYTORCH_CUDA_ALLOC_CONF at CLI startup
-├── docs/
-│   └── PBR_MATERIALIZE.md # GLB (Paint 2.1) vs PBR em imagem (Materialize)
-├── config/requirements.txt
-
-# Texture + AI upscale → Paint3D package (../Paint3D); Materialize só para mapas a partir de difusa
-```
-
-## Image-to-3D limitations and post-processing
-
-Hunyuan3D generates **surface from one view**: fine geometry (legs, mirrors) may disappear, **multiple islands** (separate feet) or clay-like roughness may appear. By default the CLI applies **mesh repair** via `prepare_mesh_topology`: vertex merge, non-manifold repair, weld-by-distance (0.01% diagonal), Taubin smoothing (3 iterations, volume-preserving), and adaptive isotropic remeshing — this closes invisible micro-cracks from marching cubes that would open during decimation or skinning.
+## Development
 
 ```bash
-# More geometric detail (more VRAM/time)
-text3d generate "robot" --octree-resolution 256 --num-chunks 8000 --steps 28
+cd Text3D && pip install -e ".[dev]"
+pytest tests/
+ruff check .
+ruff format .
 ```
 
-## Additional documentation
+Full CI: `make check` (from repo root) runs lint, format check, typecheck, and tests.
+
+## Additional Documentation
 
 | File | Description |
 |------|-------------|
@@ -169,23 +415,13 @@ text3d generate "robot" --octree-resolution 256 --num-chunks 8000 --steps 28
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | Troubleshooting |
 | [docs/EXAMPLES.md](docs/EXAMPLES.md) | Advanced examples |
 | [docs/API.md](docs/API.md) | Python API reference |
-| [docs/PAINT_SETUP.md](docs/PAINT_SETUP.md) | Points to Paint3D (Hunyuan texture) |
-| [docs/PBR_MATERIALIZE.md](docs/PBR_MATERIALIZE.md) | Points to Paint3D + Materialize |
-
-## Environment variables
-
-| Variable | Description |
-|----------|-------------|
-| `TEXT2D_MODEL_ID` | HF model override for Text2D phase |
-| `MATERIALIZE_BIN` | Not used by `text3d`; optional for **[Materialize](../Materialize)** / Texture2D pipelines |
-| `HF_HOME` | Hugging Face cache directory (default: `~/.cache/huggingface`) |
-| `PYTORCH_CUDA_ALLOC_CONF` | CUDA config (auto-set to `expandable_segments:True` if empty) |
-| `TEXT3D_ALLOW_SHARED_GPU` | Allow GPU sharing with other processes (`1` = yes) |
-| `TEXT3D_GPU_KILL_OTHERS` | Control termination of competing GPU processes (`0` = off, `1` = force) |
-| `TEXT3D_EXPORT_ROTATION_X_DEG` | X rotation in degrees when exporting mesh (default: 90°, Hunyuan→Y-up) |
-| `TEXT3D_EXPORT_ROTATION_X_RAD` | Alternative in radians |
+| [docs/PBR_MATERIALIZE.md](docs/PBR_MATERIALIZE.md) | PBR pipeline (Paint3D + Materialize) |
 
 ## Credits
 
-- **Tencent Hunyuan3D-2.1** — [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1), [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) (shape: `hunyuan3d-dit-v2-1`, SDNQ INT4)
-- **Text2D** — FLUX.2 Klein (SDNQ Disty0 by default; optional BFL BF16 via `TEXT2D_MODEL_ID`) in the monorepo `text2d` package — licenses: [GameDev/README](../README.md)
+- **Tencent Hunyuan3D-2.1** — [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1), [HuggingFace](https://huggingface.co/tencent/Hunyuan3D-2.1) (shape: `hunyuan3d-dit-v2-1`, SDNQ INT4)
+- **Text2D** — FLUX.2 Klein (SDNQ Disty0 by default; optional BFL BF16 via `TEXT2D_MODEL_ID`) in the monorepo `text2d` package
+
+## License
+
+MIT

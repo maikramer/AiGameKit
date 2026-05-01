@@ -8,7 +8,55 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](Text2D/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures and skymaps** (Hugging Face Inference API), **PBR texturing**, **part decomposition**, **rigging**, **animation**, and **asset batching**, sharing the same foundation (`gamedev-shared`), unified installer, and documentation.
+Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures and skymaps** (Hugging Face Inference API), **PBR texturing**, **part decomposition**, **rigging**, **animation**, **asset batching**, and **browser 3D engine**, sharing the same foundation (`gamedev-shared`), unified installer, and documentation.
+
+All GPU tools support **multi-GPU** (`--gpu-ids 0,1`) and **quality presets** (`--quality fast|low|medium|high|highest`).
+
+## Pipeline
+
+The tools form a modular generation pipeline — use them individually or let **GameAssets** orchestrate the full flow:
+
+```
+  Text2D (image) ──→ Text3D (mesh) ──→ Paint3D (texture) ──→ Part3D (parts) ──→ Rigging3D (rig) ──→ Animator3D (animate)
+       │                                        │                                            │
+       ▼                                        ▼                                            ▼
+  Texture2D (seamless)                   Materialize (PBR)                              GameAssets (batch)
+       │                                                                               ──→ VibeGame (browser)
+  Skymap2D (sky)
+  Text2Sound (audio)
+  Terrain3D (terrain)
+```
+
+### One-command idea-to-game
+
+The flagship workflow — describe your game and let the pipeline generate everything:
+
+```bash
+gameassets dream "A dark fantasy RPG with skeletons and treasure chests" --dry-run   # preview plan
+gameassets dream "A dark fantasy RPG with skeletons and treasure chests"              # full run
+```
+
+What `dream` does: plans assets via an LLM (`--llm-provider openai|huggingface|stdin`), generates `game.yaml` / `manifest.csv` / `world.xml`, runs the full pipeline (batch → rig → parts → animate → sky → terrain), handoffs assets to Vite public dir, and scaffolds a playable project. Stages are auto-detected; use `--no-animate`, `--no-rig`, `--no-parts`, or `--no-3d` to opt out.
+
+Source: [`GameAssets/src/gameassets/dream/`](GameAssets/src/gameassets/dream/).
+
+### VibeGame integration
+
+Generated assets flow into the VibeGame browser engine via handoff and declarative XML scenes:
+
+```bash
+gameassets handoff --public-dir public/    # copies GLBs (prefers animated) + manifest.json
+```
+
+Scene description via `world.xml` using VibeGame recipes:
+
+```html
+<PlayerGLTF pos="0 0 0" model-url="/assets/models/hero.glb"></PlayerGLTF>
+<GLTFLoader pos="5 0 0" model-url="/assets/models/skeleton.glb"></GLTFLoader>
+<Terrain heightmap-url="/assets/heightmap.png" resolution="128"></Terrain>
+```
+
+Key APIs: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToScene`, `loadGltfAnimated`), [`gltf-animator.ts`](VibeGame/src/extras/gltf-animator.ts) (`GltfAnimator`), [`sky-env.ts`](VibeGame/src/extras/sky-env.ts) (`applyEquirectSkyEnvironment`). See [`docs/MONOREPO_GAME_PIPELINE.md`](docs/MONOREPO_GAME_PIPELINE.md) and [`VibeGame/README.md`](VibeGame/README.md).
 
 ## Projects
 
@@ -31,6 +79,19 @@ Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures an
 | [**VibeGame**](VibeGame/) | **vibegame** — TypeScript 3D engine (ECS, Three.js, declarative XML); **Bun** + **Vite**. See [VibeGame/README.md](VibeGame/README.md). |
 
 Each project has its own `README`, setup, requirements, and license. Portuguese: [`README_PT.md`](README_PT.md) (root) and per-package `README_PT.md` where provided.
+
+### Quality presets & multi-GPU
+
+All generation tools support a unified quality system (`--quality fast|low|medium|high|highest`) with sensible defaults per tool and asset category. See [`docs/superpowers/specs/2026-04-30-quality-presets-design.md`](docs/superpowers/specs/2026-04-30-quality-presets-design.md).
+
+Multi-GPU support (via `accelerate` dispatch) is available across most GPU tools:
+
+```bash
+text3d generate "a dragon" --gpu-ids 0,1       # Split weights across GPU 0 and 1
+paint3d texture dragon.glb --gpu-ids 0,1       # Multi-GPU texturing
+```
+
+Detected automatically via `nvidia-smi` when omitted. GameAssets batch/resume propagates `--gpu-ids` to all sub-tools.
 
 ## Architecture
 
@@ -55,7 +116,7 @@ GameDev/
 
 ## General requirements
 
-- **Python**: most tools require **3.10+**; exceptions: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). See each folder’s README.
+- **Python**: most tools require **3.10+**; exceptions: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). See each folder's README.
 - **VibeGame** uses **Bun** and **Node**-compatible tooling (see `VibeGame/package.json`); run `make test-vibegame` from the repo root after installing Bun.
 - **GPU** optional for Text2D; for Text3D/Paint3D/Part3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** and **Skymap2D** do not need a local GPU (Hugging Face API). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d). **Multi-GPU:** most GPU tools accept `--gpu-ids 0,1` to split model weights across multiple NVIDIA GPUs via accelerate dispatch.
 - **Model weights** (Hugging Face, etc.) have their own licenses — read the model cards before shipping or using in production.
@@ -75,7 +136,7 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 | **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recommended: prepares installer deps (e.g. Rich), creates a `.venv` per project, editable install. |
 | **`gamedev-install`** | After `pip install -e Shared/` (or `PYTHONPATH` pointing at `Shared/src`): same registry as the scripts; useful in CI or when Shared is already installed. |
 | **Project-local installer** (`<Project>/scripts/install.sh` or `python scripts/installer.py`) | Shortcut when you are already inside the project folder; do **not** confuse with `GameDev/install.sh` at the repo root (see [docs/INSTALLING.md](docs/INSTALLING.md)). |
-| **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` per folder; see READMEs and “Manual” sections — for debugging or CI without the unified wrapper. |
+| **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` per folder; see READMEs and "Manual" sections — for debugging or CI without the unified wrapper. |
 
 Useful variable: **`PYTHON_CMD`** (or `--python` on the installer) to force the interpreter (default `python3` on Unix, `python` on Windows in the scripts).
 
@@ -209,7 +270,7 @@ Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md]
 | UniRig (code under `Rigging3D/…/unirig/`) | MIT | [VAST-AI-Research/UniRig](https://github.com/VAST-AI-Research/UniRig) · [THIRD_PARTY.md](Rigging3D/THIRD_PARTY.md) |
 | UniRig (HF weights) | MIT (many mirrors list MIT) | [VAST-AI/UniRig](https://huggingface.co/VAST-AI/UniRig) — confirm in README/`LICENSE` of the snapshot you use; [example with MIT LICENSE](https://huggingface.co/apozz/UniRig-safetensors) |
 
-> **Note:** weights have their own licenses. **Inference API** (Texture2D, Skymap2D): besides the model, [Hugging Face terms](https://huggingface.co/terms-of-service) and API policies apply. **Do not** redistribute checkpoints without complying with the author’s license and attribution. Shap-E (`openai/shap-e`) in legacy Text3D scripts requires accepting Hub terms.
+> **Note:** weights have their own licenses. **Inference API** (Texture2D, Skymap2D): besides the model, [Hugging Face terms](https://huggingface.co/terms-of-service) and API policies apply. **Do not** redistribute checkpoints without complying with the author's license and attribution. Shap-E (`openai/shap-e`) in legacy Text3D scripts requires accepting Hub terms.
 
 ## Environment variables
 

@@ -1,186 +1,226 @@
-# Materialize CLI
+# Materialize — PBR Map Generation
 
-A **Rust CLI** that generates PBR (Physically Based Rendering) maps from diffuse textures using GPU compute shaders via [wgpu](https://wgpu.rs/). No GUI, no Unity — just one command and six maps.
+A **Rust CLI** that generates PBR (Physically Based Rendering) maps from diffuse/albedo textures using GPU compute shaders via [wgpu](https://wgpu.rs/). No GUI, no Unity — one command, six maps.
 
-Inspired by the original [Materialize](https://github.com/BoundingBoxSoftware/Materialize) (Unity/Windows). **Language:** English (this file) · [Português (`README_PT.md`)](README_PT.md).
-
-**Who is this for?** Game developers, 3D artists, and anyone who needs PBR maps from diffuse textures — in engines like Unity, Unreal, Godot, or in Blender, without running a GUI or the Windows-only original.
-
-**GameDev monorepo:** **Hunyuan3D-Paint 2.1** (`paint3d texture`) already outputs a **PBR GLB**. This CLI is for **PBR maps from a diffuse image** (e.g. **Texture2D** + `texture2d.materialize` in GameAssets). See [`Text3D/docs/PBR_MATERIALIZE.md`](../Text3D/docs/PBR_MATERIALIZE.md).
+Inspired by the original [Materialize](https://github.com/BoundingBoxSoftware/Materialize) by Bounding Box Software (Unity/Windows). This is a from-scratch Rust CLI that preserves the same concept — turning a single diffuse image into a complete PBR material set.
 
 ---
 
-## Generated maps
+## Overview
 
-From a single diffuse/albedo image, the tool outputs six maps:
+Materialize takes a single diffuse/albedo texture and produces six PBR maps:
 
 | Map | Description |
 |-----|-------------|
-| **Height** | Surface elevation for parallax/displacement |
-| **Normal** | Surface normals for lighting |
-| **Metallic** | Metallic vs dielectric mask |
-| **Smoothness** | Roughness/smoothness (base + metallic contribution) |
+| **Height** | Surface elevation for parallax / displacement effects |
+| **Normal** | Per-pixel surface normals for realistic lighting |
+| **Metallic** | Metallic vs. dielectric mask |
+| **Smoothness** | Inverse roughness (base + metallic contribution) |
 | **Edge** | Edge detection derived from normals |
-| **AO** | Ambient occlusion (cavity-style from height) |
+| **AO** | Ambient occlusion (cavity-style, derived from height) |
 
----
+**Key properties:**
 
-## Features
-
-- **Minimal** — Command-line only; easy to script and automate
-- **Fast** — GPU compute shaders (wgpu); no CPU-bound image loops
+- **Fast** — GPU compute shaders via wgpu; no CPU-bound image loops
 - **Cross-platform** — Linux, macOS, Windows (Vulkan, Metal, DirectX 12)
-- **Flexible** — Output formats: PNG, JPG, TGA, EXR; configurable quality for JPEG
+- **No CUDA required** — wgpu works with any modern GPU
+- **Scriptable** — CLI-only; easy to batch and integrate into pipelines
 
 ---
 
-## Quick start
+## Installation
 
-### Install (GameDev monorepo)
+### GameDev monorepo (recommended)
 
-If you have the **GameDev** monorepo (this folder lives under `GameDev/Materialize`), use the unified installer from the **repository root**:
+From the repository root:
 
 ```bash
-cd /path/to/GameDev
 ./install.sh materialize
 ```
 
-See [docs/INSTALLING.md](../docs/INSTALLING.md). Requires **Rust** (`cargo`) and Python 3 for the installer wrapper.
+This compiles the crate and installs the binary to `~/.local/bin/`. Ensure `~/.local/bin` is on your `PATH`.
 
-### Install (standalone clone)
+### Standalone build
 
-Requires **Python 3** (installer) and **Rust** (cargo) to build. The installer compiles and places the binary in `~/.local/bin/materialize` (ensure it’s on your `PATH`).
-
-```bash
-git clone https://github.com/maikramer/Materialize-CLI.git
-cd Materialize-CLI
-./install.sh
-```
-
-- **Linux/macOS:** `./install.sh` | `./install.sh uninstall` | `./install.sh reinstall`
-- **Windows:** `.\install.ps1` or `install.bat`
-
-### Run
+Requires **Rust** 1.87+ and a GPU with up-to-date drivers.
 
 ```bash
-materialize texture.png
-# Writes to current directory:
-#   texture_height.png, texture_normal.png, texture_metallic.png,
-#   texture_smoothness.png, texture_edge.png, texture_ao.png
-
-materialize texture.png -o ./out/ -v
-materialize diffuse.png --format png --quiet
-```
-
-### Manual build (Cargo)
-
-```bash
+cd Materialize
 cargo build --release
 cargo install --path .
 ```
 
----
+The `materialize` binary is placed in Cargo's `~/.cargo/bin/`.
 
-## Usage
+### Manual install script
 
-### Syntax
-
-```text
-materialize [OPTIONS] [INPUT] [COMMAND]
+```bash
+# Clone and run installer (places binary in ~/.local/bin)
+git clone https://github.com/maikramer/Materialize-CLI.git
+cd Materialize-CLI
+./install.sh          # install
+./install.sh reinstall
+./install.sh uninstall
 ```
 
-### Options
+---
 
-| Option | Short | Default | Description |
-|--------|-------|---------|-------------|
-| `--output` | `-o` | `./` | Output directory |
-| `--format` | `-f` | `png` | Output format: `png`, `jpg`, `jpeg`, `tga`, `exr` |
-| `--quality` | `-q` | `95` | JPEG quality (0–100) when using `-f jpg` |
-| `--verbose` | `-v` | — | Print progress and timing |
-| `--quiet` | — | — | Do not list generated files on success |
-| `--help` | `-h` | — | Show help |
-| `--version` | `-V` | — | Show version |
+## Commands
 
-### Subcommands
+### `materialize <INPUT>` (default command)
 
-- **`materialize skill install`** — Installs the Materialize CLI [Cursor skill](.cursor/skills/materialize-cli/) into the current project’s `.cursor/skills/materialize-cli/`.
+Generate PBR maps from a diffuse/albedo image.
 
-### Output naming
+```bash
+materialize texture.png
+materialize texture.png -o ./out/ -v
+materialize skin.png --preset skin -o ./materials/
+materialize diffuse.png --format png --quiet
+```
 
-For input `texture.png`, outputs are:
+#### Options
 
-- `texture_height.png`
-- `texture_normal.png`
-- `texture_metallic.png`
-- `texture_smoothness.png`
-- `texture_edge.png`
-- `texture_ao.png`
+| Flag | Short | Type | Default | Description |
+|------|-------|------|---------|-------------|
+| `--output` | `-o` | path | `.` | Output directory |
+| `--format` | `-f` | str | `png` | Output format: `png`, `jpg`, `jpeg`, `tga`, `exr` |
+| `--preset` | `-p` | str | `default` | Material preset (see below) |
+| `--quality` | `-q` | int | `95` | JPEG quality 0–100 (ignored for other formats) |
+| `--verbose` | `-v` | flag | — | Print progress and timing information |
+| `--quiet` | — | flag | — | Suppress generated file list on success |
+| `--help` | `-h` | — | — | Show help message |
+| `--version` | `-V` | — | — | Show version (`materialize-cli 1.0.0`) |
 
-(Extension follows `--format`.)
+### `materialize skill install`
+
+Install the Materialize CLI [Cursor AI skill](.cursor/skills/materialize-cli/) into the current project's `.cursor/skills/materialize-cli/` directory.
+
+```bash
+materialize skill install
+```
+
+---
+
+## PBR Presets
+
+Presets tune the generation parameters for specific material types. Use `-p` / `--preset` to select one.
+
+| Preset | Description | Characteristics |
+|--------|-------------|-----------------|
+| `default` | General purpose | Balanced settings for any texture |
+| `skin` | Human/character skin | No metallic, high smoothness, subtle normals |
+| `floor` | Ground surfaces (stone, tile, dirt) | Pronounced height, strong AO, rough surface |
+| `metal` | Metallic surfaces | Boosted metallic, sharp edges, polished look |
+| `fabric` | Cloth / textile | Matte, no metallic, soft edges |
+| `wood` | Wood grain | No metallic, moderate grain detail |
+| `stone` | Rock / stone | Very rough, deep AO, strong normals |
+
+```bash
+materialize brick_diffuse.png -p stone -o ./out/
+materialize character_skin.png --preset skin -v
+materialize metal_panel.jpg -p metal -f exr -o ./hdr/
+```
+
+---
+
+## Output Files
+
+From an input file `texture.png`, Materialize generates six files in the output directory (extension follows `--format`):
+
+| File | Description |
+|------|-------------|
+| `texture_height.{ext}` | Height / displacement map |
+| `texture_normal.{ext}` | Normal map |
+| `texture_metallic.{ext}` | Metallic map |
+| `texture_smoothness.{ext}` | Smoothness map |
+| `texture_edge.{ext}` | Edge detection map |
+| `texture_ao.{ext}` | Ambient occlusion map |
 
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
-| `0` | Success |
+| `0` | Success — files generated |
 | `1` | Generic error |
 | `2` | Input file not found |
 | `3` | Unsupported input format |
-| `4` | GPU error (no adapter) |
+| `4` | GPU error (no adapter found) |
 | `5` | I/O error (permissions, disk full, etc.) |
 | `6` | Image too large for GPU |
 
 ---
 
-## Examples
+## Pipeline Integration
+
+Materialize runs **after** Texture2D or Paint3D to generate PBR maps from diffuse textures. It is integrated into the GameDev monorepo pipeline at several points:
+
+- **GameAssets batch** — via `materialize: true` in the `texture2d` block of `game.yaml`
+- **Paint3D** — `vertex-pbr` command uses Materialize for map generation
+- **Standalone** — can process any diffuse image from any source
+
+Uses wgpu compute shaders for cross-platform GPU acceleration — no CUDA required. Works on Linux (Vulkan), macOS (Metal), and Windows (DirectX 12) with any modern GPU.
 
 ```bash
-# Default: current directory, PNG
-materialize brick.png
+# Typical pipeline: generate texture, then PBR maps
+texture2d generate "brick wall" -o ./textures/
+materialize textures/brick_wall.png -p stone -o ./materials/brick/
+```
 
-# Custom output directory and verbose
-materialize brick.png -o ./materials/brick/ -v
+### Batch processing
 
-# EXR for HDR / precision
-materialize texture.png -f exr -o ./out/
+```bash
+# Parallel batch with xargs
+ls textures/*.png | xargs -P 4 -I {} materialize {} -o ./pbr/
 
-# Batch (parallel with xargs)
-ls *.png | xargs -P 4 -I {} materialize {} -o ./output/
-
-# Script-friendly: quiet, check exit code
+# Script-friendly: quiet mode, check exit code
 materialize texture.png -o ./out/ --quiet
-if [ $? -eq 0 ]; then echo "OK"; fi
+if [ $? -eq 0 ]; then echo "PBR maps generated"; fi
 ```
 
 ---
 
-## Getting help
+## Development
 
-- **Bugs & features** — [Open an issue](https://github.com/maikramer/Materialize-CLI/issues) (templates for bug reports and feature requests are available).
-- **Questions** — [GitHub Discussions](https://github.com/maikramer/Materialize-CLI/discussions).
-- **Contributing** — See [CONTRIBUTING.md](CONTRIBUTING.md). We follow a [Code of Conduct](CODE_OF_CONDUCT.md).
+```bash
+cd Materialize
+
+# Build
+cargo build
+
+# Run tests
+cargo test
+
+# Format (auto-fix)
+cargo fmt
+
+# Lint
+cargo clippy -- -D warnings
+```
+
+Requires **Rust** 1.87+ (edition 2024). Dev dependencies: `tempfile` for integration tests.
 
 ---
 
-## Requirements
+## License & Attribution
 
-- **Rust** 1.75+
-- **GPU** with Vulkan (Linux), Metal (macOS), or DirectX 12 (Windows); up-to-date drivers
+**MIT License** — see [LICENSE](LICENSE).
+
+This project is based on [Materialize](https://github.com/BoundingBoxSoftware/Materialize) by **Bounding Box Software**. The original Materialize is a Unity-based Windows application for generating PBR maps. This is a from-scratch Rust reimplementation that preserves the concept and algorithmic approach.
 
 ---
 
 ## Documentation
 
 - [docs/README.md](docs/README.md) — Overview, installation details, and doc index
-- [docs/cli-api.md](docs/cli-api.md) — Full CLI reference, env vars, shell completion
+- [docs/cli-api.md](docs/cli-api.md) — Full CLI reference, environment variables, shell completion
 - [docs/architecture.md](docs/architecture.md) — System structure
 - [docs/features.md](docs/features.md) — Capabilities
 - [docs/algorithms.md](docs/algorithms.md) — Processing algorithms
-- [docs/shaders.md](docs/shaders.md) — WGSL shaders
+- [docs/shaders.md](docs/shaders.md) — WGSL compute shaders
 - [docs/roadmap.md](docs/roadmap.md) — Future plans
 
----
+## Getting Help
 
-## License
-
-[MIT](LICENSE). Based on the original Materialize by Bounding Box Software.
+- **Bugs & features** — [Open an issue](https://github.com/maikramer/Materialize-CLI/issues)
+- **Questions** — [GitHub Discussions](https://github.com/maikramer/Materialize-CLI/discussions)
+- **Contributing** — See [CONTRIBUTING.md](CONTRIBUTING.md)
