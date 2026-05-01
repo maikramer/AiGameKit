@@ -20,11 +20,12 @@ dependencies = [
     "gamedev-shared @ file:../Shared",
     # AI / diffusion deps
     "torch>=2.6.0",
-    "torchvision>=2.6.0",
+    "torchvision>=0.21.0",
     "diffusers>=0.30.2",
     "transformers>=4.44.0",
     "accelerate>=0.34.0",
     "safetensors>=0.4.5",
+    "huggingface-hub>=0.20.0",
     "infinite-tensor>=0.3.0",
     "h5py>=3.12.0",
     "scipy>=1.10.0",

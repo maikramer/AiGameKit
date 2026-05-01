@@ -95,7 +95,6 @@ class PythonProjectInstaller(BaseInstaller):
         else:
             self.venv_python = self.venv_dir / "bin" / "python"
         self.venv_exists = self.venv_python.is_file()
-        self.requirements_file = self.project_root / "config" / "requirements.txt"
 
     # ------------------------------------------------------------------
     # Fluxo principal
@@ -258,30 +257,11 @@ class PythonProjectInstaller(BaseInstaller):
         if not self.skip_pytorch:
             self.install_pytorch(pip_cmd, cwd=self.project_root)
 
-        if self.requirements_file.is_file():
-            self.logger.info(f"Instalando dependências: {self.requirements_file}")
-            try:
-                subprocess.run(
-                    [*pip_cmd, "-r", str(self.requirements_file)],
-                    check=True,
-                    cwd=_root,
-                )
-            except subprocess.CalledProcessError:
-                if self._use_uv:
-                    self.logger.warn("uv falhou (provavelmente caminhos file: relativos) — a tentar com pip do venv...")
-                    subprocess.run(
-                        [python, "-m", "pip", "install", "-r", str(self.requirements_file)],
-                        check=True,
-                        cwd=_root,
-                    )
-                else:
-                    raise
-        else:
-            self.logger.warn(f"Ficheiro em falta: {self.requirements_file}")
-
-        self.logger.info("Instalando pacote em modo editável...")
+        # pyproject.toml é a única fonte de verdade para dependências.
+        # pip install -e . instala o pacote + todas as deps declaradas lá.
+        self.logger.info("Instalando pacote em modo editável (deps do pyproject.toml)...")
         subprocess.run(
-            [python, "-m", "pip", "install", "-e", str(self.project_root), "--no-deps"],
+            [python, "-m", "pip", "install", "-e", str(self.project_root)],
             check=True,
             cwd=_root,
         )
@@ -344,22 +324,10 @@ class PythonProjectInstaller(BaseInstaller):
         if not self.skip_pytorch:
             self.install_pytorch(pip_cmd, cwd=self.project_root)
 
-        if self.requirements_file.is_file():
-            self.logger.info(f"Instalando dependências: {self.requirements_file}")
-            subprocess.run(
-                [*pip_cmd, "-r", str(self.requirements_file)],
-                check=True,
-                cwd=_root,
-            )
-        else:
-            self.logger.warn(f"Ficheiro em falta: {self.requirements_file}")
-
-        self.logger.info(f"Instalando pacote {self.cli_name} em modo editável...")
-        editable_cmd = [*pip_cmd, "-e", str(self.project_root)]
-        if self._use_uv:
-            editable_cmd.append("--no-deps")
+        # pyproject.toml é a única fonte de verdade para dependências.
+        self.logger.info(f"Instalando pacote {self.cli_name} em modo editável (deps do pyproject.toml)...")
         subprocess.run(
-            editable_cmd,
+            [*pip_cmd, "-e", str(self.project_root)],
             check=True,
             cwd=_root,
         )

@@ -1,2 +1,0 @@
-# gamedev-shared — dependências base (sem torch/GPU, que é extra opcional)
-rich>=13.0.0

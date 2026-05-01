@@ -1,4 +1,0 @@
-# Rigging3D — dependências instaladas antes de ``pip install -e .``
-# PyTorch/torchvision: instalados pelo instalador unificado (install_pytorch).
-# Metadados do pacote e extra UniRig: pyproject.toml → pip install -e ".[inference]"
-gamedev-shared @ file:../Shared

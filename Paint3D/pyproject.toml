@@ -11,7 +11,7 @@ license = "MIT"
 dependencies = [
     "gamedev-shared @ file:../Shared",
     "torch>=2.6.0",
-    "torchvision>=2.6.0",
+    "torchvision>=0.21.0",
     "pytorch-lightning>=2.1.0",
     "diffusers>=0.37.0",
     "transformers>=4.48.0",
@@ -36,7 +36,8 @@ dependencies = [
     "xformers>=0.0.28; sys_platform == 'linux'",
     "sdnq>=0.1.0",       # Quantização moderna SDNQ
     "einops>=0.8.0",     # Tensor rearrange (pipeline vendored)
-    "bpy==5.1.0",
+    "bpy>=4.5.9",
+    "pymeshlab>=2022.2",
     # Hunyuan3D-2.1: código vendored em paint3d/hy3dpaint/ (de Tencent-Hunyuan/Hunyuan3D-2.1)
     # Real-ESRGAN (RRDBNet + RealESRGANer): vendored — evita basicsr (pip falha no Python 3.13)
     # nvdiffrast: instalar separadamente com --no-build-isolation (requer PyTorch pré-instalado)

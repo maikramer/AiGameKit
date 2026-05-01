@@ -32,6 +32,16 @@ dependencies = [
     "addict>=2.4.0",         # Necessário para sonata/model.py
     "spconv-cu121>=2.3.0",   # Necessário para sonata (sparse convolution)
     "sdnq>=0.1.0",           # Quantização moderna SDNQ
+    "accelerate>=0.24.0",
+    "torchmetrics>=1.6.0",
+    "pyyaml>=6.0.0",
+    "configargparse>=1.7",
+    "timm",
+    "numba",
+    "fpsample",
+    "scikit-learn",
+    "onnxruntime>=1.16.0",
+    "pymeshlab>=2023.12",
     "gamedev-shared @ file:../Shared",
 ]
 classifiers = [

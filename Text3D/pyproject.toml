@@ -12,7 +12,7 @@ requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
     "torch>=2.6.0",
-    "torchvision>=2.6.0",
+    "torchvision>=0.21.0",
     "diffusers>=0.37.0",
     "transformers>=4.48.0",
     "accelerate>=0.24.0",
@@ -34,6 +34,7 @@ dependencies = [
     "timm>=0.9.0",
     "omegaconf>=2.3.0",
     "opencv-python>=4.8.0",
+    "kornia>=0.7.0",
     "gamedev-shared @ file:../Shared",
     "text2d @ file:../Text2D",
 ]
