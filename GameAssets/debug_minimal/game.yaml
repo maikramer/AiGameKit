@@ -1,0 +1,72 @@
+# Debug rápido — pouca inferência, sem Paint 2.1 (solid), geração fast.
+# gameassets batch --profile game.yaml --manifest manifest.yaml --plain
+title: "Debug Minimal"
+genre: "test"
+tone: "neutro"
+style_preset: lowpoly
+generation: fast
+
+negative_keywords:
+  - text
+  - watermark
+  - blurry
+
+output_dir: .
+path_layout: split
+images_subdir: images
+meshes_subdir: meshes
+audio_subdir: audio
+image_ext: png
+image_source: text2d
+
+text2d:
+  low_vram: false
+
+texture2d:
+  width: 512
+  height: 512
+  steps: 4
+
+text3d:
+  preset: fast
+  low_vram: false
+  export_origin: feet
+
+paint3d:
+  style: solid
+  preserve_origin: true
+  solid_color: "#8b7355"
+
+text2sound:
+  quality: fast
+  audio_format: wav
+  trim: true
+
+rigging3d:
+  output_suffix: "_rigged"
+
+animator3d:
+  preset: humanoid
+
+part3d:
+  segment_only: true
+  quantization: none
+
+lod:
+  lod1_ratio: 0.42
+  lod2_ratio: 0.14
+  meshfix: false
+
+collision:
+  max_faces: 64
+  convex_hull: true
+
+terrain3d:
+  prompt: "colinas rochosas com vegetação rasteira, terreno de RPG"
+  size: 512
+  world_size: 128.0
+  max_height: 30.0
+  quality: fast
+
+skymap2d:
+  prompt: "céu azul com nuvens fofas, dia claro, horizonte de montanhas"

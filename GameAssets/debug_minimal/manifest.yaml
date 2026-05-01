@@ -1,0 +1,43 @@
+# Debug rápido — ver game.yaml (fast + paint3d solid).
+# Pipeline: 3d exige shape; paint = textura (quick/hunyuan); demais etapas opcionais.
+assets:
+  - id: wooden_crate
+    idea: "caixa de madeira com tábuas, low poly, game prop"
+    kind: prop
+    category: chest
+    pipeline: [3d, paint, parts, lod, collision]
+    lod_levels: 3
+
+  - id: sfx_coin_pickup
+    idea: "som breve de moeda a tilintar, pickup UI"
+    kind: prop
+    pipeline: [audio]
+    audio:
+      duration: 0.5
+      profile: effects
+      preset: coin-pickup
+      trim: true
+
+  - id: goblin_warrior
+    idea: "goblin guerreiro pequeno, armadura de couro, low poly"
+    kind: character
+    category: humanoid
+    pipeline: [3d, paint, rig, animate, lod, collision]
+    lod_levels: 1
+
+  - id: stone_tile_from_texture
+    idea: "laje de pedra desgastada, textura tile sem costura"
+    kind: prop
+    category: environment
+    pipeline: [3d, paint, lod, collision]
+    image_source: texture2d
+
+  - id: bgm_exploration
+    idea: "música de exploração calma, fantasia medieval, loop suave"
+    kind: music
+    pipeline: [audio]
+    audio:
+      duration: 8.0
+      profile: music
+      preset: exploration
+      trim: true
