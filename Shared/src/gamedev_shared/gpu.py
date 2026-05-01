@@ -288,7 +288,9 @@ def _process_uid(pid: int) -> int | None:
         try:
             r = subprocess.run(
                 ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             if r.returncode == 0 and r.stdout.strip():
                 return None

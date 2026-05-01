@@ -122,11 +122,15 @@ class ViewProcessor:
             )
             project_cos_map = weight * (project_cos_map**self.config.bake_exp)
 
-            bm_blurred = torch.nn.functional.conv2d(
-                project_boundary_map.permute(2, 0, 1).unsqueeze(0),
-                _blur_k.to(project_boundary_map.device),
-                padding=blur_radius // 2,
-            ).squeeze(0).permute(1, 2, 0)
+            bm_blurred = (
+                torch.nn.functional.conv2d(
+                    project_boundary_map.permute(2, 0, 1).unsqueeze(0),
+                    _blur_k.to(project_boundary_map.device),
+                    padding=blur_radius // 2,
+                )
+                .squeeze(0)
+                .permute(1, 2, 0)
+            )
             soft_factor = (1.0 - 0.5 * bm_blurred.clamp(0, 1)).clamp(min=0.0)
             project_cos_map = project_cos_map * soft_factor
 

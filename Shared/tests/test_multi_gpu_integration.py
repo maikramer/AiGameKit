@@ -9,15 +9,11 @@ paths: planner → apply → subprocess propagation → CUDA cleanup → package
 
 from __future__ import annotations
 
-import importlib
-import sys
-from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from gamedev_shared.multi_gpu import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -125,13 +121,7 @@ class TestMultiGPUPipelineIntegration:
         mock_accel_fn.return_value = _mock_accelerate(device_map={"layer": 0})
 
         user_mem = {0: "20GiB", 1: "12GiB"}
-        plan = (
-            MultiGPUPlanner()
-            .for_model(MagicMock())
-            .with_gpus([0, 1])
-            .max_memory(user_mem)
-            .plan()
-        )
+        plan = MultiGPUPlanner().for_model(MagicMock()).with_gpus([0, 1]).max_memory(user_mem).plan()
         mock_probe.assert_not_called()
         assert plan.status == "multi_gpu"
 
@@ -424,7 +414,7 @@ class TestModuleImports:
 
     def test_from_multi_gpu_module(self) -> None:
         """Direct import from gamedev_shared.multi_gpu."""
-        from gamedev_shared.multi_gpu import DevicePlan, ModelArchitectureRegistry, MultiGPUPlanner
+        from gamedev_shared.multi_gpu import MultiGPUPlanner
 
         assert DevicePlan is not None
         assert ModelArchitectureRegistry is not None
@@ -469,7 +459,6 @@ class TestExportFromPackage:
     def test_lazy_getattr_resolves_correctly(self) -> None:
         """gamedev_shared.MultiGPUPlanner resolves to the real class."""
         from gamedev_shared import MultiGPUPlanner
-
         from gamedev_shared.multi_gpu import MultiGPUPlanner as DirectPlanner
 
         assert MultiGPUPlanner is DirectPlanner

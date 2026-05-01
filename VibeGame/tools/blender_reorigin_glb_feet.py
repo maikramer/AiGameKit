@@ -93,11 +93,7 @@ def _apply_euler_rotation_xyz_deg(rx: float, ry: float, rz: float) -> None:
     import bpy
 
     ctx = bpy.context
-    mesh_objs = [
-        o
-        for o in bpy.data.objects
-        if o.type == "MESH" and not (o.parent and o.parent.type == "ARMATURE")
-    ]
+    mesh_objs = [o for o in bpy.data.objects if o.type == "MESH" and not (o.parent and o.parent.type == "ARMATURE")]
     if not mesh_objs:
         return
 

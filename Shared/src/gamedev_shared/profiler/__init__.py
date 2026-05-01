@@ -20,10 +20,10 @@ from .env import (
 from .session import ProfilerSession, get_active_session, profile_span
 
 __all__ = [
-    "CudaMemorySnapshot",
     "ENV_LOG",
     "ENV_PROFILE",
     "ENV_TOOL",
+    "CudaMemorySnapshot",
     "ProfilerSession",
     "cuda_memory_snapshot",
     "cuda_memory_snapshot_all",

@@ -44,7 +44,7 @@ def _rasterize_vertex_colors_to_texture(
         v0x, v0y = xs[0], ys[0]
         v1x, v1y = xs[1], ys[1]
         v2x, v2y = xs[2], ys[2]
-        denom = ((v1y - v2y) * (v0x - v2x) + (v2x - v1x) * (v0y - v2y))
+        denom = (v1y - v2y) * (v0x - v2x) + (v2x - v1x) * (v0y - v2y)
         if abs(denom) < 1e-12:
             continue
         for py in range(miny, maxy + 1):
@@ -71,7 +71,7 @@ def _rasterize_vertex_colors_to_texture(
             lin = base[..., ch]
             mx = 1.0 if lin.max() <= 0 else lin.max()
             u8[..., ch] = (np.clip(lin / mx, 0, 1) * 255).astype(np.uint8)
-        mask_u8 = (hole.astype(np.uint8) * 255)
+        mask_u8 = hole.astype(np.uint8) * 255
         u8_bgr = cv2.cvtColor(u8, cv2.COLOR_RGB2BGR)
         inp = cv2.inpaint(u8_bgr, mask_u8, inpaintRadius=3, flags=cv2.INPAINT_TELEA)
         u8_rgb = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB).astype(np.float64) / 255.0

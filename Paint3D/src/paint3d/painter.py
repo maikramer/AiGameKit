@@ -588,9 +588,7 @@ class PaintBatchProcessor:
         self._config = None
         clear_cuda_memory()
 
-    def paint_mesh(
-        self, mesh: Any, image: str | Path | Image.Image, *, step_callback=None
-    ) -> Any:
+    def paint_mesh(self, mesh: Any, image: str | Path | Image.Image, *, step_callback=None) -> Any:
         """Pinta uma mesh usando o pipeline carregado. Mesh + imagem → objectos bpy texturizados."""
         from gamedev_shared.profiler import profile_span
 

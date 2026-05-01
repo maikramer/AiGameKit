@@ -37,9 +37,9 @@ def test_unload_clears_model() -> None:
 
 
 def test_remove_background_converts_rgba() -> None:
-    from text3d.utils.bg_removal import BiRefNetBGRemover
-
     import torch
+
+    from text3d.utils.bg_removal import BiRefNetBGRemover
 
     fake_mask = torch.rand(1, 1, 1024, 1024)
 

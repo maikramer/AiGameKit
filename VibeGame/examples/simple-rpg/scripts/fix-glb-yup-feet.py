@@ -154,9 +154,7 @@ def main() -> int:
         argv.extend(["--only", str(p)])
     argv.extend(["--axis", args.axis])
     if args.rotate is not None:
-        argv.extend(
-            ["--rotate", str(args.rotate[0]), str(args.rotate[1]), str(args.rotate[2])]
-        )
+        argv.extend(["--rotate", str(args.rotate[0]), str(args.rotate[1]), str(args.rotate[2])])
     if args.dry_run:
         argv.append("--dry-run")
 

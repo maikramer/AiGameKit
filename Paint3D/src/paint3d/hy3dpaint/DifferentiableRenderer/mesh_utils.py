@@ -273,7 +273,9 @@ def _weld_seam_vertices(vtx_pos, pos_idx, tolerance=1e-4):
     return moved
 
 
-def _save_glb_mesh_bpy(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None):
+def _save_glb_mesh_bpy(
+    mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=None, roughness=None, normal=None
+):
     """Export mesh as GLB via bpy — create mesh from arrays, apply texture, export.
 
     No scene switching, no EDIT mode, no vertex merge.  Keeps the pipeline
@@ -388,6 +390,3 @@ def save_mesh(mesh_path, vtx_pos, pos_idx, vtx_uv, uv_idx, texture, metallic=Non
             roughness=roughness,
             normal=normal,
         )
-
-
-

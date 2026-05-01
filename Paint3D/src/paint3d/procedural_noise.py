@@ -38,9 +38,7 @@ def _noise3_trilinear(v: np.ndarray, seed: int) -> np.ndarray:
 
     corners = np.zeros((n, 8), dtype=np.float64)
     for c in range(8):
-        corners[:, c] = _v01(
-            i[:, 0] + ox[c], i[:, 1] + oy[c], i[:, 2] + oz[c], seed
-        )
+        corners[:, c] = _v01(i[:, 0] + ox[c], i[:, 1] + oy[c], i[:, 2] + oz[c], seed)
 
     ux, uy, uz = u[:, 0], u[:, 1], u[:, 2]
     c = corners
