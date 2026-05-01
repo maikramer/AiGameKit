@@ -291,11 +291,28 @@ class PythonProjectInstaller(BaseInstaller):
     # ------------------------------------------------------------------
 
     def _write_pth_files(self) -> None:
+        # gamedev_shared (always, from monorepo sibling)
         shared_src = (self.project_root.parent / "Shared" / "src").resolve()
         if shared_src.is_dir():
             ok = link_local_src(venv_dir=self.venv_dir, src_dir=shared_src, import_name="gamedev_shared")
             if ok:
                 self.logger.info(f"PTH: gamedev_shared → {shared_src}")
+
+        # The project being installed — write .pth directly.
+        # NOTE: we do NOT call link_local_src() here because that would
+        # delete the dist-info left by ``pip install -e .`` (breaking
+        # ``pip show`` / ``pip uninstall``).  The ``link_local_src`` call
+        # for gamedev_shared above already removed the
+        # ``__editable__.<pkg>.pth`` created by pip, so we replace it
+        # with our own monorepo .pth.
+        project_src = (self.project_root / "src").resolve()
+        if project_src.is_dir() and self.cli_name:
+            sp = _find_site_packages(self.venv_dir)
+            if sp is not None:
+                pth = sp / f"_monorepo_{self.cli_name}.pth"
+                pth.write_text(str(project_src), encoding="utf-8")
+                self.logger.info(f"PTH: {self.cli_name} → {project_src}")
+
         for src_dir, import_name in self.cross_dep_folders:
             if src_dir.is_dir():
                 ok = link_local_src(venv_dir=self.venv_dir, src_dir=src_dir, import_name=import_name)
