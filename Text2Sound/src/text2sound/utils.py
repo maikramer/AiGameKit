@@ -13,7 +13,7 @@ from gamedev_shared.seed_utils import resolve_effective_seed  # noqa: F401
 def generate_output_path(
     prompt: str,
     output_dir: Path,
-    fmt: str = "wav",
+    fmt: str = "ogg",
 ) -> Path:
     """Gera caminho de saída único baseado no prompt e timestamp."""
     ts = int(time.time())

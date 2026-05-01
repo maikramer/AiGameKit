@@ -314,4 +314,4 @@ class TestConstants:
         assert "ogg" in SUPPORTED_FORMATS
 
     def test_default_format(self):
-        assert DEFAULT_FORMAT == "wav"
+        assert DEFAULT_FORMAT == "ogg"

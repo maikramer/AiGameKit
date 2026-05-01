@@ -15,7 +15,7 @@ import soundfile as sf
 import torch
 
 SUPPORTED_FORMATS = ("wav", "flac", "ogg")
-DEFAULT_FORMAT = "wav"
+DEFAULT_FORMAT = "ogg"
 
 _SF_SUBTYPES = {
     "wav": "PCM_16",

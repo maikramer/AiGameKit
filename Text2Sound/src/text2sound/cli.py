@@ -194,7 +194,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--format",
     "-f",
     "fmt",
-    default="wav",
+    default="ogg",
     show_default=True,
     type=click.Choice(list(SUPPORTED_FORMATS), case_sensitive=False),
     help="Formato de saída",
@@ -609,7 +609,7 @@ def generate_cmd(
 @click.option("--sigma-min", default=DEFAULT_SIGMA_MIN, type=float)
 @click.option("--sigma-max", default=DEFAULT_SIGMA_MAX, type=float)
 @click.option("--sampler", default=DEFAULT_SAMPLER, type=str)
-@click.option("--format", "-f", "fmt", default="wav", type=click.Choice(list(SUPPORTED_FORMATS)))
+@click.option("--format", "-f", "fmt", default="ogg", type=click.Choice(list(SUPPORTED_FORMATS)))
 @click.option("--trim/--no-trim", default=True)
 @click.option("--model", "-m", "model_id", default=None, help="ID HF ou alias (music, effects, small, …)")
 @click.option(
