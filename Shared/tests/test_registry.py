@@ -69,11 +69,11 @@ class TestToolSpec:
         assert spec.needs_pytorch is False
         assert spec.folder == "GameDevLab"
 
-    def test_texture2d_no_pytorch(self):
+    def test_texture2d_needs_pytorch(self):
         spec = TOOLS["texture2d"]
         assert spec.kind == ToolKind.PYTHON
         assert spec.python_module == "texture2d"
-        assert spec.needs_pytorch is False
+        assert spec.needs_pytorch is True
         assert "texture2d-generate" in spec.extra_aliases
 
     def test_project_root(self, tmp_path: Path):

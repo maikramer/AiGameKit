@@ -117,7 +117,7 @@ TOOLS: dict[str, ToolSpec] = {
         description="Texturas 2D seamless via HF Inference API (sem GPU local)",
         min_python=(3, 10),
         extra_aliases=("texture2d-generate",),
-        needs_pytorch=False,
+        needs_pytorch=True,
     ),
     "skymap2d": ToolSpec(
         name="Skymap2D",
