@@ -249,3 +249,47 @@ def test_load_profile_roundtrip() -> None:
         assert p.title == "T"
     finally:
         path.unlink(missing_ok=True)
+
+
+def test_from_dict_terrain3d() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "terrain3d": {
+                "prompt": "rocky mountains with snow",
+                "size": 1024,
+                "world_size": 256.0,
+                "max_height": 80.0,
+                "quality": "high",
+            },
+        }
+    )
+    assert p.terrain3d is not None
+    assert p.terrain3d.prompt == "rocky mountains with snow"
+    assert p.terrain3d.size == 1024
+    assert p.terrain3d.world_size == 256.0
+    assert p.terrain3d.max_height == 80.0
+    assert p.terrain3d.quality == "high"
+
+
+def test_from_dict_skymap2d_with_prompt() -> None:
+    p = GameProfile.from_dict(
+        {
+            "title": "A",
+            "genre": "B",
+            "tone": "C",
+            "style_preset": "lowpoly",
+            "skymap2d": {
+                "prompt": "sunset over mountains",
+                "width": 2048,
+                "height": 1024,
+            },
+        }
+    )
+    assert p.skymap2d is not None
+    assert p.skymap2d.prompt == "sunset over mountains"
+    assert p.skymap2d.width == 2048
+    assert p.skymap2d.height == 1024

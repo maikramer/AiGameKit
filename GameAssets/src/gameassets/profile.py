@@ -182,6 +182,7 @@ class CollisionProfile:
 class Skymap2DProfile:
     """Opções passadas ao CLI skymap2d generate (HF equirectangular 360°)."""
 
+    prompt: str | None = None
     width: int | None = None
     height: int | None = None
     steps: int | None = None
@@ -191,6 +192,22 @@ class Skymap2DProfile:
     cfg_scale: float | None = None
     lora_strength: float | None = None
     model_id: str | None = None
+
+
+@dataclass
+class Terrain3DProfile:
+    """Opções passadas ao CLI terrain3d generate (terrain-diffusion)."""
+
+    prompt: str | None = None
+    seed: int | None = None
+    size: int | None = None
+    world_size: float | None = None
+    max_height: float | None = None
+    quality: str | None = None
+    device: str | None = None
+    dtype: str | None = None
+    cache_size: str | None = None
+    coarse_window: int | None = None
 
 
 @dataclass
@@ -222,6 +239,7 @@ class GameProfile:
     part3d: Part3DProfile | None = None
     lod: LODProfile | None = None
     collision: CollisionProfile | None = None
+    terrain3d: Terrain3DProfile | None = None
     generation: str | None = None
 
     @classmethod
@@ -322,6 +340,8 @@ class GameProfile:
         sky2: Skymap2DProfile | None = None
         raw_sky2 = data.get("skymap2d")
         if isinstance(raw_sky2, dict):
+            sky_prompt = raw_sky2.get("prompt")
+            sky_prompt_s = str(sky_prompt).strip() if sky_prompt not in (None, "") else None
             w = raw_sky2.get("width")
             h = raw_sky2.get("height")
             st = raw_sky2.get("steps")
@@ -346,6 +366,7 @@ class GameProfile:
             mid_s2 = raw_sky2.get("model_id")
             mid_ss = str(mid_s2).strip() if mid_s2 not in (None, "") else None
             sky2 = Skymap2DProfile(
+                prompt=sky_prompt_s,
                 width=wi_s,
                 height=he_s,
                 steps=st_s,
@@ -644,6 +665,46 @@ class GameProfile:
                 max_faces=mf_i,
                 convex_hull=bool(ch) if ch is not None else True,
             )
+        ter: Terrain3DProfile | None = None
+        raw_ter = data.get("terrain3d")
+        if isinstance(raw_ter, dict):
+            ter_prompt = raw_ter.get("prompt")
+            ter_prompt_s = str(ter_prompt).strip() if ter_prompt not in (None, "") else None
+            ter_seed = raw_ter.get("seed")
+            ter_size = raw_ter.get("size")
+            ter_ws = raw_ter.get("world_size")
+            ter_mh = raw_ter.get("max_height")
+            ter_quality = raw_ter.get("quality")
+            ter_device = raw_ter.get("device")
+            ter_dtype = raw_ter.get("dtype")
+            ter_cache = raw_ter.get("cache_size")
+            ter_cw = raw_ter.get("coarse_window")
+            try:
+                ter_seed_i = int(ter_seed) if ter_seed is not None else None
+                ter_size_i = int(ter_size) if ter_size is not None else None
+                ter_ws_f = float(ter_ws) if ter_ws is not None else None
+                ter_mh_f = float(ter_mh) if ter_mh is not None else None
+                ter_cw_i = int(ter_cw) if ter_cw is not None else None
+            except (TypeError, ValueError) as e:
+                raise ValueError(
+                    "terrain3d.seed, size, world_size, max_height e coarse_window devem ser números válidos"
+                ) from e
+            ter_quality_s = str(ter_quality).strip().lower() if ter_quality not in (None, "") else None
+            ter_device_s = str(ter_device).strip() if ter_device not in (None, "") else None
+            ter_dtype_s = str(ter_dtype).strip().lower() if ter_dtype not in (None, "") else None
+            ter_cache_s = str(ter_cache).strip() if ter_cache not in (None, "") else None
+            ter = Terrain3DProfile(
+                prompt=ter_prompt_s,
+                seed=ter_seed_i,
+                size=ter_size_i,
+                world_size=ter_ws_f,
+                max_height=ter_mh_f,
+                quality=ter_quality_s,
+                device=ter_device_s,
+                dtype=ter_dtype_s,
+                cache_size=ter_cache_s,
+                coarse_window=ter_cw_i,
+            )
         sb = data.get("seed_base")
         if sb is not None:
             try:
@@ -694,6 +755,7 @@ class GameProfile:
             part3d=p3,
             lod=lod,
             collision=coll,
+            terrain3d=ter,
             generation=gen_name,
         )
 
