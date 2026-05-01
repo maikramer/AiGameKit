@@ -363,14 +363,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Medir tempos, CPU, RAM e VRAM (JSONL: GAMEDEV_PROFILE_LOG; SQLite automático).",
 )
 @click.option(
-    "--max-faces",
-    "max_faces",
-    type=int,
-    default=40000,
-    show_default=True,
-    help="Número máximo de faces (0 = sem redução). Usa quadric edge collapse do PyMeshLab.",
-)
-@click.option(
     "--gpu-ids",
     "gpu_ids",
     type=str,
@@ -436,7 +428,6 @@ def generate(
     save_reference_image,
     no_prompt_optimize,
     prof_profile,
-    max_faces,
     gpu_ids,
     skip_remesh,
     quality,
@@ -543,10 +534,6 @@ def generate(
         opt_label = "desligada" if no_prompt_optimize else "ativa (anti-placa)"
         info_table.add_row("[bold]Otimização prompt[/bold]", opt_label)
     info_table.add_row("[bold]BG removal[/bold]", "desactivada" if no_remove_bg else "BiRefNet")
-    if max_faces > 0:
-        info_table.add_row("[bold]Max faces[/bold]", f"{max_faces} (PyMeshLab quadric)")
-    else:
-        info_table.add_row("[bold]Max faces[/bold]", "sem redução")
     info_table.add_row("[bold]Formato[/bold]", output_format.upper())
     info_table.add_row(
         "[bold]Export[/bold]",
@@ -658,12 +645,6 @@ def generate(
                             console.print(f"[dim]Imagem Text2D (rede Hunyuan): [cyan]{out_png.resolve()}[/cyan][/dim]")
 
                     progress.update(task, description="[green]Concluído")
-
-                if max_faces > 0:
-                    from text3d.hy3dshape.postprocessors import FaceReducer
-
-                    face_reducer = FaceReducer()
-                    result = face_reducer(result, max_facenum=max_faces)
 
                 if result is not None:
                     from text3d.utils.mesh_lod import prepare_mesh_topology
