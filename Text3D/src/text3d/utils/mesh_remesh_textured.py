@@ -8,6 +8,7 @@ transferência directa pixel-a-pixel (closest-point + bilinear sampling).
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import math
 import tempfile
@@ -61,7 +62,6 @@ def _bpy_obj_to_arrays(obj) -> tuple[np.ndarray, np.ndarray]:
     Triangulates the mesh first (GLTF export always triangulates, so this
     matches what the user sees in the GLB).
     """
-    import bpy
 
     mesh = obj.data
     n_verts = len(mesh.vertices)
@@ -595,8 +595,9 @@ def _build_textured_bpy_mesh(
     Returns (bpy_object, temp_image_path) — caller should unlink/delete temp file
     after saving.
     """
-    import bpy
     import os
+
+    import bpy
     from PIL import Image as PILImage
 
     n_verts = len(verts)
@@ -810,6 +811,8 @@ def remesh_textured_glb(
         Path do ficheiro escrito.
     """
     import bpy
+    import numpy as np
+    from mathutils.kdtree import KDTree
 
     path_in = Path(path_in)
     path_out = Path(path_out)
@@ -829,9 +832,17 @@ def remesh_textured_glb(
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
 
+    mesh = obj.data
+    saved_n = len(mesh.vertices)
+    saved_pos = np.empty((saved_n, 3), dtype=np.float32)
+    saved_nrm = np.empty((saved_n, 3), dtype=np.float32)
+    for i, v in enumerate(mesh.vertices):
+        saved_pos[i] = v.co
+        saved_nrm[i] = v.normal
+
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    bpy.ops.mesh.remove_doubles(threshold=0.0001, use_sharp_edge_from_normals=False)
     bpy.ops.object.mode_set(mode="OBJECT")
     log.info("Após merge by distance: %d faces", len(obj.data.polygons))
 
@@ -841,6 +852,31 @@ def remesh_textured_glb(
     mod.ratio = ratio
     bpy.ops.object.modifier_apply(modifier=mod.name)
     log.info("Após decimate: %d faces (ratio=%.4f)", len(obj.data.polygons), ratio)
+
+    kdt = KDTree(len(saved_pos))
+    for i, p in enumerate(saved_pos):
+        kdt.insert(p.tolist(), i)
+    kdt.balance()
+    K = min(4, len(saved_pos))
+    new_normals = np.empty((len(mesh.vertices), 3), dtype=np.float64)
+    for i, v in enumerate(mesh.vertices):
+        total_w = 0.0
+        normal = np.zeros(3, dtype=np.float64)
+        for _co, idx, dist in kdt.find_n(v.co, K):
+            w = 1.0 / (dist * dist + 1e-10)
+            normal += w * saved_nrm[idx]
+            total_w += w
+        if total_w > 0:
+            normal /= total_w
+        length = np.linalg.norm(normal)
+        if length > 1e-8:
+            normal /= length
+        new_normals[i] = normal
+    loop_normals = np.empty((len(mesh.loops), 3), dtype=np.float32)
+    for loop in mesh.loops:
+        loop_normals[loop.index] = new_normals[loop.vertex_index]
+    with contextlib.suppress(AttributeError):
+        mesh.normals_split_custom_set(loop_normals)
 
     if texture_size and obj.data.materials and obj.data.materials[0].use_nodes:
         for node in obj.data.materials[0].node_tree.nodes:

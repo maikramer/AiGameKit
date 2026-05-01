@@ -6,6 +6,7 @@ animações quando presentes no input.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from pathlib import Path
 
@@ -24,6 +25,64 @@ def _require_bpy():
         return bpy
     except ImportError:
         raise ImportError("bpy is required for LOD generation. Install with: pip install bpy") from None
+
+
+def _capture_vertex_normals(mesh_obj) -> tuple:
+    """Capture per-vertex positions and smooth normals before topology changes.
+
+    Returns (positions, normals) as float32 numpy arrays of shape (N, 3).
+    """
+    import numpy as np
+
+    mesh = mesh_obj.data
+    n = len(mesh.vertices)
+    positions = np.empty((n, 3), dtype=np.float32)
+    normals = np.empty((n, 3), dtype=np.float32)
+    for i, v in enumerate(mesh.vertices):
+        positions[i] = v.co
+        normals[i] = v.normal
+    return positions, normals
+
+
+def _restore_smooth_normals(mesh_obj, positions, normals) -> None:
+    """Restore smooth normals via KD-tree interpolation after topology changes.
+
+    For each vertex in the modified mesh, finds the K nearest original vertices
+    and interpolates their normals (inverse-distance weighting). Sets the result
+    loop_normals for each face corner.
+    """
+    import numpy as np
+    from mathutils.kdtree import KDTree
+
+    mesh = mesh_obj.data
+
+    kdt = KDTree(len(positions))
+    for i, p in enumerate(positions):
+        kdt.insert(p.tolist(), i)
+    kdt.balance()
+
+    K = min(4, len(positions))
+    new_normals = np.empty((len(mesh.vertices), 3), dtype=np.float64)
+    for i, v in enumerate(mesh.vertices):
+        total_w = 0.0
+        normal = np.zeros(3, dtype=np.float64)
+        for _co, idx, dist in kdt.find_n(v.co, K):
+            w = 1.0 / (dist * dist + 1e-10)
+            normal += w * normals[idx]
+            total_w += w
+        if total_w > 0:
+            normal /= total_w
+        length = np.linalg.norm(normal)
+        if length > 1e-8:
+            normal /= length
+        new_normals[i] = normal
+
+    loop_normals = np.empty((len(mesh.loops), 3), dtype=np.float32)
+    for loop in mesh.loops:
+        loop_normals[loop.index] = new_normals[loop.vertex_index]
+
+    with contextlib.suppress(AttributeError):
+        mesh.normals_split_custom_set(loop_normals)
 
 
 def _dynamic_weld_distance(vertex_count: int) -> float:
@@ -89,6 +148,9 @@ def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
     )
 
 
+_export_glb = _export_textured_glb
+
+
 def _remove_doubles(obj, threshold: float) -> int:
     """Remove vértices duplicados dentro de *threshold*. Devolve vértices removidos."""
     import bpy
@@ -97,7 +159,7 @@ def _remove_doubles(obj, threshold: float) -> int:
     bpy.context.view_layer.objects.active = obj
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=True)
+    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=False)
     bpy.ops.object.mode_set(mode="OBJECT")
     return before - len(obj.data.vertices)
 
@@ -128,38 +190,34 @@ def _make_normals_consistent(obj) -> None:
 def _prepare_topology_bpy(mesh_obj) -> None:
     """Pipeline de preparação de topologia sobre um bpy mesh object (in-place).
 
-    1. Remove doubles exactos (threshold baixo)
-    2. Weld por distância adaptativa (fecha micro-cracks)
-    3. Normais consistentes
+    1. Captura normais suaves originais
+    2. Remove doubles exactos (threshold baixo)
+    3. Weld por distância adaptativa (fecha micro-cracks)
     4. Fill holes pequenos (≤30 lados)
+    5. Restaura normais suaves via KD-tree interpolation
     """
     log = logging.getLogger(__name__)
 
     n_faces_before = len(mesh_obj.data.polygons)
     n_verts_before = len(mesh_obj.data.vertices)
 
-    # 1. Remove doubles exactos
+    saved_pos, saved_nrm = _capture_vertex_normals(mesh_obj)
+
     removed = _remove_doubles(mesh_obj, threshold=0.0001)
     if removed:
         log.info("Remove doubles exactos: %d vértices removidos", removed)
 
-    # 2. Weld por distância adaptativa
     weld_dist = _dynamic_weld_distance(len(mesh_obj.data.vertices))
     removed = _remove_doubles(mesh_obj, threshold=weld_dist)
     if removed:
         log.info("Weld adaptativo (%.4f): %d vértices removidos", weld_dist, removed)
 
-    # 3. Normais consistentes
-    try:
-        _make_normals_consistent(mesh_obj)
-    except Exception as exc:
-        log.warning("normals_make_consistent falhou: %s", exc)
-
-    # 4. Fill holes pequenos
     try:
         _fill_holes_bpy(mesh_obj, sides=30)
     except Exception as exc:
         log.warning("fill_holes falhou: %s", exc)
+
+    _restore_smooth_normals(mesh_obj, saved_pos, saved_nrm)
 
     log.info(
         "prepare_topology: %d→%d faces, %d→%d vértices",
@@ -180,15 +238,12 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
     if t >= current:
         return current
 
+    saved_pos, saved_nrm = _capture_vertex_normals(mesh_obj)
+
     bpy.context.view_layer.objects.active = mesh_obj
 
-    # Iteratively decimate using planar collapse — preserves shape much better
-    # than COLLAPSE on thin/non-manifold geometry. Planar collapses faces that
-    # lie on the same plane, preserving the overall silhouette.
     while len(mesh_obj.data.polygons) > t:
         current = len(mesh_obj.data.polygons)
-        need = current - t
-        angle = min(math.radians(30), math.radians(5) + need / current * math.radians(25))
         mod = mesh_obj.modifiers.new("Decimate", "DECIMATE")
         mod.decimate_type = "COLLAPSE"
         mod.ratio = max(0.01, t / current)
@@ -196,12 +251,9 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
         mod.use_collapse_triangulate = True
         bpy.ops.object.modifier_apply(modifier=mod.name)
         if len(mesh_obj.data.polygons) == current:
-            break  # No progress — stop
+            break
 
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.normals_make_consistent()
-    bpy.ops.object.mode_set(mode="OBJECT")
+    _restore_smooth_normals(mesh_obj, saved_pos, saved_nrm)
 
     return len(mesh_obj.data.polygons)
 
@@ -211,9 +263,7 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def prepare_mesh_topology(
-    input_path: Path | str, output_path: Path | str | None = None, **kwargs: object
-) -> Path:
+def prepare_mesh_topology(input_path: Path | str, output_path: Path | str | None = None, **kwargs: object) -> Path:
     """Prepara topologia de um GLB: remove doubles, weld, normais, fill holes.
 
     Carrega o GLB via bpy, aplica o pipeline de reparo e exporta. Preserva
@@ -231,9 +281,7 @@ def prepare_mesh_topology(
     try:
         return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh)
     except ImportError:
-        logging.getLogger(__name__).warning(
-            "bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)"
-        )
+        logging.getLogger(__name__).warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
         if _was_trimesh:
             return input_path
         return Path(input_path)
@@ -325,8 +373,14 @@ def generate_lod_glb_triplet(
     output_dir.mkdir(parents=True, exist_ok=True)
     try:
         return _generate_lod_glb_triplet_impl(
-            input_path, output_dir, basename, lod1_ratio, lod2_ratio,
-            min_faces_lod1, min_faces_lod2, meshfix,
+            input_path,
+            output_dir,
+            basename,
+            lod1_ratio,
+            lod2_ratio,
+            min_faces_lod1,
+            min_faces_lod2,
+            meshfix,
         )
     except ImportError:
         logging.getLogger(__name__).warning("bpy indisponível — generate_lod_glb_triplet ignorado")
@@ -334,8 +388,14 @@ def generate_lod_glb_triplet(
 
 
 def _generate_lod_glb_triplet_impl(
-    input_path, output_dir, basename, lod1_ratio, lod2_ratio,
-    min_faces_lod1, min_faces_lod2, meshfix,
+    input_path,
+    output_dir,
+    basename,
+    lod1_ratio,
+    lod2_ratio,
+    min_faces_lod1,
+    min_faces_lod2,
+    meshfix,
 ):
     mesh_obj, arm_objs = _load_glb_with_armatures(input_path)
     n = len(mesh_obj.data.polygons)
@@ -383,6 +443,7 @@ def generate_lod_textured_glb_triplet(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     import bpy
+
     from gamedev_shared.bpy_mesh import clear_scene
 
     clear_scene()
@@ -415,6 +476,7 @@ def generate_lod_textured_glb_triplet(
         remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex_base)
     else:
         import shutil
+
         shutil.copy2(painted, lod0_path)
     out_paths.append(lod0_path)
 

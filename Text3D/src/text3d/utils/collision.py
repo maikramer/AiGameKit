@@ -14,6 +14,7 @@ def generate_collision_mesh(
 ) -> Path:
     """Generate a simplified convex-hull collision mesh — geometry only, no materials/textures/UVs."""
     import bpy
+
     from gamedev_shared.bpy_mesh import clear_scene
 
     clear_scene()
