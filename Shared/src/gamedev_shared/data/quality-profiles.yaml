@@ -56,6 +56,11 @@ profiles:
       size: 512
       world_size: 256.0
       coarse_window: 2
+      island_noise_scale: 0.12
+      island_noise_freq: 2.5
+      smooth_iterations: 2
+      elevation_gamma: 1.1
+      elevation_contrast: 0.05
 
   low:
     label: "Low (~1min, basic quality)"
@@ -106,6 +111,11 @@ profiles:
       size: 1024
       world_size: 256.0
       coarse_window: 3
+      island_noise_scale: 0.14
+      island_noise_freq: 2.8
+      smooth_iterations: 3
+      elevation_gamma: 1.15
+      elevation_contrast: 0.08
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -156,6 +166,11 @@ profiles:
       size: 2048
       world_size: 512.0
       coarse_window: 4
+      island_noise_scale: 0.15
+      island_noise_freq: 3.0
+      smooth_iterations: 3
+      elevation_gamma: 1.2
+      elevation_contrast: 0.1
 
   high:
     label: "High (~5min, high quality)"
@@ -206,6 +221,11 @@ profiles:
       size: 4096
       world_size: 512.0
       coarse_window: 6
+      island_noise_scale: 0.16
+      island_noise_freq: 3.2
+      smooth_iterations: 4
+      elevation_gamma: 1.2
+      elevation_contrast: 0.12
 
   highest:
     label: "Highest (~10min+, maximum quality)"
@@ -256,3 +276,8 @@ profiles:
       size: 4096
       world_size: 1024.0
       coarse_window: 8
+      island_noise_scale: 0.18
+      island_noise_freq: 3.5
+      smooth_iterations: 5
+      elevation_gamma: 1.25
+      elevation_contrast: 0.15
