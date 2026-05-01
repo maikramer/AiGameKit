@@ -34,8 +34,14 @@ def link_local_src(*, venv_dir: Path, src_dir: Path, import_name: str) -> bool:
         return False
     pth = sp / f"_monorepo_{import_name}.pth"
     pth.write_text(str(src_dir), encoding="utf-8")
+    # Remove editable .pth files left by pip (they shadow our monorepo .pth)
     for old in sp.glob("__editable__.*.pth"):
         old.unlink(missing_ok=True)
+    # Remove installed package directory + dist-info so the .pth path
+    # (pointing to the monorepo src/) is the only copy Python finds.
+    pkg_dir = sp / import_name
+    if pkg_dir.is_dir():
+        shutil.rmtree(pkg_dir, ignore_errors=True)
     for dist in sp.glob(f"{import_name}*.dist-info"):
         if dist.is_dir():
             shutil.rmtree(dist, ignore_errors=True)
