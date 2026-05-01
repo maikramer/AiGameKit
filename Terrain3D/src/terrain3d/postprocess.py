@@ -24,7 +24,7 @@ def island_falloff(
 
     Args:
         heightmap: 2D float64 array in [0, 1].
-        falloff: Base radius as fraction of half the smallest dimension (0.1–0.5).
+        falloff: Base radius as fraction of half the smallest dimension (0.1-0.5).
         noise_scale: Amplitude of Perlin modulation on the radius.
         noise_freq: Frequency of the Perlin noise around the circle.
         seed: Random seed for the Perlin noise.
@@ -78,7 +78,7 @@ def _circular_perlin(seed: int, noise_freq: float, n_samples: int = 1024) -> np.
     xs = np.cos(angles) * noise_freq
     ys = np.sin(angles) * noise_freq
 
-    values = np.array([noise_gen.get_noise(float(x), float(y)) for x, y in zip(xs, ys)])
+    values = np.array([noise_gen.get_noise(float(x), float(y)) for x, y in zip(xs, ys, strict=True)])
     return values
 
 
@@ -114,7 +114,7 @@ def taubin_smooth(
     Args:
         heightmap: 2D float64 array.
         iterations: Number of λ+μ iteration pairs (0 disables smoothing).
-        lambda_val: Smoothing strength (0–1, typically 0.5).
+        lambda_val: Smoothing strength (0-1, typically 0.5).
         mu_val: Shrinkage compensation (negative, typically -0.53).
 
     Returns:
@@ -154,7 +154,7 @@ def elevation_scurve(
     Args:
         heightmap: 2D float64 array in [0, 1].
         gamma: Exponent for gamma correction (1.0 = neutral, >1 = expand lows).
-        contrast: Sigmoid contrast strength (0 = disabled, typical 0.05–0.2).
+        contrast: Sigmoid contrast strength (0 = disabled, typical 0.05-0.2).
 
     Returns:
         Remapped heightmap in [0, 1], float64.
@@ -172,10 +172,7 @@ def elevation_scurve(
         # Normalise sigmoid so f(0)→0 and f(1)→1
         s_min = 1.0 / (1.0 + np.exp(k * 0.5))
         s_max = 1.0 / (1.0 + np.exp(-k * 0.5))
-        if s_max - s_min > 1e-12:
-            h = (sigmoid - s_min) / (s_max - s_min)
-        else:
-            h = np.full_like(h, 0.5)
+        h = (sigmoid - s_min) / (s_max - s_min) if s_max - s_min > 1e-12 else np.full_like(h, 0.5)
 
     return np.clip(h, 0.0, 1.0).astype(np.float64)
 
@@ -229,9 +226,6 @@ def apply_postprocess_chain(
 
     # 4. Re-normalise to [0, 1]
     h_min, h_max = float(h.min()), float(h.max())
-    if h_max - h_min > 1e-12:
-        h = (h - h_min) / (h_max - h_min)
-    else:
-        h = np.zeros_like(h, dtype=np.float64)
+    h = (h - h_min) / (h_max - h_min) if h_max - h_min > 1e-12 else np.zeros_like(h, dtype=np.float64)
 
     return h.astype(np.float64)

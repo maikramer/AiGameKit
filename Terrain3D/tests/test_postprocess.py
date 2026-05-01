@@ -5,7 +5,6 @@ import pytest
 
 from terrain3d.postprocess import apply_postprocess_chain, elevation_scurve, island_falloff, taubin_smooth
 
-
 # --- Fixtures ---
 
 
