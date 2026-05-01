@@ -37,14 +37,14 @@ SPEC_MUSIC = ModelSpec(
     default_sigma_max=500.0,
 )
 
-# Defaults do model card: steps=8, cfg=1.0, sampler pingpong (até ~11s).
+# Defaults do model card: steps=8, cfg=1.0. O modelo usa rf_denoiser → sample_rf; sampler euler compatível.
 SPEC_EFFECTS = ModelSpec(
     hf_id=MODEL_EFFECTS_ID,
     label="Stable Audio Open Small (efeitos / clips curtos)",
     max_seconds=11.0,
     default_steps=8,
     default_cfg=1.0,
-    default_sampler="pingpong",
+    default_sampler="euler",
     default_sigma_min=0.3,
     default_sigma_max=500.0,
 )

@@ -125,6 +125,7 @@ def save_audio(
     trim: bool = False,
     metadata: dict[str, Any] | None = None,
     trim_buffer_ms: int = 200,
+    trim_threshold_db: float = -60.0,
     apply_fade: bool = True,
 ) -> Path:
     """Processa e grava áudio num ficheiro.
@@ -139,6 +140,7 @@ def save_audio(
         trim: Remover silêncio no início e no fim.
         metadata: Metadados para gravar num .json ao lado do áudio.
         trim_buffer_ms: Buffer em ms ao cortar silêncio (passado a trim_silence).
+        trim_threshold_db: Limiar em dB para o trim de silêncio (-30 mais agressivo, -60 conservador).
         apply_fade: Aplicar micro fade-in/out nas bordas do clip.
 
     Returns:
@@ -154,7 +156,7 @@ def save_audio(
         audio = peak_normalize(audio)
 
     if trim:
-        audio = trim_silence(audio, sample_rate, buffer_ms=trim_buffer_ms)
+        audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=trim_buffer_ms)
 
     if apply_fade:
         audio = apply_edge_fade(audio, sample_rate)

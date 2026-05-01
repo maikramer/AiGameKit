@@ -333,6 +333,7 @@ def generate_cmd(
     # QualityEngine resolution: merge quality + category params (CLI always wins)
     resolved_hints: list[str] = []
     trim_buffer_ms: int = 200  # default buffer
+    trim_threshold_db: float = -60.0  # default threshold
     quality_audio_kind: str | None = None
 
     try:
@@ -360,13 +361,14 @@ def generate_cmd(
         if resolved.model_id is not None and ctx.get_parameter_source("model_id") == ParameterSource.DEFAULT:
             model_id = resolved.model_id
 
-        # Determine trim buffer from audio_kind_info
-        if quality_audio_kind:
-            try:
-                kind_info = qe.audio_kind_info(quality_audio_kind)
-                trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
-            except KeyError:
-                pass
+            # Determine trim buffer from audio_kind_info
+            if quality_audio_kind:
+                try:
+                    kind_info = qe.audio_kind_info(quality_audio_kind)
+                    trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
+                    trim_threshold_db = float(kind_info.get("trim_threshold_db", -60.0))
+                except KeyError:
+                    pass
 
     except Exception:
         pass  # QualityEngine unavailable — continue with defaults
@@ -523,6 +525,7 @@ def generate_cmd(
                         trim=trim,
                         metadata=metadata,
                         trim_buffer_ms=trim_buffer_ms,
+                        trim_threshold_db=trim_threshold_db,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
@@ -833,7 +836,7 @@ def info_cmd() -> None:
     t.add_column("Valor", style="green")
 
     t.add_row("Música (default)", "stabilityai/stable-audio-open-1.0 — até ~47s")
-    t.add_row("Efeitos", "stabilityai/stable-audio-open-small — até ~11s, steps~8, pingpong")
+    t.add_row("Efeitos", "stabilityai/stable-audio-open-small — até ~11s, steps~8, euler")
     t.add_row("Sample rate", "44100 Hz")
     t.add_row("Canais", "Estéreo (2)")
 

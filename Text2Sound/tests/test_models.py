@@ -59,7 +59,7 @@ class TestGetSpec:
         e = get_spec(MODEL_EFFECTS_ID)
         assert e.max_seconds == 11.0
         assert e.default_steps == 8
-        assert e.default_sampler == "pingpong"
+        assert e.default_sampler == "euler"
 
     def test_custom_id_fallback(self):
         s = get_spec("user/custom-model")
