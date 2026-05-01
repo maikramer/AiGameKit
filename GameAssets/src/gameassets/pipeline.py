@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import struct
 import time
 from pathlib import Path
 from typing import Any
@@ -40,6 +42,27 @@ def _resolve_animator3d_bin() -> str | None:
         return resolve_binary("ANIMATOR3D_BIN", "animator3d")
     except FileNotFoundError:
         return None
+
+
+def _count_faces_glb(path: Path) -> int:
+    """Count total triangles in a GLB file by parsing the binary header (no bpy required)."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        if len(data) < 20 or data[:4] != b"glTF":
+            return -1
+        json_len = struct.unpack_from("<I", data, 12)[0]
+        chunk = json.loads(data[20 : 20 + json_len])
+        accessors = chunk.get("accessors", [])
+        faces = 0
+        for m in chunk.get("meshes", []):
+            for p in m.get("primitives", []):
+                idx = p.get("indices")
+                if idx is not None and idx < len(accessors):
+                    faces += accessors[idx].get("count", 0) // 3
+        return faces
+    except Exception:
+        return -1
 
 
 def _rigging3d_pipeline_argv(
@@ -799,13 +822,8 @@ def _remesh_shape_to_target(
     target = get_target_faces(row.category)
     if target <= 0:
         return False
-    try:
-        from gamedev_shared.bpy_mesh import face_count as _face_count
-        from gamedev_shared.bpy_mesh import load_glb
-
-        _objs = load_glb(mesh_path)
-        current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception:
+    current_faces = _count_faces_glb(mesh_path)
+    if current_faces < 0:
         return False
     if current_faces <= target:
         return False
@@ -860,13 +878,8 @@ def _remesh_textured_to_target(
     target = get_target_faces(row.category, face_ratio=fr)
     if target <= 0:
         return False
-    try:
-        from gamedev_shared.bpy_mesh import face_count as _face_count
-        from gamedev_shared.bpy_mesh import load_glb
-
-        _objs = load_glb(mesh_path)
-        current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception:
+    current_faces = _count_faces_glb(mesh_path)
+    if current_faces < 0:
         return False
     if current_faces <= target:
         return False
@@ -921,14 +934,9 @@ def _simplify_to_target(
     target = get_target_faces(row.category, face_ratio=fr)
     if target <= 0:
         return False
-    try:
-        from gamedev_shared.bpy_mesh import face_count as _face_count
-        from gamedev_shared.bpy_mesh import load_glb
-
-        _objs = load_glb(mesh_path)
-        current_faces = sum(_face_count(o) for o in _objs) if _objs else 0
-    except Exception:
-        return False
+    current_faces = _count_faces_glb(mesh_path)
+    if current_faces < 0:
+        return False  # can't read mesh
     if current_faces <= target:
         return False
     if current_faces < target * 1.2:
