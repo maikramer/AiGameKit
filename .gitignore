@@ -49,6 +49,26 @@ Thumbs.db
 **/outputs/
 *.log
 
+# Binary assets — nunca commitar para o repo (usar Git LFS ou .gitattributes)
+*.glb
+*.gltf
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.fbx
+*.obj
+*.stl
+*.usd
+*.usdc
+*.usda
+
+# Venvs e ambientes locais
+.venv312/
+
+# Experiments / research (não versionar)
+experiments/
+
 # Vendored hy3dpaint checkpoints (downloaded on-demand)
 Paint3D/src/paint3d/hy3dpaint/ckpt/
 # Pesos Real-ESRGAN descarregados por URL (realesrgan_infer.load_file_from_url)
