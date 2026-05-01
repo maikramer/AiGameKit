@@ -4,24 +4,6 @@
 
 categories:
   # ── Characters ──
-  humanoid:
-    label: "Humanoid"
-    target_faces: 32000
-    rig: true
-    animate: true
-    audio:
-      profile: music
-      kind: music_loop
-      duration: 30
-      trim: false
-    text3d:
-      octree: 256
-      chunks: 8000
-      steps: 30
-    paint:
-      style: hunyuan
-      max_views: 6
-
   creature:
     label: "Creature"
     target_faces: 25000
@@ -33,9 +15,27 @@ categories:
       duration: 3
       trim: true
     text3d:
-      octree: 256
-      chunks: 8000
-      steps: 30
+      octree: 192
+      chunks: 6000
+      steps: 24
+    paint:
+      style: hunyuan
+      max_views: 6
+
+  humanoid:
+    label: "Humanoid"
+    target_faces: 32000
+    rig: true
+    animate: true
+    audio:
+      profile: music
+      kind: music_loop
+      duration: 30
+      trim: false
+    text3d:
+      octree: 192
+      chunks: 6000
+      steps: 24
     paint:
       style: hunyuan
       max_views: 6
@@ -157,9 +157,9 @@ categories:
       duration: 8
       trim: true
     text3d:
-      octree: 256
-      chunks: 8000
-      steps: 30
+      octree: 192
+      chunks: 6000
+      steps: 24
 
   # ── Items & Consumables ──
   item:
