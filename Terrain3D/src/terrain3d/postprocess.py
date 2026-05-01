@@ -138,3 +138,43 @@ def taubin_smooth(
         h = h + mu_val * laplacian
 
     return h.astype(np.float64)
+
+
+def elevation_scurve(
+    heightmap: np.ndarray,
+    gamma: float = 1.2,
+    contrast: float = 0.1,
+) -> np.ndarray:
+    """Apply gamma correction and sigmoid contrast enhancement.
+
+    Gamma expands or compresses the elevation range.  The sigmoid S-curve
+    boosts contrast in the mid-range (slopes/hillsides) while keeping
+    flat areas stable.
+
+    Args:
+        heightmap: 2D float64 array in [0, 1].
+        gamma: Exponent for gamma correction (1.0 = neutral, >1 = expand lows).
+        contrast: Sigmoid contrast strength (0 = disabled, typical 0.05–0.2).
+
+    Returns:
+        Remapped heightmap in [0, 1], float64.
+    """
+    h = heightmap.copy()
+
+    # --- Gamma correction ---
+    if abs(gamma - 1.0) > 1e-9:
+        h = np.power(np.clip(h, 1e-10, 1.0), 1.0 / gamma)
+
+    # --- Sigmoid contrast ---
+    if contrast > 1e-9:
+        k = 1.0 + contrast * 20.0  # e.g. contrast=0.1 → k=3
+        sigmoid = 1.0 / (1.0 + np.exp(-k * (h - 0.5)))
+        # Normalise sigmoid so f(0)→0 and f(1)→1
+        s_min = 1.0 / (1.0 + np.exp(k * 0.5))
+        s_max = 1.0 / (1.0 + np.exp(-k * 0.5))
+        if s_max - s_min > 1e-12:
+            h = (sigmoid - s_min) / (s_max - s_min)
+        else:
+            h = np.full_like(h, 0.5)
+
+    return np.clip(h, 0.0, 1.0).astype(np.float64)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from terrain3d.postprocess import island_falloff, taubin_smooth
+from terrain3d.postprocess import elevation_scurve, island_falloff, taubin_smooth
 
 
 # --- Fixtures ---
@@ -122,3 +122,44 @@ class TestTaubinSmooth:
         # Taubin is volume-preserving, so values should stay near [0, 1]
         assert smoothed.min() >= -0.5
         assert smoothed.max() <= 1.5
+
+
+class TestElevationScurve:
+    def test_gamma_one_noop(self, heightmap_noisy: np.ndarray) -> None:
+        """gamma=1.0 with contrast=0 should not change the input."""
+        result = elevation_scurve(heightmap_noisy, gamma=1.0, contrast=0.0)
+        np.testing.assert_allclose(result, heightmap_noisy, atol=1e-12)
+
+    def test_gamma_above_one_expands_lows(self) -> None:
+        """gamma > 1 should expand low values (brighten shadows)."""
+        h = np.full((64, 64), 0.2, dtype=np.float64)
+        result = elevation_scurve(h, gamma=1.5, contrast=0.0)
+        # gamma > 1: x^(1/1.5) > x for x < 1
+        assert result.mean() > 0.2
+
+    def test_contrast_increases_mid_variance(self) -> None:
+        """contrast > 0 should increase variance of mid-range values."""
+        rng = np.random.default_rng(12)
+        h = np.clip(rng.normal(0.5, 0.15, (128, 128)), 0.0, 1.0).astype(np.float64)
+        result = elevation_scurve(h, gamma=1.0, contrast=0.2)
+        # Mid-range variance should increase
+        mid_mask = (h > 0.3) & (h < 0.7)
+        assert result[mid_mask].std() > h[mid_mask].std()
+
+    def test_output_in_range(self, heightmap_noisy: np.ndarray) -> None:
+        """Output should be in [0, 1]."""
+        result = elevation_scurve(heightmap_noisy, gamma=1.2, contrast=0.1)
+        assert result.min() >= 0.0
+        assert result.max() <= 1.0
+
+    def test_extremes_preserved(self) -> None:
+        """0 and 1 inputs should stay at (approximately) 0 and 1."""
+        h = np.array([[0.0, 1.0], [0.5, 0.25]], dtype=np.float64)
+        result = elevation_scurve(h, gamma=1.2, contrast=0.1)
+        assert result[0, 0] == pytest.approx(0.0, abs=0.01)
+        assert result[0, 1] == pytest.approx(1.0, abs=0.01)
+
+    def test_no_nan_or_inf(self, heightmap_gaussian_peak: np.ndarray) -> None:
+        """Output should contain no NaN or Inf."""
+        result = elevation_scurve(heightmap_gaussian_peak, gamma=1.5, contrast=0.3)
+        assert np.all(np.isfinite(result))
