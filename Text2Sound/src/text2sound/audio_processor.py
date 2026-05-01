@@ -147,10 +147,10 @@ def apply_seamless_loop_crossfade(
 
     t = torch.linspace(0, torch.pi / 2, n, device=audio.device, dtype=audio.dtype)
     fade_out = torch.cos(t) ** 2  # (n,)
-    fade_in = torch.sin(t) ** 2   # (n,)
+    fade_in = torch.sin(t) ** 2  # (n,)
 
-    tail = audio[:, -n:]   # last n samples
-    head = audio[:, :n]    # first n samples
+    tail = audio[:, -n:]  # last n samples
+    head = audio[:, :n]  # first n samples
 
     # Broadcast: (channels, n) * (n,) → (channels, n)
     crossfaded = tail * fade_out + head * fade_in

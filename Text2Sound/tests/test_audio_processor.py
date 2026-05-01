@@ -161,7 +161,6 @@ class TestApplySeamlessLoopCrossfade:
     def test_equal_power_property(self):
         """cos^2 + sin^2 should equal ~1.0 for all points."""
         sr = 44100
-        audio = torch.randn(2, sr * 5)
         n = int(sr * 500.0 / 1000)
         t = torch.linspace(0, torch.pi / 2, n)
         fade_out = torch.cos(t) ** 2
@@ -295,7 +294,9 @@ class TestSaveAudio:
         meta = {"prompt": "test"}
         out = tmp_path / "loop_meta"
         result = save_audio(
-            audio, 44100, out,
+            audio,
+            44100,
+            out,
             seamless_loop=True,
             crossfade_ms=500.0,
             metadata=meta,
