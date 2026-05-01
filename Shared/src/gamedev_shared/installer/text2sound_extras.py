@@ -35,11 +35,12 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
     if not inst.skip_pytorch:
         inst.install_pytorch(pip_cmd, cwd=inst.project_root)
 
-    if inst.requirements_file.is_file():
-        inst.logger.info(f"Instalando dependências: {inst.requirements_file}")
-        subprocess.run([*pip_cmd, "-r", str(inst.requirements_file)], check=True, cwd=_root)
-    else:
-        inst.logger.warn(f"Ficheiro em falta: {inst.requirements_file}")
+    req_file = getattr(inst, "requirements_file", None)
+    if req_file is not None and req_file.is_file():
+        inst.logger.info(f"Instalando dependências: {req_file}")
+        subprocess.run([*pip_cmd, "-r", str(req_file)], check=True, cwd=_root)
+    elif req_file is not None:
+        inst.logger.warn(f"Ficheiro em falta: {req_file}")
 
     sat_deps = inst.project_root / "config" / "requirements-stable-audio-deps.txt"
     inst.logger.info(f"{_STABLE_AUDIO_TOOLS} (--no-deps), depois dependências listadas...")

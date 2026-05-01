@@ -413,63 +413,6 @@ def _validate_and_fix_origin(glb_path: Path, tolerance: float = 0.1) -> bool:
         return False
 
 
-def _prep_mesh_for_rigging(input_path: Path, output_path: Path, python_bin: str) -> bool:
-    """Prepara mesh para rigging: merge verts, remove degenerados, remesh, close holes.
-
-    Retorna True se conseguiu preparar (output_path escrito); False se não
-    conseguiu (input_path é usado sem modificação).
-    """
-    import subprocess as _sp
-
-    script = """
-import sys, trimesh, numpy as np
-mesh = trimesh.load(sys.argv[1], force='mesh')
-mesh.merge_vertices(digits_vertex=4)
-mask = mesh.area_faces > 1e-7
-mesh.update_faces(mask)
-mesh.remove_unreferenced_vertices()
-try:
-    import pymeshlab
-    ms = pymeshlab.MeshSet()
-    ms.add_mesh(pymeshlab.Mesh(mesh.vertices, mesh.faces))
-    ms.meshing_repair_non_manifold_edges()
-    ms.meshing_repair_non_manifold_vertices()
-    ms.meshing_remove_duplicate_faces()
-    ms.meshing_remove_duplicate_vertices()
-    ms.meshing_close_holes(maxholesize=80)
-    ms.meshing_isotropic_explicit_remeshing(
-        targetlen=pymeshlab.PercentageValue(1.0),
-        adaptive=True,
-        iterations=3,
-    )
-    ms.apply_coord_taubin_smoothing(stepsmoothnum=2)
-    ms.meshing_remove_unreferenced_vertices()
-    out = ms.current_mesh()
-    mesh = trimesh.Trimesh(vertices=out.vertex_matrix(), faces=out.face_matrix())
-except ImportError:
-    pass
-trimesh.repair.fill_holes(mesh)
-trimesh.repair.fix_normals(mesh, multibody=True)
-mesh.export(sys.argv[2], file_type='glb')
-print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
-"""
-    try:
-        r = _sp.run(
-            [python_bin, "-c", script, str(input_path), str(output_path)],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        if r.returncode == 0 and output_path.is_file() and output_path.stat().st_size > 0:
-            console.print(f"[dim]{r.stdout.strip()}[/dim]")
-            return True
-        if r.stderr:
-            console.print(f"[yellow]prep mesh aviso: {r.stderr[:200]}[/yellow]")
-    except Exception as e:
-        console.print(f"[yellow]prep mesh falhou ({e}); a usar mesh original.[/yellow]")
-    return False
-
-
 @cli.command("pipeline")
 @click.option("--input", "-i", "mesh", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--output", "-o", "out", type=click.Path(path_type=Path), required=True)
@@ -480,7 +423,6 @@ print(f'prep: {len(mesh.vertices)} verts, {len(mesh.faces)} faces')
     "--smooth-iterations", type=int, default=3, show_default=True, help="Passadas de suavização Laplaciana no merge."
 )
 @click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
-@click.option("--no-prep", is_flag=True, help="Não preparar mesh (skip remesh/repair).")
 @click.option("--low-vram", is_flag=True, help="Modo baixa VRAM: num_train_vertex 256 (padrão: 512).")
 @click.option(
     "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
@@ -502,7 +444,6 @@ def pipeline_cmd(
     keep_temp: bool,
     smooth_iterations: int,
     groups_per_vertex: int,
-    no_prep: bool,
     low_vram: bool,
     draco: bool,
     quality: str,
@@ -550,15 +491,6 @@ def pipeline_cmd(
         params={"seed": seed, "smooth_iterations": smooth_iterations, "groups_per_vertex": groups_per_vertex},
     ):
         actual_mesh = mesh
-        if not no_prep:
-            emit_progress(item_id, TOOL_RIGGING3D, phase="preparing_mesh", percent=0)
-            prepped = wd / "_prepped.glb"
-            console.print("[dim]Preparando mesh (remesh + repair)...[/dim]")
-            if _prep_mesh_for_rigging(mesh, prepped, py):
-                actual_mesh = prepped
-            else:
-                console.print("[yellow]Prep falhou; a usar mesh original.[/yellow]")
-            emit_progress(item_id, TOOL_RIGGING3D, phase="preparing_mesh", percent=100)
 
         skel = wd / "_skeleton.glb"
         skin = wd / "_skin.glb"
