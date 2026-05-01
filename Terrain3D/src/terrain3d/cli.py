@@ -68,6 +68,55 @@ def cli() -> None:
     show_default=True,
     help="Number of coarse tiles (~7.7km each for 30m)",
 )
+@click.option(
+    "--mode",
+    type=click.Choice(["island", "continental"]),
+    default="island",
+    show_default=True,
+    help="Terrain mode: island (falloff) or continental (raw)",
+)
+@click.option(
+    "--island-falloff",
+    type=float,
+    default=0.35,
+    show_default=True,
+    help="Island falloff radius (0.1-0.5)",
+)
+@click.option(
+    "--island-noise-scale",
+    type=float,
+    default=0.15,
+    show_default=True,
+    help="Perlin noise amplitude for coast variation",
+)
+@click.option(
+    "--island-noise-freq",
+    type=float,
+    default=3.0,
+    show_default=True,
+    help="Perlin noise frequency for coast variation",
+)
+@click.option(
+    "--smooth-iterations",
+    type=int,
+    default=3,
+    show_default=True,
+    help="Taubin smoothing iterations (0=off)",
+)
+@click.option(
+    "--elevation-gamma",
+    type=float,
+    default=1.2,
+    show_default=True,
+    help="Gamma exponent for elevation (1.0=neutral)",
+)
+@click.option(
+    "--elevation-contrast",
+    type=float,
+    default=0.1,
+    show_default=True,
+    help="Sigmoid contrast for elevation (0=off)",
+)
 @click.option("--quiet", is_flag=True, help="Suppress progress output")
 def generate_cmd(
     prompt: str | None,
@@ -82,6 +131,13 @@ def generate_cmd(
     dtype: str,
     cache_size: str,
     coarse_window: int,
+    mode: str,
+    island_falloff: float,
+    island_noise_scale: float,
+    island_noise_freq: float,
+    smooth_iterations: int,
+    elevation_gamma: float,
+    elevation_contrast: float,
     quiet: bool,
 ) -> None:
     """Generate an AI terrain heightmap via diffusion."""
@@ -94,6 +150,13 @@ def generate_cmd(
     _user_set_size = ctx.get_parameter_source("size") != ParameterSource.DEFAULT
     _user_set_world_size = ctx.get_parameter_source("world_size") != ParameterSource.DEFAULT
     _user_set_coarse_window = ctx.get_parameter_source("coarse_window") != ParameterSource.DEFAULT
+    _user_set_mode = ctx.get_parameter_source("mode") != ParameterSource.DEFAULT
+    _user_set_island_falloff = ctx.get_parameter_source("island_falloff") != ParameterSource.DEFAULT
+    _user_set_island_noise_scale = ctx.get_parameter_source("island_noise_scale") != ParameterSource.DEFAULT
+    _user_set_island_noise_freq = ctx.get_parameter_source("island_noise_freq") != ParameterSource.DEFAULT
+    _user_set_smooth_iterations = ctx.get_parameter_source("smooth_iterations") != ParameterSource.DEFAULT
+    _user_set_elevation_gamma = ctx.get_parameter_source("elevation_gamma") != ParameterSource.DEFAULT
+    _user_set_elevation_contrast = ctx.get_parameter_source("elevation_contrast") != ParameterSource.DEFAULT
 
     try:
         from gamedev_shared.quality import QualityEngine
@@ -106,6 +169,20 @@ def generate_cmd(
             world_size = _qresolved.params["world_size"]
         if not _user_set_coarse_window and "coarse_window" in _qresolved.params:
             coarse_window = _qresolved.params["coarse_window"]
+        if not _user_set_mode and "mode" in _qresolved.params:
+            mode = _qresolved.params["mode"]
+        if not _user_set_island_falloff and "island_falloff" in _qresolved.params:
+            island_falloff = _qresolved.params["island_falloff"]
+        if not _user_set_island_noise_scale and "island_noise_scale" in _qresolved.params:
+            island_noise_scale = _qresolved.params["island_noise_scale"]
+        if not _user_set_island_noise_freq and "island_noise_freq" in _qresolved.params:
+            island_noise_freq = _qresolved.params["island_noise_freq"]
+        if not _user_set_smooth_iterations and "smooth_iterations" in _qresolved.params:
+            smooth_iterations = _qresolved.params["smooth_iterations"]
+        if not _user_set_elevation_gamma and "elevation_gamma" in _qresolved.params:
+            elevation_gamma = _qresolved.params["elevation_gamma"]
+        if not _user_set_elevation_contrast and "elevation_contrast" in _qresolved.params:
+            elevation_contrast = _qresolved.params["elevation_contrast"]
     except Exception:
         pass  # QualityEngine unavailable — continue with CLI defaults
 
@@ -124,6 +201,13 @@ def generate_cmd(
         cache_size=cache_size,
         coarse_window=coarse_window,
         prompt=prompt,
+        mode=mode,
+        island_falloff=island_falloff,
+        island_noise_scale=island_noise_scale,
+        island_noise_freq=island_noise_freq,
+        smooth_iterations=smooth_iterations,
+        elevation_gamma=elevation_gamma,
+        elevation_contrast=elevation_contrast,
     )
 
     if quiet:
@@ -161,6 +245,7 @@ def generate_cmd(
     table.add_row("Height max", f"{result.heightmap.max():.4f}")
     table.add_row("Height mean", f"{result.heightmap.mean():.4f}")
     table.add_row("Height std", f"{result.heightmap.std():.4f}")
+    table.add_row("Mode", mode)
     table.add_row("Heightmap", str(hmap_path))
     table.add_row("Metadata", str(meta_path))
     if prompt:
