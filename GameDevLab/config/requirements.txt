@@ -1,0 +1,13 @@
+# GameDevLab — dependências de runtime (debug 3D, bancadas, profiling)
+# Uso: pip install -r config/requirements.txt
+
+click>=8.0
+rich>=13.0
+rich-click>=1.8.0
+Pillow>=10.0
+numpy>=1.24.0
+pyyaml>=6.0
+
+# Monorepo: biblioteca partilhada. Em setup.py vira file:// absoluto.
+# Caminho relativo ao CWD do projecto (GameDevLab/) — usado por pip -r com cwd=projecto.
+gamedev-shared @ file:../Shared

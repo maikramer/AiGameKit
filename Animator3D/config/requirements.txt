@@ -1,0 +1,14 @@
+# Animator3D — dependências de runtime (animação 3D com Blender Python / bpy 5.1)
+# Uso: pip install -r config/requirements.txt
+# Nota: requer Python 3.13 (bpy 5.1.0 wheels só cp313).
+
+# Blender Python — motor principal de animação
+bpy==5.1.0
+
+click>=8.1.0
+rich>=13.0.0
+rich-click>=1.8.0
+
+# Monorepo: biblioteca partilhada. Em setup.py vira file:// absoluto.
+# Caminho relativo ao CWD do projecto (Animator3D/) — usado por pip -r com cwd=projecto.
+gamedev-shared @ file:../Shared
