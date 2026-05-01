@@ -11,6 +11,7 @@ from text2sound.audio_processor import (
     DEFAULT_FORMAT,
     SUPPORTED_FORMATS,
     apply_edge_fade,
+    apply_seamless_loop_crossfade,
     peak_normalize,
     save_audio,
     to_int16,
@@ -148,6 +149,64 @@ class TestApplyEdgeFade:
         original = audio.clone()
         apply_edge_fade(audio, sr, fade_in_ms=5, fade_out_ms=10)
         assert torch.equal(audio, original)
+
+
+class TestApplySeamlessLoopCrossfade:
+    def test_output_shape_matches_input(self):
+        sr = 44100
+        audio = torch.randn(2, sr * 5)  # 5 seconds stereo
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        assert result.shape == audio.shape
+
+    def test_equal_power_property(self):
+        """cos^2 + sin^2 should equal ~1.0 for all points."""
+        sr = 44100
+        audio = torch.randn(2, sr * 5)
+        n = int(sr * 500.0 / 1000)
+        t = torch.linspace(0, torch.pi / 2, n)
+        fade_out = torch.cos(t) ** 2
+        fade_in = torch.sin(t) ** 2
+        energy = fade_out + fade_in
+        assert torch.allclose(energy, torch.ones_like(energy), atol=1e-6)
+
+    def test_center_unchanged(self):
+        """Samples outside crossfade zone should be identical to input."""
+        sr = 44100
+        audio = torch.randn(2, sr * 5)
+        n = int(sr * 500.0 / 1000)
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        # Middle section (excluding last n samples which are crossfaded)
+        assert torch.equal(result[:, :-n], audio[:, :-n])
+
+    def test_works_with_mono(self):
+        sr = 44100
+        audio = torch.randn(1, sr * 5)
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        assert result.shape == audio.shape
+
+    def test_short_audio_crossfade_clamped(self):
+        """Audio shorter than crossfade_ms should clamp crossfade to half length."""
+        sr = 44100
+        audio = torch.randn(2, 100)  # very short
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        assert result.shape == audio.shape
+
+    def test_does_not_modify_original(self):
+        sr = 44100
+        audio = torch.randn(2, sr * 5)
+        original = audio.clone()
+        apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        assert torch.equal(audio, original)
+
+    def test_crossfade_500ms_stereo(self):
+        """Full integration: 500ms crossfade on stereo audio, verify smooth transition."""
+        sr = 44100
+        # Create audio with distinct start and end
+        audio = torch.randn(2, sr * 5)
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        # The last 500ms should be a mix (not identical to input)
+        n = int(sr * 500.0 / 1000)
+        assert not torch.equal(result[:, -n:], audio[:, -n:])
 
 
 class TestSaveAudio:

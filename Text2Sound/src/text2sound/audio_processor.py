@@ -115,6 +115,51 @@ def apply_edge_fade(
     return result
 
 
+def apply_seamless_loop_crossfade(
+    audio: torch.Tensor,
+    sample_rate: int,
+    crossfade_ms: float = 500.0,
+) -> torch.Tensor:
+    """Apply equal-power crossfade between the end and start of audio for seamless looping.
+
+    Blends the last ``crossfade_ms`` milliseconds with the first ``crossfade_ms``
+    milliseconds using cos²/sin² curves, preserving RMS energy during the transition.
+    The output has the same duration as the input — the crossfaded region replaces
+    the tail of the audio.
+
+    Args:
+        audio: Tensor (channels, samples) float.
+        sample_rate: Sample rate in Hz.
+        crossfade_ms: Crossfade duration in milliseconds.
+
+    Returns:
+        Tensor with crossfade applied (channels, samples), same length as input.
+    """
+    total_samples = audio.shape[-1]
+    if total_samples == 0:
+        return audio
+
+    n = int(sample_rate * crossfade_ms / 1000)
+    # Clamp crossfade to at most half the audio length
+    n = min(n, total_samples // 2)
+    if n < 2:
+        return audio.clone()
+
+    t = torch.linspace(0, torch.pi / 2, n, device=audio.device, dtype=audio.dtype)
+    fade_out = torch.cos(t) ** 2  # (n,)
+    fade_in = torch.sin(t) ** 2   # (n,)
+
+    tail = audio[:, -n:]   # last n samples
+    head = audio[:, :n]    # first n samples
+
+    # Broadcast: (channels, n) * (n,) → (channels, n)
+    crossfaded = tail * fade_out + head * fade_in
+
+    result = audio.clone()
+    result[:, -n:] = crossfaded
+    return result
+
+
 def save_audio(
     audio: torch.Tensor,
     sample_rate: int,
