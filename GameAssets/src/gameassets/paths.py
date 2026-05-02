@@ -101,13 +101,22 @@ def _shape_path(mesh_final: Path) -> Path:
 
     O orquestrador move este ficheiro para ``_intermediate/`` ao fim da
     pipeline via ``move_to_intermediate``.
+
+    Round 2 fix: normaliza o stem via ``_base_stem`` para que a função seja
+    idempotente — passar ``goblin.glb`` ou ``goblin_painted.glb`` devolve
+    sempre ``goblin_shape.glb``.
     """
-    return mesh_final.with_name(f"{mesh_final.stem}_shape{mesh_final.suffix}")
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_shape{mesh_final.suffix}")
 
 
 def _painted_path(mesh_final: Path) -> Path:
-    """``id_painted.glb`` ao lado da mesh canónica (compat)."""
-    return mesh_final.with_name(f"{mesh_final.stem}_painted{mesh_final.suffix}")
+    """``id_painted.glb`` ao lado da mesh canónica (compat).
+
+    Idempotente em relação a sufixos canónicos (Round 2 fix).
+    """
+    base = _base_stem(mesh_final.stem)
+    return mesh_final.with_name(f"{base}_painted{mesh_final.suffix}")
 
 
 def _clean_path(mesh_final: Path) -> Path:
