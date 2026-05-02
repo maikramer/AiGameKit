@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -381,6 +382,216 @@ def merge_cmd(
 # --- pipeline ---
 
 
+def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
+    """Rename ``bone_0..bone_N`` nodes to semantic humanoid names.
+
+    UniRig's autoregressive model sometimes predicts ``cls_none`` instead of the
+    expected ``articulationxl`` token, causing ``order.make_names()`` to produce
+    generic placeholder names.  This post-merge step analyses the **bone hierarchy
+    tree** in the GLB and assigns Mixamo-style semantic names (Hips, Spine,
+    LeftArm, RightUpLeg, …) based on each bone's structural role.
+
+    Classification is purely topological (parent-child tree shape), not
+    positional, so it works regardless of bone transforms or model predictions
+    of ``cls`` tokens.  Bones that cannot be confidently classified keep their
+    ``bone_*`` names for downstream tools (e.g. Animator3D spatial rename).
+
+    Args:
+        glb_path: Output GLB file to rewrite in-place.
+        root: UniRig package root (unused — kept for API compatibility).
+
+    Returns:
+        Number of bones renamed (0 if nothing to do).
+    """
+    import re
+    import struct
+
+    # ------------------------------------------------------------------ #
+    # Name templates (Mixamo-style, compatible with Animator3D chains)     #
+    # ------------------------------------------------------------------ #
+    _SPINE_NAMES = ["Hips", "Spine", "Chest", "UpperChest", "UpperChest2", "UpperChest3"]
+    _NECK_NAMES = ["Neck", "Head", "Neck1", "Neck2"]
+    _ARM_L = ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand"]
+    _ARM_R = ["RightShoulder", "RightArm", "RightForeArm", "RightHand"]
+    _LEG_L = ["LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase"]
+    _LEG_R = ["RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"]
+
+    # ------------------------------------------------------------------ #
+    # Parse GLB                                                           #
+    # ------------------------------------------------------------------ #
+    try:
+        if glb_path.stat().st_size < 20:
+            return 0
+
+        with open(glb_path, "rb") as f:
+            header = f.read(12)
+            if len(header) < 12:
+                return 0
+            _magic, _ver, _total = struct.unpack("<III", header)
+            if _magic != 0x46546C67:
+                return 0
+            chunk0_header = f.read(8)
+            if len(chunk0_header) < 8:
+                return 0
+            chunk0_len, _ct = struct.unpack("<II", chunk0_header)
+            json_bytes = f.read(chunk0_len)
+            remaining = f.read()
+
+        glb_json = json.loads(json_bytes)
+    except (struct.error, json.JSONDecodeError, OSError):
+        return 0
+    nodes = glb_json.get("nodes", [])
+
+    # ------------------------------------------------------------------ #
+    # Identify bone nodes and build hierarchy                             #
+    # ------------------------------------------------------------------ #
+    bone_re = re.compile(r"^bone_(\d+)$")
+    bone_nodes: dict[int, int] = {}  # bone_index → node_index
+    for ni, node in enumerate(nodes):
+        name = node.get("name", "")
+        m = bone_re.match(name)
+        if m:
+            bone_nodes[int(m.group(1))] = ni
+
+    if not bone_nodes:
+        return 0
+
+    # Build children map (bone-index space)
+    parent_map: dict[int, int | None] = {}  # node_index → parent_node_index
+    for ni, node in enumerate(nodes):
+        for c in node.get("children", []):
+            parent_map[c] = ni
+
+    children_of_bone: dict[int, list[int]] = {}
+    for bi, ni in bone_nodes.items():
+        parent_ni = parent_map.get(ni)
+        if parent_ni is not None:
+            parent_name = nodes[parent_ni].get("name", "")
+            pm = bone_re.match(parent_name)
+            if pm:
+                parent_bi = int(pm.group(1))
+                children_of_bone.setdefault(parent_bi, []).append(bi)
+
+    def _linear_chain(start_bi: int) -> list[int]:
+        """Follow single-child path from *start_bi*."""
+        chain = [start_bi]
+        cur = start_bi
+        while len(children_of_bone.get(cur, [])) == 1:
+            cur = children_of_bone[cur][0]
+            chain.append(cur)
+        return chain
+
+    def _descendants(bi: int) -> int:
+        n = 0
+        for c in children_of_bone.get(bi, []):
+            n += 1 + _descendants(c)
+        return n
+
+    # ------------------------------------------------------------------ #
+    # Classify the tree                                                   #
+    # ------------------------------------------------------------------ *
+    # Find root (bone whose parent is not a bone)
+    root_bi: int | None = None
+    for bi, ni in bone_nodes.items():
+        parent_ni = parent_map.get(ni)
+        if parent_ni is None:
+            root_bi = bi
+            break
+        parent_name = nodes[parent_ni].get("name", "")
+        if not bone_re.match(parent_name):
+            root_bi = bi
+            break
+    if root_bi is None:
+        return 0
+
+    # Spine: follow the child with the most descendants
+    root_kids = children_of_bone.get(root_bi, [])
+    if not root_kids:
+        return 0
+    spine_start = max(root_kids, key=_descendants)
+    spine = [root_bi] + _linear_chain(spine_start)
+
+    # Upper-chest = last bone in spine
+    upper_chest = spine[-1]
+    uc_kids = children_of_bone.get(upper_chest, [])
+
+    # Legs = root children that are NOT the spine start
+    leg_starts = [c for c in root_kids if c != spine_start]
+
+    # Chains from upper-chest, sorted shortest first
+    uc_chains = sorted(
+        [_linear_chain(c) for c in uc_kids],
+        key=len,
+    )
+
+    # ------------------------------------------------------------------ #
+    # Assign names                                                        #
+    # ------------------------------------------------------------------ #
+    assignments: dict[int, str] = {}
+
+    # Spine
+    for i, bi in enumerate(spine):
+        assignments[bi] = _SPINE_NAMES[i] if i < len(_SPINE_NAMES) else f"Spine{i}"
+
+    # From upper-chest: shortest chain(s) = neck/head, rest = arms
+    neck_done = False
+    arm_idx = 0
+    arm_templates = [_ARM_L, _ARM_R]
+    for chain in uc_chains:
+        if not neck_done and len(chain) <= 3:
+            for i, bi in enumerate(chain):
+                assignments[bi] = _NECK_NAMES[i] if i < len(_NECK_NAMES) else f"NeckExtra{i}"
+            neck_done = True
+        else:
+            tpl = arm_templates[arm_idx] if arm_idx < len(arm_templates) else None
+            for i, bi in enumerate(chain):
+                if tpl and i < len(tpl):
+                    assignments[bi] = tpl[i]
+                # Extra bones in a long arm chain stay as bone_* (hand/finger bones)
+            arm_idx += 1
+
+    # Legs from root
+    leg_templates = [_LEG_L, _LEG_R]
+    for idx, start in enumerate(leg_starts):
+        chain = _linear_chain(start)
+        tpl = leg_templates[idx] if idx < len(leg_templates) else None
+        for i, bi in enumerate(chain):
+            if tpl and i < len(tpl):
+                assignments[bi] = tpl[i]
+
+    # ------------------------------------------------------------------ #
+    # Apply renames in GLB node space                                     #
+    # ------------------------------------------------------------------ #
+    renames: dict[int, str] = {}  # node_index → new_name
+    for bi, new_name in assignments.items():
+        ni = bone_nodes.get(bi)
+        if ni is not None:
+            renames[ni] = new_name
+
+    if not renames:
+        return 0
+
+    for ni, new_name in renames.items():
+        nodes[ni]["name"] = new_name
+
+    # ------------------------------------------------------------------ #
+    # Write back                                                          #
+    # ------------------------------------------------------------------ #
+    new_json_bytes = json.dumps(glb_json, separators=(",", ":")).encode("utf-8")
+    pad = (4 - len(new_json_bytes) % 4) % 4
+    new_json_bytes += b" " * pad
+    new_chunk0_len = len(new_json_bytes)
+    new_total = 12 + 8 + new_chunk0_len + len(remaining)
+
+    with open(glb_path, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, new_total))
+        f.write(struct.pack("<II", new_chunk0_len, 0x4E4F534A))
+        f.write(new_json_bytes)
+        f.write(remaining)
+
+    return len(renames)
+
+
 def _validate_and_fix_origin(glb_path: Path, tolerance: float = 0.1) -> bool:
     """Valida se a base do modelo está em Y≈0 (convenção feet do Text3D).
 
@@ -618,6 +829,9 @@ def pipeline_cmd(
             if rc != 0:
                 console.print(f"[yellow]merge rc={rc}, output={out.stat().st_size}B- prosseguindo.[/yellow]")
             emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=100)
+            renamed = _rename_generic_bones(out, root)
+            if renamed:
+                console.print(f"[green]Renomeados {renamed} ossos para nomes semânticos (humanoid).[/green]")
             _validate_and_fix_origin(out)
         finally:
             if cleanup is not None and not keep_temp:

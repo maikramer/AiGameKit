@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import struct
 from pathlib import Path
 from unittest.mock import patch
 
@@ -451,3 +453,133 @@ class TestRootOption:
                 catch_exceptions=False,
             )
         assert result.exit_code == 0
+
+
+# ── _rename_generic_bones ──────────────────────────────────────────────
+
+# NPZ parents for a 28-bone humanoid (model output with cls_none).
+_HUMANOID_PARENTS = [None, 0, 1, 2, 3, 4, 3, 6, 7, 8, 9, 10, 11, 3, 13, 14, 15, 16, 17, 18, 0, 20, 21, 22, 0, 24, 25, 26]
+
+
+def _build_glb_with_bones(tmp_path: Path, parents: list[int | None], prefix: str = "bone_") -> Path:
+    """Create a minimal GLB file with bone nodes following *parents*."""
+    n = len(parents)
+    # Build node hierarchy
+    nodes: list[dict[str, object]] = []
+    children_of: dict[int, list[int]] = {}
+    for i in range(n):
+        children_of.setdefault(parents[i], []).append(i) if parents[i] is not None else None
+    for i in range(n):
+        node: dict[str, object] = {"name": f"{prefix}{i}"}
+        kids = children_of.get(i)
+        if kids:
+            node["children"] = kids
+        nodes.append(node)
+    # Add mesh + armature wrapper nodes
+    mesh_node = {"name": "geometry_0", "mesh": 0, "skin": 0}
+    armature_node = {"name": "Armature", "children": [n, len(nodes)]}  # mesh_idx, bone_root
+    world_node = {"name": "world", "children": [len(nodes) + 1]}
+    # Find root bone index
+    root_bi = parents.index(None)
+    armature_node["children"] = [len(nodes), root_bi]
+    nodes.append(mesh_node)
+    nodes.append(armature_node)
+    nodes.append(world_node)
+
+    glb_json = {
+        "asset": {"version": "2.0", "generator": "test"},
+        "scene": len(nodes) - 1,
+        "scenes": [{"nodes": [len(nodes) - 1]}],
+        "nodes": nodes,
+        "meshes": [{"primitives": []}],
+        "skins": [{"joints": list(range(n))}],
+    }
+    json_bytes = json.dumps(glb_json, separators=(",", ":")).encode("utf-8")
+    pad = (4 - len(json_bytes) % 4) % 4
+    json_bytes += b" " * pad
+    # Minimal BIN chunk
+    bin_data = b"\x00" * 4
+    total = 12 + 8 + len(json_bytes) + 8 + len(bin_data)
+    glb_path = tmp_path / "test.glb"
+    with open(glb_path, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, total))
+        f.write(struct.pack("<II", len(json_bytes), 0x4E4F534A))
+        f.write(json_bytes)
+        f.write(struct.pack("<II", len(bin_data), 0x004E4942))
+        f.write(bin_data)
+    return glb_path
+
+
+def _read_glb_node_names(glb_path: Path) -> list[str]:
+    """Read node names from GLB."""
+    with open(glb_path, "rb") as f:
+        f.read(12)
+        c_len, _ = struct.unpack("<II", f.read(8))
+        data = json.loads(f.read(c_len))
+    return [n.get("name", "") for n in data.get("nodes", [])]
+
+
+class TestRenameGenericBones:
+    """Tests for ``_rename_generic_bones`` tree-based classification."""
+
+    def test_humanoid_28_bones(self, tmp_path: Path) -> None:
+        from rigging3d.cli import _rename_generic_bones
+
+        glb = _build_glb_with_bones(tmp_path, _HUMANOID_PARENTS)
+        root = tmp_path  # root unused by new implementation
+        count = _rename_generic_bones(glb, root)
+        names = _read_glb_node_names(glb)
+
+        # 22 body bones should be renamed (28 total - 6 generic hand bones)
+        assert count == 22
+
+        # Verify key bone names
+        bone_names = {n for n in names if n.startswith("bone_") or n[0].isupper()}
+        expected = {
+            "Hips", "Spine", "Chest", "UpperChest",
+            "Neck", "Head",
+            "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand",
+            "RightShoulder", "RightArm", "RightForeArm", "RightHand",
+            "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase",
+            "RightUpLeg", "RightLeg", "RightFoot", "RightToeBase",
+        }
+        assert expected <= bone_names
+
+        # Generic hand bones should remain
+        generic = {n for n in names if n.startswith("bone_")}
+        assert len(generic) == 6  # bone_10..12, bone_17..19
+
+    def test_no_bones_no_change(self, tmp_path: Path) -> None:
+        from rigging3d.cli import _rename_generic_bones
+
+        # GLB with no bone_ nodes
+        nodes = [{"name": "mesh"}, {"name": "root", "children": [0]}]
+        glb_json = {
+            "asset": {"version": "2.0"},
+            "scene": 1,
+            "scenes": [{"nodes": [1]}],
+            "nodes": nodes,
+        }
+        json_bytes = json.dumps(glb_json, separators=(",", ":")).encode("utf-8")
+        pad = (4 - len(json_bytes) % 4) % 4
+        json_bytes += b" " * pad
+        bin_data = b"\x00" * 4
+        total = 12 + 8 + len(json_bytes) + 8 + len(bin_data)
+        glb = tmp_path / "empty.glb"
+        with open(glb, "wb") as f:
+            f.write(struct.pack("<III", 0x46546C67, 2, total))
+            f.write(struct.pack("<II", len(json_bytes), 0x4E4F534A))
+            f.write(json_bytes)
+            f.write(struct.pack("<II", len(bin_data), 0x004E4942))
+            f.write(bin_data)
+
+        assert _rename_generic_bones(glb, tmp_path) == 0
+
+    def test_already_named_no_change(self, tmp_path: Path) -> None:
+        """Bones with non-generic names should not be touched."""
+        from rigging3d.cli import _rename_generic_bones
+
+        # Same topology but bones already have semantic names
+        parents = [None, 0, 1, 2, 3, 4, 3, 6, 7, 8, 9, 10, 11, 3, 13, 14, 15, 16, 17, 18, 0, 20, 21, 22, 0, 24, 25, 26]
+        glb = _build_glb_with_bones(tmp_path, parents, prefix="J_Bip_")
+        assert _rename_generic_bones(glb, tmp_path) == 0
