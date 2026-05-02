@@ -157,6 +157,64 @@ def _apply_translation(objects: list, offset: np.ndarray) -> None:
         obj.data.update()
 
 
+def _apply_rotation_x(objects: list, angle_rad: float) -> None:
+    """Roda objectos em torno do eixo X (in-place, sobre os vértices).
+
+    Usado para reaplicar a convenção Y-up quando o pipeline de pintura
+    devolve a mesh em Z-up (Hunyuan default). Operamos sobre os vértices
+    (não na transform do objecto) para que o GLB exportado já chegue na
+    orientação certa, sem depender de matrizes de nó.
+    """
+    if abs(angle_rad) < 1e-9:
+        return
+    c = float(np.cos(angle_rad))
+    s = float(np.sin(angle_rad))
+    for obj in objects:
+        for v in obj.data.vertices:
+            y = float(v.co[1])
+            z = float(v.co[2])
+            v.co[1] = c * y - s * z
+            v.co[2] = s * y + c * z
+        obj.data.update()
+
+
+def _bounds_axis_swap_x_rad(
+    before_min: np.ndarray,
+    before_max: np.ndarray,
+    after_min: np.ndarray,
+    after_max: np.ndarray,
+    *,
+    tol: float = 0.05,
+) -> float:
+    """Detecta swap Y↔Z entre input e output, comparando AABBs.
+
+    Devolve o ângulo (em radianos) a aplicar em torno de X para repor a
+    convenção do input. ``+π/2`` se o output está em Z-up vs input Y-up,
+    ``-π/2`` no caso contrário, ``0.0`` se as dimensões coincidem.
+
+    Heurística: para um asset de personagem, a dimensão "altura" é a
+    maior das três (ou pelo menos não a menor). Se a altura está em Y no
+    input mas em Z no output (ou vice-versa), houve rotação.
+    """
+    extent_before = np.asarray(before_max) - np.asarray(before_min)
+    extent_after = np.asarray(after_max) - np.asarray(after_min)
+    if (
+        np.any(extent_before <= tol) or np.any(extent_after <= tol)
+    ):
+        return 0.0
+    # Razão entre eixos Y/Z em ambos os AABBs. Se inverteu, houve swap.
+    yz_before = extent_before[1] / extent_before[2]
+    yz_after = extent_after[1] / extent_after[2]
+    # Toleramos ±10% (mesh de saída pode ter pequenas variações por remesh).
+    if yz_before > 1.0 and yz_after < 1.0 and abs(yz_before - 1.0 / yz_after) < max(yz_before, 1.0 / yz_after) * 0.30:
+        # Input era Y-tall, output é Z-tall → mesh rodou -90° X (Y foi para Z).
+        # Para repor, rodamos +90° em X.
+        return float(np.pi / 2.0)
+    if yz_before < 1.0 and yz_after > 1.0 and abs(1.0 / yz_before - yz_after) < max(1.0 / yz_before, yz_after) * 0.30:
+        return float(-np.pi / 2.0)
+    return 0.0
+
+
 def apply_hunyuan_paint(
     mesh: Any,
     image: str | Path | Image.Image,
@@ -345,6 +403,26 @@ def apply_hunyuan_paint(
 
     if preserve_origin:
         bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
+
+        # 1) Detectar swap Y↔Z (Hunyuan paint exporta em Z-up; nós queremos
+        # Y-up — convenção aplicada no shape pelo text3d generate).
+        angle_x = _bounds_axis_swap_x_rad(
+            bounds_min_before, bounds_max_before,
+            bounds_min_after, bounds_max_after,
+        )
+        if abs(angle_x) > 1e-9:
+            _apply_rotation_x(textured, angle_x)
+            if verbose:
+                _logger.info(
+                    f"orientação reposta: rot_x={angle_x:.4f} rad "
+                    f"(extent_before_yz={(bounds_max_before-bounds_min_before)[1:].tolist()}, "
+                    f"extent_after_yz={(bounds_max_after-bounds_min_after)[1:].tolist()})"
+                )
+            # Recalcula bounds após rotação para que o offset translacional
+            # use os números corretos.
+            bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
+
+        # 2) Realinhar centroide ao input.
         centroid_before = (bounds_min_before + bounds_max_before) * 0.5
         centroid_after = (bounds_min_after + bounds_max_after) * 0.5
         offset = centroid_before - centroid_after
@@ -631,6 +709,15 @@ class PaintBatchProcessor:
 
         if self._preserve_origin:
             bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
+            # 1) Repor convenção Y-up se Hunyuan paint devolveu Z-up.
+            angle_x = _bounds_axis_swap_x_rad(
+                bounds_min_before, bounds_max_before,
+                bounds_min_after, bounds_max_after,
+            )
+            if abs(angle_x) > 1e-9:
+                _apply_rotation_x(textured, angle_x)
+                bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
+            # 2) Realinhar centroide.
             centroid_before = (bounds_min_before + bounds_max_before) * 0.5
             centroid_after = (bounds_min_after + bounds_max_after) * 0.5
             offset = centroid_before - centroid_after

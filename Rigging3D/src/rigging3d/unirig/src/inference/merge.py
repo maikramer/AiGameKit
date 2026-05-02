@@ -189,10 +189,23 @@ def axis(a: np.ndarray):
     b = np.concatenate([-a[:, 0:1], -a[:, 1:2], a[:, 2:3]], axis=1)
     return b
 
-def get_correct_orientation_kdtree(a: np.ndarray, b: np.ndarray, bones: np.ndarray, num: int=16384) -> np.ndarray:
+def get_correct_orientation_kdtree(
+    a: np.ndarray,
+    b: np.ndarray,
+    bones: np.ndarray,
+    num: int = 16384,
+    *,
+    fix_up_axis: int | None = None,
+) -> np.ndarray:
     '''
     a: sampled_vertiecs
     b: mesh_vertices
+    bones: (J, 6) array (head + tail)
+    fix_up_axis: when set (0=X, 1=Y, 2=Z), restricts the search to
+        permutations that keep this axis mapped to itself with sign +1.
+        Use it when you trust the input mesh's up-axis (e.g. our pipeline
+        guarantees Y-up after paint), eliminating random kdtree-based axis
+        ambiguity that produced upside-down rigs in symmetric humanoids.
     '''
     min_loss = float('inf')
     best_transformed = a.copy()
@@ -200,9 +213,16 @@ def get_correct_orientation_kdtree(a: np.ndarray, b: np.ndarray, bones: np.ndarr
     sign_combinations = [(x, y, z) for x in [1, -1] 
                         for y in [1, -1] 
                         for z in [1, -1]]
+    if fix_up_axis is not None:
+        # Apenas permutações onde o eixo "up" se mapeia a si mesmo, e
+        # restrigimos sign(up) a +1 — evita inversão cabeça/pés.
+        axis_permutations = [p for p in axis_permutations if p[fix_up_axis] == fix_up_axis]
+        sign_combinations = [s for s in sign_combinations if s[fix_up_axis] == 1]
     _bones = bones.copy()
+    # Use a deterministic sample for stability across runs.
+    rng = np.random.default_rng(seed=12345)
     for perm in axis_permutations:
-        permuted_a = a[np.random.permutation(a.shape[0])[:num]][:, perm]
+        permuted_a = a[rng.permutation(a.shape[0])[:num]][:, perm]
         for signs in sign_combinations:
             transformed = permuted_a * np.array(signs)
             tree = cKDTree(transformed)
@@ -246,6 +266,7 @@ def make_armature(
     add_root: bool=False,
     smooth_iterations: int=2,
     is_vrm: bool=False,
+    fix_up_axis: int | None = None,
 ):
     context = bpy.context
     
@@ -298,7 +319,9 @@ def make_armature(
         bone.parent = parent_bone
         bone.use_connect = False # always False currently
 
-    vertices, bones = get_correct_orientation_kdtree(vertices, mesh_vertices, bones)
+    vertices, bones = get_correct_orientation_kdtree(
+        vertices, mesh_vertices, bones, fix_up_axis=fix_up_axis,
+    )
     inv = np.linalg.inv(local_coord)
     bones[:, :3] = (inv[:3, :3] @ bones[:, :3].T + inv[:3, 3:4]).T
     bones[:, 3:] = (inv[:3, :3] @ bones[:, 3:].T + inv[:3, 3:4]).T
@@ -419,6 +442,7 @@ def merge(
     is_vrm: bool=False,
     group_per_vertex: int | None=None,
     smooth_iterations: int | None=None,
+    fix_up_axis: int | None=None,
 ):
     '''
     Merge skin and bone into original file.
@@ -427,6 +451,19 @@ def merge(
         group_per_vertex = int(os.environ.get("RIGGING3D_GROUPS_PER_VERTEX", "8"))
     if smooth_iterations is None:
         smooth_iterations = int(os.environ.get("RIGGING3D_SMOOTH_ITERATIONS", "3"))
+    if fix_up_axis is None:
+        env_axis = os.environ.get("RIGGING3D_FIX_UP_AXIS", "").strip().lower()
+        # Por defeito assumimos Y-up (convenção do nosso pipeline). Para
+        # desactivar, exporta ``RIGGING3D_FIX_UP_AXIS=auto`` (volta ao
+        # heurístico KDTree completo de UniRig).
+        if env_axis in ("", "y", "1"):
+            fix_up_axis = 1
+        elif env_axis in ("x", "0"):
+            fix_up_axis = 0
+        elif env_axis in ("z", "2"):
+            fix_up_axis = 2
+        elif env_axis in ("auto", "none", "off"):
+            fix_up_axis = None
 
     clean_bpy()
     try:
@@ -448,6 +485,7 @@ def merge(
         add_root=add_root,
         is_vrm=is_vrm,
         smooth_iterations=smooth_iterations,
+        fix_up_axis=fix_up_axis,
     )
     
     dirpath = os.path.dirname(output_path)
