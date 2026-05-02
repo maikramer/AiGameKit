@@ -418,7 +418,12 @@ def run_master_pipeline(
 
     # Stage 6 — collision a partir do LOD0
     if with_collision:
-        coll_p = mesh_final.with_name(f"{mesh_final.stem}_collision{mesh_final.suffix}")
+        # Usa o stem-base (strip _shape/_painted/_lod0) para evitar nomes
+        # como ``goblin_painted_collision.glb`` quando mesh_final aponta
+        # para ``goblin_painted.glb``.
+        from .paths import _base_stem as _bs
+
+        coll_p = mesh_final.with_name(f"{_bs(mesh_final.stem)}_collision{mesh_final.suffix}")
         coll_argv = [
             text3d_bin,
             "collision",
