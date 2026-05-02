@@ -60,11 +60,40 @@ def check_group() -> None:
     help="Escrever relatório JSON (stdout se omitido com --quiet).",
 )
 @click.option("--quiet", "-q", is_flag=True, help="Só código de saída; erros em stderr.")
-def check_glb_cmd(glb_path: Path, rules_file: Path, json_out: Path | None, quiet: bool) -> None:
-    """Valida um GLB contra regras (via native bpy inspect)."""
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Categoria do asset (humanoid, weapon, ...). Usada por face_count.max_per_category.",
+)
+@click.option(
+    "--no-bpy-inspect",
+    "no_bpy_inspect",
+    is_flag=True,
+    help="Salta inspect via bpy; usa só metadados via parser binário (mais rápido).",
+)
+def check_glb_cmd(
+    glb_path: Path,
+    rules_file: Path,
+    json_out: Path | None,
+    quiet: bool,
+    category: str | None,
+    no_bpy_inspect: bool,
+) -> None:
+    """Valida um GLB contra regras (via native bpy inspect + parser binário)."""
+    from gamedev_lab.glb_meta import glb_extract_meta
+
     rules = load_rules_file(rules_file)
-    inspect_data = inspect_glb(glb_path)
-    ok, failures, details = evaluate_inspect_rules(inspect_data, rules)
+    if no_bpy_inspect:
+        inspect_data = {}
+    else:
+        try:
+            inspect_data = inspect_glb(glb_path)
+        except Exception as exc:  # bpy ausente ou erro
+            console_err.print(f"[yellow]bpy inspect falhou ({exc}); a usar só glb_meta[/yellow]")
+            inspect_data = {}
+    inspect_data["glb_meta"] = glb_extract_meta(glb_path)
+    ok, failures, details = evaluate_inspect_rules(inspect_data, rules, category=category)
     report: dict[str, Any] = {
         "ok": ok,
         "glb": str(glb_path.resolve()),

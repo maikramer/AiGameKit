@@ -37,21 +37,35 @@ def _check_min_max(
         failures.append(f"{path}: {v} > max ({spec['max']})")
 
 
-def evaluate_inspect_rules(inspect: dict[str, Any], rules: dict[str, Any]) -> tuple[bool, list[str], dict[str, Any]]:
+def evaluate_inspect_rules(
+    inspect: dict[str, Any],
+    rules: dict[str, Any],
+    *,
+    category: str | None = None,
+) -> tuple[bool, list[str], dict[str, Any]]:
     """
     Avalia regras contra o dict de inspect.
 
     Regras suportadas (todas opcionais):
       mesh_totals.vertex_count: { min, max }
       mesh_totals.face_count: { min, max }
-      world_bounds.max_extent: { min, max }  (ou size[*] individual)
+      mesh_totals.v_per_tri: { max }   — pega ``glb_meta.v_per_tri``
+      world_bounds.max_extent: { min, max }
       world_bounds.size: [ { min, max }, ... ] por eixo
       armatures: lista por índice; cada item pode ter bone_count: { min, max }
       bones_contain: lista de nomes que devem existir em algum armature
-      actions_min: número mínimo de actions (animações)
+      actions_min: número mínimo de actions
+      meshes_min: número mínimo de meshes
+      attributes_required: [POSITION, NORMAL, TEXCOORD_0, TANGENT]
+      texture_format: ktx2 | png | jpeg | any  (nas imagens)
+      compression: meshopt | draco | none      (extensionsUsed)
+      origin.y_min: { near: 0.0, tol: 0.01 }
+      face_count.max_per_category: { humanoid: 38400, weapon: 7200, ... }
+        — usa ``category`` (kwarg) para selecionar o limite efetivo.
     """
     failures: list[str] = []
     details: dict[str, Any] = {"rules_applied": []}
+    glb_meta = inspect.get("glb_meta") or {}
 
     mt = rules.get("mesh_totals") or {}
     if isinstance(mt, dict):
@@ -63,6 +77,10 @@ def evaluate_inspect_rules(inspect: dict[str, Any], rules: dict[str, Any]) -> tu
         if "face_count" in mt:
             _check_min_max(fc, mt["face_count"], "mesh_totals.face_count", failures)
             details["rules_applied"].append("mesh_totals.face_count")
+        if "v_per_tri" in mt:
+            vpt = glb_meta.get("v_per_tri")
+            _check_min_max(vpt, mt["v_per_tri"], "mesh_totals.v_per_tri", failures)
+            details["rules_applied"].append("mesh_totals.v_per_tri")
 
     wb = rules.get("world_bounds") or {}
     if isinstance(wb, dict):
@@ -124,6 +142,76 @@ def evaluate_inspect_rules(inspect: dict[str, Any], rules: dict[str, Any]) -> tu
         if n < int(meshes_min):
             failures.append(f"meshes: {n} < meshes_min ({meshes_min})")
         details["rules_applied"].append("meshes_min")
+
+    attrs_req = rules.get("attributes_required")
+    if isinstance(attrs_req, list) and attrs_req:
+        present = set(glb_meta.get("attributes_present") or [])
+        missing = [a for a in attrs_req if a not in present]
+        if missing:
+            failures.append(f"attributes_required: faltam {missing}")
+        details["rules_applied"].append("attributes_required")
+
+    texture_format = rules.get("texture_format")
+    if texture_format and texture_format != "any":
+        wanted = str(texture_format).lower()
+        mimes = glb_meta.get("texture_mime_types") or []
+        if not mimes:
+            details["rules_applied"].append("texture_format(no_textures)")
+        else:
+            wanted_full = {
+                "ktx2": "image/ktx2",
+                "png": "image/png",
+                "jpeg": "image/jpeg",
+                "jpg": "image/jpeg",
+                "webp": "image/webp",
+            }.get(wanted, wanted)
+            non_match = [m for m in mimes if m != wanted_full]
+            if non_match:
+                failures.append(f"texture_format: esperado {wanted_full}, encontrado {non_match}")
+            details["rules_applied"].append("texture_format")
+
+    compression = rules.get("compression")
+    if compression and compression != "any":
+        wanted = str(compression).lower()
+        ext_used = glb_meta.get("extensions_used") or []
+        if wanted == "meshopt":
+            if "EXT_meshopt_compression" not in ext_used:
+                failures.append("compression: EXT_meshopt_compression ausente")
+            details["rules_applied"].append("compression(meshopt)")
+        elif wanted == "draco":
+            if "KHR_draco_mesh_compression" not in ext_used:
+                failures.append("compression: KHR_draco_mesh_compression ausente")
+            details["rules_applied"].append("compression(draco)")
+        elif wanted == "none":
+            for unwanted in ("EXT_meshopt_compression", "KHR_draco_mesh_compression"):
+                if unwanted in ext_used:
+                    failures.append(f"compression: {unwanted} presente (esperado none)")
+            details["rules_applied"].append("compression(none)")
+
+    origin_rule = rules.get("origin")
+    if isinstance(origin_rule, dict) and "y_min" in origin_rule:
+        spec = origin_rule["y_min"] or {}
+        near = float(spec.get("near", 0.0))
+        tol = float(spec.get("tol", 0.01))
+        # Preferir glb_meta.world_bounds_y_min; fallback ao inspect existente
+        y = glb_meta.get("world_bounds_y_min")
+        if y is None:
+            y = (inspect.get("world_bounds") or {}).get("min", [None, None, None])[1]
+        if y is None:
+            failures.append("origin.y_min: valor não disponível no inspect")
+        elif abs(float(y) - near) > tol:
+            failures.append(f"origin.y_min: {y} fora de {near}±{tol}")
+        details["rules_applied"].append("origin.y_min")
+
+    fc_rule = rules.get("face_count")
+    if isinstance(fc_rule, dict):
+        per_cat = fc_rule.get("max_per_category")
+        if isinstance(per_cat, dict) and category and category in per_cat:
+            limit = int(per_cat[category])
+            fc = inspect.get("mesh_totals", {}).get("face_count")
+            if fc is not None and int(fc) > limit:
+                failures.append(f"face_count.max_per_category[{category}]: {fc} > {limit}")
+            details["rules_applied"].append(f"face_count.max_per_category[{category}]")
 
     ok = len(failures) == 0
     details["failures"] = failures
