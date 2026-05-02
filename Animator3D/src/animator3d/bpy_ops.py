@@ -19,6 +19,31 @@ def clear_scene() -> None:
     bpy.ops.wm.read_factory_settings(use_empty=True)
 
 
+def _decompress_meshopt_glb(src: Path) -> Path:
+    """Se ``src`` é GLB com EXT_meshopt_compression (que bpy não importa),
+    descompressa via ``gltf-transform copy`` para um tmpfile e devolve o path
+    novo. Caso contrário, devolve ``src``.
+    """
+    import shutil as _sh
+    import subprocess as _sp
+    import tempfile as _tf
+
+    if _sh.which("npx") is None:
+        return src
+    with _tf.NamedTemporaryFile(suffix=".glb", delete=False) as _tmp:
+        out = Path(_tmp.name)
+    try:
+        r = _sp.run(
+            ["npx", "--yes", "@gltf-transform/cli", "copy", str(src), str(out)],
+            capture_output=True, text=True, timeout=300, check=False,
+        )
+    except (FileNotFoundError, _sp.TimeoutExpired):
+        return src
+    if r.returncode != 0 or not out.is_file():
+        return src
+    return out
+
+
 def import_asset(path: Path) -> list[str]:
     """Importa GLB/GLTF ou FBX. Devolve nomes de objectos de topo criados."""
     bpy = _bpy()
@@ -30,6 +55,9 @@ def import_asset(path: Path) -> list[str]:
     before = {o.name for o in bpy.context.scene.objects}
 
     if suffix in {".glb", ".gltf"}:
+        # bpy GLTF importer não suporta EXT_meshopt_compression; descompressa
+        # silenciosamente quando preciso (no-op se já descompresso).
+        path = _decompress_meshopt_glb(path)
         bpy.ops.import_scene.gltf(filepath=str(path))
     elif suffix == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(path))
@@ -2350,10 +2378,10 @@ def project_texture_to_parts(
     bpy = _bpy()
     clear_scene()
 
-    bpy.ops.import_scene.gltf(filepath=str(original_glb.resolve()))
+    bpy.ops.import_scene.gltf(filepath=str(_decompress_meshopt_glb(original_glb.resolve())))
     source_objs = [o for o in bpy.context.selected_objects if o.type == "MESH"]
 
-    bpy.ops.import_scene.gltf(filepath=str(parts_glb.resolve()))
+    bpy.ops.import_scene.gltf(filepath=str(_decompress_meshopt_glb(parts_glb.resolve())))
     all_objs = list(bpy.context.selected_objects)
     part_objs = [o for o in all_objs if o not in source_objs and o.type == "MESH"]
 

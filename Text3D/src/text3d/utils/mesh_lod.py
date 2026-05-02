@@ -458,10 +458,11 @@ def generate_lod_textured_glb_triplet(
     lod0_path = output_dir / f"{basename}_lod0.glb"
     if lod0_target < n:
         remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex_base)
-    else:
+    elif Path(painted).resolve() != lod0_path.resolve():
         import shutil
 
         shutil.copy2(painted, lod0_path)
+    # else: painted já é o lod0_path — nada a copiar.
     out_paths.append(lod0_path)
 
     for level, target, tex_size in (

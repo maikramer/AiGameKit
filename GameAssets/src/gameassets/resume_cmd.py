@@ -212,9 +212,10 @@ def resume_cmd(
         row_wants_rig = _row_wants_rig(row, has_rigging_profile)
         row_wants_animate = _row_wants_animate(row, want_rig, has_rigging_profile)
 
+        master_state: str | None = None
         if getattr(profile, "master_pipeline", False):
             # Round 2: usa classificador do DAG novo.
-            state = _classify_row_state_master(
+            master_state = _classify_row_state_master(
                 img_final=img_final,
                 mesh_final=mesh_final,
                 want_texture=row.generate_paint,
@@ -223,6 +224,28 @@ def resume_cmd(
                 wants_lod=row.generate_lod,
                 wants_collision=row.generate_collision,
             )
+            # Mapeia para os 6 buckets clássicos usados pelo planeador/loop
+            # do resume_cmd. O bucket determina onde a execução vai retomar:
+            # need_paint cobre topology-fix/bake-master/lod_gen (todos
+            # rodam dentro do pipeline_master, que é despachado a partir do
+            # passo paint).
+            _master_to_legacy = {
+                "need_image": _ROW_NEED_IMAGE,
+                "need_shape": _ROW_NEED_SHAPE,
+                "need_topology_fix": _ROW_NEED_PAINT,
+                "need_paint": _ROW_NEED_PAINT,
+                "need_bake_master": _ROW_NEED_PAINT,
+                "need_lod_gen": _ROW_NEED_PAINT,
+                "need_collision": _ROW_NEED_PAINT,
+                "need_rig_hi": _ROW_NEED_RIG,
+                "need_rig": _ROW_NEED_RIG,
+                "need_transfer": _ROW_NEED_RIG,
+                "need_animate_lod": _ROW_NEED_ANIMATE,
+                "need_animate": _ROW_NEED_ANIMATE,
+                "need_validate": _ROW_DONE,
+                _ROW_DONE: _ROW_DONE,
+            }
+            state = _master_to_legacy.get(master_state, _ROW_NEED_PAINT)
         else:
             state = _classify_row_state(
                 img_final=img_final,
@@ -243,6 +266,7 @@ def resume_cmd(
                 "idx": idx,
                 "row": row,
                 "state": state,
+                "master_state": master_state,
                 "img_final": img_final,
                 "mesh_final": mesh_final,
                 "row_work": row_work,
@@ -254,7 +278,7 @@ def resume_cmd(
         )
 
     # --- Relatório ---
-    counts = {
+    counts: dict[str, int] = {
         _ROW_NEED_IMAGE: 0,
         _ROW_NEED_SHAPE: 0,
         _ROW_NEED_PAINT: 0,
@@ -263,7 +287,7 @@ def resume_cmd(
         _ROW_DONE: 0,
     }
     for it in items:
-        counts[it["state"]] += 1
+        counts[it["state"]] = counts.get(it["state"], 0) + 1
 
     plan_table = Table(title="[bold]Plano de execução[/bold]", box=box.ROUNDED, show_header=True)
     plan_table.add_column("Fase", style="bold")

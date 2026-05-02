@@ -13,10 +13,56 @@ caminho explícito via ``targets_out``.
 from __future__ import annotations
 
 import logging
+import shutil
+import subprocess
+import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 log = logging.getLogger(__name__)
+
+
+def _decompress_glb(src: Path, dst: Path) -> bool:
+    """Descompressa GLB via ``gltf-transform copy`` (remove EXT_meshopt_compression)."""
+    if shutil.which("npx") is None:
+        return False
+    try:
+        r = subprocess.run(
+            ["npx", "--yes", "@gltf-transform/cli", "copy", str(src), str(dst)],
+            capture_output=True, text=True, timeout=300, check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        log.warning("transfer-weights decompress falhou: %s", exc)
+        return False
+    if r.returncode != 0:
+        log.warning("transfer-weights decompress retornou %d: %s", r.returncode, r.stderr[-300:])
+        return False
+    return dst.is_file()
+
+
+@contextmanager
+def _bpy_readable_glb(path: Path):
+    """Yields a path to ``path`` that bpy's GLTF importer can read.
+
+    If ``path`` uses ``EXT_meshopt_compression`` (output de
+    ``gltf_transform_finish``), bpy falha o import. Descompressamos para
+    um tmpfile via gltf-transform copy. Para GLBs não-comprimidos, o
+    copy é idempotente (apenas reserializa).
+    """
+    src = Path(path).resolve()
+    with tempfile.NamedTemporaryFile(suffix=".glb", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
+    try:
+        if _decompress_glb(src, tmp_path):
+            yield tmp_path
+        else:
+            yield src
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 @dataclass
@@ -51,14 +97,14 @@ def _transfer_one(
     from gamedev_shared.bpy_mesh import clear_scene
 
     clear_scene()
-    src_mesh, src_arms = _import_glb(source_glb.resolve())
-
+    with _bpy_readable_glb(source_glb) as src_path:
+        src_mesh, src_arms = _import_glb(src_path)
     if not src_arms:
         raise ValueError(f"Source GLB sem armature: {source_glb}")
     src_arm = src_arms[0]
 
-    # importa o target em seguida (mesma cena)
-    bpy.ops.import_scene.gltf(filepath=str(target_glb.resolve()))
+    with _bpy_readable_glb(target_glb) as tgt_path:
+        bpy.ops.import_scene.gltf(filepath=str(tgt_path))
     all_meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     tgt_candidates = [o for o in all_meshes if o is not src_mesh]
     if not tgt_candidates:
@@ -100,14 +146,26 @@ def _transfer_one(
             mix_mode="REPLACE",
         )
 
-    # Parent target ao mesmo armature (Armature modifier)
-    has_armature_mod = any(m.type == "ARMATURE" for m in tgt.modifiers)
-    if not has_armature_mod:
-        amod = tgt.modifiers.new("Armature", "ARMATURE")
-        amod.object = src_arm
-        amod.use_vertex_groups = True
-    tgt.parent = src_arm
-    tgt.matrix_parent_inverse = src_arm.matrix_world.inverted()
+    # Parent target ao armature usando o operator idiomático do Blender.
+    # ``object.parent_set(type='ARMATURE_NAME')`` configura tanto o parenting
+    # como o Armature modifier — necessário para o exportador GLTF do Blender
+    # detectar o mesh como "skinned" e emitir uma `skin` real (sem isso, o
+    # GLTF ainda contém JOINTS_0/WEIGHTS_0 mas não tem ``skin`` no node, e
+    # importadores reconstruem os bones como Empties em vez de Armature).
+    bpy.ops.object.select_all(action="DESELECT")
+    tgt.select_set(True)
+    src_arm.select_set(True)
+    bpy.context.view_layer.objects.active = src_arm
+    try:
+        bpy.ops.object.parent_set(type="ARMATURE_NAME")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("transfer-weights: parent_set ARMATURE_NAME falhou: %s — fallback manual", exc)
+        if not any(m.type == "ARMATURE" for m in tgt.modifiers):
+            amod = tgt.modifiers.new("Armature", "ARMATURE")
+            amod.object = src_arm
+            amod.use_vertex_groups = True
+        tgt.parent = src_arm
+        tgt.matrix_parent_inverse = src_arm.matrix_world.inverted()
 
     # Exportar só (target + armature). Remover source mesh da cena para não
     # ficar duplicado no output.

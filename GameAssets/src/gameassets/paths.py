@@ -210,6 +210,16 @@ def _resolve_intermediate_or_main(canonical: Path, mesh_final: Path) -> Path | N
     return None
 
 
+def _clean_existing(mesh_final: Path) -> Path | None:
+    """Encontra o GLB ``_clean`` em ``meshes/`` ou ``_intermediate/``."""
+    return _resolve_intermediate_or_main(_clean_path(mesh_final), mesh_final)
+
+
+def _rigged_hi_existing(mesh_final: Path) -> Path | None:
+    """Encontra o GLB ``_rigged_hi`` em ``meshes/`` ou ``_intermediate/``."""
+    return _resolve_intermediate_or_main(_rigged_hi_path(mesh_final), mesh_final)
+
+
 def _shape_existing(mesh_final: Path) -> Path | None:
     """Devolve o ``id_shape.glb`` existente em ``meshes/`` ou ``_intermediate/``."""
     return _resolve_intermediate_or_main(_shape_path(mesh_final), mesh_final)
@@ -273,17 +283,17 @@ def _classify_row_state_master(
     """
     shape_any = _shape_existing(mesh_final)
     painted_any = _painted_existing(mesh_final)
-    clean = _clean_path(mesh_final)
+    clean_any = _clean_existing(mesh_final)
     lod0 = _lod_path(mesh_final, 0)
     lod1 = _lod_path(mesh_final, 1)
     lod2 = _lod_path(mesh_final, 2)
-    rigged_hi = _rigged_hi_path(mesh_final)
+    rigged_hi_any = _rigged_hi_existing(mesh_final)
 
     if not _valid_file(img_final) and shape_any is None:
         return _ROW_NEED_IMAGE
     if shape_any is None:
         return _ROW_NEED_SHAPE
-    if not _valid_file(clean):
+    if clean_any is None:
         return _ROW_NEED_TOPOLOGY_FIX
     if want_texture and painted_any is None:
         return _ROW_NEED_PAINT
@@ -291,7 +301,7 @@ def _classify_row_state_master(
         return _ROW_NEED_BAKE_MASTER
     if wants_lod and (not _valid_file(lod1) or not _valid_file(lod2)):
         return _ROW_NEED_LOD_GEN
-    if wants_rig and not _valid_file(rigged_hi):
+    if wants_rig and rigged_hi_any is None:
         return _ROW_NEED_RIG_HI
     if wants_rig:
         # checa transfers

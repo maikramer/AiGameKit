@@ -133,6 +133,42 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     return True
 
 
+def gltf_transform_decompress(
+    glb_in: Path,
+    glb_out: Path,
+) -> bool:
+    """Descompressa um GLB (remove EXT_meshopt_compression) via ``gltf-transform copy``.
+
+    Necessário antes de pipelines que usam bpy (rigging3d transfer-weights,
+    animator3d game-pack), porque o importador GLTF do Blender ainda não
+    suporta esta extensão.
+
+    Devolve True se a descompressão correu, False c.c. (cai para cópia
+    binária quando ``npx`` está ausente).
+    """
+    glb_in = Path(glb_in).resolve()
+    glb_out = Path(glb_out).resolve()
+    glb_out.parent.mkdir(parents=True, exist_ok=True)
+
+    if not glb_in.is_file():
+        return False
+
+    if _has_npx():
+        ok, err = _run_gltf_transform("copy", glb_in, glb_out)
+        if ok:
+            return True
+        log.warning("gltf_finish: descompress falhou — %s", err)
+
+    # Fallback: cópia binária (não decodifica meshopt; só serve quando o
+    # input já está descompresso).
+    try:
+        shutil.copy2(glb_in, glb_out)
+    except OSError as exc:
+        log.warning("gltf_finish: cópia fallback falhou: %s", exc)
+        return False
+    return False
+
+
 def gltf_transform_finish(
     glb_in: Path,
     glb_out: Path,

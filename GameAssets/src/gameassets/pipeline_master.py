@@ -31,7 +31,9 @@ from .categories import (
 from .helpers import effective_face_ratio
 from .manifest import ManifestRow
 from .paths import (
+    _clean_existing,
     _clean_path,
+    _rigged_hi_existing,
     _intermediate_dir,
     _lod_animated_path,
     _lod_path,
@@ -266,24 +268,29 @@ def run_master_pipeline(
     # (após uma run anterior). Resolve dinamicamente para permitir resume.
     shape_p = _shape_existing(mesh_final) or _shape_path(mesh_final)
     painted_p = _painted_existing(mesh_final) or _painted_path(mesh_final)
-    clean_p = _clean_path(mesh_final)
+    clean_existing = _clean_existing(mesh_final)
+    clean_p = clean_existing if clean_existing is not None else _clean_path(mesh_final)
 
     if not shape_p.is_file():
         res.ok = False
         res.stages.append(StageResult("preflight", False, 0.0, f"shape ausente: {shape_p}"))
         return res
 
-    # Stage 2 — topology-fix (shape → clean)
+    # Stage 2 — topology-fix (shape → clean). Skip se já temos um clean
+    # válido (em meshes/ ou _intermediate/) — resume-friendly.
     clean_p.parent.mkdir(parents=True, exist_ok=True)
-    s = _run(
-        "topology-fix",
-        [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)],
-        clean_p,
-    )
-    res.stages.append(s)
-    if not s.ok:
-        res.ok = False
-        return res
+    if clean_existing is not None and clean_existing.is_file():
+        res.stages.append(StageResult("topology-fix", True, 0.0, "skipped (clean existente)", clean_p))
+    else:
+        s = _run(
+            "topology-fix",
+            [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)],
+            clean_p,
+        )
+        res.stages.append(s)
+        if not s.ok:
+            res.ok = False
+            return res
 
     # Stage 4 — bake-master (painted → lod0 com tangents/KTX2/meshopt)
     if not painted_p.is_file():
@@ -309,6 +316,15 @@ def run_master_pipeline(
     ]
     if bake_normals:
         bake_argv.append("--bake-normals")
+    # Quando há rigging/anim downstream, o LOD0 vai ser re-importado por bpy
+    # (rigging3d, animator3d). bpy não suporta EXT_meshopt_compression,
+    # portanto saltamos a compressão em bake-master e re-aplicamos
+    # gltf_transform_finish na promoção (Stage 9.5) sobre o output final.
+    needs_bpy_downstream = (with_rig and rigging3d_bin is not None) or (
+        with_animate and animator3d_bin is not None
+    )
+    if needs_bpy_downstream:
+        bake_argv.extend(["--no-meshopt", "--no-ktx2"])
     s = _run("bake-master", bake_argv, lod0_p)
     res.stages.append(s)
     if not s.ok:
@@ -340,6 +356,10 @@ def run_master_pipeline(
             "--min-faces-lod2",
             str(lod_target_lod2),
         ]
+        # Igual a bake-master: salta finish quando bpy precisa importar
+        # depois (rigging/animação por LOD). Re-comprimimos na promoção.
+        if needs_bpy_downstream:
+            lod_argv.append("--no-finish")
         s = _run("lod", lod_argv)
         res.stages.append(s)
 
@@ -372,17 +392,30 @@ def run_master_pipeline(
             except Exception as exc:  # noqa: BLE001
                 log.warning("master: finish collision falhou: %s", exc)
 
-    # Stage 7 — rigging3d pipeline sobre _clean.glb
-    rigged_hi_p = _rigged_hi_path(mesh_final)
+    # Stage 7 — rigging3d pipeline sobre _clean.glb. Skip se já temos um
+    # rigged_hi válido (em meshes/ ou _intermediate/) — resume-friendly.
+    rigged_hi_existing = _rigged_hi_existing(mesh_final)
+    rigged_hi_p = rigged_hi_existing if rigged_hi_existing is not None else _rigged_hi_path(mesh_final)
     if with_rig and rigging3d_bin:
-        rig_argv = [rigging3d_bin, "pipeline", "--input", str(clean_p), "--output", str(rigged_hi_p)]
-        s = _run("rigging3d-hi", rig_argv, rigged_hi_p)
-        res.stages.append(s)
-        if not s.ok:
-            with_rig = False  # bloqueia stages dependentes mas não aborta o asset
+        if rigged_hi_existing is not None and rigged_hi_existing.is_file():
+            res.stages.append(StageResult("rigging3d-hi", True, 0.0, "skipped (rigged_hi existente)", rigged_hi_p))
+        else:
+            rig_argv = [rigging3d_bin, "pipeline", "--input", str(clean_p), "--output", str(rigged_hi_p)]
+            s = _run("rigging3d-hi", rig_argv, rigged_hi_p)
+            res.stages.append(s)
+            if not s.ok:
+                with_rig = False  # bloqueia stages dependentes mas não aborta o asset
 
-    # Stage 8 — transfer-weights para LOD0/1/2 (CLI já aplica gltf_transform_finish
-    # em cada output rigged: KTX2+meshopt+tangents+dedup+prune — Round 2 Fase 1.4).
+    # Stage 8 — Rigging por LOD via ``rigging3d merge``.
+    #
+    # Estratégia: re-usa o skeleton+skin do ``_rigged_hi.glb`` e fá-lo
+    # "merge" com cada LOD low-poly, produzindo um GLB com Armature real
+    # (re-importável por bpy → animator3d funciona). Não corre o modelo
+    # de inferência de novo (sem GPU), apenas faz re-skinning analítico.
+    #
+    # ``rigging3d transfer-weights`` (bpy.data_transfer) é alternativa mas
+    # o exportador GLTF do Blender não detecta o output como skinned —
+    # mantido apenas como ferramenta experimental.
     rigged_lods: list[Path] = []
     if with_rig and rigging3d_bin and rigged_hi_p.is_file():
         targets: list[Path] = [lod0_p]
@@ -390,14 +423,30 @@ def run_master_pipeline(
             targets.append(lod1_p)
         if lod2_p.is_file():
             targets.append(lod2_p)
-        outs = [_lod_rigged_path(mesh_final, i) for i in range(len(targets))]
-        tw_argv = [rigging3d_bin, "transfer-weights", "--source", str(rigged_hi_p)]
-        for t, o in zip(targets, outs, strict=False):
-            tw_argv.extend(["--target", str(t), "--output", str(o)])
-        s = _run("transfer-weights", tw_argv)
-        res.stages.append(s)
-        if s.ok:
-            rigged_lods = [o for o in outs if o.is_file()]
+        for i, tgt in enumerate(targets):
+            out = _lod_rigged_path(mesh_final, i)
+            merge_argv = [
+                rigging3d_bin,
+                "merge",
+                "--source",
+                str(rigged_hi_p),
+                "--target",
+                str(tgt),
+                "--output",
+                str(out),
+            ]
+            s = _run(f"rigging3d-merge-lod{i}", merge_argv, out)
+            res.stages.append(s)
+            if s.ok and out.is_file():
+                # Aplica gltf_transform_finish para alinhar com regras
+                # rigged.yaml (KTX2+meshopt+tangents+dedup+prune).
+                try:
+                    from text3d.utils.gltf_finish import gltf_transform_finish
+
+                    gltf_transform_finish(out, out)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("master: finish rigged-lod%d falhou: %s", i, exc)
+                rigged_lods.append(out)
 
     # Stage 9 — animate cada LOD rigged. Round 2: preset por categoria.
     animated_lods: list[Path] = []
@@ -475,6 +524,17 @@ def run_master_pipeline(
                 promoted_levels.add(level)
             except OSError as exc:
                 log.warning("master: promoção %s→%s falhou: %s", w, target, exc)
+                continue
+            # Garante que o output final está totalmente optimizado
+            # (KTX2+meshopt+tangents+dedup+prune). Bake-master e
+            # rigging/animação correm com finish minimal quando há bpy
+            # downstream — aplicamos a finalização pesada aqui no fim.
+            try:
+                from text3d.utils.gltf_finish import gltf_transform_finish
+
+                gltf_transform_finish(target, target)
+            except Exception as exc:  # noqa: BLE001
+                log.warning("master: finish promoted lod%d falhou: %s", level, exc)
 
         # Se animated promovido, mover _rigged.glb para _intermediate/.
         if promotion_kind == "animated":
