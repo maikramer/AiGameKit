@@ -530,11 +530,11 @@ class TestRenameGenericBones:
         count = _rename_generic_bones(glb, root)
         names = _read_glb_node_names(glb)
 
-        # 22 body bones should be renamed (28 total - 6 generic hand bones)
-        assert count == 22
+        # All 28 bones should be renamed (body + finger chains)
+        assert count == 28
 
         # Verify key bone names
-        bone_names = {n for n in names if n.startswith("bone_") or n[0].isupper()}
+        bone_names = {n for n in names if not n.startswith("_")}
         expected = {
             "Hips", "Spine", "Chest", "UpperChest",
             "Neck", "Head",
@@ -542,12 +542,15 @@ class TestRenameGenericBones:
             "RightShoulder", "RightArm", "RightForeArm", "RightHand",
             "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase",
             "RightUpLeg", "RightLeg", "RightFoot", "RightToeBase",
+            # Finger bones (3 per hand, beyond the 4-arm template)
+            "LeftHandFinger1", "LeftHandFinger2", "LeftHandFinger3",
+            "RightHandFinger1", "RightHandFinger2", "RightHandFinger3",
         }
         assert expected <= bone_names
 
-        # Generic hand bones should remain
+        # No generic bone_* names should remain
         generic = {n for n in names if n.startswith("bone_")}
-        assert len(generic) == 6  # bone_10..12, bone_17..19
+        assert len(generic) == 0
 
     def test_no_bones_no_change(self, tmp_path: Path) -> None:
         from rigging3d.cli import _rename_generic_bones

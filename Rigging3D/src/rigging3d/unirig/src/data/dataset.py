@@ -119,9 +119,9 @@ class UniRigDatasetModule(pl.LightningDataModule):
                 cls: DatasetConfig(
                     shuffle=False,
                     batch_size=1,
-                    num_workers=0,
+                    num_workers=min(os.cpu_count() or 4, 8),
                     datapath_config=deepcopy(datapath),
-                    pin_memory=False,
+                    pin_memory=True,
                     persistent_workers=False,
                 )
             }

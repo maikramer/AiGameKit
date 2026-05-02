@@ -276,7 +276,9 @@ class TokenizerPart(TokenizerSpec):
                 cls = ids[i]
                 i += 1
             elif ids[i] == self.token_id_cls_none:
-                cls = None
+                # Model predicted cls_none — fall back to the first (default) cls
+                # so that order.make_names() can still produce semantic bone names.
+                cls = next(iter(self.cls_token_id.values())) if self.cls_token_id else None
                 i += 1
             else:
                 raise ValueError(f"unexpected token found: {ids[i]}")

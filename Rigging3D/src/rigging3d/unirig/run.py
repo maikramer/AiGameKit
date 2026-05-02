@@ -17,16 +17,17 @@ warnings.filterwarnings("ignore", message="Implicit dimension choice for softmax
 warnings.filterwarnings("ignore", message=".*tensorboardX.*removed.*")
 warnings.filterwarnings("ignore", message=".*litlogger.*")
 warnings.filterwarnings("ignore", message=".*litmodels.*")
-warnings.filterwarnings("ignore", message=".*num_workers.*bottleneck.*")
+warnings.filterwarnings("ignore", message=".*bottleneck.*")
 warnings.filterwarnings("ignore", message=".*callbacks used to create.*")
 warnings.filterwarnings("ignore", message="To copy construct from a tensor.*")
 warnings.filterwarnings("ignore", category=FutureWarning, module="torch")
 # Silenciar tips do lightning (litlogger/litmodels) e warnings de tracing do torch
 os.environ.setdefault("LIGHTNING_LOGGING_LEVEL", "ERROR")
-os.environ.setdefault("TORCH_LOGS", "-fx")
 import logging
 
+logging.getLogger("lightning").setLevel(logging.ERROR)
 logging.getLogger("lightning.pytorch").setLevel(logging.ERROR)
+logging.getLogger("lightning_fabric").setLevel(logging.ERROR)
 
 if platform.system() == "Linux":
     os.environ.setdefault("PYOPENGL_PLATFORM", "egl")

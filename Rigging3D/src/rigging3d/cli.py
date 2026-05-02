@@ -544,10 +544,15 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
             neck_done = True
         else:
             tpl = arm_templates[arm_idx] if arm_idx < len(arm_templates) else None
+            side = "Left" if arm_idx == 0 else "Right"
+            tpl_len = len(tpl) if tpl else 0
             for i, bi in enumerate(chain):
-                if tpl and i < len(tpl):
+                if tpl and i < tpl_len:
                     assignments[bi] = tpl[i]
-                # Extra bones in a long arm chain stay as bone_* (hand/finger bones)
+                else:
+                    # Finger bones beyond the standard arm template
+                    finger_idx = i - tpl_len
+                    assignments[bi] = f"{side}HandFinger{finger_idx + 1}"
             arm_idx += 1
 
     # Legs from root
