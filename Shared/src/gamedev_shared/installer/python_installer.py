@@ -2,8 +2,8 @@
 
 Usa ``uv`` (se disponível) para criação de venvs e instalação de pacotes,
 o que permite resolver automaticamente a versão correcta de Python quando
-``min_python`` exige uma versão diferente da do sistema (ex.: Animator3D 3.13).  Quando ``uv`` não está disponível, usa o fluxo clássico
-``python -m venv`` + ``pip``.
+``min_python`` exige uma versão diferente da do sistema (ex.: Animator3D 3.13).
+Quando ``uv`` não está disponível, usa o fluxo clássico ``python -m venv`` + ``pip``.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .base import BaseInstaller, has_uv, uv_cmd
+from .base import BaseInstaller, has_uv, install_all_constraint_argv, uv_cmd
 
 _PIP_BOOTSTRAP = ("pip", "setuptools>=68,<82", "wheel")
 
@@ -281,6 +281,7 @@ class PythonProjectInstaller(BaseInstaller):
         self.logger.step("Instalando no venv do projecto...")
         python = str(self.venv_python)
         pip_cmd = self._pip_install_cmd()
+        constr = install_all_constraint_argv()
 
         _root = str(self.project_root)
 
@@ -305,7 +306,7 @@ class PythonProjectInstaller(BaseInstaller):
         if (shared_root / "pyproject.toml").is_file():
             self.logger.info(f"Sincronizando gamedev-shared: {shared_root}")
             subprocess.run(
-                [*pip_cmd, "-e", str(shared_root)],
+                [*pip_cmd, *constr, "-e", str(shared_root)],
                 check=True,
                 cwd=_root,
             )
@@ -316,11 +317,18 @@ class PythonProjectInstaller(BaseInstaller):
         # pyproject.toml é a única fonte de verdade para dependências.
         # pip install -e . instala o pacote + todas as deps declaradas lá.
         self.logger.info("Instalando pacote em modo editável (deps do pyproject.toml)...")
-        subprocess.run(
-            [python, "-m", "pip", "install", "-e", str(self.project_root)],
-            check=True,
-            cwd=_root,
-        )
+        if self._use_uv:
+            subprocess.run(
+                [*pip_cmd, *constr, "-e", str(self.project_root)],
+                check=True,
+                cwd=_root,
+            )
+        else:
+            subprocess.run(
+                [python, "-m", "pip", "install", *constr, "-e", str(self.project_root)],
+                check=True,
+                cwd=_root,
+            )
 
         # Após pip: .pth files substituem editable installs locais do monorepo
         # (source changes reflectem imediatamente sem pip reinstall).
@@ -367,6 +375,7 @@ class PythonProjectInstaller(BaseInstaller):
 
     def install_system_wide(self) -> None:
         self.logger.step(f"Instalando {self.project_name} (system-wide / prefix)...")
+        constr = install_all_constraint_argv()
         pip_cmd = [uv_cmd(), "pip", "install"] if self._use_uv else [self.python_cmd, "-m", "pip", "install"]
         _root = str(self.project_root)
 
@@ -383,7 +392,7 @@ class PythonProjectInstaller(BaseInstaller):
         # pyproject.toml é a única fonte de verdade para dependências.
         self.logger.info(f"Instalando pacote {self.cli_name} em modo editável (deps do pyproject.toml)...")
         subprocess.run(
-            [*pip_cmd, "-e", str(self.project_root)],
+            [*pip_cmd, *constr, "-e", str(self.project_root)],
             check=True,
             cwd=_root,
         )

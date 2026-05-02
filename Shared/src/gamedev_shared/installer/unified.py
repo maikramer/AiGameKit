@@ -194,12 +194,33 @@ class _ToolRustInstaller(RustProjectInstaller):
 
 
 def _install_nvdiffrast(venv_python: Path, project_root: Path, logger: Logger) -> bool:
-    """Instala nvdiffrast com --no-build-isolation (requer PyTorch pré-instalado no venv)."""
+    """Instala nvdiffrast com --no-build-isolation (requer PyTorch pré-instalado no venv).
+
+    Sem GPU / sem NVCC compilável o build pode falhar; define por defeito
+    ``TORCH_CUDA_ARCH_LIST`` para evitar ``IndexError`` no PyTorch quando a lista de
+    arquitecturas fica vazia. Sobrepõe com ``TORCH_CUDA_ARCH_LIST`` já definido no ambiente.
+
+    Define ``PAINT3D_SKIP_NVDIFFRAST=1`` para concluir a instalação sem nvdiffrast
+    (funcionalidades que dependem de rasterização diferenciável ficam indisponíveis).
+    """
+    import os
     import subprocess
 
     from .base import has_uv, uv_cmd
 
+    skip = os.environ.get("PAINT3D_SKIP_NVDIFFRAST", "").strip().lower()
+    if skip in ("1", "true", "yes", "on"):
+        logger.warn(
+            "PAINT3D_SKIP_NVDIFFRAST — a saltar nvdiffrast; corre depois "
+            "`pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation` no venv se precisares."
+        )
+        return True
+
     logger.step("Instalando nvdiffrast (--no-build-isolation)...")
+    env = os.environ.copy()
+    if not (env.get("TORCH_CUDA_ARCH_LIST") or "").strip():
+        # Evita falha em torch.utils.cpp_extension._get_cuda_arch_flags (lista vazia → IndexError).
+        env["TORCH_CUDA_ARCH_LIST"] = "7.5;8.0;8.6;8.9;9.0"
     try:
         if has_uv():
             cmd = [
@@ -220,13 +241,16 @@ def _install_nvdiffrast(venv_python: Path, project_root: Path, logger: Logger) -
                 "git+https://github.com/NVlabs/nvdiffrast.git",
                 "--no-build-isolation",
             ]
-        subprocess.run(cmd, check=True, cwd=str(project_root))
+        subprocess.run(cmd, check=True, cwd=str(project_root), env=env)
         logger.success("nvdiffrast instalado")
         return True
     except subprocess.CalledProcessError as e:
         logger.error(f"Falha ao instalar nvdiffrast: {e}")
         logger.info(
-            "Instala manualmente: .venv/bin/pip install "
+            "Possíveis remediações: (1) toolchain CUDA compatível no PATH; "
+            "(2) export TORCH_CUDA_ARCH_LIST=<arquitectura> (ex.: 8.6); "
+            "(3) PAINT3D_SKIP_NVDIFFRAST=1 para instalar sem nvdiffrast; "
+            "(4) manual: .venv/bin/pip install "
             "git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation"
         )
         return False
@@ -301,6 +325,35 @@ def install_tool(
         return False
 
 
+def _install_all_constraints_blurb(monorepo: Path) -> str:
+    """Caminho relativo ao monorepo do ficheiro de constraints, se existir."""
+    path = (monorepo / "Shared" / "config" / "install-all-constraints.txt").resolve()
+    if not path.is_file():
+        return ""
+    try:
+        return str(path.relative_to(monorepo.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _install_all_sort_key(spec: ToolSpec) -> tuple[int, str]:
+    """Ordem estável para --all: Text2D → Text3D → restantes PyTorch → Python sem GPU PyTorch → Rust → Bun."""
+    c = spec.cli_name.lower()
+    if c == "text2d":
+        rank = -2
+    elif c == "text3d":
+        rank = -1
+    elif spec.kind == ToolKind.PYTHON and spec.needs_pytorch:
+        rank = 0
+    elif spec.kind == ToolKind.PYTHON:
+        rank = 1
+    elif spec.kind == ToolKind.RUST:
+        rank = 2
+    else:
+        rank = 3
+    return (rank, c)
+
+
 def install_all(
     *,
     monorepo: Path | None = None,
@@ -318,43 +371,63 @@ def install_all(
         monorepo = find_monorepo_root()
 
     logger = Logger()
-    tools = list_available_tools(monorepo)
+    tools = sorted(list_available_tools(monorepo), key=_install_all_sort_key)
     if not tools:
         logger.error("Nenhuma ferramenta encontrada no monorepo.")
         return False
 
-    logger.header(f"Instalando {len(tools)} ferramentas")
-    results: dict[str, bool] = {}
-
-    for spec in tools:
-        logger.header(f"→ {spec.name}")
-        try:
-            ok = install_tool(
-                spec.cli_name,
-                monorepo=monorepo,
-                install_prefix=install_prefix,
-                python_cmd=python_cmd,
-                use_venv=use_venv,
-                skip_deps=skip_deps,
-                skip_models=skip_models,
-                force=force,
-                skip_env_config=skip_env_config,
-                text2d_venv_only=text2d_venv_only,
+    prev_install_all = os.environ.get("GAMEDEV_INSTALL_ALL")
+    prev_concurrent_builds = os.environ.get("UV_CONCURRENT_BUILDS")
+    os.environ["GAMEDEV_INSTALL_ALL"] = "1"
+    os.environ.setdefault("UV_CONCURRENT_BUILDS", "4")
+    constraints = _install_all_constraints_blurb(monorepo)
+    try:
+        logger.header(f"Instalando {len(tools)} ferramentas")
+        if constraints:
+            logger.info(
+                "Modo instalação completa: ordem favorece reutilização de rodas CUDA/PyTorch; "
+                f"constraints opcionais: {constraints}"
             )
-        except Exception as exc:
-            logger.error(f"{spec.name}: excepção não tratada — {exc}")
-            ok = False
-        results[spec.name] = ok
+        results: dict[str, bool] = {}
 
-    logger.header("Resumo")
-    for name, ok in results.items():
-        status = "OK" if ok else "FALHOU"
-        if ok:
-            logger.success(f"{name}: {status}")
+        for spec in tools:
+            logger.header(f"→ {spec.name}")
+            try:
+                ok = install_tool(
+                    spec.cli_name,
+                    monorepo=monorepo,
+                    install_prefix=install_prefix,
+                    python_cmd=python_cmd,
+                    use_venv=use_venv,
+                    skip_deps=skip_deps,
+                    skip_models=skip_models,
+                    force=force,
+                    skip_env_config=skip_env_config,
+                    text2d_venv_only=text2d_venv_only,
+                )
+            except Exception as exc:
+                logger.error(f"{spec.name}: excepção não tratada — {exc}")
+                ok = False
+            results[spec.name] = ok
+
+        logger.header("Resumo")
+        for name, ok in results.items():
+            status = "OK" if ok else "FALHOU"
+            if ok:
+                logger.success(f"{name}: {status}")
+            else:
+                logger.error(f"{name}: {status}")
+
+        return all(results.values())
+    finally:
+        if prev_install_all is None:
+            os.environ.pop("GAMEDEV_INSTALL_ALL", None)
         else:
-            logger.error(f"{name}: {status}")
-
-    return all(results.values())
+            os.environ["GAMEDEV_INSTALL_ALL"] = prev_install_all
+        if prev_concurrent_builds is None:
+            os.environ.pop("UV_CONCURRENT_BUILDS", None)
+        else:
+            os.environ["UV_CONCURRENT_BUILDS"] = prev_concurrent_builds
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -503,7 +576,7 @@ def _build_epilog(available: list[ToolSpec]) -> str:
             "  gamedev-install text3d --text2d-venv-only # Only text2d editable in venv",
             "  gamedev-install gameassets --skip-deps      # Install GameAssets (no sys deps)",
             "  gamedev-install materialize --action uninstall",
-            "  gamedev-install all                         # Instalar tudo",
+            "  gamedev-install all                         # Todas as ferramentas (+ constraints; Shared/config/)",
             "  gamedev-install --all                      # Igual ao anterior",
             "  gamedev-install --list                     # Listar ferramentas",
             "  gamedev-install part3d                     # Part3D: instala torch-scatter/cluster após PyTorch",

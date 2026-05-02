@@ -1,4 +1,4 @@
-"""Extras de inferência Rigging3D (UniRig): ``[inference]``, PyTorch CUDA, spconv, PyG."""
+"""Extras de inferência Rigging3D (UniRig): open3d opcional, PyTorch CUDA, spconv, PyG."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from ..logging import Logger
-from .base import has_uv, uv_cmd
+from .base import has_uv, install_all_constraint_argv, uv_cmd
 
 _TORCH_INFO_SCRIPT = """
 import torch, sys
@@ -46,14 +46,13 @@ def _pip_list(python: str) -> list[str]:
 def ensure_cuda_torch(
     pip_cmd: list[str],
     *,
+    venv_python: str,
     cwd: Path,
     logger: Logger,
 ) -> None:
     """Garante ``torch`` com CUDA quando há GPU mas o instalador base instalou CPU (p.ex. NVML falhou)."""
-    python = pip_cmd[0]
-
     check = subprocess.run(
-        [python, "-c", "import torch; print(torch.version.cuda or '')"],
+        [venv_python, "-c", "import torch; print(torch.version.cuda or '')"],
         capture_output=True,
         text=True,
         cwd=str(cwd),
@@ -81,13 +80,22 @@ def ensure_cuda_torch(
     )
     try:
         subprocess.run(
-            [*pip_cmd, "torch", "torchvision", "--index-url", index],
+            [
+                *pip_cmd,
+                *install_all_constraint_argv(),
+                "torch",
+                "torchvision",
+                "--index-url",
+                index,
+            ],
             check=True,
             cwd=str(cwd),
         )
     except subprocess.CalledProcessError as e:
-        logger.error(f"Falha ao instalar PyTorch CUDA: {e}")
-        raise
+        logger.error(
+            f"Falha ao instalar PyTorch CUDA ({e}); mantém-se o PyTorch actual. "
+            "Tenta outro RIGGING3D_PYTORCH_CUDA_INDEX ou instala torch CUDA manualmente."
+        )
 
 
 def install_rigging_inference_extras(
@@ -96,23 +104,29 @@ def install_rigging_inference_extras(
     project_root: Path,
     logger: Logger,
 ) -> bool:
-    """Instala ``pip install -e .[inference]``, PyG wheels, spconv/cumm.
+    """open3d opcional, reforço torch CUDA, wheels PyG / spconv.
 
     Returns:
-        True se passos principais concluíram (scatter/spconv podem falhar em combinações exóticas).
+        ``True`` após o fluxo (scatter/spconv/Open3D falhos só geram avisos, não abortam a instalação).
     """
     python = str(venv_python)
     pip_cmd = _pip_list(python)
     root = project_root.resolve()
 
-    logger.step("Instalando rigging3d[inference]...")
-    subprocess.run(
-        [python, "-m", "pip", "install", "-e", f"{root}[inference]", "--no-deps"],
-        check=True,
+    logger.step("Dependências opcionais UniRig (open3d; wheel pode faltar no Python 3.13)…")
+    od = subprocess.run(
+        [python, "-m", "pip", "install", "-q", "open3d>=0.18.0"],
         cwd=str(root),
+        capture_output=True,
+        text=True,
     )
+    if od.returncode != 0:
+        logger.warn(
+            "open3d não instalado (wheel pode não existir para este Python, ex.: 3.13). "
+            "O pipeline Rigging pode falhar onde o UniRig exige Open3D; consulta o README do Rigging3D."
+        )
 
-    ensure_cuda_torch(pip_cmd, cwd=root, logger=logger)
+    ensure_cuda_torch(pip_cmd, venv_python=python, cwd=root, logger=logger)
 
     logger.step("Detectando torch/CUDA para deps nativas...")
     try:
@@ -124,8 +138,11 @@ def install_rigging_inference_extras(
         )
         torch_short, cuda_tag = info.stdout.strip().split()
     except (subprocess.CalledProcessError, ValueError) as e:
-        logger.warn(f"Não foi possível detectar torch/CUDA ({e}) — deps nativas em falta")
-        return False
+        logger.warn(
+            f"Não foi possível detectar torch/CUDA ({e}) — a saltar torch-scatter/spconv; "
+            "verifica o ambiente PyTorch."
+        )
+        return True
 
     logger.info(f"torch={torch_short}  cuda_tag={cuda_tag}")
 

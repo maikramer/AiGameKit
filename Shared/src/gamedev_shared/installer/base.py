@@ -53,6 +53,27 @@ def uv_cmd() -> str:
     return found if found else "uv"
 
 
+def shared_installer_python_repo_root() -> Path:
+    """Raiz ``Shared/`` (contém ``src/gamedev_shared/installer/base.py`` e ``pyproject.toml``)."""
+    return Path(__file__).resolve().parents[3]
+
+
+def install_all_constraints_file() -> Path | None:
+    """Ficheiro de constraints para ``install all`` quando existir no checkout."""
+    p = shared_installer_python_repo_root() / "config" / "install-all-constraints.txt"
+    return p if p.is_file() else None
+
+
+def install_all_constraint_argv() -> list[str]:
+    """Expande para ``-c <constraints>`` se ``GAMEDEV_INSTALL_ALL=1`` e houver ficheiro."""
+    if os.environ.get("GAMEDEV_INSTALL_ALL") != "1":
+        return []
+    path = install_all_constraints_file()
+    if path is None:
+        return []
+    return ["-c", str(path)]
+
+
 class BaseInstaller:
     """Classe base para instaladores do monorepo GameDev.
 
@@ -187,6 +208,8 @@ class BaseInstaller:
         if cwd is not None:
             _kw["cwd"] = str(cwd)
 
+        constr = install_all_constraint_argv()
+
         has_cuda = shutil.which("nvidia-smi") is not None
         py_minor = self._python_minor()
 
@@ -202,7 +225,7 @@ class BaseInstaller:
                             cuda_minor = int(cuda_version.split(".")[1]) if "." in cuda_version else 0
                             if py_minor >= 13 or cuda_major >= 13:
                                 self.logger.info(f"PyTorch via PyPI (CUDA {cuda_version})...")
-                                subprocess.run([*pip_cmd, "torch", "torchvision"], check=True, **_kw)
+                                subprocess.run([*pip_cmd, *constr, "torch", "torchvision"], check=True, **_kw)
                                 return
                             if cuda_major == 12 and cuda_minor >= 6:
                                 idx = "https://download.pytorch.org/whl/cu126"
@@ -212,7 +235,7 @@ class BaseInstaller:
                                 idx = "https://download.pytorch.org/whl/cu118"
                             self.logger.info(f"PyTorch ({idx.split('/')[-1]})...")
                             subprocess.run(
-                                [*pip_cmd, "torch", "torchvision", "--index-url", idx],
+                                [*pip_cmd, *constr, "torch", "torchvision", "--index-url", idx],
                                 check=True,
                                 **_kw,
                             )
@@ -223,14 +246,14 @@ class BaseInstaller:
                         "nvidia-smi não mostrou 'CUDA Version' (NVML/driver). "
                         "A instalar PyTorch com CUDA a partir do índice PyPI (cu130)…"
                     )
-                    subprocess.run([*pip_cmd, "torch", "torchvision"], check=True, **_kw)
+                    subprocess.run([*pip_cmd, *constr, "torch", "torchvision"], check=True, **_kw)
                     return
             except Exception:
                 pass
 
         self.logger.info("Sem CUDA utilizável neste sistema; PyTorch CPU (índice PyTorch wheel CPU)…")
         subprocess.run(
-            [*pip_cmd, "torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cpu"],
+            [*pip_cmd, *constr, "torch", "torchvision", "--index-url", "https://download.pytorch.org/whl/cpu"],
             check=True,
             **_kw,
         )

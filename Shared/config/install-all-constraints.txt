@@ -1,0 +1,10 @@
+# Constraints para `gamedev-install --all` / `./install.sh --all`.
+#
+# Activados só quando `GAMEDEV_INSTALL_ALL=1` (definido automaticamente pelo instalador).
+# Objectivo: mesmo interpretador resolver `transformers` / `numpy` de forma igual em cada `.venv`,
+# maximizando reutilização de rodas na cache (~/.cache/uv).
+#
+# Actualizar quando Rigging3D mudar `transformers` ou quando houver conflicto na resolução.
+
+transformers==4.51.3
+numpy>=1.26.4,<3
