@@ -97,26 +97,30 @@ def _intermediate_dir(mesh_final: Path) -> Path:
 
 
 def _shape_path(mesh_final: Path) -> Path:
-    """``id_shape.glb`` ao lado da mesh canónica (compat: batch_cmd/resume_cmd).
+    """``id_shape.glb`` em ``_intermediate/`` — destino canónico desde Round 2.
 
-    O orquestrador move este ficheiro para ``_intermediate/`` ao fim da
-    pipeline via ``move_to_intermediate``.
+    Antes existia ao lado da mesh canónica e era movido no fim da pipeline;
+    isso fazia o ``resume`` e o ``batch`` perderem o ficheiro depois do
+    move (procuravam só em ``meshes/``). Agora escrevemos directamente
+    em ``_intermediate/`` desde o Stage 1 (``text3d generate``).
 
-    Round 2 fix: normaliza o stem via ``_base_stem`` para que a função seja
-    idempotente — passar ``goblin.glb`` ou ``goblin_painted.glb`` devolve
-    sempre ``goblin_shape.glb``.
+    ``_shape_existing`` mantém compatibilidade com layouts antigos
+    (procura em ``meshes/`` primeiro, depois em ``_intermediate/``).
+
+    Idempotente em relação a sufixos canónicos do stem.
     """
     base = _base_stem(mesh_final.stem)
-    return mesh_final.with_name(f"{base}_shape{mesh_final.suffix}")
+    return _intermediate_dir(mesh_final) / f"{base}_shape{mesh_final.suffix}"
 
 
 def _painted_path(mesh_final: Path) -> Path:
-    """``id_painted.glb`` ao lado da mesh canónica (compat).
+    """``id_painted.glb`` em ``_intermediate/`` — destino canónico desde Round 2.
 
-    Idempotente em relação a sufixos canónicos (Round 2 fix).
+    Mesma lógica de :func:`_shape_path`: escrever directamente em
+    ``_intermediate/`` evita a corrida resume↔move ao fim do pipeline.
     """
     base = _base_stem(mesh_final.stem)
-    return mesh_final.with_name(f"{base}_painted{mesh_final.suffix}")
+    return _intermediate_dir(mesh_final) / f"{base}_painted{mesh_final.suffix}"
 
 
 def _clean_path(mesh_final: Path) -> Path:
@@ -195,15 +199,20 @@ def _valid_file(p: Path) -> bool:
 
 
 def _resolve_intermediate_or_main(canonical: Path, mesh_final: Path) -> Path | None:
-    """Round 2: aceita o ficheiro em ``meshes/`` ou em ``meshes/_intermediate/``.
+    """Aceita o ficheiro no caminho canónico ou no legacy ``meshes/`` (compat).
 
-    O master pipeline move ``shape``/``painted`` para ``_intermediate/`` no fim.
-    Para retomar uma pipeline parcial precisamos detectar o ficheiro em
-    qualquer das duas localizações. Devolve o path existente (preferindo a
-    localização canónica) ou ``None`` se nenhum existe e é válido.
+    Desde Round 2 o caminho canónico de ``shape``/``painted``/``clean``/
+    ``rigged_hi`` é ``meshes/_intermediate/``; para retro-compat também
+    aceitamos a localização antiga (``meshes/<asset>_shape.glb`` etc.).
+    Devolve o primeiro ficheiro válido encontrado ou ``None``.
     """
     if _valid_file(canonical):
         return canonical
+    # Fallback para layouts antigos: <meshes>/<asset>_shape.glb.
+    legacy = mesh_final.with_name(canonical.name)
+    if _valid_file(legacy):
+        return legacy
+    # Fallback inverso (caso ``canonical`` ainda aponte para legacy).
     intermediate = _intermediate_dir(mesh_final) / canonical.name
     if _valid_file(intermediate):
         return intermediate

@@ -64,10 +64,12 @@ from .paths import (
     _animator3d_output_path,
     _classify_row_state,
     _install_file,
+    _painted_existing,
     _painted_path,
     _path_for_log,
     _paths_for_row_manifest,
     _rigging3d_output_path,
+    _shape_existing,
     _shape_path,
 )
 from .pipeline import (
@@ -1406,7 +1408,7 @@ def batch_cmd(
                             for idx in pending_3d_d:
                                 row = rows[idx]
                                 img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                mesh_shape = _shape_path(mesh_f)
+                                mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                 if not force and mesh_shape.is_file():
                                     shape_skipped_d.add(idx)
                                     shape_idx_map_d[row.id] = idx
@@ -1535,8 +1537,8 @@ def batch_cmd(
                                         row = rows[idx]
                                         rec_d = results_d[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                        mesh_shape = _shape_path(mesh_f)
-                                        mesh_painted = _painted_path(mesh_f)
+                                        mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
+                                        mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                         try:
                                             assert paint3d_bin is not None
                                             tex_argv = _texture_subprocess_argv(
@@ -1596,8 +1598,8 @@ def batch_cmd(
                                     for idx in shape_ok_paint_d:
                                         row = rows[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                        mesh_shape = _shape_path(mesh_f)
-                                        mesh_painted = _painted_path(mesh_f)
+                                        mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
+                                        mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                         if not force and mesh_painted.is_file():
                                             paint_skipped_d.add(idx)
                                             paint_idx_map_d[row.id] = idx
@@ -1674,7 +1676,7 @@ def batch_cmd(
                                             rec_d = results_d[idx]
                                             row = rows[idx]
                                             img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                            mesh_painted = _painted_path(mesh_f)
+                                            mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                             _pst = item_result.get("status", "")
 
                                             if _pst == "progress":
@@ -1708,7 +1710,7 @@ def batch_cmd(
                                             row = rows[idx]
                                             rec_d = results_d[idx]
                                             img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                            mesh_painted = _painted_path(mesh_f)
+                                            mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                             dash.feed_event(row.id, "paint3d", "skipped", phase="texture")
                                             _finalize_mesh_ok_d(rec_d, mesh_painted, row)
                                             finalized_d.add(idx)
@@ -1726,7 +1728,7 @@ def batch_cmd(
                                 if rec_d.get("status") == "error":
                                     continue
                                 img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                mesh_shape = _shape_path(mesh_f)
+                                mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                 if not mesh_shape.is_file():
                                     continue
                                 rec_d["image_path"] = _path_for_log(img_f, manifest_dir)
@@ -1742,8 +1744,8 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec_d = results_d[idx]
                                     _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_painted = _painted_path(mesh_f)
-                                    mesh_shape = _shape_path(mesh_f)
+                                    mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
+                                    mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                     simplify_mesh = (
                                         mesh_painted
                                         if mesh_painted.is_file()
@@ -1772,8 +1774,8 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec_d = results_d[idx]
                                     img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_painted = _painted_path(mesh_f)
-                                    mesh_shape = _shape_path(mesh_f)
+                                    mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
+                                    mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                     actual_mesh = (
                                         mesh_painted
                                         if mesh_painted.is_file()
@@ -1806,7 +1808,7 @@ def batch_cmd(
                                 row = rows[idx]
                                 rec_d = results_d[idx]
                                 img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                mesh_shape = _shape_path(mesh_f)
+                                mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                 seed = _seed_for_row(profile, row.id)
                                 t3d_args = _text3d_argv(text3d_bin, profile, img_f, mesh_shape, row, gpu_ids=gpu_ids)
                                 if seed is not None:
@@ -2414,8 +2416,8 @@ def batch_cmd(
                             for idx in pending_3d_indices:
                                 row = rows[idx]
                                 img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                mesh_shape = _shape_path(mesh_final)
-                                mesh_painted = _painted_path(mesh_final)
+                                mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
+                                mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
                                 if (
                                     not force
@@ -2571,8 +2573,8 @@ def batch_cmd(
                                     rec = results[idx]
                                     progress.update(task_paint, description=f"[cyan]{row.id}[/cyan] · quick paint")
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_shape = _shape_path(mesh_final)
-                                    mesh_painted = _painted_path(mesh_final)
+                                    mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
+                                    mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
                                     if mesh_final.is_file() and not force:
                                         _finalize_mesh_ok(rec, mesh_final, row)
@@ -2630,8 +2632,8 @@ def batch_cmd(
                                 for idx in shape_ok_paint:
                                     row = rows[idx]
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_shape = _shape_path(mesh_final)
-                                    mesh_painted = _painted_path(mesh_final)
+                                    mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
+                                    mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
                                     if mesh_final.is_file() and not force:
                                         rec = results[idx]
@@ -2719,7 +2721,7 @@ def batch_cmd(
                                         rec = results[idx]
                                         row = rows[idx]
                                         img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                        mesh_painted = _painted_path(mesh_final)
+                                        mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
                                         _pst = item_result.get("status", "")
 
                                         if _pst == "progress":
@@ -2766,8 +2768,8 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec = results[idx]
                                     _img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_painted = _painted_path(mesh_f)
-                                    mesh_shape = _shape_path(mesh_f)
+                                    mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
+                                    mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                     simplify_mesh = (
                                         mesh_painted
                                         if mesh_painted.is_file()
@@ -2799,8 +2801,8 @@ def batch_cmd(
                                     row = rows[idx]
                                     rec = results[idx]
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_painted = _painted_path(mesh_final)
-                                    mesh_shape = _shape_path(mesh_final)
+                                    mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
+                                    mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
                                     actual_mesh = (
                                         mesh_painted
                                         if mesh_painted.is_file()
@@ -2839,7 +2841,7 @@ def batch_cmd(
                                 rec = results[idx]
                                 progress.update(task2, description=f"[cyan]{row.id}[/cyan] · Text3D")
                                 img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                mesh_shape = _shape_path(mesh_final)
+                                mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
 
                                 if not force and mesh_shape.is_file():
                                     actual_mesh = mesh_final if mesh_final.is_file() else mesh_shape

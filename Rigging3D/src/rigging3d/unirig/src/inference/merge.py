@@ -571,6 +571,23 @@ def transfer(source: str, target: str, output: str, add_root: bool=False):
         skin = get_skin(arranged_bones)
 
     joints, tails, parents, names, matrix_local = process_armature(armature, arranged_bones)
+
+    # ``merge`` -> ``make_armature`` -> ``denormalize_vertices`` reaplica a
+    # bbox do TARGET assumindo input em [-1, +1] (espaço normalizado UniRig).
+    # Quando vimos de ``transfer`` (rigged_hi → lod), as posições estão no
+    # world space da SOURCE: temos de normalizar primeiro pela bbox da
+    # source para que a denormalização use a bbox do target corretamente.
+    # Caso contrário o esqueleto fica deslocado e fora da mesh quando o
+    # source e o target têm origens diferentes (ex.: clean=center vs lod0=feet).
+    src_min = np.min(vertices, axis=0)
+    src_max = np.max(vertices, axis=0)
+    src_center = (src_min + src_max) / 2.0
+    src_scale = float(np.max(src_max - src_min) / 2.0)
+    if src_scale > 1e-9:
+        vertices = (vertices - src_center) / src_scale
+        joints = (joints - src_center) / src_scale
+        tails = (tails - src_center) / src_scale
+
     merge(
         path=target,
         output_path=output,

@@ -28,9 +28,10 @@ def test_intermediate_dir_layout(tmp_path: Path) -> None:
     inter = _intermediate_dir(mesh_final)
     assert inter == mesh_final.parent / "_intermediate"
 
-    # _shape_path / _painted_path mantêm-se ao lado da mesh canónica (compat)
-    assert _shape_path(mesh_final) == mesh_final.parent / "goblin_shape.glb"
-    assert _painted_path(mesh_final) == mesh_final.parent / "goblin_painted.glb"
+    # _shape_path / _painted_path nascem agora em _intermediate/ (Round 2 fix:
+    # evita corrida resume↔move-to-intermediate ao fim do pipeline).
+    assert _shape_path(mesh_final) == inter / "goblin_shape.glb"
+    assert _painted_path(mesh_final) == inter / "goblin_painted.glb"
 
     # _clean_path / _rigged_hi_path nascem em _intermediate/
     assert _clean_path(mesh_final) == inter / "goblin_clean.glb"

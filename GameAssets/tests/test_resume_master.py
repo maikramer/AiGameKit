@@ -169,11 +169,10 @@ def test_classify_master_detects_shape_in_intermediate(tmp_path: Path) -> None:
     img = tmp_path / "img.png"
     _touch(img)
     mesh = tmp_path / "mesh.glb"
-    # shape vai direto para _intermediate/ (simula run anterior).
+    # shape canónico já é em _intermediate/ desde Round 2.
     canonical_shape = _shape_path(mesh)
-    intermediate_shape = _intermediate_dir(mesh) / canonical_shape.name
-    _touch(intermediate_shape)
-    assert not canonical_shape.exists()
+    assert canonical_shape == _intermediate_dir(mesh) / canonical_shape.name
+    _touch(canonical_shape)
 
     state = _classify_row_state_master(
         img_final=img, mesh_final=mesh, want_texture=True, wants_rig=False, wants_animate=False

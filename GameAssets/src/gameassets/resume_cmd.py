@@ -43,9 +43,11 @@ from .paths import (
     _classify_row_state,
     _classify_row_state_master,
     _install_file,
+    _painted_existing,
     _painted_path,
     _paths_for_row_manifest,
     _rigging3d_output_path,
+    _shape_existing,
     _shape_path,
 )
 from .pipeline import (
@@ -623,7 +625,7 @@ def resume_cmd(
                         t_tex = _texture_subprocess_argv(
                             paint3d_bin,
                             profile,
-                            _shape_path(it["mesh_final"]),
+                            _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"]),
                             it["img_final"],
                             painted_out,
                             row_id=row.id,
@@ -663,7 +665,7 @@ def resume_cmd(
                         paint_manifest_items.append(
                             {
                                 "id": row.id,
-                                "mesh": str(_shape_path(it["mesh_final"])),
+                                "mesh": str(_shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])),
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
                             }
@@ -1080,7 +1082,7 @@ def resume_cmd(
                         t_tex = _texture_subprocess_argv(
                             paint3d_bin,
                             profile,
-                            _shape_path(it["mesh_final"]),
+                            _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"]),
                             it["img_final"],
                             painted_out,
                             row_id=row.id,
@@ -1114,7 +1116,7 @@ def resume_cmd(
                         paint_manifest_items.append(
                             {
                                 "id": row.id,
-                                "mesh": str(_shape_path(it["mesh_final"])),
+                                "mesh": str(_shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])),
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
                             }
