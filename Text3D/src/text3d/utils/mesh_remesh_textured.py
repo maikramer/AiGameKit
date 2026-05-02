@@ -853,30 +853,20 @@ def remesh_textured_glb(
     bpy.ops.object.modifier_apply(modifier=mod.name)
     log.info("Após decimate: %d faces (ratio=%.4f)", len(obj.data.polygons), ratio)
 
-    kdt = KDTree(len(saved_pos))
-    for i, p in enumerate(saved_pos):
-        kdt.insert(p.tolist(), i)
-    kdt.balance()
-    K = min(4, len(saved_pos))
-    new_normals = np.empty((len(mesh.vertices), 3), dtype=np.float64)
-    for i, v in enumerate(mesh.vertices):
-        total_w = 0.0
-        normal = np.zeros(3, dtype=np.float64)
-        for _co, idx, dist in kdt.find_n(v.co, K):
-            w = 1.0 / (dist * dist + 1e-10)
-            normal += w * saved_nrm[idx]
-            total_w += w
-        if total_w > 0:
-            normal /= total_w
-        length = np.linalg.norm(normal)
-        if length > 1e-8:
-            normal /= length
-        new_normals[i] = normal
-    loop_normals = np.empty((len(mesh.loops), 3), dtype=np.float32)
-    for loop in mesh.loops:
-        loop_normals[loop.index] = new_normals[loop.vertex_index]
+    # Smooth shading via shade_smooth + auto-smooth angle. NÃO usar
+    # normals_split_custom_set: força exporter GLTF a duplicar verts e produz
+    # V/Tri ≈ 3 (regressão crítica que afetava goblin_shape, ver
+    # docs/superpowers/specs/2026-05-02-game-asset-pipeline-redesign.md).
+    with contextlib.suppress(Exception):
+        mesh.free_normals_split()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
     with contextlib.suppress(AttributeError):
-        mesh.normals_split_custom_set(loop_normals)
+        mesh.use_auto_smooth = True
+        mesh.auto_smooth_angle = 0.523599  # 30 graus
+    # saved_pos / saved_nrm / KDTree antigos deixam de ser usados; mantemos
+    # calculados acima por enquanto para minimizar diff.
+    _ = (saved_pos, saved_nrm, KDTree)
 
     if texture_size and obj.data.materials and obj.data.materials[0].use_nodes:
         for node in obj.data.materials[0].node_tree.nodes:

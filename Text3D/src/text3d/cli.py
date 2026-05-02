@@ -377,9 +377,18 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "skip_remesh",
     is_flag=True,
     default=False,
+    hidden=True,
+    help="(obsoleto, ignorado) Mantido por backward-compat.",
+)
+@click.option(
+    "--no-topology-fix",
+    "no_topology_fix",
+    is_flag=True,
+    default=False,
     help=(
-        "Salta isotropic remeshing no prepare_mesh_topology. "
-        "Usar quando o mesh será texturizado (Paint3D) — mantém high-poly para melhor qualidade de pintura."
+        "Stage 1 cru: salta o passo de reparo topológico (weld/manifold/normals). "
+        "Recomendado para a pipeline LOD0-master, que aplica topology-fix em comando "
+        "separado depois (text3d topology-fix)."
     ),
 )
 @click.option(
@@ -430,6 +439,7 @@ def generate(
     prof_profile,
     gpu_ids,
     skip_remesh,
+    no_topology_fix,
     quality,
     category,
 ):
@@ -646,11 +656,13 @@ def generate(
 
                     progress.update(task, description="[green]Concluído")
 
-                if result is not None:
+                if result is not None and not no_topology_fix:
                     from text3d.utils.mesh_lod import prepare_mesh_topology
 
                     emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=0)
-                    result = prepare_mesh_topology(result, skip_remesh=skip_remesh)
+                    result = prepare_mesh_topology(result)
+                    emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=100)
+                elif no_topology_fix:
                     emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=100)
 
                 if save_reference_image and from_image:
@@ -745,6 +757,41 @@ def doctor():
             )
 
     console.print(table)
+
+    extra = Table(title="[bold blue]Ferramentas externas (bake-master)", box=box.ROUNDED)
+    extra.add_column("Item", style="cyan", no_wrap=True)
+    extra.add_column("Estado", style="green")
+
+    import shutil as _sh
+    import subprocess
+
+    npx_path = _sh.which("npx")
+    if npx_path:
+        extra.add_row("npx", f"OK ({npx_path})")
+        try:
+            r = subprocess.run(
+                ["npx", "--yes", "@gltf-transform/cli", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=False,
+            )
+            if r.returncode == 0:
+                ver = (r.stdout or "").strip().splitlines()[0] if r.stdout else "?"
+                extra.add_row("@gltf-transform/cli", f"OK ({ver})")
+            else:
+                extra.add_row("@gltf-transform/cli", "[yellow]falhou — bake-master fará fallback sem KTX2/meshopt[/yellow]")
+        except Exception as exc:  # noqa: BLE001
+            extra.add_row("@gltf-transform/cli", f"[yellow]erro: {exc}[/yellow]")
+    else:
+        extra.add_row(
+            "npx",
+            "[yellow]não encontrado — instale Node.js (https://nodejs.org) "
+            "para usar text3d bake-master com KTX2/meshopt[/yellow]",
+        )
+
+    console.print(extra)
+
     console.print(
         Panel(
             "[dim]Perfis: --preset fast | balanced | hq. "
@@ -826,6 +873,192 @@ def convert(input_file, output, rotate):
     except Exception as e:
         console.print(f"[bold red]✗[/bold red] {e}")
         sys.exit(1)
+
+
+@cli.command("bake-master")
+@click.argument("painted_glb", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, path_type=Path),
+    required=True,
+    help="GLB de saída (LOD0 master).",
+)
+@click.option(
+    "--target-faces",
+    type=int,
+    required=True,
+    help="Número alvo de faces após decimação (use categoria do asset).",
+)
+@click.option(
+    "--high-poly",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    default=None,
+    help="GLB high-poly limpo (id_clean.glb) usado como fonte para bake de normal map.",
+)
+@click.option(
+    "--bake-normals/--no-bake-normals",
+    default=False,
+    show_default=True,
+    help=(
+        "Bake de normal map high-poly → low-poly via Cycles. Caro (segundos a "
+        "minutos), só vale a pena quando o LOD0 é muito mais leve que o clean. "
+        "Requer ``--high-poly``."
+    ),
+)
+@click.option(
+    "--normal-resolution",
+    type=int,
+    default=1024,
+    show_default=True,
+    help="Resolução do normal map (pixels) quando --bake-normals.",
+)
+@click.option(
+    "--ktx2/--no-ktx2",
+    default=True,
+    show_default=True,
+    help="Aplica compressão KTX2/UASTC via @gltf-transform/cli (npx).",
+)
+@click.option(
+    "--meshopt/--no-meshopt",
+    default=True,
+    show_default=True,
+    help="Aplica EXT_meshopt_compression via @gltf-transform/cli (npx).",
+)
+@click.option(
+    "--texture-size",
+    type=int,
+    default=2048,
+    show_default=True,
+    help="Resolução da textura base (passada ao remesh).",
+)
+def bake_master_cmd(
+    painted_glb: Path,
+    output: Path,
+    target_faces: int,
+    high_poly: Path | None,
+    bake_normals: bool,
+    normal_resolution: int,
+    ktx2: bool,
+    meshopt: bool,
+    texture_size: int,
+) -> None:
+    """Stage 4 — produz LOD0 master (decimação + tangents + KTX2 + meshopt).
+
+    Input: GLB painted (high-poly texturizado, vindo do paint3d).
+    Output: GLB LOD0 com TANGENT, KTX2 e meshopt aplicados quando disponíveis.
+
+    Pós-processamento KTX2/meshopt requer ``npx`` no PATH e baixa
+    ``@gltf-transform/cli`` na primeira execução. Falha graciosamente sem
+    bloquear a pipeline (apenas warning).
+    """
+    from .utils.bake_master import bake_master
+
+    res = bake_master(
+        painted_glb,
+        output,
+        target_faces=target_faces,
+        high_poly_clean=high_poly,
+        bake_normals=bake_normals,
+        normal_map_resolution=normal_resolution,
+        apply_ktx2=ktx2,
+        apply_meshopt=meshopt,
+        texture_size=texture_size,
+    )
+
+    try:
+        sz = format_bytes(Path(res.output_path).stat().st_size)
+    except OSError:
+        sz = "?"
+    flags = []
+    if res.tangents_added:
+        flags.append("tangents")
+    if res.normal_map_path is not None:
+        flags.append("normal-map")
+    if res.ktx2_applied:
+        flags.append("ktx2")
+    if res.meshopt_applied:
+        flags.append("meshopt")
+    flags_str = "+".join(flags) if flags else "vanilla"
+    console.print(
+        f"[bold green]✓[/bold green] bake-master → [cyan]{res.output_path}[/cyan] "
+        f"[dim]({sz}, {res.decimated_faces} tris, {flags_str})[/dim]"
+    )
+
+
+@cli.command("topology-fix")
+@click.argument("input_mesh", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help="GLB de saída (defeito: sobrepõe input).",
+)
+@click.option(
+    "--fill-holes-sides",
+    type=int,
+    default=12,
+    show_default=True,
+    help="Tamanho máximo (arestas) de buracos a preencher. 0 desativa fill_holes.",
+)
+@click.option(
+    "--export-origin",
+    type=click.Choice(["feet", "center", "none"]),
+    default=None,
+    help=(
+        "Aplica reposicionamento da origem ao final do reparo. Se omitido, mantém "
+        "a origem do input (recomendado quando o input já vem orientado)."
+    ),
+)
+@click.option(
+    "--export-rotation-x-deg",
+    type=float,
+    default=None,
+    help="Rotação X em graus aplicada antes do reposicionamento (raro; default 0).",
+)
+def topology_fix_cmd(
+    input_mesh: Path,
+    output: Path | None,
+    fill_holes_sides: int,
+    export_origin: str | None,
+    export_rotation_x_deg: float | None,
+) -> None:
+    """Repara topologia de um GLB cru (Stage 2 da pipeline).
+
+    Operações em ordem: weld exato (1e-5) → weld adaptativo →
+    normais consistentes → fill_holes (≤ ``--fill-holes-sides``) →
+    shade-smooth (sem custom split normals).
+
+    Substitui a etapa que estava embebida em ``text3d generate``.
+    Recomendado correr em ``id_shape.glb`` para produzir ``id_clean.glb``.
+    """
+    from text3d.utils.mesh_lod import prepare_mesh_topology
+
+    out_path = Path(output) if output else input_mesh
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if export_rotation_x_deg is not None:
+        _defaults.set_export_rotation_x_rad_override(math.radians(float(export_rotation_x_deg)))
+    try:
+        prepare_mesh_topology(
+            input_mesh,
+            out_path,
+            fill_holes_sides=fill_holes_sides,
+        )
+        if export_origin is not None and export_origin != "none":
+            from .utils.export import convert_mesh
+
+            convert_mesh(out_path, out_path, rotate=False, origin_mode=export_origin)
+    finally:
+        if export_rotation_x_deg is not None:
+            _defaults.set_export_rotation_x_rad_override(None)
+
+    try:
+        sz = format_bytes(out_path.stat().st_size)
+    except OSError:
+        sz = "?"
+    console.print(f"[bold green]✓[/bold green] topology-fix → [cyan]{out_path}[/cyan] [dim]({sz})[/dim]")
 
 
 @cli.command("gpu-processes")
@@ -950,6 +1183,21 @@ def gpu_processes_cmd() -> None:
     default=None,
     help="Face target para LOD0 (com --painted-mesh). LOD1=target/2, LOD2=target/4.",
 )
+@click.option(
+    "--finish/--no-finish",
+    default=True,
+    show_default=True,
+    help=(
+        "Round 2: aplica gltf_transform_finish (dedup+prune+uastc+meshopt+tangents) "
+        "aos LOD1/LOD2. Use --no-finish para gerar LODs crus para debug."
+    ),
+)
+@click.option(
+    "--finish-lod0",
+    is_flag=True,
+    default=False,
+    help="Aplica finalização também ao LOD0 (use só quando lod_cmd corre sem bake-master).",
+)
 def lod_cmd(
     input_mesh: Path,
     output_dir: Path,
@@ -961,6 +1209,8 @@ def lod_cmd(
     meshfix: bool,
     painted_mesh: Path | None,
     target_faces: int | None,
+    finish: bool,
+    finish_lod0: bool,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -988,6 +1238,8 @@ def lod_cmd(
                 min_faces_lod1=min_faces_lod1,
                 min_faces_lod2=min_faces_lod2,
                 target_faces=target_faces,
+                apply_finish=finish,
+                finish_lod0=finish_lod0,
             )
         else:
             paths = generate_lod_glb_triplet(
@@ -1333,7 +1585,7 @@ def generate_batch(
                 )
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=0)
-                mesh = prepare_mesh_topology(mesh, skip_remesh=item.get("skip_remesh", False))
+                mesh = prepare_mesh_topology(mesh)
                 emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=100)
                 faces = len(mesh.faces)
 

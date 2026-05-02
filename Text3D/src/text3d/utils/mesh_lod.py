@@ -27,62 +27,25 @@ def _require_bpy():
         raise ImportError("bpy is required for LOD generation. Install with: pip install bpy") from None
 
 
-def _capture_vertex_normals(mesh_obj) -> tuple:
-    """Capture per-vertex positions and smooth normals before topology changes.
+def _shade_smooth(mesh_obj) -> None:
+    """Marca todas as faces como smooth-shaded e limpa custom split normals.
 
-    Returns (positions, normals) as float32 numpy arrays of shape (N, 3).
+    Substitui o antigo ``_restore_smooth_normals`` que aplicava
+    ``normals_split_custom_set(loop_normals)``. Esse caminho fazia o exporter
+    GLTF do Blender escrever normais por canto de face, duplicando vértices
+    (V/Tri ≈ 3 — bug do goblin_shape). Aqui usamos shade_smooth + auto-smooth
+    angle, deixando o exporter calcular normais por vértice.
     """
-    import numpy as np
-
     mesh = mesh_obj.data
-    n = len(mesh.vertices)
-    positions = np.empty((n, 3), dtype=np.float32)
-    normals = np.empty((n, 3), dtype=np.float32)
-    for i, v in enumerate(mesh.vertices):
-        positions[i] = v.co
-        normals[i] = v.normal
-    return positions, normals
-
-
-def _restore_smooth_normals(mesh_obj, positions, normals) -> None:
-    """Restore smooth normals via KD-tree interpolation after topology changes.
-
-    For each vertex in the modified mesh, finds the K nearest original vertices
-    and interpolates their normals (inverse-distance weighting). Sets the result
-    loop_normals for each face corner.
-    """
-    import numpy as np
-    from mathutils.kdtree import KDTree
-
-    mesh = mesh_obj.data
-
-    kdt = KDTree(len(positions))
-    for i, p in enumerate(positions):
-        kdt.insert(p.tolist(), i)
-    kdt.balance()
-
-    K = min(4, len(positions))
-    new_normals = np.empty((len(mesh.vertices), 3), dtype=np.float64)
-    for i, v in enumerate(mesh.vertices):
-        total_w = 0.0
-        normal = np.zeros(3, dtype=np.float64)
-        for _co, idx, dist in kdt.find_n(v.co, K):
-            w = 1.0 / (dist * dist + 1e-10)
-            normal += w * normals[idx]
-            total_w += w
-        if total_w > 0:
-            normal /= total_w
-        length = np.linalg.norm(normal)
-        if length > 1e-8:
-            normal /= length
-        new_normals[i] = normal
-
-    loop_normals = np.empty((len(mesh.loops), 3), dtype=np.float32)
-    for loop in mesh.loops:
-        loop_normals[loop.index] = new_normals[loop.vertex_index]
-
+    with contextlib.suppress(Exception):
+        # Limpa qualquer custom split normal data que possa ter ficado da geração
+        mesh.free_normals_split()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
     with contextlib.suppress(AttributeError):
-        mesh.normals_split_custom_set(loop_normals)
+        # Auto-smooth por ângulo (Blender 4+ usa modifier ou attribute)
+        mesh.use_auto_smooth = True
+        mesh.auto_smooth_angle = 0.523599  # 30 graus em radianos
 
 
 def _dynamic_weld_distance(vertex_count: int) -> float:
@@ -187,23 +150,23 @@ def _make_normals_consistent(obj) -> None:
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def _prepare_topology_bpy(mesh_obj) -> None:
+def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12) -> None:
     """Pipeline de preparação de topologia sobre um bpy mesh object (in-place).
 
-    1. Captura normais suaves originais
-    2. Remove doubles exactos (threshold baixo)
-    3. Weld por distância adaptativa (fecha micro-cracks)
-    4. Fill holes pequenos (≤30 lados)
-    5. Restaura normais suaves via KD-tree interpolation
+    Ordem fixa, idempotente:
+    1. Remove doubles exactos (1e-5)
+    2. Weld adaptativo por distância (fecha micro-cracks de marching cubes)
+    3. Normais consistentes (outward)
+    4. Fill holes pequenos (≤ ``fill_holes_sides`` lados; defeito 12 evita
+       tapar aberturas grandes intencionais como base de crates)
+    5. Shade-smooth + auto-smooth angle (sem custom split normals!)
     """
     log = logging.getLogger(__name__)
 
     n_faces_before = len(mesh_obj.data.polygons)
     n_verts_before = len(mesh_obj.data.vertices)
 
-    saved_pos, saved_nrm = _capture_vertex_normals(mesh_obj)
-
-    removed = _remove_doubles(mesh_obj, threshold=0.0001)
+    removed = _remove_doubles(mesh_obj, threshold=0.00001)
     if removed:
         log.info("Remove doubles exactos: %d vértices removidos", removed)
 
@@ -213,11 +176,17 @@ def _prepare_topology_bpy(mesh_obj) -> None:
         log.info("Weld adaptativo (%.4f): %d vértices removidos", weld_dist, removed)
 
     try:
-        _fill_holes_bpy(mesh_obj, sides=30)
+        _make_normals_consistent(mesh_obj)
     except Exception as exc:
-        log.warning("fill_holes falhou: %s", exc)
+        log.warning("normals_make_consistent falhou: %s", exc)
 
-    _restore_smooth_normals(mesh_obj, saved_pos, saved_nrm)
+    if fill_holes_sides > 0:
+        try:
+            _fill_holes_bpy(mesh_obj, sides=fill_holes_sides)
+        except Exception as exc:
+            log.warning("fill_holes falhou: %s", exc)
+
+    _shade_smooth(mesh_obj)
 
     log.info(
         "prepare_topology: %d→%d faces, %d→%d vértices",
@@ -238,8 +207,6 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
     if t >= current:
         return current
 
-    saved_pos, saved_nrm = _capture_vertex_normals(mesh_obj)
-
     bpy.context.view_layer.objects.active = mesh_obj
 
     while len(mesh_obj.data.polygons) > t:
@@ -253,7 +220,7 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
         if len(mesh_obj.data.polygons) == current:
             break
 
-    _restore_smooth_normals(mesh_obj, saved_pos, saved_nrm)
+    _shade_smooth(mesh_obj)
 
     return len(mesh_obj.data.polygons)
 
@@ -263,7 +230,13 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
 # ---------------------------------------------------------------------------
 
 
-def prepare_mesh_topology(input_path: Path | str, output_path: Path | str | None = None, **kwargs: object) -> Path:
+def prepare_mesh_topology(
+    input_path: Path | str,
+    output_path: Path | str | None = None,
+    *,
+    fill_holes_sides: int = 12,
+    **_legacy: object,
+) -> Path:
     """Prepara topologia de um GLB: remove doubles, weld, normais, fill holes.
 
     Carrega o GLB via bpy, aplica o pipeline de reparo e exporta. Preserva
@@ -273,13 +246,22 @@ def prepare_mesh_topology(input_path: Path | str, output_path: Path | str | None
     Args:
         input_path: GLB de entrada (ou objeto trimesh — backward compat).
         output_path: GLB de saída (se None, sobrepõe o ficheiro de entrada).
+        fill_holes_sides: Tamanho máximo (em arestas) de buracos a preencher.
+            Defeito 12 evita tapar aberturas grandes intencionais (base de
+            crates etc.). Use 0 para desativar.
+        **_legacy: Aceita ``skip_remesh`` (kwarg morto) por compat. Será
+            removido em versão futura.
 
     Returns:
         Path para o GLB preparado (ou trimesh.Trimesh se input for trimesh).
     """
+    if "skip_remesh" in _legacy:
+        logging.getLogger(__name__).warning(
+            "prepare_mesh_topology: kwarg 'skip_remesh' está obsoleto e será ignorado."
+        )
     _was_trimesh = hasattr(input_path, "export")
     try:
-        return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh)
+        return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides)
     except ImportError:
         logging.getLogger(__name__).warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
         if _was_trimesh:
@@ -287,7 +269,7 @@ def prepare_mesh_topology(input_path: Path | str, output_path: Path | str | None
         return Path(input_path)
 
 
-def _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh):
+def _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides: int = 12):
     if _was_trimesh:
         import tempfile
 
@@ -302,7 +284,7 @@ def _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh):
         _output = Path(output_path) if output_path else _input
 
     mesh_obj, arm_objs = _load_glb_with_armatures(_input)
-    _prepare_topology_bpy(mesh_obj)
+    _prepare_topology_bpy(mesh_obj, fill_holes_sides=fill_holes_sides)
     _export_glb(_output, mesh_obj, arm_objs)
 
     if _was_trimesh:
@@ -430,6 +412,8 @@ def generate_lod_textured_glb_triplet(
     min_faces_lod2: int = 150,
     texture_size_lod0: int = 2048,
     target_faces: int | None = None,
+    apply_finish: bool = True,
+    finish_lod0: bool = False,
 ) -> list[Path]:
     """Gera três GLB texturizados por decimação com preservação de UV.
 
@@ -487,5 +471,16 @@ def generate_lod_textured_glb_triplet(
         path = output_dir / f"{basename}_lod{level}.glb"
         remesh_textured_glb(painted, path, target_faces=target, texture_size=tex_size)
         out_paths.append(path)
+
+    if apply_finish:
+        # Finalização (Round 2): tangents + dedup + prune + uastc + meshopt.
+        # Por defeito o LOD0 é assumido como master vindo do bake-master e já
+        # finalizado; só finalizamos LOD1/LOD2 aqui. ``finish_lod0=True`` força
+        # finalização também no LOD0 (caso usado standalone sem bake-master).
+        from .gltf_finish import gltf_transform_finish
+
+        finish_targets = out_paths if finish_lod0 else out_paths[1:]
+        for p in finish_targets:
+            gltf_transform_finish(p, p)
 
     return out_paths

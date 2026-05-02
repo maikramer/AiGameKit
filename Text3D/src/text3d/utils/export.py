@@ -39,16 +39,19 @@ def _load_as_bpy(path: str | Path) -> list:
 
 def _export_glb_bpy(objects: Any, output_path: Path) -> None:
     """Exporta GLB via bpy + weld pass para limpar vértices duplicados."""
+    import logging as _log_mod
+
     from gamedev_shared.bpy_mesh import save_glb
 
     save_glb(objects, output_path)
-    with contextlib.suppress(Exception):
-        try:
-            from gamedev_shared.mesh_utils import weld_glb as _weld_glb
+    try:
+        from gamedev_shared.mesh_utils import weld_glb as _weld_glb
 
-            _weld_glb(str(output_path))
-        except ImportError:
-            pass
+        _weld_glb(str(output_path))
+    except ImportError:
+        pass
+    except Exception as exc:  # noqa: BLE001
+        _log_mod.getLogger(__name__).warning("weld_glb pós-export falhou: %s", exc)
 
 
 def _apply_rotation_bpy(obj: Any) -> Any:
