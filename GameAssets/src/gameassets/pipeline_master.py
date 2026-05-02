@@ -146,8 +146,36 @@ def _stage(
     from gamedev_shared.progress import emit_progress
 
     profiler_tool = name.replace("-", "_")
-    if item_id:
-        emit_progress(item_id, profiler_tool, phase="run", percent=0)
+
+    def _emit(phase: str, percent: float, status: str = "progress", **meta: object) -> None:
+        """Emite progresso E alimenta o dashboard directamente.
+
+        ``emit_progress`` escreve no stdout do processo gameassets, que NÃO
+        passa pelo callback ``on_progress_line`` do dashboard (esse só vê
+        stdout dos sub-processos via ``run_cmd_streaming``). Sem este
+        encaminhamento manual o dashboard congela em "Paint3D 100%" durante
+        os stages do master pipeline (que duram dezenas de segundos cada).
+        """
+        if not item_id:
+            return
+        emit_progress(item_id, profiler_tool, phase=phase, percent=percent, **meta)
+        if on_progress_line is not None:
+            import json as _json
+
+            data: dict = {
+                "id": item_id,
+                "tool": profiler_tool,
+                "status": status,
+                "phase": phase,
+                "percent": round(percent, 1),
+            }
+            data.update(meta)
+            try:
+                on_progress_line(_json.dumps(data))
+            except Exception:  # noqa: BLE001
+                pass
+
+    _emit("run", 0)
 
     t0 = _time.perf_counter()
     try:
@@ -158,13 +186,39 @@ def _stage(
         ):
             if on_progress_line is not None and _run_cmd_streaming is not None:
                 # Stream stdout para callback (dashboard) E acumula resultado.
+                # Sub-tools (text3d/rigging3d/animator3d) emitem events com
+                # ``id`` derivado do filename (ex.: "goblin_lod0"); o
+                # dashboard chaveia por ``row.id`` ("goblin"), portanto
+                # reescrevemos o ``id`` em cada linha JSON antes de
+                # encaminhar para que a célula do asset reflicta a fase
+                # corrente. ``phase`` ganha o nome do stage para distinguir
+                # entre rigging-merge-lod0/lod1/animate-lod0/etc.
+                import json as _json
+
                 stdout_buf: list[str] = []
                 stderr_buf: list[str] = []
 
                 def _on_out(line: str) -> None:
                     stdout_buf.append(line)
                     try:
-                        on_progress_line(line)
+                        forwarded = line
+                        s = line.strip()
+                        if item_id and s.startswith("{") and s.endswith("}"):
+                            try:
+                                data = _json.loads(s)
+                            except (ValueError, _json.JSONDecodeError):
+                                data = None
+                            if isinstance(data, dict) and "id" in data:
+                                # Preserva o id original em sub_id e mostra
+                                # o ``name`` (stage do master) como tool.
+                                data["sub_id"] = data.get("id")
+                                data["sub_tool"] = data.get("tool", "")
+                                data["id"] = item_id
+                                data["tool"] = profiler_tool
+                                if "phase" not in data and data.get("sub_tool"):
+                                    data["phase"] = data["sub_tool"]
+                                forwarded = _json.dumps(data)
+                        on_progress_line(forwarded)
                     except Exception:  # noqa: BLE001
                         pass
 
@@ -183,22 +237,21 @@ def _stage(
                 r = run_cmd(argv, extra_env=env, cwd=cwd)
     except Exception as exc:  # noqa: BLE001
         dt = _time.perf_counter() - t0
-        if item_id:
-            emit_progress(item_id, profiler_tool, phase="run", percent=100, status="error")
+        _emit("run", 100, status="error")
         return StageResult(name, False, dt, f"ProfilerSession: {exc}", output)
 
     dt = _time.perf_counter() - t0
     if r.returncode != 0:
         err = merge_subprocess_output(r, max_chars=400) or f"{name} falhou (rc={r.returncode})"
-        if item_id:
-            emit_progress(item_id, profiler_tool, phase="run", percent=100, status="error")
+        _emit("run", 100, status="error")
         return StageResult(name, False, dt, err, output)
     if output is not None and not output.is_file():
-        if item_id:
-            emit_progress(item_id, profiler_tool, phase="run", percent=100, status="error")
+        _emit("run", 100, status="error")
         return StageResult(name, False, dt, f"{name}: output não foi criado", output)
-    if item_id:
-        emit_progress(item_id, profiler_tool, phase="run", percent=100, status="ok")
+    # Emite como ``progress`` (não ``ok``) — ``ok`` no dashboard sinaliza
+    # conclusão do asset INTEIRO; usá-lo aqui faria a célula piscar OK entre
+    # cada stage e contar duplicado no progresso global.
+    _emit("run", 100, status="progress", seconds=round(dt, 2))
     return StageResult(name, True, dt, output=output)
 
 
