@@ -74,6 +74,7 @@ class PythonProjectInstaller(BaseInstaller):
         skip_pytorch: bool = False,
         min_python: tuple[int, int] = (3, 10),
         cross_dep_folders: list[tuple[Path, str]] | None = None,
+        python_module: str | None = None,
     ) -> None:
         super().__init__(
             project_name=project_name,
@@ -87,6 +88,10 @@ class PythonProjectInstaller(BaseInstaller):
         self.skip_models = skip_models
         self.force = force
         self.skip_pytorch = skip_pytorch
+        # ``python_module`` é usado em ``-m <module>`` nos wrappers; difere do
+        # ``cli_name`` quando este contém hífens (ex.: ``gamedev-lab`` →
+        # módulo ``gamedev_lab``).
+        self.python_module = python_module or cli_name.replace("-", "_")
         self.min_python = min_python
         self._use_uv = has_uv()
         self.cross_dep_folders: list[tuple[Path, str]] = cross_dep_folders or []
@@ -412,9 +417,9 @@ class PythonProjectInstaller(BaseInstaller):
         self.create_wrapper(
             self.cli_name,
             python_path=python_path,
-            module_name=self.cli_name,
+            module_name=self.python_module,
         )
-        mod = self.cli_name
+        mod = self.python_module
         for alias in extra_aliases or []:
             if self.is_windows:
                 w = self.bin_dir / f"{alias}.cmd"

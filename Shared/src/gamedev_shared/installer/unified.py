@@ -49,6 +49,7 @@ class _ToolPythonInstaller(PythonProjectInstaller):
             skip_pytorch=not spec.needs_pytorch,
             min_python=spec.min_python,
             cross_dep_folders=self._resolve_cross_deps(spec, monorepo),
+            python_module=spec.python_module or None,
         )
         self.spec = spec
         self.skip_env_config = skip_env_config

@@ -1147,7 +1147,7 @@ def _run_check_glb(
 ) -> StageResult:
     import time as _time
 
-    bin_ = _bin_or_none("GAMEDEV_LAB_BIN", "gamedev-lab")
+    bin_ = _bin_or_none("GAMEDEVLAB_BIN", "gamedev-lab")
     if not bin_:
         return StageResult("validate", False, 0.0, "gamedev-lab não encontrado no PATH")
     argv = [bin_, "check", "glb", str(glb), str(rules)]
