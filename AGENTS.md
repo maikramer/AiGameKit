@@ -353,6 +353,13 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Each package may have its own `.venv/` — tests should use the package-local venv.
 - Environment variables are the primary configuration mechanism (see README.md "Environment variables" section).
 - Run `make check` before considering work complete.
+- **Game asset master pipeline (Text3D `bake-master`)** depends on Node.js + `npx`
+  para correr `@gltf-transform/cli` (KTX2/UASTC + EXT_meshopt_compression). Verifica
+  com `text3d doctor`. Se ausente, `bake-master` faz fallback gracioso (LOD0 sem
+  KTX2/meshopt) e a validação `gamedev-lab check glb` falhará nas regras
+  `texture_format: ktx2` / `compression: meshopt`. Instalar via Node.js LTS
+  (https://nodejs.org); `npx --yes @gltf-transform/cli` baixa o pacote na primeira
+  invocação.
 
 ## Learned User Preferences
 
@@ -365,6 +372,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - VibeGame: correções reutilizáveis devem ir para a **engine**; no **jogo/exemplo** (ex. `simple-rpg`) ficam só ajustes específicos desse jogo.
 - Exemplos como `simple-rpg`: pós-processamento e partículas com intensidade moderada para jogabilidade, mesmo quando os efeitos permanecem ativos para teste.
 - Áudio 3D e SFX de movimento: preferir integração via sistema da engine (XML/recipes, `AudioListener` + câmera principal) e alinhar o som à ação; evitar silêncio inicial longo nos WAV (trim na geração com `text2sound` ou na importação) para não somar latência perceptível.
+- Instalações e retries de ferramentas devem ser **não-interativos**: `install.sh`, instaladores por pacote e loops de correção não devem bloquear à espera de input (ex. prompts de licença, confirmações); quando a automação falha, reportar e seguir em vez de ficar preso num retry interativo.
 
 ## Learned Workspace Facts
 
@@ -382,6 +390,12 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - O **Part3D** expõe quantização do DiT (modo `auto` ou bitsandbytes int8/int4) para reduzir VRAM na fase que mais pesa; `--no-quantize-dit` desliga essa optimização quando se quer precisão máxima.
 - **QualityEngine** (`gamedev_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/gamedev_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Part3D, Text2Sound, Rigging3D, Terrain3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
 
-- **Arquitetura de responsabilidades — mesh operations**: O **Text3D** é o único dono de operações de mesh (LOD, collision, simplify, remesh, remesh-textured). O GameAssets NÃO deve conter código de mesh — apenas orquestra subprocessos `text3d lod|collision|remesh|remesh-textured`. Não usar `bpy` nem `trimesh` diretamente no GameAssets. O `text3d lod` preserva armatures/animations — não é necessário um caminho separado para LOD rigged. O ficheiro `bpy_simplify.py` é um utilitário standalone legado, não orquestrado pelo pipeline.
+- **Arquitetura de responsabilidades — mesh operations**: O **Text3D** é o único dono de operações de mesh (LOD, collision, simplify, remesh, remesh-textured, `topology-fix`, `bake-master`). O GameAssets NÃO deve conter código de mesh — apenas orquestra subprocessos `text3d`. Não usar `bpy` nem `trimesh` diretamente no GameAssets (o legado `bpy_simplify.py` foi removido). O `text3d lod` preserva armatures/animations — não é necessário um caminho separado para LOD rigged. Transferência de weights rigged HI → LODs é responsabilidade do `rigging3d transfer-weights` (não do Text3D).
+
+- **Master pipeline (`gameassets batch --master-pipeline`)**: DAG canónico em `GameAssets/src/gameassets/pipeline_master.py` com stages numeradas: (1) `text3d generate` (shape cru), (2) `text3d topology-fix` (clean, inclui `--export-origin feet|center|none` e `--fill-holes-sides N`), (3) paint, (4) `text3d bake-master` (LOD0 com bake de normais + KTX2/meshopt opcionais a partir do high-poly clean), (5–7) LOD1/LOD2/collision, (8) `rigging3d transfer-weights --source HI --target LOD0 --target LOD1 ...`, (9) animate por LOD, (10) `gamedev-lab check glb --category ...`. Intermediários (`shape`, `painted`, `rigged_hi`, `clean`, `normal_map`) são movidos para `_intermediate/` no fim. `GameProfile` tem `master_pipeline`, `master_validate`, `master_bake_normals`; `--legacy-pipeline` força o pipeline antigo. Flag `text3d generate --no-topology-fix` mantém o Stage 1 cru.
+
+- **Validação GLB — `gamedev-lab check glb`**: usa `GameDevLab/src/gamedev_lab/glb_meta.py` (parser binário do GLB sem `bpy`) para extrair `attributes_present`, `extensions_used`, `texture_mime_types`, `v_per_tri`, `world_bounds_y_min`. Aceita `--category <lod0|lod1|lod2|rigged|collision>` (regras YAML em `GameAssets/src/gameassets/data/rules/*.yaml`) e `--no-bpy-inspect` para correr sem Blender. Regras suportam `mesh_totals.v_per_tri`, `attributes_required`, `texture_format`, `compression`, `origin.y_min`, `face_count.max_per_category`.
+
+- **Normais no export GLTF (Text3D)**: NÃO usar `normals_split_custom_set(loop_normals)` em `mesh_lod.py`/`mesh_remesh_textured.py` — o exporter GLTF fica com `V/Tri=3` (normais por loop, sem merge) e infla ficheiros (ex. goblin_shape 33 MB). Usar `shade_smooth` + `auto_smooth_angle` para obter normais por vértice. Em `weld_glb` (`Text3D/src/text3d/utils/export.py`) nunca engolir exceções silenciosamente — usar `try/except` com `log.warning` para ficar visível em pipelines.
 
 - Multi-GPU: a maioria dos pacotes com GPU agora aceitam `--gpu-ids 0,1` para dividir pesos entre GPUs via accelerate (`MultiGPUPlanner` em `gamedev_shared.multi_gpu`). GameAssets batch/`resume` propaga `--gpu-ids` e `CUDA_VISIBLE_DEVICES` a todos os sub-tools; deteta GPUs via `nvidia-smi` quando omitido. Pipeline stages (3D, rig, parts, animate) são agora auto-detetados do manifest + `game.yaml` blocks; usar `--no-3d`, `--no-rig`, `--no-parts`, `--no-animate` para opt-out. O env var `PAINT3D_MULTI_GPU` está obsoleto — usar `--gpu-ids`. Resolução por defeito do Text2D passou de 2048 para 1024.
