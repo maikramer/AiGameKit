@@ -867,6 +867,103 @@ def _validate_io(
         raise click.ClickException("Indica --input e --output, ou --input-dir e --output-dir.")
 
 
+@cli.command("transfer-weights")
+@click.option(
+    "--source",
+    "-s",
+    "source_glb",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="GLB rigged high-poly (saída de ``rigging3d pipeline`` sobre _clean.glb).",
+)
+@click.option(
+    "--target",
+    "-t",
+    "targets",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    multiple=True,
+    required=True,
+    help="GLB(s) target(s) — use múltiplas vezes para LOD0/1/2.",
+)
+@click.option(
+    "--output",
+    "-o",
+    "outputs",
+    type=click.Path(dir_okay=False, path_type=Path),
+    multiple=True,
+    default=None,
+    help=(
+        "Caminhos explícitos de output (1:1 com --target). Se omitido, escreve "
+        "ao lado de cada target com sufixo ``_rigged``."
+    ),
+)
+@click.option(
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=None,
+    help="Pasta de saída comum quando --output não é especificado.",
+)
+@click.option(
+    "--output-suffix",
+    type=str,
+    default="_rigged",
+    show_default=True,
+    help="Sufixo aplicado ao stem do target quando --output não é especificado.",
+)
+@click.option(
+    "--finish/--no-finish",
+    default=True,
+    show_default=True,
+    help="Round 2: aplica gltf_transform_finish (dedup+prune+uastc+meshopt+tangents) aos outputs.",
+)
+def transfer_weights_cmd(
+    source_glb: Path,
+    targets: tuple[Path, ...],
+    outputs: tuple[Path, ...],
+    output_dir: Path | None,
+    output_suffix: str,
+    finish: bool,
+) -> None:
+    """Stage 8 — transfere skin weights do source rigged para LOD0/1/2.
+
+    Usa ``bpy.ops.object.data_transfer`` (POLYINTERP_NEAREST) e ata cada
+    target ao mesmo armature do source. Ideal para reaproveitar um rig
+    high-fidelity (gerado em ``id_clean.glb`` via ``rigging3d pipeline``)
+    em meshes decimadas (LOD0/1/2).
+    """
+    from .transfer_weights import transfer_weights
+
+    out_list: list[Path] | None = list(outputs) if outputs else None
+    if out_list is not None and len(out_list) != len(targets):
+        raise click.UsageError(
+            "Número de --output deve coincidir com o de --target."
+        )
+
+    try:
+        results = transfer_weights(
+            source_glb,
+            list(targets),
+            output_dir=output_dir,
+            output_suffix=output_suffix,
+            targets_out=out_list,
+            apply_finish=finish,
+        )
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    for r in results:
+        try:
+            sz = r.target_out.stat().st_size
+            sz_str = f"{sz / 1024:.0f} KB" if sz < 1024 * 1024 else f"{sz / (1024 * 1024):.2f} MB"
+        except OSError:
+            sz_str = "?"
+        console.print(
+            f"[bold green]✓[/bold green] transfer-weights → "
+            f"[cyan]{r.target_out}[/cyan] [dim]({sz_str}, "
+            f"{r.bones} bones, {r.vertex_groups} vgroups)[/dim]"
+        )
+
+
 def _io_args(
     input_path: Path | None,
     output_path: Path | None,
