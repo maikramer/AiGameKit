@@ -3,7 +3,10 @@ import trimesh
 import os
 import json
 import math
-import open3d as o3d
+try:
+    import open3d as o3d
+except ImportError:
+    o3d = None
 import torch
 
 
@@ -115,10 +118,11 @@ def save_point_cloud(coord, color=None, file_path="pc.ply", logger=None):
     coord = np.array(coord)
     if color is not None:
         color = np.array(color)
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(coord)
-    pcd.colors = o3d.utility.Vector3dVector(np.ones_like(coord) if color is None else color)
-    o3d.io.write_point_cloud(file_path, pcd)
+    if o3d is not None:
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(coord)
+        pcd.colors = o3d.utility.Vector3dVector(np.ones_like(coord) if color is None else color)
+        o3d.io.write_point_cloud(file_path, pcd)
     if logger is not None:
         logger.info(f"Save Point Cloud to: {file_path}")
 

@@ -30,7 +30,10 @@ from pointcept.utils.timer import Timer
 TRAINERS = Registry("trainers")
 from cuml.cluster.hdbscan import HDBSCAN
 # from sklearn.cluster import HDBSCAN
-import open3d as o3d
+try:
+    import open3d as o3d
+except ImportError:
+    o3d = None
 import matplotlib.colors as mcolors
 import numpy as np
 from collections import OrderedDict
@@ -245,10 +248,11 @@ class Trainer(TrainerBase):
                 random_color.append(rgb_colors[i % len(rgb_colors)])
             random_color.append(np.array([0, 0, 0]))
             color = [random_color[i] for i in labels]
-            pcd = o3d.geometry.PointCloud()
-            pcd.points = o3d.utility.Vector3dVector(coord)
-            pcd.colors = o3d.utility.Vector3dVector(color)
-            o3d.io.write_point_cloud(save_path, pcd)
+            if o3d is not None:
+                pcd = o3d.geometry.PointCloud()
+                pcd.points = o3d.utility.Vector3dVector(coord)
+                pcd.colors = o3d.utility.Vector3dVector(color)
+                o3d.io.write_point_cloud(save_path, pcd)
 
             labels = labels[pcd_inverse]
 

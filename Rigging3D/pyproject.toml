@@ -7,8 +7,8 @@ name = "rigging3d"
 version = "0.5.0"
 description = "CLI de auto-rigging 3D"
 readme = "README.md"
-# Inferência UniRig precisa de open3d (sem wheel estável para 3.13). Animator3D usa 3.13 à parte.
-requires-python = ">=3.11,<3.12"
+# Animator3D e Rigging3D usam bpy 5.1+ (Python 3.13).
+requires-python = ">=3.13"
 license = "MIT"
 authors = [{ name = "Rigging3D Project" }]
 dependencies = [
@@ -18,11 +18,14 @@ dependencies = [
     "rich-click>=1.8.0",
     "PyYAML>=6.0",
 ]
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+]
 
 [project.optional-dependencies]
 inference = [
-    "torch>=2.3.1",
-    "torchvision>=0.18.0",
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
     "numpy>=1.26.4,<3",
     "transformers==4.51.3",
     "python-box",
@@ -33,10 +36,8 @@ inference = [
     "addict",
     "timm",
     "fast-simplification",
-    # bpy >=4.5.9 cobre todas as versões de Python usadas no monorepo (3.11–3.13)
-    "bpy>=4.5.9",
+    "bpy>=5.1.0",
     "trimesh",
-    "open3d",
     "pyrender",
     "huggingface_hub",
     "wandb",

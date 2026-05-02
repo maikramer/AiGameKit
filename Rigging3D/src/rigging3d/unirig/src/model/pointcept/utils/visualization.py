@@ -6,7 +6,11 @@ Please cite our work if the code is helpful to you.
 """
 
 import os
-import open3d as o3d
+try:
+    import open3d as o3d
+    OPEN3D_AVAILABLE = True
+except ImportError:
+    OPEN3D_AVAILABLE = False
 import numpy as np
 import torch
 
@@ -19,6 +23,8 @@ def to_numpy(x):
 
 
 def save_point_cloud(coord, color=None, file_path="pc.ply", logger=None):
+    if not OPEN3D_AVAILABLE:
+        return
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     coord = to_numpy(coord)
     if color is not None:
@@ -36,6 +42,8 @@ def save_point_cloud(coord, color=None, file_path="pc.ply", logger=None):
 def save_bounding_boxes(
     bboxes_corners, color=(1.0, 0.0, 0.0), file_path="bbox.ply", logger=None
 ):
+    if not OPEN3D_AVAILABLE:
+        return
     bboxes_corners = to_numpy(bboxes_corners)
     # point list
     points = bboxes_corners.reshape(-1, 3)
@@ -76,6 +84,8 @@ def save_bounding_boxes(
 def save_lines(
     points, lines, color=(1.0, 0.0, 0.0), file_path="lines.ply", logger=None
 ):
+    if not OPEN3D_AVAILABLE:
+        return
     points = to_numpy(points)
     lines = to_numpy(lines)
     colors = np.array([color for _ in range(len(lines))])

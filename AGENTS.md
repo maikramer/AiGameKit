@@ -19,7 +19,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Texture2D/` | Python | `texture2d` | Seamless 2D textures (HF API) |
 | `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (HF API) |
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
-| `Rigging3D/` | Python | `rigging3d` | Auto-rigging (UniRig, Python 3.11) |
+| `Rigging3D/` | Python | `rigging3d` | Auto-rigging (UniRig, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `GameDevLab/` | Python | `gamedev-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
@@ -339,7 +339,7 @@ Use Conventional Commits:
 CI runs on push/PR to `main` (`.github/workflows/ci.yml`):
 
 1. **lint:** ruff check + ruff format --check + pre-commit
-2. **test-python:** pytest per package on Python 3.13 (3.11 for Rigging3D)
+2. **test-python:** pytest per package on Python 3.13
 3. **test-rust:** cargo fmt --check + cargo clippy + cargo test (Materialize; continue-on-error)
 
 Excluded from CI (heavy PyTorch / diffusers deps, not viable on GPU-less runners): Text2D, Text3D, Paint3D.
@@ -378,7 +378,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Sem URL de heightmap no terreno, `TerrainLOD` / `@interverse/three-terrain-lod` pode gerar um heightmap procedural internamente; os ficheiros exportados pelo Terrain3D (`terrain.json`, `heightmap.png`, etc.) só têm efeito se o recipe/plugin apontar para eles — atributos XML não suportados podem ser ignorados em silêncio.
 - OpenCode (`opencode.json` no repositório): entradas MCP locais devem declarar `type: "local"` e `command` como array de strings com executável e argumentos (não o par `command` + `args` usado noutras ferramentas).
 - VibeGame: corpos dinâmicos GLTF podem ter colisor desalinhado do mesh se o centro do AABB não coincidir com a origem da entidade — definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local. No plugin de partículas (`three.quarks`), usar o emissor interno `ParticleSystem.emitter`; um wrapper `ParticleEmitter` à parte faz o batch descartar o sistema no update e as partículas deixam de aparecer.
-- No PyPI, `bpy==5.1.0` exige Python 3.13; o Rigging3D (inferência UniRig) fixa Python 3.11 com `bpy==5.0.1` e `open3d` porque não há combinação estável Open3D + `bpy` 5.1 no mesmo venv. O **Animator3D** usa stack **3.13 + `bpy==5.1.0`** em paralelo — não assumir um único Python/`bpy` para todo o monorepo.
+- No PyPI, `bpy==5.1.0` exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy==5.1.0`** — não assumir outro Python/`bpy` para estes pacotes.
 - O **Part3D** expõe quantização do DiT (modo `auto` ou bitsandbytes int8/int4) para reduzir VRAM na fase que mais pesa; `--no-quantize-dit` desliga essa optimização quando se quer precisão máxima.
 - **QualityEngine** (`gamedev_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/gamedev_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Part3D, Text2Sound, Rigging3D, Terrain3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
 

@@ -377,7 +377,7 @@ class UniRigSkin(ModelSpec):
             ptv3_input = {
                 'coord': vertices.reshape(-1, 3),
                 'feat': feat.reshape(-1, 9),
-                'offset': torch.tensor(batch['offset']),
+                'offset': batch['offset'].detach().clone(),
                 'grid_size': self.grid_size,
             }
             if not self.training:
@@ -443,10 +443,10 @@ class UniRigSkin(ModelSpec):
                 if self.training:
                     with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
                         pred = self.skinweight_pred(input_features).reshape(cur_N, num_bones[i])
-                        skin_pred[i, :, :num_bones[i]] = F.softmax(pred)
+                        skin_pred[i, :, :num_bones[i]] = F.softmax(pred, dim=-1)
                 else:
                     pred = self.skinweight_pred(input_features).reshape(cur_N, num_bones[i])
-                    skin_pred[i, :, :num_bones[i]] = F.softmax(pred)
+                    skin_pred[i, :, :num_bones[i]] = F.softmax(pred, dim=-1)
             skin_pred_list.append(skin_pred)
         skin_pred_list = torch.cat(skin_pred_list, dim=1)
         if not self.training:

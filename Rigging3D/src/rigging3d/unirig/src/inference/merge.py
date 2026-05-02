@@ -14,7 +14,6 @@ from box import Box
 
 from scipy.spatial import cKDTree
 
-import open3d as o3d
 import itertools
 
 import bpy

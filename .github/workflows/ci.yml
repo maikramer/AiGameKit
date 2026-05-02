@@ -50,9 +50,9 @@ jobs:
             python-version: "3.13"
           - package: Skymap2D
             python-version: "3.13"
-          # Rigging3D — requires-python >=3.11,<3.12
+          # Rigging3D — requires-python >=3.13
           - package: Rigging3D
-            python-version: "3.11"
+            python-version: "3.13"
           # Torch on CPU
           - package: Part3D
             python-version: "3.13"

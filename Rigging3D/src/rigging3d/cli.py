@@ -14,11 +14,11 @@ from pathlib import Path
 import yaml
 from gamedev_shared.profiler.session import ProfilerSession
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_RIGGING3D, emit_progress, emit_result
+from gamedev_shared.quality import VALID_QUALITIES
 from rich.console import Console
 
 from . import __version__
 from .cli_rich import click
-from gamedev_shared.quality import VALID_QUALITIES
 
 console = Console()
 
@@ -614,9 +614,7 @@ def pipeline_cmd(
                     error=f"merge falhou (código {rc})",
                     seconds=time.monotonic() - t0,
                 )
-                raise click.ClickException(
-                    f"merge falhou (código {rc} ou GLB vazio). Confirma bpy/open3d e caminhos acima."
-                )
+                raise click.ClickException(f"merge falhou (código {rc} ou GLB vazio). Confirma bpy e caminhos acima.")
             if rc != 0:
                 console.print(f"[yellow]merge rc={rc}, output={out.stat().st_size}B- prosseguindo.[/yellow]")
             emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=100)

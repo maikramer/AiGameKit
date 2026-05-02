@@ -23,6 +23,7 @@ def _bash_write_output_fbx(
     *,
     python_bin: str | None = None,
     propagate_profile: bool = False,
+    gpu_ids: list[int] | None = None,
 ) -> int:
     """Simula generate_skeleton / generate_skin: escreve o ficheiro indicado em --output (GLB/FBX)."""
     if "--output" in args:
@@ -181,7 +182,7 @@ class TestSkin:
         monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
         captured_args: list[str] = []
 
-        def fake_run_bash(_root: Path, _script: str, args: list[str], *, python_bin: str | None = None) -> int:
+        def fake_run_bash(_root: Path, _script: str, args: list[str], *, python_bin: str | None = None, **_kwargs: object) -> int:
             captured_args.extend(args)
             return 0
 
@@ -313,6 +314,7 @@ class TestPipeline:
             *,
             python_bin: str | None = None,
             propagate_profile: bool = False,
+            gpu_ids: list[int] | None = None,
         ) -> int:
             nonlocal call_count
             call_count += 1
@@ -323,6 +325,7 @@ class TestPipeline:
                     args,
                     python_bin=python_bin,
                     propagate_profile=propagate_profile,
+                    gpu_ids=gpu_ids,
                 )
             return 1
 

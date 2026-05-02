@@ -29,5 +29,5 @@ predict_transform_config:
         vertex_query: 1
         grid_weight: 3.0
         # mode: exp
-        backend: pyrender # switch to 'open3d' if pyrender does not work
+        backend: pyrender
   sampler_config: *sampler_config

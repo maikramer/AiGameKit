@@ -2,8 +2,7 @@
 
 Usa ``uv`` (se disponível) para criação de venvs e instalação de pacotes,
 o que permite resolver automaticamente a versão correcta de Python quando
-``min_python`` exige uma versão diferente da do sistema (ex.: Rigging3D 3.11,
-Animator3D 3.13).  Quando ``uv`` não está disponível, usa o fluxo clássico
+``min_python`` exige uma versão diferente da do sistema (ex.: Animator3D 3.13).  Quando ``uv`` não está disponível, usa o fluxo clássico
 ``python -m venv`` + ``pip``.
 """
 

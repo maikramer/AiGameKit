@@ -286,9 +286,9 @@ def voxelization(
     faces: ndarray,
     grid: int=256,
     scale: float=1.0,
-    backend: Literal['pyrender', 'open3d']='pyrender',
+    backend: Literal['pyrender']='pyrender',
 ):
-    assert backend in ['pyrender', 'open3d']
+    assert backend == 'pyrender'
     if backend == 'pyrender':
         import pyrender
         znear = 0.05
@@ -383,55 +383,7 @@ def voxelization(
         grid_coords = grid_coords[mask]
         return grid_coords
     else:
-        import open3d as o3d
-        mesh_o3d = o3d.geometry.TriangleMesh()
-        mesh_o3d.vertices = o3d.utility.Vector3dVector(vertices)
-        mesh_o3d.triangles = o3d.utility.Vector3iVector(faces)
-        voxel_size = 2 / grid
-        voxel = o3d.geometry.VoxelGrid.create_from_triangle_mesh(mesh_o3d, voxel_size=voxel_size)
-        origin = voxel.origin
-        coords = np.array([pt.grid_index for pt in voxel.get_voxels()])
-        
-        max_coords = np.max(coords, axis=0)
-        shape = tuple(max_coords + 1)
-        voxel = np.zeros(shape, dtype=bool)
-        voxel[tuple(coords.T)] = True
-        
-        grids = np.indices(voxel.shape)
-        x_coord = grids[0, ...]
-        y_coord = grids[1, ...]
-        z_coord = grids[2, ...]
-        
-        INF = 2147483647
-        x_tmp = x_coord.copy()
-        x_tmp[~voxel] = INF
-        x_min = x_tmp.min(axis=0)
-        x_tmp[~voxel] = -1
-        x_max = x_tmp.max(axis=0)
-        
-        y_tmp = y_coord.copy()
-        y_tmp[~voxel] = INF
-        y_min = y_tmp.min(axis=1)
-        y_tmp[~voxel] = -1
-        y_max = y_tmp.max(axis=1)
-        
-        z_tmp = z_coord.copy()
-        z_tmp[~voxel] = INF
-        z_min = z_tmp.min(axis=2)
-        z_tmp[~voxel] = -1
-        z_max = z_tmp.max(axis=2)
-        
-        in_x = (x_coord >= x_min[None, :, :]) & (x_coord <= x_max[None, :, :])
-        in_y = (y_coord >= y_min[:, None, :]) & (y_coord <= y_max[:, None, :])
-        in_z = (z_coord >= z_min[:, :, None]) & (z_coord <= z_max[:, :, None])
-        
-        count = in_x.astype(int) + in_y.astype(int) + in_z.astype(int)
-        fill_mask = count >= 2
-        voxel = voxel | fill_mask
-        x, y, z = np.where(voxel)
-        grid_indices = np.stack([x, y, z], axis=1)
-        grid_coords = origin + (grid_indices + 0.5) * voxel_size
-        return grid_coords
+        raise ValueError(f"Unknown backend: {backend!r}")
 
 def voxel_skin(
     grid: int,
