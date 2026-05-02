@@ -17,10 +17,6 @@ dependencies = [
     "numpy>=1.24.0",
     "pyyaml>=6.0",
     "gamedev-shared @ file:../Shared",
-]
-
-[project.optional-dependencies]
-bench = [
     "torch>=2.6.0",
     "diffusers>=0.30.0",
     "transformers>=4.46.0",
@@ -34,11 +30,11 @@ bench = [
     "easydict>=1.10",
     "scikit-image>=0.24.0",
     "addict>=2.4.0",
-    # Otimizações VRAM adicionais
-    "xformers>=0.0.28",  # Memory efficient attention
-    "accelerate>=0.34.0",  # Otimizações de modelo
+    "xformers>=0.0.28",
+    "accelerate>=0.34.0",
+    "pytest>=7.4.0",
+    "ruff>=0.11.0",
 ]
-dev = ["pytest>=7.4.0", "ruff>=0.11.0"]
 
 [project.scripts]
 gamedev-lab = "gamedev_lab.cli:main"

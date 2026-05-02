@@ -17,13 +17,6 @@ dependencies = [
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "PyYAML>=6.0",
-]
-classifiers = [
-    "Programming Language :: Python :: 3.13",
-]
-
-[project.optional-dependencies]
-inference = [
     "torch>=2.6.0",
     "torchvision>=0.21.0",
     "numpy>=1.26.4,<3",
@@ -41,11 +34,13 @@ inference = [
     "pyrender",
     "huggingface_hub",
     "wandb",
-    # Deps CUDA-specific (instaladas por setup.sh / installer.py --inference):
-    #   spconv-cu121, cumm-cu121, torch-scatter, torch-cluster
-    # Atenção: PyTorch SDPA (nativo); não é necessário flash-attn.
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
 ]
-dev = ["pytest>=7.4.0", "pytest-cov>=4.0.0", "ruff>=0.11.0"]
+classifiers = [
+    "Programming Language :: Python :: 3.13",
+]
 
 [project.scripts]
 rigging3d = "rigging3d.cli:main"

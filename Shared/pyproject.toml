@@ -13,29 +13,25 @@ license = "MIT"
 dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
+    "torch>=2.6.0",
+    "rich-click>=1.8.0",
+    "bitsandbytes>=0.45.0",
+    "torchao>=0.10.0",
+    "optimum-quanto>=0.2.0",
+    "sdnq>=0.1.0",
+    "xformers>=0.0.28; sys_platform != 'darwin'",
+    "psutil>=5.9.0",
+    "bpy>=5.1.0",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
+    "mypy>=1.10.0",
+    "Pillow>=10.0.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Programming Language :: Python :: 3.13",
 ]
-
-[project.optional-dependencies]
-gpu = ["torch>=2.6.0"]
-cli = ["rich-click>=1.8.0"]
-quantization = [
-    "bitsandbytes>=0.45.0",
-    "torchao>=0.10.0",
-    "optimum-quanto>=0.2.0",
-    "sdnq>=0.1.0",  # Quantização moderna SDNQ
-]
-low_vram = [
-    "xformers>=0.0.28; sys_platform != 'darwin'",
-]
-profiler = [
-    "psutil>=5.9.0",
-]
-mesh = ["bpy>=5.1.0"]
-dev = ["pytest>=7.4.0", "pytest-cov>=4.0.0", "ruff>=0.11.0", "mypy>=1.10.0", "Pillow>=10.0.0"]
 
 [project.scripts]
 gamedev-install = "gamedev_shared.installer.unified:main"

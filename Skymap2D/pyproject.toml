@@ -27,15 +27,15 @@ dependencies = [
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "gamedev-shared @ file:../Shared",
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Graphics",
     "Programming Language :: Python :: 3.13",
 ]
-
-[project.optional-dependencies]
-dev = ["pytest>=7.4.0", "pytest-cov>=4.0.0", "ruff>=0.11.0"]
 
 [project.scripts]
 skymap2d = "skymap2d.cli:main"

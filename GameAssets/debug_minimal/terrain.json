@@ -1,0 +1,21 @@
+{
+  "version": "2.0",
+  "generator": "terrain3d",
+  "model_id": "xandergos/terrain-diffusion-30m",
+  "terrain": {
+    "size": 512,
+    "world_size": 128.0,
+    "max_height": 30.0,
+    "height_min": 0.0,
+    "height_max": 1.0,
+    "height_mean": 0.056651444600466075,
+    "height_std": 0.20016688205061747
+  },
+  "rivers": [],
+  "lakes": [],
+  "lake_planes": [],
+  "stats": {
+    "generation_time_seconds": 86.044
+  },
+  "prompt": "colinas rochosas com vegetação rasteira, terreno de RPG"
+}

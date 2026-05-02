@@ -56,11 +56,12 @@ def _apply_rotation_bpy(obj: Any) -> Any:
     angle = float(get_export_rotation_x_rad())
     if angle == 0.0:
         return obj
-    bpy = _require_bpy()
+    _require_bpy()
+    import mathutils
     from math import cos, sin
 
     c, s = cos(angle), sin(angle)
-    rx = bpy.mathutils.Matrix(((1, 0, 0, 0), (0, c, -s, 0), (0, s, c, 0), (0, 0, 0, 1)))
+    rx = mathutils.Matrix(((1, 0, 0, 0), (0, c, -s, 0), (0, s, c, 0), (0, 0, 0, 1)))
     obj.matrix_world = rx @ obj.matrix_world
     return obj
 
@@ -87,8 +88,10 @@ def _apply_origin_bpy(obj: Any, mode: str) -> Any:
         tz = -(bz0 + bz1) * 0.5
     else:
         raise ValueError(f"Modo de origem desconhecido: {mode!r}")
-    bpy = _require_bpy()
-    translate = bpy.mathutils.Matrix.Translation((tx, ty, tz))
+    _require_bpy()
+    import mathutils
+
+    translate = mathutils.Matrix.Translation((tx, ty, tz))
     obj.matrix_world = translate @ obj.matrix_world
     return obj
 
