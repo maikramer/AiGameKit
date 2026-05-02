@@ -214,10 +214,19 @@ def get_correct_orientation_kdtree(
                         for y in [1, -1] 
                         for z in [1, -1]]
     if fix_up_axis is not None:
-        # Apenas permutações onde o eixo "up" se mapeia a si mesmo, e
-        # restrigimos sign(up) a +1 — evita inversão cabeça/pés.
-        axis_permutations = [p for p in axis_permutations if p[fix_up_axis] == fix_up_axis]
-        sign_combinations = [s for s in sign_combinations if s[fix_up_axis] == 1]
+        # Quando o "up" está fixo confiamos na convenção do pipeline
+        # (Y-up, +Z forward) e desligamos a procura: identidade pura.
+        # Para reactivar a procura completa do KDTree, exporta
+        # ``RIGGING3D_FIX_UP_AXIS=auto``.
+        # Alternativa intermédia (procura restringida ao eixo up apenas):
+        # ``RIGGING3D_ORIENT_SEARCH=relaxed``.
+        mode = os.environ.get("RIGGING3D_ORIENT_SEARCH", "").strip().lower()
+        if mode == "relaxed":
+            axis_permutations = [p for p in axis_permutations if p[fix_up_axis] == fix_up_axis]
+            sign_combinations = [s for s in sign_combinations if s[fix_up_axis] == 1]
+        else:
+            # Modo "lock" (default): nada de procura — devolve a, bones intactos.
+            return a, bones
     _bones = bones.copy()
     # Use a deterministic sample for stability across runs.
     rng = np.random.default_rng(seed=12345)

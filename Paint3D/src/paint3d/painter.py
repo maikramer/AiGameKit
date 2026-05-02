@@ -207,11 +207,11 @@ def _bounds_axis_swap_x_rad(
     yz_after = extent_after[1] / extent_after[2]
     # Toleramos ±10% (mesh de saída pode ter pequenas variações por remesh).
     if yz_before > 1.0 and yz_after < 1.0 and abs(yz_before - 1.0 / yz_after) < max(yz_before, 1.0 / yz_after) * 0.30:
-        # Input era Y-tall, output é Z-tall → mesh rodou -90° X (Y foi para Z).
-        # Para repor, rodamos +90° em X.
-        return float(np.pi / 2.0)
-    if yz_before < 1.0 and yz_after > 1.0 and abs(1.0 / yz_before - yz_after) < max(1.0 / yz_before, yz_after) * 0.30:
+        # Input era Y-tall, output é Z-tall → Hunyuan rodou +90° em X
+        # ((0,1,0)→(0,0,1)); para repor a convenção Y-up rodamos -90° em X.
         return float(-np.pi / 2.0)
+    if yz_before < 1.0 and yz_after > 1.0 and abs(1.0 / yz_before - yz_after) < max(1.0 / yz_before, yz_after) * 0.30:
+        return float(np.pi / 2.0)
     return 0.0
 
 
