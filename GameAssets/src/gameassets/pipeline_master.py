@@ -387,13 +387,79 @@ def run_master_pipeline(
                     log.warning("master: finish animated falhou em %s: %s", anim_p, exc)
                 animated_lods.append(anim_p)
 
-    # Stage 10 — validação. LOD0 é gate; LOD1/2/rigged/animated são warnings.
+    # Stage 9.5 — Promoção: o output do estágio mais alto vira lodN.glb.
+    # Semântica: lod0.glb é SEMPRE o asset pronto-pra-jogo. Se houve animate,
+    # lod0=animated; se houve só rig, lod0=rigged; senão fica o bake-master.
+    # Versões "intermediárias" (bake-master sem rig, ou rigged se animado
+    # promovido) movem-se para _intermediate/ para debug, evitando ficheiros
+    # redundantes em meshes/.
+    promotion_kind = "none"
+    if animated_lods:
+        promotion_kind = "animated"
+        winners = animated_lods
+    elif rigged_lods:
+        promotion_kind = "rigged"
+        winners = rigged_lods
+    else:
+        winners = []
+
+    import shutil as _shutil
+
+    if winners:
+        log.info("master: promovendo %s outputs como lod0/1/2 (%s)", len(winners), promotion_kind)
+        promoted_levels: set[int] = set()
+        for w in winners:
+            try:
+                level_str = w.stem.rsplit("_lod", 1)[1].split("_")[0]
+                level = int(level_str)
+            except (IndexError, ValueError):
+                continue
+            target = _lod_path(mesh_final, level)
+            # Move bake-master output para _intermediate/_lodN_painted.glb (debug).
+            if target.is_file() and target.resolve() != w.resolve():
+                base = mesh_final.stem
+                from .paths import _base_stem as _bs
+
+                base = _bs(base)
+                debug = _intermediate_dir(mesh_final) / f"{base}_lod{level}_painted{mesh_final.suffix}"
+                debug.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    _shutil.move(str(target), str(debug))
+                except OSError as exc:
+                    log.warning("master: move bake-master→intermediate falhou: %s", exc)
+            try:
+                _shutil.move(str(w), str(target))
+                promoted_levels.add(level)
+            except OSError as exc:
+                log.warning("master: promoção %s→%s falhou: %s", w, target, exc)
+
+        # Se animated promovido, mover _rigged.glb para _intermediate/.
+        if promotion_kind == "animated":
+            for r in rigged_lods:
+                if r.is_file():
+                    try:
+                        dst = _intermediate_dir(mesh_final) / r.name
+                        dst.parent.mkdir(parents=True, exist_ok=True)
+                        _shutil.move(str(r), str(dst))
+                    except OSError as exc:
+                        log.warning("master: move rigged→intermediate falhou: %s", exc)
+
+    # Stage 10 — validação. LOD0 é gate; LOD1/2 são warnings.
+    # As regras efectivas dependem de quem foi promovido: animated.yaml >
+    # rigged.yaml > lod{N}.yaml. Quando promotion_kind != "none" usamos a
+    # mesma regra para LOD0/1/2 (mesmo nível semântico).
     if with_validate:
         rules_dir = _rules_dir()
-        # LOD0/1/2
+        if promotion_kind == "animated":
+            rule_for = {0: "animated.yaml", 1: "animated.yaml", 2: "animated.yaml"}
+        elif promotion_kind == "rigged":
+            rule_for = {0: "rigged.yaml", 1: "rigged.yaml", 2: "rigged.yaml"}
+        else:
+            rule_for = {0: "lod0.yaml", 1: "lod1.yaml", 2: "lod2.yaml"}
+
         for lvl, lod_p in ((0, lod0_p), (1, lod1_p), (2, lod2_p)):
             if lod_p.is_file():
-                rules = rules_dir / f"lod{lvl}.yaml"
+                rules = rules_dir / rule_for[lvl]
                 if rules.is_file():
                     s = _run_check_glb(
                         lod_p,
@@ -405,29 +471,25 @@ def run_master_pipeline(
                     s.name = f"validate-lod{lvl}"
                     res.stages.append(s)
                     if not s.ok and lvl == 0:
-                        # LOD0 inválido é gate
+                        # LOD0 inválido é gate.
                         res.ok = False
-        # rigged outputs (warnings only)
-        rigged_rules = rules_dir / "rigged.yaml"
-        if rigged_rules.is_file():
-            for rg in rigged_lods:
-                if rg.is_file():
-                    s = _run_check_glb(rg, rigged_rules, category=row.category, env=child_env, cwd=manifest_dir)
-                    s.name = f"validate-{rg.stem}"
-                    res.stages.append(s)
-        # animated outputs (warnings only)
-        animated_rules = rules_dir / "animated.yaml"
-        if animated_rules.is_file():
-            for an in animated_lods:
-                if an.is_file():
-                    s = _run_check_glb(an, animated_rules, category=row.category, env=child_env, cwd=manifest_dir)
-                    s.name = f"validate-{an.stem}"
-                    res.stages.append(s)
+        # Validação extra contra lod{N}.yaml (face count caps). Mesmo após
+        # promoção, lod0 deve respeitar limites de faces da categoria.
+        if promotion_kind != "none":
+            base_rules = rules_dir / "lod0.yaml"
+            if base_rules.is_file() and lod0_p.is_file():
+                s = _run_check_glb(
+                    lod0_p, base_rules, category=row.category, env=child_env, cwd=manifest_dir
+                )
+                s.name = "validate-lod0-base"
+                res.stages.append(s)
+                if not s.ok:
+                    res.ok = False
 
-    # Move intermediários (shape, painted) para _intermediate/
+    # Move intermediários (shape, painted) para _intermediate/.
     move_to_intermediate(shape_p, mesh_final)
     move_to_intermediate(painted_p, mesh_final)
-    # rigged_hi e clean já nascem em _intermediate/
+    # rigged_hi e clean já nascem em _intermediate/.
 
     res.recompute_totals()
     return res

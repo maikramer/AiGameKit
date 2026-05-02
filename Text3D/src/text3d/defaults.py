@@ -25,7 +25,16 @@ def set_export_rotation_x_rad_override(value: float | None) -> None:
 
 
 def get_export_rotation_x_rad() -> float:
-    """Rotação X Hunyuan → espaço de export (Y-up)."""
+    """Rotação X Hunyuan → espaço de export (Y-up).
+
+    Defeito: +90° (π/2). Hunyuan3D produz meshes deitadas no eixo Z (cabeça
+    em +Z, pés em -Z). Sem rotação, exportadas como GLB (Y-up) ficam de
+    barriga para cima. A rotação +90° em X coloca a cabeça em +Y (cima) e
+    os pés em -Z (atrás), como esperado para Y-up Z-forward (Godot/Three).
+
+    Override via ``TEXT3D_EXPORT_ROTATION_X_DEG`` env, ``TEXT3D_EXPORT_ROTATION_X_RAD``
+    env, ou via CLI ``--export-rotation-x-deg``.
+    """
     if _rotation_x_rad_override is not None:
         return float(_rotation_x_rad_override)
     env = os.environ.get("TEXT3D_EXPORT_ROTATION_X_RAD")
@@ -34,7 +43,7 @@ def get_export_rotation_x_rad() -> float:
     env_deg = os.environ.get("TEXT3D_EXPORT_ROTATION_X_DEG")
     if env_deg is not None and str(env_deg).strip() != "":
         return float(env_deg) * math.pi / 180.0
-    return 0.0
+    return math.pi / 2.0
 
 
 # --- Origem ao gravar mesh (após rotação Y-up) ---
