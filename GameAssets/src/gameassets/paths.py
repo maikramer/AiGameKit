@@ -167,6 +167,12 @@ def move_to_intermediate(src: Path, mesh_final: Path) -> Path:
     if not suffix:
         suffix = ""
     dst = dst_dir / f"{base}{suffix}{src.suffix}"
+    # Idempotente: se src já está no destino (resume), não faz nada.
+    try:
+        if dst.exists() and src.resolve() == dst.resolve():
+            return dst
+    except OSError:
+        pass
     if dst.exists():
         try:
             dst.unlink()
@@ -186,6 +192,32 @@ def move_to_intermediate(src: Path, mesh_final: Path) -> Path:
 
 def _valid_file(p: Path) -> bool:
     return p.is_file() and p.stat().st_size > 0
+
+
+def _resolve_intermediate_or_main(canonical: Path, mesh_final: Path) -> Path | None:
+    """Round 2: aceita o ficheiro em ``meshes/`` ou em ``meshes/_intermediate/``.
+
+    O master pipeline move ``shape``/``painted`` para ``_intermediate/`` no fim.
+    Para retomar uma pipeline parcial precisamos detectar o ficheiro em
+    qualquer das duas localizações. Devolve o path existente (preferindo a
+    localização canónica) ou ``None`` se nenhum existe e é válido.
+    """
+    if _valid_file(canonical):
+        return canonical
+    intermediate = _intermediate_dir(mesh_final) / canonical.name
+    if _valid_file(intermediate):
+        return intermediate
+    return None
+
+
+def _shape_existing(mesh_final: Path) -> Path | None:
+    """Devolve o ``id_shape.glb`` existente em ``meshes/`` ou ``_intermediate/``."""
+    return _resolve_intermediate_or_main(_shape_path(mesh_final), mesh_final)
+
+
+def _painted_existing(mesh_final: Path) -> Path | None:
+    """Devolve o ``id_painted.glb`` existente em ``meshes/`` ou ``_intermediate/``."""
+    return _resolve_intermediate_or_main(_painted_path(mesh_final), mesh_final)
 
 
 def _classify_row_state(
@@ -239,21 +271,21 @@ def _classify_row_state_master(
     paint → bake-master (lod0) → lod gen → rig_hi → transfer → animate →
     validate. Devolve o primeiro estágio que ainda falta.
     """
-    shape = _shape_path(mesh_final)
+    shape_any = _shape_existing(mesh_final)
+    painted_any = _painted_existing(mesh_final)
     clean = _clean_path(mesh_final)
-    painted = _painted_path(mesh_final)
     lod0 = _lod_path(mesh_final, 0)
     lod1 = _lod_path(mesh_final, 1)
     lod2 = _lod_path(mesh_final, 2)
     rigged_hi = _rigged_hi_path(mesh_final)
 
-    if not _valid_file(img_final) and not _valid_file(shape):
+    if not _valid_file(img_final) and shape_any is None:
         return _ROW_NEED_IMAGE
-    if not _valid_file(shape):
+    if shape_any is None:
         return _ROW_NEED_SHAPE
     if not _valid_file(clean):
         return _ROW_NEED_TOPOLOGY_FIX
-    if want_texture and not _valid_file(painted):
+    if want_texture and painted_any is None:
         return _ROW_NEED_PAINT
     if not _valid_file(lod0):
         return _ROW_NEED_BAKE_MASTER

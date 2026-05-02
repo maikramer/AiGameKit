@@ -35,8 +35,10 @@ from .paths import (
     _lod_animated_path,
     _lod_path,
     _lod_rigged_path,
+    _painted_existing,
     _painted_path,
     _rigged_hi_path,
+    _shape_existing,
     _shape_path,
     move_to_intermediate,
 )
@@ -221,8 +223,10 @@ def run_master_pipeline(
         res.stages.append(StageResult("setup", False, 0.0, "text3d não encontrado"))
         return res
 
-    shape_p = _shape_path(mesh_final)
-    painted_p = _painted_path(mesh_final)
+    # Round 2: shape/painted podem estar em meshes/ OU em meshes/_intermediate/
+    # (após uma run anterior). Resolve dinamicamente para permitir resume.
+    shape_p = _shape_existing(mesh_final) or _shape_path(mesh_final)
+    painted_p = _painted_existing(mesh_final) or _painted_path(mesh_final)
     clean_p = _clean_path(mesh_final)
 
     if not shape_p.is_file():
