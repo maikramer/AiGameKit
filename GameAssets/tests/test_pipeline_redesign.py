@@ -72,7 +72,8 @@ def test_master_pipeline_profile_default() -> None:
             "style_preset": "w",
         }
     )
-    assert p.master_pipeline is False
+    # Round 2: master_pipeline é o default ON (promovido para default).
+    assert p.master_pipeline is True
     assert p.master_validate is True
     assert p.master_bake_normals is False
 

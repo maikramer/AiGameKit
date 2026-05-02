@@ -73,6 +73,18 @@ text3d:
 paint3d:
   preserve_origin: true
 
+# Round 2 — master pipeline (default ON). DAG completo:
+#   topology-fix → bake-master → LOD → collision → rigging → transfer-weights
+#   → animate → promote (lod0=animated/rigged/painted) → validate.
+# Outputs em meshes/ ficam todos finalizados (KTX2+meshopt+tangents);
+# intermediários (shape/painted/clean/rigged_hi) movidos para meshes/_intermediate/.
+# Use master_pipeline: false (ou --legacy-pipeline no batch) para o caminho antigo.
+master_pipeline: true
+master_validate: true
+# bake_normals resolvido por categoria (humanoid/creature/armor/weapon/chest/tool
+# ON; resto OFF). master_bake_normals: true força globalmente.
+master_bake_normals: false
+
 # Rigging3D após Text3D (--with-rig + pipeline "rig" no manifest). Requer bash, GPU CUDA; ver Rigging3D/README.md.
 # rigging3d:
 #   output_suffix: "_rigged"

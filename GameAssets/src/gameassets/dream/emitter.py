@@ -42,6 +42,10 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
             "export_origin": "feet",
         }
         doc["paint3d"] = {"preserve_origin": True}
+        # Round 2 — master pipeline default ON.
+        doc["master_pipeline"] = True
+        doc["master_validate"] = True
+        doc["master_bake_normals"] = False
 
     has_rig = any(a.generate_rig for a in plan.assets)
     if has_rig:

@@ -254,8 +254,9 @@ console = Console()
     "master_pipeline_flag",
     default=None,
     help=(
-        "Activa o novo DAG (LOD0 master, transfer-weights, validate). "
-        "Override do ``master_pipeline`` no game.yaml."
+        "Round 2: master pipeline é o default. Use --legacy-pipeline para o "
+        "caminho antigo (text3d generate → paint3d → text3d lod → rigging3d → "
+        "animator3d sequencial). Override do ``master_pipeline`` no game.yaml."
     ),
 )
 def batch_cmd(

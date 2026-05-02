@@ -244,7 +244,11 @@ class GameProfile:
     # Stage 4 — bake-master pipeline (LOD0 master, transfer-weights, validate).
     # Defeito False (legacy); ativar via game.yaml ``master_pipeline: true`` ou
     # CLI ``--master-pipeline`` em ``gameassets batch``.
-    master_pipeline: bool = False
+    # Round 2: master pipeline é o default. DAG completo (topology-fix →
+    # bake-master → LOD → collision → rigging → transfer-weights → animate →
+    # promote → validate). Para forçar o caminho legacy use
+    # ``master_pipeline: false`` em game.yaml ou ``--legacy-pipeline`` no batch.
+    master_pipeline: bool = True
     master_validate: bool = True
     master_bake_normals: bool = False
     # Round 2: lista override de categorias que ativam bake-normals.
@@ -767,7 +771,7 @@ class GameProfile:
             collision=coll,
             terrain3d=ter,
             generation=gen_name,
-            master_pipeline=bool(data.get("master_pipeline", False)),
+            master_pipeline=bool(data.get("master_pipeline", True)),
             master_validate=bool(data.get("master_validate", True)),
             master_bake_normals=bool(data.get("master_bake_normals", False)),
             master_bake_normals_categories=(
