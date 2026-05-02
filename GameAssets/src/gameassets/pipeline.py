@@ -568,6 +568,7 @@ def _post_text3d_mesh_extras(
     use_master_pipeline: bool | None = None,
     with_validate: bool | None = None,
     bake_normals: bool | None = None,
+    on_progress_line: Any = None,
 ) -> bool:
     """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou.
 
@@ -599,6 +600,7 @@ def _post_text3d_mesh_extras(
             with_animate=with_animate and (animator3d_bin is not None),
             with_validate=with_validate,
             bake_normals=bake_normals,
+            on_progress_line=on_progress_line,
         )
         aggregate_master_results(mres.stages, rec)
         if mres.lod0_path and mres.lod0_path.is_file():

@@ -18,6 +18,7 @@ o caminho legacy fica intacto para compatibilidade. Move intermediários
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,11 @@ from .paths import (
 )
 from .profile import GameProfile
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
+
+try:
+    from gamedev_shared.subprocess_utils import run_cmd_streaming as _run_cmd_streaming
+except ImportError:  # pragma: no cover
+    _run_cmd_streaming = None  # type: ignore[assignment]
 
 log = logging.getLogger(__name__)
 
@@ -118,12 +124,19 @@ def _stage(
     *,
     item_id: str | None = None,
     profile_enabled: bool = False,
+    on_progress_line: "Callable[[str], None] | None" = None,
 ) -> StageResult:
     """Executa um stage do master pipeline.
 
     Round 2: envolto em ``ProfilerSession`` para spans no perf.db quando
     ``profile_enabled`` (controlado por ``GAMEDEV_PROFILE`` no child_env).
     Emite ``emit_progress`` no início e fim para visibilidade no dashboard.
+
+    ``on_progress_line``: callback alimentado linha-a-linha com stdout do
+    subprocesso. Permite encaminhar ``emit_progress`` events emitidos pelas
+    ferramentas (text3d, rigging3d, animator3d) para o dashboard do
+    gameassets — sem isso, o dashboard só vê os events do orquestrador
+    (start/end por stage) e parece "congelar" após paint3d.
     """
     import time as _time
 
@@ -141,7 +154,31 @@ def _stage(
             cli_profile=profile_enabled,
             params={"item_id": item_id} if item_id else None,
         ):
-            r = run_cmd(argv, extra_env=env, cwd=cwd)
+            if on_progress_line is not None and _run_cmd_streaming is not None:
+                # Stream stdout para callback (dashboard) E acumula resultado.
+                stdout_buf: list[str] = []
+                stderr_buf: list[str] = []
+
+                def _on_out(line: str) -> None:
+                    stdout_buf.append(line)
+                    try:
+                        on_progress_line(line)
+                    except Exception:  # noqa: BLE001
+                        pass
+
+                def _on_err(line: str) -> None:
+                    stderr_buf.append(line)
+
+                rs = _run_cmd_streaming(
+                    argv,
+                    on_stdout_line=_on_out,
+                    on_stderr_line=_on_err,
+                    cwd=cwd,
+                    extra_env=env,
+                )
+                r = rs
+            else:
+                r = run_cmd(argv, extra_env=env, cwd=cwd)
     except Exception as exc:  # noqa: BLE001
         dt = _time.perf_counter() - t0
         if item_id:
@@ -176,6 +213,7 @@ def run_master_pipeline(
     with_animate: bool = False,
     with_validate: bool = True,
     bake_normals: bool | None = None,
+    on_progress_line: Callable[[str], None] | None = None,
 ) -> MasterPipelineResult:
     """Executa o DAG novo a partir de ``id_shape.glb`` e ``id_painted.glb``.
 
@@ -213,6 +251,7 @@ def run_master_pipeline(
             output,
             item_id=row.id,
             profile_enabled=profile_enabled,
+            on_progress_line=on_progress_line,
         )
 
     text3d_bin = _bin_or_none("TEXT3D_BIN", "text3d")
@@ -512,6 +551,7 @@ def resume_master_pipeline(
     with_animate: bool = False,
     with_validate: bool = True,
     bake_normals: bool | None = None,
+    on_progress_line: Callable[[str], None] | None = None,
 ) -> MasterPipelineResult:
     """Retoma o master pipeline a partir do checkpoint detectado.
 
@@ -564,6 +604,7 @@ def resume_master_pipeline(
         with_animate=with_animate,
         with_validate=with_validate,
         bake_normals=bake_normals,
+        on_progress_line=on_progress_line,
     )
 
 
