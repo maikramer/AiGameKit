@@ -7,7 +7,7 @@ name = "animator3d"
 version = "0.1.0"
 description = "CLI de animação 3D com Blender Python (bpy) — complementa Rigging3D"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 authors = [{ name = "Animator3D Project" }]
 dependencies = [
@@ -17,6 +17,10 @@ dependencies = [
     "rich-click>=1.8.0",
     # bpy 5.1+ requer Python 3.13
     "bpy>=5.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
     "pytest>=7.4.0",
     "ruff>=0.11.0",
 ]

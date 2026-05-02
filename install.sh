@@ -8,6 +8,7 @@
 # Uso:
 #   ./install.sh <tool>           # Instalar uma ferramenta
 #   ./install.sh all              # Instalar tudo
+#   ./install.sh --all             # igual a «all»
 #   ./install.sh --list           # Listar ferramentas
 #   ./install.sh materialize      # Instalar Materialize (Rust)
 #   ./install.sh vibegame         # VibeGame: Bun + Node; ~/.local/bin/vibegame
@@ -77,27 +78,48 @@ prepare_installer_environment() {
 
     export PYTHONPATH="$SHARED_SRC:${PYTHONPATH:-}"
 
-    # O instalador unificado usa Rich (Shared/config/requirements.txt).
-    if ! "$PYTHON_CMD" -c "import rich" 2>/dev/null; then
-        echo -e "${CYAN}  → Dependências do instalador (Rich)...${NC}"
+    # Rich para o instalador — evita PEP 668 (distros «externally managed»): venv próprio sob Shared/.
+    local INSTALLER_VENV="$SHARED_ROOT/.installer-venv"
+    if "$PYTHON_CMD" -c "import rich" 2>/dev/null; then
+        export GAME_DEV_INSTALLER_PYTHON="$PYTHON_CMD"
+        return 0
+    fi
+
+    echo -e "${CYAN}  → Ambiente isolado do instalador (venv + Rich)...${NC}"
+    local INSTALLER_PY="$INSTALLER_VENV/bin/python"
+
+    if [ ! -x "$INSTALLER_PY" ]; then
         if command -v uv &> /dev/null; then
-            if ! uv pip install --system -q -r "$SHARED_ROOT/config/requirements.txt"; then
-                echo -e "${RED}✗ Falha ao instalar dependências do instalador via uv.${NC}"
+            if ! uv venv "$INSTALLER_VENV" --seed --python "$PYTHON_CMD" --clear; then
+                echo -e "${RED}✗ Falha ao criar $INSTALLER_VENV com uv.${NC}"
                 exit 1
             fi
         else
-            if ! "$PYTHON_CMD" -m pip install -q -r "$SHARED_ROOT/config/requirements.txt"; then
-                echo -e "${RED}✗ Falha ao instalar dependências do instalador.${NC}"
-                echo "  Tenta manualmente: $PYTHON_CMD -m pip install -r Shared/config/requirements.txt"
+            if ! "$PYTHON_CMD" -m venv "$INSTALLER_VENV"; then
+                echo -e "${RED}✗ Falha ao criar venv do instalador.${NC}"
+                echo "  Em Debian/Ubuntu: sudo apt install python3-venv"
                 exit 1
             fi
         fi
     fi
+
+    if ! "$INSTALLER_PY" -c "import rich" 2>/dev/null; then
+        if ! "$INSTALLER_PY" -m pip install -q --upgrade pip "rich>=13"; then
+            echo -e "${RED}✗ Falha ao instalar Rich no venv do instalador.${NC}"
+            exit 1
+        fi
+    fi
+
+    export GAME_DEV_INSTALLER_PYTHON="$INSTALLER_PY"
 }
 
 prepare_installer_environment
 
+# ``uv`` (venv/pip): sem prompts sobre .venv existente; sem warnings de hardlink cross-filesystem.
+export UV_VENV_CLEAR=1
+export UV_LINK_MODE=copy
+
 echo -e "${CYAN}GameDev Monorepo — Instalador Unificado${NC}"
 echo "========================================"
 
-exec "$PYTHON_CMD" -m gamedev_shared.installer.unified "$@"
+exec "${GAME_DEV_INSTALLER_PYTHON:?}" -m gamedev_shared.installer.unified "$@"

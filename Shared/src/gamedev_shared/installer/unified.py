@@ -7,6 +7,7 @@ instalar qualquer ferramenta (Python, Rust ou Bun/TypeScript) registada no regis
 from __future__ import annotations
 
 import argparse
+import os
 import platform
 import sys
 from pathlib import Path
@@ -358,6 +359,11 @@ def install_all(
 
 def main(argv: list[str] | None = None) -> int:
     """Ponto de entrada CLI: ``gamedev-install``."""
+    # ``uv venv`` pode pedir confirmação interactiva se ``.venv`` já existir.
+    os.environ.setdefault("UV_VENV_CLEAR", "1")
+    # Cache e destino em filesystems diferentes: evita repetir warnings de hardlink.
+    os.environ.setdefault("UV_LINK_MODE", "copy")
+
     monorepo = find_monorepo_root()
     available = list_available_tools(monorepo)
     tool_names = sorted(TOOLS.keys())
@@ -386,6 +392,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Acção (default: install)",
     )
     parser.add_argument("--list", action="store_true", help="Listar ferramentas disponíveis")
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="Instalar todas as ferramentas (equivalente ao argumento posicional «all»)",
+    )
     parser.add_argument(
         "--prefix",
         default=None,
@@ -425,13 +436,17 @@ def main(argv: list[str] | None = None) -> int:
         _print_tool_list(available, logger)
         return 0
 
-    if args.tool is None:
+    if args.all and args.tool is not None:
+        parser.error("Não uses --all juntamente com o nome da ferramenta.")
+
+    effective_tool = "all" if args.all else args.tool
+    if effective_tool is None:
         parser.print_help()
         return 0
 
     prefix = Path(args.prefix) if args.prefix else None
 
-    if args.tool.lower() == "all":
+    if effective_tool.lower() == "all":
         ok = install_all(
             monorepo=monorepo,
             install_prefix=prefix,
@@ -445,7 +460,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     else:
         ok = install_tool(
-            args.tool,
+            effective_tool,
             monorepo=monorepo,
             action=args.action,
             install_prefix=prefix,
@@ -488,7 +503,8 @@ def _build_epilog(available: list[ToolSpec]) -> str:
             "  gamedev-install text3d --text2d-venv-only # Only text2d editable in venv",
             "  gamedev-install gameassets --skip-deps      # Install GameAssets (no sys deps)",
             "  gamedev-install materialize --action uninstall",
-            "  gamedev-install all                        # Instalar tudo",
+            "  gamedev-install all                         # Instalar tudo",
+            "  gamedev-install --all                      # Igual ao anterior",
             "  gamedev-install --list                     # Listar ferramentas",
             "  gamedev-install part3d                     # Part3D: instala torch-scatter/cluster após PyTorch",
         ]

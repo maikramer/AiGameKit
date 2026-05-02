@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "CLI Text-to-Audio com Stable Audio Open 1.0 — áudio estéreo 44.1 kHz"
 readme = "README.md"
 authors = [{ name = "Text2Sound Project" }]
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
     "torch>=2.6.0",
@@ -20,14 +20,19 @@ dependencies = [
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "gamedev-shared @ file:../Shared",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.11.0",
 ]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Sound/Audio",
     "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
 ]
 
 [project.scripts]

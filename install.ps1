@@ -7,7 +7,8 @@
 # Uso:
 #   .\install.ps1 materialize           # Instalar Materialize (Rust)
 #   .\install.ps1 text2d              # com .venv no projecto, instala no venv do projecto
-#   .\install.ps1 all                   # Instalar tudo
+#   .\install.ps1 all                     # Instalar tudo
+#   .\install.ps1 --all                    # Igual a «all»
 #   .\install.ps1 --list                # Listar ferramentas
 #
 # =============================================================================
@@ -51,26 +52,42 @@ function Prepare-InstallerEnvironment {
 
     $env:PYTHONPATH = "$SharedSrc;$($env:PYTHONPATH)"
 
-    & $py -c "import rich" 2>$null
+    $projectsPython = $py
+    & $projectsPython -c "import rich" 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "${Cyan}  -> pip: dependencias do instalador (Rich)...${Reset}"
-        $req = Join-Path $SharedRoot "config\requirements.txt"
-        & $py -m pip install -q -r $req
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "${Red}Falha ao instalar dependencias do instalador.${Reset}"
-            Write-Host "  Tenta manualmente: $py -m pip install -r Shared\config\requirements.txt"
-            exit 1
+        Write-Host "${Cyan}  -> Ambiente isolado do instalador (venv + Rich)...${Reset}"
+        $installerVenv = Join-Path $SharedRoot ".installer-venv"
+        $launcherPython = Join-Path $installerVenv "Scripts\\python.exe"
+        if (-not (Test-Path -LiteralPath $launcherPython)) {
+            & $projectsPython -m venv $installerVenv
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "${Red}Falha ao criar venv do instalador em $installerVenv${Reset}"
+                exit 1
+            }
         }
+        & $launcherPython -c "import rich" 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            & $launcherPython -m pip install -q --upgrade pip "rich>=13"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "${Red}Falha ao instalar Rich no venv do instalador.${Reset}"
+                exit 1
+            }
+        }
+        return @{ Launcher = $launcherPython; Projects = $projectsPython }
     }
 
-    return $py
+    return @{ Launcher = $projectsPython; Projects = $projectsPython }
 }
 
-$PythonExe = Prepare-InstallerEnvironment
+$p = Prepare-InstallerEnvironment
+
+# Evita prompts do ``uv venv`` quando .venv ja existe (alinha com install.sh).
+$env:UV_VENV_CLEAR = "1"
+$env:UV_LINK_MODE = "copy"
 
 Write-Host "${Cyan}GameDev Monorepo - Instalador Unificado${Reset}"
 Write-Host "========================================"
 
-# Passa o Python detectado ao instalador (venv + pip usam o mesmo exe).
-& $PythonExe -m gamedev_shared.installer.unified --python $PythonExe @args
+# Launcher com Rich (--python mantém-se o interpretador de referência dos projectos / venvs).
+& $p.Launcher -m gamedev_shared.installer.unified --python $p.Projects @args
 exit $LASTEXITCODE

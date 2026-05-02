@@ -16,6 +16,9 @@ from .base import BaseInstaller, has_uv, uv_cmd
 
 _PIP_BOOTSTRAP = ("pip", "setuptools>=68,<82", "wheel")
 
+# Rodas ``bpy`` no PyPI (cp313 até à data). Actualizar quando houver ABI mais recente.
+_MONOREPO_BPY_MAX_ABI: tuple[int, int] = (3, 13)
+
 MONOREPO_LOCAL_SRC: dict[str, str] = {
     "Shared": "gamedev_shared",
 }
@@ -164,17 +167,63 @@ class PythonProjectInstaller(BaseInstaller):
     # venv do projecto
     # ------------------------------------------------------------------
 
+    def _read_venv_python_abi(self) -> tuple[int, int] | None:
+        """Versão maior.menor do interpretador dentro de ``projecto/.venv``."""
+        if not self.venv_python.is_file():
+            return None
+        try:
+            proc = subprocess.run(
+                [
+                    str(self.venv_python),
+                    "-c",
+                    "import sys; print(sys.version_info.major, sys.version_info.minor)",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            parts = proc.stdout.strip().split()
+            if len(parts) != 2:
+                return None
+            return int(parts[0]), int(parts[1])
+        except (subprocess.CalledProcessError, ValueError, OSError):
+            return None
+
     def ensure_project_venv(self) -> bool:
         """Garante ``projecto/.venv`` com um interpretador válido (cria se necessário).
 
-        Quando ``uv`` está disponível, usa ``uv venv --python X.Y`` para criar o
+        Quando ``uv`` está disponível, usa ``uv venv --python X.Y --clear`` para criar o
         venv com a versão de Python adequada ao projecto (descarrega automaticamente
-        se necessário).  Caso contrário, usa o fluxo clássico ``python -m venv``.
+        se necessário), sem prompts se já existir ``.venv`` (recriação não interactiva).
+        Caso contrário, usa o fluxo clássico ``python -m venv``.
+
+        Se já existir ``.venv`` com Python anterior a ``min_python`` ou posterior ao
+        suportado por ``bpy`` (gamedev-shared), remove e recria (evita erros uv ``cp314`` vs bpy).
         """
         if self.venv_python.is_file():
-            self.venv_exists = True
-            self.logger.info(f"Venv do projecto: {self.venv_dir}")
-            return True
+            abi = self._read_venv_python_abi()
+            ok = abi is not None and self.min_python <= abi <= _MONOREPO_BPY_MAX_ABI
+            if ok:
+                self.venv_exists = True
+                self.logger.info(f"Venv do projecto: {self.venv_dir}")
+                return True
+            if abi is None:
+                self.logger.warn(".venv incompleto ou ilegível; recriando.")
+            elif abi < self.min_python:
+                self.logger.warn(
+                    f"Venv usa Python {abi[0]}.{abi[1]} (mínimo {self.min_python[0]}.{self.min_python[1]}); "
+                    "recriando."
+                )
+            else:
+                self.logger.warn(
+                    f"Venv usa Python {abi[0]}.{abi[1]}; bpy só oferece rodas até {_MONOREPO_BPY_MAX_ABI[0]}."
+                    f"{_MONOREPO_BPY_MAX_ABI[1]} no PyPI. Recriando com {self.min_python[0]}."
+                    f"{self.min_python[1]}."
+                )
+            self.logger.step(f"Removendo {self.venv_dir}…")
+            shutil.rmtree(self.venv_dir, ignore_errors=True)
+            self.venv_exists = False
 
         py_version = f"{self.min_python[0]}.{self.min_python[1]}"
 
@@ -182,7 +231,15 @@ class PythonProjectInstaller(BaseInstaller):
             self.logger.step(f"Criando ambiente virtual com uv (Python {py_version}) em {self.venv_dir}...")
             try:
                 subprocess.run(
-                    [uv_cmd(), "venv", str(self.venv_dir), "--python", py_version, "--seed"],
+                    [
+                        uv_cmd(),
+                        "venv",
+                        str(self.venv_dir),
+                        "--python",
+                        py_version,
+                        "--seed",
+                        "--clear",
+                    ],
                     check=True,
                 )
             except subprocess.CalledProcessError as e:

@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "AI-powered terrain generation via diffusion models (terrain-diffusion)"
 readme = "README.md"
 authors = [{ name = "Terrain3D Project" }]
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
     "numpy",
@@ -36,14 +36,19 @@ dependencies = [
     "matplotlib>=3.9.0",
     "ema-pytorch>=0.7.0",
     "easydict>=1.10",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.11.0",
 ]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Graphics :: 3D Modeling",
     "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
 ]
 
 [project.scripts]

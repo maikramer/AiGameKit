@@ -6,6 +6,7 @@ __pycache__/
 .Python
 .venv/
 .venv-ci/
+.installer-venv/
 venv/
 .env
 .env.*
@@ -48,26 +49,6 @@ Thumbs.db
 # Project outputs (gerados localmente)
 **/outputs/
 *.log
-
-# Binary assets — nunca commitar para o repo (usar Git LFS ou .gitattributes)
-*.glb
-*.gltf
-*.wav
-*.mp3
-*.ogg
-*.flac
-*.fbx
-*.obj
-*.stl
-*.usd
-*.usdc
-*.usda
-
-# Venvs e ambientes locais
-.venv312/
-
-# Experiments / research (não versionar)
-experiments/
 
 # Vendored hy3dpaint checkpoints (downloaded on-demand)
 Paint3D/src/paint3d/hy3dpaint/ckpt/

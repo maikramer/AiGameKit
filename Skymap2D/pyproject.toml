@@ -7,7 +7,7 @@ name = "skymap2d"
 version = "0.1.0"
 description = "CLI para geração de skymaps equirectangular 360° com FLUX.1-dev + LoRA local"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 authors = [{ name = "Skymap2D Project" }]
 dependencies = [
@@ -27,14 +27,19 @@ dependencies = [
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "gamedev-shared @ file:../Shared",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.11.0",
 ]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Graphics",
     "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
 ]
 
 [project.scripts]

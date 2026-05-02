@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Text-to-3D com Text2D + Hunyuan3D-2.1 SDNQ INT4"
 readme = "README.md"
 authors = [{ name = "Text3D Project" }]
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 license = "MIT"
 dependencies = [
     "torch>=2.6.0",
@@ -37,15 +37,20 @@ dependencies = [
     "bpy>=5.1.0",
     "gamedev-shared @ file:../Shared",
     "text2d @ file:../Text2D",
-    "pymeshfix>=1.0.0",
-    "pytest>=7.4.0",
-    "pytest-cov>=4.0.0",
-    "ruff>=0.11.0",
+    "pymeshfix>=0.18.0",
 ]
+
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Topic :: Multimedia :: Graphics :: 3D Modeling",
     "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
 ]
 
 [project.scripts]

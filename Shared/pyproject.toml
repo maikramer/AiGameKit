@@ -7,7 +7,7 @@ name = "gamedev-shared"
 version = "0.2.0"
 description = "Biblioteca partilhada do monorepo GameDev (logging, GPU, instaladores, CLI, subprocess)"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 authors = [{ name = "GameDev" }]
 license = "MIT"
 dependencies = [
@@ -22,15 +22,20 @@ dependencies = [
     "xformers>=0.0.28; sys_platform != 'darwin'",
     "psutil>=5.9.0",
     "bpy>=5.1.0",
+    "Pillow>=10.0.0",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.0.0",
     "ruff>=0.11.0",
     "mypy>=1.10.0",
-    "Pillow>=10.0.0",
-]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Programming Language :: Python :: 3.13",
 ]
 
 [project.scripts]

@@ -1,6 +1,4 @@
-# Desenvolvimento e testes (além de config/requirements.txt via setup.py)
--r requirements.txt
-
+# Desenvolvimento e testes (runtime: Shared/pyproject.toml)
 pytest>=7.4.0
 pytest-cov>=4.0.0
 ruff>=0.11.0
