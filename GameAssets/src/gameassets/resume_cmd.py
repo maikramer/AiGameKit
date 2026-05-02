@@ -41,6 +41,7 @@ from .paths import (
     _ROW_NEED_SHAPE,
     _animator3d_output_path,
     _classify_row_state,
+    _classify_row_state_master,
     _install_file,
     _painted_path,
     _paths_for_row_manifest,
@@ -211,19 +212,31 @@ def resume_cmd(
         row_wants_rig = _row_wants_rig(row, has_rigging_profile)
         row_wants_animate = _row_wants_animate(row, want_rig, has_rigging_profile)
 
-        state = _classify_row_state(
-            img_final=img_final,
-            mesh_final=mesh_final,
-            rig_out=rig_out,
-            anim_out=anim_out,
-            want_texture=row.generate_paint,
-            wants_rig=row_wants_rig,
-            wants_animate=row_wants_animate,
-            wants_lod=row.generate_lod,
-            wants_collision=row.generate_collision,
-            lod0_path=mesh_final.parent / f"{mesh_final.stem}_lod0.glb",
-            collision_path=mesh_final.parent / f"{mesh_final.stem}_collision.glb",
-        )
+        if getattr(profile, "master_pipeline", False):
+            # Round 2: usa classificador do DAG novo.
+            state = _classify_row_state_master(
+                img_final=img_final,
+                mesh_final=mesh_final,
+                want_texture=row.generate_paint,
+                wants_rig=row_wants_rig,
+                wants_animate=row_wants_animate,
+                wants_lod=row.generate_lod,
+                wants_collision=row.generate_collision,
+            )
+        else:
+            state = _classify_row_state(
+                img_final=img_final,
+                mesh_final=mesh_final,
+                rig_out=rig_out,
+                anim_out=anim_out,
+                want_texture=row.generate_paint,
+                wants_rig=row_wants_rig,
+                wants_animate=row_wants_animate,
+                wants_lod=row.generate_lod,
+                wants_collision=row.generate_collision,
+                lod0_path=mesh_final.parent / f"{mesh_final.stem}_lod0.glb",
+                collision_path=mesh_final.parent / f"{mesh_final.stem}_collision.glb",
+            )
 
         items.append(
             {

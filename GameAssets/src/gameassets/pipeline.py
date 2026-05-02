@@ -565,9 +565,54 @@ def _post_text3d_mesh_extras(
     gpu_ids: list[int] | None = None,
     with_lod: bool = False,
     with_collision: bool = False,
+    use_master_pipeline: bool | None = None,
+    with_validate: bool | None = None,
+    bake_normals: bool | None = None,
 ) -> bool:
-    """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou."""
+    """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou.
+
+    Quando ``use_master_pipeline=True`` corre o novo DAG (LOD0 master,
+    transfer-weights, validate). O caminho legacy (linha-a-linha de
+    text3d lod / rigging3d / animator3d) é mantido para retro-compat.
+    """
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
+
+    if use_master_pipeline is None:
+        use_master_pipeline = bool(getattr(profile, "master_pipeline", False))
+    if with_validate is None:
+        with_validate = bool(getattr(profile, "master_validate", True))
+    if bake_normals is None:
+        bake_normals = bool(getattr(profile, "master_bake_normals", False))
+
+    if use_master_pipeline:
+        from .pipeline_master import aggregate_master_results, run_master_pipeline
+
+        mres = run_master_pipeline(
+            profile,
+            row,
+            mesh_final,
+            manifest_dir=manifest_dir,
+            child_env=child_env,
+            with_lod=with_lod,
+            with_collision=with_collision,
+            with_rig=with_rig and (rigging3d_bin is not None),
+            with_animate=with_animate and (animator3d_bin is not None),
+            with_validate=with_validate,
+            bake_normals=bake_normals,
+        )
+        aggregate_master_results(mres.stages, rec)
+        if mres.lod0_path and mres.lod0_path.is_file():
+            rec["lod0_path"] = _path_for_log(mres.lod0_path, manifest_dir)
+        if mres.intermediates_dir is not None:
+            rec["intermediates_dir"] = _path_for_log(mres.intermediates_dir, manifest_dir)
+        if not mres.ok:
+            errors = [s.error for s in mres.stages if not s.ok and s.error]
+            rec["status"] = "error"
+            rec["error"] = "; ".join(errors[:3]) or "master pipeline falhou"
+            console.print(f"[red]master pipeline falhou[/red] {row.id}: {rec['error'][:200]}")
+            return True
+        return False
+
     _lod_pipeline_failed(
         profile,
         row,

@@ -1,0 +1,46 @@
+# Regras de validação para o GLB LOD0 (master).
+# Aplicado pelo orquestrador via:
+#   gamedev-lab check glb id_lod0.glb rules/lod0.yaml --category <cat>
+
+mesh_totals:
+  v_per_tri:
+    max: 1.6
+  vertex_count:
+    min: 8
+    max: 200000
+
+attributes_required:
+  - POSITION
+  - NORMAL
+  - TEXCOORD_0
+  - TANGENT
+
+texture_format: ktx2
+compression: meshopt
+
+origin:
+  y_min:
+    near: 0.0
+    tol: 0.05
+
+# Limites por categoria (LOD0 = 1.2× target_faces da categoria, com folga).
+face_count:
+  max_per_category:
+    humanoid: 38400
+    creature: 28800
+    chest: 9600
+    weapon: 7200
+    tree: 14400
+    rock: 3840
+    mineral: 5760
+    building: 28800
+    furniture: 9600
+    vegetation: 12000
+    vehicle: 19200
+    armor: 12000
+    food: 3840
+    tool: 4800
+    terrain: 19200
+    effects: 2400
+
+meshes_min: 1

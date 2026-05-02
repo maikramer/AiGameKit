@@ -1,0 +1,36 @@
+# LOD2 — 25% do target da categoria. TANGENT opcional.
+mesh_totals:
+  v_per_tri:
+    max: 1.6
+  vertex_count:
+    min: 4
+    max: 50000
+
+attributes_required:
+  - POSITION
+  - NORMAL
+  - TEXCOORD_0
+
+texture_format: ktx2
+compression: meshopt
+
+face_count:
+  max_per_category:
+    humanoid: 9600
+    creature: 7200
+    chest: 2400
+    weapon: 1800
+    tree: 3600
+    rock: 960
+    mineral: 1440
+    building: 7200
+    furniture: 2400
+    vegetation: 3000
+    vehicle: 4800
+    armor: 3000
+    food: 960
+    tool: 1200
+    terrain: 4800
+    effects: 600
+
+meshes_min: 1

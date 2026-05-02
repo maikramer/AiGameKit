@@ -1,0 +1,37 @@
+# LOD1 — 50% do target da categoria, mesmas exigências de PBR.
+mesh_totals:
+  v_per_tri:
+    max: 1.6
+  vertex_count:
+    min: 4
+    max: 100000
+
+attributes_required:
+  - POSITION
+  - NORMAL
+  - TEXCOORD_0
+  - TANGENT
+
+texture_format: ktx2
+compression: meshopt
+
+face_count:
+  max_per_category:
+    humanoid: 19200
+    creature: 14400
+    chest: 4800
+    weapon: 3600
+    tree: 7200
+    rock: 1920
+    mineral: 2880
+    building: 14400
+    furniture: 4800
+    vegetation: 6000
+    vehicle: 9600
+    armor: 6000
+    food: 1920
+    tool: 2400
+    terrain: 9600
+    effects: 1200
+
+meshes_min: 1

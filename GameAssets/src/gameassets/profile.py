@@ -241,6 +241,16 @@ class GameProfile:
     collision: CollisionProfile | None = None
     terrain3d: Terrain3DProfile | None = None
     generation: str | None = None
+    # Stage 4 — bake-master pipeline (LOD0 master, transfer-weights, validate).
+    # Defeito False (legacy); ativar via game.yaml ``master_pipeline: true`` ou
+    # CLI ``--master-pipeline`` em ``gameassets batch``.
+    master_pipeline: bool = False
+    master_validate: bool = True
+    master_bake_normals: bool = False
+    # Round 2: lista override de categorias que ativam bake-normals.
+    # None = usar BAKE_NORMALS_CATEGORIES (humanoid, creature, armor,
+    # weapon, chest, tool). Vazia = nunca por categoria.
+    master_bake_normals_categories: list[str] | None = None
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> GameProfile:
@@ -757,6 +767,14 @@ class GameProfile:
             collision=coll,
             terrain3d=ter,
             generation=gen_name,
+            master_pipeline=bool(data.get("master_pipeline", False)),
+            master_validate=bool(data.get("master_validate", True)),
+            master_bake_normals=bool(data.get("master_bake_normals", False)),
+            master_bake_normals_categories=(
+                [str(x) for x in data["master_bake_normals_categories"]]
+                if isinstance(data.get("master_bake_normals_categories"), list)
+                else None
+            ),
         )
 
 

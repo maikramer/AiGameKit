@@ -1,0 +1,24 @@
+# Animated GLB (Round 2) — pós animator3d game-pack + gltf_transform_finish.
+# Exige skin + armature + pelo menos uma action + KTX2/meshopt/tangents.
+mesh_totals:
+  v_per_tri:
+    max: 1.6
+
+attributes_required:
+  - POSITION
+  - NORMAL
+  - TEXCOORD_0
+  - TANGENT
+  - JOINTS_0
+  - WEIGHTS_0
+
+texture_format: ktx2
+compression: meshopt
+
+armatures:
+  - bone_count:
+      min: 1
+      max: 512
+
+actions_min: 1
+meshes_min: 1

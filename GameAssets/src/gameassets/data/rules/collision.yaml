@@ -1,0 +1,9 @@
+# Collision GLB — geometria mínima, sem texturas, sem skin.
+mesh_totals:
+  face_count:
+    max: 256
+  vertex_count:
+    min: 4
+    max: 256
+
+meshes_min: 1

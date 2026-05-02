@@ -506,3 +506,44 @@ def get_target_faces(category: str, default: int = 3000, face_ratio: float = 1.0
     if face_ratio <= 0:
         return 0
     return max(4, int(base * face_ratio))
+
+
+# Round 2: categorias que beneficiam de bake-normals high→low por defeito.
+# Ativado quando o asset tem detalhe orgânico/relevo (humanoid, creature, armor)
+# ou superfície complexa (weapon, chest, tool). Categorias planares ou de
+# baixa-frequência (vegetation, effects, terrain) não compensam o custo.
+BAKE_NORMALS_CATEGORIES: frozenset[str] = frozenset(
+    {"humanoid", "creature", "armor", "weapon", "chest", "tool"}
+)
+
+
+def category_wants_bake_normals(
+    category: str | None,
+    overrides: list[str] | None = None,
+) -> bool:
+    """Decide se ``--bake-normals`` deve ser ON por defeito para a categoria.
+
+    Args:
+        category: nome da categoria (humanoid, creature, ...).
+        overrides: lista alternativa (do profile); se None usa BAKE_NORMALS_CATEGORIES.
+    """
+    if not category:
+        return False
+    cat_key = str(category).strip().lower()
+    if overrides is not None:
+        return cat_key in {str(c).strip().lower() for c in overrides}
+    return cat_key in BAKE_NORMALS_CATEGORIES
+
+
+# Round 2: mapeamento categoria → preset de animator3d game-pack.
+# Categorias humanóides/criaturas usam rigs animados; resto fica em "static".
+ANIMATOR_PRESET_BY_CATEGORY: dict[str, str] = {
+    "humanoid": "humanoid",
+    "creature": "creature",
+}
+
+
+def animator_preset_for_category(category: str | None) -> str:
+    if not category:
+        return "static"
+    return ANIMATOR_PRESET_BY_CATEGORY.get(str(category).strip().lower(), "static")
