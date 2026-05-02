@@ -151,7 +151,7 @@ def test_classify_master_need_rig_hi(tmp_path: Path) -> None:
 
 
 def test_resume_master_pipeline_importable() -> None:
-    from gameassets import pipeline_master
+    from gameassets import pipeline as pipeline_master
 
     assert hasattr(pipeline_master, "resume_master_pipeline")
     assert hasattr(pipeline_master, "run_master_pipeline")

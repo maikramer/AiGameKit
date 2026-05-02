@@ -6,7 +6,7 @@ import inspect
 
 
 def test_master_pipeline_result_has_observability_fields() -> None:
-    from gameassets.pipeline_master import MasterPipelineResult
+    from gameassets.pipeline import MasterPipelineResult
 
     r = MasterPipelineResult(asset_id="t", ok=True)
     assert hasattr(r, "total_elapsed_s")
@@ -16,7 +16,7 @@ def test_master_pipeline_result_has_observability_fields() -> None:
 
 
 def test_master_pipeline_result_recompute_totals() -> None:
-    from gameassets.pipeline_master import MasterPipelineResult, StageResult
+    from gameassets.pipeline import MasterPipelineResult, StageResult
 
     r = MasterPipelineResult(asset_id="t", ok=True)
     r.stages.append(StageResult("a", True, 1.5))
@@ -26,7 +26,7 @@ def test_master_pipeline_result_recompute_totals() -> None:
 
 
 def test_stage_function_signature_includes_profiling_kwargs() -> None:
-    from gameassets.pipeline_master import _stage
+    from gameassets.pipeline import _stage
 
     sig = inspect.signature(_stage)
     assert "item_id" in sig.parameters
@@ -35,7 +35,7 @@ def test_stage_function_signature_includes_profiling_kwargs() -> None:
 
 def test_stage_uses_profiler_session() -> None:
     """ProfilerSession deve ser referenciada no corpo de _stage."""
-    from gameassets import pipeline_master
+    from gameassets import pipeline as pipeline_master
 
     src = inspect.getsource(pipeline_master._stage)
     assert "ProfilerSession" in src
@@ -43,7 +43,7 @@ def test_stage_uses_profiler_session() -> None:
 
 
 def test_aggregate_master_results_writes_total_elapsed_s() -> None:
-    from gameassets.pipeline_master import StageResult, aggregate_master_results
+    from gameassets.pipeline import StageResult, aggregate_master_results
 
     rec: dict = {}
     aggregate_master_results([StageResult("a", True, 1.0), StageResult("b", True, 2.0)], rec)
@@ -54,7 +54,7 @@ def test_aggregate_master_results_writes_total_elapsed_s() -> None:
 
 def test_run_master_pipeline_signature_bake_normals_default_none() -> None:
     """Round 2: bake_normals default agora é None (= resolução por categoria)."""
-    from gameassets.pipeline_master import run_master_pipeline
+    from gameassets.pipeline import run_master_pipeline
 
     sig = inspect.signature(run_master_pipeline)
     assert sig.parameters["bake_normals"].default is None

@@ -125,7 +125,7 @@ def test_rules_lod0_required_attrs() -> None:
 
 def test_pipeline_master_module_imports() -> None:
     """O módulo do orquestrador deve ser importável."""
-    import gameassets.pipeline_master as pm
+    import gameassets.pipeline as pm
 
     assert hasattr(pm, "run_master_pipeline")
     assert hasattr(pm, "aggregate_master_results")

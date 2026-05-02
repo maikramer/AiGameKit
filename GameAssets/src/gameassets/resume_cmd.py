@@ -227,7 +227,7 @@ def resume_cmd(
             # Mapeia para os 6 buckets clássicos usados pelo planeador/loop
             # do resume_cmd. O bucket determina onde a execução vai retomar:
             # need_paint cobre topology-fix/bake-master/lod_gen (todos
-            # rodam dentro do pipeline_master, que é despachado a partir do
+            # rodam dentro do master pipeline, que é despachado a partir do
             # passo paint).
             _master_to_legacy = {
                 "need_image": _ROW_NEED_IMAGE,
