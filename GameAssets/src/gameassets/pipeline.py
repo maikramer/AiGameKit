@@ -626,6 +626,16 @@ def _post_text3d_mesh_extras(
         bake_normals = bool(getattr(profile, "master_bake_normals", False))
 
     if use_master_pipeline:
+        # Filtragem por-row: respeita ``manifest.pipeline`` (ex.: ``wooden_crate``
+        # com ``pipeline: [3d, paint, lod, collision]`` não deve correr rig).
+        # O caminho legacy fazia isto dentro de ``_rigging3d_pipeline_failed``
+        # via ``_row_wants_rig``; o master pipeline tem de o aplicar aqui.
+        row_wants_rig = _row_wants_rig(row, has_rigging_profile)
+        row_wants_animate = _row_wants_animate(row, with_rig, has_rigging_profile)
+        effective_with_rig = with_rig and row_wants_rig and (rigging3d_bin is not None)
+        effective_with_animate = (
+            with_animate and row_wants_animate and (animator3d_bin is not None)
+        )
         mres = run_master_pipeline(
             profile,
             row,
@@ -634,8 +644,8 @@ def _post_text3d_mesh_extras(
             child_env=child_env,
             with_lod=with_lod,
             with_collision=with_collision,
-            with_rig=with_rig and (rigging3d_bin is not None),
-            with_animate=with_animate and (animator3d_bin is not None),
+            with_rig=effective_with_rig,
+            with_animate=effective_with_animate,
             with_validate=with_validate,
             bake_normals=bake_normals,
             on_progress_line=on_progress_line,
