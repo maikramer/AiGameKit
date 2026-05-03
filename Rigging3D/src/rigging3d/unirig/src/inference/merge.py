@@ -265,6 +265,61 @@ def get_matrix(ob):
         ob = ob.parent
     return m
 
+def _average_duplicate_vertex_weights() -> None:
+    """Average skin weights across vertices sharing the same 3D position.
+
+    GLTF meshes split vertices at hard edges (different normals/tangents)
+    producing multiple vertices at the same position.  After KDTree-based
+    weight transfer these duplicates can receive slightly different weights,
+    causing the mesh to tear during animation ("shattered glass" effect).
+    This function groups duplicates by position and replaces each group's
+    weights with their average.
+    """
+    import bpy as _bpy
+    from collections import defaultdict as _dd
+
+    _ROUND = 4
+
+    for ob in _bpy.data.objects:
+        if ob.type != 'MESH' or len(ob.vertex_groups) == 0:
+            continue
+
+        # Group vertex indices by rounded position
+        pos_map: dict[tuple, list[int]] = _dd(list)
+        for v in ob.data.vertices:
+            co = (round(v.co.x, _ROUND), round(v.co.y, _ROUND), round(v.co.z, _ROUND))
+            pos_map[co].append(v.index)
+
+        fixed = 0
+        for _pos, vids in pos_map.items():
+            if len(vids) <= 1:
+                continue
+
+            # Collect all bone weights across duplicates
+            bone_weights: dict[str, list[float]] = _dd(list)
+            for vid in vids:
+                v = ob.data.vertices[vid]
+                for g in v.groups:
+                    bone_weights[ob.vertex_groups[g.group].name].append(g.weight)
+
+            # Compute averages
+            avg_weights = {name: sum(ws) / len(ws) for name, ws in bone_weights.items()}
+
+            # Replace weights on ALL duplicates with the averaged values
+            for vid in vids:
+                for vg in ob.vertex_groups:
+                    vg.remove([vid])
+                for bone_name, avg_w in avg_weights.items():
+                    vg = ob.vertex_groups.get(bone_name)
+                    if vg is None:
+                        vg = ob.vertex_groups.new(name=bone_name)
+                    vg.add([vid], avg_w, 'REPLACE')
+            fixed += 1
+
+        if fixed:
+            print(f"[merge] averaged weights for {fixed} duplicate-position groups "
+                  f"on '{ob.name}'")
+
 def make_armature(
     vertices: ndarray,
     bones: ndarray, # (joint, tail)
@@ -282,7 +337,16 @@ def make_armature(
     mesh_vertices = []
     local_coord = np.eye(4)
     local_parent = None
-    for ob in bpy.data.objects:
+    # Collect mesh objects for bbox computation.  When multiple meshes are
+    # present, skip those that have no vertex groups — these are typically
+    # stray debug helpers (e.g. icospheres) that would inflate the bbox.
+    all_meshes = [ob for ob in bpy.data.objects if ob.type == 'MESH']
+    has_skinned = any(ob.vertex_groups for ob in all_meshes)
+    target_meshes = [ob for ob in all_meshes if not has_skinned or ob.vertex_groups]
+    if len(all_meshes) != len(target_meshes):
+        print(f"[make_armature] skipping {len(all_meshes) - len(target_meshes)} "
+              f"non-skinned mesh(es) from bbox computation")
+    for ob in target_meshes:
         if ob.type != 'MESH':
             continue
         if ob.parent is not None:
@@ -413,7 +477,14 @@ def make_armature(
         armature.select_set(False)
         ob.select_set(False)
     armature.parent = local_parent
-    
+
+    # Average weights for duplicate vertices (same position, different
+    # normals/hard-edges).  Without this, duplicated vertices at the same
+    # 3D position can receive different skin weights from the KDTree
+    # mapping, causing the mesh to tear ("shattered glass" effect) when
+    # animated.
+    _average_duplicate_vertex_weights()
+
     # set vrm bones link
     if is_vrm:
         armature.data.vrm_addon_extension.spec_version = "1.0"
@@ -437,6 +508,49 @@ def make_armature(
         humanoid.human_bones.right_hand.node.bone_name = "J_Bip_R_Hand"
         
         bpy.ops.vrm.assign_vrm1_humanoid_human_bones_automatically(armature_name="Armature")
+
+def _reorigin_scene_feet(tolerance: float = 0.01) -> None:
+    """Translate the armature so mesh AABB has min_y=0, centred X/Z.
+
+    Only the armature (root node) is translated — skinned meshes parented
+    to it follow automatically via the parent transform.  Translating
+    children directly would double-apply the offset.
+    """
+    import bpy as _bpy
+
+    min_x = min_y = min_z = float('inf')
+    max_x = max_y = max_z = float('-inf')
+    has_mesh = False
+    for ob in _bpy.data.objects:
+        if ob.type != 'MESH' or not ob.data.vertices or len(ob.vertex_groups) == 0:
+            continue
+        has_mesh = True
+        for v in ob.data.vertices:
+            w = ob.matrix_world @ v.co
+            min_x = min(min_x, w.x)
+            min_y = min(min_y, w.y)
+            min_z = min(min_z, w.z)
+            max_x = max(max_x, w.x)
+            max_y = max(max_y, w.y)
+            max_z = max(max_z, w.z)
+
+    if not has_mesh:
+        return
+
+    dx = -0.5 * (min_x + max_x)
+    dy = -min_y
+    dz = -0.5 * (min_z + max_z)
+
+    if abs(dx) < tolerance and abs(dy) < tolerance and abs(dz) < tolerance:
+        return
+
+    print(f"[merge] reorigin feet: offset=({dx:.4f}, {dy:.4f}, {dz:.4f})")
+    # Only translate the armature (root).  Child meshes follow via parent.
+    for ob in _bpy.data.objects:
+        if ob.type == 'ARMATURE' and ob.parent is None:
+            ob.location.x += dx
+            ob.location.y += dy
+            ob.location.z += dz
 
 def merge(
     path: str,
@@ -497,6 +611,29 @@ def merge(
         fix_up_axis=fix_up_axis,
     )
     
+    # Pre-export cleanup: remove stray mesh objects that are not parented to
+    # the armature we just created.  After ``make_armature`` the target mesh
+    # is parented to the armature; any unparented mesh is a stray debug object
+    # (e.g. icosphere) that should not appear in the output GLB.
+    _armature = None
+    for _ob in bpy.data.objects:
+        if _ob.type == 'ARMATURE':
+            _armature = _ob
+            break
+    if _armature is not None:
+        for _ob in list(bpy.data.objects):
+            if _ob.type == 'MESH' and _ob.parent != _armature:
+                print(f"[merge] removing unparented mesh '{_ob.name}' "
+                      f"({len(_ob.data.vertices)} verts) before export")
+                bpy.data.objects.remove(_ob, do_unlink=True)
+
+    # Reorigin: ensure feet at Y=0, X/Z centred.  The input mesh may have
+    # been generated with origin at center (e.g. Hunyuan3D marching cubes
+    # before topology-fix applies --export-origin feet).  After merge the
+    # armature + mesh are in the scene — translate ALL objects so that the
+    # mesh AABB has min_y=0 and centred x/z.
+    _reorigin_scene_feet()
+
     dirpath = os.path.dirname(output_path)
     if dirpath != '':
         os.makedirs(dirpath, exist_ok=True)
@@ -565,7 +702,21 @@ def transfer(source: str, target: str, output: str, add_root: bool=False):
         print(f"failed to load {source}")
         return
 
-    vertices, faces, skin = process_mesh()
+    # Remove stray mesh objects that have no vertex groups (e.g. debug icospheres
+    # left by Blender or inference scripts).  These inflate the bounding box used
+    # for normalisation and cause the skeleton to be displaced after
+    # denormalisation.  The main rigged mesh always has vertex groups.
+    _removed = 0
+    for ob in list(bpy.data.objects):
+        if ob.type == 'MESH' and len(ob.vertex_groups) == 0:
+            print(f"[merge] removing stray mesh '{ob.name}' "
+                  f"({len(ob.data.vertices)} verts, no vertex groups)")
+            bpy.data.objects.remove(ob, do_unlink=True)
+            _removed += 1
+    if _removed:
+        print(f"[merge] removed {_removed} stray mesh(es) from source scene")
+
+    vertices, faces, skin = process_mesh(skip_unskinned=True)
     arranged_bones = get_arranged_bones(armature)
     if skin is None:
         skin = get_skin(arranged_bones)

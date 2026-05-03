@@ -1583,7 +1583,7 @@ def batch_cmd(
                                                 dash.feed_event(
                                                     row.id, "paint3d", "ok", phase="quick", seconds=elapsed_qp
                                                 )
-                                                _finalize_mesh_ok_d(rec_d, mesh_painted, row)
+                                                _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                                 finalized_d.add(idx)
                                                 append_log(rec_d)
                                                 if not continue_on_error and rec_d["status"] == "error":
@@ -1690,7 +1690,7 @@ def batch_cmd(
                                                         item_result.get("seconds", 0),
                                                     )
                                                 # mesh_painted already at correct path
-                                                _finalize_mesh_ok_d(rec_d, mesh_painted, row)
+                                                _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                                 finalized_d.add(idx)
                                                 append_log(rec_d)
                                                 if not continue_on_error and rec_d["status"] == "error":
@@ -1712,7 +1712,7 @@ def batch_cmd(
                                             img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                             mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                             dash.feed_event(row.id, "paint3d", "skipped", phase="texture")
-                                            _finalize_mesh_ok_d(rec_d, mesh_painted, row)
+                                            _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                             finalized_d.add(idx)
                                             append_log(rec_d)
                                             if not continue_on_error and rec_d["status"] == "error":
@@ -1732,7 +1732,7 @@ def batch_cmd(
                                 if not mesh_shape.is_file():
                                     continue
                                 rec_d["image_path"] = _path_for_log(img_f, manifest_dir)
-                                _finalize_mesh_ok_d(rec_d, mesh_shape, row)
+                                _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                 finalized_d.add(idx)
                                 append_log(rec_d)
 
@@ -1786,7 +1786,7 @@ def batch_cmd(
                                         continue
                                     rec_d["image_path"] = _path_for_log(img_f, manifest_dir)
                                     dash.feed_event(row.id, "post3d", "progress", phase="rig/animate", percent=0)
-                                    _finalize_mesh_ok_d(rec_d, actual_mesh, row)
+                                    _finalize_mesh_ok_d(rec_d, mesh_f, row)
                                     if rec_d["status"] == "ok":
                                         dash.feed_event(row.id, "post3d", "ok", phase="rig/animate")
                                     else:
@@ -2849,7 +2849,7 @@ def batch_cmd(
                                     _post_text3d_mesh_extras(
                                         profile,
                                         row,
-                                        actual_mesh,
+                                        mesh_final,
                                         rec,
                                         manifest_dir,
                                         child_env,
@@ -2913,7 +2913,7 @@ def batch_cmd(
                                     if _post_text3d_mesh_extras(
                                         profile,
                                         row,
-                                        mesh_shape,
+                                        mesh_final,
                                         rec,
                                         manifest_dir,
                                         child_env,

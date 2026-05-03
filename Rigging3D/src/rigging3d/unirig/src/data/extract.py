@@ -139,10 +139,21 @@ def get_arranged_bones(armature):
         Q = _c + Q
     return arranged_bones
 
-def process_mesh(arranged_bones=None):
+def process_mesh(arranged_bones=None, skip_unskinned: bool = False):
+    """Extract mesh vertices, faces, and (optionally) skin weights from the scene.
+
+    Args:
+        arranged_bones: If provided, extract per-vertex skin weights for these bones.
+        skip_unskinned: When True, skip meshes that have no vertex groups.
+            Use this when processing a rigged source in ``transfer()`` to
+            exclude stray debug helpers (e.g. icospheres) that would inflate
+            the bounding box.
+    """
     meshes = []
     for v in bpy.data.objects:
         if v.type == 'MESH':
+            if skip_unskinned and len(v.vertex_groups) == 0:
+                continue
             meshes.append(v)
     
     if arranged_bones is not None:
