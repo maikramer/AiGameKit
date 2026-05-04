@@ -259,6 +259,7 @@ describe('Transform Order of Operations', () => {
       group: 'fixed',
       update(_state) {
         Transform.posX[entity] += 1;
+        Transform.dirty[entity] = 1;
       },
     });
 

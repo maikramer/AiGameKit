@@ -2,12 +2,15 @@ import * as THREE from 'three';
 import { eulerToQuaternion } from '../../core/math';
 import { defineQuery, type State, type System } from '../../core';
 import { PlacePending } from './components';
+import { TerrainSpawned } from './components';
 import type { GroupSpawnDefaults } from './profiles';
 import { getPlacementSpecs } from './place-context';
 import { spawnTemplateAtTerrain } from './spawn-template';
 import { isNormalWithinSlopeLimit, sampleTerrainSurface } from './surface';
 import { composeSpawnRotation } from './transform-merge';
 import { Transform, WorldTransform } from '../transforms/components';
+import { isTerrainDynamicsBlocking } from '../terrain/utils';
+import { findNearestTerrainEntity } from '../terrain/index';
 
 const placeQuery = defineQuery([PlacePending]);
 
@@ -58,6 +61,7 @@ function applyRootPlacement(
   Transform.rotY[eid] = q.y;
   Transform.rotZ[eid] = q.z;
   Transform.rotW[eid] = q.w;
+  Transform.dirty[eid] = 1;
 }
 
 /**
@@ -84,20 +88,29 @@ export const TerrainPlaceSystem: System = {
         continue;
       }
 
-      const surfaceProbe = sampleTerrainSurface(
-        state,
-        0,
-        0,
-        spec.spawn.surfaceEpsilon
-      );
-      if (!surfaceProbe) continue;
-
       const [ax, , az] = anchorOffset(state, eid);
       const wx = spec.atX + ax;
       const wz = spec.atZ + az;
 
-      const s = sampleTerrainSurface(state, wx, wz, spec.spawn.surfaceEpsilon);
-      if (!s) continue;
+      const terrainEid = findNearestTerrainEntity(state, wx, wz);
+      if (isTerrainDynamicsBlocking(state, terrainEid || undefined)) continue;
+
+      const s = sampleTerrainSurface(
+        state,
+        wx,
+        wz,
+        spec.spawn.surfaceEpsilon,
+        spec.spawn.surfaceEpsilonAuto
+      );
+      if (!s) {
+        console.warn(
+          '[spawner] Place skipped: no terrain surface at (%.0f, %.0f)',
+          wx,
+          wz
+        );
+        PlacePending.spawned[eid] = 1;
+        continue;
+      }
 
       const maxSlope = Number.isFinite(spec.spawn.maxSlopeDeg)
         ? spec.spawn.maxSlopeDeg
@@ -113,6 +126,9 @@ export const TerrainPlaceSystem: System = {
 
       if (spec.templates.length === 0) {
         applyRootPlacement(state, eid, spec.spawn, wx, wy, wz, s.normal);
+        state.addComponent(eid, TerrainSpawned);
+        TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
+        TerrainSpawned.surfaceEpsilon[eid] = spec.spawn.surfaceEpsilon;
       } else {
         for (const template of spec.templates) {
           spawnTemplateAtTerrain(

@@ -69,7 +69,7 @@ export function queryEntities(
 ): number[] {
   const components = componentNames
     .map((name) => state.getComponent(name))
-    .filter((c): c is NonNullable<typeof c> => c !== null);
+    .filter((c): c is NonNullable<typeof c> => c != null);
 
   if (components.length === 0) return [];
 

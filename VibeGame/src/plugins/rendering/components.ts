@@ -62,3 +62,10 @@ export const CsmConfig = defineComponent({
   shadowMapSize: Types.ui16,
   enabled: Types.ui8,
 });
+
+export const DistanceCull = defineComponent({
+  /** Maximum render distance in world units (0 = disabled). */
+  maxDistance: Types.f32,
+  /** 0 = visible, 1 = culled (hidden). Used for hysteresis to avoid flickering at the boundary. */
+  culled: Types.ui8,
+});

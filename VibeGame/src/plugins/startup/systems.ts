@@ -137,6 +137,7 @@ export const PlayerCharacterSystem: System = {
       state.addComponent(character, Parent);
       state.addComponent(character, AnimatedCharacter);
       Transform.posY[character] = 0.75;
+      Transform.dirty[character] = 1;
       Parent.entity[character] = player;
     }
   },

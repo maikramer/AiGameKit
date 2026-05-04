@@ -1,5 +1,5 @@
 import type { Plugin } from '../../core';
-import { PlacePending, SpawnerPending } from './components';
+import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { entityParser } from './entity-parser';
 import { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';
 import { spawnGroupParser } from './parser';
@@ -12,6 +12,7 @@ export const SpawnerPlugin: Plugin = {
   components: {
     spawnerPending: SpawnerPending,
     placePending: PlacePending,
+    terrainSpawned: TerrainSpawned,
   },
   config: {
     parsers: {
@@ -24,6 +25,10 @@ export const SpawnerPlugin: Plugin = {
       },
       placePending: {
         spawned: 0,
+      },
+      terrainSpawned: {
+        yOffset: 0,
+        surfaceEpsilon: 0.75,
       },
     },
   },

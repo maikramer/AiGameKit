@@ -8,14 +8,15 @@
     "max_height": 200.0,
     "height_min": 0.0,
     "height_max": 1.0,
-    "height_mean": 0.43476887553821947,
-    "height_std": 0.16351275108805488
+    "height_mean": 0.051184143752174206,
+    "height_std": 0.18341283339117526
   },
   "rivers": [],
   "lakes": [],
   "lake_planes": [],
   "stats": {
-    "generation_time_seconds": 246.854
+    "generation_time_seconds": 173.199,
+    "postprocess": "upscaled_png_lanczos_512_to_2048_for_vibegame_terrain"
   },
-  "prompt": "rolling hills with gentle valleys, scattered mountain peaks, grasslands with occasional rocky ridges, fantasy RPG overworld terrain"
+  "prompt": "ilha de fantasia RPG — colinas centrais, costas baixas, modo island (Terrain3D)"
 }

@@ -14,6 +14,7 @@ export const Transform = defineComponent({
   scaleX: Types.f32,
   scaleY: Types.f32,
   scaleZ: Types.f32,
+  dirty: Types.ui8,
 });
 
 export const WorldTransform = defineComponent({

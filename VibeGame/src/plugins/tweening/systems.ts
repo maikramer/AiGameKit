@@ -20,7 +20,7 @@ import {
   TweenValue,
 } from './components';
 import * as THREE from 'three';
-import { WorldTransform } from '../transforms';
+import { Transform, WorldTransform } from '../transforms';
 import {
   applyEasing,
   createTween,
@@ -283,6 +283,20 @@ export const TweenSystem: System = {
 
         if (array && targetEntity < array.length) {
           array[targetEntity] = value;
+          if (
+            state.hasComponent(targetEntity, Transform) &&
+            (array === Transform.posX ||
+              array === Transform.posY ||
+              array === Transform.posZ ||
+              array === Transform.eulerX ||
+              array === Transform.eulerY ||
+              array === Transform.eulerZ ||
+              array === Transform.scaleX ||
+              array === Transform.scaleY ||
+              array === Transform.scaleZ)
+          ) {
+            Transform.dirty[targetEntity] = 1;
+          }
         }
       }
     }
@@ -518,6 +532,10 @@ export const TransformShakerApplySystem: System = {
       WorldTransform.rotY[targetEid] = currentQuat.y;
       WorldTransform.rotZ[targetEid] = currentQuat.z;
       WorldTransform.rotW[targetEid] = currentQuat.w;
+
+      if (state.hasComponent(targetEid, Transform)) {
+        Transform.dirty[targetEid] = 1;
+      }
     }
   },
 };
@@ -559,6 +577,9 @@ export const TransformShakerRestoreSystem: System = {
       WorldTransform.rotY[targetEid] = baseQuat.y;
       WorldTransform.rotZ[targetEid] = baseQuat.z;
       WorldTransform.rotW[targetEid] = baseQuat.w;
+      if (state.hasComponent(targetEid, Transform)) {
+        Transform.dirty[targetEid] = 1;
+      }
     }
     transformShakerQuatRegistry.clear();
   },

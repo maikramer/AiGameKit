@@ -33,6 +33,7 @@ export function respawnEntity(state: State, entity: number): void {
     Transform.rotY[entity] = quat.y;
     Transform.rotZ[entity] = quat.z;
     Transform.rotW[entity] = quat.w;
+    Transform.dirty[entity] = 1;
   }
 
   if (state.hasComponent(entity, Rigidbody)) {

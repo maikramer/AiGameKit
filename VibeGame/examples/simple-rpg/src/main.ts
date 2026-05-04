@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    __heroPos?: () => { x: number; y: number; z: number; eid: number };
+  }
+}
+
 import type { System, State } from 'vibegame';
 import {
   AudioSource,
@@ -8,6 +14,7 @@ import {
   registerEntityScripts,
   resetBuilder,
   resumeAudioContextIfSuspended,
+  setKTX2TranscoderPath,
   withPlugin,
   withSystem,
   SaveLoadPlugin,
@@ -20,10 +27,11 @@ import {
   t,
   isKeyDown,
 } from 'vibegame';
+import { Rigidbody } from '../../../src/plugins/physics/components';
+
+setKTX2TranscoderPath('/libs/basis/');
 import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
 import { Health, isDead } from '../../../src/plugins/combat/components.ts';
-import { createLakeWaterEntities } from '../../../src/plugins/terrain/lake-renderer';
-import { loadTerrainData } from '../../../src/plugins/terrain/terrain-data-loader';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
 
 const SAVE_KEY = 'simple-rpg-save';
@@ -471,34 +479,11 @@ function resolveAudioEids(state: State): void {
   eidSfxHeal = state.getEntityByName('sfx-heal') ?? -1;
 }
 
-async function injectTerrainWaterEntities(): Promise<void> {
-  const scene = document.querySelector('Scene');
-  if (!(scene instanceof Element)) return;
-
-  try {
-    const terrainData = await loadTerrainData('/assets/terrain/terrain.json');
-    const lakeWaterXml = createLakeWaterEntities(terrainData);
-    if (!lakeWaterXml) return;
-
-    const fogNode = scene.querySelector('Fog');
-    if (fogNode instanceof Element) {
-      fogNode.insertAdjacentHTML('beforebegin', `${lakeWaterXml}\n`);
-      return;
-    }
-
-    scene.insertAdjacentHTML('beforeend', lakeWaterXml);
-  } catch (error) {
-    console.warn('[simple-rpg] Failed to inject terrain water entities', error);
-  }
-}
-
 async function bootstrap(): Promise<void> {
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(CombatPlugin);
   withSystem(GameplayHudSystem);
-
-  await injectTerrainWaterEntities();
 
   configure({ canvas: '#game-canvas' });
 
@@ -514,7 +499,10 @@ async function bootstrap(): Promise<void> {
     state.addComponent(heroEid, Health);
     Health.current[heroEid] = 100;
     Health.max[heroEid] = 100;
+    Rigidbody.gravityScale[heroEid] = 0;
   }
+
+  window.__heroState = state;
 
   resolveAudioEids(state);
 

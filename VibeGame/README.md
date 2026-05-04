@@ -67,13 +67,13 @@ vibegame run
 vibegame run -- --host    # pass --host to Vite
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--install` / `-i` | Force `bun install` in the engine directory |
-| `--skip-install` / `--skip-engine-install` | Skip `bun install` when deps are already present |
-| `--skip-build` | Skip the engine build step |
-| `--skip-app-install` | Skip `bun install` in the app directory |
-| `--` (separator) | All arguments after `--` are forwarded to `bun run dev` |
+| Flag                                       | Description                                             |
+| ------------------------------------------ | ------------------------------------------------------- |
+| `--install` / `-i`                         | Force `bun install` in the engine directory             |
+| `--skip-install` / `--skip-engine-install` | Skip `bun install` when deps are already present        |
+| `--skip-build`                             | Skip the engine build step                              |
+| `--skip-app-install`                       | Skip `bun install` in the app directory                 |
+| `--` (separator)                           | All arguments after `--` are forwarded to `bun run dev` |
 
 ### `vibegame --version`
 
@@ -147,28 +147,28 @@ System execution groups (in order): `setup` → `fixed` (physics tick) → `simu
 
 ### Available Elements
 
-| Element | Description | Key Attributes |
-|---------|-------------|----------------|
-| `<Scene>` | Root container for all entities | `canvas`, `sky` |
-| `<static-part>` | Static physics body with renderer | `pos`, `shape`, `size`, `color`, `body` |
-| `<dynamic-part>` | Dynamic physics body with renderer | `pos`, `shape`, `size`, `color`, `body` |
-| `<GameObject>` | Generic entity with component mapping | `transform`, `body`, `renderer`, `collider` |
-| `<GLTFLoader>` | Load a static GLB/GLTF model | `url`, `pos`, `scale`, `rotation` |
-| `<PlayerGLTF>` | Animated player character (WASD + camera) | `pos`, `model-url`, `speed`, `jump` |
-| `<Player>` | Capsule player controller | `speed`, `jump` |
-| `<OrbitCamera>` | Orbital camera with zoom | `distance`, `angle` |
-| `<FollowCamera>` | Third-person follow camera | (configured via profile) |
-| `<Skybox>` | Equirectangular sky (PMREM IBL) | `url` |
-| `<Terrain>` | Terrain with LOD from heightmap | `url`, `size`, `collision-resolution` |
-| `<Water>` | Water plane with reflections | (configured via profile) |
-| `<Fog>` | Atmospheric fog | `mode`, `density`, `color` |
-| `<AudioSource>` | Audio emitter (Howler) | `src`, `loop`, `volume`, `spatial` |
-| `<SpawnGroup>` | Batch-spawn entities on terrain | `profile`, `count`, `density-per-km2` |
-| `<ParticleSystem>` | Particle emitter | `preset` |
-| `<ParticleBurst>` | One-shot particle burst | `preset` |
-| `<NavMeshSurface>` | Navigation mesh for AI pathfinding | `url` |
-| `<NavMeshAgent>` | AI navigation agent | `target` |
-| `<HudPanel>` | On-screen HUD overlay | `position`, `size` |
+| Element            | Description                               | Key Attributes                              |
+| ------------------ | ----------------------------------------- | ------------------------------------------- |
+| `<Scene>`          | Root container for all entities           | `canvas`, `sky`                             |
+| `<static-part>`    | Static physics body with renderer         | `pos`, `shape`, `size`, `color`, `body`     |
+| `<dynamic-part>`   | Dynamic physics body with renderer        | `pos`, `shape`, `size`, `color`, `body`     |
+| `<GameObject>`     | Generic entity with component mapping     | `transform`, `body`, `renderer`, `collider` |
+| `<GLTFLoader>`     | Load a static GLB/GLTF model              | `url`, `pos`, `scale`, `rotation`           |
+| `<PlayerGLTF>`     | Animated player character (WASD + camera) | `pos`, `model-url`, `speed`, `jump`         |
+| `<Player>`         | Capsule player controller                 | `speed`, `jump`                             |
+| `<OrbitCamera>`    | Orbital camera with zoom                  | `distance`, `angle`                         |
+| `<FollowCamera>`   | Third-person follow camera                | (configured via profile)                    |
+| `<Skybox>`         | Equirectangular sky (PMREM IBL)           | `url`                                       |
+| `<Terrain>`        | Terrain with LOD from heightmap           | `url`, `size`, `collision-resolution`       |
+| `<Water>`          | Water plane with reflections              | (configured via profile)                    |
+| `<Fog>`            | Atmospheric fog                           | `mode`, `density`, `color`                  |
+| `<AudioSource>`    | Audio emitter (Howler)                    | `src`, `loop`, `volume`, `spatial`          |
+| `<SpawnGroup>`     | Batch-spawn entities on terrain           | `profile`, `count`, `density-per-km2`       |
+| `<ParticleSystem>` | Particle emitter                          | `preset`                                    |
+| `<ParticleBurst>`  | One-shot particle burst                   | `preset`                                    |
+| `<NavMeshSurface>` | Navigation mesh for AI pathfinding        | `url`                                       |
+| `<NavMeshAgent>`   | AI navigation agent                       | `target`                                    |
+| `<HudPanel>`       | On-screen HUD overlay                     | `position`, `size`                          |
 
 ### Example Scene
 
@@ -391,6 +391,7 @@ The `<PlayerGLTF>` recipe creates a fully playable third-person character in a s
 ```
 
 Handles:
+
 - GLB model loading with animation clips
 - Animation controller (idle, walk, run, jump states)
 - WASD movement relative to camera direction
@@ -400,12 +401,12 @@ Handles:
 
 **Controls:**
 
-| Input | Action |
-|-------|--------|
-| W A S D | Move (relative to camera) |
-| Space | Jump |
-| Right mouse drag | Orbit camera |
-| Mouse wheel | Zoom |
+| Input            | Action                    |
+| ---------------- | ------------------------- |
+| W A S D          | Move (relative to camera) |
+| Space            | Jump                      |
+| Right mouse drag | Orbit camera              |
+| Mouse wheel      | Zoom                      |
 
 ---
 
@@ -415,79 +416,79 @@ VibeGame includes 30+ plugins organized by category. See [`src/plugins/README.md
 
 ### Core
 
-| Plugin | Description | Export Path |
-|--------|-------------|-------------|
+| Plugin       | Description                                              | Export Path           |
+| ------------ | -------------------------------------------------------- | --------------------- |
 | `transforms` | Position, rotation, scale 3D (Transform, WorldTransform) | `vibegame/transforms` |
-| `physics` | Rapier physics simulation + colliders | `vibegame/physics` |
-| `rendering` | Three.js renderer, cameras, scenes (MeshRenderer) | `vibegame/rendering` |
-| `input` | Keyboard, mouse, gamepad input | `vibegame/input` |
-| `startup` | Deferred post-initialization execution | `vibegame/startup` |
-| `animation` | Animation clips, AnimatedCharacter, HasAnimator | `vibegame/animation` |
+| `physics`    | Rapier physics simulation + colliders                    | `vibegame/physics`    |
+| `rendering`  | Three.js renderer, cameras, scenes (MeshRenderer)        | `vibegame/rendering`  |
+| `input`      | Keyboard, mouse, gamepad input                           | `vibegame/input`      |
+| `startup`    | Deferred post-initialization execution                   | `vibegame/startup`    |
+| `animation`  | Animation clips, AnimatedCharacter, HasAnimator          | `vibegame/animation`  |
 
 ### Camera
 
-| Plugin | Description |
-|--------|-------------|
-| `orbit-camera` | Orbital camera with zoom and pan |
+| Plugin          | Description                                  |
+| --------------- | -------------------------------------------- |
+| `orbit-camera`  | Orbital camera with zoom and pan             |
 | `follow-camera` | Third-person follow camera with zoom presets |
 
 ### Player
 
-| Plugin | Description |
-|--------|-------------|
-| `player` | Player controller (WASD, jump, character controller) |
+| Plugin      | Description                                                          |
+| ----------- | -------------------------------------------------------------------- |
+| `player`    | Player controller (WASD, jump, character controller)                 |
 | `gltf-anim` | GLTF animation plugin — registers and updates GltfAnimator instances |
 
 ### 3D Models
 
-| Plugin | Description |
-|--------|-------------|
+| Plugin     | Description                                                 |
+| ---------- | ----------------------------------------------------------- |
 | `gltf-xml` | Declarative GLB/GLTF loading via `<GLTFLoader>` XML element |
-| `text-3d` | Text3D/Hunyuan GLB model loading |
+| `text-3d`  | Text3D/Hunyuan GLB model loading                            |
 
 ### Environment
 
-| Plugin | Description |
-|--------|-------------|
-| `sky` | Skybox with equirectangular IBL (PMREM) via `<Skybox>` |
-| `fog` | Volumetric fog — exponential and linear modes |
-| `water` | Water plane with physics, swimming, reflections |
-| `terrain` | Terrain with LOD from heightmaps via `<Terrain>` |
+| Plugin    | Description                                            |
+| --------- | ------------------------------------------------------ |
+| `sky`     | Skybox with equirectangular IBL (PMREM) via `<Skybox>` |
+| `fog`     | Volumetric fog — exponential and linear modes          |
+| `water`   | Water plane with physics, swimming, reflections        |
+| `terrain` | Terrain with LOD from heightmaps via `<Terrain>`       |
 
 ### Post-Processing
 
-| Plugin | Description |
-|--------|-------------|
+| Plugin           | Description                                                                                                          |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- |
 | `postprocessing` | Bloom, SMAA, dithering, tonemapping (effect registry API — see [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md)) |
 
 ### Logic & Gameplay
 
-| Plugin | Description |
-|--------|-------------|
-| `tweening` | Smooth interpolation (tweens) via GSAP |
-| `spawner` | `<SpawnGroup>` for batch-spawning entities on terrain |
-| `respawn` | Entity respawn system |
-| `lod` | Level of Detail (near/far switching) |
-| `audio` | Spatial audio via Howler — `<AudioSource>`, `playAudioEmitter` (see [`docs/AUDIO.md`](docs/AUDIO.md)) |
-| `debug` | Debug overlays (wireframes, stats) |
-| `entity-script` | Per-entity MonoBehaviour scripts (Unity-style) |
-| `sprite` | 2D sprites |
-| `line` | 3D lines |
-| `hud` | On-screen HUD panels |
-| `raycast` | Raycasting for interaction |
-| `navmesh` | Navigation mesh and agents for AI pathfinding |
-| `ai-steering` | Autonomous NPC wandering via Yuka |
-| `particles` | Particle systems and bursts (three.quarks) |
-| `joints` | Physics joints for connected objects |
-| `combat` | Combat system |
-| `save-load` | Save/load game state to localStorage (msgpackr) |
-| `network` | Multiplayer networking via Colyseus |
-| `i18n` | Internationalization with locale auto-detection |
+| Plugin          | Description                                                                                           |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| `tweening`      | Smooth interpolation (tweens) via GSAP                                                                |
+| `spawner`       | `<SpawnGroup>` for batch-spawning entities on terrain                                                 |
+| `respawn`       | Entity respawn system                                                                                 |
+| `lod`           | Level of Detail (near/far switching)                                                                  |
+| `audio`         | Spatial audio via Howler — `<AudioSource>`, `playAudioEmitter` (see [`docs/AUDIO.md`](docs/AUDIO.md)) |
+| `debug`         | Debug overlays (wireframes, stats)                                                                    |
+| `entity-script` | Per-entity MonoBehaviour scripts (Unity-style)                                                        |
+| `sprite`        | 2D sprites                                                                                            |
+| `line`          | 3D lines                                                                                              |
+| `hud`           | On-screen HUD panels                                                                                  |
+| `raycast`       | Raycasting for interaction                                                                            |
+| `navmesh`       | Navigation mesh and agents for AI pathfinding                                                         |
+| `ai-steering`   | Autonomous NPC wandering via Yuka                                                                     |
+| `particles`     | Particle systems and bursts (three.quarks)                                                            |
+| `joints`        | Physics joints for connected objects                                                                  |
+| `combat`        | Combat system                                                                                         |
+| `save-load`     | Save/load game state to localStorage (msgpackr)                                                       |
+| `network`       | Multiplayer networking via Colyseus                                                                   |
+| `i18n`          | Internationalization with locale auto-detection                                                       |
 
 ### Pipeline
 
-| Plugin | Description |
-|--------|-------------|
+| Plugin           | Description                               |
+| ---------------- | ----------------------------------------- |
 | `scene-manifest` | Load scenes from GameAssets JSON manifest |
 
 ### Creating a New Plugin
@@ -569,22 +570,22 @@ Full pipeline example: [`VibeGame/examples/simple-rpg/`](examples/simple-rpg/)
 
 End-to-end demo of the GameDev monorepo workflow:
 
-| Element | Source | Plugin |
-|---------|--------|--------|
-| Animated player (WASD) | GameAssets → Animator3D | `<PlayerGLTF>` |
-| Terrain (256m, LOD) | Built-in | `<Terrain>` |
-| Sky IBL + background | Skymap2D (equirect PNG) | `<Skybox>` |
-| Ocean water | Built-in | `<Water>` |
-| Atmospheric fog | Built-in | `<Fog>` |
-| Stone pillars (30) | Text3D + Paint3D | `<SpawnGroup>` |
-| Lowpoly trees (density) | Text3D | `<SpawnGroup>` |
-| Pushable crates (30) | Text3D | `<SpawnGroup profile="gltf-crate">` |
-| BGM + SFX | Text2Sound | `<AudioSource>` + `playAudioEmitter` |
-| Particles (fire, rain) | Built-in | `<ParticleSystem>` |
-| AI-steering NPCs (3) | Built-in | `AiSteeringPlugin` |
-| Save / Load | Built-in | `SaveLoadPlugin` (Q/E keys) |
-| i18n (EN/PT) | Built-in | `I18nPlugin` |
-| Follow camera + post-fx | Built-in | `<FollowCamera>` (bloom, vignette) |
+| Element                 | Source                  | Plugin                               |
+| ----------------------- | ----------------------- | ------------------------------------ |
+| Animated player (WASD)  | GameAssets → Animator3D | `<PlayerGLTF>`                       |
+| Terrain (256m, LOD)     | Built-in                | `<Terrain>`                          |
+| Sky IBL + background    | Skymap2D (equirect PNG) | `<Skybox>`                           |
+| Ocean water             | Built-in                | `<Water>`                            |
+| Atmospheric fog         | Built-in                | `<Fog>`                              |
+| Stone pillars (30)      | Text3D + Paint3D        | `<SpawnGroup>`                       |
+| Lowpoly trees (density) | Text3D                  | `<SpawnGroup>`                       |
+| Pushable crates (30)    | Text3D                  | `<SpawnGroup profile="gltf-crate">`  |
+| BGM + SFX               | Text2Sound              | `<AudioSource>` + `playAudioEmitter` |
+| Particles (fire, rain)  | Built-in                | `<ParticleSystem>`                   |
+| AI-steering NPCs (3)    | Built-in                | `AiSteeringPlugin`                   |
+| Save / Load             | Built-in                | `SaveLoadPlugin` (Q/E keys)          |
+| i18n (EN/PT)            | Built-in                | `I18nPlugin`                         |
+| Follow camera + post-fx | Built-in                | `<FollowCamera>` (bloom, vignette)   |
 
 **Controls:** WASD move, Space jump, Q save, E load, Right mouse drag orbit, Mouse wheel zoom.
 
@@ -735,14 +736,14 @@ GAME.resetBuilder();
 
 Assets generated by the GameDev monorepo tools can be loaded directly into VibeGame:
 
-| Tool | Output | VibeGame Loading |
-|------|--------|------------------|
-| **Text3D** → Paint3D | Static GLB | `<GLTFLoader url="…">` or `loadGltfToScene()` |
-| **Text3D** → Rigging3D → Animator3D | Animated GLB | `<PlayerGLTF model-url="…">` or `loadGltfAnimated()` |
-| **Skymap2D** | Equirect PNG (2:1) | `<Skybox url="…">` or `applyEquirectSkyEnvironment()` |
-| **Text2Sound** | WAV audio | `<AudioSource src="…">` or `playAudioEmitter()` |
-| **Terrain3D** | heightmap.png, terrain.json | `<Terrain url="…">` |
-| **Texture2D** | Seamless 2D textures | Loaded as material maps via GLB |
+| Tool                                | Output                      | VibeGame Loading                                      |
+| ----------------------------------- | --------------------------- | ----------------------------------------------------- |
+| **Text3D** → Paint3D                | Static GLB                  | `<GLTFLoader url="…">` or `loadGltfToScene()`         |
+| **Text3D** → Rigging3D → Animator3D | Animated GLB                | `<PlayerGLTF model-url="…">` or `loadGltfAnimated()`  |
+| **Skymap2D**                        | Equirect PNG (2:1)          | `<Skybox url="…">` or `applyEquirectSkyEnvironment()` |
+| **Text2Sound**                      | WAV audio                   | `<AudioSource src="…">` or `playAudioEmitter()`       |
+| **Terrain3D**                       | heightmap.png, terrain.json | `<Terrain url="…">`                                   |
+| **Texture2D**                       | Seamless 2D textures        | Loaded as material maps via GLB                       |
 
 The `gameassets handoff` command copies generated assets into `public/assets/` and prefers animated GLBs when present.
 
@@ -752,17 +753,17 @@ See [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md) and [`docs/MONOREPO_GAME_
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [`docs/PLUGINS.md`](docs/PLUGINS.md) | Complete plugin list with details |
-| [`docs/SHARED.md`](docs/SHARED.md) | Shared module (types, math, validation) |
-| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md) | Post-processing effect system |
-| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md) | GameAssets Python → VibeGame pipeline |
-| [`docs/AUDIO.md`](docs/AUDIO.md) | Audio system (Howler, XML, autoplay) |
-| [`src/plugins/README.md`](src/plugins/README.md) | Plugin architecture + template |
-| [`../AGENTS.md`](../AGENTS.md) | Monorepo agent guide (CLI commands, conventions) |
-| [`../docs/MONOREPO_GAME_PIPELINE.md`](../docs/MONOREPO_GAME_PIPELINE.md) | Full monorepo pipeline layout |
-| [`../docs/ZERO_TO_GAME_AI.md`](../docs/ZERO_TO_GAME_AI.md) | AI-centric workflow and `dream` command |
+| Document                                                                 | Description                                      |
+| ------------------------------------------------------------------------ | ------------------------------------------------ |
+| [`docs/PLUGINS.md`](docs/PLUGINS.md)                                     | Complete plugin list with details                |
+| [`docs/SHARED.md`](docs/SHARED.md)                                       | Shared module (types, math, validation)          |
+| [`docs/EFFECT-REGISTRY.md`](docs/EFFECT-REGISTRY.md)                     | Post-processing effect system                    |
+| [`docs/ASSET-PIPELINE.md`](docs/ASSET-PIPELINE.md)                       | GameAssets Python → VibeGame pipeline            |
+| [`docs/AUDIO.md`](docs/AUDIO.md)                                         | Audio system (Howler, XML, autoplay)             |
+| [`src/plugins/README.md`](src/plugins/README.md)                         | Plugin architecture + template                   |
+| [`../AGENTS.md`](../AGENTS.md)                                           | Monorepo agent guide (CLI commands, conventions) |
+| [`../docs/MONOREPO_GAME_PIPELINE.md`](../docs/MONOREPO_GAME_PIPELINE.md) | Full monorepo pipeline layout                    |
+| [`../docs/ZERO_TO_GAME_AI.md`](../docs/ZERO_TO_GAME_AI.md)               | AI-centric workflow and `dream` command          |
 
 ---
 

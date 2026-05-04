@@ -70,4 +70,5 @@ export function updateCameraTransform(
   Transform.rotW[cameraEntity] = _tmpQuat.w;
 
   syncEulerFromQuaternion(Transform, cameraEntity);
+  Transform.dirty[cameraEntity] = 1;
 }

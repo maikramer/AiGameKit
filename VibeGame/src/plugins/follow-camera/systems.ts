@@ -252,6 +252,7 @@ export const FollowCameraPositionSystem: System = {
       Transform.rotW[cam] = _tempQuat.w;
 
       syncEulerFromQuaternion(Transform, cam);
+      Transform.dirty[cam] = 1;
     }
   },
 };

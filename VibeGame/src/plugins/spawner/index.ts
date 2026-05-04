@@ -1,4 +1,4 @@
-export { PlacePending, SpawnerPending } from './components';
+export { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 export { SpawnerPlugin } from './plugin';
 export { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';
 export { spawnGroupParser } from './parser';
@@ -23,6 +23,7 @@ export {
   optNumber,
   parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
+  roleToProfile,
   yawAnglesFromStepDeg,
 } from './profiles';
 export type {

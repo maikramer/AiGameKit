@@ -1,4 +1,5 @@
-import { describe, expect, it, mock } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import type { State } from '../../../src/core';
 import {
   parseTerrainData,
   spawnWaterEntitiesFromTerrainData,
@@ -148,25 +149,6 @@ describe('terrain-data-loader', () => {
   });
 
   describe('spawnWaterEntitiesFromTerrainData', () => {
-    it('logs lake planes without throwing', () => {
-      const consoleSpy = mock(() => {});
-      const originalLog = console.log;
-      console.log = consoleSpy as typeof console.log;
-
-      try {
-        spawnWaterEntitiesFromTerrainData(VALID_TERRAIN_JSON as TerrainData);
-        expect(consoleSpy).toHaveBeenCalled();
-
-        const calls = consoleSpy.mock.calls;
-        const lakeCall = calls.find((c: string[]) =>
-          c.some((s: string) => s.includes('lake_id=0'))
-        );
-        expect(lakeCall).toBeDefined();
-      } finally {
-        console.log = originalLog;
-      }
-    });
-
     it('handles empty terrain data without error', () => {
       const data: TerrainData = {
         version: '1.0',
@@ -176,25 +158,23 @@ describe('terrain-data-loader', () => {
         lake_planes: [],
       };
 
-      expect(() => spawnWaterEntitiesFromTerrainData(data)).not.toThrow();
+      expect(() =>
+        spawnWaterEntitiesFromTerrainData({} as State, data)
+      ).not.toThrow();
     });
 
-    it('logs river info for rivers with paths', () => {
-      const consoleSpy = mock(() => {});
-      const originalLog = console.log;
-      console.log = consoleSpy as typeof console.log;
+    it('handles terrain data with empty lake_planes without error', () => {
+      const data: TerrainData = {
+        version: '1.0',
+        terrain: { size: 1024, world_size: 256.0, max_height: 50.0 },
+        rivers: VALID_TERRAIN_JSON.rivers,
+        lakes: VALID_TERRAIN_JSON.lakes,
+        lake_planes: [],
+      };
 
-      try {
-        spawnWaterEntitiesFromTerrainData(VALID_TERRAIN_JSON as TerrainData);
-
-        const calls = consoleSpy.mock.calls;
-        const riverCall = calls.find((c: string[]) =>
-          c.some((s: string) => s.includes('river id=0'))
-        );
-        expect(riverCall).toBeDefined();
-      } finally {
-        console.log = originalLog;
-      }
+      expect(() =>
+        spawnWaterEntitiesFromTerrainData({} as State, data)
+      ).not.toThrow();
     });
   });
 });

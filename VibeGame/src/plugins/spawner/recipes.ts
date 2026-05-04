@@ -7,6 +7,9 @@ export const spawnGroupRecipe: Recipe = {
   parserAttributes: [
     'profile',
     'count',
+    'count-min',
+    'count-max',
+    'density-per-km2',
     'seed',
     'region-min',
     'region-max',
@@ -17,9 +20,17 @@ export const spawnGroupRecipe: Recipe = {
     'random-yaw',
     'scale-min',
     'scale-max',
+    'scale-distribution',
+    'scale-discrete',
+    'yaw-distribution',
+    'yaw-discrete-deg',
+    'yaw-step-deg',
     'surface-epsilon',
+    'surface-epsilon-auto',
     'max-slope-deg',
     'max-slope-attempts',
+    'avoid-water',
+    'max-distance',
   ],
 };
 

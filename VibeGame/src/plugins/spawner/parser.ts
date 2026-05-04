@@ -7,15 +7,21 @@ import {
   normalizeChildTemplateProfileId,
   normalizeGroupProfileId,
   resolveGroupSpawnFields,
+  roleToProfile,
 } from './profiles';
 import type {
   SpawnCountMode,
   SpawnGroupSpec,
-  SpawnTemplateRole,
   SpawnTemplateSpec,
 } from './types';
 
 const VALID_ROLES = new Set<string>([
+  'tree',
+  'enemy',
+  'prop',
+  'pickup',
+  'npc',
+  'building',
   'visual',
   'dynamic',
   'static',
@@ -23,17 +29,18 @@ const VALID_ROLES = new Set<string>([
   '',
 ]);
 
-function parseRole(value: XMLValue | undefined): SpawnTemplateRole {
+function parseRole(value: XMLValue | undefined): string {
   if (value === undefined || value === null) return '';
   const s = String(value).trim().toLowerCase();
   if (s === '') return '';
   if (!VALID_ROLES.has(s)) {
     console.warn(
-      `[spawn-group] role="${value}" desconhecido; use visual | dynamic | static | kinematic. Ignorado no spec.`
+      `[spawner] Unrecognized role "%s" on SpawnGroup — ignoring`,
+      value
     );
     return '';
   }
-  return s as SpawnTemplateRole;
+  return s;
 }
 
 function toNumber(value: XMLValue | undefined, fallback: number): number {
@@ -127,9 +134,22 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     templates.push(tpl);
   }
 
-  const groupProfileId = normalizeGroupProfileId(
+  let groupProfileId = normalizeGroupProfileId(
     element.attributes.profile as string | undefined
   );
+
+  if (groupProfileId === 'none') {
+    for (const tpl of templates) {
+      if (tpl.role) {
+        const mapped = roleToProfile(tpl.role);
+        if (mapped !== null) {
+          groupProfileId = mapped;
+          break;
+        }
+      }
+    }
+  }
+
   const resolvedSpawn = resolveGroupSpawnFields(
     element.attributes,
     groupProfileId
@@ -250,10 +270,12 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     yawDistribution: resolvedSpawn.yawDistribution,
     yawDiscreteDeg: resolvedSpawn.yawDiscreteDeg,
     surfaceEpsilon: resolvedSpawn.surfaceEpsilon,
+    surfaceEpsilonAuto: resolvedSpawn.surfaceEpsilonAuto,
     maxSlopeDeg: resolvedSpawn.maxSlopeDeg,
     maxSlopePlacementAttempts: resolvedSpawn.maxSlopePlacementAttempts,
     pickStrategy,
     avoidWater: resolvedSpawn.avoidWater,
+    maxDistance: resolvedSpawn.maxDistance,
     templates,
   };
 

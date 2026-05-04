@@ -361,6 +361,7 @@ describe('Respawn Plugin', () => {
 
       Rigidbody.posY[player] = -101;
       Transform.posY[entity] = -101;
+      Transform.dirty[entity] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -399,7 +400,9 @@ describe('Respawn Plugin', () => {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
       Transform.posY[entity1] = -101;
+      Transform.dirty[entity1] = 1;
       Transform.posY[entity2] = -50;
+      Transform.dirty[entity2] = 1;
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 

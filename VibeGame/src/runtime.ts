@@ -2,7 +2,12 @@ import type { BuilderOptions } from './builder';
 import type { State } from './core';
 import { TIME_CONSTANTS, XMLParser, XMLValueParser } from './core';
 import { parseXMLToEntities } from './core/recipes/parser';
-import { RenderContext, setCanvasElement } from './plugins/rendering';
+import {
+  RenderContext,
+  createRenderer,
+  getRenderingContext,
+  setCanvasElement,
+} from './plugins/rendering';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
 import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
@@ -126,6 +131,17 @@ export class GameRuntime {
 
         setCanvasElement(rendererEntity, canvas);
         setTargetCanvas(canvas);
+
+        // Create renderer immediately so KTX2Loader can be initialized
+        // before any GLTF load functions are called during processWorldContent().
+        const renderingCtx = getRenderingContext(this.state);
+        if (!renderingCtx.renderer) {
+          const clearColor =
+            RenderContext.clearColor[rendererEntity] ?? 0x000000;
+          const renderer = createRenderer(canvas, clearColor);
+          renderingCtx.renderer = renderer;
+          renderingCtx.canvas = canvas;
+        }
       }
     }
 

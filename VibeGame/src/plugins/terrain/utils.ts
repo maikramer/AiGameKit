@@ -8,7 +8,10 @@ export interface TerrainEntityData {
   heightmapUrl?: string;
   textureUrl?: string;
   initialized: boolean;
+  /** See `collisionDispatchStarted` — true only after baked heightfields are in the Rapier world. */
   collisionReady: boolean;
+  /** Avoids launching `computeAllCollisionData` twice until `collisionReady` resets. */
+  collisionDispatchStarted: boolean;
   /** Last applied ECS world translation for terrain rigid bodies + Three object. */
   worldOffset: { x: number; y: number; z: number };
   chunkColliders: Map<
@@ -26,12 +29,35 @@ export interface TerrainEntityData {
   lastHeightSmoothingSpread: number;
   /** Last applied tint (0xffffff when diffuse texture is set). */
   lastBaseColor: number;
+  /** Cached heightmap ImageData to avoid redundant canvas draws. */
+  heightmapImageData: ImageData | null;
 }
 
 const stateToTerrainContext = new WeakMap<
   State,
   Map<number, TerrainEntityData>
 >();
+
+const heightmapReloadCallbacks = new WeakMap<State, (() => void)[]>();
+
+export function registerHeightmapReloadCallback(
+  state: State,
+  cb: () => void
+): void {
+  let arr = heightmapReloadCallbacks.get(state);
+  if (!arr) {
+    arr = [];
+    heightmapReloadCallbacks.set(state, arr);
+  }
+  arr.push(cb);
+}
+
+export function fireHeightmapReloadCallbacks(state: State): void {
+  const arr = heightmapReloadCallbacks.get(state);
+  if (arr) {
+    for (const cb of arr) cb();
+  }
+}
 
 export function getTerrainContext(
   state: State
@@ -42,6 +68,27 @@ export function getTerrainContext(
     stateToTerrainContext.set(state, context);
   }
   return context;
+}
+
+/**
+ * When any `<Terrain>` exists, delay rigid-body stepping and terrain placement hooks that
+ * expect ground contact until meshes are initialized and the first batch of Rapier heightfields is in.
+ *
+ * @param state ECS state.
+ * @param eid Optional terrain entity ID. When provided, only checks that specific terrain.
+ *            When omitted, checks all terrains (backwards compatible).
+ */
+export function isTerrainDynamicsBlocking(state: State, eid?: number): boolean {
+  const ctx = getTerrainContext(state);
+  if (ctx.size === 0) return false;
+  if (eid !== undefined) {
+    const data = ctx.get(eid);
+    return !!data && (!data.initialized || !data.collisionReady);
+  }
+  for (const [, data] of ctx) {
+    if (!data.initialized || !data.collisionReady) return true;
+  }
+  return false;
 }
 
 const heightmapUrls = new WeakMap<State, Map<number, string>>();
@@ -89,8 +136,10 @@ export function getTerrainTextureUrl(
 
 /** Same canvas draw as three-terrain-lod `_extractHeightmapImageData` (CPU sampling). */
 export function extractTerrainHeightmapImageData(
-  terrainLOD: TerrainLOD
+  terrainLOD: TerrainLOD,
+  cached?: ImageData | null
 ): ImageData | null {
+  if (cached) return cached;
   const hm = terrainLOD.getHeightMap();
   if (!hm?.image) return null;
   const img = hm.image as HTMLCanvasElement | HTMLImageElement;
@@ -297,7 +346,11 @@ export function resampleChunkHeightsForCollider(
   worldSize: number,
   maxHeight: number,
   imageData: ImageData,
-  invertWorldV: boolean
+  invertWorldV: boolean,
+  heightSmoothing = 0,
+  heightSmoothingSpread = 1.25,
+  terrainOriginX = 0,
+  terrainOriginZ = 0
 ): void {
   const res = chunk.rows - 1;
   const halfWorld = worldSize / 2;
@@ -305,7 +358,9 @@ export function resampleChunkHeightsForCollider(
   const centerZ = chunk.position.z;
   const chunkSize = chunk.size;
   const iw = imageData.width;
-  const ih = imageData.height;
+  const sm = Math.min(1, Math.max(0, heightSmoothing));
+  const heightMapSize = iw;
+
   for (let row = 0; row < chunk.rows; row++) {
     for (let col = 0; col < chunk.cols; col++) {
       const localX = (col / res - 0.5) * chunkSize;
@@ -318,12 +373,27 @@ export function resampleChunkHeightsForCollider(
         chunk.heights[row * chunk.cols + col] = 0;
         continue;
       }
-      const imgX = Math.floor(u * (iw - 1));
-      const vRow = invertWorldV ? 1 - vv : vv;
-      const imgY = Math.floor(vRow * (ih - 1));
-      const idx = (imgY * iw + imgX) * 4;
-      chunk.heights[row * chunk.cols + col] =
-        (imageData.data[idx] / 255) * maxHeight;
+
+      if (sm > 1e-6) {
+        chunk.heights[row * chunk.cols + col] = sampleTerrainHeightGpuAligned(
+          imageData,
+          worldSize,
+          maxHeight,
+          worldX + terrainOriginX,
+          worldZ + terrainOriginZ,
+          invertWorldV,
+          terrainOriginX,
+          terrainOriginZ,
+          heightMapSize,
+          heightSmoothing,
+          heightSmoothingSpread
+        );
+      } else {
+        const vRow = invertWorldV ? 1 - vv : vv;
+        chunk.heights[row * chunk.cols + col] =
+          sampleHeightmapRedBilinearNorm(imageData, u, vRow, invertWorldV) *
+          maxHeight;
+      }
     }
   }
 }

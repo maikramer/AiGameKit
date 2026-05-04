@@ -2,6 +2,7 @@ export {
   AmbientLight,
   CsmConfig,
   DirectionalLight,
+  DistanceCull,
   MainCamera,
   PointLight,
   RenderContext,
@@ -20,6 +21,7 @@ export { RenderingPlugin } from './plugin';
 export { rendererRecipe, pointLightRecipe, spotLightRecipe } from './recipes';
 export {
   CameraProjection,
+  createRenderer,
   getRenderingContext,
   getScene,
   setCanvasElement,

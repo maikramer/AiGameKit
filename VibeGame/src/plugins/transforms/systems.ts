@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { System, defineQuery } from '../../core';
+import type { State } from '../../core';
 import { Parent } from '../../core';
 import { Transform, WorldTransform } from './components';
 import {
@@ -18,6 +19,12 @@ const scale = new THREE.Vector3();
 
 const transformQuery = defineQuery([Transform]);
 
+function parentIsDirty(state: State, entity: number): boolean {
+  if (!state.hasComponent(entity, Parent)) return false;
+  const parent = Parent.entity[entity];
+  return Transform.dirty[parent] === 1;
+}
+
 export const TransformHierarchySystem: System = {
   group: 'simulation',
   last: true,
@@ -25,10 +32,16 @@ export const TransformHierarchySystem: System = {
     const entities = transformQuery(state.world);
 
     for (const entity of entities) {
+      const isDirty = Transform.dirty[entity] === 1;
+      if (!isDirty && !parentIsDirty(state, entity)) continue;
+
       syncQuaternionFromEuler(Transform, entity);
     }
 
     for (const entity of entities) {
+      const isDirty = Transform.dirty[entity] === 1;
+      if (!isDirty && !parentIsDirty(state, entity)) continue;
+
       if (!state.hasComponent(entity, WorldTransform)) {
         state.addComponent(entity, WorldTransform);
         WorldTransform.rotX[entity] = 0;
@@ -72,6 +85,12 @@ export const TransformHierarchySystem: System = {
           rotation,
           scale
         );
+      }
+    }
+
+    for (const entity of entities) {
+      if (Transform.dirty[entity] === 1) {
+        Transform.dirty[entity] = 0;
       }
     }
 

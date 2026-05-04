@@ -673,6 +673,8 @@ export function interpolateTransforms(state: State, alpha: number): void {
     }
 
     syncEulerFromQuaternion(Transform, entity);
+
+    Transform.dirty[entity] = 1;
   }
 }
 
@@ -766,6 +768,8 @@ export function copyRigidbodyToTransforms(entity: number, state: State): void {
   InterpolatedTransform.rotY[entity] = Rigidbody.rotY[entity];
   InterpolatedTransform.rotZ[entity] = Rigidbody.rotZ[entity];
   InterpolatedTransform.rotW[entity] = Rigidbody.rotW[entity];
+
+  Transform.dirty[entity] = 1;
 }
 
 export function syncBodyQuaternionFromEuler(entity: number): void {

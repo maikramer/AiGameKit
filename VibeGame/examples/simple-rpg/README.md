@@ -8,22 +8,22 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 
 ## What is in the scene
 
-| Element                      | Source / Plugin                        | How it loads                                                   |
-| ---------------------------- | -------------------------------------- | -------------------------------------------------------------- |
-| Terrain (256m, LOD)          | Built-in `<Terrain>`                   | Declarative in `index.html`                                    |
-| Ocean water plane            | Built-in `<Water>`                     | Declarative                                                    |
-| Atmospheric fog              | Built-in `<Fog>`                       | Declarative                                                    |
-| Player (animated GLB + WASD) | Built-in `<PlayerGLTF`                 | Declarative                                                    |
-| Follow camera + post-fx      | Built-in `<FollowCamera>`              | Declarative (bloom, vignette, chromatic aberration)            |
-| Hero character (GLB)       | Player asset                           | `<PlayerGLTF model-url="/assets/models/hero.glb">`             |
-| Stone pillars (30)         | Spawner + terrain align               | `stone_pillar.glb` (Y-up + pés; ver `scripts/fix-glb-yup-feet.py`)   |
-| Lowpoly trees (densidade)  | Spawner                                | `tree_lowpoly.glb`; `density-per-km2`, escala 1.5–4×, yaw em passos de 45° |
-| Pushable wooden crates (30)| Spawner + Physics                     | `wooden_crate.glb` (`<SpawnGroup profile="gltf-crate">`, dynamic) |
-| Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`                  |
-| Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`                    |
-| On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`               |
-| Sky IBL + background         | Skymap2D (equirect PNG) + `sky` plugin | **`<Skyboxurl="/assets/sky/sky.png">`** em `index.html`        |
-| BGM + SFX (jump, save, load) | Text2Sound + `audio` plugin            | **`<AudioSource>`** + `playAudioEmitter` em `src/main.ts`      |
+| Element                      | Source / Plugin                        | How it loads                                                                    |
+| ---------------------------- | -------------------------------------- | ------------------------------------------------------------------------------- |
+| Terrain (256m, LOD)          | Built-in `<Terrain>`                   | Declarative in `index.html`                                                     |
+| Ocean water plane            | Built-in `<Water>`                     | Declarative                                                                     |
+| Atmospheric fog              | Built-in `<Fog>`                       | Declarative                                                                     |
+| Player (animated GLB + WASD) | Built-in `<PlayerGLTF`                 | Declarative                                                                     |
+| Follow camera + post-fx      | Built-in `<FollowCamera>`              | Declarative (bloom, vignette, chromatic aberration)                             |
+| Hero character (GLB)         | Player asset                           | `<PlayerGLTF model-url="/assets/meshes/hero_lod0.glb">`                         |
+| Stone pillars (30)           | Spawner + terrain align                | `stone_pillar_lod0.glb`                                                         |
+| Lowpoly trees (densidade)    | Spawner                                | `tree_lowpoly_lod0.glb`; `density-per-km2`, escala 1.5–4×, yaw em passos de 45° |
+| Pushable wooden crates (30)  | Spawner + Physics                      | `wooden_crate_lod0.glb` (`<SpawnGroup profile="gltf-crate">`, dynamic)          |
+| Save / Load                  | **Save-Load plugin**                   | `withPlugin(SaveLoadPlugin)` in `src/main.ts`                                   |
+| Localized messages (EN/PT)   | **i18n plugin**                        | `withPlugin(I18nPlugin)` + `loadDictionary`                                     |
+| On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`                                |
+| Sky IBL + background         | Skymap2D (equirect PNG) + `sky` plugin | **`<Skyboxurl="/assets/sky/sky.png">`** em `index.html`                         |
+| BGM + SFX (jump, save, load) | Text2Sound + `audio` plugin            | **`<AudioSource>`** + `playAudioEmitter` em `src/main.ts`                       |
 
 ## Engine features demonstrated
 
@@ -54,7 +54,7 @@ sample-gameassets/
   main.ts           # Bootstrap code (for reference)
   index.html        # Full page (for reference)
 # GLB/PNG/WAV gerados pelo batch: `public/assets/{meshes,images,audio}/` (local; não versionados no Git).
-# No repositório mantêm-se só `public/assets/{models,textures,audio,sky,terrain}/`.
+# No repositório mantêm-se só `public/assets/{audio,sky,terrain}/` (+ JSON dos WAV onde aplicável).
 ```
 
 ### 2. Generate assets (requires GPU)
@@ -88,10 +88,9 @@ This creates (or refreshes):
 ```
 public/
   assets/
-    meshes/     # saída intermédia do batch (GLB por id) — só local, .gitignore
+    meshes/     # GLB finais (lod0/lod1/lod2, collision, etc.) — só local, .gitignore
     images/     # PNG 2D do Text2D — só local, .gitignore
-    models/     # GLB servidos pelo Vite (handoff)
-    textures/   # PNG difusos (handoff)
+    textures/   # PNG difusos (handoff), se usados
     audio/      # WAV do Text2Sound
     sky/sky.png
     gameassets_handoff.json

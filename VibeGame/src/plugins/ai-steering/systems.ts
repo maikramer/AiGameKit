@@ -124,6 +124,7 @@ export const SteeringSyncSystem: System = {
       Transform.rotY[eid] = row.vehicle.rotation.y;
       Transform.rotZ[eid] = row.vehicle.rotation.z;
       Transform.rotW[eid] = row.vehicle.rotation.w;
+      Transform.dirty[eid] = 1;
 
       if (hasComponent(state.world, WorldTransform, eid)) {
         WorldTransform.posX[eid] = Transform.posX[eid];

@@ -18,9 +18,11 @@ import {
   isGltfBoundsPrefetchInflight,
   warnMissingGltfBoundsOnce,
 } from '../gltf-xml/gltf-bounds-cache';
+import { DistanceCull } from '../rendering/components';
+import { Transform } from '../transforms/components';
+import { TerrainSpawned } from './components';
 
 const upNormal = new THREE.Vector3(0, 1, 0);
-const _foot = new THREE.Vector3();
 
 function mergeTemplateAttributes(
   template: SpawnTemplateSpec,
@@ -59,17 +61,12 @@ function pickScaleJitter(
 function pickYawRad(
   spec: Pick<
     SpawnGroupSpec,
-    | 'randomYaw'
-    | 'yawDistribution'
-    | 'yawDiscreteDeg'
+    'randomYaw' | 'yawDistribution' | 'yawDiscreteDeg'
   >,
   rand: () => number
 ): number {
   if (!spec.randomYaw) return 0;
-  if (
-    spec.yawDistribution === 'discrete' &&
-    spec.yawDiscreteDeg.length > 0
-  ) {
+  if (spec.yawDistribution === 'discrete' && spec.yawDiscreteDeg.length > 0) {
     const arr = spec.yawDiscreteDeg;
     const deg = arr[Math.floor(rand() * arr.length)]!;
     return (deg * Math.PI) / 180;
@@ -92,6 +89,8 @@ export function spawnTemplateAtTerrain(
     | 'yawDistribution'
     | 'yawDiscreteDeg'
     | 'surfaceEpsilon'
+    | 'surfaceEpsilonAuto'
+    | 'maxDistance'
   >,
   rand: () => number,
   wx: number,
@@ -112,7 +111,13 @@ export function spawnTemplateAtTerrain(
     parts.scale[2] * scaleJitter,
   ];
 
-  const surface = sampleTerrainSurface(state, wx, wz, spec.surfaceEpsilon);
+  const surface = sampleTerrainSurface(
+    state,
+    wx,
+    wz,
+    spec.surfaceEpsilon,
+    spec.surfaceEpsilonAuto
+  );
   const normal = surface?.normal ?? upNormal;
 
   const yawRad = pickYawRad(spec, rand);
@@ -129,15 +134,16 @@ export function spawnTemplateAtTerrain(
   const url = typeof urlRaw === 'string' ? urlRaw.trim() : '';
   const scaleY = Math.max(scaleJitter * parts.scale[1], 1e-6);
 
-  _foot.set(0, 0, 0);
+  const foot = new THREE.Vector3();
+  foot.set(0, 0, 0);
   if (spec.groundAlign === 'aabb' && url) {
     const b = getGltfLocalYBounds(url);
     if (b) {
       const lift = -b.minY * scaleY;
       if (spec.alignToTerrain) {
-        _foot.copy(normal).multiplyScalar(lift);
+        foot.copy(normal).multiplyScalar(lift);
       } else {
-        _foot.set(0, lift, 0);
+        foot.set(0, lift, 0);
       }
     } else if (!isGltfBoundsPrefetchInflight(url)) {
       warnMissingGltfBoundsOnce(url);
@@ -145,9 +151,9 @@ export function spawnTemplateAtTerrain(
   }
 
   base.pos = [
-    wx + parts.pos[0] + _foot.x,
-    wy + parts.pos[1] + spec.baseYOffset + _foot.y,
-    wz + parts.pos[2] + _foot.z,
+    wx + parts.pos[0] + foot.x,
+    wy + parts.pos[1] + spec.baseYOffset + foot.y,
+    wz + parts.pos[2] + foot.z,
   ];
 
   const transformStr = formatTransformAttr(base);
@@ -155,14 +161,28 @@ export function spawnTemplateAtTerrain(
 
   if (template.tagName.toLowerCase() === 'gameobject') {
     delete attrs.place;
-    const root = createEntityFromRecipe(state, 'GameObject', attrs);
+    const eid = createEntityFromRecipe(state, 'GameObject', attrs);
     const ch = template.entityChildren;
     if (ch?.length) {
       const context = new ParseContext(state);
-      processRecipeChildElements(state, root, 'GameObject', ch, context);
+      processRecipeChildElements(state, eid, 'GameObject', ch, context);
     }
+    if (spec.maxDistance > 0) {
+      state.addComponent(eid, DistanceCull);
+      DistanceCull.maxDistance[eid] = spec.maxDistance;
+    }
+    state.addComponent(eid, TerrainSpawned);
+    TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
+    TerrainSpawned.surfaceEpsilon[eid] = spec.surfaceEpsilon;
     return;
   }
 
-  createEntityFromRecipe(state, template.tagName, attrs);
+  const eid = createEntityFromRecipe(state, template.tagName, attrs);
+  if (spec.maxDistance > 0) {
+    state.addComponent(eid, DistanceCull);
+    DistanceCull.maxDistance[eid] = spec.maxDistance;
+  }
+  state.addComponent(eid, TerrainSpawned);
+  TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
+  TerrainSpawned.surfaceEpsilon[eid] = spec.surfaceEpsilon;
 }

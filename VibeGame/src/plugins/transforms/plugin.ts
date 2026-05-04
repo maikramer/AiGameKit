@@ -15,6 +15,7 @@ export const TransformsPlugin: Plugin = {
         scaleX: 1,
         scaleY: 1,
         scaleZ: 1,
+        dirty: 1,
       },
       'world-transform': {
         rotW: 1,

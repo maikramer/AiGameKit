@@ -4,6 +4,7 @@ export { terrainRecipe } from './recipes';
 export {
   getTerrainContext,
   getTerrainHeightmapUrl,
+  registerHeightmapReloadCallback,
   setTerrainHeightmapUrl,
   getTerrainTextureUrl,
   setTerrainTextureUrl,

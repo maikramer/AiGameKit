@@ -15,8 +15,8 @@ export type SpawnTemplateRole =
 export interface SpawnTemplateSpec {
   tagName: string;
   attributes: Record<string, XMLValue>;
-  /** Metadado opcional (`role` no XML); não altera física nem posição. */
-  role: SpawnTemplateRole;
+  /** Role string validated by parser (`tree`, `enemy`, `prop`, …). */
+  role: string;
   /** Perfil de template no filho (`profile` no XML), se houver. */
   childProfile?: ChildTemplateProfileId;
   /** When `tagName` is `entity`, XML children to attach under the spawned root. */
@@ -61,6 +61,8 @@ export interface SpawnGroupSpec {
   /** Yaw extra em graus (0–360); vazio = linear em `[0, 360)` se `yaw-distribution=linear`. */
   yawDiscreteDeg: number[];
   surfaceEpsilon: number;
+  /** When true, compute surfaceEpsilon from terrain context: max(0.75, worldSize / heightmapResolution * 2). */
+  surfaceEpsilonAuto: boolean;
   /** Inclinação máxima (graus) entre normal do terreno e +Y; acima re-amostra posição. */
   maxSlopeDeg: number;
   /** Tentativas por instância para obter declive dentro de max-slope-deg (normal do heightmap bruto). Se esgotar e max-slope-deg for menor que 90°, essa instância não spawna. */
@@ -69,5 +71,7 @@ export interface SpawnGroupSpec {
   pickStrategy: 'round-robin' | 'random';
   /** Re-sample XZ when terrain would sit under a Water plane (lakes). */
   avoidWater: boolean;
+  /** Maximum render distance for spawned entities (0 = no culling). Beyond this XZ distance from camera, mesh is hidden but physics remain active. */
+  maxDistance: number;
   templates: SpawnTemplateSpec[];
 }

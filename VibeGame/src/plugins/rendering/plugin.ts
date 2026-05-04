@@ -3,6 +3,7 @@ import {
   AmbientLight,
   CsmConfig,
   DirectionalLight,
+  DistanceCull,
   MainCamera,
   PointLight,
   RenderContext,
@@ -12,9 +13,11 @@ import {
 import { pointLightRecipe, rendererRecipe, spotLightRecipe } from './recipes';
 import {
   CameraSyncSystem,
+  DistanceCullSystem,
   LightSyncSystem,
   MeshInstanceSystem,
   PointSpotLightSyncSystem,
+  RendererSetupSystem,
   WebGLRenderSystem,
 } from './systems';
 import {
@@ -26,7 +29,9 @@ import { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';
 export const RenderingPlugin: Plugin = {
   recipes: [rendererRecipe, pointLightRecipe, spotLightRecipe],
   systems: [
+    RendererSetupSystem,
     TextureRecipeLoadSystem,
+    DistanceCullSystem,
     MeshInstanceSystem,
     LightSyncSystem,
     PointSpotLightSyncSystem,
@@ -36,6 +41,7 @@ export const RenderingPlugin: Plugin = {
   ],
   components: {
     meshRenderer: MeshRenderer,
+    DistanceCull,
     RenderContext,
     MainCamera,
     AmbientLight,
@@ -70,6 +76,9 @@ export const RenderingPlugin: Plugin = {
         sizeZ: 1,
         color: 0xffffff,
         unlit: 0,
+      },
+      distanceCull: {
+        maxDistance: 0,
       },
       mainCamera: {
         projection: 0,

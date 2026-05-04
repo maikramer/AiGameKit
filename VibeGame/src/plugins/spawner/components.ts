@@ -9,3 +9,9 @@ export const SpawnerPending = defineComponent({
 export const PlacePending = defineComponent({
   spawned: Types.ui8,
 });
+
+/** Marks entities spawned on terrain; used to re-align Y after heightmap hot-reload. */
+export const TerrainSpawned = defineComponent({
+  yOffset: Types.f32,
+  surfaceEpsilon: Types.f32,
+});

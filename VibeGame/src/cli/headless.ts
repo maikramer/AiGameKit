@@ -50,6 +50,9 @@ export function createHeadlessState(options: HeadlessOptions = {}): State {
 export function parseWorldXml(state: State, xml: string): void {
   ensureDom();
   const normalized = normalizeBooleanAttributes(xml);
+  if (normalized.trim() === '') {
+    return;
+  }
   const wrapped = normalized.includes('<world')
     ? normalized
     : `<world>${normalized}</world>`;

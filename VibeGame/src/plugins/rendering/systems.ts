@@ -8,6 +8,7 @@ import {
   AmbientLight,
   CsmConfig,
   DirectionalLight,
+  DistanceCull,
   MainCamera,
   PointLight,
   RenderContext,
@@ -15,6 +16,7 @@ import {
   SpotLight,
 } from './components';
 import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
+import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import {
   createRenderer,
   createThreeCamera,
@@ -29,6 +31,7 @@ import {
 } from './utils';
 
 const rendererQuery = defineQuery([MeshRenderer]);
+const distanceCullQuery = defineQuery([DistanceCull, WorldTransform]);
 const ambientQuery = defineQuery([AmbientLight]);
 const directionalQuery = defineQuery([DirectionalLight]);
 const csmQuery = defineQuery([CsmConfig]);
@@ -80,6 +83,50 @@ export const MeshInstanceSystem: System = {
       }
 
       mesh = updateInstance(mesh, entity, context, state, unlit);
+    }
+  },
+};
+
+export const DistanceCullSystem: System = {
+  group: 'draw',
+  update(state: State) {
+    if (state.headless) return;
+
+    const camEntities = mainCameraQuery(state.world);
+    if (camEntities.length === 0) return;
+    const camera = threeCameras.get(camEntities[0]);
+    if (!camera) return;
+
+    const camX = camera.position.x;
+    const camZ = camera.position.z;
+
+    const HYSTERESIS = 0.9;
+
+    for (const eid of distanceCullQuery(state.world)) {
+      const maxDist = DistanceCull.maxDistance[eid];
+      if (maxDist <= 0) continue;
+
+      const dx = WorldTransform.posX[eid] - camX;
+      const dz = WorldTransform.posZ[eid] - camZ;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+
+      const wasCulled = DistanceCull.culled[eid] === 1;
+      const shouldCull = wasCulled
+        ? dist >= maxDist * HYSTERESIS
+        : dist > maxDist;
+
+      if (shouldCull === wasCulled) continue;
+
+      DistanceCull.culled[eid] = shouldCull ? 1 : 0;
+
+      const gltfGroup = getGltfRootGroup(state, eid);
+      if (gltfGroup) {
+        gltfGroup.visible = !shouldCull;
+      }
+
+      if (state.hasComponent(eid, MeshRenderer)) {
+        MeshRenderer.visible[eid] = shouldCull ? 0 : 1;
+      }
     }
   },
 };
@@ -320,6 +367,31 @@ export const PointSpotLightSyncSystem: System = {
   },
 };
 
+export const RendererSetupSystem: System = {
+  group: 'setup',
+  last: true,
+  setup(state: State) {
+    if (state.headless) return;
+    const contextEntities = renderContextQuery(state.world);
+    if (contextEntities.length === 0) return;
+
+    const entity = contextEntities[0];
+    const canvas = getCanvasElement(entity);
+    if (!canvas) return;
+
+    const clearColor = RenderContext.clearColor[entity];
+    const renderer = createRenderer(canvas, clearColor);
+
+    const context = getRenderingContext(state);
+    context.renderer = renderer;
+    context.canvas = canvas;
+
+    window.addEventListener('resize', () =>
+      handleWindowResize(state, renderer)
+    );
+  },
+};
+
 export const CameraSyncSystem: System = {
   group: 'draw',
   update(state: State) {
@@ -364,6 +436,9 @@ export const WebGLRenderSystem: System = {
     const contextEntities = renderContextQuery(state.world);
     if (contextEntities.length === 0) return;
 
+    const context = getRenderingContext(state);
+    if (context.renderer) return; // already set up by RendererSetupSystem
+
     const entity = contextEntities[0];
     const canvas = getCanvasElement(entity);
     if (!canvas) return;
@@ -371,7 +446,6 @@ export const WebGLRenderSystem: System = {
     const clearColor = RenderContext.clearColor[entity];
     const renderer = createRenderer(canvas, clearColor);
 
-    const context = getRenderingContext(state);
     context.renderer = renderer;
     context.canvas = canvas;
 

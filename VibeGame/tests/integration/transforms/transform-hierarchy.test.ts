@@ -283,6 +283,7 @@ describe('Transform Hierarchy System', () => {
     Transform.posX[entity] = 20;
     Transform.posY[entity] = 25;
     Transform.posZ[entity] = 30;
+    Transform.dirty[entity] = 1;
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 

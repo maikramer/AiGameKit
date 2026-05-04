@@ -1,5 +1,7 @@
 import { defineQuery, type State, type System } from '../../core';
-import { SpawnerPending } from './components';
+import { getTerrainContext, registerHeightmapReloadCallback } from '../terrain';
+import { Transform } from '../transforms/components';
+import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { getSpawnGroupSpecs } from './context';
 import { spawnTemplateAtTerrain } from './spawn-template';
 import {
@@ -10,9 +12,12 @@ import {
 import { isTerrainUnderwaterAt } from './water-spawn';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
-import { Transform, WorldTransform } from '../transforms/components';
+import { WorldTransform } from '../transforms/components';
 
 const spawnerQuery = defineQuery([SpawnerPending]);
+const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
+
+let callbackRegistered = false;
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -82,6 +87,26 @@ export const TerrainSpawnSystem: System = {
   update(state) {
     if (state.headless) return;
 
+    if (!callbackRegistered) {
+      callbackRegistered = true;
+      registerHeightmapReloadCallback(state, () => {
+        for (const eid of terrainSpawnedQuery(state.world)) {
+          const x = state.hasComponent(eid, WorldTransform)
+            ? WorldTransform.posX[eid]
+            : Transform.posX[eid];
+          const z = state.hasComponent(eid, WorldTransform)
+            ? WorldTransform.posZ[eid]
+            : Transform.posZ[eid];
+          const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
+          const s = sampleTerrainSurface(state, x, z, eps);
+          if (s) {
+            Transform.posY[eid] = s.worldY + TerrainSpawned.yOffset[eid];
+            Transform.dirty[eid] = 1;
+          }
+        }
+      });
+    }
+
     const specs = getSpawnGroupSpecs(state);
     if (specs.size === 0) return;
 
@@ -94,20 +119,55 @@ export const TerrainSpawnSystem: System = {
         continue;
       }
 
-      const surfaceProbe = sampleTerrainSurface(
-        state,
-        0,
-        0,
-        spec.surfaceEpsilon
-      );
-      if (!surfaceProbe) continue;
-
       const rand = mulberry32(spec.seed >>> 0);
       const [ax, , az] = anchorOffset(state, eid);
       const minX = spec.regionMin[0] + ax;
       const maxX = spec.regionMax[0] + ax;
       const minZ = spec.regionMin[2] + az;
       const maxZ = spec.regionMax[2] + az;
+
+      const cx = (minX + maxX) / 2;
+      const cz = (minZ + maxZ) / 2;
+
+      // Multi-point probe: center + 4 corners. The center alone may map
+      // to a water/invalid heightmap pixel (common when region is symmetric
+      // around origin and terrain heightmap hasn't loaded yet).
+      const probes: [number, number][] = [
+        [cx, cz],
+        [minX, minZ],
+        [minX, maxZ],
+        [maxX, minZ],
+        [maxX, maxZ],
+      ];
+      let regionProbe: TerrainSurfaceSample | null = null;
+      for (const [px, pz] of probes) {
+        regionProbe = sampleTerrainSurface(
+          state,
+          px,
+          pz,
+          spec.surfaceEpsilon,
+          spec.surfaceEpsilonAuto
+        );
+        if (regionProbe) break;
+      }
+      if (!regionProbe) {
+        // If no terrain context is initialized at all, defer this frame
+        // without marking the group as permanently done. Retry next frame.
+        const terrainCtx = getTerrainContext(state);
+        let terrainReady = false;
+        for (const [, data] of terrainCtx) {
+          if (data.initialized) {
+            terrainReady = true;
+            break;
+          }
+        }
+        if (!terrainReady) continue;
+        console.warn(
+          `[spawner] SpawnGroup "group-${eid}" skipped: no terrain surface in region (${minX.toFixed(0)}..${maxX.toFixed(0)}, ${minZ.toFixed(0)}..${maxZ.toFixed(0)})`
+        );
+        PlacePending.spawned[eid] = 1;
+        continue;
+      }
 
       const width = Math.abs(maxX - minX);
       const depth = Math.abs(maxZ - minZ);
@@ -128,7 +188,13 @@ export const TerrainSpawnSystem: System = {
         for (let attempt = 0; attempt < attempts; attempt++) {
           wx = minX + rand() * (maxX - minX);
           wz = minZ + rand() * (maxZ - minZ);
-          const cand = sampleTerrainSurface(state, wx, wz, spec.surfaceEpsilon);
+          const cand = sampleTerrainSurface(
+            state,
+            wx,
+            wz,
+            spec.surfaceEpsilon,
+            spec.surfaceEpsilonAuto
+          );
           if (!cand) continue;
           if (
             spec.avoidWater &&

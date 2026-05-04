@@ -24,6 +24,7 @@ export interface GroupSpawnDefaults {
   scaleMin: number;
   scaleMax: number;
   surfaceEpsilon: number;
+  surfaceEpsilonAuto: boolean;
   /**
    * Inclinação máxima aceite (graus): ângulo entre a normal do terreno e +Y.
    * Acima disto, o spawn re-amostra uma posição aleatória na região (até `maxSlopePlacementAttempts`).
@@ -33,6 +34,8 @@ export interface GroupSpawnDefaults {
   maxSlopePlacementAttempts: number;
   /** Re-amostra posições que cairiam sob planos de água (lagos). */
   avoidWater: boolean;
+  /** Distância máxima de renderização (0 = sem culling). Entidades além desta distância XZ da câmara têm o mesh oculto; a física permanece ativa. */
+  maxDistance: number;
   scaleDistribution: ScaleDistributionMode;
   yawDistribution: YawDistributionMode;
   /** Valores positivos para `scale-distribution=discrete` (XML `scale-discrete`). */
@@ -49,6 +52,7 @@ const LEGACY: GroupSpawnDefaults = {
   scaleMin: 1,
   scaleMax: 1,
   surfaceEpsilon: 0.75,
+  surfaceEpsilonAuto: false,
   maxSlopeDeg: 45,
   maxSlopePlacementAttempts: 32,
   avoidWater: false,
@@ -56,6 +60,7 @@ const LEGACY: GroupSpawnDefaults = {
   yawDistribution: 'linear',
   scaleDiscreteValues: [],
   yawDiscreteDeg: [],
+  maxDistance: 0,
 };
 
 const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
@@ -68,6 +73,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMin: 1.6,
     scaleMax: 2.2,
     surfaceEpsilon: 0.75,
+    surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
@@ -75,6 +81,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
+    maxDistance: 300,
   },
   foliage: {
     alignToTerrain: true,
@@ -84,6 +91,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMin: 0.9,
     scaleMax: 1.3,
     surfaceEpsilon: 0.75,
+    surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
@@ -91,6 +99,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
+    maxDistance: 120,
   },
   'physics-box': {
     alignToTerrain: false,
@@ -100,6 +109,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMin: 1,
     scaleMax: 1,
     surfaceEpsilon: 0.75,
+    surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
     avoidWater: false,
@@ -107,6 +117,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
+    maxDistance: 200,
   },
   'gltf-crate': {
     alignToTerrain: false,
@@ -116,6 +127,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMin: 0.85,
     scaleMax: 1.1,
     surfaceEpsilon: 0.75,
+    surfaceEpsilonAuto: false,
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
     avoidWater: false,
@@ -123,6 +135,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
+    maxDistance: 200,
   },
   place: {
     alignToTerrain: true,
@@ -132,6 +145,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     scaleMin: 1,
     scaleMax: 1,
     surfaceEpsilon: 0.75,
+    surfaceEpsilonAuto: false,
     maxSlopeDeg: 90,
     maxSlopePlacementAttempts: 1,
     avoidWater: false,
@@ -139,6 +153,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
+    maxDistance: 0,
   },
 };
 
@@ -221,6 +236,28 @@ export function isKnownGroupProfileForTests(id: string): boolean {
   return KNOWN_GROUP_PROFILES.has(id);
 }
 
+/** Map a spawn-template role to a group profile. Returns `null` for unrecognized roles. */
+export function roleToProfile(role: string): SpawnGroupProfileId | null {
+  switch (role) {
+    case 'tree':
+      return 'tree';
+    case 'enemy':
+    case 'dynamic':
+    case 'pickup':
+    case 'npc':
+    case 'kinematic':
+      return 'physics-box';
+    case 'prop':
+    case 'static':
+    case 'visual':
+      return 'gltf-crate';
+    case 'building':
+      return 'none';
+    default:
+      return null;
+  }
+}
+
 function rawToBool01(value: XMLValue): number {
   if (typeof value === 'boolean') return value ? 1 : 0;
   if (typeof value === 'number') return value !== 0 ? 1 : 0;
@@ -296,7 +333,9 @@ function optYawDistribution(
 }
 
 /** Números separados por espaço (XML `scale-discrete`, `yaw-discrete-deg`). */
-export function parseSpaceSeparatedNumbers(raw: XMLValue | undefined): number[] {
+export function parseSpaceSeparatedNumbers(
+  raw: XMLValue | undefined
+): number[] {
   if (raw === undefined || raw === null) return [];
   const s = String(raw).trim();
   if (!s) return [];
@@ -322,9 +361,9 @@ export function resolveGroupSpawnFields(
 ): GroupSpawnDefaults {
   const p = getGroupSpawnDefaults(profileId);
 
-  let scaleDiscrete = parseSpaceSeparatedNumbers(attrs['scale-discrete']).filter(
-    (x) => x > 0
-  );
+  let scaleDiscrete = parseSpaceSeparatedNumbers(
+    attrs['scale-discrete']
+  ).filter((x) => x > 0);
   let yawDeg = parseSpaceSeparatedNumbers(attrs['yaw-discrete-deg']);
   const stepYaw = optNumber(attrs['yaw-step-deg'], NaN);
   if (yawDeg.length === 0 && Number.isFinite(stepYaw) && stepYaw > 0) {
@@ -354,6 +393,10 @@ export function resolveGroupSpawnFields(
     scaleMin: optNumber(attrs['scale-min'], p.scaleMin),
     scaleMax: optNumber(attrs['scale-max'], p.scaleMax),
     surfaceEpsilon: optNumber(attrs['surface-epsilon'], p.surfaceEpsilon),
+    surfaceEpsilonAuto: optBool(
+      attrs['surface-epsilon-auto'],
+      p.surfaceEpsilonAuto
+    ),
     maxSlopeDeg: optNumber(attrs['max-slope-deg'], p.maxSlopeDeg),
     maxSlopePlacementAttempts: Math.max(
       1,
@@ -362,6 +405,7 @@ export function resolveGroupSpawnFields(
       )
     ),
     avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
+    maxDistance: optNumber(attrs['max-distance'], p.maxDistance),
     scaleDistribution,
     yawDistribution,
     scaleDiscreteValues:

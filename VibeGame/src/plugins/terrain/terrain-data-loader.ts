@@ -1,3 +1,5 @@
+import { createEntityFromRecipe } from '../../core/recipes/parser';
+
 export interface TerrainData {
   version: string;
   terrain: {
@@ -118,17 +120,17 @@ export function parseTerrainData(data: unknown): TerrainData {
 }
 
 export function spawnWaterEntitiesFromTerrainData(
+  state: import('../../core').State,
   terrainData: TerrainData
 ): void {
   for (const plane of terrainData.lake_planes) {
-    console.log(
-      `[terrain-data-loader] Would spawn <Water> entity: pos="${plane.pos_x} ${plane.pos_y} ${plane.pos_z}" size-x="${plane.size_x}" size-z="${plane.size_z}"> (lake_id=${plane.lake_id})`
-    );
-  }
-
-  for (const river of terrainData.rivers) {
-    console.log(
-      `[terrain-data-loader] Would spawn water segments for river id=${river.id} (${river.path.length} points, length=${river.length})`
-    );
+    const size = Math.max(plane.size_x, plane.size_z);
+    createEntityFromRecipe(state, 'Water', {
+      pos: `${plane.pos_x} ${plane.pos_y} ${plane.pos_z}`,
+      size,
+      'water-level': plane.pos_y,
+      'size-x': plane.size_x,
+      'size-z': plane.size_z,
+    });
   }
 }

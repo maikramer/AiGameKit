@@ -148,7 +148,14 @@ export class State {
   }
 
   getComponent(name: string): Component | undefined {
-    return this.components.get(toKebabCase(name));
+    const kebab = toKebabCase(name);
+    return (
+      this.components.get(kebab) ??
+      (kebab === 'body' ? this.components.get('rigidbody') : undefined) ??
+      (kebab === 'player'
+        ? this.components.get('player-controller')
+        : undefined)
+    );
   }
 
   hasRecipe(name: string): boolean {

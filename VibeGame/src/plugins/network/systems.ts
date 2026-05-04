@@ -207,6 +207,7 @@ export const NetworkInterpolationSystem: System = {
           Transform.scaleX[eid] = sample.scaleX;
           Transform.scaleY[eid] = sample.scaleY;
           Transform.scaleZ[eid] = sample.scaleZ;
+          Transform.dirty[eid] = 1;
           continue;
         }
       }
@@ -248,6 +249,7 @@ export const NetworkInterpolationSystem: System = {
       Transform.scaleZ[eid] =
         NetworkBuffer.prevScaleZ[eid] +
         (NetworkBuffer.nextScaleZ[eid] - NetworkBuffer.prevScaleZ[eid]) * t;
+      Transform.dirty[eid] = 1;
     }
   },
 };

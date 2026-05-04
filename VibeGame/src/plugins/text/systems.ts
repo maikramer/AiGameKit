@@ -168,6 +168,7 @@ export const ParagraphArrangeSystem: System = {
         const targetX = wordPosition(data.widths, gap, align, i);
 
         Transform.posX[eid] += (targetX - Transform.posX[eid]) * t;
+        Transform.dirty[eid] = 1;
       }
     }
   },

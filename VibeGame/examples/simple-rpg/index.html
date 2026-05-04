@@ -76,7 +76,7 @@
       ></AudioSource>
       <AudioSource
         name="sfx-heal"
-        url="/assets/audio/collect_sfx.wav"
+        url="/assets/audio/sfx_collect.wav"
         loop="false"
         volume="0.48"
         playing="false"
@@ -95,7 +95,7 @@
         height-smoothing="0.3"
         height-smoothing-spread="1.25"
         heightmap="/assets/terrain/heightmap.png"
-        collision-resolution="64"
+        collision-resolution="128"
         skirt-width="0.015625"
         roughness="0.85"
         metalness="0"
@@ -107,55 +107,54 @@
 
       <Fog
         color="#dde6d4"
-        density="0.00025"
+        density="0.00014"
         mode="exponential"
         height-falloff="0.48"
         base-height="0"
-        volumetric-strength="0.016"
+        volumetric-strength="0.009"
         quality="medium"
         noise-scale="0.28"
       ></Fog>
 
+      <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world-size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
       <PlayerGLTF
         name="hero"
-        pos="5000 250 5000"
-        model-url="/assets/models/hero.glb"
+        pos="0 200 0"
+        model-url="/assets/meshes/hero_rigged_animated.glb"
         script="auto-attacker.ts"
       ></PlayerGLTF>
 
       <GameObject name="WaveManager" script="wave-manager.ts"></GameObject>
 
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
+      <!-- Post-processing temporarily disabled for debugging -->
       <FollowCamera
         target-distance="12"
         target-pitch="0.32"
         yaw-smoothness="0.055"
         position-lag="0.18"
         auto-rotate-delay="0.55"
-        smaa="preset: high"
-        bloom="intensity: 1.52; luminance-threshold: 0.78; luminance-smoothing: 0.4; mipmap-blur: 1; radius: 0.9; levels: 8"
-        vignette="darkness: 0.24; offset: 0.14"
-        noise="opacity: 0.028; blend-function: normal"
-        tonemapping="mode: aces-filmic; middle-grey: 0.82; white-point: 6.8; average-luminance: 1.2; adaptation-rate: 1.0"
       ></FollowCamera>
 
-      <!-- Modelos em disco neste exemplo: hero, stone_pillar, tree_lowpoly, wooden_crate (resto removido sem PNG de pintura). -->
-      <!-- Pilares Y-up (GLB corrigido com scripts/fix-glb-yup-feet.py); só euler 0 no spawn. -->
+      <!-- Meshes em public/assets/meshes/ (LOD: por agora só *_lod0.glb; troca por distância virá depois). -->
+      <!-- Pilares: euler 0 no spawn (assets já Y-up / pés no chão pelo pipeline). -->
       <SpawnGroup
         profile="tree"
         count="80"
         seed="11"
-        region-min="1000 0 1000"
-        region-max="9000 0 9000"
+        region-min="-4500 0 -4500"
+        region-max="4500 0 4500"
         max-slope-attempts="180"
         pick-strategy="random"
         scale-min="1.5"
         scale-max="1.5"
+        max-distance="550"
+        surface-epsilon-auto="true"
       >
         <GLTFDynamic
           role="dynamic"
-          profile="tree"
-          url="/assets/models/stone_pillar.glb"
+          profile="gltf-crate"
+          url="/assets/meshes/stone_pillar_lod0.glb"
           body-type="fixed"
           collider-shape="capsule"
           collider-margin="-0.12"
@@ -167,15 +166,17 @@
         profile="gltf-crate"
         count="60"
         seed="23"
-        region-min="1500 0 1500"
-        region-max="8500 0 8500"
+        region-min="-4200 0 -4200"
+        region-max="4200 0 4200"
         max-slope-attempts="120"
         pick-strategy="random"
+        max-distance="450"
+        surface-epsilon-auto="true"
       >
         <GLTFDynamic
           role="dynamic"
           profile="gltf-crate"
-          url="/assets/models/wooden_crate.glb"
+          url="/assets/meshes/wooden_crate_lod0.glb"
           body-type="dynamic"
           collider-shape="box"
           transform="scale: 1 1 1"
@@ -184,10 +185,10 @@
 
       <SpawnGroup
         profile="tree"
-        density-per-km2="60"
+        count="300"
         seed="7"
-        region-min="0 0 0"
-        region-max="10000 0 10000"
+        region-min="-2000 0 -2000"
+        region-max="2000 0 2000"
         max-slope-attempts="220"
         pick-strategy="random"
         scale-min="1.5"
@@ -195,11 +196,13 @@
         scale-distribution="linear"
         yaw-distribution="discrete"
         yaw-step-deg="45"
+        max-distance="400"
+        surface-epsilon-auto="true"
       >
         <GLTFDynamic
           role="dynamic"
-          profile="tree"
-          url="/assets/models/tree_lowpoly.glb"
+          profile="gltf-crate"
+          url="/assets/meshes/tree_lowpoly_lod0.glb"
           body-type="fixed"
           collider-shape="capsule"
           collider-margin="-0.18"

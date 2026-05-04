@@ -3,6 +3,7 @@ import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
 import { defineQuery, TIME_CONSTANTS } from '../../core';
 import { Transform, WorldTransform } from '../transforms';
+import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import {
   ApplyAngularImpulse,
   ApplyForce,
@@ -582,6 +583,8 @@ export const PhysicsStepSystem: System = {
     const context = getPhysicsContext(state);
     const worldRapier = context.physicsWorld;
     if (!worldRapier) return;
+
+    if (isTerrainDynamicsBlocking(state)) return;
 
     const eventQueue = new RAPIER.EventQueue(true);
     worldRapier.step(eventQueue);

@@ -13,6 +13,7 @@ export {
   loadGltfLodToScene,
   loadGltfToScene,
   loadGltfToSceneWithAnimator,
+  setKTX2TranscoderPath,
 } from './extras/gltf-bridge';
 export type { GltfLoadResult } from './extras/gltf-bridge';
 export { GltfAnimator } from './extras/gltf-animator';
@@ -129,6 +130,7 @@ export {
   optNumber,
   parseSpaceSeparatedNumbers,
   resolveGroupSpawnFields,
+  roleToProfile,
   yawAnglesFromStepDeg,
 } from './plugins/spawner';
 export type { TerrainEntityData } from './plugins/terrain';

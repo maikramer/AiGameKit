@@ -7,25 +7,40 @@ import * as THREE from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 import type { State } from '../core';
 import { getRenderingContext, getScene } from '../plugins/rendering';
 import { GltfAnimator } from './gltf-animator';
 
 let _ktx2Loader: KTX2Loader | null | undefined = undefined;
+let _customTranscoderPath: string | undefined;
+
+/**
+ * Override the KTX2 transcoder path. Call before loading any KTX2 textures.
+ * The path must be a URL ending with ``/`` pointing to a directory containing
+ * ``basis_transcoder.js`` and ``basis_transcoder.wasm``.
+ */
+export function setKTX2TranscoderPath(path: string): void {
+  _customTranscoderPath = path;
+  _ktx2Loader = undefined;
+}
 
 function tryInitKTX2(renderer: THREE.WebGLRenderer): KTX2Loader | null {
   if (_ktx2Loader !== undefined) return _ktx2Loader;
   try {
-    const revision = THREE.REVISION;
-    const transcoderPath = `https://unpkg.com/three@0.${revision}.0/examples/jsm/libs/basis/`;
+    const transcoderPath =
+      _customTranscoderPath ??
+      `https://unpkg.com/three@0.${THREE.REVISION}.0/examples/jsm/libs/basis/`;
     _ktx2Loader = new KTX2Loader()
       .setTranscoderPath(transcoderPath)
       .detectSupport(renderer);
     return _ktx2Loader;
   } catch (e) {
     console.warn(
-      '[VibeGame] KTX2Loader init failed — KTX2 textures disabled.',
+      '[VibeGame] KTX2Loader init failed — KTX2 textures disabled. ' +
+        'Call setKTX2TranscoderPath() with a valid URL, or ensure ' +
+        'basis_transcoder.js / .wasm are accessible from node_modules.',
       e
     );
     _ktx2Loader = null;
@@ -42,11 +57,52 @@ function ensureKTX2FromState(state: State): void {
 /**
  * Create a {@link GLTFLoader} with KTX2 texture support attached (when available).
  *
+ * Forces TextureLoader (img-based) for embedded textures instead of ImageBitmapLoader
+ * (fetch-based). GLTFLoader r168 selects ImageBitmapLoader when `createImageBitmap` is
+ * available, but its `fetch(blobUrl) → createImageBitmap(blob)` pipeline can fail on
+ * blob: URLs in some environments. TextureLoader's `<img>` approach is universally
+ * compatible.
+ *
  * @param manager - Optional Three.js LoadingManager.
  * @returns A configured GLTFLoader instance.
  */
 export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
   const loader = new GLTFLoader(manager);
+
+  // Intercept parse() to temporarily disable createImageBitmap so the internal
+  // GLTFParser constructor picks TextureLoader instead of ImageBitmapLoader.
+  const origParse = loader.parse.bind(loader);
+  loader.parse = function (
+    data: ArrayBuffer | string,
+    path: string,
+    onLoad: (gltf: GLTF) => void,
+    onError?: (event: ErrorEvent) => void
+  ): void {
+    const origBitmap = globalThis.createImageBitmap;
+    (globalThis as any).createImageBitmap = undefined;
+
+    const restore = () => {
+      (globalThis as any).createImageBitmap = origBitmap;
+    };
+
+    const wrappedOnLoad = (gltf: GLTF) => {
+      restore();
+      onLoad(gltf);
+    };
+    const wrappedOnError = (e: ErrorEvent) => {
+      restore();
+      onError?.(e);
+    };
+
+    try {
+      origParse(data, path, wrappedOnLoad, wrappedOnError);
+    } catch (e) {
+      restore();
+      throw e;
+    }
+  };
+
+  loader.setMeshoptDecoder(MeshoptDecoder);
   if (_ktx2Loader) {
     loader.setKTX2Loader(_ktx2Loader);
   }

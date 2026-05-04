@@ -1,6 +1,6 @@
 import { defineQuery, type System } from '../../core';
 import { GltfAnimator } from '../../extras/gltf-animator';
-import { WorldTransform } from '../transforms';
+import { Transform, WorldTransform } from '../transforms';
 import { syncEulerFromQuaternion } from '../transforms/utils';
 import { GltfAnimationState } from './components';
 
@@ -47,6 +47,9 @@ export const GltfAnimationUpdateSystem: System = {
       WorldTransform.rotZ[eid] = root.quaternion.z;
       WorldTransform.rotW[eid] = root.quaternion.w;
       syncEulerFromQuaternion(WorldTransform, eid);
+      if (state.hasComponent(eid, Transform)) {
+        Transform.dirty[eid] = 1;
+      }
     }
   },
 };

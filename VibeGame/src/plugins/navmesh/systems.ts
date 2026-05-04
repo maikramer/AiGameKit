@@ -232,6 +232,7 @@ export const NavAgentMoveSystem: System = {
       Transform.posX[eid] += to.x * step;
       Transform.posY[eid] += to.y * step;
       Transform.posZ[eid] += to.z * step;
+      Transform.dirty[eid] = 1;
 
       if (hasComponent(state.world, WorldTransform, eid)) {
         WorldTransform.posX[eid] = Transform.posX[eid];

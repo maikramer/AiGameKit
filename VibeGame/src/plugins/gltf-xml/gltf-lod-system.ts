@@ -44,16 +44,24 @@ export const GltfLodSystem: System = {
 
       const near = GltfLod.thresholdNear[eid];
       const mid = GltfLod.thresholdMid[eid];
-      const raw = pickLodLevel(dist, near, mid);
+
+      const farCutoff = mid * 1.15;
+      if (dist > farCutoff) {
+        root.visible = false;
+        continue;
+      }
+      root.visible = true;
+
+      const prevLevel = GltfLod.activeLevel[eid];
+      const raw = pickLodLevel(dist, near, mid, prevLevel);
       const level = Math.min(raw, childCount - 1);
-      if (level === GltfLod.activeLevel[eid]) {
+      if (level === prevLevel) {
         continue;
       }
       GltfLod.activeLevel[eid] = level;
 
       for (let i = 0; i < root.children.length; i++) {
-        const ch = root.children[i];
-        ch.visible = i === level;
+        root.children[i].visible = i === level;
       }
     }
   },

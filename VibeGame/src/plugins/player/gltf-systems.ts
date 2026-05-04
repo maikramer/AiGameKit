@@ -1,4 +1,10 @@
-import { Box3 } from 'three';
+import {
+  Box3,
+  CapsuleGeometry,
+  EdgesGeometry,
+  LineBasicMaterial,
+  LineSegments,
+} from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import { loadGltfAnimated } from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
@@ -7,6 +13,8 @@ import { HasAnimator } from '../animation/components';
 import { isKeyDown } from '../input/utils';
 import { WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
+import { getScene } from '../rendering';
+import { PLAYER_COLLIDER_DEFAULTS } from './constants';
 
 let nextModelUrlIndex = 1;
 const modelUrlByIndex = new Map<number, string>();
@@ -139,6 +147,29 @@ export const PlayerGltfSetupSystem: System = {
 
 const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig]);
 
+const debugCapsuleByState = new WeakMap<State, LineSegments>();
+
+function ensureDebugCapsule(state: State): LineSegments | null {
+  const existing = debugCapsuleByState.get(state);
+  if (existing) return existing;
+
+  const scene = getScene(state);
+  if (!scene) return null;
+
+  const radius = PLAYER_COLLIDER_DEFAULTS.radius;
+  const halfHeight = PLAYER_COLLIDER_DEFAULTS.height / 2;
+  const capsuleGeo = new CapsuleGeometry(radius, halfHeight * 2, 8, 16);
+  const edges = new EdgesGeometry(capsuleGeo, 15);
+  const lineMat = new LineBasicMaterial({ color: 0x00ff00 });
+  const wireframe = new LineSegments(edges, lineMat);
+  wireframe.name = '__debug_capsule';
+  scene.add(wireframe);
+  debugCapsuleByState.set(state, wireframe);
+  capsuleGeo.dispose();
+  edges.dispose();
+  return wireframe;
+}
+
 export const PlayerGltfAnimStateSystem: System = {
   group: 'simulation',
   update: (state) => {
@@ -188,6 +219,16 @@ export const PlayerGltfAnimStateSystem: System = {
         WorldTransform.rotZ[eid],
         WorldTransform.rotW[eid]
       );
+
+      const debugCapsule = ensureDebugCapsule(state);
+      if (debugCapsule) {
+        debugCapsule.position.set(
+          WorldTransform.posX[eid],
+          WorldTransform.posY[eid] + PLAYER_COLLIDER_DEFAULTS.posOffsetY,
+          WorldTransform.posZ[eid]
+        );
+        debugCapsule.quaternion.copy(root.quaternion);
+      }
     }
   },
 };

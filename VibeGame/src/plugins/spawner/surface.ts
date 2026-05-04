@@ -68,7 +68,8 @@ export function sampleTerrainSurface(
   state: State,
   wx: number,
   wz: number,
-  eps: number
+  eps: number,
+  surfaceEpsilonAuto = false
 ): TerrainSurfaceSample | null {
   const context = getTerrainContext(state);
   for (const [entity, data] of context) {
@@ -76,8 +77,17 @@ export function sampleTerrainSurface(
     const ox = data.worldOffset.x;
     const oz = data.worldOffset.z;
     const cfg = data.terrainLOD.getConfig();
-    const imageData = extractTerrainHeightmapImageData(data.terrainLOD);
+    const imageData = extractTerrainHeightmapImageData(
+      data.terrainLOD,
+      data.heightmapImageData
+    );
+    if (!data.heightmapImageData && imageData) {
+      data.heightmapImageData = imageData;
+    }
     const hmW = imageData?.width ?? 1024;
+    const effectiveEps = surfaceEpsilonAuto
+      ? Math.max(0.75, (cfg.worldSize / hmW) * 2)
+      : eps;
     const smoothing = state.hasComponent(entity, Terrain)
       ? Terrain.heightSmoothing[entity]
       : cfg.heightSmoothing;
@@ -117,7 +127,12 @@ export function sampleTerrainSurface(
             spread
           )
         : data.terrainLOD.getHeightAt(x - ox, z - oz);
-    const normal = normalFromHeightSampler(heightAtRawSlope, wx, wz, eps);
+    const normal = normalFromHeightSampler(
+      heightAtRawSlope,
+      wx,
+      wz,
+      effectiveEps
+    );
     return {
       terrainEntity: entity,
       worldY: ty + h,

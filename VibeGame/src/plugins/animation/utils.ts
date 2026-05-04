@@ -63,6 +63,11 @@ export function applyWalkAnimation(
   Transform.eulerX[rightArmEntity] = armRotation;
   Transform.eulerX[leftLegEntity] = legRotation;
   Transform.eulerX[rightLegEntity] = -legRotation;
+
+  Transform.dirty[leftArmEntity] = 1;
+  Transform.dirty[rightArmEntity] = 1;
+  Transform.dirty[leftLegEntity] = 1;
+  Transform.dirty[rightLegEntity] = 1;
 }
 
 export function easeInOutSine(t: number): number {
@@ -119,6 +124,13 @@ export function applyJumpAnimation(
 
     Transform.eulerX[headEntity] = 10;
   }
+
+  Transform.dirty[headEntity] = 1;
+  Transform.dirty[torsoEntity] = 1;
+  Transform.dirty[leftArmEntity] = 1;
+  Transform.dirty[rightArmEntity] = 1;
+  Transform.dirty[leftLegEntity] = 1;
+  Transform.dirty[rightLegEntity] = 1;
 }
 
 export function applyFallAnimation(
@@ -150,6 +162,13 @@ export function applyFallAnimation(
     Math.sin(adjustedFallTime * 2.5) * ANIMATION_CONFIG.fall.windSwayAmount;
   Transform.posX[torsoEntity] = windSway;
   Transform.posX[headEntity] = windSway * 0.5;
+
+  Transform.dirty[headEntity] = 1;
+  Transform.dirty[torsoEntity] = 1;
+  Transform.dirty[leftArmEntity] = 1;
+  Transform.dirty[rightArmEntity] = 1;
+  Transform.dirty[leftLegEntity] = 1;
+  Transform.dirty[rightLegEntity] = 1;
 }
 
 export function applyLandingAnimation(
@@ -171,6 +190,9 @@ export function applyLandingAnimation(
   Transform.scaleX[torsoEntity] = 1 + squash * 0.4;
   Transform.scaleY[torsoEntity] = 1 - squash * 0.8;
   Transform.scaleZ[torsoEntity] = 1 + squash * 0.4;
+
+  Transform.dirty[headEntity] = 1;
+  Transform.dirty[torsoEntity] = 1;
 }
 
 export function resetBodyPartTransforms(
@@ -220,4 +242,11 @@ export function resetBodyPartTransforms(
   Transform.scaleX[torsoEntity] = 1;
   Transform.scaleY[torsoEntity] = 1;
   Transform.scaleZ[torsoEntity] = 1;
+
+  Transform.dirty[headEntity] = 1;
+  Transform.dirty[torsoEntity] = 1;
+  Transform.dirty[leftArmEntity] = 1;
+  Transform.dirty[rightArmEntity] = 1;
+  Transform.dirty[leftLegEntity] = 1;
+  Transform.dirty[rightLegEntity] = 1;
 }

@@ -33,5 +33,6 @@ export const TerrainDebugInfo = defineComponent({
   totalInstances: Types.ui32,
   geometryCount: Types.ui32,
   materialCount: Types.ui32,
+  failedColliderChunks: Types.ui32,
   lastUpdated: Types.f32,
 });
