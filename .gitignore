@@ -105,3 +105,13 @@ VibeGame/examples/simple-rpg/public/assets/images/
 
 # Screenshots de teste no exemplo
 VibeGame/examples/simple-rpg/screenshot*.png
+
+# Backups locais (.bak)
+*.bak.*
+
+# Libs de terceiros copiadas para public (basis transcoder, etc.)
+VibeGame/examples/simple-rpg/public/libs/
+
+# Screenshots de teste na raiz do VibeGame
+VibeGame/*test*.png
+VibeGame/screenshot*.png
