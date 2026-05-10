@@ -8,23 +8,26 @@ export const Terrain = defineComponent({
   lodDistanceRatio: Types.f32,
   lodHysteresis: Types.f32,
   wireframe: Types.ui8,
-  // Material
   roughness: Types.f32,
   metalness: Types.f32,
   normalStrength: Types.f32,
   skirtDepth: Types.f32,
-  /** Largura da saia entre chunks (UV); típico ~0.015625. */
   skirtWidth: Types.f32,
-  /** Cor difusa quando não há `texture` (RGB em 0xRRGGBB). */
   baseColor: Types.ui32,
-  /** 0 = deslocamento só com 1 texel (mais barato); >0 mistura com média 5-tap em cruz (reduz facetas). */
   heightSmoothing: Types.f32,
-  /** Multiplicador do passo em texels para o filtro de deslocamento (mín. 0,25 na lib). */
   heightSmoothingSpread: Types.f32,
   // Physics
   collisionResolution: Types.ui8,
   // Debug
   showChunkBorders: Types.ui8,
+  // DefaultTerrainMaterial layering
+  snowHeight: Types.f32,
+  colorHigh: Types.ui32,
+  colorMid: Types.ui32,
+  colorLow: Types.ui32,
+  colorRock: Types.ui32,
+  slopeThreshold: Types.f32,
+  slopeSoftness: Types.f32,
 });
 
 export const TerrainDebugInfo = defineComponent({

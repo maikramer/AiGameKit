@@ -10,7 +10,7 @@ const vibegameRoot = path.resolve(
 
 export default defineConfig({
   resolve: {
-    dedupe: ['three'],
+    dedupe: ['three', 'three/webgpu', 'three/tsl'],
     alias: {
       vibegame: path.join(vibegameRoot, 'src/index.ts'),
       'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),

@@ -33,7 +33,8 @@
       sky="#ffffff"
       resume-audio-on-user-gesture="true"
     >
-      <Skybox url="/assets/sky/sky.png"></Skybox>
+      <!-- Skybox disabled (needs SkyPlugin) -->
+      <!-- <Skybox url="/assets/sky/sky.png"></Skybox> -->
 
       <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
       <GameObject
@@ -89,7 +90,7 @@
         world-size="10000"
         max-height="200"
         levels="4"
-        resolution="128"
+        resolution="64"
         lod-hysteresis="1.3"
         lod-distance-ratio="2"
         height-smoothing="0.3"
@@ -105,24 +106,23 @@
 
       <!-- Água gerada dinamicamente a partir de /assets/terrain/terrain.json no bootstrap. -->
 
-      <Fog
-        color="#dde6d4"
-        density="0.00014"
-        mode="exponential"
-        height-falloff="0.48"
-        base-height="0"
-        volumetric-strength="0.009"
-        quality="medium"
-        noise-scale="0.28"
-      ></Fog>
+      <!-- Fog disabled for WebGPU migration -->
 
       <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world-size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
       <PlayerGLTF
         name="hero"
-        pos="0 200 0"
+        pos="0 150 0"
         model-url="/assets/meshes/hero_rigged_animated.glb"
         script="auto-attacker.ts"
-      ></PlayerGLTF>
+      >
+        <ParticleSystem
+          preset="fire"
+          rate="15"
+          lifetime="0.8"
+          size="0.15"
+          playing="1"
+        ></ParticleSystem>
+      </PlayerGLTF>
 
       <GameObject name="WaveManager" script="wave-manager.ts"></GameObject>
 
@@ -136,79 +136,8 @@
         auto-rotate-delay="0.55"
       ></FollowCamera>
 
-      <!-- Meshes em public/assets/meshes/ (LOD: por agora só *_lod0.glb; troca por distância virá depois). -->
-      <!-- Pilares: euler 0 no spawn (assets já Y-up / pés no chão pelo pipeline). -->
-      <SpawnGroup
-        profile="tree"
-        count="80"
-        seed="11"
-        region-min="-4500 0 -4500"
-        region-max="4500 0 4500"
-        max-slope-attempts="180"
-        pick-strategy="random"
-        scale-min="1.5"
-        scale-max="1.5"
-        max-distance="550"
-        surface-epsilon-auto="true"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="gltf-crate"
-          url="/assets/meshes/stone_pillar_lod0.glb"
-          body-type="fixed"
-          collider-shape="capsule"
-          collider-margin="-0.12"
-          transform="euler: 0 0 0"
-        ></GLTFDynamic>
-      </SpawnGroup>
+      <!-- SpawnGroups disabled for perf testing -->
 
-      <SpawnGroup
-        profile="gltf-crate"
-        count="60"
-        seed="23"
-        region-min="-4200 0 -4200"
-        region-max="4200 0 4200"
-        max-slope-attempts="120"
-        pick-strategy="random"
-        max-distance="450"
-        surface-epsilon-auto="true"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="gltf-crate"
-          url="/assets/meshes/wooden_crate_lod0.glb"
-          body-type="dynamic"
-          collider-shape="box"
-          transform="scale: 1 1 1"
-        ></GLTFDynamic>
-      </SpawnGroup>
-
-      <SpawnGroup
-        profile="tree"
-        count="300"
-        seed="7"
-        region-min="-2000 0 -2000"
-        region-max="2000 0 2000"
-        max-slope-attempts="220"
-        pick-strategy="random"
-        scale-min="1.5"
-        scale-max="4"
-        scale-distribution="linear"
-        yaw-distribution="discrete"
-        yaw-step-deg="45"
-        max-distance="400"
-        surface-epsilon-auto="true"
-      >
-        <GLTFDynamic
-          role="dynamic"
-          profile="gltf-crate"
-          url="/assets/meshes/tree_lowpoly_lod0.glb"
-          body-type="fixed"
-          collider-shape="capsule"
-          collider-margin="-0.18"
-          transform="scale: 1 1 1"
-        ></GLTFDynamic>
-      </SpawnGroup>
     </Scene>
 
     <canvas id="game-canvas"></canvas>

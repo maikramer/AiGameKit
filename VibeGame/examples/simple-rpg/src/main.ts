@@ -95,6 +95,10 @@ let localeDebounce = false;
 let prevHeroIsJumping = 0;
 
 let playTimeSec = 0;
+let fpsEl: HTMLDivElement | null = null;
+let fpsSmoothed = 60;
+let fpsFrameCount = 0;
+let fpsElapsed = 0;
 let statusFlashUntil = 0;
 let statusFlashKey = '';
 
@@ -199,6 +203,21 @@ const GameplayHudSystem: System = {
   update(state: State) {
     const dt = state.time.deltaTime;
     playTimeSec += dt;
+
+    // FPS counter (smoothed)
+    fpsFrameCount++;
+    fpsElapsed += dt;
+    if (fpsElapsed >= 0.5) {
+      const instant = fpsFrameCount / fpsElapsed;
+      fpsSmoothed = fpsSmoothed * 0.8 + instant * 0.2;
+      fpsFrameCount = 0;
+      fpsElapsed = 0;
+      if (fpsEl) {
+      if (fpsEl) {
+        fpsEl.textContent = `FPS: ${Math.round(fpsSmoothed)} | ${(dt * 1000).toFixed(1)}ms`;
+      }
+      }
+    }
 
     const heroEid = state.getEntityByName('hero');
 
@@ -466,6 +485,18 @@ function createOverlayHud(state: State): void {
   wrap.appendChild(waveCompleteEl);
   wrap.appendChild(waveTopEl);
   wrap.appendChild(bottom);
+
+  // FPS counter (top-right)
+  fpsEl = document.createElement('div');
+  fpsEl.style.cssText =
+    'position:fixed;top:20px;right:20px;' +
+    'background:rgba(8,12,28,0.55);color:#aabbcc;padding:6px 12px;' +
+    'border-radius:6px;font-size:12px;font-weight:600;font-family:monospace;' +
+    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(6px);' +
+    'z-index:1000;pointer-events:none;';
+  fpsEl.textContent = 'FPS: --';
+  wrap.appendChild(fpsEl);
+
   document.body.appendChild(wrap);
   document.body.appendChild(gameOverEl);
 

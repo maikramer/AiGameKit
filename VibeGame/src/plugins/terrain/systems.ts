@@ -1,36 +1,27 @@
 import { TerrainLOD } from '@interverse/three-terrain-lod';
+import { DefaultTerrainMaterial } from '@interverse/three-terrain-lod';
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { getPhysicsContext, RAPIER } from '../physics';
 import { PhysicsWorldSystem } from '../physics/systems';
 import { CameraSyncSystem } from '../rendering/systems';
-import {
-  getRenderingContext,
-  getScene,
-  MainCamera,
-  threeCameras,
-} from '../rendering';
+import { getRenderingContext, MainCamera, threeCameras } from '../rendering';
 import { TransformHierarchySystem, WorldTransform } from '../transforms';
 import { Terrain, TerrainDebugInfo } from './components';
 import {
-  extractTerrainHeightmapImageData,
   fireHeightmapReloadCallbacks,
   getTerrainContext,
   getTerrainHeightmapUrl,
   getTerrainTextureUrl,
-  resampleChunkHeightsForCollider,
   setTerrainHeightmapUrl,
+  terrainHeightsToRapierColumnMajor,
   type TerrainEntityData,
 } from './utils';
-import { WebGLTerrainMaterialProvider } from './webgl-material';
 import {
   loadTerrainData,
   spawnWaterEntitiesFromTerrainData,
 } from './terrain-data-loader';
-
-/** Set false only if colliders should match three-terrain-lod getHeightAt (canvas row order) instead of WebGL mesh. */
-const COLLIDER_HEIGHT_MATCH_WEBGL = true;
 
 const terrainQuery = defineQuery([Terrain]);
 const cameraQuery = defineQuery([MainCamera, WorldTransform]);
@@ -42,16 +33,53 @@ function getActiveCamera(state: State): THREE.Camera | null {
   return threeCameras.get(cameraEntities[0]) ?? null;
 }
 
-/** Physics heightfield sampling: must be 32, 64, or 128 (defaults to 64). */
 function resolveCollisionResolution(raw: number): 32 | 64 | 128 {
   if (raw === 32 || raw === 128) return raw;
   return 64;
 }
 
-/**
- * Runs in `fixed` (after physics world exists) so terrain exists before
- * TerrainPhysicsSystem in the same frame — `fixed` is scheduled before `draw`.
- */
+function hexToRgb(hex: number): [number, number, number] {
+  const h = hex >>> 0;
+  return [((h >> 16) & 0xff) / 255, ((h >> 8) & 0xff) / 255, (h & 0xff) / 255];
+}
+
+function applyMaterialCustomization(
+  terrainLOD: TerrainLOD,
+  entity: number
+): void {
+  const provider = (terrainLOD as any).defaultMaterialProvider as
+    | DefaultTerrainMaterial
+    | undefined;
+  if (!provider) return;
+
+  provider.setSlopeThreshold(Terrain.slopeThreshold[entity]);
+  provider.setSlopeSoftness(Terrain.slopeSoftness[entity]);
+  provider.setSnowHeight(Terrain.snowHeight[entity]);
+  provider.setNormalStrength(Terrain.normalStrength[entity]);
+  provider.setSkirtDepth(Terrain.skirtDepth[entity]);
+  provider.setSkirtWidth(Terrain.skirtWidth[entity]);
+  provider.setHeightSmoothing(Terrain.heightSmoothing[entity]);
+  provider.setHeightSmoothingSpread(Terrain.heightSmoothingSpread[entity]);
+
+  const nodes = provider.getNodes();
+  if (nodes.colorHigh) {
+    const [r, g, b] = hexToRgb(Terrain.colorHigh[entity]);
+    nodes.colorHigh.value.set(r, g, b);
+  }
+  if (nodes.colorMid) {
+    const [r, g, b] = hexToRgb(Terrain.colorMid[entity]);
+    nodes.colorMid.value.set(r, g, b);
+  }
+  if (nodes.colorLow) {
+    const [r, g, b] = hexToRgb(Terrain.colorLow[entity]);
+    nodes.colorLow.value.set(r, g, b);
+  }
+  if (nodes.colorRock) {
+    const [r, g, b] = hexToRgb(Terrain.colorRock[entity]);
+    nodes.colorRock.value.set(r, g, b);
+  }
+}
+
 export const TerrainBootstrapSystem: System = {
   group: 'fixed',
   after: [PhysicsWorldSystem],
@@ -86,38 +114,16 @@ export const TerrainBootstrapSystem: System = {
             0.25,
             Terrain.heightSmoothingSpread[entity]
           ),
+          normalStrength: Math.max(0, Terrain.normalStrength[entity]),
+          skirtDepth: Terrain.skirtDepth[entity],
+          skirtWidth: Terrain.skirtWidth[entity],
+          showChunkBorders: Terrain.showChunkBorders[entity] === 1,
         });
 
-        // Apply runtime-configurable params
         terrainLOD.setLODHysteresis(Terrain.lodHysteresis[entity]);
-        terrainLOD.setNormalStrength(Terrain.normalStrength[entity]);
         terrainLOD.setCollisionResolution(
           resolveCollisionResolution(Terrain.collisionResolution[entity])
         );
-        if (Terrain.showChunkBorders[entity] === 1) {
-          terrainLOD.setShowChunkBorders(true);
-        }
-
-        const materialProvider = new WebGLTerrainMaterialProvider({
-          skirtWidth: Terrain.skirtWidth[entity],
-          baseColor: Terrain.baseColor[entity],
-        });
-        terrainLOD.setMaterialProvider(materialProvider);
-
-        // Intercept InstancedMesh creation to set receiveShadow BEFORE first render.
-        // The shader program is compiled on first draw; if receiveShadow is false at
-        // that point, USE_SHADOWMAP won't be defined and shadows are permanently off.
-        const origAdd = terrainLOD.add.bind(terrainLOD);
-        terrainLOD.add = function (...objs: THREE.Object3D[]) {
-          for (const o of objs) {
-            const im = o as THREE.InstancedMesh;
-            if (im.isInstancedMesh) {
-              im.receiveShadow = true;
-              im.castShadow = false;
-            }
-          }
-          return origAdd(...objs);
-        };
 
         data = {
           terrainLOD,
@@ -128,16 +134,8 @@ export const TerrainBootstrapSystem: System = {
           collisionDispatchStarted: false,
           worldOffset: { x: 0, y: 0, z: 0 },
           chunkColliders: new Map(),
-          materialProvider,
-          lastRoughness: -1,
-          lastMetalness: -1,
-          lastSkirtDepth: -1,
-          lastSkirtWidth: -1,
-          lastWireframe: -1,
-          lastHeightSmoothing: -1,
-          lastHeightSmoothingSpread: -1,
-          lastBaseColor: -1,
-          heightmapImageData: null,
+          lastWireframe: Terrain.wireframe[entity],
+          lastShowChunkBorders: Terrain.showChunkBorders[entity],
         };
         context.set(entity, data);
 
@@ -146,18 +144,25 @@ export const TerrainBootstrapSystem: System = {
         const entityData = data;
         terrainLOD
           .init()
-          .then(() => {
+          .then(async () => {
             entityData.initialized = true;
-            applyMaterialProperties(entityData, entity, state);
+
+            replaceProceduralDiffuse(terrainLOD);
+
+            applyMaterialCustomization(terrainLOD, entity);
+
             terrainLOD.traverse((child) => {
               const mesh = child as THREE.Mesh;
               if (mesh.isMesh === true) {
                 mesh.receiveShadow = true;
                 mesh.castShadow = false;
-                if (mesh.material && 'needsUpdate' in mesh.material) {
-                  (mesh.material as THREE.Material).needsUpdate = true;
-                }
               }
+            });
+
+            patchBilinearGetHeightAt(terrainLOD);
+
+            await terrainLOD.computeAllCollisionData().catch((err: unknown) => {
+              console.error('[terrain] computeAllCollisionData failed:', err);
             });
 
             const hmUrl = getTerrainHeightmapUrl(state, entity);
@@ -180,7 +185,6 @@ export const TerrainBootstrapSystem: System = {
           });
       }
 
-      // Hot-reload: check if heightmap URL changed
       if (data) {
         const newHmUrl = getTerrainHeightmapUrl(state, entity);
         if (newHmUrl && newHmUrl !== data.heightmapUrl) {
@@ -191,7 +195,6 @@ export const TerrainBootstrapSystem: System = {
               .then(() => {
                 const physicsWorld = getPhysicsContext(state).physicsWorld;
                 if (physicsWorld) cleanupPhysics(data, physicsWorld);
-                data.heightmapImageData = null;
                 data.collisionDispatchStarted = false;
                 data.collisionReady = false;
                 fireHeightmapReloadCallbacks(state);
@@ -219,7 +222,7 @@ export const TerrainBootstrapSystem: System = {
     }
   },
   dispose(state: State) {
-    const scene = getScene(state);
+    const scene = getRenderingContext(state).scene;
     const physicsWorld = getPhysicsContext(state).physicsWorld;
     const context = getTerrainContext(state);
 
@@ -232,60 +235,6 @@ export const TerrainBootstrapSystem: System = {
   },
 };
 
-/** Apply ECS component values to the Three.js material at runtime. */
-function applyMaterialProperties(
-  data: TerrainEntityData,
-  entity: number,
-  state: State
-): void {
-  const roughness = Terrain.roughness[entity];
-  const metalness = Terrain.metalness[entity];
-  const skirtDepth = Terrain.skirtDepth[entity];
-  const skirtWidth = Terrain.skirtWidth[entity];
-  const wireframe = Terrain.wireframe[entity];
-  const heightSmoothing = Terrain.heightSmoothing[entity];
-  const heightSmoothingSpread = Terrain.heightSmoothingSpread[entity];
-  const baseColor = Terrain.baseColor[entity] >>> 0;
-  const hasDiffuseTexture = Boolean(getTerrainTextureUrl(state, entity));
-
-  // Only update when values change (avoids redundant uniform uploads)
-  if (roughness !== data.lastRoughness) {
-    data.materialProvider.setRoughness(roughness);
-    data.lastRoughness = roughness;
-  }
-  if (metalness !== data.lastMetalness) {
-    data.materialProvider.setMetalness(metalness);
-    data.lastMetalness = metalness;
-  }
-  if (skirtDepth !== data.lastSkirtDepth) {
-    data.materialProvider.setSkirtDepth(skirtDepth);
-    data.lastSkirtDepth = skirtDepth;
-  }
-  if (skirtWidth !== data.lastSkirtWidth) {
-    data.materialProvider.setSkirtWidth(skirtWidth);
-    data.lastSkirtWidth = skirtWidth;
-  }
-  if (wireframe !== data.lastWireframe) {
-    data.materialProvider.setWireframe(wireframe === 1);
-    data.lastWireframe = wireframe;
-  }
-  if (heightSmoothing !== data.lastHeightSmoothing) {
-    data.terrainLOD.setHeightSmoothing(heightSmoothing);
-    data.lastHeightSmoothing = heightSmoothing;
-  }
-  if (heightSmoothingSpread !== data.lastHeightSmoothingSpread) {
-    data.terrainLOD.setHeightSmoothingSpread(heightSmoothingSpread);
-    data.lastHeightSmoothingSpread = heightSmoothingSpread;
-  }
-
-  const effectiveColor = hasDiffuseTexture ? 0xffffff : baseColor;
-  if (effectiveColor !== data.lastBaseColor) {
-    data.materialProvider.setTerrainColor(effectiveColor);
-    data.lastBaseColor = effectiveColor;
-  }
-}
-
-/** LOD / frustum updates — must run after camera is updated (draw group). */
 export const TerrainRenderSystem: System = {
   group: 'draw',
   after: [CameraSyncSystem],
@@ -307,9 +256,17 @@ export const TerrainRenderSystem: System = {
       }
       data.terrainLOD.update(camera);
 
-      // Apply material property changes every frame (cheap equality check)
       if (data.initialized) {
-        applyMaterialProperties(data, entity, state);
+        const wf = Terrain.wireframe[entity];
+        if (wf !== data.lastWireframe) {
+          data.terrainLOD.setWireframe(wf === 1);
+          data.lastWireframe = wf;
+        }
+        const scb = Terrain.showChunkBorders[entity];
+        if (scb !== data.lastShowChunkBorders) {
+          data.terrainLOD.setShowChunkBorders(scb === 1);
+          data.lastShowChunkBorders = scb;
+        }
         const im = (data.terrainLOD as any).instancedMesh as
           | THREE.InstancedMesh
           | undefined;
@@ -322,7 +279,6 @@ export const TerrainRenderSystem: System = {
   },
 };
 
-/** Populates TerrainDebugInfo component with live terrain statistics. */
 export const TerrainDebugSystem: System = {
   group: 'draw',
   after: [CameraSyncSystem],
@@ -376,40 +332,14 @@ export const TerrainPhysicsSystem: System = {
       }
       data.worldOffset = { x: ox, y: oy, z: oz };
       const offset = data.worldOffset;
-
-      setupCollisionCallbacks(data, physicsWorld, entity);
       data.collisionDispatchStarted = true;
 
       const terrainLOD = data.terrainLOD;
-      const worldSize = terrainLOD.getConfig().worldSize;
-      const maxHeight = terrainLOD.getConfig().maxHeight;
-
-      const hSmooth = Terrain.heightSmoothing[entity];
-      const hSmoothSpread = Terrain.heightSmoothingSpread[entity];
+      patchBilinearGetHeightAt(terrainLOD);
 
       terrainLOD
         .computeAllCollisionData()
-        .then(() => {
-          const imageData = extractTerrainHeightmapImageData(
-            terrainLOD,
-            data.heightmapImageData
-          );
-          const allData = terrainLOD.getAllCollisionData();
-          for (const [, chunkData] of allData) {
-            if (imageData && COLLIDER_HEIGHT_MATCH_WEBGL) {
-              resampleChunkHeightsForCollider(
-                chunkData,
-                worldSize,
-                maxHeight,
-                imageData,
-                true,
-                hSmooth,
-                hSmoothSpread,
-                offset.x,
-                offset.z
-              );
-            }
-          }
+        .then((allData) => {
           for (const [key, chunkData] of allData) {
             if (!data.chunkColliders.has(key)) {
               const result = createChunkCollider(
@@ -443,75 +373,89 @@ export const TerrainPhysicsSystem: System = {
   },
 };
 
-function setupCollisionCallbacks(
-  data: TerrainEntityData,
-  physicsWorld: RAPIER.World,
-  terrainEntity: number
-): void {
-  data.terrainLOD.setCollisionCallback({
-    onChunkEnterLOD0(chunk) {
-      const key = `${chunk.index.x}_${chunk.index.z}`;
-      if (data.chunkColliders.has(key)) return;
-
-      const worldSize = data.terrainLOD.getConfig().worldSize;
-      const maxHeight = data.terrainLOD.getConfig().maxHeight;
-      const imageData = extractTerrainHeightmapImageData(
-        data.terrainLOD,
-        data.heightmapImageData
-      );
-      if (imageData && COLLIDER_HEIGHT_MATCH_WEBGL) {
-        resampleChunkHeightsForCollider(
-          chunk,
-          worldSize,
-          maxHeight,
-          imageData,
-          true,
-          data.lastHeightSmoothing,
-          data.lastHeightSmoothingSpread,
-          data.worldOffset.x,
-          data.worldOffset.z
-        );
-      }
-
-      const result = createChunkCollider(
-        chunk,
-        physicsWorld,
-        data.worldOffset,
-        terrainEntity
-      );
-      if (result) data.chunkColliders.set(key, result);
-    },
-    onChunkExitLOD0(index) {
-      const key = `${index.x}_${index.z}`;
-      const existing = data.chunkColliders.get(key);
-      if (existing) {
-        physicsWorld.removeCollider(existing.collider, false);
-        physicsWorld.removeRigidBody(existing.body);
-        data.chunkColliders.delete(key);
-      }
-    },
-  });
+function replaceProceduralDiffuse(terrainLOD: TerrainLOD): void {
+  const tlod = terrainLOD as any;
+  if (tlod.proceduralDiffuseTexture) {
+    tlod.proceduralDiffuseTexture.dispose();
+    const canvas = document.createElement('canvas');
+    canvas.width = 4;
+    canvas.height = 4;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = '#3e6b29';
+    ctx.fillRect(0, 0, 4, 4);
+    const solid = new THREE.CanvasTexture(canvas);
+    solid.wrapS = solid.wrapT = THREE.RepeatWrapping;
+    solid.repeat.set(16, 16);
+    solid.anisotropy = 16;
+    tlod.diffuseTexture = solid;
+    tlod.proceduralDiffuseTexture = null;
+    tlod.recreateMaterial();
+  }
 }
 
-/**
- * Parry/Rapier heightfields use a `heights_zx` matrix: row index → Z, column index → X
- * (see parry3d `HeightField::new` / `triangles_vids_at`: `p00 = i + j * nrows`).
- * Column-major flat layout: index = i_z + j_x * nrows_z.
- * three-terrain-lod uses row-major `rowZ * cols + colX` for the same (Z,X) samples.
- */
-function terrainHeightsToParryColumnMajor(
-  terrainRowMajor: Float32Array,
-  vertexCountZ: number,
-  vertexCountX: number
-): Float32Array {
-  const out = new Float32Array(vertexCountZ * vertexCountX);
-  for (let rowZ = 0; rowZ < vertexCountZ; rowZ++) {
-    for (let colX = 0; colX < vertexCountX; colX++) {
-      out[rowZ + colX * vertexCountZ] =
-        terrainRowMajor[rowZ * vertexCountX + colX];
-    }
-  }
-  return out;
+function patchBilinearGetHeightAt(terrainLOD: TerrainLOD): void {
+  const tlod = terrainLOD as any;
+  if (tlod._bilinearPatched) return;
+  tlod._bilinearPatched = true;
+
+  const sample = (imgData: ImageData, u: number, v: number): number => {
+    const w = imgData.width;
+    const d = imgData.data;
+    const px = u * (w - 1);
+    const py = v * (imgData.height - 1);
+    const x0 = Math.floor(px);
+    const y0 = Math.floor(py);
+    const x1 = Math.min(x0 + 1, w - 1);
+    const y1 = Math.min(y0 + 1, imgData.height - 1);
+    const fx = px - x0;
+    const fy = py - y0;
+    const h00 = d[(y0 * w + x0) * 4] / 255;
+    const h10 = d[(y0 * w + x1) * 4] / 255;
+    const h01 = d[(y1 * w + x0) * 4] / 255;
+    const h11 = d[(y1 * w + x1) * 4] / 255;
+    return (
+      h00 * (1 - fx) * (1 - fy) +
+      h10 * fx * (1 - fy) +
+      h01 * (1 - fx) * fy +
+      h11 * fx * fy
+    );
+  };
+
+  tlod.getHeightAt = (worldX: number, worldZ: number): number => {
+    const imgData = tlod.heightmapImageData;
+    if (!imgData) return 0;
+
+    const config = tlod.config;
+    const halfWorld = config.worldSize / 2;
+    const u = (worldX + halfWorld) / config.worldSize;
+    const v = (worldZ + halfWorld) / config.worldSize;
+    if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
+
+    const rawH = sample(imgData, u, v);
+
+    const smoothing = config.heightSmoothing;
+    if (smoothing <= 0) return rawH * config.maxHeight;
+
+    const w = imgData.width;
+    const h = imgData.height;
+    const spread = config.heightSmoothingSpread;
+    const sU = (spread / w) * 0.5;
+    const sV = (spread / h) * 0.5;
+
+    const hN = sample(imgData, u, v - sV);
+    const hS = sample(imgData, u, v + sV);
+    const hE = sample(imgData, u + sU, v);
+    const hW = sample(imgData, u - sU, v);
+    const hNE = sample(imgData, u + sU, v - sV);
+    const hNW = sample(imgData, u - sU, v - sV);
+    const hSE = sample(imgData, u + sU, v + sV);
+    const hSW = sample(imgData, u - sU, v + sV);
+
+    const filtered =
+      (rawH * 4 + (hN + hS + hE + hW) * 2 + (hNE + hNW + hSE + hSW)) / 16;
+
+    return (rawH * (1 - smoothing) + filtered * smoothing) * config.maxHeight;
+  };
 }
 
 function createChunkCollider(
@@ -528,16 +472,12 @@ function createChunkCollider(
   terrainEntity: number = 0
 ): { body: RAPIER.RigidBody; collider: RAPIER.Collider } | null {
   try {
-    // chunk.rows / chunk.cols are VERTEX counts from three-terrain-lod
-    // (resolution + 1). Rapier expects SUBDIVISION counts (cells), so we
-    // pass (rows - 1) and (cols - 1) to ColliderDesc.heightfield().
-    // The heights array must be (rows) × (cols) = (nsubdivs+1)² entries.
     const vertexRows = chunk.rows;
     const vertexCols = chunk.cols;
     const subdivRows = vertexRows - 1;
     const subdivCols = vertexCols - 1;
 
-    const heightsColMajor = terrainHeightsToParryColumnMajor(
+    const heightsColMajor = terrainHeightsToRapierColumnMajor(
       chunk.heights,
       vertexRows,
       vertexCols
@@ -555,16 +495,12 @@ function createChunkCollider(
       return null;
     }
 
-    // three-terrain-lod sets `position` to the chunk CENTER. Rapier's heightfield lives in
-    // the xz plane with local x∈[0,scale.x], z∈[0,scale.z] from the rigid-body origin
-    // (see Rapier user guide: scale is the span along x and z). Place the body at the
-    // world-space min corner of the chunk.
-    const originX = chunk.position.x - chunk.size * 0.5 + offset.x;
-    const originZ = chunk.position.z - chunk.size * 0.5 + offset.z;
+    const bodyX = chunk.position.x + offset.x;
+    const bodyZ = chunk.position.z + offset.z;
     const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
-      originX,
+      bodyX,
       chunk.position.y + offset.y,
-      originZ
+      bodyZ
     );
     const body = physicsWorld.createRigidBody(bodyDesc);
 
@@ -583,11 +519,35 @@ function createChunkCollider(
     colliderDesc.setRestitution(0.0);
 
     const collider = physicsWorld.createCollider(colliderDesc, body);
+
+    if (Math.abs(chunk.position.x) < chunk.size && Math.abs(chunk.position.z) < chunk.size) {
+      let hMin = Infinity, hMax = -Infinity;
+      for (let i = 0; i < chunk.heights.length; i++) {
+        if (chunk.heights[i] < hMin) hMin = chunk.heights[i];
+        if (chunk.heights[i] > hMax) hMax = chunk.heights[i];
+      }
+      const mid = Math.floor(chunk.rows / 2) * chunk.cols + Math.floor(chunk.cols / 2);
+      console.log('[terrain DEBUG] center chunk:', {
+        pos: `(${chunk.position.x.toFixed(1)}, ${chunk.position.z.toFixed(1)})`,
+        bodyY: (chunk.position.y + offset.y).toFixed(2),
+        heightsRange: `[${hMin.toFixed(2)}, ${hMax.toFixed(2)}]`,
+        heightCenter: chunk.heights[mid].toFixed(2),
+        scale: `(${chunk.scale.x.toFixed(1)}, ${chunk.scale.y}, ${chunk.scale.z.toFixed(1)})`,
+        subdivs: `${subdivRows}x${subdivCols}`,
+        cornerHeights: [
+          chunk.heights[0].toFixed(2),
+          chunk.heights[chunk.cols - 1].toFixed(2),
+          chunk.heights[(chunk.rows - 1) * chunk.cols].toFixed(2),
+          chunk.heights[chunk.rows * chunk.cols - 1].toFixed(2),
+        ],
+      });
+    }
+
     return { body, collider };
   } catch (err) {
     const chunkKey = `${chunk.rows}x${chunk.cols}@(${chunk.position.x.toFixed(1)},${chunk.position.z.toFixed(1)})`;
     console.error(
-      `[terrain] CRITICAL: Heightfield collider failed for chunk "%s", falling back to flat cuboid. Object may fall through terrain. Error: %s`,
+      `[terrain] CRITICAL: Heightfield collider failed for chunk "%s", falling back to flat cuboid. Error: %s`,
       chunkKey,
       err
     );
@@ -624,14 +584,6 @@ function cleanupPhysics(
   data.chunkColliders.clear();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public query helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Sample terrain height at a world position.
- * Returns 0 if no terrain entity is initialized.
- */
 export function getTerrainHeightAt(
   state: State,
   worldX: number,
@@ -640,16 +592,14 @@ export function getTerrainHeightAt(
   const context = getTerrainContext(state);
   for (const [, data] of context) {
     if (data.initialized) {
-      return data.terrainLOD.getHeightAt(worldX, worldZ);
+      const localX = worldX - data.worldOffset.x;
+      const localZ = worldZ - data.worldOffset.z;
+      return data.terrainLOD.getHeightAt(localX, localZ);
     }
   }
   return 0;
 }
 
-/**
- * Find the nearest initialized terrain entity to a given world position.
- * Returns 0 if no terrain is available.
- */
 export function findNearestTerrainEntity(
   state: State,
   worldX: number,
@@ -672,10 +622,6 @@ export function findNearestTerrainEntity(
   return bestEntity;
 }
 
-/**
- * Toggle wireframe on a specific terrain entity at runtime.
- * No-op if the entity has no terrain data.
- */
 export function setTerrainWireframe(
   state: State,
   entity: number,
@@ -685,15 +631,10 @@ export function setTerrainWireframe(
   const data = context.get(entity);
   if (data?.initialized) {
     data.terrainLOD.setWireframe(enabled);
-    data.materialProvider.setWireframe(enabled);
     data.lastWireframe = enabled ? 1 : 0;
   }
 }
 
-/**
- * Hot-reload the heightmap on a terrain entity from a new URL.
- * Invalidates physics colliders after loading.
- */
 export function reloadTerrainHeightmap(
   state: State,
   entity: number,
@@ -711,7 +652,6 @@ export function reloadTerrainHeightmap(
       const physicsCtx = getPhysicsContext(state);
       const physicsWorld = physicsCtx.physicsWorld;
       if (physicsWorld) cleanupPhysics(data, physicsWorld);
-      data.heightmapImageData = null;
       data.collisionDispatchStarted = false;
       data.collisionReady = false;
       fireHeightmapReloadCallbacks(state);
@@ -721,10 +661,6 @@ export function reloadTerrainHeightmap(
     });
 }
 
-/**
- * Get live terrain statistics for a terrain entity.
- * Returns null if the entity has no terrain data or is not initialized.
- */
 export function getTerrainStats(
   state: State,
   entity: number

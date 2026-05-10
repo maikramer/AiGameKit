@@ -10,12 +10,12 @@ import {
 } from './systems';
 import { setTerrainHeightmapUrl, setTerrainTextureUrl } from './utils';
 
-function terrainBaseColorAdapter(
-  entity: number,
-  value: string,
-  _state: State
-): void {
-  Terrain.baseColor[entity] = parseColor(value) >>> 0;
+function terrainColorAdapter(
+  field: keyof typeof Terrain
+): Adapter {
+  return ((entity: number, value: string, _state: State) => {
+    Terrain[field][entity] = parseColor(value) >>> 0;
+  }) as Adapter;
 }
 
 export const TerrainPlugin: Plugin = {
@@ -40,7 +40,6 @@ export const TerrainPlugin: Plugin = {
         lodDistanceRatio: 2.0,
         lodHysteresis: 1.2,
         wireframe: 0,
-        // Material
         roughness: 0.85,
         metalness: 0.0,
         normalStrength: 1.0,
@@ -49,10 +48,15 @@ export const TerrainPlugin: Plugin = {
         baseColor: 0x4a7a3a,
         heightSmoothing: 0.35,
         heightSmoothingSpread: 1.25,
-        // Physics
         collisionResolution: 64,
-        // Debug
         showChunkBorders: 0,
+        snowHeight: 0.75,
+        colorHigh: 0xffffff,
+        colorMid: 0x7a9a4a,
+        colorLow: 0x4a6a2a,
+        colorRock: 0x808080,
+        slopeThreshold: 0.55,
+        slopeSoftness: 0.1,
       },
     },
     adapters: {
@@ -63,7 +67,11 @@ export const TerrainPlugin: Plugin = {
         texture: ((entity, value, state) => {
           setTerrainTextureUrl(state, entity, value);
         }) as Adapter,
-        'base-color': terrainBaseColorAdapter as Adapter,
+        'base-color': terrainColorAdapter('baseColor') as Adapter,
+        'color-high': terrainColorAdapter('colorHigh') as Adapter,
+        'color-mid': terrainColorAdapter('colorMid') as Adapter,
+        'color-low': terrainColorAdapter('colorLow') as Adapter,
+        'color-rock': terrainColorAdapter('colorRock') as Adapter,
       },
     },
   },

@@ -11,10 +11,6 @@ export {
 } from './utils';
 export type { TerrainEntityData } from './utils';
 export {
-  WebGLTerrainMaterialProvider,
-  type WebGLTerrainMaterialOptions,
-} from './webgl-material';
-export {
   getTerrainHeightAt,
   findNearestTerrainEntity,
   setTerrainWireframe,
