@@ -1,0 +1,92 @@
+import * as RAPIER from "@dimforge/rapier3d-simd";
+import { Rigidbody, Collider, BodyType, ColliderShape } from "./components";
+
+export function createRapierBody(entity: number): RAPIER.RigidBodyDesc {
+  const type = Rigidbody.type[entity] ?? BodyType.Dynamic;
+
+  let desc: RAPIER.RigidBodyDesc;
+  switch (type) {
+    case BodyType.Fixed:
+      desc = RAPIER.RigidBodyDesc.fixed();
+      break;
+    case BodyType.Dynamic:
+    default:
+      desc = RAPIER.RigidBodyDesc.dynamic();
+      break;
+  }
+
+  desc.setTranslation(
+    Rigidbody.posX[entity] ?? 0,
+    Rigidbody.posY[entity] ?? 0,
+    Rigidbody.posZ[entity] ?? 0,
+  );
+
+  const mass = Math.max(0.001, Rigidbody.mass[entity] || 1);
+  desc.setAdditionalMass(mass, true);
+
+  const gravityScale = Rigidbody.gravityScale[entity] ?? 1;
+  desc.setGravityScale(gravityScale, true);
+
+  if (
+    Rigidbody.lockRotX[entity] ||
+    Rigidbody.lockRotY[entity] ||
+    Rigidbody.lockRotZ[entity]
+  ) {
+    desc.setEnabledRotations(
+      !Rigidbody.lockRotX[entity],
+      !Rigidbody.lockRotY[entity],
+      !Rigidbody.lockRotZ[entity],
+      true,
+    );
+  }
+
+  return desc;
+}
+
+export function createRapierColliderDesc(entity: number): RAPIER.ColliderDesc {
+  const shape = Collider.shape[entity] ?? ColliderShape.Box;
+
+  let desc: RAPIER.ColliderDesc;
+  switch (shape) {
+    case ColliderShape.Sphere:
+      desc = RAPIER.ColliderDesc.ball(Collider.radius[entity] || 0.5);
+      break;
+    case ColliderShape.Capsule:
+      desc = RAPIER.ColliderDesc.capsule(
+        (Collider.height[entity] || 1) / 2,
+        Collider.radius[entity] || 0.5,
+      );
+      break;
+    case ColliderShape.Box:
+    default:
+      desc = RAPIER.ColliderDesc.cuboid(
+        (Collider.sizeX[entity] || 1) / 2,
+        (Collider.sizeY[entity] || 1) / 2,
+        (Collider.sizeZ[entity] || 1) / 2,
+      );
+      break;
+  }
+
+  desc.setFriction(Collider.friction[entity] ?? 0.5);
+  desc.setRestitution(Collider.restitution[entity] ?? 0);
+
+  const sensor = Collider.sensor[entity] || 0;
+  if (sensor) {
+    desc.setSensor(true);
+    desc.setDensity(0);
+  } else {
+    desc.setDensity(Collider.density[entity] ?? 1);
+  }
+
+  const groups = Collider.membershipGroups[entity] || 0xffff;
+  const filter = Collider.filterGroups[entity] || 0xffff;
+  desc.setCollisionGroups((groups & 0xffff) | ((filter & 0xffff) << 16));
+
+  desc.setTranslation(
+    Collider.posOffsetX[entity] || 0,
+    Collider.posOffsetY[entity] || 0,
+    Collider.posOffsetZ[entity] || 0,
+  );
+
+  return desc;
+}
