@@ -73,8 +73,7 @@ export const PhysicsStepSystem: System = {
 };
 
 export const PhysicsSyncSystem: System = {
-  group: 'fixed',
-  after: [PhysicsStepSystem],
+  group: 'simulation',
   update: (state) => {
     const bodies = getBodyMap(state);
 
