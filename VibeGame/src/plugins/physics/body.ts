@@ -22,21 +22,20 @@ export function createRapierBody(entity: number): RAPIER.RigidBodyDesc {
   );
 
   const mass = Math.max(0.001, Rigidbody.mass[entity] || 1);
-  desc.setAdditionalMass(mass, true);
+  desc.setAdditionalMass(mass);
 
   const gravityScale = Rigidbody.gravityScale[entity] ?? 1;
-  desc.setGravityScale(gravityScale, true);
+  desc.setGravityScale(gravityScale);
 
   if (
     Rigidbody.lockRotX[entity] ||
     Rigidbody.lockRotY[entity] ||
     Rigidbody.lockRotZ[entity]
   ) {
-    desc.setEnabledRotations(
+    desc.enabledRotations(
       !Rigidbody.lockRotX[entity],
       !Rigidbody.lockRotY[entity],
       !Rigidbody.lockRotZ[entity],
-      true,
     );
   }
 

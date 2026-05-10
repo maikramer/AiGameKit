@@ -11,6 +11,9 @@ export const Rigidbody = defineComponent({
   lockRotX: Types.ui8,
   lockRotY: Types.ui8,
   lockRotZ: Types.ui8,
+  ccd: Types.ui8,
+  linearDamping: Types.f32,
+  angularDamping: Types.f32,
 
   posX: Types.f32,
   posY: Types.f32,
@@ -26,6 +29,9 @@ export const Rigidbody = defineComponent({
   velX: Types.f32,
   velY: Types.f32,
   velZ: Types.f32,
+  rotVelX: Types.f32,
+  rotVelY: Types.f32,
+  rotVelZ: Types.f32,
 });
 
 export const Collider = defineComponent({
@@ -48,4 +54,62 @@ export const Collider = defineComponent({
   rotOffsetY: Types.f32,
   rotOffsetZ: Types.f32,
   rotOffsetW: Types.f32,
+});
+
+export const CollisionEvents = defineComponent({});
+
+export const TouchedEvent = defineComponent({
+  other: Types.eid,
+});
+
+export const TouchEndedEvent = defineComponent({
+  other: Types.eid,
+});
+
+export const SetLinearVelocity = defineComponent({
+  x: Types.f32,
+  y: Types.f32,
+  z: Types.f32,
+});
+
+export const SetAngularVelocity = defineComponent({
+  x: Types.f32,
+  y: Types.f32,
+  z: Types.f32,
+});
+
+export const CharacterController = defineComponent({
+  moveX: Types.f32,
+  moveY: Types.f32,
+  moveZ: Types.f32,
+  grounded: Types.ui8,
+  platform: Types.eid,
+  platformVelX: Types.f32,
+  platformVelZ: Types.f32,
+});
+
+export const CharacterMovement = defineComponent({
+  desiredVelX: Types.f32,
+  desiredVelY: Types.f32,
+  desiredVelZ: Types.f32,
+  velocityY: Types.f32,
+  actualMoveX: Types.f32,
+  actualMoveZ: Types.f32,
+});
+
+export const InterpolatedTransform = defineComponent({
+  prevPosX: Types.f32,
+  prevPosY: Types.f32,
+  prevPosZ: Types.f32,
+  prevRotX: Types.f32,
+  prevRotY: Types.f32,
+  prevRotZ: Types.f32,
+  prevRotW: Types.f32,
+  posX: Types.f32,
+  posY: Types.f32,
+  posZ: Types.f32,
+  rotX: Types.f32,
+  rotY: Types.f32,
+  rotZ: Types.f32,
+  rotW: Types.f32,
 });

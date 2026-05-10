@@ -117,3 +117,11 @@ export function getBodyForEntity(
 ): RAPIER.RigidBody | undefined {
   return getBodyMap(state).get(entity);
 }
+
+export function getPhysicsContext(state: State): { physicsWorld: RAPIER.World } {
+  return { physicsWorld: getOrCreateWorld() };
+}
+
+export { PhysicsStepSystem as PhysicsWorldSystem };
+export { PhysicsInitSystem as PhysicsInitializationSystem };
+export { PhysicsSyncSystem as PhysicsInterpolationSystem };

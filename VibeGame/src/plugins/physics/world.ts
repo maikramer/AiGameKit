@@ -1,14 +1,14 @@
 import * as RAPIER from "@dimforge/rapier3d-simd";
 
 const GRAVITY_Y = -60;
+export const DEFAULT_GRAVITY = GRAVITY_Y;
 const TIMESTEP = 1 / 50;
 
 let world: RAPIER.World | null = null;
 let initialized = false;
 
-export async function initPhysics(): Promise<void> {
+export function initPhysics(): void {
   if (initialized) return;
-  await RAPIER.init();
   initialized = true;
 }
 
