@@ -8,7 +8,7 @@ export function vibegame(): Plugin[] {
         config.resolve = config.resolve || {};
         config.resolve.alias = {
           ...config.resolve.alias,
-          '@dimforge/rapier3d': '@dimforge/rapier3d-compat',
+          '@dimforge/rapier3d': '@dimforge/rapier3d-simd',
         };
       },
     },
