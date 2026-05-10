@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 export default defineConfig({
   resolve: {
     alias: {
-      '@dimforge/rapier3d': '@dimforge/rapier3d-compat',
+      '@dimforge/rapier3d': '@dimforge/rapier3d-simd',
     },
   },
   build: {
