@@ -13,7 +13,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@dimforge/rapier3d': '@dimforge/rapier3d-simd',
+      '@dimforge/rapier3d': '@dimforge/rapier3d-simd-compat',
     },
   },
   build: {
@@ -50,7 +50,7 @@ export default defineConfig({
         'three',
         'bitecs',
         'vite',
-        '@dimforge/rapier3d-simd',
+        '@dimforge/rapier3d-simd-compat',
         'troika-three-text',
         /^three\//,
         'jsdom',

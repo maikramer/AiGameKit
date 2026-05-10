@@ -1,4 +1,4 @@
-import * as RAPIER from '@dimforge/rapier3d-simd';
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import * as THREE from 'three';
 import { defineQuery, type State, type System } from '../../core';
 import { forEachGltfRootGroup } from '../gltf-xml/group-registry';

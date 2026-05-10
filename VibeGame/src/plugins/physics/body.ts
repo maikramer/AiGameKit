@@ -1,4 +1,4 @@
-import * as RAPIER from "@dimforge/rapier3d-simd";
+import * as RAPIER from "@dimforge/rapier3d-simd-compat";
 import { Rigidbody, Collider, BodyType, ColliderShape } from "./components";
 
 export function createRapierBody(entity: number): RAPIER.RigidBodyDesc {

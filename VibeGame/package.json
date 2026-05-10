@@ -179,7 +179,7 @@
     "vite-plugin-dts": "^4.5.4"
   },
   "dependencies": {
-    "@dimforge/rapier3d-simd": "^0.19.3",
+    "@dimforge/rapier3d-simd-compat": "^0.19.3",
     "@gltf-transform/core": "^4.3.0",
     "@gltf-transform/functions": "^4.3.0",
     "@interverse/three-terrain-lod": "^2.0.0",

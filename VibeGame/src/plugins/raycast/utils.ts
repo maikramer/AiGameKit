@@ -1,4 +1,4 @@
-import * as RAPIER from '@dimforge/rapier3d-simd';
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import { hasComponent } from 'bitecs';
 import * as THREE from 'three';
 import type { State } from '../../core';

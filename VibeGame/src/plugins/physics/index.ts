@@ -1,4 +1,4 @@
-﻿import * as RAPIER from "@dimforge/rapier3d-simd";
+﻿import * as RAPIER from "@dimforge/rapier3d-simd-compat";
 
 export {
   BodyType,

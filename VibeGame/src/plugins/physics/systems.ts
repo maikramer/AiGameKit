@@ -1,4 +1,4 @@
-﻿import * as RAPIER from '@dimforge/rapier3d-simd';
+﻿import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import { defineQuery, type State, type System } from '../../core';
 import { Transform } from '../transforms';
 import { Rigidbody, Collider } from './components';

@@ -1,4 +1,4 @@
-﻿import type * as RAPIER from '@dimforge/rapier3d-simd';
+﻿import type * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import type { TerrainLOD } from '@interverse/three-terrain-lod';
 import type { State } from '../../core';
 

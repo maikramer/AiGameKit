@@ -1,4 +1,4 @@
-import type { ImpulseJoint } from '@dimforge/rapier3d-simd';
+import type { ImpulseJoint } from '@dimforge/rapier3d-simd-compat';
 import type { State } from '../../core';
 
 const stateToJoints = new WeakMap<State, Map<number, ImpulseJoint>>();
