@@ -1,28 +1,8 @@
-﻿import * as RAPIER from '@dimforge/rapier3d-compat';
+﻿import * as RAPIER from "@dimforge/rapier3d-simd";
 
-export {
-  ApplyAngularImpulse,
-  ApplyForce,
-  ApplyImpulse,
-  ApplyTorque,
-  Rigidbody,
-  BodyType,
-  CharacterController,
-  CharacterMovement,
-  Collider,
-  ColliderShape,
-  CollisionEvents,
-  InterpolatedTransform,
-  KinematicAngularVelocity,
-  KinematicMove,
-  KinematicRotate,
-  PhysicsWorld,
-  SetAngularVelocity,
-  SetLinearVelocity,
-  TouchedEvent,
-  TouchEndedEvent,
-} from './components';
-export { PhysicsPlugin } from './plugin';
-export { getPhysicsContext } from './systems';
-export { DEFAULT_GRAVITY, initializePhysics } from './utils';
+export { BodyType, ColliderShape, Rigidbody, Collider } from "./components";
+export { PhysicsPlugin } from "./plugin";
+export { getBodyForEntity } from "./systems";
+export { initPhysics, getWorld, getOrCreateWorld } from "./world";
+export { createRapierBody, createRapierColliderDesc } from "./body";
 export { RAPIER };
