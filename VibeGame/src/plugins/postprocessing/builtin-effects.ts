@@ -10,11 +10,10 @@ import {
   ToneMappingMode,
   VignetteEffect,
 } from 'postprocessing';
-import { SSREffect } from 'screen-space-reflections';
 import { Vector2 } from 'three';
 import { defineQuery } from '../../core';
 import { PlayerController } from '../player';
-import { MainCamera, getScene, threeCameras } from '../rendering';
+import { MainCamera, threeCameras } from '../rendering';
 import { WorldTransform } from '../transforms';
 import {
   Bloom,
@@ -24,7 +23,6 @@ import {
   Noise,
   SMAA,
   ScreenSpaceAmbientOcclusion,
-  ScreenSpaceReflection,
   Tonemapping,
   Vignette,
 } from './components';
@@ -267,33 +265,6 @@ const builtinDefinitions: EffectDefinition[] = [
       if ((ssao as any).luminanceInfluence !== luminanceInfluence) {
         (ssao as any).luminanceInfluence = luminanceInfluence;
       }
-    },
-  },
-  {
-    key: 'ssr',
-    component: ScreenSpaceReflection,
-    create(state, entity) {
-      const camera = threeCameras.get(entity);
-      const scene = getScene(state);
-      try {
-        return new SSREffect(scene!, camera!, {
-          intensity: ScreenSpaceReflection.intensity[entity],
-          distance: ScreenSpaceReflection.maxDistance[entity],
-        });
-      } catch (e: any) {
-        console.warn(
-          `[vibegame] SSR effect unavailable — screen-space-reflections is incompatible with this Three.js version (${e?.message ?? e}). Skipping.`
-        );
-        return null as unknown as InstanceType<typeof SSREffect>;
-      }
-    },
-    update(_state, entity, effect) {
-      if (!effect) return;
-      const ssr = effect as SSREffect;
-      const intensity = ScreenSpaceReflection.intensity[entity];
-      const maxDistance = ScreenSpaceReflection.maxDistance[entity];
-      if (ssr.intensity !== intensity) ssr.intensity = intensity;
-      if (ssr.distance !== maxDistance) ssr.distance = maxDistance;
     },
   },
 ];

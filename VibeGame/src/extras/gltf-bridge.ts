@@ -26,7 +26,7 @@ export function setKTX2TranscoderPath(path: string): void {
   _ktx2Loader = undefined;
 }
 
-function tryInitKTX2(renderer: THREE.WebGLRenderer): KTX2Loader | null {
+function tryInitKTX2(renderer: any): KTX2Loader | null {
   if (_ktx2Loader !== undefined) return _ktx2Loader;
   try {
     const transcoderPath =

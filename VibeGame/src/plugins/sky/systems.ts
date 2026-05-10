@@ -91,7 +91,7 @@ export const SkySystem: System = {
 
       const tex = rotateEquirectBitmap(loaded, Skybox.rotationDeg[eid]);
 
-      const pmrem = new THREE.PMREMGenerator(renderer);
+      const pmrem = new THREE.PMREMGenerator(renderer as any);
       pmrem.compileEquirectangularShader();
       const rt = pmrem.fromEquirectangular(tex);
       const envMap = rt.texture;

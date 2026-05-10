@@ -13,7 +13,7 @@ export default defineConfig({
       fileName: 'vibegame.standalone',
       formats: ['iife'],
     },
-    rollupOptions: {
+    rolldownOptions: {
       output: {
         extend: true,
       },
@@ -21,6 +21,5 @@ export default defineConfig({
     outDir: 'dist/cdn',
     sourcemap: false,
     target: 'esnext',
-    minify: 'esbuild',
   },
 });

@@ -1,6 +1,5 @@
 export {
   AmbientLight,
-  CsmConfig,
   DirectionalLight,
   DistanceCull,
   MainCamera,

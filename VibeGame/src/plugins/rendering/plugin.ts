@@ -1,7 +1,6 @@
 import type { Plugin } from '../../core';
 import {
   AmbientLight,
-  CsmConfig,
   DirectionalLight,
   DistanceCull,
   MainCamera,
@@ -18,7 +17,7 @@ import {
   MeshInstanceSystem,
   PointSpotLightSyncSystem,
   RendererSetupSystem,
-  WebGLRenderSystem,
+  SceneRenderSystem,
 } from './systems';
 import {
   TextureRecipeLoadSystem,
@@ -36,7 +35,7 @@ export const RenderingPlugin: Plugin = {
     LightSyncSystem,
     PointSpotLightSyncSystem,
     CameraSyncSystem,
-    WebGLRenderSystem,
+    SceneRenderSystem,
     TextureRecipeCleanupSystem,
   ],
   components: {
@@ -48,7 +47,6 @@ export const RenderingPlugin: Plugin = {
     DirectionalLight,
     PointLight,
     SpotLight,
-    CsmConfig,
     TextureRecipe,
     TextureRecipeLoaded,
   },
@@ -84,12 +82,6 @@ export const RenderingPlugin: Plugin = {
         projection: 0,
         fov: 75,
         orthoSize: 10,
-      },
-      csmConfig: {
-        cascades: 4,
-        maxFar: 200,
-        shadowMapSize: 2048,
-        enabled: 1,
       },
       pointLight: {
         color: 0xffffff,

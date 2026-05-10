@@ -7,10 +7,16 @@ import {
   createRenderer,
   getRenderingContext,
   setCanvasElement,
+  getScene,
+  threeCameras,
 } from './plugins/rendering';
+import { MainCamera } from './plugins/rendering/components';
+import { defineQuery } from './core';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
 import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
+
+const mainCameraQuery = defineQuery([MainCamera]);
 
 export class GameRuntime {
   private state: State;
@@ -70,6 +76,39 @@ export class GameRuntime {
   }
 
   private startAnimationLoop(): void {
+    const context = getRenderingContext(this.state);
+    const renderer = context.renderer;
+
+    if (renderer) {
+      let lastTime = performance.now();
+
+      renderer.setAnimationLoop((currentTime: number) => {
+        if (!this.isRunning) return;
+
+        try {
+          const deltaTime = ((currentTime as number) - lastTime) / 1000;
+          lastTime = currentTime as number;
+
+          this.state.step(deltaTime);
+
+          const scene = getScene(this.state);
+          if (!scene) return;
+
+          const cameraEntities = mainCameraQuery(this.state.world);
+          if (cameraEntities.length === 0) return;
+
+          const camera = threeCameras.get(cameraEntities[0]);
+          if (!camera) return;
+
+          renderer.render(scene, camera);
+        } catch (e) {
+          console.error('[VibeGame] Animation loop error:', e);
+        }
+      });
+
+      return;
+    }
+
     let lastTime = performance.now();
 
     const animate = (currentTime: number) => {
@@ -93,19 +132,19 @@ export class GameRuntime {
     }
 
     await this.state.initializePlugins();
-    this.processWorldElements();
+    await this.processWorldElements();
     this.setupMutationObserver();
     this.state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
   }
 
-  private processWorldElements(): void {
-    const worldElements = document.querySelectorAll('Scene');
-    worldElements.forEach((element) => {
-      this.processWorldElement(element as HTMLElement);
-    });
+  private async processWorldElements(): Promise<void> {
+    const elements = document.querySelectorAll('scene');
+    for (const element of elements) {
+      await this.processWorldElement(element as HTMLElement);
+    }
   }
 
-  private processWorldElement(element: HTMLElement): void {
+  private async processWorldElement(element: HTMLElement): Promise<void> {
     if (element.tagName.toLowerCase() !== 'scene') return;
 
     element.style.display = 'none';
@@ -138,7 +177,7 @@ export class GameRuntime {
         if (!renderingCtx.renderer) {
           const clearColor =
             RenderContext.clearColor[rendererEntity] ?? 0x000000;
-          const renderer = createRenderer(canvas, clearColor);
+          const renderer = await createRenderer(canvas, clearColor);
           renderingCtx.renderer = renderer;
           renderingCtx.canvas = canvas;
         }

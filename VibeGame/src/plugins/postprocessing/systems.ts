@@ -29,6 +29,8 @@ export const PostprocessingSystem: System = {
 
     if (!renderContext.renderer || !scene) return;
 
+    if (!('getContextAttributes' in renderContext.renderer)) return;
+
     const cameraEntities = mainCameraTransformQuery(state.world);
     const definitions = getEffectDefinitions();
 
@@ -38,6 +40,7 @@ export const PostprocessingSystem: System = {
 
       let composer = postContext.composers.get(entity);
       if (!composer) {
+        // @ts-expect-error WebGPU migration
         composer = new EffectComposer(renderContext.renderer);
         const composerAny = composer as unknown as {
           createDepthTexture: () => THREE.DepthTexture;
@@ -183,6 +186,8 @@ export const PostprocessingRenderSystem: System = {
     const renderContext = getRenderingContext(state);
     const renderer = renderContext.renderer;
     if (!renderer) return;
+
+    if (!('getContextAttributes' in renderer)) return;
 
     const postContext = getPostprocessingContext(state);
     const cameraEntities = mainCameraQuery(state.world);

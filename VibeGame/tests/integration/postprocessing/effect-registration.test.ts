@@ -17,7 +17,6 @@ import {
   ChromaticAberration,
   Noise,
   ScreenSpaceAmbientOcclusion,
-  ScreenSpaceReflection,
 } from '../../../src/plugins/postprocessing/components';
 
 const EXPECTED_EFFECT_KEYS = [
@@ -30,7 +29,6 @@ const EXPECTED_EFFECT_KEYS = [
   'chromaticAberration',
   'noise',
   'ssao',
-  'ssr',
 ] as const;
 
 const EFFECT_COMPONENTS = {
@@ -43,7 +41,6 @@ const EFFECT_COMPONENTS = {
   chromaticAberration: ChromaticAberration,
   noise: Noise,
   ssao: ScreenSpaceAmbientOcclusion,
-  ssr: ScreenSpaceReflection,
 } as const;
 
 describe('Postprocessing Effect Registration', () => {
@@ -52,12 +49,12 @@ describe('Postprocessing Effect Registration', () => {
     global.DOMParser = dom.window.DOMParser;
   });
 
-  it('should have exactly 10 registered effects', () => {
+  it('should have exactly 9 registered effects', () => {
     const definitions = getEffectDefinitions();
-    expect(definitions).toHaveLength(10);
+    expect(definitions).toHaveLength(9);
   });
 
-  it('should have all 10 expected effect keys registered', () => {
+  it('should have all 9 expected effect keys registered', () => {
     const definitions = getEffectDefinitions();
     const keys = definitions.map((d) => d.key);
     for (const expectedKey of EXPECTED_EFFECT_KEYS) {
@@ -112,7 +109,6 @@ describe('Postprocessing Effect Registration', () => {
       'chromaticAberration',
       'noise',
       'ssao',
-      'ssr',
     ];
     for (const key of middleKeys) {
       const def = definitions.find((d) => d.key === key);

@@ -1,7 +1,7 @@
 import { entityExists, hasComponent } from 'bitecs';
 import * as THREE from 'three';
 import type { Object3D } from 'three';
-import { BatchedParticleRenderer } from 'three.quarks';
+import { BatchedRenderer } from 'three.quarks';
 import type { ParticleSystem as QuarksParticleSystem } from 'three.quarks';
 import { Parent, defineQuery, type State, type System } from '../../core';
 import { getScene } from '../rendering';
@@ -61,7 +61,7 @@ const _tmpOffset = new THREE.Vector2();
 function disposeParticle(
   eid: number,
   ctx: {
-    batch: InstanceType<typeof BatchedParticleRenderer> | null;
+    batch: BatchedRenderer | null;
     roots: Map<number, Object3D>;
   }
 ) {
@@ -89,7 +89,7 @@ export const ParticleBootstrapSystem: System = {
     if (!scene) return;
     const ctx = getParticlesContext(state);
     if (ctx.batch) return;
-    const batch = new BatchedParticleRenderer();
+    const batch = new BatchedRenderer();
     ctx.batch = batch;
     scene.add(batch);
   },
@@ -106,7 +106,7 @@ export const ParticleEmitSystem: System = {
     if (!batch) {
       const scene = getScene(state);
       if (!scene) return;
-      batch = new BatchedParticleRenderer();
+      batch = new BatchedRenderer();
       ctx.batch = batch;
       scene.add(batch);
     }
@@ -203,7 +203,7 @@ export const ParticleBurstSystem: System = {
     if (!batch) {
       const scene = getScene(state);
       if (!scene) return;
-      batch = new BatchedParticleRenderer();
+      batch = new BatchedRenderer();
       ctx.batch = batch;
       scene.add(batch);
     }

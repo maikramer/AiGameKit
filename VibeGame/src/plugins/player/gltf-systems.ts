@@ -150,24 +150,7 @@ const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig]);
 const debugCapsuleByState = new WeakMap<State, LineSegments>();
 
 function ensureDebugCapsule(state: State): LineSegments | null {
-  const existing = debugCapsuleByState.get(state);
-  if (existing) return existing;
-
-  const scene = getScene(state);
-  if (!scene) return null;
-
-  const radius = PLAYER_COLLIDER_DEFAULTS.radius;
-  const halfHeight = PLAYER_COLLIDER_DEFAULTS.height / 2;
-  const capsuleGeo = new CapsuleGeometry(radius, halfHeight * 2, 8, 16);
-  const edges = new EdgesGeometry(capsuleGeo, 15);
-  const lineMat = new LineBasicMaterial({ color: 0x00ff00 });
-  const wireframe = new LineSegments(edges, lineMat);
-  wireframe.name = '__debug_capsule';
-  scene.add(wireframe);
-  debugCapsuleByState.set(state, wireframe);
-  capsuleGeo.dispose();
-  edges.dispose();
-  return wireframe;
+  return null;
 }
 
 export const PlayerGltfAnimStateSystem: System = {

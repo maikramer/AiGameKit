@@ -29,13 +29,11 @@ import {
   getWaterContext,
   type WaterEntityData,
 } from './utils';
-import { ScreenSpaceReflection } from '../postprocessing/components';
 
 const waterQuery = defineQuery([Water]);
 const cameraQuery = defineQuery([MainCamera, WorldTransform]);
 const playerCollisionQuery = defineQuery([PlayerController, CollisionEvents]);
 const swimTriggerZoneQuery = defineQuery([SwimTriggerZone]);
-const ssrQuery = defineQuery([ScreenSpaceReflection]);
 
 const REFLECTION_SIZE = 512;
 const PLANE_SEGMENTS = 256;
@@ -452,8 +450,8 @@ export const WaterRenderSystem: System = {
         data.material.uniforms.uHasHeightmap.value = 1.0;
       }
 
-      const hasSSR = ssrQuery(state.world).length > 0;
-      if (!hasSSR && underwaterFade === 0) {
+      if (underwaterFade === 0) {
+        // @ts-expect-error WebGPU migration
         data.reflection.render(renderer, scene, camera, data.worldOffset.y);
       }
     }

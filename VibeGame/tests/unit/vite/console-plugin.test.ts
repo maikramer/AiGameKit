@@ -65,7 +65,7 @@ describe('Console Forwarding Plugin', () => {
     it('should register WebSocket message handler', () => {
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         expect(mockWs.on).toHaveBeenCalledWith(
           'vibegame:console',
           expect.any(Function)
@@ -79,7 +79,7 @@ describe('Console Forwarding Plugin', () => {
 
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         const calls = (mockWs.on as any).mock.calls || [];
         const handler = calls.find(
           (call: any[]) => call && call[0] === 'vibegame:console'
@@ -104,7 +104,7 @@ describe('Console Forwarding Plugin', () => {
 
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         const calls = (mockWs.on as any).mock.calls || [];
         const handler = calls.find(
           (call: any[]) => call && call[0] === 'vibegame:console'
@@ -139,7 +139,7 @@ describe('Console Forwarding Plugin', () => {
 
       const transform = plugin.transform;
       if (transform && typeof transform === 'function') {
-        const result = transform.call({} as any, code, id);
+        const result = (transform as Function).call({} as any, code, id);
         const transformedCode = typeof result === 'string' ? result : result;
 
         expect(transformedCode).toContain('import.meta.hot');
@@ -155,7 +155,7 @@ describe('Console Forwarding Plugin', () => {
 
       const transform = plugin.transform;
       if (transform && typeof transform === 'function') {
-        const result = transform.call({} as any, code, id);
+        const result = (transform as Function).call({} as any, code, id);
         const transformedCode = typeof result === 'string' ? result : result;
 
         expect(transformedCode).toContain('log');
@@ -171,7 +171,7 @@ describe('Console Forwarding Plugin', () => {
 
       const transform = plugin.transform;
       if (transform && typeof transform === 'function') {
-        const result = transform.call({} as any, code, id);
+        const result = (transform as Function).call({} as any, code, id);
         const transformedCode = typeof result === 'string' ? result : result;
 
         expect(transformedCode).toContain('Error().stack');
@@ -185,7 +185,7 @@ describe('Console Forwarding Plugin', () => {
 
       const transform = plugin.transform;
       if (transform && typeof transform === 'function') {
-        const result = transform.call({} as any, code, id);
+        const result = (transform as Function).call({} as any, code, id);
         const transformedCode = typeof result === 'string' ? result : result;
 
         expect(transformedCode).toContain('import.meta.hot.send');
@@ -199,7 +199,7 @@ describe('Console Forwarding Plugin', () => {
 
       const transform = plugin.transform;
       if (transform && typeof transform === 'function') {
-        const result = transform.call({} as any, code, id);
+        const result = (transform as Function).call({} as any, code, id);
 
         expect(result).toBe(code);
       }
@@ -219,7 +219,7 @@ describe('Console Forwarding Plugin', () => {
 
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         const calls = (mockWs.on as any).mock.calls || [];
         const handler = calls.find(
           (call: any[]) => call && call[0] === 'vibegame:console'
@@ -247,7 +247,7 @@ describe('Console Forwarding Plugin', () => {
 
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         const calls = (mockWs.on as any).mock.calls || [];
         const handler = calls.find(
           (call: any[]) => call && call[0] === 'vibegame:console'
@@ -279,7 +279,7 @@ describe('Console Forwarding Plugin', () => {
 
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         const calls = (mockWs.on as any).mock.calls || [];
         const handler = calls.find(
           (call: any[]) => call && call[0] === 'vibegame:console'
@@ -302,7 +302,7 @@ describe('Console Forwarding Plugin', () => {
 
       const configureServer = plugin.configureServer;
       if (configureServer && typeof configureServer === 'function') {
-        configureServer(mockServer as ViteDevServer);
+        (configureServer as Function).call({}, mockServer as ViteDevServer);
         const calls = (mockWs.on as any).mock.calls || [];
         const handler = calls.find(
           (call: any[]) => call && call[0] === 'vibegame:console'

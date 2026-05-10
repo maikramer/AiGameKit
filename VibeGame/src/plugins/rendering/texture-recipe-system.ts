@@ -10,7 +10,7 @@ function isKTX2Url(url: string): boolean {
 
 let _ktx2Loader: KTX2Loader | null | undefined = undefined;
 
-function tryInitKTX2(renderer: THREE.WebGLRenderer): KTX2Loader | null {
+function tryInitKTX2(renderer: any): KTX2Loader | null {
   if (_ktx2Loader !== undefined) return _ktx2Loader;
   try {
     _ktx2Loader = new KTX2Loader()

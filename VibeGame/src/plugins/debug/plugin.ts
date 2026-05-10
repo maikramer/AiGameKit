@@ -1,5 +1,8 @@
 import { defineQuery, type Component } from 'bitecs';
 import type { Plugin, State } from '../../core';
+import { getTerrainContext } from '../terrain/utils';
+import { getRenderingContext } from '../rendering/utils';
+import { getPhysicsContext } from '../physics/systems';
 
 export interface VibeGameDebugBridge {
   state: State;
@@ -19,6 +22,9 @@ export interface VibeGameDebugBridge {
   componentNames(): string[];
   namedEntities(): Array<{ name: string; eid: number }>;
   step(dt?: number): void;
+  terrain(): Record<string, unknown>;
+  rendering(): unknown;
+  physics(): unknown;
 }
 
 type TypedArrayField =
@@ -111,6 +117,20 @@ function createBridge(state: State): VibeGameDebugBridge {
     },
     step(dt) {
       state.step(dt);
+    },
+    terrain() {
+      const ctx = getTerrainContext(state);
+      const out: Record<string, unknown> = {};
+      for (const [eid, data] of ctx) {
+        out[String(eid)] = data;
+      }
+      return out;
+    },
+    rendering() {
+      return getRenderingContext(state);
+    },
+    physics() {
+      return getPhysicsContext(state);
     },
   };
 }

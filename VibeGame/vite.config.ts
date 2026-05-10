@@ -45,7 +45,7 @@ export default defineConfig({
         `${entryName}.${format === 'es' ? 'js' : 'cjs'}`,
       formats: ['es'],
     },
-    rollupOptions: {
+    rolldownOptions: {
       external: [
         'three',
         'bitecs',
@@ -73,6 +73,5 @@ export default defineConfig({
     },
     sourcemap: true,
     target: 'esnext',
-    minify: 'esbuild',
   },
 });

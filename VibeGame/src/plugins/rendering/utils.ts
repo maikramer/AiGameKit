@@ -1,6 +1,5 @@
-﻿import type { CSM } from 'three-stdlib';
-import type { State } from '../../core';
-import * as THREE from 'three';
+﻿import type { State } from '../../core';
+import * as THREE from 'three/webgpu';
 import { MainCamera } from './components';
 
 const INITIAL_INSTANCES = 1000;
@@ -21,27 +20,7 @@ export const CameraProjection = {
 export const threeCameras = new Map<number, THREE.Camera>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
 
-let angleD3dShaderInfoWarnFilterInstalled = false;
 
-/** Suprime avisos não acionáveis do compilador HLSL/D3D (ANGLE no Windows) no Program Info Log. */
-function installAngleD3dShaderInfoWarnFilter(): void {
-  if (angleD3dShaderInfoWarnFilterInstalled || typeof console === 'undefined') {
-    return;
-  }
-  angleD3dShaderInfoWarnFilterInstalled = true;
-  const orig = console.warn.bind(console);
-  console.warn = (...args: unknown[]) => {
-    const text = args.map((a) => String(a)).join(' ');
-    if (
-      text.includes('WebGLProgram') &&
-      text.includes('Program Info Log') &&
-      text.includes('X4122')
-    ) {
-      return;
-    }
-    orig(...args);
-  };
-}
 
 function getCanvasAspect(state: State): {
   width: number;
@@ -243,10 +222,8 @@ export interface RenderingContext {
     pointLights: THREE.PointLight[];
     spotLights: THREE.SpotLight[];
   };
-  renderer?: THREE.WebGLRenderer;
+  renderer?: THREE.WebGPURenderer;
   canvas?: HTMLCanvasElement;
-  csm?: CSM;
-  csmSetupPending: boolean;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
 }
@@ -292,7 +269,6 @@ export function initializeContext(): RenderingContext {
     },
     totalInstanceCount: 0,
     hasShownPerformanceWarning: false,
-    csmSetupPending: false,
   };
 }
 
@@ -335,12 +311,11 @@ export function setRenderingCanvas(
   context.canvas = canvas;
 }
 
-export function createRenderer(
+export async function createRenderer(
   canvas: HTMLCanvasElement,
   clearColor: number
-): THREE.WebGLRenderer {
-  installAngleD3dShaderInfoWarnFilter();
-  const renderer = new THREE.WebGLRenderer({
+): Promise<THREE.WebGPURenderer> {
+  const renderer = new THREE.WebGPURenderer({
     canvas,
     antialias: false,
   });
@@ -355,23 +330,22 @@ export function createRenderer(
     )
   );
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);
   }
 
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  /** PBR/IBL sem tone mapping no ecrã fica HDR “cru” (lavado). ACES como base; pós com `tonemapping` põe `NoToneMapping` no render. */
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1;
+
+  await renderer.init();
 
   return renderer;
 }
 
 export function handleWindowResize(
   state: State,
-  renderer: THREE.WebGLRenderer
+  renderer: THREE.WebGPURenderer
 ): void {
   const context = getRenderingContext(state);
   const canvas = context.canvas;

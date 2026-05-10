@@ -96,7 +96,7 @@ export async function applyEquirectSkyEnvironment(
 
   const tex = rotateEquirectBitmap(loaded, options?.rotationDeg ?? 0);
 
-  const pmrem = new THREE.PMREMGenerator(renderer);
+  const pmrem = new THREE.PMREMGenerator(renderer as any);
   pmrem.compileEquirectangularShader();
   const rt = pmrem.fromEquirectangular(tex);
   const envMap = rt.texture;
