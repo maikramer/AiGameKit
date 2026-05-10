@@ -1,5 +1,5 @@
-import { JointData, RotationOps, Vector3 } from '@dimforge/rapier3d-compat';
-import type { ImpulseJoint } from '@dimforge/rapier3d-compat';
+import { JointData, RotationOps, Vector3 } from '@dimforge/rapier3d-simd';
+import type { ImpulseJoint } from '@dimforge/rapier3d-simd';
 import { defineQuery, type System } from '../../core';
 import { Rigidbody } from '../physics/components';
 import {

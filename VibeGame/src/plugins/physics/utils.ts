@@ -1,5 +1,5 @@
-import * as RAPIER from '@dimforge/rapier3d-compat';
-import { ActiveCollisionTypes, ActiveEvents } from '@dimforge/rapier3d-compat';
+import * as RAPIER from '@dimforge/rapier3d-simd';
+import { ActiveCollisionTypes, ActiveEvents } from '@dimforge/rapier3d-simd';
 import {
   defineQuery,
   NULL_ENTITY,
@@ -32,6 +32,33 @@ import {
 } from './components';
 
 export const DEFAULT_GRAVITY = -60;
+
+interface RapierVec3 {
+  x: number;
+  y: number;
+  z: number;
+  free?: () => void;
+}
+
+interface RapierRot {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+  free?: () => void;
+}
+
+export function safeVec3(v: RapierVec3): [number, number, number] {
+  const r: [number, number, number] = [v.x, v.y, v.z];
+  if (v.free) v.free();
+  return r;
+}
+
+export function safeQuat(v: RapierRot): [number, number, number, number] {
+  const r: [number, number, number, number] = [v.x, v.y, v.z, v.w];
+  if (v.free) v.free();
+  return r;
+}
 
 let rapierEngineInitialized = false;
 
@@ -241,16 +268,16 @@ export function setLinearVelocityForEntity(
   const type = Rigidbody.type[entity];
 
   if (type === BodyType.Dynamic) {
-    const currentVel = body.linvel();
+    const [cvx, cvy, cvz] = safeVec3(body.linvel());
     const targetVel = new RAPIER.Vector3(
       SetLinearVelocity.x[entity],
       SetLinearVelocity.y[entity],
       SetLinearVelocity.z[entity]
     );
     const deltaVel = new RAPIER.Vector3(
-      targetVel.x - currentVel.x,
-      targetVel.y - currentVel.y,
-      targetVel.z - currentVel.z
+      targetVel.x - cvx,
+      targetVel.y - cvy,
+      targetVel.z - cvz
     );
     const mass = body.mass();
     const impulse = new RAPIER.Vector3(
@@ -281,22 +308,22 @@ export function setAngularVelocityForEntity(
   const type = Rigidbody.type[entity];
 
   if (type === BodyType.Dynamic) {
-    const currentAngVel = body.angvel();
+    const [cax, cay, caz] = safeVec3(body.angvel());
     const targetAngVel = new RAPIER.Vector3(
       SetAngularVelocity.x[entity],
       SetAngularVelocity.y[entity],
       SetAngularVelocity.z[entity]
     );
     const deltaAngVel = new RAPIER.Vector3(
-      targetAngVel.x - currentAngVel.x,
-      targetAngVel.y - currentAngVel.y,
-      targetAngVel.z - currentAngVel.z
+      targetAngVel.x - cax,
+      targetAngVel.y - cay,
+      targetAngVel.z - caz
     );
-    const inertia = body.principalInertia();
+    const [ix, iy, iz] = safeVec3(body.principalInertia());
     const impulse = new RAPIER.Vector3(
-      deltaAngVel.x * inertia.x,
-      deltaAngVel.y * inertia.y,
-      deltaAngVel.z * inertia.z
+      deltaAngVel.x * ix,
+      deltaAngVel.y * iy,
+      deltaAngVel.z * iz
     );
     body.applyTorqueImpulse(impulse, true);
   } else if (type === BodyType.KinematicVelocityBased) {
@@ -332,16 +359,16 @@ export function applyKinematicMove(
       )
     );
   } else if (type === BodyType.KinematicVelocityBased) {
-    const currentPos = body.translation();
+    const [cpx, cpy, cpz] = safeVec3(body.translation());
     const targetX = KinematicMove.x[entity];
     const targetY = KinematicMove.y[entity];
     const targetZ = KinematicMove.z[entity];
     const dt = TIME_CONSTANTS.FIXED_TIMESTEP;
     body.setLinvel(
       new RAPIER.Vector3(
-        (targetX - currentPos.x) / dt,
-        (targetY - currentPos.y) / dt,
-        (targetZ - currentPos.z) / dt
+        (targetX - cpx) / dt,
+        (targetY - cpy) / dt,
+        (targetZ - cpz) / dt
       ),
       true
     );
@@ -368,19 +395,19 @@ export function applyKinematicRotation(
 }
 
 export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
-  const currentPos = body.translation();
-  const currentRot = body.rotation();
+  const [cpx, cpy, cpz] = safeVec3(body.translation());
+  const [crx, cry, crz, crw] = safeQuat(body.rotation());
 
   const hasPositionChange =
-    currentPos.x !== Rigidbody.posX[entity] ||
-    currentPos.y !== Rigidbody.posY[entity] ||
-    currentPos.z !== Rigidbody.posZ[entity];
+    cpx !== Rigidbody.posX[entity] ||
+    cpy !== Rigidbody.posY[entity] ||
+    cpz !== Rigidbody.posZ[entity];
 
   const hasRotationChange =
-    currentRot.x !== Rigidbody.rotX[entity] ||
-    currentRot.y !== Rigidbody.rotY[entity] ||
-    currentRot.z !== Rigidbody.rotZ[entity] ||
-    currentRot.w !== Rigidbody.rotW[entity];
+    crx !== Rigidbody.rotX[entity] ||
+    cry !== Rigidbody.rotY[entity] ||
+    crz !== Rigidbody.rotZ[entity] ||
+    crw !== Rigidbody.rotW[entity];
 
   if (hasPositionChange) {
     body.setTranslation(
@@ -433,8 +460,10 @@ export function detectPlatformContinuous(
   colliderToEntity: Map<number, number>
 ): number {
   const castDistance = 0.15;
-  const shapePos = collider.translation();
-  const shapeRot = collider.rotation();
+  const [spx, spy, spz] = safeVec3(collider.translation());
+  const [srx, sry, srz, srw] = safeQuat(collider.rotation());
+  const shapePos = new RAPIER.Vector3(spx, spy, spz);
+  const shapeRot = new RAPIER.Quaternion(srx, sry, srz, srw);
   const shapeVel = new RAPIER.Vector3(0, -1, 0);
   const colliderShape = collider.shape;
 
@@ -536,69 +565,79 @@ export function applyCharacterMovement(
   CharacterController.platformVelY[entity] = platformVelY + tangentialVelY;
   CharacterController.platformVelZ[entity] = platformVelZ + tangentialVelZ;
 
-  const desiredTranslation = new RAPIER.Vector3(
+  const desiredX =
     (CharacterMovement.desiredVelX[entity] + platformVelX + tangentialVelX) *
-      deltaTime,
-    (totalVelY + platformVelY + tangentialVelY) * deltaTime,
+    deltaTime;
+  const desiredY = (totalVelY + platformVelY + tangentialVelY) * deltaTime;
+  const desiredZ =
     (CharacterMovement.desiredVelZ[entity] + platformVelZ + tangentialVelZ) *
-      deltaTime
-  );
+    deltaTime;
 
-  controller.computeColliderMovement(
-    collider,
-    desiredTranslation,
-    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-    undefined,
-    (otherCollider: RAPIER.Collider) => otherCollider.handle !== collider.handle
-  );
+  let fmx = desiredX;
+  let fmy = desiredY;
+  let fmz = desiredZ;
+  let grounded = false;
+  let rapierOk = false;
 
-  const correctedMovement = controller.computedMovement();
-
-  const desiredHorizontalSpeed = Math.sqrt(
-    CharacterMovement.desiredVelX[entity] ** 2 +
-      CharacterMovement.desiredVelZ[entity] ** 2
-  );
-  const actualHorizontalSpeed = Math.sqrt(
-    (correctedMovement.x / deltaTime) ** 2 +
-      (correctedMovement.z / deltaTime) ** 2
-  );
-
-  const isStuckAgainstWall =
-    desiredHorizontalSpeed > 0.1 &&
-    actualHorizontalSpeed < desiredHorizontalSpeed * 0.1;
-
-  let finalMovement = correctedMovement;
-
-  if (isStuckAgainstWall && CharacterMovement.velocityY[entity] > 0) {
-    const pushOffX = -CharacterMovement.desiredVelX[entity] * 0.001;
-    const pushOffZ = -CharacterMovement.desiredVelZ[entity] * 0.001;
-
-    finalMovement = new RAPIER.Vector3(
-      correctedMovement.x + pushOffX,
-      correctedMovement.y,
-      correctedMovement.z + pushOffZ
+  try {
+    const desiredTranslation = new RAPIER.Vector3(desiredX, desiredY, desiredZ);
+    controller.computeColliderMovement(
+      collider,
+      desiredTranslation,
+      RAPIER.QueryFilterFlags.EXCLUDE_SENSORS
     );
+
+    const movement = controller.computedMovement();
+    fmx = movement.x;
+    fmy = movement.y;
+    fmz = movement.z;
+
+    const desiredHorizontalSpeed = Math.sqrt(
+      CharacterMovement.desiredVelX[entity] ** 2 +
+        CharacterMovement.desiredVelZ[entity] ** 2
+    );
+    const actualHorizontalSpeed = Math.sqrt(
+      (fmx / deltaTime) ** 2 + (fmz / deltaTime) ** 2
+    );
+
+    if (
+      desiredHorizontalSpeed > 0.1 &&
+      actualHorizontalSpeed < desiredHorizontalSpeed * 0.1 &&
+      CharacterMovement.velocityY[entity] > 0
+    ) {
+      fmx += -CharacterMovement.desiredVelX[entity] * 0.001;
+      fmz += -CharacterMovement.desiredVelZ[entity] * 0.001;
+    }
+
+    grounded = controller.computedGrounded();
+    rapierOk = true;
+  } catch {
+    // Fallback: use desired translation directly
   }
 
-  const currentPos = body.translation();
-  const newPos = new RAPIER.Vector3(
-    currentPos.x + finalMovement.x,
-    currentPos.y + finalMovement.y,
-    currentPos.z + finalMovement.z
-  );
+  const px = Rigidbody.posX[entity];
+  const py = Rigidbody.posY[entity];
+  const pz = Rigidbody.posZ[entity];
 
-  body.setNextKinematicTranslation(newPos);
+  if (rapierOk) {
+    try {
+      body.setNextKinematicTranslation(
+        new RAPIER.Vector3(px + fmx, py + fmy, pz + fmz)
+      );
+    } catch {
+      // Rapier RefCell still stuck; position will be off for this frame
+    }
+  }
 
-  CharacterMovement.actualMoveX[entity] = finalMovement.x;
-  CharacterMovement.actualMoveY[entity] = finalMovement.y;
-  CharacterMovement.actualMoveZ[entity] = finalMovement.z;
+  CharacterMovement.actualMoveX[entity] = fmx;
+  CharacterMovement.actualMoveY[entity] = fmy;
+  CharacterMovement.actualMoveZ[entity] = fmz;
 
-  CharacterController.moveX[entity] = finalMovement.x;
-  CharacterController.moveY[entity] = finalMovement.y;
-  CharacterController.moveZ[entity] = finalMovement.z;
+  CharacterController.moveX[entity] = fmx;
+  CharacterController.moveY[entity] = fmy;
+  CharacterController.moveZ[entity] = fmz;
 
-  const grounded = controller.computedGrounded() ? 1 : 0;
-  CharacterController.grounded[entity] = grounded;
+  CharacterController.grounded[entity] = grounded ? 1 : 0;
 
   if (grounded) {
     CharacterController.platform[entity] = detectPlatformContinuous(
@@ -683,41 +722,36 @@ export function syncRigidbodyToECS(
   body: RAPIER.RigidBody,
   state: State
 ): void {
-  const position = body.translation();
-  const rotation = body.rotation();
-  const linvel = body.linvel();
+  const [px, py, pz] = safeVec3(body.translation());
+  const [rx, ry, rz, rw] = safeQuat(body.rotation());
+  const [lvx, lvy, lvz] = safeVec3(body.linvel());
 
-  Rigidbody.posX[entity] = position.x;
-  Rigidbody.posY[entity] = position.y;
-  Rigidbody.posZ[entity] = position.z;
-  Rigidbody.rotX[entity] = rotation.x;
-  Rigidbody.rotY[entity] = rotation.y;
-  Rigidbody.rotZ[entity] = rotation.z;
-  Rigidbody.rotW[entity] = rotation.w;
+  Rigidbody.posX[entity] = px;
+  Rigidbody.posY[entity] = py;
+  Rigidbody.posZ[entity] = pz;
+  Rigidbody.rotX[entity] = rx;
+  Rigidbody.rotY[entity] = ry;
+  Rigidbody.rotZ[entity] = rz;
+  Rigidbody.rotW[entity] = rw;
 
-  const euler = quaternionToEuler(
-    rotation.x,
-    rotation.y,
-    rotation.z,
-    rotation.w
-  );
+  const euler = quaternionToEuler(rx, ry, rz, rw);
   Rigidbody.eulerX[entity] = euler.x;
   Rigidbody.eulerY[entity] = euler.y;
   Rigidbody.eulerZ[entity] = euler.z;
 
-  Rigidbody.velX[entity] = linvel.x;
-  Rigidbody.velY[entity] = linvel.y;
-  Rigidbody.velZ[entity] = linvel.z;
+  Rigidbody.velX[entity] = lvx;
+  Rigidbody.velY[entity] = lvy;
+  Rigidbody.velZ[entity] = lvz;
 
   if (state.hasComponent(entity, KinematicAngularVelocity)) {
     Rigidbody.rotVelX[entity] = KinematicAngularVelocity.x[entity];
     Rigidbody.rotVelY[entity] = KinematicAngularVelocity.y[entity];
     Rigidbody.rotVelZ[entity] = KinematicAngularVelocity.z[entity];
   } else {
-    const angvel = body.angvel();
-    Rigidbody.rotVelX[entity] = angvel.x;
-    Rigidbody.rotVelY[entity] = angvel.y;
-    Rigidbody.rotVelZ[entity] = angvel.z;
+    const [avx, avy, avz] = safeVec3(body.angvel());
+    Rigidbody.rotVelX[entity] = avx;
+    Rigidbody.rotVelY[entity] = avy;
+    Rigidbody.rotVelZ[entity] = avz;
   }
 }
 

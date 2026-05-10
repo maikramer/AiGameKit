@@ -439,8 +439,8 @@ function patchBilinearGetHeightAt(terrainLOD: TerrainLOD): void {
     const w = imgData.width;
     const h = imgData.height;
     const spread = config.heightSmoothingSpread;
-    const sU = (spread / w) * 0.5;
-    const sV = (spread / h) * 0.5;
+    const sU = spread / w;
+    const sV = spread / h;
 
     const hN = sample(imgData, u, v - sV);
     const hS = sample(imgData, u, v + sV);

@@ -60,7 +60,7 @@ physics/
 ## Dependencies
 
 - **Internal**: Core ECS, Transform components
-- **External**: @dimforge/rapier3d-compat (WASM physics engine)
+- **External**: @dimforge/rapier3d-simd (WASM physics engine)
 
 <!-- LLM:REFERENCE -->
 ### Constants
