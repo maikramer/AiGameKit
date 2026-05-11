@@ -36,23 +36,43 @@ export const PhysicsInitSystem: System = {
     for (const entity of bodyQuery(state.world)) {
       if (bodies.has(entity)) continue;
 
-      const bodyDesc = createRapierBody(entity);
-      const body = world.createRigidBody(bodyDesc);
-      bodies.set(entity, body);
+      const px = Rigidbody.posX[entity] ?? 0;
+      const py = Rigidbody.posY[entity] ?? 0;
+      const pz = Rigidbody.posZ[entity] ?? 0;
+      const mass = Rigidbody.mass[entity] ?? 1;
+      const gs = Rigidbody.gravityScale[entity] ?? 1;
+      const type = Rigidbody.type[entity] ?? 0;
 
-      const colliderDesc = createRapierColliderDesc(entity);
-      world.createCollider(colliderDesc, body);
+      if (!isFinite(px) || !isFinite(py) || !isFinite(pz) || !isFinite(mass)) {
+        console.warn(`[physics] skipping entity ${entity}: NaN/Inf in pos=(${px},${py},${pz}) mass=${mass}`);
+        continue;
+      }
+      if (type === 0 && mass <= 0) {
+        console.warn(`[physics] skipping entity ${entity}: dynamic body with mass=0, using 1`);
+        Rigidbody.mass[entity] = 1;
+      }
 
-      const t = body.translation();
-      Rigidbody.posX[entity] = t.x;
-      Rigidbody.posY[entity] = t.y;
-      Rigidbody.posZ[entity] = t.z;
+      try {
+        const bodyDesc = createRapierBody(entity);
+        const body = world.createRigidBody(bodyDesc);
+        bodies.set(entity, body);
 
-      const r = body.rotation();
-      Rigidbody.rotX[entity] = r.x;
-      Rigidbody.rotY[entity] = r.y;
-      Rigidbody.rotZ[entity] = r.z;
-      Rigidbody.rotW[entity] = r.w;
+        const colliderDesc = createRapierColliderDesc(entity);
+        world.createCollider(colliderDesc, body);
+
+        const t = body.translation();
+        Rigidbody.posX[entity] = t.x;
+        Rigidbody.posY[entity] = t.y;
+        Rigidbody.posZ[entity] = t.z;
+
+        const r = body.rotation();
+        Rigidbody.rotX[entity] = r.x;
+        Rigidbody.rotY[entity] = r.y;
+        Rigidbody.rotZ[entity] = r.z;
+        Rigidbody.rotW[entity] = r.w;
+      } catch (err) {
+        console.error(`[physics] createRigidBody failed for entity ${entity}: pos=(${px},${py},${pz}) mass=${mass} gs=${gs} type=${type}`, err);
+      }
     }
   },
 };
