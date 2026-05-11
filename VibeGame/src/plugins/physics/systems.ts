@@ -10,6 +10,7 @@ import {
 } from './components';
 import { getOrCreateWorld, stepWorld } from './world';
 import { createRapierBody, createRapierColliderDesc } from './body';
+import { isTerrainDynamicsBlocking } from '../terrain/utils';
 
 const bodyQuery = defineQuery([Rigidbody, Collider, Transform]);
 const setLinvelQuery = defineQuery([SetLinearVelocity, Rigidbody]);
@@ -111,7 +112,8 @@ export const ApplyJumpSystem: System = {
 export const PhysicsStepSystem: System = {
   group: 'fixed',
   after: [ApplyJumpSystem],
-  update: () => {
+  update: (state) => {
+    if (isTerrainDynamicsBlocking(state)) return;
     stepWorld();
   },
 };

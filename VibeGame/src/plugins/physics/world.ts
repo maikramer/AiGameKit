@@ -27,6 +27,10 @@ export function getWorld(): RAPIER.World | null {
 
 export function stepWorld(): void {
   if (world) {
-    world.step();
+    try {
+      world.step();
+    } catch (e) {
+      console.error("[physics] world.step() panic:", e);
+    }
   }
 }
