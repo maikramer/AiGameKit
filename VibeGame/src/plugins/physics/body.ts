@@ -68,7 +68,7 @@ export function createRapierColliderDesc(entity: number): RAPIER.ColliderDesc {
   desc.setFriction(Collider.friction[entity] ?? 0.5);
   desc.setRestitution(Collider.restitution[entity] ?? 0);
 
-  const sensor = Collider.sensor[entity] || 0;
+  const sensor = Collider.sensor[entity] || Collider.isSensor[entity] || 0;
   if (sensor) {
     desc.setSensor(true);
     desc.setDensity(0);

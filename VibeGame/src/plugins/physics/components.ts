@@ -45,6 +45,7 @@ export const Collider = defineComponent({
   restitution: Types.f32,
   density: Types.f32,
   sensor: Types.ui8,
+  isSensor: Types.ui8,
   membershipGroups: Types.ui16,
   filterGroups: Types.ui16,
   posOffsetX: Types.f32,
