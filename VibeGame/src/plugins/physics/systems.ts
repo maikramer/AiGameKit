@@ -21,6 +21,7 @@ const charMoveQuery = defineQuery([CharacterMovement, Rigidbody]);
 
 const stateToBodies = new WeakMap<State, Map<number, RAPIER.RigidBody>>();
 const stateToFailed = new WeakMap<State, Set<number>>();
+const stateToGroundCreated = new WeakMap<State, boolean>();
 
 function getBodyMap(state: State): Map<number, RAPIER.RigidBody> {
   let m = stateToBodies.get(state);
@@ -40,12 +41,28 @@ function getFailedSet(state: State): Set<number> {
   return s;
 }
 
+function ensureGroundPlane(state: State, world: RAPIER.World): void {
+  if (stateToGroundCreated.get(state)) return;
+  stateToGroundCreated.set(state, true);
+  try {
+    const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.1, 0);
+    const groundBody = world.createRigidBody(groundDesc);
+    const groundCollider = RAPIER.ColliderDesc.cuboid(100, 0.1, 100);
+    groundCollider.setFriction(0.8);
+    world.createCollider(groundCollider, groundBody);
+    console.log('[physics] safety ground plane created at y=-0.1 (200x0.2x200)');
+  } catch (e) {
+    console.error('[physics] failed to create ground plane:', e);
+  }
+}
+
 export const PhysicsInitSystem: System = {
   group: 'fixed',
   update: (state) => {
     const world = getOrCreateWorld();
     const bodies = getBodyMap(state);
     const failed = getFailedSet(state);
+    ensureGroundPlane(state, world);
 
     for (const entity of bodyQuery(state.world)) {
       if (bodies.has(entity)) continue;
@@ -74,6 +91,8 @@ export const PhysicsInitSystem: System = {
 
         const colliderDesc = createRapierColliderDesc(entity);
         world.createCollider(colliderDesc, body);
+
+        console.log(`[physics] body created: entity=${entity} pos=(${px.toFixed(1)}, ${py.toFixed(2)}, ${pz.toFixed(1)}) mass=${mass} type=${type}`);
 
         const t = body.translation();
         Rigidbody.posX[entity] = t.x;
@@ -214,9 +233,12 @@ export const PhysicsSyncSystem: System = {
 
         if (state.hasComponent(entity, CharacterController)) {
           const dy = t.y - prevY;
-          // Grounded if velocity Y is near zero and not moving vertically
           const grounded = Math.abs(v.y) < 0.1 && Math.abs(dy) < 0.01;
           CharacterController.grounded[entity] = grounded ? 1 : 0;
+          // Track position changes for debugging
+          if (Math.abs(dy) > 1 && Math.abs(v.y) > 5) {
+            console.log(`[player] falling: y=${t.y.toFixed(2)} vy=${v.y.toFixed(2)} dy=${dy.toFixed(2)}`);
+          }
         }
 
         if (state.hasComponent(entity, Transform)) {
