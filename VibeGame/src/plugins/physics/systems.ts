@@ -45,12 +45,12 @@ function ensureGroundPlane(state: State, world: RAPIER.World): void {
   if (stateToGroundCreated.get(state)) return;
   stateToGroundCreated.set(state, true);
   try {
-    const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -0.1, 0);
+    const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -1, 0);
     const groundBody = world.createRigidBody(groundDesc);
-    const groundCollider = RAPIER.ColliderDesc.cuboid(100, 0.1, 100);
+    const groundCollider = RAPIER.ColliderDesc.cuboid(500, 1, 500);
     groundCollider.setFriction(0.8);
     world.createCollider(groundCollider, groundBody);
-    console.log('[physics] safety ground plane created at y=-0.1 (200x0.2x200)');
+    console.log('[physics] safety ground plane created at y=-1 (1000x2x1000)');
   } catch (e) {
     console.error('[physics] failed to create ground plane:', e);
   }
