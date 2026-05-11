@@ -7,6 +7,8 @@ import {
   SetLinearVelocity,
   SetAngularVelocity,
   BodyType,
+  CharacterMovement,
+  CharacterController,
 } from './components';
 import { getOrCreateWorld, stepWorld } from './world';
 import { createRapierBody, createRapierColliderDesc } from './body';
@@ -15,6 +17,7 @@ import { isTerrainDynamicsBlocking } from '../terrain/utils';
 const bodyQuery = defineQuery([Rigidbody, Collider, Transform]);
 const setLinvelQuery = defineQuery([SetLinearVelocity, Rigidbody]);
 const setAngvelQuery = defineQuery([SetAngularVelocity, Rigidbody]);
+const charMoveQuery = defineQuery([CharacterMovement, Rigidbody]);
 
 const stateToBodies = new WeakMap<State, Map<number, RAPIER.RigidBody>>();
 const stateToFailed = new WeakMap<State, Set<number>>();
@@ -97,6 +100,38 @@ export const ApplyMovementSystem: System = {
   after: [PhysicsInitSystem],
   update: (state) => {
     const bodies = getBodyMap(state);
+    const dt = state.time.fixedDeltaTime;
+
+    // Character movement (player)
+    for (const entity of charMoveQuery(state.world)) {
+      const body = bodies.get(entity);
+      if (!body) continue;
+      try {
+        const type = Rigidbody.type[entity];
+        if (type !== BodyType.Dynamic && type !== 2) continue;
+
+        const dvx = CharacterMovement.desiredVelX[entity] || 0;
+        const dvz = CharacterMovement.desiredVelZ[entity] || 0;
+        const jumpVel = CharacterMovement.velocityY[entity] || 0;
+
+        // Horizontal movement
+        if (dvx !== 0 || dvz !== 0) {
+          body.setLinvel(new RAPIER.Vector3(dvx, 0, dvz), true);
+        }
+
+        // Jump
+        if (jumpVel > 0) {
+          const grounded = state.hasComponent(entity, CharacterController)
+            ? CharacterController.grounded[entity]
+            : 0;
+          if (grounded) {
+            const mass = body.mass();
+            body.applyImpulse(new RAPIER.Vector3(0, jumpVel * (mass || 70), 0), true);
+            CharacterMovement.velocityY[entity] = 0;
+          }
+        }
+      } catch (e) { /* skip */ }
+    }
 
     for (const entity of setLinvelQuery(state.world)) {
       const body = bodies.get(entity);
@@ -159,6 +194,9 @@ export const PhysicsSyncSystem: System = {
 
       try {
         const t = body.translation();
+        const prevX = Rigidbody.posX[entity];
+        const prevY = Rigidbody.posY[entity];
+        const prevZ = Rigidbody.posZ[entity];
         Rigidbody.posX[entity] = t.x;
         Rigidbody.posY[entity] = t.y;
         Rigidbody.posZ[entity] = t.z;
@@ -173,6 +211,13 @@ export const PhysicsSyncSystem: System = {
         Rigidbody.velX[entity] = v.x;
         Rigidbody.velY[entity] = v.y;
         Rigidbody.velZ[entity] = v.z;
+
+        if (state.hasComponent(entity, CharacterController)) {
+          const dy = t.y - prevY;
+          // Grounded if velocity Y is near zero and not moving vertically
+          const grounded = Math.abs(v.y) < 0.1 && Math.abs(dy) < 0.01;
+          CharacterController.grounded[entity] = grounded ? 1 : 0;
+        }
 
         if (state.hasComponent(entity, Transform)) {
           Transform.posX[entity] = t.x;

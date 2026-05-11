@@ -1,6 +1,6 @@
 import { defineComponent, Types } from 'bitecs';
 
-export const BodyType = { Dynamic: 0, Fixed: 1 } as const;
+export const BodyType = { Dynamic: 0, Fixed: 1, KinematicPositionBased: 2 } as const;
 
 export const ColliderShape = { Box: 0, Sphere: 1, Capsule: 2 } as const;
 
