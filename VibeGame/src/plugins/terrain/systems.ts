@@ -519,9 +519,9 @@ function createChunkCollider(
     const body = physicsWorld.createRigidBody(bodyDesc);
 
     const scale = new RAPIER.Vector3(
-      chunk.scale.x,
+      chunk.size / subdivCols,
       chunk.scale.y,
-      chunk.scale.z
+      chunk.size / subdivRows
     );
     const colliderDesc = RAPIER.ColliderDesc.heightfield(
       subdivRows,
