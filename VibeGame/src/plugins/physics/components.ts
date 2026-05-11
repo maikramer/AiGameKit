@@ -56,7 +56,9 @@ export const Collider = defineComponent({
   rotOffsetW: Types.f32,
 });
 
-export const CollisionEvents = defineComponent({});
+export const CollisionEvents = defineComponent({
+  activeEvents: Types.ui8,
+});
 
 export const TouchedEvent = defineComponent({
   other: Types.eid,
