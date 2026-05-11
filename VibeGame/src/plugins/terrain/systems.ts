@@ -477,6 +477,13 @@ function createChunkCollider(
     const subdivRows = vertexRows - 1;
     const subdivCols = vertexCols - 1;
 
+    if (subdivRows <= 0 || subdivCols <= 0) {
+      console.warn(
+        `[terrain] skipping heightfield chunk: invalid subdivs ${subdivRows}x${subdivCols} (vertices ${vertexRows}x${vertexCols})`
+      );
+      return null;
+    }
+
     const heightsColMajor = terrainHeightsToRapierColumnMajor(
       chunk.heights,
       vertexRows,
@@ -493,6 +500,13 @@ function createChunkCollider(
         `(vertexRows=${vertexRows}, vertexCols=${vertexCols})`
       );
       return null;
+    }
+
+    for (let i = 0; i < heightsColMajor.length; i++) {
+      if (!isFinite(heightsColMajor[i])) {
+        console.warn(`[terrain] skipping chunk: NaN/Inf height at index ${i}`);
+        return null;
+      }
     }
 
     const bodyX = chunk.position.x + offset.x;
