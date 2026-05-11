@@ -17,6 +17,7 @@ const setLinvelQuery = defineQuery([SetLinearVelocity, Rigidbody]);
 const setAngvelQuery = defineQuery([SetAngularVelocity, Rigidbody]);
 
 const stateToBodies = new WeakMap<State, Map<number, RAPIER.RigidBody>>();
+const stateToFailed = new WeakMap<State, Set<number>>();
 
 function getBodyMap(state: State): Map<number, RAPIER.RigidBody> {
   let m = stateToBodies.get(state);
@@ -27,14 +28,25 @@ function getBodyMap(state: State): Map<number, RAPIER.RigidBody> {
   return m;
 }
 
+function getFailedSet(state: State): Set<number> {
+  let s = stateToFailed.get(state);
+  if (!s) {
+    s = new Set();
+    stateToFailed.set(state, s);
+  }
+  return s;
+}
+
 export const PhysicsInitSystem: System = {
   group: 'fixed',
   update: (state) => {
     const world = getOrCreateWorld();
     const bodies = getBodyMap(state);
+    const failed = getFailedSet(state);
 
     for (const entity of bodyQuery(state.world)) {
       if (bodies.has(entity)) continue;
+      if (failed.has(entity)) continue;
 
       const px = Rigidbody.posX[entity] ?? 0;
       const py = Rigidbody.posY[entity] ?? 0;
@@ -44,11 +56,11 @@ export const PhysicsInitSystem: System = {
       const type = Rigidbody.type[entity] ?? 0;
 
       if (!isFinite(px) || !isFinite(py) || !isFinite(pz) || !isFinite(mass)) {
-        console.warn(`[physics] skipping entity ${entity}: NaN/Inf in pos=(${px},${py},${pz}) mass=${mass}`);
+        console.warn(`[physics] skipping entity ${entity}: NaN/Inf pos=(${px},${py},${pz}) mass=${mass}`);
+        failed.add(entity);
         continue;
       }
       if (type === 0 && mass <= 0) {
-        console.warn(`[physics] skipping entity ${entity}: dynamic body with mass=0, using 1`);
         Rigidbody.mass[entity] = 1;
       }
 
@@ -70,8 +82,11 @@ export const PhysicsInitSystem: System = {
         Rigidbody.rotY[entity] = r.y;
         Rigidbody.rotZ[entity] = r.z;
         Rigidbody.rotW[entity] = r.w;
+
+        failed.delete(entity);
       } catch (err) {
-        console.error(`[physics] createRigidBody failed for entity ${entity}: pos=(${px},${py},${pz}) mass=${mass} gs=${gs} type=${type}`, err);
+        console.error(`[physics] createRigidBody failed entity ${entity}: pos=(${px},${py},${pz}) mass=${mass} type=${type}`, err);
+        failed.add(entity);
       }
     }
   },
@@ -86,36 +101,32 @@ export const ApplyMovementSystem: System = {
     for (const entity of setLinvelQuery(state.world)) {
       const body = bodies.get(entity);
       if (!body) continue;
-      if (Rigidbody.type[entity] !== BodyType.Dynamic) {
-        state.removeComponent(entity, SetLinearVelocity);
-        continue;
-      }
-      body.setLinvel(
-        new RAPIER.Vector3(
-          SetLinearVelocity.x[entity],
-          SetLinearVelocity.y[entity],
-          SetLinearVelocity.z[entity]
-        ),
-        true
-      );
+      try {
+        if (Rigidbody.type[entity] !== BodyType.Dynamic) {
+          state.removeComponent(entity, SetLinearVelocity);
+          continue;
+        }
+        body.setLinvel(
+          new RAPIER.Vector3(SetLinearVelocity.x[entity], SetLinearVelocity.y[entity], SetLinearVelocity.z[entity]),
+          true
+        );
+      } catch (e) { /* skip */ }
       state.removeComponent(entity, SetLinearVelocity);
     }
 
     for (const entity of setAngvelQuery(state.world)) {
       const body = bodies.get(entity);
       if (!body) continue;
-      if (Rigidbody.type[entity] !== BodyType.Dynamic) {
-        state.removeComponent(entity, SetAngularVelocity);
-        continue;
-      }
-      body.setAngvel(
-        new RAPIER.Vector3(
-          SetAngularVelocity.x[entity],
-          SetAngularVelocity.y[entity],
-          SetAngularVelocity.z[entity]
-        ),
-        true
-      );
+      try {
+        if (Rigidbody.type[entity] !== BodyType.Dynamic) {
+          state.removeComponent(entity, SetAngularVelocity);
+          continue;
+        }
+        body.setAngvel(
+          new RAPIER.Vector3(SetAngularVelocity.x[entity], SetAngularVelocity.y[entity], SetAngularVelocity.z[entity]),
+          true
+        );
+      } catch (e) { /* skip */ }
       state.removeComponent(entity, SetAngularVelocity);
     }
   },
@@ -146,31 +157,35 @@ export const PhysicsSyncSystem: System = {
     for (const [entity, body] of bodies) {
       if (!state.hasComponent(entity, Rigidbody)) continue;
 
-      const t = body.translation();
-      Rigidbody.posX[entity] = t.x;
-      Rigidbody.posY[entity] = t.y;
-      Rigidbody.posZ[entity] = t.z;
+      try {
+        const t = body.translation();
+        Rigidbody.posX[entity] = t.x;
+        Rigidbody.posY[entity] = t.y;
+        Rigidbody.posZ[entity] = t.z;
 
-      const r = body.rotation();
-      Rigidbody.rotX[entity] = r.x;
-      Rigidbody.rotY[entity] = r.y;
-      Rigidbody.rotZ[entity] = r.z;
-      Rigidbody.rotW[entity] = r.w;
+        const r = body.rotation();
+        Rigidbody.rotX[entity] = r.x;
+        Rigidbody.rotY[entity] = r.y;
+        Rigidbody.rotZ[entity] = r.z;
+        Rigidbody.rotW[entity] = r.w;
 
-      const v = body.linvel();
-      Rigidbody.velX[entity] = v.x;
-      Rigidbody.velY[entity] = v.y;
-      Rigidbody.velZ[entity] = v.z;
+        const v = body.linvel();
+        Rigidbody.velX[entity] = v.x;
+        Rigidbody.velY[entity] = v.y;
+        Rigidbody.velZ[entity] = v.z;
 
-      if (state.hasComponent(entity, Transform)) {
-        Transform.posX[entity] = t.x;
-        Transform.posY[entity] = t.y;
-        Transform.posZ[entity] = t.z;
-        Transform.rotX[entity] = r.x;
-        Transform.rotY[entity] = r.y;
-        Transform.rotZ[entity] = r.z;
-        Transform.rotW[entity] = r.w;
-        Transform.dirty[entity] = 1;
+        if (state.hasComponent(entity, Transform)) {
+          Transform.posX[entity] = t.x;
+          Transform.posY[entity] = t.y;
+          Transform.posZ[entity] = t.z;
+          Transform.rotX[entity] = r.x;
+          Transform.rotY[entity] = r.y;
+          Transform.rotZ[entity] = r.z;
+          Transform.rotW[entity] = r.w;
+          Transform.dirty[entity] = 1;
+        }
+      } catch (err) {
+        console.error(`[physics] sync failed for entity ${entity}`, err);
       }
     }
   },

@@ -30,7 +30,9 @@ export function stepWorld(): void {
     try {
       world.step();
     } catch (e) {
-      console.error("[physics] world.step() panic:", e);
+      console.error("[physics] world.step() panic — recreating world:", e);
+      world.free();
+      world = null;
     }
   }
 }
