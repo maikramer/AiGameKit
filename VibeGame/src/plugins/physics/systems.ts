@@ -1,11 +1,19 @@
 ﻿import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import { defineQuery, type State, type System } from '../../core';
 import { Transform } from '../transforms';
-import { Rigidbody, Collider } from './components';
+import {
+  Rigidbody,
+  Collider,
+  SetLinearVelocity,
+  SetAngularVelocity,
+  BodyType,
+} from './components';
 import { getOrCreateWorld, stepWorld } from './world';
 import { createRapierBody, createRapierColliderDesc } from './body';
 
 const bodyQuery = defineQuery([Rigidbody, Collider, Transform]);
+const setLinvelQuery = defineQuery([SetLinearVelocity, Rigidbody]);
+const setAngvelQuery = defineQuery([SetAngularVelocity, Rigidbody]);
 
 const stateToBodies = new WeakMap<State, Map<number, RAPIER.RigidBody>>();
 
@@ -51,8 +59,44 @@ export const PhysicsInitSystem: System = {
 export const ApplyMovementSystem: System = {
   group: 'fixed',
   after: [PhysicsInitSystem],
-  update: () => {
-    // Placeholder: player plugin sets body.linvel() directly via getBodyForEntity()
+  update: (state) => {
+    const bodies = getBodyMap(state);
+
+    for (const entity of setLinvelQuery(state.world)) {
+      const body = bodies.get(entity);
+      if (!body) continue;
+      if (Rigidbody.type[entity] !== BodyType.Dynamic) {
+        state.removeComponent(entity, SetLinearVelocity);
+        continue;
+      }
+      body.setLinvel(
+        new RAPIER.Vector3(
+          SetLinearVelocity.x[entity],
+          SetLinearVelocity.y[entity],
+          SetLinearVelocity.z[entity]
+        ),
+        true
+      );
+      state.removeComponent(entity, SetLinearVelocity);
+    }
+
+    for (const entity of setAngvelQuery(state.world)) {
+      const body = bodies.get(entity);
+      if (!body) continue;
+      if (Rigidbody.type[entity] !== BodyType.Dynamic) {
+        state.removeComponent(entity, SetAngularVelocity);
+        continue;
+      }
+      body.setAngvel(
+        new RAPIER.Vector3(
+          SetAngularVelocity.x[entity],
+          SetAngularVelocity.y[entity],
+          SetAngularVelocity.z[entity]
+        ),
+        true
+      );
+      state.removeComponent(entity, SetAngularVelocity);
+    }
   },
 };
 
