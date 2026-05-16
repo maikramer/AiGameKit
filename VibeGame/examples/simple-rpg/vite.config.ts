@@ -8,12 +8,18 @@ const vibegameRoot = path.resolve(
   '../..'
 );
 
+const terrainLodPath = path.join(
+  vibegameRoot,
+  'node_modules/@interverse/three-terrain-lod'
+);
+
 export default defineConfig({
   resolve: {
     dedupe: ['three', 'three/webgpu', 'three/tsl'],
     alias: {
       vibegame: path.join(vibegameRoot, 'src/index.ts'),
       'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),
+      '@interverse/three-terrain-lod': terrainLodPath,
     },
   },
   plugins: [vibegame(), consoleForwarding()],
@@ -30,8 +36,12 @@ export default defineConfig({
   build: {
     target: 'esnext',
     sourcemap: true,
+    rolldownOptions: {
+      external: ['@interverse/three-terrain-lod'],
+    },
   },
   optimizeDeps: {
     exclude: ['vibegame'],
+    include: ['@interverse/three-terrain-lod'],
   },
 });

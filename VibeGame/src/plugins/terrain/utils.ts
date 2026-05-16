@@ -1,19 +1,14 @@
-﻿import type * as RAPIER from '@dimforge/rapier3d-simd-compat';
-import type { TerrainLOD } from '@interverse/three-terrain-lod';
+﻿import type { TerrainLOD, TerrainPhysics } from '@interverse/three-terrain-lod';
 import type { State } from '../../core';
 
 export interface TerrainEntityData {
   terrainLOD: TerrainLOD;
+  terrainPhysics: TerrainPhysics | null;
   heightmapUrl?: string;
   textureUrl?: string;
   initialized: boolean;
   collisionReady: boolean;
-  collisionDispatchStarted: boolean;
   worldOffset: { x: number; y: number; z: number };
-  chunkColliders: Map<
-    string,
-    { body: RAPIER.RigidBody; collider: RAPIER.Collider }
-  >;
   lastWireframe: number;
   lastShowChunkBorders: number;
 }
@@ -110,18 +105,3 @@ export function getTerrainTextureUrl(
 ): string | undefined {
   return textureUrls.get(state)?.get(entity);
 }
-
-export function terrainHeightsToRapierColumnMajor(
-  heights: Float32Array,
-  rows: number,
-  cols: number
-): Float32Array {
-  const out = new Float32Array(rows * cols);
-  for (let rowZ = 0; rowZ < rows; rowZ++) {
-    for (let colX = 0; colX < cols; colX++) {
-      out[rowZ + colX * rows] = heights[rowZ * cols + colX];
-    }
-  }
-  return out;
-}
-

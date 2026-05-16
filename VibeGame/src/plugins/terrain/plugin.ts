@@ -10,9 +10,7 @@ import {
 } from './systems';
 import { setTerrainHeightmapUrl, setTerrainTextureUrl } from './utils';
 
-function terrainColorAdapter(
-  field: keyof typeof Terrain
-): Adapter {
+function terrainColorAdapter(field: keyof typeof Terrain): Adapter {
   return ((entity: number, value: string, _state: State) => {
     Terrain[field][entity] = parseColor(value) >>> 0;
   }) as Adapter;
