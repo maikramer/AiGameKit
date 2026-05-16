@@ -1,5 +1,5 @@
-import * as RAPIER from "@dimforge/rapier3d-simd-compat";
-import { Rigidbody, Collider, BodyType, ColliderShape } from "./components";
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
+import { Rigidbody, Collider, BodyType, ColliderShape } from './components';
 
 export function createRapierBody(entity: number): RAPIER.RigidBodyDesc {
   const type = Rigidbody.type[entity] ?? BodyType.Dynamic;
@@ -12,13 +12,15 @@ export function createRapierBody(entity: number): RAPIER.RigidBodyDesc {
     case BodyType.Dynamic:
     default:
       desc = RAPIER.RigidBodyDesc.dynamic();
+      desc.setCcdEnabled(true);
+      desc.setSoftCcdPrediction(2.0);
       break;
   }
 
   desc.setTranslation(
     Rigidbody.posX[entity] ?? 0,
     Rigidbody.posY[entity] ?? 0,
-    Rigidbody.posZ[entity] ?? 0,
+    Rigidbody.posZ[entity] ?? 0
   );
 
   const mass = Rigidbody.mass[entity];
@@ -52,7 +54,7 @@ export function createRapierColliderDesc(entity: number): RAPIER.ColliderDesc {
     case ColliderShape.Capsule:
       desc = RAPIER.ColliderDesc.capsule(
         (Collider.height[entity] || 1) / 2,
-        Collider.radius[entity] || 0.5,
+        Collider.radius[entity] || 0.5
       );
       break;
     case ColliderShape.Box:
@@ -60,7 +62,7 @@ export function createRapierColliderDesc(entity: number): RAPIER.ColliderDesc {
       desc = RAPIER.ColliderDesc.cuboid(
         (Collider.sizeX[entity] || 1) / 2,
         (Collider.sizeY[entity] || 1) / 2,
-        (Collider.sizeZ[entity] || 1) / 2,
+        (Collider.sizeZ[entity] || 1) / 2
       );
       break;
   }
@@ -83,7 +85,7 @@ export function createRapierColliderDesc(entity: number): RAPIER.ColliderDesc {
   desc.setTranslation(
     Collider.posOffsetX[entity] || 0,
     Collider.posOffsetY[entity] || 0,
-    Collider.posOffsetZ[entity] || 0,
+    Collider.posOffsetZ[entity] || 0
   );
 
   return desc;
