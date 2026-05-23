@@ -255,7 +255,7 @@ export function consumeAction(action: BufferedAction): boolean {
   return false;
 }
 
-export function updateInputState(eid: number): void {
+export function updateInputState(eid: number, skipMouseInput = false): void {
   const sensitivity = INPUT_CONFIG.mouseSensitivity;
 
   InputState.moveX[eid] = getMovementAxis(
@@ -271,9 +271,22 @@ export function updateInputState(eid: number): void {
     INPUT_CONFIG.mappings.moveDown
   );
 
-  InputState.lookX[eid] = inputData.mouseDeltaX * sensitivity.look;
-  InputState.lookY[eid] = inputData.mouseDeltaY * sensitivity.look;
-  InputState.scrollDelta[eid] = inputData.scrollDelta;
+  if (!skipMouseInput) {
+    InputState.lookX[eid] = inputData.mouseDeltaX * sensitivity.look;
+    InputState.lookY[eid] = inputData.mouseDeltaY * sensitivity.look;
+    InputState.scrollDelta[eid] = inputData.scrollDelta;
+
+    InputState.leftMouse[eid] = inputData.mouseButtons.has(0) ? 1 : 0;
+    InputState.rightMouse[eid] = inputData.mouseButtons.has(2) ? 1 : 0;
+    InputState.middleMouse[eid] = inputData.mouseButtons.has(1) ? 1 : 0;
+  } else {
+    InputState.lookX[eid] = 0;
+    InputState.lookY[eid] = 0;
+    InputState.scrollDelta[eid] = 0;
+    InputState.leftMouse[eid] = 0;
+    InputState.rightMouse[eid] = 0;
+    InputState.middleMouse[eid] = 0;
+  }
 
   InputState.jump[eid] = canConsumeAction(
     bufferedActions.jump,
@@ -293,10 +306,6 @@ export function updateInputState(eid: number): void {
   )
     ? 1
     : 0;
-
-  InputState.leftMouse[eid] = inputData.mouseButtons.has(0) ? 1 : 0;
-  InputState.rightMouse[eid] = inputData.mouseButtons.has(2) ? 1 : 0;
-  InputState.middleMouse[eid] = inputData.mouseButtons.has(1) ? 1 : 0;
 
   InputState.jumpBufferTime[eid] = bufferedActions.jump.lastPressTime;
   InputState.primaryBufferTime[eid] = bufferedActions.primary.lastPressTime;

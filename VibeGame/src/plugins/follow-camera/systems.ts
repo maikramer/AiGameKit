@@ -14,7 +14,7 @@ import {
   WorldTransform,
   syncEulerFromQuaternion,
 } from '../transforms';
-import { springStep } from '../third-person-controller/utils/spring';
+import { springStep } from './utils/spring';
 import { FollowCamera } from './components';
 import { ZOOM_PRESETS } from './constants';
 import * as THREE from 'three';

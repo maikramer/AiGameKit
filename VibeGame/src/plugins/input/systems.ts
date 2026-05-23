@@ -24,14 +24,13 @@ export const InputSystem: System = {
     const focusedCanvas = getFocusedCanvas();
     const context = getRenderingContext(state);
 
-    if (!focusedCanvas || !context.canvas || context.canvas !== focusedCanvas) {
-      return;
-    }
+    // Keyboard input is global; mouse-related input requires canvas focus.
+    const canvasActive = focusedCanvas && context.canvas && context.canvas === focusedCanvas;
 
     const entities = inputStateQuery(state.world);
 
     for (const eid of entities) {
-      updateInputState(eid);
+      updateInputState(eid, !canvasActive);
     }
 
     resetFrameDeltas();
