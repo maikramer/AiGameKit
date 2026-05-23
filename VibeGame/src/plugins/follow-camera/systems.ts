@@ -1,16 +1,20 @@
-import { defineQuery, type System } from '../../core';
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
+import { defineQuery, type State, type System } from '../../core';
 import { InputState, isKeyDown } from '../input';
 import {
   normalizeAngle,
   shortestAngleDiff,
   smoothLerp,
 } from '../orbit-camera/math';
+import { getOrCreateWorld } from '../physics/world';
 import { Rigidbody } from '../physics';
+import { getRenderingContext, threeCameras } from '../rendering';
 import {
   Transform,
   WorldTransform,
   syncEulerFromQuaternion,
 } from '../transforms';
+import { springStep } from '../third-person-controller/utils/spring';
 import { FollowCamera } from './components';
 import { ZOOM_PRESETS } from './constants';
 import * as THREE from 'three';
@@ -253,6 +257,262 @@ export const FollowCameraPositionSystem: System = {
 
       syncEulerFromQuaternion(Transform, cam);
       Transform.dirty[cam] = 1;
+
+      // Over-shoulder view offset
+      const threeCamera = threeCameras.get(cam);
+      if (threeCamera) {
+        if (FollowCamera.overShoulder[cam] === 1) {
+          const offset = FollowCamera.overShoulderOffset[cam] || 0.2;
+          const w = window.innerWidth;
+          const h = window.innerHeight;
+          threeCamera.setViewOffset(w, h, w * offset, 0, w, h);
+        } else {
+          threeCamera.clearViewOffset();
+        }
+      }
+    }
+  },
+};
+
+const _springTarget = new THREE.Vector3();
+const _springCam = new THREE.Vector3();
+const _springSpherical = new THREE.Spherical();
+
+/**
+ * When `useSpring[eid] === 1`, replaces the smoothLerp convergence on the
+ * look-at target with a critically-damped spring. Yaw / pitch / distance
+ * still use smoothLerp (handled by FollowCameraPositionSystem).
+ *
+ * Runs AFTER FollowCameraPositionSystem so it can override the smoothed
+ * target values and reposition the camera accordingly.
+ */
+export const FollowCameraSpringSystem: System = {
+  group: 'draw',
+  after: [FollowCameraPositionSystem],
+  update: (state) => {
+    const cameraEntities = followCameraQuery(state.world);
+    const dt = state.time.deltaTime;
+
+    for (const cam of cameraEntities) {
+      if (FollowCamera.useSpring[cam] !== 1) continue;
+
+      const targetEntity = FollowCamera.target[cam];
+      if (!targetEntity || !state.hasComponent(targetEntity, WorldTransform)) {
+        continue;
+      }
+
+      // First-frame snap: ensure velocities are zeroed and target is set
+      if (FollowCamera.smoothedTargetInit[cam] === 0) {
+        FollowCamera.smoothedTargetX[cam] =
+          WorldTransform.posX[targetEntity] + FollowCamera.offsetX[cam];
+        FollowCamera.smoothedTargetY[cam] =
+          WorldTransform.posY[targetEntity] + FollowCamera.offsetY[cam];
+        FollowCamera.smoothedTargetZ[cam] =
+          WorldTransform.posZ[targetEntity] + FollowCamera.offsetZ[cam];
+        FollowCamera.springVelocityX[cam] = 0;
+        FollowCamera.springVelocityY[cam] = 0;
+        FollowCamera.springVelocityZ[cam] = 0;
+        FollowCamera.smoothedTargetInit[cam] = 1;
+        continue;
+      }
+
+      const springTime = FollowCamera.springTime[cam] || 0.15;
+
+      const actualX =
+        WorldTransform.posX[targetEntity] + FollowCamera.offsetX[cam];
+      const actualY =
+        WorldTransform.posY[targetEntity] + FollowCamera.offsetY[cam];
+      const actualZ =
+        WorldTransform.posZ[targetEntity] + FollowCamera.offsetZ[cam];
+
+      const sx = springStep(
+        FollowCamera.smoothedTargetX[cam],
+        actualX,
+        FollowCamera.springVelocityX[cam],
+        dt,
+        springTime
+      );
+      const sy = springStep(
+        FollowCamera.smoothedTargetY[cam],
+        actualY,
+        FollowCamera.springVelocityY[cam],
+        dt,
+        springTime
+      );
+      const sz = springStep(
+        FollowCamera.smoothedTargetZ[cam],
+        actualZ,
+        FollowCamera.springVelocityZ[cam],
+        dt,
+        springTime
+      );
+
+      FollowCamera.smoothedTargetX[cam] = sx.value;
+      FollowCamera.springVelocityX[cam] = sx.velocity;
+      FollowCamera.smoothedTargetY[cam] = sy.value;
+      FollowCamera.springVelocityY[cam] = sy.velocity;
+      FollowCamera.smoothedTargetZ[cam] = sz.value;
+      FollowCamera.springVelocityZ[cam] = sz.velocity;
+
+      _springTarget.set(
+        FollowCamera.smoothedTargetX[cam],
+        FollowCamera.smoothedTargetY[cam],
+        FollowCamera.smoothedTargetZ[cam]
+      );
+
+      const dist = FollowCamera.currentDistance[cam];
+      const polar = Math.PI / 2 - FollowCamera.currentPitch[cam];
+      _springSpherical.set(dist, polar, FollowCamera.currentYaw[cam]);
+
+      _springCam.setFromSpherical(_springSpherical).add(_springTarget);
+
+      Transform.posX[cam] = _springCam.x;
+      Transform.posY[cam] = _springCam.y;
+      Transform.posZ[cam] = _springCam.z;
+
+      _tempMat.lookAt(_springCam, _springTarget, _upVec);
+      _tempQuat.setFromRotationMatrix(_tempMat);
+
+      Transform.rotX[cam] = _tempQuat.x;
+      Transform.rotY[cam] = _tempQuat.y;
+      Transform.rotZ[cam] = _tempQuat.z;
+      Transform.rotW[cam] = _tempQuat.w;
+
+      syncEulerFromQuaternion(Transform, cam);
+      Transform.dirty[cam] = 1;
+    }
+  },
+};
+
+/**
+ * When `wallAvoidance[eid] === 1`, casts a Rapier ray from the look-at
+ * target toward the camera. If geometry is hit, pulls the camera closer
+ * to the hit point (plus `wallAvoidanceOffset`). When clear, smoothly
+ * returns to normal distance.
+ */
+export const FollowCameraWallAvoidanceSystem: System = {
+  group: 'draw',
+  after: [FollowCameraPositionSystem],
+  update: (state) => {
+    const cameraEntities = followCameraQuery(state.world);
+    let world: RAPIER.World | null = null;
+
+    for (const cam of cameraEntities) {
+      if (FollowCamera.wallAvoidance[cam] !== 1) continue;
+
+      // Lazy-init Rapier world (may not exist if physics plugin absent)
+      if (!world) {
+        world = getOrCreateWorld();
+      }
+
+      const camX = Transform.posX[cam];
+      const camY = Transform.posY[cam];
+      const camZ = Transform.posZ[cam];
+
+      const targetX = FollowCamera.smoothedTargetX[cam];
+      const targetY = FollowCamera.smoothedTargetY[cam];
+      const targetZ = FollowCamera.smoothedTargetZ[cam];
+
+      const dx = camX - targetX;
+      const dy = camY - targetY;
+      const dz = camZ - targetZ;
+      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+      if (dist < 1e-4) continue;
+
+      const invDist = 1 / dist;
+      const dirX = dx * invDist;
+      const dirY = dy * invDist;
+      const dirZ = dz * invDist;
+
+      const offset = FollowCamera.wallAvoidanceOffset[cam] || 0.3;
+
+      const ray = new RAPIER.Ray(
+        { x: targetX, y: targetY, z: targetZ },
+        { x: dirX, y: dirY, z: dirZ }
+      );
+
+      const hit = world.castRay(ray, dist, true);
+
+      if (hit !== null && hit.timeOfImpact < dist) {
+        const safeDist = Math.max(0, hit.timeOfImpact - offset);
+        const newCamX = targetX + dirX * safeDist;
+        const newCamY = targetY + dirY * safeDist;
+        const newCamZ = targetZ + dirZ * safeDist;
+
+        Transform.posX[cam] = newCamX;
+        Transform.posY[cam] = newCamY;
+        Transform.posZ[cam] = newCamZ;
+
+        _tempVecCam.set(newCamX, newCamY, newCamZ);
+        _tempVecTarget.set(targetX, targetY, targetZ);
+        _tempMat.lookAt(_tempVecCam, _tempVecTarget, _upVec);
+        _tempQuat.setFromRotationMatrix(_tempMat);
+
+        Transform.rotX[cam] = _tempQuat.x;
+        Transform.rotY[cam] = _tempQuat.y;
+        Transform.rotZ[cam] = _tempQuat.z;
+        Transform.rotW[cam] = _tempQuat.w;
+
+        syncEulerFromQuaternion(Transform, cam);
+        Transform.dirty[cam] = 1;
+      }
+    }
+  },
+};
+
+let pointerLockInitialized = false;
+let pointerLockCanvas: HTMLCanvasElement | null = null;
+
+function ensurePointerLockListeners(canvas: HTMLCanvasElement): void {
+  if (pointerLockInitialized && pointerLockCanvas === canvas) return;
+  pointerLockInitialized = true;
+  pointerLockCanvas = canvas;
+
+  canvas.addEventListener('click', () => {
+    if (document.pointerLockElement !== canvas) {
+      canvas.requestPointerLock();
+    }
+  });
+}
+
+export const FollowCameraMouseModeSystem: System = {
+  group: 'simulation',
+  after: [FollowCameraInputSystem],
+  update(state: State): void {
+    const cameraEntities = followCameraAllQuery(state.world);
+
+    for (const cam of cameraEntities) {
+      const mode = FollowCamera.mouseMode[cam];
+      if (mode === 1) continue;
+
+      if (mode === 0) {
+        const rendering = getRenderingContext(state);
+        const canvas = rendering.canvas;
+        if (!canvas) continue;
+
+        ensurePointerLockListeners(canvas);
+
+        if (document.pointerLockElement === canvas) {
+          const inputSource = FollowCamera.inputSource[cam];
+          if (!inputSource || !state.hasComponent(inputSource, InputState)) continue;
+
+          const lookX = InputState.lookX[inputSource];
+          const lookY = InputState.lookY[inputSource];
+          const sens = FollowCamera.sensitivity[cam];
+
+          FollowCamera.targetYaw[cam] -= lookX * sens;
+          const pitch = FollowCamera.targetPitch[cam] + lookY * sens;
+          FollowCamera.targetPitch[cam] = Math.max(
+            FollowCamera.minPitch[cam],
+            Math.min(FollowCamera.maxPitch[cam], pitch)
+          );
+
+          FollowCamera.lastManualInputTime[cam] = state.time.elapsed * 1000;
+        }
+      } else if (mode >= 2 && mode <= 5) {
+        console.warn(`[FollowCamera] Mouse mode ${mode} not yet implemented`);
+      }
     }
   },
 };

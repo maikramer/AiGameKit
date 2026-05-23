@@ -4,16 +4,22 @@ import { followCameraRecipe } from './recipes';
 import {
   FollowCameraAutoRotateSystem,
   FollowCameraInputSystem,
+  FollowCameraMouseModeSystem,
   FollowCameraPositionSystem,
   FollowCameraSetupSystem,
+  FollowCameraSpringSystem,
+  FollowCameraWallAvoidanceSystem,
 } from './systems';
 
 export const FollowCameraPlugin: Plugin = {
   systems: [
     FollowCameraSetupSystem,
     FollowCameraInputSystem,
+    FollowCameraMouseModeSystem,
     FollowCameraAutoRotateSystem,
     FollowCameraPositionSystem,
+    FollowCameraSpringSystem,
+    FollowCameraWallAvoidanceSystem,
   ],
   recipes: [followCameraRecipe],
   components: {

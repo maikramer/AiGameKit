@@ -120,7 +120,7 @@ export const PlayerMovementSystem: System = {
         rotY: Rigidbody.rotY[entity],
         rotZ: Rigidbody.rotZ[entity],
         rotW: Rigidbody.rotW[entity],
-      });
+      }, cameraYaw, state.world);
 
       Rigidbody.rotX[entity] = newRotation.x;
       Rigidbody.rotY[entity] = newRotation.y;

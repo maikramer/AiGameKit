@@ -1,3 +1,4 @@
+import { type IWorld } from '../../core';
 import { INPUT_CONFIG } from '../input';
 import {
   Rigidbody,
@@ -5,6 +6,7 @@ import {
   CharacterMovement,
   DEFAULT_GRAVITY,
 } from '../physics';
+import { FollowCamera } from '../follow-camera';
 import { PlayerController } from './components';
 import * as THREE from 'three';
 
@@ -115,28 +117,20 @@ function calculateSlerpFactor(
   return angle > 0.001 ? Math.min(1.0, maxRotation / angle) : 1.0;
 }
 
-export function updateRotation(
-  entity: number,
-  inputVector: THREE.Vector3,
-  deltaTime: number,
-  rotationData: {
-    rotX: number;
-    rotY: number;
-    rotZ: number;
-    rotW: number;
-  }
-): { x: number; y: number; z: number; w: number } {
-  if (inputVector.length() <= JUMP_CONSTANTS.verticalVelocityThreshold) {
-    return {
-      x: rotationData.rotX,
-      y: rotationData.rotY,
-      z: rotationData.rotZ,
-      w: rotationData.rotW,
-    };
-  }
+export function resolveMouseMode(entity: number, world: IWorld): number {
+  const camEid = PlayerController.cameraEntity[entity];
+  if (camEid === 0) return 1;
+  const mode = FollowCamera.mouseMode[camEid];
+  return mode >= 0 && mode <= 5 ? mode : 1;
+}
 
-  const targetYRotation = Math.atan2(inputVector.x, inputVector.z);
-  _tmpEuler.set(0, targetYRotation, 0);
+function applySlerpRotation(
+  entity: number,
+  targetAngle: number,
+  deltaTime: number,
+  rotationData: { rotX: number; rotY: number; rotZ: number; rotW: number }
+): { x: number; y: number; z: number; w: number } {
+  _tmpEuler.set(0, targetAngle, 0);
   _tmpQuat.setFromEuler(_tmpEuler);
 
   _tmpQuat2.set(
@@ -147,18 +141,66 @@ export function updateRotation(
   );
 
   const maxRotationRadians = PlayerController.rotationSpeed[entity] * deltaTime;
-  const slerpFactor = calculateSlerpFactor(
-    _tmpQuat2,
-    _tmpQuat,
-    maxRotationRadians
-  );
-
+  const slerpFactor = calculateSlerpFactor(_tmpQuat2, _tmpQuat, maxRotationRadians);
   _tmpQuat2.slerp(_tmpQuat, slerpFactor);
 
-  return {
-    x: _tmpQuat2.x,
-    y: _tmpQuat2.y,
-    z: _tmpQuat2.z,
-    w: _tmpQuat2.w,
-  };
+  return { x: _tmpQuat2.x, y: _tmpQuat2.y, z: _tmpQuat2.z, w: _tmpQuat2.w };
+}
+
+function makeQuatFromYaw(yaw: number): { x: number; y: number; z: number; w: number } {
+  _tmpEuler.set(0, yaw, 0);
+  _tmpQuat.setFromEuler(_tmpEuler);
+  return { x: _tmpQuat.x, y: _tmpQuat.y, z: _tmpQuat.z, w: _tmpQuat.w };
+}
+
+const IDLE_THRESHOLD = JUMP_CONSTANTS.verticalVelocityThreshold;
+
+export function updateRotation(
+  entity: number,
+  inputVector: THREE.Vector3,
+  deltaTime: number,
+  rotationData: { rotX: number; rotY: number; rotZ: number; rotW: number },
+  cameraYaw: number,
+  world: IWorld
+): { x: number; y: number; z: number; w: number } {
+  const mode = resolveMouseMode(entity, world);
+  const isMoving = inputVector.length() > IDLE_THRESHOLD;
+
+  switch (mode) {
+    case 0:
+    case 2: {
+      if (isMoving) {
+        const moveAngle = Math.atan2(inputVector.x, inputVector.z);
+        return applySlerpRotation(entity, moveAngle, deltaTime, rotationData);
+      }
+      return applySlerpRotation(entity, cameraYaw, deltaTime, rotationData);
+    }
+
+    case 1:
+    case 3: {
+      if (!isMoving) {
+        return {
+          x: rotationData.rotX,
+          y: rotationData.rotY,
+          z: rotationData.rotZ,
+          w: rotationData.rotW,
+        };
+      }
+      const moveAngle = Math.atan2(inputVector.x, inputVector.z);
+      return applySlerpRotation(entity, moveAngle, deltaTime, rotationData);
+    }
+
+    case 4:
+    case 5: {
+      return makeQuatFromYaw(cameraYaw);
+    }
+
+    default:
+      return {
+        x: rotationData.rotX,
+        y: rotationData.rotY,
+        z: rotationData.rotZ,
+        w: rotationData.rotW,
+      };
+  }
 }

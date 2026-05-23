@@ -4,6 +4,7 @@ import { loadGltfAnimated } from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import { animatorRegistry, registerAnimator } from '../gltf-anim/systems';
 import { HasAnimator } from '../animation/components';
+import { InputState } from '../input/components';
 import { isKeyDown } from '../input/utils';
 import { WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
@@ -59,23 +60,33 @@ function setYOffset(state: State, eid: number, y: number): void {
   m.set(eid, y);
 }
 
-const CLIP_IDLE = 'Animator3D_BreatheIdle';
-const CLIP_WALK = 'Animator3D_Walk';
-const CLIP_RUN = 'Animator3D_Run';
+const DEFAULT_LOCOMOTION_SET = 'default';
 
-const MOVE_CODES = [
-  'KeyW',
-  'KeyA',
-  'KeyS',
-  'KeyD',
-  'ArrowUp',
-  'ArrowDown',
-  'ArrowLeft',
-  'ArrowRight',
-] as const;
+function resolveClipName(
+  animator: GltfAnimator,
+  indexField: number,
+  fallbackIndex: number,
+): string {
+  const names = animator.clipNames;
+  if (names.length === 0) return '';
+  if (indexField > 0 && indexField < names.length) return names[indexField];
+  if (fallbackIndex < names.length) return names[fallbackIndex];
+  return names[0] ?? '';
+}
 
-function isMovementPressed(): boolean {
-  return MOVE_CODES.some((c) => isKeyDown(c));
+function ensureLocomotionSet(animator: GltfAnimator, eid: number): void {
+  if (animator['locomotionSets'] && (animator as unknown as Record<string, unknown>).locomotionSets instanceof Map) {
+    const sets = (animator as unknown as { locomotionSets: Map<string, unknown> }).locomotionSets;
+    if (sets.size > 0) return;
+  }
+
+  const idle = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
+  const walk = resolveClipName(animator, PlayerGltfConfig.walkClipIndex[eid], 1);
+  const run = resolveClipName(animator, PlayerGltfConfig.runClipIndex[eid], 2);
+
+  if (!idle || !walk || !run) return;
+
+  animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, { idle, walk, run });
 }
 
 function isRunModifier(): boolean {
@@ -125,7 +136,11 @@ export const PlayerGltfSetupSystem: System = {
           const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });
           const regIdx = registerAnimator(animator);
           PlayerGltfConfig.animatorRegistryIndex[eid] = regIdx;
-          animator.play(CLIP_IDLE);
+
+          ensureLocomotionSet(animator, eid);
+
+          const idleClip = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
+          animator.play(idleClip || animator.clipNames[0] || 'Animator3D_BreatheIdle');
         })
         .catch((err: unknown) => {
           console.error('[player-gltf] load failed', err);
@@ -138,7 +153,7 @@ export const PlayerGltfSetupSystem: System = {
   },
 };
 
-const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig]);
+const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig, InputState]);
 
 function ensureDebugCapsule(_state: State): LineSegments | null {
   return null;
@@ -163,15 +178,48 @@ export const PlayerGltfAnimStateSystem: System = {
         continue;
       }
 
-      const moving = isMovementPressed();
-      const run = moving && isRunModifier();
-      let wantClip = CLIP_IDLE;
-      if (moving) {
-        wantClip = run ? CLIP_RUN : CLIP_WALK;
+      if (PlayerGltfConfig.overrideLock[eid] === 1 || animator.overrideLock) {
+        animator.update(dt);
+
+        if (!state.hasComponent(eid, WorldTransform)) {
+          continue;
+        }
+        syncTransformToRoot(eid, animator, state);
+        continue;
       }
 
-      if (animator.activeClipName !== wantClip) {
-        animator.play(wantClip);
+      ensureLocomotionSet(animator, eid);
+
+      const moving = Math.abs(InputState.moveX[eid]) > 0.01 || Math.abs(InputState.moveY[eid]) > 0.01;
+      const run = moving && isRunModifier();
+
+      const hasLocomotion = animator['locomotionSets']
+        ? (animator as unknown as { locomotionSets: Map<string, unknown> }).locomotionSets.size > 0
+        : false;
+
+      if (hasLocomotion) {
+        if (InputState.jump[eid]) {
+          animator.playLocomotion('jump');
+        } else if (run) {
+          animator.playLocomotion('run');
+        } else if (moving) {
+          animator.playLocomotion('walk');
+        } else {
+          animator.playLocomotion('idle');
+        }
+      } else {
+        const idleClip = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
+        const walkClip = resolveClipName(animator, PlayerGltfConfig.walkClipIndex[eid], 1);
+        const runClip = resolveClipName(animator, PlayerGltfConfig.runClipIndex[eid], 2);
+
+        let wantClip = idleClip;
+        if (moving) {
+          wantClip = run ? runClip : walkClip;
+        }
+
+        if (wantClip && animator.activeClipName !== wantClip) {
+          animator.play(wantClip);
+        }
       }
 
       animator.update(dt);
@@ -180,29 +228,33 @@ export const PlayerGltfAnimStateSystem: System = {
         continue;
       }
 
-      const yOff = getYOffset(state, eid);
-      const root = animator.root;
-      root.position.set(
-        WorldTransform.posX[eid],
-        WorldTransform.posY[eid] + yOff,
-        WorldTransform.posZ[eid]
-      );
-      root.quaternion.set(
-        WorldTransform.rotX[eid],
-        WorldTransform.rotY[eid],
-        WorldTransform.rotZ[eid],
-        WorldTransform.rotW[eid]
-      );
-
-      const debugCapsule = ensureDebugCapsule(state);
-      if (debugCapsule) {
-        debugCapsule.position.set(
-          WorldTransform.posX[eid],
-          WorldTransform.posY[eid] + PLAYER_COLLIDER_DEFAULTS.posOffsetY,
-          WorldTransform.posZ[eid]
-        );
-        debugCapsule.quaternion.copy(root.quaternion);
-      }
+      syncTransformToRoot(eid, animator, state);
     }
   },
 };
+
+function syncTransformToRoot(eid: number, animator: GltfAnimator, state: State): void {
+  const yOff = getYOffset(state, eid);
+  const root = animator.root;
+  root.position.set(
+    WorldTransform.posX[eid],
+    WorldTransform.posY[eid] + yOff,
+    WorldTransform.posZ[eid]
+  );
+  root.quaternion.set(
+    WorldTransform.rotX[eid],
+    WorldTransform.rotY[eid],
+    WorldTransform.rotZ[eid],
+    WorldTransform.rotW[eid]
+  );
+
+  const debugCapsule = ensureDebugCapsule(state);
+  if (debugCapsule) {
+    debugCapsule.position.set(
+      WorldTransform.posX[eid],
+      WorldTransform.posY[eid] + PLAYER_COLLIDER_DEFAULTS.posOffsetY,
+      WorldTransform.posZ[eid]
+    );
+    debugCapsule.quaternion.copy(root.quaternion);
+  }
+}

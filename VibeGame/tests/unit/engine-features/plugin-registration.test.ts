@@ -7,7 +7,6 @@ import { I18nPlugin } from '../../../src/plugins/i18n/plugin';
 import { JointsPlugin } from '../../../src/plugins/joints/plugin';
 import { NavmeshPlugin } from '../../../src/plugins/navmesh/plugin';
 import { NetworkPlugin } from '../../../src/plugins/network/plugin';
-import { ParticlesPlugin } from '../../../src/plugins/particles/plugin';
 import { RaycastPlugin } from '../../../src/plugins/raycast/plugin';
 import { SaveLoadPlugin } from '../../../src/plugins/save-load/plugin';
 
@@ -20,7 +19,6 @@ describe('Engine feature plugins registration', () => {
     expect(DefaultPlugins).toContain(RaycastPlugin);
     expect(DefaultPlugins).toContain(NavmeshPlugin);
     expect(DefaultPlugins).toContain(AiSteeringPlugin);
-    expect(DefaultPlugins).toContain(ParticlesPlugin);
     expect(DefaultPlugins).toContain(HudPlugin);
     expect(DefaultPlugins).toContain(JointsPlugin);
   });

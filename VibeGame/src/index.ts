@@ -150,11 +150,7 @@ export {
   SteeringAgent,
   SteeringTarget,
 } from './plugins/ai-steering';
-export {
-  ParticlesPlugin,
-  ParticleBurst,
-  ParticleSystem,
-} from './plugins/particles';
+
 export { HudPlugin, HudPanel } from './plugins/hud';
 export { JointsPlugin, Joint } from './plugins/joints';
 export {

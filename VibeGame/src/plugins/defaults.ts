@@ -9,7 +9,7 @@ import { InputPlugin } from './input/plugin';
 // import { JointsPlugin } from './joints/plugin';
 // import { NavmeshPlugin } from './navmesh/plugin';
 import { OrbitCameraPlugin } from './orbit-camera/plugin';
-import { ParticlesPlugin } from './particles/plugin';
+
 import { PhysicsPlugin } from './physics/plugin';
 import { HudPlugin } from './hud/plugin';
 import { PlayerPlugin } from './player/plugin';
@@ -43,7 +43,6 @@ export const DefaultPlugins: Plugin[] = [
   // AiSteeringPlugin,
   // JointsPlugin,
   RenderingPlugin,
-  ParticlesPlugin,
   HudPlugin,
   FollowCameraPlugin,
   OrbitCameraPlugin,
