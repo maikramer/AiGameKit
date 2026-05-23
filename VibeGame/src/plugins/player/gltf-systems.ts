@@ -75,11 +75,6 @@ function resolveClipName(
 }
 
 function ensureLocomotionSet(animator: GltfAnimator, eid: number): void {
-  if (animator['locomotionSets'] && (animator as unknown as Record<string, unknown>).locomotionSets instanceof Map) {
-    const sets = (animator as unknown as { locomotionSets: Map<string, unknown> }).locomotionSets;
-    if (sets.size > 0) return;
-  }
-
   const idle = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
   const walk = resolveClipName(animator, PlayerGltfConfig.walkClipIndex[eid], 1);
   const run = resolveClipName(animator, PlayerGltfConfig.runClipIndex[eid], 2);
@@ -193,21 +188,18 @@ export const PlayerGltfAnimStateSystem: System = {
       const moving = Math.abs(InputState.moveX[eid]) > 0.01 || Math.abs(InputState.moveY[eid]) > 0.01;
       const run = moving && isRunModifier();
 
-      const hasLocomotion = animator['locomotionSets']
-        ? (animator as unknown as { locomotionSets: Map<string, unknown> }).locomotionSets.size > 0
-        : false;
-
-      if (hasLocomotion) {
-        if (InputState.jump[eid]) {
-          animator.playLocomotion('jump');
-        } else if (run) {
-          animator.playLocomotion('run');
-        } else if (moving) {
-          animator.playLocomotion('walk');
-        } else {
-          animator.playLocomotion('idle');
-        }
+      let locomotionPlayed = false;
+      if (InputState.jump[eid]) {
+        locomotionPlayed = animator.playLocomotion('jump') !== null;
+      } else if (run) {
+        locomotionPlayed = animator.playLocomotion('run') !== null;
+      } else if (moving) {
+        locomotionPlayed = animator.playLocomotion('walk') !== null;
       } else {
+        locomotionPlayed = animator.playLocomotion('idle') !== null;
+      }
+
+      if (!locomotionPlayed) {
         const idleClip = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
         const walkClip = resolveClipName(animator, PlayerGltfConfig.walkClipIndex[eid], 1);
         const runClip = resolveClipName(animator, PlayerGltfConfig.runClipIndex[eid], 2);
