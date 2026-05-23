@@ -3,10 +3,7 @@ import { terrainHeightsToRapierColumnMajor } from '../../../src/plugins/terrain/
 
 describe('terrain utils', () => {
   it('terrainHeightsToRapierColumnMajor transposes row-major to column-major', () => {
-    const rowMajor = new Float32Array([
-      1, 2, 3,
-      4, 5, 6,
-    ]);
+    const rowMajor = new Float32Array([1, 2, 3, 4, 5, 6]);
     const result = terrainHeightsToRapierColumnMajor(rowMajor, 2, 3);
     expect(result.length).toBe(6);
     expect(result[0]).toBe(1);
@@ -18,10 +15,7 @@ describe('terrain utils', () => {
   });
 
   it('terrainHeightsToRapierColumnMajor with square grid', () => {
-    const rowMajor = new Float32Array([
-      1, 2,
-      3, 4,
-    ]);
+    const rowMajor = new Float32Array([1, 2, 3, 4]);
     const result = terrainHeightsToRapierColumnMajor(rowMajor, 2, 2);
     expect(result.length).toBe(4);
     expect(result[0]).toBe(1);

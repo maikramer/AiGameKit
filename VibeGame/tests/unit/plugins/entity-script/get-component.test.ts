@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'bitecs';
+import { defineComponent, Types } from 'vibegame';
 
 import { Parent } from '../../../../src/core/ecs/components';
 import { State } from '../../../../src/core/ecs/state';

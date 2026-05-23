@@ -1,5 +1,5 @@
 /* eslint-disable import/no-namespace */
-import { defineComponent, Types } from 'bitecs';
+import { defineComponent, Types } from 'vibegame';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as GAME from 'vibegame';

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'bitecs';
+import { defineComponent, Types } from 'vibegame';
 import type { ParsedElement, Plugin, ParserParams } from 'vibegame';
 import { State, TIME_CONSTANTS, ParseContext } from 'vibegame';
 

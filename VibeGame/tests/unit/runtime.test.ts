@@ -1,4 +1,4 @@
-import { Types, defineComponent } from 'bitecs';
+import { defineComponent, Types } from 'vibegame';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';

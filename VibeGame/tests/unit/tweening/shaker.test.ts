@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'bitecs';
+import { defineComponent, Types } from 'vibegame';
 import type { System } from 'vibegame';
 import { State } from 'vibegame';
 import {

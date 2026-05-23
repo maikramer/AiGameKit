@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'bitecs';
+import { defineComponent, Types } from 'vibegame';
 import { State, defineQuery } from 'vibegame';
 import { createTween, Tween, TweenPlugin, TweenValue } from 'vibegame/tweening';
 
