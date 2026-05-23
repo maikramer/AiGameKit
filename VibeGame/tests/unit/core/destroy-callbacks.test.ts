@@ -1,13 +1,13 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('destroyEntity callbacks', () => {
   let state: State;
 
-  const TestComponent = defineComponent({
-    value: Types.f32,
-  });
+  const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
   beforeEach(() => {
     state = new State();

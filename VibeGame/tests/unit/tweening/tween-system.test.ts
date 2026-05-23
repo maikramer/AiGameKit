@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'vibegame';
+
 import { State, defineQuery } from 'vibegame';
 import { createTween, Tween, TweenPlugin, TweenValue } from 'vibegame/tweening';
+
+const MAX_ENTITIES = 100000;
 
 describe('Tween System', () => {
   let state: State;
@@ -40,7 +42,7 @@ describe('Tween System', () => {
   });
 
   it('should interpolate values with linear easing', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();
@@ -70,7 +72,7 @@ describe('Tween System', () => {
   });
 
   it('should apply quad-out easing correctly', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();
@@ -89,7 +91,7 @@ describe('Tween System', () => {
   });
 
   it('should clean up TweenValue entities when parent Tween is destroyed', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();

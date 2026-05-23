@@ -1,11 +1,13 @@
 /* eslint-disable import/no-namespace */
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as GAME from 'vibegame';
 import { RenderingPlugin } from 'vibegame/rendering';
 import { PhysicsPlugin } from 'vibegame/physics';
 import { TransformsPlugin } from 'vibegame/transforms';
+
+const MAX_ENTITIES = 100000;
 
 describe('Builder-Runtime Integration', () => {
   beforeEach(() => {
@@ -46,7 +48,7 @@ describe('Builder-Runtime Integration', () => {
     it('should configure without defaults', async () => {
       const MyCustomPlugin: GAME.Plugin = {
         components: {
-          custom: defineComponent({ value: Types.f32 }),
+          custom: { value: new Float32Array(MAX_ENTITIES) },
         },
         systems: [
           {
@@ -83,8 +85,8 @@ describe('Builder-Runtime Integration', () => {
 
   describe('Complex Configuration Example', () => {
     it('should configure with multiple components and systems', async () => {
-      const HealthComponent = defineComponent({ value: Types.f32 });
-      const EnemyComponent = defineComponent({ type: Types.ui8 });
+      const HealthComponent = { value: new Float32Array(MAX_ENTITIES) };
+      const EnemyComponent = { type: new Uint8Array(MAX_ENTITIES) };
 
       let customSystemCalled = false;
       const CustomSystem: GAME.System = {
@@ -121,9 +123,7 @@ describe('Builder-Runtime Integration', () => {
 
   describe('Custom Plugin Example', () => {
     it('should create and use custom plugin', async () => {
-      let MyComponent: GAME.Component | undefined = GAME.defineComponent({
-        value: GAME.Types.f32,
-      });
+      let MyComponent: GAME.Component | undefined = { value: new Float32Array(MAX_ENTITIES) };
       const myComponentQuery = GAME.defineQuery([MyComponent]);
       const MySystem: GAME.System = {
         update: (state) => {
@@ -169,10 +169,7 @@ describe('Builder-Runtime Integration', () => {
 
   describe('XML World Processing', () => {
     it('should process declarative XML entities', async () => {
-      const TestComponent = defineComponent({
-        x: Types.f32,
-        y: Types.f32,
-      });
+      const TestComponent = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES) };
 
       const state = new GAME.State();
       state.registerPlugin(TransformsPlugin);
@@ -221,10 +218,7 @@ describe('Builder-Runtime Integration', () => {
       let setupCalled = false;
       let cleanupCalled = false;
 
-      const GameComponent = defineComponent({
-        score: Types.ui32,
-        lives: Types.ui8,
-      });
+      const GameComponent = { score: new Uint32Array(MAX_ENTITIES), lives: new Uint8Array(MAX_ENTITIES) };
 
       const GameSystem: GAME.System = {
         setup: () => {

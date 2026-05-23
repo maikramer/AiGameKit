@@ -7,9 +7,7 @@ import {
   State,
   TIME_CONSTANTS,
   defineQuery,
-  addComponent,
   addEntity,
-  removeComponent,
   removeEntity,
 } from 'vibegame';
 import { createHeadlessState } from 'vibegame/cli';
@@ -72,7 +70,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should create bloom entity with plugin defaults', () => {
     const entity = addEntity(state.world);
-    addComponent(state.world, Bloom, entity);
+    state.addComponent(entity, Bloom);
 
     Bloom.intensity[entity] = 1.0;
     Bloom.luminanceThreshold[entity] = 1.0;
@@ -89,7 +87,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should create SMAA entity with preset', () => {
     const entity = addEntity(state.world);
-    addComponent(state.world, SMAA, entity);
+    state.addComponent(entity, SMAA);
     SMAA.preset[entity] = 2;
 
     expect(SMAA.preset[entity]).toBe(2);
@@ -99,11 +97,11 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     const bloomQuery = defineQuery([Bloom]);
 
     const e1 = addEntity(state.world);
-    addComponent(state.world, Bloom, e1);
+    state.addComponent(e1, Bloom);
     Bloom.intensity[e1] = 1.5;
 
     const e2 = addEntity(state.world);
-    addComponent(state.world, Bloom, e2);
+    state.addComponent(e2, Bloom);
     Bloom.intensity[e2] = 2.0;
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -123,7 +121,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     let bloomEntities = bloomQuery(state.world);
     expect(bloomEntities).not.toContain(entity);
 
-    addComponent(state.world, Bloom, entity);
+    state.addComponent(entity, Bloom);
     Bloom.intensity[entity] = 1.0;
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -136,7 +134,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
   it('should effect deactivation: entity loses component → removed from query', () => {
     const bloomQuery = defineQuery([Bloom]);
     const entity = addEntity(state.world);
-    addComponent(state.world, Bloom, entity);
+    state.addComponent(entity, Bloom);
     Bloom.intensity[entity] = 1.0;
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -144,7 +142,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     let bloomEntities = bloomQuery(state.world);
     expect(bloomEntities).toContain(entity);
 
-    removeComponent(state.world, Bloom, entity);
+    state.removeComponent(entity, Bloom);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -155,7 +153,7 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
   it('should remove postprocessing entity and have zero entities in query', () => {
     const dofQuery = defineQuery([DepthOfField]);
     const entity = addEntity(state.world);
-    addComponent(state.world, DepthOfField, entity);
+    state.addComponent(entity, DepthOfField);
     DepthOfField.focusDistance[entity] = 15;
     DepthOfField.autoFocus[entity] = 0;
 
@@ -185,13 +183,13 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should zero overhead: entities without postprocessing components → no effects in context', () => {
     const e1 = addEntity(state.world);
-    addComponent(state.world, WorldTransform, e1);
+    state.addComponent(e1, WorldTransform);
     WorldTransform.posX[e1] = 5;
     WorldTransform.posY[e1] = 0;
     WorldTransform.posZ[e1] = 5;
 
     const e2 = addEntity(state.world);
-    addComponent(state.world, PlayerController, e2);
+    state.addComponent(e2, PlayerController);
 
     for (let i = 0; i < 10; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -208,9 +206,9 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     const vignetteQuery = defineQuery([Vignette]);
 
     const entity = addEntity(state.world);
-    addComponent(state.world, Bloom, entity);
-    addComponent(state.world, SMAA, entity);
-    addComponent(state.world, Vignette, entity);
+    state.addComponent(entity, Bloom);
+    state.addComponent(entity, SMAA);
+    state.addComponent(entity, Vignette);
 
     Bloom.intensity[entity] = 2.0;
     SMAA.preset[entity] = 3;
@@ -232,13 +230,13 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
     const vignetteQuery = defineQuery([Vignette]);
 
     const entity = addEntity(state.world);
-    addComponent(state.world, Bloom, entity);
-    addComponent(state.world, SMAA, entity);
-    addComponent(state.world, Vignette, entity);
+    state.addComponent(entity, Bloom);
+    state.addComponent(entity, SMAA);
+    state.addComponent(entity, Vignette);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
-    removeComponent(state.world, Bloom, entity);
+    state.removeComponent(entity, Bloom);
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
@@ -249,9 +247,9 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should run 100 steps with postprocessing entities without degradation', () => {
     const entity = addEntity(state.world);
-    addComponent(state.world, Bloom, entity);
-    addComponent(state.world, SMAA, entity);
-    addComponent(state.world, Vignette, entity);
+    state.addComponent(entity, Bloom);
+    state.addComponent(entity, SMAA);
+    state.addComponent(entity, Vignette);
 
     Bloom.intensity[entity] = 1.0;
     Bloom.radius[entity] = 0.85;
@@ -282,16 +280,16 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should DoF auto-focus: player and camera entities with WorldTransforms', () => {
     const player = addEntity(state.world);
-    addComponent(state.world, PlayerController, player);
-    addComponent(state.world, WorldTransform, player);
+    state.addComponent(player, PlayerController);
+    state.addComponent(player, WorldTransform);
     WorldTransform.posX[player] = 10;
     WorldTransform.posY[player] = 0;
     WorldTransform.posZ[player] = 0;
 
     const camera = addEntity(state.world);
-    addComponent(state.world, MainCamera, camera);
-    addComponent(state.world, WorldTransform, camera);
-    addComponent(state.world, DepthOfField, camera);
+    state.addComponent(camera, MainCamera);
+    state.addComponent(camera, WorldTransform);
+    state.addComponent(camera, DepthOfField);
     DepthOfField.focusDistance[camera] = 10;
     DepthOfField.focalLength[camera] = 0.05;
     DepthOfField.bokehScale[camera] = 1;
@@ -321,16 +319,16 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should DoF auto-focus: update player position and verify distance changes', () => {
     const player = addEntity(state.world);
-    addComponent(state.world, PlayerController, player);
-    addComponent(state.world, WorldTransform, player);
+    state.addComponent(player, PlayerController);
+    state.addComponent(player, WorldTransform);
     WorldTransform.posX[player] = 3;
     WorldTransform.posY[player] = 4;
     WorldTransform.posZ[player] = 0;
 
     const camera = addEntity(state.world);
-    addComponent(state.world, MainCamera, camera);
-    addComponent(state.world, WorldTransform, camera);
-    addComponent(state.world, DepthOfField, camera);
+    state.addComponent(camera, MainCamera);
+    state.addComponent(camera, WorldTransform);
+    state.addComponent(camera, DepthOfField);
     DepthOfField.autoFocus[camera] = 1;
     WorldTransform.posX[camera] = 0;
     WorldTransform.posY[camera] = 0;
@@ -357,9 +355,9 @@ describe('E2E: Postprocessing Effect Lifecycle', () => {
 
   it('should DoF manual focus: autoFocus off → uses focusDistance from component', () => {
     const camera = addEntity(state.world);
-    addComponent(state.world, MainCamera, camera);
-    addComponent(state.world, WorldTransform, camera);
-    addComponent(state.world, DepthOfField, camera);
+    state.addComponent(camera, MainCamera);
+    state.addComponent(camera, WorldTransform);
+    state.addComponent(camera, DepthOfField);
     DepthOfField.autoFocus[camera] = 0;
     DepthOfField.focusDistance[camera] = 25;
 

@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'vibegame';
+
 import { State, defineQuery } from 'vibegame';
 import { Transform, TransformsPlugin } from 'vibegame/transforms';
 import { createTween, Tween, TweenPlugin, TweenValue } from 'vibegame/tweening';
+
+const MAX_ENTITIES = 100000;
 
 describe('Tween API', () => {
   let state: State;
@@ -14,7 +16,7 @@ describe('Tween API', () => {
   });
 
   it('should create tween with single property target', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();
@@ -104,7 +106,7 @@ describe('Tween API', () => {
   });
 
   it('should use current value when from is omitted', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();
@@ -122,7 +124,7 @@ describe('Tween API', () => {
   });
 
   it('should map easing function names correctly', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();
@@ -151,7 +153,7 @@ describe('Tween API', () => {
   });
 
   it('should use default values when options are omitted', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();
@@ -167,7 +169,7 @@ describe('Tween API', () => {
   });
 
   it('should handle array values for single property', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const entity = state.createEntity();

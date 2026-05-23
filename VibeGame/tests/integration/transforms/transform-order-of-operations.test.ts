@@ -1,4 +1,3 @@
-import { defineComponent, Types } from 'vibegame';
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
 import {
@@ -7,6 +6,8 @@ import {
   TransformsPlugin,
   WorldTransform,
 } from 'vibegame/transforms';
+
+const MAX_ENTITIES = 100000;
 
 describe('Transform Order of Operations', () => {
   let state: State;
@@ -78,16 +79,7 @@ describe('Transform Order of Operations', () => {
   });
 
   it('should support oscillation pattern from example', () => {
-    const Oscillate = defineComponent({
-      amplitude: Types.f32,
-      frequency: Types.f32,
-      axis: Types.i32,
-      phase: Types.f32,
-      time: Types.f32,
-      startX: Types.f32,
-      startY: Types.f32,
-      startZ: Types.f32,
-    });
+    const Oscillate = { amplitude: new Float32Array(MAX_ENTITIES), frequency: new Float32Array(MAX_ENTITIES), axis: new Int32Array(MAX_ENTITIES), phase: new Float32Array(MAX_ENTITIES), time: new Float32Array(MAX_ENTITIES), startX: new Float32Array(MAX_ENTITIES), startY: new Float32Array(MAX_ENTITIES), startZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerSystem({
       group: 'setup',

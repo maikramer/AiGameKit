@@ -1,7 +1,9 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('GameBuilder', () => {
   let builder: any;
@@ -76,9 +78,7 @@ describe('GameBuilder', () => {
   });
 
   it('should register a component with withComponent', () => {
-    const TestComponent = defineComponent({
-      value: Types.f32,
-    });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     const result = builder.withComponent('test', TestComponent);
     expect(result).toBe(builder);
@@ -121,7 +121,7 @@ describe('GameBuilder', () => {
   });
 
   it('should support method chaining', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     const testPlugin = { components: {}, systems: [] };
     const testSystem = { update: () => {} };
     const testRecipe = { name: 'test', components: [] };
@@ -193,7 +193,7 @@ describe('GameBuilder', () => {
   });
 
   it('should register components with state when building', async () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     builder.withComponent('test-component', TestComponent);
     const runtime = await builder.build();
@@ -261,10 +261,7 @@ describe('GameBuilder', () => {
   });
 
   it('should handle complex plugin with all features', async () => {
-    const ComplexComponent = defineComponent({
-      x: Types.f32,
-      y: Types.f32,
-    });
+    const ComplexComponent = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES) };
 
     let systemSetupCalled = false;
     let systemUpdateCalled = false;

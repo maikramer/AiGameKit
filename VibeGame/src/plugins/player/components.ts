@@ -25,4 +25,10 @@ export const PlayerGltfConfig = {
   modelUrlIndex: new Uint32Array(MAX_ENTITIES),
   loaded: new Uint8Array(MAX_ENTITIES),
   animatorRegistryIndex: new Uint32Array(MAX_ENTITIES),
+  idleClipIndex: new Uint32Array(MAX_ENTITIES),
+  walkClipIndex: new Uint32Array(MAX_ENTITIES),
+  runClipIndex: new Uint32Array(MAX_ENTITIES),
+  jumpClipIndex: new Uint32Array(MAX_ENTITIES),
+  overrideLock: new Uint8Array(MAX_ENTITIES),
+  overrideClipIndex: new Uint32Array(MAX_ENTITIES),
 } as const;

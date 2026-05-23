@@ -1,4 +1,4 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { defineQuery, parseXMLToEntities, State, XMLParser } from 'vibegame';
@@ -8,6 +8,8 @@ import {
   WorldTransform,
 } from 'vibegame/transforms';
 import { Tween, TweenPlugin, TweenValue } from 'vibegame/tweening';
+
+const MAX_ENTITIES = 100000;
 
 describe('Tween XML Integration', () => {
   let state: State;
@@ -144,11 +146,7 @@ describe('Tween XML Integration', () => {
   });
 
   it('should animate custom component properties', () => {
-    const Velocity = defineComponent({
-      velocityX: Types.f32,
-      velocityY: Types.f32,
-      velocityZ: Types.f32,
-    });
+    const Velocity = { velocityX: new Float32Array(MAX_ENTITIES), velocityY: new Float32Array(MAX_ENTITIES), velocityZ: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('velocity', Velocity);
 
     const xml = `

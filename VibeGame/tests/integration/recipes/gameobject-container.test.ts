@@ -1,7 +1,9 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('GameObject Container Syntax', () => {
   let state: State;
@@ -12,33 +14,13 @@ describe('GameObject Container Syntax', () => {
 
     state = new State();
 
-    const Transform = defineComponent({
-      posX: Types.f32,
-      posY: Types.f32,
-      posZ: Types.f32,
-      scaleX: Types.f32,
-      scaleY: Types.f32,
-      scaleZ: Types.f32,
-    });
-    const Parent = defineComponent({ entity: Types.i32 });
-    const Rigidbody = defineComponent({ type: Types.i8, mass: Types.f32 });
-    const Collider = defineComponent({
-      shape: Types.i8,
-      radius: Types.f32,
-      height: Types.f32,
-    });
-    const MeshRenderer = defineComponent({
-      visible: Types.ui8,
-      shape: Types.i8,
-    });
-    const PointLight = defineComponent({
-      intensity: Types.f32,
-      colorR: Types.f32,
-    });
-    const AudioSource = defineComponent({
-      volume: Types.f32,
-      clipPath: Types.f32,
-    });
+    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES), scaleX: new Float32Array(MAX_ENTITIES), scaleY: new Float32Array(MAX_ENTITIES), scaleZ: new Float32Array(MAX_ENTITIES) };
+    const Parent = { entity: new Int32Array(MAX_ENTITIES) };
+    const Rigidbody = { type: new Int8Array(MAX_ENTITIES), mass: new Float32Array(MAX_ENTITIES) };
+    const Collider = { shape: new Int8Array(MAX_ENTITIES), radius: new Float32Array(MAX_ENTITIES), height: new Float32Array(MAX_ENTITIES) };
+    const MeshRenderer = { visible: new Uint8Array(MAX_ENTITIES), shape: new Int8Array(MAX_ENTITIES) };
+    const PointLight = { intensity: new Float32Array(MAX_ENTITIES), colorR: new Float32Array(MAX_ENTITIES) };
+    const AudioSource = { volume: new Float32Array(MAX_ENTITIES), clipPath: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerComponent('parent', Parent);

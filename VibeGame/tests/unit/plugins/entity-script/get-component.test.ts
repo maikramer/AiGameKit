@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'vibegame';
+
 
 import { Parent } from '../../../../src/core/ecs/components';
 import { State } from '../../../../src/core/ecs/state';
 import { buildContext } from '../../../../src/plugins/entity-script/system';
 
-const TestMarker = defineComponent({ value: Types.f32 });
-const OtherMarker = defineComponent({ flag: Types.ui8 });
+const MAX_ENTITIES = 100000;
+
+const TestMarker = { value: new Float32Array(MAX_ENTITIES) };
+const OtherMarker = { flag: new Uint8Array(MAX_ENTITIES) };
 
 describe('EntityScriptContext getComponent methods', () => {
   let state: State;

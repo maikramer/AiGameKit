@@ -1,7 +1,9 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { fromEuler } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('Recipe Core', () => {
   let state: State;
@@ -15,9 +17,7 @@ describe('Recipe Core', () => {
   });
 
   it('should create entity from recipe', () => {
-    const TestComponent = defineComponent({
-      value: Types.f32,
-    });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('test', TestComponent);
 
@@ -38,15 +38,9 @@ describe('Recipe Core', () => {
   });
 
   it('should create entity with multiple components', () => {
-    const Position = defineComponent({
-      x: Types.f32,
-      y: Types.f32,
-    });
+    const Position = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES) };
 
-    const Velocity = defineComponent({
-      dx: Types.f32,
-      dy: Types.f32,
-    });
+    const Velocity = { dx: new Float32Array(MAX_ENTITIES), dy: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('position', Position);
     state.registerComponent('velocity', Velocity);
@@ -76,14 +70,9 @@ describe('Recipe Core', () => {
 
   describe('Recipe Shorthands', () => {
     it('should expand shorthands to component properties', () => {
-      const MeshRenderer = defineComponent({
-        shape: Types.ui8,
-        color: Types.ui32,
-      });
+      const MeshRenderer = { shape: new Uint8Array(MAX_ENTITIES), color: new Uint32Array(MAX_ENTITIES) };
 
-      const Collider = defineComponent({
-        shape: Types.ui8,
-      });
+      const Collider = { shape: new Uint8Array(MAX_ENTITIES) };
 
       state.registerComponent('meshRenderer', MeshRenderer);
       state.registerComponent('collider', Collider);
@@ -117,13 +106,9 @@ describe('Recipe Core', () => {
     });
 
     it('should allow explicit properties to override shorthands', () => {
-      const MeshRenderer = defineComponent({
-        shape: Types.ui8,
-      });
+      const MeshRenderer = { shape: new Uint8Array(MAX_ENTITIES) };
 
-      const Collider = defineComponent({
-        shape: Types.ui8,
-      });
+      const Collider = { shape: new Uint8Array(MAX_ENTITIES) };
 
       state.registerComponent('meshRenderer', MeshRenderer);
       state.registerComponent('collider', Collider);
@@ -155,17 +140,9 @@ describe('Recipe Core', () => {
     });
 
     it('should apply component-level shorthands', () => {
-      const MeshRenderer = defineComponent({
-        sizeX: Types.f32,
-        sizeY: Types.f32,
-        sizeZ: Types.f32,
-      });
+      const MeshRenderer = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES) };
 
-      const Collider = defineComponent({
-        sizeX: Types.f32,
-        sizeY: Types.f32,
-        sizeZ: Types.f32,
-      });
+      const Collider = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES) };
 
       const plugin = {
         components: {
@@ -209,15 +186,9 @@ describe('Recipe Core', () => {
 
   describe('JavaScript API', () => {
     it('should create entity with position and color attributes', () => {
-      const Transform = defineComponent({
-        posX: Types.f32,
-        posY: Types.f32,
-        posZ: Types.f32,
-      });
+      const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
 
-      const MeshRenderer = defineComponent({
-        color: Types.ui32,
-      });
+      const MeshRenderer = { color: new Uint32Array(MAX_ENTITIES) };
 
       state.registerComponent('transform', Transform);
       state.registerComponent('meshRenderer', MeshRenderer);

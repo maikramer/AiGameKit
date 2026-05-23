@@ -286,6 +286,7 @@ export class State {
   }
 
   setTag(eid: number, name: string): void {
+    if (!entityExists(this.world, eid)) return;
     let id = getTagId(name);
     if (id < 0) id = addTag(name);
     if (!bitecsHas(this.world, eid, Tag)) {
@@ -295,6 +296,7 @@ export class State {
   }
 
   getTag(eid: number): string {
+    if (!entityExists(this.world, eid)) return 'Untagged';
     if (!bitecsHas(this.world, eid, Tag)) return 'Untagged';
     return getTagName(Tag.value[eid]);
   }
@@ -321,6 +323,7 @@ export class State {
   }
 
   setLayer(eid: number, layer: number): void {
+    if (!entityExists(this.world, eid)) return;
     if (!bitecsHas(this.world, eid, Layer)) {
       bitecsAdd(this.world, eid, Layer);
     }
@@ -328,6 +331,7 @@ export class State {
   }
 
   getLayer(eid: number): number {
+    if (!entityExists(this.world, eid)) return 0;
     if (!bitecsHas(this.world, eid, Layer)) return 0;
     return Layer.value[eid];
   }
@@ -393,6 +397,7 @@ export class State {
   }
 
   hasComponent<T extends Component>(eid: number, component: T): boolean {
+    if (!entityExists(this.world, eid)) return false;
     return bitecsHas(this.world, eid, component);
   }
 

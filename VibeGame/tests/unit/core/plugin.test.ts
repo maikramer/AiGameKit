@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'vibegame';
+
 import type { ParsedElement, Plugin, ParserParams } from 'vibegame';
 import { State, TIME_CONSTANTS, ParseContext } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('Plugin System', () => {
   let state: State;
@@ -11,9 +13,7 @@ describe('Plugin System', () => {
   });
 
   it('should register plugin components', () => {
-    const TestComponent = defineComponent({
-      value: Types.f32,
-    });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     const plugin: Plugin = {
       components: {
@@ -114,10 +114,7 @@ describe('Plugin System', () => {
   });
 
   it('should register plugin with complete config', () => {
-    const Health = defineComponent({
-      current: Types.f32,
-      max: Types.f32,
-    });
+    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
 
     const plugin: Plugin = {
       components: { health: Health },
@@ -154,7 +151,7 @@ describe('Plugin System', () => {
   });
 
   it('should register complete plugins', () => {
-    const Component = defineComponent({ x: Types.f32 });
+    const Component = { x: new Float32Array(MAX_ENTITIES) };
     let systemRan = false;
 
     const plugin: Plugin = {

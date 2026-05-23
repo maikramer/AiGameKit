@@ -7,7 +7,6 @@ import {
   State,
   TIME_CONSTANTS,
   defineQuery,
-  addComponent,
   addEntity,
   removeEntity,
 } from 'vibegame';
@@ -37,7 +36,7 @@ describe('E2E: Fog Plugin Lifecycle', () => {
 
   it('should create a fog entity and apply plugin defaults', () => {
     const entity = addEntity(state.world);
-    addComponent(state.world, Fog, entity);
+    state.addComponent(entity, Fog);
 
     const defaults = FogPlugin.config!.defaults!.fog;
     Fog.mode[entity] = defaults.mode;
@@ -63,7 +62,7 @@ describe('E2E: Fog Plugin Lifecycle', () => {
 
   it('should run simulation steps with fog entity without errors', () => {
     const entity = addEntity(state.world);
-    addComponent(state.world, Fog, entity);
+    state.addComponent(entity, Fog);
     Fog.mode[entity] = 0;
     Fog.density[entity] = 0.02;
     Fog.colorR[entity] = 0.5;
@@ -81,14 +80,14 @@ describe('E2E: Fog Plugin Lifecycle', () => {
     const fogQuery = defineQuery([Fog]);
 
     const e1 = addEntity(state.world);
-    addComponent(state.world, Fog, e1);
+    state.addComponent(e1, Fog);
     Fog.mode[e1] = 2;
     Fog.density[e1] = 0.05;
     Fog.near[e1] = 5;
     Fog.far[e1] = 200;
 
     const e2 = addEntity(state.world);
-    addComponent(state.world, Fog, e2);
+    state.addComponent(e2, Fog);
     Fog.mode[e2] = 0;
     Fog.density[e2] = 0.01;
 
@@ -106,7 +105,7 @@ describe('E2E: Fog Plugin Lifecycle', () => {
     const fogQuery = defineQuery([Fog]);
 
     const entity = addEntity(state.world);
-    addComponent(state.world, Fog, entity);
+    state.addComponent(entity, Fog);
     Fog.mode[entity] = 0;
     Fog.density[entity] = 0.02;
 
@@ -127,12 +126,12 @@ describe('E2E: Fog Plugin Lifecycle', () => {
     const fogQuery = defineQuery([Fog]);
 
     const e1 = addEntity(state.world);
-    addComponent(state.world, Fog, e1);
+    state.addComponent(e1, Fog);
     Fog.mode[e1] = 0;
     Fog.density[e1] = 0.03;
 
     const e2 = addEntity(state.world);
-    addComponent(state.world, Fog, e2);
+    state.addComponent(e2, Fog);
     Fog.mode[e2] = 2;
     Fog.near[e2] = 10;
     Fog.far[e2] = 500;
@@ -147,7 +146,7 @@ describe('E2E: Fog Plugin Lifecycle', () => {
 
   it('should run 100 steps with fog entity without degradation', () => {
     const entity = addEntity(state.world);
-    addComponent(state.world, Fog, entity);
+    state.addComponent(entity, Fog);
     Fog.mode[entity] = 0;
     Fog.density[entity] = 0.02;
     Fog.colorR[entity] = 0.5;

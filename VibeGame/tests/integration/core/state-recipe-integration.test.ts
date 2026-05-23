@@ -1,9 +1,11 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State } from 'vibegame';
 import { TransformsPlugin } from 'vibegame/transforms';
 import { PhysicsPlugin } from 'vibegame/physics';
+
+const MAX_ENTITIES = 100000;
 
 describe('State Recipe Integration', () => {
   let state: State;
@@ -81,10 +83,7 @@ describe('State Recipe Integration', () => {
   });
 
   it('should work with custom components registered after State creation', () => {
-    const CustomComponent = defineComponent({
-      value: Types.f32,
-      name: Types.ui8,
-    });
+    const CustomComponent = { value: new Float32Array(MAX_ENTITIES), name: new Uint8Array(MAX_ENTITIES) };
 
     state.registerComponent('custom', CustomComponent);
     state.registerRecipe({

@@ -1,13 +1,13 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, defineQuery } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('State', () => {
   let state: State;
 
-  const TestComponent = defineComponent({
-    value: Types.f32,
-  });
+  const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
   beforeEach(() => {
     state = new State();
@@ -66,10 +66,7 @@ describe('State', () => {
   });
 
   it('should add component with initial values dictionary', () => {
-    const Health = defineComponent({
-      current: Types.f32,
-      max: Types.f32,
-    });
+    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
 
     const entity = state.createEntity();
     state.addComponent(entity, Health, {
@@ -83,10 +80,7 @@ describe('State', () => {
   });
 
   it('should support direct component array access pattern', () => {
-    const Health = defineComponent({
-      current: Types.f32,
-      max: Types.f32,
-    });
+    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('health', Health);
 
@@ -107,9 +101,7 @@ describe('State', () => {
   });
 
   it('should handle kebab-case component names', () => {
-    const MyTestComponent = defineComponent({
-      value: Types.f32,
-    });
+    const MyTestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('my-test-component', MyTestComponent);
 
@@ -122,10 +114,7 @@ describe('State', () => {
   });
 
   it('should apply component defaults when adding component', () => {
-    const TestWithDefaults = defineComponent({
-      value: Types.f32,
-      scale: Types.f32,
-    });
+    const TestWithDefaults = { value: new Float32Array(MAX_ENTITIES), scale: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('test-with-defaults', TestWithDefaults);
     state.registerConfig({
@@ -145,10 +134,7 @@ describe('State', () => {
   });
 
   it('should allow explicit values to override component defaults', () => {
-    const TestWithDefaults = defineComponent({
-      value: Types.f32,
-      scale: Types.f32,
-    });
+    const TestWithDefaults = { value: new Float32Array(MAX_ENTITIES), scale: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('test-override', TestWithDefaults);
     state.registerConfig({

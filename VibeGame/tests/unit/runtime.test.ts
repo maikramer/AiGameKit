@@ -1,7 +1,9 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('GameRuntime', () => {
   let runtime: any;
@@ -187,7 +189,7 @@ describe('GameRuntime', () => {
   });
 
   it('should process world content with entities', async () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
       name: 'GameObject',
@@ -318,11 +320,7 @@ describe('GameRuntime', () => {
   });
 
   it('should process complex nested XML content', async () => {
-    const Transform = defineComponent({
-      posX: Types.f32,
-      posY: Types.f32,
-      posZ: Types.f32,
-    });
+    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerRecipe({

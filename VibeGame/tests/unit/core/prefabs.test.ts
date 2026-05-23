@@ -1,13 +1,15 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('prefab/template system', () => {
   let state: State;
 
-  const TestHealth = defineComponent({ hp: Types.f32 });
-  const TestScore = defineComponent({ points: Types.f32 });
-  const TestPos = defineComponent({ x: Types.f32, y: Types.f32, z: Types.f32 });
+  const TestHealth = { hp: new Float32Array(MAX_ENTITIES) };
+  const TestScore = { points: new Float32Array(MAX_ENTITIES) };
+  const TestPos = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES), z: new Float32Array(MAX_ENTITIES) };
 
   beforeEach(() => {
     state = new State();

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'vibegame';
+
 import { State, defineQuery } from 'vibegame';
 import { createTween, Tween, TweenPlugin, TweenValue } from 'vibegame/tweening';
+
+const MAX_ENTITIES = 100000;
 
 describe('Tween Components', () => {
   let state: State;
@@ -22,7 +24,7 @@ describe('Tween Components', () => {
   });
 
   it('should establish source-target relationships', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const targetEntity = state.createEntity();
@@ -45,11 +47,7 @@ describe('Tween Components', () => {
   });
 
   it('should track multiple TweenValues for same Tween source', () => {
-    const TestComponent = defineComponent({
-      x: Types.f32,
-      y: Types.f32,
-      z: Types.f32,
-    });
+    const TestComponent = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES), z: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const targetEntity = state.createEntity();
@@ -82,7 +80,7 @@ describe('Tween Components', () => {
   });
 
   it('should properly initialize from and to values', () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('test', TestComponent);
 
     const targetEntity = state.createEntity();

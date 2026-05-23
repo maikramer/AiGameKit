@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { defineComponent, Types } from 'vibegame';
+
 import type { System } from 'vibegame';
 import { State } from 'vibegame';
 import {
@@ -12,9 +12,11 @@ import {
   TweenPlugin,
 } from 'vibegame/tweening';
 
+const MAX_ENTITIES = 100000;
+
 describe('Shaker System', () => {
   let state: State;
-  const TestComponent = defineComponent({ value: Types.f32 });
+  const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
   beforeEach(() => {
     state = new State();

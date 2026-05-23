@@ -1,5 +1,5 @@
 /* eslint-disable import/no-namespace */
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import * as GAME from 'vibegame';
@@ -14,6 +14,8 @@ import { RespawnPlugin } from 'vibegame/respawn';
 import { StartupPlugin } from 'vibegame/startup';
 import { TransformsPlugin } from 'vibegame/transforms';
 import { TweenPlugin } from 'vibegame/tweening';
+
+const MAX_ENTITIES = 100000;
 
 describe('Global API', () => {
   beforeEach(() => {
@@ -67,7 +69,7 @@ describe('Global API', () => {
   });
 
   it('should chain withPlugin', async () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
     const testPlugin = {
       components: { test: TestComponent },
       systems: [],
@@ -98,7 +100,7 @@ describe('Global API', () => {
   });
 
   it('should chain withComponent', async () => {
-    const TestComponent = defineComponent({ value: Types.f32 });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     const runtime = await GAME.withComponent('custom', TestComponent).run();
     const state = runtime.getState();
@@ -120,9 +122,9 @@ describe('Global API', () => {
   });
 
   it('should support complex chaining', async () => {
-    const TestComponent = defineComponent({ x: Types.f32 });
+    const TestComponent = { x: new Float32Array(MAX_ENTITIES) };
     const testPlugin = {
-      components: { plugin: defineComponent({ y: Types.f32 }) },
+      components: { plugin: { y: new Float32Array(MAX_ENTITIES) } },
       systems: [],
     };
     const testSystem = {
@@ -158,11 +160,11 @@ describe('Global API', () => {
 
   it('should handle multiple plugins in sequence', async () => {
     const plugin1 = {
-      components: { comp1: defineComponent({ a: Types.f32 }) },
+      components: { comp1: { a: new Float32Array(MAX_ENTITIES) } },
       systems: [],
     };
     const plugin2 = {
-      components: { comp2: defineComponent({ b: Types.f32 }) },
+      components: { comp2: { b: new Float32Array(MAX_ENTITIES) } },
       systems: [],
     };
 
@@ -205,8 +207,8 @@ describe('Global API', () => {
   });
 
   it('should handle multiple components in sequence', async () => {
-    const Component1 = defineComponent({ x: Types.f32 });
-    const Component2 = defineComponent({ y: Types.f32 });
+    const Component1 = { x: new Float32Array(MAX_ENTITIES) };
+    const Component2 = { y: new Float32Array(MAX_ENTITIES) };
 
     const runtime = await GAME.withComponent('comp1', Component1)
       .withComponent('comp2', Component2)
@@ -241,8 +243,6 @@ describe('Global API', () => {
 
   it('should export core types and utilities', () => {
     expect(GAME.State).toBeDefined();
-    expect(GAME.defineComponent).toBeDefined();
-    expect(GAME.Types).toBeDefined();
     expect(GAME.XMLParser).toBeDefined();
     expect(GAME.lerp).toBeDefined();
     expect(GAME.slerp).toBeDefined();

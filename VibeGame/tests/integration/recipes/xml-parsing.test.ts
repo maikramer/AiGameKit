@@ -1,8 +1,10 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser } from 'vibegame';
 import { parseXMLToEntities } from 'vibegame';
+
+const MAX_ENTITIES = 100000;
 
 describe('XML Recipe Integration', () => {
   let state: State;
@@ -24,14 +26,8 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle nested entities with parent-child relationships', () => {
-    const Transform = defineComponent({
-      posX: Types.f32,
-      posY: Types.f32,
-      posZ: Types.f32,
-    });
-    const Parent = defineComponent({
-      entity: Types.i32,
-    });
+    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
+    const Parent = { entity: new Int32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerComponent('parent', Parent);
@@ -69,7 +65,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should use custom recipes from XML', () => {
-    const Component = defineComponent({ x: Types.f32 });
+    const Component = { x: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('position', Component);
     state.registerRecipe({
@@ -89,12 +85,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should apply component attributes with CSS-style syntax', () => {
-    const TestComponent = defineComponent({
-      value: Types.f32,
-      posX: Types.f32,
-      posY: Types.f32,
-      posZ: Types.f32,
-    });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES), posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
@@ -117,9 +108,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should apply dot notation attributes from XML', () => {
-    const TestComponent = defineComponent({
-      value: Types.f32,
-    });
+    const TestComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
@@ -166,12 +155,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should expand component shorthands when component is present', () => {
-    const MeshRenderer = defineComponent({
-      sizeX: Types.f32,
-      sizeY: Types.f32,
-      sizeZ: Types.f32,
-      shape: Types.i8,
-    });
+    const MeshRenderer = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES), shape: new Int8Array(MAX_ENTITIES) };
 
     state.registerComponent('meshRenderer', MeshRenderer);
     state.registerConfig({
@@ -206,11 +190,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should auto-expand shorthands only for present components', () => {
-    const MeshRenderer = defineComponent({
-      sizeX: Types.f32,
-      sizeY: Types.f32,
-      sizeZ: Types.f32,
-    });
+    const MeshRenderer = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('meshRenderer', MeshRenderer);
 
@@ -242,7 +222,7 @@ describe('XML Recipe Integration', () => {
     expect(warning).toContain('Unknown attribute "my-component"');
     expect(warning).toContain('[GameObject]');
 
-    const MyComponent = defineComponent({ value: Types.f32 });
+    const MyComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('my-component', MyComponent);
     state.registerConfig({
       defaults: {
@@ -264,7 +244,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle component registration before and after recipe registration', () => {
-    const MyComponent = defineComponent({ value: Types.f32 });
+    const MyComponent = { value: new Float32Array(MAX_ENTITIES) };
 
     const xml =
       '<root><GameObject my-component="value: 42"></GameObject></root>';
@@ -293,11 +273,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle vector broadcast for single values', () => {
-    const Transform = defineComponent({
-      scaleX: Types.f32,
-      scaleY: Types.f32,
-      scaleZ: Types.f32,
-    });
+    const Transform = { scaleX: new Float32Array(MAX_ENTITIES), scaleY: new Float32Array(MAX_ENTITIES), scaleZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -322,15 +298,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should convert euler angles to quaternion', () => {
-    const Transform = defineComponent({
-      rotX: Types.f32,
-      rotY: Types.f32,
-      rotZ: Types.f32,
-      rotW: Types.f32,
-      eulerX: Types.f32,
-      eulerY: Types.f32,
-      eulerZ: Types.f32,
-    });
+    const Transform = { rotX: new Float32Array(MAX_ENTITIES), rotY: new Float32Array(MAX_ENTITIES), rotZ: new Float32Array(MAX_ENTITIES), rotW: new Float32Array(MAX_ENTITIES), eulerX: new Float32Array(MAX_ENTITIES), eulerY: new Float32Array(MAX_ENTITIES), eulerZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -364,15 +332,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle rotation as alias for euler', () => {
-    const Transform = defineComponent({
-      rotX: Types.f32,
-      rotY: Types.f32,
-      rotZ: Types.f32,
-      rotW: Types.f32,
-      eulerX: Types.f32,
-      eulerY: Types.f32,
-      eulerZ: Types.f32,
-    });
+    const Transform = { rotX: new Float32Array(MAX_ENTITIES), rotY: new Float32Array(MAX_ENTITIES), rotZ: new Float32Array(MAX_ENTITIES), rotW: new Float32Array(MAX_ENTITIES), eulerX: new Float32Array(MAX_ENTITIES), eulerY: new Float32Array(MAX_ENTITIES), eulerZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -402,21 +362,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should parse multiple properties in component string', () => {
-    const Transform = defineComponent({
-      posX: Types.f32,
-      posY: Types.f32,
-      posZ: Types.f32,
-      rotX: Types.f32,
-      rotY: Types.f32,
-      rotZ: Types.f32,
-      rotW: Types.f32,
-      eulerX: Types.f32,
-      eulerY: Types.f32,
-      eulerZ: Types.f32,
-      scaleX: Types.f32,
-      scaleY: Types.f32,
-      scaleZ: Types.f32,
-    });
+    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES), rotX: new Float32Array(MAX_ENTITIES), rotY: new Float32Array(MAX_ENTITIES), rotZ: new Float32Array(MAX_ENTITIES), rotW: new Float32Array(MAX_ENTITIES), eulerX: new Float32Array(MAX_ENTITIES), eulerY: new Float32Array(MAX_ENTITIES), eulerZ: new Float32Array(MAX_ENTITIES), scaleX: new Float32Array(MAX_ENTITIES), scaleY: new Float32Array(MAX_ENTITIES), scaleZ: new Float32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -458,9 +404,7 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle enum values in body component', () => {
-    const Rigidbody = defineComponent({
-      type: Types.i8,
-    });
+    const Rigidbody = { type: new Int8Array(MAX_ENTITIES) };
 
     state.registerComponent('rigidbody', Rigidbody);
     state.registerConfig({
@@ -504,7 +448,7 @@ describe('XML Recipe Integration', () => {
     expect(warning).toContain('[GameObject] Unknown attribute "my-component"');
     expect(warning).toContain('Available: id, name, parent');
 
-    const MyComponent = defineComponent({ value: Types.f32 });
+    const MyComponent = { value: new Float32Array(MAX_ENTITIES) };
     state.registerComponent('my-component', MyComponent);
     state.registerConfig({
       defaults: {

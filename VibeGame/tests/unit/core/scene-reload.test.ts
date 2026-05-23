@@ -1,4 +1,4 @@
-import { defineComponent, Types } from 'vibegame';
+
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import {
@@ -14,10 +14,12 @@ import {
   CoroutineRunnerSystem,
 } from 'vibegame';
 
+const MAX_ENTITIES = 100000;
+
 describe('Scene reload', () => {
   let state: State;
 
-  const TestValue = defineComponent({ value: Types.f32 });
+  const TestValue = { value: new Float32Array(MAX_ENTITIES) };
 
   beforeEach(() => {
     const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>');
