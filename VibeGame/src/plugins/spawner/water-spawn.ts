@@ -1,4 +1,4 @@
-import { defineQuery } from 'bitecs';
+import { defineQuery } from '../../core';
 import type { State } from '../../core';
 import { Water } from '../water/components';
 import { WorldTransform } from '../transforms/components';

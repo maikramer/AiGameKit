@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { addComponent, defineQuery } from '../../core';
+import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import {
   CollisionEvents,
@@ -242,7 +242,7 @@ export const WaterInteractionSystem: System = {
 
     for (const entity of players) {
       if (!state.hasComponent(entity, PlayerWaterState)) {
-        addComponent(state.world, PlayerWaterState, entity);
+        state.addComponent(entity, PlayerWaterState);
         PlayerWaterState.state[entity] = WaterSubmersionState.Outside;
         PlayerWaterState.waterEntity[entity] = 0;
         PlayerWaterState.entryTime[entity] = 0;

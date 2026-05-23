@@ -1,5 +1,4 @@
 import * as RAPIER from '@dimforge/rapier3d-simd-compat';
-import { hasComponent } from 'bitecs';
 import * as THREE from 'three';
 import type { State } from '../../core';
 import { Collider as ColliderECS } from '../physics/components';
@@ -82,7 +81,7 @@ export function getRayOriginFromEntity(
   eid: number,
   out: THREE.Vector3
 ): void {
-  if (hasComponent(state.world, WorldTransform, eid)) {
+  if (state.hasComponent(eid, WorldTransform)) {
     out.set(
       WorldTransform.posX[eid],
       WorldTransform.posY[eid],

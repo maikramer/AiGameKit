@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { hasComponent } from 'bitecs';
 import { defineQuery, type System } from '../../core';
 import { Pathfinding } from 'three-pathfinding';
 import { Collider } from '../physics';
@@ -145,13 +144,13 @@ export const NavAgentPathSystem: System = {
       const st = NavMeshAgent.status[eid];
       if (st === 1 || st === 2) continue;
 
-      const ox = hasComponent(state.world, WorldTransform, eid)
+      const ox = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posX[eid]
         : Transform.posX[eid];
-      const oy = hasComponent(state.world, WorldTransform, eid)
+      const oy = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posY[eid]
         : Transform.posY[eid];
-      const oz = hasComponent(state.world, WorldTransform, eid)
+      const oz = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posZ[eid]
         : Transform.posZ[eid];
 
@@ -234,7 +233,7 @@ export const NavAgentMoveSystem: System = {
       Transform.posZ[eid] += to.z * step;
       Transform.dirty[eid] = 1;
 
-      if (hasComponent(state.world, WorldTransform, eid)) {
+      if (state.hasComponent(eid, WorldTransform)) {
         WorldTransform.posX[eid] = Transform.posX[eid];
         WorldTransform.posY[eid] = Transform.posY[eid];
         WorldTransform.posZ[eid] = Transform.posZ[eid];

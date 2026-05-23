@@ -25,7 +25,7 @@ const playerGroundedQuery = defineQuery([
 ]);
 const playersQuery = defineQuery([PlayerController]);
 
-function resolveCameraYaw(world: import('bitecs').IWorld): number {
+function resolveCameraYaw(world: import('../../core').IWorld): number {
   const followCams = followCameraQuery(world);
   if (followCams.length > 0) return FollowCamera.currentYaw[followCams[0]];
   const orbitCams = orbitCameraQuery(world);

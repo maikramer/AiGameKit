@@ -10,7 +10,7 @@ const statusQuery = defineQuery([NetworkStatus]);
 
 const jitterBuffers = new Map<number, JitterBuffer>();
 
-function setStatus(world: import('bitecs').IWorld, status: number): void {
+function setStatus(world: import('../../core').IWorld, status: number): void {
   for (const eid of statusQuery(world)) {
     NetworkStatus.connected[eid] = status;
   }

@@ -1,4 +1,4 @@
-import { entityExists, hasComponent } from 'bitecs';
+import { entityExists } from '../../core';
 import * as THREE from 'three';
 import type { Object3D } from 'three';
 import { BatchedRenderer } from 'three.quarks';
@@ -32,8 +32,8 @@ function getEmitterWorldPosition(
   state: State,
   eid: number
 ): [number, number, number] {
-  if (hasComponent(state.world, Parent, eid)) {
-    if (hasComponent(state.world, WorldTransform, eid)) {
+  if (state.hasComponent(eid, Parent)) {
+    if (state.hasComponent(eid, WorldTransform)) {
       return [
         WorldTransform.posX[eid],
         WorldTransform.posY[eid],
@@ -115,7 +115,7 @@ export const ParticleEmitSystem: System = {
       if (ParticleSystem.spawned[eid]) continue;
       if (!ParticleSystem.playing[eid]) continue;
 
-      const colOL = hasComponent(state.world, ColorOverLife, eid)
+      const colOL = state.hasComponent(eid, ColorOverLife)
         ? {
             startR: ColorOverLife.startR[eid],
             startG: ColorOverLife.startG[eid],
@@ -128,7 +128,7 @@ export const ParticleEmitSystem: System = {
           }
         : undefined;
 
-      const szOL = hasComponent(state.world, SizeOverLife, eid)
+      const szOL = state.hasComponent(eid, SizeOverLife)
         ? {
             startSize: SizeOverLife.startSize[eid],
             endSize: SizeOverLife.endSize[eid],
@@ -139,13 +139,13 @@ export const ParticleEmitSystem: System = {
       let spriteFrames = 1;
       let spriteSpeed = 1;
 
-      if (hasComponent(state.world, TextureRecipe, eid)) {
+      if (state.hasComponent(eid, TextureRecipe)) {
         const loaded = getTextureAsset(eid);
         if (!loaded) continue;
         texture = loaded.clone();
         texture.needsUpdate = true;
 
-        if (hasComponent(state.world, ParticleTexture, eid)) {
+        if (state.hasComponent(eid, ParticleTexture)) {
           spriteFrames = ParticleTexture.frames[eid] || 1;
           spriteSpeed = ParticleTexture.animationSpeed[eid] || 1;
           if (spriteFrames > 1) {

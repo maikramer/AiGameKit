@@ -1,4 +1,3 @@
-import { hasComponent } from 'bitecs';
 import * as THREE from 'three';
 import {
   Block,
@@ -47,7 +46,7 @@ export const HudBuildSystem: System = {
     for (const eid of hudQuery(state.world)) {
       if (HudPanel.built[eid]) {
         if (
-          hasComponent(state.world, I18nText, eid) &&
+          state.hasComponent(eid, I18nText) &&
           I18nText.resolved[eid]
         ) {
           const text = texts.get(eid);
@@ -92,13 +91,13 @@ export const HudSyncSystem: System = {
       const block = blocks.get(eid);
       if (!block) continue;
 
-      const wx = hasComponent(state.world, WorldTransform, eid)
+      const wx = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posX[eid]
         : Transform.posX[eid];
-      const wy = hasComponent(state.world, WorldTransform, eid)
+      const wy = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posY[eid]
         : Transform.posY[eid];
-      const wz = hasComponent(state.world, WorldTransform, eid)
+      const wz = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posZ[eid]
         : Transform.posZ[eid];
       block.position.set(wx, wy, wz);

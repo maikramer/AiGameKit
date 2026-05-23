@@ -105,3 +105,17 @@ export function getTerrainTextureUrl(
 ): string | undefined {
   return textureUrls.get(state)?.get(entity);
 }
+
+export function terrainHeightsToRapierColumnMajor(
+  rowMajor: Float32Array,
+  rows: number,
+  cols: number
+): Float32Array {
+  const result = new Float32Array(rows * cols);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      result[c * rows + r] = rowMajor[r * cols + c];
+    }
+  }
+  return result;
+}

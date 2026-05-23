@@ -1,4 +1,4 @@
-import * as RAPIER from "@dimforge/rapier3d-simd-compat";
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 
 const GRAVITY_Y = -60;
 export const DEFAULT_GRAVITY = GRAVITY_Y;
@@ -30,7 +30,7 @@ export function stepWorld(): void {
     try {
       world.step();
     } catch (e) {
-      console.error("[physics] world.step() panic:", e);
+      console.error('[physics] world.step() panic:', e);
     }
   }
 }

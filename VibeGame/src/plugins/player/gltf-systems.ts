@@ -1,10 +1,4 @@
-import {
-  Box3,
-  CapsuleGeometry,
-  EdgesGeometry,
-  LineBasicMaterial,
-  LineSegments,
-} from 'three';
+import { Box3, LineSegments } from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import { loadGltfAnimated } from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
@@ -13,7 +7,6 @@ import { HasAnimator } from '../animation/components';
 import { isKeyDown } from '../input/utils';
 import { WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
-import { getScene } from '../rendering';
 import { PLAYER_COLLIDER_DEFAULTS } from './constants';
 
 let nextModelUrlIndex = 1;
@@ -147,9 +140,7 @@ export const PlayerGltfSetupSystem: System = {
 
 const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig]);
 
-const debugCapsuleByState = new WeakMap<State, LineSegments>();
-
-function ensureDebugCapsule(state: State): LineSegments | null {
+function ensureDebugCapsule(_state: State): LineSegments | null {
   return null;
 }
 

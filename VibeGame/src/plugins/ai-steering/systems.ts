@@ -1,4 +1,3 @@
-import { hasComponent } from 'bitecs';
 import {
   FleeBehavior,
   GameEntity,
@@ -57,7 +56,7 @@ function syncTarget(state: State, eid: number, row: SteeringRow): void {
   let tx = SteeringTarget.targetX[eid];
   let ty = SteeringTarget.targetY[eid];
   let tz = SteeringTarget.targetZ[eid];
-  if (te > 0 && state.exists(te) && hasComponent(state.world, Transform, te)) {
+  if (te > 0 && state.exists(te) && state.hasComponent(te, Transform)) {
     tx = Transform.posX[te];
     ty = Transform.posY[te];
     tz = Transform.posZ[te];
@@ -126,7 +125,7 @@ export const SteeringSyncSystem: System = {
       Transform.rotW[eid] = row.vehicle.rotation.w;
       Transform.dirty[eid] = 1;
 
-      if (hasComponent(state.world, WorldTransform, eid)) {
+      if (state.hasComponent(eid, WorldTransform)) {
         WorldTransform.posX[eid] = Transform.posX[eid];
         WorldTransform.posY[eid] = Transform.posY[eid];
         WorldTransform.posZ[eid] = Transform.posZ[eid];

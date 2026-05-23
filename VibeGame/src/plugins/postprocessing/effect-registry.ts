@@ -1,5 +1,5 @@
 import type { Effect } from 'postprocessing';
-import type { Component } from 'bitecs';
+import type { Component } from '../../core';
 import type { State } from '../../core';
 
 /**

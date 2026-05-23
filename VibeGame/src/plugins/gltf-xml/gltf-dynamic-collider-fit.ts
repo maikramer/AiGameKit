@@ -4,7 +4,7 @@ import { ColliderShape } from '../physics/components';
 export const GLTF_DYNAMIC_MIN_HALF_DIM = 0.05;
 
 export interface GltfDynamicColliderFit {
-  shape: ColliderShape;
+  shape: (typeof ColliderShape)[keyof typeof ColliderShape];
   sizeX: number;
   sizeY: number;
   sizeZ: number;

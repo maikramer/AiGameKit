@@ -1,4 +1,4 @@
-﻿import * as RAPIER from "@dimforge/rapier3d-simd-compat";
+﻿import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 
 export {
   BodyType,
@@ -13,17 +13,27 @@ export {
   CharacterController,
   CharacterMovement,
   InterpolatedTransform,
-} from "./components";
-export {
-  PhysicsPlugin,
-} from "./plugin";
+  ApplyForce,
+  ApplyImpulse,
+  ApplyAngularImpulse,
+  ApplyTorque,
+  KinematicMove,
+  KinematicRotate,
+  PhysicsWorld,
+} from './components';
+export { PhysicsPlugin } from './plugin';
 export {
   getBodyForEntity,
   getPhysicsContext,
   PhysicsWorldSystem,
   PhysicsInitializationSystem,
   PhysicsInterpolationSystem,
-} from "./systems";
-export { initPhysics, getWorld, getOrCreateWorld, DEFAULT_GRAVITY } from "./world";
-export { createRapierBody, createRapierColliderDesc } from "./body";
+} from './systems';
+export {
+  initPhysics,
+  getWorld,
+  getOrCreateWorld,
+  DEFAULT_GRAVITY,
+} from './world';
+export { createRapierBody, createRapierColliderDesc } from './body';
 export { RAPIER };
