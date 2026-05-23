@@ -149,7 +149,7 @@
   },
   "license": "MIT",
   "peerDependencies": {
-    "bitecs": ">=0.3.40",
+    "bitecs": ">=0.4.0",
     "three": ">=0.183.0"
   },
   "devDependencies": {
@@ -163,7 +163,7 @@
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "@typescript-eslint/parser": "^8.40.0",
     "ajv": "^8.17.1",
-    "bitecs": "^0.3.40",
+    "bitecs": "^0.4.0",
     "canvas": "^3.2.0",
     "eslint": "^9.33.0",
     "eslint-config-prettier": "^10.1.8",
@@ -182,7 +182,7 @@
     "@dimforge/rapier3d-simd-compat": "^0.19.3",
     "@gltf-transform/core": "^4.3.0",
     "@gltf-transform/functions": "^4.3.0",
-    "@interverse/three-terrain-lod": "^2.0.0",
+    "@interverse/three-terrain-lod": "file:/home/maikeu/GitClones/three-terrain-lod",
     "colyseus.js": "^0.16.22",
     "gsap": "^3.13.0",
     "howler": "^2.2.4",

@@ -213,9 +213,9 @@ const GameplayHudSystem: System = {
       fpsFrameCount = 0;
       fpsElapsed = 0;
       if (fpsEl) {
-      if (fpsEl) {
-        fpsEl.textContent = `FPS: ${Math.round(fpsSmoothed)} | ${(dt * 1000).toFixed(1)}ms`;
-      }
+        if (fpsEl) {
+          fpsEl.textContent = `FPS: ${Math.round(fpsSmoothed)} | ${(dt * 1000).toFixed(1)}ms`;
+        }
       }
     }
 
