@@ -1,4 +1,4 @@
-import { defineQuery } from 'bitecs';
+import { defineQuery } from 'vibegame';
 import type { MonoBehaviourContext } from 'vibegame';
 import {
   Transform,
