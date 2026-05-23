@@ -327,7 +327,14 @@ export async function createRenderer(
       /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
     )
   );
-  renderer.shadowMap.enabled = true;
+
+  // Shadow maps cause depth/color attachment size mismatch on WebGPU
+  // (Three.js bug — depth buffer not resized in sync with color).
+  // Keep disabled until Three.js fixes this.
+  const isWebGPU = renderer.isWebGPURenderer === true;
+  if (!isWebGPU) {
+    renderer.shadowMap.enabled = true;
+  }
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);
