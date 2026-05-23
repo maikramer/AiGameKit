@@ -373,6 +373,7 @@ export class State {
     component: T,
     values?: Record<string, number>
   ): void {
+    if (!entityExists(this.world, eid)) return;
     bitecsAdd(this.world, eid, component);
 
     const componentName = this.getComponentName(component);
