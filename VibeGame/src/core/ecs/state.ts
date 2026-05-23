@@ -387,6 +387,7 @@ export class State {
   }
 
   removeComponent<T extends Component>(eid: number, component: T): void {
+    if (!entityExists(this.world, eid)) return;
     bitecsRemove(this.world, eid, component);
   }
 
