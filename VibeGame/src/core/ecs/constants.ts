@@ -4,3 +4,5 @@ export const TIME_CONSTANTS = {
 } as const;
 
 export const NULL_ENTITY = 4294967295;
+
+export const MAX_ENTITIES = 100000;

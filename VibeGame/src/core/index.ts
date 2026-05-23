@@ -1,17 +1,14 @@
 export {
-  addComponent,
   addEntity,
   createWorld,
-  defineComponent,
-  defineQuery,
+  entityExists,
   getAllEntities,
-  hasComponent,
-  removeComponent,
   removeEntity,
-  Types,
-  type Component,
-  type IWorld,
+  type World as IWorld,
 } from 'bitecs';
+
+export { defineQuery } from './ecs/query';
+export type { Component } from './ecs/types';
 
 export {
   createSnapshot,

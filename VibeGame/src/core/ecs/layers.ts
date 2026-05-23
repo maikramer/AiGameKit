@@ -1,8 +1,8 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from './constants';
 
-export const Layer = defineComponent({
-  value: Types.ui8,
-});
+export const Layer = {
+  value: new Uint8Array(MAX_ENTITIES),
+} as const;
 
 const layerById = new Map<number, string>();
 const layerByName = new Map<string, number>();

@@ -1,4 +1,5 @@
-import { defineQuery, type Component } from 'bitecs';
+import { defineQuery } from './query';
+import type { Component } from './types';
 import type { State } from './state';
 
 export interface SnapshotOptions {

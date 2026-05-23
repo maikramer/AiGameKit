@@ -1,8 +1,10 @@
-import type { Component } from 'bitecs';
 import type { ParsedElement, XMLValue } from '../xml';
 import type { ParseContext } from '../recipes/parse-context';
 
 export type { XMLValue };
+
+/** A VibeGame component: a plain object mapping field names to typed arrays. */
+export type Component = Record<string, unknown>;
 import type { State } from './state';
 
 export interface System {

@@ -1,4 +1,4 @@
-import type { Component } from 'bitecs';
+import type { Component } from './types';
 
 type ComponentField =
   | Float32Array

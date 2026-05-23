@@ -1,15 +1,14 @@
 import {
-  addComponent,
   addEntity,
   createWorld,
   entityExists,
-  hasComponent,
-  removeComponent,
   removeEntity,
-  type Component,
-  type IWorld,
+  addComponent as bitecsAdd,
+  removeComponent as bitecsRemove,
+  hasComponent as bitecsHas,
+  type World,
 } from 'bitecs';
-import { defineQuery } from 'bitecs';
+import { defineQuery } from './query';
 import { toKebabCase } from '../utils/naming';
 import { ConfigRegistry } from './config';
 import {
@@ -22,6 +21,7 @@ import { Parent } from './components';
 import { TIME_CONSTANTS } from './constants';
 import { Scheduler } from './scheduler';
 import type {
+  Component,
   Config,
   Parser,
   Plugin,
@@ -47,7 +47,7 @@ import {
 } from './events';
 
 export class State {
-  public readonly world: IWorld;
+  public readonly world: World;
   public readonly time: Time;
   public readonly scheduler = new Scheduler();
   public readonly systems = new Set<System>();
@@ -288,14 +288,14 @@ export class State {
   setTag(eid: number, name: string): void {
     let id = getTagId(name);
     if (id < 0) id = addTag(name);
-    if (!hasComponent(this.world, Tag, eid)) {
-      addComponent(this.world, Tag, eid);
+    if (!bitecsHas(this.world, eid, Tag)) {
+      bitecsAdd(this.world, eid, Tag);
     }
     Tag.value[eid] = id;
   }
 
   getTag(eid: number): string {
-    if (!hasComponent(this.world, Tag, eid)) return 'Untagged';
+    if (!bitecsHas(this.world, eid, Tag)) return 'Untagged';
     return getTagName(Tag.value[eid]);
   }
 
@@ -321,14 +321,14 @@ export class State {
   }
 
   setLayer(eid: number, layer: number): void {
-    if (!hasComponent(this.world, Layer, eid)) {
-      addComponent(this.world, Layer, eid);
+    if (!bitecsHas(this.world, eid, Layer)) {
+      bitecsAdd(this.world, eid, Layer);
     }
     Layer.value[eid] = layer;
   }
 
   getLayer(eid: number): number {
-    if (!hasComponent(this.world, Layer, eid)) return 0;
+    if (!bitecsHas(this.world, eid, Layer)) return 0;
     return Layer.value[eid];
   }
 
@@ -373,7 +373,7 @@ export class State {
     component: T,
     values?: Record<string, number>
   ): void {
-    addComponent(this.world, component, eid);
+    bitecsAdd(this.world, eid, component);
 
     const componentName = this.getComponentName(component);
     if (componentName) {
@@ -387,11 +387,11 @@ export class State {
   }
 
   removeComponent<T extends Component>(eid: number, component: T): void {
-    removeComponent(this.world, component, eid);
+    bitecsRemove(this.world, eid, component);
   }
 
   hasComponent<T extends Component>(eid: number, component: T): boolean {
-    return hasComponent(this.world, component, eid);
+    return bitecsHas(this.world, eid, component);
   }
 
   createFromRecipe(

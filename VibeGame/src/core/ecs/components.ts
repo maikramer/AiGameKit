@@ -1,5 +1,5 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from './constants';
 
-export const Parent = defineComponent({
-  entity: Types.i32,
-});
+export const Parent = {
+  entity: new Int32Array(MAX_ENTITIES),
+} as const;
