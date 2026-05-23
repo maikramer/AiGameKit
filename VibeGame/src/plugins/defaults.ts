@@ -1,5 +1,5 @@
 ﻿import type { Plugin } from '../core';
-// import { AiSteeringPlugin } from './ai-steering/plugin';
+import { AiSteeringPlugin } from './ai-steering/plugin';
 import { AnimationPlugin } from './animation/plugin';
 import { FollowCameraPlugin } from './follow-camera/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
@@ -40,7 +40,7 @@ export const DefaultPlugins: Plugin[] = [
   PhysicsPlugin,
   RaycastPlugin,
   // NavmeshPlugin,
-  // AiSteeringPlugin,
+  AiSteeringPlugin,
   // JointsPlugin,
   RenderingPlugin,
   HudPlugin,

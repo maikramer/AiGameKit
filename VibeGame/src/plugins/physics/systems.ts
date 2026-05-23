@@ -9,8 +9,10 @@ import {
   BodyType,
   CharacterMovement,
   CharacterController,
+  CollisionEvents,
+  TouchedEvent,
 } from './components';
-import { getOrCreateWorld, stepWorld } from './world';
+import { getOrCreateWorld, getEventQueue, stepWorld } from './world';
 import { createRapierBody, createRapierColliderDesc } from './body';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
 
@@ -233,6 +235,38 @@ export const PhysicsStepSystem: System = {
   update: (state) => {
     if (isTerrainDynamicsBlocking(state)) return;
     stepWorld();
+
+    const queue = getEventQueue();
+    const c2e = getColliderToEntityMap(state);
+    if (!queue) return;
+
+    queue.drainCollisionEvents((handle1, handle2, started) => {
+      const eid1 = c2e.get(handle1) ?? 0;
+      const eid2 = c2e.get(handle2) ?? 0;
+      if (!eid1 || !eid2) return;
+
+      if (started) {
+        if (state.hasComponent(eid1, CollisionEvents)) {
+          if (!state.hasComponent(eid1, TouchedEvent)) {
+            state.addComponent(eid1, TouchedEvent);
+          }
+          TouchedEvent.other[eid1] = eid2;
+        }
+        if (state.hasComponent(eid2, CollisionEvents)) {
+          if (!state.hasComponent(eid2, TouchedEvent)) {
+            state.addComponent(eid2, TouchedEvent);
+          }
+          TouchedEvent.other[eid2] = eid1;
+        }
+      } else {
+        if (state.hasComponent(eid1, TouchedEvent)) {
+          state.removeComponent(eid1, TouchedEvent);
+        }
+        if (state.hasComponent(eid2, TouchedEvent)) {
+          state.removeComponent(eid2, TouchedEvent);
+        }
+      }
+    });
   },
 };
 
