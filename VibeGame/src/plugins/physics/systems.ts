@@ -121,6 +121,13 @@ export const PhysicsInitSystem: System = {
         Rigidbody.rotZ[entity] = r.z;
         Rigidbody.rotW[entity] = r.w;
 
+        const vx = Rigidbody.velX[entity];
+        const vy = Rigidbody.velY[entity];
+        const vz = Rigidbody.velZ[entity];
+        if ((vx || vy || vz) && type === BodyType.Dynamic) {
+          body.setLinvel(new RAPIER.Vector3(vx, vy, vz), true);
+        }
+
         failed.delete(entity);
       } catch (err) {
         console.error(
@@ -145,29 +152,46 @@ export const ApplyMovementSystem: System = {
       if (!body) continue;
       try {
         const type = Rigidbody.type[entity];
-        if (type !== BodyType.Dynamic && type !== 2) continue;
 
         const dvx = CharacterMovement.desiredVelX[entity] || 0;
         const dvz = CharacterMovement.desiredVelZ[entity] || 0;
         const jumpVel = CharacterMovement.velocityY[entity] || 0;
 
-        // Horizontal movement
-        if (dvx !== 0 || dvz !== 0) {
-          body.setLinvel(new RAPIER.Vector3(dvx, 0, dvz), true);
-        }
-
-        // Jump
-        if (jumpVel > 0) {
-          const grounded = state.hasComponent(entity, CharacterController)
-            ? CharacterController.grounded[entity]
-            : 0;
-          if (grounded) {
-            const mass = body.mass();
-            body.applyImpulse(
-              new RAPIER.Vector3(0, jumpVel * (mass || 70), 0),
-              true
-            );
+        if (type === 2) {
+          const t = body.translation();
+          const dt = state.time.fixedDeltaTime || 1 / 60;
+          const newY = t.y + jumpVel * dt;
+          body.setNextKinematicTranslation({
+            x: t.x + dvx * dt,
+            y: newY,
+            z: t.z + dvz * dt,
+          });
+          body.setNextKinematicRotation({
+            x: Rigidbody.rotX[entity],
+            y: Rigidbody.rotY[entity],
+            z: Rigidbody.rotZ[entity],
+            w: Rigidbody.rotW[entity],
+          });
+          if (jumpVel > 0) {
             CharacterMovement.velocityY[entity] = 0;
+          }
+        } else if (type === BodyType.Dynamic) {
+          if (dvx !== 0 || dvz !== 0) {
+            body.setLinvel(new RAPIER.Vector3(dvx, 0, dvz), true);
+          }
+
+          if (jumpVel > 0) {
+            const grounded = state.hasComponent(entity, CharacterController)
+              ? CharacterController.grounded[entity]
+              : 0;
+            if (grounded) {
+              const mass = body.mass();
+              body.applyImpulse(
+                new RAPIER.Vector3(0, jumpVel * (mass || 70), 0),
+                true
+              );
+              CharacterMovement.velocityY[entity] = 0;
+            }
           }
         }
       } catch (e) {

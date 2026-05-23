@@ -9,7 +9,6 @@ import {
   Collider,
   CollisionEvents,
   Rigidbody,
-  SetLinearVelocity,
 } from '../../../../src/plugins/physics/components.ts';
 import { MeshRenderer } from '../../../../src/plugins/rendering/components.ts';
 
@@ -130,10 +129,9 @@ export function update(ctx: MonoBehaviourContext): void {
   ctx.state.addComponent(projectileEid, CollisionEvents);
   CollisionEvents.activeEvents[projectileEid] = 1;
 
-  ctx.state.addComponent(projectileEid, SetLinearVelocity);
-  SetLinearVelocity.x[projectileEid] = ndx * config.speed;
-  SetLinearVelocity.y[projectileEid] = ndy * config.speed;
-  SetLinearVelocity.z[projectileEid] = ndz * config.speed;
+  Rigidbody.velX[projectileEid] = ndx * config.speed;
+  Rigidbody.velY[projectileEid] = ndy * config.speed;
+  Rigidbody.velZ[projectileEid] = ndz * config.speed;
 
   cooldownTimers.set(eid, config.cooldown);
 }

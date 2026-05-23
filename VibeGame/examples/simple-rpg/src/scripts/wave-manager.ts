@@ -6,6 +6,7 @@ import {
   SteeringAgent,
   SteeringTarget,
   MonoBehaviour,
+  Rigidbody,
 } from 'vibegame';
 import { Health, isDead } from '../../../../src/plugins/combat/components.ts';
 import { CollisionEvents } from '../../../../src/plugins/physics/components.ts';
@@ -89,6 +90,9 @@ function spawnWave(ctx: MonoBehaviourContext, waveNum: number): void {
       scale: '0.44 0.88 0.44',
     });
 
+    Rigidbody.type[eid] = 2;
+    Rigidbody.gravityScale[eid] = 0;
+
     ctx.state.addComponent(eid, SteeringAgent);
     SteeringAgent.maxSpeed[eid] = 8;
     SteeringAgent.active[eid] = 1;
@@ -98,6 +102,10 @@ function spawnWave(ctx: MonoBehaviourContext, waveNum: number): void {
 
     ctx.state.addComponent(eid, CollisionEvents);
     CollisionEvents.activeEvents[eid] = 1;
+
+    ctx.state.addComponent(eid, Health);
+    Health.current[eid] = 30;
+    Health.max[eid] = 30;
 
     ctx.state.addComponent(eid, MonoBehaviour);
     MonoBehaviour.enabled[eid] = 1;
@@ -175,11 +183,12 @@ export function update(ctx: MonoBehaviourContext): void {
 
     if (aliveCount === 0) {
       for (const [eid, record] of enemyMap) {
-        if (record.alive && isDead(eid)) {
+        if (record.alive) {
           record.alive = false;
-          if (Math.random() < HEAL_DROP_CHANCE) {
+          if (isDead(eid) && Math.random() < HEAL_DROP_CHANCE) {
             spawnHealDrop(ctx, record.x, record.y, record.z);
           }
+          ctx.state.destroyEntity(eid);
         }
       }
       enemyMap.clear();

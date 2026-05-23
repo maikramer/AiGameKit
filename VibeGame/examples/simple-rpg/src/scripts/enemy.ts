@@ -5,13 +5,13 @@ import {
   PlayerController,
   SteeringAgent,
   SteeringTarget,
+  MonoBehaviour,
 } from 'vibegame';
 import {
   Health,
   damageHealth,
   isDead,
 } from '../../../../src/plugins/combat/components.ts';
-import { CollisionEvents } from '../../../../src/plugins/physics/components.ts';
 
 interface EnemyConfig {
   health: number;
@@ -50,12 +50,11 @@ export function start(ctx: MonoBehaviourContext): void {
   configs.set(eid, { ...DEFAULT_CONFIG });
   attackTimers.set(eid, 0);
 
-  ctx.state.addComponent(eid, Health);
-  Health.current[eid] = DEFAULT_CONFIG.health;
-  Health.max[eid] = DEFAULT_CONFIG.health;
-
-  ctx.state.addComponent(eid, CollisionEvents);
-  CollisionEvents.activeEvents[eid] = 1;
+  if (!ctx.state.hasComponent(eid, Health)) {
+    ctx.state.addComponent(eid, Health);
+    Health.current[eid] = DEFAULT_CONFIG.health;
+    Health.max[eid] = DEFAULT_CONFIG.health;
+  }
 
   cachedPlayerEid = findPlayer(ctx);
 }
@@ -66,7 +65,8 @@ export function update(ctx: MonoBehaviourContext): void {
   if (!config) return;
 
   if (isDead(eid)) {
-    ctx.state.destroyEntity(eid);
+    MonoBehaviour.enabled[eid] = 0;
+    SteeringAgent.active[eid] = 0;
     configs.delete(eid);
     attackTimers.delete(eid);
     return;

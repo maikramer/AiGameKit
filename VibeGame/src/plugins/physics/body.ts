@@ -9,6 +9,12 @@ export function createRapierBody(entity: number): RAPIER.RigidBodyDesc {
     case BodyType.Fixed:
       desc = RAPIER.RigidBodyDesc.fixed();
       break;
+    case 2:
+      desc = RAPIER.RigidBodyDesc.kinematicPositionBased();
+      break;
+    case 3:
+      desc = RAPIER.RigidBodyDesc.kinematicVelocityBased();
+      break;
     case BodyType.Dynamic:
     default:
       desc = RAPIER.RigidBodyDesc.dynamic();

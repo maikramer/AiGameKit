@@ -9,6 +9,7 @@ import {
 } from 'yuka';
 import { defineQuery, type State, type System } from '../../core';
 import { BodyType, Collider, Rigidbody } from '../physics/components';
+import { getBodyForEntity } from '../physics/systems';
 import { Transform, WorldTransform } from '../transforms';
 import { SteeringAgent, SteeringTarget } from './components';
 import { getSteeringMap, type SteeringRow } from './context';
@@ -124,6 +125,27 @@ export const SteeringSyncSystem: System = {
       Transform.rotZ[eid] = row.vehicle.rotation.z;
       Transform.rotW[eid] = row.vehicle.rotation.w;
       Transform.dirty[eid] = 1;
+
+      const body = getBodyForEntity(state, eid);
+      if (body) {
+        const rtype = Rigidbody.type[eid];
+        if (rtype === 2) {
+          body.setNextKinematicTranslation({
+            x: row.vehicle.position.x,
+            y: row.vehicle.position.y,
+            z: row.vehicle.position.z,
+          });
+          body.setNextKinematicRotation({
+            x: row.vehicle.rotation.x,
+            y: row.vehicle.rotation.y,
+            z: row.vehicle.rotation.z,
+            w: row.vehicle.rotation.w,
+          });
+        } else if (rtype === BodyType.Dynamic) {
+          const vel = row.vehicle.velocity;
+          body.setLinvel({ x: vel.x, y: 0, z: vel.z }, true);
+        }
+      }
 
       if (state.hasComponent(eid, WorldTransform)) {
         WorldTransform.posX[eid] = Transform.posX[eid];
