@@ -1,71 +1,69 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const MeshRenderer = defineComponent({
-  shape: Types.ui8,
-  sizeX: Types.f32,
-  sizeY: Types.f32,
-  sizeZ: Types.f32,
-  color: Types.ui32,
-  visible: Types.ui8,
-  unlit: Types.ui8,
-});
+export const MeshRenderer = {
+  shape: new Uint8Array(MAX_ENTITIES),
+  sizeX: new Float32Array(MAX_ENTITIES),
+  sizeY: new Float32Array(MAX_ENTITIES),
+  sizeZ: new Float32Array(MAX_ENTITIES),
+  color: new Uint32Array(MAX_ENTITIES),
+  visible: new Uint8Array(MAX_ENTITIES),
+  unlit: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const RenderContext = defineComponent({
-  clearColor: Types.ui32,
-  hasCanvas: Types.ui8,
-});
+export const RenderContext = {
+  clearColor: new Uint32Array(MAX_ENTITIES),
+  hasCanvas: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const MainCamera = defineComponent({
-  projection: Types.ui8,
-  fov: Types.f32,
-  orthoSize: Types.f32,
-});
+export const MainCamera = {
+  projection: new Uint8Array(MAX_ENTITIES),
+  fov: new Float32Array(MAX_ENTITIES),
+  orthoSize: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const AmbientLight = defineComponent({
-  skyColor: Types.ui32,
-  groundColor: Types.ui32,
-  intensity: Types.f32,
-});
+export const AmbientLight = {
+  skyColor: new Uint32Array(MAX_ENTITIES),
+  groundColor: new Uint32Array(MAX_ENTITIES),
+  intensity: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const DirectionalLight = defineComponent({
-  color: Types.ui32,
-  intensity: Types.f32,
-  castShadow: Types.ui8,
-  shadowMapSize: Types.ui32,
-  directionX: Types.f32,
-  directionY: Types.f32,
-  directionZ: Types.f32,
-  distance: Types.f32,
-});
+export const DirectionalLight = {
+  color: new Uint32Array(MAX_ENTITIES),
+  intensity: new Float32Array(MAX_ENTITIES),
+  castShadow: new Uint8Array(MAX_ENTITIES),
+  shadowMapSize: new Uint32Array(MAX_ENTITIES),
+  directionX: new Float32Array(MAX_ENTITIES),
+  directionY: new Float32Array(MAX_ENTITIES),
+  directionZ: new Float32Array(MAX_ENTITIES),
+  distance: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const PointLight = defineComponent({
-  color: Types.ui32,
-  intensity: Types.f32,
-  distance: Types.f32,
-  decay: Types.f32,
-  castShadow: Types.ui8,
-});
+export const PointLight = {
+  color: new Uint32Array(MAX_ENTITIES),
+  intensity: new Float32Array(MAX_ENTITIES),
+  distance: new Float32Array(MAX_ENTITIES),
+  decay: new Float32Array(MAX_ENTITIES),
+  castShadow: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const SpotLight = defineComponent({
-  color: Types.ui32,
-  intensity: Types.f32,
-  distance: Types.f32,
-  decay: Types.f32,
-  angle: Types.f32,
-  penumbra: Types.f32,
-  castShadow: Types.ui8,
-});
+export const SpotLight = {
+  color: new Uint32Array(MAX_ENTITIES),
+  intensity: new Float32Array(MAX_ENTITIES),
+  distance: new Float32Array(MAX_ENTITIES),
+  decay: new Float32Array(MAX_ENTITIES),
+  angle: new Float32Array(MAX_ENTITIES),
+  penumbra: new Float32Array(MAX_ENTITIES),
+  castShadow: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const CsmConfig = defineComponent({
-  cascades: Types.ui8,
-  maxFar: Types.f32,
-  shadowMapSize: Types.ui16,
-  enabled: Types.ui8,
-});
+export const CsmConfig = {
+  cascades: new Uint8Array(MAX_ENTITIES),
+  maxFar: new Float32Array(MAX_ENTITIES),
+  shadowMapSize: new Uint16Array(MAX_ENTITIES),
+  enabled: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const DistanceCull = defineComponent({
-  /** Maximum render distance in world units (0 = disabled). */
-  maxDistance: Types.f32,
-  /** 0 = visible, 1 = culled (hidden). Used for hysteresis to avoid flickering at the boundary. */
-  culled: Types.ui8,
-});
+export const DistanceCull = {
+  maxDistance: new Float32Array(MAX_ENTITIES),
+  culled: new Uint8Array(MAX_ENTITIES),
+} as const;

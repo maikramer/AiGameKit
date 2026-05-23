@@ -1,7 +1,7 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const ProfilerStats = defineComponent({
-  lastFPS: Types.f32,
-  frameTimeMs: Types.f32,
-  systemCount: Types.ui32,
-});
+export const ProfilerStats = {
+  lastFPS: new Float32Array(MAX_ENTITIES),
+  frameTimeMs: new Float32Array(MAX_ENTITIES),
+  systemCount: new Uint32Array(MAX_ENTITIES),
+} as const;

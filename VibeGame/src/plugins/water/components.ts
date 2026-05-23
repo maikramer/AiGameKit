@@ -1,4 +1,4 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 export enum WaterSubmersionState {
   Outside = 0,
@@ -7,35 +7,35 @@ export enum WaterSubmersionState {
   Exiting = 3,
 }
 
-export const Water = defineComponent({
-  size: Types.f32,
-  waterLevel: Types.f32,
-  opacity: Types.f32,
-  tintR: Types.f32,
-  tintG: Types.f32,
-  tintB: Types.f32,
-  waveSpeed: Types.f32,
-  waveScale: Types.f32,
-  wireframe: Types.ui8,
-  underwaterFogColorR: Types.f32,
-  underwaterFogColorG: Types.f32,
-  underwaterFogColorB: Types.f32,
-  underwaterFogDensity: Types.f32,
-});
+export const Water = {
+  size: new Float32Array(MAX_ENTITIES),
+  waterLevel: new Float32Array(MAX_ENTITIES),
+  opacity: new Float32Array(MAX_ENTITIES),
+  tintR: new Float32Array(MAX_ENTITIES),
+  tintG: new Float32Array(MAX_ENTITIES),
+  tintB: new Float32Array(MAX_ENTITIES),
+  waveSpeed: new Float32Array(MAX_ENTITIES),
+  waveScale: new Float32Array(MAX_ENTITIES),
+  wireframe: new Uint8Array(MAX_ENTITIES),
+  underwaterFogColorR: new Float32Array(MAX_ENTITIES),
+  underwaterFogColorG: new Float32Array(MAX_ENTITIES),
+  underwaterFogColorB: new Float32Array(MAX_ENTITIES),
+  underwaterFogDensity: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const PlayerWaterState = defineComponent({
-  state: Types.ui8,
-  waterEntity: Types.eid,
-  entryTime: Types.f32,
-  submersionDepth: Types.f32,
-  swimTriggered: Types.ui8,
-  swimZoneEntity: Types.eid,
-});
+export const PlayerWaterState = {
+  state: new Uint8Array(MAX_ENTITIES),
+  waterEntity: new Uint32Array(MAX_ENTITIES),
+  entryTime: new Float32Array(MAX_ENTITIES),
+  submersionDepth: new Float32Array(MAX_ENTITIES),
+  swimTriggered: new Uint8Array(MAX_ENTITIES),
+  swimZoneEntity: new Uint32Array(MAX_ENTITIES),
+} as const;
 
-export const SwimTriggerZone = defineComponent({
-  waterEntity: Types.eid,
-  enabled: Types.ui8,
-  swimSpeed: Types.f32,
-  buoyancyForce: Types.f32,
-  maxSwimDepth: Types.f32,
-});
+export const SwimTriggerZone = {
+  waterEntity: new Uint32Array(MAX_ENTITIES),
+  enabled: new Uint8Array(MAX_ENTITIES),
+  swimSpeed: new Float32Array(MAX_ENTITIES),
+  buoyancyForce: new Float32Array(MAX_ENTITIES),
+  maxSwimDepth: new Float32Array(MAX_ENTITIES),
+} as const;

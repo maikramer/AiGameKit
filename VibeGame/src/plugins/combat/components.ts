@@ -1,16 +1,16 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Health = defineComponent({
-  current: Types.f32,
-  max: Types.f32,
-});
+export const Health = {
+  current: new Float32Array(MAX_ENTITIES),
+  max: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const ProjectileData = defineComponent({
-  damage: Types.f32,
-  ownerEid: Types.i32,
-  lifetime: Types.f32,
-  age: Types.f32,
-});
+export const ProjectileData = {
+  damage: new Float32Array(MAX_ENTITIES),
+  ownerEid: new Int32Array(MAX_ENTITIES),
+  lifetime: new Float32Array(MAX_ENTITIES),
+  age: new Float32Array(MAX_ENTITIES),
+} as const;
 
 export function damageHealth(eid: number, amount: number): void {
   const newHp = Health.current[eid] - amount;

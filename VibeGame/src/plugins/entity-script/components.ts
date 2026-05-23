@@ -1,9 +1,7 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /** Marks an entity that runs a TS module from XML `script="…"`. */
-export const MonoBehaviour = defineComponent({
-  /** 0 = setup not done; 1 = setup completed. */
-  ready: Types.ui8,
-  /** 1 = call `update` each frame after setup. */
-  enabled: Types.ui8,
-});
+export const MonoBehaviour = {
+  ready: new Uint8Array(MAX_ENTITIES),
+  enabled: new Uint8Array(MAX_ENTITIES),
+} as const;

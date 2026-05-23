@@ -1,9 +1,9 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /** 0 = pendente; 1 = carregamento concluído (ou ignorado). */
-export const GltfPending = defineComponent({
-  loaded: Types.ui8,
-});
+export const GltfPending = {
+  loaded: new Uint8Array(MAX_ENTITIES),
+} as const;
 
 /**
  * Após o GLB carregar, cria `Rigidbody` + `Collider` no AABB do modelo.
@@ -14,24 +14,18 @@ export const GltfPending = defineComponent({
  * Três variantes GLB (lod0/lod1/lod2) sob um único `Group`; visibilidade por distância à câmara.
  * Requer `lod-urls` no `<gltf-load>` e carregamento triplo no sistema de load.
  */
-export const GltfLod = defineComponent({
-  /** Distância (m) até ao qual usa LOD0. */
-  thresholdNear: Types.f32,
-  /** Distância até ao qual usa LOD1; além disto LOD2. */
-  thresholdMid: Types.f32,
-  /** 0 | 1 | 2 — último nível aplicado (debug). */
-  activeLevel: Types.ui8,
-});
+export const GltfLod = {
+  thresholdNear: new Float32Array(MAX_ENTITIES),
+  thresholdMid: new Float32Array(MAX_ENTITIES),
+  activeLevel: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const GltfPhysicsPending = defineComponent({
-  ready: Types.ui8,
-  /** Metros somados ao tamanho do AABB por eixo (antes de dividir pelo scale do Transform). */
-  colliderMargin: Types.f32,
-  mass: Types.f32,
-  friction: Types.f32,
-  restitution: Types.f32,
-  /** `ColliderShape` (0 = box, 1 = sphere, 2 = capsule). */
-  colliderShape: Types.ui8,
-  /** `BodyType` (0 = dynamic, 1 = fixed, 2 = kinematic-position, 3 = kinematic-velocity). */
-  bodyType: Types.ui8,
-});
+export const GltfPhysicsPending = {
+  ready: new Uint8Array(MAX_ENTITIES),
+  colliderMargin: new Float32Array(MAX_ENTITIES),
+  mass: new Float32Array(MAX_ENTITIES),
+  friction: new Float32Array(MAX_ENTITIES),
+  restitution: new Float32Array(MAX_ENTITIES),
+  colliderShape: new Uint8Array(MAX_ENTITIES),
+  bodyType: new Uint8Array(MAX_ENTITIES),
+} as const;

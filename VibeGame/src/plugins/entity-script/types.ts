@@ -1,4 +1,4 @@
-import type { Component } from 'bitecs';
+import type { Component } from '../../core';
 import type { Object3D } from 'three';
 
 import type { State } from '../../core';

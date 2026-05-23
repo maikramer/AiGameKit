@@ -1,66 +1,66 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Bloom = defineComponent({
-  intensity: Types.f32,
-  luminanceThreshold: Types.f32,
-  luminanceSmoothing: Types.f32,
-  mipmapBlur: Types.ui8,
-  radius: Types.f32,
-  levels: Types.ui8,
-});
+export const Bloom = {
+  intensity: new Float32Array(MAX_ENTITIES),
+  luminanceThreshold: new Float32Array(MAX_ENTITIES),
+  luminanceSmoothing: new Float32Array(MAX_ENTITIES),
+  mipmapBlur: new Uint8Array(MAX_ENTITIES),
+  radius: new Float32Array(MAX_ENTITIES),
+  levels: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const Dithering = defineComponent({
-  colorBits: Types.ui8,
-  intensity: Types.f32,
-  grayscale: Types.ui8,
-  scale: Types.f32,
-  noise: Types.f32,
-});
+export const Dithering = {
+  colorBits: new Uint8Array(MAX_ENTITIES),
+  intensity: new Float32Array(MAX_ENTITIES),
+  grayscale: new Uint8Array(MAX_ENTITIES),
+  scale: new Float32Array(MAX_ENTITIES),
+  noise: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const Tonemapping = defineComponent({
-  mode: Types.ui8,
-  middleGrey: Types.f32,
-  whitePoint: Types.f32,
-  averageLuminance: Types.f32,
-  adaptationRate: Types.f32,
-});
+export const Tonemapping = {
+  mode: new Uint8Array(MAX_ENTITIES),
+  middleGrey: new Float32Array(MAX_ENTITIES),
+  whitePoint: new Float32Array(MAX_ENTITIES),
+  averageLuminance: new Float32Array(MAX_ENTITIES),
+  adaptationRate: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const SMAA = defineComponent({
-  preset: Types.ui8,
-});
+export const SMAA = {
+  preset: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const Vignette = defineComponent({
-  darkness: Types.f32,
-  offset: Types.f32,
-});
+export const Vignette = {
+  darkness: new Float32Array(MAX_ENTITIES),
+  offset: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const DepthOfField = defineComponent({
-  focusDistance: Types.f32,
-  focalLength: Types.f32,
-  bokehScale: Types.f32,
-  resolutionScale: Types.f32,
-  autoFocus: Types.ui8,
-});
+export const DepthOfField = {
+  focusDistance: new Float32Array(MAX_ENTITIES),
+  focalLength: new Float32Array(MAX_ENTITIES),
+  bokehScale: new Float32Array(MAX_ENTITIES),
+  resolutionScale: new Float32Array(MAX_ENTITIES),
+  autoFocus: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const ChromaticAberration = defineComponent({
-  offsetX: Types.f32,
-  offsetY: Types.f32,
-  radialModulation: Types.ui8,
-  modulationOffset: Types.f32,
-});
+export const ChromaticAberration = {
+  offsetX: new Float32Array(MAX_ENTITIES),
+  offsetY: new Float32Array(MAX_ENTITIES),
+  radialModulation: new Uint8Array(MAX_ENTITIES),
+  modulationOffset: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const Noise = defineComponent({
-  opacity: Types.f32,
-  blendFunction: Types.ui8,
-});
+export const Noise = {
+  opacity: new Float32Array(MAX_ENTITIES),
+  blendFunction: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const ScreenSpaceReflection = defineComponent({
-  intensity: Types.f32,
-  maxDistance: Types.f32,
-});
+export const ScreenSpaceReflection = {
+  intensity: new Float32Array(MAX_ENTITIES),
+  maxDistance: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const ScreenSpaceAmbientOcclusion = defineComponent({
-  intensity: Types.f32,
-  radius: Types.f32,
-  luminanceInfluence: Types.f32,
-});
+export const ScreenSpaceAmbientOcclusion = {
+  intensity: new Float32Array(MAX_ENTITIES),
+  radius: new Float32Array(MAX_ENTITIES),
+  luminanceInfluence: new Float32Array(MAX_ENTITIES),
+} as const;

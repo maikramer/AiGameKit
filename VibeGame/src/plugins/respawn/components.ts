@@ -1,11 +1,10 @@
-import { Types } from 'bitecs';
-import { defineComponent } from '../../core';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Respawn = defineComponent({
-  posX: Types.f32,
-  posY: Types.f32,
-  posZ: Types.f32,
-  eulerX: Types.f32,
-  eulerY: Types.f32,
-  eulerZ: Types.f32,
-});
+export const Respawn = {
+  posX: new Float32Array(MAX_ENTITIES),
+  posY: new Float32Array(MAX_ENTITIES),
+  posZ: new Float32Array(MAX_ENTITIES),
+  eulerX: new Float32Array(MAX_ENTITIES),
+  eulerY: new Float32Array(MAX_ENTITIES),
+  eulerZ: new Float32Array(MAX_ENTITIES),
+} as const;

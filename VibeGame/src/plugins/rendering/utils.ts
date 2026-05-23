@@ -20,8 +20,6 @@ export const CameraProjection = {
 export const threeCameras = new Map<number, THREE.Camera>();
 const canvasElements = new Map<number, HTMLCanvasElement>();
 
-
-
 function getCanvasAspect(state: State): {
   width: number;
   height: number;

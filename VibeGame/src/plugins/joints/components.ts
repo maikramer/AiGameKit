@@ -1,25 +1,25 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /** 0 fixed, 1 revolute, 2 prismatic, 3 spherical, 4 rope, 5 spring */
-export const Joint = defineComponent({
-  bodyA: Types.eid,
-  bodyB: Types.eid,
-  jointType: Types.ui8,
-  anchorAX: Types.f32,
-  anchorAY: Types.f32,
-  anchorAZ: Types.f32,
-  anchorBX: Types.f32,
-  anchorBY: Types.f32,
-  anchorBZ: Types.f32,
-  axisX: Types.f32,
-  axisY: Types.f32,
-  axisZ: Types.f32,
-  limitsMin: Types.f32,
-  limitsMax: Types.f32,
-  motorSpeed: Types.f32,
-  motorMaxForce: Types.f32,
-  ropeLength: Types.f32,
-  springStiffness: Types.f32,
-  springDamping: Types.f32,
-  created: Types.ui8,
-});
+export const Joint = {
+  bodyA: new Uint32Array(MAX_ENTITIES),
+  bodyB: new Uint32Array(MAX_ENTITIES),
+  jointType: new Uint8Array(MAX_ENTITIES),
+  anchorAX: new Float32Array(MAX_ENTITIES),
+  anchorAY: new Float32Array(MAX_ENTITIES),
+  anchorAZ: new Float32Array(MAX_ENTITIES),
+  anchorBX: new Float32Array(MAX_ENTITIES),
+  anchorBY: new Float32Array(MAX_ENTITIES),
+  anchorBZ: new Float32Array(MAX_ENTITIES),
+  axisX: new Float32Array(MAX_ENTITIES),
+  axisY: new Float32Array(MAX_ENTITIES),
+  axisZ: new Float32Array(MAX_ENTITIES),
+  limitsMin: new Float32Array(MAX_ENTITIES),
+  limitsMax: new Float32Array(MAX_ENTITIES),
+  motorSpeed: new Float32Array(MAX_ENTITIES),
+  motorMaxForce: new Float32Array(MAX_ENTITIES),
+  ropeLength: new Float32Array(MAX_ENTITIES),
+  springStiffness: new Float32Array(MAX_ENTITIES),
+  springDamping: new Float32Array(MAX_ENTITIES),
+  created: new Uint8Array(MAX_ENTITIES),
+} as const;

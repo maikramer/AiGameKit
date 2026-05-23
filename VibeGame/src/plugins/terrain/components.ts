@@ -1,41 +1,37 @@
-﻿import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
+export const Terrain = {
+  worldSize: new Float32Array(MAX_ENTITIES),
+  maxHeight: new Float32Array(MAX_ENTITIES),
+  levels: new Uint8Array(MAX_ENTITIES),
+  resolution: new Uint8Array(MAX_ENTITIES),
+  lodDistanceRatio: new Float32Array(MAX_ENTITIES),
+  lodHysteresis: new Float32Array(MAX_ENTITIES),
+  wireframe: new Uint8Array(MAX_ENTITIES),
+  roughness: new Float32Array(MAX_ENTITIES),
+  metalness: new Float32Array(MAX_ENTITIES),
+  normalStrength: new Float32Array(MAX_ENTITIES),
+  skirtDepth: new Float32Array(MAX_ENTITIES),
+  skirtWidth: new Float32Array(MAX_ENTITIES),
+  baseColor: new Uint32Array(MAX_ENTITIES),
+  heightSmoothing: new Float32Array(MAX_ENTITIES),
+  heightSmoothingSpread: new Float32Array(MAX_ENTITIES),
+  collisionResolution: new Uint8Array(MAX_ENTITIES),
+  showChunkBorders: new Uint8Array(MAX_ENTITIES),
+  snowHeight: new Float32Array(MAX_ENTITIES),
+  colorHigh: new Uint32Array(MAX_ENTITIES),
+  colorMid: new Uint32Array(MAX_ENTITIES),
+  colorLow: new Uint32Array(MAX_ENTITIES),
+  colorRock: new Uint32Array(MAX_ENTITIES),
+  slopeThreshold: new Float32Array(MAX_ENTITIES),
+  slopeSoftness: new Float32Array(MAX_ENTITIES),
+} as const;
 
-export const Terrain = defineComponent({
-  worldSize: Types.f32,
-  maxHeight: Types.f32,
-  levels: Types.ui8,
-  resolution: Types.ui8,
-  lodDistanceRatio: Types.f32,
-  lodHysteresis: Types.f32,
-  wireframe: Types.ui8,
-  roughness: Types.f32,
-  metalness: Types.f32,
-  normalStrength: Types.f32,
-  skirtDepth: Types.f32,
-  skirtWidth: Types.f32,
-  baseColor: Types.ui32,
-  heightSmoothing: Types.f32,
-  heightSmoothingSpread: Types.f32,
-  // Physics
-  collisionResolution: Types.ui8,
-  // Debug
-  showChunkBorders: Types.ui8,
-  // DefaultTerrainMaterial layering
-  snowHeight: Types.f32,
-  colorHigh: Types.ui32,
-  colorMid: Types.ui32,
-  colorLow: Types.ui32,
-  colorRock: Types.ui32,
-  slopeThreshold: Types.f32,
-  slopeSoftness: Types.f32,
-});
-
-export const TerrainDebugInfo = defineComponent({
-  activeChunks: Types.ui32,
-  drawCalls: Types.ui32,
-  totalInstances: Types.ui32,
-  geometryCount: Types.ui32,
-  materialCount: Types.ui32,
-  failedColliderChunks: Types.ui32,
-  lastUpdated: Types.f32,
-});
+export const TerrainDebugInfo = {
+  activeChunks: new Uint32Array(MAX_ENTITIES),
+  drawCalls: new Uint32Array(MAX_ENTITIES),
+  totalInstances: new Uint32Array(MAX_ENTITIES),
+  geometryCount: new Uint32Array(MAX_ENTITIES),
+  materialCount: new Uint32Array(MAX_ENTITIES),
+  failedColliderChunks: new Uint32Array(MAX_ENTITIES),
+  lastUpdated: new Float32Array(MAX_ENTITIES),
+} as const;

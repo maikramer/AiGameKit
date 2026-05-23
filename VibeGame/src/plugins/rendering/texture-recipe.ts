@@ -1,4 +1,4 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /**
  * Referência a uma textura gerada pelo Texture2D (pipeline Python).
@@ -6,28 +6,17 @@ import { defineComponent, Types } from 'bitecs';
  *
  * Presets disponíveis no Texture2D: Wood, Fabric, Metal, Stone, Brick, Leather, Concrete, etc.
  */
-export const TextureRecipe = defineComponent({
-  /** URL da textura (PNG/JPG gerado pelo Texture2D). */
-  url: Types.eid, // placeholder — URL real fica no mapa
-  /** 1 = carregamento pendente. */
-  pending: Types.ui8,
-  /** Modo de repeat: 0 = ClampToEdge, 1 = RepeatWrapping. */
-  repeatMode: Types.ui8,
-  /** Quantas vezes a textura repete em X. */
-  repeatX: Types.f32,
-  /** Quantas vezes a textura repete em Y. */
-  repeatY: Types.f32,
-  /** Inverter horizontalmente. */
-  flipX: Types.ui8,
-  /** Inverter verticalmente. */
-  flipY: Types.ui8,
-  /** Anisotropia (0 = usar default da GPU). */
-  anisotropy: Types.ui8,
-  /** Canal de destino: 0 = map (diffuse), 1 = normalMap, 2 = roughnessMap, 3 = metalnessMap, 4 = aoMap, 5 = displacementMap. */
-  channel: Types.ui8,
-});
+export const TextureRecipe = {
+  pending: new Uint8Array(MAX_ENTITIES),
+  repeatMode: new Uint8Array(MAX_ENTITIES),
+  repeatX: new Float32Array(MAX_ENTITIES),
+  repeatY: new Float32Array(MAX_ENTITIES),
+  flipX: new Uint8Array(MAX_ENTITIES),
+  flipY: new Uint8Array(MAX_ENTITIES),
+  anisotropy: new Uint8Array(MAX_ENTITIES),
+  channel: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const TextureRecipeLoaded = defineComponent({
-  /** 1 = textura carregada e pronta. */
-  ready: Types.ui8,
-});
+export const TextureRecipeLoaded = {
+  ready: new Uint8Array(MAX_ENTITIES),
+} as const;

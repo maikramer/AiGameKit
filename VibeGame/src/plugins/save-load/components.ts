@@ -1,6 +1,6 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Serializable = defineComponent({
-  flag: Types.ui8,
-  serializationId: Types.ui32,
-});
+export const Serializable = {
+  flag: new Uint8Array(MAX_ENTITIES),
+  serializationId: new Uint32Array(MAX_ENTITIES),
+} as const;

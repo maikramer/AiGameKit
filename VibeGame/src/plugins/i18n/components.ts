@@ -1,6 +1,6 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const I18nText = defineComponent({
-  keyIndex: Types.ui32,
-  resolved: Types.ui8,
-});
+export const I18nText = {
+  keyIndex: new Uint32Array(MAX_ENTITIES),
+  resolved: new Uint8Array(MAX_ENTITIES),
+} as const;

@@ -1,16 +1,14 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Sprite = defineComponent({
-  texturePath: Types.ui32, // string ID from StringStore
-  width: Types.f32,
-  height: Types.f32,
-  pivotX: Types.f32,
-  pivotY: Types.f32,
-  opacity: Types.f32,
-  colorR: Types.f32,
-  colorG: Types.f32,
-  colorB: Types.f32,
-  flipX: Types.ui8,
-  flipY: Types.ui8,
-  layer: Types.ui16, // render order
-});
+export const Sprite = {
+  width: new Float32Array(MAX_ENTITIES),
+  height: new Float32Array(MAX_ENTITIES),
+  pivotX: new Float32Array(MAX_ENTITIES),
+  pivotY: new Float32Array(MAX_ENTITIES),
+  opacity: new Float32Array(MAX_ENTITIES),
+  colorR: new Float32Array(MAX_ENTITIES),
+  colorG: new Float32Array(MAX_ENTITIES),
+  colorB: new Float32Array(MAX_ENTITIES),
+  flipX: new Uint8Array(MAX_ENTITIES),
+  flipY: new Uint8Array(MAX_ENTITIES),
+} as const;

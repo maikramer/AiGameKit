@@ -1,34 +1,34 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Transform = defineComponent({
-  posX: Types.f32,
-  posY: Types.f32,
-  posZ: Types.f32,
-  rotX: Types.f32,
-  rotY: Types.f32,
-  rotZ: Types.f32,
-  rotW: Types.f32,
-  eulerX: Types.f32,
-  eulerY: Types.f32,
-  eulerZ: Types.f32,
-  scaleX: Types.f32,
-  scaleY: Types.f32,
-  scaleZ: Types.f32,
-  dirty: Types.ui8,
-});
+export const Transform = {
+  posX: new Float32Array(MAX_ENTITIES),
+  posY: new Float32Array(MAX_ENTITIES),
+  posZ: new Float32Array(MAX_ENTITIES),
+  rotX: new Float32Array(MAX_ENTITIES),
+  rotY: new Float32Array(MAX_ENTITIES),
+  rotZ: new Float32Array(MAX_ENTITIES),
+  rotW: new Float32Array(MAX_ENTITIES),
+  eulerX: new Float32Array(MAX_ENTITIES),
+  eulerY: new Float32Array(MAX_ENTITIES),
+  eulerZ: new Float32Array(MAX_ENTITIES),
+  scaleX: new Float32Array(MAX_ENTITIES),
+  scaleY: new Float32Array(MAX_ENTITIES),
+  scaleZ: new Float32Array(MAX_ENTITIES),
+  dirty: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const WorldTransform = defineComponent({
-  posX: Types.f32,
-  posY: Types.f32,
-  posZ: Types.f32,
-  rotX: Types.f32,
-  rotY: Types.f32,
-  rotZ: Types.f32,
-  rotW: Types.f32,
-  eulerX: Types.f32,
-  eulerY: Types.f32,
-  eulerZ: Types.f32,
-  scaleX: Types.f32,
-  scaleY: Types.f32,
-  scaleZ: Types.f32,
-});
+export const WorldTransform = {
+  posX: new Float32Array(MAX_ENTITIES),
+  posY: new Float32Array(MAX_ENTITIES),
+  posZ: new Float32Array(MAX_ENTITIES),
+  rotX: new Float32Array(MAX_ENTITIES),
+  rotY: new Float32Array(MAX_ENTITIES),
+  rotZ: new Float32Array(MAX_ENTITIES),
+  rotW: new Float32Array(MAX_ENTITIES),
+  eulerX: new Float32Array(MAX_ENTITIES),
+  eulerY: new Float32Array(MAX_ENTITIES),
+  eulerZ: new Float32Array(MAX_ENTITIES),
+  scaleX: new Float32Array(MAX_ENTITIES),
+  scaleY: new Float32Array(MAX_ENTITIES),
+  scaleZ: new Float32Array(MAX_ENTITIES),
+} as const;

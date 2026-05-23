@@ -1,13 +1,9 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /** Configuração de sky environment por entidade. */
-export const Skybox = defineComponent({
-  /** URL da textura equirectangular (2:1 PNG/JPG/HDR). */
-  urlIndex: Types.ui32,
-  /** Rotação horizontal em graus (0-360). */
-  rotationDeg: Types.f32,
-  /** Se 1, aplica como background; se 0, só iluminação IBL. */
-  setBackground: Types.ui8,
-  /** Se 1, sky já foi aplicado. */
-  loaded: Types.ui8,
-});
+export const Skybox = {
+  urlIndex: new Uint32Array(MAX_ENTITIES),
+  rotationDeg: new Float32Array(MAX_ENTITIES),
+  setBackground: new Uint8Array(MAX_ENTITIES),
+  loaded: new Uint8Array(MAX_ENTITIES),
+} as const;

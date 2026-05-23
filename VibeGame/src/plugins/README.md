@@ -22,21 +22,21 @@ Plugins são registrados em `defaults.ts` via `DefaultPlugins` array.
 
 ### Component
 
-Define dados puros (sem lógica) armazenados em SOA (Struct of Arrays) via `bitecs/defineComponent`:
+Dados puros (sem lógica) armazenados em SOA (Struct of Arrays) — plain objects com typed arrays:
 
 ```ts
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const Fog = defineComponent({
-  mode: Types.f32,
-  density: Types.f32,
-  colorR: Types.f32,
-  colorG: Types.f32,
-  colorB: Types.f32,
-});
+export const Fog = {
+  mode: new Float32Array(MAX_ENTITIES),
+  density: new Float32Array(MAX_ENTITIES),
+  colorR: new Float32Array(MAX_ENTITIES),
+  colorG: new Float32Array(MAX_ENTITIES),
+  colorB: new Float32Array(MAX_ENTITIES),
+} as const;
 ```
 
-**Tipos:** `f32`, `ui8`, `ui32`, `eid` (entity reference), `i8`, `i32`.
+**Tipos:** `Float32Array`, `Uint8Array`, `Uint16Array`, `Uint32Array`, `Int8Array`, `Int32Array`.
 
 ### System
 
@@ -112,13 +112,13 @@ plugins/
 ### 1. Component (`components.ts`)
 
 ```ts
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const MeuComponent = defineComponent({
-  ativo: Types.ui8,
-  valor: Types.f32,
-  alvo: Types.eid,
-});
+export const MeuComponent = {
+  ativo: new Uint8Array(MAX_ENTITIES),
+  valor: new Float32Array(MAX_ENTITIES),
+  alvo: new Uint32Array(MAX_ENTITIES),
+} as const;
 ```
 
 ### 2. System (`systems.ts`)

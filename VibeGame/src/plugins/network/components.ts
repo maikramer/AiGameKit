@@ -1,34 +1,34 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const NetworkStatus = defineComponent({
-  connected: Types.ui8,
-});
+export const NetworkStatus = {
+  connected: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const Networked = defineComponent({
-  networkId: Types.ui32,
-  isOwner: Types.ui8,
-  interpolate: Types.ui8,
-});
+export const Networked = {
+  networkId: new Uint32Array(MAX_ENTITIES),
+  isOwner: new Uint8Array(MAX_ENTITIES),
+  interpolate: new Uint8Array(MAX_ENTITIES),
+} as const;
 
-export const NetworkBuffer = defineComponent({
-  prevX: Types.f32,
-  prevY: Types.f32,
-  prevZ: Types.f32,
-  prevRotX: Types.f32,
-  prevRotY: Types.f32,
-  prevRotZ: Types.f32,
-  prevRotW: Types.f32,
-  prevScaleX: Types.f32,
-  prevScaleY: Types.f32,
-  prevScaleZ: Types.f32,
-  nextX: Types.f32,
-  nextY: Types.f32,
-  nextZ: Types.f32,
-  nextRotX: Types.f32,
-  nextRotY: Types.f32,
-  nextRotZ: Types.f32,
-  nextRotW: Types.f32,
-  nextScaleX: Types.f32,
-  nextScaleY: Types.f32,
-  nextScaleZ: Types.f32,
-});
+export const NetworkBuffer = {
+  prevX: new Float32Array(MAX_ENTITIES),
+  prevY: new Float32Array(MAX_ENTITIES),
+  prevZ: new Float32Array(MAX_ENTITIES),
+  prevRotX: new Float32Array(MAX_ENTITIES),
+  prevRotY: new Float32Array(MAX_ENTITIES),
+  prevRotZ: new Float32Array(MAX_ENTITIES),
+  prevRotW: new Float32Array(MAX_ENTITIES),
+  prevScaleX: new Float32Array(MAX_ENTITIES),
+  prevScaleY: new Float32Array(MAX_ENTITIES),
+  prevScaleZ: new Float32Array(MAX_ENTITIES),
+  nextX: new Float32Array(MAX_ENTITIES),
+  nextY: new Float32Array(MAX_ENTITIES),
+  nextZ: new Float32Array(MAX_ENTITIES),
+  nextRotX: new Float32Array(MAX_ENTITIES),
+  nextRotY: new Float32Array(MAX_ENTITIES),
+  nextRotZ: new Float32Array(MAX_ENTITIES),
+  nextRotW: new Float32Array(MAX_ENTITIES),
+  nextScaleX: new Float32Array(MAX_ENTITIES),
+  nextScaleY: new Float32Array(MAX_ENTITIES),
+  nextScaleZ: new Float32Array(MAX_ENTITIES),
+} as const;

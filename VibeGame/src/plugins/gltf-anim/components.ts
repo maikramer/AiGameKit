@@ -1,8 +1,8 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const GltfAnimationState = defineComponent({
-  registryIndex: Types.ui32,
-  activeClipIndex: Types.ui8,
-  isPlaying: Types.ui8,
-  crossfadeDuration: Types.f32,
-});
+export const GltfAnimationState = {
+  registryIndex: new Uint32Array(MAX_ENTITIES),
+  activeClipIndex: new Uint8Array(MAX_ENTITIES),
+  isPlaying: new Uint8Array(MAX_ENTITIES),
+  crossfadeDuration: new Float32Array(MAX_ENTITIES),
+} as const;

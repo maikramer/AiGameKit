@@ -1,19 +1,17 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /** Marca zona de navegação (recipe `nav-mesh`). */
-export const NavMeshSurface = defineComponent({
-  loaded: Types.ui8,
-  /** 0 = use fallback PlaneGeometry zone, 1 = build from scene collidable meshes. */
-  buildFromScene: Types.ui8,
-});
+export const NavMeshSurface = {
+  loaded: new Uint8Array(MAX_ENTITIES),
+  buildFromScene: new Uint8Array(MAX_ENTITIES),
+} as const;
 
 /** Agente que segue caminho no navmesh. */
-export const NavMeshAgent = defineComponent({
-  targetX: Types.f32,
-  targetY: Types.f32,
-  targetZ: Types.f32,
-  speed: Types.f32,
-  tolerance: Types.f32,
-  /** 0 idle, 1 moving, 2 arrived, 3 stuck */
-  status: Types.ui8,
-});
+export const NavMeshAgent = {
+  targetX: new Float32Array(MAX_ENTITIES),
+  targetY: new Float32Array(MAX_ENTITIES),
+  targetZ: new Float32Array(MAX_ENTITIES),
+  speed: new Float32Array(MAX_ENTITIES),
+  tolerance: new Float32Array(MAX_ENTITIES),
+  status: new Uint8Array(MAX_ENTITIES),
+} as const;

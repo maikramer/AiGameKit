@@ -1,28 +1,28 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const PlayerController = defineComponent({
-  speed: Types.f32,
-  jumpHeight: Types.f32,
-  rotationSpeed: Types.f32,
-  canJump: Types.ui8,
-  isJumping: Types.ui8,
-  jumpCooldown: Types.f32,
-  lastGroundedTime: Types.f32,
-  jumpBufferTime: Types.f32,
-  cameraEntity: Types.eid,
-  inheritedVelX: Types.f32,
-  inheritedVelZ: Types.f32,
-  inheritedAngVelX: Types.f32,
-  inheritedAngVelY: Types.f32,
-  inheritedAngVelZ: Types.f32,
-  platformOffsetX: Types.f32,
-  platformOffsetY: Types.f32,
-  platformOffsetZ: Types.f32,
-  lastPlatform: Types.eid,
-});
+export const PlayerController = {
+  speed: new Float32Array(MAX_ENTITIES),
+  jumpHeight: new Float32Array(MAX_ENTITIES),
+  rotationSpeed: new Float32Array(MAX_ENTITIES),
+  canJump: new Uint8Array(MAX_ENTITIES),
+  isJumping: new Uint8Array(MAX_ENTITIES),
+  jumpCooldown: new Float32Array(MAX_ENTITIES),
+  lastGroundedTime: new Float32Array(MAX_ENTITIES),
+  jumpBufferTime: new Float32Array(MAX_ENTITIES),
+  cameraEntity: new Uint32Array(MAX_ENTITIES),
+  inheritedVelX: new Float32Array(MAX_ENTITIES),
+  inheritedVelZ: new Float32Array(MAX_ENTITIES),
+  inheritedAngVelX: new Float32Array(MAX_ENTITIES),
+  inheritedAngVelY: new Float32Array(MAX_ENTITIES),
+  inheritedAngVelZ: new Float32Array(MAX_ENTITIES),
+  platformOffsetX: new Float32Array(MAX_ENTITIES),
+  platformOffsetY: new Float32Array(MAX_ENTITIES),
+  platformOffsetZ: new Float32Array(MAX_ENTITIES),
+  lastPlatform: new Uint32Array(MAX_ENTITIES),
+} as const;
 
-export const PlayerGltfConfig = defineComponent({
-  modelUrlIndex: Types.ui32,
-  loaded: Types.ui8,
-  animatorRegistryIndex: Types.ui32,
-});
+export const PlayerGltfConfig = {
+  modelUrlIndex: new Uint32Array(MAX_ENTITIES),
+  loaded: new Uint8Array(MAX_ENTITIES),
+  animatorRegistryIndex: new Uint32Array(MAX_ENTITIES),
+} as const;

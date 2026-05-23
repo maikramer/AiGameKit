@@ -1,4 +1,4 @@
-import type { Component } from 'bitecs';
+import type { Component } from '../../core';
 import { gsap } from 'gsap';
 import type { State } from '../../core';
 import { defineQuery, toCamelCase } from '../../core';

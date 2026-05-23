@@ -1,25 +1,24 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 /** Origem do raio: posição vem de WorldTransform; direção em espaço mundo. */
-export const RaycastSource = defineComponent({
-  dirX: Types.f32,
-  dirY: Types.f32,
-  dirZ: Types.f32,
-  maxDist: Types.f32,
-  layerMask: Types.ui32,
-  /** 0 = só Rapier, 1 = tentar malhas Three (BVH) quando registadas */
-  mode: Types.ui8,
-});
+export const RaycastSource = {
+  dirX: new Float32Array(MAX_ENTITIES),
+  dirY: new Float32Array(MAX_ENTITIES),
+  dirZ: new Float32Array(MAX_ENTITIES),
+  maxDist: new Float32Array(MAX_ENTITIES),
+  layerMask: new Uint32Array(MAX_ENTITIES),
+  mode: new Uint8Array(MAX_ENTITIES),
+} as const;
 
 /** Resultado preenchido por RaycastSystem. */
-export const RaycastHit = defineComponent({
-  hitValid: Types.ui8,
-  hitEntity: Types.eid,
-  hitDist: Types.f32,
-  hitNormalX: Types.f32,
-  hitNormalY: Types.f32,
-  hitNormalZ: Types.f32,
-  hitPointX: Types.f32,
-  hitPointY: Types.f32,
-  hitPointZ: Types.f32,
-});
+export const RaycastHit = {
+  hitValid: new Uint8Array(MAX_ENTITIES),
+  hitEntity: new Uint32Array(MAX_ENTITIES),
+  hitDist: new Float32Array(MAX_ENTITIES),
+  hitNormalX: new Float32Array(MAX_ENTITIES),
+  hitNormalY: new Float32Array(MAX_ENTITIES),
+  hitNormalZ: new Float32Array(MAX_ENTITIES),
+  hitPointX: new Float32Array(MAX_ENTITIES),
+  hitPointY: new Float32Array(MAX_ENTITIES),
+  hitPointZ: new Float32Array(MAX_ENTITIES),
+} as const;

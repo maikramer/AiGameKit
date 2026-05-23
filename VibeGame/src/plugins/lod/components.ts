@@ -1,9 +1,9 @@
-import { defineComponent, Types } from 'bitecs';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const LODGroup = defineComponent({
-  near: Types.f32,
-  far: Types.f32,
-  currentLevel: Types.ui8, // 0=near, 1=far
-  nearEntity: Types.eid,
-  farEntity: Types.eid,
-});
+export const LODGroup = {
+  near: new Float32Array(MAX_ENTITIES),
+  far: new Float32Array(MAX_ENTITIES),
+  currentLevel: new Uint8Array(MAX_ENTITIES),
+  nearEntity: new Uint32Array(MAX_ENTITIES),
+  farEntity: new Uint32Array(MAX_ENTITIES),
+} as const;

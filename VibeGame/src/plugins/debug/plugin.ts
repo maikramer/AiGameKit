@@ -1,4 +1,4 @@
-import { defineQuery, type Component } from 'bitecs';
+import { defineQuery, type Component } from '../../core';
 import type { Plugin, State } from '../../core';
 import { getTerrainContext } from '../terrain/utils';
 import { getRenderingContext } from '../rendering/utils';
