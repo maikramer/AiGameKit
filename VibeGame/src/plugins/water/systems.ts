@@ -21,6 +21,7 @@ import {
 import {
   createUnderwaterPostProcessMaterial,
   createWaterMaterial,
+  createWaterFallbackMaterial,
 } from './water-material';
 import { PlanarReflection } from './planar-reflection';
 import {
@@ -38,11 +39,18 @@ const swimTriggerZoneQuery = defineQuery([SwimTriggerZone]);
 const REFLECTION_SIZE = 512;
 const PLANE_SEGMENTS = 256;
 
-const POST_PROCESS_RT = new WeakMap<State, THREE.WebGLRenderTarget>();
+const POST_PROCESS_RT = new WeakMap<State, THREE.RenderTarget>();
 const POST_PROCESS_SCENE = new WeakMap<State, THREE.Scene>();
 const POST_PROCESS_CAMERA = new WeakMap<State, THREE.OrthographicCamera>();
 const POST_PROCESS_MATERIAL = new WeakMap<State, THREE.ShaderMaterial>();
 const POST_PROCESS_QUAD = new WeakMap<State, THREE.Mesh>();
+const POST_PROCESS_FAILED = new WeakMap<State, boolean>();
+
+function isWebGPURenderer(
+  renderer: { isWebGPURenderer?: boolean } | undefined
+): boolean {
+  return renderer?.isWebGPURenderer === true;
+}
 
 function ensurePostProcessResources(state: State): void {
   if (POST_PROCESS_RT.has(state)) return;
@@ -52,8 +60,11 @@ function ensurePostProcessResources(state: State): void {
   if (!renderer) return;
   const size = new THREE.Vector2();
   renderer.getSize(size);
+  const pixelRatio = renderer.getPixelRatio();
+  const width = Math.floor(size.x * pixelRatio);
+  const height = Math.floor(size.y * pixelRatio);
 
-  const target = new THREE.WebGLRenderTarget(size.x, size.y, {
+  const target = new THREE.RenderTarget(width, height, {
     depthBuffer: true,
     stencilBuffer: false,
   });
@@ -89,6 +100,7 @@ function disposePostProcessResources(state: State): void {
   POST_PROCESS_CAMERA.delete(state);
   POST_PROCESS_MATERIAL.delete(state);
   POST_PROCESS_QUAD.delete(state);
+  POST_PROCESS_FAILED.delete(state);
 }
 
 function applyWaterSplash(
@@ -146,7 +158,8 @@ export const WaterBootstrapSystem: System = {
       );
       geometry.rotateX(-Math.PI / 2);
 
-      const material = createWaterMaterial({
+      const webgpu = isWebGPURenderer(ctx.renderer);
+      const materialOpts = {
         waterLevel,
         opacity,
         tint,
@@ -159,7 +172,11 @@ export const WaterBootstrapSystem: System = {
         underwaterFogDensity: 0.04,
         reflectionTexture: reflection.texture,
         heightmapTexture: heightmap,
-      });
+      };
+
+      const material = webgpu
+        ? createWaterFallbackMaterial(materialOpts)
+        : createWaterMaterial(materialOpts);
 
       const mesh = new THREE.Mesh(geometry, material);
       mesh.userData._isWater = true;
@@ -177,6 +194,7 @@ export const WaterBootstrapSystem: System = {
         mesh,
         material,
         reflection,
+        isFallbackMaterial: webgpu,
         initialized: true,
         worldOffset: { x: 0, y: waterLevel, z: 0 },
         physicsBody: null,
@@ -405,10 +423,33 @@ export const WaterRenderSystem: System = {
         data.worldOffset = { x: ox, y: oy, z: oz };
       }
 
-      data.material.uniforms.uTime.value = time;
-      data.material.uniforms.uCameraPosition.value.copy(camera.position);
-      data.material.uniforms.uRippleCenter.value.copy(data.rippleCenter);
-      data.material.uniforms.uRippleStrength.value = data.rippleStrength;
+      if (!data.isFallbackMaterial && data.material instanceof THREE.ShaderMaterial) {
+        data.material.uniforms.uTime.value = time;
+        data.material.uniforms.uCameraPosition.value.copy(camera.position);
+        data.material.uniforms.uRippleCenter.value.copy(data.rippleCenter);
+        data.material.uniforms.uRippleStrength.value = data.rippleStrength;
+
+        const fogR = Water.underwaterFogColorR[entity] ?? 0.0;
+        const fogG = Water.underwaterFogColorG[entity] ?? 0.0;
+        const fogB = Water.underwaterFogColorB[entity] ?? 0.0;
+        const fogDensity = Water.underwaterFogDensity[entity] ?? 0.0;
+        if (data.material.uniforms.uUnderwaterFogColor) {
+          data.material.uniforms.uUnderwaterFogColor.value.setRGB(
+            fogR,
+            fogG,
+            fogB
+          );
+        }
+        if (data.material.uniforms.uUnderwaterFogDensity) {
+          data.material.uniforms.uUnderwaterFogDensity.value = fogDensity;
+        }
+
+        const heightmap = findNearestTerrainHeightmap(state);
+        if (heightmap && !data.material.uniforms.tHeightMap.value) {
+          data.material.uniforms.tHeightMap.value = heightmap;
+          data.material.uniforms.uHasHeightmap.value = 1.0;
+        }
+      }
 
       const waterLevel = Water.waterLevel[entity];
       const cameraY = camera.position.y;
@@ -416,8 +457,11 @@ export const WaterRenderSystem: System = {
         cameraY < waterLevel
           ? Math.min(1.0, (waterLevel - cameraY) / 5.0)
           : 0.0;
-      if (data.material.uniforms.uUnderwaterFade) {
-        data.material.uniforms.uUnderwaterFade.value = underwaterFade;
+
+      if (!data.isFallbackMaterial && data.material instanceof THREE.ShaderMaterial) {
+        if (data.material.uniforms.uUnderwaterFade) {
+          data.material.uniforms.uUnderwaterFade.value = underwaterFade;
+        }
       }
 
       data.underwaterPostProcessActive = underwaterFade > 0;
@@ -429,62 +473,51 @@ export const WaterRenderSystem: System = {
         waterLineY = projected.y * 0.5 + 0.5;
       }
 
-      const fogR = Water.underwaterFogColorR[entity] ?? 0.0;
-      const fogG = Water.underwaterFogColorG[entity] ?? 0.0;
-      const fogB = Water.underwaterFogColorB[entity] ?? 0.0;
-      const fogDensity = Water.underwaterFogDensity[entity] ?? 0.0;
-      if (data.material.uniforms.uUnderwaterFogColor) {
-        data.material.uniforms.uUnderwaterFogColor.value.setRGB(
-          fogR,
-          fogG,
-          fogB
-        );
-      }
-      if (data.material.uniforms.uUnderwaterFogDensity) {
-        data.material.uniforms.uUnderwaterFogDensity.value = fogDensity;
-      }
-
-      const heightmap = findNearestTerrainHeightmap(state);
-      if (heightmap && !data.material.uniforms.tHeightMap.value) {
-        data.material.uniforms.tHeightMap.value = heightmap;
-        data.material.uniforms.uHasHeightmap.value = 1.0;
-      }
-
-      if (underwaterFade === 0) {
-        // @ts-expect-error WebGPU migration
-        data.reflection.render(renderer, scene, camera, data.worldOffset.y);
+      if (!data.isFallbackMaterial && underwaterFade === 0) {
+        try {
+          data.reflection.render(renderer, scene, camera, data.worldOffset.y);
+        } catch {
+          // Graceful degradation: skip reflection on WebGPU
+        }
       }
     }
 
-    if (strongestUnderwaterFade > 0.001) {
-      ensurePostProcessResources(state);
-      const rt = POST_PROCESS_RT.get(state);
-      const postScene = POST_PROCESS_SCENE.get(state);
-      const postCamera = POST_PROCESS_CAMERA.get(state);
-      const postMaterial = POST_PROCESS_MATERIAL.get(state);
+    if (strongestUnderwaterFade > 0.001 && !isWebGPURenderer(renderer)) {
+      try {
+        ensurePostProcessResources(state);
+        const rt = POST_PROCESS_RT.get(state);
+        const postScene = POST_PROCESS_SCENE.get(state);
+        const postCamera = POST_PROCESS_CAMERA.get(state);
+        const postMaterial = POST_PROCESS_MATERIAL.get(state);
 
-      if (!rt || !postScene || !postCamera || !postMaterial) return;
+        if (!rt || !postScene || !postCamera || !postMaterial) return;
 
-      const size = new THREE.Vector2();
-      renderer.getSize(size);
-      if (rt.width !== size.x || rt.height !== size.y) {
-        rt.setSize(size.x, size.y);
+        const size = new THREE.Vector2();
+        renderer.getSize(size);
+        const pixelRatio = renderer.getPixelRatio();
+        const width = Math.floor(size.x * pixelRatio);
+        const height = Math.floor(size.y * pixelRatio);
+        if (rt.width !== width || rt.height !== height) {
+          rt.setSize(width, height);
+        }
+
+        renderer.setRenderTarget(rt);
+        renderer.render(scene, camera);
+        renderer.setRenderTarget(null);
+
+        postMaterial.uniforms.uSceneTexture.value = rt.texture;
+        postMaterial.uniforms.uTime.value = time;
+        postMaterial.uniforms.uUnderwaterFade.value = strongestUnderwaterFade;
+        postMaterial.uniforms.uLineY.value = THREE.MathUtils.clamp(
+          waterLineY,
+          0,
+          1
+        );
+
+        renderer.render(postScene, postCamera);
+      } catch {
+        POST_PROCESS_FAILED.set(state, true);
       }
-
-      renderer.setRenderTarget(rt);
-      renderer.render(scene, camera);
-      renderer.setRenderTarget(null);
-
-      postMaterial.uniforms.uSceneTexture.value = rt.texture;
-      postMaterial.uniforms.uTime.value = time;
-      postMaterial.uniforms.uUnderwaterFade.value = strongestUnderwaterFade;
-      postMaterial.uniforms.uLineY.value = THREE.MathUtils.clamp(
-        waterLineY,
-        0,
-        1
-      );
-
-      renderer.render(postScene, postCamera);
     }
   },
 };

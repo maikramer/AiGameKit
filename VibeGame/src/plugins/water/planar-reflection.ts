@@ -1,14 +1,24 @@
 import * as THREE from 'three';
 
+/** Minimal renderer interface shared by WebGLRenderer and WebGPURenderer. */
+interface CompatibleRenderer {
+  getRenderTarget(): THREE.RenderTarget | null;
+  setRenderTarget(renderTarget: THREE.RenderTarget | null): void;
+  render(scene: THREE.Scene, camera: THREE.Camera): void;
+  setClearColor(color: THREE.ColorRepresentation, alpha?: number): void;
+  clear(): void;
+  xr: { enabled: boolean };
+}
+
 export class PlanarReflection {
-  private renderTarget: THREE.WebGLRenderTarget;
+  private renderTarget: THREE.RenderTarget;
   private mirrorCamera: THREE.PerspectiveCamera;
   private reflectionPlane = new THREE.Plane();
   private q = new THREE.Vector4();
   private projectionMatrix = new THREE.Matrix4();
 
   constructor(width: number = 512, height: number = 512) {
-    this.renderTarget = new THREE.WebGLRenderTarget(width, height, {
+    this.renderTarget = new THREE.RenderTarget(width, height, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
@@ -27,7 +37,20 @@ export class PlanarReflection {
   }
 
   render(
-    renderer: THREE.WebGLRenderer,
+    renderer: CompatibleRenderer,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    waterLevel: number
+  ): void {
+    try {
+      this.renderInternal(renderer, scene, camera, waterLevel);
+    } catch {
+      // Graceful degradation: WebGPU renderer may not support all operations
+    }
+  }
+
+  private renderInternal(
+    renderer: CompatibleRenderer,
     scene: THREE.Scene,
     camera: THREE.PerspectiveCamera,
     waterLevel: number

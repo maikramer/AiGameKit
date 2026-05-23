@@ -6,7 +6,8 @@ import type { PlanarReflection } from './planar-reflection';
 
 export interface WaterEntityData {
   mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+  material: THREE.ShaderMaterial | THREE.MeshStandardMaterial;
+  isFallbackMaterial: boolean;
   reflection: PlanarReflection;
   initialized: boolean;
   worldOffset: { x: number; y: number; z: number };

@@ -17,7 +17,7 @@ export {
 } from './extras/gltf-bridge';
 export type { GltfLoadResult } from './extras/gltf-bridge';
 export { GltfAnimator } from './extras/gltf-animator';
-export type { GltfAnimatorOptions } from './extras/gltf-animator';
+export type { GltfAnimatorOptions, LocomotionSet } from './extras/gltf-animator';
 export {
   applyEquirectSkyEnvironment,
   autoLoadSkyEnvironment,

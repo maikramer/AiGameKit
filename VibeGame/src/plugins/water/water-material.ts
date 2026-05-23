@@ -82,6 +82,20 @@ export function createUnderwaterPostProcessMaterial(
   });
 }
 
+export function createWaterFallbackMaterial(
+  options: WaterMaterialOptions
+): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color: options.tint.clone().lerp(new THREE.Color(0x2ec4b6), 0.5),
+    transparent: true,
+    opacity: options.opacity * 0.8,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    roughness: 0.2,
+    metalness: 0.1,
+  });
+}
+
 const waterVertexShader = /* glsl */ `
 uniform float uTime;
 uniform float uWaveSpeed;

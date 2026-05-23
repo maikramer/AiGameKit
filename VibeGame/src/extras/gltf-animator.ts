@@ -21,6 +21,17 @@ export interface GltfAnimatorOptions {
   crossfadeDuration?: number;
 }
 
+/** Named set of locomotion clip names for state-based animation switching. */
+export interface LocomotionSet {
+  idle: string;
+  walk: string;
+  run: string;
+  jump?: string | { start: string; loop: string; end: string };
+  walkBack?: string;
+  leftWalk?: string;
+  rightWalk?: string;
+}
+
 export class GltfAnimator {
   readonly mixer: AnimationMixer;
   readonly clips: Map<string, AnimationClip> = new Map();
@@ -28,6 +39,12 @@ export class GltfAnimator {
   private currentAction: AnimationAction | null = null;
   private currentClipName = '';
   private crossfadeDuration: number;
+
+  private locomotionSets = new Map<string, LocomotionSet>();
+  private activeLocomotionSetName = "default";
+  private _overrideLock = false;
+  private previousLocomotionClip = "";
+  private _jumpState: "none" | "start" | "loop" | "end" = "none";
 
   constructor(gltf: GLTF, options: GltfAnimatorOptions = {}) {
     this.mixer = new AnimationMixer(gltf.scene);
@@ -91,6 +108,82 @@ export class GltfAnimator {
   /** Tick the mixer. Call every frame with delta time in seconds. */
   update(deltaTime: number): void {
     this.mixer.update(deltaTime);
+  }
+
+  registerLocomotionSet(name: string, clips: LocomotionSet): void {
+    this.locomotionSets.set(name, clips);
+  }
+
+  switchLocomotionSet(name: string, _crossfadeDuration?: number): void {
+    if (!this.locomotionSets.has(name)) {
+      console.warn(`[GltfAnimator] Locomotion set "${name}" not found`);
+      return;
+    }
+    this.activeLocomotionSetName = name;
+  }
+
+  playLocomotion(
+    action: keyof LocomotionSet,
+    options?: { crossfade?: number },
+  ): AnimationAction | null {
+    if (this._overrideLock) return this.currentAction;
+
+    const set = this.locomotionSets.get(this.activeLocomotionSetName);
+    if (!set) return null;
+
+    const clipName = set[action];
+    if (clipName === undefined) return null;
+
+    if (action === "jump" && typeof clipName === "object") {
+      return this.playJumpSequence(clipName);
+    }
+
+    this.previousLocomotionClip = typeof clipName === "string" ? clipName : "";
+    return this.play(typeof clipName === "string" ? clipName : "", options);
+  }
+
+  playOverride(
+    clipName: string,
+    options?: { loop?: boolean; crossfade?: number; onFinished?: () => void },
+  ): AnimationAction | null {
+    this._overrideLock = true;
+    const action = this.play(clipName, {
+      loop: options?.loop ?? false,
+      crossfade: options?.crossfade,
+    });
+
+    if (action) {
+      const onFinished = options?.onFinished;
+      const self = this;
+      action.getMixer().addEventListener("finished", function handler() {
+        action.getMixer().removeEventListener("finished", handler);
+        self._overrideLock = false;
+        if (onFinished) onFinished();
+      });
+    }
+
+    return action;
+  }
+
+  get overrideLock(): boolean {
+    return this._overrideLock;
+  }
+
+  get lastLocomotionClip(): string {
+    return this.previousLocomotionClip;
+  }
+
+  get jumpPhase(): "none" | "start" | "loop" | "end" {
+    return this._jumpState;
+  }
+
+  private playJumpSequence(jump: {
+    start: string;
+    loop: string;
+    end: string;
+  }): AnimationAction | null {
+    this._jumpState = "start";
+    return this.play(jump.start);
   }
 
   /** Stop all animations and release mixer resources. */
