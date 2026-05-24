@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -15,32 +14,33 @@ if TYPE_CHECKING:
     from clified.installer.registry import ToolSpec
 
 
-def _clified_root() -> Path:
-    env = os.environ.get("CLIFIED_ROOT", "").strip()
-    if env:
-        return Path(env).resolve()
-    return Path.home() / "AI" / "clified"
-
-
 def ensure_clified_env(monorepo: Path | None = None) -> Path:
-    """Define ``CLIFIED_TOOLS`` e variáveis auxiliares; devolve a raiz do monorepo."""
+    """Define ``CLIFIED_TOOLS``; devolve a raiz do monorepo."""
     root = monorepo or find_monorepo_root()
-    os.environ.setdefault("CLIFIED_ROOT", str(_clified_root()))
     os.environ["CLIFIED_TOOLS"] = str(root / "tools.yaml")
     os.environ.setdefault("UV_VENV_CLEAR", "1")
     os.environ.setdefault("UV_LINK_MODE", "copy")
     return root
 
 
-def _clified_python() -> str:
-    clified = _clified_root()
-    if sys.platform == "win32":
-        candidate = clified / ".installer-venv" / "Scripts" / "python.exe"
-    else:
-        candidate = clified / ".installer-venv" / "bin" / "python"
-    if candidate.is_file():
-        return str(candidate)
-    return os.environ.get("PYTHON_CMD", "").strip() or sys.executable
+def _ensure_clified_importable() -> None:
+    try:
+        import clified  # noqa: F401
+    except ImportError:
+        import subprocess
+
+        min_ver = os.environ.get("CLIFIED_MIN_VERSION", "0.4.0")
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--user",
+                f"clified>={min_ver}",
+            ],
+            check=True,
+        )
 
 
 def install_tool(
@@ -56,8 +56,8 @@ def install_tool(
     force: bool = False,
     text2d_venv_only: bool = False,
 ) -> bool:
-    """Instala uma ferramenta registada em ``tools.yaml`` via Clified."""
     ensure_clified_env(monorepo)
+    _ensure_clified_importable()
     from clified.installer.registry import load_registry
     from clified.installer.unified import install_tool as _clified_install
 
@@ -86,6 +86,7 @@ def install_all(
     force: bool = False,
 ) -> bool:
     ensure_clified_env(monorepo)
+    _ensure_clified_importable()
     from clified.installer.registry import load_registry
     from clified.installer.unified import install_all as _clified_install_all
 
@@ -102,6 +103,7 @@ def install_all(
 
 def list_available_tools(monorepo: Path | None = None) -> list[ToolSpec]:
     ensure_clified_env(monorepo)
+    _ensure_clified_importable()
     from clified.installer.registry import (
         get_workspace,
         list_available_tools as _list,
@@ -113,19 +115,11 @@ def list_available_tools(monorepo: Path | None = None) -> list[ToolSpec]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from clified.installer.bootstrap import run
+
     args = list(sys.argv[1:] if argv is None else argv)
     monorepo = ensure_clified_env()
-    clified = _clified_root()
-    install_sh = clified / "install.sh"
-
-    if sys.platform != "win32" and install_sh.is_file():
-        env = os.environ.copy()
-        cmd = [str(install_sh), *args]
-        return subprocess.call(cmd, cwd=monorepo, env=env)
-
-    env = os.environ.copy()
-    py = _clified_python()
-    return subprocess.call([py, "-m", "clified", *args], cwd=monorepo, env=env)
+    return run(args, cwd=monorepo)
 
 
 if __name__ == "__main__":
