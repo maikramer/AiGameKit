@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,24 +17,19 @@ from gamedev_shared.installer.unified import (
 
 
 class TestEnsureClifiedEnv:
-    def test_sets_tools_yaml(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    def test_sets_tools_yaml(self, tmp_path: Path):
         (tmp_path / "tools.yaml").write_text("workspace:\n  root: .\n tools: {}\n")
         (tmp_path / "Shared").mkdir()
-        (tmp_path / ".git").mkdir()
-        monkeypatch.setenv("CLIFIED_ROOT", str(tmp_path / "clified"))
         root = ensure_clified_env(tmp_path)
         assert root == tmp_path.resolve()
-        import os
-
         assert os.environ["CLIFIED_TOOLS"] == str((tmp_path / "tools.yaml").resolve())
 
 
 class TestInstallToolBridge:
     @patch("clified.installer.unified.install_tool")
     @patch("clified.installer.registry.load_registry")
-    def test_delegates_to_clified(self, _load, mock_install, monkeypatch):
+    def test_delegates_to_clified(self, _load, mock_install):
         mock_install.return_value = True
-        monkeypatch.setenv("CLIFIED_ROOT", "/tmp/clified")
         ok = install_tool("materialize", force=True)
         assert ok is True
         mock_install.assert_called_once()
@@ -50,12 +46,11 @@ class TestListAvailableTools:
 
 
 class TestMain:
-    @patch("subprocess.call", return_value=0)
-    def test_linux_calls_install_sh(self, mock_call, monkeypatch):
-        monkeypatch.setenv("CLIFIED_ROOT", str(Path.home() / "AI" / "clified"))
+    @patch("clified.installer.bootstrap.run", return_value=0)
+    @patch("gamedev_shared.installer.unified.find_monorepo_root")
+    def test_delegates_to_clified(self, mock_root, mock_run, tmp_path: Path):
+        (tmp_path / "tools.yaml").write_text("workspace:\n  root: .\n tools: {}\n")
+        mock_root.return_value = tmp_path
         code = main(["--list"])
         assert code == 0
-        mock_call.assert_called_once()
-        cmd = mock_call.call_args.args[0]
-        assert "install.sh" in cmd[0]
-        assert "--list" in cmd
+        mock_run.assert_called_once_with(["--list"], cwd=tmp_path)

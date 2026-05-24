@@ -133,8 +133,8 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 
 | Method | When to use |
 |--------|-------------|
-| **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recommended: delegates to [Clified](https://github.com/maikramer/clified) using `tools.yaml` in this repo. |
-| **`gamedev-install`** | Same as root scripts via `gamedev_shared.installer` bridge (requires Clified at `CLIFIED_ROOT`). |
+| **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recommended: [Clified](https://pypi.org/project/clified/) via PyPI using `tools.yaml` in this repo. |
+| **`gamedev-install`** | Mesmo fluxo via ponte `gamedev_shared.installer` (instala `clified` via PyPI se necessário). |
 | **Project-local installer** (`<Project>/scripts/install.sh` or `python scripts/installer.py`) | Shortcut when you are already inside the project folder; do **not** confuse with `GameDev/install.sh` at the repo root (see [docs/INSTALLING.md](docs/INSTALLING.md)). |
 | **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` per folder; see READMEs and "Manual" sections — for debugging or CI without the unified wrapper. |
 
@@ -142,7 +142,7 @@ Useful variable: **`PYTHON_CMD`** (or `--python` on the installer) to force the 
 
 ### Installer via Clified (recommended)
 
-Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://github.com/maikramer/clified) (`CLIFIED_ROOT`, default `~/AI/clified`):
+Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.org/project/clified/) on PyPI (installed automatically by the root scripts):
 
 ```bash
 # Linux/macOS

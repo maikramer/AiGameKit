@@ -19,9 +19,9 @@ gamedev-install --list
 gamedev-install text2d
 ```
 
-Pré-requisitos do **instalador**: [Clified](https://github.com/maikramer/clified) em `~/AI/clified` (ou `CLIFIED_ROOT`), Python **3.10+** e `uv` (instalados automaticamente pelo `install.sh` do Clified).
+Pré-requisitos do **instalador**: Python **3.10+** e `pip`. O [Clified](https://pypi.org/project/clified/) é instalado automaticamente via PyPI quando ausente. O `uv` é instalado pelo Clified durante a instalação das ferramentas.
 
-Variáveis úteis: `CLIFIED_ROOT`, `CLIFIED_TOOLS` (por defeito `GameDev/tools.yaml`), `PYTHON_CMD`.
+Variáveis úteis: `CLIFIED_TOOLS` (por defeito `GameDev/tools.yaml`), `PYTHON_CMD`, `CLIFIED_MIN_VERSION`.
 
 ---
 
