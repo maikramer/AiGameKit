@@ -1,40 +1,35 @@
-"""Instaladores base para projetos Python e Rust do monorepo GameDev."""
+"""Instaladores e hooks do monorepo GameDev (via Clified)."""
 
-from .base import BaseInstaller, default_python_command
-from .bun_installer import BunProjectInstaller
-from .python_installer import PythonProjectInstaller
-from .registry import (
-    TOOLS,
-    ToolKind,
-    ToolSpec,
-    find_monorepo_root,
-    get_tool,
-    list_available_tools,
-    try_find_monorepo_root,
+from .base import (
+    BaseInstaller,
+    default_python_command,
+    install_all_constraint_argv,
+    path_env_contains_dir,
 )
-from .rust_installer import RustProjectInstaller
+from .clified_hooks import (
+    paint3d_post_install,
+    part3d_post_install,
+    rigging3d_post_install,
+    text2sound_custom_install,
+    text3d_post_install,
+)
+from .monorepo import find_monorepo_root, try_find_monorepo_root
+from .unified import install_all, install_tool, list_available_tools, main
 
 __all__ = [
-    "TOOLS",
     "BaseInstaller",
-    "BunProjectInstaller",
-    "PythonProjectInstaller",
-    "RustProjectInstaller",
-    "ToolKind",
-    "ToolSpec",
     "default_python_command",
     "find_monorepo_root",
-    "get_tool",
     "install_all",
+    "install_all_constraint_argv",
     "install_tool",
     "list_available_tools",
+    "main",
+    "paint3d_post_install",
+    "part3d_post_install",
+    "path_env_contains_dir",
+    "rigging3d_post_install",
+    "text2sound_custom_install",
+    "text3d_post_install",
     "try_find_monorepo_root",
 ]
-
-
-def __getattr__(name: str) -> object:
-    if name in ("install_tool", "install_all"):
-        from .unified import install_all, install_tool
-
-        return install_tool if name == "install_tool" else install_all
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

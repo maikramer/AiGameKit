@@ -1,66 +1,16 @@
 #!/usr/bin/env python3
-"""
-Instalador Rigging3D — usa o instalador unificado do monorepo.
-
-Uso:
-  ./install.sh rigging3d
-  python3 scripts/installer.py
-  gamedev-install rigging3d
-"""
+"""Instalador Rigging3D — delega ao Clified."""
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
-# Setup path para gamedev_shared
-_script_dir = Path(__file__).resolve().parent
-_project_root = _script_dir.parent
-_monorepo_root = _project_root.parent
-_shared_src = _monorepo_root / "Shared" / "src"
+_shared_src = Path(__file__).resolve().parents[2] / "Shared" / "src"
 if _shared_src.is_dir() and str(_shared_src) not in sys.path:
     sys.path.insert(0, str(_shared_src))
 
-from gamedev_shared.installer.unified import install_tool  # noqa: E402
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Instalador Rigging3D",
-        epilog="""
-Forma oficial: ./install.sh rigging3d
-
-Exemplos:
-  ./install.sh rigging3d
-  python3 scripts/installer.py --force
-
-Para inferência completa (UniRig), usar:
-  bash scripts/setup.sh
-  # ou
-  python3 scripts/installer.py --use-venv  # (via UnifiedInstaller)
-""",
-    )
-    parser.add_argument("--prefix", default=str(Path.home() / ".local"), help="Diretório de instalação")
-    parser.add_argument("--python", default=None, help="Comando Python")
-    parser.add_argument("--use-venv", action="store_true", help="Usar virtualenv")
-    parser.add_argument("--skip-deps", action="store_true", help="Pular dependências")
-    parser.add_argument("--skip-models", action="store_true", help="Pular modelos")
-    parser.add_argument("--force", action="store_true", help="Forçar reinstalação")
-    args = parser.parse_args()
-
-    success = install_tool(
-        "rigging3d",
-        monorepo=_monorepo_root,
-        install_prefix=Path(args.prefix),
-        python_cmd=args.python,
-        use_venv=args.use_venv,
-        skip_deps=args.skip_deps,
-        skip_models=args.skip_models,
-        force=args.force,
-    )
-    return 0 if success else 1
-
+from gamedev_shared.installer.tool_script import run_fixed_tool
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run_fixed_tool("rigging3d", description="Instalador Rigging3D"))

@@ -133,16 +133,16 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 
 | Method | When to use |
 |--------|-------------|
-| **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recommended: prepares installer deps (e.g. Rich), creates a `.venv` per project, editable install. |
-| **`gamedev-install`** | After `pip install -e Shared/` (or `PYTHONPATH` pointing at `Shared/src`): same registry as the scripts; useful in CI or when Shared is already installed. |
+| **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recommended: delegates to [Clified](https://github.com/maikramer/clified) using `tools.yaml` in this repo. |
+| **`gamedev-install`** | Same as root scripts via `gamedev_shared.installer` bridge (requires Clified at `CLIFIED_ROOT`). |
 | **Project-local installer** (`<Project>/scripts/install.sh` or `python scripts/installer.py`) | Shortcut when you are already inside the project folder; do **not** confuse with `GameDev/install.sh` at the repo root (see [docs/INSTALLING.md](docs/INSTALLING.md)). |
 | **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` per folder; see READMEs and "Manual" sections — for debugging or CI without the unified wrapper. |
 
 Useful variable: **`PYTHON_CMD`** (or `--python` on the installer) to force the interpreter (default `python3` on Unix, `python` on Windows in the scripts).
 
-### Unified installer (recommended)
+### Installer via Clified (recommended)
 
-The monorepo includes a unified installer for every registered tool:
+Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://github.com/maikramer/clified) (`CLIFIED_ROOT`, default `~/AI/clified`):
 
 ```bash
 # Linux/macOS

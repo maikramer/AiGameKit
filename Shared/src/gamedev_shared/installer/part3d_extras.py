@@ -10,10 +10,13 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..logging import Logger
-from .base import has_uv, uv_cmd
-from .python_installer import PythonProjectInstaller
+from clified.installer.base import has_uv, uv_cmd
+
+if TYPE_CHECKING:
+    from clified.installer.python_installer import PythonProjectInstaller
 
 # Nome pip → módulo Python
 _PART3D_PYG_PACKAGES: tuple[tuple[str, str], ...] = (

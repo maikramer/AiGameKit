@@ -19,7 +19,9 @@ gamedev-install --list
 gamedev-install text2d
 ```
 
-**Installer prerequisites:** Python **3.10+**, `pip`, and dependencies in [`Shared/config/requirements.txt`](../Shared/config/requirements.txt) (e.g. Rich), installed automatically by [`install.sh`](../install.sh) before loading the unified module.
+**Installer prerequisites:** [Clified](https://github.com/maikramer/clified) at `~/AI/clified` (or `CLIFIED_ROOT`), Python **3.10+**, and `uv` (bootstrapped by Clified's `install.sh`).
+
+Useful env vars: `CLIFIED_ROOT`, `CLIFIED_TOOLS` (defaults to `GameDev/tools.yaml`), `PYTHON_CMD`.
 
 Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `python` on Windows in the scripts).
 
@@ -44,7 +46,7 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 
 Install everything present in the checkout: `./install.sh all`.
 
-Technical details: [`Shared/src/gamedev_shared/installer/registry.py`](../Shared/src/gamedev_shared/installer/registry.py).
+Technical details: [`tools.yaml`](../tools.yaml) (Clified registry) and hooks in [`Shared/src/gamedev_shared/installer/clified_hooks.py`](../Shared/src/gamedev_shared/installer/clified_hooks.py).
 
 **From batch assets to a browser game (folder layout, GLB handoff, VibeGame):** [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md).
 
@@ -54,7 +56,7 @@ Technical details: [`Shared/src/gamedev_shared/installer/registry.py`](../Shared
 
 | File | Role |
 |------|------|
-| **`GameDev/install.sh`** (root) | **Unified** installer for any tool (`gamedev_shared.installer.unified`). |
+| **`GameDev/install.sh`** (root) | Delegates to **Clified** (`tools.yaml` + repo hooks). |
 | **`<Project>/scripts/install.sh`** | Local shortcut that only calls **that** project’s `scripts/installer.py` (same logic as unified when equivalent). **Not** the root script. |
 
 Prefer `./install.sh <name>` **from the repo root**. The `scripts/` wrapper exists for people already inside the project folder.

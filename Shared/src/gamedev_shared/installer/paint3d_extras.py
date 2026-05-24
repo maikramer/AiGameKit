@@ -6,9 +6,12 @@ import os
 import subprocess
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..logging import Logger
-from .python_installer import PythonProjectInstaller
+
+if TYPE_CHECKING:
+    from clified.installer.python_installer import PythonProjectInstaller
 
 _REALESRGAN_URL = "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
 

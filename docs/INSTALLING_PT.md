@@ -19,9 +19,9 @@ gamedev-install --list
 gamedev-install text2d
 ```
 
-Pré-requisitos do **instalador**: Python **3.10+**, `pip`, e dependências em [`Shared/config/requirements.txt`](../Shared/config/requirements.txt) (ex.: Rich), instaladas automaticamente por [`install.sh`](../install.sh) antes de carregar o módulo unificado.
+Pré-requisitos do **instalador**: [Clified](https://github.com/maikramer/clified) em `~/AI/clified` (ou `CLIFIED_ROOT`), Python **3.10+** e `uv` (instalados automaticamente pelo `install.sh` do Clified).
 
-Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, ou `python` no Windows nos scripts).
+Variáveis úteis: `CLIFIED_ROOT`, `CLIFIED_TOOLS` (por defeito `GameDev/tools.yaml`), `PYTHON_CMD`.
 
 ---
 
@@ -44,7 +44,7 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 
 Instalar tudo o que estiver presente no checkout: `./install.sh all`.
 
-Detalhes técnicos: [`Shared/src/gamedev_shared/installer/registry.py`](../Shared/src/gamedev_shared/installer/registry.py).
+Detalhes técnicos: [`tools.yaml`](../tools.yaml) (registo Clified) e hooks em [`Shared/src/gamedev_shared/installer/clified_hooks.py`](../Shared/src/gamedev_shared/installer/clified_hooks.py).
 
 **De assets em batch ao jogo no browser (pastas, handoff GLB, VibeGame):** [MONOREPO_GAME_PIPELINE.md](MONOREPO_GAME_PIPELINE.md) (documento em inglês).
 
@@ -54,7 +54,7 @@ Detalhes técnicos: [`Shared/src/gamedev_shared/installer/registry.py`](../Share
 
 | Ficheiro | Função |
 |----------|--------|
-| **`GameDev/install.sh`** (raiz) | Instalador **unificado** de qualquer ferramenta (`gamedev_shared.installer.unified`). |
+| **`GameDev/install.sh`** (raiz) | Delega ao **Clified** (`tools.yaml` + hooks no repo). |
 | **`<Projeto>/scripts/install.sh`** | Atalho local que apenas chama `scripts/installer.py` **desse** projeto (mesma lógica que o unificado quando equivalente). **Não** é o script da raiz. |
 
 Preferência: usar sempre `./install.sh <nome>` **a partir da raiz**. O wrapper em `scripts/` existe para quem já está dentro da pasta do projecto.

@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import subprocess
+from typing import TYPE_CHECKING
 
-from .base import install_all_constraint_argv, uv_cmd
-from .python_installer import PythonProjectInstaller
+from clified.installer.base import uv_cmd
+from clified.installer.python_installer import _PIP_BOOTSTRAP
 
-# Wheel PyPI sem flash-attn; METADATA fixa pandas==2.0.2 (sem cp313) — instalamos
-# --no-deps e depois requirements-stable-audio-deps.txt (sem pandas).
+from .base import install_all_constraint_argv
+
+if TYPE_CHECKING:
+    from clified.installer.python_installer import PythonProjectInstaller
+
 _STABLE_AUDIO_TOOLS = "stable-audio-tools==0.0.18"
 
 
 def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
     """Replica ``install_in_venv`` com passo extra para stable-audio-tools."""
-    from .python_installer import _PIP_BOOTSTRAP
-
     inst.logger.step("Instalando no venv do projecto...")
     python = str(inst.venv_python)
     pip_cmd = inst._pip_install_cmd()
@@ -77,7 +79,16 @@ def text2sound_install_in_venv(inst: PythonProjectInstaller) -> None:
         )
     else:
         subprocess.run(
-            [str(inst.venv_python), "-m", "pip", "install", *constr, "-e", str(inst.project_root), "--no-deps"],
+            [
+                str(inst.venv_python),
+                "-m",
+                "pip",
+                "install",
+                *constr,
+                "-e",
+                str(inst.project_root),
+                "--no-deps",
+            ],
             check=True,
             cwd=_root,
         )

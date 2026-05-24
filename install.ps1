@@ -1,93 +1,39 @@
 # =============================================================================
-# GameDev Monorepo — Instalador Unificado (Windows PowerShell)
-# =============================================================================
-#
-# Instala qualquer ferramenta do monorepo GameDev.
-#
-# Uso:
-#   .\install.ps1 materialize           # Instalar Materialize (Rust)
-#   .\install.ps1 text2d              # com .venv no projecto, instala no venv do projecto
-#   .\install.ps1 all                     # Instalar tudo
-#   .\install.ps1 --all                    # Igual a «all»
-#   .\install.ps1 --list                # Listar ferramentas
-#
+# GameDev Monorepo — Instalador via Clified (Windows PowerShell)
 # =============================================================================
 
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$SharedRoot = Join-Path $ScriptDir "Shared"
-$SharedSrc = Join-Path $SharedRoot "src"
+$ClifiedRoot = if ($env:CLIFIED_ROOT) { $env:CLIFIED_ROOT } else { Join-Path $env:USERPROFILE "AI\clified" }
 
-$Cyan = "`e[36m"
-$Red = "`e[31m"
-$Reset = "`e[0m"
-
-function Prepare-InstallerEnvironment {
-    Write-Host "${Cyan}Preparando ambiente do instalador...${Reset}"
-
-    $pkgPath = Join-Path $SharedSrc "gamedev_shared"
-    if (-not (Test-Path -LiteralPath $pkgPath)) {
-        Write-Host "${Red}Monorepo incompleto: nao existe $pkgPath${Reset}"
-        Write-Host "  Clona o repositorio completo (pasta Shared/ e obrigatoria)."
+if (-not (Test-Path -LiteralPath (Join-Path $ClifiedRoot "install.sh"))) {
+    $installPs1 = Join-Path $ClifiedRoot "install.ps1"
+    if (-not (Test-Path -LiteralPath $installPs1)) {
+        Write-Host "Clified nao encontrado em $ClifiedRoot" -ForegroundColor Red
+        Write-Host "Clone https://github.com/maikramer/clified ou defina CLIFIED_ROOT."
         exit 1
     }
-
-    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
-    if (-not $pythonCmd) {
-        $pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue
-    }
-    if (-not $pythonCmd) {
-        Write-Host "${Red}Python 3 nao encontrado. Instale de https://python.org${Reset}"
-        exit 1
-    }
-
-    $py = $pythonCmd.Source
-    & $py -c "import sys; assert sys.version_info >= (3, 10)" 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "${Red}Python 3.10 ou superior e necessario.${Reset}"
-        & $py -V 2>$null
-        exit 1
-    }
-
-    $env:PYTHONPATH = "$SharedSrc;$($env:PYTHONPATH)"
-
-    $projectsPython = $py
-    & $projectsPython -c "import rich" 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "${Cyan}  -> Ambiente isolado do instalador (venv + Rich)...${Reset}"
-        $installerVenv = Join-Path $SharedRoot ".installer-venv"
-        $launcherPython = Join-Path $installerVenv "Scripts\\python.exe"
-        if (-not (Test-Path -LiteralPath $launcherPython)) {
-            & $projectsPython -m venv $installerVenv
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "${Red}Falha ao criar venv do instalador em $installerVenv${Reset}"
-                exit 1
-            }
-        }
-        & $launcherPython -c "import rich" 2>$null | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            & $launcherPython -m pip install -q --upgrade pip "rich>=13"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "${Red}Falha ao instalar Rich no venv do instalador.${Reset}"
-                exit 1
-            }
-        }
-        return @{ Launcher = $launcherPython; Projects = $projectsPython }
-    }
-
-    return @{ Launcher = $projectsPython; Projects = $projectsPython }
 }
 
-$p = Prepare-InstallerEnvironment
-
-# Evita prompts do ``uv venv`` quando .venv ja existe (alinha com install.sh).
+$env:CLIFIED_ROOT = $ClifiedRoot
+$env:CLIFIED_TOOLS = Join-Path $ScriptDir "tools.yaml"
 $env:UV_VENV_CLEAR = "1"
 $env:UV_LINK_MODE = "copy"
 
-Write-Host "${Cyan}GameDev Monorepo - Instalador Unificado${Reset}"
+Write-Host "GameDev Monorepo — Instalador (Clified)" -ForegroundColor Cyan
 Write-Host "========================================"
 
-# Launcher com Rich (--python mantém-se o interpretador de referência dos projectos / venvs).
-& $p.Launcher -m gamedev_shared.installer.unified --python $p.Projects @args
+$py = Join-Path $ClifiedRoot ".installer-venv\Scripts\python.exe"
+if (-not (Test-Path -LiteralPath $py)) {
+    $pythonCmd = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $pythonCmd) { $pythonCmd = Get-Command python3 -ErrorAction SilentlyContinue }
+    if (-not $pythonCmd) {
+        Write-Host "Python 3 nao encontrado." -ForegroundColor Red
+        exit 1
+    }
+    $py = $pythonCmd.Source
+}
+
+& $py -m clified @args
 exit $LASTEXITCODE

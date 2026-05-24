@@ -23,7 +23,7 @@ def resolve_skill_source(
     Raises:
         FileNotFoundError: Skill não encontrada em nenhuma localização.
     """
-    from .installer.registry import try_find_monorepo_root
+    from .installer.monorepo import try_find_monorepo_root
 
     gamedev = try_find_monorepo_root(package_dir)
     if gamedev is not None:

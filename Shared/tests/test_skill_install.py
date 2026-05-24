@@ -2,7 +2,7 @@
 
 import pytest
 
-from gamedev_shared.installer.registry import try_find_monorepo_root
+from gamedev_shared.installer.monorepo import try_find_monorepo_root
 from gamedev_shared.skill_install import (
     install_agent_skill,
     resolve_skill_source,

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from .python_installer import PythonProjectInstaller
+if TYPE_CHECKING:
+    from clified.installer.python_installer import PythonProjectInstaller
 
 
 class Text3DPostInstall:

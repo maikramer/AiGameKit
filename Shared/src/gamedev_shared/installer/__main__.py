@@ -1,7 +1,8 @@
-"""Permite ``python -m gamedev_shared.installer.unified``."""
+"""Permite ``python -m gamedev_shared.installer`` (delega ao Clified)."""
 
-import sys
+from __future__ import annotations
 
 from .unified import main
 
-sys.exit(main())
+if __name__ == "__main__":
+    raise SystemExit(main())

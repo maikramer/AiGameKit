@@ -15,10 +15,10 @@ Biblioteca partilhada do monorepo **GameDev** — código comum entre Text2D, Te
 | `gamedev_shared.gpu` | Utilitários GPU/memória (format_bytes, get_gpu_info, clear_cuda_memory, ...) |
 | `gamedev_shared.subprocess_utils` | Execução de ferramentas via subprocess (resolve_binary, run_cmd, RunResult) |
 | `gamedev_shared.env` | Constantes e helpers para variáveis de ambiente do monorepo (`TOOL_BINS`, `get_tool_bin`, …) |
-| `gamedev_shared.installer` | Classes base para instaladores (Python e Rust) |
-| `gamedev_shared.installer.registry` | Registry (ToolSpec, TOOLS, `find_monorepo_root`, `try_find_monorepo_root`) |
-| `gamedev_shared.installer.unified` | Instalador unificado — instala qualquer ferramenta (`gamedev-install` CLI) |
-| `gamedev_shared.installer.text3d_extras` | Pós-venv Text3D (nvdiffrast, `~/.config/text3d`, wrappers) |
+| `gamedev_shared.installer` | Ponte Clified (`gamedev-install` / `install.sh` → `tools.yaml`) |
+| `gamedev_shared.installer.monorepo` | `find_monorepo_root`, `try_find_monorepo_root` |
+| `gamedev_shared.installer.clified_hooks` | Hooks por ferramenta (Text3D, Text2Sound, Part3D, Paint3D, Rigging3D) |
+| `gamedev_shared.installer.text3d_extras` | Pós-venv Text3D (`~/.config/text3d`, wrappers) |
 | `gamedev_shared.installer.part3d_extras` | Extras PyG (torch-scatter, torch-cluster) e resumo Part3D |
 | `gamedev_shared.multi_gpu` | Planeador de split multi-GPU (MultiGPUPlanner, DevicePlan, ModelArchitectureRegistry) — envolve o accelerate para colocação inteligente de dispositivos |
 | `gamedev_shared.profiler` | Spans com tempo, CPU, RSS e VRAM CUDA (`ProfilerSession`, `profile_span`, `cuda_memory_snapshot_all` para todas as GPUs; extra `[profiler]` → `psutil`) |

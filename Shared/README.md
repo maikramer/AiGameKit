@@ -18,7 +18,7 @@ It provides reusable building blocks so each tool stays focused on its domain: s
 | `gpu` | GPU detection, VRAM monitoring, `warn_if_vram_occupied()`, `enforce_exclusive_gpu()`, `kill_gpu_compute_processes_aggressive()`, `format_bytes()`, `clear_cuda_memory()` |
 | `subprocess_utils` | `run_cmd()`, `run_cmd_streaming()`, `resolve_binary()`, `merge_subprocess_output()`, `RunResult` dataclass |
 | `env` | Canonical env-var constants (`TOOL_BINS`, `get_tool_bin()`, `ensure_pytorch_cuda_alloc_conf()`, `subprocess_gpu_env()`, `detect_low_vram()`) |
-| `installer/` | Unified installer (`install.sh` / `python3 -m gamedev_shared.installer.unified`); registry, Python/Rust base classes, per-tool extras |
+| `installer/` | Ponte Clified (`install.sh` → `tools.yaml`); hooks por ferramenta (`clified_hooks`, `*_extras`) |
 | `cli_rich` | `setup_rich_click()` / `setup_rich_click_module()` — parametrized rich-click config for all CLIs |
 | `quality` | **QualityEngine** — 5 quality tiers, 14 asset categories, 11 audio kinds, soft parameter resolution with `ParameterSource` tracking |
 | `multi_gpu` | **MultiGPUPlanner** — auto-detect GPUs, split weights via accelerate, `DevicePlan`, `ModelArchitectureRegistry` |

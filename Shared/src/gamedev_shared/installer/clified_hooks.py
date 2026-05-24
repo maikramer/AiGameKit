@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .python_installer import PythonProjectInstaller
+    from clified.installer.python_installer import PythonProjectInstaller
 
 
 def text2sound_custom_install(installer: PythonProjectInstaller) -> bool:
