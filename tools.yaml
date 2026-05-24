@@ -1,0 +1,159 @@
+# Registo Clified — monorepo GameDev
+# Usado por install.sh via CLIFIED_TOOLS (sem hardcode no Clified central).
+
+workspace:
+  root: .
+  name: "GameDev"
+  shared_python:
+    path: Shared
+    import_name: gamedev_shared
+    src_subpath: src
+
+tools:
+  text2d:
+    name: "Text2D"
+    kind: python
+    folder: Text2D
+    cli_name: text2d
+    python_module: text2d
+    description: "CLI text-to-image com FLUX.2 Klein (SDNQ)"
+    min_python: [3, 13]
+    extra_aliases: [text2d-generate]
+    needs_pytorch: true
+    install_order: -2
+    post_install: clified.hooks:pip_check
+
+  text3d:
+    name: "Text3D"
+    kind: python
+    folder: Text3D
+    cli_name: text3d
+    python_module: text3d
+    description: "Pipeline text-to-3D (Text2D + Hunyuan3D)"
+    min_python: [3, 13]
+    extra_aliases: [text3d-generate]
+    needs_pytorch: true
+    install_order: -1
+    install_before: [text2d]
+    cross_deps: [text2d]
+    post_install: gamedev_shared.installer.clified_hooks:text3d_post_install
+
+  gameassets:
+    name: "GameAssets"
+    kind: python
+    folder: GameAssets
+    cli_name: gameassets
+    python_module: gameassets
+    description: "Batch de prompts/assets 2D/3D alinhados ao jogo"
+    min_python: [3, 13]
+
+  gamedevlab:
+    name: "GameDevLab"
+    kind: python
+    folder: GameDevLab
+    cli_name: gamedev-lab
+    python_module: gamedev_lab
+    description: "Laboratório: debug 3D, bancadas de quantização, profiling"
+    min_python: [3, 13]
+
+  text2sound:
+    name: "Text2Sound"
+    kind: python
+    folder: Text2Sound
+    cli_name: text2sound
+    python_module: text2sound
+    description: "CLI text-to-audio com Stable Audio Open 1.0"
+    min_python: [3, 13]
+    extra_aliases: [text2sound-generate]
+    needs_pytorch: true
+    custom_install: gamedev_shared.installer.clified_hooks:text2sound_custom_install
+
+  texture2d:
+    name: "Texture2D"
+    kind: python
+    folder: Texture2D
+    cli_name: texture2d
+    python_module: texture2d
+    description: "Texturas 2D seamless via HF Inference API (sem GPU local)"
+    min_python: [3, 13]
+    extra_aliases: [texture2d-generate]
+    needs_pytorch: true
+
+  skymap2d:
+    name: "Skymap2D"
+    kind: python
+    folder: Skymap2D
+    cli_name: skymap2d
+    python_module: skymap2d
+    description: "Skymaps equirectangular 360° via HF Inference API (sem GPU local)"
+    min_python: [3, 13]
+    extra_aliases: [skymap2d-generate]
+
+  terrain3d:
+    name: "Terrain3D"
+    kind: python
+    folder: Terrain3D
+    cli_name: terrain3d
+    python_module: terrain3d
+    description: "AI terrain generation via diffusion models (CUDA GPU)"
+    min_python: [3, 13]
+    needs_pytorch: true
+
+  rigging3d:
+    name: "Rigging3D"
+    kind: python
+    folder: Rigging3D
+    cli_name: rigging3d
+    python_module: rigging3d
+    description: "UniRig empacotado + CLI (auto-rigging 3D; PyTorch/CUDA; bpy 5.1+)"
+    min_python: [3, 13]
+    needs_pytorch: true
+    post_install: gamedev_shared.installer.clified_hooks:rigging3d_post_install
+
+  animator3d:
+    name: "Animator3D"
+    kind: python
+    folder: Animator3D
+    cli_name: animator3d
+    python_module: animator3d
+    description: "Animação 3D com bpy (Blender Python) — complementa Rigging3D"
+    min_python: [3, 13]
+
+  part3d:
+    name: "Part3D"
+    kind: python
+    folder: Part3D
+    cli_name: part3d
+    python_module: part3d
+    description: "Decomposição semântica de meshes 3D via Hunyuan3D-Part"
+    min_python: [3, 13]
+    extra_aliases: [part3d-decompose]
+    needs_pytorch: true
+    post_install: gamedev_shared.installer.clified_hooks:part3d_post_install
+
+  paint3d:
+    name: "Paint3D"
+    kind: python
+    folder: Paint3D
+    cli_name: paint3d
+    python_module: paint3d
+    description: "Texturização 3D: Hunyuan3D-Paint 2.1 (PBR nativo) + Upscale IA"
+    min_python: [3, 13]
+    needs_pytorch: true
+    post_install: gamedev_shared.installer.clified_hooks:paint3d_post_install
+
+  materialize:
+    name: "Materialize CLI"
+    kind: rust
+    folder: Materialize
+    cli_name: materialize
+    cargo_bin_name: materialize-cli
+    description: "PBR maps (normal, AO, metallic, smoothness) via GPU/wgpu"
+
+  vibegame:
+    name: "VibeGame"
+    kind: bun
+    folder: VibeGame
+    cli_name: vibegame
+    description: "Motor 3D (TypeScript/Bun); CLI vibegame create + build da biblioteca"
+    bun_cli_script: scripts/vibegame-cli.mjs
