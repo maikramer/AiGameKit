@@ -1,6 +1,7 @@
 declare global {
   interface Window {
     __heroPos?: () => { x: number; y: number; z: number; eid: number };
+    __heroDebug?: () => Record<string, number>;
   }
 }
 
@@ -28,6 +29,16 @@ import {
   isKeyDown,
 } from 'vibegame';
 import { Rigidbody } from '../../../src/plugins/physics/components';
+import {
+  getBodyForEntity,
+  PhysicsInitSystem,
+  PhysicsStepSystem,
+} from '../../../src/plugins/physics/systems';
+import { getBodyYForFeetAt, getCharacterFeetY, GROUND_CONTACT_SKIN } from '../../../src/plugins/physics/character-ground.ts';
+import { getTerrainHeightAt } from '../../../src/plugins/terrain/systems.ts';
+import { getTerrainContext, isTerrainDynamicsBlocking } from '../../../src/plugins/terrain/utils';
+import { Transform } from '../../../src/plugins/transforms';
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 
 setKTX2TranscoderPath('/libs/basis/');
 import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
@@ -35,6 +46,65 @@ import { Health, isDead } from '../../../src/plugins/combat/components.ts';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
 
 const SAVE_KEY = 'simple-rpg-save';
+
+function isTerrainReady(state: State): boolean {
+  for (const [, data] of getTerrainContext(state)) {
+    if (data.initialized) return true;
+  }
+  return false;
+}
+
+let heroGroundSnapped = false;
+
+const HeroGroundSnapSystem: System = {
+  group: 'fixed',
+  after: [PhysicsStepSystem],
+  update(state: State) {
+    if (heroGroundSnapped || isTerrainDynamicsBlocking(state) || !isTerrainReady(state)) {
+      return;
+    }
+
+    const heroEid = state.getEntityByName('hero');
+    if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
+
+    const body = getBodyForEntity(state, heroEid);
+    if (!body) return;
+
+    const x = Transform.posX[heroEid];
+    const z = Transform.posZ[heroEid];
+    const groundY = getTerrainHeightAt(state, x, z);
+    const spawnY = getBodyYForFeetAt(
+      state,
+      heroEid,
+      groundY + GROUND_CONTACT_SKIN
+    );
+
+    Transform.posX[heroEid] = x;
+    Transform.posY[heroEid] = spawnY;
+    Transform.posZ[heroEid] = z;
+    Transform.dirty[heroEid] = 1;
+
+    Rigidbody.posX[heroEid] = x;
+    Rigidbody.posY[heroEid] = spawnY;
+    Rigidbody.posZ[heroEid] = z;
+    Rigidbody.velX[heroEid] = 0;
+    Rigidbody.velY[heroEid] = 0;
+    Rigidbody.velZ[heroEid] = 0;
+
+    body.setTranslation({ x, y: spawnY, z }, true);
+    body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+    body.wakeUp();
+
+    const CM = state.getComponent('character-movement');
+    if (CM && state.hasComponent(heroEid, CM)) {
+      CM.velocityY[heroEid] = 0;
+      CM.desiredVelX[heroEid] = 0;
+      CM.desiredVelZ[heroEid] = 0;
+    }
+
+    heroGroundSnapped = true;
+  },
+};
 
 const dictEN: Record<string, string> = {
   'hud.title': 'Crystal Vale',
@@ -52,7 +122,7 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[WASD] move  [Space] jump  [Mouse] look  [Q] save  [E] load  [L] EN/PT',
+    '[WASD] move  [Space] jump  [Click] camera  [Q] save  [E] load  [L] EN/PT',
 };
 
 const dictPT: Record<string, string> = {
@@ -71,7 +141,7 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[WASD] mover  [Espaço] saltar  [Rato] câmara  [Q] gravar  [E] carregar  [L] EN/PT',
+    '[WASD] mover  [Espaço] saltar  [Clique] câmara  [Q] gravar  [E] carregar  [L] EN/PT',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
@@ -515,6 +585,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(I18nPlugin);
   withPlugin(CombatPlugin);
   withSystem(GameplayHudSystem);
+  withSystem(HeroGroundSnapSystem);
 
   configure({ canvas: '#game-canvas' });
 
@@ -530,10 +601,37 @@ async function bootstrap(): Promise<void> {
     state.addComponent(heroEid, Health);
     Health.current[heroEid] = 100;
     Health.max[heroEid] = 100;
-    Rigidbody.gravityScale[heroEid] = 0;
   }
 
   window.__heroState = state;
+
+  window.__heroDebug = () => {
+    const heroEid = state.getEntityByName('hero');
+    if (heroEid === null) return {};
+    const x = Transform.posX[heroEid];
+    const y = Transform.posY[heroEid];
+    const z = Transform.posZ[heroEid];
+    const terrainY = getTerrainHeightAt(state, x, z);
+    const feetY = getCharacterFeetY(state, heroEid, y);
+    const CM = state.getComponent('character-movement');
+    const CC = state.getComponent('character-controller');
+    const RB = state.getComponent('rigidbody');
+    const body = getBodyForEntity(state, heroEid);
+    const rapierY = body?.translation().y;
+    return {
+      x,
+      y,
+      z,
+      rapierY,
+      terrainY,
+      feetY,
+      groundGap: feetY - terrainY,
+      vy: RB?.velY?.[heroEid] ?? 0,
+      grounded: CC?.grounded?.[heroEid] ?? 0,
+      desiredVelX: CM?.desiredVelX?.[heroEid] ?? 0,
+      desiredVelZ: CM?.desiredVelZ?.[heroEid] ?? 0,
+    };
+  };
 
   resolveAudioEids(state);
 

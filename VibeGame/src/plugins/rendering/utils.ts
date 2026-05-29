@@ -328,13 +328,9 @@ export async function createRenderer(
     )
   );
 
-  // Shadow maps cause depth/color attachment size mismatch on WebGPU
-  // (Three.js bug — depth buffer not resized in sync with color).
-  // Keep disabled until Three.js fixes this.
-  const isWebGPU = renderer.isWebGPURenderer === true;
-  if (!isWebGPU) {
-    renderer.shadowMap.enabled = true;
-  }
+  // WebGPU shadow maps were broken pre-r183; fixed in Three.js PR #32705.
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);

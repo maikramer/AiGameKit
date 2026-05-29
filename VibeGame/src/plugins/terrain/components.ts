@@ -26,6 +26,16 @@ export const Terrain = {
   slopeSoftness: new Float32Array(MAX_ENTITIES),
 } as const;
 
+export const TerrainChunk = {
+  field: new Uint32Array(MAX_ENTITIES),
+  originX: new Float32Array(MAX_ENTITIES),
+  originZ: new Float32Array(MAX_ENTITIES),
+  size: new Float32Array(MAX_ENTITIES),
+  level: new Uint8Array(MAX_ENTITIES),
+  resolution: new Uint8Array(MAX_ENTITIES),
+  meshDirty: new Uint8Array(MAX_ENTITIES),
+} as const;
+
 export const TerrainDebugInfo = {
   activeChunks: new Uint32Array(MAX_ENTITIES),
   drawCalls: new Uint32Array(MAX_ENTITIES),

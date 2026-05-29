@@ -9,7 +9,6 @@ import {
   sampleTerrainSurface,
   type TerrainSurfaceSample,
 } from './surface';
-import { isTerrainUnderwaterAt } from './water-spawn';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
@@ -196,12 +195,6 @@ export const TerrainSpawnSystem: System = {
             spec.surfaceEpsilonAuto
           );
           if (!cand) continue;
-          if (
-            spec.avoidWater &&
-            isTerrainUnderwaterAt(state, wx, wz, cand.worldY)
-          ) {
-            continue;
-          }
           s = cand;
           if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
             foundValidSlope = true;

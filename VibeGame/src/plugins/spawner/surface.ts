@@ -1,5 +1,6 @@
 ﻿import * as THREE from 'three';
 import type { State } from '../../core';
+import { sampleHeightAt } from '../terrain/height-sampler';
 import { getTerrainContext } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
 
@@ -59,19 +60,18 @@ export function sampleTerrainSurface(
     if (!data.initialized) continue;
     const ox = data.worldOffset.x;
     const oz = data.worldOffset.z;
-    const cfg = data.terrainLOD.getConfig();
 
     const effectiveEps = surfaceEpsilonAuto
-      ? Math.max(0.75, cfg.worldSize / (cfg.resolution * 4))
+      ? Math.max(0.75, data.sampler.worldSize / (data.sampler.width * 4))
       : eps;
 
     const localX = wx - ox;
     const localZ = wz - oz;
-    const h = data.terrainLOD.getHeightAt(localX, localZ);
+    const h = sampleHeightAt(data.sampler, localX, localZ);
     const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>
-      data.terrainLOD.getHeightAt(x - ox, z - oz);
+      sampleHeightAt(data.sampler, x - ox, z - oz);
 
     const normal = normalFromHeightSampler(
       heightAtRawSlope,

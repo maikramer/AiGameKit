@@ -4,9 +4,6 @@ import { AiSteeringPlugin } from '../../../src/plugins/ai-steering/plugin';
 import { DefaultPlugins } from '../../../src/plugins/defaults';
 import { HudPlugin } from '../../../src/plugins/hud/plugin';
 import { I18nPlugin } from '../../../src/plugins/i18n/plugin';
-import { JointsPlugin } from '../../../src/plugins/joints/plugin';
-import { NavmeshPlugin } from '../../../src/plugins/navmesh/plugin';
-import { NetworkPlugin } from '../../../src/plugins/network/plugin';
 import { RaycastPlugin } from '../../../src/plugins/raycast/plugin';
 import { SaveLoadPlugin } from '../../../src/plugins/save-load/plugin';
 
@@ -17,15 +14,12 @@ describe('Engine feature plugins registration', () => {
 
   it('includes gameplay plugins in DefaultPlugins', () => {
     expect(DefaultPlugins).toContain(RaycastPlugin);
-    expect(DefaultPlugins).toContain(NavmeshPlugin);
     expect(DefaultPlugins).toContain(AiSteeringPlugin);
     expect(DefaultPlugins).toContain(HudPlugin);
-    expect(DefaultPlugins).toContain(JointsPlugin);
   });
 
   it('optional plugins are not in DefaultPlugins', () => {
     expect(DefaultPlugins).not.toContain(SaveLoadPlugin);
-    expect(DefaultPlugins).not.toContain(NetworkPlugin);
     expect(DefaultPlugins).not.toContain(I18nPlugin);
   });
 
@@ -34,12 +28,5 @@ describe('Engine feature plugins registration', () => {
     state.registerPlugin(RaycastPlugin);
     expect(state.getComponent('RaycastSource')).toBeDefined();
     expect(state.getComponent('raycastHit')).toBeDefined();
-  });
-
-  it('registers navmesh components', () => {
-    const state = new State();
-    state.registerPlugin(NavmeshPlugin);
-    expect(state.getComponent('NavMeshSurface')).toBeDefined();
-    expect(state.getComponent('NavMeshAgent')).toBeDefined();
   });
 });

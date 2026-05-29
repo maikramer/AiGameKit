@@ -1,7 +1,7 @@
 import { BodyType, ColliderShape } from '../physics';
 
 export const PLAYER_BODY_DEFAULTS = {
-  type: BodyType.KinematicPositionBased,
+  type: BodyType.Dynamic,
   mass: 1,
   posX: 0,
   posY: 0,

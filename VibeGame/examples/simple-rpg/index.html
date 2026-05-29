@@ -38,8 +38,8 @@
 
       <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
       <GameObject
-        ambient-light="sky-color: 0xd8ecff; ground-color: 0x726a58; intensity: 0.84"
-        directional-light="color: 0xfff8f2; intensity: 1.78; direction-x: -0.92; direction-y: 1.55; direction-z: -0.78; cast-shadow: 1; shadow-map-size: 4096; distance: 120"
+        ambient-light="sky-color: 0xd8ecff; ground-color: 0x726a58; intensity: 0.55"
+        directional-light="color: 0xfff8f2; intensity: 2.1; direction-x: -0.92; direction-y: 1.55; direction-z: -0.78; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
       >
       </GameObject>
 
@@ -108,26 +108,26 @@
 
       <!-- Fog disabled for WebGPU migration -->
 
+      <!-- WaveManager desativado enquanto ajustamos movimento/câmera -->
+      <!-- <GameObject name="WaveManager" script="wave-manager.ts"></GameObject> -->
+
       <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world-size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
       <PlayerGLTF
         name="hero"
-        pos="0 150 0"
+        pos="0 0 0"
         model-url="/assets/meshes/hero_rigged_animated.glb"
-        script="auto-attacker.ts"
       >
       </PlayerGLTF>
 
-      <GameObject name="WaveManager" script="wave-manager.ts"></GameObject>
-
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
       <!-- Post-processing temporarily disabled for debugging -->
-      <FollowCamera
-        target-distance="12"
-        target-pitch="0.32"
-        yaw-smoothness="0.055"
-        position-lag="0.18"
-        auto-rotate-delay="0.55"
-      ></FollowCamera>
+      <ThirdPersonCamera
+        distance="12"
+        height="4"
+        pitch="0.3"
+        position-smooth="0.08"
+        mouse-sensitivity="0.003"
+      ></ThirdPersonCamera>
 
       <!-- SpawnGroups disabled for perf testing -->
     </Scene>

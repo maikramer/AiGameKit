@@ -15,7 +15,6 @@ import {
   PLAYER_COLLIDER_DEFAULTS,
 } from '../player';
 import { AmbientLight, DirectionalLight, MainCamera } from '../rendering';
-import { Respawn } from '../respawn';
 import { Transform } from '../transforms';
 
 const ambientQuery = defineQuery([AmbientLight]);
@@ -103,7 +102,6 @@ export const PlayerStartupSystem: System = {
 
       state.addComponent(entity, CharacterController);
       state.addComponent(entity, InputState);
-      state.addComponent(entity, Respawn);
     }
   },
 };

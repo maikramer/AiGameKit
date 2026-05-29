@@ -29,11 +29,8 @@ export {
   PlayerGltfConfig,
   playerGltfRecipe,
 } from './plugins/player';
-export {
-  FollowCamera,
-  FollowCameraPlugin,
-  ZOOM_PRESETS,
-} from './plugins/follow-camera';
+export { ThirdPersonCamera } from './plugins/player-controller/components';
+export { PlayerControllerPlugin } from './plugins/player-controller/plugin';
 export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
 export { getScene } from './plugins/rendering';
 export { MeshRenderer } from './plugins/rendering';
@@ -80,16 +77,7 @@ export type {
   EntityScriptContext,
   EntityScriptModule,
 } from './plugins/entity-script';
-export { LODGroup, LodPlugin, LodSystem } from './plugins/lod';
-export { Sprite, SpritePlugin, SpriteSystem } from './plugins/sprite';
-export {
-  loadSceneManifest,
-  SceneManifestPlugin,
-} from './plugins/scene-manifest';
-export type {
-  SceneManifest,
-  SceneManifestEntry,
-} from './plugins/scene-manifest';
+
 export { Terrain, TerrainPlugin } from './plugins/terrain';
 export {
   SpawnerPlugin,
@@ -138,13 +126,21 @@ export {
   getGltfLocalYBounds,
   prefetchGltfLocalYBounds,
 } from './plugins/gltf-xml';
-export { Water, WaterPlugin } from './plugins/water';
-export { TextMesh, Text3dPlugin, text3dRecipe } from './plugins/text-3d';
-export type { WaterEntityData } from './plugins/water';
-export { DebugPlugin } from './plugins/debug';
-export type { VibeGameDebugBridge } from './plugins/debug';
+
 export { RaycastPlugin, RaycastHit, RaycastSource } from './plugins/raycast';
-export { NavmeshPlugin, NavMeshAgent, NavMeshSurface } from './plugins/navmesh';
+export {
+  BvhPlugin,
+  BvhTarget,
+  castBvhRay,
+  getBvhContext,
+  getBvhSurfaceHeight,
+  getBvhStats,
+  registerBvhMesh,
+  unregisterBvhMesh,
+  unregisterBvhForEntity,
+} from './plugins/bvh';
+export type { BvhRaycastHit } from './plugins/bvh';
+
 export {
   AiSteeringPlugin,
   SteeringAgent,
@@ -152,7 +148,7 @@ export {
 } from './plugins/ai-steering';
 
 export { HudPlugin, HudPanel } from './plugins/hud';
-export { JointsPlugin, Joint } from './plugins/joints';
+
 export {
   SaveLoadPlugin,
   Serializable,
@@ -161,12 +157,7 @@ export {
   saveSnapshot,
   saveToLocalStorage,
 } from './plugins/save-load';
-export {
-  NetworkPlugin,
-  NetworkBuffer,
-  Networked,
-  setNetworkConfig,
-} from './plugins/network';
+
 export {
   I18nPlugin,
   I18nText,

@@ -30,7 +30,6 @@ function makeMockGamepad(overrides: Partial<Gamepad> = {}): Gamepad {
 describe('GamepadInput', () => {
   let state: State;
   let entity: number;
-  let gamepadSystem: { update?: (s: State) => void };
 
   beforeEach(() => {
     const dom = new JSDOM(
@@ -60,9 +59,6 @@ describe('GamepadInput', () => {
 
     GamepadInput.deadzone[entity] = 0.15;
 
-    gamepadSystem = Array.from(state.systems).find(
-      (s) => 'update' in s && s !== Array.from(state.systems)[0]
-    ) || { update: undefined };
 
     const allSystems = Array.from(state.systems);
     for (const s of allSystems) {

@@ -2,6 +2,7 @@ import * as THREE from 'three/webgpu';
 import type { State } from '../../core';
 import { defineQuery, type System } from '../../core';
 import { WorldTransform } from '../transforms';
+import { ThirdPersonCamera } from '../player-controller/components';
 import {
   AmbientLight,
   DirectionalLight,
@@ -31,11 +32,13 @@ const rendererQuery = defineQuery([MeshRenderer]);
 const distanceCullQuery = defineQuery([DistanceCull, WorldTransform]);
 const ambientQuery = defineQuery([AmbientLight]);
 const directionalQuery = defineQuery([DirectionalLight]);
+const thirdPersonCameraQuery = defineQuery([ThirdPersonCamera]);
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
 const renderContextQuery = defineQuery([RenderContext]);
 const _lightDir = new THREE.Vector3();
 const _lightPos = new THREE.Vector3();
+const _shadowCenter = new THREE.Vector3();
 const _lightPosition = new THREE.Vector3();
 const _lightQuaternion = new THREE.Quaternion();
 const _lightForward = new THREE.Vector3(0, 0, -1);
@@ -47,6 +50,25 @@ const entityToSpotLight = new Map<number, THREE.SpotLight>();
 
 const MAX_POINT_LIGHTS = 4;
 const MAX_SPOT_LIGHTS = 2;
+
+function resolveShadowCenter(state: State): THREE.Vector3 {
+  _shadowCenter.copy(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER);
+
+  const thirdPersonCams = thirdPersonCameraQuery(state.world);
+  if (thirdPersonCams.length > 0) {
+    const targetEid = ThirdPersonCamera.target[thirdPersonCams[0]];
+    if (targetEid > 0 && state.hasComponent(targetEid, WorldTransform)) {
+      _shadowCenter.set(
+        WorldTransform.posX[targetEid],
+        WorldTransform.posY[targetEid],
+        WorldTransform.posZ[targetEid]
+      );
+    }
+  }
+
+  return _shadowCenter;
+}
+
 export const MeshInstanceSystem: System = {
   group: 'draw',
   update(state: State) {
@@ -177,16 +199,18 @@ export const LightSyncSystem: System = {
         light.shadow.mapSize.width = DirectionalLight.shadowMapSize[entity];
         light.shadow.mapSize.height = DirectionalLight.shadowMapSize[entity];
         light.shadow.bias = -0.0001;
-        light.shadow.normalBias = 0;
+        light.shadow.normalBias = 0.02;
+
+        const shadowCenter = resolveShadowCenter(state);
 
         _lightPos
-          .copy(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER)
+          .copy(shadowCenter)
           .add(
             _lightDir.clone().multiplyScalar(DirectionalLight.distance[entity])
           );
 
         light.position.copy(_lightPos);
-        light.target.position.copy(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER);
+        light.target.position.copy(shadowCenter);
         light.target.updateMatrixWorld();
 
         const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
@@ -198,7 +222,7 @@ export const LightSyncSystem: System = {
         shadowCamera.near = SHADOW_CONFIG.NEAR_PLANE;
         shadowCamera.far = SHADOW_CONFIG.FAR_PLANE;
         shadowCamera.position.copy(_lightPos);
-        shadowCamera.lookAt(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER);
+        shadowCamera.lookAt(shadowCenter);
         shadowCamera.updateProjectionMatrix();
         shadowCamera.updateMatrixWorld();
       } else {

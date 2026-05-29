@@ -1,271 +1,370 @@
-import { TerrainLOD, TerrainPhysics } from '@interverse/three-terrain-lod';
-import { DefaultTerrainMaterial } from '@interverse/three-terrain-lod';
+import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { getPhysicsContext, RAPIER } from '../physics';
 import { CameraSyncSystem } from '../rendering/systems';
-import { getRenderingContext, MainCamera, threeCameras } from '../rendering';
-import { TransformHierarchySystem, WorldTransform } from '../transforms';
-import { Terrain, TerrainDebugInfo } from './components';
+import { getRenderingContext, MainCamera } from '../rendering';
+import { WorldTransform } from '../transforms';
+import { getWorld } from '../physics/world';
+import { Terrain, TerrainChunk, TerrainDebugInfo } from './components';
+import { buildChunkGeometry } from './chunk-geometry';
+import {
+  createFlatSampler,
+  createHeightmapSampler,
+  loadHeightmapFromUrl,
+  sampleHeightAt,
+} from './height-sampler';
+import type { HeightSampler } from './height-sampler';
+import { chunkKey, resolutionForLevel, selectChunks } from './lod-select';
 import {
   fireHeightmapReloadCallbacks,
+  getChunkMeshRegistry,
   getTerrainContext,
   getTerrainHeightmapUrl,
   getTerrainTextureUrl,
   setTerrainHeightmapUrl,
 } from './utils';
-import {
-  loadTerrainData,
-  spawnWaterEntitiesFromTerrainData,
-} from './terrain-data-loader';
 
 const terrainQuery = defineQuery([Terrain]);
-const cameraQuery = defineQuery([MainCamera, WorldTransform]);
+const chunkQuery = defineQuery([TerrainChunk]);
 const debugQuery = defineQuery([Terrain, TerrainDebugInfo]);
+const mainCameraQuery = defineQuery([MainCamera, WorldTransform]);
 
-function getActiveCamera(state: State): THREE.Camera | null {
-  const cameraEntities = cameraQuery(state.world);
-  if (cameraEntities.length === 0) return null;
-  return threeCameras.get(cameraEntities[0]) ?? null;
+function fieldWorldOffset(state: State, entity: number): {
+  x: number;
+  y: number;
+  z: number;
+} {
+  if (state.hasComponent(entity, WorldTransform)) {
+    return {
+      x: WorldTransform.posX[entity],
+      y: WorldTransform.posY[entity],
+      z: WorldTransform.posZ[entity],
+    };
+  }
+  return { x: 0, y: 0, z: 0 };
 }
 
-function resolveCollisionResolution(raw: number): 32 | 64 | 128 {
-  if (raw === 32 || raw === 128) return raw;
-  return 64;
-}
-
-function hexToRgb(hex: number): [number, number, number] {
-  const h = hex >>> 0;
-  return [((h >> 16) & 0xff) / 255, ((h >> 8) & 0xff) / 255, (h & 0xff) / 255];
-}
-
-function applyMaterialCustomization(
-  terrainLOD: TerrainLOD,
-  entity: number
-): void {
-  const provider = (terrainLOD as any).defaultMaterialProvider as
-    | DefaultTerrainMaterial
-    | undefined;
-  if (!provider) return;
-
-  provider.setSlopeThreshold(Terrain.slopeThreshold[entity]);
-  provider.setSlopeSoftness(Terrain.slopeSoftness[entity]);
-  provider.setSnowHeight(Terrain.snowHeight[entity]);
-  provider.setNormalStrength(Terrain.normalStrength[entity]);
-  provider.setSkirtDepth(Terrain.skirtDepth[entity]);
-  provider.setSkirtWidth(Terrain.skirtWidth[entity]);
-  provider.setHeightSmoothing(Terrain.heightSmoothing[entity]);
-  provider.setHeightSmoothingSpread(Terrain.heightSmoothingSpread[entity]);
-
-  const nodes = provider.getNodes();
-  if (nodes.colorHigh) {
-    const [r, g, b] = hexToRgb(Terrain.colorHigh[entity]);
-    nodes.colorHigh.value.set(r, g, b);
-  }
-  if (nodes.colorMid) {
-    const [r, g, b] = hexToRgb(Terrain.colorMid[entity]);
-    nodes.colorMid.value.set(r, g, b);
-  }
-  if (nodes.colorLow) {
-    const [r, g, b] = hexToRgb(Terrain.colorLow[entity]);
-    nodes.colorLow.value.set(r, g, b);
-  }
-  if (nodes.colorRock) {
-    const [r, g, b] = hexToRgb(Terrain.colorRock[entity]);
-    nodes.colorRock.value.set(r, g, b);
-  }
-}
-
-export const TerrainBootstrapSystem: System = {
+export const TerrainFieldBootstrapSystem: System = {
   group: 'fixed',
   update(state: State) {
     if (state.headless) return;
-    const scene = getRenderingContext(state).scene;
 
     const context = getTerrainContext(state);
-    const entities = terrainQuery(state.world);
 
-    for (const entity of entities) {
-      let data = context.get(entity);
+    for (const entity of terrainQuery(state.world)) {
+      if (context.has(entity)) continue;
 
-      if (!data) {
-        const heightmapUrl = getTerrainHeightmapUrl(state, entity);
-        const textureUrl = getTerrainTextureUrl(state, entity);
+      const sampler = createFlatSampler(
+        Terrain.worldSize[entity],
+        Terrain.maxHeight[entity]
+      );
 
-        const terrainLOD = new TerrainLOD({
-          heightMapUrl: heightmapUrl,
-          textureUrl: textureUrl,
-          worldSize: Terrain.worldSize[entity],
-          maxHeight: Terrain.maxHeight[entity],
-          levels: Terrain.levels[entity],
-          resolution: Terrain.resolution[entity],
-          lodDistanceRatio: Terrain.lodDistanceRatio[entity],
-          wireframe: Terrain.wireframe[entity] === 1,
-          heightSmoothing: Math.min(
-            1,
-            Math.max(0, Terrain.heightSmoothing[entity])
-          ),
-          heightSmoothingSpread: Math.max(
-            0.25,
-            Terrain.heightSmoothingSpread[entity]
-          ),
-          normalStrength: Math.max(0, Terrain.normalStrength[entity]),
-          skirtDepth: Terrain.skirtDepth[entity],
-          skirtWidth: Terrain.skirtWidth[entity],
-          showChunkBorders: Terrain.showChunkBorders[entity] === 1,
-        });
+      const heightmapUrl = getTerrainHeightmapUrl(state, entity);
 
-        terrainLOD.setLODHysteresis(Terrain.lodHysteresis[entity]);
-        terrainLOD.setCollisionResolution(
-          resolveCollisionResolution(Terrain.collisionResolution[entity])
-        );
+      context.set(entity, {
+        sampler,
+        chunks: new Set<number>(),
+        heightmapUrl,
+        textureUrl: getTerrainTextureUrl(state, entity),
+        initialized: true,
+        collisionReady: false,
+        worldOffset: fieldWorldOffset(state, entity),
+        lastWireframe: Terrain.wireframe[entity],
+        lastShowChunkBorders: Terrain.showChunkBorders[entity],
+        physicsBody: null,
+        physicsCollider: null,
+      });
 
-        data = {
-          terrainLOD,
-          terrainPhysics: null,
-          heightmapUrl,
-          textureUrl,
-          initialized: false,
-          collisionReady: false,
-          worldOffset: { x: 0, y: 0, z: 0 },
-          lastWireframe: Terrain.wireframe[entity],
-          lastShowChunkBorders: Terrain.showChunkBorders[entity],
-        };
-        context.set(entity, data);
-
-        scene.add(terrainLOD as unknown as THREE.Object3D);
-
-        const entityData = data;
-        terrainLOD
-          .init()
-          .then(async () => {
-            entityData.initialized = true;
-
-            replaceProceduralDiffuse(terrainLOD);
-
-            applyMaterialCustomization(terrainLOD, entity);
-
-            terrainLOD.traverse((child) => {
-              const mesh = child as unknown as THREE.Mesh;
-              if (mesh.isMesh === true) {
-                mesh.receiveShadow = true;
-                mesh.castShadow = false;
-              }
-            });
-
-            patchBilinearGetHeightAt(terrainLOD);
-
-            await terrainLOD.computeAllCollisionData().catch((err: unknown) => {
-              console.error('[terrain] computeAllCollisionData failed:', err);
-            });
-
-            const hmUrl = getTerrainHeightmapUrl(state, entity);
-            if (hmUrl) {
-              const terrainJsonUrl = hmUrl.replace(/[^/]+$/, 'terrain.json');
-              loadTerrainData(terrainJsonUrl)
-                .then((terrainData) => {
-                  spawnWaterEntitiesFromTerrainData(state, terrainData);
-                })
-                .catch((err: unknown) => {
-                  console.warn(
-                    '[terrain] Failed to spawn water entities:',
-                    err
-                  );
-                });
+      if (heightmapUrl) {
+        const field = entity;
+        const worldSize = Terrain.worldSize[entity];
+        const maxHeight = Terrain.maxHeight[entity];
+        loadHeightmapFromUrl(heightmapUrl)
+          .then((imgData) => {
+            const data = context.get(field);
+            if (!data) return;
+            data.sampler = createHeightmapSampler(worldSize, maxHeight, imgData);
+            for (const chunk of data.chunks) {
+              TerrainChunk.meshDirty[chunk] = 1;
             }
-          })
-          .catch((err: unknown) => {
-            console.error('[terrain] Failed to initialize TerrainLOD:', err);
-          });
-      }
-
-      if (data) {
-        const newHmUrl = getTerrainHeightmapUrl(state, entity);
-        if (newHmUrl && newHmUrl !== data.heightmapUrl) {
-          data.heightmapUrl = newHmUrl;
-          if (data.initialized) {
-            data.terrainLOD
-              .loadHeightMap(newHmUrl, true)
-              .then(() => {
-                if (data.terrainPhysics)
-                  data.terrainPhysics.rebuildDirtyChunks();
+            if (data.physicsBody) {
+              const rapierWorld = getWorld();
+              if (rapierWorld) {
+                rapierWorld.removeRigidBody(data.physicsBody);
+                data.physicsBody = null;
+                data.physicsCollider = null;
                 data.collisionReady = false;
-                fireHeightmapReloadCallbacks(state);
-              })
-              .catch((err: unknown) => {
-                console.error('[terrain] Failed to hot-reload heightmap:', err);
-              });
-          }
-        }
-        const newTexUrl = getTerrainTextureUrl(state, entity);
-        if (newTexUrl && newTexUrl !== data.textureUrl) {
-          data.textureUrl = newTexUrl;
-        }
+              }
+            }
+            fireHeightmapReloadCallbacks(state);
+          })
+          .catch(() => {});
       }
     }
 
     for (const [entity, data] of context) {
-      if (!state.exists(entity)) {
-        if (data.terrainPhysics) data.terrainPhysics.dispose();
-        if (scene) scene.remove(data.terrainLOD as unknown as THREE.Object3D);
-        data.terrainLOD.dispose();
-        context.delete(entity);
+      if (state.exists(entity)) continue;
+      const rapierWorld = getWorld();
+      if (rapierWorld && data.physicsBody) {
+        rapierWorld.removeRigidBody(data.physicsBody);
+        data.physicsBody = null;
+        data.physicsCollider = null;
       }
+      for (const chunk of data.chunks) {
+        if (state.exists(chunk)) state.destroyEntity(chunk);
+      }
+      context.delete(entity);
     }
   },
   dispose(state: State) {
     const scene = getRenderingContext(state).scene;
-    const context = getTerrainContext(state);
-
-    for (const [, data] of context) {
-      if (data.terrainPhysics) data.terrainPhysics.dispose();
-      if (scene) scene.remove(data.terrainLOD as unknown as THREE.Object3D);
-      data.terrainLOD.dispose();
+    const registry = getChunkMeshRegistry(state);
+    for (const [chunk, mesh] of registry) {
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      registry.delete(chunk);
     }
-    context.clear();
+    getTerrainContext(state).clear();
   },
 };
 
-export const TerrainRenderSystem: System = {
+export const TerrainLodSelectSystem: System = {
   group: 'draw',
   after: [CameraSyncSystem],
   update(state: State) {
     if (state.headless) return;
+
     const context = getTerrainContext(state);
-    const camera = getActiveCamera(state);
-    if (!camera) return;
+    const cameras = mainCameraQuery(state.world);
+    if (cameras.length === 0) return;
+    const camEntity = cameras[0];
+    const camX = WorldTransform.posX[camEntity];
+    const camZ = WorldTransform.posZ[camEntity];
 
-    for (const entity of terrainQuery(state.world)) {
-      const data = context.get(entity);
-      if (!data) continue;
-      if (state.hasComponent(entity, WorldTransform)) {
-        const ox = WorldTransform.posX[entity];
-        const oy = WorldTransform.posY[entity];
-        const oz = WorldTransform.posZ[entity];
-        data.terrainLOD.position.set(ox, oy, oz);
-        data.worldOffset = { x: ox, y: oy, z: oz };
+    for (const fieldEntity of terrainQuery(state.world)) {
+      const data = context.get(fieldEntity);
+      if (!data || !data.initialized) continue;
+
+      const worldSize = Terrain.worldSize[fieldEntity];
+      const levels = Terrain.levels[fieldEntity];
+      const ratio = Terrain.lodDistanceRatio[fieldEntity];
+      const hysteresis = Terrain.lodHysteresis[fieldEntity];
+      const baseResolution = Terrain.resolution[fieldEntity];
+
+      const offset = data.worldOffset;
+      const localCamX = camX - offset.x;
+      const localCamZ = camZ - offset.z;
+
+      const desired = selectChunks(worldSize, levels, ratio, hysteresis, localCamX, localCamZ);
+
+      const desiredKeys = new Map<string, (typeof desired)[number]>();
+      for (const desc of desired) {
+        desiredKeys.set(chunkKey(desc), desc);
       }
-      (data.terrainLOD as any).update(camera);
 
-      if (data.initialized) {
-        const wf = Terrain.wireframe[entity];
-        if (wf !== data.lastWireframe) {
-          data.terrainLOD.setWireframe(wf === 1);
-          data.lastWireframe = wf;
+      const existingKeys = new Map<string, number>();
+      for (const chunkEid of data.chunks) {
+        if (!state.exists(chunkEid)) continue;
+        const key = `${TerrainChunk.originX[chunkEid]},${TerrainChunk.originZ[chunkEid]},${TerrainChunk.level[chunkEid]}`;
+        existingKeys.set(key, chunkEid);
+      }
+
+      for (const [key, desc] of desiredKeys) {
+        if (existingKeys.has(key)) continue;
+
+        const chunk = state.createEntity();
+        const res = resolutionForLevel(baseResolution, desc.level);
+        state.addComponent(chunk, TerrainChunk, {
+          field: fieldEntity,
+          originX: desc.originX,
+          originZ: desc.originZ,
+          size: desc.size,
+          level: desc.level,
+          resolution: res,
+          meshDirty: 1,
+        });
+        data.chunks.add(chunk);
+      }
+
+      for (const [key, chunkEid] of existingKeys) {
+        if (desiredKeys.has(key)) continue;
+        data.chunks.delete(chunkEid);
+        if (state.exists(chunkEid)) {
+          state.destroyEntity(chunkEid);
         }
-        const scb = Terrain.showChunkBorders[entity];
-        if (scb !== data.lastShowChunkBorders) {
-          data.terrainLOD.setShowChunkBorders(scb === 1);
-          data.lastShowChunkBorders = scb;
-        }
-        const im = (data.terrainLOD as any).instancedMesh as
-          | THREE.InstancedMesh
-          | undefined;
-        if (im) {
-          im.receiveShadow = true;
-          im.castShadow = false;
-        }
+      }
+    }
+  },
+};
+
+export const TerrainMeshSystem: System = {
+  group: 'draw',
+  update(state: State) {
+    if (state.headless) return;
+
+    const scene = getRenderingContext(state).scene;
+    const registry = getChunkMeshRegistry(state);
+    const context = getTerrainContext(state);
+
+    for (const [chunk, mesh] of registry) {
+      if (state.exists(chunk)) continue;
+      scene.remove(mesh);
+      mesh.geometry.dispose();
+      registry.delete(chunk);
+    }
+
+    for (const chunk of chunkQuery(state.world)) {
+      if (TerrainChunk.meshDirty[chunk] !== 1) continue;
+
+      const field = TerrainChunk.field[chunk];
+      const data = context.get(field);
+      if (!data) continue;
+
+      const geometry = buildChunkGeometry(
+        data.sampler,
+        TerrainChunk.originX[chunk],
+        TerrainChunk.originZ[chunk],
+        TerrainChunk.size[chunk],
+        TerrainChunk.resolution[chunk]
+      );
+
+      let mesh = registry.get(chunk);
+      if (mesh) {
+        mesh.geometry.dispose();
+        mesh.geometry = geometry;
+      } else {
+        const material = new THREE.MeshStandardMaterial({
+          color: Terrain.baseColor[field],
+          roughness: Terrain.roughness[field],
+          metalness: Terrain.metalness[field],
+          wireframe: Terrain.wireframe[field] === 1,
+        });
+        mesh = new THREE.Mesh(geometry, material);
+        mesh.receiveShadow = true;
+        mesh.castShadow = false;
+        registry.set(chunk, mesh);
+        scene.add(mesh);
+      }
+
+      const offset = data.worldOffset;
+      mesh.position.set(
+        offset.x + TerrainChunk.originX[chunk],
+        offset.y,
+        offset.z + TerrainChunk.originZ[chunk]
+      );
+
+      TerrainChunk.meshDirty[chunk] = 0;
+    }
+  },
+};
+
+/**
+ * Build a terrain-wide heightfield in Rapier's column-major format directly.
+ * Eliminates the intermediate row-major array and transpose step.
+ * nrows/ncols define the cell count; the array has (nrows+1)*(ncols+1) vertices.
+ */
+function buildTerrainHeightfieldDirect(
+  sampler: HeightSampler,
+  worldSize: number,
+  resolution: number
+): { heights: Float32Array; nrows: number; ncols: number } {
+  const nrows = resolution;
+  const ncols = resolution;
+  const rows = nrows + 1;
+  const cols = ncols + 1;
+  const heights = new Float32Array(rows * cols);
+  const half = worldSize / 2;
+
+  for (let col = 0; col < cols; col++) {
+    const localX = -half + (col / ncols) * worldSize;
+    for (let row = 0; row < rows; row++) {
+      const localZ = -half + (row / nrows) * worldSize;
+      heights[col * rows + row] = sampleHeightAt(sampler, localX, localZ);
+    }
+  }
+
+  return { heights, nrows, ncols };
+}
+
+export const TerrainPhysicsSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    if (state.headless) return;
+
+    const rapierWorld = getWorld();
+    if (!rapierWorld) return;
+
+    const context = getTerrainContext(state);
+
+    for (const fieldEntity of terrainQuery(state.world)) {
+      const data = context.get(fieldEntity);
+      if (!data || !data.initialized) continue;
+      if (data.physicsBody) continue;
+
+      const sampler = data.sampler;
+      const worldSize = Terrain.worldSize[fieldEntity];
+      const offset = data.worldOffset;
+
+      if (!sampler.data) {
+        const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
+          offset.x,
+          offset.y,
+          offset.z
+        );
+        const body = rapierWorld.createRigidBody(bodyDesc);
+        const half = worldSize / 2;
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(half, 0.01, half)
+          .setFriction(0.7)
+          .setRestitution(0.0)
+          .setContactSkin(0.1);
+        const collider = rapierWorld.createCollider(colliderDesc, body);
+        data.physicsBody = body;
+        data.physicsCollider = collider;
+        data.collisionReady = true;
+        continue;
+      }
+
+      const collisionRes = Terrain.collisionResolution[fieldEntity];
+
+      const { heights, nrows, ncols } = buildTerrainHeightfieldDirect(
+        sampler,
+        worldSize,
+        collisionRes
+      );
+
+      const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
+        offset.x,
+        offset.y,
+        offset.z
+      );
+      const body = rapierWorld.createRigidBody(bodyDesc);
+
+      const colliderDesc = RAPIER.ColliderDesc.heightfield(
+        nrows,
+        ncols,
+        heights,
+        { x: worldSize, y: 1.0, z: worldSize }
+      )
+        .setFriction(0.7)
+        .setRestitution(0.0)
+        .setContactSkin(0.1);
+
+      const collider = rapierWorld.createCollider(colliderDesc, body);
+      data.physicsBody = body;
+      data.physicsCollider = collider;
+      data.collisionReady = true;
+    }
+  },
+  dispose(state: State) {
+    const rapierWorld = getWorld();
+    if (!rapierWorld) return;
+    const context = getTerrainContext(state);
+    for (const [, data] of context) {
+      if (data.physicsBody) {
+        rapierWorld.removeRigidBody(data.physicsBody);
+        data.physicsBody = null;
+        data.physicsCollider = null;
       }
     }
   },
@@ -282,165 +381,16 @@ export const TerrainDebugSystem: System = {
       const data = context.get(entity);
       if (!data || !data.initialized) continue;
 
-      const stats = data.terrainLOD.getStats();
-      TerrainDebugInfo.activeChunks[entity] = stats.instances.active;
-      TerrainDebugInfo.drawCalls[entity] = stats.drawCalls;
-      TerrainDebugInfo.totalInstances[entity] = stats.instances.total;
-      TerrainDebugInfo.geometryCount[entity] = stats.geometries;
-      TerrainDebugInfo.materialCount[entity] = stats.materials;
+      const count = data.chunks.size;
+      TerrainDebugInfo.activeChunks[entity] = count;
+      TerrainDebugInfo.drawCalls[entity] = count;
+      TerrainDebugInfo.totalInstances[entity] = count;
+      TerrainDebugInfo.geometryCount[entity] = count;
+      TerrainDebugInfo.materialCount[entity] = count;
       TerrainDebugInfo.lastUpdated[entity] = now;
     }
   },
 };
-
-export const TerrainPhysicsSystem: System = {
-  group: 'simulation',
-  after: [TransformHierarchySystem],
-  update(state: State) {
-    const physicsWorld = getPhysicsContext(state).physicsWorld;
-    const context = getTerrainContext(state);
-    const entities = terrainQuery(state.world);
-
-    if (!physicsWorld) {
-      for (const entity of entities) {
-        const data = context.get(entity);
-        if (data?.initialized) data.collisionReady = true;
-      }
-      return;
-    }
-
-    for (const entity of entities) {
-      const data = context.get(entity);
-      if (!data || !data.initialized || data.terrainPhysics) continue;
-
-      let ox = 0,
-        oy = 0,
-        oz = 0;
-      if (state.hasComponent(entity, WorldTransform)) {
-        ox = WorldTransform.posX[entity];
-        oy = WorldTransform.posY[entity];
-        oz = WorldTransform.posZ[entity];
-      }
-      data.worldOffset = { x: ox, y: oy, z: oz };
-
-      patchBilinearGetHeightAt(data.terrainLOD);
-
-      const tp = new TerrainPhysics({
-        rapier: RAPIER,
-        world: physicsWorld,
-        terrain: data.terrainLOD,
-        config: { friction: 0.8, restitution: 0.0, dynamicLoading: false },
-      });
-
-      tp.init()
-        .then(() => {
-          data.terrainPhysics = tp;
-          data.collisionReady = true;
-        })
-        .catch((err: unknown) => {
-          console.error('[terrain] TerrainPhysics.init failed:', err);
-          data.collisionReady = false;
-        });
-    }
-  },
-  dispose(state: State) {
-    const context = getTerrainContext(state);
-    for (const [, data] of context) {
-      if (data.terrainPhysics) {
-        data.terrainPhysics.dispose();
-        data.terrainPhysics = null;
-      }
-    }
-  },
-};
-
-function replaceProceduralDiffuse(terrainLOD: TerrainLOD): void {
-  const tlod = terrainLOD as any;
-  if (tlod.proceduralDiffuseTexture) {
-    tlod.proceduralDiffuseTexture.dispose();
-    const canvas = document.createElement('canvas');
-    canvas.width = 4;
-    canvas.height = 4;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = '#3e6b29';
-    ctx.fillRect(0, 0, 4, 4);
-    const solid = new THREE.CanvasTexture(canvas);
-    solid.wrapS = solid.wrapT = THREE.RepeatWrapping;
-    solid.repeat.set(16, 16);
-    solid.anisotropy = 16;
-    tlod.diffuseTexture = solid;
-    tlod.proceduralDiffuseTexture = null;
-    tlod.recreateMaterial();
-  }
-}
-
-function patchBilinearGetHeightAt(terrainLOD: TerrainLOD): void {
-  const tlod = terrainLOD as any;
-  if (tlod._bilinearPatched) return;
-  tlod._bilinearPatched = true;
-
-  const sample = (imgData: ImageData, u: number, v: number): number => {
-    const w = imgData.width;
-    const h = imgData.height;
-    const d = imgData.data;
-    const cu = Math.max(0, Math.min(1, u));
-    const cv = Math.max(0, Math.min(1, v));
-    const px = cu * (w - 1);
-    const py = cv * (h - 1);
-    const x0 = Math.floor(px);
-    const y0 = Math.floor(py);
-    const x1 = Math.min(x0 + 1, w - 1);
-    const y1 = Math.min(y0 + 1, h - 1);
-    const fx = px - x0;
-    const fy = py - y0;
-    const h00 = d[(y0 * w + x0) * 4] / 255;
-    const h10 = d[(y0 * w + x1) * 4] / 255;
-    const h01 = d[(y1 * w + x0) * 4] / 255;
-    const h11 = d[(y1 * w + x1) * 4] / 255;
-    return (
-      h00 * (1 - fx) * (1 - fy) +
-      h10 * fx * (1 - fy) +
-      h01 * (1 - fx) * fy +
-      h11 * fx * fy
-    );
-  };
-
-  tlod.getHeightAt = (worldX: number, worldZ: number): number => {
-    const imgData = tlod.heightmapImageData;
-    if (!imgData) return 0;
-
-    const config = tlod.config;
-    const halfWorld = config.worldSize / 2;
-    const u = (worldX + halfWorld) / config.worldSize;
-    const v = (worldZ + halfWorld) / config.worldSize;
-    if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
-
-    const rawH = sample(imgData, u, v);
-
-    const smoothing = config.heightSmoothing;
-    if (smoothing <= 0) return rawH * config.maxHeight;
-
-    const w = imgData.width;
-    const h = imgData.height;
-    const spread = config.heightSmoothingSpread;
-    const sU = spread / w;
-    const sV = spread / h;
-
-    const hN = sample(imgData, u, v - sV);
-    const hS = sample(imgData, u, v + sV);
-    const hE = sample(imgData, u + sU, v);
-    const hW = sample(imgData, u - sU, v);
-    const hNE = sample(imgData, u + sU, v - sV);
-    const hNW = sample(imgData, u - sU, v - sV);
-    const hSE = sample(imgData, u + sU, v + sV);
-    const hSW = sample(imgData, u - sU, v + sV);
-
-    const filtered =
-      (rawH * 4 + (hN + hS + hE + hW) * 2 + (hNE + hNW + hSE + hSW)) / 16;
-
-    return (rawH * (1 - smoothing) + filtered * smoothing) * config.maxHeight;
-  };
-}
 
 export function getTerrainHeightAt(
   state: State,
@@ -449,11 +399,10 @@ export function getTerrainHeightAt(
 ): number {
   const context = getTerrainContext(state);
   for (const [, data] of context) {
-    if (data.initialized) {
-      const localX = worldX - data.worldOffset.x;
-      const localZ = worldZ - data.worldOffset.z;
-      return data.terrainLOD.getHeightAt(localX, localZ);
-    }
+    if (!data.initialized) continue;
+    const localX = worldX - data.worldOffset.x;
+    const localZ = worldZ - data.worldOffset.z;
+    return sampleHeightAt(data.sampler, localX, localZ);
   }
   return 0;
 }
@@ -487,9 +436,17 @@ export function setTerrainWireframe(
 ): void {
   const context = getTerrainContext(state);
   const data = context.get(entity);
-  if (data?.initialized) {
-    data.terrainLOD.setWireframe(enabled);
-    data.lastWireframe = enabled ? 1 : 0;
+  if (!data) return;
+
+  Terrain.wireframe[entity] = enabled ? 1 : 0;
+  data.lastWireframe = enabled ? 1 : 0;
+
+  const registry = getChunkMeshRegistry(state);
+  for (const chunk of data.chunks) {
+    const mesh = registry.get(chunk);
+    if (mesh) {
+      (mesh.material as THREE.MeshStandardMaterial).wireframe = enabled;
+    }
   }
 }
 
@@ -500,20 +457,33 @@ export function reloadTerrainHeightmap(
 ): void {
   const context = getTerrainContext(state);
   const data = context.get(entity);
-  if (!data?.initialized) return;
+  if (!data) return;
 
   setTerrainHeightmapUrl(state, entity, url);
   data.heightmapUrl = url;
-  data.terrainLOD
-    .loadHeightMap(url, true)
-    .then(() => {
-      if (data.terrainPhysics) data.terrainPhysics.rebuildDirtyChunks();
-      data.collisionReady = false;
+
+  const worldSize = Terrain.worldSize[entity];
+  const maxHeight = Terrain.maxHeight[entity];
+  loadHeightmapFromUrl(url)
+    .then((imgData) => {
+      const d = context.get(entity);
+      if (!d) return;
+      d.sampler = createHeightmapSampler(worldSize, maxHeight, imgData);
+      for (const chunk of d.chunks) {
+        TerrainChunk.meshDirty[chunk] = 1;
+      }
+      if (d.physicsBody) {
+        const rapierWorld = getWorld();
+        if (rapierWorld) {
+          rapierWorld.removeRigidBody(d.physicsBody);
+          d.physicsBody = null;
+          d.physicsCollider = null;
+          d.collisionReady = false;
+        }
+      }
       fireHeightmapReloadCallbacks(state);
     })
-    .catch((err: unknown) => {
-      console.error('[terrain] Failed to hot-reload heightmap:', err);
-    });
+    .catch(() => {});
 }
 
 export function getTerrainStats(
@@ -531,13 +501,13 @@ export function getTerrainStats(
   const data = context.get(entity);
   if (!data?.initialized) return null;
 
-  const stats = data.terrainLOD.getStats();
+  const count = data.chunks.size;
   return {
-    activeChunks: stats.instances.active,
-    drawCalls: stats.drawCalls,
-    totalInstances: stats.instances.total,
-    geometries: stats.geometries,
-    materials: stats.materials,
+    activeChunks: count,
+    drawCalls: count,
+    totalInstances: count,
+    geometries: count,
+    materials: count,
     failedColliderChunks: TerrainDebugInfo.failedColliderChunks[entity] ?? 0,
   };
 }

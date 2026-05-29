@@ -13,7 +13,6 @@ import {
   PhysicsPlugin,
 } from 'vibegame/physics';
 import { Transform, TransformsPlugin } from 'vibegame/transforms';
-import { Respawn, RespawnPlugin } from 'vibegame/respawn';
 
 describe('Player Recipes and XML', () => {
   let state: State;
@@ -25,7 +24,6 @@ describe('Player Recipes and XML', () => {
     state = new State();
     state.registerPlugin(TransformsPlugin);
     state.registerPlugin(PhysicsPlugin);
-    state.registerPlugin(RespawnPlugin);
     state.registerPlugin(InputPlugin);
     state.registerPlugin(PlayerPlugin);
 
@@ -46,7 +44,6 @@ describe('Player Recipes and XML', () => {
       expect(state.hasComponent(player, Collider)).toBe(true);
       expect(state.hasComponent(player, CharacterController)).toBe(true);
       expect(state.hasComponent(player, InputState)).toBe(true);
-      expect(state.hasComponent(player, Respawn)).toBe(true);
 
       expect(PlayerController.speed[player]).toBeCloseTo(5.3);
       expect(PlayerController.jumpHeight[player]).toBeCloseTo(2.3);
@@ -136,7 +133,7 @@ describe('Player Recipes and XML', () => {
     it('should have correct default body configuration', () => {
       const entity = state.createFromRecipe('Player');
 
-      expect(Rigidbody.type[entity]).toBe(BodyType.KinematicPositionBased);
+      expect(Rigidbody.type[entity]).toBe(BodyType.Dynamic);
       expect(Rigidbody.mass[entity]).toBe(1);
       expect(Rigidbody.linearDamping[entity]).toBe(0);
       expect(Rigidbody.angularDamping[entity]).toBe(0);
@@ -186,17 +183,6 @@ describe('Player Recipes and XML', () => {
       expect(Transform.scaleX[entity]).toBe(1);
       expect(Transform.scaleY[entity]).toBe(1);
       expect(Transform.scaleZ[entity]).toBe(1);
-    });
-
-    it('should have correct default respawn values', () => {
-      const entity = state.createFromRecipe('Player');
-
-      expect(Respawn.posX[entity]).toBe(0);
-      expect(Respawn.posY[entity]).toBe(0);
-      expect(Respawn.posZ[entity]).toBe(0);
-      expect(Respawn.eulerX[entity]).toBe(0);
-      expect(Respawn.eulerY[entity]).toBe(0);
-      expect(Respawn.eulerZ[entity]).toBe(0);
     });
   });
 

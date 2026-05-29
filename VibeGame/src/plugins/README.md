@@ -200,7 +200,7 @@ export { MeuSystem } from './systems';
 | `player`         | Controle de jogador (movimento, pulo, câmera)                                            | Média        |
 | `input`          | Teclado/mouse/gamepad                                                                    | Média        |
 | `orbit-camera`   | Câmera orbital com zoom                                                                  | Média        |
-| `follow-camera`  | Câmera em terceira pessoa                                                                | Média        |
+| `player-controller`  | Câmera em terceira pessoa (ThirdPersonCamera)                                            | Média        |
 | `fog`            | Neblina volumétrica + fog exp/linear                                                     | Média        |
 | `water`          | Água com física, nado, reflexos                                                          | Alta         |
 | `terrain`        | Terreno procedural com heightmaps                                                        | Alta         |

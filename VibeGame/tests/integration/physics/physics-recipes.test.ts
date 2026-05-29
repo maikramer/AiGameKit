@@ -12,7 +12,6 @@ import {
 } from 'vibegame/physics';
 import { RenderingPlugin } from 'vibegame/rendering';
 import { TransformsPlugin } from 'vibegame/transforms';
-import { TweenPlugin } from 'vibegame/tweening';
 
 describe('Physics Recipes', () => {
   let state: State;
@@ -293,7 +292,7 @@ describe('Physics Recipes', () => {
       const character = entities[0].entity;
 
       expect(state.hasComponent(character, Rigidbody)).toBe(true);
-      expect(Rigidbody.type[character]).toBe(BodyType.KinematicPositionBased);
+      expect(Rigidbody.type[character]).toBe(BodyType.Dynamic);
       expect(Rigidbody.posX[character]).toBe(0);
       expect(Rigidbody.posY[character]).toBe(1);
       expect(Rigidbody.posZ[character]).toBe(0);
@@ -341,61 +340,6 @@ describe('Physics Recipes', () => {
       expect(CharacterController.maxStepHeight[character]).toBeCloseTo(0.3, 2);
 
       expect(state.hasComponent(character, CharacterMovement)).toBe(true);
-    });
-  });
-
-  describe('moving platform with tweening', () => {
-    beforeEach(async () => {
-      state.registerPlugin(TweenPlugin);
-    });
-
-    it('should create kinematic platform with tween animation', () => {
-      const xml = `
-        <root>
-          <kinematic-part name="platform"
-            pos="0 2 0"
-            shape="box"
-            size="3 0.2 3"
-            color="#4169e1"
-          >
-          </kinematic-part>
-          <Tween
-            target="platform"
-            attr="rigidbody.pos-y"
-            from="2"
-            to="5"
-            duration="3"
-            easing="sine-in-out"
-          />
-        </root>
-      `;
-
-      const parsed = XMLParser.parse(xml);
-      const entities = parseXMLToEntities(state, parsed.root);
-
-      expect(entities.length).toBe(2);
-      const platform = entities[0].entity;
-
-      expect(state.hasComponent(platform, Rigidbody)).toBe(true);
-      expect(Rigidbody.type[platform]).toBe(BodyType.KinematicVelocityBased);
-      expect(Rigidbody.posY[platform]).toBe(2);
-
-      const renderer = state.getComponent('meshRenderer') as any;
-      const collider = state.getComponent('collider') as any;
-
-      expect(renderer?.shape?.[platform]).toBe(0);
-      expect(renderer?.sizeX?.[platform]).toBe(3);
-      expect(renderer?.sizeY?.[platform]).toBeCloseTo(0.2, 1);
-      expect(renderer?.sizeZ?.[platform]).toBe(3);
-      expect(renderer?.color?.[platform]).toBe(0x4169e1);
-
-      expect(collider?.shape?.[platform]).toBe(0);
-      expect(collider?.sizeX?.[platform]).toBe(3);
-      expect(collider?.sizeY?.[platform]).toBeCloseTo(0.2, 1);
-      expect(collider?.sizeZ?.[platform]).toBe(3);
-
-      const tweenParserCalled = parseXMLToEntities.toString().includes('tween');
-      expect(tweenParserCalled || entities[0].children.length >= 0).toBe(true);
     });
   });
 

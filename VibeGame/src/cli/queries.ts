@@ -1,6 +1,20 @@
 import { defineQuery } from '../core';
 import type { State } from '../core';
-import { Sequence, SequenceState } from '../plugins/tweening';
+
+
+interface SequenceComponent {
+  state: Uint8Array;
+  itemCount: Float32Array;
+  currentIndex: Float32Array;
+}
+
+const SequenceStateValues = { Playing: 1 } as const;
+
+function getSequenceComponent(state: State): SequenceComponent | null {
+  const comp = state.getComponent('sequence');
+  if (!comp) return null;
+  return comp as unknown as SequenceComponent;
+}
 
 export interface SequenceInfo {
   name: string;
@@ -26,14 +40,17 @@ export function getSequenceInfo(
   if (!sequenceComponent || !state.hasComponent(eid, sequenceComponent))
     return null;
 
-  const itemCount = Sequence.itemCount[eid];
+  const seq = getSequenceComponent(state);
+  if (!seq) return null;
+
+  const itemCount = seq.itemCount[eid];
   return {
     name,
     eid,
-    state: Sequence.state[eid] === SequenceState.Playing ? 'playing' : 'idle',
-    currentIndex: Sequence.currentIndex[eid],
+    state: seq.state[eid] === SequenceStateValues.Playing ? 'playing' : 'idle',
+    currentIndex: seq.currentIndex[eid],
     itemCount,
-    progress: itemCount > 0 ? Sequence.currentIndex[eid] / itemCount : 0,
+    progress: itemCount > 0 ? seq.currentIndex[eid] / itemCount : 0,
   };
 }
 
@@ -43,20 +60,23 @@ export function getAllSequences(state: State): SequenceInfo[] {
 
   if (!sequenceComponent) return sequences;
 
+  const seq = getSequenceComponent(state);
+  if (!seq) return sequences;
+
   const query = defineQuery([sequenceComponent]);
   const entities = query(state.world);
 
   for (const eid of entities) {
     const name = state.getEntityName(eid);
-    const itemCount = Sequence.itemCount[eid];
+    const itemCount = seq.itemCount[eid];
 
     sequences.push({
       name: name ?? `eid-${eid}`,
       eid,
-      state: Sequence.state[eid] === SequenceState.Playing ? 'playing' : 'idle',
-      currentIndex: Sequence.currentIndex[eid],
+      state: seq.state[eid] === SequenceStateValues.Playing ? 'playing' : 'idle',
+      currentIndex: seq.currentIndex[eid],
       itemCount,
-      progress: itemCount > 0 ? Sequence.currentIndex[eid] / itemCount : 0,
+      progress: itemCount > 0 ? seq.currentIndex[eid] / itemCount : 0,
     });
   }
 

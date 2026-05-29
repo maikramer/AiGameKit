@@ -1,5 +1,5 @@
 import { defineQuery, type System } from '../../core';
-import { FollowCamera } from '../follow-camera';
+import { ThirdPersonCamera } from '../player-controller';
 import { InputState } from '../input';
 import { OrbitCamera } from '../orbit-camera';
 import { Rigidbody, CharacterController, CharacterMovement } from '../physics';
@@ -15,7 +15,7 @@ const playerMovementQuery = defineQuery([
   InputState,
 ]);
 const orbitCameraQuery = defineQuery([OrbitCamera]);
-const followCameraQuery = defineQuery([FollowCamera]);
+const thirdPersonCameraQuery = defineQuery([ThirdPersonCamera]);
 const playerGroundedQuery = defineQuery([
   PlayerController,
   CharacterMovement,
@@ -26,8 +26,8 @@ const playerGroundedQuery = defineQuery([
 const playersQuery = defineQuery([PlayerController]);
 
 function resolveCameraYaw(world: import('../../core').IWorld): number {
-  const followCams = followCameraQuery(world);
-  if (followCams.length > 0) return FollowCamera.currentYaw[followCams[0]];
+  const thirdPersonCams = thirdPersonCameraQuery(world);
+  if (thirdPersonCams.length > 0) return ThirdPersonCamera.yaw[thirdPersonCams[0]];
   const orbitCams = orbitCameraQuery(world);
   if (orbitCams.length > 0) return OrbitCamera.currentYaw[orbitCams[0]];
   return 0;
@@ -185,17 +185,16 @@ export const PlayerCameraLinkingSystem: System = {
   update: (state) => {
     const players = playersQuery(state.world);
 
-    const followCams = followCameraQuery(state.world);
+    const thirdPersonCams = thirdPersonCameraQuery(state.world);
     const orbitCams = orbitCameraQuery(state.world);
 
     for (const player of players) {
       if (PlayerController.cameraEntity[player] !== 0) continue;
 
-      if (followCams.length > 0) {
-        const cam = followCams[0];
+      if (thirdPersonCams.length > 0) {
+        const cam = thirdPersonCams[0];
         PlayerController.cameraEntity[player] = cam;
-        FollowCamera.target[cam] = player;
-        FollowCamera.inputSource[cam] = player;
+        ThirdPersonCamera.target[cam] = player;
       } else if (orbitCams.length > 0) {
         const cam = orbitCams[0];
         PlayerController.cameraEntity[player] = cam;

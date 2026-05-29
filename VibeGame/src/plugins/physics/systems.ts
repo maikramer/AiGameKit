@@ -12,18 +12,81 @@ import {
   CollisionEvents,
   TouchedEvent,
 } from './components';
-import { getOrCreateWorld, getEventQueue, stepWorld } from './world';
+import { getOrCreateWorld, getEventQueue, stepWorld, DEFAULT_GRAVITY } from './world';
 import { createRapierBody, createRapierColliderDesc } from './body';
+import {
+  CHARACTER_MOVE_ACCEL,
+  getCharacterFeetY,
+  GROUND_PROBE_DISTANCE,
+  isFeetTouchingTerrain,
+  moveToward,
+} from './character-ground';
+import { castBvhRay } from '../bvh/utils';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
+import * as THREE from 'three';
 
 const bodyQuery = defineQuery([Rigidbody, Collider, Transform]);
 const setLinvelQuery = defineQuery([SetLinearVelocity, Rigidbody]);
 const setAngvelQuery = defineQuery([SetAngularVelocity, Rigidbody]);
 const charMoveQuery = defineQuery([CharacterMovement, Rigidbody]);
 
+const _groundRayOrigin = new RAPIER.Vector3(0, 0, 0);
+const _groundRayDir = new RAPIER.Vector3(0, -1, 0);
+const _bvhOrigin = new THREE.Vector3();
+const _bvhDir = new THREE.Vector3(0, -1, 0);
+
+function isCharacterGrounded(
+  state: State,
+  world: RAPIER.World,
+  x: number,
+  y: number,
+  z: number,
+  entity: number,
+  verticalSpeed: number
+): boolean {
+  if (verticalSpeed > 1.5) return false;
+
+  const feetY = getCharacterFeetY(state, entity, y);
+
+  // 1) Heightmap (cheap CPU sample, no Rapier roundtrip).
+  if (isFeetTouchingTerrain(state, x, feetY, z)) {
+    return true;
+  }
+
+  // 2) Mesh BVH (terrain + static GLTFs). Catches props/floors the heightmap
+  //    does not represent.
+  _bvhOrigin.set(x, feetY + 0.08, z);
+  const bvhHit = castBvhRay(state, _bvhOrigin, _bvhDir, GROUND_PROBE_DISTANCE + 0.08);
+  if (bvhHit && bvhHit.distance <= GROUND_PROBE_DISTANCE + 0.08) {
+    return true;
+  }
+
+  // 3) Rapier ray cast for dynamic colliders (moving platforms, kinematics).
+  const c2e = getColliderToEntityMap(state);
+  const filter = (collider: RAPIER.Collider) =>
+    c2e.get(collider.handle) !== entity;
+
+  const offsetY =
+    state.hasComponent(entity, Collider) ? Collider.posOffsetY[entity] || 0 : 0;
+  _groundRayOrigin.x = x;
+  _groundRayOrigin.y = y + offsetY + 0.05;
+  _groundRayOrigin.z = z;
+  const maxDist = 0.45;
+  const hit = world.castRay(
+    new RAPIER.Ray(_groundRayOrigin, _groundRayDir),
+    maxDist,
+    true,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    filter
+  );
+  return hit !== null && hit.timeOfImpact <= maxDist;
+}
+
 const stateToBodies = new WeakMap<State, Map<number, RAPIER.RigidBody>>();
 const stateToFailed = new WeakMap<State, Set<number>>();
-const stateToGroundCreated = new WeakMap<State, boolean>();
 const stateToColliderToEntity = new WeakMap<State, Map<number, number>>();
 
 function getBodyMap(state: State): Map<number, RAPIER.RigidBody> {
@@ -53,28 +116,12 @@ function getColliderToEntityMap(state: State): Map<number, number> {
   return m;
 }
 
-function ensureGroundPlane(state: State, world: RAPIER.World): void {
-  if (stateToGroundCreated.get(state)) return;
-  stateToGroundCreated.set(state, true);
-  try {
-    const groundDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(0, -1, 0);
-    const groundBody = world.createRigidBody(groundDesc);
-    const groundCollider = RAPIER.ColliderDesc.cuboid(500, 1, 500);
-    groundCollider.setFriction(0.8);
-    world.createCollider(groundCollider, groundBody);
-    console.log('[physics] safety ground plane created at y=-1 (1000x2x1000)');
-  } catch (e) {
-    console.error('[physics] failed to create ground plane:', e);
-  }
-}
-
 export const PhysicsInitSystem: System = {
   group: 'fixed',
   update: (state) => {
     const world = getOrCreateWorld();
     const bodies = getBodyMap(state);
     const failed = getFailedSet(state);
-    ensureGroundPlane(state, world);
 
     for (const entity of bodyQuery(state.world)) {
       if (bodies.has(entity)) continue;
@@ -144,6 +191,8 @@ export const ApplyMovementSystem: System = {
   group: 'fixed',
   after: [PhysicsInitSystem],
   update: (state) => {
+    if (isTerrainDynamicsBlocking(state)) return;
+
     const bodies = getBodyMap(state);
 
     // Character movement (player)
@@ -160,7 +209,21 @@ export const ApplyMovementSystem: System = {
         if (type === 2) {
           const t = body.translation();
           const dt = state.time.fixedDeltaTime || 1 / 60;
-          const newY = t.y + jumpVel * dt;
+          let vy = CharacterMovement.velocityY[entity] || 0;
+
+          if (state.hasComponent(entity, CharacterController)) {
+            const grounded = CharacterController.grounded[entity] === 1;
+            const gravityScale = Rigidbody.gravityScale[entity] ?? 1;
+
+            if (grounded && vy <= 0) {
+              vy = 0;
+            } else if (gravityScale > 0) {
+              vy = Math.max(vy + DEFAULT_GRAVITY * gravityScale * dt, -40);
+            }
+            CharacterMovement.velocityY[entity] = vy;
+          }
+
+          const newY = t.y + vy * dt;
           body.setNextKinematicTranslation({
             x: t.x + dvx * dt,
             y: newY,
@@ -172,13 +235,32 @@ export const ApplyMovementSystem: System = {
             z: Rigidbody.rotZ[entity],
             w: Rigidbody.rotW[entity],
           });
-          if (jumpVel > 0) {
-            CharacterMovement.velocityY[entity] = 0;
-          }
         } else if (type === BodyType.Dynamic) {
-          if (dvx !== 0 || dvz !== 0) {
-            body.setLinvel(new RAPIER.Vector3(dvx, 0, dvz), true);
+          const dt = state.time.fixedDeltaTime || 1 / 60;
+          const currentVel = body.linvel();
+          const grounded =
+            state.hasComponent(entity, CharacterController) &&
+            CharacterController.grounded[entity] === 1;
+
+          const hasInput = dvx !== 0 || dvz !== 0;
+          let newVx = currentVel.x;
+          let newVz = currentVel.z;
+
+          if (hasInput) {
+            const accel = grounded
+              ? CHARACTER_MOVE_ACCEL.ground
+              : CHARACTER_MOVE_ACCEL.air;
+            newVx = moveToward(currentVel.x, dvx, accel * dt);
+            newVz = moveToward(currentVel.z, dvz, accel * dt);
+          } else {
+            const decel = grounded
+              ? CHARACTER_MOVE_ACCEL.groundDecel
+              : CHARACTER_MOVE_ACCEL.airDecel;
+            newVx = moveToward(currentVel.x, 0, decel * dt);
+            newVz = moveToward(currentVel.z, 0, decel * dt);
           }
+
+          body.setLinvel(new RAPIER.Vector3(newVx, currentVel.y, newVz), true);
 
           if (jumpVel > 0) {
             const grounded = state.hasComponent(entity, CharacterController)
@@ -298,13 +380,15 @@ export const PhysicsSyncSystem: System = {
   group: 'simulation',
   update: (state) => {
     const bodies = getBodyMap(state);
+    const world = getOrCreateWorld();
 
     for (const [entity, body] of bodies) {
       if (!state.hasComponent(entity, Rigidbody)) continue;
 
       try {
         const t = body.translation();
-        const prevY = Rigidbody.posY[entity];
+        const prevX = Rigidbody.posX[entity];
+        const prevZ = Rigidbody.posZ[entity];
         Rigidbody.posX[entity] = t.x;
         Rigidbody.posY[entity] = t.y;
         Rigidbody.posZ[entity] = t.z;
@@ -320,21 +404,36 @@ export const PhysicsSyncSystem: System = {
         Rigidbody.velY[entity] = v.y;
         Rigidbody.velZ[entity] = v.z;
 
+        const bodyY = t.y;
+
+        if (state.hasComponent(entity, CharacterMovement)) {
+          CharacterMovement.actualMoveX[entity] = t.x - prevX;
+          CharacterMovement.actualMoveZ[entity] = t.z - prevZ;
+        }
+
         if (state.hasComponent(entity, CharacterController)) {
-          const dy = t.y - prevY;
-          const grounded = Math.abs(v.y) < 0.1 && Math.abs(dy) < 0.01;
+          const grounded = isCharacterGrounded(
+            state,
+            world,
+            t.x,
+            bodyY,
+            t.z,
+            entity,
+            v.y
+          );
           CharacterController.grounded[entity] = grounded ? 1 : 0;
-          // Track position changes for debugging
-          if (Math.abs(dy) > 1 && Math.abs(v.y) > 5) {
-            console.log(
-              `[player] falling: y=${t.y.toFixed(2)} vy=${v.y.toFixed(2)} dy=${dy.toFixed(2)}`
-            );
+          if (
+            grounded &&
+            state.hasComponent(entity, CharacterMovement) &&
+            CharacterMovement.velocityY[entity] < 0
+          ) {
+            CharacterMovement.velocityY[entity] = 0;
           }
         }
 
         if (state.hasComponent(entity, Transform)) {
           Transform.posX[entity] = t.x;
-          Transform.posY[entity] = t.y;
+          Transform.posY[entity] = bodyY;
           Transform.posZ[entity] = t.z;
           Transform.rotX[entity] = r.x;
           Transform.rotY[entity] = r.y;

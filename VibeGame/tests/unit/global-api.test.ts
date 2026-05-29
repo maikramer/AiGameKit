@@ -10,10 +10,8 @@ import { OrbitCameraPlugin } from 'vibegame/orbit-camera';
 import { PhysicsPlugin } from 'vibegame/physics';
 import { PlayerPlugin } from 'vibegame/player';
 import { RenderingPlugin } from 'vibegame/rendering';
-import { RespawnPlugin } from 'vibegame/respawn';
 import { StartupPlugin } from 'vibegame/startup';
 import { TransformsPlugin } from 'vibegame/transforms';
-import { TweenPlugin } from 'vibegame/tweening';
 
 const MAX_ENTITIES = 100000;
 
@@ -257,9 +255,7 @@ describe('Global API', () => {
     expect(PhysicsPlugin).toBeDefined();
     expect(PlayerPlugin).toBeDefined();
     expect(RenderingPlugin).toBeDefined();
-    expect(RespawnPlugin).toBeDefined();
     expect(StartupPlugin).toBeDefined();
     expect(TransformsPlugin).toBeDefined();
-    expect(TweenPlugin).toBeDefined();
   });
 });

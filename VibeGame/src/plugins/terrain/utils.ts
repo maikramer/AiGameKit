@@ -1,9 +1,15 @@
-﻿import type { TerrainLOD, TerrainPhysics } from '@interverse/three-terrain-lod';
+import type * as THREE from 'three';
 import type { State } from '../../core';
+import type { HeightSampler } from './height-sampler';
 
+/**
+ * Per-field terrain state. The ECS components are the source of truth for
+ * configuration; this holds derived runtime data (decoded heights, the set of
+ * spawned chunk entities, load/collision readiness) keyed by the field entity.
+ */
 export interface TerrainEntityData {
-  terrainLOD: TerrainLOD;
-  terrainPhysics: TerrainPhysics | null;
+  sampler: HeightSampler;
+  chunks: Set<number>;
   heightmapUrl?: string;
   textureUrl?: string;
   initialized: boolean;
@@ -11,12 +17,16 @@ export interface TerrainEntityData {
   worldOffset: { x: number; y: number; z: number };
   lastWireframe: number;
   lastShowChunkBorders: number;
+  physicsBody: import("@dimforge/rapier3d-simd-compat").RigidBody | null;
+  physicsCollider: import("@dimforge/rapier3d-simd-compat").Collider | null;
 }
 
 const stateToTerrainContext = new WeakMap<
   State,
   Map<number, TerrainEntityData>
 >();
+
+const stateToChunkMeshes = new WeakMap<State, Map<number, THREE.Mesh>>();
 
 const heightmapReloadCallbacks = new WeakMap<State, (() => void)[]>();
 
@@ -48,6 +58,16 @@ export function getTerrainContext(
     stateToTerrainContext.set(state, context);
   }
   return context;
+}
+
+/** Per-state registry of chunk meshes (derived cache, not source of truth). */
+export function getChunkMeshRegistry(state: State): Map<number, THREE.Mesh> {
+  let registry = stateToChunkMeshes.get(state);
+  if (!registry) {
+    registry = new Map();
+    stateToChunkMeshes.set(state, registry);
+  }
+  return registry;
 }
 
 export function isTerrainDynamicsBlocking(state: State, eid?: number): boolean {
@@ -106,16 +126,4 @@ export function getTerrainTextureUrl(
   return textureUrls.get(state)?.get(entity);
 }
 
-export function terrainHeightsToRapierColumnMajor(
-  rowMajor: Float32Array,
-  rows: number,
-  cols: number
-): Float32Array {
-  const result = new Float32Array(rows * cols);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      result[c * rows + r] = rowMajor[r * cols + c];
-    }
-  }
-  return result;
-}
+

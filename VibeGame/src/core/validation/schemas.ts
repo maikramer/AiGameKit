@@ -272,42 +272,27 @@ export const cameraRecipeSchema = z
   })
   .strict();
 
-export const followCameraComponentSchema = z
+export const thirdPersonCameraComponentSchema = z
   .object({
-    'target-distance': numberSchema.optional(),
-    'min-distance': numberSchema.optional(),
-    'max-distance': numberSchema.optional(),
-    'min-pitch': numberSchema.optional(),
-    'max-pitch': numberSchema.optional(),
-    'target-pitch': numberSchema.optional(),
-    'target-yaw': numberSchema.optional(),
-    smoothness: numberSchema.optional(),
-    'yaw-smoothness': numberSchema.optional(),
-    'zoom-sensitivity': numberSchema.optional(),
-    'auto-rotate': booleanSchema.optional(),
-    'auto-rotate-delay': numberSchema.optional(),
-    'allow-manual-orbit': booleanSchema.optional(),
-    sensitivity: numberSchema.optional(),
+    distance: numberSchema.optional(),
+    height: numberSchema.optional(),
+    pitch: numberSchema.optional(),
+    'position-smooth': numberSchema.optional(),
+    'mouse-sensitivity': numberSchema.optional(),
   })
   .strict();
 
-export const followCameraRecipeSchema = z
+export const thirdPersonCameraRecipeSchema = z
   .object({
-    'target-distance': numberSchema.optional(),
-    'min-distance': numberSchema.optional(),
-    'max-distance': numberSchema.optional(),
-    'target-pitch': numberSchema.optional(),
-    'target-yaw': numberSchema.optional(),
-    smoothness: numberSchema.optional(),
-    'yaw-smoothness': numberSchema.optional(),
-    'auto-rotate': booleanSchema.optional(),
-    'auto-rotate-delay': numberSchema.optional(),
-    'allow-manual-orbit': booleanSchema.optional(),
-    sensitivity: numberSchema.optional(),
+    distance: numberSchema.optional(),
+    height: numberSchema.optional(),
+    pitch: numberSchema.optional(),
+    'position-smooth': numberSchema.optional(),
+    'mouse-sensitivity': numberSchema.optional(),
 
     transform: z.union([z.string(), transformComponentSchema]).optional(),
-    'follow-camera': z
-      .union([z.string(), followCameraComponentSchema])
+    'third-person-camera': z
+      .union([z.string(), thirdPersonCameraComponentSchema])
       .optional(),
 
     id: z.string().optional(),
@@ -451,7 +436,7 @@ export const recipeSchemas = {
   PlayerGLTF: playerGltfRecipeSchema,
   camera: cameraRecipeSchema,
   OrbitCamera: cameraRecipeSchema,
-  FollowCamera: followCameraRecipeSchema,
+  ThirdPersonCamera: thirdPersonCameraRecipeSchema,
   Scene: worldRecipeSchema,
   Skybox: skyRecipeSchema,
   AudioSource: audioClipRecipeSchema,

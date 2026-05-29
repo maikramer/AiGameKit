@@ -1,7 +1,6 @@
 import { Font } from '@fredli74/typr';
 import { readFile } from 'fs/promises';
 import type { State } from '../core';
-import { setMeasureFn, type MeasureFn } from '../plugins/text';
 
 export type { Font };
 
@@ -36,11 +35,11 @@ export function measureTextWidth(
   return totalAdvance * scale;
 }
 
+export type MeasureFn = (text: string, fontSize: number) => number;
+
 export function createMeasureFn(font: Font): MeasureFn {
   return (text: string, fontSize: number) =>
     measureTextWidth(font, text, fontSize);
 }
 
-export function setHeadlessFont(state: State, font: Font): void {
-  setMeasureFn(state, createMeasureFn(font));
-}
+export function setHeadlessFont(_state: State, _font: Font): void {}

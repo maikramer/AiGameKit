@@ -6,7 +6,7 @@ import {
   CharacterMovement,
   DEFAULT_GRAVITY,
 } from '../physics';
-import { FollowCamera } from '../follow-camera';
+import { ThirdPersonCamera } from '../player-controller';
 import { PlayerController } from './components';
 import * as THREE from 'three';
 
@@ -117,11 +117,11 @@ function calculateSlerpFactor(
   return angle > 0.001 ? Math.min(1.0, maxRotation / angle) : 1.0;
 }
 
-export function resolveMouseMode(entity: number, world: IWorld): number {
+export function resolveMouseMode(entity: number, _world: IWorld): number {
   const camEid = PlayerController.cameraEntity[entity];
   if (camEid === 0) return 1;
-  const mode = FollowCamera.mouseMode[camEid];
-  return mode >= 0 && mode <= 5 ? mode : 1;
+  if (!ThirdPersonCamera.target[camEid]) return 1;
+  return 1;
 }
 
 function applySlerpRotation(

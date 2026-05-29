@@ -83,6 +83,10 @@
       "types": "./dist/plugins/terrain/index.d.ts",
       "import": "./dist/plugins/terrain/index.js"
     },
+    "./bvh": {
+      "types": "./dist/plugins/bvh/index.d.ts",
+      "import": "./dist/plugins/bvh/index.js"
+    },
     "./water": {
       "types": "./dist/plugins/water/index.d.ts",
       "import": "./dist/plugins/water/index.js"
@@ -182,12 +186,12 @@
     "@dimforge/rapier3d-simd-compat": "^0.19.3",
     "@gltf-transform/core": "^4.3.0",
     "@gltf-transform/functions": "^4.3.0",
-    "@interverse/three-terrain-lod": "file:/home/maikeu/GitClones/three-terrain-lod",
     "colyseus.js": "^0.16.22",
     "gsap": "^3.13.0",
     "howler": "^2.2.4",
     "msgpackr": "^1.11.9",
     "postprocessing": "^6.37.8",
+    "three-mesh-bvh": "^0.9.10",
     "three-mesh-ui": "^6.5.4",
     "three-pathfinding": "^1.3.0",
     "three-stdlib": "^2.36.1",

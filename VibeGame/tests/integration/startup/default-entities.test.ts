@@ -19,7 +19,6 @@ import { InputState } from 'vibegame/input';
 import { OrbitCamera } from 'vibegame/orbit-camera';
 import { Parent, Transform, TransformsPlugin } from 'vibegame/transforms';
 import { PlayerController } from 'vibegame/player';
-import { Respawn } from 'vibegame/respawn';
 import { StartupPlugin } from 'vibegame/startup';
 
 describe('Startup Plugin - Auto-Creation', () => {
@@ -57,7 +56,6 @@ describe('Startup Plugin - Auto-Creation', () => {
     expect(state.hasComponent(player, Collider)).toBe(true);
     expect(state.hasComponent(player, CharacterController)).toBe(true);
     expect(state.hasComponent(player, InputState)).toBe(true);
-    expect(state.hasComponent(player, Respawn)).toBe(true);
 
     expect(state.hasComponent(camera, OrbitCamera)).toBe(true);
     expect(state.hasComponent(camera, Transform)).toBe(true);

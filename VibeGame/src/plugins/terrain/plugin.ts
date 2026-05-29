@@ -1,12 +1,13 @@
 ﻿import type { Adapter, Plugin, State } from '../../core';
 import { parseColor } from '../../core/validation/schemas';
-import { Terrain, TerrainDebugInfo } from './components';
+import { Terrain, TerrainChunk, TerrainDebugInfo } from './components';
 import { terrainRecipe } from './recipes';
 import {
-  TerrainBootstrapSystem,
   TerrainDebugSystem,
+  TerrainFieldBootstrapSystem,
+  TerrainLodSelectSystem,
+  TerrainMeshSystem,
   TerrainPhysicsSystem,
-  TerrainRenderSystem,
 } from './systems';
 import { setTerrainHeightmapUrl, setTerrainTextureUrl } from './utils';
 
@@ -19,13 +20,15 @@ function terrainColorAdapter(field: keyof typeof Terrain): Adapter {
 export const TerrainPlugin: Plugin = {
   recipes: [terrainRecipe],
   systems: [
-    TerrainBootstrapSystem,
+    TerrainFieldBootstrapSystem,
     TerrainPhysicsSystem,
-    TerrainRenderSystem,
+    TerrainLodSelectSystem,
+    TerrainMeshSystem,
     TerrainDebugSystem,
   ],
   components: {
     terrain: Terrain,
+    terrainChunk: TerrainChunk,
     terrainDebugInfo: TerrainDebugInfo,
   },
   config: {

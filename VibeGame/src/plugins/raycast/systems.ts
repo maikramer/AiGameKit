@@ -1,19 +1,15 @@
 import * as RAPIER from '@dimforge/rapier3d-simd-compat';
 import * as THREE from 'three';
-import { defineQuery, type State, type System } from '../../core';
-import { forEachGltfRootGroup } from '../gltf-xml/group-registry';
+import { defineQuery, type System } from '../../core';
+import { castBvhRay } from '../bvh/utils';
 import { PhysicsInterpolationSystem } from '../physics/systems';
-import { getRenderingContext } from '../rendering/utils';
 import { RaycastHit, RaycastSource } from './components';
 import { castRapierRay, getRayOriginFromEntity } from './utils';
 
 const rayQuery = defineQuery([RaycastSource, RaycastHit]);
 
 const _origin = new THREE.Vector3();
-const _raycaster = new THREE.Raycaster();
 const _dir = new THREE.Vector3();
-const _normal = new THREE.Vector3();
-const _groupToEntity = new Map<THREE.Object3D, number>();
 
 /** Limpa resultados antes do resto do frame (setup corre primeiro). */
 export const RaycastResetSystem: System = {
@@ -25,87 +21,6 @@ export const RaycastResetSystem: System = {
     }
   },
 };
-
-/**
- * Resolve entity a partir de um Object3D atingido pelo raycast.
- * Percorre a cadeia de parents até encontrar:
- *   - um Group registado no group-registry (GLTF models)
- *   - um InstancedMesh presente em entityInstances (primitive renderers)
- */
-function resolveEntityFromObject(
-  state: State,
-  object: THREE.Object3D
-): number | null {
-  const renderCtx = getRenderingContext(state);
-
-  let current: THREE.Object3D | null = object;
-  while (current) {
-    if (_groupToEntity.has(current)) {
-      return _groupToEntity.get(current)!;
-    }
-
-    if (current instanceof THREE.InstancedMesh) {
-      for (const [entity, info] of renderCtx.entityInstances) {
-        const pools = info.unlit
-          ? renderCtx.unlitMeshPools
-          : renderCtx.meshPools;
-        if (pools.get(info.poolId) === current) {
-          return entity;
-        }
-      }
-    }
-    current = current.parent;
-  }
-
-  return null;
-}
-
-function castBvhRay(
-  state: State,
-  origin: THREE.Vector3,
-  direction: THREE.Vector3,
-  maxDist: number
-): {
-  entity: number;
-  distance: number;
-  normal: THREE.Vector3;
-  point: THREE.Vector3;
-} | null {
-  _groupToEntity.clear();
-  forEachGltfRootGroup(state, (entity, group) => {
-    _groupToEntity.set(group, entity);
-  });
-
-  const scene = getRenderingContext(state).scene;
-
-  _raycaster.set(origin, direction);
-  _raycaster.near = 0;
-  _raycaster.far = maxDist;
-
-  const hits = _raycaster.intersectObjects(scene.children, true);
-  if (hits.length === 0) return null;
-
-  for (const hit of hits) {
-    const entity = resolveEntityFromObject(state, hit.object);
-    if (entity !== null) {
-      if (hit.face) {
-        _normal
-          .copy(hit.face.normal)
-          .transformDirection(hit.object.matrixWorld);
-      } else {
-        _normal.set(0, 1, 0);
-      }
-      return {
-        entity,
-        distance: hit.distance,
-        normal: _normal,
-        point: hit.point,
-      };
-    }
-  }
-
-  return null;
-}
 
 export const RaycastSystem: System = {
   group: 'simulation',
@@ -127,7 +42,7 @@ export const RaycastSystem: System = {
 
       if (mode === 1) {
         _dir.set(ndx, ndy, ndz);
-        const hit = castBvhRay(state, _origin, _dir, maxDist);
+        const hit = castBvhRay(state, _origin, _dir, maxDist, layerMask);
         if (!hit) {
           RaycastHit.hitValid[eid] = 0;
           continue;
