@@ -22,7 +22,6 @@ import {
   moveToward,
 } from './character-ground';
 import { castBvhRay } from '../bvh/utils';
-import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import * as THREE from 'three';
 
 const bodyQuery = defineQuery([Rigidbody, Collider, Transform]);
@@ -191,8 +190,6 @@ export const ApplyMovementSystem: System = {
   group: 'fixed',
   after: [PhysicsInitSystem],
   update: (state) => {
-    if (isTerrainDynamicsBlocking(state)) return;
-
     const bodies = getBodyMap(state);
 
     // Character movement (player)
@@ -339,7 +336,6 @@ export const PhysicsStepSystem: System = {
   group: 'fixed',
   after: [ApplyJumpSystem],
   update: (state) => {
-    if (isTerrainDynamicsBlocking(state)) return;
     stepWorld();
 
     const queue = getEventQueue();
