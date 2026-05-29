@@ -616,8 +616,11 @@ async function bootstrap(): Promise<void> {
     const CM = state.getComponent('character-movement');
     const CC = state.getComponent('character-controller');
     const RB = state.getComponent('rigidbody');
+    const PC = state.getComponent('player-controller');
+    const IS = state.getComponent('input-state');
     const body = getBodyForEntity(state, heroEid);
     const rapierY = body?.translation().y;
+    const rapierVel = body ? body.linvel() : null;
     return {
       x,
       y,
@@ -627,9 +630,16 @@ async function bootstrap(): Promise<void> {
       feetY,
       groundGap: feetY - terrainY,
       vy: RB?.velY?.[heroEid] ?? 0,
+      rapierVx: rapierVel?.x ?? 0,
+      rapierVy: rapierVel?.y ?? 0,
+      rapierVz: rapierVel?.z ?? 0,
       grounded: CC?.grounded?.[heroEid] ?? 0,
       desiredVelX: CM?.desiredVelX?.[heroEid] ?? 0,
       desiredVelZ: CM?.desiredVelZ?.[heroEid] ?? 0,
+      speed: PC?.speed?.[heroEid] ?? -1,
+      moveY: IS?.moveY?.[heroEid] ?? -1,
+      moveX: IS?.moveX?.[heroEid] ?? -1,
+      bodyType: RB?.type?.[heroEid] ?? -1,
     };
   };
 
