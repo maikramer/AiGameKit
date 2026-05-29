@@ -55,8 +55,6 @@ function isTerrainReady(state: State): boolean {
 }
 
 let heroGroundSnapped = false;
-let snapLogDone = false;
-let frameCounter = 0;
 
 const HeroGroundSnapSystem: System = {
   group: 'fixed',
@@ -105,10 +103,6 @@ const HeroGroundSnapSystem: System = {
     }
 
     heroGroundSnapped = true;
-    if (!snapLogDone) {
-      snapLogDone = true;
-      console.log(`[snap] hero snapped to (${x.toFixed(1)}, ${spawnY.toFixed(3)}, ${z.toFixed(1)}) groundY=${groundY.toFixed(3)}`);
-    }
   },
 };
 
@@ -431,22 +425,6 @@ const GameplayHudSystem: System = {
       pushFlash(state, ok ? 'hud.loaded' : 'hud.no-save', 2.5);
     }
     if (!isKeyDown('KeyE')) loadDebounce = false;
-
-    frameCounter++;
-    if (frameCounter % 60 === 0) {
-      const heroEid = state.getEntityByName('hero');
-      if (heroEid !== null) {
-        const body = getBodyForEntity(state, heroEid);
-        const t = body?.translation();
-        const v = body?.linvel();
-        console.log(
-          `[frame ${frameCounter}] rapier=(${t?.x.toFixed(3)},${t?.y.toFixed(3)},${t?.z.toFixed(3)})` +
-          ` vel=(${v?.x.toFixed(2)},${v?.y.toFixed(2)},${v?.z.toFixed(2)})` +
-          ` ecs=(${Transform.posX[heroEid].toFixed(3)},${Transform.posY[heroEid].toFixed(3)},${Transform.posZ[heroEid].toFixed(3)})` +
-          ` snapDone=${heroGroundSnapped}`
-        );
-      }
-    }
   },
 };
 

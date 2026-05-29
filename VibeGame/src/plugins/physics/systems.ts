@@ -28,7 +28,6 @@ const bodyQuery = defineQuery([Rigidbody, Collider, Transform]);
 const setLinvelQuery = defineQuery([SetLinearVelocity, Rigidbody]);
 const setAngvelQuery = defineQuery([SetAngularVelocity, Rigidbody]);
 const charMoveQuery = defineQuery([CharacterMovement, Rigidbody]);
-let applyMoveLogDone = false;
 
 const _groundRayOrigin = new RAPIER.Vector3(0, 0, 0);
 const _groundRayDir = new RAPIER.Vector3(0, -1, 0);
@@ -256,15 +255,6 @@ export const ApplyMovementSystem: System = {
               : CHARACTER_MOVE_ACCEL.airDecel;
             newVx = moveToward(currentVel.x, 0, decel * dt);
             newVz = moveToward(currentVel.z, 0, decel * dt);
-          }
-
-          if (hasInput && !applyMoveLogDone) {
-            applyMoveLogDone = true;
-            console.log(
-              `[move] eid=${entity} type=${type} dvx=${dvx.toFixed(2)} dvz=${dvz.toFixed(2)}` +
-              ` cur=(${currentVel.x.toFixed(2)},${currentVel.y.toFixed(2)},${currentVel.z.toFixed(2)})` +
-              ` new=(${newVx.toFixed(2)},*,${newVz.toFixed(2)}) grounded=${grounded ? 1 : 0}`
-            );
           }
 
           body.setLinvel(new RAPIER.Vector3(newVx, currentVel.y, newVz), true);
