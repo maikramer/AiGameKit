@@ -921,6 +921,7 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         ("run_cycle_keyframes", {"frame_end": 36, "action_name": "Animator3D_Run"}),
         ("jump_keyframes", {"frame_end": 36, "action_name": "Animator3D_Jump"}),
         ("fall_keyframes", {"frame_end": 24, "action_name": "Animator3D_Fall"}),
+        ("attack_keyframes", {"frame_end": 28, "action_name": "Animator3D_Attack"}),
     ],
     "creature": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),

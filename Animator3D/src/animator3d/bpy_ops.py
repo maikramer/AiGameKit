@@ -841,9 +841,12 @@ def attack_keyframes(
     wing_amp: float = 0.62,
     tail_amp: float = 0.42,
     finger_amp: float = 0.28,
+    arm_amp: float = 1.45,
     action_name: str = "Animator3D_Attack",
 ) -> dict[str, list[str]]:
-    """Animacao de ataque (mordida/investida): tronco, pescoco, asas a frente, cauda a contrabalancar.
+    """Animacao de ataque. Humanoides: golpe de braco (investida do tronco +
+    balanco do braco direito, braco esquerdo a contrabalancar). Criaturas:
+    mordida/investida com pescoco, asas e cauda.
 
     Patas sem keyframes. `strikes` repetem o perfil no intervalo de frames.
     """
@@ -941,6 +944,28 @@ def attack_keyframes(
             amp=-tail_amp,
             decay=0.08,
             phase_delay=0.06,
+        )
+
+    # Humanoid melee: right arm swings forward/down through the strike, left arm
+    # counter-swings back. Decay along the chain so shoulder leads and the hand
+    # whips through. (No-op on rigs without arms, e.g. dragons.)
+    if "arm_r" in chains:
+        _anim_chain_strike(
+            chains["arm_r"],
+            axis=0,
+            amp=arm_amp,
+            sign=-1.0,
+            decay=0.05,
+            secondary_axis=2,
+            secondary_scale=arm_amp * 0.2,
+        )
+    if "arm_l" in chains:
+        _anim_chain_strike(
+            chains["arm_l"],
+            axis=0,
+            amp=arm_amp * 0.4,
+            sign=0.7,
+            decay=0.1,
         )
 
     if "wing_r" in chains:
