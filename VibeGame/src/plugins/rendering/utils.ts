@@ -1,5 +1,6 @@
 ﻿import type { State } from '../../core';
 import * as THREE from 'three/webgpu';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { MainCamera } from './components';
 
 const INITIAL_INSTANCES = 1000;
@@ -341,6 +342,24 @@ export async function createRenderer(
   await renderer.init();
 
   return renderer;
+}
+
+/**
+ * Give the scene an image-based lighting environment. Without it, glTF PBR
+ * materials with non-zero metalness (very common in exported characters) have
+ * nothing to reflect and render black. A prefiltered neutral room is the
+ * standard fix and lights every metallic/rough surface plausibly.
+ */
+export function applyNeutralEnvironment(
+  renderer: THREE.WebGPURenderer,
+  scene: THREE.Scene
+): void {
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  try {
+    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  } finally {
+    pmrem.dispose();
+  }
 }
 
 export function handleWindowResize(

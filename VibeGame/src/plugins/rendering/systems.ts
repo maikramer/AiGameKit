@@ -16,6 +16,7 @@ import {
 import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import {
+  applyNeutralEnvironment,
   createRenderer,
   createThreeCamera,
   deleteCanvasElement,
@@ -362,6 +363,7 @@ export const RendererSetupSystem: System = {
     const context = getRenderingContext(state);
     context.renderer = renderer;
     context.canvas = canvas;
+    applyNeutralEnvironment(renderer, context.scene);
 
     window.addEventListener('resize', () =>
       handleWindowResize(state, renderer)
@@ -425,6 +427,7 @@ export const SceneRenderSystem: System = {
 
     context.renderer = renderer;
     context.canvas = canvas;
+    applyNeutralEnvironment(renderer, context.scene);
 
     window.addEventListener('resize', () =>
       handleWindowResize(state, renderer)
