@@ -2,6 +2,7 @@ import { defineQuery, type State, type System } from '../../core';
 import { InputState } from '../input';
 import { CharacterMovement, Rigidbody } from '../physics';
 import { MainCamera, threeCameras } from '../rendering';
+import { CameraSyncSystem } from '../rendering/systems';
 import {
   Transform,
   WorldTransform,
@@ -17,21 +18,12 @@ const thirdPersonCameraQuery = defineQuery([
 const thirdPersonCameraAllQuery = defineQuery([ThirdPersonCamera]);
 const playerQuery = defineQuery([CharacterMovement, Rigidbody, InputState]);
 
-/** Squared horizontal speed below which the camera holds its current yaw. */
-const CAMERA_MOVE_EPS = 0.04;
-/** Per-60fps fraction the camera yaw swings toward the heading each frame. */
-const CAMERA_TURN_SMOOTH = 0.1;
-
-/** Lerp `current` toward `target` (radians) along the shortest arc. */
-function approachAngle(current: number, target: number, t: number): number {
-  let delta = (target - current) % (Math.PI * 2);
-  if (delta > Math.PI) delta -= Math.PI * 2;
-  else if (delta < -Math.PI) delta += Math.PI * 2;
-  return current + delta * t;
-}
-
 export const ThirdPersonCameraSystem: System = {
   group: 'draw',
+  // Run after the generic camera sync so this system is the sole authority over
+  // the third-person camera's Three.js transform (otherwise the two fight and
+  // the view jitters every frame).
+  after: [CameraSyncSystem],
   update(state: State) {
     if (state.headless) return;
     const dt = state.time.deltaTime;
@@ -48,22 +40,8 @@ export const ThirdPersonCameraSystem: System = {
       const targetY = WorldTransform.posY[targetEid];
       const targetZ = WorldTransform.posZ[targetEid];
 
-      // Auto-trailing camera: swing the yaw to sit behind the target's
-      // movement direction. Keyboard-only — the mouse never drives the camera.
-      // Pitch stays as configured.
-      if (state.hasComponent(targetEid, CharacterMovement)) {
-        const dvx = CharacterMovement.desiredVelX[targetEid];
-        const dvz = CharacterMovement.desiredVelZ[targetEid];
-        if (dvx * dvx + dvz * dvz > CAMERA_MOVE_EPS) {
-          const desiredYaw = Math.atan2(dvx, dvz) + Math.PI;
-          const turn = 1 - Math.pow(1 - CAMERA_TURN_SMOOTH, dt * 60);
-          ThirdPersonCamera.yaw[cam] = approachAngle(
-            ThirdPersonCamera.yaw[cam],
-            desiredYaw,
-            turn
-          );
-        }
-      }
+      // Yaw is steered by the player (A/D) in PlayerMovementSystem; the camera
+      // just orbits to the configured distance/pitch around that yaw.
 
       // Calculate desired camera position
       const dist = ThirdPersonCamera.distance[cam];

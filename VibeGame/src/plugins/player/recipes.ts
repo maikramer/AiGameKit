@@ -23,6 +23,9 @@ export const playerRecipe: Recipe = {
     'rigidbody.ccd': PLAYER_BODY_DEFAULTS.ccd,
     'rigidbody.lock-rot-x': PLAYER_BODY_DEFAULTS.lockRotX,
     'rigidbody.lock-rot-z': PLAYER_BODY_DEFAULTS.lockRotZ,
+    // Vertical follow is handled by the stick velocity in applyCharacterMovement;
+    // snap-to-ground on top of it makes the resting height creep upward.
+    'character-controller.snap-dist': 0,
     'collider.shape': PLAYER_COLLIDER_DEFAULTS.shape,
     'collider.radius': PLAYER_COLLIDER_DEFAULTS.radius,
     'collider.height': PLAYER_COLLIDER_DEFAULTS.height,

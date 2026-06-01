@@ -25,12 +25,10 @@ const playerGroundedQuery = defineQuery([
 ]);
 const playersQuery = defineQuery([PlayerController]);
 
+/** Camera turn rate (rad/s) when steering the third-person view with A/D. */
+const CAMERA_TURN_SPEED = 2.5;
+
 function resolveCameraYaw(world: import('../../core').IWorld): number {
-  // The third-person camera auto-trails the player, so movement is
-  // world-relative (input is not rotated by the camera). Rotating input by an
-  // auto-following camera's yaw would spiral as the camera chases the heading.
-  const thirdPersonCams = thirdPersonCameraQuery(world);
-  if (thirdPersonCams.length > 0) return 0;
   const orbitCams = orbitCameraQuery(world);
   if (orbitCams.length > 0) return OrbitCamera.currentYaw[orbitCams[0]];
   return 0;
@@ -41,13 +39,29 @@ export const PlayerMovementSystem: System = {
   update: (state) => {
     const playerEntities = playerMovementQuery(state.world);
 
-    const cameraYaw = resolveCameraYaw(state.world);
+    const thirdPersonCams = thirdPersonCameraQuery(state.world);
+    const tpCam = thirdPersonCams.length > 0 ? thirdPersonCams[0] : 0;
     const deltaTime = state.time.fixedDeltaTime;
 
     for (const entity of playerEntities) {
+      // Third-person: A/D steer the camera (and thus the heading) and W/S move
+      // along the camera's forward axis. Without a third-person camera fall back
+      // to an orbit-relative (or world) frame where A/D strafes.
+      let cameraYaw: number;
+      let strafe: number;
+      if (tpCam !== 0) {
+        ThirdPersonCamera.yaw[tpCam] -=
+          InputState.moveX[entity] * CAMERA_TURN_SPEED * deltaTime;
+        cameraYaw = ThirdPersonCamera.yaw[tpCam];
+        strafe = 0;
+      } else {
+        cameraYaw = resolveCameraYaw(state.world);
+        strafe = InputState.moveX[entity];
+      }
+
       const inputVector = processInput(
         InputState.moveY[entity],
-        InputState.moveX[entity],
+        strafe,
         cameraYaw
       );
 
