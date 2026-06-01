@@ -7,11 +7,10 @@
 ## Physics Behavior
 
 ### Transform Synchronization
-- **Body position is authoritative**: For entities with a Body component, the physics position/rotation overwrites Transform values
-- **One-way sync**: Body → Transform (never Transform → Body except via teleportation)
+- **Rigidbody position is authoritative**: For entities with a Rigidbody component, the physics position/rotation overwrites Transform values
+- **One-way sync**: Rigidbody → Transform (never Transform → Rigidbody except via teleportation)
 - **Scale inheritance**: Collider dimensions are multiplied by Transform scale at creation time
 - **Initialization delay**: Rapier bodies aren't created until the next fixed update after entity creation
-- **GLB / `GLTFDynamic`**: Rapier drives `Transform`, but the Three.js mesh is a separate object graph. The **gltf-xml** plugin’s `GltfSceneSyncSystem` copies ECS transforms onto the loaded `Group` each frame so dynamic crates and similar props render where the collider is. Without that system, meshes can remain at the initial spawn pose while the body moves.
 
 ### Fixed Timestep Execution
 - **Fixed update rate**: Physics runs at 50Hz (1/50 second intervals), not every frame
@@ -60,7 +59,7 @@ physics/
 ## Dependencies
 
 - **Internal**: Core ECS, Transform components
-- **External**: @dimforge/rapier3d-simd-compat (WASM physics engine)
+- **External**: @dimforge/rapier3d-compat (WASM physics engine)
 
 <!-- LLM:REFERENCE -->
 ### Constants
@@ -86,7 +85,7 @@ physics/
 - gravityY: f32 (-60)
 - gravityZ: f32 (0)
 
-#### Body
+#### Rigidbody
 - type: ui8 - BodyType enum (Fixed)
 - mass: f32 (1)
 - linearDamping: f32 (0)
@@ -225,7 +224,8 @@ Initializes Rapier WASM physics engine
   color="#4169e1"
 >
   <!-- Add movement with tweening -->
-  <Tween     target="body.pos-y"
+  <tween
+    target="body.pos-y"
     from="2"
     to="5"
     duration="3"
@@ -236,7 +236,8 @@ Initializes Rapier WASM physics engine
 
 ##### Character with Controller
 ```xml
-<GameObject   pos="0 1 0"
+<entity
+  pos="0 1 0"
   body="type: kinematic-position"
   collider="shape: capsule; height: 1.8; radius: 0.4"
   character-controller
@@ -251,12 +252,12 @@ Initializes Rapier WASM physics engine
 ##### Create Physics Entity
 ```typescript
 import * as GAME from 'vibegame';
-import { Body, Collider, BodyType, ColliderShape } from 'vibegame/physics';
+import { Rigidbody, Collider, BodyType, ColliderShape } from 'vibegame/physics';
 
 // Create a dynamic physics box
 const entity = state.createEntity();
 
-state.addComponent(entity, Body, {
+state.addComponent(entity, Rigidbody, {
   type: BodyType.Dynamic,
   mass: 5,
   posX: 0, posY: 10, posZ: 0
@@ -270,18 +271,18 @@ state.addComponent(entity, Collider, {
 });
 
 // Note: Physics body won't exist until next fixed update
-// Transform will be overwritten by Body position after initialization
+// Transform will be overwritten by Rigidbody position after initialization
 ```
 
 ##### Moving Physics Bodies
 
 ```typescript
 import * as GAME from 'vibegame';
-import { Body, BodyType, ApplyForce, ApplyImpulse, KinematicMove, SetLinearVelocity } from 'vibegame/physics';
+import { Rigidbody, BodyType, ApplyForce, ApplyImpulse, KinematicMove, SetLinearVelocity } from 'vibegame/physics';
 import { Transform } from 'vibegame/transforms';
 
 // Dynamic bodies - Use forces/impulses for movement
-if (Body.type[entity] === BodyType.Dynamic) {
+if (Rigidbody.type[entity] === BodyType.Dynamic) {
   // Apply force for gradual acceleration
   state.addComponent(entity, ApplyForce, { x: 10, y: 0, z: 0 });
 
@@ -289,20 +290,20 @@ if (Body.type[entity] === BodyType.Dynamic) {
   state.addComponent(entity, ApplyImpulse, { x: 0, y: 50, z: 0 });
 
   // Direct position setting only for teleportation
-  Body.posX[entity] = 10; // Teleport - use sparingly
+  Rigidbody.posX[entity] = 10; // Teleport - use sparingly
 }
 
 // Kinematic bodies - Direct control via movement components
-if (Body.type[entity] === BodyType.KinematicPositionBased) {
+if (Rigidbody.type[entity] === BodyType.KinematicPositionBased) {
   state.addComponent(entity, KinematicMove, { x: 5, y: 2, z: 0 });
 }
 
-if (Body.type[entity] === BodyType.KinematicVelocityBased) {
+if (Rigidbody.type[entity] === BodyType.KinematicVelocityBased) {
   state.addComponent(entity, SetLinearVelocity, { x: 3, y: 0, z: 0 });
 }
 
 // Never modify Transform directly for physics entities
-// Transform.posX[entity] = 10; // ❌ Will be overwritten by Body
+// Transform.posX[entity] = 10; // ❌ Will be overwritten by Rigidbody
 ```
 
 ##### Apply Forces
