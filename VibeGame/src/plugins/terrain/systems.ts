@@ -28,6 +28,12 @@ import {
 /** Build per-chunk terrain colliders only within this radius of the player. */
 const PHYSICS_COLLIDER_RADIUS = 192;
 
+/** Re-run the (allocating) quadtree LOD selection only after the camera moves
+ * this far — LOD boundaries are tens of metres apart, so per-frame reselection
+ * is wasted work while standing or moving slowly. */
+const LOD_RESELECT_DISTANCE = 6;
+const _lastLodCam = new Map<number, { x: number; z: number }>();
+
 const terrainQuery = defineQuery([Terrain]);
 const chunkQuery = defineQuery([TerrainChunk]);
 const debugQuery = defineQuery([Terrain, TerrainDebugInfo]);
@@ -172,6 +178,17 @@ export const TerrainLodSelectSystem: System = {
       const offset = data.worldOffset;
       const localCamX = camX - offset.x;
       const localCamZ = camZ - offset.z;
+
+      // Skip reselection if the camera barely moved (and chunks already exist).
+      const last = _lastLodCam.get(fieldEntity);
+      if (
+        last &&
+        data.chunks.size > 0 &&
+        Math.hypot(localCamX - last.x, localCamZ - last.z) < LOD_RESELECT_DISTANCE
+      ) {
+        continue;
+      }
+      _lastLodCam.set(fieldEntity, { x: localCamX, z: localCamZ });
 
       const desired = selectChunks(worldSize, levels, ratio, hysteresis, localCamX, localCamZ);
 
