@@ -4,7 +4,7 @@ Load relevant context for the current conversation. Then, proceed with the task 
 
 ## Auto-Loaded Context:
 
-@CLAUDE.md
+@AGENTS.md
 @layers/structure.md
 
 User arguments: "$ARGUMENTS"

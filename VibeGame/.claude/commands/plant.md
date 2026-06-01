@@ -4,7 +4,7 @@ Initialize context management structure for the project.
 
 ## Auto-Loaded Context:
 
-@CLAUDE.md
+@AGENTS.md
 @layers/structure.md
 
 User arguments: "$ARGUMENTS"
@@ -19,7 +19,7 @@ User arguments: "$ARGUMENTS"
 
 ### 2. Fill Core Templates
 
-- Update `CLAUDE.md` with project-specific details
+- Update `AGENTS.md` with project-specific details
 - Complete `layers/structure.md` with actual stack, commands, layout
 - Remove template placeholders
 

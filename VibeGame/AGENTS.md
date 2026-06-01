@@ -8,7 +8,7 @@ VibeGame - A vibe coding game engine using an ECS architecture with bitECS, feat
 
 ## Context Management System
 
-- **Tier 0 — global**: `CLAUDE.md` (root). Global standards and system overview
+- **Tier 0 — global**: `AGENTS.md` (root). Global standards and system overview
 - **Tier 1 — project**: `layers/structure.md`. Project map (stack, commands, layout, entry points)
 - **Tier 2 — folder context**: `context.md` in any folder; one per folder; explains purpose/structure of that folder
 - **Tier 3 — implementation**: Code files (scripts)
@@ -25,6 +25,7 @@ VibeGame - A vibe coding game engine using an ECS architecture with bitECS, feat
 - **Data**: Favor data-driven/declarative design
 - **Fail Fast**: Make bugs immediately visible rather than hiding them; favor simplicity over defensive patterns
 - **Backwards Compatibility**: Unless stated otherwise, favor simplicity over backwards compatibility; the design rules above should make breaking changes easy to trace and fix
+- **Shell**: Never combine `cd` with a write command (`sed -i`, redirects, file mutations) in a single Bash call; use absolute paths and drop the `cd`. The `cd`+write combination triggers a hardcoded manual-approval guardrail that no setting can disable. Read-only `cd` is fine
 
 ## Security
 

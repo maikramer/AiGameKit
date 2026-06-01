@@ -20,7 +20,7 @@
     "vite.config.ts",
     "eslint.config.js",
     "README.md",
-    "CLAUDE.md",
+    "AGENTS.md",
     ".prettierrc",
     ".prettierignore",
     ".gitignore",

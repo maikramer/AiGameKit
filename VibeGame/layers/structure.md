@@ -28,7 +28,7 @@ VibeGame - A vibe coding game engine using ECS architecture with bitECS, featuri
 
 ```
 vibegame/
-├── CLAUDE.md  # Global context (Tier 0)
+├── AGENTS.md  # Global context (Tier 0)
 ├── create-vibegame/  # Project scaffolding CLI
 │   ├── index.js  # CLI script
 │   ├── package.json
