@@ -31,14 +31,13 @@ import {
 import { Rigidbody } from '../../../src/plugins/physics/components';
 import {
   getBodyForEntity,
-  PhysicsInitSystem,
   PhysicsStepSystem,
 } from '../../../src/plugins/physics/systems';
 import { getBodyYForFeetAt, getCharacterFeetY, GROUND_CONTACT_SKIN } from '../../../src/plugins/physics/character-ground.ts';
 import { getTerrainHeightAt } from '../../../src/plugins/terrain/systems.ts';
 import { getTerrainContext, isTerrainDynamicsBlocking } from '../../../src/plugins/terrain/utils';
 import { Transform } from '../../../src/plugins/transforms';
-import * as RAPIER from '@dimforge/rapier3d-simd-compat';
+import * as RAPIER from '@dimforge/rapier3d-compat';
 
 setKTX2TranscoderPath('/libs/basis/');
 import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
@@ -49,7 +48,13 @@ const SAVE_KEY = 'simple-rpg-save';
 
 function isTerrainReady(state: State): boolean {
   for (const [, data] of getTerrainContext(state)) {
-    if (data.initialized) return true;
+    if (!data.initialized) continue;
+    // A heightmapped terrain reports `initialized` with a flat zero-height
+    // sampler before the image is decoded. Snapping then drops the hero far
+    // below the real surface, where the one-sided heightfield can't catch it.
+    // Wait until the heightmap data has actually loaded.
+    if (data.heightmapUrl && !data.sampler.data) continue;
+    return true;
   }
   return false;
 }
