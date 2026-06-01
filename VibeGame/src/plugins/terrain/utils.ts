@@ -17,8 +17,8 @@ export interface TerrainEntityData {
   worldOffset: { x: number; y: number; z: number };
   lastWireframe: number;
   lastShowChunkBorders: number;
-  physicsBody: import("@dimforge/rapier3d-simd-compat").RigidBody | null;
-  physicsCollider: import("@dimforge/rapier3d-simd-compat").Collider | null;
+  physicsBody: import("@dimforge/rapier3d-compat").RigidBody | null;
+  physicsCollider: import("@dimforge/rapier3d-compat").Collider | null;
 }
 
 const stateToTerrainContext = new WeakMap<

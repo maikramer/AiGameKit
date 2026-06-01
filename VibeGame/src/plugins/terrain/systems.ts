@@ -1,11 +1,11 @@
-import * as RAPIER from '@dimforge/rapier3d-simd-compat';
+import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, MainCamera } from '../rendering';
 import { WorldTransform } from '../transforms';
-import { getWorld } from '../physics/world';
+import { getRapierWorld } from '../physics';
 import { Terrain, TerrainChunk, TerrainDebugInfo } from './components';
 import { buildChunkGeometry } from './chunk-geometry';
 import {
@@ -89,7 +89,7 @@ export const TerrainFieldBootstrapSystem: System = {
               TerrainChunk.meshDirty[chunk] = 1;
             }
             if (data.physicsBody) {
-              const rapierWorld = getWorld();
+              const rapierWorld = getRapierWorld(state);
               if (rapierWorld) {
                 rapierWorld.removeRigidBody(data.physicsBody);
                 data.physicsBody = null;
@@ -105,7 +105,7 @@ export const TerrainFieldBootstrapSystem: System = {
 
     for (const [entity, data] of context) {
       if (state.exists(entity)) continue;
-      const rapierWorld = getWorld();
+      const rapierWorld = getRapierWorld(state);
       if (rapierWorld && data.physicsBody) {
         rapierWorld.removeRigidBody(data.physicsBody);
         data.physicsBody = null;
@@ -292,7 +292,7 @@ export const TerrainPhysicsSystem: System = {
   update(state: State) {
     if (state.headless) return;
 
-    const rapierWorld = getWorld();
+    const rapierWorld = getRapierWorld(state);
     if (!rapierWorld) return;
 
     const context = getTerrainContext(state);
@@ -316,8 +316,7 @@ export const TerrainPhysicsSystem: System = {
         const half = worldSize / 2;
         const colliderDesc = RAPIER.ColliderDesc.cuboid(half, 0.01, half)
           .setFriction(0.7)
-          .setRestitution(0.0)
-          .setContactSkin(0.1);
+          .setRestitution(0.0);
         const collider = rapierWorld.createCollider(colliderDesc, body);
         data.physicsBody = body;
         data.physicsCollider = collider;
@@ -347,8 +346,7 @@ export const TerrainPhysicsSystem: System = {
         { x: worldSize, y: 1.0, z: worldSize }
       )
         .setFriction(0.7)
-        .setRestitution(0.0)
-        .setContactSkin(0.1);
+        .setRestitution(0.0);
 
       const collider = rapierWorld.createCollider(colliderDesc, body);
       data.physicsBody = body;
@@ -357,7 +355,7 @@ export const TerrainPhysicsSystem: System = {
     }
   },
   dispose(state: State) {
-    const rapierWorld = getWorld();
+    const rapierWorld = getRapierWorld(state);
     if (!rapierWorld) return;
     const context = getTerrainContext(state);
     for (const [, data] of context) {
@@ -473,7 +471,7 @@ export function reloadTerrainHeightmap(
         TerrainChunk.meshDirty[chunk] = 1;
       }
       if (d.physicsBody) {
-        const rapierWorld = getWorld();
+        const rapierWorld = getRapierWorld(state);
         if (rapierWorld) {
           rapierWorld.removeRigidBody(d.physicsBody);
           d.physicsBody = null;
