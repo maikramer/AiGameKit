@@ -10,7 +10,7 @@ import {
 
 /**
  * Mantém o `Group` Three.js do GLB alinhado ao `Transform` / `WorldTransform` em ECS.
- * Obrigatório para `gltf-dynamic`: a física move o `Body` → `Transform`; sem isto o mesh
+ * Obrigatório para `gltf-dynamic`: a física move o `Rigidbody` → `Transform`; sem isto o mesh
  * fica na posição inicial e o jogador atravessa o modelo embora o colisor Rapier se mova.
  */
 function applyWorldLikeTransformToGroup(

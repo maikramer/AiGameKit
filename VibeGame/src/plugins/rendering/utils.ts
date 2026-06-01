@@ -320,13 +320,12 @@ export async function createRenderer(
 
   const width = canvas.clientWidth || window.innerWidth;
   const height = canvas.clientHeight || window.innerHeight;
-  renderer.setSize(width, height, false);
-  renderer.setPixelRatio(
-    Math.min(
-      window.devicePixelRatio,
-      /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
-    )
+  const pixelRatio = Math.min(
+    window.devicePixelRatio,
+    /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
   );
+  renderer.setPixelRatio(pixelRatio);
+  renderer.setSize(width, height, false);
 
   // WebGPU shadow maps were broken pre-r183; fixed in Three.js PR #32705.
   renderer.shadowMap.enabled = true;
@@ -355,6 +354,12 @@ export function handleWindowResize(
   const height = canvas?.clientHeight || window.innerHeight;
   const aspect = width / height;
 
+  renderer.setPixelRatio(
+    Math.min(
+      window.devicePixelRatio,
+      /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
+    )
+  );
   renderer.setSize(width, height, false);
 
   for (const [, camera] of threeCameras) {
