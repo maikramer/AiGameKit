@@ -7,7 +7,7 @@ import {
   TerrainFieldBootstrapSystem,
   TerrainLodSelectSystem,
   TerrainMeshSystem,
-  TerrainPhysicsSystem,
+  TerrainChunkColliderSystem,
 } from './systems';
 import { setTerrainHeightmapUrl, setTerrainTextureUrl } from './utils';
 
@@ -21,7 +21,7 @@ export const TerrainPlugin: Plugin = {
   recipes: [terrainRecipe],
   systems: [
     TerrainFieldBootstrapSystem,
-    TerrainPhysicsSystem,
+    TerrainChunkColliderSystem,
     TerrainLodSelectSystem,
     TerrainMeshSystem,
     TerrainDebugSystem,

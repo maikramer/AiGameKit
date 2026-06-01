@@ -25,6 +25,9 @@ import {
   setTerrainHeightmapUrl,
 } from './utils';
 
+/** Build per-chunk terrain colliders only within this radius of the player. */
+const PHYSICS_COLLIDER_RADIUS = 192;
+
 const terrainQuery = defineQuery([Terrain]);
 const chunkQuery = defineQuery([TerrainChunk]);
 const debugQuery = defineQuery([Terrain, TerrainDebugInfo]);
@@ -43,6 +46,19 @@ function fieldWorldOffset(state: State, entity: number): {
     };
   }
   return { x: 0, y: 0, z: 0 };
+}
+
+/** Tear down every per-chunk heightfield body for a terrain field. */
+function removeChunkColliders(
+  rapierWorld: RAPIER.World | null,
+  data: import('./utils').TerrainEntityData
+): void {
+  if (rapierWorld) {
+    for (const body of data.chunkColliders.values()) {
+      rapierWorld.removeRigidBody(body);
+    }
+  }
+  data.chunkColliders.clear();
 }
 
 export const TerrainFieldBootstrapSystem: System = {
@@ -74,6 +90,7 @@ export const TerrainFieldBootstrapSystem: System = {
         lastShowChunkBorders: Terrain.showChunkBorders[entity],
         physicsBody: null,
         physicsCollider: null,
+        chunkColliders: new Map(),
       });
 
       if (heightmapUrl) {
@@ -88,15 +105,14 @@ export const TerrainFieldBootstrapSystem: System = {
             for (const chunk of data.chunks) {
               TerrainChunk.meshDirty[chunk] = 1;
             }
-            if (data.physicsBody) {
-              const rapierWorld = getRapierWorld(state);
-              if (rapierWorld) {
-                rapierWorld.removeRigidBody(data.physicsBody);
-                data.physicsBody = null;
-                data.physicsCollider = null;
-                data.collisionReady = false;
-              }
+            const rapierWorld = getRapierWorld(state);
+            if (data.physicsBody && rapierWorld) {
+              rapierWorld.removeRigidBody(data.physicsBody);
+              data.physicsBody = null;
+              data.physicsCollider = null;
             }
+            removeChunkColliders(rapierWorld, data);
+            data.collisionReady = false;
             fireHeightmapReloadCallbacks(state);
           })
           .catch(() => {});
@@ -111,6 +127,7 @@ export const TerrainFieldBootstrapSystem: System = {
         data.physicsBody = null;
         data.physicsCollider = null;
       }
+      removeChunkColliders(rapierWorld, data);
       for (const chunk of data.chunks) {
         if (state.exists(chunk)) state.destroyEntity(chunk);
       }
@@ -221,12 +238,21 @@ export const TerrainMeshSystem: System = {
       const data = context.get(field);
       if (!data) continue;
 
+      // Shallow apron just deep enough to plug LOD T-junction cracks; kept small
+      // so it stays hidden below the surface instead of forming visible cliffs.
+      const skirtDepth = Terrain.maxHeight[field] * Terrain.skirtWidth[field];
+      // Field-constant epsilon so shared edge vertices get identical normals on
+      // both neighbouring chunks (no lighting seam), independent of their LOD.
+      const normalEpsilon = Terrain.worldSize[field] / 1024;
+
       const geometry = buildChunkGeometry(
         data.sampler,
         TerrainChunk.originX[chunk],
         TerrainChunk.originZ[chunk],
         TerrainChunk.size[chunk],
-        TerrainChunk.resolution[chunk]
+        TerrainChunk.resolution[chunk],
+        skirtDepth,
+        normalEpsilon
       );
 
       let mesh = registry.get(chunk);
@@ -239,6 +265,9 @@ export const TerrainMeshSystem: System = {
           roughness: Terrain.roughness[field],
           metalness: Terrain.metalness[field],
           wireframe: Terrain.wireframe[field] === 1,
+          // Edge skirts can face either way; render both so they always plug
+          // cracks and never show as unlit black walls.
+          side: THREE.DoubleSide,
         });
         mesh = new THREE.Mesh(geometry, material);
         mesh.receiveShadow = true;
@@ -260,26 +289,30 @@ export const TerrainMeshSystem: System = {
 };
 
 /**
- * Build a terrain-wide heightfield in Rapier's column-major format directly.
- * Eliminates the intermediate row-major array and transpose step.
- * nrows/ncols define the cell count; the array has (nrows+1)*(ncols+1) vertices.
+ * Build a Rapier heightfield (column-major) for one chunk, sampled over
+ * [origin ± size/2] at the chunk's mesh resolution so the collider surface is
+ * identical to {@link buildChunkGeometry}. The array has (res+1)² vertices.
+ * Small per-chunk fields keep each heightfield well under the size at which
+ * Rapier's WASM panics on a single giant terrain-wide field.
  */
-function buildTerrainHeightfieldDirect(
+function buildChunkHeightfield(
   sampler: HeightSampler,
-  worldSize: number,
+  originX: number,
+  originZ: number,
+  size: number,
   resolution: number
 ): { heights: Float32Array; nrows: number; ncols: number } {
-  const nrows = resolution;
-  const ncols = resolution;
+  const nrows = Math.max(1, resolution);
+  const ncols = nrows;
   const rows = nrows + 1;
   const cols = ncols + 1;
   const heights = new Float32Array(rows * cols);
-  const half = worldSize / 2;
+  const half = size / 2;
 
   for (let col = 0; col < cols; col++) {
-    const localX = -half + (col / ncols) * worldSize;
+    const localX = originX - half + (col / ncols) * size;
     for (let row = 0; row < rows; row++) {
-      const localZ = -half + (row / nrows) * worldSize;
+      const localZ = originZ - half + (row / nrows) * size;
       heights[col * rows + row] = sampleHeightAt(sampler, localX, localZ);
     }
   }
@@ -287,7 +320,50 @@ function buildTerrainHeightfieldDirect(
   return { heights, nrows, ncols };
 }
 
-export const TerrainPhysicsSystem: System = {
+function createChunkCollider(
+  rapierWorld: RAPIER.World,
+  sampler: HeightSampler,
+  offset: { x: number; y: number; z: number },
+  originX: number,
+  originZ: number,
+  size: number,
+  resolution: number
+): RAPIER.RigidBody {
+  const { heights, nrows, ncols } = buildChunkHeightfield(
+    sampler,
+    originX,
+    originZ,
+    size,
+    resolution
+  );
+
+  const body = rapierWorld.createRigidBody(
+    RAPIER.RigidBodyDesc.fixed().setTranslation(
+      offset.x + originX,
+      offset.y,
+      offset.z + originZ
+    )
+  );
+
+  const colliderDesc = RAPIER.ColliderDesc.heightfield(nrows, ncols, heights, {
+    x: size,
+    y: 1.0,
+    z: size,
+  })
+    .setFriction(0.7)
+    .setRestitution(0.0);
+
+  rapierWorld.createCollider(colliderDesc, body);
+  return body;
+}
+
+/**
+ * Per-chunk terrain physics. Before the heightmap decodes, a single flat cuboid
+ * stands in so the player has ground; once the real heights are available each
+ * visual LOD chunk gets its own heightfield collider (built/torn down to track
+ * the chunk set), so collision matches the rendered surface everywhere.
+ */
+export const TerrainChunkColliderSystem: System = {
   group: 'simulation',
   update(state: State) {
     if (state.headless) return;
@@ -300,58 +376,83 @@ export const TerrainPhysicsSystem: System = {
     for (const fieldEntity of terrainQuery(state.world)) {
       const data = context.get(fieldEntity);
       if (!data || !data.initialized) continue;
-      if (data.physicsBody) continue;
 
       const sampler = data.sampler;
-      const worldSize = Terrain.worldSize[fieldEntity];
       const offset = data.worldOffset;
+      const worldSize = Terrain.worldSize[fieldEntity];
 
       if (!sampler.data) {
-        const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
-          offset.x,
-          offset.y,
-          offset.z
-        );
-        const body = rapierWorld.createRigidBody(bodyDesc);
-        const half = worldSize / 2;
-        const colliderDesc = RAPIER.ColliderDesc.cuboid(half, 0.01, half)
-          .setFriction(0.7)
-          .setRestitution(0.0);
-        const collider = rapierWorld.createCollider(colliderDesc, body);
-        data.physicsBody = body;
-        data.physicsCollider = collider;
-        data.collisionReady = true;
+        // Flat stand-in ground until the heightmap finishes decoding.
+        if (!data.physicsBody) {
+          const body = rapierWorld.createRigidBody(
+            RAPIER.RigidBodyDesc.fixed().setTranslation(
+              offset.x,
+              offset.y,
+              offset.z
+            )
+          );
+          const half = worldSize / 2;
+          data.physicsCollider = rapierWorld.createCollider(
+            RAPIER.ColliderDesc.cuboid(half, 0.01, half)
+              .setFriction(0.7)
+              .setRestitution(0.0),
+            body
+          );
+          data.physicsBody = body;
+          data.collisionReady = true;
+        }
         continue;
       }
 
-      const collisionRes = Terrain.collisionResolution[fieldEntity];
+      // Heights are ready: drop the flat stand-in and switch to per-chunk fields.
+      if (data.physicsBody) {
+        rapierWorld.removeRigidBody(data.physicsBody);
+        data.physicsBody = null;
+        data.physicsCollider = null;
+      }
 
-      const { heights, nrows, ncols } = buildTerrainHeightfieldDirect(
-        sampler,
-        worldSize,
-        collisionRes
-      );
+      // Only the chunks near the player need colliders — building a heightfield
+      // for every visible (incl. distant) chunk wastes CPU/memory and churns as
+      // far chunks change LOD. Use the camera as the player proxy.
+      const cams = mainCameraQuery(state.world);
+      const hasCam = cams.length > 0;
+      const camLocalX = hasCam ? WorldTransform.posX[cams[0]] - offset.x : 0;
+      const camLocalZ = hasCam ? WorldTransform.posZ[cams[0]] - offset.z : 0;
+      const inRange = (chunk: number): boolean => {
+        if (!hasCam) return true;
+        const dx = TerrainChunk.originX[chunk] - camLocalX;
+        const dz = TerrainChunk.originZ[chunk] - camLocalZ;
+        const reach = PHYSICS_COLLIDER_RADIUS + TerrainChunk.size[chunk] * 0.5;
+        return dx * dx + dz * dz <= reach * reach;
+      };
 
-      const bodyDesc = RAPIER.RigidBodyDesc.fixed().setTranslation(
-        offset.x,
-        offset.y,
-        offset.z
-      );
-      const body = rapierWorld.createRigidBody(bodyDesc);
+      for (const chunk of data.chunks) {
+        if (
+          data.chunkColliders.has(chunk) ||
+          !state.exists(chunk) ||
+          !inRange(chunk)
+        )
+          continue;
+        const body = createChunkCollider(
+          rapierWorld,
+          sampler,
+          offset,
+          TerrainChunk.originX[chunk],
+          TerrainChunk.originZ[chunk],
+          TerrainChunk.size[chunk],
+          TerrainChunk.resolution[chunk]
+        );
+        data.chunkColliders.set(chunk, body);
+      }
 
-      const colliderDesc = RAPIER.ColliderDesc.heightfield(
-        nrows,
-        ncols,
-        heights,
-        { x: worldSize, y: 1.0, z: worldSize }
-      )
-        .setFriction(0.7)
-        .setRestitution(0.0);
+      for (const [chunk, body] of data.chunkColliders) {
+        if (data.chunks.has(chunk) && state.exists(chunk) && inRange(chunk))
+          continue;
+        rapierWorld.removeRigidBody(body);
+        data.chunkColliders.delete(chunk);
+      }
 
-      const collider = rapierWorld.createCollider(colliderDesc, body);
-      data.physicsBody = body;
-      data.physicsCollider = collider;
-      data.collisionReady = true;
+      if (data.chunkColliders.size > 0) data.collisionReady = true;
     }
   },
   dispose(state: State) {
@@ -364,6 +465,7 @@ export const TerrainPhysicsSystem: System = {
         data.physicsBody = null;
         data.physicsCollider = null;
       }
+      removeChunkColliders(rapierWorld, data);
     }
   },
 };
@@ -470,15 +572,14 @@ export function reloadTerrainHeightmap(
       for (const chunk of d.chunks) {
         TerrainChunk.meshDirty[chunk] = 1;
       }
-      if (d.physicsBody) {
-        const rapierWorld = getRapierWorld(state);
-        if (rapierWorld) {
-          rapierWorld.removeRigidBody(d.physicsBody);
-          d.physicsBody = null;
-          d.physicsCollider = null;
-          d.collisionReady = false;
-        }
+      const rapierWorld = getRapierWorld(state);
+      if (d.physicsBody && rapierWorld) {
+        rapierWorld.removeRigidBody(d.physicsBody);
+        d.physicsBody = null;
+        d.physicsCollider = null;
       }
+      removeChunkColliders(rapierWorld, d);
+      d.collisionReady = false;
       fireHeightmapReloadCallbacks(state);
     })
     .catch(() => {});
