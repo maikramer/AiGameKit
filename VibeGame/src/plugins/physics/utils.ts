@@ -44,14 +44,38 @@ export async function initializePhysics(): Promise<void> {
 
 const interpolatedTransformQuery = defineQuery([InterpolatedTransform]);
 
+/** Constant gap kept between the character's feet and the ground when snapped. */
+const GROUND_SNAP_SKIN = 0.04;
+/** Max distance the feet may be re-seated downward per step (slopes/step-downs). */
+const GROUND_SNAP_MAX = 0.35;
+const _groundCastDown = { x: 0, y: -1, z: 0 };
+const _snapOrigin = { x: 0, y: 0, z: 0 };
+
 /**
- * Downward speed held while grounded so the kinematic controller keeps ground
- * contact after a horizontal step (computedGrounded stays true) and tracks
- * descending slopes. Snap-to-ground is disabled for the character so this is the
- * sole vertical follower — that combination avoids the upward resting creep that
- * snap + stick produced together.
+ * Distance from `pos` down to the first non-self collider within
+ * {@link GROUND_SNAP_MAX} (casting the character's own shape), or null if none.
  */
-const GROUND_STICK_VELOCITY = -6;
+function groundCastDistance(
+  collider: RAPIER.Collider,
+  physicsWorld: RAPIER.World,
+  pos: RAPIER.Vector3
+): number | null {
+  const hit = physicsWorld.castShape(
+    pos,
+    collider.rotation(),
+    _groundCastDown,
+    collider.shape,
+    0,
+    GROUND_SNAP_MAX,
+    true,
+    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+    undefined,
+    undefined,
+    undefined,
+    (other: RAPIER.Collider) => other.handle !== collider.handle
+  );
+  return hit ? hit.time_of_impact : null;
+}
 
 export function createRigidbodyDescriptor(
   type: number,
@@ -492,15 +516,15 @@ export function applyCharacterMovement(
   const gravityScale = Rigidbody.gravityScale[entity];
   const effectiveGravity = gravityY * gravityScale;
 
-  // Airborne: integrate gravity. Grounded: hold a constant downward "stick"
-  // speed so the controller keeps ground contact (computedGrounded stays true)
-  // and follows descending slopes. A positive velocityY (an active jump) is left
-  // untouched so jumps still launch.
+  // Airborne: integrate gravity. Grounded (and not actively jumping): no vertical
+  // velocity — the explicit ground snap below keeps the feet planted and follows
+  // slopes, which is stable frame-to-frame (a velocity "stick" jittered against
+  // the collider). A positive velocityY (an active jump) is left untouched.
   if (!wasGrounded) {
     CharacterMovement.velocityY[entity] =
       (CharacterMovement.velocityY[entity] || 0) + effectiveGravity * deltaTime;
   } else if (CharacterMovement.velocityY[entity] <= 0) {
-    CharacterMovement.velocityY[entity] = GROUND_STICK_VELOCITY;
+    CharacterMovement.velocityY[entity] = 0;
   }
 
   const totalVelY =
@@ -600,17 +624,38 @@ export function applyCharacterMovement(
     currentPos.z + finalMovement.z
   );
 
+  let grounded = controller.computedGrounded() ? 1 : 0;
+
+  // Explicit ground snap: when not rising, cast the collider straight down from
+  // the post-move position and re-seat the feet at a constant skin above the
+  // first contact. This makes the resting height identical every frame (no
+  // penetration-recovery creep/jitter that shook the camera) and lets the
+  // character track up/down slopes and step-downs within GROUND_SNAP_MAX.
+  if (CharacterMovement.velocityY[entity] <= 0) {
+    // Cast from the collider's projected new centre (it sits at a fixed offset
+    // from the body origin, so cast there — not from the body position).
+    const cp = collider.translation();
+    _snapOrigin.x = cp.x + finalMovement.x;
+    _snapOrigin.y = cp.y + finalMovement.y;
+    _snapOrigin.z = cp.z + finalMovement.z;
+    const drop = groundCastDistance(collider, physicsWorld, _snapOrigin);
+    if (drop !== null) {
+      newPos.y += GROUND_SNAP_SKIN - drop;
+      grounded = 1;
+      CharacterMovement.velocityY[entity] = 0;
+    }
+  }
+
   body.setNextKinematicTranslation(newPos);
 
   CharacterMovement.actualMoveX[entity] = finalMovement.x;
-  CharacterMovement.actualMoveY[entity] = finalMovement.y;
+  CharacterMovement.actualMoveY[entity] = newPos.y - currentPos.y;
   CharacterMovement.actualMoveZ[entity] = finalMovement.z;
 
   CharacterController.moveX[entity] = finalMovement.x;
-  CharacterController.moveY[entity] = finalMovement.y;
+  CharacterController.moveY[entity] = newPos.y - currentPos.y;
   CharacterController.moveZ[entity] = finalMovement.z;
 
-  const grounded = controller.computedGrounded() ? 1 : 0;
   CharacterController.grounded[entity] = grounded;
 
   if (grounded) {
