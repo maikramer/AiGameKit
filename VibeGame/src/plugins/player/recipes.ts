@@ -14,7 +14,11 @@ export const playerRecipe: Recipe = {
     'respawn',
   ],
   overrides: {
-    'rigidbody.eulerY': PLAYER_BODY_DEFAULTS.eulerY,
+    // Spawn facing into the scene (eulerY 180 = away from the default camera).
+    'rigidbody.rotX': PLAYER_BODY_DEFAULTS.rotX,
+    'rigidbody.rotY': PLAYER_BODY_DEFAULTS.rotY,
+    'rigidbody.rotZ': PLAYER_BODY_DEFAULTS.rotZ,
+    'rigidbody.rotW': PLAYER_BODY_DEFAULTS.rotW,
     'rigidbody.type': PLAYER_BODY_DEFAULTS.type,
     'rigidbody.ccd': PLAYER_BODY_DEFAULTS.ccd,
     'rigidbody.lock-rot-x': PLAYER_BODY_DEFAULTS.lockRotX,

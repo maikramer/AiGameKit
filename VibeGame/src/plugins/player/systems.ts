@@ -26,8 +26,11 @@ const playerGroundedQuery = defineQuery([
 const playersQuery = defineQuery([PlayerController]);
 
 function resolveCameraYaw(world: import('../../core').IWorld): number {
+  // The third-person camera auto-trails the player, so movement is
+  // world-relative (input is not rotated by the camera). Rotating input by an
+  // auto-following camera's yaw would spiral as the camera chases the heading.
   const thirdPersonCams = thirdPersonCameraQuery(world);
-  if (thirdPersonCams.length > 0) return ThirdPersonCamera.yaw[thirdPersonCams[0]];
+  if (thirdPersonCams.length > 0) return 0;
   const orbitCams = orbitCameraQuery(world);
   if (orbitCams.length > 0) return OrbitCamera.currentYaw[orbitCams[0]];
   return 0;

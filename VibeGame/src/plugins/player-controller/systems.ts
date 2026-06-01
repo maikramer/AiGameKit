@@ -17,6 +17,19 @@ const thirdPersonCameraQuery = defineQuery([
 const thirdPersonCameraAllQuery = defineQuery([ThirdPersonCamera]);
 const playerQuery = defineQuery([CharacterMovement, Rigidbody, InputState]);
 
+/** Squared horizontal speed below which the camera holds its current yaw. */
+const CAMERA_MOVE_EPS = 0.04;
+/** Per-60fps fraction the camera yaw swings toward the heading each frame. */
+const CAMERA_TURN_SMOOTH = 0.1;
+
+/** Lerp `current` toward `target` (radians) along the shortest arc. */
+function approachAngle(current: number, target: number, t: number): number {
+  let delta = (target - current) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  else if (delta < -Math.PI) delta += Math.PI * 2;
+  return current + delta * t;
+}
+
 export const ThirdPersonCameraSystem: System = {
   group: 'draw',
   update(state: State) {
@@ -35,21 +48,22 @@ export const ThirdPersonCameraSystem: System = {
       const targetY = WorldTransform.posY[targetEid];
       const targetZ = WorldTransform.posZ[targetEid];
 
-      // Get input source — check if camera itself has InputState, otherwise use target
-      let inputEid = cam;
-      if (!state.hasComponent(cam, InputState)) {
-        inputEid = targetEid;
+      // Auto-trailing camera: swing the yaw to sit behind the target's
+      // movement direction. Keyboard-only — the mouse never drives the camera.
+      // Pitch stays as configured.
+      if (state.hasComponent(targetEid, CharacterMovement)) {
+        const dvx = CharacterMovement.desiredVelX[targetEid];
+        const dvz = CharacterMovement.desiredVelZ[targetEid];
+        if (dvx * dvx + dvz * dvz > CAMERA_MOVE_EPS) {
+          const desiredYaw = Math.atan2(dvx, dvz) + Math.PI;
+          const turn = 1 - Math.pow(1 - CAMERA_TURN_SMOOTH, dt * 60);
+          ThirdPersonCamera.yaw[cam] = approachAngle(
+            ThirdPersonCamera.yaw[cam],
+            desiredYaw,
+            turn
+          );
+        }
       }
-      if (!state.hasComponent(inputEid, InputState)) continue;
-
-      // Update yaw/pitch from mouse input (right mouse button held OR pointer lock)
-      const lookX = InputState.lookX[inputEid];
-      const lookY = InputState.lookY[inputEid];
-      const sens = ThirdPersonCamera.mouseSensitivity[cam];
-
-      ThirdPersonCamera.yaw[cam] -= lookX * sens;
-      const newPitch = ThirdPersonCamera.pitch[cam] + lookY * sens;
-      ThirdPersonCamera.pitch[cam] = Math.max(-1.2, Math.min(1.2, newPitch));
 
       // Calculate desired camera position
       const dist = ThirdPersonCamera.distance[cam];
