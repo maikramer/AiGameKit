@@ -41,6 +41,7 @@ import * as RAPIER from '@dimforge/rapier3d-compat';
 
 setKTX2TranscoderPath('/libs/basis/');
 import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
+import { DebugPlugin } from '../../../src/plugins/debug/index.ts';
 import { Health, isDead } from '../../../src/plugins/combat/components.ts';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
 
@@ -589,6 +590,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(CombatPlugin);
+  withPlugin(DebugPlugin);
   withSystem(GameplayHudSystem);
   withSystem(HeroGroundSnapSystem);
 
