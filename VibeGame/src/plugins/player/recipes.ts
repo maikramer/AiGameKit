@@ -20,6 +20,11 @@ export const playerRecipe: Recipe = {
     'rigidbody.rotZ': PLAYER_BODY_DEFAULTS.rotZ,
     'rigidbody.rotW': PLAYER_BODY_DEFAULTS.rotW,
     'rigidbody.type': PLAYER_BODY_DEFAULTS.type,
+    // Drives the character controller's manual gravity + jump velocity
+    // (jumpVelocity = sqrt(2·|g·gravityScale|·jumpHeight)). The Float32 store
+    // defaults to 0, which silently zeroed jumping and air gravity.
+    'rigidbody.gravity-scale': PLAYER_BODY_DEFAULTS.gravityScale,
+    'rigidbody.mass': PLAYER_BODY_DEFAULTS.mass,
     'rigidbody.ccd': PLAYER_BODY_DEFAULTS.ccd,
     'rigidbody.lock-rot-x': PLAYER_BODY_DEFAULTS.lockRotX,
     'rigidbody.lock-rot-z': PLAYER_BODY_DEFAULTS.lockRotZ,

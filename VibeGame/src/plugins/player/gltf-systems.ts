@@ -1,4 +1,4 @@
-import { Box3, LineSegments } from 'three';
+import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import { loadGltfAnimated } from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
@@ -6,7 +6,8 @@ import { animatorRegistry, registerAnimator } from '../gltf-anim/systems';
 import { HasAnimator } from '../animation/components';
 import { InputState } from '../input/components';
 import { isKeyDown } from '../input/utils';
-import { WorldTransform } from '../transforms';
+import { CharacterController, CharacterMovement } from '../physics';
+import { Transform, WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
 import { PLAYER_COLLIDER_DEFAULTS } from './constants';
 
@@ -62,30 +63,78 @@ function setYOffset(state: State, eid: number, y: number): void {
 
 const DEFAULT_LOCOMOTION_SET = 'default';
 
-function resolveClipName(
-  animator: GltfAnimator,
-  indexField: number,
-  fallbackIndex: number,
-): string {
-  const names = animator.clipNames;
-  if (names.length === 0) return '';
-  if (indexField > 0 && indexField < names.length) return names[indexField];
-  if (fallbackIndex < names.length) return names[fallbackIndex];
-  return names[0] ?? '';
+const ATTACK_RANGE = 2.2; // m
+const ATTACK_DAMAGE = 25;
+const prevPrimary = new Map<number, number>();
+
+const _fwd = new Vector3();
+const _q = new Quaternion();
+
+/** First clip whose name contains any of the keywords (case-insensitive). */
+function findClip(animator: GltfAnimator, ...keywords: string[]): string {
+  for (const k of keywords) {
+    const hit = animator.clipNames.find((n) => n.toLowerCase().includes(k));
+    if (hit) return hit;
+  }
+  return '';
 }
 
-function ensureLocomotionSet(animator: GltfAnimator, eid: number): void {
-  const idle = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
-  const walk = resolveClipName(animator, PlayerGltfConfig.walkClipIndex[eid], 1);
-  const run = resolveClipName(animator, PlayerGltfConfig.runClipIndex[eid], 2);
+interface Locomotion {
+  idle: string;
+  walk: string;
+  run: string;
+  jump: string;
+  fall: string;
+}
 
-  if (!idle || !walk || !run) return;
-
-  animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, { idle, walk, run });
+/** Resolve clips by explicit index override (>0) else by name keyword. */
+function resolveLocomotion(animator: GltfAnimator, eid: number): Locomotion {
+  const names = animator.clipNames;
+  const byIndex = (field: number): string =>
+    field > 0 && field < names.length ? names[field] : '';
+  return {
+    idle: byIndex(PlayerGltfConfig.idleClipIndex[eid]) || findClip(animator, 'idle', 'breathe'),
+    walk: byIndex(PlayerGltfConfig.walkClipIndex[eid]) || findClip(animator, 'walk'),
+    run: byIndex(PlayerGltfConfig.runClipIndex[eid]) || findClip(animator, 'run'),
+    jump: findClip(animator, 'jump'),
+    fall: findClip(animator, 'fall'),
+  };
 }
 
 function isRunModifier(): boolean {
   return isKeyDown('ShiftLeft') || isKeyDown('ShiftRight');
+}
+
+let meleeQuery: ReturnType<typeof defineQuery> | null = null;
+
+/** Damage Health entities within a forward cone when an attack lands. */
+function meleeHit(state: State, attacker: number): void {
+  const HealthComp = state.getComponent('health');
+  if (!HealthComp || !state.hasComponent(attacker, WorldTransform)) return;
+  const Health = HealthComp as unknown as { current: Float32Array };
+  if (!meleeQuery) meleeQuery = defineQuery([HealthComp, Transform]);
+
+  const ax = WorldTransform.posX[attacker];
+  const az = WorldTransform.posZ[attacker];
+  _fwd.set(0, 0, 1).applyQuaternion(
+    _q.set(
+      WorldTransform.rotX[attacker],
+      WorldTransform.rotY[attacker],
+      WorldTransform.rotZ[attacker],
+      WorldTransform.rotW[attacker]
+    )
+  );
+
+  for (const target of meleeQuery(state.world)) {
+    if (target === attacker) continue;
+    const dx = Transform.posX[target] - ax;
+    const dz = Transform.posZ[target] - az;
+    const dist = Math.hypot(dx, dz);
+    if (dist > ATTACK_RANGE || dist < 0.001) continue;
+    // in front (within ~70°)
+    if ((dx * _fwd.x + dz * _fwd.z) / dist < 0.35) continue;
+    Health.current[target] = Math.max(0, Health.current[target] - ATTACK_DAMAGE);
+  }
 }
 
 const playerGltfSetupQuery = defineQuery([PlayerController, PlayerGltfConfig]);
@@ -132,10 +181,16 @@ export const PlayerGltfSetupSystem: System = {
           const regIdx = registerAnimator(animator);
           PlayerGltfConfig.animatorRegistryIndex[eid] = regIdx;
 
-          ensureLocomotionSet(animator, eid);
-
-          const idleClip = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
-          animator.play(idleClip || animator.clipNames[0] || 'Animator3D_BreatheIdle');
+          const loco = resolveLocomotion(animator, eid);
+          if (loco.idle && loco.walk && loco.run) {
+            animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, {
+              idle: loco.idle,
+              walk: loco.walk,
+              run: loco.run,
+              jump: loco.jump || undefined,
+            });
+          }
+          animator.play(loco.idle || animator.clipNames[0] || '');
         })
         .catch((err: unknown) => {
           console.error('[player-gltf] load failed', err);
@@ -173,45 +228,55 @@ export const PlayerGltfAnimStateSystem: System = {
         continue;
       }
 
+      const grounded =
+        !state.hasComponent(eid, CharacterController) ||
+        CharacterController.grounded[eid] === 1;
+      const vy = state.hasComponent(eid, CharacterMovement)
+        ? CharacterMovement.velocityY[eid]
+        : 0;
+
+      // Attack: rising edge of primary action (left click) while grounded plays
+      // the skeletal attack clip as a one-shot override (locks locomotion until
+      // it finishes), and lands a melee hit.
+      const primary = InputState.primaryAction[eid] || InputState.leftMouse[eid];
+      const wasPrimary = prevPrimary.get(eid) ?? 0;
+      prevPrimary.set(eid, primary);
+      if (primary && !wasPrimary && grounded && !animator.overrideLock) {
+        const attackClip = findClip(animator, 'attack');
+        if (attackClip) animator.playOverride(attackClip, { loop: false });
+        meleeHit(state, eid);
+      }
+
       if (PlayerGltfConfig.overrideLock[eid] === 1 || animator.overrideLock) {
         animator.update(dt);
-
-        if (!state.hasComponent(eid, WorldTransform)) {
-          continue;
+        if (state.hasComponent(eid, WorldTransform)) {
+          syncTransformToRoot(eid, animator, state);
         }
-        syncTransformToRoot(eid, animator, state);
         continue;
       }
 
-      ensureLocomotionSet(animator, eid);
-
-      const moving = Math.abs(InputState.moveX[eid]) > 0.01 || Math.abs(InputState.moveY[eid]) > 0.01;
-      const run = moving && isRunModifier();
-
-      let locomotionPlayed = false;
-      if (InputState.jump[eid]) {
-        locomotionPlayed = animator.playLocomotion('jump') !== null;
-      } else if (run) {
-        locomotionPlayed = animator.playLocomotion('run') !== null;
-      } else if (moving) {
-        locomotionPlayed = animator.playLocomotion('walk') !== null;
-      } else {
-        locomotionPlayed = animator.playLocomotion('idle') !== null;
+      const loco = resolveLocomotion(animator, eid);
+      if (loco.idle && loco.walk && loco.run) {
+        animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, {
+          idle: loco.idle,
+          walk: loco.walk,
+          run: loco.run,
+          jump: loco.jump || undefined,
+        });
       }
 
-      if (!locomotionPlayed) {
-        const idleClip = resolveClipName(animator, PlayerGltfConfig.idleClipIndex[eid], 0);
-        const walkClip = resolveClipName(animator, PlayerGltfConfig.walkClipIndex[eid], 1);
-        const runClip = resolveClipName(animator, PlayerGltfConfig.runClipIndex[eid], 2);
+      const moving =
+        Math.abs(InputState.moveX[eid]) > 0.01 ||
+        Math.abs(InputState.moveY[eid]) > 0.01;
+      const run = moving && isRunModifier();
 
-        let wantClip = idleClip;
-        if (moving) {
-          wantClip = run ? runClip : walkClip;
-        }
-
-        if (wantClip && animator.activeClipName !== wantClip) {
-          animator.play(wantClip);
-        }
+      // Airborne uses jump (ascending) / fall (descending); grounded uses gait.
+      if (!grounded && (loco.jump || loco.fall)) {
+        const clip = vy > 0.5 ? loco.jump || loco.fall : loco.fall || loco.jump;
+        if (clip && animator.activeClipName !== clip) animator.play(clip);
+      } else {
+        const clip = run ? loco.run : moving ? loco.walk : loco.idle;
+        if (clip && animator.activeClipName !== clip) animator.play(clip);
       }
 
       animator.update(dt);
@@ -225,7 +290,11 @@ export const PlayerGltfAnimStateSystem: System = {
   },
 };
 
-function syncTransformToRoot(eid: number, animator: GltfAnimator, state: State): void {
+function syncTransformToRoot(
+  eid: number,
+  animator: GltfAnimator,
+  state: State
+): void {
   const yOff = getYOffset(state, eid);
   const root = animator.root;
   root.position.set(
