@@ -128,7 +128,7 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[WASD] move  [Space] jump  [Click] camera  [Q] save  [E] load  [L] EN/PT',
+    '[W/S] move  [A/D] turn camera  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT',
 };
 
 const dictPT: Record<string, string> = {
@@ -147,7 +147,7 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[WASD] mover  [Espaço] saltar  [Clique] câmara  [Q] gravar  [E] carregar  [L] EN/PT',
+    '[W/S] mover  [A/D] girar câmara  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
