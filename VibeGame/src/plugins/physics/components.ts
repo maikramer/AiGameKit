@@ -1,24 +1,35 @@
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-export const BodyType = {
-  Dynamic: 0,
-  Fixed: 1,
-  KinematicPositionBased: 2,
-  KinematicVelocityBased: 3,
-} as const;
+export enum BodyType {
+  Dynamic = 0,
+  Fixed = 1,
+  KinematicPositionBased = 2,
+  KinematicVelocityBased = 3,
+}
 
-export const ColliderShape = { Box: 0, Sphere: 1, Capsule: 2 } as const;
+export enum ColliderShape {
+  Box = 0,
+  Sphere = 1,
+  Capsule = 2,
+}
+
+export const PhysicsWorld = {
+  gravityX: new Float32Array(MAX_ENTITIES),
+  gravityY: new Float32Array(MAX_ENTITIES),
+  gravityZ: new Float32Array(MAX_ENTITIES),
+} as const;
 
 export const Rigidbody = {
   type: new Uint8Array(MAX_ENTITIES),
   mass: new Float32Array(MAX_ENTITIES),
+  linearDamping: new Float32Array(MAX_ENTITIES),
+  angularDamping: new Float32Array(MAX_ENTITIES),
   gravityScale: new Float32Array(MAX_ENTITIES),
+  ccd: new Uint8Array(MAX_ENTITIES),
   lockRotX: new Uint8Array(MAX_ENTITIES),
   lockRotY: new Uint8Array(MAX_ENTITIES),
   lockRotZ: new Uint8Array(MAX_ENTITIES),
-  ccd: new Uint8Array(MAX_ENTITIES),
-  linearDamping: new Float32Array(MAX_ENTITIES),
-  angularDamping: new Float32Array(MAX_ENTITIES),
+
   posX: new Float32Array(MAX_ENTITIES),
   posY: new Float32Array(MAX_ENTITIES),
   posZ: new Float32Array(MAX_ENTITIES),
@@ -29,6 +40,7 @@ export const Rigidbody = {
   eulerX: new Float32Array(MAX_ENTITIES),
   eulerY: new Float32Array(MAX_ENTITIES),
   eulerZ: new Float32Array(MAX_ENTITIES),
+
   velX: new Float32Array(MAX_ENTITIES),
   velY: new Float32Array(MAX_ENTITIES),
   velZ: new Float32Array(MAX_ENTITIES),
@@ -47,7 +59,6 @@ export const Collider = {
   friction: new Float32Array(MAX_ENTITIES),
   restitution: new Float32Array(MAX_ENTITIES),
   density: new Float32Array(MAX_ENTITIES),
-  sensor: new Uint8Array(MAX_ENTITIES),
   isSensor: new Uint8Array(MAX_ENTITIES),
   membershipGroups: new Uint16Array(MAX_ENTITIES),
   filterGroups: new Uint16Array(MAX_ENTITIES),
@@ -60,48 +71,25 @@ export const Collider = {
   rotOffsetW: new Float32Array(MAX_ENTITIES),
 } as const;
 
-export const CollisionEvents = {
-  activeEvents: new Uint8Array(MAX_ENTITIES),
-} as const;
-
-export const TouchedEvent = {
-  other: new Uint32Array(MAX_ENTITIES),
-} as const;
-
-export const TouchEndedEvent = {
-  other: new Uint32Array(MAX_ENTITIES),
-} as const;
-
-export const SetLinearVelocity = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
-
-export const SetAngularVelocity = {
-  x: new Float32Array(MAX_ENTITIES),
-  y: new Float32Array(MAX_ENTITIES),
-  z: new Float32Array(MAX_ENTITIES),
-} as const;
-
 export const CharacterController = {
+  offset: new Float32Array(MAX_ENTITIES),
+  maxSlope: new Float32Array(MAX_ENTITIES),
+  maxSlide: new Float32Array(MAX_ENTITIES),
+  snapDist: new Float32Array(MAX_ENTITIES),
+  autoStep: new Uint8Array(MAX_ENTITIES),
+  maxStepHeight: new Float32Array(MAX_ENTITIES),
+  minStepWidth: new Float32Array(MAX_ENTITIES),
+  upX: new Float32Array(MAX_ENTITIES),
+  upY: new Float32Array(MAX_ENTITIES),
+  upZ: new Float32Array(MAX_ENTITIES),
   moveX: new Float32Array(MAX_ENTITIES),
   moveY: new Float32Array(MAX_ENTITIES),
   moveZ: new Float32Array(MAX_ENTITIES),
   grounded: new Uint8Array(MAX_ENTITIES),
   platform: new Uint32Array(MAX_ENTITIES),
   platformVelX: new Float32Array(MAX_ENTITIES),
+  platformVelY: new Float32Array(MAX_ENTITIES),
   platformVelZ: new Float32Array(MAX_ENTITIES),
-  offset: new Float32Array(MAX_ENTITIES),
-  maxSlope: new Float32Array(MAX_ENTITIES),
-  upX: new Float32Array(MAX_ENTITIES),
-  upY: new Float32Array(MAX_ENTITIES),
-  upZ: new Float32Array(MAX_ENTITIES),
-  snapDist: new Float32Array(MAX_ENTITIES),
-  autoStep: new Uint8Array(MAX_ENTITIES),
-  maxStepHeight: new Float32Array(MAX_ENTITIES),
-  minStepWidth: new Float32Array(MAX_ENTITIES),
-  maxSlide: new Float32Array(MAX_ENTITIES),
 } as const;
 
 export const CharacterMovement = {
@@ -122,6 +110,7 @@ export const InterpolatedTransform = {
   prevRotY: new Float32Array(MAX_ENTITIES),
   prevRotZ: new Float32Array(MAX_ENTITIES),
   prevRotW: new Float32Array(MAX_ENTITIES),
+
   posX: new Float32Array(MAX_ENTITIES),
   posY: new Float32Array(MAX_ENTITIES),
   posZ: new Float32Array(MAX_ENTITIES),
@@ -131,7 +120,29 @@ export const InterpolatedTransform = {
   rotW: new Float32Array(MAX_ENTITIES),
 } as const;
 
+export const CollisionEvents = {
+  activeEvents: new Uint8Array(MAX_ENTITIES),
+} as const;
+
+export const TouchedEvent = {
+  other: new Uint32Array(MAX_ENTITIES),
+  handle1: new Uint32Array(MAX_ENTITIES),
+  handle2: new Uint32Array(MAX_ENTITIES),
+} as const;
+
+export const TouchEndedEvent = {
+  other: new Uint32Array(MAX_ENTITIES),
+  handle1: new Uint32Array(MAX_ENTITIES),
+  handle2: new Uint32Array(MAX_ENTITIES),
+} as const;
+
 export const ApplyForce = {
+  x: new Float32Array(MAX_ENTITIES),
+  y: new Float32Array(MAX_ENTITIES),
+  z: new Float32Array(MAX_ENTITIES),
+} as const;
+
+export const ApplyTorque = {
   x: new Float32Array(MAX_ENTITIES),
   y: new Float32Array(MAX_ENTITIES),
   z: new Float32Array(MAX_ENTITIES),
@@ -149,7 +160,13 @@ export const ApplyAngularImpulse = {
   z: new Float32Array(MAX_ENTITIES),
 } as const;
 
-export const ApplyTorque = {
+export const SetLinearVelocity = {
+  x: new Float32Array(MAX_ENTITIES),
+  y: new Float32Array(MAX_ENTITIES),
+  z: new Float32Array(MAX_ENTITIES),
+} as const;
+
+export const SetAngularVelocity = {
   x: new Float32Array(MAX_ENTITIES),
   y: new Float32Array(MAX_ENTITIES),
   z: new Float32Array(MAX_ENTITIES),
@@ -168,8 +185,8 @@ export const KinematicRotate = {
   w: new Float32Array(MAX_ENTITIES),
 } as const;
 
-export const PhysicsWorld = {
-  gravityX: new Float32Array(MAX_ENTITIES),
-  gravityY: new Float32Array(MAX_ENTITIES),
-  gravityZ: new Float32Array(MAX_ENTITIES),
+export const KinematicAngularVelocity = {
+  x: new Float32Array(MAX_ENTITIES),
+  y: new Float32Array(MAX_ENTITIES),
+  z: new Float32Array(MAX_ENTITIES),
 } as const;
