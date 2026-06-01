@@ -44,6 +44,15 @@ export async function initializePhysics(): Promise<void> {
 
 const interpolatedTransformQuery = defineQuery([InterpolatedTransform]);
 
+/**
+ * Downward speed held while grounded so the kinematic controller keeps ground
+ * contact after a horizontal step (computedGrounded stays true) and tracks
+ * descending slopes. Snap-to-ground is disabled for the character so this is the
+ * sole vertical follower — that combination avoids the upward resting creep that
+ * snap + stick produced together.
+ */
+const GROUND_STICK_VELOCITY = -6;
+
 export function createRigidbodyDescriptor(
   type: number,
   position?: RAPIER.Vector3,
@@ -483,11 +492,15 @@ export function applyCharacterMovement(
   const gravityScale = Rigidbody.gravityScale[entity];
   const effectiveGravity = gravityY * gravityScale;
 
+  // Airborne: integrate gravity. Grounded: hold a constant downward "stick"
+  // speed so the controller keeps ground contact (computedGrounded stays true)
+  // and follows descending slopes. A positive velocityY (an active jump) is left
+  // untouched so jumps still launch.
   if (!wasGrounded) {
     CharacterMovement.velocityY[entity] =
       (CharacterMovement.velocityY[entity] || 0) + effectiveGravity * deltaTime;
-  } else if (CharacterMovement.velocityY[entity] < 0) {
-    CharacterMovement.velocityY[entity] = 0;
+  } else if (CharacterMovement.velocityY[entity] <= 0) {
+    CharacterMovement.velocityY[entity] = GROUND_STICK_VELOCITY;
   }
 
   const totalVelY =
@@ -611,7 +624,7 @@ export function applyCharacterMovement(
     CharacterController.platform[entity] = NULL_ENTITY;
   }
 
-  if (grounded && !wasGrounded) {
+  if (grounded && CharacterMovement.velocityY[entity] < 0) {
     CharacterMovement.velocityY[entity] = 0;
   }
 }
