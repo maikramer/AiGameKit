@@ -100,7 +100,27 @@ export class GameRuntime {
           const camera = threeCameras.get(cameraEntities[0]);
           if (!camera) return;
 
-          renderer.render(scene, camera);
+          // Render through the WebGPU post-processing pipeline when one is built,
+          // otherwise straight to screen. If a post effect fails (e.g. a backend
+          // that can't run it), drop the pipeline and fall back so the game keeps
+          // rendering.
+          if (context.postProcessing) {
+            try {
+              const r = context.postProcessing.render() as unknown;
+              if (r && typeof (r as Promise<void>).catch === 'function') {
+                (r as Promise<void>).catch((err) => {
+                  console.warn('[VibeGame] post-processing disabled:', err);
+                  context.postProcessing = undefined;
+                });
+              }
+            } catch (err) {
+              console.warn('[VibeGame] post-processing disabled:', err);
+              context.postProcessing = undefined;
+              renderer.render(scene, camera);
+            }
+          } else {
+            renderer.render(scene, camera);
+          }
         } catch (e) {
           console.error('[VibeGame] Animation loop error:', e);
         }
