@@ -27,8 +27,13 @@ import {
   getLocale,
   t,
   isKeyDown,
+  getScene,
 } from 'vibegame';
+import * as THREE from 'three/webgpu';
+import { defineQuery } from 'vibegame';
 import { Rigidbody } from '../../../src/plugins/physics/components';
+import { Postprocessing } from '../../../src/plugins/rendering/components';
+import { getRenderingContext } from '../../../src/plugins/rendering';
 import {
   getBodyForEntity,
   PhysicsStepSystem,
@@ -112,6 +117,41 @@ const HeroGroundSnapSystem: System = {
   },
 };
 
+// Live post-processing toggles (keys 1–7) so effects can be tuned per-machine —
+// flipping a field and dropping context.postProcessing rebuilds the pipeline.
+const postfxQuery = defineQuery([Postprocessing]);
+const POSTFX_KEYS: Array<[string, string, string]> = [
+  ['Digit1', 'bloom', 'Bloom'],
+  ['Digit2', 'gtao', 'GTAO (AO)'],
+  ['Digit3', 'ssr', 'SSR'],
+  ['Digit4', 'dof', 'Depth of Field'],
+  ['Digit5', 'chromaticAberration', 'Chromatic Aberration'],
+  ['Digit6', 'vignette', 'Vignette'],
+  ['Digit7', 'fxaa', 'FXAA'],
+];
+const postfxDebounce = new Set<string>();
+
+const PostFxToggleSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    const ents = postfxQuery(state.world);
+    if (ents.length === 0) return;
+    const e = ents[0];
+    for (const [code, field, label] of POSTFX_KEYS) {
+      if (isKeyDown(code) && !postfxDebounce.has(code)) {
+        postfxDebounce.add(code);
+        const arr = (Postprocessing as Record<string, Uint8Array>)[field];
+        arr[e] = arr[e] ? 0 : 1;
+        const ctx = getRenderingContext(state);
+        ctx.postProcessing?.dispose();
+        ctx.postProcessing = undefined;
+        console.log(`[postfx] ${label} = ${arr[e] ? 'on' : 'off'}`);
+      }
+      if (!isKeyDown(code)) postfxDebounce.delete(code);
+    }
+  },
+};
+
 const dictEN: Record<string, string> = {
   'hud.title': 'Crystal Vale',
   'hud.mission': 'Survive the enemy waves!',
@@ -128,7 +168,7 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn camera  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT',
+    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT  [1-7] post-fx',
 };
 
 const dictPT: Record<string, string> = {
@@ -147,7 +187,7 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] girar câmara  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT',
+    '[W/S] mover  [A/D] girar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT  [1-7] pós-fx',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
@@ -593,6 +633,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(DebugPlugin);
   withSystem(GameplayHudSystem);
   withSystem(HeroGroundSnapSystem);
+  withSystem(PostFxToggleSystem);
 
   configure({ canvas: '#game-canvas' });
 
@@ -673,6 +714,29 @@ async function bootstrap(): Promise<void> {
   }
 
   await runtime.start();
+
+  // Equirectangular sky as both background (real sky) and environment (IBL so
+  // PBR materials reflect it). Set directly — no PMREM — because the WebGPU node
+  // pipeline samples equirect environments natively, and PMREM's equirect path
+  // uses a ShaderMaterial that the WebGPU backend rejects. Retry until the async
+  // renderer/scene are ready.
+  void (async () => {
+    const tex = await new THREE.TextureLoader().loadAsync(
+      '/assets/sky/sky.png'
+    );
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    for (let i = 0; i < 80; i++) {
+      const scene = getScene(state);
+      if (scene) {
+        scene.background = tex;
+        scene.environment = tex;
+        scene.environmentIntensity = 0.65;
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  })();
 }
 
 void bootstrap();
