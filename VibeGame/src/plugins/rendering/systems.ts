@@ -8,12 +8,14 @@ import {
   DirectionalLight,
   DistanceCull,
   MainCamera,
+  Postprocessing,
   PointLight,
   RenderContext,
   MeshRenderer,
   SpotLight,
 } from './components';
 import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
+import { buildPostProcessing } from './postprocessing';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import {
   applyNeutralEnvironment,
@@ -37,6 +39,7 @@ const thirdPersonCameraQuery = defineQuery([ThirdPersonCamera]);
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
 const renderContextQuery = defineQuery([RenderContext]);
+const postprocessingQuery = defineQuery([Postprocessing]);
 const _lightDir = new THREE.Vector3();
 const _lightPos = new THREE.Vector3();
 const _shadowCenter = new THREE.Vector3();
@@ -364,6 +367,9 @@ export const RendererSetupSystem: System = {
     context.renderer = renderer;
     context.canvas = canvas;
     applyNeutralEnvironment(renderer, context.scene);
+    // The post-processing scene pass renders scene.background (not the renderer
+    // clear colour), so mirror the clear colour there or the sky goes black.
+    if (clearColor !== 0) context.scene.background = new THREE.Color(clearColor);
 
     window.addEventListener('resize', () =>
       handleWindowResize(state, renderer)
@@ -407,6 +413,77 @@ export const CameraSyncSystem: System = {
   },
 };
 
+/**
+ * Builds the WebGPU post-processing pipeline once the renderer + main camera
+ * exist, when a `Postprocessing` entity opts in (enabled). The runtime renders
+ * through `context.postProcessing` when present (see runtime render loop).
+ */
+export const PostprocessingBuildSystem: System = {
+  group: 'draw',
+  after: [CameraSyncSystem],
+  update(state: State) {
+    if (state.headless) return;
+    const context = getRenderingContext(state);
+    if (context.postProcessing || !context.renderer) return;
+
+    const entities = postprocessingQuery(state.world);
+    if (entities.length === 0) return;
+    const e = entities[0];
+    if (Postprocessing.enabled[e] !== 1) return;
+
+    const cameras = mainCameraQuery(state.world);
+    if (cameras.length === 0) return;
+    const camera = threeCameras.get(cameras[0]);
+    if (!camera) return;
+
+    context.postProcessing = buildPostProcessing(
+      context.renderer,
+      context.scene,
+      camera,
+      {
+        bloom: Postprocessing.bloom[e] === 1,
+        bloomStrength: Postprocessing.bloomStrength[e],
+        bloomRadius: Postprocessing.bloomRadius[e],
+        bloomThreshold: Postprocessing.bloomThreshold[e],
+        gtao: Postprocessing.gtao[e] === 1,
+        gtaoRadius: Postprocessing.gtaoRadius[e],
+        gtaoScale: Postprocessing.gtaoScale[e],
+        ssgi: Postprocessing.ssgi[e] === 1,
+        ssgiSliceCount: Postprocessing.ssgiSliceCount[e],
+        ssgiStepCount: Postprocessing.ssgiStepCount[e],
+        ssr: Postprocessing.ssr[e] === 1,
+        ssrMaxDistance: Postprocessing.ssrMaxDistance[e],
+        ssrOpacity: Postprocessing.ssrOpacity[e],
+        ssrThickness: Postprocessing.ssrThickness[e],
+        sss: Postprocessing.sss[e] === 1,
+        sssDistance: Postprocessing.sssDistance[e],
+        sssQuality: Postprocessing.sssQuality[e],
+        dof: Postprocessing.dof[e] === 1,
+        dofFocus: Postprocessing.dofFocus[e],
+        dofFocalLength: Postprocessing.dofFocalLength[e],
+        dofBokeh: Postprocessing.dofBokeh[e],
+        godrays: Postprocessing.godrays[e] === 1,
+        godraysSteps: Postprocessing.godraysSteps[e],
+        godraysIntensity: Postprocessing.godraysIntensity[e],
+        chromaticAberration: Postprocessing.chromaticAberration[e] === 1,
+        caStrength: Postprocessing.caStrength[e],
+        anamorphic: Postprocessing.anamorphic[e] === 1,
+        anamorphicThreshold: Postprocessing.anamorphicThreshold[e],
+        anamorphicScale: Postprocessing.anamorphicScale[e],
+        vignette: Postprocessing.vignette[e] === 1,
+        vignetteStrength: Postprocessing.vignetteStrength[e],
+        vignetteRadius: Postprocessing.vignetteRadius[e],
+        aa: Postprocessing.aa[e],
+      }
+    );
+  },
+  dispose(state: State) {
+    const context = getRenderingContext(state);
+    context.postProcessing?.dispose();
+    context.postProcessing = undefined;
+  },
+};
+
 export const SceneRenderSystem: System = {
   group: 'draw',
   last: true,
@@ -428,6 +505,9 @@ export const SceneRenderSystem: System = {
     context.renderer = renderer;
     context.canvas = canvas;
     applyNeutralEnvironment(renderer, context.scene);
+    // The post-processing scene pass renders scene.background (not the renderer
+    // clear colour), so mirror the clear colour there or the sky goes black.
+    if (clearColor !== 0) context.scene.background = new THREE.Color(clearColor);
 
     window.addEventListener('resize', () =>
       handleWindowResize(state, renderer)

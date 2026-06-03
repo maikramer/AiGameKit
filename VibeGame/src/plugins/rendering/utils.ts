@@ -222,6 +222,7 @@ export interface RenderingContext {
     spotLights: THREE.SpotLight[];
   };
   renderer?: THREE.WebGPURenderer;
+  postProcessing?: THREE.RenderPipeline;
   canvas?: HTMLCanvasElement;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
