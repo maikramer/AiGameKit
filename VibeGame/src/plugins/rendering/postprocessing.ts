@@ -93,12 +93,6 @@ export function buildPostProcessing(
 
   const needsMrt = useGtao || useSsr || useSsgi || useSss;
 
-  if (!isWebGPU && (cfg.gtao || cfg.ssr || cfg.ssgi || cfg.sss || cfg.dof || cfg.godrays)) {
-    console.info(
-      '[VibeGame] GTAO/SSR/SSGI/SSS/DoF/Godrays need the WebGPU backend — skipped on the WebGL2 fallback.'
-    );
-  }
-
   const scenePass = pass(scene, camera);
   if (needsMrt) {
     scenePass.setMRT(
@@ -167,8 +161,8 @@ export function buildPostProcessing(
     );
     if (godrayLight) {
       const godraysPass = n(godrays(depth, camera, godrayLight));
-      godraysPass.steps.value = cfg.godraysSteps;
-      godraysPass.intensity.value = cfg.godraysIntensity;
+      godraysPass.raymarchSteps.value = cfg.godraysSteps;
+      godraysPass.density.value = cfg.godraysIntensity;
       node = node.add(godraysPass.getTextureNode());
     }
   }
