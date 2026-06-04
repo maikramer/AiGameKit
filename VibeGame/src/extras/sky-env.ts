@@ -102,10 +102,16 @@ export async function applyEquirectSkyEnvironment(
   const envMap = rt.texture;
   tex.dispose();
   pmrem.dispose();
+  if (scene.environment && scene.environment !== envMap) {
+    scene.environment.dispose();
+  }
   scene.environment = envMap;
   scene.environmentIntensity = options?.environmentIntensity ?? 0.1;
 
   if (options?.background !== false) {
+    if (scene.background && scene.background !== envMap) {
+      (scene.background as THREE.Texture).dispose();
+    }
     scene.background = envMap;
   }
 }

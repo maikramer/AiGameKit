@@ -34,6 +34,9 @@ const PHYSICS_COLLIDER_RADIUS = 192;
 const LOD_RESELECT_DISTANCE = 6;
 const _lastLodCam = new Map<number, { x: number; z: number }>();
 
+/** Shared materials per terrain field — avoids N duplicate Material instances for N chunks. */
+const _sharedTerrainMaterials = new Map<number, THREE.MeshStandardMaterial>();
+
 const terrainQuery = defineQuery([Terrain]);
 const chunkQuery = defineQuery([TerrainChunk]);
 const debugQuery = defineQuery([Terrain, TerrainDebugInfo]);
@@ -149,6 +152,10 @@ export const TerrainFieldBootstrapSystem: System = {
       registry.delete(chunk);
     }
     getTerrainContext(state).clear();
+    for (const mat of _sharedTerrainMaterials.values()) {
+      mat.dispose();
+    }
+    _sharedTerrainMaterials.clear();
   },
 };
 
@@ -277,15 +284,21 @@ export const TerrainMeshSystem: System = {
         mesh.geometry.dispose();
         mesh.geometry = geometry;
       } else {
-        const material = new THREE.MeshStandardMaterial({
-          color: Terrain.baseColor[field],
-          roughness: Terrain.roughness[field],
-          metalness: Terrain.metalness[field],
-          wireframe: Terrain.wireframe[field] === 1,
-          // Edge skirts can face either way; render both so they always plug
-          // cracks and never show as unlit black walls.
-          side: THREE.DoubleSide,
-        });
+        let material = _sharedTerrainMaterials.get(field);
+        if (!material || material.wireframe !== (Terrain.wireframe[field] === 1)
+            || material.color.getHex() !== Terrain.baseColor[field]
+            || material.roughness !== Terrain.roughness[field]
+            || material.metalness !== Terrain.metalness[field]) {
+          if (material) material.dispose();
+          material = new THREE.MeshStandardMaterial({
+            color: Terrain.baseColor[field],
+            roughness: Terrain.roughness[field],
+            metalness: Terrain.metalness[field],
+            wireframe: Terrain.wireframe[field] === 1,
+            side: THREE.DoubleSide,
+          });
+          _sharedTerrainMaterials.set(field, material);
+        }
         mesh = new THREE.Mesh(geometry, material);
         mesh.receiveShadow = true;
         mesh.castShadow = false;
