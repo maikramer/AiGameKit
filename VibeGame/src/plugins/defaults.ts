@@ -19,6 +19,7 @@ import { SpawnerPlugin } from './spawner/plugin';
 import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { AudioPlugin } from './audio/plugin';
+import { VegetationPlugin } from './vegetation/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -39,5 +40,6 @@ export const DefaultPlugins: Plugin[] = [
   TerrainPlugin,
   BvhPlugin,
   SpawnerPlugin,
+  VegetationPlugin,
   AudioPlugin,
 ];

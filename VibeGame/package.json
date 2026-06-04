@@ -83,6 +83,10 @@
       "types": "./dist/plugins/terrain/index.d.ts",
       "import": "./dist/plugins/terrain/index.js"
     },
+    "./vegetation": {
+      "types": "./dist/plugins/vegetation/index.d.ts",
+      "import": "./dist/plugins/vegetation/index.js"
+    },
     "./bvh": {
       "types": "./dist/plugins/bvh/index.d.ts",
       "import": "./dist/plugins/bvh/index.js"
