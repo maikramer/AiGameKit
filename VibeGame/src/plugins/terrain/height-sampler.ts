@@ -45,26 +45,100 @@ export function createHeightmapSampler(
   };
 }
 
+interface DecodedImage {
+  width: number;
+  height: number;
+  source: CanvasImageSource;
+  close(): void;
+}
+
+/**
+ * Decode an image blob into a drawable source.
+ *
+ * Prefers `createImageBitmap` (works in workers), but falls back to an
+ * `HTMLImageElement` when it is unavailable — e.g. Firefox builds where
+ * `createImageBitmap` is not exposed. Without this fallback the heightmap
+ * fails to decode and the terrain stays flat.
+ */
+async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
+  if (typeof createImageBitmap === "function") {
+    const bitmap = await createImageBitmap(blob);
+    return {
+      width: bitmap.width,
+      height: bitmap.height,
+      source: bitmap,
+      close: () => bitmap.close(),
+    };
+  }
+
+  if (typeof Image === "undefined" || typeof URL === "undefined") {
+    throw new Error("No image decoder available (no createImageBitmap / Image)");
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = objectUrl;
+    if (typeof img.decode === "function") {
+      await img.decode();
+    } else {
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("Image load failed"));
+      });
+    }
+    return {
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      source: img,
+      close: () => URL.revokeObjectURL(objectUrl),
+    };
+  } catch (e) {
+    URL.revokeObjectURL(objectUrl);
+    throw e;
+  }
+}
+
 export async function loadHeightmapFromUrl(
   url: string
 ): Promise<HeightSamplerData> {
-  const response = await fetch(url);
-  const blob = await response.blob();
-  const bitmap = await createImageBitmap(blob);
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (e) {
+    throw new Error(`Heightmap fetch failed: ${url} — ${e}`);
+  }
+  if (!response.ok) {
+    throw new Error(`Heightmap fetch ${response.status}: ${url}`);
+  }
+
+  let blob: Blob;
+  try {
+    blob = await response.blob();
+  } catch (e) {
+    throw new Error(`Heightmap blob failed: ${e}`);
+  }
+
+  let image: DecodedImage;
+  try {
+    image = await decodeImageBlob(blob);
+  } catch (e) {
+    throw new Error(`Heightmap decode failed (${blob.type}, ${blob.size}B): ${e}`);
+  }
 
   const canvas =
     typeof OffscreenCanvas !== "undefined"
-      ? new OffscreenCanvas(bitmap.width, bitmap.height)
+      ? new OffscreenCanvas(image.width, image.height)
       : (() => {
           const c = document.createElement("canvas");
-          c.width = bitmap.width;
-          c.height = bitmap.height;
+          c.width = image.width;
+          c.height = image.height;
           return c;
         })();
 
   const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(bitmap, 0, 0);
-  bitmap.close();
+  ctx.drawImage(image.source as CanvasImageSource, 0, 0);
+  image.close();
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const pixels = imageData.data;

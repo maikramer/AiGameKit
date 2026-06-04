@@ -33,6 +33,7 @@ const PHYSICS_COLLIDER_RADIUS = 192;
  * is wasted work while standing or moving slowly. */
 const LOD_RESELECT_DISTANCE = 6;
 const _lastLodCam = new Map<number, { x: number; z: number }>();
+let _heightmapRetryFrame = 0;
 
 /** Shared materials per terrain field — avoids N duplicate Material instances for N chunks. */
 const _sharedTerrainMaterials = new Map<number, THREE.MeshStandardMaterial>();
@@ -86,7 +87,6 @@ export const TerrainFieldBootstrapSystem: System = {
       );
 
       const heightmapUrl = getTerrainHeightmapUrl(state, entity);
-
       context.set(entity, {
         sampler,
         chunks: new Set<number>(),
@@ -124,7 +124,9 @@ export const TerrainFieldBootstrapSystem: System = {
             data.collisionReady = false;
             fireHeightmapReloadCallbacks(state);
           })
-          .catch(() => {});
+          .catch((err) => {
+            console.error(`Heightmap load failed: ${heightmapUrl} — ${err instanceof Error ? err.message : err}`);
+          });
       }
     }
 
@@ -314,6 +316,30 @@ export const TerrainMeshSystem: System = {
       );
 
       TerrainChunk.meshDirty[chunk] = 0;
+    }
+
+    // Retry heightmap load if sampler still flat after bootstrap (async callback
+    // may have failed — ensure terrain eventually gets real data).
+    _heightmapRetryFrame++;
+    const _heightmapRetryInterval = 60; // retry every 60 frames (~1s at 60fps)
+    if (_heightmapRetryFrame % _heightmapRetryInterval === 0) {
+    for (const [entity, data] of context) {
+      if (data.sampler.data !== null || !data.heightmapUrl) continue;
+      loadHeightmapFromUrl(data.heightmapUrl)
+        .then((imgData) => {
+          data.sampler = createHeightmapSampler(
+            Terrain.worldSize[entity],
+            Terrain.maxHeight[entity],
+            imgData
+          );
+          for (const chunk of data.chunks) {
+            TerrainChunk.meshDirty[chunk] = 1;
+          }
+        })
+        .catch((err) => {
+          console.error(`Heightmap retry failed: ${data.heightmapUrl} — ${err instanceof Error ? err.message : err}`);
+        });
+    }
     }
   },
 };
@@ -612,7 +638,9 @@ export function reloadTerrainHeightmap(
       d.collisionReady = false;
       fireHeightmapReloadCallbacks(state);
     })
-    .catch(() => {});
+    .catch((err) => {
+      console.error(`Heightmap reload failed: ${url}`, err);
+    });
 }
 
 export function getTerrainStats(
