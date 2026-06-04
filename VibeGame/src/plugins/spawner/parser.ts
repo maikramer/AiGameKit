@@ -43,6 +43,17 @@ function parseRole(value: XMLValue | undefined): string {
   return s;
 }
 
+function toBool(value: XMLValue | undefined): boolean {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase();
+    return s === '1' || s === 'true' || s === 'yes';
+  }
+  return false;
+}
+
 function toNumber(value: XMLValue | undefined, fallback: number): number {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'number') return value;
@@ -276,6 +287,7 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     pickStrategy,
     avoidWater: resolvedSpawn.avoidWater,
     maxDistance: resolvedSpawn.maxDistance,
+    instanced: toBool(element.attributes['instanced']),
     templates,
   };
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { eulerToQuaternion } from '../../core/math';
 import { defineQuery, type State, type System } from '../../core';
+import { getTerrainContext } from '../terrain';
 import { PlacePending } from './components';
 import { TerrainSpawned } from './components';
 import type { GroupSpawnDefaults } from './profiles';
@@ -13,6 +14,18 @@ import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import { findNearestTerrainEntity } from '../terrain/index';
 
 const placeQuery = defineQuery([PlacePending]);
+
+const MAX_PLACE_HEIGHTMAP_DEFER_FRAMES = 600;
+let _placeHeightmapDeferFrames = 0;
+
+/** Terrain has a heightmap URL but its sampler hasn't decoded yet. */
+function isTerrainHeightmapPending(state: State): boolean {
+  const tctx = getTerrainContext(state);
+  for (const [, data] of tctx) {
+    if (data.heightmapUrl && data.sampler.data === null) return true;
+  }
+  return false;
+}
 
 function anchorOffset(
   state: State,
@@ -78,6 +91,15 @@ export const TerrainPlaceSystem: System = {
 
     const specs = getPlacementSpecs(state);
     if (specs.size === 0) return;
+
+    // Wait for the heightmap to decode before placing, else entities land on the
+    // flat placeholder surface and get buried once the real terrain rises.
+    if (isTerrainHeightmapPending(state)) {
+      if (_placeHeightmapDeferFrames < MAX_PLACE_HEIGHTMAP_DEFER_FRAMES) {
+        _placeHeightmapDeferFrames++;
+        return;
+      }
+    }
 
     for (const eid of placeQuery(state.world)) {
       if (PlacePending.spawned[eid]) continue;

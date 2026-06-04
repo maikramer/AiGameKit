@@ -73,5 +73,7 @@ export interface SpawnGroupSpec {
   avoidWater: boolean;
   /** Maximum render distance for spawned entities (0 = no culling). Beyond this XZ distance from camera, mesh is hidden but physics remain active. */
   maxDistance: number;
+  /** Render the group as a single GPU-instanced mesh (per LOD) instead of one entity per instance. Trades per-instance physics/scripts for draw-call efficiency on dense static vegetation. */
+  instanced: boolean;
   templates: SpawnTemplateSpec[];
 }

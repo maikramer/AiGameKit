@@ -4,11 +4,11 @@ import { entityParser } from './entity-parser';
 import { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';
 import { spawnGroupParser } from './parser';
 import { TerrainPlaceSystem } from './place-system';
-import { TerrainSpawnSystem } from './systems';
+import { TerrainSpawnSystem, VegetationUpdateSystem } from './systems';
 
 export const SpawnerPlugin: Plugin = {
   recipes: [spawnGroupRecipe, entitySpawnerRecipe],
-  systems: [TerrainSpawnSystem, TerrainPlaceSystem],
+  systems: [TerrainSpawnSystem, TerrainPlaceSystem, VegetationUpdateSystem],
   components: {
     spawnerPending: SpawnerPending,
     placePending: PlacePending,

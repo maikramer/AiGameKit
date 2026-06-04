@@ -12,11 +12,52 @@ import {
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
+import { VegetationInstancer } from '../vegetation/systems';
+import { MeshInstanceSystem } from '../rendering/systems';
+import { getGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
 
 const spawnerQuery = defineQuery([SpawnerPending]);
 const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
 
 let callbackRegistered = false;
+
+/** Frames a spawn group may wait for an async heightmap before giving up and
+ * placing on whatever (possibly flat) sampler exists. ~10s at 60fps — long
+ * enough for a slow heightmap decode, short enough to not hang forever if the
+ * heightmap genuinely fails to load. */
+const MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES = 600;
+let _spawnHeightmapDeferFrames = 0;
+
+/**
+ * A terrain declares a `heightmapUrl` but its sampler has no data yet — the
+ * heightmap is still decoding. Spawning now would place entities on the flat
+ * placeholder surface (y≈0) and leave them buried once the real terrain rises.
+ */
+function isTerrainHeightmapPending(state: State): boolean {
+  const tctx = getTerrainContext(state);
+  for (const [, data] of tctx) {
+    if (data.heightmapUrl && data.sampler.data === null) return true;
+  }
+  return false;
+}
+const vegetationInstancers = new Map<number, VegetationInstancer>();
+
+function resolveYaw(rand: () => number, spec: SpawnGroupSpec): number {
+  if (!spec.randomYaw) return 0;
+  if (spec.yawDistribution === 'discrete' && spec.yawDiscreteDeg.length > 0) {
+    const idx = Math.floor(rand() * spec.yawDiscreteDeg.length);
+    return (spec.yawDiscreteDeg[idx]! * Math.PI) / 180;
+  }
+  return rand() * Math.PI * 2;
+}
+
+function resolveScale(rand: () => number, spec: SpawnGroupSpec): number {
+  if (spec.scaleDistribution === 'discrete' && spec.scaleDiscreteValues.length > 0) {
+    const idx = Math.floor(rand() * spec.scaleDiscreteValues.length);
+    return spec.scaleDiscreteValues[idx]!;
+  }
+  return spec.scaleMin + rand() * (spec.scaleMax - spec.scaleMin);
+}
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -109,6 +150,16 @@ export const TerrainSpawnSystem: System = {
     const specs = getSpawnGroupSpecs(state);
     if (specs.size === 0) return;
 
+    // Defer spawning until the terrain heightmap has decoded, otherwise entities
+    // get placed on the flat placeholder and end up buried when terrain rises.
+    if (isTerrainHeightmapPending(state)) {
+      if (_spawnHeightmapDeferFrames < MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES) {
+        _spawnHeightmapDeferFrames++;
+        return;
+      }
+      // Fallback: heightmap is taking too long (or failed) — spawn anyway.
+    }
+
     for (const eid of spawnerQuery(state.world)) {
       if (SpawnerPending.spawned[eid]) continue;
 
@@ -178,6 +229,82 @@ export const TerrainSpawnSystem: System = {
         : 45;
       const acceptAnySlope = maxSlope >= 90 - 1e-6;
 
+      // === INSTANCED VEGETATION HOOK ===
+      const firstTemplate = spec.templates[0];
+      if (firstTemplate && spec.instanced) {
+        const vegUrl = String(firstTemplate.attributes['url'] || '');
+        if (!vegUrl) {
+          console.warn('[spawner] Instanced vegetation group skipped: no url attribute');
+          SpawnerPending.spawned[eid] = 1;
+          continue;
+        }
+
+        const vegInstancer = new VegetationInstancer();
+        vegetationInstancers.set(eid, vegInstancer);
+
+        vegInstancer.initializeFromSpec(
+          {
+            url: vegUrl,
+            lod1Url: firstTemplate.attributes['lod1-url']
+              ? String(firstTemplate.attributes['lod1-url'])
+              : undefined,
+            lod2Url: firstTemplate.attributes['lod2-url']
+              ? String(firstTemplate.attributes['lod2-url'])
+              : undefined,
+            role: firstTemplate.role || 'static',
+            profile: firstTemplate.childProfile,
+          },
+          state
+        ).then(() => {
+          const positions: Array<{ x: number; y: number; z: number; scale: number; yaw: number }> = [];
+          const glbBounds = getGltfLocalYBounds(vegUrl);
+          for (let i = 0; i < instanceCount; i++) {
+            let wx = minX;
+            let wz = minZ;
+            let s: TerrainSurfaceSample | null = null;
+            let foundValidSlope = false;
+            const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
+            for (let attempt = 0; attempt < attempts; attempt++) {
+              wx = minX + rand() * (maxX - minX);
+              wz = minZ + rand() * (maxZ - minZ);
+              const cand = sampleTerrainSurface(
+                state,
+                wx,
+                wz,
+                spec.surfaceEpsilon,
+                spec.surfaceEpsilonAuto
+              );
+              if (!cand) continue;
+              s = cand;
+              if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
+                foundValidSlope = true;
+                break;
+              }
+            }
+            if (!s) continue;
+            if (!foundValidSlope && !acceptAnySlope) continue;
+            const scale = resolveScale(rand, spec);
+            const yLift = glbBounds ? -glbBounds.minY * scale : 0;
+            positions.push({
+              x: wx,
+              y: s.worldY + yLift,
+              z: wz,
+              scale,
+              yaw: resolveYaw(rand, spec),
+            });
+          }
+
+          for (const p of positions) {
+            vegInstancer.addInstance(p.x, p.y, p.z, p.scale, p.yaw);
+          }
+          vegInstancer.markReady(state);
+        });
+
+        SpawnerPending.spawned[eid] = 1;
+        continue;
+      }
+      // === END INSTANCED HOOK ===
+
       for (let i = 0; i < instanceCount; i++) {
         let wx = minX;
         let wz = minZ;
@@ -224,3 +351,17 @@ export const TerrainSpawnSystem: System = {
     }
   },
 };
+
+export const vegetationInstancerMap = vegetationInstancers;
+
+export const VegetationUpdateSystem: System = {
+  group: 'draw',
+  after: [MeshInstanceSystem],
+  update(state: State) {
+    if (state.headless) return;
+    for (const [, instancer] of vegetationInstancers) {
+      instancer.update(state);
+    }
+  },
+};
+

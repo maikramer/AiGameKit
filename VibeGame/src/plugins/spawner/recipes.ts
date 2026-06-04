@@ -31,6 +31,7 @@ export const spawnGroupRecipe: Recipe = {
     'max-slope-attempts',
     'avoid-water',
     'max-distance',
+    'instanced',
   ],
 };
 
