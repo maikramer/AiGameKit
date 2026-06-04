@@ -91,17 +91,15 @@ export function buildPostProcessing(
   const useGodrays = cfg.godrays && isWebGPU;
   const useTraa = cfg.aa === AAMode.TRAA && isWebGPU;
 
-  const needsMrt = useGtao || useSsr || useSsgi || useSss;
+  const needsMetalRough = useSsr || useSsgi || useSss;
 
   const scenePass = pass(scene, camera);
-  if (needsMrt) {
-    scenePass.setMRT(
-      mrt({
-        output,
-        normal: normalView,
-        metalrough: vec2(metalness, roughness),
-      })
-    );
+  if (needsMetalRough || useGtao) {
+    const mrtTargets: Record<string, any> = { output, normal: normalView };
+    if (needsMetalRough) {
+      mrtTargets.metalrough = vec2(metalness, roughness);
+    }
+    scenePass.setMRT(mrt(mrtTargets));
   }
 
   const color = scenePass.getTextureNode('output');
@@ -115,6 +113,7 @@ export function buildPostProcessing(
     const aoPass = n(ao(depth, normal, camera));
     aoPass.radius.value = cfg.gtaoRadius;
     aoPass.scale.value = cfg.gtaoScale;
+    aoPass.resolutionScale = 0.75;
     node = node.mul(aoPass.getTextureNode().r);
   }
 

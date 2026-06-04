@@ -135,7 +135,7 @@ export function initializeInstancedMesh(
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  mesh.frustumCulled = false;
+  mesh.frustumCulled = true;
 
   const zeroMatrix = new THREE.Matrix4();
   zeroMatrix.makeScale(0, 0, 0);
@@ -240,13 +240,13 @@ export function createGeometries(): Map<number, THREE.BufferGeometry> {
 export function initializeContext(): RenderingContext {
   const scene = new THREE.Scene();
 
-  const ambient = new THREE.HemisphereLight(0xb1e1ff, 0xb97a20, 1.5);
+  const ambient = new THREE.HemisphereLight(0xb1e1ff, 0xb97a20, 1.0);
   scene.add(ambient);
 
-  const directional = new THREE.DirectionalLight(0xffffff, 2.5);
+  const directional = new THREE.DirectionalLight(0xffffff, 1.8);
   directional.castShadow = true;
-  directional.shadow.mapSize.width = 4096;
-  directional.shadow.mapSize.height = 4096;
+  directional.shadow.mapSize.width = 2048;
+  directional.shadow.mapSize.height = 2048;
   scene.add(directional);
   scene.add(directional.target);
 
@@ -324,7 +324,7 @@ export async function createRenderer(
   const height = canvas.clientHeight || window.innerHeight;
   const pixelRatio = Math.min(
     window.devicePixelRatio,
-    /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
+    /Mobi|Android/i.test(navigator.userAgent) ? 1.25 : 1.5
   );
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
@@ -377,7 +377,7 @@ export function handleWindowResize(
   renderer.setPixelRatio(
     Math.min(
       window.devicePixelRatio,
-      /Mobi|Android/i.test(navigator.userAgent) ? 1.5 : 2
+      /Mobi|Android/i.test(navigator.userAgent) ? 1.25 : 1.5
     )
   );
   renderer.setSize(width, height, false);
