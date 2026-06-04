@@ -120,6 +120,28 @@
       >
       </PlayerGLTF>
 
+      <!-- Instanced vegetation: 100 pine trees via GPU instancing -->
+      <SpawnGroup
+        profile="tree"
+        count="100"
+        seed="42"
+        region-min="-200 0 -200"
+        region-max="200 0 200"
+        instanced="true"
+        scale-min="2"
+        scale-max="3.5"
+        yaw-distribution="discrete"
+        yaw-step-deg="45"
+      >
+        <GLTFDynamic
+          role="dynamic"
+          url="/assets/meshes/tree_pine_lod0.glb"
+          lod1-url="/assets/meshes/tree_pine_lod1.glb"
+          lod2-url="/assets/meshes/tree_pine_lod2.glb"
+          body-type="fixed"
+        />
+      </SpawnGroup>
+
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
       <!-- Post-processing temporarily disabled for debugging -->
       <ThirdPersonCamera
