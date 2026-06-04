@@ -74,6 +74,11 @@ export const GltfXmlPlugin: Plugin = {
             setPendingLodThresholdMid(state, entity, v);
           }
         }) as Adapter,
+        // Spawner/vegetation instancing uses these directly from attributes;
+        // register as accepted to suppress "unknown attribute" warnings.
+        'lod1-url': ((_entity, _value, _state) => {}) as Adapter,
+        'lod2-url': ((_entity, _value, _state) => {}) as Adapter,
+        'instanced': ((_entity, _value, _state) => {}) as Adapter,
       },
     },
     defaults: {
