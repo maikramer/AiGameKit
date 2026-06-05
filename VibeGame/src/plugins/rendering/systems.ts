@@ -416,7 +416,7 @@ export const CameraSyncSystem: System = {
 };
 
 /**
- * Builds the WebGPU post-processing pipeline once the renderer + main camera
+ * Builds the post-processing pipeline once the renderer + main camera
  * exist, when a `Postprocessing` entity opts in (enabled). The runtime renders
  * through `context.postProcessing` when present (see runtime render loop).
  */

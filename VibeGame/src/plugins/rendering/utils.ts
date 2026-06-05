@@ -246,8 +246,8 @@ export interface RenderingContext {
     pointLights: THREE.PointLight[];
     spotLights: THREE.SpotLight[];
   };
-  renderer?: THREE.WebGPURenderer;
-  postProcessing?: THREE.RenderPipeline;
+  renderer?: THREE.WebGLRenderer;
+  postProcessing?: any | null;
   canvas?: HTMLCanvasElement;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
@@ -339,10 +339,10 @@ export function setRenderingCanvas(
 export async function createRenderer(
   canvas: HTMLCanvasElement,
   clearColor: number
-): Promise<THREE.WebGPURenderer> {
-  const renderer = new THREE.WebGPURenderer({
+): Promise<THREE.WebGLRenderer> {
+  const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: false,
+    antialias: true,
     powerPreference: 'high-performance',
   });
 
@@ -355,7 +355,6 @@ export async function createRenderer(
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
 
-  // WebGPU shadow maps were broken pre-r183; fixed in Three.js PR #32705.
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
@@ -363,33 +362,9 @@ export async function createRenderer(
     renderer.setClearColor(clearColor);
   }
 
-  // AgX is the modern filmic tone mapper (r160+): smoother highlight rolloff
-  // and more neutral hue handling than ACES, which tends to skew oranges/reds.
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = 1;
-
-  await renderer.init();
-
-  // WebGPURenderer silently falls back to a WebGL2 backend when `navigator.gpu`
-  // is missing (e.g. Linux browsers where WebGPU is still behind a flag). The
-  // game runs either way, but the fallback loses compute-driven passes
-  // (GTAO/SSR/SSGI/SSS/DoF/godrays/TRAA) — so surface which backend is live
-  // instead of leaving "why is WebGPU not active?" a mystery.
-  const isWebGPU = Boolean(
-    (renderer.backend as unknown as { isWebGPUBackend?: boolean })
-      ?.isWebGPUBackend
-  );
-  if (isWebGPU) {
-    console.info('[VibeGame] Renderer backend: WebGPU');
-  } else {
-    console.warn(
-      '[VibeGame] Renderer backend: WebGL2 (WebGPU unavailable). ' +
-        'Enable WebGPU for full features — Firefox: about:config ' +
-        'dom.webgpu.enabled=true; Chrome/Linux: chrome://flags ' +
-        '#enable-unsafe-webgpu. Note: as of 2026 no browser ships WebGPU ' +
-        'by default on Linux.'
-    );
-  }
 
   return renderer;
 }
@@ -401,7 +376,7 @@ export async function createRenderer(
  * standard fix and lights every metallic/rough surface plausibly.
  */
 export function applyNeutralEnvironment(
-  renderer: THREE.WebGPURenderer,
+  renderer: THREE.WebGLRenderer,
   scene: THREE.Scene
 ): void {
   const pmrem = new THREE.PMREMGenerator(renderer);
@@ -414,7 +389,7 @@ export function applyNeutralEnvironment(
 
 export function handleWindowResize(
   state: State,
-  renderer: THREE.WebGPURenderer
+  renderer: THREE.WebGLRenderer
 ): void {
   const context = getRenderingContext(state);
   const canvas = context.canvas;
@@ -430,6 +405,10 @@ export function handleWindowResize(
     )
   );
   renderer.setSize(width, height, false);
+
+  if (context.postProcessing && typeof context.postProcessing.setSize === 'function') {
+    context.postProcessing.setSize(width, height);
+  }
 
   for (const [, camera] of threeCameras) {
     if (camera instanceof THREE.PerspectiveCamera) {

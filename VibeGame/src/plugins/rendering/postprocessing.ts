@@ -1,206 +1,138 @@
-import * as THREE from 'three';
-import {
-  pass,
-  mrt,
-  output,
-  normalView,
-  metalness,
-  roughness,
-  vec2,
-  vec3,
-  float,
-  int,
-  velocity,
-} from 'three/tsl';
-/* eslint-disable import/no-unresolved */
-import { bloom } from 'three/addons/tsl/display/BloomNode.js';
-import { fxaa } from 'three/addons/tsl/display/FXAANode.js';
-import { smaa } from 'three/addons/tsl/display/SMAANode.js';
-import { traa } from 'three/addons/tsl/display/TRAANode.js';
-import { ao } from 'three/addons/tsl/display/GTAONode.js';
-import { ssr } from 'three/addons/tsl/display/SSRNode.js';
-import { ssgi } from 'three/addons/tsl/display/SSGINode.js';
-import { sss } from 'three/addons/tsl/display/SSSNode.js';
-import { godrays } from 'three/addons/tsl/display/GodraysNode.js';
-import { dof } from 'three/addons/tsl/display/DepthOfFieldNode.js';
-import { chromaticAberration } from 'three/addons/tsl/display/ChromaticAberrationNode.js';
-import { anamorphic } from 'three/addons/tsl/display/AnamorphicNode.js';
-import { vignette as tslVignette } from 'three/addons/tsl/display/CRT.js';
-import { boxBlur } from 'three/addons/tsl/display/boxBlur.js';
-/* eslint-enable import/no-unresolved */
+import * as THREE from "three";
+import { EffectComposer } from "three-stdlib/postprocessing/EffectComposer";
+import { RenderPass } from "three-stdlib/postprocessing/RenderPass";
+import { UnrealBloomPass } from "three-stdlib/postprocessing/UnrealBloomPass";
+import { ShaderPass } from "three-stdlib/postprocessing/ShaderPass";
+import { SMAAPass } from "three-stdlib/postprocessing/SMAAPass";
+import { FXAAShader } from "three-stdlib/shaders/FXAAShader";
+import { GammaCorrectionShader } from "three-stdlib/shaders/GammaCorrectionShader";
 
-export const AAMode = { OFF: 0, FXAA: 1, SMAA: 2, TRAA: 3 } as const;
+export const AAMode = { OFF: 0, FXAA: 1, SMAA: 2 } as const;
 
 export interface PostFxConfig {
+  enabled: number;
   bloom: boolean;
   bloomStrength: number;
   bloomRadius: number;
   bloomThreshold: number;
-  gtao: boolean;
-  gtaoRadius: number;
-  gtaoScale: number;
-  ssgi: boolean;
-  ssgiSliceCount: number;
-  ssgiStepCount: number;
-  ssr: boolean;
-  ssrMaxDistance: number;
-  ssrOpacity: number;
-  ssrThickness: number;
-  sss: boolean;
-  sssDistance: number;
-  sssQuality: number;
-  dof: boolean;
-  dofFocus: number;
-  dofFocalLength: number;
-  dofBokeh: number;
-  godrays: boolean;
-  godraysSteps: number;
-  godraysIntensity: number;
   chromaticAberration: boolean;
-  caStrength: number;
-  anamorphic: boolean;
-  anamorphicThreshold: number;
-  anamorphicScale: number;
+  chromaticAberrationStrength: number;
   vignette: boolean;
   vignetteStrength: number;
-  vignetteRadius: number;
+  vignetteSmoothness: number;
+  fxaa: boolean;
+  smaa: boolean;
+  smaaQuality: number;
+  tonemapping: number;
+  dither: number;
   aa: number;
 }
 
-type N = any; // eslint-disable-line @typescript-eslint/no-explicit-any
-const n = (x: unknown): N => x as N;
+export type PostProcessingPipeline = EffectComposer;
+
+const ChromaticAberrationShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uStrength: { value: 0.003 },
+    uDirection: { value: new THREE.Vector2(1.0, 1.0) },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uStrength;
+    uniform vec2 uDirection;
+    varying vec2 vUv;
+    void main() {
+      vec2 dir = (vUv - 0.5) * uDirection;
+      float dist = length(dir);
+      float strength = uStrength * dist;
+      vec4 cr = texture2D(tDiffuse, vUv + dir * strength);
+      vec4 cg = texture2D(tDiffuse, vUv);
+      vec4 cb = texture2D(tDiffuse, vUv - dir * strength);
+      gl_FragColor = vec4(cr.r, cg.g, cb.b, cg.a);
+    }
+  `,
+};
+
+const VignetteShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uStrength: { value: 0.5 },
+    uSmoothness: { value: 0.85 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform float uStrength;
+    uniform float uSmoothness;
+    varying vec2 vUv;
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      float dist = distance(vUv, vec2(0.5));
+      float vignette = smoothstep(uSmoothness, uSmoothness - 0.4, dist * uStrength * 2.0);
+      gl_FragColor = vec4(color.rgb * mix(1.0, vignette, uStrength), color.a);
+    }
+  `,
+};
 
 export function buildPostProcessing(
-  renderer: THREE.WebGPURenderer,
+  renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   camera: THREE.Camera,
-  cfg: PostFxConfig
-): THREE.RenderPipeline {
-  const post = new THREE.RenderPipeline(renderer);
+  config: PostFxConfig,
+): EffectComposer | null {
+  if (!config.enabled) return null;
 
-  const isWebGPU = Boolean(
-    (renderer.backend as unknown as { isWebGPUBackend?: boolean })
-      ?.isWebGPUBackend
-  );
+  const size = renderer.getSize(new THREE.Vector2());
+  const composer = new EffectComposer(renderer);
 
-  const useGtao = cfg.gtao && isWebGPU;
-  const useSsr = cfg.ssr && isWebGPU;
-  const useSsgi = cfg.ssgi && isWebGPU;
-  const useSss = cfg.sss && isWebGPU;
-  const useDof = cfg.dof && isWebGPU;
-  const useGodrays = cfg.godrays && isWebGPU;
-  const useTraa = cfg.aa === AAMode.TRAA && isWebGPU;
+  composer.addPass(new RenderPass(scene, camera));
 
-  const needsMetalRough = useSsr || useSsgi || useSss;
-
-  const scenePass = pass(scene, camera);
-  if (needsMetalRough || useGtao) {
-    const mrtTargets: Record<string, any> = { output, normal: normalView };
-    if (needsMetalRough) {
-      mrtTargets.metalrough = vec2(metalness, roughness);
-    }
-    scenePass.setMRT(mrt(mrtTargets));
-  }
-
-  const color = scenePass.getTextureNode('output');
-  const depth = scenePass.getTextureNode('depth');
-  const viewZ = scenePass.getViewZNode();
-
-  let node: N = color;
-
-  if (useGtao) {
-    const normal = scenePass.getTextureNode('normal');
-    const aoPass = n(ao(depth, normal, camera));
-    aoPass.radius.value = cfg.gtaoRadius;
-    aoPass.scale.value = cfg.gtaoScale;
-    aoPass.resolutionScale = 0.75;
-    node = node.mul(aoPass.getTextureNode().r);
-  }
-
-  if (useSsgi) {
-    const normal = scenePass.getTextureNode('normal');
-    const ssgiPass = n(ssgi(color, depth, normal, camera as THREE.PerspectiveCamera));
-    n(ssgiPass).sliceCount.value = cfg.ssgiSliceCount;
-    n(ssgiPass).stepCount.value = cfg.ssgiStepCount;
-    node = node.add(ssgiPass.getTextureNode());
-  }
-
-  if (useSsr) {
-    const normal = scenePass.getTextureNode('normal');
-    const metalRough = n(scenePass.getTextureNode('metalrough'));
-    const ssrPass = n(
-      ssr(color, depth, normal, metalRough.r, metalRough.g, camera)
+  if (config.bloom) {
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(size.x, size.y),
+      config.bloomStrength,
+      config.bloomRadius,
+      config.bloomThreshold,
     );
-    ssrPass.maxDistance.value = cfg.ssrMaxDistance;
-    ssrPass.opacity.value = cfg.ssrOpacity;
-    ssrPass.thickness.value = cfg.ssrThickness;
-    node = node.add(ssrPass.getTextureNode());
+    composer.addPass(bloomPass);
   }
 
-  if (useSss) {
-    const mainLight = scene.children.find(
-      (c): c is THREE.DirectionalLight =>
-        c instanceof THREE.DirectionalLight && c.castShadow
-    );
-    if (mainLight) {
-      const sssPass = n(sss(depth, camera, mainLight));
-      sssPass.distance.value = cfg.sssDistance;
-      sssPass.quality.value = cfg.sssQuality;
-      const sssBlurred = n(boxBlur(sssPass.getTextureNode().r, { size: int(2), separation: int(1) }));
-      node = node.mul(n(sssBlurred).add(0.5));
-    }
+  if (config.chromaticAberration) {
+    const caPass = new ShaderPass(ChromaticAberrationShader);
+    caPass.uniforms["uStrength"].value = config.chromaticAberrationStrength;
+    composer.addPass(caPass);
   }
 
-  if (useGodrays) {
-    const godrayLight = scene.children.find(
-      (c): c is THREE.DirectionalLight =>
-        c instanceof THREE.DirectionalLight && c.castShadow
-    ) || scene.children.find(
-      (c): c is THREE.PointLight => c instanceof THREE.PointLight
-    );
-    if (godrayLight) {
-      const godraysPass = n(godrays(depth, camera, godrayLight));
-      godraysPass.raymarchSteps.value = cfg.godraysSteps;
-      godraysPass.density.value = cfg.godraysIntensity;
-      node = node.add(godraysPass.getTextureNode());
-    }
+  if (config.vignette) {
+    const vignettePass = new ShaderPass(VignetteShader);
+    vignettePass.uniforms["uStrength"].value = config.vignetteStrength;
+    vignettePass.uniforms["uSmoothness"].value = config.vignetteSmoothness;
+    composer.addPass(vignettePass);
   }
 
-  if (cfg.bloom) {
-    node = node.add(
-      n(bloom(node, cfg.bloomStrength, cfg.bloomRadius, cfg.bloomThreshold))
-    );
+  if (config.aa === AAMode.FXAA) {
+    const fxaaPass = new ShaderPass(FXAAShader);
+    fxaaPass.uniforms["resolution"].value.set(1 / size.x, 1 / size.y);
+    composer.addPass(fxaaPass);
+  } else if (config.aa === AAMode.SMAA) {
+    composer.addPass(new SMAAPass(size.x, size.y));
   }
 
-  if (cfg.anamorphic) {
-    const anamorphicPass = n(anamorphic(color, float(cfg.anamorphicThreshold), float(cfg.anamorphicScale)));
-    node = node.add(anamorphicPass.getTextureNode());
-  }
+  const gammaPass = new ShaderPass(GammaCorrectionShader);
+  composer.addPass(gammaPass);
 
-  if (useDof) {
-    node = n(dof(node, viewZ, cfg.dofFocus, cfg.dofFocalLength, cfg.dofBokeh));
-  }
-
-  if (cfg.chromaticAberration) {
-    node = n(chromaticAberration)(node, cfg.caStrength, vec2(0.5, 0.5), 1.1);
-  }
-
-  if (cfg.vignette) {
-    const strength = float(cfg.vignetteStrength);
-    const radius = float(1.0 - cfg.vignetteRadius);
-    node = n(tslVignette)(n(vec3(node)), strength, radius);
-  }
-
-  post.outputNode = node;
-
-  if (useTraa) {
-    const vel = scenePass.getTextureNode('velocity') ?? velocity;
-    post.outputNode = n(traa(post.outputNode, depth, vel, camera));
-  } else if (cfg.aa === AAMode.SMAA) {
-    post.outputNode = n(smaa(post.outputNode));
-  } else if (cfg.aa === AAMode.FXAA) {
-    post.outputNode = n(fxaa(post.outputNode));
-  }
-
-  return post;
+  return composer;
 }

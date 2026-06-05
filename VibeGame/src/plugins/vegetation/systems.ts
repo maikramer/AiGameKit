@@ -26,25 +26,6 @@ function extractGeometryMaterialPairs(scene: THREE.Object3D): GeometryMaterialPa
   return pairs;
 }
 
-function toWebGPUMaterial(mat: THREE.Material): THREE.Material {
-  if (mat instanceof THREE.MeshStandardMaterial) {
-    const nodeMat = new THREE.MeshStandardNodeMaterial();
-    nodeMat.map = mat.map;
-    nodeMat.normalMap = mat.normalMap;
-    nodeMat.roughnessMap = mat.roughnessMap;
-    nodeMat.metalnessMap = mat.metalnessMap;
-    nodeMat.aoMap = mat.aoMap;
-    nodeMat.roughness = mat.roughness;
-    nodeMat.metalness = mat.metalness;
-    nodeMat.side = mat.side;
-    nodeMat.transparent = mat.transparent;
-    nodeMat.alphaTest = mat.alphaTest;
-    nodeMat.color.copy(mat.color);
-    return nodeMat;
-  }
-  return mat;
-}
-
 export class VegetationInstancer {
   private state: VegetationSpawnState;
   private lodPairs = new Map<string, GeometryMaterialPair[]>();
@@ -98,8 +79,7 @@ export class VegetationInstancer {
     for (const [lodKey, pairs] of this.lodPairs) {
       const meshes: THREE.InstancedMesh[] = [];
       for (const { geometry, material } of pairs) {
-        const webgpuMat = toWebGPUMaterial(material);
-        const im = new THREE.InstancedMesh(geometry, webgpuMat, MAX_INSTANCES);
+        const im = new THREE.InstancedMesh(geometry, material, MAX_INSTANCES);
         im.castShadow = true;
         im.receiveShadow = true;
         im.frustumCulled = true;
@@ -113,7 +93,7 @@ export class VegetationInstancer {
     }
   }
 
-  async markReady(state: State): Promise<void> {
+  markReady(state: State): void {
     if (!this.state.scene) {
       this.state.scene = getScene(state) ?? null;
     }
@@ -122,11 +102,7 @@ export class VegetationInstancer {
     const ctx = getRenderingContext(state);
     const cam = ctx.renderer ? this.getCamera(state) : null;
     if (cam && ctx.renderer) {
-      try {
-        await ctx.renderer.compileAsync(this.state.scene, cam);
-      } catch {
-        // Non-fatal: compile may fail in some WebGPU implementations
-      }
+      ctx.renderer.compile(this.state.scene, cam);
     }
     this.state.compiled = true;
     this.state.ready = true;

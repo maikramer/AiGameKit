@@ -10,20 +10,10 @@ const inFlight = new Set<number>();
 const _loader = new THREE.TextureLoader();
 
 /**
- * Loads an equirectangular sky for a WebGPU scene.
- *
- * On WebGPU, a raw equirect texture assigned to ``scene.environment`` does NOT
- * produce valid IBL lighting — PBR materials render near-black because the
- * WebGPU backend cannot sample an unfiltered equirect as a cubemap radiance
- * input at runtime.  The ``RendererSetupSystem`` already installs a PMREM-filtered
- * ``RoomEnvironment`` via ``applyNeutralEnvironment()``; we must preserve it.
- *
- * Strategy: set the equirect as **background only** (visual sky dome) and bump
- * ``environmentIntensity`` so the existing PMREM environment illuminates PBR
- * surfaces adequately.  If/when Three.js gains native WebGPU PMREM, this can be
- * revisited to also replace the environment with a filtered cubemap.
+ * Loads an equirectangular sky texture and applies it as scene background
+ * while preserving the PMREM environment for IBL/PBR lighting.
  */
-async function applyWebGPUSky(
+async function applyEquirectSky(
   scene: THREE.Scene,
   url: string,
   setBackground: boolean
@@ -69,7 +59,7 @@ export const EquirectSkyLoadSystem: System = {
       }
 
       inFlight.add(eid);
-      applyWebGPUSky(ctx.scene, url, EquirectSky.setBackground[eid] !== 0)
+      applyEquirectSky(ctx.scene, url, EquirectSky.setBackground[eid] !== 0)
         .then(() => {
           EquirectSky.applied[eid] = 1;
         })
