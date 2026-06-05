@@ -438,7 +438,7 @@ export const recipeSchemas = {
   OrbitCamera: cameraRecipeSchema,
   ThirdPersonCamera: thirdPersonCameraRecipeSchema,
   Scene: worldRecipeSchema,
-  Skybox: skyRecipeSchema,
+  EquirectSky: skyRecipeSchema,
   AudioSource: audioClipRecipeSchema,
   Fog: fogRecipeSchema,
   Tween: tweenElementSchema,
