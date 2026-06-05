@@ -1,5 +1,5 @@
 ﻿import type { State } from '../../core';
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { MainCamera } from './components';
 

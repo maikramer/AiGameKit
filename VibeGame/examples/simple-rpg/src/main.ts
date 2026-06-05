@@ -29,7 +29,7 @@ import {
   isKeyDown,
   getScene,
 } from 'vibegame';
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { defineQuery } from 'vibegame';
 import { Rigidbody } from '../../../src/plugins/physics/components';
 import { Postprocessing } from '../../../src/plugins/rendering/components';

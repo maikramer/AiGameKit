@@ -39,10 +39,6 @@
       "types": "./dist/plugins/rendering/index.d.ts",
       "import": "./dist/plugins/rendering/index.js"
     },
-    "./postprocessing": {
-      "types": "./dist/plugins/postprocessing/index.d.ts",
-      "import": "./dist/plugins/postprocessing/index.js"
-    },
     "./text": {
       "types": "./dist/plugins/text/index.d.ts",
       "import": "./dist/plugins/text/index.js"
@@ -194,7 +190,6 @@
     "gsap": "^3.13.0",
     "howler": "^2.2.4",
     "msgpackr": "^1.11.9",
-    "postprocessing": "^6.37.8",
     "three-mesh-bvh": "^0.9.10",
     "three-mesh-ui": "^6.5.4",
     "three-pathfinding": "^1.3.0",

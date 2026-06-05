@@ -1,4 +1,4 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import type { State } from '../../core';
 import { defineQuery, type System } from '../../core';
 import { WorldTransform } from '../transforms';
@@ -356,7 +356,7 @@ export const RendererSetupSystem: System = {
     const context = getRenderingContext(state);
     if (context.renderer) return;
 
-    const contextEntities = renderContextQuery(state.world());
+    const contextEntities = renderContextQuery(state.world);
     if (contextEntities.length === 0) return;
 
     const entity = contextEntities[0];

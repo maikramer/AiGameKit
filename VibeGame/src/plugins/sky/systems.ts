@@ -1,4 +1,4 @@
-import * as THREE from 'three/webgpu';
+import * as THREE from 'three';
 import { defineQuery, type State, type System } from '../../core';
 import { getRenderingContext } from '../rendering';
 import { EquirectSky, getEquirectSkyUrl } from './components';

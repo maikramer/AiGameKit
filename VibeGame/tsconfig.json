@@ -31,7 +31,6 @@
       "vibegame/orbit-camera": ["./src/plugins/orbit-camera/index.ts"],
       "vibegame/physics": ["./src/plugins/physics/index.ts"],
       "vibegame/player": ["./src/plugins/player/index.ts"],
-      "vibegame/postprocessing": ["./src/plugins/postprocessing/index.ts"],
       "vibegame/rendering": ["./src/plugins/rendering/index.ts"],
       "vibegame/text": ["./src/plugins/text/index.ts"],
       "vibegame/respawn": ["./src/plugins/respawn/index.ts"],
