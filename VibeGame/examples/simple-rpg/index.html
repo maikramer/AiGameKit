@@ -33,14 +33,13 @@
       sky="#ffffff"
       resume-audio-on-user-gesture="true"
     >
-      <!-- Skybox disabled (needs SkyPlugin) -->
-      <!-- <Skybox url="/assets/sky/sky.png"></Skybox> -->
+      <EquirectSky url="/assets/sky/sky.png"></EquirectSky>
 
       <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
       <GameObject
-        ambient-light="sky-color: 0xd8ecff; ground-color: 0x726a58; intensity: 0.55"
-        directional-light="color: 0xfff8f2; intensity: 2.1; direction-x: -0.92; direction-y: 1.55; direction-z: -0.78; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
-        postprocessing="enabled: 1; gtao: 1; gtao-radius: 0.35; gtao-scale: 0.4; godrays: 1; godrays-steps: 12; godrays-intensity: 0.25; vignette: 1; vignette-strength: 0.25; aa: fxaa"
+        ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.8"
+        directional-light="color: 0xfff0d0; intensity: 3.0; direction-x: -0.7; direction-y: 3.5; direction-z: -0.6; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
+        postprocessing="enabled: 0"
       >
       </GameObject>
 
@@ -90,7 +89,7 @@
       <Terrain
         pos="0 0 0"
         world-size="2000"
-        max-height="200"
+        max-height="130"
         levels="4"
         resolution="128"
         lod-hysteresis="1.3"
@@ -99,10 +98,10 @@
         height-smoothing-spread="1.25"
         heightmap="/assets/terrain/heightmap.png"
         skirt-width="0.015625"
-        roughness="0.85"
+        roughness="0.78"
         metalness="0"
-        normal-strength="0.6"
-        base-color="#96ad78"
+        normal-strength="1.0"
+        base-color="#8cb866"
       ></Terrain>
 
       <!-- Água gerada dinamicamente a partir de /assets/terrain/terrain.json no bootstrap. -->
@@ -142,12 +141,32 @@
         />
       </SpawnGroup>
 
+      <!-- Instanced rocks: scattered mossy boulders via GPU instancing -->
+      <SpawnGroup
+        profile="tree"
+        count="30"
+        seed="7"
+        region-min="-220 0 -220"
+        region-max="220 0 220"
+        instanced="true"
+        scale-min="0.5"
+        scale-max="2.6"
+      >
+        <GLTFDynamic
+          role="prop"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          lod1-url="/assets/meshes/rock_mossy_lod1.glb"
+          lod2-url="/assets/meshes/rock_mossy_lod2.glb"
+          body-type="fixed"
+        />
+      </SpawnGroup>
+
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
       <!-- Post-processing temporarily disabled for debugging -->
       <ThirdPersonCamera
-        distance="12"
-        height="4"
-        pitch="0.3"
+        distance="6"
+        height="2.2"
+        pitch="0.15"
         position-smooth="0.08"
         mouse-sensitivity="0.003"
       ></ThirdPersonCamera>

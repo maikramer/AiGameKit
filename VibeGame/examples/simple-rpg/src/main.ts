@@ -715,28 +715,7 @@ async function bootstrap(): Promise<void> {
 
   await runtime.start();
 
-  // Equirectangular sky as both background (real sky) and environment (IBL so
-  // PBR materials reflect it). Set directly — no PMREM — because the WebGPU node
-  // pipeline samples equirect environments natively, and PMREM's equirect path
-  // uses a ShaderMaterial that the WebGPU backend rejects. Retry until the async
-  // renderer/scene are ready.
-  void (async () => {
-    const tex = await new THREE.TextureLoader().loadAsync(
-      '/assets/sky/sky.png'
-    );
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
-    for (let i = 0; i < 80; i++) {
-      const scene = getScene(state);
-      if (scene) {
-        scene.background = tex;
-        scene.environment = tex;
-        scene.environmentIntensity = 0.65;
-        return;
-      }
-      await new Promise((r) => setTimeout(r, 100));
-    }
-  })();
+
 }
 
 void bootstrap();
