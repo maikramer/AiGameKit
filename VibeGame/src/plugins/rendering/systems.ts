@@ -353,7 +353,10 @@ export const RendererSetupSystem: System = {
   last: true,
   async setup(state: State) {
     if (state.headless) return;
-    const contextEntities = renderContextQuery(state.world);
+    const context = getRenderingContext(state);
+    if (context.renderer) return;
+
+    const contextEntities = renderContextQuery(state.world());
     if (contextEntities.length === 0) return;
 
     const entity = contextEntities[0];
@@ -363,7 +366,6 @@ export const RendererSetupSystem: System = {
     const clearColor = RenderContext.clearColor[entity];
     const renderer = await createRenderer(canvas, clearColor);
 
-    const context = getRenderingContext(state);
     context.renderer = renderer;
     context.canvas = canvas;
     applyNeutralEnvironment(renderer, context.scene);
