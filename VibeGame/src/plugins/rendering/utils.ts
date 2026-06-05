@@ -204,6 +204,34 @@ export function resizeInstancedMesh(
   return newMesh;
 }
 
+/**
+ * Per-entity instance slot plus a cache of the transform inputs and color last
+ * written to the GPU buffer. The render loop compares against this cache so it
+ * only rewrites `setMatrixAt`/`setColorAt` and flags `needsUpdate` when an
+ * instance actually changed — static instances (terrain props, vegetation)
+ * then cost zero GPU buffer uploads per frame instead of a full re-upload.
+ */
+export interface InstanceInfo {
+  poolId: number;
+  instanceId: number;
+  unlit: boolean;
+  /** False until the slot has been written once (or after it was hidden). */
+  initialized: boolean;
+  /** Last composed transform inputs (position, rotation quat, final scale). */
+  px: number;
+  py: number;
+  pz: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  rw: number;
+  sx: number;
+  sy: number;
+  sz: number;
+  /** Last color written to the instance color buffer (-1 = never written). */
+  color: number;
+}
+
 export interface RenderingContext {
   scene: THREE.Scene;
   meshPools: Map<number, THREE.InstancedMesh>;
@@ -211,10 +239,7 @@ export interface RenderingContext {
   geometries: Map<number, THREE.BufferGeometry>;
   material: THREE.MeshStandardMaterial;
   unlitMaterial: THREE.MeshBasicMaterial;
-  entityInstances: Map<
-    number,
-    { poolId: number; instanceId: number; unlit: boolean }
-  >;
+  entityInstances: Map<number, InstanceInfo>;
   lights: {
     ambient: THREE.HemisphereLight;
     directional: THREE.DirectionalLight;
@@ -318,6 +343,7 @@ export async function createRenderer(
   const renderer = new THREE.WebGPURenderer({
     canvas,
     antialias: false,
+    powerPreference: 'high-performance',
   });
 
   const width = canvas.clientWidth || window.innerWidth;
@@ -337,10 +363,33 @@ export async function createRenderer(
     renderer.setClearColor(clearColor);
   }
 
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  // AgX is the modern filmic tone mapper (r160+): smoother highlight rolloff
+  // and more neutral hue handling than ACES, which tends to skew oranges/reds.
+  renderer.toneMapping = THREE.AgXToneMapping;
   renderer.toneMappingExposure = 1;
 
   await renderer.init();
+
+  // WebGPURenderer silently falls back to a WebGL2 backend when `navigator.gpu`
+  // is missing (e.g. Linux browsers where WebGPU is still behind a flag). The
+  // game runs either way, but the fallback loses compute-driven passes
+  // (GTAO/SSR/SSGI/SSS/DoF/godrays/TRAA) — so surface which backend is live
+  // instead of leaving "why is WebGPU not active?" a mystery.
+  const isWebGPU = Boolean(
+    (renderer.backend as unknown as { isWebGPUBackend?: boolean })
+      ?.isWebGPUBackend
+  );
+  if (isWebGPU) {
+    console.info('[VibeGame] Renderer backend: WebGPU');
+  } else {
+    console.warn(
+      '[VibeGame] Renderer backend: WebGL2 (WebGPU unavailable). ' +
+        'Enable WebGPU for full features — Firefox: about:config ' +
+        'dom.webgpu.enabled=true; Chrome/Linux: chrome://flags ' +
+        '#enable-unsafe-webgpu. Note: as of 2026 no browser ships WebGPU ' +
+        'by default on Linux.'
+    );
+  }
 
   return renderer;
 }
