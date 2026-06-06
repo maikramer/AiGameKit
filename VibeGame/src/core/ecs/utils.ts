@@ -21,3 +21,26 @@ export function setComponentFields(
     }
   }
 }
+
+/**
+ * Zero every field of a component for one entity.
+ *
+ * Component stores are global typed arrays indexed by entity id, so a recycled
+ * id (entity removed then a new one allocated to the same slot, or the same id
+ * reused across worlds) carries stale data. Clearing on a fresh add — before
+ * defaults and values are applied — guarantees a deterministic initial state,
+ * regardless of whether the registered defaults cover every field.
+ */
+export function clearComponentFields(
+  component: Component,
+  entity: number
+): void {
+  for (const key in component) {
+    const field = component[key as keyof Component] as
+      | ComponentField
+      | undefined;
+    if (field && ArrayBuffer.isView(field)) {
+      field[entity] = 0;
+    }
+  }
+}

@@ -10,13 +10,13 @@ import {
 } from 'bitecs';
 import { defineQuery } from './query';
 import { toKebabCase } from '../utils/naming';
-import { ConfigRegistry } from './config';
+import { ConfigRegistry, COMPONENT_ALIASES } from './config';
 import {
   type InstantiateOptions,
   type TemplateData,
   deepCloneTemplate,
 } from './prefabs';
-import { setComponentFields } from './utils';
+import { clearComponentFields, setComponentFields } from './utils';
 import { Parent } from './components';
 import { TIME_CONSTANTS } from './constants';
 import { Scheduler } from './scheduler';
@@ -149,13 +149,10 @@ export class State {
 
   getComponent(name: string): Component | undefined {
     const kebab = toKebabCase(name);
-    return (
-      this.components.get(kebab) ??
-      (kebab === 'body' ? this.components.get('rigidbody') : undefined) ??
-      (kebab === 'player'
-        ? this.components.get('player-controller')
-        : undefined)
-    );
+    const direct = this.components.get(kebab);
+    if (direct) return direct;
+    const alias = COMPONENT_ALIASES[kebab];
+    return alias ? this.components.get(alias) : undefined;
   }
 
   hasRecipe(name: string): boolean {
@@ -378,7 +375,14 @@ export class State {
     values?: Record<string, number>
   ): void {
     if (!entityExists(this.world, eid)) return;
+    // Clearing only on a fresh add keeps re-adding a component as a way to
+    // patch fields (see instantiate overrides), while wiping stale data left
+    // in the global stores by a previously recycled entity id.
+    const isNew = !bitecsHas(this.world, eid, component);
     bitecsAdd(this.world, eid, component);
+    if (isNew) {
+      clearComponentFields(component, eid);
+    }
 
     const componentName = this.getComponentName(component);
     if (componentName) {

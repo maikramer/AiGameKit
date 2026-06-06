@@ -1,3 +1,4 @@
+import { commitRemovals } from 'bitecs';
 import { TIME_CONSTANTS } from './constants';
 import { sortSystemsByConstraints } from './ordering';
 import type { State } from './state';
@@ -38,6 +39,7 @@ export class Scheduler {
     this.runSystemGroup(state, 'setup');
 
     while (this.accumulator >= fixedDeltaTime) {
+      commitRemovals(state.world);
       mutableTime.deltaTime = fixedDeltaTime;
       mutableTime.fixedTime += fixedDeltaTime;
       this.runSystemGroup(state, 'fixed');
