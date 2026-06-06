@@ -12,6 +12,8 @@ from pathlib import Path
 
 from gamedev_shared.bpy_mesh import clear_scene
 
+log = logging.getLogger(__name__)
+
 # ---------------------------------------------------------------------------
 # bpy helpers (lazy import inside functions — bpy may not be installed)
 # ---------------------------------------------------------------------------
@@ -256,9 +258,7 @@ def prepare_mesh_topology(
         Path para o GLB preparado (ou trimesh.Trimesh se input for trimesh).
     """
     if "skip_remesh" in _legacy:
-        logging.getLogger(__name__).warning(
-            "prepare_mesh_topology: kwarg 'skip_remesh' está obsoleto e será ignorado."
-        )
+        logging.getLogger(__name__).warning("prepare_mesh_topology: kwarg 'skip_remesh' está obsoleto e será ignorado.")
     _was_trimesh = hasattr(input_path, "export")
     try:
         return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides)
@@ -414,11 +414,15 @@ def generate_lod_textured_glb_triplet(
     target_faces: int | None = None,
     apply_finish: bool = True,
     finish_lod0: bool = False,
+    apply_meshopt: bool = False,
 ) -> list[Path]:
     """Gera três GLB texturizados por decimação com preservação de UV.
 
     Se ``target_faces`` for dado: LOD0 = target_faces, LOD1 = target/2, LOD2 = target/4.
     Caso contrário usa ``lod1_ratio`` e ``lod2_ratio`` sobre o original.
+
+    ``apply_meshopt`` controla EXT_meshopt_compression (desactivado por defeito;
+    a quantização pode deslocar origem e inverter orientação nalguns viewers).
     """
     from text3d.utils.mesh_remesh_textured import remesh_textured_glb
 
@@ -474,14 +478,30 @@ def generate_lod_textured_glb_triplet(
         out_paths.append(path)
 
     if apply_finish:
-        # Finalização (Round 2): tangents + dedup + prune + uastc + meshopt.
-        # Por defeito o LOD0 é assumido como master vindo do bake-master e já
-        # finalizado; só finalizamos LOD1/LOD2 aqui. ``finish_lod0=True`` força
-        # finalização também no LOD0 (caso usado standalone sem bake-master).
         from .gltf_finish import gltf_transform_finish
 
         finish_targets = out_paths if finish_lod0 else out_paths[1:]
         for p in finish_targets:
-            gltf_transform_finish(p, p)
+            res = gltf_transform_finish(p, p, apply_meshopt=apply_meshopt)
+            if not res.fully_optimized():
+                log.warning(
+                    "gltf_finish não optimizou totalmente %s: ktx2=%s meshopt=%s skipped='%s'",
+                    p.name,
+                    res.ktx2_applied,
+                    res.meshopt_applied,
+                    res.skipped_reason,
+                )
+
+    if out_paths and out_paths[0].is_file():
+        lod0_size = out_paths[0].stat().st_size
+        for p in out_paths[1:]:
+            if p.is_file() and p.stat().st_size > lod0_size:
+                log.warning(
+                    "LOD regressão: %s (%d bytes) > LOD0 %s (%d bytes)",
+                    p.name,
+                    p.stat().st_size,
+                    out_paths[0].name,
+                    lod0_size,
+                )
 
     return out_paths

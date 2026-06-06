@@ -780,7 +780,9 @@ def doctor():
                 ver = (r.stdout or "").strip().splitlines()[0] if r.stdout else "?"
                 extra.add_row("@gltf-transform/cli", f"OK ({ver})")
             else:
-                extra.add_row("@gltf-transform/cli", "[yellow]falhou — bake-master fará fallback sem KTX2/meshopt[/yellow]")
+                extra.add_row(
+                    "@gltf-transform/cli", "[yellow]falhou — bake-master fará fallback sem KTX2/meshopt[/yellow]"
+                )
         except Exception as exc:  # noqa: BLE001
             extra.add_row("@gltf-transform/cli", f"[yellow]erro: {exc}[/yellow]")
     else:
@@ -921,7 +923,7 @@ def convert(input_file, output, rotate):
 )
 @click.option(
     "--meshopt/--no-meshopt",
-    default=True,
+    default=False,
     show_default=True,
     help="Aplica EXT_meshopt_compression via @gltf-transform/cli (npx).",
 )
@@ -1198,6 +1200,12 @@ def gpu_processes_cmd() -> None:
     default=False,
     help="Aplica finalização também ao LOD0 (use só quando lod_cmd corre sem bake-master).",
 )
+@click.option(
+    "--meshopt/--no-meshopt",
+    default=False,
+    show_default=True,
+    help="Aplica EXT_meshopt_compression (quantização) aos LODs.",
+)
 def lod_cmd(
     input_mesh: Path,
     output_dir: Path,
@@ -1211,6 +1219,7 @@ def lod_cmd(
     target_faces: int | None,
     finish: bool,
     finish_lod0: bool,
+    meshopt: bool,
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
@@ -1240,6 +1249,7 @@ def lod_cmd(
                 target_faces=target_faces,
                 apply_finish=finish,
                 finish_lod0=finish_lod0,
+                apply_meshopt=meshopt,
             )
         else:
             paths = generate_lod_glb_triplet(

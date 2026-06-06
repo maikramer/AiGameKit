@@ -868,13 +868,21 @@ def remesh_textured_glb(
     # calculados acima por enquanto para minimizar diff.
     _ = (saved_pos, saved_nrm, KDTree)
 
-    if texture_size and obj.data.materials and obj.data.materials[0].use_nodes:
-        for node in obj.data.materials[0].node_tree.nodes:
-            if node.type == "TEX_IMAGE" and node.image:
+    # Scale ALL texture images across all materials (not just the first).
+    # image.scale() may convert RGB→RGBA; set alpha_mode to avoid
+    # the GLTF exporter switching from JPEG to PNG for no-opaque alpha.
+    if texture_size:
+        for mat_slot in obj.material_slots:
+            mat = mat_slot.material
+            if not mat or not mat.use_nodes:
+                continue
+            for node in mat.node_tree.nodes:
+                if node.type != "TEX_IMAGE" or not node.image:
+                    continue
                 w, h = node.image.size[0], node.image.size[1]
                 if max(w, h) != texture_size:
                     node.image.scale(texture_size, texture_size)
-                break
+                    node.image.alpha_mode = "NONE"
 
     n_final = len(obj.data.polygons)
     bpy.ops.object.select_all(action="DESELECT")
@@ -887,11 +895,19 @@ def remesh_textured_glb(
     has_armature = bool(arm_objs)
 
     bpy.context.view_layer.objects.active = arm_objs[0] if has_armature else obj
+
+    # Calc tangents when UV layers present (matches bake-master export).
+    if mesh.uv_layers:
+        with contextlib.suppress(Exception):
+            mesh.calc_tangents()
+
     bpy.ops.export_scene.gltf(
         filepath=str(path_out),
+        export_format="GLB",
         use_selection=True,
         export_apply=True,
         export_normals=True,
+        export_tangents=True,
         export_texcoords=True,
         export_animations=has_armature,
         export_skins=has_armature,

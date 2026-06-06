@@ -201,7 +201,7 @@ def bake_master(
     normal_map_resolution: int = 1024,
     normal_map_path: Path | None = None,
     apply_ktx2: bool = True,
-    apply_meshopt: bool = True,
+    apply_meshopt: bool = False,
     apply_dedup: bool = True,
     apply_prune: bool = True,
     texture_size: int = 2048,
