@@ -78,7 +78,7 @@ export const GltfXmlPlugin: Plugin = {
         // register as accepted to suppress "unknown attribute" warnings.
         'lod1-url': ((_entity, _value, _state) => {}) as Adapter,
         'lod2-url': ((_entity, _value, _state) => {}) as Adapter,
-        'instanced': ((_entity, _value, _state) => {}) as Adapter,
+        instanced: ((_entity, _value, _state) => {}) as Adapter,
       },
     },
     defaults: {

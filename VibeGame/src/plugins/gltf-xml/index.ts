@@ -6,6 +6,7 @@ export { GltfLodSystem } from './gltf-lod-system';
 export { pickLodLevel } from './gltf-lod-level';
 export { GltfSceneSyncSystem } from './gltf-scene-sync';
 export {
+  getGltfLocalAABB,
   getGltfLocalYBounds,
   prefetchGltfLocalYBounds,
   registerGltfLocalYBounds,
