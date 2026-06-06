@@ -9,6 +9,7 @@ import {
   TerrainMeshSystem,
   TerrainChunkColliderSystem,
 } from './systems';
+import { TerrainReadyGateSystem } from './ready-gate';
 import { setTerrainHeightmapUrl, setTerrainTextureUrl } from './utils';
 
 function terrainColorAdapter(field: keyof typeof Terrain): Adapter {
@@ -25,6 +26,7 @@ export const TerrainPlugin: Plugin = {
     TerrainLodSelectSystem,
     TerrainMeshSystem,
     TerrainDebugSystem,
+    TerrainReadyGateSystem,
   ],
   components: {
     terrain: Terrain,

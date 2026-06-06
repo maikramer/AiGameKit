@@ -122,3 +122,16 @@ export {
   registerRuntime,
   unregisterRuntime,
 } from './runtime-manager';
+
+export {
+  getLoadingProgress,
+  getReadyGates,
+  isLoadingEnforced,
+  isPhysicsHeld,
+  isWorldLoadedLatched,
+  isWorldReady,
+  registerReadyGate,
+  resetLoadingGate,
+  setLoadingEnforcement,
+} from './loading-gate';
+export type { ReadyCheck } from './loading-gate';

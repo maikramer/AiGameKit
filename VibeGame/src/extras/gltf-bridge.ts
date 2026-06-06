@@ -16,6 +16,29 @@ import { GltfAnimator } from './gltf-animator';
 let _ktx2Loader: KTX2Loader | null | undefined = undefined;
 let _customTranscoderPath: string | undefined;
 
+// --- GLTF load tracking (for the loading-screen "assets" ready gate) ---
+let _activeGltfLoads = 0;
+let _anyGltfLoadStarted = false;
+
+/** Number of GLTF/GLB scene loads currently in flight. */
+export function getActiveGltfLoadCount(): number {
+  return _activeGltfLoads;
+}
+
+/** Whether at least one GLTF scene load has ever been started. */
+export function hasAnyGltfLoadStarted(): boolean {
+  return _anyGltfLoadStarted;
+}
+
+/** Wrap a load promise so it counts toward the in-flight asset total. */
+function trackGltfLoad<T>(p: Promise<T>): Promise<T> {
+  _activeGltfLoads++;
+  _anyGltfLoadStarted = true;
+  return p.finally(() => {
+    _activeGltfLoads = Math.max(0, _activeGltfLoads - 1);
+  });
+}
+
 /**
  * Override the KTX2 transcoder path. Call before loading any KTX2 textures.
  * The path must be a URL ending with ``/`` pointing to a directory containing
@@ -150,7 +173,8 @@ export function loadGltfLodToScene(
   const root = new THREE.Group();
   root.name = 'gltf-lod-root';
 
-  return Promise.all(
+  return trackGltfLoad(
+    Promise.all(
     urls.map((url, i) =>
       loader.loadAsync(url).then((gltf) => {
         applyDefaultShadowFlags(gltf.scene);
@@ -172,7 +196,8 @@ export function loadGltfLodToScene(
     }
     scene.add(root);
     return root;
-  });
+  })
+  );
 }
 
 export function loadGltfToScene(state: State, url: string): Promise<Group> {
@@ -186,18 +211,20 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
   }
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
-  return new Promise((resolve, reject) => {
-    loader.load(
-      url,
-      (gltf) => {
-        applyDefaultShadowFlags(gltf.scene);
-        scene.add(gltf.scene);
-        resolve(gltf.scene);
-      },
-      undefined,
-      reject
-    );
-  });
+  return trackGltfLoad(
+    new Promise((resolve, reject) => {
+      loader.load(
+        url,
+        (gltf) => {
+          applyDefaultShadowFlags(gltf.scene);
+          scene.add(gltf.scene);
+          resolve(gltf.scene);
+        },
+        undefined,
+        reject
+      );
+    })
+  );
 }
 
 /**
@@ -215,11 +242,13 @@ export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
   }
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
-  return loader.loadAsync(url).then((gltf) => {
-    applyDefaultShadowFlags(gltf.scene);
-    scene.add(gltf.scene);
-    return gltf;
-  });
+  return trackGltfLoad(
+    loader.loadAsync(url).then((gltf) => {
+      applyDefaultShadowFlags(gltf.scene);
+      scene.add(gltf.scene);
+      return gltf;
+    })
+  );
 }
 
 export interface GltfLoadResult {
@@ -250,7 +279,8 @@ export function loadGltfToSceneWithAnimator(
   }
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
-  return new Promise((resolve, reject) => {
+  return trackGltfLoad(
+    new Promise<GltfLoadResult>((resolve, reject) => {
     loader.load(
       url,
       (gltf) => {
@@ -270,5 +300,6 @@ export function loadGltfToSceneWithAnimator(
       undefined,
       reject
     );
-  });
+    })
+  );
 }

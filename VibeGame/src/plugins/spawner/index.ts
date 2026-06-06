@@ -11,6 +11,7 @@ export { getPlacementSpecs, setPlacementSpec } from './place-context';
 export {
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
+  sampleMeshSurfaceHeight,
   sampleTerrainSurface,
   sampleTerrainSurfaceMatrix,
   sinkOffsetForSlope,

@@ -18,6 +18,9 @@ import {
   setKTX2TranscoderPath,
   withPlugin,
   withSystem,
+  LoadingPlugin,
+  mountLoadingScreen,
+  isWorldLoadedLatched,
   SaveLoadPlugin,
   I18nPlugin,
   saveToLocalStorage,
@@ -215,6 +218,8 @@ let damageFlashEl: HTMLDivElement | null = null;
 let waveCompleteEl: HTMLDivElement | null = null;
 let gameOverEl: HTMLDivElement | null = null;
 let waveTopEl: HTMLDivElement | null = null;
+let hudRootEl: HTMLDivElement | null = null;
+let hudRevealed = false;
 
 let eidSfxJump = -1;
 let eidSfxSave = -1;
@@ -333,6 +338,13 @@ function project3Dto2D(
 const GameplayHudSystem: System = {
   group: 'simulation',
   update(state: State) {
+    // Keep the HUD hidden until the loading screen has handed off, then fade it
+    // in — so it never shows over a still-loading world.
+    if (!hudRevealed && isWorldLoadedLatched(state)) {
+      hudRevealed = true;
+      if (hudRootEl) hudRootEl.style.opacity = '1';
+    }
+
     const dt = state.time.deltaTime;
     playTimeSec += dt;
 
@@ -493,7 +505,11 @@ const GameplayHudSystem: System = {
 function createOverlayHud(state: State): void {
   const wrap = document.createElement('div');
   wrap.style.cssText =
-    'position:fixed;inset:0;pointer-events:none;z-index:1000;font-family:system-ui,Segoe UI,sans-serif;';
+    'position:fixed;inset:0;pointer-events:none;z-index:1000;font-family:system-ui,Segoe UI,sans-serif;' +
+    // Hidden until the loading screen finishes, so the HUD doesn't show over a
+    // half-built scene. Revealed by GameplayHudSystem once the world is loaded.
+    'opacity:0;transition:opacity 0.5s ease-in;';
+  hudRootEl = wrap;
 
   const topLeft = document.createElement('div');
   topLeft.style.cssText =
@@ -643,6 +659,17 @@ function resolveAudioEids(state: State): void {
 }
 
 async function bootstrap(): Promise<void> {
+  // Paint the loading screen immediately — before building the runtime, parsing
+  // the scene, or loading any asset — so there's no gap where the blank scene
+  // or HUD shows through.
+  const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
+  mountLoadingScreen({
+    title: bootLang === 'pt' ? 'Vale do Cristal' : 'Crystal Vale',
+    subtitle:
+      bootLang === 'pt' ? 'A preparar o mundo…' : 'Preparing the world…',
+  });
+
+  withPlugin(LoadingPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(CombatPlugin);

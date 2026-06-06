@@ -97,6 +97,7 @@ export {
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
   partialAlignEuler,
+  sampleMeshSurfaceHeight,
   sampleTerrainSurface,
 } from './plugins/spawner';
 export type {
@@ -152,6 +153,16 @@ export {
 } from './plugins/ai-steering';
 
 export { HudPlugin, HudPanel } from './plugins/hud';
+
+export {
+  LoadingPlugin,
+  LoadingScreenSystem,
+  getLoadingScreenText,
+  mountLoadingScreen,
+  setLoadingScreenText,
+} from './plugins/loading';
+export type { LoadingScreenText } from './plugins/loading';
+export { getActiveGltfLoadCount } from './extras/gltf-bridge';
 
 export {
   SaveLoadPlugin,

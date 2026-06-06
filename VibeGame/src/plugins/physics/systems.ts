@@ -1,7 +1,7 @@
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
-import { defineQuery, TIME_CONSTANTS } from '../../core';
+import { defineQuery, isPhysicsHeld, TIME_CONSTANTS } from '../../core';
 import { Transform, WorldTransform } from '../transforms';
 import {
   ApplyAngularImpulse,
@@ -562,6 +562,11 @@ export const PhysicsStepSystem: System = {
   group: 'fixed',
   after: [TeleportationSystem],
   update: (state) => {
+    // Hold the simulation while the world is still loading so nothing falls or
+    // settles before terrain colliders and assets are in place. Body/collider
+    // creation runs in other `fixed` systems, so colliders still build now.
+    if (isPhysicsHeld(state)) return;
+
     const context = getPhysicsContext(state);
     const worldRapier = context.physicsWorld;
     if (!worldRapier) return;

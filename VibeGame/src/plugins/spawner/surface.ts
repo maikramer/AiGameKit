@@ -1,8 +1,65 @@
 ﻿import * as THREE from 'three';
 import type { State } from '../../core';
-import { sampleHeightAt } from '../terrain/height-sampler';
+import { Terrain } from '../terrain/components';
+import { sampleHeightAt, type HeightSampler } from '../terrain/height-sampler';
 import { getTerrainContext } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
+
+/**
+ * Elevation of the *rendered* terrain surface (the LOD mesh) at a field-local
+ * (x, z), as opposed to the full-resolution analytic height from
+ * {@link sampleHeightAt}.
+ *
+ * The terrain mesh only samples the heightfield at its vertices — spaced
+ * `worldSize / baseResolution` apart — and draws flat triangles between them
+ * (see `buildChunkGeometry`). That spacing is constant across LOD levels (the
+ * per-level size halving and resolution halving cancel out), so we can
+ * reproduce the visible surface by sampling the heightmap on that same lattice
+ * and interpolating across the matching triangle.
+ *
+ * Anchoring spawned objects to this height (instead of the finer analytic one)
+ * keeps them flush with what is actually drawn: on peaks/ridges that fall
+ * between mesh vertices the analytic height sits above the flat triangle, which
+ * is exactly why a subset of trees appeared to float.
+ */
+export function sampleMeshSurfaceHeight(
+  sampler: HeightSampler,
+  localX: number,
+  localZ: number,
+  baseResolution: number
+): number {
+  const res = Math.floor(baseResolution);
+  // No usable mesh lattice (flat field or bad config) → analytic height.
+  if (res < 1 || !sampler.data) {
+    return sampleHeightAt(sampler, localX, localZ);
+  }
+
+  const half = sampler.worldSize / 2;
+  const step = sampler.worldSize / res;
+  const gx = (localX + half) / step;
+  const gz = (localZ + half) / step;
+  const x0 = Math.floor(gx);
+  const z0 = Math.floor(gz);
+  const fx = gx - x0;
+  const fz = gz - z0;
+
+  const lx0 = x0 * step - half;
+  const lz0 = z0 * step - half;
+  const lx1 = lx0 + step;
+  const lz1 = lz0 + step;
+
+  // Quad corners, matching buildChunkGeometry's vertex layout / triangulation:
+  // a=(x,z) b=(x+1,z) c=(x,z+1) d=(x+1,z+1); triangles (a,c,b) and (b,c,d).
+  const hA = sampleHeightAt(sampler, lx0, lz0);
+  const hB = sampleHeightAt(sampler, lx1, lz0);
+  const hC = sampleHeightAt(sampler, lx0, lz1);
+  const hD = sampleHeightAt(sampler, lx1, lz1);
+
+  if (fx + fz <= 1) {
+    return hA + fx * (hB - hA) + fz * (hC - hA);
+  }
+  return hD + (1 - fx) * (hC - hD) + (1 - fz) * (hB - hD);
+}
 
 export function normalFromHeightSampler(
   heightAt: (x: number, z: number) => number,
@@ -67,8 +124,10 @@ const _eOut = /*@__PURE__*/ new THREE.Euler(0, 0, 0, 'XYZ');
  * Behaviour:
  *  - Below `minSlopeRad` (or on effectively flat ground) → upright, yaw only.
  *  - Between min slope and `maxTiltRad` worth of slope, the lean blends
- *    linearly and is clamped to `maxTiltRad` so trees lean gently on moderate
- *    slopes but never look like they're falling over.
+ *    linearly and is clamped to `maxTiltRad` (default π/3 ≈ 60°) so trees
+ *    follow the terrain surface naturally without lying flat on extreme
+ *    cliffs. The profile's `maxSlopeDeg` gate already filters out
+ *    unreasonably steep spawn positions.
  *  - The tilt leans toward the terrain's fall-line (the surface normal), then
  *    yaw is applied about the (tilted) trunk axis.
  */
@@ -77,7 +136,7 @@ export function partialAlignEuler(
   yawRad: number,
   slopeRad: number,
   minSlopeRad = 0.087,
-  maxTiltRad = 0.26
+  maxTiltRad = Math.PI / 3
 ): [number, number, number] {
   // Flat enough → keep upright but still honour random yaw about +Y.
   if (slopeRad < minSlopeRad || normal.y > 0.9999) {
@@ -153,7 +212,8 @@ export function sampleTerrainSurface(
 
     const localX = wx - ox;
     const localZ = wz - oz;
-    const h = sampleHeightAt(data.sampler, localX, localZ);
+    const baseRes = Terrain.resolution[entity];
+    const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, baseRes);
     const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>
@@ -200,7 +260,8 @@ export function sampleTerrainSurfaceMatrix(
 
     const localX = wx - ox;
     const localZ = wz - oz;
-    const h = sampleHeightAt(data.sampler, localX, localZ);
+    const baseRes = Terrain.resolution[entity];
+    const h = sampleMeshSurfaceHeight(data.sampler, localX, localZ, baseRes);
     const ty = terrainBaseY(state, entity);
 
     const heightAtRawSlope = (x: number, z: number) =>

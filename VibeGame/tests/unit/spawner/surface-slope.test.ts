@@ -51,14 +51,14 @@ describe('partialAlignEuler', () => {
       Math.sin(slopeRad)
     ).normalize();
     const e = partialAlignEuler(normal, 0, slopeRad);
-    // Magnitudes must be radian-sized (< ~0.3), never ~15+ (degrees-as-radians).
-    expect(Math.abs(e[0])).toBeLessThan(0.3);
-    expect(Math.abs(e[2])).toBeLessThan(0.3);
-    // The trunk leans, but only gently — far from lying flat.
+    // Magnitudes must be radian-sized (< ~0.6), never ~15+ (degrees-as-radians).
+    expect(Math.abs(e[0])).toBeLessThan(0.6);
+    expect(Math.abs(e[2])).toBeLessThan(0.6);
+    // The trunk leans to match the terrain slope (~30°).
     const t = trunkUp(e);
     const lean = Math.acos(Math.min(1, Math.max(-1, t.y)));
     expect(lean).toBeGreaterThan(0.01);
-    expect(lean).toBeLessThanOrEqual(0.26 + 1e-6);
+    expect(lean).toBeLessThanOrEqual(Math.PI / 3 + 1e-6);
   });
 
   it('encosta íngreme satura no tilt máximo (não tomba)', () => {
@@ -71,7 +71,7 @@ describe('partialAlignEuler', () => {
     const e = partialAlignEuler(normal, 0, slopeRad);
     const t = trunkUp(e);
     const lean = Math.acos(Math.min(1, Math.max(-1, t.y)));
-    expect(lean).toBeCloseTo(0.26, 5);
+    expect(lean).toBeCloseTo(Math.PI / 3, 5);
   });
 
   it('inclina na direção da encosta (fall-line)', () => {

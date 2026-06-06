@@ -8,7 +8,27 @@ import type { VegetationInstanceSpec, VegetationSpawnState } from './types';
 const MAX_INSTANCES = 500;
 const LOD1_DISTANCE = 80;
 const LOD2_DISTANCE = 200;
+const LOD1_DISTANCE_SQ = LOD1_DISTANCE * LOD1_DISTANCE;
+const LOD2_DISTANCE_SQ = LOD2_DISTANCE * LOD2_DISTANCE;
+/** Camera must move at least this far (world units) before LOD buckets are
+ * recomputed. Standing still or micro-movements cost zero per-frame work — the
+ * matrices are static, so nothing changes until the camera travels enough to
+ * cross an LOD boundary. Well below the 80u LOD0→LOD1 ring, so no visible pop. */
+const REPACK_CAM_MOVE = 4;
+const REPACK_CAM_MOVE_SQ = REPACK_CAM_MOVE * REPACK_CAM_MOVE;
 const DUMMY = new THREE.Object3D();
+
+/**
+ * LOD tier for a squared camera distance: 0 = full detail, 1 = mid, 2 = far.
+ * Pure and exported so the distance thresholds can be verified in isolation.
+ */
+export function vegetationLodTier(distanceSq: number): 0 | 1 | 2 {
+  if (distanceSq < LOD1_DISTANCE_SQ) return 0;
+  if (distanceSq < LOD2_DISTANCE_SQ) return 1;
+  return 2;
+}
+
+const LOD_TIER_KEYS = ['lod0', 'lod1', 'lod2'] as const;
 
 interface GeometryMaterialPair {
   geometry: THREE.BufferGeometry;
@@ -37,6 +57,32 @@ export class VegetationInstancer {
   private gltfLoader: GLTFLoader;
   private lodMeshes = new Map<string, THREE.InstancedMesh[]>();
   private instanceCount = 0;
+
+  // === Immutable per-instance data, computed once at spawn time ===
+  /** Local→world matrix per instance (row-major 16 floats), indexed by i. */
+  private srcMatrix = new Float32Array(MAX_INSTANCES * 16);
+  /** Instance world position (x, y, z) used for cheap LOD distance tests. */
+  private instancePos = new Float32Array(MAX_INSTANCES * 3);
+  /** Number of geometry/material pairs per LOD (instances round-robin across). */
+  private numPairs = 0;
+  /** Whether more than one LOD exists; single-LOD groups never need repacking. */
+  private lodEnabled = false;
+  /** Max bounding radius (geometry radius × scale) over all instances. */
+  private maxInstanceRadius = 0;
+  /** Geometry bounding radius (from instance origin) of the LOD0 model. */
+  private geomRadius = 0.5;
+
+  // === Reused per-frame scratch (no per-frame allocations) ===
+  private readonly camPos = new THREE.Vector3();
+  private lastCamX = 0;
+  private lastCamY = 0;
+  private lastCamZ = 0;
+  private hasRepacked = false;
+  /** Write cursors per LOD key, one entry per geometry/material pair. */
+  private cursors = new Map<string, Int32Array>();
+  /** AABB of instance positions, for the static bounding sphere. */
+  private boundsMin = new THREE.Vector3(Infinity, Infinity, Infinity);
+  private boundsMax = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
 
   constructor() {
     this.state = {
@@ -104,6 +150,23 @@ export class VegetationInstancer {
         meshes.push(im);
       }
       this.lodMeshes.set(lodKey, meshes);
+      this.cursors.set(lodKey, new Int32Array(meshes.length));
+    }
+
+    const lod0Pairs = this.lodPairs.get('lod0');
+    this.numPairs = lod0Pairs?.length ?? 0;
+    this.lodEnabled = this.lodMeshes.size > 1;
+
+    // Geometry bounding radius from the instance origin, computed once so the
+    // static bounding sphere can account for the model's own extent.
+    if (lod0Pairs) {
+      let r = 0;
+      for (const { geometry } of lod0Pairs) {
+        if (!geometry.boundingSphere) geometry.computeBoundingSphere();
+        const bs = geometry.boundingSphere;
+        if (bs) r = Math.max(r, bs.center.length() + bs.radius);
+      }
+      if (r > 0) this.geomRadius = r;
     }
   }
 
@@ -120,7 +183,17 @@ export class VegetationInstancer {
     }
     this.state.compiled = true;
     this.state.ready = true;
-    this.updateAllBoundingSpheres();
+
+    // Instances are static, so a single bounding sphere covering them all is
+    // valid for every LOD mesh and every frame — set it once and let three's
+    // frustum culling reuse it (it won't recompute a non-null boundingSphere).
+    this.assignStaticBoundingSphere();
+
+    // Initial upload of the LOD0 matrices placed by addInstance.
+    const lod0Meshes = this.lodMeshes.get('lod0');
+    if (lod0Meshes) {
+      for (const mesh of lod0Meshes) mesh.instanceMatrix.needsUpdate = true;
+    }
   }
 
   addInstance(
@@ -132,12 +205,10 @@ export class VegetationInstancer {
     alignEuler?: [number, number, number]
   ): void {
     if (this.instanceCount >= MAX_INSTANCES) return;
+    if (this.numPairs === 0) return;
 
-    const lod0Meshes = this.lodMeshes.get('lod0');
-    if (!lod0Meshes || lod0Meshes.length === 0) return;
-
-    const meshIndex = this.instanceCount % lod0Meshes.length;
-    const im = lod0Meshes[meshIndex];
+    const i = this.instanceCount;
+    const meshIndex = i % this.numPairs;
 
     DUMMY.position.set(x, y, z);
     DUMMY.scale.setScalar(scale);
@@ -147,102 +218,118 @@ export class VegetationInstancer {
       DUMMY.rotation.set(0, yaw, 0);
     }
     DUMMY.updateMatrix();
-    im.setMatrixAt(this.instanceCount, DUMMY.matrix);
 
-    for (const [lodKey, meshes] of this.lodMeshes) {
-      if (lodKey === 'lod0') continue;
-      const mesh = meshes[meshIndex];
-      if (mesh) {
-        mesh.setMatrixAt(this.instanceCount, DUMMY.matrix);
-        mesh.instanceMatrix.needsUpdate = true;
-      }
+    // Store immutable source data (the matrix is identical across LODs).
+    DUMMY.matrix.toArray(this.srcMatrix, i * 16);
+    this.instancePos[i * 3] = x;
+    this.instancePos[i * 3 + 1] = y;
+    this.instancePos[i * 3 + 2] = z;
+
+    this.boundsMin.min(DUMMY.position);
+    this.boundsMax.max(DUMMY.position);
+    this.maxInstanceRadius = Math.max(
+      this.maxInstanceRadius,
+      this.geomRadius * scale
+    );
+
+    // Seed the LOD0 mesh so single-LOD groups (which never repack) render
+    // immediately; multi-LOD groups overwrite this on the first update().
+    const lod0Meshes = this.lodMeshes.get('lod0');
+    const im = lod0Meshes?.[meshIndex];
+    if (im) {
+      im.setMatrixAt(i, DUMMY.matrix);
+      im.count = Math.max(im.count, i + 1);
     }
 
     this.instanceCount++;
-    im.count = Math.max(im.count, this.instanceCount);
-    im.instanceMatrix.needsUpdate = true;
   }
 
   update(state: State): void {
     if (!this.state.ready) return;
-
-    const cam = this.getCamera(state);
-    if (!cam) return;
-
-    const camPos = new THREE.Vector3();
-    cam.getWorldPosition(camPos);
-
-    const counts = new Map<string, number[]>();
-    for (const [lodKey, meshes] of this.lodMeshes) {
-      const lodCounts = new Array<number>(meshes.length).fill(0);
-      counts.set(lodKey, lodCounts);
-      for (const mesh of meshes) {
-        mesh.count = 0;
-      }
-    }
+    // Single-LOD groups have fixed matrices placed at spawn — nothing to do.
+    if (!this.lodEnabled) return;
 
     const lod0Meshes = this.lodMeshes.get('lod0');
     if (!lod0Meshes || lod0Meshes.length === 0) return;
 
+    const cam = this.getCamera(state);
+    if (!cam) return;
+    cam.getWorldPosition(this.camPos);
+
+    // Skip the repack (and the GPU re-upload it triggers) when the camera
+    // barely moved — LOD buckets can't have changed enough to matter.
+    if (this.hasRepacked) {
+      const dx = this.camPos.x - this.lastCamX;
+      const dy = this.camPos.y - this.lastCamY;
+      const dz = this.camPos.z - this.lastCamZ;
+      if (dx * dx + dy * dy + dz * dz < REPACK_CAM_MOVE_SQ) return;
+    }
+    this.lastCamX = this.camPos.x;
+    this.lastCamY = this.camPos.y;
+    this.lastCamZ = this.camPos.z;
+    this.hasRepacked = true;
+
+    for (const [, cur] of this.cursors) cur.fill(0);
+
+    const cx = this.camPos.x;
+    const cy = this.camPos.y;
+    const cz = this.camPos.z;
+    const numPairs = this.numPairs;
+
     for (let i = 0; i < this.instanceCount; i++) {
-      const meshIndex = i % lod0Meshes.length;
-      const im = lod0Meshes[meshIndex];
-      if (!im) continue;
+      const px = this.instancePos[i * 3];
+      const py = this.instancePos[i * 3 + 1];
+      const pz = this.instancePos[i * 3 + 2];
+      const ddx = px - cx;
+      const ddy = py - cy;
+      const ddz = pz - cz;
+      const d2 = ddx * ddx + ddy * ddy + ddz * ddz;
 
-      DUMMY.matrix.fromArray(im.instanceMatrix.array, i * 16);
-      DUMMY.position.setFromMatrixPosition(DUMMY.matrix);
-
-      const dist = camPos.distanceTo(DUMMY.position);
-
-      let targetLod: string;
-      if (dist < LOD1_DISTANCE) {
-        targetLod = 'lod0';
-      } else if (dist < LOD2_DISTANCE) {
-        targetLod = 'lod1';
-      } else {
-        targetLod = 'lod2';
+      let lodKey: string = LOD_TIER_KEYS[vegetationLodTier(d2)];
+      let targetMeshes = this.lodMeshes.get(lodKey);
+      if (!targetMeshes) {
+        lodKey = 'lod0';
+        targetMeshes = lod0Meshes;
       }
 
-      const targetMeshes = this.lodMeshes.get(targetLod) ?? lod0Meshes;
-      const targetMesh = targetMeshes[meshIndex];
-      if (!targetMesh) continue;
+      const meshIndex = i % numPairs;
+      const mesh = targetMeshes[meshIndex];
+      if (!mesh) continue;
 
-      const lodCounts = counts.get(targetLod)!;
-      const slot = lodCounts[meshIndex];
-      if (targetLod !== 'lod0') {
-        const srcMatrix = lod0Meshes[meshIndex]!.instanceMatrix.array;
-        const dstArray = targetMesh.instanceMatrix.array;
-        for (let j = 0; j < 16; j++) {
-          dstArray[slot * 16 + j] = srcMatrix[i * 16 + j];
-        }
-      } else {
-        if (slot !== i) {
-          const srcArray = lod0Meshes[meshIndex]!.instanceMatrix.array;
-          for (let j = 0; j < 16; j++) {
-            targetMesh.instanceMatrix.array[slot * 16 + j] =
-              srcArray[i * 16 + j];
-          }
-        }
+      const cur = this.cursors.get(lodKey)!;
+      const slot = cur[meshIndex]++;
+      const dst = mesh.instanceMatrix.array;
+      const srcBase = i * 16;
+      const dstBase = slot * 16;
+      for (let j = 0; j < 16; j++) {
+        dst[dstBase + j] = this.srcMatrix[srcBase + j];
       }
-
-      lodCounts[meshIndex] = slot + 1;
     }
 
     for (const [lodKey, meshes] of this.lodMeshes) {
-      const lodCounts = counts.get(lodKey)!;
+      const cur = this.cursors.get(lodKey)!;
       for (let mi = 0; mi < meshes.length; mi++) {
-        meshes[mi].count = lodCounts[mi];
+        meshes[mi].count = cur[mi];
         meshes[mi].instanceMatrix.needsUpdate = true;
       }
     }
-
-    this.updateAllBoundingSpheres();
   }
 
-  private updateAllBoundingSpheres(): void {
+  /** Build one world-space sphere covering every instance and assign it to all
+   * LOD meshes. Called once; instances never move so it stays valid. */
+  private assignStaticBoundingSphere(): void {
+    if (this.instanceCount === 0) return;
+
+    const center = new THREE.Vector3()
+      .addVectors(this.boundsMin, this.boundsMax)
+      .multiplyScalar(0.5);
+    const halfDiagonal =
+      this.boundsMax.distanceTo(this.boundsMin) * 0.5;
+    const radius = halfDiagonal + this.maxInstanceRadius;
+
     for (const [, meshes] of this.lodMeshes) {
       for (const mesh of meshes) {
-        mesh.computeBoundingSphere();
+        mesh.boundingSphere = new THREE.Sphere(center.clone(), radius);
       }
     }
   }
@@ -278,6 +365,7 @@ export class VegetationInstancer {
     }
     this.lodMeshes.clear();
     this.lodPairs.clear();
+    this.cursors.clear();
     this.instanceCount = 0;
     this.state.ready = false;
     this.state.compiled = false;
