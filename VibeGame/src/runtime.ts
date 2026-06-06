@@ -183,9 +183,13 @@ export class GameRuntime {
         if (!renderingCtx.renderer) {
           const clearColor =
             RenderContext.clearColor[rendererEntity] ?? 0x000000;
-          const renderer = await createRenderer(canvas, clearColor);
-          renderingCtx.renderer = renderer;
-          renderingCtx.canvas = canvas;
+          try {
+            const renderer = await createRenderer(canvas, clearColor);
+            renderingCtx.renderer = renderer;
+            renderingCtx.canvas = canvas;
+          } catch {
+            // WebGL unavailable (headless CI); continue without renderer
+          }
         }
       }
     }
