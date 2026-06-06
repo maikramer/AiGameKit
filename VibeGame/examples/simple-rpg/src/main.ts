@@ -32,15 +32,22 @@ import {
 import * as THREE from 'three';
 import { defineQuery } from 'vibegame';
 import { Rigidbody } from '../../../src/plugins/physics/components';
-import { Postprocessing } from '../../../src/plugins/rendering/components';
+import { Postprocessing } from '../../../src/plugins/postprocessing/components';
 import { getRenderingContext } from '../../../src/plugins/rendering';
 import {
   getBodyForEntity,
   PhysicsStepSystem,
 } from '../../../src/plugins/physics/systems';
-import { getBodyYForFeetAt, getCharacterFeetY, GROUND_CONTACT_SKIN } from '../../../src/plugins/physics/character-ground.ts';
+import {
+  getBodyYForFeetAt,
+  getCharacterFeetY,
+  GROUND_CONTACT_SKIN,
+} from '../../../src/plugins/physics/character-ground.ts';
 import { getTerrainHeightAt } from '../../../src/plugins/terrain/systems.ts';
-import { getTerrainContext, isTerrainDynamicsBlocking } from '../../../src/plugins/terrain/utils';
+import {
+  getTerrainContext,
+  isTerrainDynamicsBlocking,
+} from '../../../src/plugins/terrain/utils';
 import { Transform } from '../../../src/plugins/transforms';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 
@@ -71,7 +78,11 @@ const HeroGroundSnapSystem: System = {
   group: 'fixed',
   after: [PhysicsStepSystem],
   update(state: State) {
-    if (heroGroundSnapped || isTerrainDynamicsBlocking(state) || !isTerrainReady(state)) {
+    if (
+      heroGroundSnapped ||
+      isTerrainDynamicsBlocking(state) ||
+      !isTerrainReady(state)
+    ) {
       return;
     }
 
@@ -124,7 +135,9 @@ const POSTFX_KEYS: Array<[string, string, string]> = [
   ['Digit1', 'bloom', 'Bloom'],
   ['Digit2', 'chromaticAberration', 'Chromatic Aberration'],
   ['Digit3', 'vignette', 'Vignette'],
-  ['Digit4', 'fxaa', 'FXAA'],
+  ['Digit4', 'aa', 'AA (SMAA/FXAA)'],
+  ['Digit5', 'ssao', 'SSAO'],
+  ['Digit6', 'toneMapping', 'Tone Mapping'],
 ];
 const postfxDebounce = new Set<string>();
 
@@ -138,7 +151,13 @@ const PostFxToggleSystem: System = {
       if (isKeyDown(code) && !postfxDebounce.has(code)) {
         postfxDebounce.add(code);
         const arr = (Postprocessing as Record<string, Uint8Array>)[field];
-        arr[e] = arr[e] ? 0 : 1;
+        if (field === 'aa') {
+          arr[e] = ((arr[e] + 1) % 3) as 0 | 1 | 2;
+        } else if (field === 'toneMapping') {
+          arr[e] = ((arr[e] + 1) % 5) as 0 | 1 | 2 | 3 | 4;
+        } else {
+          arr[e] = arr[e] ? 0 : 1;
+        }
         const ctx = getRenderingContext(state);
         ctx.postProcessing?.dispose();
         ctx.postProcessing = undefined;
@@ -165,7 +184,7 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT  [1-4] post-fx',
+    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT  [1-6] post-fx',
 };
 
 const dictPT: Record<string, string> = {
@@ -184,7 +203,7 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] girar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT  [1-4] pós-fx',
+    '[W/S] mover  [A/D] girar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT  [1-6] pós-fx',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
@@ -711,8 +730,6 @@ async function bootstrap(): Promise<void> {
   }
 
   await runtime.start();
-
-
 }
 
 void bootstrap();

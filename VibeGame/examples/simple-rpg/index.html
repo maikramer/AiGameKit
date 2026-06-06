@@ -39,7 +39,7 @@
       <GameObject
         ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.8"
         directional-light="color: 0xfff0d0; intensity: 3.0; direction-x: -0.7; direction-y: 3.5; direction-z: -0.6; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
-        postprocessing="enabled: 0"
+        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.35; bloom-radius: 0.5; bloom-threshold: 0.65; chromatic-aberration: 0; vignette: 1; vignette-offset: 0.3; vignette-darkness: 0.48; aa: smaa; tone-mapping: agx; ssao: 1; ssao-intensity: 0.4; ssao-radius: 0.8"
       >
       </GameObject>
 
@@ -119,7 +119,7 @@
       >
       </PlayerGLTF>
 
-      <!-- Instanced vegetation: 100 pine trees via GPU instancing -->
+      <!-- Instanced vegetation: 100 oak trees via GPU instancing -->
       <SpawnGroup
         profile="tree"
         count="100"
@@ -134,9 +134,9 @@
       >
         <GLTFDynamic
           role="dynamic"
-          url="/assets/meshes/tree_pine_lod0.glb"
-          lod1-url="/assets/meshes/tree_pine_lod1.glb"
-          lod2-url="/assets/meshes/tree_pine_lod2.glb"
+          url="/assets/meshes/tree_oak_lod0.glb"
+          lod1-url="/assets/meshes/tree_oak_lod1.glb"
+          lod2-url="/assets/meshes/tree_oak_lod2.glb"
           body-type="fixed"
         />
       </SpawnGroup>
@@ -162,7 +162,7 @@
       </SpawnGroup>
 
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
-      <!-- Post-processing temporarily disabled for debugging -->
+      <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
       <ThirdPersonCamera
         distance="6"
         height="2.2"
