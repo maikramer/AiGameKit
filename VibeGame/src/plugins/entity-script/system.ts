@@ -390,18 +390,24 @@ export const EntityScriptCollisionBridgeSystem: System = {
 
       const other = TouchedEvent.other[eid];
       const trigger = isTriggerCollision(state, eid, other);
+      const activePairs = getActiveCollisionPairs(state);
+      const alreadyTracked = activePairs.get(eid)?.has(other) ?? false;
+
       addActiveCollisionPair(state, eid, other, trigger);
-      enteredPairs.add(`${eid}:${other}`);
 
-      const resolved = resolveModule(state, eid);
-      if (!resolved) continue;
+      if (!alreadyTracked) {
+        enteredPairs.add(`${eid}:${other}`);
 
-      const ctx = buildContext(state, eid);
-      const otherObj: CollisionOther = { entity: other };
-      if (trigger) {
-        resolved.mod.onTriggerEnter?.(ctx, otherObj);
-      } else {
-        resolved.mod.onCollisionEnter?.(ctx, otherObj);
+        const resolved = resolveModule(state, eid);
+        if (!resolved) continue;
+
+        const ctx = buildContext(state, eid);
+        const otherObj: CollisionOther = { entity: other };
+        if (trigger) {
+          resolved.mod.onTriggerEnter?.(ctx, otherObj);
+        } else {
+          resolved.mod.onCollisionEnter?.(ctx, otherObj);
+        }
       }
     }
 
