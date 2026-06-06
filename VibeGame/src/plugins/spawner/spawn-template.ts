@@ -5,7 +5,7 @@ import {
   createEntityFromRecipe,
   processRecipeChildElements,
 } from '../../core/recipes/parser';
-import { sampleTerrainSurface } from './surface';
+import { sampleTerrainSurfaceMatrix, sinkOffsetForSlope } from './surface';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import {
   composeSpawnRotation,
@@ -14,6 +14,7 @@ import {
   parseTransformAttr,
 } from './transform-merge';
 import {
+  getGltfLocalAABB,
   getGltfLocalYBounds,
   isGltfBoundsPrefetchInflight,
   warnMissingGltfBoundsOnce,
@@ -111,7 +112,7 @@ export function spawnTemplateAtTerrain(
     parts.scale[2] * scaleJitter,
   ];
 
-  const surface = sampleTerrainSurface(
+  const surface = sampleTerrainSurfaceMatrix(
     state,
     wx,
     wz,
@@ -122,9 +123,14 @@ export function spawnTemplateAtTerrain(
 
   const yawRad = pickYawRad(spec, rand);
 
+  const MIN_ALIGN_SLOPE_RAD = 0.06;
+  const slopeSteepEnough =
+    surface != null && surface.slopeAngleRad > MIN_ALIGN_SLOPE_RAD;
+  const effectiveNormal =
+    spec.alignToTerrain && slopeSteepEnough ? normal : upNormal;
   const euler = composeSpawnRotation(
-    normal,
-    spec.alignToTerrain,
+    effectiveNormal,
+    spec.alignToTerrain && slopeSteepEnough,
     yawRad,
     parts.euler
   );
@@ -133,6 +139,14 @@ export function spawnTemplateAtTerrain(
   const urlRaw = template.attributes.url;
   const url = typeof urlRaw === 'string' ? urlRaw.trim() : '';
   const scaleY = Math.max(scaleJitter * parts.scale[1], 1e-6);
+
+  const aabb = getGltfLocalAABB(url);
+  const halfWidth = aabb
+    ? Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2
+    : 0.5;
+  const sink = surface
+    ? sinkOffsetForSlope(surface.slopeAngleRad, halfWidth * scaleJitter)
+    : 0;
 
   const foot = new THREE.Vector3();
   foot.set(0, 0, 0);
@@ -152,7 +166,7 @@ export function spawnTemplateAtTerrain(
 
   base.pos = [
     wx + parts.pos[0] + foot.x,
-    wy + parts.pos[1] + spec.baseYOffset + foot.y,
+    wy + parts.pos[1] + spec.baseYOffset + foot.y - sink,
     wz + parts.pos[2] + foot.z,
   ];
 

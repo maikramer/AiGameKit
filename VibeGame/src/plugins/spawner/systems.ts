@@ -7,6 +7,9 @@ import { spawnTemplateAtTerrain } from './spawn-template';
 import {
   isNormalWithinSlopeLimit,
   sampleTerrainSurface,
+  sampleTerrainSurfaceMatrix,
+  sinkOffsetForSlope,
+  partialAlignEuler,
   type TerrainSurfaceSample,
 } from './surface';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
@@ -14,7 +17,14 @@ import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
 import { VegetationInstancer } from '../vegetation/systems';
 import { MeshInstanceSystem } from '../rendering/systems';
-import { getGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
+import { getGltfLocalAABB } from '../gltf-xml/gltf-bounds-cache';
+import {
+  BodyType,
+  Collider,
+  ColliderShape,
+  Rigidbody,
+} from '../physics/components';
+import { syncBodyQuaternionFromEuler } from '../physics/utils';
 
 const spawnerQuery = defineQuery([SpawnerPending]);
 const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
@@ -52,7 +62,10 @@ function resolveYaw(rand: () => number, spec: SpawnGroupSpec): number {
 }
 
 function resolveScale(rand: () => number, spec: SpawnGroupSpec): number {
-  if (spec.scaleDistribution === 'discrete' && spec.scaleDiscreteValues.length > 0) {
+  if (
+    spec.scaleDistribution === 'discrete' &&
+    spec.scaleDiscreteValues.length > 0
+  ) {
     const idx = Math.floor(rand() * spec.scaleDiscreteValues.length);
     return spec.scaleDiscreteValues[idx]!;
   }
@@ -234,7 +247,9 @@ export const TerrainSpawnSystem: System = {
       if (firstTemplate && spec.instanced) {
         const vegUrl = String(firstTemplate.attributes['url'] || '');
         if (!vegUrl) {
-          console.warn('[spawner] Instanced vegetation group skipped: no url attribute');
+          console.warn(
+            '[spawner] Instanced vegetation group skipped: no url attribute'
+          );
           SpawnerPending.spawned[eid] = 1;
           continue;
         }
@@ -242,63 +257,139 @@ export const TerrainSpawnSystem: System = {
         const vegInstancer = new VegetationInstancer();
         vegetationInstancers.set(eid, vegInstancer);
 
-        vegInstancer.initializeFromSpec(
-          {
-            url: vegUrl,
-            lod1Url: firstTemplate.attributes['lod1-url']
-              ? String(firstTemplate.attributes['lod1-url'])
-              : undefined,
-            lod2Url: firstTemplate.attributes['lod2-url']
-              ? String(firstTemplate.attributes['lod2-url'])
-              : undefined,
-            role: firstTemplate.role || 'static',
-            profile: firstTemplate.childProfile,
-          },
-          state
-        ).then(() => {
-          const positions: Array<{ x: number; y: number; z: number; scale: number; yaw: number }> = [];
-          const glbBounds = getGltfLocalYBounds(vegUrl);
-          for (let i = 0; i < instanceCount; i++) {
-            let wx = minX;
-            let wz = minZ;
-            let s: TerrainSurfaceSample | null = null;
-            let foundValidSlope = false;
-            const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
-            for (let attempt = 0; attempt < attempts; attempt++) {
-              wx = minX + rand() * (maxX - minX);
-              wz = minZ + rand() * (maxZ - minZ);
-              const cand = sampleTerrainSurface(
-                state,
-                wx,
-                wz,
-                spec.surfaceEpsilon,
-                spec.surfaceEpsilonAuto
+        vegInstancer
+          .initializeFromSpec(
+            {
+              url: vegUrl,
+              lod1Url: firstTemplate.attributes['lod1-url']
+                ? String(firstTemplate.attributes['lod1-url'])
+                : undefined,
+              lod2Url: firstTemplate.attributes['lod2-url']
+                ? String(firstTemplate.attributes['lod2-url'])
+                : undefined,
+              role: firstTemplate.role || 'static',
+              profile: firstTemplate.childProfile,
+            },
+            state
+          )
+          .then(() => {
+            const positions: Array<{
+              x: number;
+              y: number;
+              z: number;
+              scale: number;
+              yaw: number;
+              alignEuler: [number, number, number];
+            }> = [];
+            const aabb = getGltfLocalAABB(vegUrl);
+            const halfWidth = aabb
+              ? Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2
+              : 0.5;
+
+            for (let i = 0; i < instanceCount; i++) {
+              let wx = minX;
+              let wz = minZ;
+              let s: (TerrainSurfaceSample & { slopeAngleRad: number }) | null =
+                null;
+              let foundValidSlope = false;
+              const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
+              for (let attempt = 0; attempt < attempts; attempt++) {
+                wx = minX + rand() * (maxX - minX);
+                wz = minZ + rand() * (maxZ - minZ);
+                const cand = sampleTerrainSurfaceMatrix(
+                  state,
+                  wx,
+                  wz,
+                  spec.surfaceEpsilon,
+                  spec.surfaceEpsilonAuto
+                );
+                if (!cand) continue;
+                s = cand;
+                if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
+                  foundValidSlope = true;
+                  break;
+                }
+              }
+              if (!s) continue;
+              if (!foundValidSlope && !acceptAnySlope) continue;
+              const scale = resolveScale(rand, spec);
+              const sink = sinkOffsetForSlope(
+                s.slopeAngleRad,
+                halfWidth * scale
               );
-              if (!cand) continue;
-              s = cand;
-              if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
-                foundValidSlope = true;
-                break;
+              const yaw = resolveYaw(rand, spec);
+              const alignEuler: [number, number, number] = spec.alignToTerrain
+                ? partialAlignEuler(s.normal, yaw, s.slopeAngleRad)
+                : [0, 0, 0];
+              positions.push({
+                x: wx,
+                y: s.worldY - sink,
+                z: wz,
+                scale,
+                yaw,
+                alignEuler,
+              });
+            }
+
+            for (const p of positions) {
+              vegInstancer.addInstance(
+                p.x,
+                p.y,
+                p.z,
+                p.scale,
+                p.yaw,
+                p.alignEuler
+              );
+            }
+            vegInstancer.markReady(state);
+
+            if (aabb && firstTemplate.attributes['body-type'] !== undefined) {
+              for (const p of positions) {
+                const physEid = state.createEntity();
+                state.addComponent(physEid, Transform);
+                state.addComponent(physEid, Rigidbody);
+                state.addComponent(physEid, Collider);
+
+                const sizeX = (aabb.maxX - aabb.minX) * p.scale;
+                const sizeY = (aabb.maxY - aabb.minY) * p.scale;
+                const sizeZ = (aabb.maxZ - aabb.minZ) * p.scale;
+                const centerX = ((aabb.minX + aabb.maxX) / 2) * p.scale;
+                const centerY = ((aabb.minY + aabb.maxY) / 2) * p.scale;
+                const centerZ = ((aabb.minZ + aabb.maxZ) / 2) * p.scale;
+
+                Transform.posX[physEid] = p.x;
+                Transform.posY[physEid] = p.y;
+                Transform.posZ[physEid] = p.z;
+                Transform.scaleX[physEid] = 1;
+                Transform.scaleY[physEid] = 1;
+                Transform.scaleZ[physEid] = 1;
+                Transform.dirty[physEid] = 1;
+
+                Rigidbody.type[physEid] = BodyType.Fixed;
+                Rigidbody.posX[physEid] = p.x;
+                Rigidbody.posY[physEid] = p.y;
+                Rigidbody.posZ[physEid] = p.z;
+                Rigidbody.eulerY[physEid] = p.yaw;
+                Rigidbody.gravityScale[physEid] = 1;
+                syncBodyQuaternionFromEuler(physEid);
+
+                Collider.shape[physEid] = ColliderShape.Box;
+                Collider.sizeX[physEid] = sizeX;
+                Collider.sizeY[physEid] = sizeY;
+                Collider.sizeZ[physEid] = sizeZ;
+                Collider.posOffsetX[physEid] = centerX;
+                Collider.posOffsetY[physEid] = centerY;
+                Collider.posOffsetZ[physEid] = centerZ;
+                Collider.friction[physEid] = 0.5;
+                Collider.restitution[physEid] = 0;
+                Collider.density[physEid] = 1;
+                Collider.isSensor[physEid] = 0;
+                Collider.membershipGroups[physEid] = 0xffff;
+                Collider.filterGroups[physEid] = 0xffff;
+                Collider.rotOffsetW[physEid] = 1;
               }
             }
-            if (!s) continue;
-            if (!foundValidSlope && !acceptAnySlope) continue;
-            const scale = resolveScale(rand, spec);
-            const yLift = glbBounds ? -glbBounds.minY * scale : 0;
-            positions.push({
-              x: wx,
-              y: s.worldY + yLift,
-              z: wz,
-              scale,
-              yaw: resolveYaw(rand, spec),
-            });
-          }
-
-          for (const p of positions) {
-            vegInstancer.addInstance(p.x, p.y, p.z, p.scale, p.yaw);
-          }
-          vegInstancer.markReady(state);
-        });
+          });
 
         SpawnerPending.spawned[eid] = 1;
         continue;
@@ -364,4 +455,3 @@ export const VegetationUpdateSystem: System = {
     }
   },
 };
-

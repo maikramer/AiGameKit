@@ -12,6 +12,10 @@ export {
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
   sampleTerrainSurface,
+  sampleTerrainSurfaceMatrix,
+  sinkOffsetForSlope,
+  slopeAngleRad,
+  partialAlignEuler,
 } from './surface';
 export type { TerrainSurfaceSample } from './surface';
 export {
