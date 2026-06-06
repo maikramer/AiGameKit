@@ -79,6 +79,34 @@ function findClip(animator: GltfAnimator, ...keywords: string[]): string {
   return '';
 }
 
+/** Fuzzy clip search: tries progressively relaxed matching strategies. */
+function findClipFuzzy(animator: GltfAnimator, ...keywords: string[]): string {
+  // Strategy 1: exact keyword containment (original)
+  const direct = findClip(animator, ...keywords);
+  if (direct) return direct;
+
+  const lower = animator.clipNames.map((n) => n.toLowerCase());
+
+  // Strategy 2: check for common animation naming variants
+  const variants: Record<string, string[]> = {
+    walk: ['locomotion', 'motion', 'move', 'jog', 'stride', 'walk_cycle', 'walking'],
+    run: ['sprint', 'fast', 'run_cycle', 'running'],
+    jump: ['leap', 'hop', 'vault', 'jump_start', 'jump_up', 'jumping'],
+    fall: ['airborne', 'descent', 'falling', 'drop', 'idle_fall'],
+    idle: ['stand', 'rest', 'pose', 'wait', 'breath', 'idle_a', 'idle_b'],
+  };
+
+  for (const k of keywords) {
+    const alts = variants[k] ?? [];
+    for (const alt of alts) {
+      const idx = lower.findIndex((n) => n.includes(alt));
+      if (idx >= 0) return animator.clipNames[idx];
+    }
+  }
+
+  return '';
+}
+
 interface Locomotion {
   idle: string;
   walk: string;
@@ -87,17 +115,17 @@ interface Locomotion {
   fall: string;
 }
 
-/** Resolve clips by explicit index override (>0) else by name keyword. */
+/** Resolve clips by explicit index override (>0) else by name keyword (fuzzy). */
 function resolveLocomotion(animator: GltfAnimator, eid: number): Locomotion {
   const names = animator.clipNames;
   const byIndex = (field: number): string =>
     field > 0 && field < names.length ? names[field] : '';
   return {
-    idle: byIndex(PlayerGltfConfig.idleClipIndex[eid]) || findClip(animator, 'idle', 'breathe'),
-    walk: byIndex(PlayerGltfConfig.walkClipIndex[eid]) || findClip(animator, 'walk'),
-    run: byIndex(PlayerGltfConfig.runClipIndex[eid]) || findClip(animator, 'run'),
-    jump: findClip(animator, 'jump'),
-    fall: findClip(animator, 'fall'),
+    idle: byIndex(PlayerGltfConfig.idleClipIndex[eid]) || findClipFuzzy(animator, 'idle', 'breathe'),
+    walk: byIndex(PlayerGltfConfig.walkClipIndex[eid]) || findClipFuzzy(animator, 'walk'),
+    run: byIndex(PlayerGltfConfig.runClipIndex[eid]) || findClipFuzzy(animator, 'run'),
+    jump: findClipFuzzy(animator, 'jump'),
+    fall: findClipFuzzy(animator, 'fall'),
   };
 }
 
@@ -242,7 +270,7 @@ export const PlayerGltfAnimStateSystem: System = {
       const wasPrimary = prevPrimary.get(eid) ?? 0;
       prevPrimary.set(eid, primary);
       if (primary && !wasPrimary && grounded && !animator.overrideLock) {
-        const attackClip = findClip(animator, 'attack');
+        const attackClip = findClipFuzzy(animator, 'attack');
         if (attackClip) animator.playOverride(attackClip, { loop: false });
         meleeHit(state, eid);
       }
@@ -274,9 +302,18 @@ export const PlayerGltfAnimStateSystem: System = {
       if (!grounded && (loco.jump || loco.fall)) {
         const clip = vy > 0.5 ? loco.jump || loco.fall : loco.fall || loco.jump;
         if (clip && animator.activeClipName !== clip) animator.play(clip);
+      } else if (moving) {
+        const clip = run ? loco.run : loco.walk;
+        if (clip && animator.activeClipName !== clip) {
+          animator.play(clip);
+        } else if (!clip && animator.activeClipName === loco.idle) {
+          animator.setTimeScale(1.8);
+        }
       } else {
-        const clip = run ? loco.run : moving ? loco.walk : loco.idle;
-        if (clip && animator.activeClipName !== clip) animator.play(clip);
+        if (loco.idle && animator.activeClipName !== loco.idle) {
+          animator.play(loco.idle);
+        }
+        animator.setTimeScale(1);
       }
 
       animator.update(dt);

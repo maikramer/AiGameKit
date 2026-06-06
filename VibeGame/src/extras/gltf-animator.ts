@@ -110,6 +110,12 @@ export class GltfAnimator {
     this.mixer.update(deltaTime);
   }
 
+  setTimeScale(scale: number): void {
+    if (this.currentAction) {
+      this.currentAction.setEffectiveTimeScale(scale);
+    }
+  }
+
   registerLocomotionSet(name: string, clips: LocomotionSet): void {
     this.locomotionSets.set(name, clips);
   }
