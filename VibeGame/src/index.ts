@@ -96,6 +96,7 @@ export {
   setPlacementSpec,
   isNormalWithinSlopeLimit,
   normalFromHeightSampler,
+  partialAlignEuler,
   sampleTerrainSurface,
 } from './plugins/spawner';
 export type {
