@@ -11,6 +11,19 @@ import type {
   ValidationRule,
 } from './types';
 
+/**
+ * Component-name aliases: a user-facing attribute name that resolves to a
+ * different canonical component (registered under the value). Config is keyed
+ * by the canonical name, so lookups must resolve aliases the same way
+ * `State.getComponent` does — otherwise defaults/enums silently vanish when a
+ * component is addressed by its alias (e.g. `body` for `rigidbody`).
+ */
+export const COMPONENT_ALIASES: Record<string, string> = {
+  body: 'rigidbody',
+  player: 'player-controller',
+  renderer: 'mesh-renderer',
+};
+
 export class ConfigRegistry {
   private readonly parsers = new Map<string, Parser[]>();
   private readonly componentDefaults: ComponentDefaults = {};
@@ -107,12 +120,17 @@ export class ConfigRegistry {
     };
   }
 
+  private resolveKey(componentName: string): string {
+    const kebab = toKebabCase(componentName);
+    return COMPONENT_ALIASES[kebab] ?? kebab;
+  }
+
   getDefaults(componentName: string): Record<string, number> {
-    return this.componentDefaults[toKebabCase(componentName)] || {};
+    return this.componentDefaults[this.resolveKey(componentName)] || {};
   }
 
   getShorthands(componentName: string): Record<string, ShorthandMapping> {
-    return this.componentShorthands[toKebabCase(componentName)] || {};
+    return this.componentShorthands[this.resolveKey(componentName)] || {};
   }
 
   getAllShorthands(): ComponentShorthands {
@@ -120,7 +138,7 @@ export class ConfigRegistry {
   }
 
   getEnums(componentName: string): Record<string, EnumMapping> {
-    return this.componentEnums[toKebabCase(componentName)] || {};
+    return this.componentEnums[this.resolveKey(componentName)] || {};
   }
 
   getValidations(): ValidationRule[] {
@@ -128,16 +146,16 @@ export class ConfigRegistry {
   }
 
   shouldSkip(componentName: string, propertyName: string): boolean {
-    const skip = this.skipProperties[toKebabCase(componentName)];
+    const skip = this.skipProperties[this.resolveKey(componentName)];
     return skip ? skip.has(propertyName) : false;
   }
 
   getAdapter(componentName: string, propertyName: string): Adapter | undefined {
-    return this.adapters[toKebabCase(componentName)]?.[propertyName];
+    return this.adapters[this.resolveKey(componentName)]?.[propertyName];
   }
 
   getAdapterProperties(componentName: string): string[] {
-    const componentAdapters = this.adapters[toKebabCase(componentName)];
+    const componentAdapters = this.adapters[this.resolveKey(componentName)];
     return componentAdapters ? Object.keys(componentAdapters) : [];
   }
 
