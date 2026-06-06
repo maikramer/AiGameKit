@@ -356,28 +356,35 @@ export function applyKinematicMove(
   state: State
 ): void {
   const type = Rigidbody.type[entity];
+  const dt = TIME_CONSTANTS.FIXED_TIMESTEP;
   if (type === BodyType.KinematicPositionBased) {
+    const currentPos = body.translation();
+    const targetX = KinematicMove.x[entity];
+    const targetY = KinematicMove.y[entity];
+    const targetZ = KinematicMove.z[entity];
+
+    Rigidbody.velX[entity] = (targetX - currentPos.x) / dt;
+    Rigidbody.velY[entity] = (targetY - currentPos.y) / dt;
+    Rigidbody.velZ[entity] = (targetZ - currentPos.z) / dt;
+
     body.setNextKinematicTranslation(
-      new RAPIER.Vector3(
-        KinematicMove.x[entity],
-        KinematicMove.y[entity],
-        KinematicMove.z[entity]
-      )
+      new RAPIER.Vector3(targetX, targetY, targetZ)
     );
   } else if (type === BodyType.KinematicVelocityBased) {
     const currentPos = body.translation();
     const targetX = KinematicMove.x[entity];
     const targetY = KinematicMove.y[entity];
     const targetZ = KinematicMove.z[entity];
-    const dt = TIME_CONSTANTS.FIXED_TIMESTEP;
-    body.setLinvel(
-      new RAPIER.Vector3(
-        (targetX - currentPos.x) / dt,
-        (targetY - currentPos.y) / dt,
-        (targetZ - currentPos.z) / dt
-      ),
-      true
-    );
+
+    const velX = (targetX - currentPos.x) / dt;
+    const velY = (targetY - currentPos.y) / dt;
+    const velZ = (targetZ - currentPos.z) / dt;
+
+    Rigidbody.velX[entity] = velX;
+    Rigidbody.velY[entity] = velY;
+    Rigidbody.velZ[entity] = velZ;
+
+    body.setLinvel(new RAPIER.Vector3(velX, velY, velZ), true);
   }
   state.removeComponent(entity, KinematicMove);
 }
@@ -465,7 +472,7 @@ export function detectPlatformContinuous(
   physicsWorld: RAPIER.World,
   colliderToEntity: Map<number, number>
 ): number {
-  const castDistance = 0.15;
+  const castDistance = 0.5;
   const shapePos = collider.translation();
   const shapeRot = collider.rotation();
   const shapeVel = new RAPIER.Vector3(0, -1, 0);
@@ -541,7 +548,10 @@ export function applyCharacterMovement(
   const platform = CharacterController.platform[entity];
   if (wasGrounded && platform !== NULL_ENTITY) {
     const platformBodyType = Rigidbody.type[platform];
-    if (platformBodyType === BodyType.KinematicVelocityBased) {
+    if (
+      platformBodyType === BodyType.KinematicVelocityBased ||
+      platformBodyType === BodyType.KinematicPositionBased
+    ) {
       platformVelX = Rigidbody.velX[platform] || 0;
       platformVelY = Rigidbody.velY[platform] || 0;
       platformVelZ = Rigidbody.velZ[platform] || 0;
@@ -574,11 +584,9 @@ export function applyCharacterMovement(
   CharacterController.platformVelZ[entity] = platformVelZ + tangentialVelZ;
 
   const desiredTranslation = new RAPIER.Vector3(
-    (CharacterMovement.desiredVelX[entity] + platformVelX + tangentialVelX) *
-      deltaTime,
-    (totalVelY + platformVelY + tangentialVelY) * deltaTime,
-    (CharacterMovement.desiredVelZ[entity] + platformVelZ + tangentialVelZ) *
-      deltaTime
+    CharacterMovement.desiredVelX[entity] * deltaTime,
+    totalVelY * deltaTime,
+    CharacterMovement.desiredVelZ[entity] * deltaTime
   );
 
   controller.computeColliderMovement(
@@ -644,6 +652,12 @@ export function applyCharacterMovement(
       grounded = 1;
       CharacterMovement.velocityY[entity] = 0;
     }
+  }
+
+  if (grounded && platform !== NULL_ENTITY) {
+    newPos.x += (platformVelX + tangentialVelX) * deltaTime;
+    newPos.y += (platformVelY + tangentialVelY) * deltaTime;
+    newPos.z += (platformVelZ + tangentialVelZ) * deltaTime;
   }
 
   body.setNextKinematicTranslation(newPos);
