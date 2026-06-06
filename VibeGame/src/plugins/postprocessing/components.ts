@@ -1,0 +1,24 @@
+import { MAX_ENTITIES } from '../../core/ecs/constants';
+
+export const Postprocessing = {
+  enabled: new Uint8Array(MAX_ENTITIES),
+  bloom: new Uint8Array(MAX_ENTITIES),
+  bloomStrength: new Float32Array(MAX_ENTITIES),
+  bloomRadius: new Float32Array(MAX_ENTITIES),
+  bloomThreshold: new Float32Array(MAX_ENTITIES),
+  chromaticAberration: new Uint8Array(MAX_ENTITIES),
+  caStrength: new Float32Array(MAX_ENTITIES),
+  vignette: new Uint8Array(MAX_ENTITIES),
+  vignetteOffset: new Float32Array(MAX_ENTITIES),
+  vignetteDarkness: new Float32Array(MAX_ENTITIES),
+  aa: new Uint8Array(MAX_ENTITIES),
+  toneMapping: new Uint8Array(MAX_ENTITIES),
+  toneMappingExposure: new Float32Array(MAX_ENTITIES),
+  ssao: new Uint8Array(MAX_ENTITIES),
+  ssaoIntensity: new Float32Array(MAX_ENTITIES),
+  ssaoRadius: new Float32Array(MAX_ENTITIES),
+  depthOfField: new Uint8Array(MAX_ENTITIES),
+  dofFocusDistance: new Float32Array(MAX_ENTITIES),
+  dofFocusRange: new Float32Array(MAX_ENTITIES),
+  dofBokehScale: new Float32Array(MAX_ENTITIES),
+} as const;

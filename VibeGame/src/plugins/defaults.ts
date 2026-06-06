@@ -21,6 +21,7 @@ import { TransformsPlugin } from './transforms';
 import { AudioPlugin } from './audio/plugin';
 import { EquirectSkyPlugin } from './sky/plugin';
 import { TweeningPlugin } from './tweening/plugin';
+import { PostprocessingPlugin } from './postprocessing/plugin';
 import { VegetationPlugin } from './vegetation/plugin';
 
 export const DefaultPlugins: Plugin[] = [
@@ -34,6 +35,7 @@ export const DefaultPlugins: Plugin[] = [
   RaycastPlugin,
   AiSteeringPlugin,
   RenderingPlugin,
+  PostprocessingPlugin,
   HudPlugin,
   PlayerControllerPlugin,
   OrbitCameraPlugin,
