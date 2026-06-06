@@ -467,65 +467,34 @@ export const CharacterMovementSystem: System = {
   },
 };
 
-export const ApplyForcesSystem: System = {
+export const ApplyInputSystem: System = {
   group: 'fixed',
   after: [CharacterMovementSystem],
   update: (state) => {
     const context = getPhysicsContext(state);
+
     for (const entity of applyForceQuery(state.world)) {
       const body = context.entityToRigidbody.get(entity);
-      if (body) {
-        applyForceToEntity(entity, body, state);
-      }
+      if (body) applyForceToEntity(entity, body, state);
     }
-  },
-};
-
-export const ApplyTorquesSystem: System = {
-  group: 'fixed',
-  after: [CharacterMovementSystem],
-  update: (state) => {
-    const context = getPhysicsContext(state);
     for (const entity of applyTorqueQuery(state.world)) {
       const body = context.entityToRigidbody.get(entity);
-      if (body) {
-        applyTorqueToEntity(entity, body, state);
-      }
+      if (body) applyTorqueToEntity(entity, body, state);
     }
-  },
-};
-
-export const ApplyImpulsesSystem: System = {
-  group: 'fixed',
-  after: [ApplyForcesSystem, ApplyTorquesSystem],
-  update: (state) => {
-    const context = getPhysicsContext(state);
     for (const entity of applyImpulseQuery(state.world)) {
       const body = context.entityToRigidbody.get(entity);
-      if (body) {
-        applyImpulseToEntity(entity, body, state);
-      }
+      if (body) applyImpulseToEntity(entity, body, state);
     }
-  },
-};
-
-export const ApplyAngularImpulsesSystem: System = {
-  group: 'fixed',
-  after: [ApplyForcesSystem, ApplyTorquesSystem],
-  update: (state) => {
-    const context = getPhysicsContext(state);
     for (const entity of applyAngularImpulseQuery(state.world)) {
       const body = context.entityToRigidbody.get(entity);
-      if (body) {
-        applyAngularImpulseToEntity(entity, body, state);
-      }
+      if (body) applyAngularImpulseToEntity(entity, body, state);
     }
   },
 };
 
 export const SetVelocitySystem: System = {
   group: 'fixed',
-  after: [ApplyImpulsesSystem, ApplyAngularImpulsesSystem],
+  after: [ApplyInputSystem],
   update: (state) => {
     const context = getPhysicsContext(state);
 

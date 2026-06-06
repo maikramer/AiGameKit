@@ -24,10 +24,7 @@ import {
   staticPartRecipe,
 } from './recipes';
 import {
-  ApplyAngularImpulsesSystem,
-  ApplyForcesSystem,
-  ApplyImpulsesSystem,
-  ApplyTorquesSystem,
+  ApplyInputSystem,
   CharacterMovementSystem,
   CollisionEventCleanupSystem,
   KinematicMovementSystem,
@@ -50,10 +47,7 @@ export const PhysicsPlugin: Plugin = {
     PhysicsCleanupSystem,
     CharacterMovementSystem,
     CollisionEventCleanupSystem,
-    ApplyForcesSystem,
-    ApplyTorquesSystem,
-    ApplyImpulsesSystem,
-    ApplyAngularImpulsesSystem,
+    ApplyInputSystem,
     SetVelocitySystem,
     TeleportationSystem,
     KinematicMovementSystem,
@@ -83,8 +77,8 @@ export const PhysicsPlugin: Plugin = {
   },
   config: {
     defaults: {
-      body: {
-        type: 0, // Fixed/Static
+      rigidbody: {
+        type: 0, // Dynamic
         mass: 1,
         gravityScale: 1,
         rotW: 1,
@@ -127,11 +121,11 @@ export const PhysicsPlugin: Plugin = {
       },
     },
     enums: {
-      body: {
+      rigidbody: {
         type: {
-          fixed: 0,
-          static: 0,
-          dynamic: 1,
+          dynamic: 0,
+          fixed: 1,
+          static: 1,
           'kinematic-position': 2,
           'kinematic-position-based': 2,
           kinematic: 3,
