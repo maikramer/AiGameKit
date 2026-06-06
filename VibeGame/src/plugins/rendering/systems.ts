@@ -8,14 +8,12 @@ import {
   DirectionalLight,
   DistanceCull,
   MainCamera,
-  Postprocessing,
   PointLight,
   RenderContext,
   MeshRenderer,
   SpotLight,
 } from './components';
 import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
-import { buildPostProcessing } from './postprocessing';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import {
   applyNeutralEnvironment,
@@ -39,7 +37,6 @@ const thirdPersonCameraQuery = defineQuery([ThirdPersonCamera]);
 const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
 const mainCameraQuery = defineQuery([MainCamera]);
 const renderContextQuery = defineQuery([RenderContext]);
-const postprocessingQuery = defineQuery([Postprocessing]);
 const _lightDir = new THREE.Vector3();
 const _lightOffset = new THREE.Vector3();
 const _lightPos = new THREE.Vector3();
@@ -374,7 +371,8 @@ export const RendererSetupSystem: System = {
     applyNeutralEnvironment(renderer, context.scene);
     // The post-processing scene pass renders scene.background (not the renderer
     // clear colour), so mirror the clear colour there or the sky goes black.
-    if (clearColor !== 0) context.scene.background = new THREE.Color(clearColor);
+    if (clearColor !== 0)
+      context.scene.background = new THREE.Color(clearColor);
 
     window.addEventListener('resize', () =>
       handleWindowResize(state, renderer)
@@ -418,60 +416,6 @@ export const CameraSyncSystem: System = {
   },
 };
 
-/**
- * Builds the post-processing pipeline once the renderer + main camera
- * exist, when a `Postprocessing` entity opts in (enabled). The runtime renders
- * through `context.postProcessing` when present (see runtime render loop).
- */
-export const PostprocessingBuildSystem: System = {
-  group: 'draw',
-  after: [CameraSyncSystem],
-  update(state: State) {
-    if (state.headless) return;
-    const context = getRenderingContext(state);
-    if (context.postProcessing || !context.renderer) return;
-
-    const entities = postprocessingQuery(state.world);
-    if (entities.length === 0) return;
-    const e = entities[0];
-    if (Postprocessing.enabled[e] !== 1) return;
-
-    const cameras = mainCameraQuery(state.world);
-    if (cameras.length === 0) return;
-    const camera = threeCameras.get(cameras[0]);
-    if (!camera) return;
-
-    context.postProcessing = buildPostProcessing(
-      context.renderer,
-      context.scene,
-      camera,
-      {
-        enabled: 1,
-        bloom: Postprocessing.bloom[e] === 1,
-        bloomStrength: Postprocessing.bloomStrength[e],
-        bloomRadius: Postprocessing.bloomRadius[e],
-        bloomThreshold: Postprocessing.bloomThreshold[e],
-        chromaticAberration: Postprocessing.chromaticAberration[e] === 1,
-        chromaticAberrationStrength: Postprocessing.caStrength[e],
-        vignette: Postprocessing.vignette[e] === 1,
-        vignetteStrength: Postprocessing.vignetteStrength[e],
-        vignetteSmoothness: 0.85,
-        fxaa: false,
-        smaa: false,
-        smaaQuality: 0,
-        tonemapping: 0,
-        dither: 0,
-        aa: Postprocessing.aa[e],
-      }
-    );
-  },
-  dispose(state: State) {
-    const context = getRenderingContext(state);
-    context.postProcessing?.dispose();
-    context.postProcessing = undefined;
-  },
-};
-
 export const SceneRenderSystem: System = {
   group: 'draw',
   last: true,
@@ -495,7 +439,8 @@ export const SceneRenderSystem: System = {
     applyNeutralEnvironment(renderer, context.scene);
     // The post-processing scene pass renders scene.background (not the renderer
     // clear colour), so mirror the clear colour there or the sky goes black.
-    if (clearColor !== 0) context.scene.background = new THREE.Color(clearColor);
+    if (clearColor !== 0)
+      context.scene.background = new THREE.Color(clearColor);
 
     window.addEventListener('resize', () =>
       handleWindowResize(state, renderer)

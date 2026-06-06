@@ -15,21 +15,6 @@ export const RenderContext = {
   hasCanvas: new Uint8Array(MAX_ENTITIES),
 } as const;
 
-// Post-processing pipeline (WebGL2-compatible effects).
-export const Postprocessing = {
-  enabled: new Uint8Array(MAX_ENTITIES),
-  bloom: new Uint8Array(MAX_ENTITIES),
-  bloomStrength: new Float32Array(MAX_ENTITIES),
-  bloomRadius: new Float32Array(MAX_ENTITIES),
-  bloomThreshold: new Float32Array(MAX_ENTITIES),
-  chromaticAberration: new Uint8Array(MAX_ENTITIES),
-  caStrength: new Float32Array(MAX_ENTITIES),
-  vignette: new Uint8Array(MAX_ENTITIES),
-  vignetteStrength: new Float32Array(MAX_ENTITIES),
-  vignetteRadius: new Float32Array(MAX_ENTITIES),
-  aa: new Uint8Array(MAX_ENTITIES), // 0=off, 1=FXAA, 2=SMAA
-} as const;
-
 export const MainCamera = {
   projection: new Uint8Array(MAX_ENTITIES),
   fov: new Float32Array(MAX_ENTITIES),

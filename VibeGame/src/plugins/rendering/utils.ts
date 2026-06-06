@@ -247,7 +247,11 @@ export interface RenderingContext {
     spotLights: THREE.SpotLight[];
   };
   renderer?: THREE.WebGLRenderer;
-  postProcessing?: any | null;
+  postProcessing?: {
+    render(delta?: number): void;
+    dispose(): void;
+    setSize(width: number, height: number): void;
+  } | null;
   canvas?: HTMLCanvasElement;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
@@ -344,6 +348,9 @@ export async function createRenderer(
     canvas,
     antialias: true,
     powerPreference: 'high-performance',
+    alpha: false,
+    premultipliedAlpha: false,
+    preserveDrawingBuffer: false,
   });
 
   const width = canvas.clientWidth || window.innerWidth;
@@ -406,7 +413,10 @@ export function handleWindowResize(
   );
   renderer.setSize(width, height, false);
 
-  if (context.postProcessing && typeof context.postProcessing.setSize === 'function') {
+  if (
+    context.postProcessing &&
+    typeof context.postProcessing.setSize === 'function'
+  ) {
     context.postProcessing.setSize(width, height);
   }
 
