@@ -76,7 +76,23 @@ export function updateInstance(
       if (instanceId === null) return mesh;
     }
 
-    instanceInfo = { poolId: MeshRenderer.shape[entity], instanceId, unlit };
+    instanceInfo = {
+      poolId: MeshRenderer.shape[entity],
+      instanceId,
+      unlit,
+      initialized: false,
+      px: 0,
+      py: 0,
+      pz: 0,
+      rx: 0,
+      ry: 0,
+      rz: 0,
+      rw: 0,
+      sx: 0,
+      sy: 0,
+      sz: 0,
+      color: -1,
+    };
     context.entityInstances.set(entity, instanceInfo);
     context.totalInstanceCount++;
 
@@ -121,15 +137,49 @@ export function updateInstance(
       scale.z *= MeshRenderer.sizeZ[entity];
     }
 
-    matrix.compose(position, rotation, scale);
-    mesh.setMatrixAt(instanceInfo.instanceId, matrix);
-    mesh.instanceMatrix.needsUpdate = true;
-
-    _color.set(MeshRenderer.color[entity]);
-    mesh.setColorAt(instanceInfo.instanceId, _color);
-    if (mesh.instanceColor) {
-      mesh.instanceColor.needsUpdate = true;
+    // Only touch the GPU buffers when the transform or color actually changed.
+    // setMatrixAt/setColorAt + needsUpdate force a full instance-buffer
+    // re-upload, so skipping unchanged (static) instances is the hot-path win.
+    const fresh = !instanceInfo.initialized;
+    if (
+      fresh ||
+      instanceInfo.px !== position.x ||
+      instanceInfo.py !== position.y ||
+      instanceInfo.pz !== position.z ||
+      instanceInfo.rx !== rotation.x ||
+      instanceInfo.ry !== rotation.y ||
+      instanceInfo.rz !== rotation.z ||
+      instanceInfo.rw !== rotation.w ||
+      instanceInfo.sx !== scale.x ||
+      instanceInfo.sy !== scale.y ||
+      instanceInfo.sz !== scale.z
+    ) {
+      matrix.compose(position, rotation, scale);
+      mesh.setMatrixAt(instanceInfo.instanceId, matrix);
+      mesh.instanceMatrix.needsUpdate = true;
+      instanceInfo.px = position.x;
+      instanceInfo.py = position.y;
+      instanceInfo.pz = position.z;
+      instanceInfo.rx = rotation.x;
+      instanceInfo.ry = rotation.y;
+      instanceInfo.rz = rotation.z;
+      instanceInfo.rw = rotation.w;
+      instanceInfo.sx = scale.x;
+      instanceInfo.sy = scale.y;
+      instanceInfo.sz = scale.z;
     }
+
+    const color = MeshRenderer.color[entity];
+    if (fresh || instanceInfo.color !== color) {
+      _color.set(color);
+      mesh.setColorAt(instanceInfo.instanceId, _color);
+      if (mesh.instanceColor) {
+        mesh.instanceColor.needsUpdate = true;
+      }
+      instanceInfo.color = color;
+    }
+
+    instanceInfo.initialized = true;
   }
 
   return mesh;
@@ -144,6 +194,8 @@ export function hideInstance(
   if (instanceInfo) {
     mesh.setMatrixAt(instanceInfo.instanceId, _zeroMatrix);
     mesh.instanceMatrix.needsUpdate = true;
+    // The buffer slot was zeroed; force a rewrite if this entity is shown again.
+    instanceInfo.initialized = false;
     releaseInstanceSlot(mesh, instanceInfo.instanceId);
   }
 }

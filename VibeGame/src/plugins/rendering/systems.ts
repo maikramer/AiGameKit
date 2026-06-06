@@ -41,6 +41,7 @@ const mainCameraQuery = defineQuery([MainCamera]);
 const renderContextQuery = defineQuery([RenderContext]);
 const postprocessingQuery = defineQuery([Postprocessing]);
 const _lightDir = new THREE.Vector3();
+const _lightOffset = new THREE.Vector3();
 const _lightPos = new THREE.Vector3();
 const _shadowCenter = new THREE.Vector3();
 const _lightPosition = new THREE.Vector3();
@@ -210,7 +211,9 @@ export const LightSyncSystem: System = {
         _lightPos
           .copy(shadowCenter)
           .add(
-            _lightDir.clone().multiplyScalar(DirectionalLight.distance[entity])
+            _lightOffset
+              .copy(_lightDir)
+              .multiplyScalar(DirectionalLight.distance[entity])
           );
 
         light.position.copy(_lightPos);

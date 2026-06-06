@@ -356,7 +356,7 @@ export async function createRenderer(
   renderer.setSize(width, height, false);
 
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);
