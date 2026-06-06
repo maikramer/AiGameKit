@@ -1,7 +1,6 @@
 import { defineQuery } from '../core';
 import type { State } from '../core';
 
-
 interface SequenceComponent {
   state: Uint8Array;
   itemCount: Float32Array;
@@ -73,7 +72,8 @@ export function getAllSequences(state: State): SequenceInfo[] {
     sequences.push({
       name: name ?? `eid-${eid}`,
       eid,
-      state: seq.state[eid] === SequenceStateValues.Playing ? 'playing' : 'idle',
+      state:
+        seq.state[eid] === SequenceStateValues.Playing ? 'playing' : 'idle',
       currentIndex: seq.currentIndex[eid],
       itemCount,
       progress: itemCount > 0 ? seq.currentIndex[eid] / itemCount : 0,

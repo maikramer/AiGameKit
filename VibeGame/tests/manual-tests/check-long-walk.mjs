@@ -9,7 +9,11 @@ await withGame(async (page) => {
     intervalMs: 400, // ~16s of continuous walking
     project: () => {
       const h = window.__heroDebug();
-      return { z: +h.z.toFixed(1), gap: +h.groundGap.toFixed(3), grounded: h.grounded };
+      return {
+        z: +h.z.toFixed(1),
+        gap: +h.groundGap.toFixed(3),
+        grounded: h.grounded,
+      };
     },
   });
 
@@ -25,9 +29,21 @@ await withGame(async (page) => {
   const maxGap = Math.max(...settled.map((r) => r.gap));
 
   let ok = true;
-  ok &= report('walked a long distance', travelled > 80, `${travelled.toFixed(0)}m`);
-  ok &= report('stayed grounded throughout', ungrounded === 0, `${ungrounded}/${settled.length} ungrounded`);
-  ok &= report('stays glued to terrain (no drift)', minGap > -1.5 && maxGap < 1.5, `gap ∈ [${minGap.toFixed(2)}, ${maxGap.toFixed(2)}]`);
+  ok &= report(
+    'walked a long distance',
+    travelled > 80,
+    `${travelled.toFixed(0)}m`
+  );
+  ok &= report(
+    'stayed grounded throughout',
+    ungrounded === 0,
+    `${ungrounded}/${settled.length} ungrounded`
+  );
+  ok &= report(
+    'stays glued to terrain (no drift)',
+    minGap > -1.5 && maxGap < 1.5,
+    `gap ∈ [${minGap.toFixed(2)}, ${maxGap.toFixed(2)}]`
+  );
 
   process.exit(ok ? 0 : 1);
 });

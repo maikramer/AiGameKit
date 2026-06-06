@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State, defineQuery } from 'vibegame';
 
@@ -66,7 +65,10 @@ describe('State', () => {
   });
 
   it('should add component with initial values dictionary', () => {
-    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
+    const Health = {
+      current: new Float32Array(MAX_ENTITIES),
+      max: new Float32Array(MAX_ENTITIES),
+    };
 
     const entity = state.createEntity();
     state.addComponent(entity, Health, {
@@ -80,7 +82,10 @@ describe('State', () => {
   });
 
   it('should support direct component array access pattern', () => {
-    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
+    const Health = {
+      current: new Float32Array(MAX_ENTITIES),
+      max: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('health', Health);
 
@@ -114,7 +119,10 @@ describe('State', () => {
   });
 
   it('should apply component defaults when adding component', () => {
-    const TestWithDefaults = { value: new Float32Array(MAX_ENTITIES), scale: new Float32Array(MAX_ENTITIES) };
+    const TestWithDefaults = {
+      value: new Float32Array(MAX_ENTITIES),
+      scale: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('test-with-defaults', TestWithDefaults);
     state.registerConfig({
@@ -134,7 +142,10 @@ describe('State', () => {
   });
 
   it('should allow explicit values to override component defaults', () => {
-    const TestWithDefaults = { value: new Float32Array(MAX_ENTITIES), scale: new Float32Array(MAX_ENTITIES) };
+    const TestWithDefaults = {
+      value: new Float32Array(MAX_ENTITIES),
+      scale: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('test-override', TestWithDefaults);
     state.registerConfig({

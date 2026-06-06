@@ -25,7 +25,8 @@ export const InputSystem: System = {
     const context = getRenderingContext(state);
 
     // Keyboard input is global; mouse-related input requires canvas focus.
-    const canvasActive = focusedCanvas && context.canvas && context.canvas === focusedCanvas;
+    const canvasActive =
+      focusedCanvas && context.canvas && context.canvas === focusedCanvas;
 
     const entities = inputStateQuery(state.world);
 
@@ -90,11 +91,16 @@ export const GamepadInputSystem: System = {
       GamepadInput.rightTrigger[eid] = gp.buttons[7]?.value ?? 0;
 
       // Merge into InputState (keyboard priority — only write if not already set)
-      if (InputState.moveX[eid] === 0) InputState.moveX[eid] = GamepadInput.leftStickX[eid];
-      if (InputState.moveZ[eid] === 0) InputState.moveZ[eid] = -GamepadInput.leftStickY[eid];
-      if (InputState.lookX[eid] === 0) InputState.lookX[eid] = GamepadInput.rightStickX[eid];
-      if (InputState.lookY[eid] === 0) InputState.lookY[eid] = GamepadInput.rightStickY[eid];
-      if (InputState.jump[eid] === 0) InputState.jump[eid] = GamepadInput.buttonA[eid];
+      if (InputState.moveX[eid] === 0)
+        InputState.moveX[eid] = GamepadInput.leftStickX[eid];
+      if (InputState.moveZ[eid] === 0)
+        InputState.moveZ[eid] = -GamepadInput.leftStickY[eid];
+      if (InputState.lookX[eid] === 0)
+        InputState.lookX[eid] = GamepadInput.rightStickX[eid];
+      if (InputState.lookY[eid] === 0)
+        InputState.lookY[eid] = GamepadInput.rightStickY[eid];
+      if (InputState.jump[eid] === 0)
+        InputState.jump[eid] = GamepadInput.buttonA[eid];
     }
   },
 };

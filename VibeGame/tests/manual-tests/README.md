@@ -25,11 +25,11 @@ Each `check-*.mjs` exits non-zero on failure, so `run-all.mjs` (and CI) can gate
 
 ## Env knobs
 
-| Var             | Default                     | Purpose                                  |
-| --------------- | --------------------------- | ---------------------------------------- |
-| `VIBE_URL`      | `http://127.0.0.1:30991/`   | Target URL                               |
-| `VIBE_BOOT_MS`  | `8000`                      | Wait after load before sampling          |
-| `VIBE_HEADLESS` | `1`                         | Set `0` to watch the browser             |
+| Var             | Default                   | Purpose                         |
+| --------------- | ------------------------- | ------------------------------- |
+| `VIBE_URL`      | `http://127.0.0.1:30991/` | Target URL                      |
+| `VIBE_BOOT_MS`  | `8000`                    | Wait after load before sampling |
+| `VIBE_HEADLESS` | `1`                       | Set `0` to watch the browser    |
 
 ## Checks
 

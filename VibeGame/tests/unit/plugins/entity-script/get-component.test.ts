@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 
-
 import { Parent } from '../../../../src/core/ecs/components';
 import { State } from '../../../../src/core/ecs/state';
 import { buildContext } from '../../../../src/plugins/entity-script/system';

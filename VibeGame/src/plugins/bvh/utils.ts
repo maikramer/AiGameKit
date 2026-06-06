@@ -12,15 +12,21 @@ let prototypesPatched = false;
 function ensurePrototypes(): void {
   if (prototypesPatched) return;
   prototypesPatched = true;
-  (THREE.BufferGeometry.prototype as unknown as {
-    computeBoundsTree: typeof computeBoundsTree;
-  }).computeBoundsTree = computeBoundsTree;
-  (THREE.BufferGeometry.prototype as unknown as {
-    disposeBoundsTree: typeof disposeBoundsTree;
-  }).disposeBoundsTree = disposeBoundsTree;
-  (THREE.Mesh.prototype as unknown as {
-    raycast: typeof acceleratedRaycast;
-  }).raycast = acceleratedRaycast;
+  (
+    THREE.BufferGeometry.prototype as unknown as {
+      computeBoundsTree: typeof computeBoundsTree;
+    }
+  ).computeBoundsTree = computeBoundsTree;
+  (
+    THREE.BufferGeometry.prototype as unknown as {
+      disposeBoundsTree: typeof disposeBoundsTree;
+    }
+  ).disposeBoundsTree = disposeBoundsTree;
+  (
+    THREE.Mesh.prototype as unknown as {
+      raycast: typeof acceleratedRaycast;
+    }
+  ).raycast = acceleratedRaycast;
 }
 
 export interface BvhEntry {

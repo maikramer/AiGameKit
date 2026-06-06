@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser } from 'vibegame';
@@ -26,7 +25,11 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle nested entities with parent-child relationships', () => {
-    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      posX: new Float32Array(MAX_ENTITIES),
+      posY: new Float32Array(MAX_ENTITIES),
+      posZ: new Float32Array(MAX_ENTITIES),
+    };
     const Parent = { entity: new Int32Array(MAX_ENTITIES) };
 
     state.registerComponent('transform', Transform);
@@ -85,7 +88,12 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should apply component attributes with CSS-style syntax', () => {
-    const TestComponent = { value: new Float32Array(MAX_ENTITIES), posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
+    const TestComponent = {
+      value: new Float32Array(MAX_ENTITIES),
+      posX: new Float32Array(MAX_ENTITIES),
+      posY: new Float32Array(MAX_ENTITIES),
+      posZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('test', TestComponent);
     state.registerRecipe({
@@ -155,7 +163,12 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should expand component shorthands when component is present', () => {
-    const MeshRenderer = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES), shape: new Int8Array(MAX_ENTITIES) };
+    const MeshRenderer = {
+      sizeX: new Float32Array(MAX_ENTITIES),
+      sizeY: new Float32Array(MAX_ENTITIES),
+      sizeZ: new Float32Array(MAX_ENTITIES),
+      shape: new Int8Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('meshRenderer', MeshRenderer);
     state.registerConfig({
@@ -190,7 +203,11 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should auto-expand shorthands only for present components', () => {
-    const MeshRenderer = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES) };
+    const MeshRenderer = {
+      sizeX: new Float32Array(MAX_ENTITIES),
+      sizeY: new Float32Array(MAX_ENTITIES),
+      sizeZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('meshRenderer', MeshRenderer);
 
@@ -273,7 +290,11 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle vector broadcast for single values', () => {
-    const Transform = { scaleX: new Float32Array(MAX_ENTITIES), scaleY: new Float32Array(MAX_ENTITIES), scaleZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      scaleX: new Float32Array(MAX_ENTITIES),
+      scaleY: new Float32Array(MAX_ENTITIES),
+      scaleZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -298,7 +319,15 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should convert euler angles to quaternion', () => {
-    const Transform = { rotX: new Float32Array(MAX_ENTITIES), rotY: new Float32Array(MAX_ENTITIES), rotZ: new Float32Array(MAX_ENTITIES), rotW: new Float32Array(MAX_ENTITIES), eulerX: new Float32Array(MAX_ENTITIES), eulerY: new Float32Array(MAX_ENTITIES), eulerZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      rotX: new Float32Array(MAX_ENTITIES),
+      rotY: new Float32Array(MAX_ENTITIES),
+      rotZ: new Float32Array(MAX_ENTITIES),
+      rotW: new Float32Array(MAX_ENTITIES),
+      eulerX: new Float32Array(MAX_ENTITIES),
+      eulerY: new Float32Array(MAX_ENTITIES),
+      eulerZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -332,7 +361,15 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should handle rotation as alias for euler', () => {
-    const Transform = { rotX: new Float32Array(MAX_ENTITIES), rotY: new Float32Array(MAX_ENTITIES), rotZ: new Float32Array(MAX_ENTITIES), rotW: new Float32Array(MAX_ENTITIES), eulerX: new Float32Array(MAX_ENTITIES), eulerY: new Float32Array(MAX_ENTITIES), eulerZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      rotX: new Float32Array(MAX_ENTITIES),
+      rotY: new Float32Array(MAX_ENTITIES),
+      rotZ: new Float32Array(MAX_ENTITIES),
+      rotW: new Float32Array(MAX_ENTITIES),
+      eulerX: new Float32Array(MAX_ENTITIES),
+      eulerY: new Float32Array(MAX_ENTITIES),
+      eulerZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({
@@ -362,7 +399,21 @@ describe('XML Recipe Integration', () => {
   });
 
   it('should parse multiple properties in component string', () => {
-    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES), rotX: new Float32Array(MAX_ENTITIES), rotY: new Float32Array(MAX_ENTITIES), rotZ: new Float32Array(MAX_ENTITIES), rotW: new Float32Array(MAX_ENTITIES), eulerX: new Float32Array(MAX_ENTITIES), eulerY: new Float32Array(MAX_ENTITIES), eulerZ: new Float32Array(MAX_ENTITIES), scaleX: new Float32Array(MAX_ENTITIES), scaleY: new Float32Array(MAX_ENTITIES), scaleZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      posX: new Float32Array(MAX_ENTITIES),
+      posY: new Float32Array(MAX_ENTITIES),
+      posZ: new Float32Array(MAX_ENTITIES),
+      rotX: new Float32Array(MAX_ENTITIES),
+      rotY: new Float32Array(MAX_ENTITIES),
+      rotZ: new Float32Array(MAX_ENTITIES),
+      rotW: new Float32Array(MAX_ENTITIES),
+      eulerX: new Float32Array(MAX_ENTITIES),
+      eulerY: new Float32Array(MAX_ENTITIES),
+      eulerZ: new Float32Array(MAX_ENTITIES),
+      scaleX: new Float32Array(MAX_ENTITIES),
+      scaleY: new Float32Array(MAX_ENTITIES),
+      scaleZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerConfig({

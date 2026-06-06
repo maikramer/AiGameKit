@@ -1,4 +1,8 @@
-export { VegetationInstancer } from "./systems";
-export { VegetationPlugin } from "./plugin";
-export { vegetationInstancerMap } from "../spawner/systems";
-export type { VegetationCluster, VegetationInstanceSpec, VegetationSpawnState } from "./types";
+export { VegetationInstancer } from './systems';
+export { VegetationPlugin } from './plugin';
+export { vegetationInstancerMap } from '../spawner/systems';
+export type {
+  VegetationCluster,
+  VegetationInstanceSpec,
+  VegetationSpawnState,
+} from './types';

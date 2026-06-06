@@ -98,7 +98,10 @@ export function getRapierWorld(state: State): RAPIER.World | null {
   return context?.physicsWorld ?? null;
 }
 
-export function getBodyForEntity(state: State, entity: number): RAPIER.RigidBody | null {
+export function getBodyForEntity(
+  state: State,
+  entity: number
+): RAPIER.RigidBody | null {
   const context = stateToPhysicsContext.get(state);
   return context?.entityToRigidbody.get(entity) ?? null;
 }
@@ -224,7 +227,11 @@ function createRigidbodyForEntity(
     entity,
     Rigidbody.type[entity],
     Rigidbody.mass[entity],
-    new RAPIER.Vector3(Rigidbody.velX[entity], Rigidbody.velY[entity], Rigidbody.velZ[entity]),
+    new RAPIER.Vector3(
+      Rigidbody.velX[entity],
+      Rigidbody.velY[entity],
+      Rigidbody.velZ[entity]
+    ),
     new RAPIER.Vector3(
       Rigidbody.rotVelX[entity],
       Rigidbody.rotVelY[entity],

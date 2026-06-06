@@ -32,8 +32,11 @@ export const TweenProcessingSystem: System = {
 
       const axis = TweenData.axis[entity];
       const isRotationAxis =
-        axis === TweenAxis.RotX || axis === TweenAxis.RotY || axis === TweenAxis.RotZ;
-      if (!isRotationAxis && !state.hasComponent(targetEid, Rigidbody)) continue;
+        axis === TweenAxis.RotX ||
+        axis === TweenAxis.RotY ||
+        axis === TweenAxis.RotZ;
+      if (!isRotationAxis && !state.hasComponent(targetEid, Rigidbody))
+        continue;
 
       TweenData.elapsed[entity] += dt;
 
@@ -65,7 +68,9 @@ export const TweenProcessingSystem: System = {
       }
 
       const t = applyEasing(rawProgress, TweenData.easing[entity]);
-      const value = TweenData.from[entity] + (TweenData.to[entity] - TweenData.from[entity]) * t;
+      const value =
+        TweenData.from[entity] +
+        (TweenData.to[entity] - TweenData.from[entity]) * t;
 
       if (axis === TweenAxis.None) continue;
 

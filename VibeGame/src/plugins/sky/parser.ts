@@ -24,8 +24,14 @@ export const equirectSkyParser: Parser = ({ entity, element }) => {
   }
 
   setEquirectSkyUrl(entity, url.trim());
-  EquirectSky.rotationDeg[entity] = toNumber(element.attributes['rotation-deg'], 0);
-  EquirectSky.setBackground[entity] = toBool(element.attributes['set-background'], true)
+  EquirectSky.rotationDeg[entity] = toNumber(
+    element.attributes['rotation-deg'],
+    0
+  );
+  EquirectSky.setBackground[entity] = toBool(
+    element.attributes['set-background'],
+    true
+  )
     ? 1
     : 0;
   EquirectSky.applied[entity] = 0;

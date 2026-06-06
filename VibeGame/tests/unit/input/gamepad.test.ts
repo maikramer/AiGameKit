@@ -8,7 +8,10 @@ import {
   applyDeadzone,
 } from 'vibegame/input';
 import { setRenderingCanvas } from 'vibegame/rendering';
-import { setTargetCanvas, setFocusedCanvas } from '../../../src/plugins/input/utils';
+import {
+  setTargetCanvas,
+  setFocusedCanvas,
+} from '../../../src/plugins/input/utils';
 
 function makeMockGamepad(overrides: Partial<Gamepad> = {}): Gamepad {
   return {
@@ -58,7 +61,6 @@ describe('GamepadInput', () => {
     setRenderingCanvas(state, canvas);
 
     GamepadInput.deadzone[entity] = 0.15;
-
 
     const allSystems = Array.from(state.systems);
     for (const s of allSystems) {
@@ -395,10 +397,7 @@ describe('GamepadInput', () => {
       );
       gpSystem?.update?.(state);
 
-      expect(InputState.lookX[entity]).toBeCloseTo(
-        applyDeadzone(0.5, 0.15),
-        5
-      );
+      expect(InputState.lookX[entity]).toBeCloseTo(applyDeadzone(0.5, 0.15), 5);
       expect(InputState.lookY[entity]).toBeCloseTo(
         applyDeadzone(-0.3, 0.15),
         5

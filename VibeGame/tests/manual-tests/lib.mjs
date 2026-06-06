@@ -24,7 +24,9 @@ export async function withGame(fn) {
   const page = await browser.newPage();
   const logs = [];
   page.on('console', (m) => logs.push({ type: m.type(), text: m.text() }));
-  page.on('pageerror', (e) => logs.push({ type: 'pageerror', text: e.message }));
+  page.on('pageerror', (e) =>
+    logs.push({ type: 'pageerror', text: e.message })
+  );
   await page.goto(URL, { waitUntil: 'load', timeout: 60000 });
   await page.waitForTimeout(BOOT_MS);
   try {
@@ -36,7 +38,9 @@ export async function withGame(fn) {
 
 /** The example exposes window.__heroDebug() with live hero physics/animation fields. */
 export async function heroDebug(page) {
-  return page.evaluate(() => (window.__heroDebug ? window.__heroDebug() : null));
+  return page.evaluate(() =>
+    window.__heroDebug ? window.__heroDebug() : null
+  );
 }
 
 /** Keyboard input needs canvas focus first. */
@@ -53,7 +57,11 @@ export async function holdKey(page, key, ms) {
 }
 
 /** Sample a projector function over time while a key is held. Returns rows. */
-export async function sampleWhileHolding(page, key, { samples = 25, intervalMs = 80, project }) {
+export async function sampleWhileHolding(
+  page,
+  key,
+  { samples = 25, intervalMs = 80, project }
+) {
   await focusCanvas(page);
   await page.keyboard.down(key);
   const rows = [];

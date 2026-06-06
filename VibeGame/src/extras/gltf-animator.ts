@@ -41,10 +41,10 @@ export class GltfAnimator {
   private crossfadeDuration: number;
 
   private locomotionSets = new Map<string, LocomotionSet>();
-  private activeLocomotionSetName = "default";
+  private activeLocomotionSetName = 'default';
   private _overrideLock = false;
-  private previousLocomotionClip = "";
-  private _jumpState: "none" | "start" | "loop" | "end" = "none";
+  private previousLocomotionClip = '';
+  private _jumpState: 'none' | 'start' | 'loop' | 'end' = 'none';
 
   constructor(gltf: GLTF, options: GltfAnimatorOptions = {}) {
     this.mixer = new AnimationMixer(gltf.scene);
@@ -130,7 +130,7 @@ export class GltfAnimator {
 
   playLocomotion(
     action: keyof LocomotionSet,
-    options?: { crossfade?: number },
+    options?: { crossfade?: number }
   ): AnimationAction | null {
     if (this._overrideLock) return this.currentAction;
 
@@ -140,17 +140,17 @@ export class GltfAnimator {
     const clipName = set[action];
     if (clipName === undefined) return null;
 
-    if (action === "jump" && typeof clipName === "object") {
+    if (action === 'jump' && typeof clipName === 'object') {
       return this.playJumpSequence(clipName);
     }
 
-    this.previousLocomotionClip = typeof clipName === "string" ? clipName : "";
-    return this.play(typeof clipName === "string" ? clipName : "", options);
+    this.previousLocomotionClip = typeof clipName === 'string' ? clipName : '';
+    return this.play(typeof clipName === 'string' ? clipName : '', options);
   }
 
   playOverride(
     clipName: string,
-    options?: { loop?: boolean; crossfade?: number; onFinished?: () => void },
+    options?: { loop?: boolean; crossfade?: number; onFinished?: () => void }
   ): AnimationAction | null {
     this._overrideLock = true;
     const action = this.play(clipName, {
@@ -161,8 +161,8 @@ export class GltfAnimator {
     if (action) {
       const onFinished = options?.onFinished;
       const self = this;
-      action.getMixer().addEventListener("finished", function handler() {
-        action.getMixer().removeEventListener("finished", handler);
+      action.getMixer().addEventListener('finished', function handler() {
+        action.getMixer().removeEventListener('finished', handler);
         self._overrideLock = false;
         if (onFinished) onFinished();
       });
@@ -179,7 +179,7 @@ export class GltfAnimator {
     return this.previousLocomotionClip;
   }
 
-  get jumpPhase(): "none" | "start" | "loop" | "end" {
+  get jumpPhase(): 'none' | 'start' | 'loop' | 'end' {
     return this._jumpState;
   }
 
@@ -188,7 +188,7 @@ export class GltfAnimator {
     loop: string;
     end: string;
   }): AnimationAction | null {
-    this._jumpState = "start";
+    this._jumpState = 'start';
     return this.play(jump.start);
   }
 

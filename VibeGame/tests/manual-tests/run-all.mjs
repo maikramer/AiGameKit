@@ -13,7 +13,9 @@ const checks = readdirSync(here)
 let failed = 0;
 for (const file of checks) {
   console.log(`\n\x1b[1m▶ ${file}\x1b[0m`);
-  const r = spawnSync(process.execPath, [join(here, file)], { stdio: 'inherit' });
+  const r = spawnSync(process.execPath, [join(here, file)], {
+    stdio: 'inherit',
+  });
   if (r.status !== 0) failed++;
 }
 

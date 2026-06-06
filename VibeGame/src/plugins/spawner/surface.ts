@@ -48,13 +48,29 @@ export function sinkOffsetForSlope(
   return Math.sin(slopeRad) * objectHalfWidth;
 }
 
+const _alignUp = /*@__PURE__*/ new THREE.Vector3(0, 1, 0);
+const _alignNormal = /*@__PURE__*/ new THREE.Vector3();
+const _tiltAxis = /*@__PURE__*/ new THREE.Vector3();
+const _qTilt = /*@__PURE__*/ new THREE.Quaternion();
+const _qYawTrunk = /*@__PURE__*/ new THREE.Quaternion();
+const _eOut = /*@__PURE__*/ new THREE.Euler(0, 0, 0, 'XYZ');
+
 /**
- * Compute partial terrain alignment Euler for instanced vegetation.
+ * Compute a partial terrain-alignment Euler (in RADIANS, XYZ order) for
+ * instanced vegetation.
  *
- * Below `minSlopeRad` → fully upright (no tilt). Between min and max slope,
- * blends linearly so trees lean gently on moderate slopes but never look
- * like they're falling over. The tilt direction follows the terrain's
- * fall-line (horizontal component of the surface normal).
+ * The returned triple is consumed directly by `Object3D.rotation.set(...)`
+ * (default XYZ Euler order), so it must be expressed in radians — returning
+ * degrees here makes every instance wrap to a near-random orientation, which
+ * looks like trees lying flat on the ground.
+ *
+ * Behaviour:
+ *  - Below `minSlopeRad` (or on effectively flat ground) → upright, yaw only.
+ *  - Between min slope and `maxTiltRad` worth of slope, the lean blends
+ *    linearly and is clamped to `maxTiltRad` so trees lean gently on moderate
+ *    slopes but never look like they're falling over.
+ *  - The tilt leans toward the terrain's fall-line (the surface normal), then
+ *    yaw is applied about the (tilted) trunk axis.
  */
 export function partialAlignEuler(
   normal: THREE.Vector3,
@@ -63,35 +79,41 @@ export function partialAlignEuler(
   minSlopeRad = 0.087,
   maxTiltRad = 0.26
 ): [number, number, number] {
+  // Flat enough → keep upright but still honour random yaw about +Y.
   if (slopeRad < minSlopeRad || normal.y > 0.9999) {
-    return [0, 0, 0];
+    return [0, yawRad, 0];
   }
-  const t = Math.min(1, (slopeRad - minSlopeRad) / (maxTiltRad - minSlopeRad));
+
+  _alignNormal.copy(normal);
+  if (_alignNormal.lengthSq() < 1e-12) {
+    return [0, yawRad, 0];
+  }
+  _alignNormal.normalize();
+
+  // Blend the lean linearly from the min-slope threshold and clamp it so the
+  // trunk never tilts past `maxTiltRad`, regardless of how steep the ground is.
+  const denom = Math.max(1e-6, maxTiltRad - minSlopeRad);
+  const t = Math.min(1, Math.max(0, (slopeRad - minSlopeRad) / denom));
   const tilt = t * maxTiltRad;
-  if (tilt < 1e-6) return [0, 0, 0];
+  if (tilt < 1e-6) {
+    return [0, yawRad, 0];
+  }
 
-  const nx = normal.x;
-  const nz = normal.z;
-  const hLen = Math.sqrt(nx * nx + nz * nz);
-  if (hLen < 1e-6) return [0, 0, 0];
+  // Horizontal axis to rotate +Y about so it leans toward the surface normal.
+  _tiltAxis.crossVectors(_alignUp, _alignNormal);
+  if (_tiltAxis.lengthSq() < 1e-12) {
+    return [0, yawRad, 0];
+  }
+  _tiltAxis.normalize();
+  _qTilt.setFromAxisAngle(_tiltAxis, tilt);
 
-  const fallX = -nx / hLen;
-  const fallZ = -nz / hLen;
-  const axisX = -fallZ;
-  const axisZ = fallX;
+  // Yaw about the trunk (local +Y, applied before the tilt) so trees still
+  // rotate randomly around their own axis while leaning downhill.
+  _qYawTrunk.setFromAxisAngle(_alignUp, yawRad);
+  _qTilt.multiply(_qYawTrunk);
 
-  const cx = Math.cos(tilt);
-  const sx = Math.sin(tilt);
-
-  const ex = sx * axisX;
-  const ez = sx * axisZ;
-  const ey = (1 - cx) * (fallX * axisX + fallZ * axisZ);
-
-  return [
-    THREE.MathUtils.radToDeg(Math.atan2(ex, cx - (ey * ex) / (1 + cx))),
-    THREE.MathUtils.radToDeg(yawRad),
-    THREE.MathUtils.radToDeg(Math.atan2(ez, cx - (ey * ez) / (1 + cx))),
-  ];
+  _eOut.setFromQuaternion(_qTilt, 'XYZ');
+  return [_eOut.x, _eOut.y, _eOut.z];
 }
 
 export function isNormalWithinSlopeLimit(

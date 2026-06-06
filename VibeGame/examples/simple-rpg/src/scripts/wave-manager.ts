@@ -8,7 +8,10 @@ import {
   MonoBehaviour,
 } from 'vibegame';
 import { Health, isDead } from '../../../../src/plugins/combat/components.ts';
-import { CollisionEvents, Rigidbody } from '../../../../src/plugins/physics/components.ts';
+import {
+  CollisionEvents,
+  Rigidbody,
+} from '../../../../src/plugins/physics/components.ts';
 import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
 import { setScriptFile } from '../../../../src/plugins/entity-script/context.ts';
 

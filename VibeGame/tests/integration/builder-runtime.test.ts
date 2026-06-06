@@ -123,7 +123,9 @@ describe('Builder-Runtime Integration', () => {
 
   describe('Custom Plugin Example', () => {
     it('should create and use custom plugin', async () => {
-      let MyComponent: GAME.Component | undefined = { value: new Float32Array(MAX_ENTITIES) };
+      let MyComponent: GAME.Component | undefined = {
+        value: new Float32Array(MAX_ENTITIES),
+      };
       const myComponentQuery = GAME.defineQuery([MyComponent]);
       const MySystem: GAME.System = {
         update: (state) => {
@@ -169,7 +171,10 @@ describe('Builder-Runtime Integration', () => {
 
   describe('XML World Processing', () => {
     it('should process declarative XML entities', async () => {
-      const TestComponent = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES) };
+      const TestComponent = {
+        x: new Float32Array(MAX_ENTITIES),
+        y: new Float32Array(MAX_ENTITIES),
+      };
 
       const state = new GAME.State();
       state.registerPlugin(TransformsPlugin);
@@ -218,7 +223,10 @@ describe('Builder-Runtime Integration', () => {
       let setupCalled = false;
       let cleanupCalled = false;
 
-      const GameComponent = { score: new Uint32Array(MAX_ENTITIES), lives: new Uint8Array(MAX_ENTITIES) };
+      const GameComponent = {
+        score: new Uint32Array(MAX_ENTITIES),
+        lives: new Uint8Array(MAX_ENTITIES),
+      };
 
       const GameSystem: GAME.System = {
         setup: () => {

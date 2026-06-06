@@ -23,9 +23,7 @@ export const BvhStaticMeshSyncSystem: System = {
   update: (state) => {
     const { added, removed, total } = syncStaticMeshBvh(state);
     if (added > 0 || removed > 0) {
-      console.log(
-        `[bvh] static GLTF: +${added} -${removed} total=${total}`
-      );
+      console.log(`[bvh] static GLTF: +${added} -${removed} total=${total}`);
     }
   },
 };

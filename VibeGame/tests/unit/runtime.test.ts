@@ -1,4 +1,3 @@
-
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS, defineQuery } from 'vibegame';
@@ -320,7 +319,11 @@ describe('GameRuntime', () => {
   });
 
   it('should process complex nested XML content', async () => {
-    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      posX: new Float32Array(MAX_ENTITIES),
+      posY: new Float32Array(MAX_ENTITIES),
+      posZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerRecipe({

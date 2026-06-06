@@ -141,13 +141,22 @@ function applySlerpRotation(
   );
 
   const maxRotationRadians = PlayerController.rotationSpeed[entity] * deltaTime;
-  const slerpFactor = calculateSlerpFactor(_tmpQuat2, _tmpQuat, maxRotationRadians);
+  const slerpFactor = calculateSlerpFactor(
+    _tmpQuat2,
+    _tmpQuat,
+    maxRotationRadians
+  );
   _tmpQuat2.slerp(_tmpQuat, slerpFactor);
 
   return { x: _tmpQuat2.x, y: _tmpQuat2.y, z: _tmpQuat2.z, w: _tmpQuat2.w };
 }
 
-function makeQuatFromYaw(yaw: number): { x: number; y: number; z: number; w: number } {
+function makeQuatFromYaw(yaw: number): {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+} {
   _tmpEuler.set(0, yaw, 0);
   _tmpQuat.setFromEuler(_tmpEuler);
   return { x: _tmpQuat.x, y: _tmpQuat.y, z: _tmpQuat.z, w: _tmpQuat.w };

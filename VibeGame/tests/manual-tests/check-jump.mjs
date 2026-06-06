@@ -26,8 +26,20 @@ await withGame(async (page) => {
   const endY = await y();
 
   let ok = true;
-  ok &= report('hero left the ground', leftGround, `peak +${(peak - startY).toFixed(2)}m`);
-  ok &= report('jump cleared a meaningful height', peak - startY > 0.8, `+${(peak - startY).toFixed(2)}m`);
-  ok &= report('landed back on the ground', endGrounded && Math.abs(endY - startY) < 0.6, `Δ${(endY - startY).toFixed(2)}m`);
+  ok &= report(
+    'hero left the ground',
+    leftGround,
+    `peak +${(peak - startY).toFixed(2)}m`
+  );
+  ok &= report(
+    'jump cleared a meaningful height',
+    peak - startY > 0.8,
+    `+${(peak - startY).toFixed(2)}m`
+  );
+  ok &= report(
+    'landed back on the ground',
+    endGrounded && Math.abs(endY - startY) < 0.6,
+    `Δ${(endY - startY).toFixed(2)}m`
+  );
   process.exit(ok ? 0 : 1);
 });

@@ -79,7 +79,16 @@ describe('Transform Order of Operations', () => {
   });
 
   it('should support oscillation pattern from example', () => {
-    const Oscillate = { amplitude: new Float32Array(MAX_ENTITIES), frequency: new Float32Array(MAX_ENTITIES), axis: new Int32Array(MAX_ENTITIES), phase: new Float32Array(MAX_ENTITIES), time: new Float32Array(MAX_ENTITIES), startX: new Float32Array(MAX_ENTITIES), startY: new Float32Array(MAX_ENTITIES), startZ: new Float32Array(MAX_ENTITIES) };
+    const Oscillate = {
+      amplitude: new Float32Array(MAX_ENTITIES),
+      frequency: new Float32Array(MAX_ENTITIES),
+      axis: new Int32Array(MAX_ENTITIES),
+      phase: new Float32Array(MAX_ENTITIES),
+      time: new Float32Array(MAX_ENTITIES),
+      startX: new Float32Array(MAX_ENTITIES),
+      startY: new Float32Array(MAX_ENTITIES),
+      startZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerSystem({
       group: 'setup',

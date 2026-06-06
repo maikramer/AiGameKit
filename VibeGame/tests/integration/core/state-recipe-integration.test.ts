@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State } from 'vibegame';
@@ -83,7 +82,10 @@ describe('State Recipe Integration', () => {
   });
 
   it('should work with custom components registered after State creation', () => {
-    const CustomComponent = { value: new Float32Array(MAX_ENTITIES), name: new Uint8Array(MAX_ENTITIES) };
+    const CustomComponent = {
+      value: new Float32Array(MAX_ENTITIES),
+      name: new Uint8Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('custom', CustomComponent);
     state.registerRecipe({

@@ -1,4 +1,4 @@
-import type { InstancedMesh, Scene, Vector3 } from "three";
+import type { InstancedMesh, Scene, Vector3 } from 'three';
 
 /** Spawn config entry for one vegetation type. */
 export interface VegetationInstanceSpec {

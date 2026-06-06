@@ -1,9 +1,6 @@
 export { BvhTarget } from './components';
 export { BvhPlugin } from './plugin';
-export {
-  BvhStaticMeshSyncSystem,
-  BvhTerrainSyncSystem,
-} from './systems';
+export { BvhStaticMeshSyncSystem, BvhTerrainSyncSystem } from './systems';
 export {
   castBvhRay,
   getBvhContext,

@@ -12,10 +12,24 @@ await withGame(async (page) => {
   const moved = Math.hypot(dx, dz);
 
   let ok = true;
-  ok &= report('hero translated holding W', moved > 1, `moved ${moved.toFixed(2)}m`);
-  ok &= report('hero stayed near ground', Math.abs(after.groundGap) < 1, `gap ${after.groundGap.toFixed(3)}`);
-  console.log('  before:', JSON.stringify({ x: before.x, y: before.y, z: before.z }));
-  console.log('  after :', JSON.stringify({ x: after.x, y: after.y, z: after.z }));
+  ok &= report(
+    'hero translated holding W',
+    moved > 1,
+    `moved ${moved.toFixed(2)}m`
+  );
+  ok &= report(
+    'hero stayed near ground',
+    Math.abs(after.groundGap) < 1,
+    `gap ${after.groundGap.toFixed(3)}`
+  );
+  console.log(
+    '  before:',
+    JSON.stringify({ x: before.x, y: before.y, z: before.z })
+  );
+  console.log(
+    '  after :',
+    JSON.stringify({ x: after.x, y: after.y, z: after.z })
+  );
 
   process.exit(ok ? 0 : 1);
 });

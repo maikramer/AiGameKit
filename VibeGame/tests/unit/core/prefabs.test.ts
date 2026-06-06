@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 
@@ -9,7 +8,11 @@ describe('prefab/template system', () => {
 
   const TestHealth = { hp: new Float32Array(MAX_ENTITIES) };
   const TestScore = { points: new Float32Array(MAX_ENTITIES) };
-  const TestPos = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES), z: new Float32Array(MAX_ENTITIES) };
+  const TestPos = {
+    x: new Float32Array(MAX_ENTITIES),
+    y: new Float32Array(MAX_ENTITIES),
+    z: new Float32Array(MAX_ENTITIES),
+  };
 
   beforeEach(() => {
     state = new State();

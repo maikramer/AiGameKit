@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, XMLParser, parseXMLToEntities } from 'vibegame';
@@ -14,13 +13,36 @@ describe('GameObject Container Syntax', () => {
 
     state = new State();
 
-    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES), scaleX: new Float32Array(MAX_ENTITIES), scaleY: new Float32Array(MAX_ENTITIES), scaleZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      posX: new Float32Array(MAX_ENTITIES),
+      posY: new Float32Array(MAX_ENTITIES),
+      posZ: new Float32Array(MAX_ENTITIES),
+      scaleX: new Float32Array(MAX_ENTITIES),
+      scaleY: new Float32Array(MAX_ENTITIES),
+      scaleZ: new Float32Array(MAX_ENTITIES),
+    };
     const Parent = { entity: new Int32Array(MAX_ENTITIES) };
-    const Rigidbody = { type: new Int8Array(MAX_ENTITIES), mass: new Float32Array(MAX_ENTITIES) };
-    const Collider = { shape: new Int8Array(MAX_ENTITIES), radius: new Float32Array(MAX_ENTITIES), height: new Float32Array(MAX_ENTITIES) };
-    const MeshRenderer = { visible: new Uint8Array(MAX_ENTITIES), shape: new Int8Array(MAX_ENTITIES) };
-    const PointLight = { intensity: new Float32Array(MAX_ENTITIES), colorR: new Float32Array(MAX_ENTITIES) };
-    const AudioSource = { volume: new Float32Array(MAX_ENTITIES), clipPath: new Float32Array(MAX_ENTITIES) };
+    const Rigidbody = {
+      type: new Int8Array(MAX_ENTITIES),
+      mass: new Float32Array(MAX_ENTITIES),
+    };
+    const Collider = {
+      shape: new Int8Array(MAX_ENTITIES),
+      radius: new Float32Array(MAX_ENTITIES),
+      height: new Float32Array(MAX_ENTITIES),
+    };
+    const MeshRenderer = {
+      visible: new Uint8Array(MAX_ENTITIES),
+      shape: new Int8Array(MAX_ENTITIES),
+    };
+    const PointLight = {
+      intensity: new Float32Array(MAX_ENTITIES),
+      colorR: new Float32Array(MAX_ENTITIES),
+    };
+    const AudioSource = {
+      volume: new Float32Array(MAX_ENTITIES),
+      clipPath: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerComponent('parent', Parent);

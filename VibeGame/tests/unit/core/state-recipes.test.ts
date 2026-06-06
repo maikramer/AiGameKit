@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 
@@ -18,7 +17,11 @@ describe('State Recipe Methods', () => {
   });
 
   it('should create entity with attributes using state.createFromRecipe', () => {
-    const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
+    const Transform = {
+      posX: new Float32Array(MAX_ENTITIES),
+      posY: new Float32Array(MAX_ENTITIES),
+      posZ: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('transform', Transform);
     state.registerRecipe({
@@ -37,7 +40,10 @@ describe('State Recipe Methods', () => {
   });
 
   it('should create entity with mixed attributes and overrides', () => {
-    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
+    const Health = {
+      current: new Float32Array(MAX_ENTITIES),
+      max: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('health', Health);
     state.registerRecipe({

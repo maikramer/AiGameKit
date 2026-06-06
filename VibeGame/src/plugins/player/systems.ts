@@ -132,12 +132,19 @@ export const PlayerMovementSystem: System = {
         }
       }
 
-      const newRotation = updateRotation(entity, inputVector, deltaTime, {
-        rotX: Rigidbody.rotX[entity],
-        rotY: Rigidbody.rotY[entity],
-        rotZ: Rigidbody.rotZ[entity],
-        rotW: Rigidbody.rotW[entity],
-      }, cameraYaw, state.world);
+      const newRotation = updateRotation(
+        entity,
+        inputVector,
+        deltaTime,
+        {
+          rotX: Rigidbody.rotX[entity],
+          rotY: Rigidbody.rotY[entity],
+          rotZ: Rigidbody.rotZ[entity],
+          rotW: Rigidbody.rotW[entity],
+        },
+        cameraYaw,
+        state.world
+      );
 
       Rigidbody.rotX[entity] = newRotation.x;
       Rigidbody.rotY[entity] = newRotation.y;

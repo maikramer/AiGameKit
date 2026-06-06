@@ -89,7 +89,15 @@ function findClipFuzzy(animator: GltfAnimator, ...keywords: string[]): string {
 
   // Strategy 2: check for common animation naming variants
   const variants: Record<string, string[]> = {
-    walk: ['locomotion', 'motion', 'move', 'jog', 'stride', 'walk_cycle', 'walking'],
+    walk: [
+      'locomotion',
+      'motion',
+      'move',
+      'jog',
+      'stride',
+      'walk_cycle',
+      'walking',
+    ],
     run: ['sprint', 'fast', 'run_cycle', 'running'],
     jump: ['leap', 'hop', 'vault', 'jump_start', 'jump_up', 'jumping'],
     fall: ['airborne', 'descent', 'falling', 'drop', 'idle_fall'],
@@ -121,9 +129,15 @@ function resolveLocomotion(animator: GltfAnimator, eid: number): Locomotion {
   const byIndex = (field: number): string =>
     field > 0 && field < names.length ? names[field] : '';
   return {
-    idle: byIndex(PlayerGltfConfig.idleClipIndex[eid]) || findClipFuzzy(animator, 'idle', 'breathe'),
-    walk: byIndex(PlayerGltfConfig.walkClipIndex[eid]) || findClipFuzzy(animator, 'walk'),
-    run: byIndex(PlayerGltfConfig.runClipIndex[eid]) || findClipFuzzy(animator, 'run'),
+    idle:
+      byIndex(PlayerGltfConfig.idleClipIndex[eid]) ||
+      findClipFuzzy(animator, 'idle', 'breathe'),
+    walk:
+      byIndex(PlayerGltfConfig.walkClipIndex[eid]) ||
+      findClipFuzzy(animator, 'walk'),
+    run:
+      byIndex(PlayerGltfConfig.runClipIndex[eid]) ||
+      findClipFuzzy(animator, 'run'),
     jump: findClipFuzzy(animator, 'jump'),
     fall: findClipFuzzy(animator, 'fall'),
   };
@@ -144,14 +158,16 @@ function meleeHit(state: State, attacker: number): void {
 
   const ax = WorldTransform.posX[attacker];
   const az = WorldTransform.posZ[attacker];
-  _fwd.set(0, 0, 1).applyQuaternion(
-    _q.set(
-      WorldTransform.rotX[attacker],
-      WorldTransform.rotY[attacker],
-      WorldTransform.rotZ[attacker],
-      WorldTransform.rotW[attacker]
-    )
-  );
+  _fwd
+    .set(0, 0, 1)
+    .applyQuaternion(
+      _q.set(
+        WorldTransform.rotX[attacker],
+        WorldTransform.rotY[attacker],
+        WorldTransform.rotZ[attacker],
+        WorldTransform.rotW[attacker]
+      )
+    );
 
   for (const target of meleeQuery(state.world)) {
     if (target === attacker) continue;
@@ -161,7 +177,10 @@ function meleeHit(state: State, attacker: number): void {
     if (dist > ATTACK_RANGE || dist < 0.001) continue;
     // in front (within ~70°)
     if ((dx * _fwd.x + dz * _fwd.z) / dist < 0.35) continue;
-    Health.current[target] = Math.max(0, Health.current[target] - ATTACK_DAMAGE);
+    Health.current[target] = Math.max(
+      0,
+      Health.current[target] - ATTACK_DAMAGE
+    );
   }
 }
 
@@ -231,7 +250,11 @@ export const PlayerGltfSetupSystem: System = {
   },
 };
 
-const playerGltfAnimQuery = defineQuery([PlayerController, PlayerGltfConfig, InputState]);
+const playerGltfAnimQuery = defineQuery([
+  PlayerController,
+  PlayerGltfConfig,
+  InputState,
+]);
 
 function ensureDebugCapsule(_state: State): LineSegments | null {
   return null;
@@ -266,7 +289,8 @@ export const PlayerGltfAnimStateSystem: System = {
       // Attack: rising edge of primary action (left click) while grounded plays
       // the skeletal attack clip as a one-shot override (locks locomotion until
       // it finishes), and lands a melee hit.
-      const primary = InputState.primaryAction[eid] || InputState.leftMouse[eid];
+      const primary =
+        InputState.primaryAction[eid] || InputState.leftMouse[eid];
       const wasPrimary = prevPrimary.get(eid) ?? 0;
       prevPrimary.set(eid, primary);
       if (primary && !wasPrimary && grounded && !animator.overrideLock) {

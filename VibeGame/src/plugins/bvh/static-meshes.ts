@@ -3,10 +3,7 @@ import { defineQuery, type State } from '../../core';
 import { forEachGltfRootGroup } from '../gltf-xml/group-registry';
 import { BodyType, Rigidbody } from '../physics/components';
 import { WorldTransform } from '../transforms';
-import {
-  registerBvhMesh,
-  unregisterBvhForEntity,
-} from './utils';
+import { registerBvhMesh, unregisterBvhForEntity } from './utils';
 
 const rigidbodyQuery = defineQuery([Rigidbody, WorldTransform]);
 
@@ -27,7 +24,9 @@ const _mat = new THREE.Matrix4();
  * Bake all triangles below `root` into a single BufferGeometry with vertices
  * already in world space (multiplied by the local matrix chain).
  */
-function bakeObject3DGeometry(root: THREE.Object3D): THREE.BufferGeometry | null {
+function bakeObject3DGeometry(
+  root: THREE.Object3D
+): THREE.BufferGeometry | null {
   const meshes: THREE.Mesh[] = [];
   root.traverse((obj) => {
     const m = obj as THREE.Mesh;
@@ -40,7 +39,9 @@ function bakeObject3DGeometry(root: THREE.Object3D): THREE.BufferGeometry | null
   let totalTris = 0;
   for (const m of meshes) {
     const g = m.geometry;
-    const triCount = g.index ? g.index.count / 3 : g.attributes.position.count / 3;
+    const triCount = g.index
+      ? g.index.count / 3
+      : g.attributes.position.count / 3;
     totalTris += triCount;
   }
   if (totalTris === 0) return null;

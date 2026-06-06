@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { JSDOM } from 'jsdom';
 import { State, TIME_CONSTANTS } from 'vibegame';
@@ -261,7 +260,10 @@ describe('GameBuilder', () => {
   });
 
   it('should handle complex plugin with all features', async () => {
-    const ComplexComponent = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES) };
+    const ComplexComponent = {
+      x: new Float32Array(MAX_ENTITIES),
+      y: new Float32Array(MAX_ENTITIES),
+    };
 
     let systemSetupCalled = false;
     let systemUpdateCalled = false;

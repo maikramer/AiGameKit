@@ -45,10 +45,7 @@ export const HudBuildSystem: System = {
     const texts = getTexts(state);
     for (const eid of hudQuery(state.world)) {
       if (HudPanel.built[eid]) {
-        if (
-          state.hasComponent(eid, I18nText) &&
-          I18nText.resolved[eid]
-        ) {
+        if (state.hasComponent(eid, I18nText) && I18nText.resolved[eid]) {
           const text = texts.get(eid);
           if (text) {
             text.set({ content: getStringAt(state, HudPanel.textIndex[eid]) });

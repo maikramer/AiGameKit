@@ -114,7 +114,10 @@ describe('Plugin System', () => {
   });
 
   it('should register plugin with complete config', () => {
-    const Health = { current: new Float32Array(MAX_ENTITIES), max: new Float32Array(MAX_ENTITIES) };
+    const Health = {
+      current: new Float32Array(MAX_ENTITIES),
+      max: new Float32Array(MAX_ENTITIES),
+    };
 
     const plugin: Plugin = {
       components: { health: Health },

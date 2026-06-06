@@ -3,11 +3,7 @@ import type { State } from '../../core';
 import { Terrain } from '../terrain/components';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import { getTerrainContext } from '../terrain/utils';
-import {
-  getBvhContext,
-  registerBvhMesh,
-  unregisterBvhMesh,
-} from './utils';
+import { getBvhContext, registerBvhMesh, unregisterBvhMesh } from './utils';
 
 /**
  * Build a single tessellated PlaneGeometry for a terrain entity with vertex

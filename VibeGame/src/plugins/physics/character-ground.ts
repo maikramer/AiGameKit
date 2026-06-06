@@ -8,9 +8,10 @@ export function getCharacterFeetY(
   entity: number,
   bodyY: number
 ): number {
-  const halfHeight = Collider.shape[entity] === 2
-    ? Collider.height[entity] / 2
-    : Collider.sizeY[entity] / 2;
+  const halfHeight =
+    Collider.shape[entity] === 2
+      ? Collider.height[entity] / 2
+      : Collider.sizeY[entity] / 2;
   const offsetY = Collider.posOffsetY[entity] || 0;
   return bodyY - halfHeight + offsetY;
 }
@@ -20,9 +21,10 @@ export function getBodyYForFeetAt(
   entity: number,
   feetY: number
 ): number {
-  const halfHeight = Collider.shape[entity] === 2
-    ? Collider.height[entity] / 2
-    : Collider.sizeY[entity] / 2;
+  const halfHeight =
+    Collider.shape[entity] === 2
+      ? Collider.height[entity] / 2
+      : Collider.sizeY[entity] / 2;
   const offsetY = Collider.posOffsetY[entity] || 0;
   return feetY + halfHeight - offsetY;
 }

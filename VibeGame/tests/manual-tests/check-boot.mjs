@@ -9,12 +9,18 @@ await withGame(async (page, { logs }) => {
   let ok = true;
   ok &= report('canvas present', !!canvas);
   ok &= report('__heroDebug available', !!h, h ? '' : 'example bridge missing');
-  ok &= report('hero has rapier body', h && h.bodyType >= 0, `bodyType=${h?.bodyType}`);
-
-  const real = errorsFrom(logs).filter(
-    (l) => !/rapier/i.test(l.text)
+  ok &= report(
+    'hero has rapier body',
+    h && h.bodyType >= 0,
+    `bodyType=${h?.bodyType}`
   );
-  ok &= report('no real console errors', real.length === 0, JSON.stringify(real));
+
+  const real = errorsFrom(logs).filter((l) => !/rapier/i.test(l.text));
+  ok &= report(
+    'no real console errors',
+    real.length === 0,
+    JSON.stringify(real)
+  );
 
   process.exit(ok ? 0 : 1);
 });

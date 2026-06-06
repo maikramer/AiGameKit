@@ -318,9 +318,12 @@ export const TerrainSpawnSystem: System = {
                 halfWidth * scale
               );
               const yaw = resolveYaw(rand, spec);
+              // partialAlignEuler bakes the yaw in (about the trunk). When not
+              // aligning to terrain, keep the yaw as a plain +Y rotation so it
+              // isn't silently dropped by addInstance.
               const alignEuler: [number, number, number] = spec.alignToTerrain
                 ? partialAlignEuler(s.normal, yaw, s.slopeAngleRad)
-                : [0, 0, 0];
+                : [0, yaw, 0];
               positions.push({
                 x: wx,
                 y: s.worldY - sink,

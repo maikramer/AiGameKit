@@ -1,4 +1,3 @@
-
 import { beforeEach, describe, expect, it } from 'bun:test';
 import { State } from 'vibegame';
 import { fromEuler } from 'vibegame';
@@ -38,9 +37,15 @@ describe('Recipe Core', () => {
   });
 
   it('should create entity with multiple components', () => {
-    const Position = { x: new Float32Array(MAX_ENTITIES), y: new Float32Array(MAX_ENTITIES) };
+    const Position = {
+      x: new Float32Array(MAX_ENTITIES),
+      y: new Float32Array(MAX_ENTITIES),
+    };
 
-    const Velocity = { dx: new Float32Array(MAX_ENTITIES), dy: new Float32Array(MAX_ENTITIES) };
+    const Velocity = {
+      dx: new Float32Array(MAX_ENTITIES),
+      dy: new Float32Array(MAX_ENTITIES),
+    };
 
     state.registerComponent('position', Position);
     state.registerComponent('velocity', Velocity);
@@ -70,7 +75,10 @@ describe('Recipe Core', () => {
 
   describe('Recipe Shorthands', () => {
     it('should expand shorthands to component properties', () => {
-      const MeshRenderer = { shape: new Uint8Array(MAX_ENTITIES), color: new Uint32Array(MAX_ENTITIES) };
+      const MeshRenderer = {
+        shape: new Uint8Array(MAX_ENTITIES),
+        color: new Uint32Array(MAX_ENTITIES),
+      };
 
       const Collider = { shape: new Uint8Array(MAX_ENTITIES) };
 
@@ -140,9 +148,17 @@ describe('Recipe Core', () => {
     });
 
     it('should apply component-level shorthands', () => {
-      const MeshRenderer = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES) };
+      const MeshRenderer = {
+        sizeX: new Float32Array(MAX_ENTITIES),
+        sizeY: new Float32Array(MAX_ENTITIES),
+        sizeZ: new Float32Array(MAX_ENTITIES),
+      };
 
-      const Collider = { sizeX: new Float32Array(MAX_ENTITIES), sizeY: new Float32Array(MAX_ENTITIES), sizeZ: new Float32Array(MAX_ENTITIES) };
+      const Collider = {
+        sizeX: new Float32Array(MAX_ENTITIES),
+        sizeY: new Float32Array(MAX_ENTITIES),
+        sizeZ: new Float32Array(MAX_ENTITIES),
+      };
 
       const plugin = {
         components: {
@@ -186,7 +202,11 @@ describe('Recipe Core', () => {
 
   describe('JavaScript API', () => {
     it('should create entity with position and color attributes', () => {
-      const Transform = { posX: new Float32Array(MAX_ENTITIES), posY: new Float32Array(MAX_ENTITIES), posZ: new Float32Array(MAX_ENTITIES) };
+      const Transform = {
+        posX: new Float32Array(MAX_ENTITIES),
+        posY: new Float32Array(MAX_ENTITIES),
+        posZ: new Float32Array(MAX_ENTITIES),
+      };
 
       const MeshRenderer = { color: new Uint32Array(MAX_ENTITIES) };
 

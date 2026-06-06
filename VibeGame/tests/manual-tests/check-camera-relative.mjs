@@ -34,7 +34,7 @@ await withGame(async (page) => {
   ok &= report(
     'W heading changed after steering with D',
     diff > 0.15,
-    `Δheading ${(diff * 180 / Math.PI).toFixed(0)}°`
+    `Δheading ${((diff * 180) / Math.PI).toFixed(0)}°`
   );
 
   process.exit(ok ? 0 : 1);
