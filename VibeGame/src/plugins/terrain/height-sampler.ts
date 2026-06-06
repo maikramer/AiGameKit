@@ -61,7 +61,7 @@ interface DecodedImage {
  * fails to decode and the terrain stays flat.
  */
 async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
-  if (typeof createImageBitmap === "function") {
+  if (typeof createImageBitmap === 'function') {
     const bitmap = await createImageBitmap(blob);
     return {
       width: bitmap.width,
@@ -71,20 +71,22 @@ async function decodeImageBlob(blob: Blob): Promise<DecodedImage> {
     };
   }
 
-  if (typeof Image === "undefined" || typeof URL === "undefined") {
-    throw new Error("No image decoder available (no createImageBitmap / Image)");
+  if (typeof Image === 'undefined' || typeof URL === 'undefined') {
+    throw new Error(
+      'No image decoder available (no createImageBitmap / Image)'
+    );
   }
 
   const objectUrl = URL.createObjectURL(blob);
   try {
     const img = new Image();
     img.src = objectUrl;
-    if (typeof img.decode === "function") {
+    if (typeof img.decode === 'function') {
       await img.decode();
     } else {
       await new Promise<void>((resolve, reject) => {
         img.onload = () => resolve();
-        img.onerror = () => reject(new Error("Image load failed"));
+        img.onerror = () => reject(new Error('Image load failed'));
       });
     }
     return {
@@ -123,20 +125,22 @@ export async function loadHeightmapFromUrl(
   try {
     image = await decodeImageBlob(blob);
   } catch (e) {
-    throw new Error(`Heightmap decode failed (${blob.type}, ${blob.size}B): ${e}`);
+    throw new Error(
+      `Heightmap decode failed (${blob.type}, ${blob.size}B): ${e}`
+    );
   }
 
   const canvas =
-    typeof OffscreenCanvas !== "undefined"
+    typeof OffscreenCanvas !== 'undefined'
       ? new OffscreenCanvas(image.width, image.height)
       : (() => {
-          const c = document.createElement("canvas");
+          const c = document.createElement('canvas');
           c.width = image.width;
           c.height = image.height;
           return c;
         })();
 
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext('2d')!;
   ctx.drawImage(image.source as CanvasImageSource, 0, 0);
   image.close();
 
@@ -157,7 +161,11 @@ export async function loadHeightmapFromUrl(
 }
 
 /** Bilinear amplitude in [0,1] at normalized uv; 0 for a flat sampler. */
-function sampleNormalized(sampler: HeightSampler, u: number, v: number): number {
+function sampleNormalized(
+  sampler: HeightSampler,
+  u: number,
+  v: number
+): number {
   const { data, width, height } = sampler;
   if (!data || width < 2 || height < 2) return 0;
 

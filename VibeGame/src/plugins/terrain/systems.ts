@@ -43,7 +43,10 @@ const chunkQuery = defineQuery([TerrainChunk]);
 const debugQuery = defineQuery([Terrain, TerrainDebugInfo]);
 const mainCameraQuery = defineQuery([MainCamera, WorldTransform]);
 
-function fieldWorldOffset(state: State, entity: number): {
+function fieldWorldOffset(
+  state: State,
+  entity: number
+): {
   x: number;
   y: number;
   z: number;
@@ -110,7 +113,11 @@ export const TerrainFieldBootstrapSystem: System = {
           .then((imgData) => {
             const data = context.get(field);
             if (!data) return;
-            data.sampler = createHeightmapSampler(worldSize, maxHeight, imgData);
+            data.sampler = createHeightmapSampler(
+              worldSize,
+              maxHeight,
+              imgData
+            );
             for (const chunk of data.chunks) {
               TerrainChunk.meshDirty[chunk] = 1;
             }
@@ -125,7 +132,9 @@ export const TerrainFieldBootstrapSystem: System = {
             fireHeightmapReloadCallbacks(state);
           })
           .catch((err) => {
-            console.error(`Heightmap load failed: ${heightmapUrl} — ${err instanceof Error ? err.message : err}`);
+            console.error(
+              `Heightmap load failed: ${heightmapUrl} — ${err instanceof Error ? err.message : err}`
+            );
           });
       }
     }
@@ -193,13 +202,21 @@ export const TerrainLodSelectSystem: System = {
       if (
         last &&
         data.chunks.size > 0 &&
-        Math.hypot(localCamX - last.x, localCamZ - last.z) < LOD_RESELECT_DISTANCE
+        Math.hypot(localCamX - last.x, localCamZ - last.z) <
+          LOD_RESELECT_DISTANCE
       ) {
         continue;
       }
       _lastLodCam.set(fieldEntity, { x: localCamX, z: localCamZ });
 
-      const desired = selectChunks(worldSize, levels, ratio, hysteresis, localCamX, localCamZ);
+      const desired = selectChunks(
+        worldSize,
+        levels,
+        ratio,
+        hysteresis,
+        localCamX,
+        localCamZ
+      );
 
       const desiredKeys = new Map<string, (typeof desired)[number]>();
       for (const desc of desired) {
@@ -287,10 +304,13 @@ export const TerrainMeshSystem: System = {
         mesh.geometry = geometry;
       } else {
         let material = _sharedTerrainMaterials.get(field);
-        if (!material || material.wireframe !== (Terrain.wireframe[field] === 1)
-            || material.color.getHex() !== Terrain.baseColor[field]
-            || material.roughness !== Terrain.roughness[field]
-            || material.metalness !== Terrain.metalness[field]) {
+        if (
+          !material ||
+          material.wireframe !== (Terrain.wireframe[field] === 1) ||
+          material.color.getHex() !== Terrain.baseColor[field] ||
+          material.roughness !== Terrain.roughness[field] ||
+          material.metalness !== Terrain.metalness[field]
+        ) {
           if (material) material.dispose();
           material = new THREE.MeshStandardMaterial({
             color: Terrain.baseColor[field],
@@ -323,23 +343,25 @@ export const TerrainMeshSystem: System = {
     _heightmapRetryFrame++;
     const _heightmapRetryInterval = 60; // retry every 60 frames (~1s at 60fps)
     if (_heightmapRetryFrame % _heightmapRetryInterval === 0) {
-    for (const [entity, data] of context) {
-      if (data.sampler.data !== null || !data.heightmapUrl) continue;
-      loadHeightmapFromUrl(data.heightmapUrl)
-        .then((imgData) => {
-          data.sampler = createHeightmapSampler(
-            Terrain.worldSize[entity],
-            Terrain.maxHeight[entity],
-            imgData
-          );
-          for (const chunk of data.chunks) {
-            TerrainChunk.meshDirty[chunk] = 1;
-          }
-        })
-        .catch((err) => {
-          console.error(`Heightmap retry failed: ${data.heightmapUrl} — ${err instanceof Error ? err.message : err}`);
-        });
-    }
+      for (const [entity, data] of context) {
+        if (data.sampler.data !== null || !data.heightmapUrl) continue;
+        loadHeightmapFromUrl(data.heightmapUrl)
+          .then((imgData) => {
+            data.sampler = createHeightmapSampler(
+              Terrain.worldSize[entity],
+              Terrain.maxHeight[entity],
+              imgData
+            );
+            for (const chunk of data.chunks) {
+              TerrainChunk.meshDirty[chunk] = 1;
+            }
+          })
+          .catch((err) => {
+            console.error(
+              `Heightmap retry failed: ${data.heightmapUrl} — ${err instanceof Error ? err.message : err}`
+            );
+          });
+      }
     }
   },
 };

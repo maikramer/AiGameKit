@@ -17,12 +17,12 @@ export interface TerrainEntityData {
   worldOffset: { x: number; y: number; z: number };
   lastWireframe: number;
   lastShowChunkBorders: number;
-  physicsBody: import("@dimforge/rapier3d-compat").RigidBody | null;
-  physicsCollider: import("@dimforge/rapier3d-compat").Collider | null;
+  physicsBody: import('@dimforge/rapier3d-compat').RigidBody | null;
+  physicsCollider: import('@dimforge/rapier3d-compat').Collider | null;
   // One Rapier heightfield body per visual chunk entity, sampled at the chunk's
   // mesh resolution so the collider surface matches what the player sees. Keyed
   // by chunk entity id; created/removed as LOD chunks come and go.
-  chunkColliders: Map<number, import("@dimforge/rapier3d-compat").RigidBody>;
+  chunkColliders: Map<number, import('@dimforge/rapier3d-compat').RigidBody>;
 }
 
 const stateToTerrainContext = new WeakMap<
@@ -129,5 +129,3 @@ export function getTerrainTextureUrl(
 ): string | undefined {
   return textureUrls.get(state)?.get(entity);
 }
-
-

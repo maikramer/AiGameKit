@@ -38,7 +38,7 @@ function traverse(
   _hysteresis: number,
   camX: number,
   camZ: number,
-  out: ChunkDesc[],
+  out: ChunkDesc[]
 ): void {
   const halfSize = size * 0.5;
   const dx = camX - cx;
@@ -49,10 +49,54 @@ function traverse(
 
   if (level < maxLevels - 1 && dist < splitDist) {
     const quarter = halfSize * 0.5;
-    traverse(cx - quarter, cz - quarter, halfSize, level + 1, maxLevels, ratio, _hysteresis, camX, camZ, out);
-    traverse(cx + quarter, cz - quarter, halfSize, level + 1, maxLevels, ratio, _hysteresis, camX, camZ, out);
-    traverse(cx - quarter, cz + quarter, halfSize, level + 1, maxLevels, ratio, _hysteresis, camX, camZ, out);
-    traverse(cx + quarter, cz + quarter, halfSize, level + 1, maxLevels, ratio, _hysteresis, camX, camZ, out);
+    traverse(
+      cx - quarter,
+      cz - quarter,
+      halfSize,
+      level + 1,
+      maxLevels,
+      ratio,
+      _hysteresis,
+      camX,
+      camZ,
+      out
+    );
+    traverse(
+      cx + quarter,
+      cz - quarter,
+      halfSize,
+      level + 1,
+      maxLevels,
+      ratio,
+      _hysteresis,
+      camX,
+      camZ,
+      out
+    );
+    traverse(
+      cx - quarter,
+      cz + quarter,
+      halfSize,
+      level + 1,
+      maxLevels,
+      ratio,
+      _hysteresis,
+      camX,
+      camZ,
+      out
+    );
+    traverse(
+      cx + quarter,
+      cz + quarter,
+      halfSize,
+      level + 1,
+      maxLevels,
+      ratio,
+      _hysteresis,
+      camX,
+      camZ,
+      out
+    );
     return;
   }
 
@@ -83,7 +127,7 @@ export function selectChunks(
   ratio: number,
   hysteresis: number,
   camX: number,
-  camZ: number,
+  camZ: number
 ): ChunkDesc[] {
   const result: ChunkDesc[] = [];
   traverse(0, 0, worldSize, 0, levels, ratio, hysteresis, camX, camZ, result);
@@ -102,6 +146,9 @@ export function chunkKey(desc: ChunkDesc): string {
  * Compute the mesh resolution for a given LOD level.
  * Halves per level with a floor of 4.
  */
-export function resolutionForLevel(baseResolution: number, level: number): number {
+export function resolutionForLevel(
+  baseResolution: number,
+  level: number
+): number {
   return Math.max(4, baseResolution >> level);
 }
