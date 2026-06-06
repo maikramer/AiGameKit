@@ -15,7 +15,7 @@ const terrainLodPath = path.join(
 
 export default defineConfig({
   resolve: {
-    dedupe: ['three', 'three/webgpu', 'three/tsl'],
+    dedupe: ['three'],
     alias: {
       vibegame: path.join(vibegameRoot, 'src/index.ts'),
       'vibegame/vite': path.join(vibegameRoot, 'src/vite/index.ts'),

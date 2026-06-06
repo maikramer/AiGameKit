@@ -117,17 +117,14 @@ const HeroGroundSnapSystem: System = {
   },
 };
 
-// Live post-processing toggles (keys 1–7) so effects can be tuned per-machine —
+// Live post-processing toggles (keys 1–4) so effects can be tuned per-machine —
 // flipping a field and dropping context.postProcessing rebuilds the pipeline.
 const postfxQuery = defineQuery([Postprocessing]);
 const POSTFX_KEYS: Array<[string, string, string]> = [
   ['Digit1', 'bloom', 'Bloom'],
-  ['Digit2', 'gtao', 'GTAO (AO)'],
-  ['Digit3', 'ssr', 'SSR'],
-  ['Digit4', 'dof', 'Depth of Field'],
-  ['Digit5', 'chromaticAberration', 'Chromatic Aberration'],
-  ['Digit6', 'vignette', 'Vignette'],
-  ['Digit7', 'fxaa', 'FXAA'],
+  ['Digit2', 'chromaticAberration', 'Chromatic Aberration'],
+  ['Digit3', 'vignette', 'Vignette'],
+  ['Digit4', 'fxaa', 'FXAA'],
 ];
 const postfxDebounce = new Set<string>();
 
@@ -168,7 +165,7 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT  [1-7] post-fx',
+    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT  [1-4] post-fx',
 };
 
 const dictPT: Record<string, string> = {
@@ -187,7 +184,7 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] girar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT  [1-7] pós-fx',
+    '[W/S] mover  [A/D] girar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT  [1-4] pós-fx',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;

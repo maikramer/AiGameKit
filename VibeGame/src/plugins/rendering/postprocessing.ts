@@ -1,11 +1,11 @@
 import * as THREE from "three";
-import { EffectComposer } from "three-stdlib/postprocessing/EffectComposer";
-import { RenderPass } from "three-stdlib/postprocessing/RenderPass";
-import { UnrealBloomPass } from "three-stdlib/postprocessing/UnrealBloomPass";
-import { ShaderPass } from "three-stdlib/postprocessing/ShaderPass";
-import { SMAAPass } from "three-stdlib/postprocessing/SMAAPass";
-import { FXAAShader } from "three-stdlib/shaders/FXAAShader";
-import { GammaCorrectionShader } from "three-stdlib/shaders/GammaCorrectionShader";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { SMAAPass } from "three/examples/jsm/postprocessing/SMAAPass.js";
+import { FXAAShader } from "three/examples/jsm/shaders/FXAAShader.js";
+import { GammaCorrectionShader } from "three/examples/jsm/shaders/GammaCorrectionShader.js";
 
 export const AAMode = { OFF: 0, FXAA: 1, SMAA: 2 } as const;
 
@@ -128,7 +128,7 @@ export function buildPostProcessing(
     fxaaPass.uniforms["resolution"].value.set(1 / size.x, 1 / size.y);
     composer.addPass(fxaaPass);
   } else if (config.aa === AAMode.SMAA) {
-    composer.addPass(new SMAAPass(size.x, size.y));
+    composer.addPass(new SMAAPass());
   }
 
   const gammaPass = new ShaderPass(GammaCorrectionShader);
