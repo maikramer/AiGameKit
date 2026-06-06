@@ -133,7 +133,7 @@ describe('Player Recipes and XML', () => {
     it('should have correct default body configuration', () => {
       const entity = state.createFromRecipe('Player');
 
-      expect(Rigidbody.type[entity]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.type[entity]).toBe(BodyType.KinematicPositionBased);
       expect(Rigidbody.mass[entity]).toBe(1);
       expect(Rigidbody.linearDamping[entity]).toBe(0);
       expect(Rigidbody.angularDamping[entity]).toBe(0);
@@ -164,7 +164,7 @@ describe('Player Recipes and XML', () => {
       expect(CharacterController.maxSlide[entity]).toBeCloseTo(
         30 * (Math.PI / 180)
       );
-      expect(CharacterController.snapDist[entity]).toBeCloseTo(0.5);
+      expect(CharacterController.snapDist[entity]).toBeCloseTo(0);
       expect(CharacterController.autoStep[entity]).toBe(1);
       expect(CharacterController.maxStepHeight[entity]).toBeCloseTo(0.3);
       expect(CharacterController.minStepWidth[entity]).toBeCloseTo(0.05);

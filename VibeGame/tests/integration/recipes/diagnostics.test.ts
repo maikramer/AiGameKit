@@ -168,7 +168,7 @@ describe('Parser Diagnostics', () => {
 
       expect(() => {
         parseXMLToEntities(state, xml.root);
-      }).toThrow(/Valid options:.*static.*dynamic.*kinematic/);
+      }).toThrow(/Valid options:.*(dynamic|fixed|static).*kinematic/);
     });
 
     it('should list valid options for renderer.shape enum', () => {

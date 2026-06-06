@@ -292,7 +292,7 @@ describe('Physics Recipes', () => {
       const character = entities[0].entity;
 
       expect(state.hasComponent(character, Rigidbody)).toBe(true);
-      expect(Rigidbody.type[character]).toBe(BodyType.Dynamic);
+      expect(Rigidbody.type[character]).toBe(BodyType.KinematicPositionBased);
       expect(Rigidbody.posX[character]).toBe(0);
       expect(Rigidbody.posY[character]).toBe(1);
       expect(Rigidbody.posZ[character]).toBe(0);

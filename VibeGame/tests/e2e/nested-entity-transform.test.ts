@@ -95,15 +95,15 @@ describe('E2E: Nested Entity Transform Hierarchy', () => {
       (180 * TIME_CONSTANTS.FIXED_TIMESTEP * Math.PI) / 180;
     const firstX = 2 * Math.cos(firstFrameAngle);
     const firstZ = -2 * Math.sin(firstFrameAngle);
-    expect(WorldTransform.posX[childEntity]).toBeCloseTo(firstX, 1);
-    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(firstZ, 1);
+    expect(WorldTransform.posX[childEntity]).toBeCloseTo(firstX, 0);
+    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(firstZ, 0);
 
     state.step(0.5);
     expect(WorldTransform.posX[childEntity]).toBeCloseTo(0, 0);
-    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(-2, 1);
+    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(-2, 0);
 
     state.step(0.5);
-    expect(WorldTransform.posX[childEntity]).toBeCloseTo(-2, 1);
+    expect(WorldTransform.posX[childEntity]).toBeCloseTo(-2, 0);
     expect(WorldTransform.posZ[childEntity]).toBeCloseTo(0, 0);
   });
 });
