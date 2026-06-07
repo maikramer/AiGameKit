@@ -161,6 +161,47 @@ describe('GltfAnimator locomotion', () => {
     expect(animator.activeClipName).toBe('idle');
   });
 
+  it('resolves turn-in-place clips from the locomotion set', () => {
+    const anim = makeAnimator([
+      'idle',
+      'walk',
+      'run',
+      'Animator3D_TurnLeft',
+      'Animator3D_TurnRight',
+    ]);
+    anim.registerLocomotionSet('default', {
+      idle: 'idle',
+      walk: 'walk',
+      run: 'run',
+      turnLeft: 'Animator3D_TurnLeft',
+      turnRight: 'Animator3D_TurnRight',
+    });
+
+    anim.playLocomotion('turnLeft');
+    expect(anim.activeClipName).toBe('Animator3D_TurnLeft');
+
+    anim.playLocomotion('turnRight');
+    expect(anim.activeClipName).toBe('Animator3D_TurnRight');
+  });
+
+  it('additive turn overlay ramps in over the base and fades out', () => {
+    const anim = makeAnimator(['idle', 'walk', 'run', 'Animator3D_TurnLeft']);
+    anim.play('walk');
+
+    expect(anim.additiveOverlayWeight).toBe(0);
+
+    // Curving while walking: base stays 'walk', turn blends on top.
+    anim.setAdditive('Animator3D_TurnLeft', 1);
+    for (let i = 0; i < 20; i++) anim.update(0.1);
+    expect(anim.activeClipName).toBe('walk'); // base unchanged
+    expect(anim.additiveOverlayWeight).toBeGreaterThan(0.5);
+
+    // Stop steering: overlay fades back out.
+    anim.setAdditive('', 0);
+    for (let i = 0; i < 40; i++) anim.update(0.1);
+    expect(anim.additiveOverlayWeight).toBeLessThan(0.05);
+  });
+
   it('3-part jump triggers playJumpSequence', () => {
     animator.registerLocomotionSet('default', {
       idle: 'idle',

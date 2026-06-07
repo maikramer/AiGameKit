@@ -102,6 +102,9 @@ function findClipFuzzy(animator: GltfAnimator, ...keywords: string[]): string {
     jump: ['leap', 'hop', 'vault', 'jump_start', 'jump_up', 'jumping'],
     fall: ['airborne', 'descent', 'falling', 'drop', 'idle_fall'],
     idle: ['stand', 'rest', 'pose', 'wait', 'breath', 'idle_a', 'idle_b'],
+    turnleft: ['turn_left', 'turnleft', 'pivot_left', 'turnl'],
+    turnright: ['turn_right', 'turnright', 'pivot_right', 'turnr'],
+    back: ['walk_back', 'walkback', 'backward', 'reverse', 'back'],
   };
 
   for (const k of keywords) {
@@ -121,6 +124,9 @@ interface Locomotion {
   run: string;
   jump: string;
   fall: string;
+  turnLeft: string;
+  turnRight: string;
+  back: string;
 }
 
 /** Resolve clips by explicit index override (>0) else by name keyword (fuzzy). */
@@ -140,6 +146,9 @@ function resolveLocomotion(animator: GltfAnimator, eid: number): Locomotion {
       findClipFuzzy(animator, 'run'),
     jump: findClipFuzzy(animator, 'jump'),
     fall: findClipFuzzy(animator, 'fall'),
+    turnLeft: findClipFuzzy(animator, 'turnleft'),
+    turnRight: findClipFuzzy(animator, 'turnright'),
+    back: findClipFuzzy(animator, 'back'),
   };
 }
 
@@ -300,6 +309,7 @@ export const PlayerGltfAnimStateSystem: System = {
       }
 
       if (PlayerGltfConfig.overrideLock[eid] === 1 || animator.overrideLock) {
+        animator.setAdditive('', 0); // no turn-lean during an attack override
         animator.update(dt);
         if (state.hasComponent(eid, WorldTransform)) {
           syncTransformToRoot(eid, animator, state);
@@ -317,27 +327,40 @@ export const PlayerGltfAnimStateSystem: System = {
         });
       }
 
-      const moving =
-        Math.abs(InputState.moveX[eid]) > 0.01 ||
-        Math.abs(InputState.moveY[eid]) > 0.01;
-      const run = moving && isRunModifier();
+      // Separate translation (W/S) from steering (A/D). In third-person the
+      // heading is steered by A/D, so |moveX| alone is a turn-in-place, not a
+      // walk — keying `moving` off moveX made the hero walk-in-place while
+      // spinning. Translation drives the gait; steering plays a turn clip.
+      const moveX = InputState.moveX[eid];
+      const moveY = InputState.moveY[eid];
+      const translating = Math.abs(moveY) > 0.01;
+      const turning = Math.abs(moveX) > 0.01;
+      const run = translating && isRunModifier();
+      const airborne = !grounded && (loco.jump || loco.fall);
 
+      // --- Base locomotion layer ---
       // Airborne uses jump (ascending) / fall (descending); grounded uses gait.
-      if (!grounded && (loco.jump || loco.fall)) {
+      if (airborne) {
         const clip = vy > 0.5 ? loco.jump || loco.fall : loco.fall || loco.jump;
         if (clip && animator.activeClipName !== clip) animator.play(clip);
-      } else if (moving) {
-        const clip = run ? loco.run : loco.walk;
-        if (clip && animator.activeClipName !== clip) {
-          animator.play(clip);
-        } else if (!clip && animator.activeClipName === loco.idle) {
-          animator.setTimeScale(1.8);
-        }
+      } else if (translating) {
+        let clip = run ? loco.run : loco.walk;
+        if (moveY < 0 && loco.back) clip = loco.back; // walking backward
+        if (clip && animator.activeClipName !== clip) animator.play(clip);
+      } else if (loco.idle && animator.activeClipName !== loco.idle) {
+        animator.play(loco.idle);
+      }
+      animator.setTimeScale(1);
+
+      // --- Additive turn-lean overlay ---
+      // Steering (A/D) blends a turn clip ON TOP of the base, so curving while
+      // walking forward (W+D), or pivoting in place, both show the turn. moveX>0
+      // (D) steers right → turn-right clip.
+      if (turning && !airborne) {
+        const turnClip = moveX > 0 ? loco.turnRight : loco.turnLeft;
+        animator.setAdditive(turnClip, Math.min(1, Math.abs(moveX)));
       } else {
-        if (loco.idle && animator.activeClipName !== loco.idle) {
-          animator.play(loco.idle);
-        }
-        animator.setTimeScale(1);
+        animator.setAdditive('', 0);
       }
 
       animator.update(dt);

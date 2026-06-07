@@ -9,9 +9,11 @@
  *   // in render loop: animator.update(deltaTime);
  */
 import {
+  AdditiveAnimationBlendMode,
   AnimationAction,
   AnimationClip,
   AnimationMixer,
+  AnimationUtils,
   type Object3D,
 } from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -30,6 +32,9 @@ export interface LocomotionSet {
   walkBack?: string;
   leftWalk?: string;
   rightWalk?: string;
+  /** Turn-in-place clips, played when the heading changes without translating. */
+  turnLeft?: string;
+  turnRight?: string;
 }
 
 export class GltfAnimator {
@@ -45,6 +50,13 @@ export class GltfAnimator {
   private _overrideLock = false;
   private previousLocomotionClip = '';
   private _jumpState: 'none' | 'start' | 'loop' | 'end' = 'none';
+
+  // Additive overlay (e.g. turn-lean blended on top of locomotion).
+  private additiveClips = new Map<string, AnimationClip>();
+  private additiveAction: AnimationAction | null = null;
+  private additiveClipName = '';
+  private additiveWeight = 0;
+  private additiveTarget = 0;
 
   constructor(gltf: GLTF, options: GltfAnimatorOptions = {}) {
     this.mixer = new AnimationMixer(gltf.scene);
@@ -105,8 +117,56 @@ export class GltfAnimator {
     return nextAction;
   }
 
+  /**
+   * Blend an additive overlay clip (e.g. a turn-lean) on top of whatever the
+   * base locomotion is playing. `intensity` in [0,1]; pass an empty clip name
+   * (or 0) to fade the overlay out. The weight is smoothed in {@link update}.
+   */
+  setAdditive(clipName: string, intensity: number): void {
+    const target = Math.max(0, Math.min(1, intensity));
+    if (!clipName || target <= 0) {
+      this.additiveTarget = 0;
+      return;
+    }
+    if (clipName !== this.additiveClipName) {
+      const base = this.clips.get(clipName);
+      if (!base) {
+        this.additiveTarget = 0;
+        return;
+      }
+      if (this.additiveAction) this.additiveAction.stop();
+      let additive = this.additiveClips.get(clipName);
+      if (!additive) {
+        additive = AnimationUtils.makeClipAdditive(base.clone());
+        this.additiveClips.set(clipName, additive);
+      }
+      this.additiveAction = this.mixer.clipAction(
+        additive,
+        undefined,
+        AdditiveAnimationBlendMode
+      );
+      this.additiveAction.play();
+      this.additiveClipName = clipName;
+    }
+    this.additiveTarget = target;
+  }
+
+  /** Current smoothed weight of the additive overlay (0 when none). */
+  get additiveOverlayWeight(): number {
+    return this.additiveWeight;
+  }
+
   /** Tick the mixer. Call every frame with delta time in seconds. */
   update(deltaTime: number): void {
+    if (this.additiveAction) {
+      // Smoothly ramp the overlay weight toward its target (~6x/sec).
+      const k = Math.min(1, deltaTime * 6);
+      this.additiveWeight += (this.additiveTarget - this.additiveWeight) * k;
+      if (this.additiveWeight < 0.001 && this.additiveTarget === 0) {
+        this.additiveWeight = 0;
+      }
+      this.additiveAction.setEffectiveWeight(this.additiveWeight);
+    }
     this.mixer.update(deltaTime);
   }
 
