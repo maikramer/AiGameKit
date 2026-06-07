@@ -8,6 +8,7 @@ export const InputState = {
   lookY: new Float32Array(MAX_ENTITIES),
   scrollDelta: new Float32Array(MAX_ENTITIES),
   jump: new Uint8Array(MAX_ENTITIES),
+  sprint: new Uint8Array(MAX_ENTITIES),
   primaryAction: new Uint8Array(MAX_ENTITIES),
   secondaryAction: new Uint8Array(MAX_ENTITIES),
   leftMouse: new Uint8Array(MAX_ENTITIES),

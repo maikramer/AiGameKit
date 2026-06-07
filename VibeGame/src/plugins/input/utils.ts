@@ -71,6 +71,10 @@ export function handleKeyDown(event: KeyboardEvent): void {
       bufferedActions.jump.isPressed = true;
     }
   }
+
+  if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+    event.preventDefault();
+  }
 }
 
 export function handleKeyUp(event: KeyboardEvent): void {
@@ -306,6 +310,9 @@ export function updateInputState(eid: number, skipMouseInput = false): void {
   )
     ? 1
     : 0;
+
+  InputState.sprint[eid] =
+    inputData.keys.has('ShiftLeft') || inputData.keys.has('ShiftRight') ? 1 : 0;
 
   InputState.jumpBufferTime[eid] = bufferedActions.jump.lastPressTime;
   InputState.primaryBufferTime[eid] = bufferedActions.primary.lastPressTime;
