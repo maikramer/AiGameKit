@@ -9,7 +9,6 @@ import {
   syncEulerFromQuaternion,
 } from '../transforms';
 import { ThirdPersonCamera } from './components';
-import { getBvhSurfaceHeight } from '../bvh';
 import { getTerrainHeightAt } from '../terrain/systems';
 import { getTerrainContext } from '../terrain/utils';
 
@@ -74,22 +73,14 @@ export const ThirdPersonCameraSystem: System = {
           (desiredZ - ThirdPersonCamera.currentZ[cam]) * smoothFactor;
       }
 
-      // Terrain collision: prevent camera from clipping below ground.
-      // BVH raycast first (accurate against mesh + obstacles), fallback to
-      // analytical height sampler (covers frames before BVH is built).
+      // Terrain collision: prevent camera from clipping below ground
       const minDist = ThirdPersonCamera.minTerrainDistance[cam];
       if (minDist > 0) {
-        const camX = ThirdPersonCamera.currentX[cam];
-        const camZ = ThirdPersonCamera.currentZ[cam];
-        const camY = ThirdPersonCamera.currentY[cam];
-        let terrainY = getBvhSurfaceHeight(state, camX, camY + 100, camZ, 300);
-        if (terrainY === null) {
-          const terrainCtx = getTerrainContext(state);
-          if (terrainCtx.size > 0) {
-            terrainY = getTerrainHeightAt(state, camX, camZ);
-          }
-        }
-        if (terrainY !== null) {
+        const terrainCtx = getTerrainContext(state);
+        if (terrainCtx.size > 0) {
+          const camX = ThirdPersonCamera.currentX[cam];
+          const camZ = ThirdPersonCamera.currentZ[cam];
+          const terrainY = getTerrainHeightAt(state, camX, camZ);
           const minY = terrainY + minDist;
           if (ThirdPersonCamera.currentY[cam] < minY) {
             ThirdPersonCamera.currentY[cam] = minY;
