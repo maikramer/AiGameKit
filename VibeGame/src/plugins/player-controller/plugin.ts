@@ -18,6 +18,8 @@ export const PlayerControllerPlugin: Plugin = {
         positionSmooth: 0.08,
         mouseSensitivity: 0.003,
         minTerrainDistance: 1.0,
+        followLag: 0.18,
+        turnLag: 0.35,
       },
     },
   },

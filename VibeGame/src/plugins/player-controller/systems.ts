@@ -37,23 +37,63 @@ export const ThirdPersonCameraSystem: System = {
         continue;
       }
 
-      // Get target position
-      const targetX = WorldTransform.posX[targetEid];
-      const targetY = WorldTransform.posY[targetEid];
-      const targetZ = WorldTransform.posZ[targetEid];
+      // Raw character transform — used ONLY to drive the smoothed follow point
+      // below, never directly. This is what decouples the camera from the
+      // character: jitter in the character can't reach the view.
+      const rawTargetX = WorldTransform.posX[targetEid];
+      const rawTargetY = WorldTransform.posY[targetEid];
+      const rawTargetZ = WorldTransform.posZ[targetEid];
 
-      // Yaw is steered by the player (A/D) in PlayerMovementSystem; the camera
-      // just orbits to the configured distance/pitch around that yaw.
-
-      // Calculate desired camera position
       const dist = ThirdPersonCamera.distance[cam];
       const pitch = ThirdPersonCamera.pitch[cam];
-      const yaw = ThirdPersonCamera.yaw[cam];
+      const rawYaw = ThirdPersonCamera.yaw[cam]; // steered by A/D in PlayerMovement
       const heightOffset = ThirdPersonCamera.height[cam];
+      const followLag = Math.max(1e-4, ThirdPersonCamera.followLag[cam]);
+      const turnLag = Math.max(1e-4, ThirdPersonCamera.turnLag[cam]);
 
-      const desiredX = targetX + Math.sin(yaw) * dist * Math.cos(pitch);
-      const desiredY = targetY + heightOffset + Math.sin(pitch) * dist;
-      const desiredZ = targetZ + Math.cos(yaw) * dist * Math.cos(pitch);
+      // First frame: snap the smoothed state onto the target (no startup swoop).
+      if (ThirdPersonCamera.initialized[cam] === 0) {
+        ThirdPersonCamera.followX[cam] = rawTargetX;
+        ThirdPersonCamera.followY[cam] = rawTargetY;
+        ThirdPersonCamera.followZ[cam] = rawTargetZ;
+        ThirdPersonCamera.smoothYaw[cam] = rawYaw;
+      }
+
+      // --- Decoupled follow (frame-rate-independent low-pass) ---
+      // The follow point chases the character with a time constant, so it lags
+      // on a dash then catches up, and any per-frame character jitter is
+      // filtered out. Vertical is damped harder to swallow the step/bob bounce.
+      const aXZ = 1 - Math.exp(-dt / followLag);
+      const aY = 1 - Math.exp(-dt / (followLag * 1.8));
+      ThirdPersonCamera.followX[cam] +=
+        (rawTargetX - ThirdPersonCamera.followX[cam]) * aXZ;
+      ThirdPersonCamera.followY[cam] +=
+        (rawTargetY - ThirdPersonCamera.followY[cam]) * aY;
+      ThirdPersonCamera.followZ[cam] +=
+        (rawTargetZ - ThirdPersonCamera.followZ[cam]) * aXZ;
+
+      // Yaw trails the steered heading, slower than the player turns (shortest
+      // angular path so it never spins the long way around).
+      const aYaw = 1 - Math.exp(-dt / turnLag);
+      const yawErr = Math.atan2(
+        Math.sin(rawYaw - ThirdPersonCamera.smoothYaw[cam]),
+        Math.cos(rawYaw - ThirdPersonCamera.smoothYaw[cam])
+      );
+      ThirdPersonCamera.smoothYaw[cam] += yawErr * aYaw;
+
+      const followX = ThirdPersonCamera.followX[cam];
+      const followY = ThirdPersonCamera.followY[cam];
+      const followZ = ThirdPersonCamera.followZ[cam];
+      const yaw = ThirdPersonCamera.smoothYaw[cam];
+
+      // The camera orbits and looks at the SMOOTHED follow point.
+      const targetX = followX;
+      const targetY = followY;
+      const targetZ = followZ;
+
+      const desiredX = followX + Math.sin(yaw) * dist * Math.cos(pitch);
+      const desiredY = followY + heightOffset + Math.sin(pitch) * dist;
+      const desiredZ = followZ + Math.cos(yaw) * dist * Math.cos(pitch);
 
       // --- Terrain collision applied to desired position FIRST ---
       // This prevents the fight between smooth interpolation and clamp:
@@ -138,9 +178,11 @@ export const ThirdPersonCameraSystem: System = {
         }
       }
 
-      // Smooth interpolation toward the SAFE desired position
-      const smooth = ThirdPersonCamera.positionSmooth[cam];
-      const smoothFactor = 1 - Math.pow(1 - smooth, dt * 60);
+      // Final micro-smoothing toward the SAFE desired position: a fast low-pass
+      // (~50ms) whose only job is to absorb collision/BVH pops. The intentional
+      // lag (dash / turn) already lives in the smoothed follow point above, so
+      // this stays snappy to avoid a double-laggy, floaty feel.
+      const smoothFactor = 1 - Math.exp(-dt / 0.05);
 
       if (ThirdPersonCamera.initialized[cam] === 0) {
         ThirdPersonCamera.currentX[cam] = safeX;
