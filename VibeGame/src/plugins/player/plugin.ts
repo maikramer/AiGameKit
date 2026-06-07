@@ -35,7 +35,8 @@ export const PlayerPlugin: Plugin = {
     },
     defaults: {
       playerController: {
-        speed: 5.3,
+        speed: 8,
+        sprintMultiplier: 1.8,
         jumpHeight: 2.3,
         rotationSpeed: 10,
         canJump: 1,

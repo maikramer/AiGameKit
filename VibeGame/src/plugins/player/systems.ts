@@ -66,8 +66,12 @@ export const PlayerMovementSystem: System = {
       );
 
       const speed = PlayerController.speed[entity];
-      const horizontalVelX = inputVector.x * speed;
-      const horizontalVelZ = inputVector.z * speed;
+      const sprintMult = InputState.sprint[entity] === 1
+        ? PlayerController.sprintMultiplier[entity]
+        : 1;
+      const finalSpeed = speed * sprintMult;
+      const horizontalVelX = inputVector.x * finalSpeed;
+      const horizontalVelZ = inputVector.z * finalSpeed;
 
       const platform = state.hasComponent(entity, CharacterController)
         ? CharacterController.platform[entity]

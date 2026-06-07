@@ -2,6 +2,7 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
 
 export const PlayerController = {
   speed: new Float32Array(MAX_ENTITIES),
+  sprintMultiplier: new Float32Array(MAX_ENTITIES),
   jumpHeight: new Float32Array(MAX_ENTITIES),
   rotationSpeed: new Float32Array(MAX_ENTITIES),
   canJump: new Uint8Array(MAX_ENTITIES),
