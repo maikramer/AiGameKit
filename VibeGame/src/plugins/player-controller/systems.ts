@@ -1,4 +1,5 @@
 import { defineQuery, type State, type System } from '../../core';
+import * as THREE from 'three';
 import { InputState } from '../input';
 import { CharacterMovement, Rigidbody } from '../physics';
 import { MainCamera, threeCameras } from '../rendering';
@@ -9,7 +10,7 @@ import {
   syncEulerFromQuaternion,
 } from '../transforms';
 import { ThirdPersonCamera } from './components';
-import { getBvhSurfaceHeight } from '../bvh';
+import { castBvhRay } from '../bvh';
 
 const thirdPersonCameraQuery = defineQuery([
   ThirdPersonCamera,
@@ -72,19 +73,30 @@ export const ThirdPersonCameraSystem: System = {
           (desiredZ - ThirdPersonCamera.currentZ[cam]) * smoothFactor;
       }
 
-      // Terrain collision: prevent camera from clipping below ground (BVH raycast)
+      // Terrain/obstacle collision: raycast from target toward camera.
+      // If terrain blocks the view, pull camera closer to hit point (like
+      // GTA / Mario Galaxy). This avoids Y-clamp fighting smooth interp.
       const minDist = ThirdPersonCamera.minTerrainDistance[cam];
       if (minDist > 0) {
         const camX = ThirdPersonCamera.currentX[cam];
-        const camZ = ThirdPersonCamera.currentZ[cam];
         const camY = ThirdPersonCamera.currentY[cam];
-        // High origin + long ray for steep slopes where terrain rises sharply
-        // above camera position (e.g. downhill on mountainsides)
-        const terrainY = getBvhSurfaceHeight(state, camX, camY + 500, camZ, 2000);
-        if (terrainY !== null) {
-          const minY = terrainY + minDist;
-          if (ThirdPersonCamera.currentY[cam] < minY) {
-            ThirdPersonCamera.currentY[cam] = minY;
+        const camZ = ThirdPersonCamera.currentZ[cam];
+        const dx = camX - targetX;
+        const dy = camY - (targetY + 1.8);
+        const dz = camZ - targetZ;
+        const distToCam = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (distToCam > 0.01) {
+          const origin = new THREE.Vector3(targetX, targetY + 1.8, targetZ);
+          const dir = new THREE.Vector3(dx / distToCam, dy / distToCam, dz / distToCam);
+          const hit = castBvhRay(state, origin, dir, distToCam, 0x0001);
+          if (hit && hit.distance < distToCam) {
+            const pushBack = Math.max(minDist, 0.3);
+            const safeDist = hit.distance - pushBack;
+            if (safeDist > 0.01) {
+              ThirdPersonCamera.currentX[cam] = targetX + dir.x * safeDist;
+              ThirdPersonCamera.currentY[cam] = targetY + 1.8 + dir.y * safeDist;
+              ThirdPersonCamera.currentZ[cam] = targetZ + dir.z * safeDist;
+            }
           }
         }
       }
