@@ -145,7 +145,11 @@ export function spawnTemplateAtTerrain(
     ? Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2
     : 0.5;
   const sink = surface
-    ? sinkOffsetForSlope(surface.slopeAngleRad, halfWidth * scaleJitter)
+    ? sinkOffsetForSlope(
+        surface.slopeAngleRad,
+        halfWidth * scaleJitter,
+        spec.alignToTerrain ? surface.slopeAngleRad : 0
+      )
     : 0;
 
   const foot = new THREE.Vector3();

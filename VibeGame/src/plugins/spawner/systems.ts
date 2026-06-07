@@ -313,10 +313,6 @@ export const TerrainSpawnSystem: System = {
               if (!s) continue;
               if (!foundValidSlope && !acceptAnySlope) continue;
               const scale = resolveScale(rand, spec);
-              const sink = sinkOffsetForSlope(
-                s.slopeAngleRad,
-                halfWidth * scale
-              );
               const yaw = resolveYaw(rand, spec);
               // partialAlignEuler bakes the yaw in (about the trunk). When not
               // aligning to terrain, keep the yaw as a plain +Y rotation so it
@@ -324,6 +320,14 @@ export const TerrainSpawnSystem: System = {
               const alignEuler: [number, number, number] = spec.alignToTerrain
                 ? partialAlignEuler(s.normal, yaw, s.slopeAngleRad)
                 : [0, yaw, 0];
+              const actualTilt = spec.alignToTerrain
+                ? Math.min(s.slopeAngleRad, Math.PI / 3)
+                : 0;
+              const sink = sinkOffsetForSlope(
+                s.slopeAngleRad,
+                halfWidth * scale,
+                actualTilt
+              );
               positions.push({
                 x: wx,
                 y: s.worldY - sink,
