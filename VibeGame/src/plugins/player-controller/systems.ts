@@ -10,7 +10,7 @@ import {
   syncEulerFromQuaternion,
 } from '../transforms';
 import { ThirdPersonCamera } from './components';
-import { castBvhRay } from '../bvh';
+import { castBvhRay, getBvhSurfaceHeight } from '../bvh';
 
 const thirdPersonCameraQuery = defineQuery([
   ThirdPersonCamera,
@@ -55,50 +55,105 @@ export const ThirdPersonCameraSystem: System = {
       const desiredY = targetY + heightOffset + Math.sin(pitch) * dist;
       const desiredZ = targetZ + Math.cos(yaw) * dist * Math.cos(pitch);
 
-      // Smooth interpolation
+      // --- Terrain collision applied to desired position FIRST ---
+      // This prevents the fight between smooth interpolation and clamp:
+      // smooth always chases a safe target, never a blocked one.
+      let safeX = desiredX;
+      let safeY = desiredY;
+      let safeZ = desiredZ;
+      const minDist = ThirdPersonCamera.minTerrainDistance[cam];
+      if (minDist > 0) {
+        const eyeY = targetY + 2.0;
+        const dx = desiredX - targetX;
+        const dy = desiredY - eyeY;
+        const dz = desiredZ - targetZ;
+        const fullDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (fullDist > 0.01) {
+          const dir = new THREE.Vector3(
+            dx / fullDist,
+            dy / fullDist,
+            dz / fullDist
+          );
+          const radius = Math.max(minDist, 0.5);
+          const origin = new THREE.Vector3(targetX, eyeY, targetZ);
+
+          // Multi-ray "sphere-cast": centre + lateral offsets
+          let minSafe = fullDist;
+          let hasHit = false;
+
+          const hit1 = castBvhRay(state, origin, dir, fullDist, 0x0001);
+          if (hit1 && hit1.distance < minSafe) {
+            minSafe = hit1.distance;
+            hasHit = true;
+          }
+
+          const right = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
+          const leftDir = new THREE.Vector3(
+            dir.x * fullDist + right.x * radius,
+            dir.y * fullDist + right.y * radius,
+            dir.z * fullDist + right.z * radius
+          ).normalize();
+          const hit2 = castBvhRay(state, origin, leftDir, fullDist + radius, 0x0001);
+          if (hit2 && hit2.distance < minSafe) {
+            minSafe = hit2.distance;
+            hasHit = true;
+          }
+
+          const rightDir = new THREE.Vector3(
+            dir.x * fullDist - right.x * radius,
+            dir.y * fullDist - right.y * radius,
+            dir.z * fullDist - right.z * radius
+          ).normalize();
+          const hit3 = castBvhRay(state, origin, rightDir, fullDist + radius, 0x0001);
+          if (hit3 && hit3.distance < minSafe) {
+            minSafe = hit3.distance;
+            hasHit = true;
+          }
+
+          // Fallback when BVH has no entry yet (terrain still loading)
+          if (!hasHit) {
+            const terrainY = getBvhSurfaceHeight(
+              state,
+              desiredX,
+              desiredY + 100,
+              desiredZ,
+              2000,
+              0x0001
+            );
+            if (terrainY !== null) {
+              const minY = terrainY + minDist;
+              if (desiredY < minY) {
+                safeY = minY;
+                hasHit = true;
+              }
+            }
+          }
+
+          if (hasHit) {
+            const safeDist = Math.max(minSafe - radius, 0.01);
+            safeX = targetX + dir.x * safeDist;
+            safeY = eyeY + dir.y * safeDist;
+            safeZ = targetZ + dir.z * safeDist;
+          }
+        }
+      }
+
+      // Smooth interpolation toward the SAFE desired position
       const smooth = ThirdPersonCamera.positionSmooth[cam];
       const smoothFactor = 1 - Math.pow(1 - smooth, dt * 60);
 
       if (ThirdPersonCamera.initialized[cam] === 0) {
-        ThirdPersonCamera.currentX[cam] = desiredX;
-        ThirdPersonCamera.currentY[cam] = desiredY;
-        ThirdPersonCamera.currentZ[cam] = desiredZ;
+        ThirdPersonCamera.currentX[cam] = safeX;
+        ThirdPersonCamera.currentY[cam] = safeY;
+        ThirdPersonCamera.currentZ[cam] = safeZ;
         ThirdPersonCamera.initialized[cam] = 1;
       } else {
         ThirdPersonCamera.currentX[cam] +=
-          (desiredX - ThirdPersonCamera.currentX[cam]) * smoothFactor;
+          (safeX - ThirdPersonCamera.currentX[cam]) * smoothFactor;
         ThirdPersonCamera.currentY[cam] +=
-          (desiredY - ThirdPersonCamera.currentY[cam]) * smoothFactor;
+          (safeY - ThirdPersonCamera.currentY[cam]) * smoothFactor;
         ThirdPersonCamera.currentZ[cam] +=
-          (desiredZ - ThirdPersonCamera.currentZ[cam]) * smoothFactor;
-      }
-
-      // Terrain/obstacle collision: raycast from target toward camera.
-      // If terrain blocks the view, pull camera closer to hit point (like
-      // GTA / Mario Galaxy). This avoids Y-clamp fighting smooth interp.
-      const minDist = ThirdPersonCamera.minTerrainDistance[cam];
-      if (minDist > 0) {
-        const camX = ThirdPersonCamera.currentX[cam];
-        const camY = ThirdPersonCamera.currentY[cam];
-        const camZ = ThirdPersonCamera.currentZ[cam];
-        const dx = camX - targetX;
-        const dy = camY - (targetY + 1.8);
-        const dz = camZ - targetZ;
-        const distToCam = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (distToCam > 0.01) {
-          const origin = new THREE.Vector3(targetX, targetY + 1.8, targetZ);
-          const dir = new THREE.Vector3(dx / distToCam, dy / distToCam, dz / distToCam);
-          const hit = castBvhRay(state, origin, dir, distToCam, 0x0001);
-          if (hit && hit.distance < distToCam) {
-            const pushBack = Math.max(minDist, 0.3);
-            const safeDist = hit.distance - pushBack;
-            if (safeDist > 0.01) {
-              ThirdPersonCamera.currentX[cam] = targetX + dir.x * safeDist;
-              ThirdPersonCamera.currentY[cam] = targetY + 1.8 + dir.y * safeDist;
-              ThirdPersonCamera.currentZ[cam] = targetZ + dir.z * safeDist;
-            }
-          }
-        }
+          (safeZ - ThirdPersonCamera.currentZ[cam]) * smoothFactor;
       }
 
       // Update ECS Transform
