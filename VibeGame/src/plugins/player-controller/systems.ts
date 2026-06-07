@@ -9,6 +9,8 @@ import {
   syncEulerFromQuaternion,
 } from '../transforms';
 import { ThirdPersonCamera } from './components';
+import { getTerrainHeightAt } from '../terrain/systems';
+import { getTerrainContext } from '../terrain/utils';
 
 const thirdPersonCameraQuery = defineQuery([
   ThirdPersonCamera,
@@ -69,6 +71,22 @@ export const ThirdPersonCameraSystem: System = {
           (desiredY - ThirdPersonCamera.currentY[cam]) * smoothFactor;
         ThirdPersonCamera.currentZ[cam] +=
           (desiredZ - ThirdPersonCamera.currentZ[cam]) * smoothFactor;
+      }
+
+      // Terrain collision: prevent camera from clipping below ground
+      const minDist = ThirdPersonCamera.minTerrainDistance[cam];
+      if (minDist > 0) {
+        const terrainCtx = getTerrainContext(state);
+        const hasTerrain = terrainCtx.size > 0;
+        if (hasTerrain) {
+          const camX = ThirdPersonCamera.currentX[cam];
+          const camZ = ThirdPersonCamera.currentZ[cam];
+          const terrainY = getTerrainHeightAt(state, camX, camZ);
+          const minY = terrainY + minDist;
+          if (ThirdPersonCamera.currentY[cam] < minY) {
+            ThirdPersonCamera.currentY[cam] = minY;
+          }
+        }
       }
 
       // Update ECS Transform

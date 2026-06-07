@@ -17,6 +17,7 @@ export const PlayerControllerPlugin: Plugin = {
         pitch: 0.3,
         positionSmooth: 0.08,
         mouseSensitivity: 0.003,
+        minTerrainDistance: 1.0,
       },
     },
   },

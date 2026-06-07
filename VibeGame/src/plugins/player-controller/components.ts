@@ -21,4 +21,6 @@ export const ThirdPersonCamera = {
   currentZ: new Float32Array(MAX_ENTITIES),
   // Whether the camera has been initialized
   initialized: new Uint8Array(MAX_ENTITIES),
+  // Minimum height above terrain surface (0 = disabled)
+  minTerrainDistance: new Float32Array(MAX_ENTITIES),
 } as const;
