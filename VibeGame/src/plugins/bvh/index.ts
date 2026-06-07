@@ -12,4 +12,4 @@ export {
 } from './utils';
 export type { BvhContext, BvhEntry, BvhRaycastHit } from './utils';
 export { syncStaticMeshBvh } from './static-meshes';
-export { syncTerrainBvh } from './terrain';
+export { syncTerrainBvh, invalidateTerrainBvh } from './terrain';

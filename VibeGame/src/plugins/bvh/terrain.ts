@@ -135,3 +135,13 @@ export function syncTerrainBvh(
 
   return { added, total: built.size };
 }
+
+/** Force rebuild on next sync (e.g. after async heightmap load replaces sampler). */
+export function invalidateTerrainBvh(state: State, entity: number): void {
+  const built = getBuiltKeys(state);
+  const key = built.get(entity);
+  if (key !== undefined) {
+    unregisterBvhMesh(state, key);
+    built.delete(entity);
+  }
+}

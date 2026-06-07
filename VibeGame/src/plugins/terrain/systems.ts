@@ -16,6 +16,7 @@ import {
 } from './height-sampler';
 import type { HeightSampler } from './height-sampler';
 import { chunkKey, resolutionForLevel, selectChunks } from './lod-select';
+import { invalidateTerrainBvh } from '../bvh';
 import {
   fireHeightmapReloadCallbacks,
   getChunkMeshRegistry,
@@ -118,6 +119,7 @@ export const TerrainFieldBootstrapSystem: System = {
               maxHeight,
               imgData
             );
+            invalidateTerrainBvh(state, field);
             for (const chunk of data.chunks) {
               TerrainChunk.meshDirty[chunk] = 1;
             }
