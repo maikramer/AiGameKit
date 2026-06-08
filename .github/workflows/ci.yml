@@ -61,6 +61,9 @@ jobs:
           # GameDevLab
           - package: GameDevLab
             python-version: "3.13"
+          # Rocks3D
+          - package: Rocks3D
+            python-version: "3.13"
           # bpy wheel (cp313)
           - package: Animator3D
             python-version: "3.13"

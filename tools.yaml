@@ -99,6 +99,16 @@ tools:
     min_python: [3, 13]
     needs_pytorch: true
 
+  rocks3d:
+    name: "Rocks3D"
+    kind: python
+    folder: Rocks3D
+    cli_name: rocks3d
+    python_module: rocks3d
+    description: "Procedural 3D rock generation for game dev"
+    min_python: [3, 13]
+    needs_pytorch: false
+
   rigging3d:
     name: "Rigging3D"
     kind: python

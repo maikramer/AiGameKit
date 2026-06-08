@@ -211,6 +211,14 @@ class Terrain3DProfile:
 
 
 @dataclass
+class Rocks3DProfile:
+    """Opções passadas ao CLI rocks3d generate (rocha procedural)."""
+
+    quality: str | None = None
+    seed: int | None = None
+
+
+@dataclass
 class GameProfile:
     title: str
     genre: str
@@ -240,6 +248,7 @@ class GameProfile:
     lod: LODProfile | None = None
     collision: CollisionProfile | None = None
     terrain3d: Terrain3DProfile | None = None
+    rocks3d: Rocks3DProfile | None = None
     generation: str | None = None
     # Stage 4 — bake-master pipeline (LOD0 master, transfer-weights, validate).
     # Defeito False (legacy); ativar via game.yaml ``master_pipeline: true`` ou
@@ -719,6 +728,17 @@ class GameProfile:
                 cache_size=ter_cache_s,
                 coarse_window=ter_cw_i,
             )
+        rk3: Rocks3DProfile | None = None
+        raw_rk3 = data.get("rocks3d")
+        if isinstance(raw_rk3, dict):
+            rk3_quality = raw_rk3.get("quality")
+            rk3_quality_s = str(rk3_quality).strip().lower() if rk3_quality not in (None, "") else None
+            rk3_seed = raw_rk3.get("seed")
+            try:
+                rk3_seed_i = int(rk3_seed) if rk3_seed is not None else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("rocks3d.seed deve ser um inteiro") from e
+            rk3 = Rocks3DProfile(quality=rk3_quality_s, seed=rk3_seed_i)
         sb = data.get("seed_base")
         if sb is not None:
             try:
@@ -770,6 +790,7 @@ class GameProfile:
             lod=lod,
             collision=coll,
             terrain3d=ter,
+            rocks3d=rk3,
             generation=gen_name,
             master_pipeline=bool(data.get("master_pipeline", True)),
             master_validate=bool(data.get("master_validate", True)),

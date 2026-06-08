@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rocks3d"
+version = "0.1.0"
+description = "Rocks3D — procedural 3D rock generation"
+requires-python = ">=3.13,<3.14"
+license = "MIT"
+dependencies = [
+    "gamedev-shared @ file:../Shared",
+    "trimesh>=4.0.0",
+    "scipy>=1.11.0",
+    "numpy>=1.24.0",
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "rich-click>=1.8.0",
+    "opensimplex>=0.4.0",
+    "xatlas>=0.0.9",
+    "pillow>=10.0.0",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Topic :: Multimedia :: Graphics :: 3D Modeling",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.11.0",
+]
+
+[project.scripts]
+rocks3d = "rocks3d.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

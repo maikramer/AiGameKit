@@ -61,6 +61,13 @@ profiles:
       smooth_iterations: 2
       elevation_gamma: 1.1
       elevation_contrast: 0.05
+    rocks3d:
+      subdivisions: 2
+      octaves: 2
+      frequency: 3.0
+      amplitude: 0.15
+      erosion_passes: 0
+      texture_resolution: 256
 
   low:
     label: "Low (~1min, basic quality)"
@@ -116,6 +123,13 @@ profiles:
       smooth_iterations: 3
       elevation_gamma: 1.15
       elevation_contrast: 0.08
+    rocks3d:
+      subdivisions: 2
+      octaves: 3
+      frequency: 3.0
+      amplitude: 0.25
+      erosion_passes: 1
+      texture_resolution: 512
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -171,6 +185,13 @@ profiles:
       smooth_iterations: 3
       elevation_gamma: 1.2
       elevation_contrast: 0.1
+    rocks3d:
+      subdivisions: 4
+      octaves: 5
+      frequency: 3.0
+      amplitude: 0.4
+      erosion_passes: 3
+      texture_resolution: 1024
 
   high:
     label: "High (~5min, high quality)"
@@ -226,6 +247,13 @@ profiles:
       smooth_iterations: 4
       elevation_gamma: 1.2
       elevation_contrast: 0.12
+    rocks3d:
+      subdivisions: 5
+      octaves: 6
+      frequency: 3.0
+      amplitude: 0.5
+      erosion_passes: 5
+      texture_resolution: 1024
 
   highest:
     label: "Highest (~10min+, maximum quality)"
@@ -281,3 +309,10 @@ profiles:
       smooth_iterations: 5
       elevation_gamma: 1.25
       elevation_contrast: 0.15
+    rocks3d:
+      subdivisions: 6
+      octaves: 7
+      frequency: 3.0
+      amplitude: 0.6
+      erosion_passes: 8
+      texture_resolution: 2048

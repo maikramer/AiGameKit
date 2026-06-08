@@ -33,6 +33,7 @@ from .categories import (
     get_target_faces,
 )
 from .helpers import (
+    _resolve_rocks3d_bin,
     _row_wants_animate,
     _row_wants_parts,
     _row_wants_rig,
@@ -65,7 +66,7 @@ from .paths import (
     _shell_path,
     move_to_intermediate,
 )
-from .profile import Animator3DProfile, GameProfile, Paint3DProfile, Part3DProfile, Rigging3DProfile
+from .profile import Animator3DProfile, GameProfile, Paint3DProfile, Part3DProfile, Rigging3DProfile, Rocks3DProfile
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
 
 try:
@@ -1112,6 +1113,73 @@ def _text3d_argv(
     return args
 
 
+def _rocks3d_argv(
+    rocks3d_bin: str,
+    rock_type: str,
+    output_path: Path,
+    *,
+    seed: int | None = None,
+    quality: str | None = None,
+) -> list[str]:
+    """Argv for ``rocks3d generate <type> --seed N --quality Q -o output.glb``."""
+    args = [rocks3d_bin, "generate", rock_type]
+    if seed is not None:
+        args.extend(["--seed", str(seed)])
+    if quality:
+        args.extend(["--quality", quality])
+    args.extend(["-o", str(output_path)])
+    return args
+
+
+def _row_is_rock(row: ManifestRow) -> bool:
+    return (row.category or "").strip().lower() == "rock"
+
+
+def _rocks3d_pipeline_failed(
+    profile: GameProfile,
+    row: ManifestRow,
+    mesh_final: Path,
+    rec: dict[str, Any],
+    manifest_dir: Path,
+    child_env: dict[str, str],
+    gpu_ids: list[int] | None = None,
+) -> bool:
+    """Run ``rocks3d generate`` for rock assets. Returns True on failure."""
+    if not _row_is_rock(row) or not row.generate_3d:
+        return False
+    try:
+        rocks3d_bin = _resolve_rocks3d_bin()
+    except FileNotFoundError:
+        return False
+
+    rk = profile.rocks3d or Rocks3DProfile()
+    seed = _seed_for_row(profile, row.id)
+    quality = rk.quality or getattr(profile, "generation", None) or "medium"
+    rock_type = row.kind or "boulder"
+    console.print(f"[cyan]⏳ Rocks3D[/cyan] {row.id} (type={rock_type}) ...")
+    t0 = time.perf_counter()
+    argv = _rocks3d_argv(rocks3d_bin, rock_type, mesh_final, seed=seed, quality=quality)
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    elapsed = time.perf_counter() - t0
+    _timing_append(rec, "rocks3d", elapsed)
+    if r.returncode == 0:
+        console.print(f"[green]✓ Rocks3D[/green] {row.id} ({elapsed:.1f}s)")
+    if r.returncode != 0:
+        err = merge_subprocess_output(r) or "rocks3d falhou"
+        rec["status"] = "error"
+        rec["error"] = err
+        preview = merge_subprocess_output(r, max_chars=4000) or err
+        console.print(f"[red]rocks3d falhou[/red] {row.id}: {preview}")
+        return True
+    if not mesh_final.is_file():
+        rec["status"] = "error"
+        rec["error"] = "rocks3d não produziu GLB"
+        console.print(f"[red]rocks3d sem GLB[/red] {row.id}")
+        return True
+    rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
+    return False
+
+
 @dataclass
 class StageResult:
     name: str
@@ -1372,6 +1440,27 @@ def run_master_pipeline(
         res.ok = False
         res.stages.append(StageResult("setup", False, 0.0, "text3d não encontrado"))
         return res
+
+    # Stage 0 — rocks3d generate (para assets da categoria "rock").
+    # Produz mesh_final diretamente via rocks3d CLI e salta as stages
+    # do Text3D (shape/topology-fix/paint/bake-master). Retorna cedo.
+    if _row_is_rock(row):
+        rocks3d_bin = _bin_or_none("ROCKS3D_BIN", "rocks3d")
+        if rocks3d_bin:
+            rk = profile.rocks3d or Rocks3DProfile()
+            rk_seed = _seed_for_row(profile, row.id)
+            rk_quality = rk.quality or getattr(profile, "generation", None) or "medium"
+            rock_type = row.kind or "boulder"
+            rk_argv = _rocks3d_argv(rocks3d_bin, rock_type, mesh_final, seed=rk_seed, quality=rk_quality)
+            s = _run("rocks3d", rk_argv, mesh_final)
+            res.stages.append(s)
+            if not s.ok:
+                res.ok = False
+                return res
+            res.lod0_path = mesh_final
+            res.recompute_totals()
+            return res
+        # rocks3d não disponível — cai para o pipeline Text3D normal
 
     # Round 2: shape/painted podem estar em meshes/ OU em meshes/_intermediate/
     # (após uma run anterior). Resolve dinamicamente para permitir resume.

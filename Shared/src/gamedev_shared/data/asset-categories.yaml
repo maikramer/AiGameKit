@@ -96,6 +96,10 @@ categories:
     target_faces: 10000
     # No audio by default
 
+  rock:
+    label: "Rock"
+    target_faces: 2000
+
   vegetation:
     label: "Vegetation"
     target_faces: 5000

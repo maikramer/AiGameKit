@@ -1,0 +1,149 @@
+# Rocks3D — Procedural 3D Rock Generation
+
+CLI for generating procedural 3D rocks as GLB meshes with embedded PBR materials. No AI models or GPU required. Rocks combine FBM simplex displacement with a **convex fracture polytope** (random cutting planes) so they read as angular stone rather than smooth blobs, plus a high-frequency detail octave, light Taubin smoothing, an optional flat base, and a superficial curvature-based weathering pass that rounds exposed edges without flattening the rock.
+
+## Overview
+
+- **Believable geometry** — FBM lumps blended with a random fracture polytope give flat faces and sharp edges; `facet_strength` spans rounded pebbles → angular boulders
+- **Two rock types** — `pebble` (small, low-poly) and `boulder` (large, high-detail)
+- **Quality presets** — 5 tiers (`fast` through `highest`) that control subdivision and noise octaves (geometry honours the tier, not just erosion)
+- **Embedded PBR** — base-color, normal, metallic-roughness and occlusion textures are generated (via [Materialize](../Materialize/), with a procedural fallback) and embedded in the GLB with UVs as a glTF `PBRMaterial`
+- **GLB output** — single self-contained file per rock, directly loadable in Three.js, Blender, or any GLTF consumer
+- **Reproducible** — full seed control
+
+## Installation
+
+### Monorepo (recommended)
+
+```bash
+cd Shared && pip install -e .
+cd Rocks3D && pip install -e .
+```
+
+Or use the unified installer:
+
+```bash
+./install.sh rocks3d
+```
+
+### Requirements
+
+- Python 3.13+
+- `gamedev-shared` (install Shared first)
+- No GPU required
+
+## Quick Start
+
+```bash
+# Generate a boulder
+rocks3d generate boulder --seed 42 -o rock.glb
+
+# Generate a pebble with high quality
+rocks3d generate pebble --seed 123 -o pebble.glb --quality high
+
+# Fast generation for prototyping
+rocks3d generate boulder --seed 7 --quality fast -o quick_rock.glb
+```
+
+## Commands
+
+Entry point: `rocks3d` or `python -m rocks3d`
+
+### `rocks3d generate TYPE`
+
+Generate a procedural 3D rock mesh.
+
+```bash
+rocks3d generate boulder --seed 42 -o rock.glb
+rocks3d generate pebble --seed 99 -o pebble.glb --scale 2.0 --no-erosion
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `TYPE` | choice | required | Rock type: `pebble` or `boulder` |
+| `-o, --output` | path | auto | Output GLB path |
+| `--seed` | int | random | Reproducible seed |
+| `--quality` | choice | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
+| `--category` | str | None | Asset category for QualityEngine overrides |
+| `--scale` | float | `1.0` | Scale factor applied to the final mesh |
+| `--erosion/--no-erosion` | flag | erosion | Toggle simulated erosion smoothing |
+
+### `rocks3d batch TYPE`
+
+Batch generate rocks with sequential seeds.
+
+```bash
+rocks3d batch boulder -n 10 -o rocks/            # 10 boulders, seeds 0..9
+rocks3d batch both -n 5 --quality high -o rocks/ # 5 pebbles + 5 boulders
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `TYPE` | choice | required | `pebble`, `boulder`, or `both` |
+| `-n, --count` | int | `5` | Rocks per type |
+| `-o, --output-dir` | path | `rocks` | Output directory |
+| `--seed` | int | `0` | Starting seed (incremented per rock) |
+| `--quality` | choice | `medium` | Quality tier |
+| `--scale` | float | `1.0` | Scale factor |
+| `--erosion/--no-erosion` | flag | erosion | Toggle erosion |
+
+Files are written as `<output-dir>/<type>_<seed>.glb`.
+
+## Rock Types
+
+| Type | Subdiv | Radius | Octaves | Freq | Amp | Facet str. | Planes | Erosion | Typical Verts | Use Case |
+|------|--------|--------|---------|------|-----|------------|--------|---------|---------------|----------|
+| `pebble` | 2 | 0.1 | 4 | 2.5 | 0.20 | 0.38 | 10 | 0 | ~162 | Ground scatter, debris, small props |
+| `boulder` | 4 | 1.0 | 5 | 2.2 | 0.18 | 0.55 | 15 | 1 | ~2.5k | Landscape features, obstacles, cover |
+
+`facet_strength` blends the smooth displaced sphere with a convex fracture polytope (`planes` cutting planes): higher = more angular. Both types use non-uniform scale and a flattened base so they sit on terrain. Vertex counts vary with quality tier (and rise further after xatlas UV unwrapping splits seam vertices).
+
+## Quality Presets
+
+The `--quality` flag adjusts subdivision, noise octaves, and erosion passes relative to the base rock type. CLI parameters always win over quality defaults.
+
+```bash
+rocks3d generate boulder --quality fast        # low poly, no erosion
+rocks3d generate boulder --quality highest     # maximum detail
+```
+
+| Tier | Subdivisions (delta) | Octaves (delta) | Erosion Passes | Description |
+|------|---------------------|-----------------|----------------|-------------|
+| `fast` | -1 | -1 | 0 | Minimum viable quality, no erosion |
+| `low` | 0 | 0 | (base) | Basic quality |
+| `medium` | 0 | 0 | (base) | Standard (default) |
+| `high` | +1 | +1 | (base) | Higher polygon count and detail |
+| `highest` | +2 | +2 | +1 | Maximum detail, extra erosion |
+
+Negative values are subtracted from the base preset. For example, a `fast` boulder (base subdivisions=4) becomes subdivisions=3.
+
+## PBR Textures
+
+Each generated rock embeds a glTF `PBRMaterial` directly in the GLB: a procedural base-color (albedo) texture with multi-octave variation and cavity darkening, plus normal, metallic-roughness and occlusion maps. When the [Materialize](../Materialize/) CLI is available (`MATERIALIZE_BIN` or on `PATH`) it generates the normal/AO/smoothness maps from the albedo using its `stone` preset; otherwise a procedural normal + roughness fallback is used. UVs are produced via xatlas (boulders) or spherical projection (pebbles) and preserved on export.
+
+## GameAssets Integration
+
+Use `rocks3d` within the [GameAssets](../GameAssets/) batch pipeline by adding it to `manifest.csv` and configuring the `rocks3d` block in `game.yaml`.
+
+```bash
+gameassets batch --profile game.yaml --manifest manifest.csv
+```
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `ROCKS3D_BIN` | Override `rocks3d` binary path (used by GameAssets) |
+
+## Development
+
+```bash
+cd Rocks3D && pip install -e ".[dev]"
+make test-rocks3d
+ruff check .
+ruff format .
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

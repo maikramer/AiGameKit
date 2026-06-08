@@ -11,6 +11,7 @@ from .manifest import ManifestRow, effective_image_source, load_manifest
 from .presets import get_preset, load_presets_bundle
 from .profile import (
     GameProfile,
+    Rocks3DProfile,
     Skymap2DProfile,
     Terrain3DProfile,
     Text2SoundProfile,
@@ -259,6 +260,21 @@ def _append_terrain3d_profile_args(ter: Terrain3DProfile, argv: list[str]) -> No
         argv.extend(["--cache-size", ter.cache_size])
     if ter.coarse_window is not None:
         argv.extend(["--coarse-window", str(ter.coarse_window)])
+
+
+def _rocks3d_profile_effective(profile: GameProfile) -> Rocks3DProfile:
+    return profile.rocks3d or Rocks3DProfile()
+
+
+def _resolve_rocks3d_bin() -> str:
+    return resolve_binary("ROCKS3D_BIN", "rocks3d")
+
+
+def _append_rocks3d_profile_args(rk: Rocks3DProfile, argv: list[str]) -> None:
+    if rk.quality:
+        argv.extend(["--quality", rk.quality])
+    if rk.seed is not None:
+        argv.extend(["--seed", str(rk.seed)])
 
 
 def _skymap2d_profile_effective(profile: GameProfile) -> Skymap2DProfile:
