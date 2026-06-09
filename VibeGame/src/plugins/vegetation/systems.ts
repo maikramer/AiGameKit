@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { createGLTFLoader } from '../../extras/gltf-bridge';
+import {
+  createGLTFLoader,
+  normalizeGltfMaterials,
+} from '../../extras/gltf-bridge';
 import { getRenderingContext, getScene, threeCameras } from '../rendering';
 import type { State } from '../../core';
 import type { VegetationInstanceSpec, VegetationSpawnState } from './types';
@@ -126,6 +129,7 @@ export class VegetationInstancer {
     const loadPromises = Array.from(lodUrls.entries()).map(
       async ([lodKey, lodUrl]) => {
         const gltf = await this.gltfLoader.loadAsync(lodUrl);
+        normalizeGltfMaterials(gltf.scene);
         this.lodPairs.set(lodKey, extractGeometryMaterialPairs(gltf.scene));
       }
     );

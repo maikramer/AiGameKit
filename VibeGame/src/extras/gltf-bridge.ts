@@ -133,9 +133,32 @@ export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
 }
 
 /**
+ * glTF defaults `metallicFactor` to 1.0 when omitted. Asset-pipeline GLBs that
+ * only carry an albedo texture (no metallic-roughness map) then render almost
+ * black under punctual lights. Treat those materials as dielectric.
+ */
+export function normalizeGltfMaterials(root: Object3D): void {
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh !== true) return;
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+    for (const mat of materials) {
+      const std = mat as THREE.MeshStandardMaterial;
+      if (std?.isMeshStandardMaterial && std.metalness === 1 && !std.metalnessMap) {
+        std.metalness = 0;
+        std.needsUpdate = true;
+      }
+    }
+  });
+}
+
+/**
  * Meshes GLB não carregam `castShadow`/`receiveShadow` por defeito; sem isto o sol direcional não projeta sombras.
  */
 export function applyDefaultShadowFlags(root: Object3D): void {
+  normalizeGltfMaterials(root);
   root.traverse((o) => {
     const m = o as THREE.Mesh & THREE.SkinnedMesh;
     if (m.isMesh === true) {

@@ -147,6 +147,9 @@ export class GltfAnimator {
       );
       this.additiveAction.play();
       this.additiveClipName = clipName;
+    } else if (this.additiveAction && this.additiveWeight <= 0.001) {
+      // Re-engaging the same overlay after it faded out: restart the lean-in.
+      this.additiveAction.reset().play();
     }
     this.additiveTarget = target;
   }
@@ -166,6 +169,20 @@ export class GltfAnimator {
         this.additiveWeight = 0;
       }
       this.additiveAction.setEffectiveWeight(this.additiveWeight);
+
+      // While the overlay is held (target > 0), freeze the clip at its peak
+      // lean instead of letting it loop/finish — releasing the key fades the
+      // weight out, which returns the pose smoothly to the base locomotion.
+      if (this.additiveTarget > 0) {
+        const clip = this.additiveAction.getClip();
+        const hold = clip.duration * 0.5;
+        if (this.additiveAction.time >= hold) {
+          this.additiveAction.paused = true;
+          this.additiveAction.time = hold;
+        }
+      } else if (this.additiveAction.paused) {
+        this.additiveAction.paused = false;
+      }
     }
     this.mixer.update(deltaTime);
   }

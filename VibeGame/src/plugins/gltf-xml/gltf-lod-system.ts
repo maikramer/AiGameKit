@@ -56,7 +56,14 @@ export const GltfLodSystem: System = {
       const raw = pickLodLevel(dist, near, mid, prevLevel);
       const level = Math.min(raw, childCount - 1);
       if (level === prevLevel) {
-        continue;
+        // Even when the level is unchanged, guard against the load-time state
+        // where the GLTF arrives with *all* LOD children visible: if it isn't
+        // exactly one visible child, fall through and re-apply. Otherwise skip.
+        let visibleCount = 0;
+        for (let i = 0; i < childCount; i++) {
+          if (root.children[i].visible) visibleCount++;
+        }
+        if (visibleCount === 1) continue;
       }
       GltfLod.activeLevel[eid] = level;
 

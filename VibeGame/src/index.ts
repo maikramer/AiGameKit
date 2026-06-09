@@ -13,6 +13,7 @@ export {
   loadGltfLodToScene,
   loadGltfToScene,
   loadGltfToSceneWithAnimator,
+  normalizeGltfMaterials,
   setKTX2TranscoderPath,
 } from './extras/gltf-bridge';
 export type { GltfLoadResult } from './extras/gltf-bridge';
