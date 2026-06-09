@@ -114,6 +114,8 @@ def reorigin_glb_bpy(path: Path, mode: str = "feet") -> bool:
             filepath=str(path),
             export_format="GLB",
             use_selection=False,
+            export_normals=True,
+            export_tangents=True,
         )
     except Exception:
         return False
