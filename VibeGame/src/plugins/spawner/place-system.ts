@@ -10,13 +10,17 @@ import { spawnTemplateAtTerrain } from './spawn-template';
 import { isNormalWithinSlopeLimit, sampleTerrainSurface } from './surface';
 import { composeSpawnRotation } from './transform-merge';
 import { Transform, WorldTransform } from '../transforms/components';
+import { Rigidbody } from '../physics/components';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import { findNearestTerrainEntity } from '../terrain/index';
 
 const placeQuery = defineQuery([PlacePending]);
 
 const MAX_PLACE_HEIGHTMAP_DEFER_FRAMES = 600;
-let _placeHeightmapDeferFrames = 0;
+// Per-state so a dev HMR reload (or a second world) gets a fresh wait window
+// instead of inheriting a maxed-out counter and placing on the flat
+// placeholder surface before the heightmap decodes.
+const _placeDeferByState = new WeakMap<State, number>();
 
 /** Terrain has a heightmap URL but its sampler hasn't decoded yet. */
 function isTerrainHeightmapPending(state: State): boolean {
@@ -49,7 +53,7 @@ function anchorOffset(
 const deterministicRand = (): number => 0;
 
 function applyRootPlacement(
-  _state: State,
+  state: State,
   eid: number,
   spawn: GroupSpawnDefaults,
   wx: number,
@@ -75,6 +79,21 @@ function applyRootPlacement(
   Transform.rotZ[eid] = q.z;
   Transform.rotW[eid] = q.w;
   Transform.dirty[eid] = 1;
+
+  // Physics bodies live in world space: mirror the placed pose so the body is
+  // created (or teleported) exactly where the entity landed on the terrain.
+  if (state.hasComponent(eid, Rigidbody)) {
+    Rigidbody.posX[eid] = Transform.posX[eid];
+    Rigidbody.posY[eid] = Transform.posY[eid];
+    Rigidbody.posZ[eid] = Transform.posZ[eid];
+    Rigidbody.eulerX[eid] = euler.x;
+    Rigidbody.eulerY[eid] = euler.y;
+    Rigidbody.eulerZ[eid] = euler.z;
+    Rigidbody.rotX[eid] = q.x;
+    Rigidbody.rotY[eid] = q.y;
+    Rigidbody.rotZ[eid] = q.z;
+    Rigidbody.rotW[eid] = q.w;
+  }
 }
 
 /**
@@ -95,8 +114,9 @@ export const TerrainPlaceSystem: System = {
     // Wait for the heightmap to decode before placing, else entities land on the
     // flat placeholder surface and get buried once the real terrain rises.
     if (isTerrainHeightmapPending(state)) {
-      if (_placeHeightmapDeferFrames < MAX_PLACE_HEIGHTMAP_DEFER_FRAMES) {
-        _placeHeightmapDeferFrames++;
+      const deferred = _placeDeferByState.get(state) ?? 0;
+      if (deferred < MAX_PLACE_HEIGHTMAP_DEFER_FRAMES) {
+        _placeDeferByState.set(state, deferred + 1);
         return;
       }
     }

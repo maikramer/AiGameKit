@@ -149,6 +149,17 @@ export const PhysicsWorldSystem: System = {
   },
 };
 
+/**
+ * Entities with `place="…"` only reach their world pose after terrain
+ * placement resolves; creating the body earlier would leave a stray collider
+ * at the pre-placement position.
+ */
+function isPlacementPending(state: State, entity: number): boolean {
+  const placePending = state.getComponent('placePending');
+  if (!placePending || !state.hasComponent(entity, placePending)) return false;
+  return (placePending as { spawned: Uint8Array }).spawned[entity] === 0;
+}
+
 export const PhysicsInitializationSystem: System = {
   group: 'fixed',
   after: [PhysicsWorldSystem],
@@ -158,7 +169,10 @@ export const PhysicsInitializationSystem: System = {
     if (!worldRapier) return;
 
     for (const entity of bodyQuery(state.world)) {
-      if (!context.entityToRigidbody.has(entity)) {
+      if (
+        !context.entityToRigidbody.has(entity) &&
+        !isPlacementPending(state, entity)
+      ) {
         createRigidbodyForEntity(entity, worldRapier, state, context);
       }
     }
