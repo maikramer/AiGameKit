@@ -102,7 +102,9 @@ export const SteeringSyncSystem: System = {
             ) / 2;
       obstacleCount++;
     }
-    const obstacles = _obstacleCache.slice(0, obstacleCount);
+    // Reuse the cache array (truncate the stale tail) instead of allocating a
+    // fresh slice every frame.
+    _obstacleCache.length = obstacleCount;
 
     for (const eid of steerQuery(state.world)) {
       if (!SteeringAgent.active[eid]) continue;
@@ -110,26 +112,40 @@ export const SteeringSyncSystem: System = {
       const row = ensureVehicle(state, eid);
       row.vehicle.maxSpeed = SteeringAgent.maxSpeed[eid];
       row.vehicle.maxForce = SteeringAgent.maxForce[eid];
+      const groundY = Transform.posY[eid];
       syncFromEcs(eid, row);
       syncTarget(state, eid, row);
       applyBehavior(eid, row);
-      row.obstacle!.obstacles = obstacles;
+      row.obstacle!.obstacles = _obstacleCache;
 
       row.vehicle.update(dt);
 
-      Transform.posX[eid] = row.vehicle.position.x;
-      Transform.posY[eid] = row.vehicle.position.y;
-      Transform.posZ[eid] = row.vehicle.position.z;
-      Transform.rotX[eid] = row.vehicle.rotation.x;
-      Transform.rotY[eid] = row.vehicle.rotation.y;
-      Transform.rotZ[eid] = row.vehicle.rotation.z;
-      Transform.rotW[eid] = row.vehicle.rotation.w;
-      Transform.dirty[eid] = 1;
+      // Steering is planar: Y is owned externally (terrain snap / placement),
+      // not the steerer. yuka's wander/seek are 3D and would otherwise let the
+      // agent drift up or sink into the ground.
+      row.vehicle.position.y = groundY;
+      row.vehicle.velocity.y = 0;
 
       const body = getBodyForEntity(state, eid);
+      const rtype = Rigidbody.type[eid];
+      const isDynamic = !!body && rtype === BodyType.Dynamic;
+
+      // For dynamic bodies the physics step owns the Transform — writing it here
+      // (and below) would fight the body and cause jitter. Only drive the
+      // Transform directly for kinematic / body-less agents.
+      if (!isDynamic) {
+        Transform.posX[eid] = row.vehicle.position.x;
+        Transform.posY[eid] = row.vehicle.position.y;
+        Transform.posZ[eid] = row.vehicle.position.z;
+        Transform.rotX[eid] = row.vehicle.rotation.x;
+        Transform.rotY[eid] = row.vehicle.rotation.y;
+        Transform.rotZ[eid] = row.vehicle.rotation.z;
+        Transform.rotW[eid] = row.vehicle.rotation.w;
+        Transform.dirty[eid] = 1;
+      }
+
       if (body) {
-        const rtype = Rigidbody.type[eid];
-        if (rtype === 2) {
+        if (rtype === BodyType.KinematicPositionBased) {
           body.setNextKinematicTranslation({
             x: row.vehicle.position.x,
             y: row.vehicle.position.y,
@@ -141,13 +157,13 @@ export const SteeringSyncSystem: System = {
             z: row.vehicle.rotation.z,
             w: row.vehicle.rotation.w,
           });
-        } else if (rtype === BodyType.Dynamic) {
+        } else if (isDynamic) {
           const vel = row.vehicle.velocity;
           body.setLinvel({ x: vel.x, y: 0, z: vel.z }, true);
         }
       }
 
-      if (state.hasComponent(eid, WorldTransform)) {
+      if (!isDynamic && state.hasComponent(eid, WorldTransform)) {
         WorldTransform.posX[eid] = Transform.posX[eid];
         WorldTransform.posY[eid] = Transform.posY[eid];
         WorldTransform.posZ[eid] = Transform.posZ[eid];
@@ -155,6 +171,15 @@ export const SteeringSyncSystem: System = {
         WorldTransform.rotY[eid] = Transform.rotY[eid];
         WorldTransform.rotZ[eid] = Transform.rotZ[eid];
         WorldTransform.rotW[eid] = Transform.rotW[eid];
+      }
+    }
+
+    // Drop steering rows whose entities were destroyed, so the per-state map
+    // (and its yuka Vehicles) don't leak across waves/levels.
+    const map = getSteeringMap(state);
+    if (map.size > 0) {
+      for (const key of map.keys()) {
+        if (!state.exists(key)) map.delete(key);
       }
     }
   },
