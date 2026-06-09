@@ -135,7 +135,13 @@ export function initializeInstancedMesh(
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
-  mesh.frustumCulled = true;
+  // Instances are scattered across the world but the mesh's bounding sphere is
+  // the unit geometry's (centred at the origin) and is never recomputed as
+  // instances are added/moved. With frustum culling on, the whole pool would
+  // vanish whenever the world origin left the view ("only visible from certain
+  // angles"). Disable per-mesh culling — it's a single instanced draw call and
+  // these pools (boxes/spheres) hold few instances.
+  mesh.frustumCulled = false;
 
   const zeroMatrix = new THREE.Matrix4();
   zeroMatrix.makeScale(0, 0, 0);
@@ -389,6 +395,10 @@ export function applyNeutralEnvironment(
   const pmrem = new THREE.PMREMGenerator(renderer);
   try {
     scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    // The IBL is there to give PBR materials something to reflect — the scene
+    // is already lit by the hemisphere + directional lights, so keep it subtle
+    // or everything washes out.
+    scene.environmentIntensity = 0.45;
   } finally {
     pmrem.dispose();
   }

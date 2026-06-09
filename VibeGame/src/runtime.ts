@@ -4,6 +4,7 @@ import { TIME_CONSTANTS, XMLParser, XMLValueParser } from './core';
 import { parseXMLToEntities } from './core/recipes/parser';
 import {
   RenderContext,
+  applyNeutralEnvironment,
   createRenderer,
   getRenderingContext,
   setCanvasElement,
@@ -187,6 +188,7 @@ export class GameRuntime {
             const renderer = await createRenderer(canvas, clearColor);
             renderingCtx.renderer = renderer;
             renderingCtx.canvas = canvas;
+            applyNeutralEnvironment(renderer, renderingCtx.scene);
           } catch {
             // WebGL unavailable (headless CI); continue without renderer
           }

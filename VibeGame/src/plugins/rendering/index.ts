@@ -19,6 +19,7 @@ export {
 export { RenderingPlugin } from './plugin';
 export { rendererRecipe, pointLightRecipe, spotLightRecipe } from './recipes';
 export {
+  applyNeutralEnvironment,
   CameraProjection,
   createRenderer,
   getRenderingContext,

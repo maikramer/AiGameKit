@@ -32,8 +32,9 @@ async function applyEquirectSky(
     }
   }
 
-  // Strengthen the existing PMREM environment so PBR surfaces are well-lit.
-  scene.environmentIntensity = 1.0;
+  // Keep the PMREM environment subtle — the scene is already lit by the
+  // hemisphere + directional lights; a full-strength IBL washes everything out.
+  scene.environmentIntensity = 0.45;
 }
 
 /**
