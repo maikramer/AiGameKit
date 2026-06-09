@@ -62,10 +62,17 @@ export const colorSchema = z.union([
 ]);
 
 /** Parse a color value (hex string with/without #, or number) into a numeric color.
+ *  Digit-only strings are decimal: the XML layer pre-parses "#8cb866" into a
+ *  decimal number, so a stringified round-trip must not be re-read as hex.
  *  Throws on invalid input. */
 export function parseColor(value: string | number): number {
   if (typeof value === 'number') return value;
-  return parseInt(value.startsWith('#') ? value.slice(1) : value, 16);
+  if (value.startsWith('#')) return parseInt(value.slice(1), 16);
+  if (value.startsWith('0x') || value.startsWith('0X')) {
+    return parseInt(value.slice(2), 16);
+  }
+  if (/^\d+$/.test(value)) return parseInt(value, 10);
+  return parseInt(value, 16);
 }
 
 /** Parse a numeric string (e.g. "1.5") into a number. Returns NaN on invalid. */
