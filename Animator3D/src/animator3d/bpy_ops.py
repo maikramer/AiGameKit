@@ -2480,6 +2480,10 @@ def export_glb(path: Path, *, draco: bool = False) -> None:
         export_draco_mesh_compression_enable=draco,
         export_draco_mesh_compression_level=6 if draco else 0,
         export_all_influences=False,
+        export_normals=True,
+        # Tangents keep the hero's normal map seam-free, including while the
+        # skinned mesh deforms during animation.
+        export_tangents=True,
         export_image_format="JPEG",
         export_keep_originals=False,
     )
@@ -2625,6 +2629,8 @@ def project_texture_to_parts(
         export_draco_mesh_compression_enable=draco,
         export_draco_mesh_compression_level=6 if draco else 0,
         export_all_influences=False,
+        export_normals=True,
+        export_tangents=True,
         export_image_format="JPEG",
         export_keep_originals=False,
     )
