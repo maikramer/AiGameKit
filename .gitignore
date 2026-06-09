@@ -102,6 +102,8 @@ Text3D/testdata/baseline_meshes_raw/*
 # VibeGame simple-rpg — saída intermédia do batch (duplica models/textures)
 VibeGame/examples/simple-rpg/public/assets/meshes/
 VibeGame/examples/simple-rpg/public/assets/images/
+# Marker written by scripts/fetch-assets.mjs (prebuilt asset bundle version)
+VibeGame/examples/simple-rpg/public/assets/.assets-version
 
 # Screenshots de teste no exemplo
 VibeGame/examples/simple-rpg/screenshot*.png

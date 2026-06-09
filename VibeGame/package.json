@@ -198,5 +198,9 @@
     "troika-three-text": "^0.52.4",
     "yuka": "^0.7.8",
     "zod": "^4.1.5"
+  },
+  "allowScripts": {
+    "sharp@0.34.5": true,
+    "@humanfs/types@0.15.0": true
   }
 }

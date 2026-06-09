@@ -4,6 +4,9 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "setup": "node scripts/fetch-assets.mjs",
+    "predev": "node scripts/fetch-assets.mjs",
+    "prebuild": "node scripts/fetch-assets.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

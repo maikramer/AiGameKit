@@ -6,6 +6,23 @@ This demo also showcases VibeGame's **new engine features**: particles, AI steer
 
 **Português:** demo completa do pipeline do monorepo GameDev: GameAssets batch gera GLBs, áudio e imagens; handoff copia para `public/`; VibeGame carrega GLBs via `<GLTFLoader` / `<PlayerGLTF`, céu equirect com `<Skybox>`, e clips com `<AudioSource>`. A API `playAudioEmitter` dispara SFX nomeados; ver [`docs/AUDIO.md`](../../docs/AUDIO.md). Novas features: partículas, NPCs com IA, save/load e i18n.
 
+## Getting started
+
+The 3D assets (GLB meshes, textures, terrain, sky, audio) are large binary
+blobs, so they are **not committed to git** — they live in a pinned GitHub
+Release and are fetched on demand:
+
+```bash
+npm install        # or: bun install
+npm run dev        # predev runs scripts/fetch-assets.mjs automatically
+```
+
+`scripts/fetch-assets.mjs` downloads the bundle pinned in `assets.lock.json`,
+verifies its sha256, and extracts it into `public/assets/` (idempotent — it
+no-ops once present). Run it directly with `npm run setup` if needed. To bump
+the assets, regenerate them with the GameAssets pipeline, upload a new release,
+and update `assets.lock.json` (`version` + `url` + `sha256`).
+
 ## What is in the scene
 
 | Element                      | Source / Plugin                        | How it loads                                                                    |
