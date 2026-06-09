@@ -15,9 +15,10 @@ def _load(path: Path) -> trimesh.Trimesh:
 
 def test_build_produces_valid_glb(tmp_path: Path) -> None:
     out = tmp_path / "pebble.glb"
-    summary = build_rock_glb("pebble", out, seed=1, quality="medium")
+    summary = build_rock_glb("pebble", out, seed=1, quality="medium", use_bpy=False)
     assert out.exists()
     assert summary["vertices"] > 0
+    assert summary["backend"] == "trimesh"
     mesh = _load(out)
     assert mesh.visual.uv is not None
     assert mesh.visual.material.baseColorTexture is not None
@@ -28,8 +29,8 @@ def test_build_produces_valid_glb(tmp_path: Path) -> None:
 def test_scale_is_applied(tmp_path: Path) -> None:
     base = tmp_path / "base.glb"
     scaled = tmp_path / "scaled.glb"
-    build_rock_glb("boulder", base, seed=3, quality="fast", scale=1.0)
-    build_rock_glb("boulder", scaled, seed=3, quality="fast", scale=3.0)
+    build_rock_glb("boulder", base, seed=3, quality="fast", scale=1.0, use_bpy=False)
+    build_rock_glb("boulder", scaled, seed=3, quality="fast", scale=3.0, use_bpy=False)
 
     e_base = _load(base).extents
     e_scaled = _load(scaled).extents
@@ -40,6 +41,6 @@ def test_scale_is_applied(tmp_path: Path) -> None:
 
 def test_no_erosion_runs(tmp_path: Path) -> None:
     out = tmp_path / "ne.glb"
-    summary = build_rock_glb("boulder", out, seed=4, quality="fast", erosion=False)
+    summary = build_rock_glb("boulder", out, seed=4, quality="fast", erosion=False, use_bpy=False)
     assert out.exists()
     assert summary["faces"] > 0

@@ -33,6 +33,11 @@ def main() -> None:
 @click.option("--category", type=str, default=None, help="Asset category for overrides")
 @click.option("--scale", type=float, default=1.0, help="Scale factor")
 @click.option("--erosion/--no-erosion", default=True, show_default=True, help="Erosion toggle")
+@click.option(
+    "--bake/--no-bake",
+    default=None,
+    help="Seamless bpy bake (default: auto — bpy if available, else trimesh).",
+)
 @click.pass_context
 def generate(
     ctx: click.Context,
@@ -43,6 +48,7 @@ def generate(
     category: str | None,
     scale: float,
     erosion: bool,
+    bake: bool | None,
 ) -> None:
     """Generate a procedural 3D rock (pebble or boulder)."""
     import time
@@ -63,12 +69,13 @@ def generate(
         quality=quality,
         scale=scale,
         erosion=erosion,
+        use_bpy=bake,
     )
 
     elapsed = time.time() - start
     click.echo(f"Generated {type_name} rock: {summary['vertices']} vertices, {summary['faces']} faces")
     click.echo(f"Output: {output_path}")
-    click.echo(f"PBR maps: {', '.join(summary['textures'])}")
+    click.echo(f"Backend: {summary['backend']} | maps: {', '.join(summary['textures'])}")
     click.echo(f"Time: {elapsed:.2f}s")
 
 
@@ -86,6 +93,11 @@ def generate(
 )
 @click.option("--scale", type=float, default=1.0, help="Scale factor")
 @click.option("--erosion/--no-erosion", default=True, show_default=True, help="Erosion toggle")
+@click.option(
+    "--bake/--no-bake",
+    default=None,
+    help="Seamless bpy bake (default: auto — bpy if available, else trimesh).",
+)
 def batch(
     type_name: str,
     count: int,
@@ -94,6 +106,7 @@ def batch(
     quality: str,
     scale: float,
     erosion: bool,
+    bake: bool | None,
 ) -> None:
     """Batch generate rocks with sequential seeds.
 
@@ -115,7 +128,9 @@ def batch(
         for i in range(count):
             s = seed + i
             output_path = out_dir / f"{t}_{s}.glb"
-            summary = build_rock_glb(t, output_path, seed=s, quality=quality, scale=scale, erosion=erosion)
+            summary = build_rock_glb(
+                t, output_path, seed=s, quality=quality, scale=scale, erosion=erosion, use_bpy=bake
+            )
             total += 1
             click.echo(f"  [{total}] {output_path} — {summary['vertices']} verts")
 
