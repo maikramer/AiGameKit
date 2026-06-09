@@ -32,6 +32,60 @@ def load_glb(path: str | Path) -> list:
     return [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
 
+def apply_smooth_by_angle(obj: Any, degrees: float = 60.0) -> None:
+    """Smooth-shade *obj*, keeping hard edges only above *degrees*.
+
+    Blender 4.1 removed ``mesh.use_auto_smooth`` / ``auto_smooth_angle`` in
+    favour of the ``object.shade_smooth_by_angle`` operator. Older code that
+    still set the removed attributes (wrapped in ``suppress``) silently did
+    nothing on bpy 5.x, leaving meshes fully smooth. This wrapper applies the
+    angle correctly on both APIs.
+
+    A higher angle (default 60°) is friendlier to *organic* assets and their
+    decimated LODs — only genuinely sharp creases stay hard, instead of the
+    old 30° which faceted gently-curved surfaces.
+    """
+    import contextlib
+    import math
+
+    bpy = _require_bpy()
+    mesh = obj.data
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+
+    angle = math.radians(degrees)
+    if hasattr(bpy.ops.object, "shade_smooth_by_angle"):
+        with contextlib.suppress(RuntimeError, TypeError):
+            bpy.ops.object.select_all(action="DESELECT")
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+            bpy.ops.object.shade_smooth_by_angle(angle=angle)
+            return
+    # Legacy bpy (< 4.1)
+    with contextlib.suppress(AttributeError):
+        mesh.use_auto_smooth = True
+        mesh.auto_smooth_angle = angle
+
+
+def _needs_tangents(objects: Any) -> bool:
+    """Whether any mesh in *objects* has both UVs and a normal-map material.
+
+    Tangents only matter for tangent-space normal maps; computing them when no
+    normal map is present just splits vertices at UV seams for nothing.
+    """
+    for obj in objects:
+        if getattr(obj, "type", None) != "MESH":
+            continue
+        if not obj.data.uv_layers:
+            continue
+        for mat in obj.data.materials:
+            if mat is None or not getattr(mat, "use_nodes", False):
+                continue
+            if any(n.type == "NORMAL_MAP" for n in mat.node_tree.nodes):
+                return True
+    return False
+
+
 def save_glb(objects, path: str | Path, **kwargs: Any) -> None:
     """Export scene/objects to GLB via bpy native exporter.
 
@@ -43,6 +97,10 @@ def save_glb(objects, path: str | Path, **kwargs: Any) -> None:
       typical 2048² PBR set vs 30-40 MB as PNG).
     - ``export_normals=True``: normals are kept (turn off for shape-only stages
       where they will be recomputed downstream).
+    - ``export_tangents=True``: MikkTSpace tangents are written so tangent-space
+      normal maps render without seams across UV islands (and stay correct when
+      a skinned mesh deforms). Automatically disabled when ``export_normals`` is
+      off, since tangents without normals are meaningless.
     - ``export_all_influences=False``: skin weights limited to the 4 most
       influential joints per vertex (GLTF standard); avoids extra
       ``JOINTS_n/WEIGHTS_n`` attribute sets.
@@ -75,6 +133,7 @@ def save_glb(objects, path: str | Path, **kwargs: Any) -> None:
         "export_skins": True,
         "export_morph": True,
         "export_normals": True,
+        "export_tangents": True,
         "export_texcoords": True,
         "export_materials": "EXPORT",
         "export_image_format": "JPEG",
@@ -83,6 +142,16 @@ def save_glb(objects, path: str | Path, **kwargs: Any) -> None:
         "use_selection": use_selection,
     }
     export_kwargs.update(kwargs)
+
+    # Tangents are only needed to render a tangent-space *normal map*, and
+    # exporting them splits vertices at UV seams. So enable them only when a
+    # mesh actually has both UVs and a normal-map material — otherwise plain
+    # geometry would be needlessly inflated (e.g. a cube 8→24 verts).
+    if export_kwargs.get("export_tangents") and export_kwargs.get("export_normals", True):
+        candidates = objects if objects else bpy.context.scene.objects
+        export_kwargs["export_tangents"] = _needs_tangents(candidates)
+    else:
+        export_kwargs["export_tangents"] = False
 
     # Suppress bpy stdout spam
     stdout = io.StringIO()

@@ -164,6 +164,38 @@ def test_save_glb_no_vertex_duplication():
     assert vc_after <= vc_before * 1.5, f"Vertex inflation: {vc_before} -> {vc_after} ({vc_after / vc_before:.1f}x)"
 
 
+def test_apply_smooth_by_angle():
+    """apply_smooth_by_angle smooth-shades a mesh on bpy 4.1+ and legacy."""
+    pytest.importorskip("bpy")
+
+    import bpy
+
+    from gamedev_shared.bpy_mesh import apply_smooth_by_angle, clear_scene
+
+    clear_scene()
+    bpy.ops.mesh.primitive_uv_sphere_add()
+    obj = bpy.context.active_object
+    # Start fully flat to prove the call actually flips shading on.
+    for poly in obj.data.polygons:
+        poly.use_smooth = False
+    apply_smooth_by_angle(obj, 60.0)
+    assert all(p.use_smooth for p in obj.data.polygons)
+
+
+def test_needs_tangents_only_with_normal_map():
+    """Tangents are emitted only for UV'd, normal-mapped meshes."""
+    pytest.importorskip("bpy")
+
+    import bpy
+
+    from gamedev_shared.bpy_mesh import _needs_tangents, clear_scene
+
+    clear_scene()
+    bpy.ops.mesh.primitive_cube_add()
+    cube = bpy.context.active_object  # default cube: no normal-map material
+    assert _needs_tangents([cube]) is False
+
+
 def test_save_glb_axis_convention():
     """save_glb preserves axis orientation (no double rotation bug)."""
     pytest.importorskip("bpy")
