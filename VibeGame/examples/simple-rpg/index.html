@@ -161,6 +161,109 @@
         />
       </SpawnGroup>
 
+      <!-- Merchant's hut — built from simple Three.js box shapes (no GLB),
+           placed on the terrain. Open doorway at the front (+Z). -->
+      <GameObject place="at: 16 8; align-to-terrain: 0; ground-align: none">
+        <GameObject
+          pos="0 0.1 0"
+          mesh-renderer="shape: box; size-x: 6.4; size-y: 0.2; size-z: 6.4; color: 0x6b4a2b"
+        ></GameObject>
+        <GameObject
+          pos="0 1.6 -3"
+          mesh-renderer="shape: box; size-x: 6.4; size-y: 3; size-z: 0.3; color: 0x8a5a30"
+        ></GameObject>
+        <GameObject
+          pos="-3 1.6 0"
+          mesh-renderer="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; color: 0x8a5a30"
+        ></GameObject>
+        <GameObject
+          pos="3 1.6 0"
+          mesh-renderer="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; color: 0x8a5a30"
+        ></GameObject>
+        <GameObject
+          pos="-2.3 1.6 3"
+          mesh-renderer="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; color: 0x8a5a30"
+        ></GameObject>
+        <GameObject
+          pos="2.3 1.6 3"
+          mesh-renderer="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; color: 0x8a5a30"
+        ></GameObject>
+        <GameObject
+          pos="0 3.3 0"
+          mesh-renderer="shape: box; size-x: 7.2; size-y: 0.4; size-z: 7.2; color: 0x4a2f18"
+        ></GameObject>
+        <PointLight
+          pos="0 2.6 0"
+          point-light="color: 0xffcc77; intensity: 10; distance: 8; decay: 2"
+        ></PointLight>
+      </GameObject>
+
+      <!-- Hut collision: fixed bodies anchored at the same terrain point as the
+           visual group; each collider mirrors one visual box via pos-offset. -->
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 6.4; size-y: 0.2; size-z: 6.4; pos-offset-y: 0.1"
+      ></GameObject>
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 6.4; size-y: 3; size-z: 0.3; pos-offset-y: 1.6; pos-offset-z: -3"
+      ></GameObject>
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; pos-offset-x: -3; pos-offset-y: 1.6"
+      ></GameObject>
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; pos-offset-x: 3; pos-offset-y: 1.6"
+      ></GameObject>
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; pos-offset-x: -2.3; pos-offset-y: 1.6; pos-offset-z: 3"
+      ></GameObject>
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; pos-offset-x: 2.3; pos-offset-y: 1.6; pos-offset-z: 3"
+      ></GameObject>
+      <GameObject
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: box; size-x: 7.2; size-y: 0.4; size-z: 7.2; pos-offset-y: 3.3"
+      ></GameObject>
+
+      <!-- The merchant NPC stands inside the hut; walk up and press F to talk.
+           The script loads the rigged GLB itself and plays the idle clip. -->
+      <GameObject
+        name="merchant"
+        place="at: 16 9; align-to-terrain: 0"
+        script="merchant.ts"
+      ></GameObject>
+
+      <!-- Two bands of goblins roaming randomly (terrain-aware wander script). -->
+      <GameObject place="at: -22 14; align-to-terrain: 0" script="goblin-wander.ts">
+        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -18 17; align-to-terrain: 0" script="goblin-wander.ts">
+        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -25 18; align-to-terrain: 0" script="goblin-wander.ts">
+        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 26 -16; align-to-terrain: 0" script="goblin-wander.ts">
+        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 30 -13; align-to-terrain: 0" script="goblin-wander.ts">
+        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 22 -19; align-to-terrain: 0" script="goblin-wander.ts">
+        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      </GameObject>
+
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
       <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
       <ThirdPersonCamera

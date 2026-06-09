@@ -39,6 +39,7 @@ import { Postprocessing } from '../../../src/plugins/postprocessing/components';
 import { getRenderingContext } from '../../../src/plugins/rendering';
 import {
   getBodyForEntity,
+  getRapierWorld,
   PhysicsStepSystem,
 } from '../../../src/plugins/physics/systems';
 import {
@@ -47,6 +48,7 @@ import {
   GROUND_CONTACT_SKIN,
 } from '../../../src/plugins/physics/character-ground.ts';
 import { getTerrainHeightAt } from '../../../src/plugins/terrain/systems.ts';
+import { getBvhSurfaceHeight } from '../../../src/plugins/bvh/utils.ts';
 import {
   getTerrainContext,
   isTerrainDynamicsBlocking,
@@ -76,18 +78,13 @@ function isTerrainReady(state: State): boolean {
 }
 
 let heroGroundSnapped = false;
+let heroSpawnY: number | null = null;
 
 const HeroGroundSnapSystem: System = {
   group: 'fixed',
   after: [PhysicsStepSystem],
   update(state: State) {
-    if (
-      heroGroundSnapped ||
-      isTerrainDynamicsBlocking(state) ||
-      !isTerrainReady(state)
-    ) {
-      return;
-    }
+    if (heroGroundSnapped) return;
 
     const heroEid = state.getEntityByName('hero');
     if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
@@ -97,26 +94,43 @@ const HeroGroundSnapSystem: System = {
 
     const x = Transform.posX[heroEid];
     const z = Transform.posZ[heroEid];
-    const groundY = getTerrainHeightAt(state, x, z);
-    const spawnY = getBodyYForFeetAt(
+
+    // Terrain not ready yet — freeze the hero at spawn Y so gravity
+    // doesn't pull it through the floor before the heightmap loads.
+    if (isTerrainDynamicsBlocking(state) || !isTerrainReady(state)) {
+      if (heroSpawnY === null) heroSpawnY = Transform.posY[heroEid];
+      Transform.posY[heroEid] = heroSpawnY;
+      Transform.dirty[heroEid] = 1;
+      Rigidbody.velX[heroEid] = 0;
+      Rigidbody.velY[heroEid] = 0;
+      Rigidbody.velZ[heroEid] = 0;
+      body.setTranslation({ x, y: heroSpawnY, z }, true);
+      body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+      const CM = state.getComponent('character-movement');
+      if (CM && state.hasComponent(heroEid, CM)) CM.velocityY[heroEid] = 0;
+      return;
+    }
+
+    const groundY = getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
+    const snapY = getBodyYForFeetAt(
       state,
       heroEid,
       groundY + GROUND_CONTACT_SKIN
     );
 
     Transform.posX[heroEid] = x;
-    Transform.posY[heroEid] = spawnY;
+    Transform.posY[heroEid] = snapY;
     Transform.posZ[heroEid] = z;
     Transform.dirty[heroEid] = 1;
 
     Rigidbody.posX[heroEid] = x;
-    Rigidbody.posY[heroEid] = spawnY;
+    Rigidbody.posY[heroEid] = snapY;
     Rigidbody.posZ[heroEid] = z;
     Rigidbody.velX[heroEid] = 0;
     Rigidbody.velY[heroEid] = 0;
     Rigidbody.velZ[heroEid] = 0;
 
-    body.setTranslation({ x, y: spawnY, z }, true);
+    body.setTranslation({ x, y: snapY, z }, true);
     body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
     body.wakeUp();
 
@@ -127,9 +141,54 @@ const HeroGroundSnapSystem: System = {
       CM.desiredVelZ[heroEid] = 0;
     }
 
-    heroGroundSnapped = true;
+    // Only release the hero once the *physics* world actually has ground
+    // under the capsule. The visual heightmap (BVH) loads before the chunk
+    // heightfield colliders are built; releasing early lets gravity build up
+    // until the capsule tunnels straight through the one-sided heightfield.
+    if (physicsGroundBelow(state, body, x, snapY, z)) {
+      heroGroundSnapped = true;
+    }
   },
 };
+
+const _downDir = { x: 0, y: -1, z: 0 };
+
+/** True when a non-self collider lies within ~1.5m below the capsule. */
+function physicsGroundBelow(
+  state: State,
+  body: RAPIER.RigidBody,
+  x: number,
+  y: number,
+  z: number
+): boolean {
+  const world = getRapierWorld(state);
+  if (!world || body.numColliders() === 0) return false;
+  const collider = body.collider(0);
+  const cp = collider.translation();
+  const bp = body.translation();
+  // Collider sits at a fixed offset from the body origin; cast from where the
+  // collider would be if the body stood at (x, y, z).
+  const origin = {
+    x: x + (cp.x - bp.x),
+    y: y + (cp.y - bp.y),
+    z: z + (cp.z - bp.z),
+  };
+  const hit = world.castShape(
+    origin,
+    collider.rotation(),
+    _downDir,
+    collider.shape,
+    0,
+    1.5,
+    true,
+    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+    undefined,
+    undefined,
+    undefined,
+    (other: RAPIER.Collider) => other.handle !== collider.handle
+  );
+  return hit !== null;
+}
 
 // Live post-processing toggles (keys 1–4) so effects can be tuned per-machine —
 // flipping a field and dropping context.postProcessing rebuilds the pipeline.
@@ -187,7 +246,7 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT  [1-6] post-fx',
+    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT',
 };
 
 const dictPT: Record<string, string> = {
@@ -206,7 +265,7 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] girar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT  [1-6] pós-fx',
+    '[W/S] mover  [A/D] virar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
@@ -702,7 +761,7 @@ async function bootstrap(): Promise<void> {
     const x = Transform.posX[heroEid];
     const y = Transform.posY[heroEid];
     const z = Transform.posZ[heroEid];
-    const terrainY = getTerrainHeightAt(state, x, z);
+    const terrainY = getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
     const feetY = getCharacterFeetY(state, heroEid, y);
     const CM = state.getComponent('character-movement');
     const CC = state.getComponent('character-controller');
