@@ -27,6 +27,8 @@ const playersQuery = defineQuery([PlayerController]);
 
 /** Camera turn rate (rad/s) when steering the third-person view with A/D. */
 const CAMERA_TURN_SPEED = 2.5;
+/** How much A/D also moves the character sideways while steering (0..1). */
+const SIDE_MOVE_FACTOR = 0.6;
 
 function resolveCameraYaw(world: import('../../core').IWorld): number {
   const orbitCams = orbitCameraQuery(world);
@@ -45,15 +47,17 @@ export const PlayerMovementSystem: System = {
 
     for (const entity of playerEntities) {
       // Third-person: A/D steer the camera (and thus the heading) and W/S move
-      // along the camera's forward axis. Without a third-person camera fall back
-      // to an orbit-relative (or world) frame where A/D strafes.
+      // along the camera's forward axis. Steering also pushes the character a
+      // bit sideways (SIDE_MOVE_FACTOR) so turning carves an arc instead of
+      // pivoting in place. Without a third-person camera fall back to an
+      // orbit-relative (or world) frame where A/D strafes.
       let cameraYaw: number;
       let strafe: number;
       if (tpCam !== 0) {
         ThirdPersonCamera.yaw[tpCam] -=
           InputState.moveX[entity] * CAMERA_TURN_SPEED * deltaTime;
         cameraYaw = ThirdPersonCamera.yaw[tpCam];
-        strafe = 0;
+        strafe = InputState.moveX[entity] * SIDE_MOVE_FACTOR;
       } else {
         cameraYaw = resolveCameraYaw(state.world);
         strafe = InputState.moveX[entity];
@@ -65,11 +69,19 @@ export const PlayerMovementSystem: System = {
         cameraYaw
       );
 
+      // processInput normalizes the direction, so reapply the input magnitude:
+      // A/D alone should only nudge the character sideways (SIDE_MOVE_FACTOR),
+      // not push it at full speed.
+      const inputMag = Math.min(
+        1,
+        Math.hypot(InputState.moveY[entity], strafe)
+      );
+
       const speed = PlayerController.speed[entity];
       const sprintMult = InputState.sprint[entity] === 1
         ? PlayerController.sprintMultiplier[entity]
         : 1;
-      const finalSpeed = speed * sprintMult;
+      const finalSpeed = speed * sprintMult * inputMag;
       const horizontalVelX = inputVector.x * finalSpeed;
       const horizontalVelZ = inputVector.z * finalSpeed;
 

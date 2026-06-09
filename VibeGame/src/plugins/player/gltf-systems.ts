@@ -327,13 +327,12 @@ export const PlayerGltfAnimStateSystem: System = {
         });
       }
 
-      // Separate translation (W/S) from steering (A/D). In third-person the
-      // heading is steered by A/D, so |moveX| alone is a turn-in-place, not a
-      // walk — keying `moving` off moveX made the hero walk-in-place while
-      // spinning. Translation drives the gait; steering plays a turn clip.
+      // A/D steers the camera AND pushes the character sideways (arc turn), so
+      // both axes translate and drive the gait; steering additionally blends a
+      // turn-lean clip on top.
       const moveX = InputState.moveX[eid];
       const moveY = InputState.moveY[eid];
-      const translating = Math.abs(moveY) > 0.01;
+      const translating = Math.abs(moveY) > 0.01 || Math.abs(moveX) > 0.01;
       const turning = Math.abs(moveX) > 0.01;
       const run = translating && isRunModifier();
       const airborne = !grounded && (loco.jump || loco.fall);
