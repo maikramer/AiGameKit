@@ -68,12 +68,22 @@ def apply_uv_xatlas(mesh: "trimesh.Trimesh") -> trimesh.Trimesh:  # noqa: F821, 
         log.warning("xatlas not available — falling back to spherical UV projection")
         return apply_uv_spherical(mesh)
 
+    # Smooth vertex normals from the *welded* mesh — must be computed before
+    # the split below.
+    source_normals = mesh.vertex_normals
+
     vmapping, indices, uvs = xatlas.parametrize(mesh.vertices, mesh.faces)
 
-    # Rebuild mesh to match xatlas vertex remapping
+    # xatlas duplicates vertices along UV-island boundaries. Rebuild the mesh
+    # with the remapped vertices, and crucially carry each duplicate's normal
+    # from its original vertex (``vmapping`` maps new → old). Without this,
+    # trimesh would recompute normals on the split topology and the two sides
+    # of every seam would get slightly different normals — the visible
+    # shading seam that plagues atlas-unwrapped GLBs.
     new_vertices = mesh.vertices[vmapping]
     new_faces = indices
 
     unwrapped = trimesh.Trimesh(vertices=new_vertices, faces=new_faces, process=False)
+    unwrapped.vertex_normals = source_normals[vmapping]
     unwrapped.visual = trimesh.visual.texture.TextureVisuals(uv=uvs)
     return unwrapped

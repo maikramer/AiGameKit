@@ -83,7 +83,14 @@ def export_glb(
     Returns:
         The *output_path* that was written.
     """
+    import numpy as np
     import trimesh
+
+    # Capture the (seam-consistent) vertex normals before touching geometry —
+    # translating vertices invalidates trimesh's normal cache, which would
+    # otherwise recompute them on the UV-split topology and bring the seams
+    # back. Translation does not change normals, so we restore them verbatim.
+    normals = np.asarray(mesh.vertex_normals).copy()
 
     y_min = mesh.vertices[:, 1].min()
     mesh.vertices[:, 1] -= y_min
@@ -110,8 +117,14 @@ def export_glb(
 
     mesh.visual = trimesh.visual.texture.TextureVisuals(uv=existing_uv, material=material)
 
+    # Restore the captured normals (invalidated by the translation above).
+    mesh.vertex_normals = normals
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     scene = trimesh.Scene(geometry=mesh)
-    scene.export(str(output_path), file_type="glb")
+    # Write vertex normals into the GLB. Without an exported NORMAL attribute
+    # the viewer recomputes normals on the (UV-split) topology, reintroducing
+    # shading seams along every UV-island boundary.
+    scene.export(str(output_path), file_type="glb", include_normals=True)
 
     return output_path
