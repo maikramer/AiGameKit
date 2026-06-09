@@ -119,7 +119,11 @@ Negative values are subtracted from the base preset. For example, a `fast` bould
 
 ## PBR Textures
 
-Each generated rock embeds a glTF `PBRMaterial` directly in the GLB: a procedural base-color (albedo) texture with multi-octave variation and cavity darkening, plus normal, metallic-roughness and occlusion maps. When the [Materialize](../Materialize/) CLI is available (`MATERIALIZE_BIN` or on `PATH`) it generates the normal/AO/smoothness maps from the albedo using its `stone` preset; otherwise a procedural normal + roughness fallback is used. UVs are produced via xatlas (boulders) or spherical projection (pebbles) and preserved on export.
+Two texturing backends, selected automatically (override with `--bake/--no-bake`):
+
+**bpy bake (default when Blender's `bpy` is importable — it ships via `gamedev-shared`).** Builds a procedural material driven by **object-space** coordinates (3D-coherent) plus geometry pointiness for cavities, then bakes albedo, normal, roughness and AO to UV images with a bake margin. Because the source signal is coherent in 3D and the margin floods UV-island gutters, the textures are **seamless**. The GLB is exported with smooth vertex normals and MikkTSpace **tangents**, so the normal map renders without seams too.
+
+**trimesh fallback.** Embeds a glTF `PBRMaterial` with a procedural albedo (cavity darkening), plus normal/roughness/AO via [Materialize](../Materialize/) (or a procedural fallback). UVs come from xatlas (boulders) / spherical projection (pebbles); smooth normals are carried through the xatlas vertex-split and exported so shading has no seams, though 2D textures can still seam across UV islands — prefer the bpy backend for final assets.
 
 ## GameAssets Integration
 
