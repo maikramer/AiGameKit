@@ -30,24 +30,25 @@ def _require_bpy():
 
 
 def _shade_smooth(mesh_obj) -> None:
-    """Marca todas as faces como smooth-shaded e limpa custom split normals.
+    """Marca faces como smooth-shaded, mantendo arestas duras só acima de 60°.
 
     Substitui o antigo ``_restore_smooth_normals`` que aplicava
     ``normals_split_custom_set(loop_normals)``. Esse caminho fazia o exporter
     GLTF do Blender escrever normais por canto de face, duplicando vértices
-    (V/Tri ≈ 3 — bug do goblin_shape). Aqui usamos shade_smooth + auto-smooth
-    angle, deixando o exporter calcular normais por vértice.
+    (V/Tri ≈ 3 — bug do goblin_shape).
+
+    Usa ``gamedev_shared.bpy_mesh.apply_smooth_by_angle`` (60°), que funciona no
+    bpy 5.x via ``shade_smooth_by_angle`` — o antigo ``use_auto_smooth`` foi
+    removido no Blender 4.1 e era silenciosamente ignorado, deixando a malha
+    totalmente lisa.
     """
+    from gamedev_shared.bpy_mesh import apply_smooth_by_angle
+
     mesh = mesh_obj.data
     with contextlib.suppress(Exception):
         # Limpa qualquer custom split normal data que possa ter ficado da geração
         mesh.free_normals_split()
-    for poly in mesh.polygons:
-        poly.use_smooth = True
-    with contextlib.suppress(AttributeError):
-        # Auto-smooth por ângulo (Blender 4+ usa modifier ou attribute)
-        mesh.use_auto_smooth = True
-        mesh.auto_smooth_angle = 0.523599  # 30 graus em radianos
+    apply_smooth_by_angle(mesh_obj, 60.0)
 
 
 def _dynamic_weld_distance(vertex_count: int) -> float:
@@ -107,6 +108,9 @@ def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
         export_skins=has_armature,
         export_all_influences=False,
         export_normals=True,
+        # Tangents so the normal map has no seams at UV islands — decimated
+        # LODs are especially prone to this without them.
+        export_tangents=True,
         export_texcoords=True,
         export_materials="EXPORT",
         export_image_format="AUTO",

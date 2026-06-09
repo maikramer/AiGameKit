@@ -317,7 +317,13 @@ def _apply_origin_only_path(path: Path, *, origin_mode: str | None = None) -> No
         if ext == "ply":
             bpy.ops.export_mesh.ply(filepath=str(path), use_selection=True)
         else:
-            bpy.ops.export_scene.gltf(filepath=str(path), export_format="GLB", use_selection=True)
+            bpy.ops.export_scene.gltf(
+                filepath=str(path),
+                export_format="GLB",
+                use_selection=True,
+                export_normals=True,
+                export_tangents=True,
+            )
     except Exception as e:
         warnings.warn(f"Não foi possível aplicar origem: {e}", stacklevel=2)
 

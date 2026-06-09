@@ -853,17 +853,18 @@ def remesh_textured_glb(
     bpy.ops.object.modifier_apply(modifier=mod.name)
     log.info("Após decimate: %d faces (ratio=%.4f)", len(obj.data.polygons), ratio)
 
-    # Smooth shading via shade_smooth + auto-smooth angle. NÃO usar
+    # Smooth shading, hard edges only above 60°. NÃO usar
     # normals_split_custom_set: força exporter GLTF a duplicar verts e produz
     # V/Tri ≈ 3 (regressão crítica que afetava goblin_shape, ver
     # docs/superpowers/specs/2026-05-02-game-asset-pipeline-redesign.md).
+    # apply_smooth_by_angle usa shade_smooth_by_angle (bpy 5.x); o antigo
+    # use_auto_smooth foi removido no Blender 4.1 e era ignorado em silêncio,
+    # deixando LODs agressivos lisos/sem controlo de aresta.
+    from gamedev_shared.bpy_mesh import apply_smooth_by_angle
+
     with contextlib.suppress(Exception):
         mesh.free_normals_split()
-    for poly in mesh.polygons:
-        poly.use_smooth = True
-    with contextlib.suppress(AttributeError):
-        mesh.use_auto_smooth = True
-        mesh.auto_smooth_angle = 0.523599  # 30 graus
+    apply_smooth_by_angle(obj, 60.0)
     # saved_pos / saved_nrm / KDTree antigos deixam de ser usados; mantemos
     # calculados acima por enquanto para minimizar diff.
     _ = (saved_pos, saved_nrm, KDTree)
