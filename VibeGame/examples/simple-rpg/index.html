@@ -245,26 +245,139 @@
       ></GameObject>
 
       <!-- Two bands of goblins roaming randomly (terrain-aware wander script). -->
-      <GameObject place="at: -22 14; align-to-terrain: 0" script="goblin-wander.ts">
-        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      <GameObject
+        place="at: -22 14; align-to-terrain: 0"
+        script="goblin-wander.ts"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/goblin_lod1.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -18 17; align-to-terrain: 0" script="goblin-wander.ts">
-        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      <GameObject
+        place="at: -18 17; align-to-terrain: 0"
+        script="goblin-wander.ts"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/goblin_lod1.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -25 18; align-to-terrain: 0" script="goblin-wander.ts">
-        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      <GameObject
+        place="at: -25 18; align-to-terrain: 0"
+        script="goblin-wander.ts"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/goblin_lod1.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: 26 -16; align-to-terrain: 0" script="goblin-wander.ts">
-        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      <GameObject
+        place="at: 26 -16; align-to-terrain: 0"
+        script="goblin-wander.ts"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/goblin_lod1.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: 30 -13; align-to-terrain: 0" script="goblin-wander.ts">
-        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      <GameObject
+        place="at: 30 -13; align-to-terrain: 0"
+        script="goblin-wander.ts"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/goblin_lod1.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: 22 -19; align-to-terrain: 0" script="goblin-wander.ts">
-        <GLTFLoader role="visual" url="/assets/meshes/goblin_lod1.glb"></GLTFLoader>
+      <GameObject
+        place="at: 22 -19; align-to-terrain: 0"
+        script="goblin-wander.ts"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/goblin_lod1.glb"
+        ></GLTFLoader>
       </GameObject>
 
       <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
+      <!-- Destructible mossy rocks: press J (or click) near them to smash with
+           particles. Collider: exact trimesh from rock_mossy_collision.glb;
+           mesh-anchor "base" re-pivots the collision mesh to the visual
+           convention (origin at the AABB base center). -->
+      <GameObject
+        place="at: 8 -6; align-to-terrain: 0"
+        script="destructible-rock.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          scale="1.2 1.2 1.2"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -10 5; align-to-terrain: 0"
+        script="destructible-rock.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          scale="1.5 1.5 1.5"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: 14 18; align-to-terrain: 0"
+        script="destructible-rock.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          scale="0.8 0.8 0.8"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -18 -8; align-to-terrain: 0"
+        script="destructible-rock.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          scale="1.0 1.0 1.0"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: 5 20; align-to-terrain: 0"
+        script="destructible-rock.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          scale="1.3 1.3 1.3"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -5 -15; align-to-terrain: 0"
+        script="destructible-rock.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/rock_mossy_lod0.glb"
+          scale="0.9 0.9 0.9"
+        ></GLTFLoader>
+      </GameObject>
+
       <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
       <ThirdPersonCamera
         distance="4"

@@ -84,7 +84,9 @@ function spawnWave(ctx: MonoBehaviourContext, waveNum: number): void {
       SPAWN_RADIUS_MIN + Math.random() * (SPAWN_RADIUS_MAX - SPAWN_RADIUS_MIN);
     const x = px + Math.cos(angle) * radius;
     const z = pz + Math.sin(angle) * radius;
-    const height = getBvhSurfaceHeight(ctx.state, x, 500, z) ?? getTerrainHeightAt(ctx.state, x, z);
+    const height =
+      getBvhSurfaceHeight(ctx.state, x, 500, z) ??
+      getTerrainHeightAt(ctx.state, x, z);
 
     if (height < WATER_LEVEL) continue;
 

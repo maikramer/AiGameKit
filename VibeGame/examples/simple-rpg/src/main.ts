@@ -2,6 +2,12 @@ declare global {
   interface Window {
     __heroPos?: () => { x: number; y: number; z: number; eid: number };
     __heroDebug?: () => Record<string, number>;
+    __spawnFloatingText?: (
+      text: string,
+      x: number,
+      y: number,
+      z: number
+    ) => number;
   }
 }
 
@@ -30,6 +36,8 @@ import {
   getLocale,
   t,
   isKeyDown,
+  addInputMapping,
+  spawnFloatingText,
   getScene,
 } from 'vibegame';
 import * as THREE from 'three';
@@ -37,6 +45,7 @@ import { defineQuery } from 'vibegame';
 import { Rigidbody } from '../../../src/plugins/physics/components';
 import { Postprocessing } from '../../../src/plugins/postprocessing/components';
 import { getRenderingContext } from '../../../src/plugins/rendering';
+import { threeCameras } from '../../../src/plugins/rendering/utils';
 import {
   getBodyForEntity,
   getRapierWorld,
@@ -61,6 +70,7 @@ import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
 import { DebugPlugin } from '../../../src/plugins/debug/index.ts';
 import { Health, isDead } from '../../../src/plugins/combat/components.ts';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
+import { getStoneCount, getLastCollectPosition } from './scripts/inventory';
 
 const SAVE_KEY = 'simple-rpg-save';
 
@@ -111,7 +121,8 @@ const HeroGroundSnapSystem: System = {
       return;
     }
 
-    const groundY = getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
+    const groundY =
+      getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
     const snapY = getBodyYForFeetAt(
       state,
       heroEid,
@@ -236,7 +247,7 @@ const dictEN: Record<string, string> = {
   'hud.hp': 'HP: {hp} / {max}',
   'hud.wave': 'Wave {wave} — Enemies: {enemies}',
   'hud.time': 'Time: {time}',
-  'hud.locale': 'Language: {lang}  [L] switch',
+  'hud.locale': 'Language: {lang}  [I] switch',
   'hud.saved': 'Game saved!',
   'hud.loaded': 'Save restored.',
   'hud.no-save': 'No save found.',
@@ -246,7 +257,9 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'Wave {wave} reached',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [Click] attack  [Q] save  [E] load  [L] EN/PT',
+    '[W/S] move  [A/D] turn  [Space] jump  [J] attack  [K] talk  [L] back  [Q] save  [E] load  [I] EN/PT',
+  'hud.stone': 'Stone: {count}',
+  'hud.stoneCollected': '+1 Stone!',
 };
 
 const dictPT: Record<string, string> = {
@@ -255,7 +268,7 @@ const dictPT: Record<string, string> = {
   'hud.hp': 'HP: {hp} / {max}',
   'hud.wave': 'Onda {wave} — Inimigos: {enemies}',
   'hud.time': 'Tempo: {time}',
-  'hud.locale': 'Idioma: {lang}  [L] trocar',
+  'hud.locale': 'Idioma: {lang}  [I] trocar',
   'hud.saved': 'Jogo gravado!',
   'hud.loaded': 'Progresso restaurado.',
   'hud.no-save': 'Nenhuma gravação encontrada.',
@@ -265,7 +278,9 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Onda {wave} alcançada',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] virar  [Espaço] saltar  [Clique] atacar  [Q] gravar  [E] carregar  [L] EN/PT',
+    '[W/S] mover  [A/D] virar  [Espaço] saltar  [J] atacar  [K] falar  [L] voltar  [Q] gravar  [E] carregar  [I] EN/PT',
+  'hud.stone': 'Pedra: {count}',
+  'hud.stoneCollected': '+1 Pedra!',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
@@ -278,6 +293,7 @@ let waveCompleteEl: HTMLDivElement | null = null;
 let gameOverEl: HTMLDivElement | null = null;
 let waveTopEl: HTMLDivElement | null = null;
 let hudRootEl: HTMLDivElement | null = null;
+let stoneCountEl: HTMLDivElement | null = null;
 let hudRevealed = false;
 
 let eidSfxJump = -1;
@@ -303,6 +319,7 @@ let healFlashUntil = 0;
 let prevWaveNumber = 1;
 let waveCompleteFlashUntil = 0;
 let gameOverShown = false;
+let prevStoneCollectVersion = 0;
 
 const DAMAGE_NUMBER_POOL_SIZE = 10;
 const damageNumberPool: HTMLDivElement[] = [];
@@ -365,28 +382,37 @@ function showDamageNumber(
   el.style.transform = 'translateY(-40px)';
 }
 
+function showStoneNumber(state: State): void {
+  // Real 3D-space popup (FloatingTextPlugin / troika-three-text): spawned at
+  // the rock, billboarded to the camera, rises and fades on its own.
+  const pos = getLastCollectPosition();
+  spawnFloatingText(state, t(state, 'hud.stoneCollected'), {
+    x: pos.x,
+    y: pos.y + 0.6,
+    z: pos.z,
+    color: 0xd4c9a8,
+    size: 0.45,
+    duration: 1.8,
+    riseSpeed: 1.1,
+  });
+}
+
 function project3Dto2D(
   worldX: number,
   worldY: number,
   worldZ: number,
-  state: State
+  _state: State
 ): { x: number; y: number } | null {
-  const renderer = state.renderer;
-  if (!renderer) return null;
-  const camera = renderer.getCamera();
+  const camera = threeCameras.values().next().value;
   if (!camera) return null;
-
-  const THREE = renderer.getTHREE();
-  if (!THREE) return null;
 
   const vec = new THREE.Vector3(worldX, worldY, worldZ);
   vec.project(camera);
 
   if (vec.z > 1) return null;
 
-  const canvas = renderer.getCanvas();
-  const hw = (canvas?.clientWidth ?? window.innerWidth) / 2;
-  const hh = (canvas?.clientHeight ?? window.innerHeight) / 2;
+  const hw = window.innerWidth / 2;
+  const hh = window.innerHeight / 2;
 
   return {
     x: vec.x * hw + hw,
@@ -505,6 +531,19 @@ const GameplayHudSystem: System = {
     if (statusFlashKey && state.time.elapsed >= statusFlashUntil) {
       statusFlashKey = '';
     }
+
+    const currentStone = getStoneCount();
+    if (stoneCountEl) {
+      stoneCountEl.textContent = t(state, 'hud.stone', {
+        count: String(currentStone),
+      });
+    }
+    const collectPos = getLastCollectPosition();
+    if (collectPos.version !== prevStoneCollectVersion) {
+      prevStoneCollectVersion = collectPos.version;
+      showStoneNumber(state);
+      if (eidSfxHeal >= 0) playAudioEmitter(state, eidSfxHeal);
+    }
     if (
       overlayMissionEl &&
       statusFlashKey &&
@@ -533,7 +572,8 @@ const GameplayHudSystem: System = {
       prevHeroIsJumping = jumping;
     }
 
-    if (isKeyDown('KeyL') && !localeDebounce) {
+    // L agora é "cancelar/voltar" (fecha o diálogo do mercador); o idioma fica no I.
+    if (isKeyDown('KeyI') && !localeDebounce) {
       localeDebounce = true;
       const next = getLocale(state) === 'pt' ? 'en' : 'pt';
       setLocale(state, next);
@@ -541,7 +581,7 @@ const GameplayHudSystem: System = {
         overlayControlsEl.textContent = t(state, 'hud.controls');
       refreshHud(state);
     }
-    if (!isKeyDown('KeyL')) localeDebounce = false;
+    if (!isKeyDown('KeyI')) localeDebounce = false;
 
     if (isKeyDown('KeyQ') && !saveDebounce) {
       saveDebounce = true;
@@ -615,6 +655,15 @@ function createOverlayHud(state: State): void {
 
   topLeft.appendChild(overlayMissionEl);
   topLeft.appendChild(healthBarContainer);
+
+  stoneCountEl = document.createElement('div');
+  stoneCountEl.style.cssText =
+    'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
+    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);' +
+    'color:#d4c9a8;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
+  stoneCountEl.textContent = t(state, 'hud.stone', { count: '0' });
+
+  topLeft.appendChild(stoneCountEl);
   topLeft.appendChild(overlayStatsEl);
 
   damageFlashEl = document.createElement('div');
@@ -728,6 +777,9 @@ async function bootstrap(): Promise<void> {
       bootLang === 'pt' ? 'A preparar o mundo…' : 'Preparing the world…',
   });
 
+  // J ataca como o clique esquerdo (animação + meleeHit + rochas destrutíveis).
+  addInputMapping('primaryAction', 'KeyJ');
+
   withPlugin(LoadingPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
@@ -755,13 +807,18 @@ async function bootstrap(): Promise<void> {
 
   window.__heroState = state;
 
+  // QA helper: spawn a floating text from the console / automated tests.
+  window.__spawnFloatingText = (text, x, y, z) =>
+    spawnFloatingText(state, text, { x, y, z, duration: 4 });
+
   window.__heroDebug = () => {
     const heroEid = state.getEntityByName('hero');
     if (heroEid === null) return {};
     const x = Transform.posX[heroEid];
     const y = Transform.posY[heroEid];
     const z = Transform.posZ[heroEid];
-    const terrainY = getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
+    const terrainY =
+      getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
     const feetY = getCharacterFeetY(state, heroEid, y);
     const CM = state.getComponent('character-movement');
     const CC = state.getComponent('character-controller');

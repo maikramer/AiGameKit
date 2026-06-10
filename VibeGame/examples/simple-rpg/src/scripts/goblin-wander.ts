@@ -141,8 +141,10 @@ export function update(ctx: MonoBehaviourContext): void {
 
   // --- Speed ease-in/out ---
   const targetSpeed = w.walking ? WALK_SPEED : 0;
-  if (w.speed < targetSpeed) w.speed = Math.min(targetSpeed, w.speed + ACCEL * dt);
-  else if (w.speed > targetSpeed) w.speed = Math.max(targetSpeed, w.speed - ACCEL * dt);
+  if (w.speed < targetSpeed)
+    w.speed = Math.min(targetSpeed, w.speed + ACCEL * dt);
+  else if (w.speed > targetSpeed)
+    w.speed = Math.max(targetSpeed, w.speed - ACCEL * dt);
 
   let nx = x;
   let nz = z;

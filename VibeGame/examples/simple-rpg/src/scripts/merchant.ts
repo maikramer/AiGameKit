@@ -27,7 +27,8 @@ const _box = new THREE.Box3();
 let promptEl: HTMLDivElement | null = null;
 let dialogEl: HTMLDivElement | null = null;
 let dialogOpen = false;
-let fDebounce = false;
+let talkDebounce = false;
+let cancelDebounce = false;
 
 const LINES = [
   'Bem-vindo, viajante! / Welcome, traveler!',
@@ -44,7 +45,7 @@ function ensureDom(): void {
     'background:rgba(8,12,28,0.82);color:#ffe08a;padding:8px 18px;border-radius:8px;' +
     'font:600 14px system-ui,Segoe UI,sans-serif;border:1px solid rgba(255,210,120,0.35);' +
     'box-shadow:0 6px 24px rgba(0,0,0,0.35);z-index:1500;pointer-events:none;display:none;';
-  promptEl.innerHTML = 'Aperte <b>F</b> para falar com o mercador';
+  promptEl.innerHTML = 'Aperte <b>K</b> para falar com o mercador';
 
   dialogEl = document.createElement('div');
   dialogEl.style.cssText =
@@ -68,7 +69,7 @@ function renderDialog(): void {
   if (!dialogEl) return;
   dialogEl.innerHTML =
     `<b style="color:#ffd27a">Mercador / Merchant</b><br/>${LINES[lineIdx]}` +
-    `<br/><span style="opacity:0.6;font-size:12px">[F] continuar · afaste-se para sair</span>`;
+    `<br/><span style="opacity:0.6;font-size:12px">[K] continuar · [L] sair</span>`;
 }
 
 export function start(ctx: MonoBehaviourContext): void {
@@ -119,8 +120,8 @@ export function update(ctx: MonoBehaviourContext): void {
 
   if (near) {
     promptEl.style.display = dialogOpen ? 'none' : 'block';
-    if (isKeyDown('KeyF') && !fDebounce) {
-      fDebounce = true;
+    if (isKeyDown('KeyK') && !talkDebounce) {
+      talkDebounce = true;
       if (!dialogOpen) {
         dialogOpen = true;
         lineIdx = 0;
@@ -130,7 +131,17 @@ export function update(ctx: MonoBehaviourContext): void {
       renderDialog();
       if (dialogEl) dialogEl.style.display = 'block';
     }
-    if (!isKeyDown('KeyF')) fDebounce = false;
+    if (!isKeyDown('KeyK')) talkDebounce = false;
+
+    // L = cancelar/voltar: fecha o diálogo sem sair do alcance.
+    if (isKeyDown('KeyL') && !cancelDebounce) {
+      cancelDebounce = true;
+      if (dialogOpen) {
+        dialogOpen = false;
+        if (dialogEl) dialogEl.style.display = 'none';
+      }
+    }
+    if (!isKeyDown('KeyL')) cancelDebounce = false;
   } else {
     promptEl.style.display = 'none';
     if (dialogEl) dialogEl.style.display = 'none';

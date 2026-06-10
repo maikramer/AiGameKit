@@ -27,7 +27,9 @@ export default defineConfig({
     port: 3011,
     open: process.env.BROWSER !== 'none',
     fs: {
-      allow: ['..'],
+      // The whole VibeGame root: the engine source AND its node_modules
+      // (e.g. troika-three-text) are served from outside examples/.
+      allow: ['..', vibegameRoot],
     },
     watch: {
       ignored: ['!**/node_modules/vibegame/**'],
@@ -42,6 +44,6 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['vibegame'],
-    include: ['@interverse/three-terrain-lod'],
+    include: ['@interverse/three-terrain-lod', 'troika-three-text'],
   },
 });
