@@ -20,10 +20,29 @@ import {
   warnMissingGltfBoundsOnce,
 } from '../gltf-xml/gltf-bounds-cache';
 import { DistanceCull } from '../rendering/components';
+import { Rigidbody } from '../physics/components';
+import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
 import { TerrainSpawned } from './components';
 
 const upNormal = new THREE.Vector3(0, 1, 0);
+
+/**
+ * Physics bodies live in world space, but the spawner only writes the
+ * `transform` attribute — mirror the spawned pose into Rigidbody (same rule
+ * as TerrainPlaceSystem) or the Rapier body is created at the world origin
+ * while the visual sits on the terrain.
+ */
+function mirrorPoseToRigidbody(state: State, eid: number): void {
+  if (!state.hasComponent(eid, Rigidbody)) return;
+  Rigidbody.posX[eid] = Transform.posX[eid];
+  Rigidbody.posY[eid] = Transform.posY[eid];
+  Rigidbody.posZ[eid] = Transform.posZ[eid];
+  Rigidbody.eulerX[eid] = Transform.eulerX[eid];
+  Rigidbody.eulerY[eid] = Transform.eulerY[eid];
+  Rigidbody.eulerZ[eid] = Transform.eulerZ[eid];
+  syncBodyQuaternionFromEuler(eid);
+}
 
 function mergeTemplateAttributes(
   template: SpawnTemplateSpec,
@@ -189,6 +208,7 @@ export function spawnTemplateAtTerrain(
       state.addComponent(eid, DistanceCull);
       DistanceCull.maxDistance[eid] = spec.maxDistance;
     }
+    mirrorPoseToRigidbody(state, eid);
     state.addComponent(eid, TerrainSpawned);
     TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
     TerrainSpawned.surfaceEpsilon[eid] = spec.surfaceEpsilon;
@@ -200,6 +220,7 @@ export function spawnTemplateAtTerrain(
     state.addComponent(eid, DistanceCull);
     DistanceCull.maxDistance[eid] = spec.maxDistance;
   }
+  mirrorPoseToRigidbody(state, eid);
   state.addComponent(eid, TerrainSpawned);
   TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
   TerrainSpawned.surfaceEpsilon[eid] = spec.surfaceEpsilon;
