@@ -22,6 +22,7 @@ import { AudioPlugin } from './audio/plugin';
 import { EquirectSkyPlugin } from './sky/plugin';
 import { ParticlesPlugin } from './particles/plugin';
 import { FloatingTextPlugin } from './floating-text/plugin';
+import { DestructiblePlugin } from './destructible/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
 import { VegetationPlugin } from './vegetation/plugin';
@@ -51,5 +52,6 @@ export const DefaultPlugins: Plugin[] = [
   EquirectSkyPlugin,
   ParticlesPlugin,
   FloatingTextPlugin,
+  DestructiblePlugin,
   TweeningPlugin,
 ];

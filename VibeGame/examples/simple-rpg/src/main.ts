@@ -38,6 +38,7 @@ import {
   isKeyDown,
   addInputMapping,
   spawnFloatingText,
+  onDestructibleDestroyed,
   getScene,
 } from 'vibegame';
 import * as THREE from 'three';
@@ -70,7 +71,11 @@ import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
 import { DebugPlugin } from '../../../src/plugins/debug/index.ts';
 import { Health, isDead } from '../../../src/plugins/combat/components.ts';
 import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
-import { getStoneCount, getLastCollectPosition } from './scripts/inventory';
+import {
+  addStone,
+  getStoneCount,
+  getLastCollectPosition,
+} from './scripts/inventory';
 
 const SAVE_KEY = 'simple-rpg-save';
 
@@ -806,6 +811,13 @@ async function bootstrap(): Promise<void> {
   }
 
   window.__heroState = state;
+
+  // Engine DestructiblePlugin breaks the rocks (swing timing, particles);
+  // the game only collects the loot — the HUD watcher then shows the
+  // localized "+1 Pedra!" popup and plays the SFX.
+  onDestructibleDestroyed(state, (_eid, x, y, z) => {
+    addStone(1, x, y + 0.8, z);
+  });
 
   // QA helper: spawn a floating text from the console / automated tests.
   window.__spawnFloatingText = (text, x, y, z) =>

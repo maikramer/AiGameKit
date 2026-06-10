@@ -83,7 +83,17 @@ export type {
 } from './plugins/entity-script';
 
 export { Terrain, TerrainPlugin } from './plugins/terrain';
-export { ParticlesPlugin, ParticleEmitter } from './plugins/particles';
+export {
+  ParticlesPlugin,
+  ParticleEmitter,
+  spawnParticleBurst,
+} from './plugins/particles';
+export type { ParticleBurstOptions } from './plugins/particles';
+export {
+  DestructiblePlugin,
+  Destructible,
+  onDestructibleDestroyed,
+} from './plugins/destructible';
 export {
   FloatingTextPlugin,
   FloatingText,
