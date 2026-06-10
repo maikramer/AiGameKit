@@ -71,6 +71,10 @@ export interface SpawnGroupSpec {
   pickStrategy: 'round-robin' | 'random';
   /** Re-sample XZ when terrain would sit under a Water plane (lakes). */
   avoidWater: boolean;
+  /** Re-sample XZ when the instance footprint overlaps a registered one (trees, hut colliders, other instances, SpawnExclusion zones). */
+  avoidOverlaps: boolean;
+  /** Per-instance XZ footprint radius before scale. 0 = auto (GLB AABB half-width, fallback 0.8). */
+  footprintRadius: number;
   /** Maximum render distance for spawned entities (0 = no culling). Beyond this XZ distance from camera, mesh is hidden but physics remain active. */
   maxDistance: number;
   /** Render the group as a single GPU-instanced mesh (per LOD) instead of one entity per instance. Trades per-instance physics/scripts for draw-call efficiency on dense static vegetation. */

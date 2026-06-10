@@ -286,6 +286,8 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     maxSlopePlacementAttempts: resolvedSpawn.maxSlopePlacementAttempts,
     pickStrategy,
     avoidWater: resolvedSpawn.avoidWater,
+    avoidOverlaps: resolvedSpawn.avoidOverlaps,
+    footprintRadius: resolvedSpawn.footprintRadius,
     maxDistance: resolvedSpawn.maxDistance,
     instanced: toBool(element.attributes['instanced']),
     templates,

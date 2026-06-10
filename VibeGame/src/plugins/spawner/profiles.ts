@@ -34,6 +34,10 @@ export interface GroupSpawnDefaults {
   maxSlopePlacementAttempts: number;
   /** Re-amostra posições que cairiam sob planos de água (lagos). */
   avoidWater: boolean;
+  /** Re-amostra posições que colidem com footprints já registados (árvores, casa, outras instâncias). */
+  avoidOverlaps: boolean;
+  /** Raio XZ do footprint por instância (antes da escala). 0 = automático (meia-largura do AABB do GLB, fallback 0.8). */
+  footprintRadius: number;
   /** Distância máxima de renderização (0 = sem culling). Entidades além desta distância XZ da câmara têm o mesh oculto; a física permanece ativa. */
   maxDistance: number;
   scaleDistribution: ScaleDistributionMode;
@@ -56,6 +60,8 @@ const LEGACY: GroupSpawnDefaults = {
   maxSlopeDeg: 45,
   maxSlopePlacementAttempts: 32,
   avoidWater: false,
+  avoidOverlaps: true,
+  footprintRadius: 0,
   scaleDistribution: 'linear',
   yawDistribution: 'linear',
   scaleDiscreteValues: [],
@@ -77,6 +83,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    avoidOverlaps: true,
+    footprintRadius: 0,
     scaleDistribution: 'linear',
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
@@ -95,6 +103,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 48,
     avoidWater: true,
+    avoidOverlaps: true,
+    footprintRadius: 0,
     scaleDistribution: 'linear',
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
@@ -113,6 +123,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
     avoidWater: false,
+    avoidOverlaps: true,
+    footprintRadius: 0,
     scaleDistribution: 'linear',
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
@@ -131,6 +143,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 45,
     maxSlopePlacementAttempts: 32,
     avoidWater: false,
+    avoidOverlaps: true,
+    footprintRadius: 0,
     scaleDistribution: 'linear',
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
@@ -149,6 +163,8 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     maxSlopeDeg: 90,
     maxSlopePlacementAttempts: 1,
     avoidWater: false,
+    avoidOverlaps: true,
+    footprintRadius: 0,
     scaleDistribution: 'linear',
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
@@ -405,6 +421,8 @@ export function resolveGroupSpawnFields(
       )
     ),
     avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
+    avoidOverlaps: optBool(attrs['avoid-overlaps'], p.avoidOverlaps),
+    footprintRadius: optNumber(attrs['footprint-radius'], p.footprintRadius),
     maxDistance: optNumber(attrs['max-distance'], p.maxDistance),
     scaleDistribution,
     yawDistribution,

@@ -10,7 +10,8 @@ import { spawnTemplateAtTerrain } from './spawn-template';
 import { isNormalWithinSlopeLimit, sampleTerrainSurface } from './surface';
 import { composeSpawnRotation } from './transform-merge';
 import { Transform, WorldTransform } from '../transforms/components';
-import { Rigidbody } from '../physics/components';
+import { Collider, ColliderShape, Rigidbody } from '../physics/components';
+import { registerSpawnFootprint } from './occupancy';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import { findNearestTerrainEntity } from '../terrain/index';
 
@@ -94,6 +95,45 @@ function applyRootPlacement(
     Rigidbody.rotZ[eid] = q.z;
     Rigidbody.rotW[eid] = q.w;
   }
+
+  registerPlacedColliderFootprint(state, eid);
+}
+
+/**
+ * Placed entities with colliders (hut walls, fences…) occupy ground: register
+ * their XZ footprint so spawn groups don't drop rocks/trees inside them.
+ * Conservative disc: half the collider's XZ diagonal, centered at the
+ * collider offset. TerrainPlaceSystem runs in the first simulation bucket, so
+ * these land in the registry before any spawn group samples positions.
+ */
+function registerPlacedColliderFootprint(state: State, eid: number): void {
+  if (!state.hasComponent(eid, Collider)) return;
+  const sx = Math.abs(Transform.scaleX[eid]) || 1;
+  const sz = Math.abs(Transform.scaleZ[eid]) || 1;
+
+  let radius: number;
+  switch (Collider.shape[eid]) {
+    case ColliderShape.Sphere:
+      radius = (Collider.sizeX[eid] / 2) * Math.max(sx, sz);
+      break;
+    case ColliderShape.Capsule:
+      radius = Collider.radius[eid];
+      break;
+    case ColliderShape.TriMesh:
+    case ColliderShape.ConvexHull:
+      radius = 1.2 * (Collider.meshScale[eid] || 1) * Math.max(sx, sz);
+      break;
+    default:
+      radius =
+        Math.hypot(Collider.sizeX[eid] * sx, Collider.sizeZ[eid] * sz) / 2;
+  }
+
+  registerSpawnFootprint(
+    state,
+    Transform.posX[eid] + Collider.posOffsetX[eid],
+    Transform.posZ[eid] + Collider.posOffsetZ[eid],
+    radius
+  );
 }
 
 /**

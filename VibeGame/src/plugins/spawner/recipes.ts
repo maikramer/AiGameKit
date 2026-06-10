@@ -30,9 +30,17 @@ export const spawnGroupRecipe: Recipe = {
     'max-slope-deg',
     'max-slope-attempts',
     'avoid-water',
+    'avoid-overlaps',
+    'footprint-radius',
     'max-distance',
     'instanced',
   ],
+};
+
+/** Explicit no-spawn disc: `<SpawnExclusion at="16 8" radius="7">`. */
+export const spawnExclusionRecipe: Recipe = {
+  name: 'SpawnExclusion',
+  components: ['spawn-exclusion'],
 };
 
 /** Overrides core `entity` with transform + optional terrain placement (`place` attr). */

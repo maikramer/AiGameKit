@@ -25,9 +25,40 @@ import {
   Rigidbody,
 } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
+import {
+  SpawnExclusion,
+  isSpawnAreaFree,
+  registerSpawnFootprint,
+} from './occupancy';
 
 const spawnerQuery = defineQuery([SpawnerPending]);
 const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
+const exclusionQuery = defineQuery([SpawnExclusion]);
+
+/**
+ * Per-instance footprint radius (before scale): explicit `footprint-radius`,
+ * else half the GLB footprint, else a small prop default.
+ */
+function footprintBaseRadius(spec: SpawnGroupSpec, urls: string[]): number {
+  if (spec.footprintRadius > 0) return spec.footprintRadius;
+  let best = 0;
+  for (const url of urls) {
+    const aabb = getGltfLocalAABB(url);
+    if (!aabb) continue;
+    const half = Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2;
+    if (half > best) best = half;
+  }
+  return best > 0 ? best : 0.8;
+}
+
+function templateUrls(spec: SpawnGroupSpec): string[] {
+  const urls: string[] = [];
+  for (const tpl of spec.templates) {
+    const u = tpl.attributes.url;
+    if (typeof u === 'string' && u.trim()) urls.push(u.trim());
+  }
+  return urls;
+}
 
 let callbackRegistered = false;
 
@@ -139,6 +170,19 @@ export const TerrainSpawnSystem: System = {
   after: [TransformHierarchySystem],
   update(state) {
     if (state.headless) return;
+
+    // Explicit no-spawn zones go into the occupancy registry before any group
+    // samples positions this frame.
+    for (const e of exclusionQuery(state.world)) {
+      if (SpawnExclusion.registered[e]) continue;
+      SpawnExclusion.registered[e] = 1;
+      registerSpawnFootprint(
+        state,
+        SpawnExclusion.x[e],
+        SpawnExclusion.z[e],
+        SpawnExclusion.radius[e]
+      );
+    }
 
     if (!callbackRegistered) {
       callbackRegistered = true;
@@ -286,6 +330,11 @@ export const TerrainSpawnSystem: System = {
               ? Math.max(aabb.maxX - aabb.minX, aabb.maxZ - aabb.minZ) / 2
               : 0.5;
 
+            const radiusBase =
+              spec.footprintRadius > 0
+                ? spec.footprintRadius
+                : halfWidth || 0.8;
+
             for (let i = 0; i < instanceCount; i++) {
               let wx = minX;
               let wz = minZ;
@@ -305,14 +354,32 @@ export const TerrainSpawnSystem: System = {
                 );
                 if (!cand) continue;
                 s = cand;
-                if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
-                  foundValidSlope = true;
-                  break;
+                if (!isNormalWithinSlopeLimit(cand.normal, maxSlope)) continue;
+                // Reject candidates whose footprint overlaps the hut, trees,
+                // or anything spawned earlier (conservative scaleMax radius —
+                // the actual scale is drawn after the position is accepted).
+                if (
+                  spec.avoidOverlaps &&
+                  !isSpawnAreaFree(state, wx, wz, radiusBase * spec.scaleMax)
+                ) {
+                  continue;
                 }
+                foundValidSlope = true;
+                break;
               }
               if (!s) continue;
               if (!foundValidSlope && !acceptAnySlope) continue;
+              if (
+                !foundValidSlope &&
+                spec.avoidOverlaps &&
+                !isSpawnAreaFree(state, wx, wz, radiusBase * spec.scaleMax)
+              ) {
+                continue;
+              }
               const scale = resolveScale(rand, spec);
+              if (spec.avoidOverlaps) {
+                registerSpawnFootprint(state, wx, wz, radiusBase * scale);
+              }
               const yaw = resolveYaw(rand, spec);
               // partialAlignEuler bakes the yaw in (about the trunk). When not
               // aligning to terrain, keep the yaw as a plain +Y rotation so it
@@ -403,6 +470,8 @@ export const TerrainSpawnSystem: System = {
       }
       // === END INSTANCED HOOK ===
 
+      const templateRadiusBase = footprintBaseRadius(spec, templateUrls(spec));
+
       for (let i = 0; i < instanceCount; i++) {
         let wx = minX;
         let wz = minZ;
@@ -421,14 +490,26 @@ export const TerrainSpawnSystem: System = {
           );
           if (!cand) continue;
           s = cand;
-          if (isNormalWithinSlopeLimit(cand.normal, maxSlope)) {
-            foundValidSlope = true;
-            break;
+          if (!isNormalWithinSlopeLimit(cand.normal, maxSlope)) continue;
+          if (
+            spec.avoidOverlaps &&
+            !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
+          ) {
+            continue;
           }
+          foundValidSlope = true;
+          break;
         }
 
         if (!s) continue;
         if (!foundValidSlope && !acceptAnySlope) {
+          continue;
+        }
+        if (
+          !foundValidSlope &&
+          spec.avoidOverlaps &&
+          !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
+        ) {
           continue;
         }
 
@@ -442,6 +523,15 @@ export const TerrainSpawnSystem: System = {
             spec.templates[Math.floor(rand() * spec.templates.length)]!;
         }
 
+        if (spec.avoidOverlaps) {
+          // Conservative: the per-instance scale is drawn inside the spawn.
+          registerSpawnFootprint(
+            state,
+            wx,
+            wz,
+            templateRadiusBase * spec.scaleMax
+          );
+        }
         spawnOne(state, spec, rand, wx, wy, wz, template);
       }
 

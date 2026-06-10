@@ -6,6 +6,12 @@ export { entityParser } from './entity-parser';
 export { TerrainPlaceSystem } from './place-system';
 export { TerrainSpawnSystem } from './systems';
 export { spawnTemplateAtTerrain } from './spawn-template';
+export {
+  SpawnExclusion,
+  registerSpawnFootprint,
+  isSpawnAreaFree,
+  clearSpawnOccupancy,
+} from './occupancy';
 export type { PlacementSpec } from './place-types';
 export { getPlacementSpecs, setPlacementSpec } from './place-context';
 export {
