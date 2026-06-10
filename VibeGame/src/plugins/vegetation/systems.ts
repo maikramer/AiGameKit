@@ -327,8 +327,7 @@ export class VegetationInstancer {
     const center = new THREE.Vector3()
       .addVectors(this.boundsMin, this.boundsMax)
       .multiplyScalar(0.5);
-    const halfDiagonal =
-      this.boundsMax.distanceTo(this.boundsMin) * 0.5;
+    const halfDiagonal = this.boundsMax.distanceTo(this.boundsMin) * 0.5;
     const radius = halfDiagonal + this.maxInstanceRadius;
 
     for (const [, meshes] of this.lodMeshes) {

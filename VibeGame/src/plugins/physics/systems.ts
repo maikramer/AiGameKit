@@ -12,6 +12,7 @@ import {
   CharacterController,
   CharacterMovement,
   Collider,
+  ColliderShape,
   CollisionEvents,
   InterpolatedTransform,
   KinematicMove,
@@ -22,6 +23,13 @@ import {
   TouchedEvent,
   TouchEndedEvent,
 } from './components';
+import {
+  buildMeshColliderGeometry,
+  colliderMeshFailed,
+  getColliderMeshUrl,
+  requestColliderMesh,
+  type ColliderMeshData,
+} from './mesh-collider';
 import {
   applyAngularImpulseToEntity,
   applyCharacterMovement,
@@ -46,6 +54,7 @@ import {
 interface PhysicsContext {
   physicsWorld: RAPIER.World | null;
   worldEntity: number | null;
+  eventQueue: RAPIER.EventQueue | null;
   entityToRigidbody: Map<number, RAPIER.RigidBody>;
   entityToCollider: Map<number, RAPIER.Collider>;
   entityToCharacterController: Map<number, RAPIER.KinematicCharacterController>;
@@ -81,6 +90,7 @@ function getPhysicsContext(state: State): PhysicsContext {
     context = {
       physicsWorld: null,
       worldEntity: null,
+      eventQueue: null,
       entityToRigidbody: new Map(),
       entityToCollider: new Map(),
       entityToCharacterController: new Map(),
@@ -137,6 +147,10 @@ export const PhysicsWorldSystem: System = {
   dispose: (state) => {
     const context = stateToPhysicsContext.get(state);
     if (context) {
+      if (context.eventQueue) {
+        context.eventQueue.free();
+        context.eventQueue = null;
+      }
       if (context.physicsWorld) {
         context.physicsWorld.free();
       }
@@ -312,6 +326,19 @@ function createRigidbodyForEntity(
   InterpolatedTransform.rotY[entity] = rot.y;
   InterpolatedTransform.rotZ[entity] = rot.z;
   InterpolatedTransform.rotW[entity] = rot.w;
+
+  // Sync completo já na criação: o PhysicsRapierSyncSystem pula corpos
+  // dormindo, então corpos que nascem (e ficam) adormecidos precisam dos
+  // transforms corretos desde o primeiro frame.
+  syncRigidbodyToECS(entity, body, state);
+  copyRigidbodyToTransforms(entity, state);
+}
+
+const meshColliderWarned = new Set<number>();
+function warnOnce(entity: number, message: string): void {
+  if (meshColliderWarned.has(entity)) return;
+  meshColliderWarned.add(entity);
+  console.warn(message);
 }
 
 function createColliderForEntity(
@@ -367,8 +394,31 @@ function createColliderForEntity(
     scaleZ = Transform.scaleZ[entity];
   }
 
+  const shape = Collider.shape[entity];
+  let mesh: ColliderMeshData | undefined;
+  if (shape === ColliderShape.TriMesh || shape === ColliderShape.ConvexHull) {
+    const url = getColliderMeshUrl(state, entity);
+    if (!url) {
+      warnOnce(
+        entity,
+        `[mesh-collider] entity ${entity}: shape trimesh/convex-hull sem "mesh-url"; collider omitido.`
+      );
+      return;
+    }
+    if (colliderMeshFailed(url)) return;
+    const data = requestColliderMesh(url);
+    // GLB still downloading: leave entityToCollider unset so the init system
+    // retries next tick.
+    if (!data) return;
+    mesh = buildMeshColliderGeometry(
+      data,
+      (Collider.meshScale[entity] || 1) * scaleX,
+      Collider.meshAnchor[entity]
+    );
+  }
+
   const descriptor = createColliderDescriptor(
-    Collider.shape[entity],
+    shape,
     Collider.sizeX[entity] * scaleX,
     Collider.sizeY[entity] * scaleY,
     Collider.sizeZ[entity] * scaleZ,
@@ -382,7 +432,8 @@ function createColliderForEntity(
     Collider.filterGroups[entity],
     offset,
     rotationOffset,
-    activeEvents
+    activeEvents,
+    mesh
   );
 
   const collider = worldRapier.createCollider(descriptor, body);
@@ -585,10 +636,11 @@ export const PhysicsStepSystem: System = {
     const worldRapier = context.physicsWorld;
     if (!worldRapier) return;
 
-    const eventQueue = new RAPIER.EventQueue(true);
-    worldRapier.step(eventQueue);
-    processCollisionEvents(eventQueue, state, context);
-    eventQueue.free();
+    if (!context.eventQueue) {
+      context.eventQueue = new RAPIER.EventQueue(true);
+    }
+    worldRapier.step(context.eventQueue);
+    processCollisionEvents(context.eventQueue, state, context);
   },
 };
 
@@ -657,6 +709,10 @@ export const PhysicsRapierSyncSystem: System = {
     const context = getPhysicsContext(state);
 
     for (const [entity, body] of context.entityToRigidbody) {
+      // Corpos dormindo não se moveram: pular evita ~5 chamadas WASM +
+      // conversão de euler por corpo parado por step. Kinematic ficam de
+      // fora do skip (o estado de sleep deles não garante pose imutável).
+      if (body.isSleeping() && !body.isKinematic()) continue;
       if (state.hasComponent(entity, Rigidbody)) {
         syncRigidbodyToECS(entity, body, state);
         copyRigidbodyToTransforms(entity, state);

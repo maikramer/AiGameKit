@@ -1,3 +1,4 @@
+import { NoToneMapping, type ToneMapping } from 'three';
 import { defineQuery, type State, type System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, threeCameras } from '../rendering/utils';
@@ -12,6 +13,23 @@ const postprocessingQuery = defineQuery([Postprocessing]);
 const mainCameraQuery = defineQuery([MainCamera]);
 
 let builtinEffectsRegistered = false;
+/** Renderer tone mapping captured before the composer takes ownership of it. */
+let savedRendererToneMapping: ToneMapping | null = null;
+
+/** Changing renderer.toneMapping only affects newly compiled programs. */
+function invalidateSceneMaterials(scene: import('three').Scene): void {
+  scene.traverse((obj) => {
+    const mesh = obj as {
+      material?: { needsUpdate: boolean } | { needsUpdate: boolean }[];
+    };
+    if (!mesh.material) return;
+    if (Array.isArray(mesh.material)) {
+      for (const m of mesh.material) m.needsUpdate = true;
+    } else {
+      mesh.material.needsUpdate = true;
+    }
+  });
+}
 
 export const PostprocessingBuildSystem: System = {
   group: 'draw',
@@ -69,10 +87,33 @@ export const PostprocessingBuildSystem: System = {
       regularEffects,
       convolutionEffects
     );
+
+    // Tone mapping must happen exactly once. When the composer carries a
+    // ToneMappingEffect, the scene must reach it linear/HDR — leaving the
+    // renderer's own tone mapping on would apply the curve twice and wash the
+    // image out (flat contrast, desaturated colors).
+    const usesToneMappingEffect = Postprocessing.toneMapping[e] !== 0;
+    if (usesToneMappingEffect) {
+      if (savedRendererToneMapping === null) {
+        savedRendererToneMapping = context.renderer.toneMapping;
+      }
+      if (context.renderer.toneMapping !== NoToneMapping) {
+        context.renderer.toneMapping = NoToneMapping;
+        invalidateSceneMaterials(context.scene);
+      }
+    } else if (savedRendererToneMapping !== null) {
+      context.renderer.toneMapping = savedRendererToneMapping;
+      savedRendererToneMapping = null;
+      invalidateSceneMaterials(context.scene);
+    }
   },
   dispose(state: State) {
     const context = getRenderingContext(state);
     context.postProcessing?.dispose();
     context.postProcessing = undefined;
+    if (context.renderer && savedRendererToneMapping !== null) {
+      context.renderer.toneMapping = savedRendererToneMapping;
+      savedRendererToneMapping = null;
+    }
   },
 };

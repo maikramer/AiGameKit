@@ -1,4 +1,9 @@
-import { defineQuery, registerReadyGate, type State, type System } from '../../core';
+import {
+  defineQuery,
+  registerReadyGate,
+  type State,
+  type System,
+} from '../../core';
 import { Terrain } from './components';
 import { getTerrainContext, isTerrainDynamicsBlocking } from './utils';
 

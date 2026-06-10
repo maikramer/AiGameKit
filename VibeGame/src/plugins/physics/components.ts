@@ -11,6 +11,10 @@ export enum ColliderShape {
   Box = 0,
   Sphere = 1,
   Capsule = 2,
+  /** Exact triangle mesh from a collision GLB (`mesh-url`); fixed bodies only. */
+  TriMesh = 3,
+  /** Convex hull of a collision GLB's vertices (`mesh-url`); cheaper, works on dynamic bodies. */
+  ConvexHull = 4,
 }
 
 export const PhysicsWorld = {
@@ -62,6 +66,12 @@ export const Collider = {
   isSensor: new Uint8Array(MAX_ENTITIES),
   membershipGroups: new Uint16Array(MAX_ENTITIES),
   filterGroups: new Uint16Array(MAX_ENTITIES),
+  // TriMesh/ConvexHull shapes: uniform scale applied to the collision mesh
+  // vertices, and anchor mode (0 = as authored, 1 = recenter so the mesh
+  // AABB's base center sits at the entity origin — this project's GLB pivot
+  // convention).
+  meshScale: new Float32Array(MAX_ENTITIES),
+  meshAnchor: new Uint8Array(MAX_ENTITIES),
   posOffsetX: new Float32Array(MAX_ENTITIES),
   posOffsetY: new Float32Array(MAX_ENTITIES),
   posOffsetZ: new Float32Array(MAX_ENTITIES),

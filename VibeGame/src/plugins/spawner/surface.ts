@@ -104,9 +104,10 @@ export function sinkOffsetForSlope(
   objectHalfWidth: number,
   actualTiltRad?: number
 ): number {
-  const residualSlope = actualTiltRad !== undefined
-    ? Math.max(0, slopeRad - actualTiltRad)
-    : slopeRad;
+  const residualSlope =
+    actualTiltRad !== undefined
+      ? Math.max(0, slopeRad - actualTiltRad)
+      : slopeRad;
   return Math.sin(residualSlope) * objectHalfWidth;
 }
 

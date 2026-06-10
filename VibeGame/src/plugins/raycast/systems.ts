@@ -1,4 +1,3 @@
-import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { castBvhRay } from '../bvh/utils';
@@ -10,6 +9,7 @@ const rayQuery = defineQuery([RaycastSource, RaycastHit]);
 
 const _origin = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _rapierDir = { x: 0, y: 0, z: 0 };
 
 /** Limpa resultados antes do resto do frame (setup corre primeiro). */
 export const RaycastResetSystem: System = {
@@ -60,10 +60,11 @@ export const RaycastSystem: System = {
         continue;
       }
 
-      const origin = new RAPIER.Vector3(_origin.x, _origin.y, _origin.z);
-      const dir = new RAPIER.Vector3(ndx, ndy, ndz);
+      _rapierDir.x = ndx;
+      _rapierDir.y = ndy;
+      _rapierDir.z = ndz;
 
-      const hit = castRapierRay(state, origin, dir, maxDist, layerMask);
+      const hit = castRapierRay(state, _origin, _rapierDir, maxDist, layerMask);
       if (!hit) {
         RaycastHit.hitValid[eid] = 0;
         continue;

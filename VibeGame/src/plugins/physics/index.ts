@@ -22,3 +22,11 @@ export {
 export { PhysicsPlugin } from './plugin';
 export { getRapierWorld } from './systems';
 export { DEFAULT_GRAVITY, initializePhysics } from './utils';
+export {
+  MeshAnchor,
+  buildMeshColliderGeometry,
+  parseGlbCollisionMesh,
+  setColliderMeshUrl,
+  getColliderMeshUrl,
+} from './mesh-collider';
+export type { ColliderMeshData } from './mesh-collider';

@@ -72,6 +72,23 @@ export function handleKeyDown(event: KeyboardEvent): void {
     }
   }
 
+  // Keyboard bindings for primary/secondary actions (mouse-only by default;
+  // games extend via addInputMapping, e.g. 'KeyJ' → primaryAction).
+  if (
+    INPUT_CONFIG.mappings.primaryAction.includes(event.code) &&
+    !bufferedActions.primary.isPressed
+  ) {
+    bufferedActions.primary.lastPressTime = performance.now();
+    bufferedActions.primary.isPressed = true;
+  }
+  if (
+    INPUT_CONFIG.mappings.secondaryAction.includes(event.code) &&
+    !bufferedActions.secondary.isPressed
+  ) {
+    bufferedActions.secondary.lastPressTime = performance.now();
+    bufferedActions.secondary.isPressed = true;
+  }
+
   if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
     event.preventDefault();
   }
@@ -85,6 +102,15 @@ export function handleKeyUp(event: KeyboardEvent): void {
   if (event.code === 'Space') {
     bufferedActions.jump.lastReleaseTime = performance.now();
     bufferedActions.jump.isPressed = false;
+  }
+
+  if (INPUT_CONFIG.mappings.primaryAction.includes(event.code)) {
+    bufferedActions.primary.lastReleaseTime = performance.now();
+    bufferedActions.primary.isPressed = false;
+  }
+  if (INPUT_CONFIG.mappings.secondaryAction.includes(event.code)) {
+    bufferedActions.secondary.lastReleaseTime = performance.now();
+    bufferedActions.secondary.isPressed = false;
   }
 }
 

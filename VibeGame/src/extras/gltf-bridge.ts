@@ -146,7 +146,11 @@ export function normalizeGltfMaterials(root: Object3D): void {
       : [mesh.material];
     for (const mat of materials) {
       const std = mat as THREE.MeshStandardMaterial;
-      if (std?.isMeshStandardMaterial && std.metalness === 1 && !std.metalnessMap) {
+      if (
+        std?.isMeshStandardMaterial &&
+        std.metalness === 1 &&
+        !std.metalnessMap
+      ) {
         std.metalness = 0;
         std.needsUpdate = true;
       }
@@ -198,28 +202,28 @@ export function loadGltfLodToScene(
 
   return trackGltfLoad(
     Promise.all(
-    urls.map((url, i) =>
-      loader.loadAsync(url).then((gltf) => {
-        applyDefaultShadowFlags(gltf.scene);
-        const child = gltf.scene;
-        child.name = `lod${i}`;
-        child.visible = false;
-        child.userData.lodLevel = i;
-        return child;
-      })
-    )
-  ).then((children) => {
-    for (const c of children) {
-      root.add(c);
-    }
-    if (children[1]) {
-      children[1].visible = true;
-    } else if (children[0]) {
-      children[0].visible = true;
-    }
-    scene.add(root);
-    return root;
-  })
+      urls.map((url, i) =>
+        loader.loadAsync(url).then((gltf) => {
+          applyDefaultShadowFlags(gltf.scene);
+          const child = gltf.scene;
+          child.name = `lod${i}`;
+          child.visible = false;
+          child.userData.lodLevel = i;
+          return child;
+        })
+      )
+    ).then((children) => {
+      for (const c of children) {
+        root.add(c);
+      }
+      if (children[1]) {
+        children[1].visible = true;
+      } else if (children[0]) {
+        children[0].visible = true;
+      }
+      scene.add(root);
+      return root;
+    })
   );
 }
 
@@ -304,25 +308,25 @@ export function loadGltfToSceneWithAnimator(
   const loader = createGLTFLoader();
   return trackGltfLoad(
     new Promise<GltfLoadResult>((resolve, reject) => {
-    loader.load(
-      url,
-      (gltf) => {
-        applyDefaultShadowFlags(gltf.scene);
-        scene.add(gltf.scene);
-        const animator =
-          gltf.animations.length > 0
-            ? new GltfAnimator(gltf, {
-                crossfadeDuration: options?.crossfadeDuration,
-              })
-            : null;
-        resolve({
-          group: gltf.scene,
-          animator,
-        });
-      },
-      undefined,
-      reject
-    );
+      loader.load(
+        url,
+        (gltf) => {
+          applyDefaultShadowFlags(gltf.scene);
+          scene.add(gltf.scene);
+          const animator =
+            gltf.animations.length > 0
+              ? new GltfAnimator(gltf, {
+                  crossfadeDuration: options?.crossfadeDuration,
+                })
+              : null;
+          resolve({
+            group: gltf.scene,
+            animator,
+          });
+        },
+        undefined,
+        reject
+      );
     })
   );
 }

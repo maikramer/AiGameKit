@@ -133,7 +133,13 @@ export const ThirdPersonCameraSystem: System = {
             dir.y * fullDist + right.y * radius,
             dir.z * fullDist + right.z * radius
           ).normalize();
-          const hit2 = castBvhRay(state, origin, leftDir, fullDist + radius, 0x0001);
+          const hit2 = castBvhRay(
+            state,
+            origin,
+            leftDir,
+            fullDist + radius,
+            0x0001
+          );
           if (hit2 && hit2.distance < minSafe) {
             minSafe = hit2.distance;
             hasHit = true;
@@ -144,7 +150,13 @@ export const ThirdPersonCameraSystem: System = {
             dir.y * fullDist - right.y * radius,
             dir.z * fullDist - right.z * radius
           ).normalize();
-          const hit3 = castBvhRay(state, origin, rightDir, fullDist + radius, 0x0001);
+          const hit3 = castBvhRay(
+            state,
+            origin,
+            rightDir,
+            fullDist + radius,
+            0x0001
+          );
           if (hit3 && hit3.distance < minSafe) {
             minSafe = hit3.distance;
             hasHit = true;

@@ -14,6 +14,15 @@ export function registerGltfRootGroup(
     roots.set(state, m);
   }
   m.set(entity, group);
+  // Cleanup must ride the destroy callback, not an exists() sweep: entity ids
+  // are recycled, so a sweep can see the id alive again (now a different
+  // entity) and keep syncing this mesh to it — e.g. a destroyed rock's GLB
+  // reappearing glued to the pickup popup that reused its id.
+  state.onDestroy(entity, () => {
+    group.removeFromParent();
+    const map = roots.get(state);
+    if (map && map.get(entity) === group) map.delete(entity);
+  });
 }
 
 export function getGltfRootGroup(
@@ -39,12 +48,18 @@ export function forEachGltfRootGroup(
   }
 }
 
-/** Remove entradas de entidades que já não existem (evita fugas no `Map`). */
+/**
+ * Backup sweep for entries whose destroy callback never ran (evita fugas no
+ * `Map`). The primary cleanup is the `onDestroy` hook in
+ * {@link registerGltfRootGroup} — this sweep alone is unsafe against entity-id
+ * recycling.
+ */
 export function pruneStaleGltfRootGroups(state: State): void {
   const m = roots.get(state);
   if (!m) return;
-  for (const eid of [...m.keys()]) {
+  for (const [eid, group] of [...m.entries()]) {
     if (!state.exists(eid)) {
+      group.removeFromParent();
       m.delete(eid);
     }
   }

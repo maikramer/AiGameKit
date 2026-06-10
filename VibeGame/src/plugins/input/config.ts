@@ -1,15 +1,19 @@
+const defaultMappings = {
+  moveForward: ['KeyW', 'ArrowUp'],
+  moveBackward: ['KeyS', 'ArrowDown'],
+  moveLeft: ['KeyA', 'ArrowLeft'],
+  moveRight: ['KeyD', 'ArrowRight'],
+  moveUp: ['KeyE'],
+  moveDown: ['KeyQ'],
+  jump: ['Space'],
+  primaryAction: ['MouseLeft'],
+  secondaryAction: ['MouseRight'],
+};
+
+export type InputAction = keyof typeof defaultMappings;
+
 export const INPUT_CONFIG = {
-  mappings: {
-    moveForward: ['KeyW', 'ArrowUp'],
-    moveBackward: ['KeyS', 'ArrowDown'],
-    moveLeft: ['KeyA', 'ArrowLeft'],
-    moveRight: ['KeyD', 'ArrowRight'],
-    moveUp: ['KeyE'],
-    moveDown: ['KeyQ'],
-    jump: ['Space'],
-    primaryAction: ['MouseLeft'],
-    secondaryAction: ['MouseRight'],
-  },
+  mappings: defaultMappings as Record<InputAction, string[]>,
 
   bufferWindow: 100,
 
@@ -22,6 +26,16 @@ export const INPUT_CONFIG = {
     look: 0.5,
     scroll: 0.01,
   },
-} as const;
+};
 
-export type InputAction = keyof typeof INPUT_CONFIG.mappings;
+/**
+ * Append extra KeyboardEvent codes (e.g. 'KeyJ') to an action's bindings.
+ * Lets a game bind keyboard keys to primaryAction/secondaryAction, which
+ * default to mouse buttons only.
+ */
+export function addInputMapping(action: InputAction, ...codes: string[]): void {
+  const list = INPUT_CONFIG.mappings[action];
+  for (const code of codes) {
+    if (!list.includes(code)) list.push(code);
+  }
+}

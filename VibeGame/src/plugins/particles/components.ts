@@ -1,0 +1,25 @@
+import { MAX_ENTITIES } from '../../core/ecs/constants';
+
+export const ParticleEmitter = {
+  active: new Uint8Array(MAX_ENTITIES),
+  preset: new Uint8Array(MAX_ENTITIES),
+  emissionRate: new Float32Array(MAX_ENTITIES),
+  duration: new Float32Array(MAX_ENTITIES),
+  startLifeMin: new Float32Array(MAX_ENTITIES),
+  startLifeMax: new Float32Array(MAX_ENTITIES),
+  startSpeedMin: new Float32Array(MAX_ENTITIES),
+  startSpeedMax: new Float32Array(MAX_ENTITIES),
+  startSizeMin: new Float32Array(MAX_ENTITIES),
+  startSizeMax: new Float32Array(MAX_ENTITIES),
+  startColorR: new Float32Array(MAX_ENTITIES),
+  startColorG: new Float32Array(MAX_ENTITIES),
+  startColorB: new Float32Array(MAX_ENTITIES),
+  startColorA: new Float32Array(MAX_ENTITIES),
+  worldSpace: new Uint8Array(MAX_ENTITIES),
+  renderMode: new Uint8Array(MAX_ENTITIES),
+  looping: new Uint8Array(MAX_ENTITIES),
+  burst: new Uint8Array(MAX_ENTITIES),
+  burstCount: new Float32Array(MAX_ENTITIES),
+  shapeRadius: new Float32Array(MAX_ENTITIES),
+  shapeAngle: new Float32Array(MAX_ENTITIES),
+} as const;

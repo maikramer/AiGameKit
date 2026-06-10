@@ -1,4 +1,5 @@
-import type { Plugin } from '../../core';
+import type { Adapter, Plugin } from '../../core';
+import { setColliderMeshUrl } from './mesh-collider';
 import {
   ApplyAngularImpulse,
   ApplyForce,
@@ -106,6 +107,8 @@ export const PhysicsPlugin: Plugin = {
         rotOffsetY: 0,
         rotOffsetZ: 0,
         rotOffsetW: 1,
+        meshScale: 1,
+        meshAnchor: 0,
       },
       'character-controller': {
         offset: 0.08,
@@ -138,7 +141,24 @@ export const PhysicsPlugin: Plugin = {
           box: 0,
           sphere: 1,
           capsule: 2,
+          trimesh: 3,
+          mesh: 3,
+          'convex-hull': 4,
+          hull: 4,
         },
+        meshAnchor: {
+          none: 0,
+          base: 1,
+        },
+      },
+    },
+    adapters: {
+      collider: {
+        // URL is a string — SOA fields are numeric, so it lives in a sidecar
+        // map consumed when the Rapier collider is built.
+        'mesh-url': ((entity, value, state) => {
+          setColliderMeshUrl(state, entity, String(value));
+        }) as Adapter,
       },
     },
   },

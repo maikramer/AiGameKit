@@ -20,6 +20,8 @@ import { TerrainPlugin } from './terrain/plugin';
 import { TransformsPlugin } from './transforms';
 import { AudioPlugin } from './audio/plugin';
 import { EquirectSkyPlugin } from './sky/plugin';
+import { ParticlesPlugin } from './particles/plugin';
+import { FloatingTextPlugin } from './floating-text/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
 import { VegetationPlugin } from './vegetation/plugin';
@@ -47,5 +49,7 @@ export const DefaultPlugins: Plugin[] = [
   VegetationPlugin,
   AudioPlugin,
   EquirectSkyPlugin,
+  ParticlesPlugin,
+  FloatingTextPlugin,
   TweeningPlugin,
 ];

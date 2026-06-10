@@ -3,7 +3,7 @@ import type { State } from '../../core';
 import { Terrain } from '../terrain/components';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import { getTerrainContext } from '../terrain/utils';
-import { getBvhContext, registerBvhMesh, unregisterBvhMesh } from './utils';
+import { registerBvhMesh, unregisterBvhMesh } from './utils';
 
 /**
  * Build a single tessellated PlaneGeometry for a terrain entity with vertex
@@ -12,10 +12,11 @@ import { getBvhContext, registerBvhMesh, unregisterBvhMesh } from './utils';
  * Resolution is `gridDivisions` × `gridDivisions` quads (= (gridDivisions+1)^2
  * vertices). 256 gives a great quality/memory balance on a 10 km terrain (~131k
  * tris, BVH built in ~50ms).
+ *
+ * No normal attribute: the BVH raycast derives face normals geometrically and
+ * the mesh is never rendered, so vertex normals would be dead weight.
  */
 function buildTerrainBvhGeometry(
-  state: State,
-  entity: number,
   worldOffset: { x: number; y: number; z: number },
   gridDivisions: number,
   worldSize: number,
@@ -60,16 +61,19 @@ function buildTerrainBvhGeometry(
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geo.setIndex(new THREE.BufferAttribute(indices, 1));
-  geo.computeVertexNormals();
-  // Suppress unused param warning while keeping signature future-proof.
-  void state;
-  void entity;
   return geo;
 }
 
-const builtKeys = new WeakMap<State, Map<number, string>>();
+interface BuiltTerrain {
+  key: string;
+  /** Terrain context object the geometry was built from; identity change means
+   * the entity id was recycled (or the terrain was recreated) → rebuild. */
+  data: object;
+}
 
-function getBuiltKeys(state: State): Map<number, string> {
+const builtKeys = new WeakMap<State, Map<number, BuiltTerrain>>();
+
+function getBuiltKeys(state: State): Map<number, BuiltTerrain> {
   let m = builtKeys.get(state);
   if (!m) {
     m = new Map();
@@ -90,15 +94,19 @@ export function syncTerrainBvh(
   state: State,
   gridDivisions = 256
 ): { added: number; total: number } {
-  const ctx = getBvhContext(state);
-  void ctx;
   const built = getBuiltKeys(state);
   const terrainCtx = getTerrainContext(state);
   let added = 0;
 
   for (const [entity, data] of terrainCtx) {
     if (!data.initialized) continue;
-    if (built.has(entity)) continue;
+    const prev = built.get(entity);
+    if (prev) {
+      if (prev.data === data) continue;
+      // Entity id recycled into a different terrain: drop the stale mesh.
+      unregisterBvhMesh(state, prev.key);
+      built.delete(entity);
+    }
 
     const worldSize = Terrain.worldSize[entity];
     const sampler = (x: number, z: number) => {
@@ -108,8 +116,6 @@ export function syncTerrainBvh(
     };
 
     const geometry = buildTerrainBvhGeometry(
-      state,
-      entity,
       data.worldOffset,
       gridDivisions,
       worldSize,
@@ -121,14 +127,13 @@ export function syncTerrainBvh(
       entity,
       layer: 0x0001,
     });
-    built.set(entity, key);
+    built.set(entity, { key, data });
     added++;
   }
 
-  for (const entity of [...built.keys()]) {
-    if (!state.exists(entity)) {
-      const key = built.get(entity)!;
-      unregisterBvhMesh(state, key);
+  for (const [entity, info] of [...built]) {
+    if (!state.exists(entity) || !terrainCtx.has(entity)) {
+      unregisterBvhMesh(state, info.key);
       built.delete(entity);
     }
   }
@@ -139,9 +144,9 @@ export function syncTerrainBvh(
 /** Force rebuild on next sync (e.g. after async heightmap load replaces sampler). */
 export function invalidateTerrainBvh(state: State, entity: number): void {
   const built = getBuiltKeys(state);
-  const key = built.get(entity);
-  if (key !== undefined) {
-    unregisterBvhMesh(state, key);
+  const info = built.get(entity);
+  if (info !== undefined) {
+    unregisterBvhMesh(state, info.key);
     built.delete(entity);
   }
 }

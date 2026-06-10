@@ -102,6 +102,10 @@
     "./extras/sky": {
       "types": "./dist/extras/sky-env.d.ts",
       "import": "./dist/extras/sky-env.js"
+    },
+    "./particles": {
+      "types": "./dist/plugins/particles/index.d.ts",
+      "import": "./dist/plugins/particles/index.js"
     }
   },
   "files": [
@@ -195,6 +199,7 @@
     "three-mesh-ui": "^6.5.4",
     "three-pathfinding": "^1.3.0",
     "three-stdlib": "^2.36.1",
+    "three.quarks": "^0.17.1",
     "troika-three-text": "^0.52.4",
     "yuka": "^0.7.8",
     "zod": "^4.1.5"

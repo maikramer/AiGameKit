@@ -50,17 +50,21 @@ const GROUND_SNAP_SKIN = 0.04;
 const GROUND_SNAP_MAX = 0.35;
 const _groundCastDown = { x: 0, y: -1, z: 0 };
 const _snapOrigin = { x: 0, y: 0, z: 0 };
+const _desiredTranslation = { x: 0, y: 0, z: 0 };
+const _newPos = { x: 0, y: 0, z: 0 };
 
 /**
- * Distance from `pos` down to the first non-self collider within
- * {@link GROUND_SNAP_MAX} (casting the character's own shape), or null if none.
+ * Shape-cast of the character's own shape straight down from `pos`, up to
+ * {@link GROUND_SNAP_MAX}. Returns the Rapier hit (toi + collider + normal)
+ * or null — the hit collider doubles as the platform candidate, saving a
+ * second cast.
  */
-function groundCastDistance(
+function groundCast(
   collider: RAPIER.Collider,
   physicsWorld: RAPIER.World,
-  pos: RAPIER.Vector3
-): number | null {
-  const hit = physicsWorld.castShape(
+  pos: { x: number; y: number; z: number }
+) {
+  return physicsWorld.castShape(
     pos,
     collider.rotation(),
     _groundCastDown,
@@ -70,11 +74,8 @@ function groundCastDistance(
     true,
     RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
     undefined,
-    undefined,
-    undefined,
-    (other: RAPIER.Collider) => other.handle !== collider.handle
+    collider
   );
-  return hit ? hit.time_of_impact : null;
 }
 
 export function createRigidbodyDescriptor(
@@ -153,7 +154,8 @@ export function createColliderDescriptor(
   filterGroups: number,
   offset: RAPIER.Vector3,
   rotationOffset: RAPIER.Quaternion,
-  activeEvents: ActiveEvents = ActiveEvents.NONE
+  activeEvents: ActiveEvents = ActiveEvents.NONE,
+  mesh?: { vertices: Float32Array; indices: Uint32Array }
 ): RAPIER.ColliderDesc {
   let desc: RAPIER.ColliderDesc;
 
@@ -167,6 +169,18 @@ export function createColliderDescriptor(
     case ColliderShape.Capsule:
       desc = RAPIER.ColliderDesc.capsule(height / 2, radius);
       break;
+    case ColliderShape.TriMesh: {
+      if (!mesh) throw new Error('TriMesh collider requires mesh geometry');
+      desc = RAPIER.ColliderDesc.trimesh(mesh.vertices, mesh.indices);
+      break;
+    }
+    case ColliderShape.ConvexHull: {
+      if (!mesh) throw new Error('ConvexHull collider requires mesh geometry');
+      const hull = RAPIER.ColliderDesc.convexHull(mesh.vertices);
+      if (!hull) throw new Error('convex hull computation failed');
+      desc = hull;
+      break;
+    }
     default:
       desc = RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5);
   }
@@ -273,26 +287,7 @@ export function setLinearVelocityForEntity(
 ): void {
   const type = Rigidbody.type[entity];
 
-  if (type === BodyType.Dynamic) {
-    const currentVel = body.linvel();
-    const targetVel = new RAPIER.Vector3(
-      SetLinearVelocity.x[entity],
-      SetLinearVelocity.y[entity],
-      SetLinearVelocity.z[entity]
-    );
-    const deltaVel = new RAPIER.Vector3(
-      targetVel.x - currentVel.x,
-      targetVel.y - currentVel.y,
-      targetVel.z - currentVel.z
-    );
-    const mass = body.mass();
-    const impulse = new RAPIER.Vector3(
-      deltaVel.x * mass,
-      deltaVel.y * mass,
-      deltaVel.z * mass
-    );
-    body.applyImpulse(impulse, true);
-  } else if (type === BodyType.KinematicVelocityBased) {
+  if (type === BodyType.Dynamic || type === BodyType.KinematicVelocityBased) {
     body.setLinvel(
       new RAPIER.Vector3(
         SetLinearVelocity.x[entity],
@@ -314,24 +309,17 @@ export function setAngularVelocityForEntity(
   const type = Rigidbody.type[entity];
 
   if (type === BodyType.Dynamic) {
-    const currentAngVel = body.angvel();
-    const targetAngVel = new RAPIER.Vector3(
-      SetAngularVelocity.x[entity],
-      SetAngularVelocity.y[entity],
-      SetAngularVelocity.z[entity]
+    // setAngvel direto: o caminho antigo via applyTorqueImpulse multiplicava
+    // principalInertia componente a componente, o que só é correto com o corpo
+    // alinhado aos eixos principais de inércia.
+    body.setAngvel(
+      new RAPIER.Vector3(
+        SetAngularVelocity.x[entity],
+        SetAngularVelocity.y[entity],
+        SetAngularVelocity.z[entity]
+      ),
+      true
     );
-    const deltaAngVel = new RAPIER.Vector3(
-      targetAngVel.x - currentAngVel.x,
-      targetAngVel.y - currentAngVel.y,
-      targetAngVel.z - currentAngVel.z
-    );
-    const inertia = body.principalInertia();
-    const impulse = new RAPIER.Vector3(
-      deltaAngVel.x * inertia.x,
-      deltaAngVel.y * inertia.y,
-      deltaAngVel.z * inertia.z
-    );
-    body.applyTorqueImpulse(impulse, true);
   } else if (type === BodyType.KinematicVelocityBased) {
     const angVelX = SetAngularVelocity.x[entity];
     const angVelY = SetAngularVelocity.y[entity];
@@ -411,16 +399,19 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
   const currentPos = body.translation();
   const currentRot = body.rotation();
 
+  // Rapier devolve f64; os stores ECS são Float32Array. Comparar via fround,
+  // senão todo corpo em movimento dispara um falso teleporte (setTranslation +
+  // wake) a cada step e nenhum corpo consegue dormir.
   const hasPositionChange =
-    currentPos.x !== Rigidbody.posX[entity] ||
-    currentPos.y !== Rigidbody.posY[entity] ||
-    currentPos.z !== Rigidbody.posZ[entity];
+    Math.fround(currentPos.x) !== Rigidbody.posX[entity] ||
+    Math.fround(currentPos.y) !== Rigidbody.posY[entity] ||
+    Math.fround(currentPos.z) !== Rigidbody.posZ[entity];
 
   const hasRotationChange =
-    currentRot.x !== Rigidbody.rotX[entity] ||
-    currentRot.y !== Rigidbody.rotY[entity] ||
-    currentRot.z !== Rigidbody.rotZ[entity] ||
-    currentRot.w !== Rigidbody.rotW[entity];
+    Math.fround(currentRot.x) !== Rigidbody.rotX[entity] ||
+    Math.fround(currentRot.y) !== Rigidbody.rotY[entity] ||
+    Math.fround(currentRot.z) !== Rigidbody.rotZ[entity] ||
+    Math.fround(currentRot.w) !== Rigidbody.rotW[entity];
 
   if (hasPositionChange) {
     body.setTranslation(
@@ -440,6 +431,15 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
       InterpolatedTransform.posY[entity] = Rigidbody.posY[entity];
       InterpolatedTransform.posZ[entity] = Rigidbody.posZ[entity];
     }
+
+    // O sync pós-step pula corpos dormindo, e um corpo fixed teleportado pode
+    // nunca acordar — escrever os transforms aqui mantém o visual correto.
+    Transform.posX[entity] = Rigidbody.posX[entity];
+    Transform.posY[entity] = Rigidbody.posY[entity];
+    Transform.posZ[entity] = Rigidbody.posZ[entity];
+    WorldTransform.posX[entity] = Rigidbody.posX[entity];
+    WorldTransform.posY[entity] = Rigidbody.posY[entity];
+    WorldTransform.posZ[entity] = Rigidbody.posZ[entity];
   }
 
   if (hasRotationChange) {
@@ -463,6 +463,15 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
       InterpolatedTransform.rotZ[entity] = Rigidbody.rotZ[entity];
       InterpolatedTransform.rotW[entity] = Rigidbody.rotW[entity];
     }
+
+    Transform.rotX[entity] = Rigidbody.rotX[entity];
+    Transform.rotY[entity] = Rigidbody.rotY[entity];
+    Transform.rotZ[entity] = Rigidbody.rotZ[entity];
+    Transform.rotW[entity] = Rigidbody.rotW[entity];
+    WorldTransform.rotX[entity] = Rigidbody.rotX[entity];
+    WorldTransform.rotY[entity] = Rigidbody.rotY[entity];
+    WorldTransform.rotZ[entity] = Rigidbody.rotZ[entity];
+    WorldTransform.rotW[entity] = Rigidbody.rotW[entity];
   }
 }
 
@@ -475,22 +484,19 @@ export function detectPlatformContinuous(
   const castDistance = 0.5;
   const shapePos = collider.translation();
   const shapeRot = collider.rotation();
-  const shapeVel = new RAPIER.Vector3(0, -1, 0);
   const colliderShape = collider.shape;
 
   const hit = physicsWorld.castShape(
     shapePos,
     shapeRot,
-    shapeVel,
+    _groundCastDown,
     colliderShape,
-    castDistance,
+    0,
     castDistance,
     true,
     RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
     undefined,
-    undefined,
-    undefined,
-    (otherCollider: RAPIER.Collider) => otherCollider.handle !== collider.handle
+    collider
   );
 
   if (hit) {
@@ -583,18 +589,15 @@ export function applyCharacterMovement(
   CharacterController.platformVelY[entity] = platformVelY + tangentialVelY;
   CharacterController.platformVelZ[entity] = platformVelZ + tangentialVelZ;
 
-  const desiredTranslation = new RAPIER.Vector3(
-    CharacterMovement.desiredVelX[entity] * deltaTime,
-    totalVelY * deltaTime,
-    CharacterMovement.desiredVelZ[entity] * deltaTime
-  );
+  _desiredTranslation.x = CharacterMovement.desiredVelX[entity] * deltaTime;
+  _desiredTranslation.y = totalVelY * deltaTime;
+  _desiredTranslation.z = CharacterMovement.desiredVelZ[entity] * deltaTime;
 
+  // The CCT automatically excludes the controlled collider itself.
   controller.computeColliderMovement(
     collider,
-    desiredTranslation,
-    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
-    undefined,
-    (otherCollider: RAPIER.Collider) => otherCollider.handle !== collider.handle
+    _desiredTranslation,
+    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS
   );
 
   const correctedMovement = controller.computedMovement();
@@ -612,27 +615,22 @@ export function applyCharacterMovement(
     desiredHorizontalSpeed > 0.1 &&
     actualHorizontalSpeed < desiredHorizontalSpeed * 0.1;
 
-  let finalMovement = correctedMovement;
+  let finalX = correctedMovement.x;
+  const finalY = correctedMovement.y;
+  let finalZ = correctedMovement.z;
 
   if (isStuckAgainstWall && CharacterMovement.velocityY[entity] > 0) {
-    const pushOffX = -CharacterMovement.desiredVelX[entity] * 0.001;
-    const pushOffZ = -CharacterMovement.desiredVelZ[entity] * 0.001;
-
-    finalMovement = new RAPIER.Vector3(
-      correctedMovement.x + pushOffX,
-      correctedMovement.y,
-      correctedMovement.z + pushOffZ
-    );
+    finalX -= CharacterMovement.desiredVelX[entity] * 0.001;
+    finalZ -= CharacterMovement.desiredVelZ[entity] * 0.001;
   }
 
   const currentPos = body.translation();
-  const newPos = new RAPIER.Vector3(
-    currentPos.x + finalMovement.x,
-    currentPos.y + finalMovement.y,
-    currentPos.z + finalMovement.z
-  );
+  _newPos.x = currentPos.x + finalX;
+  _newPos.y = currentPos.y + finalY;
+  _newPos.z = currentPos.z + finalZ;
 
   let grounded = controller.computedGrounded() ? 1 : 0;
+  let snapHit: ReturnType<typeof groundCast> = null;
 
   // Explicit ground snap: when not rising, cast the collider straight down from
   // the post-move position and re-seat the feet at a constant skin above the
@@ -643,42 +641,54 @@ export function applyCharacterMovement(
     // Cast from the collider's projected new centre (it sits at a fixed offset
     // from the body origin, so cast there — not from the body position).
     const cp = collider.translation();
-    _snapOrigin.x = cp.x + finalMovement.x;
-    _snapOrigin.y = cp.y + finalMovement.y;
-    _snapOrigin.z = cp.z + finalMovement.z;
-    const drop = groundCastDistance(collider, physicsWorld, _snapOrigin);
-    if (drop !== null) {
-      newPos.y += GROUND_SNAP_SKIN - drop;
+    _snapOrigin.x = cp.x + finalX;
+    _snapOrigin.y = cp.y + finalY;
+    _snapOrigin.z = cp.z + finalZ;
+    snapHit = groundCast(collider, physicsWorld, _snapOrigin);
+    if (snapHit) {
+      _newPos.y += GROUND_SNAP_SKIN - snapHit.time_of_impact;
       grounded = 1;
       CharacterMovement.velocityY[entity] = 0;
     }
   }
 
   if (grounded && platform !== NULL_ENTITY) {
-    newPos.x += (platformVelX + tangentialVelX) * deltaTime;
-    newPos.y += (platformVelY + tangentialVelY) * deltaTime;
-    newPos.z += (platformVelZ + tangentialVelZ) * deltaTime;
+    _newPos.x += (platformVelX + tangentialVelX) * deltaTime;
+    _newPos.y += (platformVelY + tangentialVelY) * deltaTime;
+    _newPos.z += (platformVelZ + tangentialVelZ) * deltaTime;
   }
 
-  body.setNextKinematicTranslation(newPos);
+  body.setNextKinematicTranslation(_newPos);
 
-  CharacterMovement.actualMoveX[entity] = finalMovement.x;
-  CharacterMovement.actualMoveY[entity] = newPos.y - currentPos.y;
-  CharacterMovement.actualMoveZ[entity] = finalMovement.z;
+  CharacterMovement.actualMoveX[entity] = finalX;
+  CharacterMovement.actualMoveY[entity] = _newPos.y - currentPos.y;
+  CharacterMovement.actualMoveZ[entity] = finalZ;
 
-  CharacterController.moveX[entity] = finalMovement.x;
-  CharacterController.moveY[entity] = newPos.y - currentPos.y;
-  CharacterController.moveZ[entity] = finalMovement.z;
+  CharacterController.moveX[entity] = finalX;
+  CharacterController.moveY[entity] = _newPos.y - currentPos.y;
+  CharacterController.moveZ[entity] = finalZ;
 
   CharacterController.grounded[entity] = grounded;
 
   if (grounded) {
-    CharacterController.platform[entity] = detectPlatformContinuous(
-      entity,
-      collider,
-      physicsWorld,
-      colliderToEntity
-    );
+    if (snapHit) {
+      // Reuse the snap cast's hit as the platform candidate instead of a
+      // second, nearly identical shape-cast.
+      const platformEntity = colliderToEntity.get(snapHit.collider.handle);
+      CharacterController.platform[entity] =
+        platformEntity !== undefined &&
+        platformEntity !== entity &&
+        snapHit.normal1.y > 0.7
+          ? platformEntity
+          : NULL_ENTITY;
+    } else {
+      CharacterController.platform[entity] = detectPlatformContinuous(
+        entity,
+        collider,
+        physicsWorld,
+        colliderToEntity
+      );
+    }
   } else {
     CharacterController.platform[entity] = NULL_ENTITY;
   }

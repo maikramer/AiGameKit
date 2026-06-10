@@ -149,7 +149,6 @@ export interface BvhRaycastHit {
 
 const _raycaster = new THREE.Raycaster();
 const _hits: THREE.Intersection[] = [];
-const _normalScratch = new THREE.Vector3();
 
 /**
  * Cast a ray against every registered BVH mesh and return the closest hit.
@@ -180,17 +179,17 @@ export function castBvhRay(
     if (_hits.length === 0) continue;
     const hit = _hits[0];
     if (!closest || hit.distance < closest.distance) {
-      const normal = hit.face
-        ? _normalScratch.copy(hit.face.normal).clone()
-        : new THREE.Vector3(0, 1, 0);
       closest = {
         entity: entry.entity,
         layer: entry.layer,
         distance: hit.distance,
         point: hit.point.clone(),
-        normal,
+        normal: hit.face ? hit.face.normal.clone() : new THREE.Vector3(0, 1, 0),
         key,
       };
+      // Shrink the ray so later meshes are pruned at the bounds-tree root
+      // when they can't possibly beat the current closest hit.
+      _raycaster.far = hit.distance;
     }
   }
 

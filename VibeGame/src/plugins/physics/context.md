@@ -77,6 +77,9 @@ physics/
 #### ColliderShape
 - Box = 0
 - Sphere = 1
+- Capsule = 2
+- TriMesh = 3 (`shape: trimesh`/`mesh`) — exact triangle mesh from a collision GLB (`mesh-url`); fixed bodies only
+- ConvexHull = 4 (`shape: convex-hull`/`hull`) — convex hull of the GLB vertices; works on dynamic bodies
 
 ### Components
 
@@ -114,6 +117,19 @@ physics/
 - filterGroups: ui16 (0xffff)
 - posOffsetX, posOffsetY, posOffsetZ: f32
 - rotOffsetX, rotOffsetY, rotOffsetZ, rotOffsetW: f32 (rotOffsetW=1)
+- meshScale: f32 (1) — TriMesh/ConvexHull only: uniform scale applied to the collision-mesh vertices (× Transform scaleX)
+- meshAnchor: ui8 (0) — TriMesh/ConvexHull only: `none` = as authored, `base` = recenter so the mesh AABB's base center sits at the entity origin (this project's GLB pivot convention)
+
+Mesh collider example — `mesh-url` is a string handled by an adapter (sidecar map,
+not a SOA field); the GLB is fetched lazily and the collider is created once the
+download finishes (see `mesh-collider.ts`):
+
+```xml
+<GameObject
+  rigidbody="type: fixed; mass: 0"
+  collider="shape: trimesh; mesh-url: /assets/meshes/rock_collision.glb; mesh-scale: 1.2; mesh-anchor: base"
+></GameObject>
+```
 
 #### CharacterController
 - offset: f32 (0.08)

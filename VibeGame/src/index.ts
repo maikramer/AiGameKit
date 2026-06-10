@@ -47,7 +47,7 @@ export {
   GltfAnimationUpdateSystem,
   registerAnimator,
 } from './plugins/gltf-anim';
-export { isKeyDown } from './plugins/input';
+export { isKeyDown, addInputMapping, InputState } from './plugins/input';
 export {
   AudioSource,
   AudioListener,
@@ -83,6 +83,13 @@ export type {
 } from './plugins/entity-script';
 
 export { Terrain, TerrainPlugin } from './plugins/terrain';
+export { ParticlesPlugin, ParticleEmitter } from './plugins/particles';
+export {
+  FloatingTextPlugin,
+  FloatingText,
+  spawnFloatingText,
+} from './plugins/floating-text';
+export type { FloatingTextOptions } from './plugins/floating-text';
 export {
   SpawnerPlugin,
   SpawnerPending,

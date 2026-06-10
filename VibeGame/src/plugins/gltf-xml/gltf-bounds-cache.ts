@@ -51,9 +51,7 @@ export function getGltfLocalYBounds(
   return full ? { minY: full.minY, maxY: full.maxY } : null;
 }
 
-export function getGltfLocalAABB(
-  url: string
-): {
+export function getGltfLocalAABB(url: string): {
   minX: number;
   minY: number;
   minZ: number;
