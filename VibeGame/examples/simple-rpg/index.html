@@ -324,7 +324,11 @@
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
         >
-          <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod0.glb"></GLTFLoader>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/rock_mossy_lod0.glb"
+            instanced="true"
+          ></GLTFLoader>
         </GameObject>
       </SpawnGroup>
 

@@ -172,6 +172,35 @@ export function applyDefaultShadowFlags(root: Object3D): void {
   });
 }
 
+// --- Master GLB cache ---------------------------------------------------
+// Loading the same URL N times used to download + parse + upload N copies.
+// Parse once per URL; consumers receive `scene.clone(true)`, which clones the
+// node hierarchy but SHARES geometries and materials — one GPU upload per
+// asset no matter how many props use it. Skinned/animated paths stay
+// uncached (clones would share skeletons).
+const gltfMasterCache = new Map<string, Promise<GLTF>>();
+
+/**
+ * Parse a GLB once and cache it. The returned GLTF is the shared master —
+ * callers must NOT mutate or add `gltf.scene` to a scene; clone it instead.
+ * Mutating a shared material affects every clone.
+ */
+export function loadGltfMaster(state: State, url: string): Promise<GLTF> {
+  ensureKTX2FromState(state);
+  let p = gltfMasterCache.get(url);
+  if (!p) {
+    const loader = createGLTFLoader();
+    p = loader.loadAsync(url).then((gltf) => {
+      applyDefaultShadowFlags(gltf.scene);
+      return gltf;
+    });
+    // Failed loads must not poison the cache (e.g. transient 404 during dev).
+    p.catch(() => gltfMasterCache.delete(url));
+    gltfMasterCache.set(url, p);
+  }
+  return p;
+}
+
 /**
  * Load a glTF/GLB from URL and attach it to the current rendering scene.
  *
@@ -195,17 +224,14 @@ export function loadGltfLodToScene(
       )
     );
   }
-  ensureKTX2FromState(state);
-  const loader = createGLTFLoader();
   const root = new THREE.Group();
   root.name = 'gltf-lod-root';
 
   return trackGltfLoad(
     Promise.all(
       urls.map((url, i) =>
-        loader.loadAsync(url).then((gltf) => {
-          applyDefaultShadowFlags(gltf.scene);
-          const child = gltf.scene;
+        loadGltfMaster(state, url).then((gltf) => {
+          const child = gltf.scene.clone(true);
           child.name = `lod${i}`;
           child.visible = false;
           child.userData.lodLevel = i;
@@ -236,20 +262,11 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
       )
     );
   }
-  ensureKTX2FromState(state);
-  const loader = createGLTFLoader();
   return trackGltfLoad(
-    new Promise((resolve, reject) => {
-      loader.load(
-        url,
-        (gltf) => {
-          applyDefaultShadowFlags(gltf.scene);
-          scene.add(gltf.scene);
-          resolve(gltf.scene);
-        },
-        undefined,
-        reject
-      );
+    loadGltfMaster(state, url).then((gltf) => {
+      const clone = gltf.scene.clone(true);
+      scene.add(clone);
+      return clone;
     })
   );
 }

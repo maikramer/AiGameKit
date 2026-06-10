@@ -12,12 +12,30 @@ gltf-xml/
 ├── plugin.ts       # Plugin: GltfXmlPlugin (recipes + sistemas)
 ├── components.ts   # GltfPending, GltfPhysicsPending
 ├── systems.ts      # GltfXmlLoadSystem (load GLB → cena)
+├── auto-instance.ts # `instanced="true"` → InstancedMesh pool por URL
 ├── group-registry.ts # raiz Three.js por entidade (GLTFLoader / GLTFDynamic)
 ├── GLTFDynamic-system.ts # Body + Collider após AABB (Rapier)
 ├── GLTFDynamic-collider-fit.ts # AABB → Collider (box / sphere / capsule)
 ├── gltf-scene-sync.ts # ECS Transform / WorldTransform → mesh Three.js
 └── recipes.ts      # gltfLoadRecipe, gltfDynamicRecipe
 ```
+
+## Performance de meshes idênticos
+
+- **Cache de master GLB** (`extras/gltf-bridge.ts`): cada URL é baixada/parseada
+  **uma vez**; consumidores recebem `scene.clone(true)` — a hierarquia de nós é
+  clonada, mas **geometrias e materiais são partilhados** (um upload de GPU por
+  asset). Vale para `GLTFLoader`, `GLTFDynamic` e LODs. Caminhos animados
+  (skinned) NÃO usam a cache. Atenção: mutar um material partilhado afeta
+  todos os clones.
+- **`<GLTFLoader instanced="true">`** (`auto-instance.ts`): todas as entidades
+  com a mesma URL renderizam por **um `InstancedMesh` por primitiva do GLB** —
+  um draw call para o conjunto inteiro. Slots dinâmicos: destruir a entidade
+  faz swap-remove do slot (props destrutíveis OK); `DistanceCull` colapsa a
+  instância para escala zero; matrizes só re-escrevem quando o Transform muda.
+  Não cobre `lod-urls` (usar SpawnGroup `instanced`/vegetação) nem
+  `GLTFDynamic`. Entidades instanciadas não têm grupo próprio na cena (sem
+  registo no group-registry → fora do BVH de meshes estáticos).
 
 ## Scope
 

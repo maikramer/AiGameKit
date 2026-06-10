@@ -1,4 +1,5 @@
 import type { Adapter, Plugin } from '../../core';
+import { GltfAutoInstanceSystem, markGltfInstanced } from './auto-instance';
 import { GltfLod, GltfPending, GltfPhysicsPending } from './components';
 import {
   applyPendingLodThresholds,
@@ -20,6 +21,7 @@ export const GltfXmlPlugin: Plugin = {
     GltfDynamicPhysicsSystem,
     GltfSceneSyncSystem,
     GltfLodSystem,
+    GltfAutoInstanceSystem,
   ],
   components: {
     gltfPending: GltfPending,
@@ -78,7 +80,13 @@ export const GltfXmlPlugin: Plugin = {
         // register as accepted to suppress "unknown attribute" warnings.
         'lod1-url': ((_entity, _value, _state) => {}) as Adapter,
         'lod2-url': ((_entity, _value, _state) => {}) as Adapter,
-        instanced: ((_entity, _value, _state) => {}) as Adapter,
+        // `<GLTFLoader instanced="true">` — render through the shared
+        // InstancedMesh pool for this URL (one draw call per primitive for
+        // every entity using the same GLB). See auto-instance.ts.
+        instanced: ((entity, value, state) => {
+          const v = String(value).trim().toLowerCase();
+          if (v === 'true' || v === '1') markGltfInstanced(state, entity);
+        }) as Adapter,
       },
     },
     defaults: {

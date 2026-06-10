@@ -3,6 +3,7 @@ import { defineQuery, type System } from '../../core';
 import { loadGltfLodToScene, loadGltfToScene } from '../../extras/gltf-bridge';
 import { getScene } from '../rendering';
 import { Transform } from '../transforms/components';
+import { addInstancedGltf, isGltfInstanced } from './auto-instance';
 import { GltfPending, GltfPhysicsPending } from './components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
 import {
@@ -106,6 +107,19 @@ export const GltfXmlLoadSystem: System = {
         }
         continue;
       }
+
+      // instanced="true": render through the shared InstancedMesh pool for
+      // this URL instead of a per-entity clone. LOD roots and GLTFDynamic
+      // (physics fitted from the loaded group) keep the group path.
+      if (
+        isGltfInstanced(state, eid) &&
+        !state.hasComponent(eid, GltfPhysicsPending)
+      ) {
+        addInstancedGltf(state, eid, url);
+        GltfPending.loaded[eid] = 1;
+        continue;
+      }
+
       setGltfInFlight(state, eid, true);
       void loadGltfToScene(state, url)
         .then((group) => {
