@@ -97,6 +97,20 @@ rigging3d [GLOBAL_FLAGS] <COMMAND> [COMMAND_FLAGS]
 
 ---
 
+## Performance Notes
+
+The vendored UniRig inference path carries several upstream bottlenecks that are fixed in this tree (measured on a goblin asset, 50k faces, 26 joints, RTX 4050 + 16-core CPU):
+
+| Fix | Where | Effect |
+|-----|-------|--------|
+| Vectorized grammar logits processor (GPU closed-form FSM, no per-token CPU sync) | `src/model/unirig_ar.py` | Skeleton beam search no longer O(L²·beams) in Python; parity-tested against the legacy FSM |
+| Parallel multi-source Dijkstra (fork/COW process pool, min-faithful symmetrization, vertex-only columns) | `src/data/vertex_group.py` | Voxel-skin geodesics 78.8s → ~16s; whole skin stage 131s → ~44s |
+| `num_workers=0` for single-input predict (was hardcoded `min(cpu,8)`) | `src/data/dataset.py` | Transform runs in the main process (enables the Dijkstra pool — daemonic workers cannot fork children) and avoids pointless worker spawns |
+| KD-tree queries with `workers=-1` | `src/data/vertex_group.py` | Multithreaded kNN graph construction |
+| Skeleton predict errors re-raise with traceback (were swallowed, surfacing later as cryptic "0 models processed") | `src/system/ar.py` | Real error messages at the failing stage |
+
+End-to-end `rigging3d pipeline`: **227.9s → 139.9s** on the reference asset. Remaining fixed costs are 3 heavy Python process launches (torch/lightning imports + checkpoint loads).
+
 ## Commands
 
 ### `rigging3d pipeline`

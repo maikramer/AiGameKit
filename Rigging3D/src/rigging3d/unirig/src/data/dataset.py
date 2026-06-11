@@ -119,7 +119,11 @@ class UniRigDatasetModule(pl.LightningDataModule):
                 cls: DatasetConfig(
                     shuffle=False,
                     batch_size=1,
-                    num_workers=min(os.cpu_count() or 4, 8),
+                    # 0 (era min(cpu,8)): com 1 item, workers só custam fork;
+                    # pior — o transform (voxel_skin) corria num worker
+                    # daemónico, o que impedia o Dijkstra paralelo por
+                    # processos (daemon não pode ter filhos).
+                    num_workers=0,
                     datapath_config=deepcopy(datapath),
                     pin_memory=True,
                     persistent_workers=False,

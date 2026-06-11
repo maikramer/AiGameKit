@@ -4,7 +4,8 @@ output_dataset_dir: &output_dataset_dir ./dataset_inference_clean
 predict_dataset_config:
   shuffle: False
   batch_size: 1
-  num_workers: 55
+  # inferência processa 1 item — 55 workers eram só custo de fork/import
+  num_workers: 0
   pin_memory: False
   persistent_workers: False
   datapath_config:

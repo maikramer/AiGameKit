@@ -66,6 +66,11 @@ class TokenizerPart(TokenizerSpec):
         if ids.shape[0] == 0 or ids.ndim == 0:
             return [self.token_id_bos]
         assert ids.ndim == 1, "expect an array"
+        state = self.fsm_state_for_ids(ids)
+        return self.possible_tokens_for_state(state)
+
+    def fsm_state_for_ids(self, ids: ndarray) -> str:
+        """Corre o FSM sobre ``ids`` e devolve o nome do estado final."""
         state = 'expect_bos'
         for id in ids:
             if state == 'expect_bos':
@@ -98,6 +103,10 @@ class TokenizerPart(TokenizerSpec):
                 state = 'expect_joint_2'
             else:
                 assert 0, state
+        return state
+
+    def possible_tokens_for_state(self, state: str) -> List[int]:
+        """Tokens permitidos num estado do FSM (partilhado com o logits processor GPU)."""
         s = []
         def add_cls():
             s.append(self.token_id_cls_none)

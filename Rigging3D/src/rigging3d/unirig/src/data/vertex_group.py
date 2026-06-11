@@ -385,6 +385,51 @@ def voxelization(
     else:
         raise ValueError(f"Unknown backend: {backend!r}")
 
+_DIJKSTRA_GRAPH = None
+_DIJKSTRA_N_KEEP = None
+
+
+def _dijkstra_pool_chunk(indices: ndarray) -> ndarray:
+    # _DIJKSTRA_GRAPH é herdado por fork (COW) — nunca passar o grafo por
+    # pickle (initargs/args): com 40M+ arestas isso custava mais do que o
+    # próprio Dijkstra. Devolver só as colunas dos vértices da mesh:
+    # a matriz completa (J, N+M) com M~7.7M voxels seria ~1.6GB de pickle
+    # de volta pelo pipe — as colunas dos voxels nunca são usadas.
+    res = shortest_path(_DIJKSTRA_GRAPH, method='D', directed=True, indices=indices)
+    return np.ascontiguousarray(res[:, :_DIJKSTRA_N_KEEP])
+
+
+def _parallel_dijkstra(graph_sym, joint_indices: ndarray, n_keep: int) -> ndarray:
+    """Dijkstra multi-fonte paralelo por processos (fork/COW), devolvendo
+    apenas as primeiras ``n_keep`` colunas (vértices da mesh).
+
+    scipy.sparse.csgraph não liberta o GIL, por isso threads não escalam.
+    Workers daemónicos (DataLoader) não podem criar filhos — nesse caso, e em
+    plataformas sem fork, corre sequencial (já com o grafo simetrizado, que
+    por si poupa ~25% face ao directed=False original).
+    """
+    import multiprocessing as mp
+
+    n_workers = min(len(joint_indices), os.cpu_count() or 1, 12)
+    can_fork = platform.system() == "Linux" and not mp.current_process().daemon
+    if n_workers <= 1 or not can_fork:
+        res = shortest_path(graph_sym, method='D', directed=True, indices=joint_indices)
+        return np.ascontiguousarray(res[:, :n_keep])
+
+    global _DIJKSTRA_GRAPH, _DIJKSTRA_N_KEEP
+    _DIJKSTRA_GRAPH = graph_sym
+    _DIJKSTRA_N_KEEP = n_keep
+    try:
+        ctx = mp.get_context("fork")
+        chunks = np.array_split(joint_indices, n_workers)
+        with ctx.Pool(n_workers) as pool:
+            parts = pool.map(_dijkstra_pool_chunk, chunks)
+    finally:
+        _DIJKSTRA_GRAPH = None
+        _DIJKSTRA_N_KEEP = None
+    return np.concatenate(parts, axis=0)
+
+
 def voxel_skin(
     grid: int,
     grid_coords: ndarray, # (M, 3)
@@ -408,32 +453,33 @@ def voxel_skin(
     grid_tree = cKDTree(grid_coords)
     vertex_tree = cKDTree(vertices)
     joint_tree = cKDTree(joints)
-    
+
     # make combined vertices
     # 0   ~ N-1: mesh vertices
     # N   ~ N+M-1: grid vertices
     combined_vertices = np.concatenate([vertices, grid_coords], axis=0)
-    
+
     # link adjacent grids
-    dist, idx = grid_tree.query(grid_coords, grid_query) # 3*3*3
+    # workers=-1: queries kNN eram single-thread e dominavam ~25% do voxel_skin
+    dist, idx = grid_tree.query(grid_coords, grid_query, workers=-1) # 3*3*3
     dist = dist[:, 1:]
     idx = idx[:, 1:]
     mask = (0 < dist) & (dist < 2/grid*1.001)
     source_grid2grid = np.repeat(np.arange(M), grid_query-1)[mask.ravel()] + N
     to_grid2grid = idx[mask] + N
     weight_grid2grid = dist[mask] * grid_weight
-    
+
     # link very close vertices
-    dist, idx = vertex_tree.query(vertices, 4)
+    dist, idx = vertex_tree.query(vertices, 4, workers=-1)
     dist = dist[:, 1:]
     idx = idx[:, 1:]
     mask = (0 < dist) & (dist < link_dis*1.001)
     source_close = np.repeat(np.arange(N), 3)[mask.ravel()]
     to_close = idx[mask]
     weight_close = dist[mask]
-    
+
     # link grids to mesh vertices
-    dist, idx = vertex_tree.query(grid_coords, vertex_query)
+    dist, idx = vertex_tree.query(grid_coords, vertex_query, workers=-1)
     mask = (0 < dist) & (dist < 2/grid*1.001) # sqrt(3)
     source_grid2vertex = np.repeat(np.arange(M), vertex_query)[mask.ravel()] + N
     to_grid2vertex = idx[mask]
@@ -458,10 +504,19 @@ def voxel_skin(
     )
     
     # get shortest path (J, N+M)
-    dist_matrix = shortest_path(graph, method='D', directed=False, indices=joint_indices)
-    
-    # (J, N)
-    dis_vertex2joint = dist_matrix[:, :N]
+    # Era o maior gargalo do pipeline (~70% do skin): Dijkstra sequencial com
+    # directed=False (simetrização interna repetida por fonte). csgraph não
+    # liberta o GIL → paralelizar exige processos. Em Linux usa fork (grafo
+    # partilhado por COW); noutros casos cai para o caminho sequencial.
+    # Simetrização fiel ao directed=False original: onde AMBAS as direções
+    # existem vale o MIN (arestas duplicadas de meshes não-manifold podem ser
+    # assimétricas); onde só uma existe, vale essa.
+    m_max = graph.maximum(graph.T)
+    m_min = graph.minimum(graph.T)
+    graph_sym = (m_max - (m_max - m_min).multiply(m_min.sign())).tocsr()
+    joint_indices = np.atleast_1d(joint_indices)
+    # (J, N) — já cortado às colunas dos vértices (voxels não são usados)
+    dis_vertex2joint = _parallel_dijkstra(graph_sym, joint_indices, n_keep=N)
     unreachable = np.isinf(dis_vertex2joint).all(axis=0)
     k = min(J, 3)
     dist, idx = joint_tree.query(vertices[unreachable], k)

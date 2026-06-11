@@ -231,9 +231,12 @@ class ARSystem(L.LightningModule):
         try:
             prediction: List[DetokenizeOutput] = self._predict_step(batch=batch, batch_idx=batch_idx, dataloader_idx=dataloader_idx)
             return prediction
-        except Exception as e:
-            print(str(e))
-            return []
+        except Exception:
+            # Engolir a excepção aqui fazia o writer gravar nada e o stage
+            # seguinte falhar com erro críptico ("0 models processed").
+            import traceback
+            traceback.print_exc()
+            raise
     
     def configure_optimizers(self) -> Dict:
         _d = {}
