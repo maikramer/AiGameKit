@@ -983,6 +983,16 @@ def turn_in_place_keyframes(
     walk. The engine applies the actual heading change."""
     import math
 
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "turn", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        direction=direction, turn_amp=turn_amp,
+    ):
+        return chains
+
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
     stash_if_needed_for_action(armature_name, action_name)
@@ -1078,6 +1088,16 @@ def breathe_idle_keyframes(
     Amplitudes moderadas; decaimento por profundidade para evitar cascata.
     """
     import math
+
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "idle", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        cycles=cycles, breath_amp=breath_amp,
+    ):
+        return chains
 
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
@@ -1244,6 +1264,16 @@ def attack_keyframes(
     """
     import math
 
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "attack", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        strikes=strikes,
+    ):
+        return chains
+
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
     stash_if_needed_for_action(armature_name, action_name)
@@ -1398,6 +1428,16 @@ def walk_cycle_keyframes(
 ) -> dict[str, list[str]]:
     """Ciclo de caminhada: hip swing + flexao de joelho anatomica em eixos
     resolvidos do rig, com balanco contralateral de bracos."""
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "walk", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        cycles=cycles,
+    ):
+        return chains
+
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
     stash_if_needed_for_action(armature_name, action_name)
@@ -2170,6 +2210,16 @@ def run_cycle_keyframes(
 ) -> dict[str, list[str]]:
     """Running cycle: maior amplitude de hip swing e flexao de joelho, em eixos
     resolvidos do rig."""
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "run", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        cycles=cycles,
+    ):
+        return chains
+
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
     stash_if_needed_for_action(armature_name, action_name)
@@ -2219,6 +2269,15 @@ def jump_keyframes(
 ) -> dict[str, list[str]]:
     """Jump: anticipation -> crouch -> extend -> airborne -> descend -> land. Non-looping."""
     import math
+
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "jump", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+    ):
+        return chains
 
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
@@ -2359,6 +2418,15 @@ def fall_keyframes(
 ) -> dict[str, list[str]]:
     """Falling: splay -> mid-fall sway -> terminal velocity -> impact prep. Non-looping."""
     import math
+
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    if humanoid.try_humanoid_clip(
+        "fall", armature_name, chains,
+        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+    ):
+        return chains
 
     bpy = _bpy()
     normalize_armature_before_animation(armature_name)
