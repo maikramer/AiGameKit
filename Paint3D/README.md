@@ -94,6 +94,7 @@ paint3d texture mesh.glb -i ref.png --quality high
 | `--smooth/--no-smooth` | flag | `true` | Bilateral texture smoothing (removes bake artifacts) |
 | `--smooth-passes` | int | `1` | Number of bilateral filter passes |
 | `--low-vram-mode` | flag | `false` | SDNQ uint8, 4 views @ 384px, render 1024, texture 2048 |
+| `--hw-auto/--no-hw-auto` | flag | `true` | Hardware auto-detection: enables low-VRAM mode on GPUs <10 GB; FP16 kept on big/multi-GPU rigs. Explicit flags win. Env kill-switch: `PAINT3D_HW_AUTO=0` |
 | `--preserve-origin` | flag | `true` | Rebase mesh to AABB base at Y=0, XZ centered |
 | `--allow-shared-gpu` | flag | `false` | Allow GPU with other processes |
 | `--gpu-kill-others/--no-gpu-kill-others` | flag | `off` | **DEPRECATED:** terminates competing GPU processes |

@@ -196,6 +196,17 @@ def cli(ctx, verbose):
     default=None,
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: liga low-VRAM (SDNQ uint8, 4v@384) em GPUs "
+        "<10GB; FP16 nas grandes/multi-GPU. Flags explícitas ganham. "
+        "Env: PAINT3D_HW_AUTO=0."
+    ),
+)
 @click.pass_context
 def texture(
     ctx,
@@ -220,6 +231,7 @@ def texture(
     gpu_ids,
     quality,
     category,
+    hw_auto,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
@@ -245,6 +257,15 @@ def texture(
         render_size = _qresolved.params["render_size"]
     if not _user_set_tex_size and "texture_size" in _qresolved.params:
         texture_size = _qresolved.params["texture_size"]
+
+    # Hardware auto-detection (soft): --low-vram-mode explícito ganha sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled():
+        hwp = detect_hardware_profile()
+        if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
+            low_vram_mode = True
 
     mesh_path = Path(mesh_file)
     if output is None:
@@ -284,6 +305,8 @@ def texture(
         info_table.add_row("[bold]Smooth[/bold]", f"bilateral x {smooth_passes} passes")
     if upscale:
         info_table.add_row("[bold]Upscale[/bold]", f"Real-ESRGAN {upscale_factor}x")
+    if hwp is not None:
+        info_table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(info_table, title="[bold green]Hunyuan3D-Paint 2.1", border_style="green"))
 
     _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
@@ -392,6 +415,13 @@ def texture(
 @click.option("--gpu-kill-others/--no-gpu-kill-others", default=False)
 @click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
 @click.option("--gpu-ids", default=None)
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help="Auto-detecção de hardware (low-VRAM em GPUs <10GB). Env: PAINT3D_HW_AUTO=0.",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @click.pass_context
 def texture_batch(
@@ -411,6 +441,7 @@ def texture_batch(
     gpu_kill_others,
     gpu_ids,
     force,
+    hw_auto,
     batch_verbose,
 ):
     """Texturizar batch via manifest JSON. Saída JSONL em stdout."""
@@ -419,6 +450,14 @@ def texture_batch(
     from .utils.mesh_io import load_mesh_trimesh, save_glb
 
     verbose = bool(ctx.obj.get("VERBOSE")) or batch_verbose
+
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    if hw_auto and hw_auto_enabled():
+        hwp = detect_hardware_profile()
+        if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
+            low_vram_mode = True
+        Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
     os.environ.setdefault(
         "PYTORCH_CUDA_ALLOC_CONF",
@@ -759,6 +798,12 @@ def doctor():
 
     ok21, msg21 = check_hunyuan3d21_environment()
     table.add_row("Hunyuan3D-2.1", f"[{'green' if ok21 else 'yellow'}]{msg21.split(chr(10))[0][:120]}[/]")
+
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    _hwp = detect_hardware_profile()
+    _state = "" if hw_auto_enabled() else " [yellow](desligado: PAINT3D_HW_AUTO=0)[/yellow]"
+    table.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
     console.print(table)
 
