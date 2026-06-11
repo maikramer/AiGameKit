@@ -130,6 +130,12 @@ text3d generate "scene" --gpu-ids 0,1 -o scene.glb
 | `--gpu-kill-others` | flag | false | **DEPRECATED:** terminate competing GPU processes |
 | `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
 | `--category` | str | None | Asset category for automatic tuning (e.g. `humanoid`, `weapon`, `prop`) |
+| `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection: fills steps/octree/chunks, SDNQ, multi-GPU ids and volume decoder from detected VRAM. Explicit flags, `--quality` and `--preset` always win. Env kill-switch: `TEXT3D_HW_AUTO=0` |
+| `--volume-decoder` | str | `vanilla` | VAE volume decoder: `vanilla` (dense, original), `hierarchical` (near-surface only, ~lossless, much faster), `flashvdm` (fastest, slight quality loss) |
+| `--mc-algo` | str | None | Surface extraction: `mc` (skimage, CPU) or `dmc` (GPU, requires `diso`) |
+| `--compile` | flag | false | `torch.compile` on DiT+VAE+conditioner (slow first-run warmup; pays off in batch) |
+| `--sage-attn` | flag | false | SageAttention INT8 attention kernels (requires `sageattention`, Ampere+) |
+| `--sdnq-matmul` | flag | false | SDNQ quantized INT8 matmul (use together with `--sdnq-preset`) |
 
 > **Preset precedence:** When `--preset` is set, it overrides `--steps`, `--octree-resolution`, and `--num-chunks`. When `--quality` is set, the QualityEngine resolves preset/guidance/steps/octree/chunks only if the user hasn't explicitly provided them.
 
@@ -150,7 +156,41 @@ text3d generate-batch manifest.json --output-dir ./outputs --preset balanced --f
 ]
 ```
 
-Accepts all generation flags (`--preset`, `--steps`, `--guidance`, `--octree-resolution`, `--num-chunks`, `--mc-level`, `--sdnq-preset`, `--export-origin`, `--gpu-ids`, `--allow-shared-gpu`, `--force`).
+Accepts all generation flags (`--preset`, `--steps`, `--guidance`, `--octree-resolution`, `--num-chunks`, `--mc-level`, `--sdnq-preset`, `--export-origin`, `--gpu-ids`, `--allow-shared-gpu`, `--force`) plus the inference acceleration flags (`--volume-decoder`, `--mc-algo`, `--compile`, `--sage-attn`, `--sdnq-matmul`). In batch mode the BiRefNet background remover stays loaded across items (no per-item reload).
+
+### Hardware auto-detection
+
+`--hw-auto` (default **on**) detects the available CUDA hardware and resolves a profile — only filling parameters you didn't set explicitly (`--quality`, `--preset` and individual flags always win). Check the detected profile with `text3d doctor`. Disable with `--no-hw-auto` or `TEXT3D_HW_AUTO=0`.
+
+| Detected hardware | Profile |
+|-------------------|---------|
+| Multi-GPU (e.g. 2× RTX 3060 12GB = 24GB) | `gpu_ids` auto-set (accelerate weight split), hq params (30/384/20000), no quantization |
+| Single GPU ≥ 10GB | hq params, no quantization |
+| Single GPU 7.5–10GB | balanced params (24/256/8000), no quantization |
+| Single GPU 5–7.5GB (e.g. RTX 4050 6GB) | balanced params + SDNQ INT4 |
+| Single GPU < 5GB | fast params (18/128/4096) + SDNQ INT4 |
+| No CUDA | fast params on CPU |
+
+All CUDA profiles default the volume decoder to `hierarchical` (near-lossless). Multi-GPU weight splitting counts the **sum** of VRAM for the tier; an explicit `--gpu-ids` always overrides the auto selection.
+
+### Inference acceleration
+
+All acceleration paths are **opt-in** — defaults keep the original behavior (dense `VanillaVolumeDecoder` + skimage marching cubes), except `--hw-auto` above which is on by default.
+
+| Flag | What it does | Trade-off |
+|------|--------------|-----------|
+| `--volume-decoder hierarchical` | Coarse-to-fine volume decode: queries the geo-decoder only near the surface instead of the full dense grid (e.g. 385³ ≈ 57M points at octree 384) | Near-lossless; biggest single speedup of the decode phase |
+| `--volume-decoder flashvdm` | Hierarchical + FlashVDM adaptive top-k KV selection in the decoder cross-attention | Fastest; slight quality loss on fine detail |
+| `--mc-algo dmc` | Differentiable marching cubes on GPU (`diso`) instead of skimage on CPU | Requires `pip install diso` and CUDA; falls back to `mc` otherwise |
+| `--compile` | `torch.compile` over DiT, VAE and conditioner | First inference pays compile warmup; best for `generate-batch` |
+| `--sage-attn` | INT8 SageAttention kernels in the DiT and decoder attention | Requires `pip install sageattention`, Ampere+ GPU |
+| `--sdnq-matmul` | INT8 quantized matmul for SDNQ-quantized weights | Only meaningful with `--sdnq-preset`/`--low-vram` |
+
+Recommended fast profile for batch asset production:
+
+```bash
+text3d generate-batch manifest.json --preset balanced --volume-decoder hierarchical --mc-algo dmc --compile
+```
 
 ### `text3d lod MESH`
 
@@ -303,6 +343,7 @@ text3d skill install --target ./my-game --force
 | Merge vertices | Precision: 5 decimal digits |
 | Non-manifold repair | Via pymeshlab |
 | Weld by distance | 0.01% of bounding-box diagonal |
+| Loose-debris removal | Drops tiny disconnected islands (< max(64, 0.05% of faces)) — marching-cubes/quantization floaters |
 | Taubin smoothing | 3 iterations, volume-preserving |
 | Isotropic remeshing | 3 iterations, target edge length = 1% of diagonal |
 

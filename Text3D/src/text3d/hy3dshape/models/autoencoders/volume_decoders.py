@@ -260,8 +260,19 @@ class HierarchicalVolumeDecoding:
             nidx = torch.where(next_index > 0)
 
             next_points = torch.stack(nidx, dim=1)
-            next_points = (next_points * torch.tensor(resolution, dtype=next_points.dtype, device=device) +
-                           torch.tensor(bbox_min, dtype=next_points.dtype, device=device))
+            if next_points.shape[0] == 0:
+                # Degenerate SDF (no sign change near mc_level): keep the coarse
+                # grid instead of crashing on torch.cat of an empty list.
+                logger.warning(
+                    f"Hierarchical decode: no near-surface voxels at r{octree_depth_now + 1}; "
+                    "keeping coarser grid."
+                )
+                break
+            # NOTE: upstream used dtype=next_points.dtype (int64) here, truncating
+            # the sub-1.0 `resolution` scale to 0 and collapsing every refinement
+            # query onto bbox_min — the whole refined grid became one constant.
+            next_points = (next_points.to(torch.float32) * torch.tensor(resolution, dtype=torch.float32, device=device) +
+                           torch.tensor(bbox_min, dtype=torch.float32, device=device))
             batch_logits = []
             for start in tqdm(range(0, next_points.shape[0], num_chunks),
                               desc=f"Hierarchical Volume Decoding [r{octree_depth_now + 1}]"):
@@ -392,6 +403,12 @@ class FlashVDMVolumeDecoding:
             nidx = torch.where(next_index > 0)
 
             next_points = torch.stack(nidx, dim=1)
+            if next_points.shape[0] == 0:
+                logger.warning(
+                    f"FlashVDM decode: no near-surface voxels at r{octree_depth_now + 1}; "
+                    "keeping coarser grid."
+                )
+                break
             next_points = (next_points * torch.tensor(resolution, dtype=torch.float32, device=device) +
                            torch.tensor(bbox_min, dtype=torch.float32, device=device))
 

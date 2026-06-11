@@ -296,6 +296,57 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help=("Preset SDNQ para quantização do DiT. Defeito: none (full precision), ou sdnq-int4 com --low-vram."),
 )
 @click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: ajusta steps/octree/chunks, SDNQ, multi-GPU e "
+        "volume decoder à VRAM disponível. Só preenche o que não foi definido "
+        "explicitamente (flags, --quality, --preset ganham). Env: TEXT3D_HW_AUTO=0."
+    ),
+)
+@click.option(
+    "--volume-decoder",
+    "volume_decoder",
+    type=click.Choice(["vanilla", "hierarchical", "flashvdm"]),
+    default="vanilla",
+    show_default=True,
+    help=(
+        "Decoder volumétrico do VAE: vanilla (denso, original), hierarchical "
+        "(consulta só voxels perto da superfície; grande speedup, ~lossless), "
+        "flashvdm (hierárquico + top-k KV; o mais rápido, perda ligeira)."
+    ),
+)
+@click.option(
+    "--mc-algo",
+    "mc_algo",
+    type=click.Choice(["mc", "dmc"]),
+    default=None,
+    help="Extracção de superfície: mc (skimage, CPU) ou dmc (GPU, requer pacote diso).",
+)
+@click.option(
+    "--compile",
+    "compile_models",
+    is_flag=True,
+    default=False,
+    help="torch.compile no DiT+VAE (warmup lento na 1ª inferência; compensa em batch).",
+)
+@click.option(
+    "--sage-attn",
+    "sage_attention",
+    is_flag=True,
+    default=False,
+    help="SageAttention (attention INT8, Ampere+; requer pacote sageattention).",
+)
+@click.option(
+    "--sdnq-matmul",
+    "sdnq_matmul",
+    is_flag=True,
+    default=False,
+    help="Matmul quantizado SDNQ (INT8) — mais rápido em GPUs recentes; usar com --sdnq-preset.",
+)
+@click.option(
     "-v",
     "--verbose",
     "generate_verbose",
@@ -427,6 +478,12 @@ def generate(
     preset,
     mc_level,
     no_remove_bg,
+    hw_auto,
+    volume_decoder,
+    mc_algo,
+    compile_models,
+    sage_attention,
+    sdnq_matmul,
     generate_verbose,
     allow_shared_gpu,
     gpu_kill_others,
@@ -481,6 +538,29 @@ def generate(
         steps = pv["steps"]
         octree_resolution = pv["octree"]
         num_chunks = pv["chunks"]
+
+    # Hardware auto-detection: soft resolution — explicit flags, --quality e
+    # --preset ganham sempre; preenche só o que veio dos defaults do click.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    _user_set_quality = ctx.get_parameter_source("quality") not in (_src.DEFAULT,)
+    _user_set_vdecoder = ctx.get_parameter_source("volume_decoder") not in (_src.DEFAULT,)
+    hwp = None
+    if hw_auto and hw_auto_enabled() and not cpu:
+        hwp = detect_hardware_profile()
+        _params_untouched = not (
+            _user_set_preset or _user_set_quality or _user_set_steps or _user_set_octree or _user_set_chunks
+        )
+        if _params_untouched and not low_vram:
+            steps = hwp.steps
+            octree_resolution = hwp.octree
+            num_chunks = hwp.chunks
+        if sdnq_preset is None and hwp.sdnq_preset:
+            sdnq_preset = hwp.sdnq_preset
+        if parsed_gpu_ids is None and hwp.gpu_ids:
+            parsed_gpu_ids = hwp.gpu_ids
+        if not _user_set_vdecoder:
+            volume_decoder = hwp.volume_decoder
 
     # --low-vram: override to the low-VRAM profile (overrides balanced/fast/hq)
     if low_vram:
@@ -551,6 +631,21 @@ def generate(
         + (f", rotação X={export_rotation_x_deg}°" if export_rotation_x_deg is not None else ""),
     )
     info_table.add_row("[bold]Modo[/bold]", "economia VRAM" if low_vram else "normal")
+    if hwp is not None:
+        info_table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
+    _accel_parts = []
+    if volume_decoder != "vanilla":
+        _accel_parts.append(f"volume_decoder={volume_decoder}")
+    if mc_algo:
+        _accel_parts.append(f"mc_algo={mc_algo}")
+    if compile_models:
+        _accel_parts.append("torch.compile")
+    if sage_attention:
+        _accel_parts.append("sage-attn")
+    if sdnq_matmul:
+        _accel_parts.append("sdnq-matmul")
+    if _accel_parts:
+        info_table.add_row("[bold]Aceleração[/bold]", ", ".join(_accel_parts))
     if parsed_gpu_ids:
         info_table.add_row("[bold]Multi-GPU[/bold]", f"IDs: {parsed_gpu_ids} (accelerate dispatch)")
 
@@ -587,6 +682,11 @@ def generate(
                         hunyuan_subfolder=model_subfolder,
                         sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
                         gpu_ids=parsed_gpu_ids,
+                        volume_decoder=volume_decoder,
+                        mc_algo=mc_algo,
+                        compile_models=compile_models,
+                        sage_attention=sage_attention,
+                        sdnq_quantized_matmul=sdnq_matmul,
                     )
 
                 if output is None:
@@ -756,6 +856,12 @@ def doctor():
                 f"(ou TEXT3D_ALLOW_SHARED_GPU=1 / --allow-shared-gpu)",
             )
 
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    _hwp = detect_hardware_profile()
+    _hw_state = "" if hw_auto_enabled() else " [yellow](desligado: TEXT3D_HW_AUTO=0)[/yellow]"
+    table.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_hw_state}")
+
     console.print(table)
 
     extra = Table(title="[bold blue]Ferramentas externas (bake-master)", box=box.ROUNDED)
@@ -783,7 +889,7 @@ def doctor():
                 extra.add_row(
                     "@gltf-transform/cli", "[yellow]falhou — bake-master fará fallback sem KTX2/meshopt[/yellow]"
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             extra.add_row("@gltf-transform/cli", f"[yellow]erro: {exc}[/yellow]")
     else:
         extra.add_row(
@@ -1472,6 +1578,52 @@ def align_plus_z_cmd(
 @click.option("--gpu-kill-others/--no-gpu-kill-others", default=False)
 @click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
 @click.option("--gpu-ids", type=str, default=None)
+@click.option(
+    "--volume-decoder",
+    "volume_decoder",
+    type=click.Choice(["vanilla", "hierarchical", "flashvdm"]),
+    default="vanilla",
+    show_default=True,
+    help="Decoder volumétrico: vanilla | hierarchical (~lossless, rápido) | flashvdm (mais rápido).",
+)
+@click.option(
+    "--mc-algo",
+    "mc_algo",
+    type=click.Choice(["mc", "dmc"]),
+    default=None,
+    help="Extracção de superfície: mc (skimage, CPU) ou dmc (GPU, requer diso).",
+)
+@click.option(
+    "--compile",
+    "compile_models",
+    is_flag=True,
+    default=False,
+    help="torch.compile no DiT+VAE — warmup na 1ª inferência amortizado pelo lote.",
+)
+@click.option(
+    "--sage-attn",
+    "sage_attention",
+    is_flag=True,
+    default=False,
+    help="SageAttention (attention INT8, Ampere+; requer sageattention).",
+)
+@click.option(
+    "--sdnq-matmul",
+    "sdnq_matmul",
+    is_flag=True,
+    default=False,
+    help="Matmul quantizado SDNQ (INT8); usar com --sdnq-preset.",
+)
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: preenche steps/octree/chunks, SDNQ, multi-GPU e "
+        "volume decoder pelo perfil da(s) GPU(s) quando não definidos. Env: TEXT3D_HW_AUTO=0."
+    ),
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 def generate_batch(
     manifest: str,
@@ -1489,6 +1641,12 @@ def generate_batch(
     gpu_kill_others: bool,
     gpu_ids: str | None,
     force: bool,
+    volume_decoder: str,
+    mc_algo: str | None,
+    compile_models: bool,
+    sage_attention: bool,
+    sdnq_matmul: bool,
+    hw_auto: bool,
     batch_verbose: bool,
 ) -> None:
     """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout)."""
@@ -1517,16 +1675,35 @@ def generate_batch(
         base_steps = base_steps if base_steps is not None else pv["steps"]
         base_octree = base_octree if base_octree is not None else pv["octree"]
         base_chunks = base_chunks if base_chunks is not None else pv["chunks"]
+
+    parsed_gpu_ids: list[int] | None = None
+    if gpu_ids is not None:
+        parsed_gpu_ids = [int(x) for x in gpu_ids.split(",") if x.strip()]
+
+    # Hardware auto-detection (soft): só preenche valores não definidos.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled():
+        hwp = detect_hardware_profile()
+        if preset is None:
+            base_steps = base_steps if base_steps is not None else hwp.steps
+            base_octree = base_octree if base_octree is not None else hwp.octree
+            base_chunks = base_chunks if base_chunks is not None else hwp.chunks
+        if sdnq_preset is None and hwp.sdnq_preset:
+            sdnq_preset = hwp.sdnq_preset
+        if parsed_gpu_ids is None and hwp.gpu_ids:
+            parsed_gpu_ids = hwp.gpu_ids
+        if volume_decoder == "vanilla":  # default click — "vanilla" explícito também conta
+            volume_decoder = hwp.volume_decoder
+        _err.print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
+
     if base_steps is None:
         base_steps = _defaults.DEFAULT_HY_STEPS
     if base_octree is None:
         base_octree = _defaults.DEFAULT_OCTREE_RESOLUTION
     if base_chunks is None:
         base_chunks = _defaults.DEFAULT_NUM_CHUNKS
-
-    parsed_gpu_ids: list[int] | None = None
-    if gpu_ids is not None:
-        parsed_gpu_ids = [int(x) for x in gpu_ids.split(",") if x.strip()]
 
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
@@ -1556,6 +1733,11 @@ def generate_batch(
                     hunyuan_subfolder=model_subfolder,
                     sdnq_preset=resolved_sdnq,
                     gpu_ids=parsed_gpu_ids,
+                    volume_decoder=volume_decoder,
+                    mc_algo=mc_algo,
+                    compile_models=compile_models,
+                    sage_attention=sage_attention,
+                    sdnq_quantized_matmul=sdnq_matmul,
                 )
 
         _err.print(

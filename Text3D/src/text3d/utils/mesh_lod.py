@@ -156,16 +156,77 @@ def _make_normals_consistent(obj) -> None:
     bpy.ops.object.mode_set(mode="OBJECT")
 
 
+def _remove_loose_debris(obj, *, face_ratio: float = 0.0005, min_faces: int = 64) -> int:
+    """Apaga ilhas soltas minúsculas (debris de marching cubes / quantização).
+
+    Componentes com menos de ``max(min_faces, face_ratio * total_faces)`` faces
+    são removidos. Limiar conservador: fragmentos de iso-superfície têm tipicamente
+    < 50 faces; partes intencionais pequenas (olhos, fivelas) ficam acima.
+    Devolve o número de faces removidas. ``face_ratio<=0`` desativa.
+    """
+    if face_ratio <= 0:
+        return 0
+
+    import bmesh
+
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    bm.verts.ensure_lookup_table()
+
+    # União por componentes conexas via arestas (union-find iterativo).
+    parent = list(range(len(bm.verts)))
+
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    for e in bm.edges:
+        ra, rb = find(e.verts[0].index), find(e.verts[1].index)
+        if ra != rb:
+            parent[rb] = ra
+
+    faces_per_comp: dict[int, int] = {}
+    face_root = []
+    for f in bm.faces:
+        r = find(f.verts[0].index)
+        face_root.append(r)
+        faces_per_comp[r] = faces_per_comp.get(r, 0) + 1
+
+    total_faces = len(bm.faces)
+    threshold = max(min_faces, int(face_ratio * total_faces))
+    doomed_roots = {r for r, n in faces_per_comp.items() if n < threshold}
+    # Nunca apagar tudo: se até a maior ilha cai no limiar, não toca.
+    if len(doomed_roots) == len(faces_per_comp):
+        bm.free()
+        return 0
+
+    doomed_faces = [f for f, r in zip(bm.faces, face_root, strict=True) if r in doomed_roots]
+    removed = len(doomed_faces)
+    if removed:
+        doomed_verts = [v for v in bm.verts if find(v.index) in doomed_roots]
+        bmesh.ops.delete(bm, geom=doomed_faces, context="FACES")
+        bmesh.ops.delete(bm, geom=[v for v in doomed_verts if v.is_valid], context="VERTS")
+        bm.to_mesh(me)
+        me.update()
+    bm.free()
+    return removed
+
+
 def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12) -> None:
     """Pipeline de preparação de topologia sobre um bpy mesh object (in-place).
 
     Ordem fixa, idempotente:
     1. Remove doubles exactos (1e-5)
     2. Weld adaptativo por distância (fecha micro-cracks de marching cubes)
-    3. Normais consistentes (outward)
-    4. Fill holes pequenos (≤ ``fill_holes_sides`` lados; defeito 12 evita
+    3. Remove ilhas soltas minúsculas (debris de MC/quantização: cascas, floaters)
+    4. Normais consistentes (outward)
+    5. Fill holes pequenos (≤ ``fill_holes_sides`` lados; defeito 12 evita
        tapar aberturas grandes intencionais como base de crates)
-    5. Shade-smooth + auto-smooth angle (sem custom split normals!)
+    6. Shade-smooth + auto-smooth angle (sem custom split normals!)
     """
     log = logging.getLogger(__name__)
 
@@ -180,6 +241,13 @@ def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12) -> None:
     removed = _remove_doubles(mesh_obj, threshold=weld_dist)
     if removed:
         log.info("Weld adaptativo (%.4f): %d vértices removidos", weld_dist, removed)
+
+    try:
+        removed = _remove_loose_debris(mesh_obj)
+        if removed:
+            log.info("Debris removido: %d faces em ilhas soltas minúsculas", removed)
+    except Exception as exc:
+        log.warning("remove_loose_debris falhou: %s", exc)
 
     try:
         _make_normals_consistent(mesh_obj)

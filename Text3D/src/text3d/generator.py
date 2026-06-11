@@ -8,6 +8,8 @@ Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguo
 
 from __future__ import annotations
 
+import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -20,7 +22,12 @@ from gamedev_shared.logging import Logger
 from text2d.generator import KleinFluxGenerator
 
 from . import defaults as _defaults
-from .utils.bg_removal import BiRefNetBGRemover, crop_to_content
+from .utils.bg_removal import (
+    BiRefNetBGRemover,
+    crop_to_content,
+    has_meaningful_alpha,
+    key_uniform_background,
+)
 from .utils.memory import clear_cuda_memory as _clear_cuda_cache
 from .utils.prompt_enhance import create_optimized_prompt as _optimize_prompt
 
@@ -53,6 +60,9 @@ class HunyuanTextTo3DGenerator:
     DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-1"
     DEFAULT_SDNQ_PRESET = ""
 
+    VOLUME_DECODERS = frozenset({"vanilla", "hierarchical", "flashvdm"})
+    MC_ALGOS = frozenset({"mc", "dmc"})
+
     def __init__(
         self,
         device: str | None = None,
@@ -63,7 +73,17 @@ class HunyuanTextTo3DGenerator:
         hunyuan_subfolder: str = DEFAULT_SUBFOLDER,
         sdnq_preset: str = DEFAULT_SDNQ_PRESET,
         gpu_ids: list[int] | None = None,
+        volume_decoder: str = "vanilla",
+        mc_algo: str | None = None,
+        compile_models: bool = False,
+        sage_attention: bool = False,
+        sdnq_quantized_matmul: bool = False,
     ):
+        if volume_decoder not in self.VOLUME_DECODERS:
+            raise ValueError(f"volume_decoder inválido: {volume_decoder!r} (válidos: {sorted(self.VOLUME_DECODERS)})")
+        if mc_algo is not None and mc_algo not in self.MC_ALGOS:
+            raise ValueError(f"mc_algo inválido: {mc_algo!r} (válidos: {sorted(self.MC_ALGOS)})")
+
         self.verbose = verbose
         self.low_vram_mode = low_vram_mode
         self.cache_dir = cache_dir
@@ -71,6 +91,11 @@ class HunyuanTextTo3DGenerator:
         self.hunyuan_subfolder = hunyuan_subfolder
         self.sdnq_preset = sdnq_preset
         self._gpu_ids = gpu_ids
+        self.volume_decoder = volume_decoder
+        self.mc_algo = mc_algo
+        self.compile_models = compile_models
+        self.sdnq_quantized_matmul = sdnq_quantized_matmul
+        self.sage_attention = self._setup_sage_attention(sage_attention)
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -78,18 +103,50 @@ class HunyuanTextTo3DGenerator:
             self.device = device
 
         self._hunyuan_pipeline: Any = None
+        self._bg_remover: Any = None
 
         if self.verbose:
             _logger.info(f"device={self.device} low_vram={self.low_vram_mode}")
             _logger.info(f"Hunyuan: {self.hunyuan_model_id} / {self.hunyuan_subfolder}")
             if gpu_ids is not None:
                 _logger.info(f"Multi-GPU IDs: {gpu_ids}")
+            if volume_decoder != "vanilla" or mc_algo or compile_models or self.sage_attention:
+                _logger.info(
+                    f"Aceleração: volume_decoder={volume_decoder} mc_algo={mc_algo} "
+                    f"compile={compile_models} sage_attn={self.sage_attention} "
+                    f"sdnq_matmul={sdnq_quantized_matmul}"
+                )
+
+    def _setup_sage_attention(self, requested: bool) -> bool:
+        """Activa SageAttention (attention INT8) via env CA_USE_SAGEATTN.
+
+        O binding acontece no import dos módulos hy3dshape — tem de correr antes
+        do primeiro ``_load_hunyuan`` do processo. Devolve o estado efectivo.
+        """
+        if not requested:
+            return False
+        try:
+            import sageattention  # noqa: F401
+        except ImportError:
+            _logger.warn("sageattention não instalado — a continuar com SDPA (pip install sageattention).")
+            return False
+        if (
+            "text3d.hy3dshape.models.denoisers.hunyuan3ddit" in sys.modules
+            and os.environ.get("CA_USE_SAGEATTN", "0") != "1"
+        ):
+            _logger.warn("hy3dshape já importado sem SageAttention — flag sem efeito neste processo.")
+            return False
+        os.environ["CA_USE_SAGEATTN"] = "1"
+        return True
 
     def _log(self, msg: str) -> None:
         if self.verbose:
             _logger.info(msg)
 
     def _unload_hunyuan(self) -> None:
+        if self._bg_remover is not None:
+            self._bg_remover.unload()
+            self._bg_remover = None
         if self._hunyuan_pipeline is None:
             return
         self._log("A libertar pipeline Hunyuan...")
@@ -122,7 +179,10 @@ class HunyuanTextTo3DGenerator:
             )
 
         load_device = "cpu"
-        load_dtype = torch.float16
+        # fp16 em CPU é numericamente degradado (sem kernels half nativos —
+        # acumulação meia-precisão) e foi fonte de geometria extra (cascas,
+        # pedestais) no caminho --low-vram. Em CPU, sempre fp32.
+        load_dtype = torch.float16 if hunyuan_device == "cuda" else torch.float32
 
         kwargs: dict = {
             "subfolder": self.hunyuan_subfolder,
@@ -148,7 +208,7 @@ class HunyuanTextTo3DGenerator:
                     preset=self.sdnq_preset,
                     quantization_device="cpu",
                     return_device="cpu",
-                    use_quantized_matmul=False,
+                    use_quantized_matmul=self.sdnq_quantized_matmul,
                 )
                 self._log(f"SDNQ {self.sdnq_preset} aplicado ao DiT (CPU).")
             else:
@@ -170,6 +230,7 @@ class HunyuanTextTo3DGenerator:
                 pipe.vae.to(primary_dev)
                 pipe.device = torch.device(primary_dev)
                 self._log(f"Multi-GPU dispatch: GPUs {self._gpu_ids}, primary={primary_dev}")
+                self._configure_acceleration(pipe)
                 self._hunyuan_pipeline = pipe
                 return pipe
             self._log(f"Multi-GPU plan: {plan.status} — a usar colocação simples.")
@@ -181,8 +242,47 @@ class HunyuanTextTo3DGenerator:
                 alloc = torch.cuda.memory_allocated() / (1024**3)
                 self._log(f"Shape na VRAM: {alloc:.2f} GB")
 
+        self._configure_acceleration(pipe)
         self._hunyuan_pipeline = pipe
         return pipe
+
+    def _configure_acceleration(self, pipe: Any) -> None:
+        """Liga decoder volumétrico esparso, extractor GPU e torch.compile no pipeline.
+
+        Defaults preservam o comportamento original (VanillaVolumeDecoder + skimage MC).
+        ``hierarchical`` consulta apenas voxels perto da superfície (mesma matemática,
+        ~quase lossless); ``flashvdm`` adiciona selecção top-k de KV no cross-attention
+        (mais rápido, perda de qualidade ligeira). ``dmc`` requer o pacote ``diso``.
+        """
+        mc_algo = self.mc_algo
+        if mc_algo == "dmc":
+            if self.device != "cuda" or (self.low_vram_mode and self.device == "cuda"):
+                _logger.warn("dmc requer CUDA (pipeline em CPU) — fallback para mc_algo='mc'.")
+                mc_algo = "mc"
+            else:
+                try:
+                    import diso  # noqa: F401
+                except ImportError:
+                    _logger.warn("diso não instalado — fallback para mc_algo='mc' (pip install diso).")
+                    mc_algo = "mc"
+
+        if self.volume_decoder != "vanilla":
+            pipe.vae.enable_flashvdm_decoder(
+                enabled=True,
+                adaptive_kv_selection=(self.volume_decoder == "flashvdm"),
+                topk_mode="mean",
+                mc_algo=mc_algo or "mc",
+            )
+            self._log(f"Volume decoder: {self.volume_decoder} (mc_algo={mc_algo or 'mc'})")
+        elif mc_algo is not None:
+            from .hy3dshape.models.autoencoders import SurfaceExtractors
+
+            pipe.vae.surface_extractor = SurfaceExtractors[mc_algo]()
+            self._log(f"Surface extractor: {mc_algo}")
+
+        if self.compile_models:
+            pipe.compile()
+            self._log("torch.compile activo (DiT+VAE+conditioner; warmup na 1ª inferência).")
 
     def generate(
         self,
@@ -292,10 +392,27 @@ class HunyuanTextTo3DGenerator:
 
         if remove_bg:
             self._log("A remover fundo com BiRefNet...")
-            bg_remover = BiRefNetBGRemover(device=self.device)
+            bg_remover = self._bg_remover or BiRefNetBGRemover(device=self.device)
             image = bg_remover.remove_background(image)
             image = crop_to_content(image)
-            bg_remover.unload()
+            if keep_loaded:
+                self._bg_remover = bg_remover
+            else:
+                bg_remover.unload()
+                self._bg_remover = None
+        elif not has_meaningful_alpha(image):
+            # Sem alpha o preprocessor trata o frame inteiro como objecto e o
+            # Hunyuan esculpe placas/pedestais fundidos ao modelo. Para renders
+            # com fundo uniforme, keying barato recupera a silhueta.
+            keyed = key_uniform_background(image)
+            if keyed is not None:
+                self._log("Sem alpha: fundo uniforme removido por keying (anti-placa).")
+                image = crop_to_content(keyed)
+            else:
+                _logger.warn(
+                    "remove_bg desligado e imagem sem alpha com fundo não-uniforme — "
+                    "risco alto de placa/pedestal fundido. Recomenda-se BiRefNet (omitir --no-remove-bg)."
+                )
 
         self._log("Fase 2: Hunyuan3D-2.1 (imagem → mesh)")
         pipe = self._load_hunyuan()

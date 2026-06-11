@@ -71,6 +71,57 @@ class BiRefNetBGRemover:
             clear_cuda_memory()
 
 
+def has_meaningful_alpha(image: Image.Image, threshold: int = 250) -> bool:
+    """True se a imagem tem canal alpha com transparência real (silhueta)."""
+    if "A" not in image.getbands():
+        return False
+    import numpy as np
+
+    alpha = np.asarray(image.getchannel("A"))
+    return bool((alpha < threshold).any())
+
+
+def key_uniform_background(image: Image.Image, tolerance: int = 14) -> Image.Image | None:
+    """Alpha keying barato para renders com fundo uniforme (branco/cinza liso).
+
+    Flood-fill a partir dos 4 cantos sobre a cor mediana da borda. Sem rede
+    neural — serve para inputs ``--no-remove-bg`` que são renders limpos.
+    Sem silhueta no conditioning, o preprocessor do Hunyuan trata o frame
+    inteiro como objecto e o modelo esculpe placas/pedestais fundidos.
+
+    Returns:
+        RGBA com fundo transparente, ou ``None`` se a borda não for uniforme
+        (fundo fotográfico → usar BiRefNet).
+    """
+    import cv2
+    import numpy as np
+
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    h, w = rgb.shape[:2]
+    if h < 8 or w < 8:
+        return None
+
+    border = np.concatenate([rgb[0, :], rgb[-1, :], rgb[:, 0], rgb[:, -1]]).astype(np.int16)
+    median = np.median(border, axis=0)
+    deviates = np.abs(border - median).max(axis=1) > tolerance
+    if deviates.mean() > 0.02:
+        return None  # fundo não-uniforme; keying simples seria destrutivo
+
+    ff_mask = np.zeros((h + 2, w + 2), np.uint8)
+    src = rgb.copy()
+    flags = cv2.FLOODFILL_MASK_ONLY | 8 | (255 << 8)
+    for seed in ((0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)):
+        cv2.floodFill(src, ff_mask, seed, 0, loDiff=(tolerance,) * 3, upDiff=(tolerance,) * 3, flags=flags)
+
+    background = ff_mask[1:-1, 1:-1] > 0
+    if not background.any() or background.all():
+        return None
+
+    alpha = np.where(background, 0, 255).astype(np.uint8)
+    rgba = np.dstack([rgb, alpha])
+    return Image.fromarray(rgba, "RGBA")
+
+
 def crop_to_content(image: Image.Image, pad_ratio: float = 0.05) -> Image.Image:
     """Crop RGBA image to the bounding box of non-transparent content.
 

@@ -108,6 +108,14 @@ Ver [`defaults.py`](src/text3d/defaults.py). Resumo:
 | `--preset` | — | `fast` / `balanced` / `hq` (substitui steps+octree+chunks) |
 | `--mc-level` | 0 | Iso-superfície Hunyuan (ajuste fino) |
 | `--gpu-ids` | off | Split multi-GPU via accelerate (ex. `0,1`) |
+| `--hw-auto` | **on** | Auto-detecta GPU(s): 2x12GB → multi-GPU hq sem quant; 6GB → balanced + SDNQ INT4; desliga com `--no-hw-auto` / `TEXT3D_HW_AUTO=0`. Flags explícitas, `--quality` e `--preset` ganham sempre. Ver perfil: `text3d doctor` |
+| `--volume-decoder` | `vanilla` | `hierarchical` (~lossless, decode muito mais rápido) / `flashvdm` (mais rápido, perda ligeira) |
+| `--mc-algo` | `mc` | `dmc` = marching cubes na GPU (requer `pip install diso`) |
+| `--compile` | off | `torch.compile` no DiT+VAE (warmup na 1ª inferência; compensa em batch) |
+| `--sage-attn` | off | Attention INT8 SageAttention (requer `sageattention`, Ampere+) |
+| `--sdnq-matmul` | off | Matmul INT8 quantizado SDNQ (usar com `--sdnq-preset`) |
+
+Todas as flags de aceleração são opt-in — os defaults mantêm o comportamento original. Também disponíveis em `generate-batch` (onde o BiRefNet fica carregado entre itens).
 
 ## Python
 

@@ -33,6 +33,7 @@ dependencies = [
     "timm>=0.9.0",
     "omegaconf>=2.3.0",
     "opencv-python>=4.8.0",
+    "scikit-image>=0.22.0",
     "kornia>=0.7.0",
     "bpy>=5.1.0",
     "gamedev-shared @ file:../Shared",
