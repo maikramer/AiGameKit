@@ -31,10 +31,13 @@ image_ext: png
 # Fonte de imagens 2D: text2d (defeito, FLUX Klein) ou texture2d (texturas seamless HF).
 # image_source: text2d
 
-# Text2D em batch: low_vram=true recomendado em GPUs ~6 GB (CPU offload do FLUX).
-# Se der OOM, fecha o Godot/outros que usem a GPU antes do batch; em último caso cpu: true (lento).
+# Hardware: cada sub-tool auto-detecta a VRAM (hw-auto) — offload/SDNQ/multi-GPU
+# resolvem-se sozinhos. Para desligar em todos: hw_auto: false (ou <TOOL>_HW_AUTO=0).
+# hw_auto: true
+
+# Text2D em batch: low_vram resolve-se pelo hw-auto (GPUs <7.5GB → offload + 4B).
+# Forçar manualmente só se precisares de override: low_vram: true | cpu: true (lento).
 text2d:
-  low_vram: true
   width: 768
   height: 768
 
@@ -62,12 +65,12 @@ text2d:
 #   audio_format: wav
 
 # Text3D with --with-3d: preset fast balances time/VRAM.
-# low_vram=true => Hunyuan shape on CPU (much worse quality).
+# SDNQ/decoder/multi-GPU resolvem-se pelo hw-auto; low_vram=true forca Hunyuan
+# em CPU (qualidade muito pior) — evitar, o hw-auto ja cobre GPUs de 6GB.
 # Requires PAINT3D_BIN or paint3d in PATH when paint3d block is present.
 # PBR a partir de PNG (não GLB): texture2d.materialize — ver bloco texture2d.
 text3d:
   preset: fast
-  low_vram: false
   export_origin: feet
 
 paint3d:

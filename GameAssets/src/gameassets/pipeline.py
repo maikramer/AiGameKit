@@ -114,10 +114,13 @@ def _rigging3d_pipeline_argv(
     seed: int | None,
     rig_profile: Rigging3DProfile | None,
     gpu_ids: list[int] | None = None,
+    hw_auto: bool = True,
 ) -> list[str]:
     args = [rigging3d_bin]
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    if not hw_auto:
+        args.append("--no-hw-auto")
     args.append("pipeline")
     args.extend(["--input", str(mesh_in), "--output", str(mesh_out)])
     if seed is not None:
@@ -160,6 +163,7 @@ def _rigging3d_pipeline_failed(
         seed=seed,
         rig_profile=rg,
         gpu_ids=gpu_ids,
+        hw_auto=profile.hw_auto,
     )
     if profile.text3d and profile.text3d.low_vram:
         argv.append("--low-vram")
@@ -818,6 +822,7 @@ def _paint3d_texture_argv(
     image_path: Path,
     mesh_out: Path,
     gpu_ids: list[int] | None = None,
+    hw_auto: bool = True,
 ) -> list[str]:
     """Subcomando ``paint3d texture`` (Hunyuan3D-Paint 2.1; saída GLB com material PBR)."""
     args = [
@@ -855,6 +860,8 @@ def _paint3d_texture_argv(
         args.extend(["--smooth-passes", str(p3.smooth_passes)])
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    if not hw_auto:
+        args.append("--no-hw-auto")
     return args
 
 
@@ -894,6 +901,7 @@ def _texture_subprocess_argv(
         image_path,
         mesh_out,
         gpu_ids=gpu_ids,
+        hw_auto=profile.hw_auto,
     )
 
 
@@ -1110,6 +1118,8 @@ def _text3d_argv(
     args.extend(["--export-origin", t3.export_origin])
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
+    if not profile.hw_auto:
+        args.append("--no-hw-auto")
     return args
 
 
@@ -1604,6 +1614,8 @@ def run_master_pipeline(
             res.stages.append(StageResult("rigging3d-hi", True, 0.0, "skipped (rigged_hi existente)", rigged_hi_p))
         else:
             rig_argv = [rigging3d_bin, "pipeline", "--input", str(clean_p), "--output", str(rigged_hi_p)]
+            if not profile.hw_auto:
+                rig_argv.insert(1, "--no-hw-auto")
             s = _run("rigging3d-hi", rig_argv, rigged_hi_p)
             res.stages.append(s)
             if not s.ok:

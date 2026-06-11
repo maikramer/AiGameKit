@@ -260,6 +260,11 @@ class GameProfile:
     master_pipeline: bool = True
     master_validate: bool = True
     master_bake_normals: bool = False
+    # Auto-detecção de hardware nos sub-tools (text2d/text3d/paint3d/rigging3d):
+    # True (defeito) deixa cada tool resolver SDNQ/offload/multi-GPU pela VRAM;
+    # False propaga --no-hw-auto a todos. Campos explícitos do perfil (low_vram,
+    # steps, octree, gpu_ids…) ganham sempre sobre a auto-detecção.
+    hw_auto: bool = True
     # Round 2: lista override de categorias que ativam bake-normals.
     # None = usar BAKE_NORMALS_CATEGORIES (humanoid, creature, armor,
     # weapon, chest, tool). Vazia = nunca por categoria.
@@ -794,6 +799,7 @@ class GameProfile:
             generation=gen_name,
             master_pipeline=bool(data.get("master_pipeline", True)),
             master_validate=bool(data.get("master_validate", True)),
+            hw_auto=bool(data.get("hw_auto", True)),
             master_bake_normals=bool(data.get("master_bake_normals", False)),
             master_bake_normals_categories=(
                 [str(x) for x in data["master_bake_normals_categories"]]

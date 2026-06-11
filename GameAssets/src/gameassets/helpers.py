@@ -184,6 +184,8 @@ def _texture2d_material_maps_path_manifest(
 
 def _append_text2d_profile_args(profile: GameProfile, argv: list[str]) -> None:
     """Extensões do perfil (resolução, VRAM) para `text2d generate`."""
+    if not profile.hw_auto:
+        argv.append("--no-hw-auto")
     t2 = profile.text2d
     if not t2:
         return
