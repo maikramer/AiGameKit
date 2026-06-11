@@ -106,6 +106,7 @@ text2d generate "character design" --quality high
 | `--profile` | flag | off | Measure timing, CPU, RAM, and VRAM |
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split (e.g. `0,1`) |
 | `--quality` | str | `medium` | Quality tier: `fast` / `low` / `medium` / `high` / `highest` |
+| `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection: enables CPU offload + 4B model on small GPUs (<7.5 GB), keeps 9B / full-GPU / multi-GPU split on big rigs. Explicit flags win. Env kill-switch: `TEXT2D_HW_AUTO=0` |
 | `-v, --verbose` | flag | off | Detailed log output |
 
 When `--quality` is set and explicit `--width` / `--height` / `--steps` are **not** provided, the QualityEngine fills in the tier defaults (see [Quality Presets](#quality-presets)).
@@ -151,6 +152,7 @@ Each item requires `id`, `prompt`, and `output`. Optional per-item overrides: `w
 | `--low-vram` | flag | off | CPU offload mode |
 | `-m, --model` | str | auto | Model ID override |
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split |
+| `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection (offload/model/multi-GPU); `TEXT2D_HW_AUTO=0` disables |
 | `--force` | flag | off | Overwrite existing files |
 | `-v, --verbose` | flag | off | Detailed log output |
 

@@ -97,7 +97,9 @@ def test_hw_auto_env_kill_switch(monkeypatch) -> None:
 
 
 def test_cuda_gpu_specs_without_cuda(monkeypatch) -> None:
-    monkeypatch.setattr(hardware.torch.cuda, "is_available", lambda: False)
+    import torch
+
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     assert hardware.cuda_gpu_specs() == []
 
 

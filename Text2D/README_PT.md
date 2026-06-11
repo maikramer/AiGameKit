@@ -11,6 +11,8 @@ CLI de **text-to-imagem** com [FLUX.2 Klein 4B](https://huggingface.co/black-for
 | Python  | 3.10+  | Testado em 3.10–3.13 |
 | GPU     | Opcional | NVIDIA + CUDA recomendado para inferência razoável |
 | VRAM    | ~6 GB+ com `--low-vram` e 512² | Depende do checkpoint; GPUs modestas: `--low-vram`. Multi-GPU com `--gpu-ids` divide o modelo entre dispositivos |
+
+Auto-detecção de hardware (`--hw-auto`, ligada por defeito): GPUs <7.5 GB ganham CPU offload + modelo 4B automaticamente; rigs grandes mantêm 9B/full-GPU/multi-GPU. Flags explícitas ganham. Desligar: `--no-hw-auto` ou `TEXT2D_HW_AUTO=0`. Ver perfil: `text2d doctor`.
 | Disco   | ~8 GB  | Cache HF + pesos SDNQ (~2,5 GB em disco) |
 
 **Licença dos pesos:** o default é o checkpoint SDNQ [Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic), que no Hugging Face está associado a **FLUX Non-Commercial** (`flux-non-commercial-license` no metadata), **distinto** do oficial [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) (**Apache 2.0** no model card). Para uso comercial com menos ambiguidade, define `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` (mais VRAM). Resumo: [Licenças no monorepo](../README_PT.md).

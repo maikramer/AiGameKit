@@ -13,14 +13,14 @@ Perfis validados nos dois hardwares de referência:
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
-import torch
+from gamedev_shared.hardware import GIB, cuda_gpu_specs
+from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 from . import defaults as _defaults
 
-GIB = 1024**3
+HW_AUTO_ENV = "TEXT3D_HW_AUTO"
 
 
 @dataclass(frozen=True)
@@ -50,18 +50,7 @@ class HardwareProfile:
 
 def hw_auto_enabled() -> bool:
     """``TEXT3D_HW_AUTO=0`` / ``false`` / ``no`` desliga a auto-detecção."""
-    return os.environ.get("TEXT3D_HW_AUTO", "1").strip().lower() not in ("0", "false", "no")
-
-
-def cuda_gpu_specs() -> list[tuple[int, int]]:
-    """Lista (índice, VRAM total em bytes) das GPUs CUDA visíveis."""
-    if not torch.cuda.is_available():
-        return []
-    specs: list[tuple[int, int]] = []
-    for i in range(torch.cuda.device_count()):
-        props = torch.cuda.get_device_properties(i)
-        specs.append((i, int(props.total_memory)))
-    return specs
+    return _hw_auto_enabled(HW_AUTO_ENV)
 
 
 def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:

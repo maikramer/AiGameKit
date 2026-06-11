@@ -129,6 +129,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Quality tier (fast / low / medium / high / highest).",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: liga CPU offload (e o modelo 4B) em GPUs "
+        "pequenas, mantém 9B/full-GPU/multi-GPU nas grandes. Flags explícitas "
+        "ganham. Env: TEXT2D_HW_AUTO=0."
+    ),
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -146,6 +157,7 @@ def generate_cmd(
     profile: bool,
     gpu_ids_str: str | None,
     quality: str,
+    hw_auto: bool,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -174,12 +186,23 @@ def generate_cmd(
     if not cpu:
         warn_if_vram_occupied()
 
+    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled() and not cpu:
+        hwp = detect_hardware_profile()
+        if not low_vram and hwp.low_vram and hwp.device == "cuda":
+            low_vram = True
+
     low = low_vram or cpu
     if low and width == 2048 and height == 2048:
         width, height = 1024, 1024
     resolved_model = model_id or _model_id(low_vram=low)
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    if gpu_ids is None and hwp is not None and hwp.gpu_ids:
+        gpu_ids = hwp.gpu_ids
     console = Console()
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
@@ -187,6 +210,8 @@ def generate_cmd(
     table.add_row("[bold]Passos[/bold]", str(steps))
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
     table.add_row("[bold]Modelo[/bold]", resolved_model)
+    if hwp is not None:
+        table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     log_p = env_profile_log_path()
@@ -330,6 +355,13 @@ atexit.register(_batch_cleanup)
     help="IDs das GPUs para split multi-GPU (ex: '0,1').",
 )
 @click.option("--force", is_flag=True, help="Regenerar mesmo se o output já existe.")
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help="Auto-detecção de hardware (offload/modelo/multi-GPU). Env: TEXT2D_HW_AUTO=0.",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 def generate_batch_cmd(
     manifest: str,
@@ -343,6 +375,7 @@ def generate_batch_cmd(
     model_id: str | None,
     gpu_ids_str: str | None,
     force: bool,
+    hw_auto: bool,
     batch_verbose: bool,
 ) -> None:
     """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
@@ -368,8 +401,20 @@ def generate_batch_cmd(
     if not cpu:
         warn_if_vram_occupied()
 
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled() and not cpu:
+        hwp = detect_hardware_profile()
+        if not low_vram and hwp.low_vram and hwp.device == "cuda":
+            low_vram = True
+
     low = low_vram or cpu
     parsed_gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    if parsed_gpu_ids is None and hwp is not None and hwp.gpu_ids:
+        parsed_gpu_ids = hwp.gpu_ids
+    if hwp is not None:
+        Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
     try:
         gen = KleinFluxGenerator(
@@ -512,6 +557,12 @@ def doctor_cmd() -> None:
                 f"~{used / (1024**2):.0f} MiB ({pct_now:.0f}%; limite: {DEFAULT_EXCLUSIVE_GPU_MAX_USED_PCT:.0%})",
             )
     table.add_row("HF_HOME (cache)", hf_home_display_rich())
+
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    _hwp = detect_hardware_profile()
+    _state = "" if hw_auto_enabled() else " [yellow](desligado: TEXT2D_HW_AUTO=0)[/yellow]"
+    table.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
     console.print(table)
 
