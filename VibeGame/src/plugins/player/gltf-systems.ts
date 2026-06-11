@@ -67,6 +67,15 @@ const ATTACK_RANGE = 2.2; // m
 const ATTACK_DAMAGE = 25;
 const prevPrimary = new Map<number, number>();
 
+// Natural stride speed (m/s) the gait clips were authored at — playback is
+// time-scaled by actualSpeed/ref so the feet track the ground.
+const WALK_CLIP_SPEED = 1.6;
+const RUN_CLIP_SPEED = 2.8;
+// Visual-only yaw smoothing rate (1/s) for the skinned root; the physics
+// heading still turns at PlayerController.rotationSpeed.
+const VISUAL_TURN_RATE = 10;
+const _visualQuat = new Quaternion();
+
 const _fwd = new Vector3();
 const _q = new Quaternion();
 
@@ -312,7 +321,7 @@ export const PlayerGltfAnimStateSystem: System = {
         animator.setAdditive('', 0); // no turn-lean during an attack override
         animator.update(dt);
         if (state.hasComponent(eid, WorldTransform)) {
-          syncTransformToRoot(eid, animator, state);
+          syncTransformToRoot(eid, animator, state, dt);
         }
         continue;
       }
@@ -349,7 +358,20 @@ export const PlayerGltfAnimStateSystem: System = {
       } else if (loco.idle && animator.activeClipName !== loco.idle) {
         animator.play(loco.idle);
       }
-      animator.setTimeScale(1);
+
+      // Match gait cadence to the actual horizontal speed: the walk/run clips
+      // are authored at a natural stride speed, but the controller moves much
+      // faster — at timeScale 1 the feet glide and the gait reads as idle.
+      if (translating && !airborne) {
+        const planar = Math.hypot(
+          CharacterMovement.desiredVelX[eid] || 0,
+          CharacterMovement.desiredVelZ[eid] || 0
+        );
+        const ref = run ? RUN_CLIP_SPEED : WALK_CLIP_SPEED;
+        animator.setTimeScale(Math.min(2.6, Math.max(0.6, planar / ref)));
+      } else {
+        animator.setTimeScale(1);
+      }
 
       // --- Additive turn-lean overlay ---
       // Steering (A/D) blends a turn clip ON TOP of the base, so curving while
@@ -368,7 +390,7 @@ export const PlayerGltfAnimStateSystem: System = {
         continue;
       }
 
-      syncTransformToRoot(eid, animator, state);
+      syncTransformToRoot(eid, animator, state, dt);
     }
   },
 };
@@ -376,7 +398,8 @@ export const PlayerGltfAnimStateSystem: System = {
 function syncTransformToRoot(
   eid: number,
   animator: GltfAnimator,
-  state: State
+  state: State,
+  dt: number
 ): void {
   const yOff = getYOffset(state, eid);
   const root = animator.root;
@@ -385,12 +408,15 @@ function syncTransformToRoot(
     WorldTransform.posY[eid] + yOff,
     WorldTransform.posZ[eid]
   );
-  root.quaternion.set(
+  // Exponential slerp toward the physics heading so the visible character
+  // sweeps through turns instead of stepping with the fixed-tick rotation.
+  _visualQuat.set(
     WorldTransform.rotX[eid],
     WorldTransform.rotY[eid],
     WorldTransform.rotZ[eid],
     WorldTransform.rotW[eid]
   );
+  root.quaternion.slerp(_visualQuat, 1 - Math.exp(-VISUAL_TURN_RATE * dt));
 
   const debugCapsule = ensureDebugCapsule(state);
   if (debugCapsule) {

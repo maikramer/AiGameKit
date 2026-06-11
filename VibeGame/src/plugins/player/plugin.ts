@@ -35,8 +35,8 @@ export const PlayerPlugin: Plugin = {
     },
     defaults: {
       playerController: {
-        speed: 8,
-        sprintMultiplier: 1.8,
+        speed: 4,
+        sprintMultiplier: 1.5,
         jumpHeight: 2.3,
         rotationSpeed: 10,
         canJump: 1,
@@ -53,9 +53,9 @@ export const PlayerPlugin: Plugin = {
         loaded: 0,
         animatorRegistryIndex: 0,
         idleClipIndex: 0,
-        walkClipIndex: 1,
-        runClipIndex: 2,
-        jumpClipIndex: 3,
+        walkClipIndex: 0,
+        runClipIndex: 0,
+        jumpClipIndex: 0,
         overrideLock: 0,
         overrideClipIndex: 0,
       },
