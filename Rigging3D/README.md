@@ -92,6 +92,7 @@ rigging3d [GLOBAL_FLAGS] <COMMAND> [COMMAND_FLAGS]
 | `--python` | str | Current interpreter | Python interpreter path (conda/venv). Overrides `RIGGING3D_PYTHON`. |
 | `--profiler` | flag | `false` | Enable performance profiling (writes to perf DB). |
 | `--gpu-ids` | str | None | GPU IDs for subprocesses (e.g., `"0,1"`). Propagates `CUDA_VISIBLE_DEVICES`. |
+| `--hw-auto/--no-hw-auto` | flag | `true` | Hardware auto-detection: on multi-GPU rigs pins UniRig to the GPU with the most free VRAM; warns on <6.5 GB cards. Explicit `--gpu-ids` wins. Env kill-switch: `RIGGING3D_HW_AUTO=0` |
 | `--version` | — | — | Show version and exit. |
 
 ---

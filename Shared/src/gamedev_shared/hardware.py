@@ -33,3 +33,24 @@ def cuda_gpu_specs() -> list[tuple[int, int]]:
         props = torch.cuda.get_device_properties(i)
         specs.append((i, int(props.total_memory)))
     return specs
+
+
+def cuda_gpu_free_specs() -> list[tuple[int, int, int]]:
+    """Lista (índice, VRAM livre, VRAM total) em bytes das GPUs CUDA visíveis.
+
+    Livre = ``torch.cuda.mem_get_info`` (conta consumo de outros processos,
+    ex. desktop). Útil para escolher a GPU menos ocupada em rigs multi-GPU.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return []
+    specs: list[tuple[int, int, int]] = []
+    for i in range(torch.cuda.device_count()):
+        try:
+            free, total = torch.cuda.mem_get_info(i)
+        except RuntimeError:
+            props = torch.cuda.get_device_properties(i)
+            free, total = props.total_memory, props.total_memory
+        specs.append((i, int(free), int(total)))
+    return specs

@@ -217,6 +217,17 @@ def _run_module(
     default=None,
     help='IDs de GPU visíveis aos subprocessos (ex: "0,1"). Propaga CUDA_VISIBLE_DEVICES.',
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: em rigs multi-GPU pina o UniRig na placa "
+        "com mais VRAM livre; avisa em GPUs <6.5GB. --gpu-ids explícito ganha. "
+        "Env: RIGGING3D_HW_AUTO=0."
+    ),
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
@@ -224,6 +235,7 @@ def cli(
     python_cmd: str | None,
     profiler_flag: bool,
     gpu_ids_str: str | None,
+    hw_auto: bool,
 ) -> None:
     """Rigging3D — auto-rigging 3D (skeleton, skinning, merge)."""
     ctx.ensure_object(dict)
@@ -231,6 +243,16 @@ def cli(
     gpu_ids: list[int] | None = None
     if gpu_ids_str:
         gpu_ids = [int(x) for x in gpu_ids_str.split(",") if x.strip()]
+    elif hw_auto:
+        from .hardware import detect_hardware_profile, hw_auto_enabled
+
+        if hw_auto_enabled():
+            hwp = detect_hardware_profile()
+            if hwp.gpu_ids is not None:
+                gpu_ids = hwp.gpu_ids
+                click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
+            elif hwp.low_vram_warning and hwp.device == "cuda":
+                click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
     ctx.obj["GPU_IDS"] = gpu_ids
     if profiler_flag:
         os.environ["GAMEDEV_PROFILE"] = "1"
