@@ -25,6 +25,54 @@ from omegaconf import OmegaConf
 from PIL import Image
 
 
+def _adopt_vendored_unet_optimizations(pipeline) -> None:
+    """Transplanta as otimizações vendored para o código do snapshot HF.
+
+    O ``model_index.json`` do snapshot (tencent/Hunyuan3D-2.1) aponta o
+    componente unet para o código embarcado junto dos pesos
+    (``unet/modules.py`` + ``unet/attn_processor.py``); o diffusers importa-o
+    como dynamic module (``diffusers_modules.local.*``) e ignora o vendored —
+    o nosso ``unet/`` só é usado para o que o pipeline.py importa diretamente.
+    Pré-semear ``sys.modules`` não funciona (o loader rejeita módulos com spec
+    de outro nome), por isso transplantamos as funções otimizadas para as
+    classes já carregadas:
+
+    - ``AttnCore.process_attention_base`` → SDPA com SageAttention opcional
+    - ``UNet2p5DConditionModel.forward`` → ref-UNet offload + ensure-device
+
+    As funções vendored resolvem globals no módulo vendored, mantendo o
+    comportamento ao serem ligadas a classes de outro módulo. As classes do
+    snapshot são estruturalmente idênticas (mesmo checkpoint/código upstream).
+    """
+    import sys
+
+    from ..hunyuanpaintpbr.unet import attn_processor as v_attn
+    from ..hunyuanpaintpbr.unet import modules as v_modules
+
+    target = type(pipeline.unet)
+    mod_name = target.__module__
+    if mod_name.startswith("paint3d."):
+        return  # já é o código vendored
+    if target.__name__ != "UNet2p5DConditionModel":
+        print(
+            f"[Paint 2.1] AVISO: UNet inesperado ({mod_name}.{target.__name__}) — "
+            "otimizações vendored (sage-attn/offload) não aplicadas."
+        )
+        return
+
+    target.forward = v_modules.UNet2p5DConditionModel.forward
+
+    snap_mod = sys.modules.get(mod_name)
+    snap_core = getattr(snap_mod, "AttnCore", None) if snap_mod is not None else None
+    if snap_core is None:
+        attn_mod = sys.modules.get(mod_name.rsplit(".", 1)[0] + ".attn_processor")
+        snap_core = getattr(attn_mod, "AttnCore", None) if attn_mod is not None else None
+    if snap_core is not None:
+        snap_core.process_attention_base = v_attn.AttnCore.process_attention_base
+    else:
+        print("[Paint 2.1] AVISO: AttnCore do snapshot não encontrado — SageAttention inativa no UNet.")
+
+
 class multiviewDiffusionNet:
     def __init__(self, config) -> None:
         self.device = config.device
@@ -47,6 +95,8 @@ class multiviewDiffusionNet:
             custom_pipeline=custom_pipeline,
             torch_dtype=torch.float16,
         )
+
+        _adopt_vendored_unet_optimizations(pipeline)
 
         pipeline.scheduler = UniPCMultistepScheduler.from_config(pipeline.scheduler.config, timestep_spacing="trailing")
         pipeline.set_progress_bar_config(disable=True)
@@ -137,12 +187,24 @@ class multiviewDiffusionNet:
         if hasattr(self.pipeline, "enable_vae_tiling"):
             self.pipeline.enable_vae_tiling()
 
-        # DINO em CPU: ~1.1 GB fp16; output movido para CUDA no forward.
-        self._dino_on_cpu = True
+        # CFG em chunks sequenciais (uncond/ref/full): pico de ativações ÷3,
+        # matemática idêntica. Resolvido pelo painter (default: low-VRAM).
+        self.pipeline.cfg_batch_chunking = bool(getattr(config, "cfg_batch_chunking", False))
+
+        # Ref-UNet (dual stream) offload para CPU após preencher o cache de
+        # condicionamento — só é usado no primeiro step de cada pintura.
+        if hasattr(self.pipeline.unet, "use_dual_stream"):
+            self.pipeline.unet.offload_ref_unet = bool(getattr(config, "offload_ref_unet", False))
+
+        # DINO: em CPU usa fp32 (fp16 em CPU não tem kernels nativos — lentíssimo);
+        # em CUDA usa fp16 (~2.2 GB para o dinov2-giant). Output é movido/castado
+        # para o device/dtype do UNet no forward.
+        self._dino_device = str(getattr(config, "dino_device", "cpu"))
         if hasattr(self.pipeline.unet, "use_dino") and self.pipeline.unet.use_dino:
             from ..hunyuanpaintpbr.unet.modules import Dino_v2
 
-            self.dino_v2 = Dino_v2(config.dino_ckpt_path).to(torch.float16).to("cpu")
+            dino_dtype = torch.float16 if self._dino_device.startswith("cuda") else torch.float32
+            self.dino_v2 = Dino_v2(config.dino_ckpt_path).to(dino_dtype).to(self._dino_device)
 
     def seed_everything(self, seed):
         random.seed(seed)
@@ -187,8 +249,8 @@ class multiviewDiffusionNet:
 
         if hasattr(self.pipeline.unet, "use_dino") and self.pipeline.unet.use_dino:
             dino_hidden_states = self.dino_v2(input_images[0])
-            if self._dino_on_cpu and isinstance(dino_hidden_states, torch.Tensor):
-                dino_hidden_states = dino_hidden_states.to(torch.device(self.device))
+            if isinstance(dino_hidden_states, torch.Tensor):
+                dino_hidden_states = dino_hidden_states.to(torch.device(self.device)).to(self.pipeline.unet.dtype)
             kwargs["dino_hidden_states"] = dino_hidden_states
 
         sync_condition = None

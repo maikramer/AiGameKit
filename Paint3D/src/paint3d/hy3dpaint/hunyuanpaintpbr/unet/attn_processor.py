@@ -12,6 +12,7 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import os
 from collections.abc import Callable
 from typing import Literal, Optional
 
@@ -21,6 +22,59 @@ import torch.nn.functional as F
 from diffusers.models.attention_processor import Attention, AttnProcessor
 from diffusers.utils import deprecate
 from einops import rearrange
+
+
+def _resolve_sdpa():
+    """SDPA do PyTorch ou SageAttention (INT8, Ampere+) com ``PAINT3D_USE_SAGEATTN=1``.
+
+    SageAttention não suporta ``attn_mask`` nem dtypes fp32 — nesses casos a
+    chamada cai de volta para ``F.scaled_dot_product_attention``. A resolução
+    acontece no import do módulo (mesmo contrato do CA_USE_SAGEATTN no Text3D):
+    o env tem de estar definido antes do primeiro import dos módulos hy3dpaint.
+    """
+    if os.environ.get("PAINT3D_USE_SAGEATTN", "0") != "1":
+        return F.scaled_dot_product_attention
+    try:
+        from sageattention import sageattn
+    except ImportError:
+        return F.scaled_dot_product_attention
+
+    _debug = os.environ.get("PAINT3D_SAGE_DEBUG", "0") == "1"
+    _stats = {"sage": 0, "fallback": 0}
+
+    def _sdpa(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False):
+        # Fallback SDPA: máscara explícita, dtype fp32, head_dim assimétrico
+        # (RefAttn concatena os V de todos os PBR tokens → v_dim = n_pbr*qk_dim,
+        # que o sageattn não suporta) ou head_dim acima do limite do kernel.
+        if (
+            attn_mask is not None
+            or query.dtype not in (torch.float16, torch.bfloat16)
+            or query.shape[-1] != value.shape[-1]
+            or query.shape[-1] > 128
+        ):
+            if _debug:
+                _stats["fallback"] += 1
+                if _stats["fallback"] in (1, 100):
+                    print(
+                        f"[sage-debug] fallback#{_stats['fallback']} mask={attn_mask is not None} "
+                        f"dtype={query.dtype} shape={tuple(query.shape)}",
+                        flush=True,
+                    )
+            return F.scaled_dot_product_attention(
+                query, key, value, attn_mask=attn_mask, dropout_p=dropout_p, is_causal=is_causal
+            )
+        if _debug:
+            _stats["sage"] += 1
+            if _stats["sage"] in (1, 100):
+                print(f"[sage-debug] sage#{_stats['sage']} shape={tuple(query.shape)}", flush=True)
+        return sageattn(query, key, value, is_causal=is_causal)
+
+    if _debug:
+        print("[sage-debug] sageattn binding ACTIVE", flush=True)
+    return _sdpa
+
+
+scaled_dot_product_attention = _resolve_sdpa()
 
 
 class AttnUtils:
@@ -546,7 +600,7 @@ class AttnCore:
             query, key = apply_rope_fn(query, key, head_dim, **kwargs)
 
         # Compute attention
-        hidden_states = F.scaled_dot_product_attention(
+        hidden_states = scaled_dot_product_attention(
             query, key, value, attn_mask=attention_mask, dropout_p=0.0, is_causal=False
         )
 

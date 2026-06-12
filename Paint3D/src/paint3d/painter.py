@@ -51,6 +51,72 @@ from .utils.mesh_io import load_mesh_trimesh, save_glb  # noqa: E402
 _logger = Logger()
 
 
+def _env_flag(name: str, default: bool) -> bool:
+    """Override booleano via env: "0/false/no/off" desliga, "1/true/yes/on" liga."""
+    v = os.environ.get(name, "").strip().lower()
+    if v in ("0", "false", "no", "off"):
+        return False
+    if v in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+def _auto_dino_device(low_vram: bool, gpu_ids: list[int] | None) -> str:
+    """DINO-giant (~2.2 GB fp16): GPU só quando há folga de VRAM.
+
+    Em CPU corre fp32 (fp16 em CPU não tem kernels nativos). Multi-GPU →
+    device secundário (junto do VAE). Single-GPU precisa de >= DINO_GPU_MIN_GIB.
+    """
+    if low_vram or not torch.cuda.is_available():
+        return "cpu"
+    if gpu_ids and len(gpu_ids) >= 2:
+        return f"cuda:{gpu_ids[1]}"
+    from gamedev_shared.hardware import GIB, cuda_gpu_specs
+
+    largest = max((mem for _, mem in cuda_gpu_specs()), default=0)
+    return "cuda" if largest / GIB >= _defaults.DINO_GPU_MIN_GIB else "cpu"
+
+
+def _auto_esrgan_device(low_vram: bool, gpu_ids: list[int] | None) -> str:
+    """Real-ESRGAN (~64 MB): GPU sempre que houver CUDA — tiling limita o pico
+    de VRAM e o imageSuperNet cai para CPU automaticamente em OOM."""
+    if not torch.cuda.is_available():
+        return "cpu"
+    if gpu_ids and len(gpu_ids) >= 2 and not low_vram:
+        return f"cuda:{gpu_ids[1]}"
+    return "cuda"
+
+
+def _apply_optimization_config(config: Any, *, low_vram: bool, gpu_ids: list[int] | None) -> None:
+    """Anexa knobs de otimização ao Hunyuan3DPaintConfig.
+
+    - cfg_batch_chunking: CFG uncond/ref/full em 3 forwards sequenciais B=1
+      (pico de ativações ÷3, matemática idêntica). Default: ligado em low-VRAM.
+      Env: PAINT3D_CFG_CHUNKING.
+    - offload_ref_unet: ref-UNet (dual stream) → CPU após o 1º step de cada
+      pintura (liberta ~1.7 GB fp16). Default: ligado em low-VRAM.
+      Env: PAINT3D_OFFLOAD_REF_UNET.
+    - dino_device / realesrgan_device: colocação automática por VRAM.
+      Env: PAINT3D_DINO_DEVICE / PAINT3D_ESRGAN_DEVICE.
+    """
+    config.cfg_batch_chunking = _env_flag("PAINT3D_CFG_CHUNKING", low_vram)
+    config.offload_ref_unet = _env_flag("PAINT3D_OFFLOAD_REF_UNET", low_vram)
+    config.dino_device = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or _auto_dino_device(low_vram, gpu_ids)
+    config.realesrgan_device = (
+        os.environ.get("PAINT3D_ESRGAN_DEVICE", "").strip() or _auto_esrgan_device(low_vram, gpu_ids)
+    )
+    config.realesrgan_tile = _defaults.ESRGAN_TILE_LOW_VRAM if low_vram else _defaults.ESRGAN_TILE
+
+
+def _log_optimization_config(config: Any, prefix: str = "") -> None:
+    _logger.info(
+        f"{prefix}Otimizações: cfg_chunking={config.cfg_batch_chunking} "
+        f"offload_ref_unet={config.offload_ref_unet} dino={config.dino_device} "
+        f"esrgan={config.realesrgan_device} (tile={config.realesrgan_tile}) "
+        f"sage_attn={os.environ.get('PAINT3D_USE_SAGEATTN', '0') == '1'}"
+    )
+
+
 def _ensure_custom_rasterizer_shim() -> None:
     """Regista o shim nvdiffrast como ``custom_rasterizer`` se o módulo nativo não existir."""
     if "custom_rasterizer" in sys.modules:
@@ -326,6 +392,10 @@ def apply_hunyuan_paint(
 
             if not low_vram:
                 config.quantization_config = {"type": "none"}
+
+            _apply_optimization_config(config, low_vram=low_vram, gpu_ids=gpu_ids)
+            if verbose:
+                _log_optimization_config(config)
 
         with profile_span("paint_load_pipeline"):
             pipe = Hunyuan3DPaintPipeline(config)
@@ -615,6 +685,10 @@ class PaintBatchProcessor:
 
             if not self._low_vram:
                 config.quantization_config = {"type": "none"}
+
+            _apply_optimization_config(config, low_vram=self._low_vram, gpu_ids=self._gpu_ids)
+            if self._verbose:
+                _log_optimization_config(config, prefix="[batch] ")
 
         with profile_span("paint_load_pipeline"):
             pipe = Hunyuan3DPaintPipeline(config)

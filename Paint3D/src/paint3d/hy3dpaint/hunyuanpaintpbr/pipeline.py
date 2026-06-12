@@ -286,7 +286,12 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
             else:
                 negative_prompt_embeds = torch.zeros_like(prompt_embeds)
 
-        if guidance_scale > 1:
+        # CFG em chunks sequenciais: não replica condições 3x aqui — o denoise
+        # corre os 3 forwards (uncond/ref/full) um a um com B=1, cortando o pico
+        # de ativações para 1/3. Matemática idêntica ao batch único.
+        cfg_chunking = bool(getattr(self, "cfg_batch_chunking", False)) and guidance_scale > 1
+
+        if guidance_scale > 1 and not cfg_chunking:
             if self.unet.use_ra:
                 cached_condition["ref_latents"] = cached_condition["ref_latents"].repeat(
                     3, *([1] * (cached_condition["ref_latents"].dim() - 1))
@@ -565,7 +570,8 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         # For classifier free guidance, we need to do two forward passes.
         # Here we concatenate the unconditional and text embeddings into a single batch
         # to avoid doing two forward passes
-        if self.do_classifier_free_guidance:
+        use_cfg_chunking = self.do_classifier_free_guidance and bool(getattr(self, "cfg_batch_chunking", False))
+        if self.do_classifier_free_guidance and not use_cfg_chunking:
             # prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds, prompt_embeds])
 
@@ -615,6 +621,31 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
                 guidance_scale_tensor, embedding_dim=self.unet.config.time_cond_proj_dim
             ).to(device=device, dtype=latents.dtype)
 
+        # 6.3 CFG em chunks sequenciais (uncond / ref / full): cada chunk corre
+        # um forward B=1 em vez de um único forward B=3 — mesmo FLOPs totais,
+        # pico de ativações ÷3. As condições pesadas (tensores) são partilhadas
+        # entre chunks; só ref_scale e dino_hidden_states diferem.
+        cfg_chunks = None
+        prompt_embeds_chunks = None
+        if use_cfg_chunking:
+            dino_states = kwargs.pop("dino_hidden_states", None)
+            cfg_chunks = []
+            for chunk_ref_scale, chunk_use_dino in ((0.0, False), (1.0, False), (1.0, True)):
+                chunk_kwargs = dict(kwargs)
+                chunk_kwargs["cache"] = {}
+                chunk_kwargs["ref_scale"] = chunk_ref_scale
+                if dino_states is not None:
+                    chunk_kwargs["dino_hidden_states"] = (
+                        dino_states if chunk_use_dino else torch.zeros_like(dino_states)
+                    )
+                cfg_chunks.append(chunk_kwargs)
+            # uncond e ref têm condições idênticas (dino a zeros) → partilham a
+            # cache inteira, incluindo a projeção DINO. O chunk full recebe as
+            # entradas independentes do chunk (ref-UNet, voxel indices) via
+            # partilha de cache no loop de denoise.
+            cfg_chunks[1]["cache"] = cfg_chunks[0]["cache"]
+            prompt_embeds_chunks = [negative_prompt_embeds, prompt_embeds, prompt_embeds]
+
         # 7. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         self._num_timesteps = len(timesteps)
@@ -623,30 +654,66 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
                 if self.interrupt:
                     continue
 
-                # expand the latents if we are doing classifier free guidance
-                latents = rearrange(
-                    latents, "(b n_pbr n) c h w -> b n_pbr n c h w", n=kwargs["num_in_batch"], n_pbr=n_pbr
-                )
-                # latent_model_input = torch.cat([latents] * 3) if self.do_classifier_free_guidance else latents
-                latent_model_input = latents.repeat(3, 1, 1, 1, 1, 1) if self.do_classifier_free_guidance else latents
-                latent_model_input = rearrange(latent_model_input, "b n_pbr n c h w -> (b n_pbr n) c h w")
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-                latent_model_input = rearrange(
-                    latent_model_input, "(b n_pbr n) c h w ->b n_pbr n c h w", n=kwargs["num_in_batch"], n_pbr=n_pbr
-                )
+                if cfg_chunks is not None:
+                    # CFG chunked: latents ficam flat; um forward B=1 por chunk.
+                    latent_model_input = self.scheduler.scale_model_input(latents, t)
+                    latent_model_input = rearrange(
+                        latent_model_input,
+                        "(b n_pbr n) c h w -> b n_pbr n c h w",
+                        n=kwargs["num_in_batch"],
+                        n_pbr=n_pbr,
+                    )
+                    noise_preds = []
+                    for chunk_kwargs, chunk_prompt_embeds in zip(cfg_chunks, prompt_embeds_chunks, strict=False):
+                        chunk_output = self.unet(
+                            latent_model_input,
+                            t,
+                            encoder_hidden_states=chunk_prompt_embeds,
+                            timestep_cond=timestep_cond,
+                            cross_attention_kwargs=self.cross_attention_kwargs,
+                            added_cond_kwargs=added_cond_kwargs,
+                            return_dict=False,
+                            **chunk_kwargs,
+                        )
+                        noise_preds.append(chunk_output[0])
+                        # Entradas de cache independentes do chunk (ref-UNet,
+                        # voxel indices) propagam-se aos restantes — evita
+                        # recomputar o forward do ref-UNet por chunk.
+                        for other_kwargs in cfg_chunks:
+                            for cache_key in ("condition_embed_dict", "position_voxel_indices"):
+                                if cache_key in chunk_kwargs["cache"] and cache_key not in other_kwargs["cache"]:
+                                    other_kwargs["cache"][cache_key] = chunk_kwargs["cache"][cache_key]
+                    unet_output = (torch.cat(noise_preds),)
+                else:
+                    # expand the latents if we are doing classifier free guidance
+                    latents = rearrange(
+                        latents, "(b n_pbr n) c h w -> b n_pbr n c h w", n=kwargs["num_in_batch"], n_pbr=n_pbr
+                    )
+                    # latent_model_input = torch.cat([latents] * 3) if self.do_classifier_free_guidance else latents
+                    latent_model_input = (
+                        latents.repeat(3, 1, 1, 1, 1, 1) if self.do_classifier_free_guidance else latents
+                    )
+                    latent_model_input = rearrange(latent_model_input, "b n_pbr n c h w -> (b n_pbr n) c h w")
+                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                    latent_model_input = rearrange(
+                        latent_model_input,
+                        "(b n_pbr n) c h w ->b n_pbr n c h w",
+                        n=kwargs["num_in_batch"],
+                        n_pbr=n_pbr,
+                    )
 
-                # predict the noise residual
+                    # predict the noise residual
 
-                unet_output = self.unet(
-                    latent_model_input,
-                    t,
-                    encoder_hidden_states=prompt_embeds,
-                    timestep_cond=timestep_cond,
-                    cross_attention_kwargs=self.cross_attention_kwargs,
-                    added_cond_kwargs=added_cond_kwargs,
-                    return_dict=False,
-                    **kwargs,
-                )
+                    unet_output = self.unet(
+                        latent_model_input,
+                        t,
+                        encoder_hidden_states=prompt_embeds,
+                        timestep_cond=timestep_cond,
+                        cross_attention_kwargs=self.cross_attention_kwargs,
+                        added_cond_kwargs=added_cond_kwargs,
+                        return_dict=False,
+                        **kwargs,
+                    )
 
                 # DEBUG: Diagnostic para entender formato do retorno com SDNQ
                 if not isinstance(unet_output, (tuple, list)):
@@ -671,7 +738,8 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
                         f"Expected multiple of 3 for classifier-free guidance."
                     )
 
-                latents = rearrange(latents, "b n_pbr n c h w -> (b n_pbr n) c h w")
+                if cfg_chunks is None:
+                    latents = rearrange(latents, "b n_pbr n c h w -> (b n_pbr n) c h w")
                 # perform guidance
                 if self.do_classifier_free_guidance:
                     # noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)

@@ -82,6 +82,15 @@ class Dino_v2(nn.Module):
         return dino_hidden_states
 
 
+def _module_device(module: nn.Module) -> torch.device | None:
+    """Device do primeiro parâmetro ou buffer (módulos quantizados podem só ter buffers)."""
+    for p in module.parameters():
+        return p.device
+    for b in module.buffers():
+        return b.device
+    return None
+
+
 def _chunked_feed_forward(ff: nn.Module, hidden_states: torch.Tensor, chunk_dim: int, chunk_size: int):
     # "feed_forward_chunk_size" can be used to save memory
 
@@ -135,7 +144,7 @@ def compute_voxel_grid_mask(position, grid_resolution=8):
 
     valid_mask = (position != 1).all(dim=2, keepdim=True)
     valid_mask = valid_mask.expand_as(position)
-    position[not valid_mask] = 0
+    position[~valid_mask] = 0
 
     position = rearrange(
         position,
@@ -217,7 +226,7 @@ def compute_discrete_voxel_indice(position, grid_resolution=8, voxel_resolution=
 
     valid_mask = (position != 1).all(dim=2, keepdim=True)
     valid_mask = valid_mask.expand_as(position)
-    position[not valid_mask] = 0
+    position[~valid_mask] = 0
 
     position = rearrange(
         position,
@@ -779,6 +788,11 @@ class UNet2p5DConditionModel(torch.nn.Module):
         self.use_position_rope = True
         self.use_learned_text_clip = True
         self.use_dual_stream = True
+        # Offload do ref-UNet (dual stream) para CPU depois de o cache de
+        # condicionamento estar preenchido — liberta ~1.7 GB fp16 durante o
+        # resto do denoise. Reposto no device automaticamente na próxima
+        # pintura (cache novo). Ligado pelo painter em low-VRAM.
+        self.offload_ref_unet = False
         self.pbr_setting = ["albedo", "mr"]
         self.pbr_token_channels = 77
 
@@ -1032,6 +1046,10 @@ class UNet2p5DConditionModel(torch.nn.Module):
                 noisy_ref_latents = ref_latents
                 timestep_ref = 0
                 unet_ref = self.unet_dual if self.use_dual_stream else self.unet
+                if self.use_dual_stream:
+                    ref_device = _module_device(self.unet_dual)
+                    if ref_device is not None and ref_device != noisy_ref_latents.device:
+                        self.unet_dual.to(noisy_ref_latents.device)
                 unet_ref(
                     noisy_ref_latents,
                     timestep_ref,
@@ -1047,6 +1065,10 @@ class UNet2p5DConditionModel(torch.nn.Module):
                     },
                 )
                 cached_condition["cache"]["condition_embed_dict"] = condition_embed_dict
+                if self.use_dual_stream and self.offload_ref_unet:
+                    self.unet_dual.to("cpu")
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
         else:
             condition_embed_dict = None
 

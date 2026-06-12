@@ -30,14 +30,18 @@ def test_no_gpu_cpu_profile() -> None:
 
 
 def test_rtx4050_6gb_gets_low_vram() -> None:
-    """RTX 4050 6GB → SDNQ uint8, 4v@384, render 1024, tex 2048."""
+    """RTX 4050 6GB → SDNQ uint8, 6v@512, render 1536, tex 3072.
+
+    CFG chunking + ref-UNet offload libertam VRAM suficiente para igualar as
+    resoluções do mid-tier (medido: pico 4.45 GiB de 6 GiB).
+    """
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
     assert p.low_vram is True
-    assert p.max_views == 4
-    assert p.view_resolution == 384
-    assert p.render_size == 1024
-    assert p.texture_size == 2048
+    assert p.max_views == 6
+    assert p.view_resolution == 512
+    assert p.render_size == 1536
+    assert p.texture_size == 3072
     assert p.gpu_ids is None
 
 
@@ -74,8 +78,8 @@ def test_single_7gb_mid_tier() -> None:
     """7GB → still low_vram (below 8.0 threshold)."""
     p = profile_from_specs([(0, _gib(7))])
     assert p.low_vram is True
-    assert p.render_size == 1024
-    assert p.texture_size == 2048
+    assert p.render_size == 1536
+    assert p.texture_size == 3072
 
 
 def test_single_9gb_mid_tier() -> None:

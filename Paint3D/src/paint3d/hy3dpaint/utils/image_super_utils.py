@@ -18,27 +18,46 @@ from PIL import Image
 
 
 class imageSuperNet:
+    """Real-ESRGAN x4 com device configurável.
+
+    ``config.realesrgan_device`` ("cpu" | "cuda" | "cuda:N"): em GPU usa fp16 +
+    tiling (``config.realesrgan_tile``) para limitar o pico de VRAM — ordens de
+    grandeza mais rápido que CPU para as 2×N vistas do enhance. Em OOM cai de
+    volta para CPU fp32 automaticamente e mantém-se lá.
+    """
+
     def __init__(self, config) -> None:
+        self._ckpt_path = config.realesrgan_ckpt_path
+        self._device = str(getattr(config, "realesrgan_device", "cpu"))
+        self._tile = int(getattr(config, "realesrgan_tile", 512))
+        self.upsampler = self._build(self._device)
+
+    def _build(self, device_str: str):
         from paint3d.hy3dpaint.utils.realesrgan_infer import RealESRGANer
         from paint3d.hy3dpaint.utils.rrdbnet_arch_standalone import RRDBNet
 
         model = RRDBNet(num_in_ch=3, num_out_ch=3, num_feat=64, num_block=23, num_grow_ch=32, scale=4)
-        # RealESRGAN em CPU: ~64 MB de pesos, inferência rápida em CPU, liberta VRAM para o UNet.
-        upsampler = RealESRGANer(
+        use_cuda = device_str.startswith("cuda")
+        return RealESRGANer(
             scale=4,
-            model_path=config.realesrgan_ckpt_path,
+            model_path=self._ckpt_path,
             dni_weight=None,
             model=model,
-            tile=0,
+            tile=self._tile if use_cuda else 0,
             tile_pad=10,
             pre_pad=0,
-            half=False,
-            device=torch.device("cpu"),
+            half=use_cuda,
+            device=torch.device(device_str),
             gpu_id=None,
         )
-        self.upsampler = upsampler
 
     def __call__(self, image):
-        output, _ = self.upsampler.enhance(np.array(image))
+        try:
+            output, _ = self.upsampler.enhance(np.array(image))
+        except torch.cuda.OutOfMemoryError:
+            torch.cuda.empty_cache()
+            self._device = "cpu"
+            self.upsampler = self._build("cpu")
+            output, _ = self.upsampler.enhance(np.array(image))
         output = Image.fromarray(output)
         return output

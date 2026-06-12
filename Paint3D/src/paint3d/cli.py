@@ -60,6 +60,26 @@ def _env_bool(env_var: str, cli_wants: bool) -> bool:
     return cli_wants
 
 
+def _enable_sage_attention(requested: bool) -> bool:
+    """Liga SageAttention (attention INT8, Ampere+) via PAINT3D_USE_SAGEATTN.
+
+    Tem de correr antes do primeiro import dos módulos hy3dpaint (o binding
+    acontece no import). Devolve o estado efectivo.
+    """
+    if not requested:
+        return False
+    try:
+        import sageattention  # noqa: F401
+    except ImportError:
+        console.print(
+            "[yellow]sageattention não instalado — a continuar com SDPA "
+            "(pip install sageattention).[/yellow]"
+        )
+        return False
+    os.environ["PAINT3D_USE_SAGEATTN"] = "1"
+    return True
+
+
 def _prepare_gpu(allow_shared: bool, kill_others: bool, low_vram: bool = False) -> None:
     from gamedev_shared.gpu import warn_if_vram_occupied
 
@@ -162,7 +182,10 @@ def cli(ctx, verbose):
 @click.option(
     "--low-vram-mode",
     is_flag=True,
-    help="Modo baixa VRAM: SDNQ uint8, 4 views @ 384px, render 1024, texture 2048.",
+    help=(
+        "Modo baixa VRAM: SDNQ uint8 + CFG chunking + ref-UNet offload "
+        "(com hw-auto: 6v@512, render 1536, tex 3072; sem: 4v@384)."
+    ),
 )
 @click.option(
     "--preserve-origin/--no-preserve-origin",
@@ -202,10 +225,17 @@ def cli(ctx, verbose):
     default=True,
     show_default=True,
     help=(
-        "Auto-detecção de hardware: liga low-VRAM (SDNQ uint8, 4v@384) em GPUs "
+        "Auto-detecção de hardware: liga low-VRAM (SDNQ uint8, 6v@512) em GPUs "
         "<10GB; FP16 nas grandes/multi-GPU. Flags explícitas ganham. "
         "Env: PAINT3D_HW_AUTO=0."
     ),
+)
+@click.option(
+    "--sage-attn",
+    "sage_attention",
+    is_flag=True,
+    default=False,
+    help="SageAttention (attention INT8, Ampere+; requer pacote sageattention).",
 )
 @click.pass_context
 def texture(
@@ -232,11 +262,13 @@ def texture(
     quality,
     category,
     hw_auto,
+    sage_attention,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
 
     verbose = bool(ctx.obj.get("VERBOSE")) or texture_verbose
+    sage_attention = _enable_sage_attention(sage_attention)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
@@ -303,9 +335,10 @@ def texture(
     info_table.add_row("[bold]Imagem[/bold]", f"[cyan]{image_file}[/cyan]")
     info_table.add_row("[bold]Saída[/bold]", f"[cyan]{output}[/cyan]")
     quant_label = "SDNQ uint8 (low-vram)" if low_vram_mode else "FP16 (sem quantização)"
+    attn_label = " · sage-attn" if sage_attention else ""
     info_table.add_row(
         "[bold]Config[/bold]",
-        f"{max_views} vistas @ {view_resolution}px · {quant_label} · VAE tiling",
+        f"{max_views} vistas @ {view_resolution}px · {quant_label} · VAE tiling{attn_label}",
     )
     info_table.add_row(
         "[bold]Bake[/bold]",
@@ -432,6 +465,13 @@ def texture(
     show_default=True,
     help="Auto-detecção de hardware (low-VRAM em GPUs <10GB). Env: PAINT3D_HW_AUTO=0.",
 )
+@click.option(
+    "--sage-attn",
+    "sage_attention",
+    is_flag=True,
+    default=False,
+    help="SageAttention (attention INT8, Ampere+; requer pacote sageattention).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @click.pass_context
 def texture_batch(
@@ -452,6 +492,7 @@ def texture_batch(
     gpu_ids,
     force,
     hw_auto,
+    sage_attention,
     batch_verbose,
 ):
     """Texturizar batch via manifest JSON. Saída JSONL em stdout."""
@@ -460,6 +501,7 @@ def texture_batch(
     from .utils.mesh_io import load_mesh_trimesh, save_glb
 
     verbose = bool(ctx.obj.get("VERBOSE")) or batch_verbose
+    _enable_sage_attention(sage_attention)
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 

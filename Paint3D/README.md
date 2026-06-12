@@ -93,8 +93,9 @@ paint3d texture mesh.glb -i ref.png --quality high
 | `--bake-exp` | int | `6` | Bake blending exponent (higher = sharper seams, less ghosting) |
 | `--smooth/--no-smooth` | flag | `true` | Bilateral texture smoothing (removes bake artifacts) |
 | `--smooth-passes` | int | `1` | Number of bilateral filter passes |
-| `--low-vram-mode` | flag | `false` | SDNQ uint8, 4 views @ 384px, render 1024, texture 2048 |
+| `--low-vram-mode` | flag | `false` | SDNQ uint8 + sequential CFG chunking + ref-UNet CPU offload (with hw-auto: 6 views @ 512px, render 1536, texture 3072; without: 4 views @ 384px) |
 | `--hw-auto/--no-hw-auto` | flag | `true` | Hardware auto-detection: enables low-VRAM mode on GPUs <10 GB; FP16 kept on big/multi-GPU rigs. Explicit flags win. Env kill-switch: `PAINT3D_HW_AUTO=0` |
+| `--sage-attn` | flag | `false` | SageAttention (INT8 attention, Ampere+; requires `pip install sageattention`). Falls back to SDPA when unavailable |
 | `--preserve-origin` | flag | `true` | Rebase mesh to AABB base at Y=0, XZ centered |
 | `--allow-shared-gpu` | flag | `false` | Allow GPU with other processes |
 | `--gpu-kill-others/--no-gpu-kill-others` | flag | `off` | **DEPRECATED:** terminates competing GPU processes |

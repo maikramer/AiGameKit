@@ -12,7 +12,6 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
-import copy
 import os
 import warnings
 
@@ -195,9 +194,11 @@ class Hunyuan3DPaintPipeline:
         _step("multiview_render", 100)
         ###########  Enhance  ##########
         _step("enhance", 0)
+        # Cópia rasa: cada elemento é substituído pelo output do super_model,
+        # os PILs originais não são reutilizados — deepcopy era só custo.
         enhance_images = {}
-        enhance_images["albedo"] = copy.deepcopy(multiviews_pbr["albedo"])
-        enhance_images["mr"] = copy.deepcopy(multiviews_pbr["mr"])
+        enhance_images["albedo"] = list(multiviews_pbr["albedo"])
+        enhance_images["mr"] = list(multiviews_pbr["mr"])
 
         for i in range(len(enhance_images["albedo"])):
             enhance_images["albedo"][i] = self.models["super_model"](enhance_images["albedo"][i])

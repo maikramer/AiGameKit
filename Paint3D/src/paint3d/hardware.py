@@ -8,15 +8,20 @@ resolução ganham sempre. Desligável com ``--no-hw-auto`` ou ``PAINT3D_HW_AUTO
 Perfis por tier de VRAM:
 
 - >= 10 GiB (single ou multi-GPU): FP16, sem overrides (usa defaults CLI:
-  6 views @ 640px, render 2048, texture 4096).
+  6 views @ 640px, render 2048, texture 4096). DINO em GPU fp16.
 - 8.0 – 10.0 GiB (ex: RTX 4060 8GB): FP16, 6v@512, render 1536, tex 3072.
-- < 8.0 GiB (ex: RTX 4050 6GB): SDNQ uint8, 4v@384, render 1024, tex 2048.
-- CPU (sem GPU): mesmo que low-VRAM.
+- < 8.0 GiB (ex: RTX 4050 6GB): SDNQ uint8, 6v@512, render 1536, tex 3072,
+  CFG chunking (forwards uncond/ref/full sequenciais) + ref-UNet offload —
+  medido: pico 4.45 GiB na 4050 6GB.
+- CPU (sem GPU): 4v@384, render 1024, tex 2048 (conservador).
+
+Real-ESRGAN corre em GPU (fp16 + tiling) sempre que há CUDA, em qualquer tier;
+ver ``painter._apply_optimization_config`` para os knobs/env overrides.
 
 Hardware de referência:
 - 2x RTX 3060 12GB → FP16, split multi-GPU (painter já auto-detecta ≥2 GPUs).
 - RTX 4060 8GB → FP16, mid-tier resolutions.
-- RTX 4050 6GB → low-VRAM (SDNQ uint8, 4 views @ 384px, render 1024, tex 2048).
+- RTX 4050 6GB → low-VRAM (SDNQ uint8, 6 views @ 512px, render 1536, tex 3072).
 """
 
 from __future__ import annotations
@@ -116,17 +121,18 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
             texture_size=3072,
         )
 
-    # < 8.0 GiB: SDNQ uint8, low-VRAM resolutions
+    # < 8.0 GiB: SDNQ uint8 + CFG chunking + ref-UNet offload permitem 6v@512
+    # (medido na RTX 4050 6GB: pico 4.45 GiB de 6 GiB com render 1536/tex 3072).
     return Paint3DHardwareProfile(
         name=name,
         device="cuda",
         low_vram=True,
         gpu_ids=None,
         total_vram_gib=round(total_gib, 1),
-        max_views=4,
-        view_resolution=384,
-        render_size=1024,
-        texture_size=2048,
+        max_views=6,
+        view_resolution=512,
+        render_size=1536,
+        texture_size=3072,
     )
 
 
