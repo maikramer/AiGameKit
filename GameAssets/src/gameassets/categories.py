@@ -24,10 +24,20 @@ CATEGORIES: dict[str, AssetCategory] = {
         default_kind="character",
         target_faces=32000,
         hint_2d="full-body character concept, front-facing view, clean silhouette on white background",
-        hint_3d="single character model, no weapons or props attached, clean mesh with clear limb separation",
+        hint_3d=(
+            "single character model, no weapons or props attached, "
+            "clean mesh with clear limb separation, "
+            "no merged or fused body parts, distinct gaps at armpits and inner thighs"
+        ),
         hint_rig=(
-            "standing in A-pose or T-pose with arms extended away from body, "
-            "front-facing neutral pose, symmetrical stance, fingers spread slightly"
+            "standing in perfect T-pose with both arms fully extended horizontally at shoulder height, "
+            "palms facing forward, fingers spread apart, "
+            "legs shoulder-width apart with feet pointing forward, "
+            "perfectly symmetrical left-right body, "
+            "straight erect spine and neck, head facing forward, "
+            "all limbs fully visible and clearly separated from torso, "
+            "no crossed limbs, no bent elbows or knees, no clenched fists, "
+            "no self-occlusion between arms and torso"
         ),
         hint_parts=(
             "designed with clear separable segments at joints, "
