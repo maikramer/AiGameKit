@@ -68,42 +68,53 @@ def _nullable(val: str | None) -> str | None:
     return val or None
 
 
-def main() -> None:
+def run_task(
+    task_path: str,
+    *,
+    seed: int = 123,
+    input: str | None = None,
+    input_dir: str | None = None,
+    output: str | None = None,
+    output_dir: str | None = None,
+    npz_dir: str | None = "tmp",
+    cls: str | None = None,
+    data_name_override: str | None = None,
+) -> None:
+    """Corre uma task de inferência UniRig in-process (chamável pelo oneshot)."""
     torch.set_float32_matmul_precision("high")
 
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--task", required=True)
-    ap.add_argument("--seed", type=int, default=123)
-    ap.add_argument("--input", type=_nullable, default=None)
-    ap.add_argument("--input_dir", type=_nullable, default=None)
-    ap.add_argument("--output", type=_nullable, default=None)
-    ap.add_argument("--output_dir", type=_nullable, default=None)
-    ap.add_argument("--npz_dir", type=_nullable, default="tmp")
-    ap.add_argument("--cls", type=_nullable, default=None)
-    ap.add_argument("--data_name", type=_nullable, default=None)
-    args = ap.parse_args()
+    L.seed_everything(seed, workers=True)
 
-    L.seed_everything(args.seed, workers=True)
-
-    task = _load_yaml("task", args.task)
+    task = _load_yaml("task", task_path)
     mode = task.mode
     assert mode in ("predict",), f"só inferência é suportada, modo={mode}"
 
-    if args.input is not None or args.input_dir is not None:
-        assert args.output_dir is not None or args.output is not None
-        assert args.npz_dir is not None
+    if input is not None or input_dir is not None:
+        assert output_dir is not None or output is not None
+        assert npz_dir is not None
         files = get_files(
             data_name=task.components.data_name,
-            inputs=args.input,
-            input_dataset_dir=args.input_dir,
-            output_dataset_dir=args.npz_dir,
+            inputs=input,
+            input_dataset_dir=input_dir,
+            output_dataset_dir=npz_dir,
             force_override=True,
             warning=False,
         )
         files = [f[1] for f in files]
-        datapath = Datapath(files=files, cls=args.cls)
+        datapath = Datapath(files=files, cls=cls)
     else:
         datapath = None
+
+    class args:  # compat com o corpo original
+        pass
+
+    args.input = input
+    args.input_dir = input_dir
+    args.output = output
+    args.output_dir = output_dir
+    args.npz_dir = npz_dir
+    args.cls = cls
+    args.data_name = data_name_override
 
     data_config = _load_yaml("data", os.path.join("configs/data", task.components.data))
     transform_config = _load_yaml("transform", os.path.join("configs/transform", task.components.transform))
@@ -197,6 +208,32 @@ def main() -> None:
         ckpt_path=ckpt,
         return_predictions=False,
         weights_only=False,
+    )
+
+
+def main() -> None:
+    """CLI entry point (backward compat with bash scripts and __main__)."""
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--task", required=True)
+    ap.add_argument("--seed", type=int, default=123)
+    ap.add_argument("--input", type=_nullable, default=None)
+    ap.add_argument("--input_dir", type=_nullable, default=None)
+    ap.add_argument("--output", type=_nullable, default=None)
+    ap.add_argument("--output_dir", type=_nullable, default=None)
+    ap.add_argument("--npz_dir", type=_nullable, default="tmp")
+    ap.add_argument("--cls", type=_nullable, default=None)
+    ap.add_argument("--data_name", type=_nullable, default=None)
+    args = ap.parse_args()
+    run_task(
+        args.task,
+        seed=args.seed,
+        input=args.input,
+        input_dir=args.input_dir,
+        output=args.output,
+        output_dir=args.output_dir,
+        npz_dir=args.npz_dir,
+        cls=args.cls,
+        data_name_override=args.data_name,
     )
 
 

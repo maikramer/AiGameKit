@@ -690,9 +690,10 @@ def pipeline_cmd(
     from gamedev_shared.gpu import warn_if_vram_occupied
     from gamedev_shared.quality import QualityEngine
 
+    from .oneshot import run_skeleton_inprocess, run_skin_inprocess
+
     root, py = _ctx_root_py(ctx)
     gpu_ids = _ctx_gpu_ids(ctx)
-    _require_bash()
     do_profile = _ctx_profiler(ctx)
 
     warn_if_vram_occupied()
@@ -740,28 +741,39 @@ def pipeline_cmd(
                 console.print(f"[dim]Multi-GPU: skeleton→cuda:{gpu_ids[0]}, skin→cuda:{gpu_ids[1]}[/dim]")
 
             emit_progress(item_id, TOOL_RIGGING3D, phase="skeleton", percent=0)
-            skel_args = ["--input", _shell_path(actual_mesh), "--output", _shell_path(skel)]
-            if seed is not None:
-                skel_args += ["--seed", str(seed)]
-            rc = _run_bash(
-                root,
-                "launch/inference/generate_skeleton.sh",
-                skel_args,
-                python_bin=py,
-                propagate_profile=do_profile,
-                gpu_ids=skel_gpu,
-            )
-            if rc != 0 or not skel.is_file() or skel.stat().st_size == 0:
+            _old_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
+            try:
+                if skel_gpu:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in skel_gpu)
+                elif _old_cuda is not None:
+                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+                run_skeleton_inprocess(
+                    root,
+                    input_path=_shell_path(actual_mesh),
+                    output_path=_shell_path(skel),
+                    seed=seed if seed is not None else 123,
+                    npz_dir=str(wd / "_npz"),
+                )
+            except Exception as exc:
+                raise click.ClickException(
+                    f"skeleton falhou: {exc}. Confirma deps inferência, pesos HF e logs acima."
+                ) from exc
+            finally:
+                if _old_cuda is not None:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda
+                else:
+                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            if not skel.is_file() or skel.stat().st_size == 0:
                 emit_result(
                     item_id,
                     TOOL_RIGGING3D,
                     STATUS_ERROR,
                     phase="skeleton",
-                    error=f"skeleton falhou (código {rc})",
+                    error="skeleton falhou (GLB em falta)",
                     seconds=time.monotonic() - t0,
                 )
                 raise click.ClickException(
-                    f"skeleton falhou (código {rc} ou GLB em falta). Confirma deps inferência, pesos HF e logs acima."
+                    "skeleton falhou (GLB em falta). Confirma deps inferência, pesos HF e logs acima."
                 )
             emit_progress(item_id, TOOL_RIGGING3D, phase="skeleton", percent=100)
 
@@ -790,36 +802,37 @@ def pipeline_cmd(
                 console.print("[dim]Low-VRAM: num_train_vertex=256[/dim]")
 
             emit_progress(item_id, TOOL_RIGGING3D, phase="skin", percent=0)
-            skin_args = [
-                "--input",
-                _shell_path(skel),
-                "--output",
-                _shell_path(skin),
-                "--skin_task",
-                skin_task_path,
-            ]
-            if seed is not None:
-                skin_args += ["--seed", str(seed)]
-            rc = _run_bash(
-                root,
-                "launch/inference/generate_skin.sh",
-                skin_args,
-                python_bin=py,
-                propagate_profile=do_profile,
-                gpu_ids=skin_gpu,
-            )
-            if rc != 0 or not skin.is_file() or skin.stat().st_size == 0:
+            _old_cuda_skin = os.environ.get("CUDA_VISIBLE_DEVICES")
+            try:
+                if skin_gpu:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in skin_gpu)
+                elif _old_cuda_skin is not None:
+                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+                run_skin_inprocess(
+                    root,
+                    input_path=_shell_path(skel),
+                    output_path=_shell_path(skin),
+                    seed=seed if seed is not None else 123,
+                    skin_task=skin_task_path,
+                    npz_dir=str(wd / "_npz"),
+                )
+            except Exception as exc:
+                raise click.ClickException(f"skin falhou: {exc}. Confirma spconv, VRAM e logs acima.") from exc
+            finally:
+                if _old_cuda_skin is not None:
+                    os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda_skin
+                else:
+                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            if not skin.is_file() or skin.stat().st_size == 0:
                 emit_result(
                     item_id,
                     TOOL_RIGGING3D,
                     STATUS_ERROR,
                     phase="skin",
-                    error=f"skin falhou (código {rc})",
+                    error="skin falhou (GLB em falta)",
                     seconds=time.monotonic() - t0,
                 )
-                raise click.ClickException(
-                    f"skin falhou (código {rc} ou GLB em falta). Confirma spconv, VRAM e logs acima."
-                )
+                raise click.ClickException("skin falhou (GLB em falta). Confirma spconv, VRAM e logs acima.")
             emit_progress(item_id, TOOL_RIGGING3D, phase="skin", percent=100)
 
             emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=0)
@@ -957,9 +970,7 @@ def transfer_weights_cmd(
 
     out_list: list[Path] | None = list(outputs) if outputs else None
     if out_list is not None and len(out_list) != len(targets):
-        raise click.UsageError(
-            "Número de --output deve coincidir com o de --target."
-        )
+        raise click.UsageError("Número de --output deve coincidir com o de --target.")
 
     try:
         results = transfer_weights(

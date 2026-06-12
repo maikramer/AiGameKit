@@ -47,6 +47,24 @@ def _module_write_glb(root: Path, py: str, module: str, args: list[str], **_kwar
     return 1
 
 
+def _skeleton_inprocess_mock(root: Path, **kwargs) -> None:
+    """Simula run_skeleton_inprocess: escreve o ficheiro indicado em output_path."""
+    output_path = kwargs.get("output_path")
+    if output_path:
+        p = Path(output_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"mockfbx")
+
+
+def _skin_inprocess_mock(root: Path, **kwargs) -> None:
+    """Simula run_skin_inprocess: escreve o ficheiro indicado em output_path."""
+    output_path = kwargs.get("output_path")
+    if output_path:
+        p = Path(output_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"mockfbx")
+
+
 # ── Help / version ─────────────────────────────────────────────────────
 
 
@@ -264,23 +282,28 @@ class TestPipeline:
         mesh.write_bytes(b"x")
         return ur, mesh
 
-    def test_requires_bash(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_bash_required_for_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _ur, mesh = self._setup(tmp_path, monkeypatch)
-        with patch("rigging3d.cli._find_bash", return_value=None):
+        out = tmp_path / "o.glb"
+        with (
+            patch("rigging3d.cli._find_bash", return_value=None),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
+            patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
+        ):
             result = CliRunner().invoke(
                 cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb")],
+                ["pipeline", "-i", str(mesh), "-o", str(out)],
                 catch_exceptions=False,
             )
-        assert result.exit_code != 0
-        assert "bash" in result.output.lower()
+        assert result.exit_code == 0
 
     def test_full_mock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _ur, mesh = self._setup(tmp_path, monkeypatch)
         out = tmp_path / "o.glb"
         with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=_bash_write_output_fbx),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
             patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
         ):
             result = CliRunner().invoke(
@@ -293,10 +316,11 @@ class TestPipeline:
 
     def test_skeleton_failure_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _ur, mesh = self._setup(tmp_path, monkeypatch)
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", return_value=1),
-        ):
+
+        def _skeleton_fail(root: Path, **kwargs) -> None:
+            raise RuntimeError("skeleton mock failure")
+
+        with patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_fail):
             result = CliRunner().invoke(
                 cli,
                 ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb")],
@@ -307,33 +331,13 @@ class TestPipeline:
 
     def test_skin_failure_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _ur, mesh = self._setup(tmp_path, monkeypatch)
-        call_count = 0
 
-        def bash_side_effect(
-            root: Path,
-            script: str,
-            args: list[str],
-            *,
-            python_bin: str | None = None,
-            propagate_profile: bool = False,
-            gpu_ids: list[int] | None = None,
-        ) -> int:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return _bash_write_output_fbx(
-                    root,
-                    script,
-                    args,
-                    python_bin=python_bin,
-                    propagate_profile=propagate_profile,
-                    gpu_ids=gpu_ids,
-                )
-            return 1
+        def _skin_fail(root: Path, **kwargs) -> None:
+            raise RuntimeError("skin mock failure")
 
         with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=bash_side_effect),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_fail),
         ):
             result = CliRunner().invoke(
                 cli,
@@ -346,8 +350,8 @@ class TestPipeline:
     def test_merge_failure_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _ur, mesh = self._setup(tmp_path, monkeypatch)
         with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=_bash_write_output_fbx),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
             patch("rigging3d.cli._run_module", return_value=1),
         ):
             result = CliRunner().invoke(
@@ -362,8 +366,8 @@ class TestPipeline:
         _ur, mesh = self._setup(tmp_path, monkeypatch)
         wd = tmp_path / "work"
         with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=_bash_write_output_fbx),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
             patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
         ):
             CliRunner().invoke(
@@ -386,8 +390,8 @@ class TestPipeline:
             return d
 
         with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=_bash_write_output_fbx),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
             patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
             patch("tempfile.mkdtemp", side_effect=tracking_mkdtemp),
         ):
@@ -412,8 +416,8 @@ class TestPipeline:
             return d
 
         with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=_bash_write_output_fbx),
+            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
+            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
             patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
             patch("tempfile.mkdtemp", side_effect=tracking_mkdtemp),
         ):
