@@ -1,6 +1,6 @@
 # Constraints para `gamedev-install --all` / `./install.sh --all`.
 #
-# Activados só quando `GAMEDEV_INSTALL_ALL=1` (definido automaticamente pelo instalador).
+# Activados só quando `CLIFIED_INSTALL_ALL=1` (definido automaticamente pelo instalador).
 # Objectivo: mesmo interpretador resolver `transformers` / `numpy` de forma igual em cada `.venv`,
 # maximizando reutilização de rodas na cache (~/.cache/uv).
 #

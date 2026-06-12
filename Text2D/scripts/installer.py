@@ -1,16 +1,30 @@
 #!/usr/bin/env python3
-"""Instalador Text2D — delega ao Clified (``./install.sh text2d``)."""
+"""Instalador Text2D — delega ao clified-install."""
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-_shared_src = Path(__file__).resolve().parents[2] / "Shared" / "src"
-if _shared_src.is_dir() and str(_shared_src) not in sys.path:
-    sys.path.insert(0, str(_shared_src))
 
-from gamedev_shared.installer.tool_script import run_fixed_tool
+def _find_tools_yaml() -> Path:
+    """Walk up to find tools.yaml (monorepo root)."""
+    current = Path(__file__).resolve().parent
+    for _ in range(10):
+        candidate = current / "tools.yaml"
+        if candidate.is_file():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    print("Erro: tools.yaml não encontrado.", file=sys.stderr)
+    sys.exit(1)
+
 
 if __name__ == "__main__":
-    sys.exit(run_fixed_tool("text2d", description="Instalador Text2D"))
+    tools_yaml = _find_tools_yaml()
+    os.environ["CLIFIED_TOOLS"] = str(tools_yaml)
+    sys.exit(subprocess.call([sys.executable, "-m", "clified.installer", "text2d", *sys.argv[1:]]))

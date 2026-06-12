@@ -1,16 +1,30 @@
 #!/usr/bin/env python3
-"""Instalador genérico — delega ao Clified (``./install.sh <tool>``)."""
+"""Instalador genérico — delega ao clified-install."""
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from pathlib import Path
 
-_shared_src = Path(__file__).resolve().parents[2] / "Shared" / "src"
-if _shared_src.is_dir() and str(_shared_src) not in sys.path:
-    sys.path.insert(0, str(_shared_src))
 
-from gamedev_shared.installer.tool_script import run_generic_tool_installer
+def _find_tools_yaml() -> Path:
+    """Walk up to find tools.yaml (monorepo root)."""
+    current = Path(__file__).resolve().parent
+    for _ in range(10):
+        candidate = current / "tools.yaml"
+        if candidate.is_file():
+            return candidate
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    print("Erro: tools.yaml não encontrado.", file=sys.stderr)
+    sys.exit(1)
+
 
 if __name__ == "__main__":
-    sys.exit(run_generic_tool_installer())
+    tools_yaml = _find_tools_yaml()
+    os.environ["CLIFIED_TOOLS"] = str(tools_yaml)
+    sys.exit(subprocess.call([sys.executable, "-m", "clified.installer", *sys.argv[1:]]))

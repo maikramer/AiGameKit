@@ -1,7 +1,6 @@
 """Instaladores e hooks do monorepo GameDev (via Clified)."""
 
 from .base import (
-    BaseInstaller,
     default_python_command,
     install_all_constraint_argv,
     path_env_contains_dir,
@@ -17,7 +16,6 @@ from .monorepo import find_monorepo_root, try_find_monorepo_root
 from .unified import install_all, install_tool, list_available_tools, main
 
 __all__ = [
-    "BaseInstaller",
     "default_python_command",
     "find_monorepo_root",
     "install_all",
