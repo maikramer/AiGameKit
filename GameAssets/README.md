@@ -74,6 +74,10 @@ Manifest + game.yaml
 
 Pipeline stages (3D, rig, parts, animate, lod, collision) are **auto-detected** from the manifest `pipeline` field and `game.yaml` profile blocks. Use `--no-3d`, `--no-rig`, `--no-parts`, `--no-animate`, `--no-lod`, `--no-collision` to explicitly opt out.
 
+## Debug / lab tools
+
+Visual GLB debugging (screenshots, inspect, compare, bundle) lives in **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), not in `gameassets`.
+
 ## Installation
 
 ### Official (monorepo)

@@ -21,6 +21,10 @@ CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu j
 
 Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), não no `gameassets`.
 
+## Debug / laboratório
+
+Debug visual de GLB (screenshots, inspect, compare, bundle) está em **[GameDevLab](../GameDevLab)** (`gamedev-lab debug …`), não no `gameassets`.
+
 ## Instalação
 
 ### Oficial (monorepo)
