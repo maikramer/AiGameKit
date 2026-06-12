@@ -106,8 +106,10 @@ def list_available_tools(monorepo: Path | None = None) -> list[ToolSpec]:
     _ensure_clified_importable()
     from clified.installer.registry import (
         get_workspace,
-        list_available_tools as _list,
         load_registry,
+    )
+    from clified.installer.registry import (
+        list_available_tools as _list,
     )
 
     load_registry()

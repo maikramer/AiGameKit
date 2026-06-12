@@ -5,13 +5,12 @@ from __future__ import annotations
 import subprocess
 from typing import TYPE_CHECKING
 
-from clified.installer.base import uv_cmd
-from clified.installer.python_installer import _PIP_BOOTSTRAP
-
-from .base import install_all_constraint_argv
+from .base import install_all_constraint_argv, uv_cmd
 
 if TYPE_CHECKING:
     from clified.installer.python_installer import PythonProjectInstaller
+
+_PIP_BOOTSTRAP = ("pip", "setuptools>=68,<82", "wheel")
 
 _STABLE_AUDIO_TOOLS = "stable-audio-tools==0.0.18"
 

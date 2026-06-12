@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..logging import Logger
-from clified.installer.base import has_uv, uv_cmd
+from .base import has_uv, uv_cmd
 
 if TYPE_CHECKING:
     from clified.installer.python_installer import PythonProjectInstaller

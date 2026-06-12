@@ -30,7 +30,7 @@ class TestQualityProfiles:
 class TestCategories:
     def test_list_categories_count(self, engine: QualityEngine) -> None:
         """Returns 14 categories."""
-        assert len(engine.list_categories()) == 14
+        assert len(engine.list_categories()) == 15
 
     def test_list_categories_sorted(self, engine: QualityEngine) -> None:
         categories = engine.list_categories()
@@ -77,14 +77,14 @@ class TestResolveText2Sound:
 
 class TestResolveText3D:
     def test_resolve_text3d_medium_humanoid(self, engine: QualityEngine) -> None:
-        """Humanoid + medium → preset=balanced, octree=256, chunks=8000."""
+        """Humanoid + medium → preset=balanced, octree=192, chunks=6000."""
         r = engine.resolve("text3d", quality="medium", category="humanoid")
         assert isinstance(r, QualityResolution)
         # Quality profile sets preset=balanced; category text3d has octree/chunks/steps
         assert r.params["preset"] == "balanced"
-        assert r.params["octree"] == 256
-        assert r.params["chunks"] == 8000
-        assert r.params["steps"] == 30  # category overrides profile
+        assert r.params["octree"] == 192
+        assert r.params["chunks"] == 6000
+        assert r.params["steps"] == 24  # category overrides profile
         assert r.source == "category"
 
 
