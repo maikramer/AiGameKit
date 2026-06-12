@@ -2,13 +2,10 @@
 Detecção automática de hardware → perfil de inferência Hunyuan3D.
 
 Mapeia GPUs CUDA visíveis para um perfil (steps/octree/chunks, SDNQ, multi-GPU,
-volume decoder). Soft resolution no CLI: só preenche o que o utilizador não
-definiu explicitamente — flags manuais, ``--quality`` e ``--preset`` têm sempre
-precedência. Desligável com ``--no-hw-auto`` ou ``TEXT3D_HW_AUTO=0``.
-
-Perfis validados nos dois hardwares de referência:
-- 2x RTX 3060 12GB (24GB total) → multi-GPU dispatch, hq, sem quantização.
-- RTX 4050 6GB → balanced + SDNQ INT4 + CPU offload (defeito do Text2D).
+volume decoder, resolução da imagem Text2D). Soft resolution no CLI: só preenche o
+que o utilizador não definiu explicitamente — flags manuais, ``--quality`` e
+``--preset`` têm sempre precedência. Desligável com ``--no-hw-auto`` ou
+``TEXT3D_HW_AUTO=0``.
 """
 
 from __future__ import annotations
@@ -34,6 +31,8 @@ class HardwareProfile:
     chunks: int
     volume_decoder: str
     total_vram_gib: float
+    image_width: int | None = None  # None = não override (usa default do CLI)
+    image_height: int | None = None
 
     def summary(self) -> str:
         parts = [
@@ -43,6 +42,8 @@ class HardwareProfile:
         ]
         if self.sdnq_preset:
             parts.append(f"sdnq={self.sdnq_preset}")
+        if self.image_width:
+            parts.append(f"img={self.image_width}x{self.image_height}")
         if self.gpu_ids:
             parts.append(f"gpus={self.gpu_ids}")
         return " | ".join(parts)
@@ -70,6 +71,8 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
             chunks=fast["chunks"],
             volume_decoder="hierarchical",
             total_vram_gib=0.0,
+            image_width=1024,
+            image_height=1024,
         )
 
     total_gib = sum(mem for _, mem in gpus) / GIB
@@ -85,16 +88,28 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
     if capacity_gib >= 10.0:
         tier = hq
         sdnq: str | None = None
+        img_w: int | None = None
+        img_h: int | None = None
     elif capacity_gib >= 7.5:
         tier = balanced
         sdnq = None
-    elif capacity_gib >= 5.0:
-        # ex.: RTX 4050 6GB — balanced só fecha com DiT quantizado INT4
+        img_w = None
+        img_h = None
+    elif capacity_gib >= 6.5:
         tier = balanced
         sdnq = "sdnq-int4"
+        img_w = 1024
+        img_h = 1024
+    elif capacity_gib >= 4.0:
+        tier = fast
+        sdnq = "sdnq-int4"
+        img_w = 1024
+        img_h = 1024
     else:
         tier = fast
         sdnq = "sdnq-int4"
+        img_w = 1024
+        img_h = 1024
 
     return HardwareProfile(
         name=name,
@@ -106,6 +121,8 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
         chunks=tier["chunks"],
         volume_decoder="hierarchical",
         total_vram_gib=round(total_gib, 1),
+        image_width=img_w,
+        image_height=img_h,
     )
 
 

@@ -27,14 +27,16 @@ def test_no_gpu_yields_cpu_fast_profile() -> None:
     assert p.octree == 128  # preset fast
 
 
-def test_rtx4050_6gb_gets_int4_balanced() -> None:
-    """Hardware de referência mono-GPU: RTX 4050 6GB."""
+def test_rtx4050_6gb_gets_int4_fast() -> None:
+    """RTX 4050 6GB (~5.6 GiB): balanced estoura VRAM no decode → fast tier."""
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
     assert p.gpu_ids is None
     assert p.sdnq_preset == "sdnq-int4"
-    assert (p.steps, p.octree, p.chunks) == (24, 256, 8000)  # balanced
+    assert (p.steps, p.octree, p.chunks) == (18, 128, 4096)  # fast
     assert p.volume_decoder == "hierarchical"
+    assert p.image_width == 1024
+    assert p.image_height == 1024
 
 
 def test_dual_rtx3060_24gb_gets_multigpu_hq_no_quant() -> None:

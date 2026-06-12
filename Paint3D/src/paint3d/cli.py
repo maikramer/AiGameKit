@@ -266,6 +266,16 @@ def texture(
         hwp = detect_hardware_profile()
         if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
             low_vram_mode = True
+        # Apply hw-auto overrides (soft — only when user didn't explicitly set)
+        if hwp is not None:
+            if not _user_set_views and hwp.max_views is not None:
+                max_views = hwp.max_views
+            if not _user_set_view_res and hwp.view_resolution is not None:
+                view_resolution = hwp.view_resolution
+            if not _user_set_render_size and hwp.render_size is not None:
+                render_size = hwp.render_size
+            if not _user_set_tex_size and hwp.texture_size is not None:
+                texture_size = hwp.texture_size
 
     mesh_path = Path(mesh_file)
     if output is None:
@@ -453,10 +463,26 @@ def texture_batch(
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
+    _src = click.core.ParameterSource
+    _user_set_views = ctx.get_parameter_source("max_views") not in (_src.DEFAULT,)
+    _user_set_view_res = ctx.get_parameter_source("view_resolution") not in (_src.DEFAULT,)
+    _user_set_render_size = ctx.get_parameter_source("render_size") not in (_src.DEFAULT,)
+    _user_set_tex_size = ctx.get_parameter_source("texture_size") not in (_src.DEFAULT,)
+
+    hwp = None
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
         if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
             low_vram_mode = True
+        if hwp is not None:
+            if not _user_set_views and hwp.max_views is not None:
+                max_views = hwp.max_views
+            if not _user_set_view_res and hwp.view_resolution is not None:
+                view_resolution = hwp.view_resolution
+            if not _user_set_render_size and hwp.render_size is not None:
+                render_size = hwp.render_size
+            if not _user_set_tex_size and hwp.texture_size is not None:
+                texture_size = hwp.texture_size
         Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
     os.environ.setdefault(

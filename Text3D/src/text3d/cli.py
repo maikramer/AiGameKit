@@ -545,6 +545,8 @@ def generate(
 
     _user_set_quality = ctx.get_parameter_source("quality") not in (_src.DEFAULT,)
     _user_set_vdecoder = ctx.get_parameter_source("volume_decoder") not in (_src.DEFAULT,)
+    _user_set_img_w = ctx.get_parameter_source("image_width") not in (_src.DEFAULT,)
+    _user_set_img_h = ctx.get_parameter_source("image_height") not in (_src.DEFAULT,)
     hwp = None
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
@@ -561,6 +563,10 @@ def generate(
             parsed_gpu_ids = hwp.gpu_ids
         if not _user_set_vdecoder:
             volume_decoder = hwp.volume_decoder
+        if not _user_set_img_w and hwp.image_width is not None:
+            image_width = hwp.image_width
+        if not _user_set_img_h and hwp.image_height is not None:
+            image_height = hwp.image_height
 
     # --low-vram: override to the low-VRAM profile (overrides balanced/fast/hq)
     if low_vram:
