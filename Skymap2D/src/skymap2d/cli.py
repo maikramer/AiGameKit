@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Skymap2D — CLI principal (skymaps equirectangular 360°)."""
 
+from __future__ import annotations
+
 import sys
 import time
 from pathlib import Path
@@ -149,6 +151,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=float,
     help="Multiplicador dos valores lineares ao gravar EXR (ex.: 2.0 para mais intensidade)",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: liga CPU offload e clamp de resolução em "
+        "GPUs pequenas. Flags explícitas ganham. Env: SKYMAP2D_HW_AUTO=0."
+    ),
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -171,6 +183,7 @@ def generate_cmd(
     gpu_ids_str: str | None,
     image_format: str,
     exr_scale: float,
+    hw_auto: bool,
 ) -> None:
     """Gera um skymap equirectangular 360° a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -200,8 +213,24 @@ def generate_cmd(
     if not cpu:
         warn_if_vram_occupied()
 
+    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled() and not cpu:
+        hwp = detect_hardware_profile()
+        if not low_vram and hwp.low_vram and hwp.device == "cuda":
+            low_vram = True
+        # Clamp resolution only if user didn't set it explicitly.
+        if not _user_set_width and hwp.max_width is not None:
+            width = min(width, hwp.max_width)
+        if not _user_set_height and hwp.max_height is not None:
+            height = min(height, hwp.max_height)
+
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    if gpu_ids is None and hwp is not None and hwp.gpu_ids:
+        gpu_ids = hwp.gpu_ids
     resolved_model = model_id or default_model_id()
 
     table = Table(show_header=False, box=box.SIMPLE)
@@ -216,6 +245,8 @@ def generate_cmd(
     table.add_row("[bold]Formato[/bold]", image_format.lower())
     if image_format.lower() == "exr" and exr_scale != 1.0:
         table.add_row("[bold]EXR scale[/bold]", str(exr_scale))
+    if hwp is not None:
+        table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     try:
@@ -361,6 +392,13 @@ def presets_cmd() -> None:
     type=float,
     help="Multiplicador linear ao gravar EXR",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: SKYMAP2D_HW_AUTO=0.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -378,6 +416,7 @@ def batch_cmd(
     gpu_ids_str: str | None,
     image_format: str,
     exr_scale: float,
+    hw_auto: bool,
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -405,6 +444,21 @@ def batch_cmd(
     if not cpu:
         warn_if_vram_occupied()
 
+    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled() and not cpu:
+        hwp = detect_hardware_profile()
+        if not low_vram and hwp.low_vram and hwp.device == "cuda":
+            low_vram = True
+        if not _user_set_width and hwp.max_width is not None:
+            width = min(width, hwp.max_width)
+        if not _user_set_height and hwp.max_height is not None:
+            height = min(height, hwp.max_height)
+    if hwp is not None:
+        Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
+
     prompts = [
         line.strip()
         for line in file.read_text(encoding="utf-8").splitlines()
@@ -421,6 +475,8 @@ def batch_cmd(
 
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    if gpu_ids is None and hwp is not None and hwp.gpu_ids:
+        gpu_ids = hwp.gpu_ids
 
     gen = SkymapGenerator(
         device=device,
@@ -502,6 +558,12 @@ def info_cmd() -> None:
             t.add_row(f"GPU {i}", str(gpu.get("name", "")))
             t.add_row("  └ VRAM total", format_bytes(gpu.get("total_memory", 0)))
             t.add_row("  └ VRAM livre", format_bytes(gpu.get("free_memory", 0)))
+
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    _hwp = detect_hardware_profile()
+    _state = "" if hw_auto_enabled() else " [yellow](desligado: SKYMAP2D_HW_AUTO=0)[/yellow]"
+    t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
     console.print(t)
 

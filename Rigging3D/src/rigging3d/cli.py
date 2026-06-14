@@ -248,6 +248,8 @@ def cli(
 
         if hw_auto_enabled():
             hwp = detect_hardware_profile()
+            if hwp.device == "cuda":
+                ctx.obj["HW_LOW_VRAM"] = hwp.low_vram
             if hwp.gpu_ids is not None:
                 gpu_ids = hwp.gpu_ids
                 click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
@@ -712,6 +714,10 @@ def pipeline_cmd(
         groups_per_vertex = _qresolved.params["groups_per_vertex"]
     if not _user_set_low_vram and "low_vram" in _qresolved.params:
         low_vram = bool(_qresolved.params["low_vram"])
+
+    # hw-auto: auto-enable low_vram on small GPUs unless user explicitly passed --low-vram.
+    if not _user_set_low_vram and ctx.obj.get("HW_LOW_VRAM", False):
+        low_vram = True
 
     item_id = mesh.stem
     t0 = time.monotonic()

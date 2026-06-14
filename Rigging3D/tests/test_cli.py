@@ -16,6 +16,13 @@ from rigging3d.cli import cli
 def _mock_tree(p: Path) -> None:
     (p / "configs").mkdir(parents=True)
     (p / "src").mkdir()
+    # Config files needed when hw-auto auto-enables low_vram on small GPUs.
+    model_dir = p / "configs" / "model"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "unirig_skin.yaml").write_text("num_train_vertex: 512\n")
+    task_dir = p / "configs" / "task"
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / "quick_inference_unirig_skin.yaml").write_text("components:\n  model: unirig_skin\n")
 
 
 def _bash_write_output_fbx(

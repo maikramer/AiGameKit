@@ -186,6 +186,7 @@ def _append_text2d_profile_args(profile: GameProfile, argv: list[str]) -> None:
     """Extensões do perfil (resolução, VRAM) para `text2d generate`."""
     if not profile.hw_auto:
         argv.append("--no-hw-auto")
+    argv.extend(["--quality", profile.generation or "medium"])
     t2 = profile.text2d
     if not t2:
         return
@@ -203,8 +204,9 @@ def _append_text2d_profile_args(profile: GameProfile, argv: list[str]) -> None:
         argv.extend(["-g", str(t2.guidance_scale)])
 
 
-def _append_texture2d_profile_args(tt: Texture2DProfile, argv: list[str]) -> None:
+def _append_texture2d_profile_args(tt: Texture2DProfile, argv: list[str], *, quality: str | None = None) -> None:
     """Extensões do perfil para `texture2d generate`."""
+    argv.extend(["--quality", quality or "medium"])
     if tt.width is not None:
         argv.extend(["-W", str(tt.width)])
     if tt.height is not None:
@@ -289,8 +291,9 @@ def _resolve_skymap2d_bin(sky: Skymap2DProfile | None = None) -> str:
     return resolve_binary("SKYMAP2D_BIN", "skymap2d")
 
 
-def _append_skymap2d_profile_args(sky: Skymap2DProfile, argv: list[str]) -> None:
+def _append_skymap2d_profile_args(sky: Skymap2DProfile, argv: list[str], *, quality: str | None = None) -> None:
     """Extensões do perfil para `skymap2d generate`."""
+    argv.extend(["--quality", quality or "medium"])
     if sky.width is not None:
         argv.extend(["-W", str(sky.width)])
     if sky.height is not None:

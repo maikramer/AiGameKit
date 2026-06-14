@@ -184,6 +184,15 @@ def run_dream(
 
         if skymap_bin:
             sky_argv = [skymap_bin, "generate", plan.sky_prompt, "-o", str(sky_out)]
+            try:
+                from ..helpers import _append_skymap2d_profile_args, _skymap2d_profile_effective
+                from ..profile import load_profile
+
+                emitted_profile = load_profile(batch_dir / "game.yaml")
+                sky_eff = _skymap2d_profile_effective(emitted_profile)
+                _append_skymap2d_profile_args(sky_eff, sky_argv, quality=emitted_profile.generation)
+            except Exception as exc:
+                console.print(f"[dim]skymap2d profile args skipped: {exc}[/dim]")
             console.print(f"[dim]$ {' '.join(sky_argv)}[/dim]")
             rc_sky = subprocess.call(sky_argv)
             _step("skymap2d generate", ok=rc_sky == 0, detail=f"exit {rc_sky}")

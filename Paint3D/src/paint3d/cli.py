@@ -472,6 +472,19 @@ def texture(
     default=False,
     help="SageAttention (attention INT8, Ampere+; requer pacote sageattention).",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @click.pass_context
 def texture_batch(
@@ -493,6 +506,8 @@ def texture_batch(
     force,
     hw_auto,
     sage_attention,
+    quality,
+    category,
     batch_verbose,
 ):
     """Texturizar batch via manifest JSON. Saída JSONL em stdout."""
@@ -510,6 +525,19 @@ def texture_batch(
     _user_set_view_res = ctx.get_parameter_source("view_resolution") not in (_src.DEFAULT,)
     _user_set_render_size = ctx.get_parameter_source("render_size") not in (_src.DEFAULT,)
     _user_set_tex_size = ctx.get_parameter_source("texture_size") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("paint3d", quality=quality, category=category)
+    if not _user_set_views and "max_views" in _qresolved.params:
+        max_views = _qresolved.params["max_views"]
+    if not _user_set_view_res and "view_resolution" in _qresolved.params:
+        view_resolution = _qresolved.params["view_resolution"]
+    if not _user_set_render_size and "render_size" in _qresolved.params:
+        render_size = _qresolved.params["render_size"]
+    if not _user_set_tex_size and "texture_size" in _qresolved.params:
+        texture_size = _qresolved.params["texture_size"]
 
     hwp = None
     if hw_auto and hw_auto_enabled():

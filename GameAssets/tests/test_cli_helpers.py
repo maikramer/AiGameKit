@@ -424,3 +424,102 @@ def test_append_skymap2d_profile_args() -> None:
     assert "-W" in argv
     assert "2048" in argv
     assert "-s" in argv
+
+
+def test_text3d_argv_includes_quality_and_category() -> None:
+    from gameassets.profile import Text3DProfile
+
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        text3d=Text3DProfile(preset="fast"),
+        generation="high",
+    )
+    argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"), quality="high", category="humanoid")
+    assert "--quality" in argv
+    assert "high" in argv
+    assert "--category" in argv
+    assert "humanoid" in argv
+
+
+def test_paint3d_texture_argv_includes_quality_and_category() -> None:
+    argv = _paint3d_texture_argv(
+        "paint3d", Paint3DProfile(), Path("m.glb"), Path("i.png"), Path("o.glb"),
+        quality="high", category="chest",
+    )
+    assert "--quality" in argv
+    assert "high" in argv
+    assert "--category" in argv
+    assert "chest" in argv
+
+
+def test_rigging3d_pipeline_argv_accepts_quality() -> None:
+    argv = _rigging3d_pipeline_argv(
+        "rigging3d", Path("in.glb"), Path("out.glb"),
+        seed=42, rig_profile=None, quality="high",
+    )
+    assert "--quality" in argv
+    assert "high" in argv
+
+
+def test_rigging3d_pipeline_argv_no_text3d_low_vram_coupling() -> None:
+    argv = _rigging3d_pipeline_argv(
+        "rigging3d", Path("in.glb"), Path("out.glb"),
+        seed=None, rig_profile=Rigging3DProfile(),
+    )
+    assert "--low-vram" not in argv
+
+
+def test_append_text2d_profile_args_includes_quality() -> None:
+    from gameassets.helpers import _append_text2d_profile_args
+    from gameassets.profile import Text2DProfile
+
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        text2d=Text2DProfile(),
+        generation="high",
+    )
+    argv: list[str] = []
+    _append_text2d_profile_args(p, argv)
+    assert "--quality" in argv
+    assert "high" in argv
+
+
+def test_append_texture2d_profile_args_includes_quality() -> None:
+    from gameassets.helpers import _append_texture2d_profile_args
+    from gameassets.profile import Texture2DProfile
+
+    tt = Texture2DProfile(width=512, height=512)
+    argv: list[str] = []
+    _append_texture2d_profile_args(tt, argv, quality="high")
+    assert "--quality" in argv
+    assert "high" in argv
+
+
+def test_append_skymap2d_profile_args_includes_quality() -> None:
+    from gameassets.helpers import _append_skymap2d_profile_args
+    from gameassets.profile import Skymap2DProfile
+
+    sky = Skymap2DProfile(width=2048, height=1024)
+    argv: list[str] = []
+    _append_skymap2d_profile_args(sky, argv, quality="high")
+    assert "--quality" in argv
+    assert "high" in argv
+
+
+def test_text3d_low_vram_uses_low_vram_flag_not_sdnq() -> None:
+    p = GameProfile(
+        title="T",
+        genre="G",
+        tone="t",
+        style_preset="lowpoly",
+        text3d=Text3DProfile(low_vram=True),
+    )
+    argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
+    assert "--low-vram" in argv
+    assert "--sdnq-preset" not in argv

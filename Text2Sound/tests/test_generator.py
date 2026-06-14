@@ -175,3 +175,78 @@ class TestDefaults:
         assert DEFAULT_SIGMA_MIN == 0.3
         assert DEFAULT_SIGMA_MAX == 500.0
         assert DEFAULT_SAMPLER == "dpmpp-3m-sde"
+
+
+class TestShouldUseHalf:
+    def test_returns_true_below_8_5_gib(self):
+        props = MagicMock()
+        props.total_memory = 8 * 1024**3
+        with patch("text2sound.generator.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.cuda.get_device_properties.return_value = props
+            assert AudioGenerator._should_use_half() is True
+
+    def test_returns_false_at_or_above_8_5_gib(self):
+        props = MagicMock()
+        props.total_memory = 12 * 1024**3
+        with patch("text2sound.generator.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.cuda.get_device_properties.return_value = props
+            assert AudioGenerator._should_use_half() is False
+
+    def test_returns_false_no_cuda(self):
+        with patch("text2sound.generator.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = False
+            assert AudioGenerator._should_use_half() is False
+
+
+class TestShouldUseHalfExceptionPath:
+    def test_returns_false_on_exception(self):
+        with patch("text2sound.generator.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.cuda.get_device_properties.side_effect = RuntimeError("fail")
+            assert AudioGenerator._should_use_half() is False
+
+
+class TestHalfPrecisionDecoupled:
+    def test_fp16_fires_without_low_vram_on_small_gpu(self):
+        props = MagicMock()
+        props.total_memory = 8 * 1024**3
+        with patch("text2sound.generator.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.cuda.get_device_properties.return_value = props
+            gen = AudioGenerator(device="cuda", low_vram=False)
+        assert gen._half is True
+
+    def test_fp16_stays_off_on_large_gpu_without_low_vram(self):
+        props = MagicMock()
+        props.total_memory = 12 * 1024**3
+        with patch("text2sound.generator.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.cuda.get_device_properties.return_value = props
+            gen = AudioGenerator(device="cuda", low_vram=False)
+        assert gen._half is False
+
+
+class TestCpuOffloadFallback:
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_cpu_offload_logs_warning_when_unsupported(self, mock_get):
+        mock_model = MagicMock()
+        mock_model.half.return_value = mock_model
+        mock_model.to.return_value = mock_model
+        del mock_model.enable_model_cpu_offload  # no such method
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+        gen = AudioGenerator(device="cuda", low_vram=True)
+        gen.load()
+        assert gen._loaded is True
+
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_cpu_offload_called_when_supported(self, mock_get):
+        mock_model = MagicMock()
+        mock_model.half.return_value = mock_model
+        mock_model.to.return_value = mock_model
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+        gen = AudioGenerator(device="cuda", low_vram=True)
+        gen.load()
+        mock_model.enable_model_cpu_offload.assert_called_once()
+        assert gen._loaded is True

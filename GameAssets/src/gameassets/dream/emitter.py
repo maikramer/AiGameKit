@@ -32,13 +32,12 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
     if plan.negative_keywords:
         doc["negative_keywords"] = plan.negative_keywords
 
-    doc["text2d"] = {"low_vram": True, "width": 768, "height": 768}
+    doc["text2d"] = {"width": 768, "height": 768}
 
     has_3d = any(a.generate_3d for a in plan.assets)
     if has_3d:
         doc["text3d"] = {
             "preset": "fast",
-            "low_vram": False,
             "export_origin": "feet",
         }
         doc["paint3d"] = {"preserve_origin": True}

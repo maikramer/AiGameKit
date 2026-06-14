@@ -460,7 +460,7 @@ def resume_cmd(
                             dash.advance_phase()
                             continue
                         argv = [img_bin, "generate", prompt_2d, "-o", str(tmp_img)]
-                        _append_texture2d_profile_args(tt_line, argv)
+                        _append_texture2d_profile_args(tt_line, argv, quality=profile.generation)
                     else:
                         img_bin = text2d_bin
                         if not img_bin:
@@ -541,6 +541,7 @@ def resume_cmd(
                     s_manifest_path = work_dir / "resume_shape_manifest.json"
                     s_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
                     batch_args = [text3d_bin, "generate-batch", str(s_manifest_path)]
+                    batch_args.extend(["--quality", profile.generation or "medium"])
                     if force:
                         batch_args.append("--force")
                     if t3_opts:
@@ -897,7 +898,7 @@ def resume_cmd(
                             progress.advance(task)
                             continue
                         argv = [img_bin, "generate", prompt_2d, "-o", str(tmp_img)]
-                        _append_texture2d_profile_args(tt_line, argv)
+                        _append_texture2d_profile_args(tt_line, argv, quality=profile.generation)
                     else:
                         img_bin = text2d_bin
                         if not img_bin:
@@ -984,6 +985,7 @@ def resume_cmd(
                     manifest_path = work_dir / "resume_shape_manifest.json"
                     manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
                     batch_args = [text3d_bin, "generate-batch", str(manifest_path)]
+                    batch_args.extend(["--quality", profile.generation or "medium"])
                     if force:
                         batch_args.append("--force")
                     if t3_opts:

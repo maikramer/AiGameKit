@@ -87,6 +87,13 @@ class TestEmitGameYaml:
         doc = yaml.safe_load(out)
         assert "text2sound" not in doc
 
+    def test_no_hardcoded_low_vram(self) -> None:
+        out = emit_game_yaml(_sample_plan())
+        doc = yaml.safe_load(out)
+        for block in ("text2d", "text3d", "paint3d"):
+            if block in doc:
+                assert "low_vram" not in doc[block], f"{block} should not have low_vram hardcoded"
+
 
 class TestEmitWorldXml:
     def test_contains_scene_tags(self) -> None:

@@ -115,12 +115,15 @@ def _rigging3d_pipeline_argv(
     rig_profile: Rigging3DProfile | None,
     gpu_ids: list[int] | None = None,
     hw_auto: bool = True,
+    quality: str | None = None,
 ) -> list[str]:
     args = [rigging3d_bin]
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     if not hw_auto:
         args.append("--no-hw-auto")
+    if quality:
+        args.extend(["--quality", quality])
     args.append("pipeline")
     args.extend(["--input", str(mesh_in), "--output", str(mesh_out)])
     if seed is not None:
@@ -165,8 +168,6 @@ def _rigging3d_pipeline_failed(
         gpu_ids=gpu_ids,
         hw_auto=profile.hw_auto,
     )
-    if profile.text3d and profile.text3d.low_vram:
-        argv.append("--low-vram")
     console.print(f"[cyan]⏳ Rigging[/cyan] {row.id} ...")
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
@@ -196,7 +197,6 @@ def _animator3d_game_pack_argv(
     anim_out: Path,
     *,
     preset: str,
-    gpu_ids: list[int] | None = None,
 ) -> list[str]:
     return [
         animator3d_bin,
@@ -237,7 +237,7 @@ def _animator3d_game_pack_failed(
         return True
     anim_prof = profile.animator3d or Animator3DProfile()
     preset_eff = (anim_prof.preset or preset).strip().lower()
-    argv = _animator3d_game_pack_argv(abin, rigged_glb, animated_glb, preset=preset_eff, gpu_ids=gpu_ids)
+    argv = _animator3d_game_pack_argv(abin, rigged_glb, animated_glb, preset=preset_eff)
     console.print(f"[cyan]⏳ Animation[/cyan] {row.id} (preset={preset_eff}) ...")
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
@@ -312,6 +312,9 @@ def _part3d_decompose_argv(
     p3: Part3DProfile,
     seed: int | None,
     gpu_ids: list[int] | None = None,
+    *,
+    quality: str | None = None,
+    category: str | None = None,
 ) -> list[str]:
     args = [
         part3d_bin,
@@ -322,6 +325,10 @@ def _part3d_decompose_argv(
         "--output-segmented",
         str(out_seg),
     ]
+    if quality:
+        args.extend(["--quality", quality])
+    if category:
+        args.extend(["--category", category])
     if p3.octree_resolution is not None:
         args.extend(["--octree-resolution", str(p3.octree_resolution)])
     if p3.steps is not None:
@@ -528,7 +535,10 @@ def _part3d_pipeline_failed(
     p3 = _part3d_profile_effective(profile, row)  # ← Usa overrides por linha
     out_parts, out_seg = _part3d_output_paths(mesh_final, p3)
     seed = _seed_for_row(profile, f"{row.id}:part3d")
-    argv = _part3d_decompose_argv(part3d_bin, mesh_final, out_parts, out_seg, p3, seed, gpu_ids=gpu_ids)
+    argv = _part3d_decompose_argv(
+        part3d_bin, mesh_final, out_parts, out_seg, p3, seed, gpu_ids=gpu_ids,
+        quality=profile.generation, category=row.category,
+    )
     console.print(f"[cyan]⏳ Part3D[/cyan] {row.id} ...")
     t0 = time.perf_counter()
     r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
@@ -654,6 +664,7 @@ def _post_text3d_mesh_extras(
             with_validate=with_validate,
             bake_normals=bake_normals,
             on_progress_line=on_progress_line,
+            gpu_ids=gpu_ids,
         )
         aggregate_master_results(mres.stages, rec)
         if mres.lod0_path and mres.lod0_path.is_file():
@@ -823,6 +834,9 @@ def _paint3d_texture_argv(
     mesh_out: Path,
     gpu_ids: list[int] | None = None,
     hw_auto: bool = True,
+    *,
+    quality: str | None = None,
+    category: str | None = None,
 ) -> list[str]:
     """Subcomando ``paint3d texture`` (Hunyuan3D-Paint 2.1; saída GLB com material PBR)."""
     args = [
@@ -834,6 +848,10 @@ def _paint3d_texture_argv(
         "-o",
         str(mesh_out),
     ]
+    if quality:
+        args.extend(["--quality", quality])
+    if category:
+        args.extend(["--category", category])
     if p3 is None:
         return args
     if p3.max_views is not None:
@@ -902,6 +920,8 @@ def _texture_subprocess_argv(
         mesh_out,
         gpu_ids=gpu_ids,
         hw_auto=profile.hw_auto,
+        quality=profile.generation,
+        category=row.category if row else None,
     )
 
 
@@ -1067,6 +1087,8 @@ def _text3d_argv(
     row: ManifestRow | None = None,
     *,
     gpu_ids: list[int] | None = None,
+    quality: str | None = None,
+    category: str | None = None,
 ) -> list[str]:
     """Shape-only argv for ``text3d generate`` (image → mesh, sem --texture).
 
@@ -1080,6 +1102,10 @@ def _text3d_argv(
         "-o",
         str(mesh_path),
     ]
+    if quality:
+        args.extend(["--quality", quality])
+    if category:
+        args.extend(["--category", category])
     t3 = profile.text3d
     if not t3:
         return args
@@ -1403,6 +1429,7 @@ def run_master_pipeline(
     with_validate: bool = True,
     bake_normals: bool | None = None,
     on_progress_line: Callable[[str], None] | None = None,
+    gpu_ids: list[int] | None = None,
 ) -> MasterPipelineResult:
     """Executa o DAG novo a partir de ``id_shape.glb`` e ``id_painted.glb``.
 
@@ -1613,9 +1640,16 @@ def run_master_pipeline(
         if rigged_hi_existing is not None and rigged_hi_existing.is_file():
             res.stages.append(StageResult("rigging3d-hi", True, 0.0, "skipped (rigged_hi existente)", rigged_hi_p))
         else:
-            rig_argv = [rigging3d_bin, "pipeline", "--input", str(clean_p), "--output", str(rigged_hi_p)]
-            if not profile.hw_auto:
-                rig_argv.insert(1, "--no-hw-auto")
+            rig_argv = _rigging3d_pipeline_argv(
+                rigging3d_bin,
+                clean_p,
+                rigged_hi_p,
+                seed=_seed_for_row(profile, row.id),
+                rig_profile=profile.rigging3d,
+                gpu_ids=gpu_ids,
+                hw_auto=profile.hw_auto,
+                quality=profile.generation,
+            )
             s = _run("rigging3d-hi", rig_argv, rigged_hi_p)
             res.stages.append(s)
             if not s.ok:
@@ -1827,6 +1861,7 @@ def resume_master_pipeline(
     with_validate: bool = True,
     bake_normals: bool | None = None,
     on_progress_line: Callable[[str], None] | None = None,
+    gpu_ids: list[int] | None = None,
 ) -> MasterPipelineResult:
     """Retoma o master pipeline a partir do checkpoint detectado.
 
@@ -1880,6 +1915,7 @@ def resume_master_pipeline(
         with_validate=with_validate,
         bake_normals=bake_normals,
         on_progress_line=on_progress_line,
+        gpu_ids=gpu_ids,
     )
 
 

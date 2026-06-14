@@ -70,9 +70,10 @@ class AudioGenerator:
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._auto_clear = auto_clear
         if half_precision is None:
-            self._half = self._device == "cuda" and low_vram and self._should_use_half()
+            self._half = self._device == "cuda" and self._should_use_half()
         else:
             self._half = half_precision
+        self._low_vram = low_vram
         self._gpu_ids = gpu_ids
         self._multi_gpu: bool = False
         self._model: Any = None
@@ -85,10 +86,10 @@ class AudioGenerator:
         if not torch.cuda.is_available():
             return False
         try:
-            vram = torch.cuda.get_device_properties(0).total_mem
+            vram = torch.cuda.get_device_properties(0).total_memory
             return vram < 8.5 * (1024**3)
         except Exception:
-            return True
+            return False
 
     @classmethod
     def get_instance(
@@ -164,10 +165,29 @@ class AudioGenerator:
             self._model = self._model.half()
         self._model = self._model.to(self._device)
 
+        if self._low_vram and self._device == "cuda":
+            self._try_cpu_offload()
+
         if self._gpu_ids and len(self._gpu_ids) >= 2 and self._device == "cuda":
             self._try_multi_gpu()
 
         self._loaded = True
+
+    def _try_cpu_offload(self) -> None:
+        """Tenta CPU offload (difusores) para reduzir pico de VRAM.
+
+        Alguns modelos expõem ``enable_model_cpu_offload()``; quando ausente,
+        regista aviso e prossegue sem offload.
+        """
+        try:
+            self._model.enable_model_cpu_offload()
+        except AttributeError:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Modelo não suporta enable_model_cpu_offload(); "
+                "a continuar sem CPU offload (possível pico de VRAM em GPUs pequenas)."
+            )
 
     def _try_multi_gpu(self) -> None:
         """Tenta dispatch multi-GPU via accelerate (MultiGPUPlanner)."""

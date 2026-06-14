@@ -36,6 +36,7 @@ class Rigging3DHardwareProfile:
     gpu_ids: list[int] | None  # GPU escolhida p/ CUDA_VISIBLE_DEVICES (1 elem)
     free_gib: float  # VRAM livre da GPU escolhida
     low_vram_warning: bool
+    low_vram: bool
 
     def summary(self) -> str:
         parts = [self.name]
@@ -55,6 +56,7 @@ def profile_from_specs(gpus: list[tuple[int, int, int]]) -> Rigging3DHardwarePro
             gpu_ids=None,
             free_gib=0.0,
             low_vram_warning=True,
+            low_vram=True,
         )
 
     largest_total = max(total for _, _, total in gpus) / GIB
@@ -69,6 +71,7 @@ def profile_from_specs(gpus: list[tuple[int, int, int]]) -> Rigging3DHardwarePro
         gpu_ids=[best_idx] if multi else None,
         free_gib=round(best_free / GIB, 1),
         low_vram_warning=(best_total / GIB) < LOW_VRAM_WARN_GIB,
+        low_vram=(best_total / GIB) < LOW_VRAM_WARN_GIB,
     )
 
 

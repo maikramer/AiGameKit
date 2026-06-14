@@ -137,6 +137,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Quality tier (fast / low / medium / high / highest).",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: liga CPU offload e clamp de resolução em "
+        "GPUs pequenas. Flags explícitas ganham. Env: TEXTURE2D_HW_AUTO=0."
+    ),
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -157,6 +167,7 @@ def generate_cmd(
     low_vram: bool,
     gpu_ids_str: str | None,
     quality: str,
+    hw_auto: bool,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -186,8 +197,24 @@ def generate_cmd(
     if not cpu:
         warn_if_vram_occupied()
 
+    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled() and not cpu:
+        hwp = detect_hardware_profile()
+        if not low_vram and hwp.low_vram and hwp.device == "cuda":
+            low_vram = True
+        # Clamp resolution only if user didn't set it explicitly.
+        if not _user_set_width and hwp.max_width is not None:
+            width = min(width, hwp.max_width)
+        if not _user_set_height and hwp.max_height is not None:
+            height = min(height, hwp.max_height)
+
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    if gpu_ids is None and hwp is not None and hwp.gpu_ids:
+        gpu_ids = hwp.gpu_ids
     resolved_model = model_id or default_model_id()
 
     table = Table(show_header=False, box=box.SIMPLE)
@@ -198,6 +225,8 @@ def generate_cmd(
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
     table.add_row("[bold]Modelo LoRA[/bold]", resolved_model)
+    if hwp is not None:
+        table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     t_start = time.time()
@@ -317,6 +346,13 @@ def presets_cmd() -> None:
     show_default=True,
     help="Quality tier (fast / low / medium / high / highest).",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: TEXTURE2D_HW_AUTO=0.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -331,6 +367,7 @@ def batch_cmd(
     low_vram: bool,
     gpu_ids_str: str | None,
     quality: str,
+    hw_auto: bool,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -353,7 +390,24 @@ def batch_cmd(
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
 
+    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled():
+        hwp = detect_hardware_profile()
+        if not low_vram and hwp.low_vram and hwp.device == "cuda":
+            low_vram = True
+        if not _user_set_width and hwp.max_width is not None:
+            width = min(width, hwp.max_width)
+        if not _user_set_height and hwp.max_height is not None:
+            height = min(height, hwp.max_height)
+    if hwp is not None:
+        Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
+
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+    if gpu_ids is None and hwp is not None and hwp.gpu_ids:
+        gpu_ids = hwp.gpu_ids
 
     prompts = [
         line.strip()
@@ -443,6 +497,12 @@ def info_cmd() -> None:
     t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
     t.add_row("Saída padrão", str(DEFAULT_TEXTURE_DIR.resolve()))
     t.add_row("Presets disponíveis", str(len(TEXTURE_PRESETS)))
+
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    _hwp = detect_hardware_profile()
+    _state = "" if hw_auto_enabled() else " [yellow](desligado: TEXTURE2D_HW_AUTO=0)[/yellow]"
+    t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
     console.print(t)
 

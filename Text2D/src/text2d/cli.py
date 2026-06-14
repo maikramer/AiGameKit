@@ -362,8 +362,17 @@ atexit.register(_batch_cleanup)
     show_default=True,
     help="Auto-detecção de hardware (offload/modelo/multi-GPU). Env: TEXT2D_HW_AUTO=0.",
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+@click.pass_context
 def generate_batch_cmd(
+    ctx: click.Context,
     manifest: str,
     output_dir: str,
     width: int,
@@ -377,6 +386,7 @@ def generate_batch_cmd(
     force: bool,
     hw_auto: bool,
     batch_verbose: bool,
+    quality: str,
 ) -> None:
     """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
     global _batch_gen
@@ -397,6 +407,23 @@ def generate_batch_cmd(
         if missing:
             console.print(f"[red]Item {i} falta:[/red] {', '.join(missing)}")
             sys.exit(1)
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
+    _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
+    _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("text2d", quality=quality)
+    if not _user_set_width and "width" in _qresolved.params:
+        width = _qresolved.params["width"]
+    if not _user_set_height and "height" in _qresolved.params:
+        height = _qresolved.params["height"]
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
 
     if not cpu:
         warn_if_vram_occupied()

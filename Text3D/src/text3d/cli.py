@@ -1630,8 +1630,23 @@ def align_plus_z_cmd(
         "volume decoder pelo perfil da(s) GPU(s) quando não definidos. Env: TEXT3D_HW_AUTO=0."
     ),
 )
+@click.option(
+    "--quality",
+    type=click.Choice(list(VALID_QUALITIES)),
+    default="medium",
+    show_default=True,
+    help="Quality tier (fast / low / medium / high / highest).",
+)
+@click.option(
+    "--category",
+    type=str,
+    default=None,
+    help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+@click.pass_context
 def generate_batch(
+    ctx,
     manifest: str,
     output_dir: str,
     preset: str | None,
@@ -1653,6 +1668,8 @@ def generate_batch(
     sage_attention: bool,
     sdnq_matmul: bool,
     hw_auto: bool,
+    quality: str,
+    category: str | None,
     batch_verbose: bool,
 ) -> None:
     """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout)."""
@@ -1672,6 +1689,29 @@ def generate_batch(
         for key in ("id", "image", "output"):
             if key not in item:
                 raise click.ClickException(f"Item {i}: campo '{key}' em falta.")
+
+    # QualityEngine: soft resolution — fills defaults when user didn't specify.
+    _src = click.core.ParameterSource
+    _user_set_preset = ctx.get_parameter_source("preset") not in (_src.DEFAULT,)
+    _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+    _user_set_guidance = ctx.get_parameter_source("guidance") not in (_src.DEFAULT,)
+    _user_set_octree = ctx.get_parameter_source("octree_resolution") not in (_src.DEFAULT,)
+    _user_set_chunks = ctx.get_parameter_source("num_chunks") not in (_src.DEFAULT,)
+
+    from gamedev_shared.quality import QualityEngine
+
+    _qengine = QualityEngine()
+    _qresolved = _qengine.resolve("text3d", quality=quality, category=category)
+    if not _user_set_preset and "preset" in _qresolved.params:
+        preset = _qresolved.params["preset"]
+    if not _user_set_guidance and "guidance" in _qresolved.params:
+        guidance = _qresolved.params["guidance"]
+    if not _user_set_steps and "steps" in _qresolved.params:
+        steps = _qresolved.params["steps"]
+    if not _user_set_octree and "octree" in _qresolved.params:
+        octree_resolution = _qresolved.params["octree"]
+    if not _user_set_chunks and "chunks" in _qresolved.params:
+        num_chunks = _qresolved.params["chunks"]
 
     base_steps = steps
     base_octree = octree_resolution

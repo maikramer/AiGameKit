@@ -567,7 +567,7 @@ def batch_cmd(
             sky_eff = _skymap2d_profile_effective(profile)
             sky_out_dir = Path(profile.output_dir) / "sky"
             sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
-            _append_skymap2d_profile_args(sky_eff, sky_argv)
+            _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
             _dry_run_emit(dry_plan, phase="Skymap2D", row_id=None, argv=sky_argv)
         if not skip_text2d:
             if any_texture2d_row and any_text2d_row:
@@ -594,7 +594,7 @@ def batch_cmd(
                         ]
                         if seed is not None:
                             t2d_args.extend(["--seed", str(seed)])
-                        _append_texture2d_profile_args(tt_line, t2d_args)
+                        _append_texture2d_profile_args(tt_line, t2d_args, quality=profile.generation)
                         _dry_run_emit(dry_plan, phase=p1_title, row_id=row.id, argv=t2d_args)
                         if tt_line.materialize:
                             maps_ph = _texture2d_material_maps_path(profile, row)
@@ -633,8 +633,6 @@ def batch_cmd(
                     if seed_a is not None:
                         argv_au.extend(["--seed", str(seed_a)])
                     _text2sound_args_for_row(ts_line, row, argv_au)
-                    if profile.text3d and profile.text3d.low_vram:
-                        argv_au.append("--low-vram")
                     _dry_run_emit(dry_plan, phase=p1_title + " text2sound", row_id=row.id, argv=argv_au)
         else:
             _dry_run_header(dry_plan, "--- Text2D omitido (--skip-text2d) ---")
@@ -660,8 +658,6 @@ def batch_cmd(
                     if seed_a is not None:
                         argv_au.extend(["--seed", str(seed_a)])
                     _text2sound_args_for_row(ts_line, row, argv_au)
-                    if profile.text3d and profile.text3d.low_vram:
-                        argv_au.append("--low-vram")
                     _dry_run_emit(
                         dry_plan,
                         phase="text2sound (skip-text2d)",
@@ -684,6 +680,7 @@ def batch_cmd(
 
                 # Shape batch dry-run
                 shape_argv = [text3d_bin, "generate-batch", "<shape_manifest.json>"]
+                shape_argv.extend(["--quality", profile.generation or "medium"])
                 if t3d:
                     if not should_optimize_text3d(t3d):
                         if t3d.preset:
@@ -738,6 +735,7 @@ def batch_cmd(
                 else:
                     # Paint batch dry-run
                     paint_argv = [paint3d_bin or "paint3d", "texture-batch", "<paint_manifest.json>"]
+                    paint_argv.extend(["--quality", profile.generation or "medium"])
                     if t3d:
                         if t3d.allow_shared_gpu:
                             paint_argv.append("--allow-shared-gpu")
@@ -1016,7 +1014,7 @@ def batch_cmd(
                         sky_out_dir = Path(profile.output_dir) / "sky"
                         sky_out_dir.mkdir(parents=True, exist_ok=True)
                         sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
-                        _append_skymap2d_profile_args(sky_eff, sky_argv)
+                        _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
                         dash.set_phase("Skymap2D", 1)
                         dash.update_asset("skymap", "running", "A gerar skymap...")
                         t_sky = time.perf_counter()
@@ -1213,7 +1211,7 @@ def batch_cmd(
                                 t2d_args = [texture2d_bin or "", "generate", prompt, "-o", str(img_tmp_d)]
                                 if seed is not None:
                                     t2d_args.extend(["--seed", str(seed)])
-                                _append_texture2d_profile_args(tt_line, t2d_args)
+                                _append_texture2d_profile_args(tt_line, t2d_args, quality=profile.generation)
                                 tool_fail = "texture2d falhou"
                                 tool_empty = "texture2d não produziu ficheiro de imagem"
                             else:
@@ -1335,8 +1333,6 @@ def batch_cmd(
                                 if seed_a is not None:
                                     argv_au.extend(["--seed", str(seed_a)])
                                 _text2sound_args_for_row(ts_line, row, argv_au)
-                                if profile.text3d and profile.text3d.low_vram:
-                                    argv_au.append("--low-vram")
                                 dash.feed_event(row.id, "text2sound", "progress", phase="generating", percent=0)
                                 t_au_d = time.perf_counter()
                                 r_au_d = run_cmd_streaming(
@@ -1439,6 +1435,7 @@ def batch_cmd(
                                 shape_manifest_path.write_text(json.dumps(shape_items_d, indent=2))
 
                                 batch_args = [text3d_bin, "generate-batch", str(shape_manifest_path)]
+                                batch_args.extend(["--quality", profile.generation or "medium"])
                                 if force:
                                     batch_args.append("--force")
                                 t3 = profile.text3d
@@ -1620,6 +1617,7 @@ def batch_cmd(
                                         paint_manifest_path.write_text(json.dumps(paint_items_d, indent=2))
 
                                         batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
+                                        batch_args.extend(["--quality", profile.generation or "medium"])
                                         if force:
                                             batch_args.append("--force")
                                         t3 = profile.text3d
@@ -1952,7 +1950,7 @@ def batch_cmd(
                         sky_out_dir = Path(profile.output_dir) / "sky"
                         sky_out_dir.mkdir(parents=True, exist_ok=True)
                         sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
-                        _append_skymap2d_profile_args(sky_eff, sky_argv)
+                        _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
                         progress.console.print("[cyan]Skymap2D[/cyan] — a gerar skymap...")
                         t_sky = time.perf_counter()
                         r_sky = run_cmd(sky_argv, extra_env=child_env, cwd=manifest_dir)
@@ -2203,7 +2201,7 @@ def batch_cmd(
                                 ]
                                 if seed is not None:
                                     t2d_args.extend(["--seed", str(seed)])
-                                _append_texture2d_profile_args(tt_line, t2d_args)
+                                _append_texture2d_profile_args(tt_line, t2d_args, quality=profile.generation)
                                 tool_fail = "texture2d falhou"
                                 tool_empty = "texture2d não produziu ficheiro de imagem"
                                 tool_short = "texture2d"
@@ -2339,8 +2337,6 @@ def batch_cmd(
                                 if seed_a is not None:
                                     argv_au.extend(["--seed", str(seed_a)])
                                 _text2sound_args_for_row(ts_line, row, argv_au)
-                                if profile.text3d and profile.text3d.low_vram:
-                                    argv_au.append("--low-vram")
                                 t_au = time.perf_counter()
                                 r_au = run_cmd(argv_au, extra_env=child_env, cwd=manifest_dir)
                                 _timing_append(rec, "text2sound", time.perf_counter() - t_au)
@@ -2461,6 +2457,7 @@ def batch_cmd(
                                 shape_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
 
                                 batch_args = [text3d_bin, "generate-batch", str(shape_manifest_path)]
+                                batch_args.extend(["--quality", profile.generation or "medium"])
                                 if force:
                                     batch_args.append("--force")
                                 t3 = profile.text3d
@@ -2662,6 +2659,7 @@ def batch_cmd(
                                     paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
 
                                     batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
+                                    batch_args.extend(["--quality", profile.generation or "medium"])
                                     if force:
                                         batch_args.append("--force")
                                     t3 = profile.text3d
