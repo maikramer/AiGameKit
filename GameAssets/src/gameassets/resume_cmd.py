@@ -43,7 +43,6 @@ from .paths import (
     _classify_row_state,
     _classify_row_state_master,
     _install_file,
-    _painted_existing,
     _painted_path,
     _paths_for_row_manifest,
     _rigging3d_output_path,

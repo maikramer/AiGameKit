@@ -9,7 +9,7 @@ Perfis por tier de VRAM:
 
 - >= 10 GiB (single ou multi-GPU): FP16, sem overrides (usa defaults CLI:
   6 views @ 640px, render 2048, texture 4096). DINO em GPU fp16.
-- 8.0 – 10.0 GiB (ex: RTX 4060 8GB): FP16, 6v@512, render 1536, tex 3072.
+- 8.0 - 10.0 GiB (ex: RTX 4060 8GB): FP16, 6v@512, render 1536, tex 3072.
 - < 8.0 GiB (ex: RTX 4050 6GB): SDNQ uint8, 6v@512, render 1536, tex 3072,
   CFG chunking (forwards uncond/ref/full sequenciais) + ref-UNet offload —
   medido: pico 4.45 GiB na 4050 6GB.
@@ -107,7 +107,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
             total_vram_gib=round(total_gib, 1),
         )
 
-    # 8.0 – 10.0 GiB: FP16, mid-tier resolutions
+    # 8.0 - 10.0 GiB: FP16, mid-tier resolutions
     if capacity_gib >= MID_TIER_MIN_GIB:
         return Paint3DHardwareProfile(
             name=name,

@@ -882,7 +882,7 @@ def pipeline_cmd(
         finally:
             if cleanup is not None and not keep_temp:
                 shutil.rmtree(cleanup, ignore_errors=True)
-            elif low_vram:
+            elif low_vram and not keep_temp:
                 for p in _low_vram_cleanup:
                     p.unlink(missing_ok=True)
 

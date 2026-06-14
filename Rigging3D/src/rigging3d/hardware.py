@@ -43,7 +43,7 @@ class Rigging3DHardwareProfile:
         if self.gpu_ids is not None:
             parts.append(f"gpu={self.gpu_ids[0]} ({self.free_gib:.1f}GiB livre)")
         if self.low_vram_warning:
-            parts.append("aviso: <6.5GiB — meshes densas podem dar OOM")
+            parts.append(f"aviso: <{LOW_VRAM_WARN_GIB}GiB — meshes densas podem dar OOM")
         return " | ".join(parts)
 
 

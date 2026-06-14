@@ -1697,6 +1697,7 @@ def generate_batch(
     _user_set_guidance = ctx.get_parameter_source("guidance") not in (_src.DEFAULT,)
     _user_set_octree = ctx.get_parameter_source("octree_resolution") not in (_src.DEFAULT,)
     _user_set_chunks = ctx.get_parameter_source("num_chunks") not in (_src.DEFAULT,)
+    _user_set_quality = ctx.get_parameter_source("quality") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -1732,10 +1733,14 @@ def generate_batch(
     hwp = None
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if preset is None:
-            base_steps = base_steps if base_steps is not None else hwp.steps
-            base_octree = base_octree if base_octree is not None else hwp.octree
-            base_chunks = base_chunks if base_chunks is not None else hwp.chunks
+        _params_untouched = not (
+            _user_set_preset or _user_set_quality or _user_set_steps
+            or _user_set_octree or _user_set_chunks
+        )
+        if _params_untouched:
+            base_steps = hwp.steps
+            base_octree = hwp.octree
+            base_chunks = hwp.chunks
         if sdnq_preset is None and hwp.sdnq_preset:
             sdnq_preset = hwp.sdnq_preset
         if parsed_gpu_ids is None and hwp.gpu_ids:

@@ -807,8 +807,6 @@ def batch_cmd(
                     rig_profile=rg,
                     gpu_ids=gpu_ids,
                 )
-                if profile.text3d and profile.text3d.low_vram:
-                    rg_args.append("--low-vram")
                 _dry_run_emit(dry_plan, phase="rigging3d", row_id=row.id, argv=rg_args)
         if (
             with_animate
@@ -834,7 +832,7 @@ def batch_cmd(
                 anim_out = _animator3d_output_path(rig_out)
                 anim_prof = profile.animator3d or Animator3DProfile()
                 preset = (anim_prof.preset or "humanoid").strip().lower()
-                ap_args = _animator3d_game_pack_argv(animator3d_bin, rig_out, anim_out, preset=preset, gpu_ids=gpu_ids)
+                ap_args = _animator3d_game_pack_argv(animator3d_bin, rig_out, anim_out, preset=preset)
                 _dry_run_emit(dry_plan, phase="animator3d", row_id=row.id, argv=ap_args)
         if dry_run_json is not None and dry_plan is not None:
             payload = {
@@ -1979,7 +1977,6 @@ def batch_cmd(
 
                     # --- Text2D batch: pre-generate all Text2D images in one subprocess ---
                     # --- Pre-classify rows for skip logic ---
-                    want_texture = bool(profile.paint3d)
                     done_indices: set[int] = set()
                     skip_img_indices: set[int] = set()
                     for _ci, _crow in enumerate(rows):
