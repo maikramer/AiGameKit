@@ -110,6 +110,6 @@ export const compositionParser: Parser = ({ entity, element, state }) => {
   const colliderMode = resolveColliderMode(element.attributes.collider);
   setCompositionData(state, entity, { specs, colliderMode });
 
-  setupRigidbody(entity, resolveBodyType(element.attributes.body));
+  setupRigidbody(state, entity, resolveBodyType(element.attributes.body));
   setupPlace(state, entity, element.attributes.place);
 };

@@ -2,6 +2,7 @@
 import { AiSteeringPlugin } from './ai-steering/plugin';
 import { AnimationPlugin } from './animation/plugin';
 import { BvhPlugin } from './bvh/plugin';
+import { CompositionPlugin } from './composition/plugin';
 import { PlayerControllerPlugin } from './player-controller/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
 import { EntityScriptPlugin } from './entity-script/plugin';
@@ -46,6 +47,7 @@ export const DefaultPlugins: Plugin[] = [
   StartupPlugin,
   TerrainPlugin,
   BvhPlugin,
+  CompositionPlugin,
   SpawnerPlugin,
   NavMeshPlugin,
   AudioPlugin,
