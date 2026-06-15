@@ -17,6 +17,16 @@ export function getStoneCount(): number {
   return stoneCount;
 }
 
+export function removeStone(amount: number): boolean {
+  if (stoneCount < amount) return false;
+  stoneCount -= amount;
+  return true;
+}
+
+export function removeStones(amount: number): boolean {
+  return removeStone(amount);
+}
+
 export function getLastCollectPosition(): {
   x: number;
   y: number;
