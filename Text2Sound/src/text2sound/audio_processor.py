@@ -74,6 +74,37 @@ def trim_silence(
     return audio[:, start_idx:end_idx]
 
 
+def crop_to_duration(
+    audio: torch.Tensor,
+    sample_rate: int,
+    crop_seconds: float,
+    fade_out_seconds: float = 0.06,
+) -> torch.Tensor:
+    """Hard-truncate to ``crop_seconds`` with an optional linear fade-out.
+
+    Stable Audio models emit a fixed-length buffer regardless of the requested
+    duration; ``--trim`` only strips silence (the model rarely produces any at
+    the tail). This truncates to the gameplay-relevant length the caller asked
+    for, then fades the last ``fade_out_seconds`` to avoid a click at the cut.
+
+    Args:
+        audio: Tensor (channels, samples).
+        sample_rate: Sample rate in Hz.
+        crop_seconds: Target length in seconds; shorter audio is returned as-is.
+        fade_out_seconds: Linear fade-out applied to the tail (0 = hard cut).
+    """
+    max_samples = int(crop_seconds * sample_rate)
+    if audio.shape[-1] <= max_samples:
+        return audio
+    cropped = audio[:, :max_samples].clone()
+    if fade_out_seconds > 0:
+        fade_n = min(int(fade_out_seconds * sample_rate), max_samples // 2)
+        if fade_n > 1:
+            curve = torch.linspace(1.0, 0.0, fade_n, device=cropped.device, dtype=cropped.dtype)
+            cropped[:, -fade_n:] = cropped[:, -fade_n:] * curve
+    return cropped
+
+
 def apply_edge_fade(
     audio: torch.Tensor,
     sample_rate: int,
@@ -174,6 +205,8 @@ def save_audio(
     apply_fade: bool = True,
     seamless_loop: bool = False,
     crossfade_ms: float = 500.0,
+    crop_seconds: float | None = None,
+    fade_out_seconds: float = 0.06,
 ) -> Path:
     """Processa e grava áudio num ficheiro.
 
@@ -207,6 +240,9 @@ def save_audio(
     if trim:
         audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=trim_buffer_ms)
 
+    if crop_seconds is not None:
+        audio = crop_to_duration(audio, sample_rate, crop_seconds, fade_out_seconds)
+
     if seamless_loop:
         audio = apply_seamless_loop_crossfade(audio, sample_rate, crossfade_ms=crossfade_ms)
     elif apply_fade:
@@ -224,6 +260,9 @@ def save_audio(
         if seamless_loop:
             metadata["seamless_loop"] = True
             metadata["crossfade_ms"] = crossfade_ms
+        if crop_seconds is not None:
+            metadata["crop_seconds"] = crop_seconds
+            metadata["fade_out_seconds"] = fade_out_seconds
         meta_path = output_path.with_suffix(output_path.suffix + ".json")
         meta_path.write_text(
             json.dumps(metadata, indent=2, ensure_ascii=False),

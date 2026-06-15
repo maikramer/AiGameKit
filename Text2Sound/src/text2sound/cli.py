@@ -283,6 +283,20 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="Asset category for automatic audio tuning (e.g., weapon, humanoid)",
 )
+@click.option(
+    "--crop/--no-crop",
+    default=False,
+    help="Truncate output to the requested -d duration with a fade-out. "
+         "The model emits a fixed-length buffer regardless of -d.",
+)
+@click.option(
+    "--fade-out",
+    "fade_out",
+    default=0.06,
+    show_default=True,
+    type=click.FloatRange(min=0.0, max=5.0),
+    help="Linear fade-out in seconds on the tail when --crop is active (0 = hard cut).",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -307,6 +321,8 @@ def generate_cmd(
     profiler_flag: bool,
     quality: str,
     category: str | None,
+    crop: bool,
+    fade_out: float,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -542,6 +558,8 @@ def generate_cmd(
                         trim_threshold_db=trim_threshold_db,
                         seamless_loop=seamless_loop,
                         crossfade_ms=crossfade_ms,
+                        crop_seconds=duration if crop else None,
+                        fade_out_seconds=fade_out,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
@@ -636,6 +654,19 @@ def generate_cmd(
     default=None,
     help="Seed base por clip: usa seed, seed+1, seed+2, … (omitir = aleatório por linha)",
 )
+@click.option(
+    "--crop/--no-crop",
+    default=False,
+    help="Truncate each output to the -d duration with a fade-out.",
+)
+@click.option(
+    "--fade-out",
+    "fade_out",
+    default=0.06,
+    show_default=True,
+    type=click.FloatRange(min=0.0, max=5.0),
+    help="Linear fade-out in seconds on the tail when --crop is active.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -656,6 +687,8 @@ def batch_cmd(
     low_vram: bool,
     gpu_ids_str: str | None,
     seed: int | None,
+    crop: bool,
+    fade_out: float,
 ) -> None:
     """Gera áudios em batch a partir de um ficheiro de prompts (um por linha)."""
     verbose = bool(ctx.obj.get("VERBOSE"))
@@ -783,6 +816,8 @@ def batch_cmd(
                 fmt=fmt,
                 trim=trim,
                 metadata=metadata,
+                crop_seconds=duration if crop else None,
+                fade_out_seconds=fade_out,
             )
             emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)
 
