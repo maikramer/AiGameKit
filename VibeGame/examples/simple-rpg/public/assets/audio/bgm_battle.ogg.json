@@ -1,0 +1,20 @@
+{
+  "prompt": "intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm, epic adventure",
+  "profile": "effects",
+  "model_id": "stabilityai/stable-audio-open-small",
+  "duration": 11.0,
+  "steps": 100,
+  "cfg_scale": 1.0,
+  "seed": 220,
+  "seed_effective": 220,
+  "sampler": "euler",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0"
+}

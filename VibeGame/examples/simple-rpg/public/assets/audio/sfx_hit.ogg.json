@@ -1,0 +1,21 @@
+{
+  "prompt": "sharp metal sword clash, bright metallic ring, short combat hit impact, Metal sword clash and parry, sharp metallic impact of blades, weapon combat sound effect with ring",
+  "profile": "effects",
+  "model_id": "stabilityai/stable-audio-open-small",
+  "duration": 2,
+  "steps": 32,
+  "cfg_scale": 6.0,
+  "seed": 201,
+  "seed_effective": 201,
+  "sampler": "dpmpp-3m-sde",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0",
+  "preset": "sword-clash"
+}
