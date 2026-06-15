@@ -170,6 +170,27 @@ export {
   SteeringTarget,
 } from './plugins/ai-steering';
 
+export {
+  NavMeshPlugin,
+  NavMeshSurface,
+  NavMeshWalkable,
+  NavMeshAgent,
+  navMeshRecipe,
+  navMeshWalkableRecipe,
+  navMeshAgentRecipe,
+  NavMeshInitSystem,
+  NavMeshAgentSystem,
+  collectNavmeshGeometry,
+  isNavMeshReady,
+  createAgent,
+  setAgentTarget,
+  clearAgentTarget,
+  removeAgent,
+  getAgentPosition,
+  getNavMeshDebugMesh,
+} from './plugins/navmesh';
+export type { NavMeshGeometry, AgentConfig } from './plugins/navmesh';
+
 export { HudPlugin, HudPanel } from './plugins/hud';
 
 export {
