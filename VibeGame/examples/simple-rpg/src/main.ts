@@ -14,6 +14,7 @@ declare global {
 import type { System, State } from 'vibegame';
 import {
   AudioSource,
+  NavMeshPlugin,
   PlayerController,
   configure,
   getBuilder,
@@ -70,12 +71,15 @@ setKTX2TranscoderPath('/libs/basis/');
 import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
 import { DebugPlugin } from '../../../src/plugins/debug/index.ts';
 import { Health, isDead } from '../../../src/plugins/combat/components.ts';
-import { getWaveNumber, getEnemiesAlive } from './scripts/wave-manager';
 import {
   addStone,
   getStoneCount,
   getLastCollectPosition,
 } from './scripts/inventory';
+import { addWood, getWoodCount } from './scripts/wood';
+import { getGold } from './game/economy';
+import { isWoodEntity } from './scripts/tree';
+import { NavMeshAgent } from '../../../src/plugins/navmesh/index';
 
 const SAVE_KEY = 'simple-rpg-save';
 
@@ -248,42 +252,44 @@ const PostFxToggleSystem: System = {
 
 const dictEN: Record<string, string> = {
   'hud.title': 'Crystal Vale',
-  'hud.mission': 'Survive the enemy waves!',
+  'hud.mission': 'Explore, hunt creatures, gather & trade!',
   'hud.hp': 'HP: {hp} / {max}',
-  'hud.wave': 'Wave {wave} — Enemies: {enemies}',
+  'hud.stats': 'Gold: {gold} · Wood: {wood} · Stone: {stone}',
+  'hud.enemies': 'Creatures nearby: {enemies}',
   'hud.time': 'Time: {time}',
   'hud.locale': 'Language: {lang}  [I] switch',
   'hud.saved': 'Game saved!',
   'hud.loaded': 'Save restored.',
   'hud.no-save': 'No save found.',
   'hud.healed': 'Health restored!',
-  'hud.waveComplete': 'Wave {wave} Complete! — Next wave incoming...',
+  'hud.sold': 'Sold! +{gold} gold',
   'hud.gameOver': 'GAME OVER',
-  'hud.waveReached': 'Wave {wave} reached',
+  'hud.waveReached': 'You survived',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [J] attack  [K] talk  [L] back  [Q] save  [E] load  [I] EN/PT',
+    '[W/S] move  [A/D] turn  [Space] jump  [J] attack/chop  [K] talk/trade  [L] close  [Q] save  [E] load  [I] EN/PT',
   'hud.stone': 'Stone: {count}',
   'hud.stoneCollected': '+1 Stone!',
 };
 
 const dictPT: Record<string, string> = {
   'hud.title': 'Vale do Cristal',
-  'hud.mission': 'Sobrevive às ondas de inimigos!',
+  'hud.mission': 'Explora, caça criaturas, recolhe e comercia!',
   'hud.hp': 'HP: {hp} / {max}',
-  'hud.wave': 'Onda {wave} — Inimigos: {enemies}',
+  'hud.stats': 'Ouro: {gold} · Madeira: {wood} · Pedra: {stone}',
+  'hud.enemies': 'Criaturas próximas: {enemies}',
   'hud.time': 'Tempo: {time}',
   'hud.locale': 'Idioma: {lang}  [I] trocar',
   'hud.saved': 'Jogo gravado!',
   'hud.loaded': 'Progresso restaurado.',
   'hud.no-save': 'Nenhuma gravação encontrada.',
   'hud.healed': 'Saúde restaurada!',
-  'hud.waveComplete': 'Onda {wave} Completa! — Próxima onda a chegar...',
+  'hud.sold': 'Vendido! +{gold} ouro',
   'hud.gameOver': 'FIM DE JOGO',
-  'hud.waveReached': 'Onda {wave} alcançada',
+  'hud.waveReached': 'Sobreviveste',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] virar  [Espaço] saltar  [J] atacar  [K] falar  [L] voltar  [Q] gravar  [E] carregar  [I] EN/PT',
+    '[W/S] mover  [A/D] virar  [Espaço] saltar  [J] atacar/cortar  [K] falar/comerciar  [L] fechar  [Q] gravar  [E] carregar  [I] EN/PT',
   'hud.stone': 'Pedra: {count}',
   'hud.stoneCollected': '+1 Pedra!',
 };
@@ -295,10 +301,16 @@ let healthBarFill: HTMLDivElement | null = null;
 let healthBarText: HTMLSpanElement | null = null;
 let damageFlashEl: HTMLDivElement | null = null;
 let waveCompleteEl: HTMLDivElement | null = null;
-let gameOverEl: HTMLDivElement | null = null;
+let winEl: HTMLDivElement | null = null;
 let waveTopEl: HTMLDivElement | null = null;
 let hudRootEl: HTMLDivElement | null = null;
 let stoneCountEl: HTMLDivElement | null = null;
+let goldCountEl: HTMLDivElement | null = null;
+let woodCountEl: HTMLDivElement | null = null;
+let bossBarEl: HTMLDivElement | null = null;
+let bossBarFill: HTMLDivElement | null = null;
+let bossBarText: HTMLSpanElement | null = null;
+let deathEl: HTMLDivElement | null = null;
 let hudRevealed = false;
 
 let eidSfxJump = -1;
@@ -323,8 +335,16 @@ let prevPlayerHp = 100;
 let healFlashUntil = 0;
 let prevWaveNumber = 1;
 let waveCompleteFlashUntil = 0;
-let gameOverShown = false;
+let winShown = false;
 let prevStoneCollectVersion = 0;
+let heroHealthInit = false;
+let deathShown = false;
+let respawnAtTime = 0;
+const CHECKPOINT_X = 0;
+const CHECKPOINT_Y = 50;
+const CHECKPOINT_Z = 0;
+const BOSS_BAR_RANGE = 50;
+const RESPAWN_DELAY = 2.0;
 
 const DAMAGE_NUMBER_POOL_SIZE = 10;
 const damageNumberPool: HTMLDivElement[] = [];
@@ -344,12 +364,21 @@ function pushFlash(state: State, key: string, seconds = 2.2): void {
   statusFlashUntil = state.time.elapsed + seconds;
 }
 
+const creatureQuery = defineQuery([NavMeshAgent, Health]);
+
+function countAliveCreatures(state: State): number {
+  let n = 0;
+  for (const e of creatureQuery(state.world)) {
+    if (state.hasComponent(e, PlayerController)) continue;
+    if (Health.current[e] > 0) n++;
+  }
+  return n;
+}
+
 function refreshHud(state: State): void {
   if (overlayStatsEl) {
-    const wave = getWaveNumber();
-    const enemies = getEnemiesAlive();
     overlayStatsEl.innerHTML =
-      `${t(state, 'hud.wave', { wave: String(wave), enemies: String(enemies) })}<br/>` +
+      `${t(state, 'hud.enemies', { enemies: String(countAliveCreatures(state)) })}<br/>` +
       `${t(state, 'hud.time', { time: formatTime(playTimeSec) })}<br/>` +
       `${t(state, 'hud.locale', { lang: getLocale(state) === 'pt' ? 'PT' : 'EN' })}`;
   }
@@ -455,6 +484,13 @@ const GameplayHudSystem: System = {
 
     const heroEid = state.getEntityByName('hero');
 
+    if (heroEid !== null && !heroHealthInit) {
+      state.addComponent(heroEid, Health);
+      Health.max[heroEid] = 100;
+      Health.current[heroEid] = 100;
+      heroHealthInit = true;
+    }
+
     if (heroEid !== null && state.hasComponent(heroEid, Health)) {
       const currentHp = Health.current[heroEid];
       const maxHp = Health.max[heroEid];
@@ -492,45 +528,81 @@ const GameplayHudSystem: System = {
 
       prevPlayerHp = currentHp;
 
-      if (isDead(heroEid) && !gameOverShown) {
-        gameOverShown = true;
-        if (gameOverEl) {
-          gameOverEl.style.display = 'flex';
-          const waveText = gameOverEl.querySelector('.go-wave');
-          if (waveText)
-            waveText.textContent = t(state, 'hud.waveReached', {
-              wave: String(getWaveNumber()),
-            });
-          const titleEl = gameOverEl.querySelector('.go-title');
-          if (titleEl) titleEl.textContent = t(state, 'hud.gameOver');
-          const btnEl = gameOverEl.querySelector('.go-btn');
-          if (btnEl) btnEl.textContent = t(state, 'hud.restart');
-        }
+      if (isDead(heroEid) && !deathShown) {
+        deathShown = true;
+        respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
+        if (deathEl) deathEl.style.display = 'flex';
       }
-    }
-
-    const wave = getWaveNumber();
-    if (wave > prevWaveNumber && !gameOverShown) {
-      prevWaveNumber = wave;
-      waveCompleteFlashUntil = state.time.elapsed + 3;
-      if (waveCompleteEl) {
-        waveCompleteEl.textContent = t(state, 'hud.waveComplete', {
-          wave: String(wave - 1),
-        });
-        waveCompleteEl.style.transition = 'none';
-        waveCompleteEl.style.opacity = '1';
-        void waveCompleteEl.offsetHeight;
-        waveCompleteEl.style.transition = 'opacity 3s ease-out';
-        waveCompleteEl.style.opacity = '0';
+      if (deathShown && state.time.elapsed >= respawnAtTime) {
+        Health.current[heroEid] = Health.max[heroEid];
+        const body = getBodyForEntity(state, heroEid);
+        Transform.posX[heroEid] = CHECKPOINT_X;
+        Transform.posY[heroEid] = CHECKPOINT_Y;
+        Transform.posZ[heroEid] = CHECKPOINT_Z;
+        Transform.dirty[heroEid] = 1;
+        Rigidbody.velX[heroEid] = 0;
+        Rigidbody.velY[heroEid] = 0;
+        Rigidbody.velZ[heroEid] = 0;
+        if (body) {
+          body.setTranslation(
+            { x: CHECKPOINT_X, y: CHECKPOINT_Y, z: CHECKPOINT_Z },
+            true
+          );
+          body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+          body.wakeUp();
+        }
+        heroGroundSnapped = false;
+        prevPlayerHp = Health.max[heroEid];
+        deathShown = false;
+        if (deathEl) deathEl.style.display = 'none';
       }
     }
 
     if (waveTopEl) {
-      const enemies = getEnemiesAlive();
-      waveTopEl.textContent = t(state, 'hud.wave', {
-        wave: String(wave),
-        enemies: String(enemies),
+      waveTopEl.textContent = t(state, 'hud.enemies', {
+        enemies: String(countAliveCreatures(state)),
       });
+    }
+
+    const bossEid = state.getEntityByName('boss');
+    if (
+      bossBarEl &&
+      bossEid !== null &&
+      heroEid !== null &&
+      state.hasComponent(bossEid, Health) &&
+      state.hasComponent(heroEid, Transform)
+    ) {
+      const dx = Transform.posX[bossEid] - Transform.posX[heroEid];
+      const dz = Transform.posZ[bossEid] - Transform.posZ[heroEid];
+      const near = dx * dx + dz * dz < BOSS_BAR_RANGE * BOSS_BAR_RANGE;
+      if (near && !isDead(bossEid)) {
+        bossBarEl.style.display = 'block';
+        const ratio =
+          Health.max[bossEid] > 0
+            ? Math.max(
+                0,
+                Math.min(1, Health.current[bossEid] / Health.max[bossEid])
+              )
+            : 0;
+        if (bossBarFill)
+          bossBarFill.style.width = `${(ratio * 100).toFixed(1)}%`;
+        if (bossBarText)
+          bossBarText.textContent = `Boss Ogre: ${Math.round(Health.current[bossEid])} / ${Math.round(Health.max[bossEid])}`;
+      } else {
+        bossBarEl.style.display = 'none';
+      }
+    } else if (bossBarEl) {
+      bossBarEl.style.display = 'none';
+    }
+
+    if (
+      bossEid !== null &&
+      state.hasComponent(bossEid, Health) &&
+      isDead(bossEid) &&
+      !winShown
+    ) {
+      winShown = true;
+      if (winEl) winEl.style.display = 'flex';
     }
 
     if (statusFlashKey && state.time.elapsed >= statusFlashUntil) {
@@ -542,6 +614,12 @@ const GameplayHudSystem: System = {
       stoneCountEl.textContent = t(state, 'hud.stone', {
         count: String(currentStone),
       });
+    }
+    if (goldCountEl) {
+      goldCountEl.textContent = `Gold: ${getGold()}`;
+    }
+    if (woodCountEl) {
+      woodCountEl.textContent = `Wood: ${getWoodCount()}`;
     }
     const collectPos = getLastCollectPosition();
     if (collectPos.version !== prevStoneCollectVersion) {
@@ -661,6 +739,20 @@ function createOverlayHud(state: State): void {
   topLeft.appendChild(overlayMissionEl);
   topLeft.appendChild(healthBarContainer);
 
+  goldCountEl = document.createElement('div');
+  goldCountEl.style.cssText =
+    'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
+    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);' +
+    'color:#ffd700;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
+  goldCountEl.textContent = 'Gold: 0';
+
+  woodCountEl = document.createElement('div');
+  woodCountEl.style.cssText =
+    'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
+    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);' +
+    'color:#d4a76a;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
+  woodCountEl.textContent = 'Wood: 0';
+
   stoneCountEl = document.createElement('div');
   stoneCountEl.style.cssText =
     'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
@@ -668,6 +760,8 @@ function createOverlayHud(state: State): void {
     'color:#d4c9a8;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
   stoneCountEl.textContent = t(state, 'hud.stone', { count: '0' });
 
+  topLeft.appendChild(goldCountEl);
+  topLeft.appendChild(woodCountEl);
   topLeft.appendChild(stoneCountEl);
   topLeft.appendChild(overlayStatsEl);
 
@@ -691,35 +785,70 @@ function createOverlayHud(state: State): void {
     'text-shadow:0 2px 12px rgba(0,0,0,0.6);opacity:0;z-index:1003;' +
     'pointer-events:none;white-space:nowrap;';
 
-  gameOverEl = document.createElement('div');
-  gameOverEl.style.cssText =
+  winEl = document.createElement('div');
+  winEl.style.cssText =
     'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.82);' +
     'display:none;flex-direction:column;align-items:center;justify-content:center;' +
     'pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;';
 
-  const goTitle = document.createElement('div');
-  goTitle.className = 'go-title';
-  goTitle.style.cssText =
-    'color:#fff;font-size:48px;font-weight:800;letter-spacing:2px;margin-bottom:16px;';
-  goTitle.textContent = t(state, 'hud.gameOver');
+  const winTitle = document.createElement('div');
+  winTitle.style.cssText =
+    'color:#ffd700;font-size:52px;font-weight:800;letter-spacing:3px;margin-bottom:16px;' +
+    'text-shadow:0 2px 16px rgba(255,200,0,0.4);';
+  winTitle.textContent = 'VICTORY!';
 
-  const goWave = document.createElement('div');
-  goWave.className = 'go-wave';
-  goWave.style.cssText = 'color:#b8c8e8;font-size:20px;margin-bottom:32px;';
-  goWave.textContent = t(state, 'hud.waveReached', { wave: '1' });
+  const winSub = document.createElement('div');
+  winSub.style.cssText =
+    'color:#e8eef8;font-size:22px;margin-bottom:32px;text-align:center;';
+  winSub.textContent = 'You defeated the Boss Ogre!';
 
-  const goBtn = document.createElement('button');
-  goBtn.className = 'go-btn';
-  goBtn.style.cssText =
-    'background:rgba(90,120,200,0.3);color:#e8eef8;border:1px solid rgba(90,120,200,0.4);' +
+  const winBtn = document.createElement('button');
+  winBtn.style.cssText =
+    'background:rgba(120,90,30,0.35);color:#ffe08a;border:1px solid rgba(255,210,120,0.45);' +
     'padding:12px 36px;border-radius:8px;font-size:16px;cursor:pointer;pointer-events:auto;' +
     'font-family:system-ui,Segoe UI,sans-serif;';
-  goBtn.textContent = t(state, 'hud.restart');
-  goBtn.addEventListener('click', () => location.reload());
+  winBtn.textContent = 'Play Again';
+  winBtn.addEventListener('click', () => location.reload());
 
-  gameOverEl.appendChild(goTitle);
-  gameOverEl.appendChild(goWave);
-  gameOverEl.appendChild(goBtn);
+  winEl.appendChild(winTitle);
+  winEl.appendChild(winSub);
+  winEl.appendChild(winBtn);
+
+  deathEl = document.createElement('div');
+  deathEl.style.cssText =
+    'position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);z-index:1900;' +
+    'background:rgba(40,0,0,0.82);color:#ff6060;padding:24px 48px;border-radius:12px;' +
+    'font:700 26px system-ui,Segoe UI,sans-serif;letter-spacing:1px;' +
+    'border:1px solid rgba(255,60,60,0.4);box-shadow:0 10px 40px rgba(0,0,0,0.5);' +
+    'pointer-events:none;display:none;text-align:center;';
+  deathEl.textContent = 'You Died — Respawning...';
+
+  bossBarEl = document.createElement('div');
+  bossBarEl.style.cssText =
+    'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:1000;' +
+    'background:rgba(8,12,28,0.7);border-radius:10px;padding:10px 16px;' +
+    'border:1px solid rgba(200,40,40,0.35);backdrop-filter:blur(8px);' +
+    'display:none;min-width:320px;';
+
+  const bossBarOuter = document.createElement('div');
+  bossBarOuter.style.cssText =
+    'width:300px;height:20px;background:rgba(60,12,12,0.7);border-radius:4px;' +
+    'position:relative;overflow:hidden;margin:0 auto;';
+
+  bossBarFill = document.createElement('div');
+  bossBarFill.style.cssText =
+    'width:100%;height:100%;background:linear-gradient(90deg,#b22222,#ff4444);' +
+    'border-radius:4px;transition:width 0.2s ease-out;';
+
+  bossBarText = document.createElement('span');
+  bossBarText.style.cssText =
+    'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
+    'color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.7);';
+  bossBarText.textContent = 'Boss Ogre';
+
+  bossBarOuter.appendChild(bossBarFill);
+  bossBarOuter.appendChild(bossBarText);
+  bossBarEl.appendChild(bossBarOuter);
 
   waveTopEl = document.createElement('div');
   waveTopEl.style.cssText =
@@ -745,6 +874,8 @@ function createOverlayHud(state: State): void {
   wrap.appendChild(damageFlashEl);
   wrap.appendChild(waveCompleteEl);
   wrap.appendChild(waveTopEl);
+  wrap.appendChild(bossBarEl);
+  wrap.appendChild(deathEl);
   wrap.appendChild(bottom);
 
   // FPS counter (top-right)
@@ -759,7 +890,7 @@ function createOverlayHud(state: State): void {
   wrap.appendChild(fpsEl);
 
   document.body.appendChild(wrap);
-  document.body.appendChild(gameOverEl);
+  document.body.appendChild(winEl);
 
   refreshHud(state);
 }
@@ -788,6 +919,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(LoadingPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
+  withPlugin(NavMeshPlugin);
   withPlugin(CombatPlugin);
   withPlugin(DebugPlugin);
   withSystem(GameplayHudSystem);
@@ -803,20 +935,17 @@ async function bootstrap(): Promise<void> {
 
   registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
 
-  const heroEid = state.getEntityByName('hero');
-  if (heroEid !== null) {
-    state.addComponent(heroEid, Health);
-    Health.current[heroEid] = 100;
-    Health.max[heroEid] = 100;
-  }
-
   window.__heroState = state;
 
   // Engine DestructiblePlugin breaks the rocks (swing timing, particles);
   // the game only collects the loot — the HUD watcher then shows the
   // localized "+1 Pedra!" popup and plays the SFX.
-  onDestructibleDestroyed(state, (_eid, x, y, z) => {
-    addStone(1, x, y + 0.8, z);
+  onDestructibleDestroyed(state, (eid, x, y, z) => {
+    if (eid !== null && isWoodEntity(eid)) {
+      addWood(1, x, y + 0.8, z);
+    } else {
+      addStone(1, x, y, z);
+    }
   });
 
   // QA helper: spawn a floating text from the console / automated tests.

@@ -43,7 +43,13 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['vibegame'],
+    // recast-navigation ships WASM that esbuild's prebundler mangles — exclude it
+    // (and its three helper) so the runtime loads the real module.
+    exclude: [
+      'vibegame',
+      'recast-navigation',
+      '@recast-navigation/three',
+    ],
     include: ['@interverse/three-terrain-lod', 'troika-three-text'],
   },
 });

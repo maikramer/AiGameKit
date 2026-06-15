@@ -104,6 +104,8 @@
         base-color="#8cb866"
       ></Terrain>
 
+      <NavMesh></NavMesh>
+
       <!-- Água gerada dinamicamente a partir de /assets/terrain/terrain.json no bootstrap. -->
 
       <!-- Fog disabled temporarily -->
@@ -119,47 +121,34 @@
       >
       </PlayerGLTF>
 
-      <!-- Instanced vegetation: 100 oak trees via GPU instancing -->
-      <SpawnGroup
+      <!-- 100 decorative oak trees. StaticSpawner = one shared instanced-mesh
+           pool (per LOD), one draw call per primitive for the whole set. Each is
+           a real entity with a fixed trunk trimesh collider, so the player
+           collides and the navmesh (built from colliders) makes AI path around. -->
+      <StaticSpawner
         profile="tree"
         count="100"
         seed="42"
         region-min="-200 0 -200"
         region-max="200 0 200"
-        instanced="true"
         scale-min="2"
         scale-max="3.5"
         yaw-distribution="discrete"
         yaw-step-deg="45"
       >
-        <GLTFDynamic
-          role="dynamic"
-          url="/assets/meshes/tree_oak_lod0.glb"
-          lod1-url="/assets/meshes/tree_oak_lod1.glb"
-          lod2-url="/assets/meshes/tree_oak_lod2.glb"
-          body-type="fixed"
-        />
-      </SpawnGroup>
-
-      <!-- Instanced rocks: scattered mossy boulders via GPU instancing -->
-      <SpawnGroup
-        profile="tree"
-        count="30"
-        seed="7"
-        region-min="-220 0 -220"
-        region-max="220 0 220"
-        instanced="true"
-        scale-min="0.5"
-        scale-max="2.6"
-      >
-        <GLTFDynamic
-          role="prop"
-          url="/assets/meshes/rock_mossy_lod0.glb"
-          lod1-url="/assets/meshes/rock_mossy_lod1.glb"
-          lod2-url="/assets/meshes/rock_mossy_lod2.glb"
-          body-type="fixed"
-        />
-      </SpawnGroup>
+        <GameObject
+          role="static"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/tree_oak_lod0.glb"
+            lod1-url="/assets/meshes/tree_oak_lod1.glb"
+            lod2-url="/assets/meshes/tree_oak_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
 
       <!-- Merchant's hut — built from simple Three.js box shapes (no GLB),
            placed on the terrain. Open doorway at the front (+Z). -->
@@ -198,42 +187,15 @@
         ></PointLight>
       </GameObject>
 
-      <!-- Hut collision: fixed bodies anchored at the same terrain point as the
-           visual group; each collider mirrors one visual box via pos-offset. -->
+      <!-- Hut collision: ONE box envelope for the whole composite hut. The old
+           per-wall boxes left a walkable raised floor pad + ledges that creatures
+           climbed; a single solid box gives clean vertical sides — the navmesh
+           carves the footprint and AI walks around it. The merchant inside is
+           still reachable: talk range (K) reaches through the wall. -->
       <GameObject
         place="at: 16 8; align-to-terrain: 0; ground-align: none"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 6.4; size-y: 0.2; size-z: 6.4; pos-offset-y: 0.1"
-      ></GameObject>
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 6.4; size-y: 3; size-z: 0.3; pos-offset-y: 1.6; pos-offset-z: -3"
-      ></GameObject>
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; pos-offset-x: -3; pos-offset-y: 1.6"
-      ></GameObject>
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; pos-offset-x: 3; pos-offset-y: 1.6"
-      ></GameObject>
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; pos-offset-x: -2.3; pos-offset-y: 1.6; pos-offset-z: 3"
-      ></GameObject>
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; pos-offset-x: 2.3; pos-offset-y: 1.6; pos-offset-z: 3"
-      ></GameObject>
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 7.2; size-y: 0.4; size-z: 7.2; pos-offset-y: 3.3"
+        collider="shape: box; size-x: 6.6; size-y: 3.5; size-z: 6.6; pos-offset-y: 1.75"
       ></GameObject>
 
       <!-- The merchant NPC stands inside the hut; walk up and press F to talk.
@@ -244,40 +206,45 @@
         script="merchant.ts"
       ></GameObject>
 
-      <!-- Two bands of goblins roaming randomly (terrain-aware wander script). -->
+      <!-- Boss ogre — roams the far corner; high HP, heavy melee swings. -->
       <GameObject
-        place="at: -22 14; align-to-terrain: 0"
-        script="goblin-wander.ts"
-      ></GameObject>
-      <GameObject
-        place="at: -18 17; align-to-terrain: 0"
-        script="goblin-wander.ts"
-      ></GameObject>
-      <GameObject
-        place="at: -25 18; align-to-terrain: 0"
-        script="goblin-wander.ts"
-      ></GameObject>
-      <GameObject
-        place="at: 26 -16; align-to-terrain: 0"
-        script="goblin-wander.ts"
-      ></GameObject>
-      <GameObject
-        place="at: 30 -13; align-to-terrain: 0"
-        script="goblin-wander.ts"
-      ></GameObject>
-      <GameObject
-        place="at: 22 -19; align-to-terrain: 0"
-        script="goblin-wander.ts"
+        name="boss"
+        place="at: -120 -120; align-to-terrain: 0"
+        script="boss.ts"
       ></GameObject>
 
-      <!-- Pós: nítido primeiro (sem CA); bloom/grain/vignette moderados — o pacote “AAA” anterior é que “desfocava”. -->
-      <!-- Destructible mossy rocks, scattered by the terrain spawner near the
-           village. Each instance is a full entity: trimesh collider from
-           rock_mossy_collision.glb (mesh-anchor "base" re-pivots the collision
-           mesh to the visual origin-at-base convention; vertices scale with the
-           spawned Transform), DestructiblePlugin handles J/click smash +
-           particles + loot hook. -->
-      <SpawnGroup
+      <!-- Enemies: DynamicSpawner shares the placement core with StaticSpawner
+           (region/seed/count/slope/terrain) but spawns one scripted, animated
+           entity each — never instanced, since they move. -->
+      <DynamicSpawner
+        count="5"
+        seed="11"
+        region-min="-45 0 -34"
+        region-max="-14 0 22"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
+      </DynamicSpawner>
+
+      <DynamicSpawner
+        count="5"
+        seed="23"
+        region-min="22 0 -22"
+        region-max="48 0 36"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="slime.ts"></GameObject>
+      </DynamicSpawner>
+
+      <!-- Harvestable rocks (stone). StaticSpawner auto-routes the visual through
+           the instanced pool; the trimesh collider feeds the navmesh. -->
+      <StaticSpawner
         profile="tree"
         count="10"
         seed="99"
@@ -290,17 +257,45 @@
       >
         <GameObject
           role="static"
-          destructible=""
+          destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
             url="/assets/meshes/rock_mossy_lod0.glb"
-            instanced="true"
           ></GLTFLoader>
         </GameObject>
-      </SpawnGroup>
+      </StaticSpawner>
+
+      <!-- Harvestable oak trees (wood). Same single instancing path, with LOD. -->
+      <StaticSpawner
+        profile="tree"
+        count="14"
+        seed="7"
+        region-min="-60 0 -60"
+        region-max="60 0 60"
+        align-to-terrain="0"
+        ground-align="none"
+        scale-min="1.4"
+        scale-max="2.6"
+      >
+        <GameObject
+          role="static"
+          destructible="popup-text: Wood; popup-color: #8b4513; preset: dust; hits: 3; spark-on-hit: 1"
+          script="tree.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/tree_oak_lod0.glb"
+            lod1-url="/assets/meshes/tree_oak_lod1.glb"
+            lod2-url="/assets/meshes/tree_oak_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
+
 
       <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
       <ThirdPersonCamera
