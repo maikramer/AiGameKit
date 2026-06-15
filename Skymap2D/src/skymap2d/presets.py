@@ -11,8 +11,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "indoor, ground level, people, text, watermark",
         "guidance_scale": 6.0,
         "num_inference_steps": 40,
-        "width": 2048,
-        "height": 1024,
     },
     "Night Sky": {
         "prompt": (
@@ -21,8 +19,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "daylight, clouds, sun, indoor, text, watermark",
         "guidance_scale": 6.5,
         "num_inference_steps": 45,
-        "width": 2048,
-        "height": 1024,
     },
     "Overcast": {
         "prompt": (
@@ -31,16 +27,12 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "sun, clear sky, stars, indoor, text, watermark",
         "guidance_scale": 6.0,
         "num_inference_steps": 40,
-        "width": 2048,
-        "height": 1024,
     },
     "Clear Day": {
         "prompt": ("equirectangular 360 panorama, clear blue sky, few white clouds, bright daylight, calm atmosphere"),
         "negative_prompt": "rain, storm, night, stars, indoor, text, watermark",
         "guidance_scale": 6.0,
         "num_inference_steps": 40,
-        "width": 2048,
-        "height": 1024,
     },
     "Storm": {
         "prompt": (
@@ -49,8 +41,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "clear sky, sunny, calm, indoor, text, watermark",
         "guidance_scale": 7.0,
         "num_inference_steps": 50,
-        "width": 2048,
-        "height": 1024,
     },
     "Space": {
         "prompt": (
@@ -59,8 +49,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "ground, terrain, buildings, people, text, watermark",
         "guidance_scale": 6.5,
         "num_inference_steps": 45,
-        "width": 2048,
-        "height": 1024,
     },
     "Alien World": {
         "prompt": (
@@ -70,8 +58,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "earth, realistic, normal sky, indoor, text, watermark",
         "guidance_scale": 7.0,
         "num_inference_steps": 50,
-        "width": 2048,
-        "height": 1024,
     },
     "Dawn": {
         "prompt": (
@@ -81,8 +67,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "night, stars, storm, indoor, text, watermark",
         "guidance_scale": 6.0,
         "num_inference_steps": 40,
-        "width": 2048,
-        "height": 1024,
     },
     "Underwater": {
         "prompt": (
@@ -92,8 +76,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "sky, clouds, land, buildings, text, watermark",
         "guidance_scale": 6.5,
         "num_inference_steps": 45,
-        "width": 2048,
-        "height": 1024,
     },
     "Fantasy": {
         "prompt": (
@@ -103,8 +85,6 @@ SKYMAP_PRESETS: dict[str, dict[str, Any]] = {
         "negative_prompt": "realistic, modern, urban, indoor, text, watermark",
         "guidance_scale": 7.0,
         "num_inference_steps": 50,
-        "width": 2048,
-        "height": 1024,
     },
 }
 

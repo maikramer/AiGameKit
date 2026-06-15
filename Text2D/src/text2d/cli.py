@@ -171,6 +171,7 @@ def generate_cmd(
     _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
     _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+    _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -182,6 +183,8 @@ def generate_cmd(
         height = _qresolved.params["height"]
     if not _user_set_steps and "steps" in _qresolved.params:
         steps = _qresolved.params["steps"]
+    if not _user_set_guidance and "guidance" in _qresolved.params:
+        guidance_scale = _qresolved.params["guidance"]
 
     if not cpu:
         warn_if_vram_occupied()
@@ -413,6 +416,7 @@ def generate_batch_cmd(
     _user_set_width = ctx.get_parameter_source("width") not in (_src.DEFAULT,)
     _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
+    _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -424,6 +428,8 @@ def generate_batch_cmd(
         height = _qresolved.params["height"]
     if not _user_set_steps and "steps" in _qresolved.params:
         steps = _qresolved.params["steps"]
+    if not _user_set_guidance and "guidance" in _qresolved.params:
+        guidance_scale = _qresolved.params["guidance"]
 
     if not cpu:
         warn_if_vram_occupied()

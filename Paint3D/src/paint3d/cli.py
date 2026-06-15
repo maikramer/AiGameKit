@@ -276,6 +276,9 @@ def texture(
     _user_set_view_res = ctx.get_parameter_source("view_resolution") not in (_src.DEFAULT,)
     _user_set_render_size = ctx.get_parameter_source("render_size") not in (_src.DEFAULT,)
     _user_set_tex_size = ctx.get_parameter_source("texture_size") not in (_src.DEFAULT,)
+    _user_set_bake_exp = ctx.get_parameter_source("bake_exp") not in (_src.DEFAULT,)
+    _user_set_smooth = ctx.get_parameter_source("smooth") not in (_src.DEFAULT,)
+    _user_set_smooth_passes = ctx.get_parameter_source("smooth_passes") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -289,6 +292,12 @@ def texture(
         render_size = _qresolved.params["render_size"]
     if not _user_set_tex_size and "texture_size" in _qresolved.params:
         texture_size = _qresolved.params["texture_size"]
+    if not _user_set_bake_exp and "bake_exp" in _qresolved.params:
+        bake_exp = _qresolved.params["bake_exp"]
+    if not _user_set_smooth and "smooth" in _qresolved.params:
+        smooth = _qresolved.params["smooth"]
+    if not _user_set_smooth_passes and "smooth_passes" in _qresolved.params:
+        smooth_passes = _qresolved.params["smooth_passes"]
 
     # Hardware auto-detection (soft): --low-vram-mode explícito ganha sempre.
     from .hardware import detect_hardware_profile, hw_auto_enabled
@@ -525,6 +534,9 @@ def texture_batch(
     _user_set_view_res = ctx.get_parameter_source("view_resolution") not in (_src.DEFAULT,)
     _user_set_render_size = ctx.get_parameter_source("render_size") not in (_src.DEFAULT,)
     _user_set_tex_size = ctx.get_parameter_source("texture_size") not in (_src.DEFAULT,)
+    _user_set_bake_exp = ctx.get_parameter_source("bake_exp") not in (_src.DEFAULT,)
+    _user_set_smooth = ctx.get_parameter_source("smooth") not in (_src.DEFAULT,)
+    _user_set_smooth_passes = ctx.get_parameter_source("smooth_passes") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -538,6 +550,12 @@ def texture_batch(
         render_size = _qresolved.params["render_size"]
     if not _user_set_tex_size and "texture_size" in _qresolved.params:
         texture_size = _qresolved.params["texture_size"]
+    if not _user_set_bake_exp and "bake_exp" in _qresolved.params:
+        bake_exp = _qresolved.params["bake_exp"]
+    if not _user_set_smooth and "smooth" in _qresolved.params:
+        smooth = _qresolved.params["smooth"]
+    if not _user_set_smooth_passes and "smooth_passes" in _qresolved.params:
+        smooth_passes = _qresolved.params["smooth_passes"]
 
     hwp = None
     if hw_auto and hw_auto_enabled():

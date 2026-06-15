@@ -48,12 +48,12 @@ def test_12gb_full_gpu_no_offload() -> None:
     assert p.max_height is None
 
 
-def test_8gb_offload_keep_resolution() -> None:
+def test_8gb_offload_clamp_2048x1024() -> None:
     p = profile_from_specs([(0, _gib(8))])
     assert p.device == "cuda"
     assert p.low_vram is True
-    assert p.max_width is None
-    assert p.max_height is None
+    assert p.max_width == 2048
+    assert p.max_height == 1024
 
 
 def test_7gb_offload_clamp_1024x512() -> None:

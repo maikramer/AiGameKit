@@ -249,7 +249,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--low-vram",
     is_flag=True,
     default=False,
-    help="Enable low-VRAM mode (auto float16, reduced settings)",
+    help="Reserved for future use; fp16 auto-fires on <=8GB GPUs via _should_use_half()",
 )
 @click.option(
     "--gpu-ids",
@@ -622,7 +622,7 @@ def generate_cmd(
     "--low-vram",
     is_flag=True,
     default=False,
-    help="Enable low-VRAM mode (auto float16, reduced settings)",
+    help="Reserved for future use; fp16 auto-fires on <=8GB GPUs via _should_use_half()",
 )
 @click.option(
     "--gpu-ids",

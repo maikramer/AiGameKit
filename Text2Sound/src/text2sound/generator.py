@@ -73,12 +73,12 @@ class AudioGenerator:
             self._half = self._device == "cuda" and self._should_use_half()
         else:
             self._half = half_precision
-        self._low_vram = low_vram
         self._gpu_ids = gpu_ids
         self._multi_gpu: bool = False
         self._model: Any = None
         self._model_config: dict[str, Any] = {}
         self._loaded = False
+        self._cache_key: tuple[Any, ...] | None = None
 
     @staticmethod
     def _should_use_half() -> bool:
@@ -102,7 +102,8 @@ class AudioGenerator:
     ) -> AudioGenerator:
         """Singleton thread-safe — reutiliza modelo já carregado."""
         with cls._lock:
-            if cls._instance is None or cls._instance._model_id != model_id:
+            _cache_key = (model_id, half_precision, low_vram, tuple(gpu_ids) if gpu_ids else None)
+            if cls._instance is None or cls._instance._cache_key != _cache_key:
                 cls._instance = cls(
                     model_id=model_id,
                     device=device,
@@ -110,6 +111,7 @@ class AudioGenerator:
                     low_vram=low_vram,
                     gpu_ids=gpu_ids,
                 )
+                cls._instance._cache_key = _cache_key
             return cls._instance
 
     @classmethod
@@ -163,31 +165,15 @@ class AudioGenerator:
         self._model, self._model_config = get_pretrained_model(self._model_id)
         if self._half:
             self._model = self._model.half()
+            # Stable Audio VAE/pretransform NaNs in fp16; keep it in fp32.
+            if hasattr(self._model, "pretransform"):
+                self._model.pretransform.float()
         self._model = self._model.to(self._device)
-
-        if self._low_vram and self._device == "cuda":
-            self._try_cpu_offload()
 
         if self._gpu_ids and len(self._gpu_ids) >= 2 and self._device == "cuda":
             self._try_multi_gpu()
 
         self._loaded = True
-
-    def _try_cpu_offload(self) -> None:
-        """Tenta CPU offload (difusores) para reduzir pico de VRAM.
-
-        Alguns modelos expõem ``enable_model_cpu_offload()``; quando ausente,
-        regista aviso e prossegue sem offload.
-        """
-        try:
-            self._model.enable_model_cpu_offload()
-        except AttributeError:
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "Modelo não suporta enable_model_cpu_offload(); "
-                "a continuar sem CPU offload (possível pico de VRAM em GPUs pequenas)."
-            )
 
     def _try_multi_gpu(self) -> None:
         """Tenta dispatch multi-GPU via accelerate (MultiGPUPlanner)."""

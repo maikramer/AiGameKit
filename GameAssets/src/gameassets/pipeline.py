@@ -220,7 +220,6 @@ def _animator3d_game_pack_failed(
     with_rig: bool,
     has_rigging_profile: bool = False,
     preset: str = "humanoid",
-    gpu_ids: list[int] | None = None,
 ) -> bool:
     """Corre ``animator3d game-pack`` no GLB rigado. Devolve True se falhou."""
     if not with_animate or not _row_wants_animate(row, with_rig, has_rigging_profile):

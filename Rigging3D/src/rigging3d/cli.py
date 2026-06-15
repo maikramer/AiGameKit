@@ -243,14 +243,15 @@ def cli(
     gpu_ids: list[int] | None = None
     if gpu_ids_str:
         gpu_ids = [int(x) for x in gpu_ids_str.split(",") if x.strip()]
-    elif hw_auto:
+
+    if hw_auto:
         from .hardware import detect_hardware_profile, hw_auto_enabled
 
         if hw_auto_enabled():
             hwp = detect_hardware_profile()
             if hwp.device == "cuda":
                 ctx.obj["HW_LOW_VRAM"] = hwp.low_vram
-            if hwp.gpu_ids is not None:
+            if gpu_ids is None and hwp.gpu_ids is not None:
                 gpu_ids = hwp.gpu_ids
                 click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
             elif hwp.low_vram_warning and hwp.device == "cuda":

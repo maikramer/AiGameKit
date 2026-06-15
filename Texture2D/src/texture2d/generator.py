@@ -217,10 +217,10 @@ class TextureGenerator:
 
         if self.device == "cpu":
             pipe.to("cpu")
+        elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
+            self._status("Modelo carregado — split multi-GPU")
         elif self.low_vram:
             pipe.enable_model_cpu_offload()
-        elif self._try_multi_gpu(pipe):
-            self._status("Modelo carregado — split multi-GPU")
         else:
             pipe.to(self.device)
 

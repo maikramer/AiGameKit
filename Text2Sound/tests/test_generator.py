@@ -228,25 +228,61 @@ class TestHalfPrecisionDecoupled:
         assert gen._half is False
 
 
-class TestCpuOffloadFallback:
+class TestNoCpuOffload:
+    def test_try_cpu_offload_not_on_class(self):
+        assert not hasattr(AudioGenerator, "_try_cpu_offload")
+
+    def test_try_cpu_offload_not_on_instance(self):
+        gen = AudioGenerator(device="cpu")
+        assert not hasattr(gen, "_try_cpu_offload")
+
+
+class TestSingletonCacheKey:
+    def test_same_flags_reuses_instance(self):
+        inst1 = AudioGenerator.get_instance(model_id="m1", device="cpu", half_precision=False)
+        inst2 = AudioGenerator.get_instance(model_id="m1", device="cpu", half_precision=False)
+        assert inst1 is inst2
+
+    def test_different_half_precision_recreates(self):
+        inst1 = AudioGenerator.get_instance(model_id="m1", device="cpu", half_precision=False)
+        inst2 = AudioGenerator.get_instance(model_id="m1", device="cpu", half_precision=True)
+        assert inst1 is not inst2
+        assert inst2._half is True
+
+    def test_different_low_vram_recreates(self):
+        inst1 = AudioGenerator.get_instance(model_id="m1", device="cpu", low_vram=False)
+        inst2 = AudioGenerator.get_instance(model_id="m1", device="cpu", low_vram=True)
+        assert inst1 is not inst2
+
+    def test_different_gpu_ids_recreates(self):
+        inst1 = AudioGenerator.get_instance(model_id="m1", device="cpu", gpu_ids=None)
+        inst2 = AudioGenerator.get_instance(model_id="m1", device="cpu", gpu_ids=[0, 1])
+        assert inst1 is not inst2
+
+
+class TestPretransformFp32:
     @patch("text2sound.generator.get_pretrained_model")
-    def test_cpu_offload_logs_warning_when_unsupported(self, mock_get):
+    def test_half_restores_pretransform_to_fp32(self, mock_get):
+        mock_pretransform = MagicMock()
         mock_model = MagicMock()
+        mock_model.pretransform = mock_pretransform
         mock_model.half.return_value = mock_model
         mock_model.to.return_value = mock_model
-        del mock_model.enable_model_cpu_offload  # no such method
         mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
-        gen = AudioGenerator(device="cuda", low_vram=True)
+
+        gen = AudioGenerator(device="cpu", half_precision=True)
         gen.load()
-        assert gen._loaded is True
+        mock_model.half.assert_called_once()
+        mock_pretransform.float.assert_called_once()
 
     @patch("text2sound.generator.get_pretrained_model")
-    def test_cpu_offload_called_when_supported(self, mock_get):
+    def test_half_without_pretransform_does_not_error(self, mock_get):
         mock_model = MagicMock()
+        del mock_model.pretransform
         mock_model.half.return_value = mock_model
         mock_model.to.return_value = mock_model
         mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
-        gen = AudioGenerator(device="cuda", low_vram=True)
+
+        gen = AudioGenerator(device="cpu", half_precision=True)
         gen.load()
-        mock_model.enable_model_cpu_offload.assert_called_once()
         assert gen._loaded is True

@@ -20,7 +20,7 @@ HW_AUTO_ENV = "SKYMAP2D_HW_AUTO"
 
 # Tiers (GiB da maior GPU):
 #   >= 12  full GPU, sem offload, resolução livre (default 2048x1024)
-#   >=  8  enable_model_cpu_offload, resolução livre
+#   >=  8  enable_model_cpu_offload, clamp a 2048x1024
 #   <   8  offload + clamp a 1024x512
 #   <   6  offload + clamp a 1024x512 (2048x1024 é inviável em 6GB)
 
@@ -86,13 +86,13 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
         )
 
     if largest_gib >= 8.0:
-        # Offload módulo-a-módulo, resolução livre.
+        # Offload módulo-a-módulo, clamp a 2048x1024 (4096x2048 OOM em 8GB).
         return Skymap2DHardwareProfile(
             name=name,
             device="cuda",
             low_vram=True,
-            max_width=None,
-            max_height=None,
+            max_width=2048,
+            max_height=1024,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
         )
