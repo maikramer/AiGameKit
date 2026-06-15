@@ -32,7 +32,18 @@ export type ScaleDistributionMode = 'linear' | 'discrete';
 /** Rotação (yaw em torno da normal do terreno se `align-to-terrain`, senão Y) contínua ou ângulos listados. */
 export type YawDistributionMode = 'linear' | 'discrete';
 
+/**
+ * `static` = repeated immobile props (trees, rocks, crates): rendered through
+ * the shared instanced-mesh pool (one draw call per GLB primitive/LOD), with
+ * fixed colliders. `dynamic` = moving scripted entities (enemies, NPCs): one
+ * animated entity each, never instanced. Both share the placement core
+ * (region/seed/count/slope/terrain-align/overlap).
+ */
+export type SpawnMode = 'static' | 'dynamic';
+
 export interface SpawnGroupSpec {
+  /** Static (instanced props) vs dynamic (scripted moving entities). */
+  mode: SpawnMode;
   /** Perfil do grupo (`profile` no XML), ex.: `tree`, `none`. */
   spawnGroupProfile: SpawnGroupProfileId;
   /** Modo de contagem de instâncias (ver `count`, `density-per-km2`, `count-min` / `count-max`). */

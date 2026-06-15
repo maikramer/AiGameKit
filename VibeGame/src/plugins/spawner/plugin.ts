@@ -2,24 +2,27 @@ import type { Adapter, Plugin } from '../../core';
 import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { entityParser } from './entity-parser';
 import {
+  dynamicSpawnerRecipe,
   entitySpawnerRecipe,
   spawnExclusionRecipe,
   spawnGroupRecipe,
+  staticSpawnerRecipe,
 } from './recipes';
 import { spawnGroupParser } from './parser';
 import { SpawnExclusion } from './occupancy';
 import { TerrainPlaceSystem } from './place-system';
-import { TerrainSpawnSystem, VegetationUpdateSystem } from './systems';
+import { TerrainSpawnSystem } from './systems';
 import { SpawnReadyGateSystem } from './ready-gate';
 
 export const SpawnerPlugin: Plugin = {
-  recipes: [spawnGroupRecipe, entitySpawnerRecipe, spawnExclusionRecipe],
-  systems: [
-    TerrainSpawnSystem,
-    TerrainPlaceSystem,
-    VegetationUpdateSystem,
-    SpawnReadyGateSystem,
+  recipes: [
+    spawnGroupRecipe,
+    staticSpawnerRecipe,
+    dynamicSpawnerRecipe,
+    entitySpawnerRecipe,
+    spawnExclusionRecipe,
   ],
+  systems: [TerrainSpawnSystem, TerrainPlaceSystem, SpawnReadyGateSystem],
   components: {
     spawnerPending: SpawnerPending,
     placePending: PlacePending,
@@ -29,6 +32,8 @@ export const SpawnerPlugin: Plugin = {
   config: {
     parsers: {
       SpawnGroup: spawnGroupParser,
+      StaticSpawner: spawnGroupParser,
+      DynamicSpawner: spawnGroupParser,
       GameObject: entityParser,
     },
     defaults: {

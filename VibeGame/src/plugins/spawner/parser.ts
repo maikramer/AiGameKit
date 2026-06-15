@@ -12,8 +12,35 @@ import {
 import type {
   SpawnCountMode,
   SpawnGroupSpec,
+  SpawnMode,
   SpawnTemplateSpec,
 } from './types';
+
+/** Element name → spawn mode. `SpawnGroup` stays an alias for `static`. */
+const SPAWNER_MODES: Record<string, SpawnMode> = {
+  spawngroup: 'static',
+  staticspawner: 'static',
+  dynamicspawner: 'dynamic',
+};
+
+/** Force a template's visual GLB through the instanced pool (static spawners
+ * render everything instanced). Handles a direct GLTFLoader template and a
+ * GameObject template wrapping GLTFLoader children. */
+function markTemplateInstanced(tpl: SpawnTemplateSpec): void {
+  const tag = tpl.tagName.toLowerCase();
+  if (tag === 'gltfloader' || tag === 'gltf-load') {
+    if (tpl.attributes.instanced === undefined) tpl.attributes.instanced = 'true';
+    return;
+  }
+  for (const child of tpl.entityChildren ?? []) {
+    const ct = child.tagName?.toLowerCase();
+    if (ct === 'gltfloader' || ct === 'gltf-load') {
+      if (child.attributes.instanced === undefined) {
+        child.attributes.instanced = 'true';
+      }
+    }
+  }
+}
 
 const VALID_ROLES = new Set<string>([
   'tree',
@@ -92,7 +119,8 @@ function vec3FromAttr(
 }
 
 export const spawnGroupParser: Parser = ({ entity, element, state }) => {
-  if (element.tagName.toLowerCase() !== 'spawngroup') return;
+  const mode = SPAWNER_MODES[element.tagName.toLowerCase()];
+  if (!mode) return;
 
   const children = element.children.filter(
     (c) => c.tagName && c.tagName !== 'parsererror'
@@ -260,7 +288,12 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     );
   }
 
+  if (mode === 'static') {
+    for (const tpl of templates) markTemplateInstanced(tpl);
+  }
+
   const spec: SpawnGroupSpec = {
+    mode,
     spawnGroupProfile: groupProfileId,
     spawnCountMode,
     count: Math.floor(count),
