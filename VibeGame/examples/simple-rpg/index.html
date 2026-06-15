@@ -77,9 +77,97 @@
       ></AudioSource>
       <AudioSource
         name="sfx-heal"
-        url="/assets/audio/sfx_collect.wav"
+        url="/assets/audio/sfx_heal.ogg"
         loop="false"
         volume="0.48"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-hit"
+        url="/assets/audio/sfx_hit.ogg"
+        loop="false"
+        volume="0.45"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-enemy-hurt"
+        url="/assets/audio/sfx_enemy_hurt.ogg"
+        loop="false"
+        volume="0.42"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-enemy-death"
+        url="/assets/audio/sfx_enemy_death.ogg"
+        loop="false"
+        volume="0.5"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-boss-roar"
+        url="/assets/audio/sfx_boss_roar.ogg"
+        loop="false"
+        volume="0.55"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-shop-open"
+        url="/assets/audio/sfx_shop_open.ogg"
+        loop="false"
+        volume="0.45"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-buy"
+        url="/assets/audio/sfx_buy.ogg"
+        loop="false"
+        volume="0.45"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-error"
+        url="/assets/audio/sfx_error.ogg"
+        loop="false"
+        volume="0.4"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-player-hurt"
+        url="/assets/audio/sfx_player_hurt.ogg"
+        loop="false"
+        volume="0.5"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-coin"
+        url="/assets/audio/sfx_coin.ogg"
+        loop="false"
+        volume="0.42"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-item-drop"
+        url="/assets/audio/sfx_item_drop.ogg"
+        loop="false"
+        volume="0.4"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="bgm-battle"
+        url="/assets/audio/bgm_battle.ogg"
+        loop="true"
+        volume="0.1"
         playing="false"
         spatial="false"
       ></AudioSource>
@@ -150,53 +238,27 @@
         </GameObject>
       </StaticSpawner>
 
-      <!-- Merchant's hut — built from simple Three.js box shapes (no GLB),
-           placed on the terrain. Open doorway at the front (+Z). -->
-      <GameObject place="at: 16 8; align-to-terrain: 0; ground-align: none">
-        <GameObject
-          pos="0 0.1 0"
-          mesh-renderer="shape: box; size-x: 6.4; size-y: 0.2; size-z: 6.4; color: 0x6b4a2b"
-        ></GameObject>
-        <GameObject
-          pos="0 1.6 -3"
-          mesh-renderer="shape: box; size-x: 6.4; size-y: 3; size-z: 0.3; color: 0x8a5a30"
-        ></GameObject>
-        <GameObject
-          pos="-3 1.6 0"
-          mesh-renderer="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; color: 0x8a5a30"
-        ></GameObject>
-        <GameObject
-          pos="3 1.6 0"
-          mesh-renderer="shape: box; size-x: 0.3; size-y: 3; size-z: 6.4; color: 0x8a5a30"
-        ></GameObject>
-        <GameObject
-          pos="-2.3 1.6 3"
-          mesh-renderer="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; color: 0x8a5a30"
-        ></GameObject>
-        <GameObject
-          pos="2.3 1.6 3"
-          mesh-renderer="shape: box; size-x: 1.8; size-y: 3; size-z: 0.3; color: 0x8a5a30"
-        ></GameObject>
-        <GameObject
-          pos="0 3.3 0"
-          mesh-renderer="shape: box; size-x: 7.2; size-y: 0.4; size-z: 7.2; color: 0x4a2f18"
-        ></GameObject>
+      <!-- Merchant's hut — one Composition entity (1 entity, 1 Rapier body,
+           7 box meshes + compound per-wall colliders). Open doorway at the front
+           (+Z): the compound collider leaves the doorway gap walkable while each
+           wall still blocks the player. Placed on terrain via SpawnerPlugin. -->
+      <Composition
+        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        body="fixed"
+        collider="auto"
+      >
+        <Box pos="0 0.1 0"    size="6.4 0.2 6.4" color="#6b4a2b"></Box>
+        <Box pos="0 1.6 -3"   size="6.4 3 0.3"   color="#8a5a30"></Box>
+        <Box pos="-3 1.6 0"   size="0.3 3 6.4"   color="#8a5a30"></Box>
+        <Box pos="3 1.6 0"    size="0.3 3 6.4"   color="#8a5a30"></Box>
+        <Box pos="-2.3 1.6 3" size="1.8 3 0.3"   color="#8a5a30"></Box>
+        <Box pos="2.3 1.6 3"  size="1.8 3 0.3"   color="#8a5a30"></Box>
+        <Box pos="0 3.3 0"    size="7.2 0.4 7.2" color="#4a2f18"></Box>
         <PointLight
           pos="0 2.6 0"
           point-light="color: 0xffcc77; intensity: 10; distance: 8; decay: 2"
         ></PointLight>
-      </GameObject>
-
-      <!-- Hut collision: ONE box envelope for the whole composite hut. The old
-           per-wall boxes left a walkable raised floor pad + ledges that creatures
-           climbed; a single solid box gives clean vertical sides — the navmesh
-           carves the footprint and AI walks around it. The merchant inside is
-           still reachable: talk range (K) reaches through the wall. -->
-      <GameObject
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: box; size-x: 6.6; size-y: 3.5; size-z: 6.6; pos-offset-y: 1.75"
-      ></GameObject>
+      </Composition>
 
       <!-- The merchant NPC stands inside the hut; walk up and press F to talk.
            The script loads the rigged GLB itself and plays the idle clip. -->

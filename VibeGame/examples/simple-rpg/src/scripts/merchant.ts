@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { defineQuery, loadGltfToSceneWithAnimator } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
+import { defineQuery, loadGltfToSceneWithAnimator, playAudioEmitter } from 'vibegame';
+import type { GltfAnimator, MonoBehaviourContext, State } from 'vibegame';
 import { Transform, PlayerController } from 'vibegame';
 import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
 import { getBvhSurfaceHeight } from '../../../../src/plugins/bvh/utils.ts';
@@ -31,6 +31,24 @@ const WOOD1_PRICE = 8;
 
 const playerQuery = defineQuery([PlayerController]);
 let cachedPlayer = 0;
+
+let merchantState: State | null = null;
+let eidSfxShopOpen = -1;
+let eidSfxBuy = -1;
+let eidSfxError = -1;
+let eidSfxHeal = -1;
+
+function resolveMerchantSfx(state: State): void {
+  if (eidSfxShopOpen >= 0) return;
+  eidSfxShopOpen = state.getEntityByName('sfx-shop-open') ?? -1;
+  eidSfxBuy = state.getEntityByName('sfx-buy') ?? -1;
+  eidSfxError = state.getEntityByName('sfx-error') ?? -1;
+  eidSfxHeal = state.getEntityByName('sfx-heal') ?? -1;
+}
+
+function playMerchantSfx(eid: number): void {
+  if (merchantState && eid >= 0) playAudioEmitter(merchantState, eid);
+}
 
 let group: THREE.Group | null = null;
 let animator: GltfAnimator | null = null;
@@ -72,6 +90,8 @@ function findPlayer(ctx: MonoBehaviourContext): number {
 }
 
 export function start(ctx: MonoBehaviourContext): void {
+  merchantState = ctx.state;
+  resolveMerchantSfx(ctx.state);
   findPlayer(ctx);
   if (!loadStarted) {
     loadStarted = true;
@@ -205,6 +225,7 @@ function showShopError(message: string): void {
   shopErrorTimeout = setTimeout(() => {
     if (errorLabel) errorLabel.style.opacity = '0';
   }, 1500);
+  playMerchantSfx(eidSfxError);
 }
 
 function refreshShopDisplay(): void {
@@ -256,6 +277,8 @@ function buyHealthPotion(): void {
     return;
   }
   healHealth(player, POTION_HEAL);
+  playMerchantSfx(eidSfxBuy);
+  playMerchantSfx(eidSfxHeal);
   refreshShopDisplay();
 }
 
@@ -265,6 +288,7 @@ function buySwordUpgrade(): void {
     return;
   }
   swordLevel++;
+  playMerchantSfx(eidSfxBuy);
   refreshShopDisplay();
 }
 
@@ -293,6 +317,7 @@ function openShop(player: number): void {
   setInputMovementSuppressed(true);
   if (!shopPanel) createShopPanel();
   if (shopPanel) shopPanel.style.display = 'block';
+  playMerchantSfx(eidSfxShopOpen);
 
   focusedIndex = 0;
   for (let i = 0; i < shopButtons.length; i++) {

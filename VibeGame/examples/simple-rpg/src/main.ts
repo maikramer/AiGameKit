@@ -17,6 +17,7 @@ import {
   NavMeshPlugin,
   PlayerController,
   configure,
+  disposeAllRuntimes,
   getBuilder,
   playAudioEmitter,
   registerEntityScripts,
@@ -317,6 +318,9 @@ let eidSfxJump = -1;
 let eidSfxSave = -1;
 let eidSfxLoad = -1;
 let eidSfxHeal = -1;
+let eidSfxCoin = -1;
+let eidSfxPlayerHurt = -1;
+let eidBgmBattle = -1;
 
 let saveDebounce = false;
 let loadDebounce = false;
@@ -516,6 +520,7 @@ const GameplayHudSystem: System = {
             showDamageNumber(dmg, projected.x, projected.y);
           }
         }
+        if (eidSfxPlayerHurt >= 0) playAudioEmitter(state, eidSfxPlayerHurt);
       }
 
       if (state.time.elapsed < healFlashUntil && healFlashUntil > 0) {
@@ -625,7 +630,7 @@ const GameplayHudSystem: System = {
     if (collectPos.version !== prevStoneCollectVersion) {
       prevStoneCollectVersion = collectPos.version;
       showStoneNumber(state);
-      if (eidSfxHeal >= 0) playAudioEmitter(state, eidSfxHeal);
+      if (eidSfxCoin >= 0) playAudioEmitter(state, eidSfxCoin);
     }
     if (
       overlayMissionEl &&
@@ -900,6 +905,9 @@ function resolveAudioEids(state: State): void {
   eidSfxSave = state.getEntityByName('sfx-save') ?? -1;
   eidSfxLoad = state.getEntityByName('sfx-load') ?? -1;
   eidSfxHeal = state.getEntityByName('sfx-heal') ?? -1;
+  eidSfxCoin = state.getEntityByName('sfx-coin') ?? -1;
+  eidSfxPlayerHurt = state.getEntityByName('sfx-player-hurt') ?? -1;
+  eidBgmBattle = state.getEntityByName('bgm-battle') ?? -1;
 }
 
 async function bootstrap(): Promise<void> {
@@ -1002,11 +1010,19 @@ async function bootstrap(): Promise<void> {
   createOverlayHud(state);
 
   const bgmEid = state.getEntityByName('bgm');
+  const bgmBattleEid = eidBgmBattle;
   if (bgmEid !== null && typeof document !== 'undefined') {
     const startBgm = () => {
       resumeAudioContextIfSuspended();
       if (state.exists(bgmEid) && state.hasComponent(bgmEid, AudioSource)) {
         AudioSource.playing[bgmEid] = 1;
+      }
+      if (
+        bgmBattleEid >= 0 &&
+        state.exists(bgmBattleEid) &&
+        state.hasComponent(bgmBattleEid, AudioSource)
+      ) {
+        AudioSource.playing[bgmBattleEid] = 1;
       }
       document.removeEventListener('pointerdown', startBgm);
     };
@@ -1017,3 +1033,18 @@ async function bootstrap(): Promise<void> {
 }
 
 void bootstrap();
+
+// HMR teardown: Vite full-reloads on every source save (no HMR boundary in the
+// engine). Without this, the old WebGL context + Rapier/recast WASM + GPU memory
+// are never freed before the reloaded page allocates a fresh set, so reloads
+// stack VRAM and eventually lock the tab. Dispose runs renderer.setAnimationLoop(null)
+// + renderer.dispose() + state.dispose() before the page reloads.
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    try {
+      disposeAllRuntimes();
+    } catch (e) {
+      console.error('[VibeGame] HMR dispose failed:', e);
+    }
+  });
+}

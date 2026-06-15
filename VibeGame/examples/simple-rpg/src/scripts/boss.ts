@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playAudioEmitter } from 'vibegame';
+import type { GltfAnimator, MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
   defineQuery,
@@ -34,6 +34,13 @@ const ACCEL = 3.0;
 const WATER_LEVEL = 1.25;
 const ROAR_DURATION = 2.5;
 const DEATH_DISABLE_DELAY = 5.0;
+
+let eidSfxBossRoar = -1;
+
+function resolveBossSfx(state: State): void {
+  if (eidSfxBossRoar >= 0) return;
+  eidSfxBossRoar = state.getEntityByName('sfx-boss-roar') ?? -1;
+}
 
 type CombatState = 'idle' | 'seek' | 'attack' | 'dead';
 
@@ -196,6 +203,7 @@ export function update(ctx: MonoBehaviourContext): void {
   const b = state.get(eid);
   if (!b || !b.group) return;
 
+  resolveBossSfx(ctx.state);
   const dt = ctx.deltaTime;
 
   if (b.combatState === 'dead') {
@@ -245,6 +253,7 @@ export function update(ctx: MonoBehaviourContext): void {
       if (!b.hasRoared) {
         b.hasRoared = true;
         b.roarTimer = ROAR_DURATION;
+        if (eidSfxBossRoar >= 0) playAudioEmitter(ctx.state, eidSfxBossRoar);
       }
     } else {
       b.combatState = 'idle';
