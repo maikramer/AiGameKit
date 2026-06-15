@@ -3,7 +3,11 @@ import { defineQuery, type System } from '../../core';
 import { loadGltfLodToScene, loadGltfToScene } from '../../extras/gltf-bridge';
 import { getScene } from '../rendering';
 import { Transform } from '../transforms/components';
-import { addInstancedGltf, isGltfInstanced } from './auto-instance';
+import {
+  addInstancedGltf,
+  getInstancedLodUrls,
+  isGltfInstanced,
+} from './auto-instance';
 import { GltfPending, GltfPhysicsPending } from './components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
 import {
@@ -115,7 +119,8 @@ export const GltfXmlLoadSystem: System = {
         isGltfInstanced(state, eid) &&
         !state.hasComponent(eid, GltfPhysicsPending)
       ) {
-        addInstancedGltf(state, eid, url);
+        const [lod1, lod2] = getInstancedLodUrls(state, eid);
+        addInstancedGltf(state, eid, url, lod1, lod2);
         GltfPending.loaded[eid] = 1;
         continue;
       }

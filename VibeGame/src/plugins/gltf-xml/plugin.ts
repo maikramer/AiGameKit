@@ -1,5 +1,9 @@
 import type { Adapter, Plugin } from '../../core';
-import { GltfAutoInstanceSystem, markGltfInstanced } from './auto-instance';
+import {
+  GltfAutoInstanceSystem,
+  markGltfInstanced,
+  setInstancedLodUrl,
+} from './auto-instance';
 import { GltfLod, GltfPending, GltfPhysicsPending } from './components';
 import {
   applyPendingLodThresholds,
@@ -76,10 +80,16 @@ export const GltfXmlPlugin: Plugin = {
             setPendingLodThresholdMid(state, entity, v);
           }
         }) as Adapter,
-        // Spawner/vegetation instancing uses these directly from attributes;
-        // register as accepted to suppress "unknown attribute" warnings.
-        'lod1-url': ((_entity, _value, _state) => {}) as Adapter,
-        'lod2-url': ((_entity, _value, _state) => {}) as Adapter,
+        // LOD urls for an instanced GLTFLoader: recorded so the auto-instance
+        // pool can build the extra LOD levels. Harmless on non-instanced loads.
+        'lod1-url': ((entity, value, state) => {
+          const u = String(value).trim();
+          if (u) setInstancedLodUrl(state, entity, 1, u);
+        }) as Adapter,
+        'lod2-url': ((entity, value, state) => {
+          const u = String(value).trim();
+          if (u) setInstancedLodUrl(state, entity, 2, u);
+        }) as Adapter,
         // `<GLTFLoader instanced="true">` — render through the shared
         // InstancedMesh pool for this URL (one draw call per primitive for
         // every entity using the same GLB). See auto-instance.ts.
