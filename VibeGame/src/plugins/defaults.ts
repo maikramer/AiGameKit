@@ -7,6 +7,7 @@ import { GltfAnimPlugin } from './gltf-anim/plugin';
 import { EntityScriptPlugin } from './entity-script/plugin';
 import { GltfXmlPlugin } from './gltf-xml/plugin';
 import { InputPlugin } from './input/plugin';
+import { NavMeshPlugin } from './navmesh/plugin';
 import { OrbitCameraPlugin } from './orbit-camera/plugin';
 
 import { PhysicsPlugin } from './physics/plugin';
@@ -25,7 +26,6 @@ import { FloatingTextPlugin } from './floating-text/plugin';
 import { DestructiblePlugin } from './destructible/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
-import { VegetationPlugin } from './vegetation/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -47,7 +47,7 @@ export const DefaultPlugins: Plugin[] = [
   TerrainPlugin,
   BvhPlugin,
   SpawnerPlugin,
-  VegetationPlugin,
+  NavMeshPlugin,
   AudioPlugin,
   EquirectSkyPlugin,
   ParticlesPlugin,
