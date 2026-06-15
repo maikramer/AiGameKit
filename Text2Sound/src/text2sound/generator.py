@@ -28,6 +28,14 @@ DEFAULT_DURATION = 30.0
 DEFAULT_SIGMA_MIN = 0.3
 DEFAULT_SIGMA_MAX = 500.0
 
+# Rectified-flow samplers (Open Small) only accept euler/rk4/dpmpp and this
+# lib version's dpmpp path has an unbound `sigma`; euler is the safe default.
+# Map the k-diffusion names so dpmpp-3m-sde doesn't return None from sample_rf.
+_RF_SAMPLER_MAP = {
+    "euler": "euler",
+    "rk4": "rk4",
+}
+
 
 @dataclass
 class GenerationResult:
@@ -163,6 +171,13 @@ class AudioGenerator:
             pass
 
         self._model, self._model_config = get_pretrained_model(self._model_id)
+        # Stable Audio Open Small declares diffusion_objective='rf_denoiser'
+        # (rectified flow), but stable_audio_tools' generation loop only
+        # recognises 'v' / 'rectified_flow' and leaves its `sampled` variable
+        # unbound otherwise (UnboundLocalError mid-diffusion). Normalise here so
+        # the sampler picks the rectified-flow path.
+        if getattr(self._model, "diffusion_objective", None) == "rf_denoiser":
+            self._model.diffusion_objective = "rectified_flow"
         if self._half:
             self._model = self._model.half()
             # Stable Audio VAE/pretransform NaNs in fp16; keep it in fp32.
@@ -272,6 +287,9 @@ class AudioGenerator:
 
         with self._generation_context():
             gen_device = f"cuda:{self._gpu_ids[0]}" if self._multi_gpu and self._gpu_ids else self._device
+            rf_sampler = sampler_type
+            if getattr(self._model, "diffusion_objective", "") == "rectified_flow":
+                rf_sampler = _RF_SAMPLER_MAP.get(sampler_type, "euler")
             output = generate_diffusion_cond(
                 self._model,
                 steps=steps,
@@ -280,7 +298,7 @@ class AudioGenerator:
                 sample_size=self.sample_size,
                 sigma_min=sigma_min,
                 sigma_max=sigma_max,
-                sampler_type=sampler_type,
+                sampler_type=rf_sampler,
                 device=gen_device,
             )
 
