@@ -12,6 +12,32 @@ import { getRenderingContext } from '../rendering/utils';
 
 const inputStateQuery = defineQuery([InputState]);
 
+/**
+ * When a modal UI (e.g. a shop) is open, gameplay movement must stop even though
+ * the keys are physically down. Suppression is applied at the input source so it
+ * can't be overwritten: the player movement runs in the `fixed` group and reads
+ * what the input systems leave in `InputState`, and gating here zeroes movement
+ * for every consumer regardless of system order.
+ */
+let movementSuppressed = false;
+
+export function setInputMovementSuppressed(value: boolean): void {
+  movementSuppressed = value;
+}
+
+export function isInputMovementSuppressed(): boolean {
+  return movementSuppressed;
+}
+
+function zeroMovement(eid: number): void {
+  InputState.moveX[eid] = 0;
+  InputState.moveY[eid] = 0;
+  InputState.moveZ[eid] = 0;
+  InputState.lookX[eid] = 0;
+  InputState.lookY[eid] = 0;
+  InputState.jump[eid] = 0;
+}
+
 export const InputSystem: System = {
   group: 'simulation',
 
@@ -32,6 +58,7 @@ export const InputSystem: System = {
 
     for (const eid of entities) {
       updateInputState(eid, !canvasActive);
+      if (movementSuppressed) zeroMovement(eid);
     }
 
     resetFrameDeltas();
@@ -74,6 +101,10 @@ export const GamepadInputSystem: System = {
       }
 
       GamepadInput.connected[eid] = 1;
+      if (movementSuppressed) {
+        zeroMovement(eid);
+        continue;
+      }
       const dz = GamepadInput.deadzone[eid];
 
       GamepadInput.leftStickX[eid] = applyDeadzone(gp.axes[0] ?? 0, dz);
