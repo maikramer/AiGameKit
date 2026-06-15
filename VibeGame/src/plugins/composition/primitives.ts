@@ -67,6 +67,9 @@ function toFloat(value: XMLValue | undefined, fallback: number): number {
   return Number.isNaN(n) ? fallback : n;
 }
 
+// XMLValueParser (core/xml/values) already converts vector strings like
+// "0 1.6 -3" into `{x,y,z}` objects and hex colors like "#6b4a2b" / "0x..."
+// into numbers, so accept every shape here instead of assuming strings.
 function parseVec3(
   value: XMLValue | undefined,
   fallback: [number, number, number]
@@ -82,14 +85,34 @@ function parseVec3(
     if (parts.length === 1 && !Number.isNaN(parts[0])) {
       return [parts[0]!, parts[0]!, parts[0]!];
     }
+    return fallback;
+  }
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    return [value, value, value];
   }
   if (Array.isArray(value) && value.length >= 3) {
     return [Number(value[0]), Number(value[1]), Number(value[2])];
+  }
+  if (value && typeof value === 'object') {
+    const v = value as Record<string, unknown>;
+    const x = Number(v.x);
+    const y = Number(v.y);
+    const z = Number(v.z ?? v.w);
+    if (!Number.isNaN(x) && !Number.isNaN(y) && !Number.isNaN(z)) {
+      return [x, y, z];
+    }
   }
   return fallback;
 }
 
 export function parseColorHex(value: XMLValue | undefined): [number, number, number] {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return [
+      ((value >> 16) & 0xff) / 255,
+      ((value >> 8) & 0xff) / 255,
+      (value & 0xff) / 255,
+    ];
+  }
   if (typeof value !== 'string' || value.trim() === '') {
     return [0.8, 0.8, 0.8];
   }
