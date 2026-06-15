@@ -1,0 +1,20 @@
+{
+  "prompt": "magical crystal collect sparkle chime, bright ascending notes, short cheerful jingle, cartoon game pickup",
+  "profile": "effects",
+  "model_id": "ffmpeg-synth:coin-pickup",
+  "duration": 0.6,
+  "steps": null,
+  "cfg_scale": null,
+  "seed": null,
+  "seed_effective": null,
+  "sampler": null,
+  "sigma_min": null,
+  "sigma_max": null,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": null,
+  "format": "wav",
+  "sample_rate": 44100,
+  "device": "cpu",
+  "text2sound_version": "fallback-ffmpeg"
+}
