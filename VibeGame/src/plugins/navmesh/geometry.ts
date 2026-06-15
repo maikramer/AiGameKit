@@ -2,6 +2,11 @@ import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State } from '../../core';
 import {
+  CompositionPending,
+  getCompositionData,
+  type PrimitiveSpec,
+} from '../composition';
+import {
   buildMeshColliderGeometry,
   getColliderMeshUrl,
   requestColliderMesh,
@@ -138,7 +143,8 @@ function appendMesh(
   vertices: ArrayLike<number>,
   indices: ArrayLike<number>,
   matrix: THREE.Matrix4,
-  out: MeshSoup
+  out: MeshSoup,
+  fullCarve = false
 ): void {
   const base = out.positions.length / 3;
   let minY = Infinity;
@@ -147,7 +153,10 @@ function appendMesh(
     out.positions.push(_v.x, _v.y, _v.z);
     if (_v.y < minY) minY = _v.y;
   }
-  const maxY = minY + OBSTACLE_NAV_HEIGHT;
+  // fullCarve skips the per-mesh height cap: composition primitives are
+  // standalone obstacles (walls/roof), so the entire mesh must carve the
+  // navmesh or agents end up walking on top of the structure.
+  const maxY = fullCarve ? Infinity : minY + OBSTACLE_NAV_HEIGHT;
   for (let t = 0; t < indices.length; t += 3) {
     const a = indices[t];
     const b = indices[t + 1];
@@ -184,6 +193,57 @@ function appendBox(eid: number, matrix: THREE.Matrix4, out: MeshSoup): void {
 }
 
 const obstacleQuery = defineQuery([Collider]);
+const compositionObstacleQuery = defineQuery([CompositionPending]);
+
+const _compBodyMat = new THREE.Matrix4();
+const _compLocalMat = new THREE.Matrix4();
+const _compWorldMat = new THREE.Matrix4();
+const _compPos = new THREE.Vector3();
+const _compQuat = new THREE.Quaternion();
+const _compEuler = new THREE.Euler();
+const _compScl = new THREE.Vector3(1, 1, 1);
+
+// Composition entities own their collider via direct Rapier calls (no SOA
+// `Collider` component), so the navmesh has to read primitive specs from the
+// composition sidecar and bake them as box envelopes here.
+function compositionEntityWorldMatrix(state: State, eid: number): THREE.Matrix4 {
+  if (state.hasComponent(eid, Rigidbody)) {
+    _compPos.set(Rigidbody.posX[eid], Rigidbody.posY[eid], Rigidbody.posZ[eid]);
+    const rw = Rigidbody.rotW[eid];
+    if (rw === 0 && Rigidbody.rotX[eid] === 0 && Rigidbody.rotY[eid] === 0 && Rigidbody.rotZ[eid] === 0) {
+      _compQuat.identity();
+    } else {
+      _compQuat.set(Rigidbody.rotX[eid], Rigidbody.rotY[eid], Rigidbody.rotZ[eid], rw);
+    }
+  } else {
+    _compPos.set(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
+    const rw = Transform.rotW[eid] || 1;
+    _compQuat.set(Transform.rotX[eid], Transform.rotY[eid], Transform.rotZ[eid], rw);
+  }
+  _compBodyMat.compose(_compPos, _compQuat, _compScl);
+  return _compBodyMat;
+}
+
+function appendCompositionSpec(
+  spec: PrimitiveSpec,
+  parentMatrix: THREE.Matrix4,
+  out: MeshSoup
+): void {
+  const sx = Math.max(spec.sizeX, 1e-4);
+  const sy = Math.max(spec.sizeY, 1e-4);
+  const sz = Math.max(spec.sizeZ, 1e-4);
+  for (let i = 0; i < 8; i++) {
+    _boxVerts[i * 3] = BOX_CORNERS[i * 3] * sx;
+    _boxVerts[i * 3 + 1] = BOX_CORNERS[i * 3 + 1] * sy;
+    _boxVerts[i * 3 + 2] = BOX_CORNERS[i * 3 + 2] * sz;
+  }
+  _compPos.set(spec.posX, spec.posY, spec.posZ);
+  _compEuler.set(spec.rotX, spec.rotY, spec.rotZ);
+  _compQuat.setFromEuler(_compEuler);
+  _compLocalMat.compose(_compPos, _compQuat, _compScl);
+  _compWorldMat.multiplyMatrices(parentMatrix, _compLocalMat);
+  appendMesh(_boxVerts, BOX_INDICES, _compWorldMat, out, true);
+}
 
 /** True if every fixed trimesh/convex obstacle's collision GLB has finished
  * loading — the navmesh defers baking until then so holes aren't missed. */
@@ -198,6 +258,10 @@ export function navmeshObstaclesLoaded(state: State, bounds: number): boolean {
     const url = getColliderMeshUrl(state, eid);
     if (!url) continue;
     if (!requestColliderMesh(url)) return false;
+  }
+  for (const eid of compositionObstacleQuery(state.world)) {
+    if (!withinBounds(state, eid, bounds)) continue;
+    if (CompositionPending.colliderBuilt[eid] !== 1) return false;
   }
   return true;
 }
@@ -253,6 +317,20 @@ function collectColliderObstacles(
     const scale = (Collider.meshScale[eid] || 1) * (Transform.scaleX[eid] || 1);
     const baked = buildMeshColliderGeometry(data, scale, Collider.meshAnchor[eid]);
     appendMesh(baked.vertices, baked.indices, matrix, soup);
+  }
+
+  for (const eid of compositionObstacleQuery(state.world)) {
+    if (CompositionPending.colliderBuilt[eid] !== 1) continue;
+    if (!withinBounds(state, eid, bounds)) continue;
+    if (state.hasComponent(eid, Rigidbody) && Rigidbody.type[eid] !== BodyType.Fixed) {
+      continue;
+    }
+    const data = getCompositionData(state, eid);
+    if (!data || data.colliderMode === 'none') continue;
+    const matrix = compositionEntityWorldMatrix(state, eid);
+    for (const spec of data.specs) {
+      appendCompositionSpec(spec, matrix, soup);
+    }
   }
 
   if (soup.indices.length === 0) return null;
