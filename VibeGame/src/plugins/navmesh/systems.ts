@@ -24,6 +24,13 @@ const MAX_INIT_WAIT_FRAMES = 600;
 
 const AGENT_HEIGHT = 2.0;
 const AGENT_RADIUS = 0.4;
+// Extra walkable-area erosion beyond the agent radius. recast pushes the navmesh
+// edge back by `walkableRadius` cells from every obstacle; agent radius alone
+// (0.4 m = 1 cell) let enemies brush right against the house/tree/rock collider,
+// and the kinematic controller then climbed the angled face (roof, trunk flare,
+// boulder slope). Adding a margin keeps the path a clear standoff away so agents
+// route AROUND props instead of grazing them. cs = 0.4 → each cell is 0.4 m.
+const OBSTACLE_MARGIN = 0.4;
 const MAX_STEP_HEIGHT = 0.4;
 // Voxel cell size. Drives both navmesh fidelity and generation cost: the recast
 // rasteriser allocates a (2·PLAY_AREA_RADIUS / cs)² column grid, so halving cs
@@ -49,7 +56,7 @@ function navMeshConfig(worldSize: number) {
     walkableSlopeAngle: 45,
     walkableHeight: Math.ceil(AGENT_HEIGHT / cs),
     walkableClimb: Math.max(1, Math.ceil(MAX_STEP_HEIGHT / cs)),
-    walkableRadius: Math.max(1, Math.ceil(AGENT_RADIUS / cs)),
+    walkableRadius: Math.max(1, Math.ceil((AGENT_RADIUS + OBSTACLE_MARGIN) / cs)),
     maxVertsPerPoly: 6,
     detailSampleDist: cs * 6,
     detailSampleMaxError: cs,
