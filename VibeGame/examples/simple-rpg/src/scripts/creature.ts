@@ -8,13 +8,12 @@ import {
   MonoBehaviour,
 } from 'vibegame';
 import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
-import { castRapierRay } from '../../../../src/plugins/raycast/utils.ts';
+import { getBvhSurfaceHeight } from '../../../../src/plugins/bvh/utils.ts';
 import {
   Health,
   damageHealth,
   isDead,
 } from '../../../../src/plugins/combat/components.ts';
-import { spawnFloatingText } from '../../../../src/plugins/floating-text/utils.ts';
 import { spawnParticleBurst } from '../../../../src/plugins/particles/utils.ts';
 import { threeCameras } from '../../../../src/plugins/rendering/utils.ts';
 import {
@@ -26,6 +25,15 @@ import {
   NavMeshAgent,
 } from '../../../../src/plugins/navmesh/index';
 
+// Terrain collision layer for ground sampling. Sampling the terrain BVH (not a
+// Rapier ray against everything) keeps creatures off the player's head: the BVH
+// only contains terrain, so a creature standing over the player can't snap onto
+// it. Everything shares membership 0xffff, so a Rapier ray would hit the player.
+const TERRAIN_LAYER = 0x0001;
+// How close a lunge may bring the creature to the player's center — stops it
+// dashing through/over the player so melee stays face-to-face. ~2.2m keeps a
+// clear gap between the ~1m-wide meshes instead of letting them overlap.
+const LUNGE_STANDOFF = 2.2;
 const WATER_LEVEL = 1.25;
 const TURN_RATE = 2.0;
 const ACCEL = 3.0;
@@ -42,6 +50,12 @@ const HOVER_MIN = 2.0;
 const HOVER_MAX = 5.0;
 const WANDER_PICK_DIST_MIN = 2;
 const HEALTH_BAR_WIDTH = 1.4;
+
+const aggroEntities = new Set<number>();
+
+export function anyCreatureAggro(): boolean {
+  return aggroEntities.size > 0;
+}
 
 let eidSfxEnemyHurt = -1;
 let eidSfxEnemyDeath = -1;
@@ -104,6 +118,8 @@ interface CreatureState {
   healthBarBg: THREE.Mesh | null;
   healthBarFill: THREE.Mesh | null;
   lastHp: number;
+  flashTimer: number;
+  flashMats: { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] | null;
   wanderTargetX: number;
   wanderTargetZ: number;
   prevPosX: number;
@@ -115,7 +131,6 @@ interface CreatureState {
 
 const playerQuery = defineQuery([PlayerController]);
 const _box = new THREE.Box3();
-const _downDir = { x: 0, y: -1, z: 0 };
 
 function groundHeight(
   ctx: MonoBehaviourContext,
@@ -123,9 +138,8 @@ function groundHeight(
   z: number,
   fromY: number
 ): number {
-  const origin = { x, y: fromY + 60, z };
-  const hit = castRapierRay(ctx.state, origin, _downDir, 2000, 0xffff);
-  if (hit) return hit.point.y;
+  const gy = getBvhSurfaceHeight(ctx.state, x, fromY + 60, z, 2000, TERRAIN_LAYER);
+  if (gy != null && Number.isFinite(gy)) return gy;
   const hm = getTerrainHeightAt(ctx.state, x, z);
   if (Number.isFinite(hm)) return hm;
   return 0;
@@ -197,6 +211,42 @@ function disposeHealthBar(s: CreatureState): void {
   s.healthBarFill = null;
 }
 
+/** Cache the creature's emissive materials so a hit can tint them white. */
+function collectFlashMats(s: CreatureState): void {
+  if (s.flashMats || !s.group) return;
+  const mats: { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] = [];
+  s.group.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const m = mesh.material;
+    const arr = Array.isArray(m) ? m : [m];
+    for (const mat of arr) {
+      const sm = mat as THREE.MeshStandardMaterial;
+      if (sm && sm.emissive) {
+        mats.push({
+          mat: sm,
+          emHex: sm.emissive.getHex(),
+          emInt: sm.emissiveIntensity ?? 1,
+        });
+      }
+    }
+  });
+  s.flashMats = mats;
+}
+
+function applyFlash(s: CreatureState, on: boolean): void {
+  if (!s.flashMats) return;
+  for (const f of s.flashMats) {
+    if (on) {
+      f.mat.emissive.setRGB(1, 1, 1);
+      f.mat.emissiveIntensity = 1.4;
+    } else {
+      f.mat.emissive.setHex(f.emHex);
+      f.mat.emissiveIntensity = f.emInt;
+    }
+  }
+}
+
 export interface CreatureBehaviours {
   start: (ctx: MonoBehaviourContext) => void;
   update: (ctx: MonoBehaviourContext) => void;
@@ -225,6 +275,7 @@ export function createCreatureBehaviours(
     if (s.deathHandled) return;
     s.deathHandled = true;
     s.combatState = 'dead';
+    aggroEntities.delete(eid);
     s.deathTimer = 2.0;
     s.speed = 0;
     clearAgentTarget(ctx.state, eid);
@@ -245,14 +296,7 @@ export function createCreatureBehaviours(
     cfg.onDeathLoot?.(ctx.state, gold, x, y, z);
     if (eidSfxItemDrop >= 0) playAudioEmitter(ctx.state, eidSfxItemDrop);
 
-    spawnFloatingText(ctx.state, `+${gold} gold`, {
-      x,
-      y: y + 1.5,
-      z,
-      color: 0xffd700,
-      size: 0.5,
-      duration: 1.5,
-    });
+    // The "+gold" pop is emitted centrally (gold-delta watcher in main.ts).
     spawnParticleBurst(ctx.state, {
       x,
       y: y + 0.5,
@@ -282,11 +326,44 @@ export function createCreatureBehaviours(
     if (s.lungePhase === 'windup' || s.lungePhase === 'recovery') {
       moving = false;
     } else if (s.combatState === 'chase' && playerEid > 0) {
-      tx = Transform.posX[playerEid];
-      tz = Transform.posZ[playerEid];
-      moving = true;
+      // Hold a 1.1–1.6m band around the player. Crowd agents ignore RigidBodies
+      // and carry momentum, so a target pinned to the player's centroid lets the
+      // capsule glide through the agent; anchoring on a ring around the player
+      // makes the enemy approach face-to-face and retreat when the player walks
+      // into it, instead of overlapping.
+      const pdx = Transform.posX[playerEid] - Transform.posX[eid];
+      const pdz = Transform.posZ[playerEid] - Transform.posZ[eid];
+      const pdist = Math.sqrt(pdx * pdx + pdz * pdz) || 1e-3;
+      const DESIRED_DIST = 1.6;
+      const MIN_GAP = 1.1;
+      if (pdist > DESIRED_DIST) {
+        const k = (pdist - DESIRED_DIST) / pdist;
+        tx = Transform.posX[eid] + pdx * k;
+        tz = Transform.posZ[eid] + pdz * k;
+        moving = true;
+      } else if (pdist < MIN_GAP) {
+        const k = (MIN_GAP - pdist) / pdist;
+        tx = Transform.posX[eid] - pdx * k;
+        tz = Transform.posZ[eid] - pdz * k;
+        moving = true;
+      } else {
+        moving = false;
+      }
     } else if (s.combatState === 'attack') {
-      moving = false;
+      // Player can still push in: keep the same gap during attack so lunges
+      // start from face-to-face distance instead of inside the capsule.
+      const pdx = Transform.posX[playerEid] - Transform.posX[eid];
+      const pdz = Transform.posZ[playerEid] - Transform.posZ[eid];
+      const pdist = Math.sqrt(pdx * pdx + pdz * pdz) || 1e-3;
+      const MIN_GAP = 1.1;
+      if (pdist < MIN_GAP) {
+        const k = (MIN_GAP - pdist) / pdist;
+        tx = Transform.posX[eid] - pdx * k;
+        tz = Transform.posZ[eid] - pdz * k;
+        moving = true;
+      } else {
+        moving = false;
+      }
     } else {
       const homeDx = s.originX - Transform.posX[eid];
       const homeDz = s.originZ - Transform.posZ[eid];
@@ -400,6 +477,8 @@ export function createCreatureBehaviours(
         healthBarBg: null,
         healthBarFill: null,
         lastHp: cfg.hp,
+        flashTimer: 0,
+        flashMats: null,
         wanderTargetX: 0,
         wanderTargetZ: 0,
         prevPosX: 0,
@@ -447,6 +526,7 @@ export function createCreatureBehaviours(
       s?.group?.removeFromParent();
       removeAgent(ctx.state, ctx.entity);
       stateMap.delete(ctx.entity);
+      aggroEntities.delete(ctx.entity);
     },
 
     update(ctx: MonoBehaviourContext): void {
@@ -481,29 +561,27 @@ export function createCreatureBehaviours(
         return;
       }
 
+      // Tick down a hit flash and restore the original emissive when it ends.
+      if (s.flashTimer > 0) {
+        s.flashTimer -= ctx.deltaTime;
+        if (s.flashTimer <= 0) applyFlash(s, false);
+      }
+
       const currentHp = Health.current[eid];
       if (s.lastHp > currentHp) {
-        const dmg = Math.round(s.lastHp - currentHp);
-        const px = Transform.posX[eid];
-        const py = Transform.posY[eid];
-        const pz = Transform.posZ[eid];
-        spawnFloatingText(ctx.state, `-${dmg}`, {
-          x: px + (Math.random() - 0.5) * 0.5,
-          y: py + 2.0 + Math.random() * 0.3,
-          z: pz + (Math.random() - 0.5) * 0.5,
-          color: 0xff4444,
-          size: 0.4,
-          duration: 1.0,
-        });
+        // Damage number + hurt SFX come from the central watchCombatFx in
+        // main.ts; here we add the 3D spark burst + a white flash for hit juice.
+        collectFlashMats(s);
+        s.flashTimer = 0.11;
+        applyFlash(s, true);
         spawnParticleBurst(ctx.state, {
-          x: px,
-          y: py + 1.0,
-          z: pz,
+          x: Transform.posX[eid],
+          y: Transform.posY[eid] + 1.0,
+          z: Transform.posZ[eid],
           preset: 'sparks',
           count: 6,
           duration: 0.4,
         });
-        if (eidSfxEnemyHurt >= 0) playAudioEmitter(ctx.state, eidSfxEnemyHurt);
       }
       s.lastHp = currentHp;
 
@@ -604,6 +682,12 @@ export function createCreatureBehaviours(
         s.lungePhase = 'ready';
       }
 
+      if (s.combatState === 'chase' || s.combatState === 'attack') {
+        aggroEntities.add(eid);
+      } else {
+        aggroEntities.delete(eid);
+      }
+
       if (!inCombat) {
         s.stateTimer -= dt;
         if (s.stateTimer <= 0) {
@@ -651,8 +735,21 @@ export function createCreatureBehaviours(
       const hasAgent = navReady && NavMeshAgent.agentIndex[eid] !== -1;
 
       if (lunging) {
-        const nx = x + s.lungeDirX * LUNGE_SPEED * dt;
-        const nz = z + s.lungeDirZ * LUNGE_SPEED * dt;
+        let nx = x + s.lungeDirX * LUNGE_SPEED * dt;
+        let nz = z + s.lungeDirZ * LUNGE_SPEED * dt;
+        // Clamp the dash so the creature halts at a frontal standoff instead of
+        // sliding through / onto the player.
+        if (playerEid > 0) {
+          const pdx = nx - Transform.posX[playerEid];
+          const pdz = nz - Transform.posZ[playerEid];
+          const pd = Math.hypot(pdx, pdz);
+          if (pd < LUNGE_STANDOFF) {
+            const ux = pd > 1e-3 ? pdx / pd : -s.lungeDirX;
+            const uz = pd > 1e-3 ? pdz / pd : -s.lungeDirZ;
+            nx = Transform.posX[playerEid] + ux * LUNGE_STANDOFF;
+            nz = Transform.posZ[playerEid] + uz * LUNGE_STANDOFF;
+          }
+        }
         const aheadY = groundHeight(ctx, nx, nz, Transform.posY[eid]);
         if (Number.isFinite(aheadY) && aheadY >= WATER_LEVEL) {
           const groundY = footprintHeight(ctx, nx, nz, Transform.posY[eid]);
