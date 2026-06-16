@@ -65,7 +65,15 @@ const DEFAULT_LOCOMOTION_SET = 'default';
 
 const ATTACK_RANGE = 2.2; // m
 const ATTACK_DAMAGE = 25;
+// Fraction of the attack clip after which the blow lands — the hit registers
+// near the end of the swing (matching the visual impact) instead of the instant
+// the button is pressed. Mirrors Destructible.impactFraction for props.
+const ATTACK_IMPACT_FRACTION = 0.7;
+// Fallback impact delay when the clip duration is unknown.
+const ATTACK_IMPACT_FALLBACK = 0.4; // s
 const prevPrimary = new Map<number, number>();
+// Per-attacker countdown until the pending melee blow lands (seconds).
+const pendingMelee = new Map<number, number>();
 
 // Natural stride speed (m/s) the gait clips were authored at — playback is
 // time-scaled by actualSpeed/ref so the feet track the ground.
@@ -312,9 +320,40 @@ export const PlayerGltfAnimStateSystem: System = {
       const wasPrimary = prevPrimary.get(eid) ?? 0;
       prevPrimary.set(eid, primary);
       if (primary && !wasPrimary && grounded && !animator.overrideLock) {
-        const attackClip = findClipFuzzy(animator, 'attack');
-        if (attackClip) animator.playOverride(attackClip, { loop: false });
-        meleeHit(state, eid);
+        // Play the swing clip if the rig has one (don't gate the hit on it).
+        const attackClip = findClipFuzzy(
+          animator,
+          'attack',
+          'swing',
+          'punch',
+          'slash',
+          'hit',
+          'melee',
+          'strike'
+        );
+        let clipDur = 0;
+        if (attackClip) {
+          const action = animator.playOverride(attackClip, { loop: false });
+          clipDur = action?.getClip()?.duration ?? 0;
+        }
+        // Schedule the blow for the impact frame instead of landing it now —
+        // always, even when the rig has no attack clip.
+        pendingMelee.set(
+          eid,
+          clipDur > 0 ? clipDur * ATTACK_IMPACT_FRACTION : ATTACK_IMPACT_FALLBACK
+        );
+      }
+
+      // Land the scheduled melee hit when the swing reaches its impact frame.
+      const meleeWait = pendingMelee.get(eid);
+      if (meleeWait !== undefined) {
+        const left = meleeWait - dt;
+        if (left <= 0) {
+          meleeHit(state, eid);
+          pendingMelee.delete(eid);
+        } else {
+          pendingMelee.set(eid, left);
+        }
       }
 
       if (PlayerGltfConfig.overrideLock[eid] === 1 || animator.overrideLock) {
