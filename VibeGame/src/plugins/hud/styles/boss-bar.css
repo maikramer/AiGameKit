@@ -1,0 +1,40 @@
+.hud-boss {
+  min-width: 320px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  pointer-events: auto;
+  background: rgba(8, 12, 28, 0.7);
+  border: 1px solid rgba(200, 40, 40, 0.35);
+  backdrop-filter: blur(8px);
+  font-family: system-ui, Segoe UI, sans-serif;
+}
+
+.hud-boss-track {
+  position: relative;
+  width: 300px;
+  height: 20px;
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 4px;
+  background: rgba(60, 12, 12, 0.7);
+}
+
+.hud-boss-fill {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.2s ease-out;
+  background: linear-gradient(90deg, #b22222, #ff4444);
+}
+
+.hud-boss-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}

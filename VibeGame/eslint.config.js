@@ -23,6 +23,7 @@ export default [
         Response: 'readonly',
         fetch: 'readonly',
         HTMLElement: 'readonly',
+        HTMLDivElement: 'readonly',
         HTMLCanvasElement: 'readonly',
         HTMLImageElement: 'readonly',
         ImageData: 'readonly',

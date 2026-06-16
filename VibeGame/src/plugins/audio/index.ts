@@ -10,6 +10,11 @@ export {
   resumeAudioContextOnFirstUserGesture,
 } from './systems';
 export {
+  NamedSfxResolverSystem,
+  playNamedSfx,
+  registerNamedSfx,
+} from './sfx-registry';
+export {
   defineSoundBank,
   getSoundDef,
   playSound,

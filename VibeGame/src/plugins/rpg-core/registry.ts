@@ -13,6 +13,30 @@ type DefMap = Map<string, unknown>;
 
 const EMPTY_READONLY: readonly unknown[] = Object.freeze([]);
 
+type BunRuntime = {
+  Glob: new (pattern: string) => {
+    scan(opts: { cwd: string; onlyFiles?: boolean }): AsyncIterable<string>;
+  };
+  file(path: string): { text(): Promise<string> };
+};
+
+// Indirect so bundlers do not statically resolve the `bun` module for browser
+// builds (mirrors `acquireNodeFs` in plugin.ts). Under the Bun runtime the API
+// lives on `globalThis.Bun`; elsewhere (browser) this returns null and directory
+// loading is unavailable.
+function acquireBunRuntime(): BunRuntime | null {
+  const B = (globalThis as Record<string, unknown>).Bun;
+  if (B && typeof B === 'object') return B as BunRuntime;
+  try {
+    const req = (new Function('return require'))() as (id: string) => unknown;
+    const mod = req('bun');
+    if (mod && typeof mod === 'object') return mod as BunRuntime;
+  } catch {
+    /* no CommonJS require in this environment */
+  }
+  return null;
+}
+
 export class DataRegistry {
   private readonly store = new Map<string, DefMap>();
 
@@ -71,19 +95,23 @@ export class DataRegistry {
 
   /**
    * Read every `.yaml`/`.yml`/`.json` file directly under `dir` (non-recursive)
-   * and register its contents. Uses `Bun.file` for file I/O.
+   * and register its contents. Requires the Bun runtime.
    */
   async loadDirectory(dir: string): Promise<void> {
-    const moduleName = 'bu' + 'n';
-    const bunModule = await import(moduleName);
-    const glob = new bunModule.Glob('*.{yaml,yml,json}');
+    const bun = acquireBunRuntime();
+    if (!bun) {
+      throw new Error(
+        'DataRegistry.loadDirectory() requires the Bun runtime (globalThis.Bun); it is unavailable in the browser.'
+      );
+    }
+    const glob = new bun.Glob('*.{yaml,yml,json}');
     const paths: string[] = [];
     for await (const match of glob.scan({ cwd: dir, onlyFiles: true })) {
       paths.push(match);
     }
     paths.sort();
     for (const rel of paths) {
-      const text = await bunModule.file(`${dir}/${rel}`).text();
+      const text = await bun.file(`${dir}/${rel}`).text();
       if (rel.endsWith('.json')) {
         this.loadJson(text);
       } else {

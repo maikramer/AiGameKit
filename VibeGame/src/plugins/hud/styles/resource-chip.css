@@ -1,0 +1,39 @@
+.hud-resource {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border-radius: 10px;
+  pointer-events: auto;
+  cursor: default;
+  font-size: 14px;
+  font-weight: 700;
+  font-family: system-ui, Segoe UI, sans-serif;
+  background: linear-gradient(135deg, rgba(14, 18, 34, 0.72), rgba(10, 14, 26, 0.6));
+  backdrop-filter: blur(10px);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.25);
+}
+
+.hud-resource-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.hud-resource-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-resource-gold {
+  color: #ffd24a;
+  border: 1px solid rgba(255, 210, 60, 0.3);
+}
+
+.hud-resource-wood {
+  color: #d4a76a;
+  border: 1px solid rgba(190, 140, 80, 0.3);
+}
+
+.hud-resource-stone {
+  color: #d4c9a8;
+  border: 1px solid rgba(170, 165, 150, 0.3);
+}

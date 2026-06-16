@@ -7,6 +7,7 @@ export {
   getProgressionEntitySnapshot,
   getSkillRank,
   getStatModifiers,
+  getXpToNextLevel,
   levelUp,
   setProgressionConfig,
   spendSkillPoint,

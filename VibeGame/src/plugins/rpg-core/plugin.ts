@@ -1,7 +1,27 @@
-import { readFileSync, statSync } from 'node:fs';
 import type { Plugin, Recipe, State } from '../../core';
 import { EventBusCleanupSystem, getEventBus } from './events';
 import { getDataRegistry } from './registry';
+
+type NodeFsLike = {
+  readFileSync(path: string, encoding: string): string;
+  statSync(path: string): { isDirectory(): boolean };
+};
+
+function acquireNodeFs(): NodeFsLike | null {
+  try {
+    // `import.meta.require` is available in Bun (and Node with a loader);
+    // undefined in the browser, so bundlers never resolve `node:fs` for
+    // browser builds. This replaces `(new Function('return require'))()`,
+    // which fails in Bun ESM where bare `require` is not defined.
+    const req = (
+      import.meta as { require?: (id: string) => NodeFsLike }
+    ).require;
+    if (typeof req !== 'function') return null;
+    return req('node:fs');
+  } catch {
+    return null;
+  }
+}
 
 export const RpgCoreEventsPlugin: Plugin = {
   systems: [EventBusCleanupSystem],
@@ -35,9 +55,16 @@ const lootTableRecipe: Recipe = {
 };
 
 function loadRpgDataFile(state: State, src: string): void {
+  const fs = acquireNodeFs();
+  if (!fs) {
+    console.error(
+      `[RpgData] filesystem data loading is unavailable in this environment (browser). Cannot load "${src}".`
+    );
+    return;
+  }
   let isDir = false;
   try {
-    isDir = statSync(src).isDirectory();
+    isDir = fs.statSync(src).isDirectory();
   } catch (err) {
     console.error(`[RpgData] cannot stat "${src}": ${(err as Error).message ?? err}`);
     return;
@@ -50,7 +77,7 @@ function loadRpgDataFile(state: State, src: string): void {
   }
   let text: string;
   try {
-    text = readFileSync(src, 'utf8');
+    text = fs.readFileSync(src, 'utf8');
   } catch (err) {
     console.error(`[RpgData] cannot read "${src}": ${(err as Error).message ?? err}`);
     return;

@@ -1,0 +1,42 @@
+.hud-xp {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+  font-family: system-ui, Segoe UI, sans-serif;
+}
+
+.hud-xp-level {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  color: #2a1c06;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffe7a0, #ffc24a 60%, #d99320);
+  border: 1px solid rgba(255, 225, 150, 0.85);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.65);
+}
+
+.hud-xp-track {
+  flex: 1;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: rgba(10, 14, 26, 0.7);
+  border: 1px solid rgba(120, 150, 220, 0.2);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.hud-xp-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.25s ease-out;
+  background: linear-gradient(90deg, #7a5cff, #b18cff 60%, #e6dbff);
+  box-shadow: 0 0 8px rgba(150, 110, 255, 0.6);
+}

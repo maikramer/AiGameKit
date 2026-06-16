@@ -65,6 +65,9 @@ export {
   registerAudioClip,
   resumeAudioContextIfSuspended,
   resumeAudioContextOnFirstUserGesture,
+  NamedSfxResolverSystem,
+  playNamedSfx,
+  registerNamedSfx,
   defineSoundBank,
   getSoundDef,
   playSound,
@@ -147,9 +150,18 @@ export {
 export {
   FloatingTextPlugin,
   FloatingText,
+  ScreenFloatPool,
+  disposeScreenFloatPool,
+  getFloatingScreenPoolSize,
+  getScreenFloatPool,
   spawnFloatingText,
+  spawnFloatingTextScreen,
 } from './plugins/floating-text';
-export type { FloatingTextOptions } from './plugins/floating-text';
+export type {
+  FloatingTextOptions,
+  FloatingTextSpace,
+  ScreenFloatingTextOptions,
+} from './plugins/floating-text';
 export {
   SpawnerPlugin,
   SpawnerPending,
@@ -250,6 +262,112 @@ export {
   unregisterHudWidget,
 } from './plugins/hud';
 export type { HudWidget, HudWidgetFactory, WidgetHandle } from './plugins/hud';
+export {
+  DEFAULT_MINIMAP_COLORS,
+  DEFAULT_MINIMAP_RADII,
+  DEFAULT_MINIMAP_RANGE,
+  DEFAULT_MINIMAP_SIZE,
+  MINIMAP_CATEGORY_VALUES,
+  MINIMAP_WIDGET_TYPE,
+  MinimapWidget,
+  collectMinimapDots,
+  drawMinimap,
+  minimapParser,
+  minimapRecipe,
+  parseMinimapOptions,
+  registerMinimapWidgetFactory,
+  resolveMinimapCategory,
+} from './plugins/hud';
+export type {
+  MinimapAnchor,
+  MinimapCategory,
+  MinimapCollection,
+  MinimapDot,
+  MinimapOptions,
+  MinimapPlayerMarker,
+} from './plugins/hud';
+export {
+  getInteractionTargets,
+  interactionPromptParser,
+  interactionPromptRecipe,
+  interactionPromptWidgetFactory,
+  registerInteractionTarget,
+  unregisterInteractionTarget,
+} from './plugins/hud';
+export type { InteractionTarget, PromptPosition } from './plugins/hud';
+export {
+  COMPASS_DEFAULT_FOV,
+  COMPASS_DEFAULT_NORTH,
+  COMPASS_DEFAULT_NORTH_COLOR,
+  cameraAzimuth,
+  cardinalAzimuths,
+  compassParser,
+  compassRecipe,
+  createCompassWidget,
+  markTransform,
+  wrapAngle,
+} from './plugins/hud';
+export type { CardinalMark, CompassConfig, MarkTransform } from './plugins/hud';
+export {
+  bossBarFactory,
+  controlsBarFactory,
+  createBossBarWidget,
+  createControlsBarWidget,
+  createHealthBarWidget,
+  createMissionWidget,
+  createResourceChipWidget,
+  createTimerWidget,
+  createXpBarWidget,
+  healthBarFactory,
+  missionFactory,
+  registerHudWidgetFactories,
+  resourceChipFactory,
+  timerFactory,
+  widgetParsers,
+  widgetRecipes,
+  xpBarFactory,
+} from './plugins/hud';
+export {
+  applyPosition,
+  formatTime,
+  injectWidgetCss,
+  makeWidgetParser,
+  readAttr,
+  readPosition,
+  resolveTargetEntity,
+} from './plugins/hud';
+export type { HudPosition } from './plugins/hud';
+export {
+  buildTabsFromChildren,
+  closeModal,
+  createInventoryTab,
+  createOptionsTab,
+  createSkillsTab,
+  createTabbedModalWidget,
+  getOptionValue,
+  isModalOpen,
+  MODAL_ACTION,
+  MODAL_OPTION_CHANGED,
+  openModal,
+  parseOptionDef,
+  registerModalTab,
+  registerOptionDef,
+  setOptionValue,
+  TABBED_MODAL_TAG,
+  TABBED_MODAL_TYPE,
+  tabbedModalParser,
+  tabbedModalRecipe,
+  toggleModal,
+} from './plugins/hud';
+export type {
+  InventoryTabConfig,
+  OptionDef,
+  OptionRowType,
+  SkillsTabConfig,
+  TabbedModalConfig,
+  TabContent,
+  TabDescriptor,
+} from './plugins/hud';
 
 export {
   LoadingPlugin,
@@ -299,6 +417,7 @@ export {
   getProgressionConfig,
   getSkillRank,
   getStatModifiers,
+  getXpToNextLevel,
   levelUp,
   ProgressionComponent,
   ProgressionEventBridgeSystem,

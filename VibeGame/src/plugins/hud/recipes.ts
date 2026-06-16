@@ -17,3 +17,9 @@ export const hudWidgetRecipe: Recipe = {
   parserAttributes: ['type'],
   parserOwnsChildren: true,
 };
+
+export const compassRecipe: Recipe = {
+  name: 'Compass',
+  components: [],
+  parserAttributes: ['fov', 'north', 'mark-color-north'],
+};

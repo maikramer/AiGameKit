@@ -141,6 +141,18 @@ export function levelUp(state: State, eid: number): void {
   queueEvent(state, PROGRESSION_LEVEL_UP, { eid, level: currentLevel + 1 });
 }
 
+/**
+ * XP required to advance from the entity's current level to the next one,
+ * resolving the active xp-curve (registry → default `5 + level` fallback).
+ * Returns 0 when the entity has no ProgressionComponent.
+ */
+export function getXpToNextLevel(state: State, eid: number): number {
+  if (!state.hasComponent(eid, ProgressionComponent)) return 0;
+  const cfg = getProgressionConfig(state, eid);
+  const curve = resolveXpCurve(state, cfg.xpCurve);
+  return curve(ProgressionComponent.level[eid]);
+}
+
 function computeSkillCost(def: SkillDef, currentRank: number): number {
   if (Array.isArray(def.cost)) {
     const idx = Math.min(currentRank, def.cost.length - 1);

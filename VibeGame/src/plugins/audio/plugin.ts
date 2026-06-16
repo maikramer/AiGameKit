@@ -15,6 +15,7 @@ import {
   SoundBankSystem,
   registerAudioClip,
 } from './systems';
+import { NamedSfxResolverSystem } from './sfx-registry';
 
 function audioUrlAdapter(entity: number, value: string, _state: State): void {
   registerAudioClip(entity, value.trim());
@@ -41,7 +42,13 @@ function audioSoundAdapter(entity: number, value: string, _state: State): void {
 }
 
 export const AudioPlugin: Plugin = {
-  systems: [AudioListenerSetupSystem, AudioSystem, SoundBankSystem, MusicMixerSystem],
+  systems: [
+    AudioListenerSetupSystem,
+    NamedSfxResolverSystem,
+    AudioSystem,
+    SoundBankSystem,
+    MusicMixerSystem,
+  ],
   recipes: [audioClipRecipe, musicLayerRecipe, audioMixerRecipe],
   components: {
     audioSource: AudioSource,

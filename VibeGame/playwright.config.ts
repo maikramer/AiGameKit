@@ -4,6 +4,12 @@ import { defineConfig, devices } from '@playwright/test';
 /** Porta só para o webServer do Playwright (evita colisão com `npm run dev` em 3011). */
 const PLAYWRIGHT_DEV_PORT = 30991;
 const PLAYWRIGHT_ORIGIN = `http://127.0.0.1:${PLAYWRIGHT_DEV_PORT}`;
+const HUD_HARNESS_PORT = 30990;
+const HUD_HARNESS_ORIGIN = `http://127.0.0.1:${HUD_HARNESS_PORT}`;
+const FLOAT_HARNESS_PORT = 30989;
+const FLOAT_HARNESS_ORIGIN = `http://127.0.0.1:${FLOAT_HARNESS_PORT}`;
+const MINIMAP_HARNESS_PORT = 30988;
+const MINIMAP_HARNESS_ORIGIN = `http://127.0.0.1:${MINIMAP_HARNESS_PORT}`;
 
 /**
  * Modo CDP (browser já em execução com depuração remota):
@@ -95,11 +101,34 @@ export default defineConfig({
   ],
   webServer: useCdp
     ? undefined
-    : {
-        command: `BROWSER=none npx vite dev --host 127.0.0.1 --port ${PLAYWRIGHT_DEV_PORT} --strictPort`,
-        cwd: 'examples/simple-rpg',
-        url: PLAYWRIGHT_ORIGIN,
-        reuseExistingServer: !process.env.CI,
-        timeout: 120_000,
-      },
+    : [
+        {
+          command: `BROWSER=none npx vite dev --host 127.0.0.1 --port ${PLAYWRIGHT_DEV_PORT} --strictPort`,
+          cwd: 'examples/simple-rpg',
+          url: PLAYWRIGHT_ORIGIN,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120_000,
+        },
+        {
+          command: `npx vite tests/fixtures/hud-harness --host 127.0.0.1 --port ${HUD_HARNESS_PORT} --strictPort`,
+          cwd: '.',
+          url: HUD_HARNESS_ORIGIN,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+        {
+          command: `npx vite tests/fixtures/float-harness --host 127.0.0.1 --port ${FLOAT_HARNESS_PORT} --strictPort`,
+          cwd: '.',
+          url: FLOAT_HARNESS_ORIGIN,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+        {
+          command: `npx vite tests/fixtures/minimap-harness --host 127.0.0.1 --port ${MINIMAP_HARNESS_PORT} --strictPort`,
+          cwd: '.',
+          url: MINIMAP_HARNESS_ORIGIN,
+          reuseExistingServer: !process.env.CI,
+          timeout: 60_000,
+        },
+      ],
 });

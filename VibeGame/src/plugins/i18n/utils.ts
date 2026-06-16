@@ -38,7 +38,11 @@ export function t(
   const full = `${lang}:${key}`;
   const found = m?.has(full) ?? false;
   let s = m?.get(full) ?? key;
-  if (!found && process.env?.NODE_ENV !== 'production') {
+  if (
+    !found &&
+    typeof process !== 'undefined' &&
+    process.env?.NODE_ENV !== 'production'
+  ) {
     console.warn(
       `[i18n] missing key "${key}" for locale "${lang}" — returning key as fallback`
     );

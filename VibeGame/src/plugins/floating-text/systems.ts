@@ -6,12 +6,18 @@ import { getScene, threeCameras, MainCamera } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
 import { Transform } from '../transforms';
 import { FloatingText } from './components';
-import { deleteFloatingTextString, getFloatingTextString } from './utils';
+import {
+  disposeScreenFloatPool,
+  getScreenFloatPool,
+} from './screen-pool';
+import {
+  deleteFloatingTextString,
+  getFloatingTextString,
+} from './utils';
 
 const textQuery = defineQuery([FloatingText]);
 const cameraQuery = defineQuery([MainCamera]);
 
-/** The camera the renderer actually draws with — same pick as SceneRenderSystem. */
 function getActiveCamera(state: State): THREE.Camera | undefined {
   const cams = cameraQuery(state.world);
   return cams.length > 0 ? threeCameras.get(cams[0]) : undefined;
@@ -44,10 +50,8 @@ function createTextObject(state: State, entity: number): Text {
   obj.anchorX = 'center';
   obj.anchorY = 'middle';
   obj.textAlign = 'center';
-  // Black outline keeps the text readable against any backdrop.
   obj.outlineWidth = '6%';
   obj.outlineColor = 0x000000;
-  // Render late and bias depth so nearby props don't slice the glyphs.
   obj.renderOrder = 999;
   obj.depthOffset = -4;
   obj.sync();
@@ -62,13 +66,13 @@ function disposeTextObject(state: State, entity: number, obj: Text): void {
 }
 
 /**
- * Creates/updates troika `Text` meshes for `FloatingText` entities: billboards
- * them to the active camera, drifts them upward, fades the second half of
- * their lifetime, then destroys the entity.
+ * World-space floating text (space === 0): troika SDF glyphs billboards to
+ * the active camera, drifts upward, fades the second half of its lifetime
+ * and is destroyed at `duration`. Screen-space entries are skipped (handled
+ * by FloatingTextScreenUpdateSystem).
  */
 export const FloatingTextUpdateSystem: System = {
   group: 'draw',
-  // Billboard with THIS frame's camera pose, not last frame's.
   after: [CameraSyncSystem],
 
   update(state: State) {
@@ -81,6 +85,8 @@ export const FloatingTextUpdateSystem: System = {
     const camera = getActiveCamera(state);
 
     for (const entity of textQuery(state.world)) {
+      if (FloatingText.space[entity] === 1) continue;
+
       FloatingText.elapsed[entity] += dt;
       const elapsed = FloatingText.elapsed[entity];
       const duration = FloatingText.duration[entity] || 1.4;
@@ -102,15 +108,11 @@ export const FloatingTextUpdateSystem: System = {
         Transform.posY[entity] + FloatingText.riseSpeed[entity] * elapsed,
         Transform.posZ[entity]
       );
-      // Billboard via the WORLD quaternion — the engine drives the camera
-      // through its matrix, so the local .quaternion can be stale/identity
-      // and the text would face a fixed direction instead of the viewer.
       if (camera) {
         camera.getWorldQuaternion(_camQuat);
         obj.quaternion.copy(_camQuat);
       }
 
-      // Hold full opacity for the first half, then fade linearly.
       const opacity = Math.min(1, Math.max(0, 2 * (1 - elapsed / duration)));
       obj.fillOpacity = opacity;
       obj.outlineOpacity = opacity;
@@ -131,5 +133,47 @@ export const FloatingTextUpdateSystem: System = {
     }
     objects.clear();
     textObjectsByState.delete(state);
+  },
+};
+
+/**
+ * Screen-space floating text (space === 1): DOM spans recycled via the
+ * ScreenFloatPool, mounted inside the HudScreenLayer. Lazy-creates the pool
+ * on first use, animates rise + drift + scale-pop + fade, then releases the
+ * span back to the pool when the entity is destroyed.
+ */
+export const FloatingTextScreenUpdateSystem: System = {
+  group: 'late',
+
+  update(state: State) {
+    if (state.headless) return;
+    if (typeof document === 'undefined') return;
+
+    let pool = null;
+    const dt = state.time.deltaTime;
+
+    for (const entity of textQuery(state.world)) {
+      if (FloatingText.space[entity] !== 1) continue;
+
+      if (pool === null) {
+        pool = getScreenFloatPool(state);
+      }
+
+      if (!pool.getEntry(entity)) {
+        pool.applySpawn(state, entity);
+      }
+
+      FloatingText.elapsed[entity] += dt;
+      pool.updateEntity(entity, FloatingText.elapsed[entity]);
+
+      if (!pool.getEntry(entity)) {
+        if (state.exists(entity)) state.destroyEntity(entity);
+        deleteFloatingTextString(state, entity);
+      }
+    }
+  },
+
+  dispose(state: State) {
+    disposeScreenFloatPool(state);
   },
 };
