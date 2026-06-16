@@ -57,6 +57,7 @@ export {
 export {
   AudioSource,
   AudioListener,
+  MusicLayerComponent,
   AudioPlugin,
   AudioSystem,
   SoundBankSystem,
@@ -69,8 +70,6 @@ export {
   playSound,
   playSoundAt,
   playSoundOn,
-  setMasterVolume,
-  getMasterVolume,
   setBusVolume,
   getBusVolume,
   setBusMuted,
@@ -85,6 +84,30 @@ export type {
   SoundHandle,
   ClipSoundMarker,
 } from './plugins/audio';
+export {
+  MUSIC_ENTER_BATTLE,
+  MUSIC_EXIT_BATTLE,
+  MUSIC_LAYER_BATTLE,
+  MUSIC_LAYER_CUSTOM,
+  MUSIC_LAYER_EXPLORE,
+  MusicMixerSystem,
+  audioMixerParser,
+  audioMixerRecipe,
+  crossfadeMusicLayers,
+  getAudioMix,
+  getMasterVolume,
+  getMusicVolume,
+  getSfxVolume,
+  musicLayerRecipe,
+  playMusicLayer,
+  registerMusicLayerName,
+  resolveMusicLayer,
+  setMasterVolume,
+  setMusicVolume,
+  setSfxVolume,
+  wireMusicMixerEvents,
+} from './plugins/audio';
+export type { AudioMix } from './plugins/audio';
 export {
   MonoBehaviour,
   EntityScriptPlugin,
@@ -219,6 +242,14 @@ export {
 export type { NavMeshGeometry, AgentConfig } from './plugins/navmesh';
 
 export { HudPlugin, HudPanel } from './plugins/hud';
+export {
+  HudScreenUpdateSystem,
+  getHudScreenLayer,
+  registerHudWidget,
+  registerHudWidgetFactory,
+  unregisterHudWidget,
+} from './plugins/hud';
+export type { HudWidget, HudWidgetFactory, WidgetHandle } from './plugins/hud';
 
 export {
   LoadingPlugin,
@@ -247,6 +278,7 @@ export {
   INVENTORY_REMOVED,
   LOOT_DROPPED,
   LOOT_ROLLED,
+  LOOT_TABLE_KIND,
   onEvent,
   PROGRESSION_LEVEL_UP,
   PROGRESSION_SKILL_PURCHASED,
@@ -256,8 +288,11 @@ export {
   STATUS_APPLIED,
   STATUS_CANCELLED,
   STATUS_EXPIRED,
+  applyLootResult,
+  rollLoot,
 } from './plugins/rpg-core';
 export type { EventHandler, SubscriptionOptions } from './plugins/rpg-core';
+export type { LootResult, RngFn } from './plugins/rpg-core';
 
 export {
   addXp,
@@ -271,6 +306,30 @@ export {
   setProgressionConfig,
   spendSkillPoint,
 } from './plugins/rpg-progression';
+
+/**
+ * Status effects plugin: timed status effects (buffs/debuffs) with stat
+ * modifiers, periodic tick effects and a lifecycle contract that cancels every
+ * active status when its entity dies ({@link COMBAT_DEATH}). Status defs are
+ * data-driven via the {@link DataRegistry} (`status` kind).
+ */
+export {
+  applyStatus,
+  cancelAllStatuses,
+  cancelStatus,
+  getActiveStatuses,
+  getStatusModifiers,
+  STATUS_KIND,
+  StatusEffectComponent,
+  StatusEffectEventBridgeSystem,
+  StatusEffectsPlugin,
+  StatusEffectTickSystem,
+} from './plugins/rpg-status';
+export type {
+  ActiveStatusEffect,
+  StackMode,
+  StatusApplyOptions,
+} from './plugins/rpg-status';
 
 export {
   harvest,
@@ -305,22 +364,100 @@ export {
 export {
   SaveLoadPlugin,
   Serializable,
+  deserializeAll,
   loadFromLocalStorage,
   loadSnapshot,
+  registerRpgSaveSerializers,
+  registerSaveSerializer,
   saveSnapshot,
   saveToLocalStorage,
+  serializeAll,
+} from './plugins/save-load';
+export type {
+  SaveSnapshot,
+  SerializableEntitySnapshot,
+  SaveSerializer,
 } from './plugins/save-load';
 
 export {
+  ENGINE_DEFAULT_EN_DICTIONARY,
+  ENGINE_DEFAULT_LOCALE,
   I18nPlugin,
   I18nText,
   getLocale,
   loadDictionary,
+  loadEngineDefaultDictionary,
   setLocale,
   t,
 } from './plugins/i18n';
 export { initAssetHotReload } from './vite/hot-reload-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
+
+export {
+  createInteractable,
+  createPickup,
+  InteractableBehaviour,
+  PickupBehaviour,
+  interactableRecipe,
+  pickupRecipe,
+  toMonoBehaviourModule,
+} from './extras/interactable-base';
+export type {
+  InteractableConfig,
+  PickupConfig,
+  PickupTrigger,
+} from './extras/interactable-base';
+
+export {
+  createMeleeAi,
+  MeleeAiBehaviour,
+  meleeAiScriptRecipe,
+} from './extras/melee-ai-base';
+
+export {
+  createTurretAi,
+  TurretAiBehaviour,
+  turretAiScriptRecipe,
+} from './extras/turret-ai-base';
+export type { TurretAiConfig } from './extras/turret-ai-base';
+
+export {
+  AI_MODE_ATTACK,
+  AI_MODE_CHASE,
+  AI_MODE_DEAD,
+  AI_MODE_DETECT,
+  AI_MODE_IDLE,
+  AI_MODE_LUNGE,
+  AiStateComponent,
+  MELEE_AI_KIND,
+  RpgAiPlugin,
+  RpgAiSystem,
+  acquireTarget,
+  BossAiBehaviour,
+  createAiInstanceState,
+  createBossAi,
+  getMeleeAiConfig,
+  getOrCreateAiInstanceState,
+  isBossPreset,
+  loadMeleeAiPreset,
+  meleeAiRecipe,
+  presetToMeleeAiConfig,
+  removeAiInstanceState,
+  removeMeleeAiConfig,
+  runMeleeAiFrame,
+  setMeleeAiConfig,
+} from './plugins/rpg-ai';
+export type {
+  AiInstanceState,
+  AiMode,
+  BossAiPreset,
+  BossRoarConfig,
+  CreatureAssets,
+  CreatureClips,
+  CreatureLoot,
+  MeleeAiConfig,
+  MeleeAiPreset,
+} from './plugins/rpg-ai';
 
 export type {
   FactionTag,
@@ -375,12 +512,29 @@ export type { PriceEntry, PriceKind } from './plugins/rpg-economy';
  * {@link Health}, {@link damageHealth}, {@link healHealth} and {@link isDead}.
  */
 export {
+  bindCombatState,
+  CombatDeathCleanupSystem,
   CombatPlugin,
+  FACTION_TAG_NAMES,
+  FactionComponent,
+  getFaction,
   Health,
+  isHostile,
+  PROJECTILE_TEMPLATE_KIND,
+  ProjectileConfig,
   ProjectileData,
   damageHealth,
   healHealth,
   isDead,
+  setFaction,
+  spawnProjectile,
+  spawnProjectileFromTemplate,
+} from './plugins/combat';
+export type {
+  FactionHostilityMatrix,
+  ProjectileSpawnConfig,
+  ProjectileTarget,
+  ProjectileTemplate,
 } from './plugins/combat';
 
 /**
@@ -421,9 +575,23 @@ export { isTerrainDynamicsBlocking } from './plugins/terrain/utils';
 export { Postprocessing } from './plugins/postprocessing/components';
 
 /**
- * Debug overlay plugin (wireframes, stats).
+ * Debug overlay plugin (wireframes, stats) + PostFx debug toggle system
+ * (keys Digit1-6 to cycle bloom/CA/vignette/AA/SSAO/toneMapping; opt-in via DebugPlugin).
  */
-export { DebugPlugin } from './plugins/debug';
+export { DebugPlugin, PostFxToggleSystem } from './plugins/debug';
+
+/**
+ * Spawn gate plugin: opt-in latch that holds entities at their spawn Y until
+ * the terrain underneath is both heightmap-decoded and heightfield-backed,
+ * then snaps them to the ground. {@link gateEntity} marks any entity for
+ * gating; `<SpawnGate target-entity="hero" y-fallback="50"/>` is the
+ * declarative form.
+ */
+export {
+  SpawnGateComponent,
+  SpawnGatePlugin,
+  gateEntity,
+} from './plugins/spawn-gate';
 
 /*
  * ──────────────────────────────────────────────────────────────────────────

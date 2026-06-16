@@ -36,7 +36,13 @@ export function t(
   const lang = getLocale(state);
   const m = stateDictionaries.get(state);
   const full = `${lang}:${key}`;
+  const found = m?.has(full) ?? false;
   let s = m?.get(full) ?? key;
+  if (!found && process.env?.NODE_ENV !== 'production') {
+    console.warn(
+      `[i18n] missing key "${key}" for locale "${lang}" — returning key as fallback`
+    );
+  }
   if (params) {
     for (const [pk, pv] of Object.entries(params)) {
       s = s.replaceAll(`{${pk}}`, pv);

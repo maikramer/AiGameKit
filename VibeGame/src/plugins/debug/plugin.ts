@@ -3,6 +3,12 @@ import type { Plugin, State } from '../../core';
 import { getTerrainContext } from '../terrain/utils';
 import { getRenderingContext } from '../rendering/utils';
 import { getPhysicsContext } from '../physics/systems';
+import {
+  PostFxToggleSystem,
+  postFxToggleRecipe,
+  parsePostFxBindings,
+  setPostFxBindings,
+} from './postfx-toggle';
 
 export interface VibeGameDebugBridge {
   state: State;
@@ -141,6 +147,18 @@ function createBridge(state: State): VibeGameDebugBridge {
  * register it explicitly (e.g. in an example) so it never ships in production.
  */
 export const DebugPlugin: Plugin = {
+  systems: [PostFxToggleSystem],
+  recipes: [postFxToggleRecipe],
+  config: {
+    parsers: {
+      PostFxDebugToggle({ element, state }) {
+        const raw = element.attributes['bindings'];
+        if (typeof raw === 'string' && raw.trim() !== '') {
+          setPostFxBindings(state, parsePostFxBindings(raw));
+        }
+      },
+    },
+  },
   initialize(state: State): void {
     if (typeof window === 'undefined') return;
 

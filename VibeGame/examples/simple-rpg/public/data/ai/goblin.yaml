@@ -1,0 +1,32 @@
+# Goblin creature preset — melee AI tuning + assets/loot.
+# Source of truth for the simple-rpg goblin (see src/scripts/goblin-wander.ts).
+melee-ai:
+  goblin:
+    # MeleeAiConfig (consumed by the RpgAiSystem FSM)
+    detectRange: 18
+    attackRange: 3.0
+    attackCooldown: 2.5
+    attackDamage: 12
+    chaseSpeed: 2.4
+    wanderSpeed: 1.0
+    wanderRadius: 12
+    leashRadius: 30
+    lungeWindup: 0.25
+    lungeDuration: 0.3
+    lungeRecovery: 0.5
+    lungeStandoff: 2.2
+    hoverMin: 2.0
+    hoverMax: 5.0
+    # Gameplay extensions (not read by the FSM; consumed by spawn/loot wiring)
+    hp: 40
+    assets:
+      modelUrl: /assets/meshes/goblin_rigged_animated.glb
+      clips:
+        idle: Animator3D_BreatheIdle
+        walk: Animator3D_Walk
+        run: Animator3D_Run
+        lunge: Animator3D_Jump
+        death: Animator3D_Fall
+    loot:
+      goldMin: 8
+      goldMax: 18

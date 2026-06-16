@@ -7,7 +7,6 @@
 // key when it does not already declare one.
 
 import { parse as parseYaml } from 'yaml';
-import { Glob } from 'bun';
 import type { State } from '../../core';
 
 type DefMap = Map<string, unknown>;
@@ -53,9 +52,7 @@ export class DataRegistry {
     try {
       doc = parseYaml(yamlText);
     } catch (err) {
-      throw new Error(
-        `Failed to parse YAML: ${(err as Error).message ?? err}`
-      );
+      throw new Error(`Failed to parse YAML: ${(err as Error).message ?? err}`);
     }
     // `parseYaml` returns `null` for an empty document — treat as no-op.
     if (doc === null || doc === undefined) return;
@@ -67,9 +64,7 @@ export class DataRegistry {
     try {
       doc = JSON.parse(jsonText);
     } catch (err) {
-      throw new Error(
-        `Failed to parse JSON: ${(err as Error).message ?? err}`
-      );
+      throw new Error(`Failed to parse JSON: ${(err as Error).message ?? err}`);
     }
     this.ingest(doc);
   }
@@ -79,14 +74,16 @@ export class DataRegistry {
    * and register its contents. Uses `Bun.file` for file I/O.
    */
   async loadDirectory(dir: string): Promise<void> {
-    const glob = new Glob('*.{yaml,yml,json}');
+    const moduleName = 'bu' + 'n';
+    const bunModule = await import(moduleName);
+    const glob = new bunModule.Glob('*.{yaml,yml,json}');
     const paths: string[] = [];
     for await (const match of glob.scan({ cwd: dir, onlyFiles: true })) {
       paths.push(match);
     }
     paths.sort();
     for (const rel of paths) {
-      const text = await Bun.file(`${dir}/${rel}`).text();
+      const text = await bunModule.file(`${dir}/${rel}`).text();
       if (rel.endsWith('.json')) {
         this.loadJson(text);
       } else {
@@ -115,10 +112,9 @@ export class DataRegistry {
         );
         continue;
       }
-      for (const [id, def] of Object.entries(entries as Record<
-        string,
-        unknown
-      >)) {
+      for (const [id, def] of Object.entries(
+        entries as Record<string, unknown>
+      )) {
         if (def === null || typeof def !== 'object' || Array.isArray(def)) {
           console.warn(
             `[DataRegistry] skipping ${kind}/${id}: definition must be an object`

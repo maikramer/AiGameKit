@@ -12,9 +12,9 @@ describe('HudPlugin Registration', () => {
   });
 
   it('should have a recipe named "HudPanel" with components ["transform", "hudPanel"]', () => {
-    expect(HudPlugin.recipes!).toHaveLength(1);
-    expect(HudPlugin.recipes![0].name).toBe('HudPanel');
-    expect(HudPlugin.recipes![0].components).toEqual(['transform', 'hudPanel']);
+    const panelRecipe = HudPlugin.recipes!.find((r) => r.name === 'HudPanel');
+    expect(panelRecipe).toBeDefined();
+    expect(panelRecipe?.components).toEqual(['transform', 'hudPanel']);
   });
 
   it('should register the hudPanel component', () => {
@@ -29,8 +29,8 @@ describe('HudPlugin Registration', () => {
     expect(recipe?.components).toContain('hudPanel');
   });
 
-  it('should have two systems registered (HudBuildSystem + HudSyncSystem)', () => {
-    expect(HudPlugin.systems).toHaveLength(2);
+  it('should have three systems registered (HudBuildSystem + HudSyncSystem + HudScreenUpdateSystem)', () => {
+    expect(HudPlugin.systems).toHaveLength(3);
   });
 
   it('should have config.defaults for hudPanel', () => {

@@ -11,10 +11,12 @@ describe('I18nPlugin Registration', () => {
     state.registerPlugin(I18nPlugin);
   });
 
-  it('should have a recipe named "I18nText" with components ["i18n-text"]', () => {
-    expect(I18nPlugin.recipes!).toHaveLength(1);
+  it('should have recipes named "I18nText" and "I18n"', () => {
+    expect(I18nPlugin.recipes!).toHaveLength(2);
     expect(I18nPlugin.recipes![0].name).toBe('I18nText');
     expect(I18nPlugin.recipes![0].components).toEqual(['i18n-text']);
+    expect(I18nPlugin.recipes![1].name).toBe('I18n');
+    expect(I18nPlugin.recipes![1].components).toEqual(['i18n-config']);
   });
 
   it('should register the i18n-text component', () => {
@@ -29,8 +31,8 @@ describe('I18nPlugin Registration', () => {
     expect(recipe?.components).toContain('i18n-text');
   });
 
-  it('should have one system registered (I18nResolveSystem)', () => {
-    expect(I18nPlugin.systems).toHaveLength(1);
+  it('should have two systems registered (I18nAutoDefaultsSystem, I18nResolveSystem)', () => {
+    expect(I18nPlugin.systems).toHaveLength(2);
   });
 
   it('should have config.defaults for i18n-text', () => {

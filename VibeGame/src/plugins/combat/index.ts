@@ -1,6 +1,7 @@
 export {
-  Health,
-  ProjectileData,
+  FACTION_TAG_NAMES,
+  FactionComponent,
+  getDeathFlags,
   damageHealth,
   healHealth,
   isAlive,
@@ -9,6 +10,28 @@ export {
   setProjectileOwner,
   incrementProjectileAge,
   isProjectileExpired,
+  Health,
+  ProjectileConfig,
+  ProjectileData,
+  bindCombatState,
+  getFaction,
+  setFaction,
+  isHostile,
 } from './components';
+export type { FactionHostilityMatrix } from './components';
+export {
+  PROJECTILE_TEMPLATE_KIND,
+  spawnProjectile,
+  spawnProjectileFromTemplate,
+} from './projectile';
+export type {
+  ProjectileSpawnConfig,
+  ProjectileTarget,
+  ProjectileTemplate,
+} from './projectile';
 export { CombatPlugin } from './plugin';
-export { DamageResolutionSystem, ProjectileCleanupSystem } from './systems';
+export {
+  CombatDeathCleanupSystem,
+  DamageResolutionSystem,
+  ProjectileCleanupSystem,
+} from './systems';

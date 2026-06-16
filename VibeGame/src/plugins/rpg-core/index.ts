@@ -24,3 +24,5 @@ export {
 export type { EventHandler, SubscriptionOptions } from './events';
 export { DataRegistry, getDataRegistry } from './registry';
 export { RpgCoreEventsPlugin, RpgCorePlugin } from './plugin';
+export { LOOT_TABLE_KIND, applyLootResult, rollLoot } from './loot';
+export type { LootResult, RngFn } from './loot';

@@ -151,3 +151,50 @@ export function pruneVaults(
   }
   return removed;
 }
+
+export interface VaultResourceSlotData {
+  amount: number;
+  capacity: number;
+}
+
+export interface VaultEntitySnapshot {
+  resources: Record<string, VaultResourceSlotData>;
+}
+
+// Returns null when the entity owns no resources so the save serializer skips it.
+export function getVaultEntitySnapshot(
+  state: State,
+  eid: number
+): VaultEntitySnapshot | null {
+  const vs = getVaultState(state);
+  const perEntity = vs.table.get(eid);
+  if (!perEntity || perEntity.size === 0) return null;
+  const resources: Record<string, VaultResourceSlotData> = {};
+  for (const [idx, slot] of perEntity) {
+    const kind = vs.indexToKind[idx];
+    if (kind === undefined) continue;
+    resources[kind] = { amount: slot.amount, capacity: slot.capacity };
+  }
+  return { resources };
+}
+
+// Restores the side-table verbatim. Unlike addResource this emits no
+// ECONOMY_GAINED/SPENT events: a save restore is not gameplay.
+export function applyVaultEntitySnapshot(
+  state: State,
+  eid: number,
+  data: VaultEntitySnapshot
+): void {
+  VaultComponent.active[eid] = 1;
+  const vs = getVaultState(state);
+  let perEntity = vs.table.get(eid);
+  if (!perEntity) {
+    perEntity = new Map();
+    vs.table.set(eid, perEntity);
+  }
+  perEntity.clear();
+  for (const [kind, slot] of Object.entries(data.resources)) {
+    const idx = registerResourceKind(state, kind);
+    perEntity.set(idx, { amount: slot.amount, capacity: slot.capacity });
+  }
+}

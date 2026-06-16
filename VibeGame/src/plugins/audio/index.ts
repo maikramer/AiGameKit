@@ -1,4 +1,4 @@
-export { AudioSource, AudioListener } from './components';
+export { AudioSource, AudioListener, MusicLayerComponent } from './components';
 export { AudioPlugin } from './plugin';
 export { audioClipRecipe } from './recipes';
 export {
@@ -15,8 +15,6 @@ export {
   playSound,
   playSoundAt,
   playSoundOn,
-  setMasterVolume,
-  getMasterVolume,
   setBusVolume,
   getBusVolume,
   setBusMuted,
@@ -31,3 +29,27 @@ export type {
   SoundHandle,
   ClipSoundMarker,
 } from './bank';
+export {
+  MUSIC_ENTER_BATTLE,
+  MUSIC_EXIT_BATTLE,
+  MUSIC_LAYER_BATTLE,
+  MUSIC_LAYER_CUSTOM,
+  MUSIC_LAYER_EXPLORE,
+  MusicMixerSystem,
+  audioMixerParser,
+  audioMixerRecipe,
+  crossfadeMusicLayers,
+  getAudioMix,
+  getMasterVolume,
+  getMusicVolume,
+  getSfxVolume,
+  musicLayerRecipe,
+  playMusicLayer,
+  registerMusicLayerName,
+  resolveMusicLayer,
+  setMasterVolume,
+  setMusicVolume,
+  setSfxVolume,
+  wireMusicMixerEvents,
+} from './mixer';
+export type { AudioMix } from './mixer';

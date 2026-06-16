@@ -15,8 +15,8 @@ describe('AudioPlugin Registration', () => {
     state.registerPlugin(AudioPlugin);
   });
 
-  it('should register AudioListenerSetupSystem, AudioSystem and SoundBankSystem', () => {
-    expect(AudioPlugin.systems).toHaveLength(3);
+  it('should register AudioListenerSetupSystem, AudioSystem, SoundBankSystem and MusicMixerSystem', () => {
+    expect(AudioPlugin.systems).toHaveLength(4);
   });
 
   it('should register AudioEmitter component', () => {

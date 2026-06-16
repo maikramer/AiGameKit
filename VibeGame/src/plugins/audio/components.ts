@@ -17,3 +17,9 @@ export const AudioListener = {
   posY: new Float32Array(MAX_ENTITIES),
   posZ: new Float32Array(MAX_ENTITIES),
 } as const;
+
+export const MusicLayerComponent = {
+  layer: new Uint8Array(MAX_ENTITIES),
+  volume: new Float32Array(MAX_ENTITIES),
+  fade: new Float32Array(MAX_ENTITIES),
+} as const;

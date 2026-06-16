@@ -1,7 +1,14 @@
 import type { Plugin, State } from '../../core';
-import { AudioSource, AudioListener } from './components';
+import { AudioSource, AudioListener, MusicLayerComponent } from './components';
 import { getSoundDef } from './bank';
 import { audioClipRecipe } from './recipes';
+import {
+  audioMixerParser,
+  audioMixerRecipe,
+  musicLayerAdapters,
+  musicLayerRecipe,
+  MusicMixerSystem,
+} from './mixer';
 import {
   AudioListenerSetupSystem,
   AudioSystem,
@@ -14,7 +21,6 @@ function audioUrlAdapter(entity: number, value: string, _state: State): void {
   AudioSource.clipPath[entity] = entity;
 }
 
-/** `sound="key"`: seed this emitter from a bank entry (url + defaults). */
 function audioSoundAdapter(entity: number, value: string, _state: State): void {
   const def = getSoundDef(value.trim());
   if (!def) {
@@ -35,11 +41,12 @@ function audioSoundAdapter(entity: number, value: string, _state: State): void {
 }
 
 export const AudioPlugin: Plugin = {
-  systems: [AudioListenerSetupSystem, AudioSystem, SoundBankSystem],
-  recipes: [audioClipRecipe],
+  systems: [AudioListenerSetupSystem, AudioSystem, SoundBankSystem, MusicMixerSystem],
+  recipes: [audioClipRecipe, musicLayerRecipe, audioMixerRecipe],
   components: {
     audioSource: AudioSource,
     AudioListener,
+    'music-layer': MusicLayerComponent,
   },
   config: {
     defaults: {
@@ -53,12 +60,21 @@ export const AudioPlugin: Plugin = {
         rolloff: 1,
         playing: 0,
       },
+      'music-layer': {
+        layer: 0,
+        volume: 1,
+        fade: 0,
+      },
     },
     adapters: {
       audioSource: {
         url: audioUrlAdapter,
         sound: audioSoundAdapter,
       },
+      'music-layer': musicLayerAdapters,
+    },
+    parsers: {
+      AudioMixer: audioMixerParser,
     },
   },
 };

@@ -24,6 +24,16 @@ const rpgDataRecipe: Recipe = {
   parserAttributes: ['src'],
 };
 
+// `<LootTable>` is a domain-specific convenience over `<RpgData>`: it loads a
+// `.yaml`/`.yml`/`.json` file whose top-level key is `loot-table` and ingests
+// every table it contains into the registry. `id` documents the table the
+// author intends to use (no runtime effect — a file may declare many tables).
+const lootTableRecipe: Recipe = {
+  name: 'LootTable',
+  components: [],
+  parserAttributes: ['src', 'id'],
+};
+
 function loadRpgDataFile(state: State, src: string): void {
   let isDir = false;
   try {
@@ -55,10 +65,16 @@ function loadRpgDataFile(state: State, src: string): void {
 }
 
 export const RpgCorePlugin: Plugin = {
-  recipes: [rpgDataRecipe],
+  recipes: [rpgDataRecipe, lootTableRecipe],
   config: {
     parsers: {
       RpgData: ({ element, state }) => {
+        const raw = element.attributes.src;
+        if (raw === undefined || raw === null) return;
+        const src = String(raw).trim();
+        if (src.length > 0) loadRpgDataFile(state, src);
+      },
+      LootTable: ({ element, state }) => {
         const raw = element.attributes.src;
         if (raw === undefined || raw === null) return;
         const src = String(raw).trim();

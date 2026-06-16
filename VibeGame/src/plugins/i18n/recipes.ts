@@ -5,3 +5,8 @@ export const i18nTextRecipe: Recipe = {
   components: ['i18n-text'],
   merge: true,
 };
+
+export const i18nConfigRecipe: Recipe = {
+  name: 'I18n',
+  components: ['i18n-config'],
+};

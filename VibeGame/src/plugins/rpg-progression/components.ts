@@ -261,3 +261,56 @@ export function drainPendingEvents(state: State): PendingEvent[] {
   tables.pendingEvents = [];
   return drained;
 }
+
+export interface ProgressionEntitySnapshot {
+  xp: number;
+  level: number;
+  unspentPoints: number;
+  spent: number;
+  xpCurve: string;
+  skillPointsPerLevel: number;
+  ranks: Record<string, number>;
+}
+
+export function getProgressionEntitySnapshot(
+  state: State,
+  eid: number
+): ProgressionEntitySnapshot | null {
+  if (!state.hasComponent(eid, ProgressionComponent)) return null;
+  const cfg = getProgressionConfig(state, eid);
+  const ranks = getSkillRanks(state, eid);
+  const rankObj: Record<string, number> = {};
+  for (const [skillId, rank] of ranks) rankObj[skillId] = rank;
+  return {
+    xp: ProgressionComponent.xp[eid],
+    level: ProgressionComponent.level[eid],
+    unspentPoints: ProgressionComponent.unspentPoints[eid],
+    spent: ProgressionComponent.spent[eid],
+    xpCurve: cfg.xpCurve,
+    skillPointsPerLevel: cfg.skillPointsPerLevel,
+    ranks: rankObj,
+  };
+}
+
+// Restores xp/level/points and skill ranks directly. Unlike addXp /
+// spendSkillPoint this performs no curve recalculation, cost validation, or
+// event emission: the snapshot already represents a consistent prior state.
+export function applyProgressionEntitySnapshot(
+  state: State,
+  eid: number,
+  data: ProgressionEntitySnapshot
+): void {
+  ProgressionComponent.xp[eid] = data.xp;
+  ProgressionComponent.level[eid] = data.level;
+  ProgressionComponent.unspentPoints[eid] = data.unspentPoints;
+  ProgressionComponent.spent[eid] = data.spent;
+  setProgressionConfig(state, eid, {
+    xpCurve: data.xpCurve,
+    skillPointsPerLevel: data.skillPointsPerLevel,
+  });
+  const ranks = getSkillRanks(state, eid);
+  ranks.clear();
+  for (const [skillId, rank] of Object.entries(data.ranks)) {
+    ranks.set(skillId, rank);
+  }
+}

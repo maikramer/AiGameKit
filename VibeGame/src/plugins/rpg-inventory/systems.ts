@@ -55,8 +55,7 @@ function resolveMaxStack(state: State, itemId: string): number {
 }
 
 function bump(eid: number): void {
-  InventoryComponent.version[eid] =
-    (InventoryComponent.version[eid] + 1) >>> 0;
+  InventoryComponent.version[eid] = (InventoryComponent.version[eid] + 1) >>> 0;
 }
 
 export function getInventory(state: State, eid: number): readonly ItemStack[] {
@@ -64,11 +63,7 @@ export function getInventory(state: State, eid: number): readonly ItemStack[] {
   return getStacks(state, eid);
 }
 
-export function getItemQty(
-  state: State,
-  eid: number,
-  itemId: string
-): number {
+export function getItemQty(state: State, eid: number, itemId: string): number {
   if (!state.hasComponent(eid, InventoryComponent)) return 0;
   let total = 0;
   for (const stack of getStacks(state, eid)) {
@@ -176,3 +171,42 @@ export const InventoryEventBridgeSystem: System = {
     }
   },
 };
+
+export interface InventoryStackData {
+  itemId: string;
+  qty: number;
+}
+
+export interface InventoryEntitySnapshot {
+  capacity: number;
+  stacks: InventoryStackData[];
+}
+
+export function getInventoryEntitySnapshot(
+  state: State,
+  eid: number
+): InventoryEntitySnapshot | null {
+  if (!state.hasComponent(eid, InventoryComponent)) return null;
+  return {
+    capacity: InventoryComponent.capacity[eid],
+    stacks: getStacks(state, eid).map((s) => ({
+      itemId: s.itemId,
+      qty: s.qty,
+    })),
+  };
+}
+
+// Restores stacks verbatim and bypasses the maxStack/capacity clamping addItem
+// applies: a snapshot is already a valid prior state.
+export function applyInventoryEntitySnapshot(
+  state: State,
+  eid: number,
+  data: InventoryEntitySnapshot
+): void {
+  InventoryComponent.capacity[eid] = data.capacity;
+  const stacks = getStacks(state, eid);
+  stacks.length = 0;
+  for (const s of data.stacks) stacks.push({ itemId: s.itemId, qty: s.qty });
+  InventoryComponent.slots[eid] = stacks.length;
+  InventoryComponent.version[eid] = (InventoryComponent.version[eid] + 1) >>> 0;
+}

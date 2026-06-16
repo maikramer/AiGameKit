@@ -1,10 +1,18 @@
 import { defineQuery, type State, type System } from '../../core';
-
+import { COMBAT_DEATH, emitEvent } from '../rpg-core/events';
 import { TouchedEvent } from '../physics/components';
-import { ProjectileData, Health, damageHealth } from './components';
+import {
+  Health,
+  ProjectileConfig,
+  ProjectileData,
+  damageHealth,
+  getDeathFlags,
+} from './components';
 
 const touchedProjectileQuery = defineQuery([TouchedEvent, ProjectileData]);
 const projectileQuery = defineQuery([ProjectileData]);
+const projectileConfigQuery = defineQuery([ProjectileConfig]);
+const healthQuery = defineQuery([Health]);
 
 export const DamageResolutionSystem: System = {
   group: 'simulation',
@@ -33,12 +41,29 @@ export const ProjectileCleanupSystem: System = {
   group: 'simulation',
   update(state: State): void {
     const entities = projectileQuery(state.world);
+    const configured = new Set(projectileConfigQuery(state.world));
     for (const eid of entities) {
       const newAge = ProjectileData.age[eid] + state.time.deltaTime;
       ProjectileData.age[eid] = newAge;
-
-      if (newAge >= ProjectileData.lifetime[eid]) {
+      const maxLife = configured.has(eid)
+        ? ProjectileConfig.maxLife[eid]
+        : ProjectileData.lifetime[eid];
+      if (newAge >= maxLife) {
         state.destroyEntity(eid);
+      }
+    }
+  },
+};
+
+export const CombatDeathCleanupSystem: System = {
+  group: 'simulation',
+  update(state: State): void {
+    const entities = healthQuery(state.world);
+    const deathEmitted = getDeathFlags(state);
+    for (const eid of entities) {
+      if (Health.current[eid] <= 0 && deathEmitted[eid] === 0) {
+        deathEmitted[eid] = 1;
+        emitEvent(state, COMBAT_DEATH, { target: eid });
       }
     }
   },

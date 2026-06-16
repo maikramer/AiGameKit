@@ -5,3 +5,15 @@ export const hudPanelRecipe: Recipe = {
   components: ['transform', 'hudPanel'],
   merge: true,
 };
+
+export const hudScreenLayerRecipe: Recipe = {
+  name: 'HudScreenLayer',
+  components: [],
+};
+
+export const hudWidgetRecipe: Recipe = {
+  name: 'HudWidget',
+  components: [],
+  parserAttributes: ['type'],
+  parserOwnsChildren: true,
+};

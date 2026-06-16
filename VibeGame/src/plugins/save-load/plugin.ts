@@ -1,5 +1,6 @@
 import type { Plugin } from '../../core';
 import { Serializable } from './components';
+import { registerRpgSaveSerializers } from './rpg-serializers';
 import { SerializationIdSystem } from './systems';
 
 export const SaveLoadPlugin: Plugin = {
@@ -14,5 +15,8 @@ export const SaveLoadPlugin: Plugin = {
         serializationId: 0,
       },
     },
+  },
+  initialize(state) {
+    registerRpgSaveSerializers(state);
   },
 };

@@ -1,0 +1,43 @@
+# Boss (ogre) creature preset — melee AI base + roar intro sub-state.
+# Source of truth for the simple-rpg boss (see src/scripts/boss.ts).
+#
+# The boss is a melee creature composed with an extra "roar" intro layer via
+# `createBossAi(meleeConfig, roarConfig)` (composition, not inheritance): it
+# roars on spawn for `roar.duration` seconds, then hands control to the melee
+# FSM. Wire it through entity-script (`createBossAi`) rather than the plain
+# `<MeleeAi preset="boss"/>` recipe when the roar intro is desired.
+melee-ai:
+  boss:
+    # MeleeAiConfig (consumed by the RpgAiSystem FSM once the roar intro ends)
+    detectRange: 40
+    attackRange: 4.0
+    attackCooldown: 1.5
+    attackDamage: 25
+    chaseSpeed: 2.8
+    wanderSpeed: 0
+    wanderRadius: 0
+    leashRadius: 100
+    lungeWindup: 0
+    lungeDuration: 0
+    lungeRecovery: 0
+    lungeStandoff: 2.0
+    hoverMin: 0
+    hoverMax: 0
+    # Gameplay extensions (not read by the FSM; consumed by spawn/loot wiring)
+    hp: 300
+    assets:
+      modelUrl: /assets/meshes/boss_ogre_rigged_animated.glb
+      clips:
+        idle: Animator3D_BreatheIdle
+        walk: Animator3D_Walk
+        run: Animator3D_Walk
+        lunge: Animator3D_Attack
+        death: Animator3D_Fall
+        roar: Animator3D_Roar
+    loot:
+      goldMin: 0
+      goldMax: 0
+    # Boss-only roar intro sub-state (read by createBossAi)
+    roar:
+      duration: 2.5
+      sound: boss-roar

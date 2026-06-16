@@ -1,7 +1,17 @@
 import type { Plugin, State } from '../../core';
 import { HudPanel } from './components';
 import { internString } from './context';
-import { hudPanelRecipe } from './recipes';
+import {
+  HudScreenUpdateSystem,
+  createHudScreenLayer,
+  hudScreenLayerParser,
+  hudWidgetParser,
+} from './screen-layer';
+import {
+  hudPanelRecipe,
+  hudScreenLayerRecipe,
+  hudWidgetRecipe,
+} from './recipes';
 import { HudBuildSystem, HudSyncSystem } from './systems';
 
 function textAdapter(entity: number, value: string, state: State): void {
@@ -21,10 +31,15 @@ function colorAdapter(entity: number, value: string, _state: State): void {
 }
 
 export const HudPlugin: Plugin = {
-  systems: [HudBuildSystem, HudSyncSystem],
-  recipes: [hudPanelRecipe],
+  systems: [HudBuildSystem, HudSyncSystem, HudScreenUpdateSystem],
+  recipes: [hudPanelRecipe, hudScreenLayerRecipe, hudWidgetRecipe],
   components: {
     hudPanel: HudPanel,
+  },
+  initialize(state: State): void {
+    if (state.headless) return;
+    if (typeof document === 'undefined') return;
+    createHudScreenLayer(state);
   },
   config: {
     defaults: {
@@ -44,6 +59,10 @@ export const HudPlugin: Plugin = {
         text: textAdapter,
         'bg-color': colorAdapter,
       },
+    },
+    parsers: {
+      HudScreenLayer: hudScreenLayerParser,
+      HudWidget: hudWidgetParser,
     },
   },
 };
