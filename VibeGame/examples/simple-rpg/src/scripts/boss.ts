@@ -36,10 +36,12 @@ const ROAR_DURATION = 2.5;
 const DEATH_DISABLE_DELAY = 5.0;
 
 let eidSfxBossRoar = -1;
+let eidSfxEnemyDeath = -1;
 
 function resolveBossSfx(state: State): void {
   if (eidSfxBossRoar >= 0) return;
   eidSfxBossRoar = state.getEntityByName('sfx-boss-roar') ?? -1;
+  eidSfxEnemyDeath = state.getEntityByName('sfx-enemy-death') ?? -1;
 }
 
 type CombatState = 'idle' | 'seek' | 'attack' | 'dead';
@@ -181,6 +183,7 @@ function handleDeath(
   if (b.deathHandled) return;
   b.deathHandled = true;
   b.combatState = 'dead';
+  if (eidSfxEnemyDeath >= 0) playAudioEmitter(ctx.state, eidSfxEnemyDeath);
   b.deathTimer = DEATH_DISABLE_DELAY;
   b.speed = 0;
 

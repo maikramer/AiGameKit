@@ -445,6 +445,8 @@ let eidSfxMineHit = -1;
 let eidSfxChopHit = -1;
 let eidSfxMineBreak = -1;
 let eidSfxChopBreak = -1;
+let eidSfxLevelup = -1;
+let eidSfxSwing = -1;
 let eidBgm = -1;
 let eidBgmBattle = -1;
 let eidBgmExplore = -1;
@@ -564,6 +566,7 @@ function addXp(state: State, amount: number): void {
       levelUpEl.style.transform = 'translateX(-50%) translateY(0) scale(1)';
     }
     addShake(6, 260);
+    playSfx(state, eidSfxLevelup);
   }
   if (xpBarFill) {
     xpBarFill.style.width = `${Math.max(0, Math.min(100, (xp / xpToNext) * 100))}%`;
@@ -572,6 +575,7 @@ function addXp(state: State, amount: number): void {
 }
 
 let prevHeroIsJumping = 0;
+let prevPrimaryAction = 0;
 
 let playTimeSec = 0;
 let fpsEl: HTMLDivElement | null = null;
@@ -1030,6 +1034,14 @@ const GameplayHudSystem: System = {
         playSfx(state, eidSfxJump);
       }
       prevHeroIsJumping = jumping;
+    }
+
+    if (heroEid !== null && state.hasComponent(heroEid, InputState)) {
+      const primary = InputState.primaryAction[heroEid];
+      if (primary === 1 && prevPrimaryAction === 0) {
+        playSfx(state, eidSfxSwing);
+      }
+      prevPrimaryAction = primary;
     }
 
     // Q (or Esc) toggles the pause menu — which also hosts Save/Load/Options.
@@ -1669,6 +1681,8 @@ function resolveAudioEids(state: State): void {
   eidSfxChopHit = state.getEntityByName('sfx-chop-hit') ?? -1;
   eidSfxMineBreak = state.getEntityByName('sfx-mine-break') ?? -1;
   eidSfxChopBreak = state.getEntityByName('sfx-chop-break') ?? -1;
+  eidSfxLevelup = state.getEntityByName('sfx-levelup') ?? -1;
+  eidSfxSwing = state.getEntityByName('sfx-swing') ?? -1;
   eidBgm = state.getEntityByName('bgm') ?? -1;
   eidBgmBattle = state.getEntityByName('bgm-battle') ?? -1;
   eidBgmExplore = state.getEntityByName('bgm-explore') ?? -1;
@@ -1678,7 +1692,7 @@ function resolveAudioEids(state: State): void {
     'sfx-player-hurt', 'sfx-enemy-hurt', 'sfx-hit',
     'sfx-mine-hit', 'sfx-chop-hit', 'sfx-mine-break', 'sfx-chop-break',
     'sfx-shop-open', 'sfx-buy', 'sfx-error', 'sfx-item-drop',
-    'sfx-boss-roar', 'sfx-enemy-death',
+    'sfx-boss-roar', 'sfx-enemy-death', 'sfx-levelup', 'sfx-swing',
   ];
   const bgmNames = ['bgm', 'bgm-battle', 'bgm-explore'];
 
