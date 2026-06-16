@@ -11,15 +11,16 @@ declare global {
   }
 }
 
-import type { System, State } from 'vibegame';
+import type { System, State, SoundHandle } from 'vibegame';
 import {
-  AudioSource,
   NavMeshPlugin,
   PlayerController,
   configure,
   disposeAllRuntimes,
   getBuilder,
-  playAudioEmitter,
+  playSound,
+  setBusVolume,
+  setBusMuted,
   registerEntityScripts,
   resetBuilder,
   resumeAudioContextIfSuspended,
@@ -79,6 +80,7 @@ import {
 } from './scripts/inventory';
 import { addWood, getWoodCount } from './scripts/wood';
 import { getGold } from './game/economy';
+import { registerGameSounds } from './game/sounds';
 import { isWoodEntity } from './scripts/tree';
 import { anyCreatureAggro } from './scripts/creature';
 import { anyBossAggro } from './scripts/boss';
@@ -433,23 +435,6 @@ const MINIMAP_RANGE = 60; // world meters from player edge-to-center
 const MINIMAP_SIZE = 168; // px
 const destructibleQuery = defineQuery([Destructible, Transform]);
 
-let eidSfxJump = -1;
-let eidSfxSave = -1;
-let eidSfxLoad = -1;
-let eidSfxHeal = -1;
-let eidSfxCoin = -1;
-let eidSfxPlayerHurt = -1;
-let eidSfxEnemyHurt = -1;
-let eidSfxHit = -1;
-let eidSfxMineHit = -1;
-let eidSfxChopHit = -1;
-let eidSfxMineBreak = -1;
-let eidSfxChopBreak = -1;
-let eidSfxLevelup = -1;
-let eidSfxSwing = -1;
-let eidBgm = -1;
-let eidBgmBattle = -1;
-let eidBgmExplore = -1;
 let musicOn = true;
 let sfxOn = true;
 
@@ -458,54 +443,49 @@ const VOLUME_LABELS = ['opt.mute', 'opt.25', 'opt.50', 'opt.75', 'opt.max'];
 let musicVolIdx = 3;
 let sfxVolIdx = 3;
 
-const bgmBaseVol = new Map<number, number>();
-const sfxBaseVol = new Map<number, number>();
+// Music plays as three looped tracks on the 'music' bus; the battle track
+// crossfades against the ambient tracks via per-handle volume (× bank base).
+// The Music/SFX volume sliders drive the buses (see pause options below).
+const BGM_BASE = { field: 0.18, explore: 0.18, battle: 0.22 } as const;
+let bgmField: SoundHandle | null = null;
+let bgmExplore: SoundHandle | null = null;
+let bgmBattle: SoundHandle | null = null;
 let battleMusicFade = 0;
+let prevGoldFx = 0;
 
-function updateBattleMusic(state: State, dt: number): void {
+function applyBattleMusic(): void {
+  const ambient = 1 - battleMusicFade;
+  bgmField?.setVolume(BGM_BASE.field * ambient);
+  bgmExplore?.setVolume(BGM_BASE.explore * ambient);
+  bgmBattle?.setVolume(BGM_BASE.battle * battleMusicFade);
+}
+
+function updateBattleMusic(_state: State, dt: number): void {
   const target = (anyCreatureAggro() || anyBossAggro()) ? 1 : 0;
   const speed = Math.min(1, dt * 1.5);
   if (battleMusicFade < target) battleMusicFade = Math.min(target, battleMusicFade + speed);
   else if (battleMusicFade > target) battleMusicFade = Math.max(target, battleMusicFade - speed);
-
-  const volScale = VOLUME_LEVELS[musicVolIdx];
-  for (const [eid, base] of bgmBaseVol) {
-    if (!state.exists(eid) || !state.hasComponent(eid, AudioSource)) continue;
-    const fade = eid === eidBgmBattle ? battleMusicFade : 1 - battleMusicFade;
-    AudioSource.volume[eid] = base * fade * volScale;
-  }
+  applyBattleMusic();
 }
-let prevGoldFx = 0;
 
 /** Start/stop the background music tracks together (Options → Music). */
-function setMusicPlaying(state: State, on: boolean): void {
-  for (const eid of [eidBgm, eidBgmBattle, eidBgmExplore]) {
-    if (eid >= 0 && state.exists(eid) && state.hasComponent(eid, AudioSource)) {
-      AudioSource.playing[eid] = on ? 1 : 0;
-    }
+function setMusicPlaying(on: boolean): void {
+  if (on) {
+    if (bgmField) return; // already playing
+    bgmField = playSound('bgm-field');
+    bgmExplore = playSound('bgm-explore');
+    bgmBattle = playSound('bgm-battle');
+    applyBattleMusic();
+  } else {
+    bgmField?.stop();
+    bgmExplore?.stop();
+    bgmBattle?.stop();
+    bgmField = bgmExplore = bgmBattle = null;
   }
 }
 
-function applyMusicVolume(state: State): void {
-  const scale = VOLUME_LEVELS[musicVolIdx];
-  for (const [eid, base] of bgmBaseVol) {
-    if (state.exists(eid) && state.hasComponent(eid, AudioSource)) {
-      AudioSource.volume[eid] = base * scale;
-    }
-  }
-}
-
-function applySfxVolume(state: State): void {
-  const scale = VOLUME_LEVELS[sfxVolIdx];
-  for (const [eid, base] of sfxBaseVol) {
-    if (state.exists(eid) && state.hasComponent(eid, AudioSource)) {
-      AudioSource.volume[eid] = base * scale;
-    }
-  }
-}
-
-function playSfx(state: State, eid: number): void {
-  if (sfxOn && eid >= 0) playAudioEmitter(state, eid);
+function playSfx(key: string): void {
+  if (sfxOn) playSound(key);
 }
 
 // ── Juice: screen shake ──────────────────────────────────────────────────
@@ -566,7 +546,7 @@ function addXp(state: State, amount: number): void {
       levelUpEl.style.transform = 'translateX(-50%) translateY(0) scale(1)';
     }
     addShake(6, 260);
-    playSfx(state, eidSfxLevelup);
+    playSfx('levelup');
   }
   if (xpBarFill) {
     xpBarFill.style.width = `${Math.max(0, Math.min(100, (xp / xpToNext) * 100))}%`;
@@ -755,10 +735,10 @@ function watchCombatFx(state: State, heroEid: number | null): void {
       }
     );
     if (isHero) {
-      playSfx(state, eidSfxPlayerHurt);
+      playSfx('player-hurt');
       addShake(Math.min(12, 4 + dmg * 0.25), 280);
     } else {
-      playSfx(state, eidSfxEnemyHurt);
+      playSfx('enemy-hurt');
       addShake(big ? 5 : 2.5, big ? 200 : 130);
       // Award XP once, on the hit that drops the creature to 0.
       if (cur <= 0 && prev > 0) {
@@ -791,9 +771,9 @@ function watchDestructibleFx(state: State): void {
         { color: wood ? '#9be37a' : '#e2dccb', size: 24, dur: 0.55 }
       );
       if (wood) {
-        playSfx(state, eidSfxChopHit);
+        playSfx('chop-hit');
       } else {
-        playSfx(state, eidSfxMineHit);
+        playSfx('mine-hit');
       }
     }
   }
@@ -989,7 +969,7 @@ const GameplayHudSystem: System = {
     const collectPos = getLastCollectPosition();
     if (collectPos.version !== prevStoneCollectVersion) {
       prevStoneCollectVersion = collectPos.version;
-      playSfx(state, eidSfxCoin);
+      playSfx('coin');
     }
     if (
       overlayMissionEl &&
@@ -1026,12 +1006,11 @@ const GameplayHudSystem: System = {
 
     if (
       heroEid !== null &&
-      eidSfxJump >= 0 &&
       state.hasComponent(heroEid, PlayerController)
     ) {
       const jumping = PlayerController.isJumping[heroEid];
       if (jumping === 1 && prevHeroIsJumping === 0) {
-        playSfx(state, eidSfxJump);
+        playSfx('jump');
       }
       prevHeroIsJumping = jumping;
     }
@@ -1039,7 +1018,7 @@ const GameplayHudSystem: System = {
     if (heroEid !== null && state.hasComponent(heroEid, InputState)) {
       const primary = InputState.primaryAction[heroEid];
       if (primary === 1 && prevPrimaryAction === 0) {
-        playSfx(state, eidSfxSwing);
+        playSfx('swing');
       }
       prevPrimaryAction = primary;
     }
@@ -1668,49 +1647,12 @@ function createOverlayHud(state: State): void {
   refreshHud(state);
 }
 
-function resolveAudioEids(state: State): void {
-  eidSfxJump = state.getEntityByName('sfx-jump') ?? -1;
-  eidSfxSave = state.getEntityByName('sfx-save') ?? -1;
-  eidSfxLoad = state.getEntityByName('sfx-load') ?? -1;
-  eidSfxHeal = state.getEntityByName('sfx-heal') ?? -1;
-  eidSfxCoin = state.getEntityByName('sfx-coin') ?? -1;
-  eidSfxPlayerHurt = state.getEntityByName('sfx-player-hurt') ?? -1;
-  eidSfxEnemyHurt = state.getEntityByName('sfx-enemy-hurt') ?? -1;
-  eidSfxHit = state.getEntityByName('sfx-hit') ?? -1;
-  eidSfxMineHit = state.getEntityByName('sfx-mine-hit') ?? -1;
-  eidSfxChopHit = state.getEntityByName('sfx-chop-hit') ?? -1;
-  eidSfxMineBreak = state.getEntityByName('sfx-mine-break') ?? -1;
-  eidSfxChopBreak = state.getEntityByName('sfx-chop-break') ?? -1;
-  eidSfxLevelup = state.getEntityByName('sfx-levelup') ?? -1;
-  eidSfxSwing = state.getEntityByName('sfx-swing') ?? -1;
-  eidBgm = state.getEntityByName('bgm') ?? -1;
-  eidBgmBattle = state.getEntityByName('bgm-battle') ?? -1;
-  eidBgmExplore = state.getEntityByName('bgm-explore') ?? -1;
-
-  const sfxNames = [
-    'sfx-jump', 'sfx-save', 'sfx-load', 'sfx-heal', 'sfx-coin',
-    'sfx-player-hurt', 'sfx-enemy-hurt', 'sfx-hit',
-    'sfx-mine-hit', 'sfx-chop-hit', 'sfx-mine-break', 'sfx-chop-break',
-    'sfx-shop-open', 'sfx-buy', 'sfx-error', 'sfx-item-drop',
-    'sfx-boss-roar', 'sfx-enemy-death', 'sfx-levelup', 'sfx-swing',
-  ];
-  const bgmNames = ['bgm', 'bgm-battle', 'bgm-explore'];
-
-  bgmBaseVol.clear();
-  sfxBaseVol.clear();
-  for (const n of bgmNames) {
-    const e = state.getEntityByName(n);
-    if (e != null && state.hasComponent(e, AudioSource)) {
-      bgmBaseVol.set(e, AudioSource.volume[e]);
-    }
-  }
-  for (const n of sfxNames) {
-    const e = state.getEntityByName(n);
-    if (e != null && state.hasComponent(e, AudioSource)) {
-      sfxBaseVol.set(e, AudioSource.volume[e]);
-    }
-  }
-  applySfxVolume(state);
+/** Apply the saved Music/SFX volume + mute settings to the audio buses. */
+function initAudioBuses(): void {
+  setBusVolume('music', VOLUME_LEVELS[musicVolIdx]);
+  setBusVolume('sfx', VOLUME_LEVELS[sfxVolIdx]);
+  setBusMuted('music', !musicOn);
+  setBusMuted('sfx', !sfxOn);
 }
 
 async function bootstrap(): Promise<void> {
@@ -1723,6 +1665,10 @@ async function bootstrap(): Promise<void> {
     subtitle:
       bootLang === 'pt' ? 'A preparar o mundo…' : 'Preparing the world…',
   });
+
+  // Declare every game sound once (url + volume + bus). After this, any code
+  // can `playSound('coin')` — no scene entity, no eid lookup.
+  registerGameSounds();
 
   // J ataca como o clique esquerdo (animação + meleeHit + rochas destrutíveis).
   addInputMapping('primaryAction', 'KeyJ');
@@ -1756,12 +1702,12 @@ async function bootstrap(): Promise<void> {
       addWood(1, x, y + 0.8, z);
       addItem('wood', 1);
       pushFloat(state, x, y + 1.5, z, '+1 🪵', { color: '#e0b87a', size: 19 });
-      playSfx(state, eidSfxChopBreak);
+      playSfx('chop-break');
     } else {
       addStone(1, x, y, z);
       addItem('stone', 1);
       pushFloat(state, x, y + 1.2, z, '+1 🪨', { color: '#e2dccb', size: 19 });
-      playSfx(state, eidSfxMineBreak);
+      playSfx('mine-break');
     }
   });
 
@@ -1808,7 +1754,7 @@ async function bootstrap(): Promise<void> {
     };
   };
 
-  resolveAudioEids(state);
+  initAudioBuses();
 
   loadDictionary(state, 'en', dictEN);
   loadDictionary(state, 'pt', dictPT);
@@ -1859,7 +1805,8 @@ async function bootstrap(): Promise<void> {
       value: () => t(state, musicOn ? 'opt.on' : 'opt.off'),
       activate: () => {
         musicOn = !musicOn;
-        setMusicPlaying(state, musicOn);
+        setBusMuted('music', !musicOn);
+        if (musicOn) setMusicPlaying(true);
       },
     },
     {
@@ -1867,6 +1814,7 @@ async function bootstrap(): Promise<void> {
       value: () => t(state, VOLUME_LABELS[musicVolIdx]),
       activate: () => {
         musicVolIdx = (musicVolIdx + 1) % VOLUME_LEVELS.length;
+        setBusVolume('music', VOLUME_LEVELS[musicVolIdx]);
       },
     },
     {
@@ -1874,6 +1822,7 @@ async function bootstrap(): Promise<void> {
       value: () => t(state, sfxOn ? 'opt.on' : 'opt.off'),
       activate: () => {
         sfxOn = !sfxOn;
+        setBusMuted('sfx', !sfxOn);
       },
     },
     {
@@ -1881,7 +1830,7 @@ async function bootstrap(): Promise<void> {
       value: () => t(state, VOLUME_LABELS[sfxVolIdx]),
       activate: () => {
         sfxVolIdx = (sfxVolIdx + 1) % VOLUME_LEVELS.length;
-        applySfxVolume(state);
+        setBusVolume('sfx', VOLUME_LEVELS[sfxVolIdx]);
       },
     },
   ];
@@ -1893,21 +1842,21 @@ async function bootstrap(): Promise<void> {
     getLevel: () => level,
     onSave: () => {
       saveToLocalStorage(state, SAVE_KEY);
-      playSfx(state, eidSfxSave);
+      playSfx('save');
       pushFlash(state, 'hud.saved', 2.5);
     },
     onLoad: () => {
       const ok = loadFromLocalStorage(state, SAVE_KEY);
-      if (ok && eidSfxLoad >= 0) playSfx(state, eidSfxLoad);
+      if (ok) playSfx('load');
       pushFlash(state, ok ? 'hud.loaded' : 'hud.no-save', 2.5);
     },
     options: pauseOptions,
   });
 
-  if (eidBgm >= 0 && typeof document !== 'undefined') {
+  if (typeof document !== 'undefined') {
     const startBgm = () => {
       resumeAudioContextIfSuspended();
-      if (musicOn) setMusicPlaying(state, true);
+      if (musicOn) setMusicPlaying(true);
       document.removeEventListener('pointerdown', startBgm);
     };
     document.addEventListener('pointerdown', startBgm, { once: true });

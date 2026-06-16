@@ -14,6 +14,14 @@ export function registerAnimator(animator: GltfAnimator): number {
   return idx;
 }
 
+/** Drop and dispose an animator (call from the owner entity's onDestroy). */
+export function unregisterAnimator(idx: number): void {
+  const animator = animatorRegistry.get(idx);
+  if (!animator) return;
+  animator.dispose();
+  animatorRegistry.delete(idx);
+}
+
 const gltfAnimQuery = defineQuery([GltfAnimationState]);
 
 export const GltfAnimationUpdateSystem: System = {

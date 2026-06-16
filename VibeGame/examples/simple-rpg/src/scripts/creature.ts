@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playAudioEmitter } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
 import type { GltfAnimator, MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
@@ -57,18 +57,6 @@ export function anyCreatureAggro(): boolean {
   return aggroEntities.size > 0;
 }
 
-let eidSfxEnemyHurt = -1;
-let eidSfxEnemyDeath = -1;
-let eidSfxHit = -1;
-let eidSfxItemDrop = -1;
-
-function resolveCreatureSfx(state: State): void {
-  if (eidSfxEnemyHurt >= 0) return;
-  eidSfxEnemyHurt = state.getEntityByName('sfx-enemy-hurt') ?? -1;
-  eidSfxEnemyDeath = state.getEntityByName('sfx-enemy-death') ?? -1;
-  eidSfxHit = state.getEntityByName('sfx-hit') ?? -1;
-  eidSfxItemDrop = state.getEntityByName('sfx-item-drop') ?? -1;
-}
 
 export interface CreatureClips {
   idle: string;
@@ -283,7 +271,7 @@ export function createCreatureBehaviours(
     if (s.healthBarBg) s.healthBarBg.visible = false;
     if (s.healthBarFill) s.healthBarFill.visible = false;
 
-    if (eidSfxEnemyDeath >= 0) playAudioEmitter(ctx.state, eidSfxEnemyDeath);
+    playSound('enemy-death');
 
     const x = Transform.posX[eid];
     const y = Transform.posY[eid];
@@ -294,7 +282,7 @@ export function createCreatureBehaviours(
         Math.random() * (cfg.lootGoldMax - cfg.lootGoldMin + 1)
     );
     cfg.onDeathLoot?.(ctx.state, gold, x, y, z);
-    if (eidSfxItemDrop >= 0) playAudioEmitter(ctx.state, eidSfxItemDrop);
+    playSound('item-drop');
 
     // The "+gold" pop is emitted centrally (gold-delta watcher in main.ts).
     spawnParticleBurst(ctx.state, {
@@ -534,7 +522,6 @@ export function createCreatureBehaviours(
       const s = stateMap.get(eid);
       if (!s || !s.group) return;
 
-      resolveCreatureSfx(ctx.state);
       s.animator?.update(ctx.deltaTime);
 
       const x = Transform.posX[eid];
@@ -654,7 +641,7 @@ export function createCreatureBehaviours(
                   count: 8,
                   duration: 0.4,
                 });
-                if (eidSfxHit >= 0) playAudioEmitter(ctx.state, eidSfxHit);
+                playSound('hit');
               }
               s.lungePhase = 'recovery';
               s.lungeTimer = LUNGE_RECOVERY;

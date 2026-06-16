@@ -122,7 +122,7 @@ describe('GltfAnimator locomotion', () => {
     animator.registerLocomotionSet('default', defaultSet);
 
     let finishedCalled = false;
-    animator.playOverride('attack', {
+    const action = animator.playOverride('attack', {
       onFinished: () => {
         finishedCalled = true;
       },
@@ -131,10 +131,34 @@ describe('GltfAnimator locomotion', () => {
     expect(animator.overrideLock).toBe(true);
 
     const mixer = animator.mixer;
-    mixer.dispatchEvent({ type: 'finished', action: {} as any, direction: 1 });
+    // Must be this override's own action — the mixer fires 'finished' for any
+    // LoopOnce action it owns, and the lock should only release for ours.
+    mixer.dispatchEvent({ type: 'finished', action: action!, direction: 1 });
 
     expect(animator.overrideLock).toBe(false);
     expect(finishedCalled).toBe(true);
+  });
+
+  it('override lock ignores finished events from other actions', () => {
+    animator.registerLocomotionSet('default', defaultSet);
+
+    let finishedCalled = false;
+    animator.playOverride('attack', {
+      onFinished: () => {
+        finishedCalled = true;
+      },
+    });
+    expect(animator.overrideLock).toBe(true);
+
+    // A different LoopOnce action finishing must not release our lock.
+    animator.mixer.dispatchEvent({
+      type: 'finished',
+      action: {} as any,
+      direction: 1,
+    });
+
+    expect(animator.overrideLock).toBe(true);
+    expect(finishedCalled).toBe(false);
   });
 
   it('playOverride with loop=true does not lock', () => {

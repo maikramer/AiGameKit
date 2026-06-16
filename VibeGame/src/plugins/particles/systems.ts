@@ -176,6 +176,10 @@ export const ParticleUpdateSystem: System = {
         if (created) {
           systems.set(entity, created);
           ps = created;
+          // Tear down on destroy (not via an exists() sweep): a recycled eid
+          // would pass exists() and silently reuse this dead system. See
+          // eid-recycling-sidecars.
+          state.onDestroy(entity, () => destroyParticleSystem(state, entity));
         }
         if (!ps) continue;
       }
@@ -195,11 +199,6 @@ export const ParticleUpdateSystem: System = {
     }
 
     renderer.update(delta);
-
-    for (const [entity] of systems) {
-      if (state.exists(entity)) continue;
-      destroyParticleSystem(state, entity);
-    }
   },
 
   dispose(state: State) {

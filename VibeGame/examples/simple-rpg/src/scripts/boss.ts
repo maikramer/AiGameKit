@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playAudioEmitter } from 'vibegame';
+import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
 import type { GltfAnimator, MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
@@ -34,15 +34,6 @@ const ACCEL = 3.0;
 const WATER_LEVEL = 1.25;
 const ROAR_DURATION = 2.5;
 const DEATH_DISABLE_DELAY = 5.0;
-
-let eidSfxBossRoar = -1;
-let eidSfxEnemyDeath = -1;
-
-function resolveBossSfx(state: State): void {
-  if (eidSfxBossRoar >= 0) return;
-  eidSfxBossRoar = state.getEntityByName('sfx-boss-roar') ?? -1;
-  eidSfxEnemyDeath = state.getEntityByName('sfx-enemy-death') ?? -1;
-}
 
 type CombatState = 'idle' | 'seek' | 'attack' | 'dead';
 
@@ -183,7 +174,7 @@ function handleDeath(
   if (b.deathHandled) return;
   b.deathHandled = true;
   b.combatState = 'dead';
-  if (eidSfxEnemyDeath >= 0) playAudioEmitter(ctx.state, eidSfxEnemyDeath);
+  playSound('enemy-death');
   b.deathTimer = DEATH_DISABLE_DELAY;
   b.speed = 0;
 
@@ -215,7 +206,6 @@ export function update(ctx: MonoBehaviourContext): void {
   const b = state.get(eid);
   if (!b || !b.group) return;
 
-  resolveBossSfx(ctx.state);
   const dt = ctx.deltaTime;
 
   if (b.combatState === 'dead') {
@@ -265,7 +255,7 @@ export function update(ctx: MonoBehaviourContext): void {
       if (!b.hasRoared) {
         b.hasRoared = true;
         b.roarTimer = ROAR_DURATION;
-        if (eidSfxBossRoar >= 0) playAudioEmitter(ctx.state, eidSfxBossRoar);
+        playSound('boss-roar');
       }
     } else {
       b.combatState = 'idle';

@@ -374,9 +374,9 @@ export const RendererSetupSystem: System = {
     if (clearColor !== 0)
       context.scene.background = new THREE.Color(clearColor);
 
-    window.addEventListener('resize', () =>
-      handleWindowResize(state, renderer)
-    );
+    const onResize = () => handleWindowResize(state, renderer);
+    context.resizeHandler = onResize;
+    window.addEventListener('resize', onResize);
   },
 };
 
@@ -442,9 +442,9 @@ export const SceneRenderSystem: System = {
     if (clearColor !== 0)
       context.scene.background = new THREE.Color(clearColor);
 
-    window.addEventListener('resize', () =>
-      handleWindowResize(state, renderer)
-    );
+    const onResize = () => handleWindowResize(state, renderer);
+    context.resizeHandler = onResize;
+    window.addEventListener('resize', onResize);
   },
   update(state: State) {
     if (state.headless) return;
@@ -452,6 +452,10 @@ export const SceneRenderSystem: System = {
   dispose(state: State) {
     if (state.headless) return;
     const context = getRenderingContext(state);
+    if (context.resizeHandler) {
+      window.removeEventListener('resize', context.resizeHandler);
+      context.resizeHandler = undefined;
+    }
     if (context.renderer) {
       context.renderer.setAnimationLoop(null);
       context.renderer.dispose();

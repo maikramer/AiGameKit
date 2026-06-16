@@ -259,6 +259,9 @@ export interface RenderingContext {
     setSize(width: number, height: number): void;
   } | null;
   canvas?: HTMLCanvasElement;
+  /** Window 'resize' listener, kept so dispose() can remove it (avoids
+   * accumulating dead listeners across hot-reload / multi-runtime teardown). */
+  resizeHandler?: () => void;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
 }

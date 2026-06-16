@@ -5,6 +5,14 @@ import { AudioSource, AudioListener } from './components';
 import { MainCamera } from '../rendering/components';
 import { TransformHierarchySystem } from '../transforms/systems';
 import { Transform, WorldTransform } from '../transforms/components';
+import { GltfAnimationState } from '../gltf-anim/components';
+import { animatorRegistry } from '../gltf-anim/systems';
+import {
+  fireClipMarkers,
+  getClipSounds,
+  getFollowingPlays,
+  pruneFollowingPlays,
+} from './bank';
 
 // Howler.js spatial audio uses stereo panning only (no HRTF).
 
@@ -17,11 +25,14 @@ export function registerAudioClip(id: number, url: string): void {
 /** Limpa o registo global de clips (útil em testes para evitar fuga entre ficheiros). */
 export function clearAudioClipRegistry(): void {
   clipRegistry.clear();
+  clipSoundTracker.clear();
+  clipSoundCleanupRegistered.clear();
 }
 
 const audioQuery = defineQuery([AudioSource]);
 const listenerQuery = defineQuery([AudioListener, MainCamera, WorldTransform]);
 const mainCameraTransformQuery = defineQuery([MainCamera, Transform]);
+const animClipQuery = defineQuery([GltfAnimationState]);
 
 /** Últimos valores aplicados ao Howl (evitar setters por frame: Howler reinicia reprodução em `loop(true)` com som ativo; `rate()` também altera timers). */
 interface HowlPropSnapshot {
@@ -239,6 +250,64 @@ export const AudioSystem: System = {
       console.warn(
         '[audio] Nenhuma entidade com AudioListener + MainCamera + WorldTransform; áudio espacial pode falhar.'
       );
+    }
+  },
+};
+
+/** Per-entity normalized clip time last frame, for marker crossing detection. */
+const clipSoundTracker = new Map<number, { clip: string; norm: number }>();
+/** Eids with a registered destroy-cleanup, so we don't stack callbacks. */
+const clipSoundCleanupRegistered = new Set<number>();
+
+/**
+ * Reposiciona sons espaciais ligados a entidades (`playSoundOn`) e dispara sons
+ * fixados a animações (`addClipSound`) quando o tempo normalizado do clip cruza
+ * o marcador. Corre depois do `GltfAnimationUpdateSystem` (grupo 'draw').
+ */
+export const SoundBankSystem: System = {
+  group: 'draw',
+  update(state: State) {
+    if (state.headless) return;
+
+    // Sons que seguem entidades: actualiza posição ou solta se a entidade morreu.
+    pruneFollowingPlays((eid) => state.exists(eid));
+    for (const play of getFollowingPlays()) {
+      const eid = play.followEid;
+      if (!state.exists(eid)) continue;
+      const t = state.hasComponent(eid, WorldTransform) ? WorldTransform : Transform;
+      play.setPos(t.posX[eid], t.posY[eid], t.posZ[eid]);
+    }
+
+    // Sons fixados a clips de animação.
+    for (const eid of animClipQuery(state.world)) {
+      const idx = GltfAnimationState.registryIndex[eid];
+      if (idx === 0) continue;
+      const animator = animatorRegistry.get(idx);
+      if (!animator) continue;
+
+      const clip = animator.activeClipName;
+      if (!clip || !getClipSounds(clip)) {
+        clipSoundTracker.delete(eid);
+        continue;
+      }
+      const norm = animator.currentNormalizedTime;
+      const prev = clipSoundTracker.get(eid);
+      if (!prev || prev.clip !== clip) {
+        // Início do clip: dispara marcadores em at=0 a partir de -epsilon.
+        fireClipMarkers(eid, clip, -1, norm);
+      } else {
+        fireClipMarkers(eid, clip, prev.norm, norm);
+      }
+      clipSoundTracker.set(eid, { clip, norm });
+      if (!clipSoundCleanupRegistered.has(eid)) {
+        clipSoundCleanupRegistered.add(eid);
+        // Recycle-safe: drop tracker state on destroy (not an exists() sweep,
+        // which a reused eid would survive with stale norm).
+        state.onDestroy(eid, () => {
+          clipSoundTracker.delete(eid);
+          clipSoundCleanupRegistered.delete(eid);
+        });
+      }
     }
   },
 };

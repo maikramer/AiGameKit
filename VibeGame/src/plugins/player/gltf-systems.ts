@@ -2,7 +2,11 @@ import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import { loadGltfAnimated } from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
-import { animatorRegistry, registerAnimator } from '../gltf-anim/systems';
+import {
+  animatorRegistry,
+  registerAnimator,
+  unregisterAnimator,
+} from '../gltf-anim/systems';
 import { HasAnimator } from '../animation/components';
 import { InputState } from '../input/components';
 import { isKeyDown } from '../input/utils';
@@ -246,6 +250,10 @@ export const PlayerGltfSetupSystem: System = {
       setLoadInFlight(state, eid, true);
       void loadGltfAnimated(state, url)
         .then((gltf) => {
+          // Entity may have been destroyed while the model loaded — don't leak
+          // an orphan animator into the registry.
+          if (!state.exists(eid)) return;
+
           const box = new Box3().setFromObject(gltf.scene);
           const yOffset = Number.isFinite(box.min.y) ? -box.min.y : 0;
           setYOffset(state, eid, yOffset);
@@ -253,6 +261,13 @@ export const PlayerGltfSetupSystem: System = {
           const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });
           const regIdx = registerAnimator(animator);
           PlayerGltfConfig.animatorRegistryIndex[eid] = regIdx;
+          // Recycle-safe teardown: dispose the animator and clear per-eid
+          // sidecar state so a reused eid never inherits stale data.
+          state.onDestroy(eid, () => {
+            unregisterAnimator(regIdx);
+            prevPrimary.delete(eid);
+            pendingMelee.delete(eid);
+          });
 
           const loco = resolveLocomotion(animator, eid);
           if (loco.idle && loco.walk && loco.run) {

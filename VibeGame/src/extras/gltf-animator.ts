@@ -79,6 +79,23 @@ export class GltfAnimator {
     return this.currentClipName;
   }
 
+  /** Playback time of the current clip in seconds (0 if none). */
+  get currentTime(): number {
+    return this.currentAction?.time ?? 0;
+  }
+
+  /** Duration of the current clip in seconds (0 if none). */
+  get currentClipDuration(): number {
+    return this.currentAction?.getClip().duration ?? 0;
+  }
+
+  /** Current clip position normalized to 0..1 (0 if none). */
+  get currentNormalizedTime(): number {
+    const d = this.currentClipDuration;
+    if (d <= 0 || !this.currentAction) return 0;
+    return (this.currentAction.time % d) / d;
+  }
+
   /** Play a clip by name with optional crossfade from the current clip. */
   play(
     clipName: string,
@@ -238,11 +255,17 @@ export class GltfAnimator {
     if (action) {
       const onFinished = options?.onFinished;
       const self = this;
-      action.getMixer().addEventListener('finished', function handler() {
-        action.getMixer().removeEventListener('finished', handler);
-        self._overrideLock = false;
-        if (onFinished) onFinished();
-      });
+      // The mixer fires 'finished' for ANY LoopOnce action it owns, so filter
+      // to this override's action — otherwise an unrelated one-shot finishing
+      // first would release the lock early and fire the wrong callback.
+      action
+        .getMixer()
+        .addEventListener('finished', function handler(e: { action?: unknown }) {
+          if (e.action !== action) return;
+          action.getMixer().removeEventListener('finished', handler);
+          self._overrideLock = false;
+          if (onFinished) onFinished();
+        });
     }
 
     return action;
