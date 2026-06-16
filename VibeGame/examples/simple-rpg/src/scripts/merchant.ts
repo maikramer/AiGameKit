@@ -8,6 +8,7 @@ import { isKeyDown } from '../../../../src/plugins/input/utils.ts';
 import { setInputMovementSuppressed } from '../../../../src/plugins/input/systems.ts';
 import { Health, healHealth } from '../../../../src/plugins/combat/components.ts';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
+import { isGamePaused, setShopOpen } from '../game/pause.ts';
 import { getStoneCount, removeStone } from './inventory.ts';
 import { getWoodCount, removeWood } from './wood.ts';
 
@@ -314,6 +315,7 @@ function openShop(player: number): void {
   if (shopOpen) return;
   activePlayer = player;
   shopOpen = true;
+  setShopOpen(true);
   setInputMovementSuppressed(true);
   if (!shopPanel) createShopPanel();
   if (shopPanel) shopPanel.style.display = 'block';
@@ -331,6 +333,7 @@ function openShop(player: number): void {
 
 function closeShop(): void {
   shopOpen = false;
+  setShopOpen(false);
   setInputMovementSuppressed(false);
   if (shopPanel) shopPanel.style.display = 'none';
   if (shopErrorTimeout) {
@@ -378,6 +381,8 @@ function handleShopKeys(): void {
 export function update(ctx: MonoBehaviourContext): void {
   const eid = ctx.entity;
   if (!group) return;
+  // Frozen while the pause menu is open (don't open the shop on K, etc.).
+  if (isGamePaused() && !shopOpen) return;
   animator?.update(ctx.deltaTime);
 
   const x = Transform.posX[eid];
