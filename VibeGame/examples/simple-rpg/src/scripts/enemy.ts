@@ -6,12 +6,10 @@ import {
   SteeringAgent,
   SteeringTarget,
   MonoBehaviour,
-} from 'vibegame';
-import {
   Health,
   damageHealth,
   isDead,
-} from '../../../../src/plugins/combat/components.ts';
+} from 'vibegame';
 
 interface EnemyConfig {
   health: number;

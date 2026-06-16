@@ -1,0 +1,12 @@
+item:
+  potion:
+    name: Health Potion
+    description: Restores 50 HP
+    maxStack: 99
+  sword:
+    name: Iron Sword
+    maxStack: 1
+skill:
+  vitality:
+    name: Vitality
+    maxRank: 5

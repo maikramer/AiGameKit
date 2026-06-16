@@ -41,7 +41,7 @@
       <GameObject
         ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.8"
         directional-light="color: 0xfff0d0; intensity: 3.0; direction-x: -0.7; direction-y: 3.5; direction-z: -0.6; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
-          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.6; chromatic-aberration: 0; ca-strength: 0; vignette: 1; vignette-offset: 0.22; vignette-darkness: 0.62; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.05; ssao: 1; ssao-intensity: 0.55; ssao-radius: 0.9"
+        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.6; chromatic-aberration: 0; ca-strength: 0; vignette: 1; vignette-offset: 0.22; vignette-darkness: 0.62; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.05; ssao: 1; ssao-intensity: 0.55; ssao-radius: 0.9"
       >
       </GameObject>
 
@@ -123,13 +123,13 @@
         body="fixed"
         collider="auto"
       >
-        <Box pos="0 0.1 0"    size="6.4 0.2 6.4" color="#6b4a2b"></Box>
-        <Box pos="0 1.6 -3"   size="6.4 3 0.3"   color="#8a5a30"></Box>
-        <Box pos="-3 1.6 0"   size="0.3 3 6.4"   color="#8a5a30"></Box>
-        <Box pos="3 1.6 0"    size="0.3 3 6.4"   color="#8a5a30"></Box>
-        <Box pos="-2.3 1.6 3" size="1.8 3 0.3"   color="#8a5a30"></Box>
-        <Box pos="2.3 1.6 3"  size="1.8 3 0.3"   color="#8a5a30"></Box>
-        <Box pos="0 3.3 0"    size="7.2 0.4 7.2" color="#4a2f18"></Box>
+        <Box pos="0 0.1 0" size="6.4 0.2 6.4" color="#6b4a2b"></Box>
+        <Box pos="0 1.6 -3" size="6.4 3 0.3" color="#8a5a30"></Box>
+        <Box pos="-3 1.6 0" size="0.3 3 6.4" color="#8a5a30"></Box>
+        <Box pos="3 1.6 0" size="0.3 3 6.4" color="#8a5a30"></Box>
+        <Box pos="-2.3 1.6 3" size="1.8 3 0.3" color="#8a5a30"></Box>
+        <Box pos="2.3 1.6 3" size="1.8 3 0.3" color="#8a5a30"></Box>
+        <Box pos="0 3.3 0" size="7.2 0.4 7.2" color="#4a2f18"></Box>
         <PointLight
           pos="0 2.6 0"
           point-light="color: 0xffcc77; intensity: 10; distance: 8; decay: 2"
@@ -233,7 +233,6 @@
           ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
-
 
       <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
       <ThirdPersonCamera

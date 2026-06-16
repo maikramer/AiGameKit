@@ -80,8 +80,7 @@ export function getInventory(): InventoryEntry[] {
   }
   for (const id in items) {
     const it = items[id];
-    if (it.qty > 0)
-      out.push({ id, icon: it.icon, name: it.name, qty: it.qty });
+    if (it.qty > 0) out.push({ id, icon: it.icon, name: it.name, qty: it.qty });
   }
   return out;
 }

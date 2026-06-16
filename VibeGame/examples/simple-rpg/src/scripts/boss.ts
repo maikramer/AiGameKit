@@ -6,16 +6,14 @@ import {
   defineQuery,
   PlayerController,
   MonoBehaviour,
-} from 'vibegame';
-import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
-import { getBvhSurfaceHeight } from '../../../../src/plugins/bvh/utils.ts';
-import {
+  getTerrainHeightAt,
+  getBvhSurfaceHeight,
   Health,
   damageHealth,
   isDead,
-} from '../../../../src/plugins/combat/components.ts';
-import { spawnFloatingText } from '../../../../src/plugins/floating-text/utils.ts';
-import { spawnParticleBurst } from '../../../../src/plugins/particles/utils.ts';
+  spawnFloatingText,
+  spawnParticleBurst,
+} from 'vibegame';
 
 const MODEL_URL = '/assets/meshes/boss_ogre_rigged_animated.glb';
 const IDLE_CLIP = 'Animator3D_BreatheIdle';
@@ -90,7 +88,14 @@ function groundHeight(
   z: number,
   fromY: number
 ): number {
-  const gy = getBvhSurfaceHeight(ctx.state, x, fromY + 60, z, 2000, TERRAIN_LAYER);
+  const gy = getBvhSurfaceHeight(
+    ctx.state,
+    x,
+    fromY + 60,
+    z,
+    2000,
+    TERRAIN_LAYER
+  );
   if (gy != null && Number.isFinite(gy)) return gy;
   const hm = getTerrainHeightAt(ctx.state, x, z);
   if (Number.isFinite(hm)) return hm;

@@ -105,7 +105,9 @@ function parseVec3(
   return fallback;
 }
 
-export function parseColorHex(value: XMLValue | undefined): [number, number, number] {
+export function parseColorHex(
+  value: XMLValue | undefined
+): [number, number, number] {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return [
       ((value >> 16) & 0xff) / 255,
@@ -126,7 +128,11 @@ export function parseColorHex(value: XMLValue | undefined): [number, number, num
   }
   const num = parseInt(hex, 16);
   if (Number.isNaN(num)) return [0.8, 0.8, 0.8];
-  return [((num >> 16) & 0xff) / 255, ((num >> 8) & 0xff) / 255, (num & 0xff) / 255];
+  return [
+    ((num >> 16) & 0xff) / 255,
+    ((num >> 8) & 0xff) / 255,
+    (num & 0xff) / 255,
+  ];
 }
 
 const ZERO_VEC: [number, number, number] = [0, 0, 0];
@@ -186,8 +192,7 @@ export function buildPrimitiveMesh(spec: PrimitiveSpec): THREE.Mesh {
     color: new THREE.Color(spec.colorR, spec.colorG, spec.colorB),
     roughness: 1,
     metalness: 0,
-    side:
-      spec.kind === 'plane' ? THREE.DoubleSide : THREE.FrontSide,
+    side: spec.kind === 'plane' ? THREE.DoubleSide : THREE.FrontSide,
   });
   const mesh = new THREE.Mesh(primitiveGeometry(spec), material);
   mesh.castShadow = true;
@@ -218,7 +223,8 @@ export function buildPrimitiveColliderDesc(
       );
       break;
     case 'sphere': {
-      const radius = Math.max(spec.sizeX, 1e-4) * Math.max(scaleX, scaleY, scaleZ);
+      const radius =
+        Math.max(spec.sizeX, 1e-4) * Math.max(scaleX, scaleY, scaleZ);
       desc = RAPIER.ColliderDesc.ball(radius);
       break;
     }
@@ -232,9 +238,9 @@ export function buildPrimitiveColliderDesc(
     }
     case 'plane':
       desc = RAPIER.ColliderDesc.cuboid(
-        Math.max(spec.sizeX, 1e-4) * scaleX / 2,
+        (Math.max(spec.sizeX, 1e-4) * scaleX) / 2,
         PLANE_COLLIDER_HALF_THICKNESS,
-        Math.max(spec.sizeY, 1e-4) * scaleZ / 2
+        (Math.max(spec.sizeY, 1e-4) * scaleZ) / 2
       );
       break;
     default:
@@ -243,7 +249,11 @@ export function buildPrimitiveColliderDesc(
 
   desc.setFriction(0.6);
   desc.setRestitution(0);
-  desc.setTranslation(spec.posX * scaleX, spec.posY * scaleY, spec.posZ * scaleZ);
+  desc.setTranslation(
+    spec.posX * scaleX,
+    spec.posY * scaleY,
+    spec.posZ * scaleZ
+  );
 
   if (spec.rotX !== 0 || spec.rotY !== 0 || spec.rotZ !== 0) {
     const quat = eulerToQuat(spec.rotX, spec.rotY, spec.rotZ);

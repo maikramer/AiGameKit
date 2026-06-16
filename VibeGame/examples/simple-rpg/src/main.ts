@@ -46,33 +46,27 @@ import {
 } from 'vibegame';
 import * as THREE from 'three';
 import { defineQuery } from 'vibegame';
-import { Rigidbody } from '../../../src/plugins/physics/components';
-import { Postprocessing } from '../../../src/plugins/postprocessing/components';
-import { getRenderingContext } from '../../../src/plugins/rendering';
-import { threeCameras } from '../../../src/plugins/rendering/utils';
 import {
+  Rigidbody,
+  Postprocessing,
+  getRenderingContext,
+  threeCameras,
   getBodyForEntity,
   getRapierWorld,
   PhysicsStepSystem,
-} from '../../../src/plugins/physics/systems';
-import {
   getBodyYForFeetAt,
   getCharacterFeetY,
   GROUND_CONTACT_SKIN,
-} from '../../../src/plugins/physics/character-ground.ts';
-import { getTerrainHeightAt } from '../../../src/plugins/terrain/systems.ts';
-import { getBvhSurfaceHeight } from '../../../src/plugins/bvh/utils.ts';
-import {
+  getTerrainHeightAt,
+  getBvhSurfaceHeight,
   getTerrainContext,
   isTerrainDynamicsBlocking,
-} from '../../../src/plugins/terrain/utils';
-import { Transform } from '../../../src/plugins/transforms';
+  Transform,
+} from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 
 setKTX2TranscoderPath('/libs/basis/');
-import { CombatPlugin } from '../../../src/plugins/combat/index.ts';
-import { DebugPlugin } from '../../../src/plugins/debug/index.ts';
-import { Health, isDead } from '../../../src/plugins/combat/components.ts';
+import { CombatPlugin, DebugPlugin, Health, isDead } from 'vibegame';
 import {
   addStone,
   getStoneCount,
@@ -84,8 +78,7 @@ import { registerGameSounds } from './game/sounds';
 import { isWoodEntity } from './scripts/tree';
 import { anyCreatureAggro } from './scripts/creature';
 import { anyBossAggro } from './scripts/boss';
-import { NavMeshAgent } from '../../../src/plugins/navmesh/index';
-import { Destructible } from '../../../src/plugins/destructible/components';
+import { NavMeshAgent, Destructible } from 'vibegame';
 import { isShopOpen } from './game/pause';
 import {
   createPauseMenu,
@@ -295,7 +288,8 @@ const dictEN: Record<string, string> = {
   'tip.gold': 'Gold — spend at the merchant',
   'tip.wood': 'Wood — chop trees with [J]',
   'tip.stone': 'Stone — mine rocks with [J]',
-  'tip.minimap': 'Minimap — red: enemies · purple: boss · gold: merchant · green: tree · gray: rock',
+  'tip.minimap':
+    'Minimap — red: enemies · purple: boss · gold: merchant · green: tree · gray: rock',
   'tip.compass': 'Compass — facing direction',
   'minimap.you': 'You',
   'hud.levelUp': 'LEVEL UP!  Lv',
@@ -362,7 +356,8 @@ const dictPT: Record<string, string> = {
   'tip.gold': 'Ouro — gasta no mercador',
   'tip.wood': 'Madeira — corta árvores com [J]',
   'tip.stone': 'Pedra — minera rochas com [J]',
-  'tip.minimap': 'Minimapa — vermelho: inimigos · roxo: chefe · ouro: mercador · verde: árvore · cinza: rocha',
+  'tip.minimap':
+    'Minimapa — vermelho: inimigos · roxo: chefe · ouro: mercador · verde: árvore · cinza: rocha',
   'tip.compass': 'Bússola — direção que encaras',
   'minimap.you': 'Tu',
   'hud.levelUp': 'SUBIU DE NÍVEL!  Nível',
@@ -461,10 +456,12 @@ function applyBattleMusic(): void {
 }
 
 function updateBattleMusic(_state: State, dt: number): void {
-  const target = (anyCreatureAggro() || anyBossAggro()) ? 1 : 0;
+  const target = anyCreatureAggro() || anyBossAggro() ? 1 : 0;
   const speed = Math.min(1, dt * 1.5);
-  if (battleMusicFade < target) battleMusicFade = Math.min(target, battleMusicFade + speed);
-  else if (battleMusicFade > target) battleMusicFade = Math.max(target, battleMusicFade - speed);
+  if (battleMusicFade < target)
+    battleMusicFade = Math.min(target, battleMusicFade + speed);
+  else if (battleMusicFade > target)
+    battleMusicFade = Math.max(target, battleMusicFade - speed);
   applyBattleMusic();
 }
 
@@ -695,10 +692,11 @@ function updateFloatFx(state: State): void {
     }
     const rise = t * 54;
     const scale =
-      t < 0.14 ? 0.55 + (t / 0.14) * 0.55 : 1.1 - Math.min(0.12, (t - 0.14) * 0.2);
+      t < 0.14
+        ? 0.55 + (t / 0.14) * 0.55
+        : 1.1 - Math.min(0.12, (t - 0.14) * 0.2);
     const alpha = t > 0.62 ? 1 - (t - 0.62) / 0.38 : 1;
-    fx.el.style.transform =
-      `translate(-50%,-50%) translate(${p.x + fx.driftX * t}px,${p.y - rise}px) scale(${scale})`;
+    fx.el.style.transform = `translate(-50%,-50%) translate(${p.x + fx.driftX * t}px,${p.y - rise}px) scale(${scale})`;
     fx.el.style.opacity = String(alpha);
   }
 }
@@ -992,22 +990,28 @@ const GameplayHudSystem: System = {
     updateBattleMusic(state, dt);
     updateFloatFx(state);
     updateShake();
-    if (levelUpEl && levelUpFlashUntil > 0 && state.time.elapsed >= levelUpFlashUntil) {
+    if (
+      levelUpEl &&
+      levelUpFlashUntil > 0 &&
+      state.time.elapsed >= levelUpFlashUntil
+    ) {
       levelUpEl.style.opacity = '0';
-      levelUpEl.style.transform = 'translateX(-50%) translateY(-12px) scale(0.9)';
+      levelUpEl.style.transform =
+        'translateX(-50%) translateY(-12px) scale(0.9)';
       levelUpFlashUntil = 0;
     }
 
-    if (hudRevealed && heroEid !== null && state.hasComponent(heroEid, Transform)) {
+    if (
+      hudRevealed &&
+      heroEid !== null &&
+      state.hasComponent(heroEid, Transform)
+    ) {
       drawMinimap(state, heroEid);
       updateCompass();
       updateInteractionHint(state, heroEid);
     }
 
-    if (
-      heroEid !== null &&
-      state.hasComponent(heroEid, PlayerController)
-    ) {
+    if (heroEid !== null && state.hasComponent(heroEid, PlayerController)) {
       const jumping = PlayerController.isJumping[heroEid];
       if (jumping === 1 && prevHeroIsJumping === 0) {
         playSfx('jump');
@@ -1036,9 +1040,7 @@ const GameplayHudSystem: System = {
 
 /** Camera forward azimuth: 0=+Z(south), +π/2=+X(east), ±π=-Z(north). */
 function getCameraAzimuth(): number {
-  const camera = threeCameras.values().next().value as
-    | THREE.Camera
-    | undefined;
+  const camera = threeCameras.values().next().value as THREE.Camera | undefined;
   if (!camera) return 0;
   camera.getWorldDirection(_camDir);
   return Math.atan2(_camDir.x, _camDir.z);
@@ -1086,7 +1088,7 @@ function drawMinimap(state: State, heroEid: number): void {
   const S = MINIMAP_SIZE;
   const cx = S / 2;
   const cz = S / 2;
-  const scale = (S / 2) / MINIMAP_RANGE;
+  const scale = S / 2 / MINIMAP_RANGE;
 
   const px = Transform.posX[heroEid];
   const pz = Transform.posZ[heroEid];
@@ -1355,12 +1357,14 @@ function createOverlayHud(state: State): void {
     'pointer-events:auto;cursor:default;';
 
   goldCountEl = document.createElement('div');
-  goldCountEl.style.cssText = chipCss('rgba(255,210,60,0.3)') + 'color:#ffd24a;';
+  goldCountEl.style.cssText =
+    chipCss('rgba(255,210,60,0.3)') + 'color:#ffd24a;';
   goldCountEl.title = t(state, 'tip.gold');
   goldCountEl.textContent = '🪙 0';
 
   woodCountEl = document.createElement('div');
-  woodCountEl.style.cssText = chipCss('rgba(190,140,80,0.3)') + 'color:#d4a76a;';
+  woodCountEl.style.cssText =
+    chipCss('rgba(190,140,80,0.3)') + 'color:#d4a76a;';
   woodCountEl.title = t(state, 'tip.wood');
   woodCountEl.textContent = '🪵 0';
 
@@ -1554,8 +1558,7 @@ function createOverlayHud(state: State): void {
   minimapCanvas = document.createElement('canvas');
   minimapCanvas.width = MINIMAP_SIZE;
   minimapCanvas.height = MINIMAP_SIZE;
-  minimapCanvas.style.cssText =
-    `width:${MINIMAP_SIZE}px;height:${MINIMAP_SIZE}px;border-radius:50%;display:block;`;
+  minimapCanvas.style.cssText = `width:${MINIMAP_SIZE}px;height:${MINIMAP_SIZE}px;border-radius:50%;display:block;`;
   minimapCtx = minimapCanvas.getContext('2d');
   minimapWrap.appendChild(minimapCanvas);
   wrap.appendChild(minimapWrap);

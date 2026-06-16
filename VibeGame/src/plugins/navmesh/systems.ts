@@ -56,7 +56,10 @@ function navMeshConfig(worldSize: number) {
     walkableSlopeAngle: 45,
     walkableHeight: Math.ceil(AGENT_HEIGHT / cs),
     walkableClimb: Math.max(1, Math.ceil(MAX_STEP_HEIGHT / cs)),
-    walkableRadius: Math.max(1, Math.ceil((AGENT_RADIUS + OBSTACLE_MARGIN) / cs)),
+    walkableRadius: Math.max(
+      1,
+      Math.ceil((AGENT_RADIUS + OBSTACLE_MARGIN) / cs)
+    ),
     maxVertsPerPoly: 6,
     detailSampleDist: cs * 6,
     detailSampleMaxError: cs,

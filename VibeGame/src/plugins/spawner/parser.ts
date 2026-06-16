@@ -29,7 +29,8 @@ const SPAWNER_MODES: Record<string, SpawnMode> = {
 function markTemplateInstanced(tpl: SpawnTemplateSpec): void {
   const tag = tpl.tagName.toLowerCase();
   if (tag === 'gltfloader' || tag === 'gltf-load') {
-    if (tpl.attributes.instanced === undefined) tpl.attributes.instanced = 'true';
+    if (tpl.attributes.instanced === undefined)
+      tpl.attributes.instanced = 'true';
     return;
   }
   for (const child of tpl.entityChildren ?? []) {

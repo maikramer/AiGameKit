@@ -27,8 +27,10 @@ function audioSoundAdapter(entity: number, value: string, _state: State): void {
   AudioSource.loop[entity] = def.loop ? 1 : 0;
   AudioSource.pitch[entity] = def.pitch ?? 1;
   AudioSource.spatial[entity] = def.spatial ? 1 : 0;
-  if (def.minDistance != null) AudioSource.minDistance[entity] = def.minDistance;
-  if (def.maxDistance != null) AudioSource.maxDistance[entity] = def.maxDistance;
+  if (def.minDistance != null)
+    AudioSource.minDistance[entity] = def.minDistance;
+  if (def.maxDistance != null)
+    AudioSource.maxDistance[entity] = def.maxDistance;
   if (def.rolloff != null) AudioSource.rolloff[entity] = def.rolloff;
 }
 

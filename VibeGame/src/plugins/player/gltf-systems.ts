@@ -355,7 +355,9 @@ export const PlayerGltfAnimStateSystem: System = {
         // always, even when the rig has no attack clip.
         pendingMelee.set(
           eid,
-          clipDur > 0 ? clipDur * ATTACK_IMPACT_FRACTION : ATTACK_IMPACT_FALLBACK
+          clipDur > 0
+            ? clipDur * ATTACK_IMPACT_FRACTION
+            : ATTACK_IMPACT_FALLBACK
         );
       }
 

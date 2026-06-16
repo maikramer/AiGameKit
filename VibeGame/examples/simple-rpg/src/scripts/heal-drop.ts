@@ -1,10 +1,6 @@
 import { defineQuery } from 'vibegame';
 import type { MonoBehaviourContext } from 'vibegame';
-import { Transform, PlayerController } from 'vibegame';
-import {
-  Health,
-  healHealth,
-} from '../../../../src/plugins/combat/components.ts';
+import { Transform, PlayerController, Health, healHealth } from 'vibegame';
 
 const HEAL_AMOUNT = 25;
 const PICKUP_RANGE = 2.0;

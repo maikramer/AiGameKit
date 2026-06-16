@@ -27,7 +27,11 @@ export function createInventoryPanel(): InventoryPanel {
     'display:grid;grid-template-columns:repeat(5,1fr);gap:8px;';
   root.appendChild(grid);
 
-  function fillSlot(slot: HTMLDivElement, e: InventoryEntry, locale: 'en' | 'pt'): void {
+  function fillSlot(
+    slot: HTMLDivElement,
+    e: InventoryEntry,
+    locale: 'en' | 'pt'
+  ): void {
     slot.style.cssText = SLOT_BASE + SLOT_FILLED;
     slot.title = `${e.name[locale]} ×${e.qty}`;
     const icon = document.createElement('div');

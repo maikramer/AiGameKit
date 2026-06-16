@@ -252,7 +252,6 @@ export const TerrainSpawnSystem: System = {
         : 45;
       const acceptAnySlope = maxSlope >= 90 - 1e-6;
 
-
       const templateRadiusBase = footprintBaseRadius(spec, templateUrls(spec));
 
       for (let i = 0; i < instanceCount; i++) {

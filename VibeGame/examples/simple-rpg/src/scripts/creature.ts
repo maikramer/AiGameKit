@@ -6,24 +6,20 @@ import {
   defineQuery,
   PlayerController,
   MonoBehaviour,
-} from 'vibegame';
-import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
-import { getBvhSurfaceHeight } from '../../../../src/plugins/bvh/utils.ts';
-import {
+  getTerrainHeightAt,
+  getBvhSurfaceHeight,
   Health,
   damageHealth,
   isDead,
-} from '../../../../src/plugins/combat/components.ts';
-import { spawnParticleBurst } from '../../../../src/plugins/particles/utils.ts';
-import { threeCameras } from '../../../../src/plugins/rendering/utils.ts';
-import {
+  spawnParticleBurst,
+  threeCameras,
   isNavMeshReady,
   setAgentTarget,
   clearAgentTarget,
   removeAgent,
   getAgentPosition,
   NavMeshAgent,
-} from '../../../../src/plugins/navmesh/index';
+} from 'vibegame';
 
 // Terrain collision layer for ground sampling. Sampling the terrain BVH (not a
 // Rapier ray against everything) keeps creatures off the player's head: the BVH
@@ -57,7 +53,6 @@ export function anyCreatureAggro(): boolean {
   return aggroEntities.size > 0;
 }
 
-
 export interface CreatureClips {
   idle: string;
   walk: string;
@@ -76,7 +71,13 @@ export interface CreatureConfig {
   attackDamage: number;
   lootGoldMin: number;
   lootGoldMax: number;
-  onDeathLoot?: (state: State, gold: number, x: number, y: number, z: number) => void;
+  onDeathLoot?: (
+    state: State,
+    gold: number,
+    x: number,
+    y: number,
+    z: number
+  ) => void;
 }
 
 type CombatState = 'idle' | 'chase' | 'attack' | 'dead';
@@ -107,7 +108,9 @@ interface CreatureState {
   healthBarFill: THREE.Mesh | null;
   lastHp: number;
   flashTimer: number;
-  flashMats: { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] | null;
+  flashMats:
+    | { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[]
+    | null;
   wanderTargetX: number;
   wanderTargetZ: number;
   prevPosX: number;
@@ -126,7 +129,14 @@ function groundHeight(
   z: number,
   fromY: number
 ): number {
-  const gy = getBvhSurfaceHeight(ctx.state, x, fromY + 60, z, 2000, TERRAIN_LAYER);
+  const gy = getBvhSurfaceHeight(
+    ctx.state,
+    x,
+    fromY + 60,
+    z,
+    2000,
+    TERRAIN_LAYER
+  );
   if (gy != null && Number.isFinite(gy)) return gy;
   const hm = getTerrainHeightAt(ctx.state, x, z);
   if (Number.isFinite(hm)) return hm;
@@ -202,7 +212,11 @@ function disposeHealthBar(s: CreatureState): void {
 /** Cache the creature's emissive materials so a hit can tint them white. */
 function collectFlashMats(s: CreatureState): void {
   if (s.flashMats || !s.group) return;
-  const mats: { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] = [];
+  const mats: {
+    mat: THREE.MeshStandardMaterial;
+    emHex: number;
+    emInt: number;
+  }[] = [];
   s.group.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -278,8 +292,7 @@ export function createCreatureBehaviours(
     const z = Transform.posZ[eid];
 
     const gold = Math.floor(
-      cfg.lootGoldMin +
-        Math.random() * (cfg.lootGoldMax - cfg.lootGoldMin + 1)
+      cfg.lootGoldMin + Math.random() * (cfg.lootGoldMax - cfg.lootGoldMin + 1)
     );
     cfg.onDeathLoot?.(ctx.state, gold, x, y, z);
     playSound('item-drop');
@@ -628,10 +641,7 @@ export function createCreatureBehaviours(
               const pz2 = Transform.posZ[playerEid];
               const ddx = px2 - Transform.posX[eid];
               const ddz = pz2 - Transform.posZ[eid];
-              if (
-                ddx * ddx + ddz * ddz <=
-                LUNGE_HIT_RANGE * LUNGE_HIT_RANGE
-              ) {
+              if (ddx * ddx + ddz * ddz <= LUNGE_HIT_RANGE * LUNGE_HIT_RANGE) {
                 damageHealth(playerEid, cfg.attackDamage);
                 spawnParticleBurst(ctx.state, {
                   x: px2,
@@ -683,9 +693,9 @@ export function createCreatureBehaviours(
             s.stateTimer = HOVER_MIN + Math.random() * (HOVER_MAX - HOVER_MIN);
           } else {
             s.stateTimer =
-              HOVER_MIN * 0.6 + Math.random() * (HOVER_MAX * 0.6 - HOVER_MIN * 0.6);
-            s.targetHeading =
-              s.heading + (Math.random() - 0.5) * Math.PI * 1.4;
+              HOVER_MIN * 0.6 +
+              Math.random() * (HOVER_MAX * 0.6 - HOVER_MIN * 0.6);
+            s.targetHeading = s.heading + (Math.random() - 0.5) * Math.PI * 1.4;
             const angle = Math.random() * Math.PI * 2;
             const dist =
               WANDER_PICK_DIST_MIN +

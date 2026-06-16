@@ -86,7 +86,8 @@ export const compositionParser: Parser = ({ entity, element, state }) => {
   const specs: PrimitiveSpec[] = [];
 
   for (const child of element.children) {
-    if (!child.tagName || child.tagName.toLowerCase() === 'parsererror') continue;
+    if (!child.tagName || child.tagName.toLowerCase() === 'parsererror')
+      continue;
 
     if (isPrimitiveTag(child.tagName)) {
       specs.push(parsePrimitiveSpec(child.tagName, child.attributes));
@@ -96,7 +97,10 @@ export const compositionParser: Parser = ({ entity, element, state }) => {
     if (state.hasRecipe(child.tagName)) {
       // Recipe children (PointLight, AudioSource, ...) become sibling entities
       // parented to the composition so their local Transform is relative to it.
-      const childEntity = state.createFromRecipe(child.tagName, child.attributes);
+      const childEntity = state.createFromRecipe(
+        child.tagName,
+        child.attributes
+      );
       state.addComponent(childEntity, Parent, { entity });
       continue;
     }

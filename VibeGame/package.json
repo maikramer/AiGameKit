@@ -201,6 +201,7 @@
     "three-stdlib": "^2.36.1",
     "three.quarks": "^0.17.1",
     "troika-three-text": "^0.52.4",
+    "yaml": "^2.5.0",
     "yuka": "^0.7.8",
     "zod": "^4.1.5"
   },

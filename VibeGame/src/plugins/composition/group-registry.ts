@@ -64,7 +64,10 @@ export function pruneStaleCompositionGroups(state: State): void {
 
 function disposeGroupMaterials(group: Group): void {
   group.traverse((obj) => {
-    const mesh = obj as unknown as { geometry?: import('three').BufferGeometry; material?: import('three').Material | import('three').Material[] };
+    const mesh = obj as unknown as {
+      geometry?: import('three').BufferGeometry;
+      material?: import('three').Material | import('three').Material[];
+    };
     mesh.geometry?.dispose();
     const mat = mesh.material;
     if (Array.isArray(mat)) {

@@ -274,7 +274,9 @@ export const SoundBankSystem: System = {
     for (const play of getFollowingPlays()) {
       const eid = play.followEid;
       if (!state.exists(eid)) continue;
-      const t = state.hasComponent(eid, WorldTransform) ? WorldTransform : Transform;
+      const t = state.hasComponent(eid, WorldTransform)
+        ? WorldTransform
+        : Transform;
       play.setPos(t.posX[eid], t.posY[eid], t.posZ[eid]);
     }
 

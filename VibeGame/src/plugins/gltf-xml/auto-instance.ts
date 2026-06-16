@@ -118,7 +118,9 @@ export function getInstancedLodUrls(
   state: State,
   entity: number
 ): [string | undefined, string | undefined] {
-  return instancedLodUrlsByState.get(state)?.get(entity) ?? [undefined, undefined];
+  return (
+    instancedLodUrlsByState.get(state)?.get(entity) ?? [undefined, undefined]
+  );
 }
 
 function getPools(state: State): Map<string, GltfInstancePool> {
@@ -184,7 +186,9 @@ function writeSlotMatrices(
   const slot = pool.slots[slotIndex];
   const active = clampLevel(pool, slot.level < 0 ? 0 : slot.level);
 
-  const entityMatrix = slot.culled ? null : composeEntityMatrix(state, slot.entity);
+  const entityMatrix = slot.culled
+    ? null
+    : composeEntityMatrix(state, slot.entity);
 
   for (let L = 0; L < LEVELS; L++) {
     const prims = pool.levels[L];
@@ -385,7 +389,9 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[gltf-instance] failed to load "${pool.lodUrls[0]}": ${msg}`);
+      console.error(
+        `[gltf-instance] failed to load "${pool.lodUrls[0]}": ${msg}`
+      );
     });
 
   for (let L = 1; L < LEVELS; L++) {
@@ -499,7 +505,12 @@ export const GltfAutoInstanceSystem: System = {
           const dist = entityDistanceToCamera(state, eid, cx, cy, cz);
           level = clampLevel(
             pool,
-            pickLodLevel(dist, pool.near, pool.mid, slot.level < 0 ? undefined : slot.level)
+            pickLodLevel(
+              dist,
+              pool.near,
+              pool.mid,
+              slot.level < 0 ? undefined : slot.level
+            )
           );
         }
 

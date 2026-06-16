@@ -47,7 +47,7 @@ export {
   GltfAnimationUpdateSystem,
   registerAnimator,
 } from './plugins/gltf-anim';
-export { isKeyDown, addInputMapping, InputState } from './plugins/input';
+export { isKeyDown, addInputMapping, InputState, setInputMovementSuppressed } from './plugins/input';
 export {
   AudioSource,
   AudioListener,
@@ -225,6 +225,35 @@ export type { LoadingScreenText } from './plugins/loading';
 export { getActiveGltfLoadCount } from './extras/gltf-bridge';
 
 export {
+  COMBAT_DAMAGED,
+  COMBAT_DEATH,
+  COMBAT_HEALED,
+  COMBAT_KILLED,
+  DataRegistry,
+  ECONOMY_GAINED,
+  ECONOMY_SPENT,
+  EventBus,
+  EventBusCleanupSystem,
+  emitEvent,
+  getDataRegistry,
+  getEventBus,
+  INVENTORY_ADDED,
+  INVENTORY_REMOVED,
+  LOOT_DROPPED,
+  LOOT_ROLLED,
+  onEvent,
+  PROGRESSION_LEVEL_UP,
+  PROGRESSION_SKILL_PURCHASED,
+  PROGRESSION_XP_GAINED,
+  RpgCoreEventsPlugin,
+  RpgCorePlugin,
+  STATUS_APPLIED,
+  STATUS_CANCELLED,
+  STATUS_EXPIRED,
+} from './plugins/rpg-core';
+export type { EventHandler, SubscriptionOptions } from './plugins/rpg-core';
+
+export {
   SaveLoadPlugin,
   Serializable,
   loadFromLocalStorage,
@@ -243,6 +272,95 @@ export {
 } from './plugins/i18n';
 export { initAssetHotReload } from './vite/hot-reload-client';
 export { LoadingProgress, loadWithProgress } from './extras/loading-progress';
+
+export type {
+  FactionTag,
+  ItemDef,
+  ItemStack,
+  LootEntry,
+  LootTable,
+  ResourceKind,
+  SkillDef,
+  SkillEffect,
+  StatModifier,
+  StatusEffectDef,
+} from './plugins/rpg-core/types';
+
+/**
+ * Combat plugin: health tracking, damage/heal helpers and projectile data.
+ *
+ * Register via {@link CombatPlugin}; read/modify hit points with
+ * {@link Health}, {@link damageHealth}, {@link healHealth} and {@link isDead}.
+ */
+export {
+  CombatPlugin,
+  Health,
+  ProjectileData,
+  damageHealth,
+  healHealth,
+  isDead,
+} from './plugins/combat';
+
+/**
+ * Physics components and rigidbody accessors.
+ *
+ * {@link Rigidbody}, {@link Collider} and {@link CollisionEvents} are the SOA
+ * components backing the Rapier simulation. {@link getBodyForEntity} and
+ * {@link getRapierWorld} return the underlying Rapier handles for an entity or
+ * the whole world when gameplay code needs direct physics access.
+ */
+export { Rigidbody, Collider, CollisionEvents } from './plugins/physics';
+export { getRapierWorld } from './plugins/physics';
+export { getBodyForEntity, PhysicsStepSystem } from './plugins/physics/systems';
+
+/**
+ * Character ground-snap helpers for placing a body so its feet rest on a surface.
+ */
+export {
+  GROUND_CONTACT_SKIN,
+  getBodyYForFeetAt,
+  getCharacterFeetY,
+} from './plugins/physics/character-ground';
+
+/**
+ * Terrain height queries used to align gameplay objects to the ground.
+ *
+ * {@link getTerrainHeightAt} samples the terrain heightmap; {@link getBvhSurfaceHeight}
+ * (re-exported above) raycasts the terrain BVH. {@link getTerrainContext} exposes
+ * per-field runtime data; {@link isTerrainDynamicsBlocking} reports whether terrain
+ * dynamics currently block spawning/placement.
+ */
+export { getTerrainHeightAt, getTerrainContext } from './plugins/terrain';
+export { isTerrainDynamicsBlocking } from './plugins/terrain/utils';
+
+/**
+ * Post-processing component: bloom, vignette, tone mapping, DOF, SSAO, etc.
+ */
+export { Postprocessing } from './plugins/postprocessing/components';
+
+/**
+ * Debug overlay plugin (wireframes, stats).
+ */
+export { DebugPlugin } from './plugins/debug';
+
+/*
+ * ──────────────────────────────────────────────────────────────────────────
+ * Internal escape-hatches (marked @internal).
+ *
+ * `getRenderingContext` and `threeCameras` are engine-rendering internals: they
+ * expose the live WebGL renderer/scene graph and the THREE.Camera registry.
+ * They are NOT part of the stable gameplay API and may change without notice.
+ * They are re-exported here solely so engine examples/games that need
+ * renderer-level access (disposing a post-processing pass, reading the active
+ * camera for HUD projection) can do so through the public barrel instead of
+ * reaching into `../../src/plugins/rendering/*`. Prefer the higher-level
+ * helpers above whenever they suffice.
+ * ──────────────────────────────────────────────────────────────────────────
+ */
+/** @internal live rendering context (renderer, scene, canvas, post-processing). */
+export { getRenderingContext } from './plugins/rendering';
+/** @internal registry of active THREE.Camera instances keyed by camera entity. */
+export { threeCameras } from './plugins/rendering';
 
 let globalBuilder: GameBuilder | null = null;
 

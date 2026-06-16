@@ -10,7 +10,11 @@ import {
 
 export const CompositionPlugin: Plugin = {
   recipes: [compositionRecipe],
-  systems: [CompositionSetupSystem, CompositionColliderSystem, CompositionSyncSystem],
+  systems: [
+    CompositionSetupSystem,
+    CompositionColliderSystem,
+    CompositionSyncSystem,
+  ],
   components: {
     compositionPending: CompositionPending,
   },

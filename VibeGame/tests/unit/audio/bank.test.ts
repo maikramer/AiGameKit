@@ -51,7 +51,9 @@ describe('Sound bank', () => {
   });
 
   it('routes gain through master × bus × clip', () => {
-    bank.defineSoundBank({ bgm: { url: '/bgm.wav', volume: 0.8, bus: 'music', loop: true } });
+    bank.defineSoundBank({
+      bgm: { url: '/bgm.wav', volume: 0.8, bus: 'music', loop: true },
+    });
     const h = bank.playSound('bgm');
     expect(howlInstances[0].volume).toHaveBeenLastCalledWith(0.8, h.id);
 
@@ -63,7 +65,9 @@ describe('Sound bank', () => {
   });
 
   it('mutes a bus to zero gain', () => {
-    bank.defineSoundBank({ ping: { url: '/p.ogg', volume: 1, bus: 'ui', loop: true } });
+    bank.defineSoundBank({
+      ping: { url: '/p.ogg', volume: 1, bus: 'ui', loop: true },
+    });
     const h = bank.playSound('ping');
     bank.setBusMuted('ui', true);
     expect(howlInstances[0].volume).toHaveBeenLastCalledWith(0, h.id);

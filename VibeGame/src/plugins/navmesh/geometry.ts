@@ -115,24 +115,53 @@ function obstacleWorldMatrix(state: State, eid: number): THREE.Matrix4 {
   if (state.hasComponent(eid, Rigidbody)) {
     _pos.set(Rigidbody.posX[eid], Rigidbody.posY[eid], Rigidbody.posZ[eid]);
     const rw = Rigidbody.rotW[eid];
-    if (rw === 0 && Rigidbody.rotX[eid] === 0 && Rigidbody.rotY[eid] === 0 && Rigidbody.rotZ[eid] === 0) {
+    if (
+      rw === 0 &&
+      Rigidbody.rotX[eid] === 0 &&
+      Rigidbody.rotY[eid] === 0 &&
+      Rigidbody.rotZ[eid] === 0
+    ) {
       _quat.identity();
     } else {
-      _quat.set(Rigidbody.rotX[eid], Rigidbody.rotY[eid], Rigidbody.rotZ[eid], rw);
+      _quat.set(
+        Rigidbody.rotX[eid],
+        Rigidbody.rotY[eid],
+        Rigidbody.rotZ[eid],
+        rw
+      );
     }
   } else {
     _pos.set(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
-    _quat.set(Transform.rotX[eid], Transform.rotY[eid], Transform.rotZ[eid], Transform.rotW[eid] || 1);
+    _quat.set(
+      Transform.rotX[eid],
+      Transform.rotY[eid],
+      Transform.rotZ[eid],
+      Transform.rotW[eid] || 1
+    );
   }
   _bodyMat.compose(_pos, _quat, _scl);
 
   // Collider local offset (translation + rotation).
-  _pos.set(Collider.posOffsetX[eid], Collider.posOffsetY[eid], Collider.posOffsetZ[eid]);
+  _pos.set(
+    Collider.posOffsetX[eid],
+    Collider.posOffsetY[eid],
+    Collider.posOffsetZ[eid]
+  );
   const orw = Collider.rotOffsetW[eid];
-  if (orw === 0 && Collider.rotOffsetX[eid] === 0 && Collider.rotOffsetY[eid] === 0 && Collider.rotOffsetZ[eid] === 0) {
+  if (
+    orw === 0 &&
+    Collider.rotOffsetX[eid] === 0 &&
+    Collider.rotOffsetY[eid] === 0 &&
+    Collider.rotOffsetZ[eid] === 0
+  ) {
     _quat.identity();
   } else {
-    _quat.set(Collider.rotOffsetX[eid], Collider.rotOffsetY[eid], Collider.rotOffsetZ[eid], orw);
+    _quat.set(
+      Collider.rotOffsetX[eid],
+      Collider.rotOffsetY[eid],
+      Collider.rotOffsetZ[eid],
+      orw
+    );
   }
   _offsetMat.compose(_pos, _quat, _scl);
 
@@ -171,12 +200,12 @@ function appendMesh(
 
 // 8 corners + 12 triangles of a unit box centered at origin (half extent 0.5).
 const BOX_CORNERS = [
-  -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, -0.5,
-  -0.5, -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, 0.5, -0.5, 0.5, 0.5,
+  -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, -0.5, -0.5, 0.5, -0.5, -0.5,
+  -0.5, 0.5, 0.5, -0.5, 0.5, 0.5, 0.5, 0.5, -0.5, 0.5, 0.5,
 ];
 const BOX_INDICES = [
-  0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6,
-  1, 2, 6, 1, 6, 5, 0, 4, 7, 0, 7, 3,
+  0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 2, 3, 7, 2, 7, 6, 1, 2,
+  6, 1, 6, 5, 0, 4, 7, 0, 7, 3,
 ];
 const _boxVerts = new Float32Array(24);
 
@@ -206,19 +235,37 @@ const _compScl = new THREE.Vector3(1, 1, 1);
 // Composition entities own their collider via direct Rapier calls (no SOA
 // `Collider` component), so the navmesh has to read primitive specs from the
 // composition sidecar and bake them as box envelopes here.
-function compositionEntityWorldMatrix(state: State, eid: number): THREE.Matrix4 {
+function compositionEntityWorldMatrix(
+  state: State,
+  eid: number
+): THREE.Matrix4 {
   if (state.hasComponent(eid, Rigidbody)) {
     _compPos.set(Rigidbody.posX[eid], Rigidbody.posY[eid], Rigidbody.posZ[eid]);
     const rw = Rigidbody.rotW[eid];
-    if (rw === 0 && Rigidbody.rotX[eid] === 0 && Rigidbody.rotY[eid] === 0 && Rigidbody.rotZ[eid] === 0) {
+    if (
+      rw === 0 &&
+      Rigidbody.rotX[eid] === 0 &&
+      Rigidbody.rotY[eid] === 0 &&
+      Rigidbody.rotZ[eid] === 0
+    ) {
       _compQuat.identity();
     } else {
-      _compQuat.set(Rigidbody.rotX[eid], Rigidbody.rotY[eid], Rigidbody.rotZ[eid], rw);
+      _compQuat.set(
+        Rigidbody.rotX[eid],
+        Rigidbody.rotY[eid],
+        Rigidbody.rotZ[eid],
+        rw
+      );
     }
   } else {
     _compPos.set(Transform.posX[eid], Transform.posY[eid], Transform.posZ[eid]);
     const rw = Transform.rotW[eid] || 1;
-    _compQuat.set(Transform.rotX[eid], Transform.rotY[eid], Transform.rotZ[eid], rw);
+    _compQuat.set(
+      Transform.rotX[eid],
+      Transform.rotY[eid],
+      Transform.rotZ[eid],
+      rw
+    );
   }
   _compBodyMat.compose(_compPos, _compQuat, _compScl);
   return _compBodyMat;
@@ -268,7 +315,10 @@ export function navmeshObstaclesLoaded(state: State, bounds: number): boolean {
 
 function isFixedObstacle(state: State, eid: number): boolean {
   if (Collider.isSensor[eid] === 1) return false;
-  if (state.hasComponent(eid, Rigidbody) && Rigidbody.type[eid] !== BodyType.Fixed) {
+  if (
+    state.hasComponent(eid, Rigidbody) &&
+    Rigidbody.type[eid] !== BodyType.Fixed
+  ) {
     return false;
   }
   const shape = Collider.shape[eid];
@@ -315,14 +365,21 @@ function collectColliderObstacles(
     const data = requestColliderMesh(url);
     if (!data) continue;
     const scale = (Collider.meshScale[eid] || 1) * (Transform.scaleX[eid] || 1);
-    const baked = buildMeshColliderGeometry(data, scale, Collider.meshAnchor[eid]);
+    const baked = buildMeshColliderGeometry(
+      data,
+      scale,
+      Collider.meshAnchor[eid]
+    );
     appendMesh(baked.vertices, baked.indices, matrix, soup);
   }
 
   for (const eid of compositionObstacleQuery(state.world)) {
     if (CompositionPending.colliderBuilt[eid] !== 1) continue;
     if (!withinBounds(state, eid, bounds)) continue;
-    if (state.hasComponent(eid, Rigidbody) && Rigidbody.type[eid] !== BodyType.Fixed) {
+    if (
+      state.hasComponent(eid, Rigidbody) &&
+      Rigidbody.type[eid] !== BodyType.Fixed
+    ) {
       continue;
     }
     const data = getCompositionData(state, eid);

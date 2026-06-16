@@ -1,5 +1,5 @@
 import type { State } from 'vibegame';
-import { setInputMovementSuppressed } from '../../../../src/plugins/input/systems';
+import { setInputMovementSuppressed } from 'vibegame';
 import { setGamePaused } from '../game/pause';
 import {
   SKILL_DEFS,
@@ -36,10 +36,7 @@ export interface PauseMenu {
 
 type TabKey = 'menu' | 'skills' | 'inventory' | 'options';
 
-function menuButton(
-  onClick: () => void,
-  primary = false
-): HTMLButtonElement {
+function menuButton(onClick: () => void, primary = false): HTMLButtonElement {
   const b = document.createElement('button');
   const base = primary
     ? 'background:linear-gradient(180deg,rgba(150,110,40,0.55),rgba(95,68,20,0.55));color:#ffe08a;border:1px solid rgba(255,210,120,0.5);'
@@ -153,7 +150,8 @@ export function createPauseMenu(ctx: PauseMenuCtx): PauseMenu {
 
   // Skills tab.
   const pointsEl = document.createElement('div');
-  pointsEl.style.cssText = 'font:700 14px system-ui;color:#b18cff;padding:4px 0 2px;';
+  pointsEl.style.cssText =
+    'font:700 14px system-ui;color:#b18cff;padding:4px 0 2px;';
   skillsContent.appendChild(pointsEl);
   const skillRows: Record<
     SkillKey,
@@ -174,7 +172,8 @@ export function createPauseMenu(ctx: PauseMenuCtx): PauseMenu {
     const name = document.createElement('div');
     name.style.cssText = 'font:700 14px system-ui;color:#eaf0fb;';
     const desc = document.createElement('div');
-    desc.style.cssText = 'font:500 11px system-ui;color:#8a9ab8;margin-top:2px;';
+    desc.style.cssText =
+      'font:500 11px system-ui;color:#8a9ab8;margin-top:2px;';
     txt.append(name, desc);
     const val = document.createElement('span');
     val.style.cssText = `min-width:26px;text-align:center;font:800 16px system-ui;color:${def.color};`;

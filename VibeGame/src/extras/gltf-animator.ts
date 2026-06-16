@@ -260,12 +260,15 @@ export class GltfAnimator {
       // first would release the lock early and fire the wrong callback.
       action
         .getMixer()
-        .addEventListener('finished', function handler(e: { action?: unknown }) {
-          if (e.action !== action) return;
-          action.getMixer().removeEventListener('finished', handler);
-          self._overrideLock = false;
-          if (onFinished) onFinished();
-        });
+        .addEventListener(
+          'finished',
+          function handler(e: { action?: unknown }) {
+            if (e.action !== action) return;
+            action.getMixer().removeEventListener('finished', handler);
+            self._overrideLock = false;
+            if (onFinished) onFinished();
+          }
+        );
     }
 
     return action;

@@ -2,11 +2,14 @@ import * as THREE from 'three';
 import { defineQuery, loadGltfToSceneWithAnimator, playSound } from 'vibegame';
 import type { GltfAnimator, MonoBehaviourContext } from 'vibegame';
 import { Transform, PlayerController } from 'vibegame';
-import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
-import { getBvhSurfaceHeight } from '../../../../src/plugins/bvh/utils.ts';
-import { isKeyDown } from '../../../../src/plugins/input/utils.ts';
-import { setInputMovementSuppressed } from '../../../../src/plugins/input/systems.ts';
-import { Health, healHealth } from '../../../../src/plugins/combat/components.ts';
+import {
+  getTerrainHeightAt,
+  getBvhSurfaceHeight,
+  isKeyDown,
+  setInputMovementSuppressed,
+  Health,
+  healHealth,
+} from 'vibegame';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
 import { getStoneCount, removeStone } from './inventory.ts';
@@ -32,7 +35,6 @@ const WOOD1_PRICE = 8;
 
 const playerQuery = defineQuery([PlayerController]);
 let cachedPlayer = 0;
-
 
 let group: THREE.Group | null = null;
 let animator: GltfAnimator | null = null;
@@ -63,7 +65,8 @@ const BUTTON_BASE_STYLE =
   'display:block;width:100%;padding:10px 14px;margin:4px 0;box-sizing:border-box;' +
   'background:rgba(40,30,20,0.9);color:#e8d8b0;border:1px solid #5a4a30;' +
   'border-radius:4px;font:15px Georgia,serif;text-align:left;cursor:pointer;transition:background 0.12s;';
-const BUTTON_FOCUS_STYLE = 'border:2px solid #ffd700;box-shadow:0 0 12px rgba(255,215,0,0.4);';
+const BUTTON_FOCUS_STYLE =
+  'border:2px solid #ffd700;box-shadow:0 0 12px rgba(255,215,0,0.4);';
 const BUTTON_DISABLED_STYLE = 'opacity:0.4;cursor:not-allowed;';
 
 function findPlayer(ctx: MonoBehaviourContext): number {
@@ -105,7 +108,11 @@ function applyFocus(): void {
   }
 }
 
-function makeButton(label: string, action: string, onClick: () => void): HTMLButtonElement {
+function makeButton(
+  label: string,
+  action: string,
+  onClick: () => void
+): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.dataset.action = action;
@@ -124,7 +131,8 @@ function makeButton(label: string, action: string, onClick: () => void): HTMLBut
 function sectionHead(text: string): HTMLDivElement {
   const head = document.createElement('div');
   head.textContent = text;
-  head.style.cssText = 'color:#c8a04a;font-size:13px;letter-spacing:2px;margin:10px 0 2px;';
+  head.style.cssText =
+    'color:#c8a04a;font-size:13px;letter-spacing:2px;margin:10px 0 2px;';
   return head;
 }
 
@@ -144,7 +152,8 @@ function createShopPanel(): void {
     'display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;';
   const title = document.createElement('div');
   title.textContent = '\u2694 Merchant Shop';
-  title.style.cssText = 'font-size:20px;font-weight:bold;color:#c8a04a;letter-spacing:1px;';
+  title.style.cssText =
+    'font-size:20px;font-weight:bold;color:#c8a04a;letter-spacing:1px;';
   const closeBtn = document.createElement('button');
   closeBtn.textContent = '\u2715';
   closeBtn.style.cssText =
@@ -163,21 +172,35 @@ function createShopPanel(): void {
   panel.appendChild(sectionHead('\u2014 Buy \u2014'));
   shopButtons = [];
   shopButtons.push(
-    makeButton(`Buy Health Potion (${POTION_PRICE}g) \u2014 +${POTION_HEAL} HP`, 'potion', buyHealthPotion)
+    makeButton(
+      `Buy Health Potion (${POTION_PRICE}g) \u2014 +${POTION_HEAL} HP`,
+      'potion',
+      buyHealthPotion
+    )
   );
   shopButtons.push(
-    makeButton(`Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${swordLevel + 1}`, 'sword', buySwordUpgrade)
+    makeButton(
+      `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${swordLevel + 1}`,
+      'sword',
+      buySwordUpgrade
+    )
   );
 
   panel.appendChild(sectionHead('\u2014 Sell \u2014'));
   shopButtons.push(
-    makeButton(`Sell 1 Stone (${STONE1_PRICE}g)`, 'stone1', () => sellStones(1, STONE1_PRICE))
+    makeButton(`Sell 1 Stone (${STONE1_PRICE}g)`, 'stone1', () =>
+      sellStones(1, STONE1_PRICE)
+    )
   );
   shopButtons.push(
-    makeButton(`Sell 5 Stones (${STONE5_PRICE}g)`, 'stone5', () => sellStones(5, STONE5_PRICE))
+    makeButton(`Sell 5 Stones (${STONE5_PRICE}g)`, 'stone5', () =>
+      sellStones(5, STONE5_PRICE)
+    )
   );
   shopButtons.push(
-    makeButton(`Sell 1 Wood (${WOOD1_PRICE}g)`, 'wood1', () => sellWood(1, WOOD1_PRICE))
+    makeButton(`Sell 1 Wood (${WOOD1_PRICE}g)`, 'wood1', () =>
+      sellWood(1, WOOD1_PRICE)
+    )
   );
 
   for (const btn of shopButtons) panel.appendChild(btn);

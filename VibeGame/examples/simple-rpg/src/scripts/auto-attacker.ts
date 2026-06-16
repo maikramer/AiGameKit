@@ -1,16 +1,14 @@
 import { defineQuery } from 'vibegame';
 import type { MonoBehaviourContext } from 'vibegame';
-import { Transform } from 'vibegame';
 import {
+  Transform,
   Health,
   ProjectileData,
-} from '../../../../src/plugins/combat/components.ts';
-import {
   Collider,
   CollisionEvents,
   Rigidbody,
-} from '../../../../src/plugins/physics/components.ts';
-import { MeshRenderer } from '../../../../src/plugins/rendering/components.ts';
+  MeshRenderer,
+} from 'vibegame';
 
 interface AttackConfig {
   cooldown: number;
