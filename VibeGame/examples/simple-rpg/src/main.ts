@@ -313,8 +313,16 @@ const dictEN: Record<string, string> = {
   'pause.hint': '[Q] or [Esc] to resume',
   'pause.option.language': 'Language',
   'pause.option.music': 'Music',
+  'pause.option.musicVol': 'Music Vol',
+  'pause.option.sfx': 'Sound FX',
+  'pause.option.sfxVol': 'SFX Vol',
   'opt.on': 'On',
   'opt.off': 'Off',
+  'opt.mute': 'Mute',
+  'opt.25': '25%',
+  'opt.50': '50%',
+  'opt.75': '75%',
+  'opt.max': 'Max',
   'pause.points': 'Skill points: {n}',
   'pause.skill.vitality': 'Vitality',
   'pause.skill.vitality.desc': '+12 max HP',
@@ -372,8 +380,16 @@ const dictPT: Record<string, string> = {
   'pause.hint': '[Q] ou [Esc] para continuar',
   'pause.option.language': 'Idioma',
   'pause.option.music': 'Música',
-  'opt.on': 'Ligada',
-  'opt.off': 'Desligada',
+  'pause.option.musicVol': 'Vol Música',
+  'pause.option.sfx': 'Efeitos',
+  'pause.option.sfxVol': 'Vol Efeitos',
+  'opt.on': 'Ligado',
+  'opt.off': 'Desligado',
+  'opt.mute': 'Mudo',
+  'opt.25': '25%',
+  'opt.50': '50%',
+  'opt.75': '75%',
+  'opt.max': 'Máx',
   'pause.points': 'Pontos de perícia: {n}',
   'pause.skill.vitality': 'Vitalidade',
   'pause.skill.vitality.desc': '+12 HP máx',
@@ -442,6 +458,21 @@ let sfxVolIdx = 3;
 
 const bgmBaseVol = new Map<number, number>();
 const sfxBaseVol = new Map<number, number>();
+let battleMusicFade = 0;
+
+function updateBattleMusic(state: State, dt: number): void {
+  const target = (anyCreatureAggro() || anyBossAggro()) ? 1 : 0;
+  const speed = Math.min(1, dt * 1.5);
+  if (battleMusicFade < target) battleMusicFade = Math.min(target, battleMusicFade + speed);
+  else if (battleMusicFade > target) battleMusicFade = Math.max(target, battleMusicFade - speed);
+
+  const volScale = VOLUME_LEVELS[musicVolIdx];
+  for (const [eid, base] of bgmBaseVol) {
+    if (!state.exists(eid) || !state.hasComponent(eid, AudioSource)) continue;
+    const fade = eid === eidBgmBattle ? battleMusicFade : 1 - battleMusicFade;
+    AudioSource.volume[eid] = base * fade * volScale;
+  }
+}
 let prevGoldFx = 0;
 
 /** Start/stop the background music tracks together (Options → Music). */
@@ -720,10 +751,10 @@ function watchCombatFx(state: State, heroEid: number | null): void {
       }
     );
     if (isHero) {
-      if (eidSfxPlayerHurt >= 0) playAudioEmitter(state, eidSfxPlayerHurt);
+      playSfx(state, eidSfxPlayerHurt);
       addShake(Math.min(12, 4 + dmg * 0.25), 280);
     } else {
-      if (eidSfxEnemyHurt >= 0) playAudioEmitter(state, eidSfxEnemyHurt);
+      playSfx(state, eidSfxEnemyHurt);
       addShake(big ? 5 : 2.5, big ? 200 : 130);
       // Award XP once, on the hit that drops the creature to 0.
       if (cur <= 0 && prev > 0) {
@@ -954,7 +985,7 @@ const GameplayHudSystem: System = {
     const collectPos = getLastCollectPosition();
     if (collectPos.version !== prevStoneCollectVersion) {
       prevStoneCollectVersion = collectPos.version;
-      if (eidSfxCoin >= 0) playAudioEmitter(state, eidSfxCoin);
+      playSfx(state, eidSfxCoin);
     }
     if (
       overlayMissionEl &&
@@ -974,6 +1005,7 @@ const GameplayHudSystem: System = {
 
     watchCombatFx(state, heroEid);
     watchDestructibleFx(state);
+    updateBattleMusic(state, dt);
     updateFloatFx(state);
     updateShake();
     if (levelUpEl && levelUpFlashUntil > 0 && state.time.elapsed >= levelUpFlashUntil) {
@@ -995,7 +1027,7 @@ const GameplayHudSystem: System = {
     ) {
       const jumping = PlayerController.isJumping[heroEid];
       if (jumping === 1 && prevHeroIsJumping === 0) {
-        playAudioEmitter(state, eidSfxJump);
+        playSfx(state, eidSfxJump);
       }
       prevHeroIsJumping = jumping;
     }
@@ -1664,7 +1696,6 @@ function resolveAudioEids(state: State): void {
       sfxBaseVol.set(e, AudioSource.volume[e]);
     }
   }
-  applyMusicVolume(state);
   applySfxVolume(state);
 }
 
@@ -1817,6 +1848,28 @@ async function bootstrap(): Promise<void> {
         setMusicPlaying(state, musicOn);
       },
     },
+    {
+      labelKey: 'pause.option.musicVol',
+      value: () => t(state, VOLUME_LABELS[musicVolIdx]),
+      activate: () => {
+        musicVolIdx = (musicVolIdx + 1) % VOLUME_LEVELS.length;
+      },
+    },
+    {
+      labelKey: 'pause.option.sfx',
+      value: () => t(state, sfxOn ? 'opt.on' : 'opt.off'),
+      activate: () => {
+        sfxOn = !sfxOn;
+      },
+    },
+    {
+      labelKey: 'pause.option.sfxVol',
+      value: () => t(state, VOLUME_LABELS[sfxVolIdx]),
+      activate: () => {
+        sfxVolIdx = (sfxVolIdx + 1) % VOLUME_LEVELS.length;
+        applySfxVolume(state);
+      },
+    },
   ];
 
   pauseMenu = createPauseMenu({
@@ -1826,12 +1879,12 @@ async function bootstrap(): Promise<void> {
     getLevel: () => level,
     onSave: () => {
       saveToLocalStorage(state, SAVE_KEY);
-      if (eidSfxSave >= 0) playAudioEmitter(state, eidSfxSave);
+      playSfx(state, eidSfxSave);
       pushFlash(state, 'hud.saved', 2.5);
     },
     onLoad: () => {
       const ok = loadFromLocalStorage(state, SAVE_KEY);
-      if (ok && eidSfxLoad >= 0) playAudioEmitter(state, eidSfxLoad);
+      if (ok && eidSfxLoad >= 0) playSfx(state, eidSfxLoad);
       pushFlash(state, ok ? 'hud.loaded' : 'hud.no-save', 2.5);
     },
     options: pauseOptions,
