@@ -8,7 +8,7 @@ import {
   MonoBehaviour,
 } from 'vibegame';
 import { getTerrainHeightAt } from '../../../../src/plugins/terrain/systems.ts';
-import { castRapierRay } from '../../../../src/plugins/raycast/utils.ts';
+import { getBvhSurfaceHeight } from '../../../../src/plugins/bvh/utils.ts';
 import {
   Health,
   damageHealth,
@@ -62,6 +62,14 @@ interface BossState {
 }
 
 const state = new Map<number, BossState>();
+
+export function anyBossAggro(): boolean {
+  for (const b of state.values()) {
+    if (b.combatState === 'seek' || b.combatState === 'attack') return true;
+  }
+  return false;
+}
+
 const playerQuery = defineQuery([PlayerController]);
 const _box = new THREE.Box3();
 
@@ -79,7 +87,9 @@ function wrapAngle(a: number): number {
   return Math.atan2(Math.sin(a), Math.cos(a));
 }
 
-const _downDir = { x: 0, y: -1, z: 0 };
+// Terrain collision layer — sample the terrain BVH (not a Rapier ray vs. every
+// collider) so the boss can't snap onto the player's head when overlapping.
+const TERRAIN_LAYER = 0x0001;
 
 function groundHeight(
   ctx: MonoBehaviourContext,
@@ -87,9 +97,8 @@ function groundHeight(
   z: number,
   fromY: number
 ): number {
-  const origin = { x, y: fromY + 60, z };
-  const hit = castRapierRay(ctx.state, origin, _downDir, 2000, 0xffff);
-  if (hit) return hit.point.y;
+  const gy = getBvhSurfaceHeight(ctx.state, x, fromY + 60, z, 2000, TERRAIN_LAYER);
+  if (gy != null && Number.isFinite(gy)) return gy;
   const hm = getTerrainHeightAt(ctx.state, x, z);
   if (Number.isFinite(hm)) return hm;
   return 0;
