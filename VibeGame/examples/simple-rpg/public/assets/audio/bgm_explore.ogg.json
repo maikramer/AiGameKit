@@ -1,0 +1,20 @@
+{
+  "prompt": "peaceful fantasy village exploration music, gentle acoustic guitar and flute, warm ambient adventure melody, calm countryside",
+  "profile": "effects",
+  "model_id": "stabilityai/stable-audio-open-small",
+  "duration": 11.0,
+  "steps": 100,
+  "cfg_scale": 1.0,
+  "seed": 300,
+  "seed_effective": 300,
+  "sampler": "euler",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0"
+}

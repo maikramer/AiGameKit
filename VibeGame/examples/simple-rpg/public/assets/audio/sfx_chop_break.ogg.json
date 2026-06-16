@@ -1,0 +1,22 @@
+{
+  "prompt": "large tree falling crashing down, timber cracking and splintering",
+  "profile": "effects",
+  "model_id": "stabilityai/stable-audio-open-small",
+  "duration": 2.0,
+  "steps": 8,
+  "cfg_scale": 1.0,
+  "seed": 303,
+  "seed_effective": 303,
+  "sampler": "euler",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": null,
+  "half_precision_effective": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0",
+  "crop_seconds": 2.0,
+  "fade_out_seconds": 0.06
+}
