@@ -47,7 +47,13 @@ export {
   GltfAnimationUpdateSystem,
   registerAnimator,
 } from './plugins/gltf-anim';
-export { isKeyDown, addInputMapping, InputState, setInputMovementSuppressed } from './plugins/input';
+export {
+  isKeyDown,
+  addInputMapping,
+  InputState,
+  setInputMovementSuppressed,
+  isInputMovementSuppressed,
+} from './plugins/input';
 export {
   AudioSource,
   AudioListener,
@@ -254,6 +260,49 @@ export {
 export type { EventHandler, SubscriptionOptions } from './plugins/rpg-core';
 
 export {
+  addXp,
+  getProgressionConfig,
+  getSkillRank,
+  getStatModifiers,
+  levelUp,
+  ProgressionComponent,
+  ProgressionEventBridgeSystem,
+  ProgressionPlugin,
+  setProgressionConfig,
+  spendSkillPoint,
+} from './plugins/rpg-progression';
+
+export {
+  harvest,
+  isDepleted,
+  isResourceNode,
+  getResourceNodeKind,
+  NODE_HARVESTED,
+  NODE_RESPAWNED,
+  ResourceNode,
+  ResourceNodePlugin,
+  ResourceNodeRespawnSystem,
+  resolveResourceNodeKind,
+} from './plugins/rpg-resource-node';
+export type {
+  NodeHarvestedPayload,
+  NodeRespawnedPayload,
+} from './plugins/rpg-resource-node';
+
+export {
+  RpgVaultPlugin,
+  VaultComponent,
+  VaultEventBridgeSystem,
+  addResource,
+  getCapacity,
+  getResource,
+  pruneVaults,
+  registerResourceKind,
+  setCapacity,
+  spendResource,
+} from './plugins/rpg-vault';
+
+export {
   SaveLoadPlugin,
   Serializable,
   loadFromLocalStorage,
@@ -285,6 +334,39 @@ export type {
   StatModifier,
   StatusEffectDef,
 } from './plugins/rpg-core/types';
+
+/**
+ * Inventory plugin: slot-based item storage with stacking, capacity and
+ * add/remove events. Items are data-driven via the {@link DataRegistry}
+ * (`item` kind). Mutations (`addItem`/`removeItem`) queue events that the
+ * {@link InventoryEventBridgeSystem} drains each simulation step.
+ */
+export {
+  addItem,
+  getInventory,
+  getItemQty,
+  InventoryComponent,
+  InventoryEventBridgeSystem,
+  InventoryPlugin,
+  removeItem,
+} from './plugins/rpg-inventory';
+
+/**
+ * Economy plugin: thin orchestration layer over Vault (T6) and Inventory (T7)
+ * providing atomic gold-for-items transactions. {@link buyItem} and
+ * {@link sellItem} validate gold + stock + inventory room read-only before any
+ * mutation, so a rejected trade leaves both sides untouched. Prices are
+ * data-driven via the {@link DataRegistry} (`price` kind, `{ buy, sell }`).
+ */
+export {
+  buyItem,
+  EconomyEventBridgeSystem,
+  EconomyPlugin,
+  getPrice,
+  GOLD_KIND,
+  sellItem,
+} from './plugins/rpg-economy';
+export type { PriceEntry, PriceKind } from './plugins/rpg-economy';
 
 /**
  * Combat plugin: health tracking, damage/heal helpers and projectile data.
@@ -361,6 +443,29 @@ export { DebugPlugin } from './plugins/debug';
 export { getRenderingContext } from './plugins/rendering';
 /** @internal registry of active THREE.Camera instances keyed by camera entity. */
 export { threeCameras } from './plugins/rendering';
+
+/**
+ * Pause coordination plugin: modal stack that suppresses time (timeScale=0)
+ * and gameplay input while any modal is open.
+ *
+ * Register via {@link PauseCoordinatorPlugin}; drive with {@link pushModal} /
+ * {@link popModal} and query with {@link isPaused} / {@link getActiveModal}.
+ */
+export {
+  getActiveModal,
+  getPauseState,
+  isPaused,
+  PAUSE_CHANGED,
+  PauseCoordinatorPlugin,
+  PauseSystem,
+  PAUSE_POPPED,
+  popModal,
+  PAUSE_PUSHED,
+  pushModal,
+  setTimeScale,
+  suppressInput,
+} from './plugins/rpg-pause';
+export type { PauseState } from './plugins/rpg-pause';
 
 let globalBuilder: GameBuilder | null = null;
 
