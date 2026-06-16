@@ -23,6 +23,8 @@
         display: block;
         width: 100%;
         height: 100%;
+        transform-origin: center center;
+        will-change: transform;
       }
     </style>
   </head>
@@ -39,7 +41,7 @@
       <GameObject
         ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.8"
         directional-light="color: 0xfff0d0; intensity: 3.0; direction-x: -0.7; direction-y: 3.5; direction-z: -0.6; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
-        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.35; bloom-radius: 0.5; bloom-threshold: 0.65; chromatic-aberration: 0; vignette: 1; vignette-offset: 0.3; vignette-darkness: 0.48; aa: smaa; tone-mapping: agx; ssao: 1; ssao-intensity: 0.4; ssao-radius: 0.8"
+          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.6; chromatic-aberration: 0; ca-strength: 0; vignette: 1; vignette-offset: 0.22; vignette-darkness: 0.62; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.05; ssao: 1; ssao-intensity: 0.55; ssao-radius: 0.9"
       >
       </GameObject>
 
@@ -167,7 +169,47 @@
         name="bgm-battle"
         url="/assets/audio/bgm_battle.ogg"
         loop="true"
-        volume="0.1"
+        volume="0.0"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="bgm-explore"
+        url="/assets/audio/bgm_explore.ogg"
+        loop="true"
+        volume="0.0"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-mine-hit"
+        url="/assets/audio/sfx_mine_hit.ogg"
+        loop="false"
+        volume="0.45"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-chop-hit"
+        url="/assets/audio/sfx_chop_hit.ogg"
+        loop="false"
+        volume="0.45"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-mine-break"
+        url="/assets/audio/sfx_mine_break.ogg"
+        loop="false"
+        volume="0.5"
+        playing="false"
+        spatial="false"
+      ></AudioSource>
+      <AudioSource
+        name="sfx-chop-break"
+        url="/assets/audio/sfx_chop_break.ogg"
+        loop="false"
+        volume="0.5"
         playing="false"
         spatial="false"
       ></AudioSource>

@@ -80,7 +80,22 @@ import {
 import { addWood, getWoodCount } from './scripts/wood';
 import { getGold } from './game/economy';
 import { isWoodEntity } from './scripts/tree';
+import { anyCreatureAggro } from './scripts/creature';
+import { anyBossAggro } from './scripts/boss';
 import { NavMeshAgent } from '../../../src/plugins/navmesh/index';
+import { Destructible } from '../../../src/plugins/destructible/components';
+import { isShopOpen } from './game/pause';
+import {
+  createPauseMenu,
+  type PauseMenu,
+  type PauseOption,
+} from './ui/pause-menu';
+import {
+  addSkillPoints,
+  SKILL_POINTS_PER_LEVEL,
+  setSkillEffectHandler,
+} from './game/skills';
+import { registerResource, defineItem, addItem } from './game/inventory';
 
 const SAVE_KEY = 'simple-rpg-save';
 
@@ -268,9 +283,46 @@ const dictEN: Record<string, string> = {
   'hud.waveReached': 'You survived',
   'hud.restart': 'Restart',
   'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [J] attack/chop  [K] talk/trade  [L] close  [Q] save  [E] load  [I] EN/PT',
+    '[W/S] move  [A/D] turn  [Space] jump  [J] attack/chop  [K] talk/trade  [Q] menu',
   'hud.stone': 'Stone: {count}',
   'hud.stoneCollected': '+1 Stone!',
+  'hint.merchant': 'Talk to Merchant',
+  'hint.harvest.wood': 'Chop Tree',
+  'hint.harvest.stone': 'Mine Rock',
+  'tip.hp': 'Health — heal with potions',
+  'tip.gold': 'Gold — spend at the merchant',
+  'tip.wood': 'Wood — chop trees with [J]',
+  'tip.stone': 'Stone — mine rocks with [J]',
+  'tip.minimap': 'Minimap — red: enemies · purple: boss · gold: merchant · green: tree · gray: rock',
+  'tip.compass': 'Compass — facing direction',
+  'minimap.you': 'You',
+  'hud.levelUp': 'LEVEL UP!  Lv',
+  'tip.xp': 'Experience — defeat creatures to level up',
+  'tip.level': 'Level',
+  'tip.enemies': 'Creatures nearby',
+  'tip.time': 'Elapsed time',
+  'pause.title': 'Paused',
+  'pause.tab.menu': 'Menu',
+  'pause.tab.skills': 'Skills',
+  'pause.tab.inventory': 'Inventory',
+  'pause.tab.options': 'Options',
+  'pause.resume': 'Resume',
+  'pause.save': 'Save',
+  'pause.load': 'Load',
+  'pause.restart': 'Restart',
+  'pause.hint': '[Q] or [Esc] to resume',
+  'pause.option.language': 'Language',
+  'pause.option.music': 'Music',
+  'opt.on': 'On',
+  'opt.off': 'Off',
+  'pause.points': 'Skill points: {n}',
+  'pause.skill.vitality': 'Vitality',
+  'pause.skill.vitality.desc': '+12 max HP',
+  'pause.skill.strength': 'Strength',
+  'pause.skill.strength.desc': 'Attack power (soon)',
+  'pause.skill.agility': 'Agility',
+  'pause.skill.agility.desc': 'Move speed (soon)',
+  'pause.inventory.soon': 'Inventory coming soon',
 };
 
 const dictPT: Record<string, string> = {
@@ -290,20 +342,56 @@ const dictPT: Record<string, string> = {
   'hud.waveReached': 'Sobreviveste',
   'hud.restart': 'Recomeçar',
   'hud.controls':
-    '[W/S] mover  [A/D] virar  [Espaço] saltar  [J] atacar/cortar  [K] falar/comerciar  [L] fechar  [Q] gravar  [E] carregar  [I] EN/PT',
+    '[W/S] mover  [A/D] virar  [Espaço] saltar  [J] atacar/cortar  [K] falar/comerciar  [Q] menu',
   'hud.stone': 'Pedra: {count}',
   'hud.stoneCollected': '+1 Pedra!',
+  'hint.merchant': 'Falar com Mercador',
+  'hint.harvest.wood': 'Cortar Árvore',
+  'hint.harvest.stone': 'Minerar Rocha',
+  'tip.hp': 'Vida — cura com poções',
+  'tip.gold': 'Ouro — gasta no mercador',
+  'tip.wood': 'Madeira — corta árvores com [J]',
+  'tip.stone': 'Pedra — minera rochas com [J]',
+  'tip.minimap': 'Minimapa — vermelho: inimigos · roxo: chefe · ouro: mercador · verde: árvore · cinza: rocha',
+  'tip.compass': 'Bússola — direção que encaras',
+  'minimap.you': 'Tu',
+  'hud.levelUp': 'SUBIU DE NÍVEL!  Nível',
+  'tip.xp': 'Experiência — derrota criaturas para subir de nível',
+  'tip.level': 'Nível',
+  'tip.enemies': 'Criaturas próximas',
+  'tip.time': 'Tempo decorrido',
+  'pause.title': 'Pausa',
+  'pause.tab.menu': 'Menu',
+  'pause.tab.skills': 'Perícias',
+  'pause.tab.inventory': 'Inventário',
+  'pause.tab.options': 'Opções',
+  'pause.resume': 'Continuar',
+  'pause.save': 'Gravar',
+  'pause.load': 'Carregar',
+  'pause.restart': 'Recomeçar',
+  'pause.hint': '[Q] ou [Esc] para continuar',
+  'pause.option.language': 'Idioma',
+  'pause.option.music': 'Música',
+  'opt.on': 'Ligada',
+  'opt.off': 'Desligada',
+  'pause.points': 'Pontos de perícia: {n}',
+  'pause.skill.vitality': 'Vitalidade',
+  'pause.skill.vitality.desc': '+12 HP máx',
+  'pause.skill.strength': 'Força',
+  'pause.skill.strength.desc': 'Poder de ataque (em breve)',
+  'pause.skill.agility': 'Agilidade',
+  'pause.skill.agility.desc': 'Velocidade (em breve)',
+  'pause.inventory.soon': 'Inventário em breve',
 };
 
 let overlayMissionEl: HTMLDivElement | null = null;
-let overlayStatsEl: HTMLDivElement | null = null;
+let enemiesChipEl: HTMLDivElement | null = null;
+let timeChipEl: HTMLDivElement | null = null;
 let overlayControlsEl: HTMLDivElement | null = null;
 let healthBarFill: HTMLDivElement | null = null;
 let healthBarText: HTMLSpanElement | null = null;
 let damageFlashEl: HTMLDivElement | null = null;
-let waveCompleteEl: HTMLDivElement | null = null;
 let winEl: HTMLDivElement | null = null;
-let waveTopEl: HTMLDivElement | null = null;
 let hudRootEl: HTMLDivElement | null = null;
 let stoneCountEl: HTMLDivElement | null = null;
 let goldCountEl: HTMLDivElement | null = null;
@@ -314,17 +402,144 @@ let bossBarText: HTMLSpanElement | null = null;
 let deathEl: HTMLDivElement | null = null;
 let hudRevealed = false;
 
+// Minimap + compass + interaction hint
+let minimapCanvas: HTMLCanvasElement | null = null;
+let minimapCtx: CanvasRenderingContext2D | null = null;
+let compassStripEl: HTMLDivElement | null = null;
+const compassMarks: { el: HTMLDivElement; az: number }[] = [];
+let interactHintEl: HTMLDivElement | null = null;
+let interactKeyEl: HTMLSpanElement | null = null;
+let interactLabelEl: HTMLSpanElement | null = null;
+const _camDir = new THREE.Vector3();
+// Half-angle (radians) of world visible across the compass strip.
+const COMPASS_FOV = 1.7;
+const MINIMAP_RANGE = 60; // world meters from player edge-to-center
+const MINIMAP_SIZE = 168; // px
+const destructibleQuery = defineQuery([Destructible, Transform]);
+
 let eidSfxJump = -1;
 let eidSfxSave = -1;
 let eidSfxLoad = -1;
 let eidSfxHeal = -1;
 let eidSfxCoin = -1;
 let eidSfxPlayerHurt = -1;
+let eidSfxEnemyHurt = -1;
+let eidSfxHit = -1;
+let eidSfxMineHit = -1;
+let eidSfxChopHit = -1;
+let eidSfxMineBreak = -1;
+let eidSfxChopBreak = -1;
+let eidBgm = -1;
 let eidBgmBattle = -1;
+let eidBgmExplore = -1;
+let musicOn = true;
+let sfxOn = true;
 
-let saveDebounce = false;
-let loadDebounce = false;
-let localeDebounce = false;
+const VOLUME_LEVELS = [0, 0.25, 0.5, 0.75, 1.0] as const;
+const VOLUME_LABELS = ['opt.mute', 'opt.25', 'opt.50', 'opt.75', 'opt.max'];
+let musicVolIdx = 3;
+let sfxVolIdx = 3;
+
+const bgmBaseVol = new Map<number, number>();
+const sfxBaseVol = new Map<number, number>();
+let prevGoldFx = 0;
+
+/** Start/stop the background music tracks together (Options → Music). */
+function setMusicPlaying(state: State, on: boolean): void {
+  for (const eid of [eidBgm, eidBgmBattle, eidBgmExplore]) {
+    if (eid >= 0 && state.exists(eid) && state.hasComponent(eid, AudioSource)) {
+      AudioSource.playing[eid] = on ? 1 : 0;
+    }
+  }
+}
+
+function applyMusicVolume(state: State): void {
+  const scale = VOLUME_LEVELS[musicVolIdx];
+  for (const [eid, base] of bgmBaseVol) {
+    if (state.exists(eid) && state.hasComponent(eid, AudioSource)) {
+      AudioSource.volume[eid] = base * scale;
+    }
+  }
+}
+
+function applySfxVolume(state: State): void {
+  const scale = VOLUME_LEVELS[sfxVolIdx];
+  for (const [eid, base] of sfxBaseVol) {
+    if (state.exists(eid) && state.hasComponent(eid, AudioSource)) {
+      AudioSource.volume[eid] = base * scale;
+    }
+  }
+}
+
+function playSfx(state: State, eid: number): void {
+  if (sfxOn && eid >= 0) playAudioEmitter(state, eid);
+}
+
+// ── Juice: screen shake ──────────────────────────────────────────────────
+let gameCanvasEl: HTMLElement | null = null;
+let shakeMag = 0;
+let shakeUntil = 0;
+/** Kick a screen shake. Strongest of overlapping requests wins. */
+function addShake(mag: number, durMs: number): void {
+  shakeMag = Math.max(shakeMag, mag);
+  shakeUntil = Math.max(shakeUntil, performance.now() + durMs);
+}
+function updateShake(): void {
+  if (!gameCanvasEl) gameCanvasEl = document.querySelector('#game-canvas');
+  if (!gameCanvasEl) return;
+  const now = performance.now();
+  if (now >= shakeUntil || shakeMag <= 0.05) {
+    if (shakeMag !== 0) gameCanvasEl.style.transform = '';
+    shakeMag = 0;
+    return;
+  }
+  const m = shakeMag;
+  const dx = (Math.random() * 2 - 1) * m;
+  const dy = (Math.random() * 2 - 1) * m;
+  const rot = (Math.random() * 2 - 1) * m * 0.04;
+  // Overscan (scale 1.04) hides the canvas edges revealed by the offset.
+  gameCanvasEl.style.transform = `scale(1.04) translate(${dx}px,${dy}px) rotate(${rot}deg)`;
+  shakeMag *= 0.86;
+}
+
+// ── XP / level ───────────────────────────────────────────────────────────
+let xp = 0;
+let level = 1;
+let xpToNext = 6;
+let levelUpFlashUntil = 0;
+let xpBarFill: HTMLDivElement | null = null;
+let levelBadgeEl: HTMLDivElement | null = null;
+let levelUpEl: HTMLDivElement | null = null;
+
+// Pause menu handle + Esc edge-debounce (UI built in ./ui/pause-menu).
+let pauseMenu: PauseMenu | null = null;
+let menuKeyDebounce = false;
+
+function xpForLevel(l: number): number {
+  return 5 + l * 4;
+}
+function addXp(state: State, amount: number): void {
+  xp += amount;
+  while (xp >= xpToNext) {
+    xp -= xpToNext;
+    level += 1;
+    xpToNext = xpForLevel(level);
+    addSkillPoints(SKILL_POINTS_PER_LEVEL);
+    pauseMenu?.refresh();
+    levelUpFlashUntil = state.time.elapsed + 2.0;
+    if (levelUpEl) {
+      levelUpEl.textContent = `${t(state, 'hud.levelUp')} ${level}`;
+      levelUpEl.style.opacity = '1';
+      levelUpEl.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+    }
+    addShake(6, 260);
+  }
+  if (xpBarFill) {
+    xpBarFill.style.width = `${Math.max(0, Math.min(100, (xp / xpToNext) * 100))}%`;
+  }
+  if (levelBadgeEl) levelBadgeEl.textContent = `${level}`;
+}
+
 let prevHeroIsJumping = 0;
 
 let playTimeSec = 0;
@@ -350,9 +565,23 @@ const CHECKPOINT_Z = 0;
 const BOSS_BAR_RANGE = 50;
 const RESPAWN_DELAY = 2.0;
 
-const DAMAGE_NUMBER_POOL_SIZE = 10;
-const damageNumberPool: HTMLDivElement[] = [];
-let damageNumberIndex = 0;
+// ── Unified floating text (damage, loot, hit sparks) ─────────────────────
+// One screen-space pool projected from a 3D anchor each frame, so every kind of
+// pop (player/enemy/boss damage, resource gains, harvest hits) shares the same
+// look and motion instead of the old mix of DOM + troika 3D text.
+interface FloatFx {
+  x: number;
+  y: number;
+  z: number;
+  born: number;
+  dur: number;
+  driftX: number;
+  el: HTMLDivElement;
+  active: boolean;
+}
+const FLOAT_POOL_SIZE = 32;
+const floatPool: FloatFx[] = [];
+let floatCursor = 0;
 
 function formatTime(sec: number): string {
   const s = Math.floor(sec % 60);
@@ -380,11 +609,11 @@ function countAliveCreatures(state: State): number {
 }
 
 function refreshHud(state: State): void {
-  if (overlayStatsEl) {
-    overlayStatsEl.innerHTML =
-      `${t(state, 'hud.enemies', { enemies: String(countAliveCreatures(state)) })}<br/>` +
-      `${t(state, 'hud.time', { time: formatTime(playTimeSec) })}<br/>` +
-      `${t(state, 'hud.locale', { lang: getLocale(state) === 'pt' ? 'PT' : 'EN' })}`;
+  if (enemiesChipEl) {
+    enemiesChipEl.textContent = `⚔ ${countAliveCreatures(state)}`;
+  }
+  if (timeChipEl) {
+    timeChipEl.textContent = `🕓 ${formatTime(playTimeSec)}`;
   }
 }
 
@@ -400,39 +629,139 @@ function updateHealthBar(heroEid: number, state: State): void {
   });
 }
 
-function showDamageNumber(
-  amount: number,
-  screenX: number,
-  screenY: number
-): void {
-  if (damageNumberPool.length === 0) return;
-  const el = damageNumberPool[damageNumberIndex % DAMAGE_NUMBER_POOL_SIZE];
-  damageNumberIndex++;
-  el.textContent = `-${amount}`;
-  el.style.left = `${screenX}px`;
-  el.style.top = `${screenY}px`;
-  el.style.opacity = '1';
-  el.style.transform = 'translateY(0)';
-  el.style.transition = 'none';
-  void el.offsetHeight;
-  el.style.transition = 'opacity 1s ease-out, transform 1s ease-out';
-  el.style.opacity = '0';
-  el.style.transform = 'translateY(-40px)';
+interface FloatOpts {
+  color?: string;
+  size?: number;
+  dur?: number;
 }
 
-function showStoneNumber(state: State): void {
-  // Real 3D-space popup (FloatingTextPlugin / troika-three-text): spawned at
-  // the rock, billboarded to the camera, rises and fades on its own.
-  const pos = getLastCollectPosition();
-  spawnFloatingText(state, t(state, 'hud.stoneCollected'), {
-    x: pos.x,
-    y: pos.y + 0.6,
-    z: pos.z,
-    color: 0xd4c9a8,
-    size: 0.45,
-    duration: 1.8,
-    riseSpeed: 1.1,
-  });
+/** Spawn a floating pop anchored to a world position. Recycles the oldest pool
+ * element; animation runs in updateFloatFx each frame. */
+function pushFloat(
+  state: State,
+  wx: number,
+  wy: number,
+  wz: number,
+  text: string,
+  opts: FloatOpts = {}
+): void {
+  const fx = floatPool[floatCursor % FLOAT_POOL_SIZE];
+  floatCursor++;
+  if (!fx) return;
+  fx.x = wx;
+  fx.y = wy;
+  fx.z = wz;
+  fx.born = state.time.elapsed;
+  fx.dur = opts.dur ?? 1.1;
+  fx.driftX = (Math.random() - 0.5) * 34;
+  fx.active = true;
+  fx.el.textContent = text;
+  fx.el.style.color = opts.color ?? '#ffffff';
+  fx.el.style.fontSize = `${opts.size ?? 20}px`;
+  fx.el.style.opacity = '0';
+}
+
+/** Project every live float to screen and animate rise + pop + fade. */
+function updateFloatFx(state: State): void {
+  const now = state.time.elapsed;
+  for (const fx of floatPool) {
+    if (!fx.active) continue;
+    const t = (now - fx.born) / fx.dur;
+    if (t >= 1) {
+      fx.active = false;
+      fx.el.style.opacity = '0';
+      fx.el.style.transform = 'translate(-9999px,-9999px)';
+      continue;
+    }
+    const p = project3Dto2D(fx.x, fx.y, fx.z, state);
+    if (!p) {
+      fx.el.style.opacity = '0';
+      continue;
+    }
+    const rise = t * 54;
+    const scale =
+      t < 0.14 ? 0.55 + (t / 0.14) * 0.55 : 1.1 - Math.min(0.12, (t - 0.14) * 0.2);
+    const alpha = t > 0.62 ? 1 - (t - 0.62) / 0.38 : 1;
+    fx.el.style.transform =
+      `translate(-50%,-50%) translate(${p.x + fx.driftX * t}px,${p.y - rise}px) scale(${scale})`;
+    fx.el.style.opacity = String(alpha);
+  }
+}
+
+const healthFxQuery = defineQuery([Health, Transform]);
+const prevHpFx = new Map<number, number>();
+const prevPendingFx = new Map<number, number>();
+
+/** Watch every Health entity for a drop and pop a damage number + hurt SFX —
+ * one place that covers player, enemies and the boss regardless of damage
+ * source (melee, projectile, lunge). */
+function watchCombatFx(state: State, heroEid: number | null): void {
+  for (const e of healthFxQuery(state.world)) {
+    const cur = Health.current[e];
+    const prev = prevHpFx.get(e);
+    prevHpFx.set(e, cur);
+    if (prev === undefined) continue;
+    if (cur >= prev - 0.01) continue;
+    const dmg = Math.round(prev - cur);
+    if (dmg <= 0) continue;
+    const isHero = e === heroEid;
+    // Bigger blows read as crits: larger, hotter, with an emphatic glyph.
+    const big = !isHero && dmg >= 22;
+    pushFloat(
+      state,
+      Transform.posX[e],
+      Transform.posY[e] + (isHero ? 1.7 : 2.1),
+      Transform.posZ[e],
+      isHero ? `-${dmg}` : big ? `${dmg}!` : `${dmg}`,
+      {
+        color: isHero ? '#ff5a5a' : big ? '#ff8a2a' : '#fff0a0',
+        size: isHero ? 23 : big ? 32 : 21,
+        dur: big ? 1.3 : 1.1,
+      }
+    );
+    if (isHero) {
+      if (eidSfxPlayerHurt >= 0) playAudioEmitter(state, eidSfxPlayerHurt);
+      addShake(Math.min(12, 4 + dmg * 0.25), 280);
+    } else {
+      if (eidSfxEnemyHurt >= 0) playAudioEmitter(state, eidSfxEnemyHurt);
+      addShake(big ? 5 : 2.5, big ? 200 : 130);
+      // Award XP once, on the hit that drops the creature to 0.
+      if (cur <= 0 && prev > 0) {
+        const maxHp = Health.max[e] || 30;
+        addXp(state, Math.max(2, Math.round(maxHp / 12)));
+      }
+    }
+  }
+}
+
+/** Per-swing harvest feedback: pop an impact spark + hit SFX at the moment the
+ * blow actually lands. DestructibleSystem commits the hit on the button press
+ * but delays the impact (Destructible.pendingImpact countdown ≈ end of swing);
+ * we fire on the pending→0 transition so the spark matches the swing, not the
+ * key press. The final hit destroys the prop (caught by the destroyed callback
+ * which pops the resource gain), so this only covers non-breaking hits. */
+function watchDestructibleFx(state: State): void {
+  for (const e of destructibleQuery(state.world)) {
+    const pend = Destructible.pendingImpact[e];
+    const prev = prevPendingFx.get(e) ?? 0;
+    prevPendingFx.set(e, pend);
+    if (prev > 0 && pend <= 0) {
+      const wood = isWoodEntity(e);
+      pushFloat(
+        state,
+        Transform.posX[e],
+        Transform.posY[e] + 1.6,
+        Transform.posZ[e],
+        '✦',
+        { color: wood ? '#9be37a' : '#e2dccb', size: 24, dur: 0.55 }
+      );
+      if (wood) {
+        playSfx(state, eidSfxChopHit);
+      } else {
+        playSfx(state, eidSfxMineHit);
+      }
+    }
+  }
 }
 
 function project3Dto2D(
@@ -501,8 +830,10 @@ const GameplayHudSystem: System = {
 
       updateHealthBar(heroEid, state);
 
+      // Red screen flash on hero damage. The damage number + hurt SFX are
+      // emitted centrally by watchCombatFx (covers every Health entity), so
+      // this block only owns the full-screen flash now.
       if (currentHp < prevPlayerHp && prevPlayerHp > 0) {
-        const dmg = Math.round(prevPlayerHp - currentHp);
         if (damageFlashEl) {
           damageFlashEl.style.transition = 'none';
           damageFlashEl.style.opacity = '1';
@@ -510,17 +841,6 @@ const GameplayHudSystem: System = {
           damageFlashEl.style.transition = 'opacity 0.2s ease-out';
           damageFlashEl.style.opacity = '0';
         }
-        const TransformCmp = state.getComponent('transform');
-        if (TransformCmp) {
-          const px = TransformCmp.posX[heroEid];
-          const py = TransformCmp.posY[heroEid];
-          const pz = TransformCmp.posZ[heroEid];
-          const projected = project3Dto2D(px, py + 1.5, pz, state);
-          if (projected) {
-            showDamageNumber(dmg, projected.x, projected.y);
-          }
-        }
-        if (eidSfxPlayerHurt >= 0) playAudioEmitter(state, eidSfxPlayerHurt);
       }
 
       if (state.time.elapsed < healFlashUntil && healFlashUntil > 0) {
@@ -561,12 +881,6 @@ const GameplayHudSystem: System = {
         deathShown = false;
         if (deathEl) deathEl.style.display = 'none';
       }
-    }
-
-    if (waveTopEl) {
-      waveTopEl.textContent = t(state, 'hud.enemies', {
-        enemies: String(countAliveCreatures(state)),
-      });
     }
 
     const bossEid = state.getEntityByName('boss');
@@ -616,20 +930,30 @@ const GameplayHudSystem: System = {
 
     const currentStone = getStoneCount();
     if (stoneCountEl) {
-      stoneCountEl.textContent = t(state, 'hud.stone', {
-        count: String(currentStone),
-      });
+      stoneCountEl.textContent = `🪨 ${currentStone}`;
     }
+    const currentGold = getGold();
     if (goldCountEl) {
-      goldCountEl.textContent = `Gold: ${getGold()}`;
+      goldCountEl.textContent = `🪙 ${currentGold}`;
     }
     if (woodCountEl) {
-      woodCountEl.textContent = `Wood: ${getWoodCount()}`;
+      woodCountEl.textContent = `🪵 ${getWoodCount()}`;
     }
+    // Gold-gain pop near the hero (loot from kills, sales).
+    if (currentGold > prevGoldFx && heroEid !== null) {
+      pushFloat(
+        state,
+        Transform.posX[heroEid],
+        Transform.posY[heroEid] + 2.3,
+        Transform.posZ[heroEid],
+        `+${currentGold - prevGoldFx} 🪙`,
+        { color: '#ffd24a', size: 20 }
+      );
+    }
+    prevGoldFx = currentGold;
     const collectPos = getLastCollectPosition();
     if (collectPos.version !== prevStoneCollectVersion) {
       prevStoneCollectVersion = collectPos.version;
-      showStoneNumber(state);
       if (eidSfxCoin >= 0) playAudioEmitter(state, eidSfxCoin);
     }
     if (
@@ -648,6 +972,22 @@ const GameplayHudSystem: System = {
     }
     refreshHud(state);
 
+    watchCombatFx(state, heroEid);
+    watchDestructibleFx(state);
+    updateFloatFx(state);
+    updateShake();
+    if (levelUpEl && levelUpFlashUntil > 0 && state.time.elapsed >= levelUpFlashUntil) {
+      levelUpEl.style.opacity = '0';
+      levelUpEl.style.transform = 'translateX(-50%) translateY(-12px) scale(0.9)';
+      levelUpFlashUntil = 0;
+    }
+
+    if (hudRevealed && heroEid !== null && state.hasComponent(heroEid, Transform)) {
+      drawMinimap(state, heroEid);
+      updateCompass();
+      updateInteractionHint(state, heroEid);
+    }
+
     if (
       heroEid !== null &&
       eidSfxJump >= 0 &&
@@ -660,34 +1000,234 @@ const GameplayHudSystem: System = {
       prevHeroIsJumping = jumping;
     }
 
-    // L agora é "cancelar/voltar" (fecha o diálogo do mercador); o idioma fica no I.
-    if (isKeyDown('KeyI') && !localeDebounce) {
-      localeDebounce = true;
-      const next = getLocale(state) === 'pt' ? 'en' : 'pt';
-      setLocale(state, next);
-      if (overlayControlsEl)
-        overlayControlsEl.textContent = t(state, 'hud.controls');
-      refreshHud(state);
+    // Q (or Esc) toggles the pause menu — which also hosts Save/Load/Options.
+    // Skipped while the merchant shop is open (Esc there closes the shop).
+    const menuKey = isKeyDown('KeyQ') || isKeyDown('Escape');
+    if (menuKey && !menuKeyDebounce) {
+      menuKeyDebounce = true;
+      if (!isShopOpen()) pauseMenu?.toggle();
     }
-    if (!isKeyDown('KeyI')) localeDebounce = false;
-
-    if (isKeyDown('KeyQ') && !saveDebounce) {
-      saveDebounce = true;
-      saveToLocalStorage(state, SAVE_KEY);
-      if (eidSfxSave >= 0) playAudioEmitter(state, eidSfxSave);
-      pushFlash(state, 'hud.saved', 2.5);
-    }
-    if (!isKeyDown('KeyQ')) saveDebounce = false;
-
-    if (isKeyDown('KeyE') && !loadDebounce) {
-      loadDebounce = true;
-      const ok = loadFromLocalStorage(state, SAVE_KEY);
-      if (ok && eidSfxLoad >= 0) playAudioEmitter(state, eidSfxLoad);
-      pushFlash(state, ok ? 'hud.loaded' : 'hud.no-save', 2.5);
-    }
-    if (!isKeyDown('KeyE')) loadDebounce = false;
+    if (!menuKey) menuKeyDebounce = false;
   },
 };
+
+/** Camera forward azimuth: 0=+Z(south), +π/2=+X(east), ±π=-Z(north). */
+function getCameraAzimuth(): number {
+  const camera = threeCameras.values().next().value as
+    | THREE.Camera
+    | undefined;
+  if (!camera) return 0;
+  camera.getWorldDirection(_camDir);
+  return Math.atan2(_camDir.x, _camDir.z);
+}
+
+function wrapAngle(a: number): number {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+
+/** Scrolling cardinal compass: each mark slides based on its world azimuth
+ * relative to the camera heading; the centre of the strip is where you face. */
+function updateCompass(): void {
+  if (!compassStripEl || compassMarks.length === 0) return;
+  const camAz = getCameraAzimuth();
+  const halfW = compassStripEl.clientWidth / 2;
+  for (const m of compassMarks) {
+    const off = wrapAngle(m.az - camAz);
+    if (Math.abs(off) > COMPASS_FOV) {
+      m.el.style.opacity = '0';
+      continue;
+    }
+    const px = (off / COMPASS_FOV) * halfW;
+    const fade = 1 - Math.abs(off) / COMPASS_FOV;
+    m.el.style.transform = `translateX(${px}px)`;
+    m.el.style.opacity = String(0.25 + fade * 0.75);
+  }
+}
+
+interface MapDot {
+  x: number;
+  z: number;
+  color: string;
+  r: number;
+}
+
+const _mapDots: MapDot[] = [];
+
+/** Top-down minimap, north-up, player fixed at centre. Plots live enemies,
+ * boss, merchant and harvestable resource nodes within MINIMAP_RANGE. */
+function drawMinimap(state: State, heroEid: number): void {
+  if (!minimapCtx || !minimapCanvas) return;
+  const ctx = minimapCtx;
+  const S = MINIMAP_SIZE;
+  const cx = S / 2;
+  const cz = S / 2;
+  const scale = (S / 2) / MINIMAP_RANGE;
+
+  const px = Transform.posX[heroEid];
+  const pz = Transform.posZ[heroEid];
+
+  ctx.clearRect(0, 0, S, S);
+
+  // Circular ground disc.
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cz, S / 2 - 2, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.fillStyle = 'rgba(18,26,40,0.82)';
+  ctx.fillRect(0, 0, S, S);
+  // Range rings.
+  ctx.strokeStyle = 'rgba(120,150,210,0.12)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i <= 2; i++) {
+    ctx.beginPath();
+    ctx.arc(cx, cz, (S / 2 - 2) * (i / 2.4), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // Collect dots.
+  _mapDots.length = 0;
+  const bossEid = state.getEntityByName('boss');
+  const merchantEid = state.getEntityByName('merchant');
+  for (const e of creatureQuery(state.world)) {
+    if (state.hasComponent(e, PlayerController)) continue;
+    if (Health.current[e] <= 0) continue;
+    if (e === bossEid) continue;
+    _mapDots.push({
+      x: Transform.posX[e],
+      z: Transform.posZ[e],
+      color: '#ff4d4d',
+      r: 2.6,
+    });
+  }
+  if (
+    bossEid !== null &&
+    state.hasComponent(bossEid, Health) &&
+    !isDead(bossEid)
+  ) {
+    _mapDots.push({
+      x: Transform.posX[bossEid],
+      z: Transform.posZ[bossEid],
+      color: '#c060ff',
+      r: 4.5,
+    });
+  }
+  if (merchantEid !== null && state.hasComponent(merchantEid, Transform)) {
+    _mapDots.push({
+      x: Transform.posX[merchantEid],
+      z: Transform.posZ[merchantEid],
+      color: '#ffd24a',
+      r: 3.5,
+    });
+  }
+  for (const e of destructibleQuery(state.world)) {
+    _mapDots.push({
+      x: Transform.posX[e],
+      z: Transform.posZ[e],
+      color: isWoodEntity(e) ? '#6fdc6f' : '#b9b2a6',
+      r: 1.8,
+    });
+  }
+
+  // Draw, clamped to disc edge with a faded off-range style.
+  const maxPix = S / 2 - 6;
+  for (const d of _mapDots) {
+    const rx = (d.x - px) * scale;
+    const rz = -(d.z - pz) * scale; // north (−Z world) = up
+    const dist = Math.hypot(rx, rz);
+    let dx = rx;
+    let dz = rz;
+    let edge = false;
+    if (dist > maxPix) {
+      dx = (rx / dist) * maxPix;
+      dz = (rz / dist) * maxPix;
+      edge = true;
+    }
+    ctx.beginPath();
+    ctx.arc(cx + dx, cz + dz, edge ? d.r * 0.7 : d.r, 0, Math.PI * 2);
+    ctx.fillStyle = d.color;
+    ctx.globalAlpha = edge ? 0.5 : 1;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // Player arrow at centre, rotated to facing (eulerY = atan2(dirX,dirZ)).
+  const heading = Transform.eulerY[heroEid] || 0;
+  ctx.save();
+  ctx.translate(cx, cz);
+  ctx.rotate(-heading); // screen up = north; arrow points facing
+  ctx.beginPath();
+  ctx.moveTo(0, -7);
+  ctx.lineTo(5, 6);
+  ctx.lineTo(0, 3);
+  ctx.lineTo(-5, 6);
+  ctx.closePath();
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+  ctx.lineWidth = 1;
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.restore();
+
+  // North tick on the rim.
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.font = '700 9px system-ui,sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('N', cx, 11);
+}
+
+/** Show a contextual action prompt for the nearest interactable in range
+ * (merchant to talk, tree/rock to harvest). Purely a hint — the entity scripts
+ * still own the actual key handling. */
+function updateInteractionHint(state: State, heroEid: number): void {
+  if (!interactHintEl || !interactKeyEl || !interactLabelEl) return;
+  const px = Transform.posX[heroEid];
+  const pz = Transform.posZ[heroEid];
+
+  let bestDist = Infinity;
+  let bestKey = '';
+  let bestLabel = '';
+
+  const merchantEid = state.getEntityByName('merchant');
+  if (merchantEid !== null && state.hasComponent(merchantEid, Transform)) {
+    const dx = Transform.posX[merchantEid] - px;
+    const dz = Transform.posZ[merchantEid] - pz;
+    const d = dx * dx + dz * dz;
+    if (d < 4.5 * 4.5 && d < bestDist) {
+      bestDist = d;
+      bestKey = 'K';
+      bestLabel = t(state, 'hint.merchant');
+    }
+  }
+
+  for (const e of destructibleQuery(state.world)) {
+    const range = (Destructible.range[e] || 3.5) + 0.5;
+    const dx = Transform.posX[e] - px;
+    const dz = Transform.posZ[e] - pz;
+    const d = dx * dx + dz * dz;
+    if (d < range * range && d < bestDist) {
+      bestDist = d;
+      bestKey = 'J';
+      bestLabel = t(
+        state,
+        isWoodEntity(e) ? 'hint.harvest.wood' : 'hint.harvest.stone'
+      );
+    }
+  }
+
+  if (bestKey) {
+    interactKeyEl.textContent = bestKey;
+    interactLabelEl.textContent = bestLabel;
+    interactHintEl.style.opacity = '1';
+    interactHintEl.style.transform = 'translateX(-50%) translateY(0)';
+  } else {
+    interactHintEl.style.opacity = '0';
+    interactHintEl.style.transform = 'translateX(-50%) translateY(8px)';
+  }
+}
 
 function createOverlayHud(state: State): void {
   const wrap = document.createElement('div');
@@ -711,19 +1251,29 @@ function createOverlayHud(state: State): void {
     'box-shadow:0 8px 32px rgba(0,0,0,0.25);';
 
   const healthBarContainer = document.createElement('div');
+  healthBarContainer.title = t(state, 'tip.hp');
   healthBarContainer.style.cssText =
-    'background:rgba(8,12,28,0.55);border-radius:10px;padding:10px 14px;' +
-    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);';
+    'background:linear-gradient(135deg,rgba(14,18,34,0.72),rgba(10,14,26,0.6));' +
+    'border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;' +
+    'border:1px solid rgba(120,150,220,0.2);backdrop-filter:blur(10px);' +
+    'box-shadow:0 6px 22px rgba(0,0,0,0.28);pointer-events:auto;';
+
+  const heartIcon = document.createElement('span');
+  heartIcon.textContent = '❤';
+  heartIcon.style.cssText =
+    'font-size:18px;color:#ff5a6e;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));';
 
   const healthBarOuter = document.createElement('div');
   healthBarOuter.style.cssText =
-    'width:200px;height:22px;background:rgba(60,20,20,0.6);border-radius:4px;' +
-    'position:relative;overflow:hidden;';
+    'flex:1;height:22px;background:rgba(60,20,20,0.6);border-radius:6px;' +
+    'position:relative;overflow:hidden;min-width:190px;' +
+    'box-shadow:inset 0 1px 3px rgba(0,0,0,0.5);';
 
   healthBarFill = document.createElement('div');
   healthBarFill.style.cssText =
-    'width:100%;height:100%;background:linear-gradient(90deg,#2ecc40,#5ee870);' +
-    'border-radius:4px;transition:width 0.15s ease-out;';
+    'width:100%;height:100%;background:linear-gradient(90deg,#1f9d35,#3ee06a 60%,#8cf5a8);' +
+    'border-radius:6px;transition:width 0.15s ease-out;' +
+    'box-shadow:0 0 8px rgba(60,220,110,0.45);';
 
   healthBarText = document.createElement('span');
   healthBarText.style.cssText =
@@ -733,88 +1283,180 @@ function createOverlayHud(state: State): void {
 
   healthBarOuter.appendChild(healthBarFill);
   healthBarOuter.appendChild(healthBarText);
+  healthBarContainer.appendChild(heartIcon);
   healthBarContainer.appendChild(healthBarOuter);
-
-  overlayStatsEl = document.createElement('div');
-  overlayStatsEl.style.cssText =
-    'background:rgba(8,12,28,0.55);color:#b8c8e8;padding:10px 16px;' +
-    'border-radius:8px;font-size:12px;line-height:1.5;' +
-    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);';
 
   topLeft.appendChild(overlayMissionEl);
   topLeft.appendChild(healthBarContainer);
 
+  // XP bar + level badge.
+  const xpRow = document.createElement('div');
+  xpRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+  levelBadgeEl = document.createElement('div');
+  levelBadgeEl.title = t(state, 'tip.level');
+  levelBadgeEl.style.cssText =
+    'flex:0 0 auto;width:30px;height:30px;border-radius:50%;' +
+    'display:flex;align-items:center;justify-content:center;' +
+    'font:800 14px system-ui,sans-serif;color:#2a1c06;pointer-events:auto;' +
+    'background:radial-gradient(circle at 35% 30%,#ffe7a0,#ffc24a 60%,#d99320);' +
+    'border:1px solid rgba(255,225,150,0.85);' +
+    'box-shadow:0 3px 10px rgba(0,0,0,0.4),inset 0 1px 2px rgba(255,255,255,0.65);';
+  levelBadgeEl.textContent = '1';
+
+  const xpOuter = document.createElement('div');
+  xpOuter.title = t(state, 'tip.xp');
+  xpOuter.style.cssText =
+    'flex:1;height:9px;border-radius:6px;background:rgba(10,14,26,0.7);' +
+    'overflow:hidden;pointer-events:auto;' +
+    'border:1px solid rgba(120,150,220,0.2);box-shadow:inset 0 1px 2px rgba(0,0,0,0.5);';
+  xpBarFill = document.createElement('div');
+  xpBarFill.style.cssText =
+    'width:0%;height:100%;border-radius:6px;' +
+    'background:linear-gradient(90deg,#7a5cff,#b18cff 60%,#e6dbff);' +
+    'box-shadow:0 0 8px rgba(150,110,255,0.6);transition:width 0.25s ease-out;';
+  xpOuter.appendChild(xpBarFill);
+  xpRow.appendChild(levelBadgeEl);
+  xpRow.appendChild(xpOuter);
+  topLeft.appendChild(xpRow);
+
+  const chipRow = document.createElement('div');
+  chipRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+
+  const chipCss = (accent: string): string =>
+    'background:linear-gradient(135deg,rgba(14,18,34,0.72),rgba(10,14,26,0.6));' +
+    'border-radius:10px;padding:7px 13px;' +
+    `border:1px solid ${accent};backdrop-filter:blur(10px);` +
+    'box-shadow:0 5px 18px rgba(0,0,0,0.25);' +
+    'font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px;' +
+    'pointer-events:auto;cursor:default;';
+
   goldCountEl = document.createElement('div');
-  goldCountEl.style.cssText =
-    'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
-    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);' +
-    'color:#ffd700;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
-  goldCountEl.textContent = 'Gold: 0';
+  goldCountEl.style.cssText = chipCss('rgba(255,210,60,0.3)') + 'color:#ffd24a;';
+  goldCountEl.title = t(state, 'tip.gold');
+  goldCountEl.textContent = '🪙 0';
 
   woodCountEl = document.createElement('div');
-  woodCountEl.style.cssText =
-    'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
-    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);' +
-    'color:#d4a76a;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
-  woodCountEl.textContent = 'Wood: 0';
+  woodCountEl.style.cssText = chipCss('rgba(190,140,80,0.3)') + 'color:#d4a76a;';
+  woodCountEl.title = t(state, 'tip.wood');
+  woodCountEl.textContent = '🪵 0';
 
   stoneCountEl = document.createElement('div');
   stoneCountEl.style.cssText =
-    'background:rgba(8,12,28,0.55);border-radius:8px;padding:8px 14px;' +
-    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(8px);' +
-    'color:#d4c9a8;font-size:13px;font-weight:600;display:flex;align-items:center;gap:6px;';
-  stoneCountEl.textContent = t(state, 'hud.stone', { count: '0' });
+    chipCss('rgba(170,165,150,0.3)') + 'color:#d4c9a8;';
+  stoneCountEl.title = t(state, 'tip.stone');
+  stoneCountEl.textContent = '🪨 0';
 
-  topLeft.appendChild(goldCountEl);
-  topLeft.appendChild(woodCountEl);
-  topLeft.appendChild(stoneCountEl);
-  topLeft.appendChild(overlayStatsEl);
+  chipRow.appendChild(goldCountEl);
+  chipRow.appendChild(woodCountEl);
+  chipRow.appendChild(stoneCountEl);
+  topLeft.appendChild(chipRow);
 
+  // Status chips: nearby creatures + elapsed time (replaces the old verbose
+  // text panel; language hint lives in the bottom controls bar).
+  const statRow = document.createElement('div');
+  statRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
+
+  enemiesChipEl = document.createElement('div');
+  enemiesChipEl.style.cssText =
+    chipCss('rgba(200,80,80,0.28)') + 'color:#ff9a9a;';
+  enemiesChipEl.title = t(state, 'tip.enemies');
+  enemiesChipEl.textContent = '⚔ 0';
+
+  timeChipEl = document.createElement('div');
+  timeChipEl.style.cssText =
+    chipCss('rgba(120,150,210,0.24)') + 'color:#b8c8e8;';
+  timeChipEl.title = t(state, 'tip.time');
+  timeChipEl.textContent = '🕓 0:00';
+
+  statRow.appendChild(enemiesChipEl);
+  statRow.appendChild(timeChipEl);
+  topLeft.appendChild(statRow);
+
+  // Hurt feedback: a red vignette that bleeds in from the screen edges (rather
+  // than a flat full-screen wash), pulsed on hit by GameplayHudSystem.
   damageFlashEl = document.createElement('div');
   damageFlashEl.style.cssText =
-    'position:fixed;inset:0;pointer-events:none;background:rgba(255,0,0,0.35);opacity:0;z-index:1001;';
+    'position:fixed;inset:0;pointer-events:none;opacity:0;z-index:1001;' +
+    'background:radial-gradient(ellipse at center,' +
+    'rgba(255,0,0,0) 38%,rgba(180,0,0,0.35) 78%,rgba(120,0,0,0.7) 100%);';
 
-  for (let i = 0; i < DAMAGE_NUMBER_POOL_SIZE; i++) {
-    const numEl = document.createElement('div');
-    numEl.style.cssText =
-      'position:absolute;pointer-events:none;color:#ff4444;font-size:18px;' +
-      'font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,0.7);opacity:0;z-index:1002;';
-    wrap.appendChild(numEl);
-    damageNumberPool.push(numEl);
+  // Level-up banner (center).
+  levelUpEl = document.createElement('div');
+  levelUpEl.style.cssText =
+    'position:fixed;top:24%;left:50%;transform:translateX(-50%) translateY(-12px) scale(0.9);' +
+    'z-index:1004;pointer-events:none;white-space:nowrap;opacity:0;' +
+    'font:800 30px system-ui,Segoe UI,sans-serif;letter-spacing:1.5px;' +
+    'color:#ffe9a8;text-shadow:0 0 16px rgba(255,200,80,0.7),0 2px 8px rgba(0,0,0,0.6);' +
+    'transition:opacity 0.3s ease,transform 0.3s cubic-bezier(0.2,1.4,0.4,1);';
+  levelUpEl.textContent = '';
+  wrap.appendChild(levelUpEl);
+
+  for (let i = 0; i < FLOAT_POOL_SIZE; i++) {
+    const el = document.createElement('div');
+    el.style.cssText =
+      'position:fixed;left:0;top:0;pointer-events:none;z-index:1002;' +
+      'font-family:system-ui,Segoe UI,sans-serif;font-weight:800;white-space:nowrap;' +
+      'text-shadow:0 0 4px rgba(0,0,0,0.9),0 2px 3px rgba(0,0,0,0.85);' +
+      '-webkit-text-stroke:0.6px rgba(0,0,0,0.5);' +
+      'will-change:transform,opacity;opacity:0;transform:translate(-9999px,-9999px);';
+    wrap.appendChild(el);
+    floatPool.push({
+      x: 0,
+      y: 0,
+      z: 0,
+      born: 0,
+      dur: 1,
+      driftX: 0,
+      el,
+      active: false,
+    });
   }
-
-  waveCompleteEl = document.createElement('div');
-  waveCompleteEl.style.cssText =
-    'position:fixed;top:30%;left:50%;transform:translateX(-50%);' +
-    'color:#fff;font-size:28px;font-weight:700;letter-spacing:1px;' +
-    'text-shadow:0 2px 12px rgba(0,0,0,0.6);opacity:0;z-index:1003;' +
-    'pointer-events:none;white-space:nowrap;';
 
   winEl = document.createElement('div');
   winEl.style.cssText =
-    'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.82);' +
+    'position:fixed;inset:0;z-index:2000;' +
+    'background:radial-gradient(ellipse at center,rgba(40,30,8,0.86),rgba(0,0,0,0.94));' +
     'display:none;flex-direction:column;align-items:center;justify-content:center;' +
     'pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;';
 
+  const winCrown = document.createElement('div');
+  winCrown.textContent = '👑';
+  winCrown.style.cssText =
+    'font-size:64px;margin-bottom:8px;filter:drop-shadow(0 4px 18px rgba(255,200,60,0.6));';
+
   const winTitle = document.createElement('div');
   winTitle.style.cssText =
-    'color:#ffd700;font-size:52px;font-weight:800;letter-spacing:3px;margin-bottom:16px;' +
-    'text-shadow:0 2px 16px rgba(255,200,0,0.4);';
+    'font-size:64px;font-weight:800;letter-spacing:4px;margin-bottom:14px;' +
+    'background:linear-gradient(180deg,#fff3c4,#ffd24a 55%,#e09a20);' +
+    '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
+    'filter:drop-shadow(0 2px 18px rgba(255,200,0,0.5));';
   winTitle.textContent = 'VICTORY!';
 
   const winSub = document.createElement('div');
   winSub.style.cssText =
-    'color:#e8eef8;font-size:22px;margin-bottom:32px;text-align:center;';
+    'color:#e8eef8;font-size:22px;margin-bottom:30px;text-align:center;opacity:0.9;';
   winSub.textContent = 'You defeated the Boss Ogre!';
 
   const winBtn = document.createElement('button');
   winBtn.style.cssText =
-    'background:rgba(120,90,30,0.35);color:#ffe08a;border:1px solid rgba(255,210,120,0.45);' +
-    'padding:12px 36px;border-radius:8px;font-size:16px;cursor:pointer;pointer-events:auto;' +
-    'font-family:system-ui,Segoe UI,sans-serif;';
-  winBtn.textContent = 'Play Again';
+    'background:linear-gradient(180deg,rgba(150,110,40,0.5),rgba(90,65,20,0.5));' +
+    'color:#ffe08a;border:1px solid rgba(255,210,120,0.5);' +
+    'padding:13px 40px;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;' +
+    'pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;letter-spacing:0.5px;' +
+    'box-shadow:0 6px 22px rgba(0,0,0,0.45);transition:transform 0.12s ease,box-shadow 0.12s ease;';
+  winBtn.textContent = '↻ Play Again';
   winBtn.addEventListener('click', () => location.reload());
+  winBtn.addEventListener('mouseenter', () => {
+    winBtn.style.transform = 'translateY(-2px)';
+    winBtn.style.boxShadow = '0 10px 28px rgba(255,200,80,0.3)';
+  });
+  winBtn.addEventListener('mouseleave', () => {
+    winBtn.style.transform = '';
+    winBtn.style.boxShadow = '0 6px 22px rgba(0,0,0,0.45)';
+  });
 
+  winEl.appendChild(winCrown);
   winEl.appendChild(winTitle);
   winEl.appendChild(winSub);
   winEl.appendChild(winBtn);
@@ -822,15 +1464,18 @@ function createOverlayHud(state: State): void {
   deathEl = document.createElement('div');
   deathEl.style.cssText =
     'position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);z-index:1900;' +
-    'background:rgba(40,0,0,0.82);color:#ff6060;padding:24px 48px;border-radius:12px;' +
-    'font:700 26px system-ui,Segoe UI,sans-serif;letter-spacing:1px;' +
-    'border:1px solid rgba(255,60,60,0.4);box-shadow:0 10px 40px rgba(0,0,0,0.5);' +
+    'background:linear-gradient(160deg,rgba(60,4,4,0.9),rgba(28,0,0,0.88));' +
+    'color:#ff7070;padding:26px 52px;border-radius:14px;' +
+    'font:800 28px system-ui,Segoe UI,sans-serif;letter-spacing:1.5px;' +
+    'border:1px solid rgba(255,70,70,0.45);' +
+    'box-shadow:0 12px 48px rgba(0,0,0,0.6),0 0 40px rgba(180,0,0,0.25);' +
+    'text-shadow:0 2px 10px rgba(0,0,0,0.6);' +
     'pointer-events:none;display:none;text-align:center;';
-  deathEl.textContent = 'You Died — Respawning...';
+  deathEl.textContent = '☠  You Died — Respawning...';
 
   bossBarEl = document.createElement('div');
   bossBarEl.style.cssText =
-    'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:1000;' +
+    'position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:1000;' +
     'background:rgba(8,12,28,0.7);border-radius:10px;padding:10px 16px;' +
     'border:1px solid rgba(200,40,40,0.35);backdrop-filter:blur(8px);' +
     'display:none;min-width:320px;';
@@ -855,14 +1500,6 @@ function createOverlayHud(state: State): void {
   bossBarOuter.appendChild(bossBarText);
   bossBarEl.appendChild(bossBarOuter);
 
-  waveTopEl = document.createElement('div');
-  waveTopEl.style.cssText =
-    'position:fixed;top:20px;left:50%;transform:translateX(-50%);' +
-    'background:rgba(8,12,28,0.6);color:#dde4f0;padding:8px 20px;' +
-    'border-radius:8px;font-size:14px;font-weight:600;letter-spacing:0.3px;' +
-    'border:1px solid rgba(90,120,200,0.18);backdrop-filter:blur(8px);' +
-    'pointer-events:none;z-index:1000;white-space:nowrap;';
-
   const bottom = document.createElement('div');
   bottom.style.cssText =
     'position:absolute;bottom:22px;left:50%;transform:translateX(-50%);';
@@ -877,22 +1514,109 @@ function createOverlayHud(state: State): void {
   bottom.appendChild(overlayControlsEl);
   wrap.appendChild(topLeft);
   wrap.appendChild(damageFlashEl);
-  wrap.appendChild(waveCompleteEl);
-  wrap.appendChild(waveTopEl);
   wrap.appendChild(bossBarEl);
   wrap.appendChild(deathEl);
   wrap.appendChild(bottom);
 
-  // FPS counter (top-right)
+  // ── Minimap (top-right) ──────────────────────────────────────────────
+  const minimapWrap = document.createElement('div');
+  minimapWrap.title = t(state, 'tip.minimap');
+  minimapWrap.style.cssText =
+    `position:fixed;top:18px;right:18px;width:${MINIMAP_SIZE}px;height:${MINIMAP_SIZE}px;` +
+    'border-radius:50%;z-index:1000;pointer-events:auto;' +
+    'border:2px solid rgba(150,180,240,0.35);' +
+    'box-shadow:0 8px 30px rgba(0,0,0,0.4),inset 0 0 18px rgba(0,0,0,0.5);' +
+    'background:rgba(8,12,28,0.4);';
+
+  minimapCanvas = document.createElement('canvas');
+  minimapCanvas.width = MINIMAP_SIZE;
+  minimapCanvas.height = MINIMAP_SIZE;
+  minimapCanvas.style.cssText =
+    `width:${MINIMAP_SIZE}px;height:${MINIMAP_SIZE}px;border-radius:50%;display:block;`;
+  minimapCtx = minimapCanvas.getContext('2d');
+  minimapWrap.appendChild(minimapCanvas);
+  wrap.appendChild(minimapWrap);
+
+  // FPS counter (under the minimap)
   fpsEl = document.createElement('div');
   fpsEl.style.cssText =
-    'position:fixed;top:20px;right:20px;' +
-    'background:rgba(8,12,28,0.55);color:#aabbcc;padding:6px 12px;' +
-    'border-radius:6px;font-size:12px;font-weight:600;font-family:monospace;' +
+    `position:fixed;top:${18 + MINIMAP_SIZE + 8}px;right:18px;` +
+    'background:rgba(8,12,28,0.55);color:#aabbcc;padding:5px 11px;' +
+    'border-radius:6px;font-size:11px;font-weight:600;font-family:monospace;' +
     'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(6px);' +
     'z-index:1000;pointer-events:none;';
   fpsEl.textContent = 'FPS: --';
   wrap.appendChild(fpsEl);
+
+  // ── Compass strip (top-center) ───────────────────────────────────────
+  compassStripEl = document.createElement('div');
+  compassStripEl.title = t(state, 'tip.compass');
+  compassStripEl.style.cssText =
+    'position:fixed;top:14px;left:50%;transform:translateX(-50%);' +
+    'width:min(300px,70vw);height:30px;overflow:hidden;z-index:1000;' +
+    'background:rgba(8,12,28,0.6);border-radius:8px;pointer-events:auto;' +
+    'border:1px solid rgba(120,150,220,0.22);backdrop-filter:blur(8px);' +
+    'box-shadow:0 5px 18px rgba(0,0,0,0.28);' +
+    // Soft edge fade so marks dissolve at the rim.
+    '-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);' +
+    'mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);';
+
+  const compassCardinals: { az: number; label: string; major: boolean }[] = [
+    { az: Math.PI, label: 'N', major: true },
+    { az: (3 * Math.PI) / 4, label: 'NE', major: false },
+    { az: Math.PI / 2, label: 'E', major: true },
+    { az: Math.PI / 4, label: 'SE', major: false },
+    { az: 0, label: 'S', major: true },
+    { az: -Math.PI / 4, label: 'SW', major: false },
+    { az: -Math.PI / 2, label: 'W', major: true },
+    { az: (-3 * Math.PI) / 4, label: 'NW', major: false },
+  ];
+  for (const c of compassCardinals) {
+    const mark = document.createElement('div');
+    const color = c.label === 'N' ? '#ff8a6a' : c.major ? '#e8eef8' : '#8a9ab8';
+    mark.style.cssText =
+      'position:absolute;top:0;left:50%;height:30px;margin-left:-12px;width:24px;' +
+      'display:flex;align-items:center;justify-content:center;' +
+      `font:700 ${c.major ? '14' : '10'}px system-ui,sans-serif;color:${color};` +
+      'will-change:transform,opacity;';
+    mark.textContent = c.label;
+    compassStripEl.appendChild(mark);
+    compassMarks.push({ el: mark, az: c.az });
+  }
+  // Centre fixed tick marking your heading.
+  const compassTick = document.createElement('div');
+  compassTick.style.cssText =
+    'position:absolute;top:0;left:50%;width:2px;height:30px;margin-left:-1px;' +
+    'background:linear-gradient(#ffd24a,rgba(255,210,74,0));';
+  compassStripEl.appendChild(compassTick);
+  wrap.appendChild(compassStripEl);
+
+  // ── Interaction hint (bottom-center, above controls) ─────────────────
+  interactHintEl = document.createElement('div');
+  interactHintEl.style.cssText =
+    'position:fixed;bottom:62px;left:50%;transform:translateX(-50%) translateY(8px);' +
+    'display:flex;align-items:center;gap:9px;z-index:1001;pointer-events:none;' +
+    'background:linear-gradient(135deg,rgba(20,26,46,0.86),rgba(12,16,30,0.78));' +
+    'color:#eef3ff;padding:9px 16px;border-radius:24px;' +
+    'border:1px solid rgba(255,210,120,0.4);backdrop-filter:blur(10px);' +
+    'box-shadow:0 8px 26px rgba(0,0,0,0.4);font-size:14px;font-weight:600;' +
+    'opacity:0;transition:opacity 0.18s ease,transform 0.18s ease;white-space:nowrap;';
+
+  interactKeyEl = document.createElement('span');
+  interactKeyEl.style.cssText =
+    'display:inline-flex;align-items:center;justify-content:center;' +
+    'min-width:24px;height:24px;padding:0 5px;border-radius:6px;' +
+    'background:#2a3450;' +
+    'border:1px solid rgba(255,210,120,0.5);color:#ffe08a;' +
+    'font:800 13px system-ui,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
+  interactKeyEl.textContent = 'F';
+
+  interactLabelEl = document.createElement('span');
+  interactLabelEl.textContent = '';
+
+  interactHintEl.appendChild(interactKeyEl);
+  interactHintEl.appendChild(interactLabelEl);
+  wrap.appendChild(interactHintEl);
 
   document.body.appendChild(wrap);
   document.body.appendChild(winEl);
@@ -907,7 +1631,41 @@ function resolveAudioEids(state: State): void {
   eidSfxHeal = state.getEntityByName('sfx-heal') ?? -1;
   eidSfxCoin = state.getEntityByName('sfx-coin') ?? -1;
   eidSfxPlayerHurt = state.getEntityByName('sfx-player-hurt') ?? -1;
+  eidSfxEnemyHurt = state.getEntityByName('sfx-enemy-hurt') ?? -1;
+  eidSfxHit = state.getEntityByName('sfx-hit') ?? -1;
+  eidSfxMineHit = state.getEntityByName('sfx-mine-hit') ?? -1;
+  eidSfxChopHit = state.getEntityByName('sfx-chop-hit') ?? -1;
+  eidSfxMineBreak = state.getEntityByName('sfx-mine-break') ?? -1;
+  eidSfxChopBreak = state.getEntityByName('sfx-chop-break') ?? -1;
+  eidBgm = state.getEntityByName('bgm') ?? -1;
   eidBgmBattle = state.getEntityByName('bgm-battle') ?? -1;
+  eidBgmExplore = state.getEntityByName('bgm-explore') ?? -1;
+
+  const sfxNames = [
+    'sfx-jump', 'sfx-save', 'sfx-load', 'sfx-heal', 'sfx-coin',
+    'sfx-player-hurt', 'sfx-enemy-hurt', 'sfx-hit',
+    'sfx-mine-hit', 'sfx-chop-hit', 'sfx-mine-break', 'sfx-chop-break',
+    'sfx-shop-open', 'sfx-buy', 'sfx-error', 'sfx-item-drop',
+    'sfx-boss-roar', 'sfx-enemy-death',
+  ];
+  const bgmNames = ['bgm', 'bgm-battle', 'bgm-explore'];
+
+  bgmBaseVol.clear();
+  sfxBaseVol.clear();
+  for (const n of bgmNames) {
+    const e = state.getEntityByName(n);
+    if (e != null && state.hasComponent(e, AudioSource)) {
+      bgmBaseVol.set(e, AudioSource.volume[e]);
+    }
+  }
+  for (const n of sfxNames) {
+    const e = state.getEntityByName(n);
+    if (e != null && state.hasComponent(e, AudioSource)) {
+      sfxBaseVol.set(e, AudioSource.volume[e]);
+    }
+  }
+  applyMusicVolume(state);
+  applySfxVolume(state);
 }
 
 async function bootstrap(): Promise<void> {
@@ -951,8 +1709,14 @@ async function bootstrap(): Promise<void> {
   onDestructibleDestroyed(state, (eid, x, y, z) => {
     if (eid !== null && isWoodEntity(eid)) {
       addWood(1, x, y + 0.8, z);
+      addItem('wood', 1);
+      pushFloat(state, x, y + 1.5, z, '+1 🪵', { color: '#e0b87a', size: 19 });
+      playSfx(state, eidSfxChopBreak);
     } else {
       addStone(1, x, y, z);
+      addItem('stone', 1);
+      pushFloat(state, x, y + 1.2, z, '+1 🪨', { color: '#e2dccb', size: 19 });
+      playSfx(state, eidSfxMineBreak);
     }
   });
 
@@ -1009,21 +1773,74 @@ async function bootstrap(): Promise<void> {
 
   createOverlayHud(state);
 
-  const bgmEid = state.getEntityByName('bgm');
-  const bgmBattleEid = eidBgmBattle;
-  if (bgmEid !== null && typeof document !== 'undefined') {
+  // Spending a Vitality point raises the hero's max HP (Strength/Agility are
+  // stored for future use). Kept here so the skills module stays ECS-free.
+  setSkillEffectHandler((key) => {
+    if (key !== 'vitality') return;
+    const hero = state.getEntityByName('hero');
+    if (hero !== null && state.hasComponent(hero, Health)) {
+      Health.max[hero] += 12;
+      Health.current[hero] = Math.min(
+        Health.max[hero],
+        Health.current[hero] + 12
+      );
+    }
+  });
+
+  // Inventory mirrors the live resource counters (single source of truth) and
+  // can hold future bag-owned items.
+  registerResource('gold', '🪙', { en: 'Gold', pt: 'Ouro' }, () => getGold());
+  registerResource('wood', '🪵', { en: 'Wood', pt: 'Madeira' }, () =>
+    getWoodCount()
+  );
+  registerResource('stone', '🪨', { en: 'Stone', pt: 'Pedra' }, () =>
+    getStoneCount()
+  );
+  defineItem('potion', '🧪', { en: 'Potion', pt: 'Poção' });
+
+  const pauseOptions: PauseOption[] = [
+    {
+      labelKey: 'pause.option.language',
+      value: () => (getLocale(state) === 'pt' ? 'PT' : 'EN'),
+      activate: () => {
+        setLocale(state, getLocale(state) === 'pt' ? 'en' : 'pt');
+        if (overlayControlsEl)
+          overlayControlsEl.textContent = t(state, 'hud.controls');
+        refreshHud(state);
+      },
+    },
+    {
+      labelKey: 'pause.option.music',
+      value: () => t(state, musicOn ? 'opt.on' : 'opt.off'),
+      activate: () => {
+        musicOn = !musicOn;
+        setMusicPlaying(state, musicOn);
+      },
+    },
+  ];
+
+  pauseMenu = createPauseMenu({
+    state,
+    translate: (k, v) => t(state, k, v),
+    locale: () => (getLocale(state) === 'pt' ? 'pt' : 'en'),
+    getLevel: () => level,
+    onSave: () => {
+      saveToLocalStorage(state, SAVE_KEY);
+      if (eidSfxSave >= 0) playAudioEmitter(state, eidSfxSave);
+      pushFlash(state, 'hud.saved', 2.5);
+    },
+    onLoad: () => {
+      const ok = loadFromLocalStorage(state, SAVE_KEY);
+      if (ok && eidSfxLoad >= 0) playAudioEmitter(state, eidSfxLoad);
+      pushFlash(state, ok ? 'hud.loaded' : 'hud.no-save', 2.5);
+    },
+    options: pauseOptions,
+  });
+
+  if (eidBgm >= 0 && typeof document !== 'undefined') {
     const startBgm = () => {
       resumeAudioContextIfSuspended();
-      if (state.exists(bgmEid) && state.hasComponent(bgmEid, AudioSource)) {
-        AudioSource.playing[bgmEid] = 1;
-      }
-      if (
-        bgmBattleEid >= 0 &&
-        state.exists(bgmBattleEid) &&
-        state.hasComponent(bgmBattleEid, AudioSource)
-      ) {
-        AudioSource.playing[bgmBattleEid] = 1;
-      }
+      if (musicOn) setMusicPlaying(state, true);
       document.removeEventListener('pointerdown', startBgm);
     };
     document.addEventListener('pointerdown', startBgm, { once: true });
