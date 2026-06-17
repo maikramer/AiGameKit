@@ -17,7 +17,10 @@ export const test = base.extend<VibeGameFixtures>({
     await expect(page.locator('#game-canvas')).toBeVisible({ timeout: 30000 });
     await injectWebGLErrorCapture(page);
     const inspector = new GameInspector(page);
-    await inspector.waitForBridge(15000);
+    // The debug bridge only installs once the loading gate latches (terrain +
+    // spawn + assets ready). On a cold dev server that can exceed 15s, so allow
+    // generous headroom to keep the simple-rpg suite from flaking on startup.
+    await inspector.waitForBridge(45000);
     await page.waitForTimeout(2000);
     await use(page);
   },

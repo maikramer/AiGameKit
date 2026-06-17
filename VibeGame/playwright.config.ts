@@ -87,6 +87,10 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
+  // Each test navigates fresh and waits for the loading gate (terrain + spawn +
+  // assets). Under headless software GL that can take ~30-45s, so the default
+  // 30s per-test budget is too tight for the simple-rpg suite.
+  timeout: 90_000,
   use: {
     baseURL,
     trace: 'on-first-retry',
