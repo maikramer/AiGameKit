@@ -10,10 +10,7 @@ import { syncTerrainBvh } from './terrain';
 export const BvhTerrainSyncSystem: System = {
   group: 'simulation',
   update: (state) => {
-    const { added, total } = syncTerrainBvh(state);
-    if (added > 0) {
-      console.log(`[bvh] terrain registered: +${added} total=${total}`);
-    }
+    syncTerrainBvh(state);
   },
 };
 
@@ -21,9 +18,6 @@ export const BvhStaticMeshSyncSystem: System = {
   group: 'simulation',
   after: [BvhTerrainSyncSystem],
   update: (state) => {
-    const { added, removed, total } = syncStaticMeshBvh(state);
-    if (added > 0 || removed > 0) {
-      console.log(`[bvh] static GLTF: +${added} -${removed} total=${total}`);
-    }
+    syncStaticMeshBvh(state);
   },
 };
