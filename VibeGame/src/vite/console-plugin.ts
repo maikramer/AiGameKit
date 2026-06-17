@@ -107,7 +107,13 @@ if (import.meta.hot) {
       message.context.stack = args[0].stack;
     }
     
-    import.meta.hot.send('vibegame:console', message);
+    try {
+      import.meta.hot.send('vibegame:console', message);
+    } catch (e) {
+      // Best-effort forwarding: never throw out of the console override. An
+      // uncaught throw here re-enters console.error via the browser's
+      // uncaught-error path and loops while the HMR socket is still connecting.
+    }
   }
   
   ['log', 'warn', 'error', 'debug'].forEach(method => {
