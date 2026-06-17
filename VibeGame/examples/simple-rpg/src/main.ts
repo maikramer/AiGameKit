@@ -15,6 +15,7 @@ import type { System, State, SoundHandle } from 'vibegame';
 import {
   NavMeshPlugin,
   PlayerController,
+  InputState,
   configure,
   disposeAllRuntimes,
   getBuilder,
@@ -35,6 +36,7 @@ import {
   saveToLocalStorage,
   loadFromLocalStorage,
   loadDictionary,
+  loadEngineDefaultDictionary,
   setLocale,
   getLocale,
   t,
@@ -42,31 +44,46 @@ import {
   addInputMapping,
   spawnFloatingText,
   onDestructibleDestroyed,
-  getScene,
-} from 'vibegame';
-import * as THREE from 'three';
-import { defineQuery } from 'vibegame';
-import {
+  defineQuery,
   Rigidbody,
-  Postprocessing,
-  getRenderingContext,
+  Transform,
   threeCameras,
+  NavMeshAgent,
+  Destructible,
+  CombatPlugin,
+  DebugPlugin,
+  Health,
+  isDead,
   getBodyForEntity,
-  getRapierWorld,
-  PhysicsStepSystem,
-  getBodyYForFeetAt,
   getCharacterFeetY,
-  GROUND_CONTACT_SKIN,
-  getTerrainHeightAt,
   getBvhSurfaceHeight,
+  getTerrainHeightAt,
+  getBodyYForFeetAt,
+  getRapierWorld,
   getTerrainContext,
   isTerrainDynamicsBlocking,
-  Transform,
+  PhysicsStepSystem,
+  GROUND_CONTACT_SKIN,
+  RpgCorePlugin,
+  RpgVaultPlugin,
+  InventoryPlugin,
+  ProgressionPlugin,
+  PauseCoordinatorPlugin,
+  ResourceNodePlugin,
+  EconomyPlugin,
+  StatusEffectsPlugin,
+  RpgAiPlugin,
+  SpawnGatePlugin,
+  ProgressionComponent,
+  addXp,
+  getXpToNextLevel,
+  onEvent,
+  PROGRESSION_LEVEL_UP,
 } from 'vibegame';
+import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 
 setKTX2TranscoderPath('/libs/basis/');
-import { CombatPlugin, DebugPlugin, Health, isDead } from 'vibegame';
 import {
   addStone,
   getStoneCount,
@@ -78,7 +95,6 @@ import { registerGameSounds } from './game/sounds';
 import { isWoodEntity } from './scripts/tree';
 import { anyCreatureAggro } from './scripts/creature';
 import { anyBossAggro } from './scripts/boss';
-import { NavMeshAgent, Destructible } from 'vibegame';
 import { isShopOpen } from './game/pause';
 import {
   createPauseMenu,
@@ -97,10 +113,6 @@ const SAVE_KEY = 'simple-rpg-save';
 function isTerrainReady(state: State): boolean {
   for (const [, data] of getTerrainContext(state)) {
     if (!data.initialized) continue;
-    // A heightmapped terrain reports `initialized` with a flat zero-height
-    // sampler before the image is decoded. Snapping then drops the hero far
-    // below the real surface, where the one-sided heightfield can't catch it.
-    // Wait until the heightmap data has actually loaded.
     if (data.heightmapUrl && !data.sampler.data) continue;
     return true;
   }
@@ -125,8 +137,6 @@ const HeroGroundSnapSystem: System = {
     const x = Transform.posX[heroEid];
     const z = Transform.posZ[heroEid];
 
-    // Terrain not ready yet — freeze the hero at spawn Y so gravity
-    // doesn't pull it through the floor before the heightmap loads.
     if (isTerrainDynamicsBlocking(state) || !isTerrainReady(state)) {
       if (heroSpawnY === null) heroSpawnY = Transform.posY[heroEid];
       Transform.posY[heroEid] = heroSpawnY;
@@ -172,10 +182,6 @@ const HeroGroundSnapSystem: System = {
       CM.desiredVelZ[heroEid] = 0;
     }
 
-    // Only release the hero once the *physics* world actually has ground
-    // under the capsule. The visual heightmap (BVH) loads before the chunk
-    // heightfield colliders are built; releasing early lets gravity build up
-    // until the capsule tunnels straight through the one-sided heightfield.
     if (physicsGroundBelow(state, body, x, snapY, z)) {
       heroGroundSnapped = true;
     }
@@ -184,7 +190,6 @@ const HeroGroundSnapSystem: System = {
 
 const _downDir = { x: 0, y: -1, z: 0 };
 
-/** True when a non-self collider lies within ~1.5m below the capsule. */
 function physicsGroundBelow(
   state: State,
   body: RAPIER.RigidBody,
@@ -197,8 +202,6 @@ function physicsGroundBelow(
   const collider = body.collider(0);
   const cp = collider.translation();
   const bp = body.translation();
-  // Collider sits at a fixed offset from the body origin; cast from where the
-  // collider would be if the body stood at (x, y, z).
   const origin = {
     x: x + (cp.x - bp.x),
     y: y + (cp.y - bp.y),
@@ -220,46 +223,6 @@ function physicsGroundBelow(
   );
   return hit !== null;
 }
-
-// Live post-processing toggles (keys 1–4) so effects can be tuned per-machine —
-// flipping a field and dropping context.postProcessing rebuilds the pipeline.
-const postfxQuery = defineQuery([Postprocessing]);
-const POSTFX_KEYS: Array<[string, string, string]> = [
-  ['Digit1', 'bloom', 'Bloom'],
-  ['Digit2', 'chromaticAberration', 'Chromatic Aberration'],
-  ['Digit3', 'vignette', 'Vignette'],
-  ['Digit4', 'aa', 'AA (SMAA/FXAA)'],
-  ['Digit5', 'ssao', 'SSAO'],
-  ['Digit6', 'toneMapping', 'Tone Mapping'],
-];
-const postfxDebounce = new Set<string>();
-
-const PostFxToggleSystem: System = {
-  group: 'simulation',
-  update(state: State) {
-    const ents = postfxQuery(state.world);
-    if (ents.length === 0) return;
-    const e = ents[0];
-    for (const [code, field, label] of POSTFX_KEYS) {
-      if (isKeyDown(code) && !postfxDebounce.has(code)) {
-        postfxDebounce.add(code);
-        const arr = (Postprocessing as Record<string, Uint8Array>)[field];
-        if (field === 'aa') {
-          arr[e] = ((arr[e] + 1) % 3) as 0 | 1 | 2;
-        } else if (field === 'toneMapping') {
-          arr[e] = ((arr[e] + 1) % 5) as 0 | 1 | 2 | 3 | 4;
-        } else {
-          arr[e] = arr[e] ? 0 : 1;
-        }
-        const ctx = getRenderingContext(state);
-        ctx.postProcessing?.dispose();
-        ctx.postProcessing = undefined;
-        console.log(`[postfx] ${label} = ${arr[e] ? 'on' : 'off'}`);
-      }
-      if (!isKeyDown(code)) postfxDebounce.delete(code);
-    }
-  },
-};
 
 const dictEN: Record<string, string> = {
   'hud.title': 'Crystal Vale',
@@ -512,44 +475,13 @@ function updateShake(): void {
   shakeMag *= 0.86;
 }
 
-// ── XP / level ───────────────────────────────────────────────────────────
-let xp = 0;
-let level = 1;
-let xpToNext = 6;
 let levelUpFlashUntil = 0;
 let xpBarFill: HTMLDivElement | null = null;
 let levelBadgeEl: HTMLDivElement | null = null;
 let levelUpEl: HTMLDivElement | null = null;
 
-// Pause menu handle + Esc edge-debounce (UI built in ./ui/pause-menu).
 let pauseMenu: PauseMenu | null = null;
 let menuKeyDebounce = false;
-
-function xpForLevel(l: number): number {
-  return 5 + l * 4;
-}
-function addXp(state: State, amount: number): void {
-  xp += amount;
-  while (xp >= xpToNext) {
-    xp -= xpToNext;
-    level += 1;
-    xpToNext = xpForLevel(level);
-    addSkillPoints(SKILL_POINTS_PER_LEVEL);
-    pauseMenu?.refresh();
-    levelUpFlashUntil = state.time.elapsed + 2.0;
-    if (levelUpEl) {
-      levelUpEl.textContent = `${t(state, 'hud.levelUp')} ${level}`;
-      levelUpEl.style.opacity = '1';
-      levelUpEl.style.transform = 'translateX(-50%) translateY(0) scale(1)';
-    }
-    addShake(6, 260);
-    playSfx('levelup');
-  }
-  if (xpBarFill) {
-    xpBarFill.style.width = `${Math.max(0, Math.min(100, (xp / xpToNext) * 100))}%`;
-  }
-  if (levelBadgeEl) levelBadgeEl.textContent = `${level}`;
-}
 
 let prevHeroIsJumping = 0;
 let prevPrimaryAction = 0;
@@ -577,23 +509,24 @@ const CHECKPOINT_Z = 0;
 const BOSS_BAR_RANGE = 50;
 const RESPAWN_DELAY = 2.0;
 
-// ── Unified floating text (damage, loot, hit sparks) ─────────────────────
-// One screen-space pool projected from a 3D anchor each frame, so every kind of
-// pop (player/enemy/boss damage, resource gains, harvest hits) shares the same
-// look and motion instead of the old mix of DOM + troika 3D text.
-interface FloatFx {
-  x: number;
-  y: number;
-  z: number;
-  born: number;
-  dur: number;
-  driftX: number;
-  el: HTMLDivElement;
-  active: boolean;
+function pushFloat(
+  state: State,
+  wx: number,
+  wy: number,
+  wz: number,
+  text: string,
+  opts: { color?: string; size?: number; dur?: number } = {}
+): void {
+  spawnFloatingText(state, text, {
+    x: wx,
+    y: wy,
+    z: wz,
+    color: opts.color,
+    size: (opts.size ?? 20) * 0.015,
+    duration: opts.dur ?? 1.1,
+    space: 'world',
+  });
 }
-const FLOAT_POOL_SIZE = 32;
-const floatPool: FloatFx[] = [];
-let floatCursor = 0;
 
 function formatTime(sec: number): string {
   const s = Math.floor(sec % 60);
@@ -641,66 +574,6 @@ function updateHealthBar(heroEid: number, state: State): void {
   });
 }
 
-interface FloatOpts {
-  color?: string;
-  size?: number;
-  dur?: number;
-}
-
-/** Spawn a floating pop anchored to a world position. Recycles the oldest pool
- * element; animation runs in updateFloatFx each frame. */
-function pushFloat(
-  state: State,
-  wx: number,
-  wy: number,
-  wz: number,
-  text: string,
-  opts: FloatOpts = {}
-): void {
-  const fx = floatPool[floatCursor % FLOAT_POOL_SIZE];
-  floatCursor++;
-  if (!fx) return;
-  fx.x = wx;
-  fx.y = wy;
-  fx.z = wz;
-  fx.born = state.time.elapsed;
-  fx.dur = opts.dur ?? 1.1;
-  fx.driftX = (Math.random() - 0.5) * 34;
-  fx.active = true;
-  fx.el.textContent = text;
-  fx.el.style.color = opts.color ?? '#ffffff';
-  fx.el.style.fontSize = `${opts.size ?? 20}px`;
-  fx.el.style.opacity = '0';
-}
-
-/** Project every live float to screen and animate rise + pop + fade. */
-function updateFloatFx(state: State): void {
-  const now = state.time.elapsed;
-  for (const fx of floatPool) {
-    if (!fx.active) continue;
-    const t = (now - fx.born) / fx.dur;
-    if (t >= 1) {
-      fx.active = false;
-      fx.el.style.opacity = '0';
-      fx.el.style.transform = 'translate(-9999px,-9999px)';
-      continue;
-    }
-    const p = project3Dto2D(fx.x, fx.y, fx.z, state);
-    if (!p) {
-      fx.el.style.opacity = '0';
-      continue;
-    }
-    const rise = t * 54;
-    const scale =
-      t < 0.14
-        ? 0.55 + (t / 0.14) * 0.55
-        : 1.1 - Math.min(0.12, (t - 0.14) * 0.2);
-    const alpha = t > 0.62 ? 1 - (t - 0.62) / 0.38 : 1;
-    fx.el.style.transform = `translate(-50%,-50%) translate(${p.x + fx.driftX * t}px,${p.y - rise}px) scale(${scale})`;
-    fx.el.style.opacity = String(alpha);
-  }
-}
-
 const healthFxQuery = defineQuery([Health, Transform]);
 const prevHpFx = new Map<number, number>();
 const prevPendingFx = new Map<number, number>();
@@ -741,7 +614,9 @@ function watchCombatFx(state: State, heroEid: number | null): void {
       // Award XP once, on the hit that drops the creature to 0.
       if (cur <= 0 && prev > 0) {
         const maxHp = Health.max[e] || 30;
-        addXp(state, Math.max(2, Math.round(maxHp / 12)));
+        if (heroEid !== null) {
+          addXp(state, heroEid, Math.max(2, Math.round(maxHp / 12)));
+        }
       }
     }
   }
@@ -775,29 +650,6 @@ function watchDestructibleFx(state: State): void {
       }
     }
   }
-}
-
-function project3Dto2D(
-  worldX: number,
-  worldY: number,
-  worldZ: number,
-  _state: State
-): { x: number; y: number } | null {
-  const camera = threeCameras.values().next().value;
-  if (!camera) return null;
-
-  const vec = new THREE.Vector3(worldX, worldY, worldZ);
-  vec.project(camera);
-
-  if (vec.z > 1) return null;
-
-  const hw = window.innerWidth / 2;
-  const hh = window.innerHeight / 2;
-
-  return {
-    x: vec.x * hw + hw,
-    y: -vec.y * hh + hh,
-  };
 }
 
 const GameplayHudSystem: System = {
@@ -834,6 +686,8 @@ const GameplayHudSystem: System = {
       state.addComponent(heroEid, Health);
       Health.max[heroEid] = 100;
       Health.current[heroEid] = 100;
+      state.addComponent(heroEid, ProgressionComponent);
+      ProgressionComponent.level[heroEid] = 1;
       heroHealthInit = true;
     }
 
@@ -988,8 +842,22 @@ const GameplayHudSystem: System = {
     watchCombatFx(state, heroEid);
     watchDestructibleFx(state);
     updateBattleMusic(state, dt);
-    updateFloatFx(state);
     updateShake();
+
+    if (
+      heroEid !== null &&
+      state.hasComponent(heroEid, ProgressionComponent)
+    ) {
+      const cur = ProgressionComponent.xp[heroEid];
+      const needed = getXpToNextLevel(state, heroEid) || 1;
+      if (xpBarFill) {
+        xpBarFill.style.width = `${Math.max(0, Math.min(100, (cur / needed) * 100))}%`;
+      }
+      if (levelBadgeEl) {
+        levelBadgeEl.textContent = `${ProgressionComponent.level[heroEid]}`;
+      }
+    }
+
     if (
       levelUpEl &&
       levelUpFlashUntil > 0 &&
@@ -1419,27 +1287,6 @@ function createOverlayHud(state: State): void {
   levelUpEl.textContent = '';
   wrap.appendChild(levelUpEl);
 
-  for (let i = 0; i < FLOAT_POOL_SIZE; i++) {
-    const el = document.createElement('div');
-    el.style.cssText =
-      'position:fixed;left:0;top:0;pointer-events:none;z-index:1002;' +
-      'font-family:system-ui,Segoe UI,sans-serif;font-weight:800;white-space:nowrap;' +
-      'text-shadow:0 0 4px rgba(0,0,0,0.9),0 2px 3px rgba(0,0,0,0.85);' +
-      '-webkit-text-stroke:0.6px rgba(0,0,0,0.5);' +
-      'will-change:transform,opacity;opacity:0;transform:translate(-9999px,-9999px);';
-    wrap.appendChild(el);
-    floatPool.push({
-      x: 0,
-      y: 0,
-      z: 0,
-      born: 0,
-      dur: 1,
-      driftX: 0,
-      el,
-      active: false,
-    });
-  }
-
   winEl = document.createElement('div');
   winEl.style.cssText =
     'position:fixed;inset:0;z-index:2000;' +
@@ -1677,14 +1524,23 @@ async function bootstrap(): Promise<void> {
   addInputMapping('primaryAction', 'KeyJ');
 
   withPlugin(LoadingPlugin);
+  withPlugin(RpgCorePlugin);
+  withPlugin(RpgVaultPlugin);
+  withPlugin(InventoryPlugin);
+  withPlugin(ProgressionPlugin);
+  withPlugin(PauseCoordinatorPlugin);
+  withPlugin(ResourceNodePlugin);
+  withPlugin(EconomyPlugin);
+  withPlugin(CombatPlugin);
+  withPlugin(StatusEffectsPlugin);
+  withPlugin(RpgAiPlugin);
+  withPlugin(SpawnGatePlugin);
+  withPlugin(NavMeshPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
-  withPlugin(NavMeshPlugin);
-  withPlugin(CombatPlugin);
   withPlugin(DebugPlugin);
   withSystem(GameplayHudSystem);
   withSystem(HeroGroundSnapSystem);
-  withSystem(PostFxToggleSystem);
 
   configure({ canvas: '#game-canvas' });
 
@@ -1759,8 +1615,23 @@ async function bootstrap(): Promise<void> {
 
   initAudioBuses();
 
+  loadEngineDefaultDictionary(state);
   loadDictionary(state, 'en', dictEN);
   loadDictionary(state, 'pt', dictPT);
+
+  onEvent(state, PROGRESSION_LEVEL_UP, (payload) => {
+    const p = payload as { eid: number; level: number };
+    addSkillPoints(SKILL_POINTS_PER_LEVEL);
+    pauseMenu?.refresh();
+    levelUpFlashUntil = state.time.elapsed + 2.0;
+    if (levelUpEl) {
+      levelUpEl.textContent = `${t(state, 'hud.levelUp')} ${p.level}`;
+      levelUpEl.style.opacity = '1';
+      levelUpEl.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+    }
+    addShake(6, 260);
+    playSfx('levelup');
+  });
 
   const userLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
   setLocale(state, userLang);
@@ -1842,7 +1713,10 @@ async function bootstrap(): Promise<void> {
     state,
     translate: (k, v) => t(state, k, v),
     locale: () => (getLocale(state) === 'pt' ? 'pt' : 'en'),
-    getLevel: () => level,
+    getLevel: () => {
+      const hero = state.getEntityByName('hero');
+      return hero !== null ? ProgressionComponent.level[hero] : 1;
+    },
     onSave: () => {
       saveToLocalStorage(state, SAVE_KEY);
       playSfx('save');

@@ -9,6 +9,8 @@ import {
   setInputMovementSuppressed,
   Health,
   healHealth,
+  damageHealth,
+  isDead,
 } from 'vibegame';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
@@ -33,8 +35,35 @@ const STONE1_PRICE = 5;
 const STONE5_PRICE = 25;
 const WOOD1_PRICE = 8;
 
+// Commerce-only items (2D shop icons via text2d, no 3D models).
+const ANTIDOTE_PRICE = 25;
+const ANTIDOTE_HEAL = 35;
+const RING_PRICE = 80; // one-time permanent +15% move speed
+const RING_SPEED_MULT = 1.15;
+const BOMB_PRICE = 20;
+const BOMB_DAMAGE = 60;
+const BOMB_RADIUS = 14; // metres around the player
+
+const ICON_BASE = '/assets/images/';
+/** Shop button → 2D icon file (in public/assets/images). */
+const ICONS: Record<string, string> = {
+  potion: 'potion_health.png',
+  sword: 'sword_hero.png',
+  antidote: 'potion_antidote.png',
+  ring: 'ring_magic.png',
+  bomb: 'bomb.png',
+  stone1: 'rock_mossy.png',
+  stone5: 'rock_mossy.png',
+  wood1: 'tree_oak.png',
+};
+
+let ringOwned = false;
+
 const playerQuery = defineQuery([PlayerController]);
+const damageableQuery = defineQuery([Health, Transform]);
 let cachedPlayer = 0;
+let cachedMerchant = 0;
+let shopState: MonoBehaviourContext['state'] | null = null;
 
 let group: THREE.Group | null = null;
 let animator: GltfAnimator | null = null;
@@ -62,9 +91,12 @@ let navDownPressed = false;
 let enterPressed = false;
 
 const BUTTON_BASE_STYLE =
-  'display:block;width:100%;padding:10px 14px;margin:4px 0;box-sizing:border-box;' +
+  'display:flex;align-items:center;gap:10px;width:100%;padding:8px 12px;margin:4px 0;box-sizing:border-box;' +
   'background:rgba(40,30,20,0.9);color:#e8d8b0;border:1px solid #5a4a30;' +
   'border-radius:4px;font:15px Georgia,serif;text-align:left;cursor:pointer;transition:background 0.12s;';
+const ICON_STYLE =
+  'width:34px;height:34px;flex:0 0 auto;object-fit:contain;' +
+  'border-radius:4px;background:rgba(0,0,0,0.25);';
 const BUTTON_FOCUS_STYLE =
   'border:2px solid #ffd700;box-shadow:0 0 12px rgba(255,215,0,0.4);';
 const BUTTON_DISABLED_STYLE = 'opacity:0.4;cursor:not-allowed;';
@@ -108,13 +140,32 @@ function applyFocus(): void {
   }
 }
 
+/** Update a button's text without clobbering its icon (label lives in a span). */
+function setButtonLabel(btn: HTMLButtonElement, label: string): void {
+  const span = btn.querySelector<HTMLSpanElement>('[data-role="label"]');
+  if (span) span.textContent = label;
+  else btn.textContent = label;
+}
+
 function makeButton(
   label: string,
   action: string,
   onClick: () => void
 ): HTMLButtonElement {
   const btn = document.createElement('button');
-  btn.textContent = label;
+  const iconFile = ICONS[action];
+  if (iconFile) {
+    const img = document.createElement('img');
+    img.src = ICON_BASE + iconFile;
+    img.alt = '';
+    img.style.cssText = ICON_STYLE;
+    btn.appendChild(img);
+  }
+  const span = document.createElement('span');
+  span.dataset.role = 'label';
+  span.textContent = label;
+  span.style.cssText = 'flex:1 1 auto;';
+  btn.appendChild(span);
   btn.dataset.action = action;
   btn.addEventListener('click', onClick);
   btn.addEventListener('mouseenter', () => {
@@ -185,6 +236,27 @@ function createShopPanel(): void {
       buySwordUpgrade
     )
   );
+  shopButtons.push(
+    makeButton(
+      `Buy Antidote (${ANTIDOTE_PRICE}g) \u2014 cure +${ANTIDOTE_HEAL} HP`,
+      'antidote',
+      buyAntidote
+    )
+  );
+  shopButtons.push(
+    makeButton(
+      `Buy Magic Ring (${RING_PRICE}g) \u2014 +15% speed`,
+      'ring',
+      buyRing
+    )
+  );
+  shopButtons.push(
+    makeButton(
+      `Buy Bomb (${BOMB_PRICE}g) \u2014 ${BOMB_DAMAGE} dmg nearby`,
+      'bomb',
+      buyBomb
+    )
+  );
 
   panel.appendChild(sectionHead('\u2014 Sell \u2014'));
   shopButtons.push(
@@ -252,7 +324,25 @@ function refreshShopDisplay(): void {
         break;
       case 'sword':
         btn.disabled = gold < SWORD_PRICE;
-        btn.textContent = `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${swordLevel + 1}`;
+        setButtonLabel(
+          btn,
+          `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${swordLevel + 1}`
+        );
+        break;
+      case 'antidote':
+        btn.disabled = gold < ANTIDOTE_PRICE || (hpMax > 0 && hp >= hpMax);
+        break;
+      case 'ring':
+        btn.disabled = ringOwned || gold < RING_PRICE;
+        setButtonLabel(
+          btn,
+          ringOwned
+            ? 'Magic Ring \u2014 owned (+15% speed)'
+            : `Buy Magic Ring (${RING_PRICE}g) \u2014 +15% speed`
+        );
+        break;
+      case 'bomb':
+        btn.disabled = gold < BOMB_PRICE;
         break;
       case 'stone1':
         btn.disabled = stones < 1;
@@ -294,6 +384,66 @@ function buySwordUpgrade(): void {
   }
   swordLevel++;
   playSound('buy');
+  refreshShopDisplay();
+}
+
+function buyAntidote(): void {
+  const player = activePlayer;
+  const hp = Health.current[player] ?? 0;
+  const hpMax = Health.max[player] ?? 0;
+  if (hpMax > 0 && hp >= hpMax) {
+    showShopError('HP already full!');
+    return;
+  }
+  if (!spendGold(ANTIDOTE_PRICE)) {
+    showShopError('Not enough gold!');
+    return;
+  }
+  healHealth(player, ANTIDOTE_HEAL);
+  playSound('buy');
+  playSound('heal');
+  refreshShopDisplay();
+}
+
+function buyRing(): void {
+  if (ringOwned) {
+    showShopError('Already owned!');
+    return;
+  }
+  if (!spendGold(RING_PRICE)) {
+    showShopError('Not enough gold!');
+    return;
+  }
+  ringOwned = true;
+  PlayerController.speed[activePlayer] *= RING_SPEED_MULT;
+  playSound('buy');
+  refreshShopDisplay();
+}
+
+function buyBomb(): void {
+  if (!spendGold(BOMB_PRICE)) {
+    showShopError('Not enough gold!');
+    return;
+  }
+  // Detonate immediately: damage every living enemy within range of the player.
+  const player = activePlayer;
+  let hits = 0;
+  if (shopState) {
+    const px = Transform.posX[player];
+    const pz = Transform.posZ[player];
+    const r2 = BOMB_RADIUS * BOMB_RADIUS;
+    for (const eid of damageableQuery(shopState.world)) {
+      if (eid === player || eid === cachedMerchant) continue;
+      if (isDead(eid)) continue;
+      const dx = Transform.posX[eid] - px;
+      const dz = Transform.posZ[eid] - pz;
+      if (dx * dx + dz * dz > r2) continue;
+      damageHealth(eid, BOMB_DAMAGE);
+      hits++;
+    }
+  }
+  playSound('buy');
+  if (hits === 0) showShopError('No enemies in range — bomb wasted!');
   refreshShopDisplay();
 }
 
@@ -384,6 +534,8 @@ function handleShopKeys(): void {
 
 export function update(ctx: MonoBehaviourContext): void {
   const eid = ctx.entity;
+  cachedMerchant = eid;
+  shopState = ctx.state;
   if (!group) return;
   // Frozen while the pause menu is open (don't open the shop on K, etc.).
   if (isGamePaused() && !shopOpen) return;

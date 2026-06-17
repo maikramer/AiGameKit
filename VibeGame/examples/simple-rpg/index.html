@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>RPG Simples — Vale do Cristal (VibeGame)</title>
     <style>
@@ -45,8 +46,21 @@
       >
       </GameObject>
 
-      <!-- Audio: every sound is declared in code (src/game/sounds.ts) and fired
-           via playSound(); no per-sound scene entities needed. -->
+      <!-- Audio mixer tiers + layered music (engine AudioPlugin, T28).
+           Crossfade between explore/battle layers is driven from gameplay code. -->
+      <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
+      <MusicLayer
+        url="/assets/audio/bgm_explore.ogg"
+        layer="explore"
+        base-volume="0.7"
+        loop="1"
+      ></MusicLayer>
+      <MusicLayer
+        url="/assets/audio/bgm_battle.ogg"
+        layer="battle"
+        base-volume="0.9"
+        loop="1"
+      ></MusicLayer>
 
       <!-- 2 km × 2 km terrain — quadtree LOD chunks (levels=4), 2048×2048 heightmap.
            Physics: one Rapier heightfield per visual chunk, built/freed dynamically. -->
@@ -77,7 +91,7 @@
       <!-- WaveManager desativado enquanto ajustamos movimento/câmera -->
       <!-- <GameObject name="WaveManager" script="wave-manager.ts"></GameObject> -->
 
-      <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world-size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
+      <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
       <PlayerGLTF
         name="hero"
         pos="0 50 0"
@@ -86,9 +100,9 @@
       </PlayerGLTF>
 
       <!-- 100 decorative oak trees. StaticSpawner = one shared instanced-mesh
-           pool (per LOD), one draw call per primitive for the whole set. Each is
-           a real entity with a fixed trunk trimesh collider, so the player
-           collides and the navmesh (built from colliders) makes AI path around. -->
+            pool (per LOD), one draw call per primitive for the whole set. Each is
+            a real entity with a fixed trunk trimesh collider, so the player
+            collides and the navmesh (built from colliders) makes AI path around. -->
       <StaticSpawner
         profile="tree"
         count="100"
@@ -115,9 +129,9 @@
       </StaticSpawner>
 
       <!-- Merchant's hut — one Composition entity (1 entity, 1 Rapier body,
-           7 box meshes + compound per-wall colliders). Open doorway at the front
-           (+Z): the compound collider leaves the doorway gap walkable while each
-           wall still blocks the player. Placed on terrain via SpawnerPlugin. -->
+            7 box meshes + compound per-wall colliders). Open doorway at the front
+            (+Z): the compound collider leaves the doorway gap walkable while each
+            wall still blocks the player. Placed on terrain via SpawnerPlugin. -->
       <Composition
         place="at: 16 8; align-to-terrain: 0; ground-align: none"
         body="fixed"
@@ -136,24 +150,54 @@
         ></PointLight>
       </Composition>
 
-      <!-- The merchant NPC stands inside the hut; walk up and press F to talk.
-           The script loads the rigged GLB itself and plays the idle clip. -->
+      <!-- The merchant NPC: engine SpawnerPlugin placement (composition) +
+           game-specific shop-flow script. Walk up and press K to trade. -->
       <GameObject
         name="merchant"
         place="at: 16 9; align-to-terrain: 0"
         script="merchant.ts"
       ></GameObject>
 
-      <!-- Boss ogre — roams the far corner; high HP, heavy melee swings. -->
+      <!-- Treasure chest (model from the project's text3d pipeline). Walk up
+           and press F for gold + a heal. Gold feeds the merchant shop loop. -->
       <GameObject
-        name="boss"
-        place="at: -120 -120; align-to-terrain: 0"
-        script="boss.ts"
+        name="chest"
+        place="at: 12 6; align-to-terrain: 0"
+        script="chest.ts"
       ></GameObject>
 
+      <!-- Mystic readables: pre-generated GLBs from public/assets, each glowing
+           emissive until read (F), then granting a one-time reward. -->
+      <GameObject
+        name="rune-pillar"
+        place="at: -9 7; align-to-terrain: 0"
+        script="stone-pillar.ts"
+      ></GameObject>
+      <GameObject
+        name="crystal-shrine"
+        place="at: 7 -9; align-to-terrain: 0"
+        script="crystal-shrine.ts"
+      ></GameObject>
+      <GameObject
+        name="glow-mushroom"
+        place="at: -6 -5; align-to-terrain: 0"
+        script="mushroom.ts"
+      ></GameObject>
+
+      <!-- Boss ogre — engine MeleeAi preset (T14) with the rigged visual
+           model as a child. Roams the far corner; high HP, heavy melee. -->
+      <MeleeAi
+        preset="boss"
+        name="boss"
+        faction="tag: enemy"
+        place="at: -120 -120; align-to-terrain: 0"
+      >
+        <GLTFLoader url="/assets/meshes/boss_ogre_rigged_animated.glb"></GLTFLoader>
+      </MeleeAi>
+
       <!-- Enemies: DynamicSpawner shares the placement core with StaticSpawner
-           (region/seed/count/slope/terrain) but spawns one scripted, animated
-           entity each — never instanced, since they move. -->
+            (region/seed/count/slope/terrain) but spawns one entity each. Creatures
+            use the engine MeleeAi presets (T14) with their rigged models. -->
       <DynamicSpawner
         count="5"
         seed="11"
@@ -164,7 +208,9 @@
         avoid-overlaps="false"
         max-slope-deg="40"
       >
-        <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
+        <MeleeAi preset="goblin" faction="tag: enemy">
+          <GLTFLoader url="/assets/meshes/goblin_rigged_animated.glb"></GLTFLoader>
+        </MeleeAi>
       </DynamicSpawner>
 
       <DynamicSpawner
@@ -177,11 +223,14 @@
         avoid-overlaps="false"
         max-slope-deg="40"
       >
-        <GameObject role="enemy" script="slime.ts"></GameObject>
+        <MeleeAi preset="slime" faction="tag: enemy">
+          <GLTFLoader url="/assets/meshes/slime_rigged_animated.glb"></GLTFLoader>
+        </MeleeAi>
       </DynamicSpawner>
 
       <!-- Harvestable rocks (stone). StaticSpawner auto-routes the visual through
-           the instanced pool; the trimesh collider feeds the navmesh. -->
+            the instanced pool; the trimesh collider feeds the navmesh. The
+            ResourceNode (T11) tags the yield kind/amount. -->
       <StaticSpawner
         profile="tree"
         count="10"
@@ -203,10 +252,12 @@
             role="visual"
             url="/assets/meshes/rock_mossy_lod0.glb"
           ></GLTFLoader>
+          <ResourceNode kind="stone" yield="3"></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
-      <!-- Harvestable oak trees (wood). Same single instancing path, with LOD. -->
+      <!-- Harvestable oak trees (wood). Same single instancing path, with LOD.
+            ResourceNode (T11) declares the wood yield. -->
       <StaticSpawner
         profile="tree"
         count="14"
@@ -231,6 +282,7 @@
             lod1-url="/assets/meshes/tree_oak_lod1.glb"
             lod2-url="/assets/meshes/tree_oak_lod2.glb"
           ></GLTFLoader>
+          <ResourceNode kind="wood" yield="3"></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
@@ -245,6 +297,30 @@
       ></ThirdPersonCamera>
 
       <!-- SpawnGroups disabled for perf testing -->
+
+      <PostFxDebugToggle></PostFxDebugToggle>
+
+      <!-- HUD: declarative screen-space layer + widgets (engine HudPlugin,
+           T20–T27). Bars/chips target the hero entity by name. -->
+      <HudScreenLayer></HudScreenLayer>
+      <HealthBar target-entity="hero" icon="❤"></HealthBar>
+      <XpBar target-entity="hero"></XpBar>
+      <ResourceChip resource="gold" icon="🪙" target-entity="hero"></ResourceChip>
+      <ResourceChip resource="wood" icon="🪵" target-entity="hero"></ResourceChip>
+      <Minimap range="60"></Minimap>
+      <Compass></Compass>
+      <InteractionPrompt key="F" range="4.5" position="bottom-center"></InteractionPrompt>
+
+      <!-- Pause menu: tabbed modal (Escape) with skills / inventory / options
+           tabs (engine HudPlugin, T27). -->
+      <TabbedModal id="pause" key="Escape" target-entity="hero" title-key="modal.pause">
+        <SkillsTab></SkillsTab>
+        <InventoryTab columns="5"></InventoryTab>
+        <OptionsTab>
+          <OptionRow id="music-volume" type="slider" label-key="options.music" min="0" max="100" step="5" default="70"></OptionRow>
+          <OptionRow id="sfx-volume" type="slider" label-key="options.sfx" min="0" max="100" step="5" default="80"></OptionRow>
+        </OptionsTab>
+      </TabbedModal>
     </Scene>
 
     <canvas id="game-canvas"></canvas>
