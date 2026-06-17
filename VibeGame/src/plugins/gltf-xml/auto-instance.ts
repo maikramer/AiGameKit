@@ -231,13 +231,18 @@ function slotSourceChanged(slot: InstanceSlotState): boolean {
   );
 }
 
-/** Set count = slots.length on every loaded level's primitives. */
 function syncCounts(pool: GltfInstancePool): void {
   const n = pool.slots.length;
   for (let L = 0; L < LEVELS; L++) {
     const prims = pool.levels[L];
     if (!prims) continue;
-    for (const prim of prims) prim.mesh.count = n;
+    for (const prim of prims) {
+      // Clamp to the instanceMatrix buffer capacity so a level whose buffer was
+      // allocated before the pool grew never draws more instances than it holds
+      // (otherwise WebGL warns "Instance fetch requires N, but attribs only
+      // supply M").
+      prim.mesh.count = Math.min(n, prim.mesh.instanceMatrix.count);
+    }
   }
 }
 
@@ -374,8 +379,11 @@ function buildLevelPrimitives(
 
 function kickLoad(state: State, pool: GltfInstancePool): void {
   pool.loadKicked = true;
-  // lod0 first: gates the pending adds. lod1/lod2 load in the background and
-  // light up extra levels when ready.
+  // lod0 first: gates the pending adds and finalizes pool.capacity from the
+  // full pendingAdds queue. Higher LOD levels are kicked only after lod0 is
+  // built so they allocate a buffer matching lod0; if they raced ahead they
+  // would build at INITIAL_CAPACITY (16) while slots later exceed it, and
+  // syncCounts would draw past the buffer ("Instance fetch requires N...").
   void loadGltfMaster(state, pool.lodUrls[0])
     .then((gltf) => {
       registerGltfLocalYBounds(pool.lodUrls[0], gltf.scene);
@@ -386,6 +394,18 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
       for (const eid of adds) {
         if (state.exists(eid)) addSlot(state, pool, eid);
       }
+
+      for (let L = 1; L < LEVELS; L++) {
+        const lodUrl = pool.lodUrls[L];
+        if (!lodUrl) continue;
+        const level = L;
+        void loadGltfMaster(state, lodUrl)
+          .then((gltfLod) => buildLevelPrimitives(state, pool, level, gltfLod.scene))
+          .catch((err: unknown) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.warn(`[gltf-instance] lod${level} "${lodUrl}" failed: ${msg}`);
+          });
+      }
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
@@ -393,18 +413,6 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
         `[gltf-instance] failed to load "${pool.lodUrls[0]}": ${msg}`
       );
     });
-
-  for (let L = 1; L < LEVELS; L++) {
-    const lodUrl = pool.lodUrls[L];
-    if (!lodUrl) continue;
-    const level = L;
-    void loadGltfMaster(state, lodUrl)
-      .then((gltf) => buildLevelPrimitives(state, pool, level, gltf.scene))
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[gltf-instance] lod${level} "${lodUrl}" failed: ${msg}`);
-      });
-  }
 }
 
 /** Route an entity's GLB visual through the shared instance pool for `url`. */
