@@ -1,3 +1,4 @@
+import { Vector3 } from 'three';
 import type { ParserParams, State, XMLValue } from '../../../core';
 import { threeCameras } from '../../rendering/utils';
 import {
@@ -147,7 +148,9 @@ function ensureCompassStyle(): void {
   document.head.appendChild(style);
 }
 
-const _camDir: Vector3Like = { x: 0, y: 0, z: 0 };
+// Must be a real THREE.Vector3: camera.getWorldDirection() calls target.set()
+// internally, which a plain {x,y,z} object does not have.
+const _camDir = new Vector3();
 
 function firstCameraAzimuth(): number | null {
   const cam = threeCameras.values().next().value as AzimuthCamera | undefined;
