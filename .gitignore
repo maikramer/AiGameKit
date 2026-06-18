@@ -117,3 +117,13 @@ VibeGame/examples/simple-rpg/public/libs/
 # Screenshots de teste na raiz do VibeGame
 VibeGame/*test*.png
 VibeGame/screenshot*.png
+
+# Visual iteration screenshots (grip tuning, weapon rotation tests, etc.)
+/grip-*.jpeg
+/grip-*.png
+/sw-*.jpeg
+/sword-*.png
+/tune-*.jpeg
+/v-*.jpeg
+/simple-rpg-initial.png
+/simple-rpg-loaded.png
