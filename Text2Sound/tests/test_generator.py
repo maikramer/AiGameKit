@@ -209,22 +209,22 @@ class TestShouldUseHalfExceptionPath:
 
 
 class TestHalfPrecisionDecoupled:
-    def test_fp16_fires_without_low_vram_on_small_gpu(self):
+    def test_fp16_fires_on_small_gpu(self):
         props = MagicMock()
         props.total_memory = 8 * 1024**3
         with patch("text2sound.generator.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = True
             mock_torch.cuda.get_device_properties.return_value = props
-            gen = AudioGenerator(device="cuda", low_vram=False)
+            gen = AudioGenerator(device="cuda")
         assert gen._half is True
 
-    def test_fp16_stays_off_on_large_gpu_without_low_vram(self):
+    def test_fp16_stays_off_on_large_gpu(self):
         props = MagicMock()
         props.total_memory = 12 * 1024**3
         with patch("text2sound.generator.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = True
             mock_torch.cuda.get_device_properties.return_value = props
-            gen = AudioGenerator(device="cuda", low_vram=False)
+            gen = AudioGenerator(device="cuda")
         assert gen._half is False
 
 
@@ -248,11 +248,6 @@ class TestSingletonCacheKey:
         inst2 = AudioGenerator.get_instance(model_id="m1", device="cpu", half_precision=True)
         assert inst1 is not inst2
         assert inst2._half is True
-
-    def test_different_low_vram_recreates(self):
-        inst1 = AudioGenerator.get_instance(model_id="m1", device="cpu", low_vram=False)
-        inst2 = AudioGenerator.get_instance(model_id="m1", device="cpu", low_vram=True)
-        assert inst1 is not inst2
 
     def test_different_gpu_ids_recreates(self):
         inst1 = AudioGenerator.get_instance(model_id="m1", device="cpu", gpu_ids=None)

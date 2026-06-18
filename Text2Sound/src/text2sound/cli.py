@@ -246,12 +246,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Float16 (auto: ativado em GPUs <= 8 GB VRAM)",
 )
 @click.option(
-    "--low-vram",
-    is_flag=True,
-    default=False,
-    help="Reserved for future use; fp16 auto-fires on <=8GB GPUs via _should_use_half()",
-)
-@click.option(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
@@ -287,7 +281,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--crop/--no-crop",
     default=False,
     help="Truncate output to the requested -d duration with a fade-out. "
-         "The model emits a fixed-length buffer regardless of -d.",
+    "The model emits a fixed-length buffer regardless of -d.",
 )
 @click.option(
     "--fade-out",
@@ -315,7 +309,6 @@ def generate_cmd(
     trim: bool,
     model_id: str | None,
     half_precision: bool | None,
-    low_vram: bool,
     gpu_ids_str: str | None,
     verbose_flag: bool,
     profiler_flag: bool,
@@ -476,7 +469,6 @@ def generate_cmd(
             gen = AudioGenerator.get_instance(
                 model_id=resolved_model_id,
                 half_precision=half_precision,
-                low_vram=low_vram,
                 gpu_ids=gpu_ids,
             )
 
@@ -637,12 +629,6 @@ def generate_cmd(
     help="Float16 (auto em GPUs modestas)",
 )
 @click.option(
-    "--low-vram",
-    is_flag=True,
-    default=False,
-    help="Reserved for future use; fp16 auto-fires on <=8GB GPUs via _should_use_half()",
-)
-@click.option(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
@@ -684,7 +670,6 @@ def batch_cmd(
     trim: bool,
     model_id: str | None,
     half_precision: bool | None,
-    low_vram: bool,
     gpu_ids_str: str | None,
     seed: int | None,
     crop: bool,
@@ -752,7 +737,6 @@ def batch_cmd(
     gen = AudioGenerator.get_instance(
         model_id=resolved_model_id,
         half_precision=half_precision,
-        low_vram=low_vram,
         gpu_ids=gpu_ids,
     )
     emit_progress("batch", TOOL_TEXT2SOUND, phase="loading_model", percent=0)

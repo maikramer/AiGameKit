@@ -71,7 +71,6 @@ class AudioGenerator:
         device: str | None = None,
         auto_clear: bool = True,
         half_precision: bool | None = None,
-        low_vram: bool = False,
         gpu_ids: list[int] | None = None,
     ) -> None:
         self._model_id = model_id
@@ -105,18 +104,16 @@ class AudioGenerator:
         model_id: str = DEFAULT_MODEL_ID,
         device: str | None = None,
         half_precision: bool | None = None,
-        low_vram: bool = False,
         gpu_ids: list[int] | None = None,
     ) -> AudioGenerator:
         """Singleton thread-safe — reutiliza modelo já carregado."""
         with cls._lock:
-            _cache_key = (model_id, half_precision, low_vram, tuple(gpu_ids) if gpu_ids else None)
+            _cache_key = (model_id, half_precision, tuple(gpu_ids) if gpu_ids else None)
             if cls._instance is None or cls._instance._cache_key != _cache_key:
                 cls._instance = cls(
                     model_id=model_id,
                     device=device,
                     half_precision=half_precision,
-                    low_vram=low_vram,
                     gpu_ids=gpu_ids,
                 )
                 cls._instance._cache_key = _cache_key

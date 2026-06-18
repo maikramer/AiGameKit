@@ -88,7 +88,6 @@ text2sound generate "footsteps on gravel" -d 5 -s 80 -f flac --seed 42 --trim
 | `--trim/--no-trim` | flag | trim | Remove leading/trailing silence |
 | `-m, --model` | str | None | Model override: HF ID or alias (`music`, `full`, `effects`, `small`, `sfx`) |
 | `--half/--no-half` | flag | auto | Half precision (auto-enabled on ≤8 GB VRAM) |
-| `--low-vram` | flag | false | Low VRAM mode (auto float16, reduced settings) |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g., `0,1`) |
 | `--profiler` | flag | false | Record performance metrics (perf DB + JSONL) |
 | `--quality` | choice | `medium` | Quality tier (resolves params via QualityEngine) |
