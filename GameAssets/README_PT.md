@@ -228,7 +228,7 @@ Todos os sub-tools também aceitam `--gpu-ids` propagado pelo comando batch.
 
 ### Hunyuan3D e qualidade
 
-Com `text3d.low_vram: true` e GPU CUDA, o **Text3D** envia o Hunyuan3D shape para **CPU** (evita OOM em ~6 GB), mas a **forma** costuma degradar muito (malhas blocosas). Para assets de jogo sérios, usa **`low_vram: false`** com `preset: balanced` ou `fast` na GPU e fecha outras aplicações que usem VRAM (ex.: editor Godot).
+O `text3d.low_vram` foi removido (deprecated no-op). O **hw-auto** aplica SDNQ INT4 automaticamente em GPUs pequenas (~6 GB). Para assets de jogo sérios, usa `preset: balanced` ou `fast` na GPU e fecha outras aplicações que usem VRAM (ex.: editor Godot).
 
 ### Layout de pastas (`path_layout`)
 

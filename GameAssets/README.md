@@ -587,7 +587,7 @@ Options for Text3D (Hunyuan3D-2.1) shape generation.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `preset` | `str` | `None` | `fast` / `balanced` / `hq` |
-| `low_vram` | `bool` | `false` | Low VRAM (CPU offload; quality degrades) |
+| `low_vram` | `bool` | `false` | Deprecated no-op (hw-auto handles small GPUs via SDNQ INT4) |
 | `export_origin` | `str` | `"feet"` | `feet` / `center` / `none` |
 | `steps` | `int` | `None` | Inference steps |
 | `octree_resolution` | `int` | `None` | Octree resolution |
@@ -600,7 +600,7 @@ Options for Text3D (Hunyuan3D-2.1) shape generation.
 | `guidance` | `float` | `None` | Hunyuan guidance value |
 | `simplify_texture_size` | `int` | `None` | Texture size for `remesh-textured` |
 
-> **Quality note:** `low_vram: true` sends shape to CPU to avoid OOM on ~6 GB VRAM, but shape quality often degrades badly (blocky meshes). For serious assets, use `low_vram: false` with `preset: balanced` or `fast`.
+> **Quality note:** `low_vram` is a deprecated no-op — hw-auto applies SDNQ INT4 automatically on small GPUs (~6 GB). For best results, use `preset: balanced` or `fast`.
 
 #### `paint3d` — Paint3DProfile
 

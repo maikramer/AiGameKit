@@ -134,11 +134,11 @@ def test_text3d_argv_with_profile_options() -> None:
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(preset="hq", low_vram=True),
+        text3d=Text3DProfile(preset="hq"),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
     assert "--preset" in argv and "hq" in argv
-    assert "--low-vram" in argv
+    assert "--low-vram" not in argv
     assert "--texture" not in argv
     assert "--export-origin" in argv
     assert argv[argv.index("--export-origin") + 1] == "feet"
@@ -446,8 +446,13 @@ def test_text3d_argv_includes_quality_and_category() -> None:
 
 def test_paint3d_texture_argv_includes_quality_and_category() -> None:
     argv = _paint3d_texture_argv(
-        "paint3d", Paint3DProfile(), Path("m.glb"), Path("i.png"), Path("o.glb"),
-        quality="high", category="chest",
+        "paint3d",
+        Paint3DProfile(),
+        Path("m.glb"),
+        Path("i.png"),
+        Path("o.glb"),
+        quality="high",
+        category="chest",
     )
     assert "--quality" in argv
     assert "high" in argv
@@ -457,8 +462,12 @@ def test_paint3d_texture_argv_includes_quality_and_category() -> None:
 
 def test_rigging3d_pipeline_argv_accepts_quality() -> None:
     argv = _rigging3d_pipeline_argv(
-        "rigging3d", Path("in.glb"), Path("out.glb"),
-        seed=42, rig_profile=None, quality="high",
+        "rigging3d",
+        Path("in.glb"),
+        Path("out.glb"),
+        seed=42,
+        rig_profile=None,
+        quality="high",
     )
     assert "--quality" in argv
     assert "high" in argv
@@ -466,8 +475,11 @@ def test_rigging3d_pipeline_argv_accepts_quality() -> None:
 
 def test_rigging3d_pipeline_argv_no_text3d_low_vram_coupling() -> None:
     argv = _rigging3d_pipeline_argv(
-        "rigging3d", Path("in.glb"), Path("out.glb"),
-        seed=None, rig_profile=Rigging3DProfile(),
+        "rigging3d",
+        Path("in.glb"),
+        Path("out.glb"),
+        seed=None,
+        rig_profile=Rigging3DProfile(),
     )
     assert "--low-vram" not in argv
 
@@ -512,7 +524,7 @@ def test_append_skymap2d_profile_args_includes_quality() -> None:
     assert "high" in argv
 
 
-def test_text3d_low_vram_uses_low_vram_flag_not_sdnq() -> None:
+def test_text3d_low_vram_is_noop_after_removal() -> None:
     p = GameProfile(
         title="T",
         genre="G",
@@ -521,5 +533,4 @@ def test_text3d_low_vram_uses_low_vram_flag_not_sdnq() -> None:
         text3d=Text3DProfile(low_vram=True),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
-    assert "--low-vram" in argv
-    assert "--sdnq-preset" not in argv
+    assert "--low-vram" not in argv

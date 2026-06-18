@@ -535,8 +535,15 @@ def _part3d_pipeline_failed(
     out_parts, out_seg = _part3d_output_paths(mesh_final, p3)
     seed = _seed_for_row(profile, f"{row.id}:part3d")
     argv = _part3d_decompose_argv(
-        part3d_bin, mesh_final, out_parts, out_seg, p3, seed, gpu_ids=gpu_ids,
-        quality=profile.generation, category=row.category,
+        part3d_bin,
+        mesh_final,
+        out_parts,
+        out_seg,
+        p3,
+        seed,
+        gpu_ids=gpu_ids,
+        quality=profile.generation,
+        category=row.category,
     )
     console.print(f"[cyan]⏳ Part3D[/cyan] {row.id} ...")
     t0 = time.perf_counter()
@@ -647,9 +654,7 @@ def _post_text3d_mesh_extras(
         row_wants_rig = _row_wants_rig(row, has_rigging_profile)
         row_wants_animate = _row_wants_animate(row, with_rig, has_rigging_profile)
         effective_with_rig = with_rig and row_wants_rig and (rigging3d_bin is not None)
-        effective_with_animate = (
-            with_animate and row_wants_animate and (animator3d_bin is not None)
-        )
+        effective_with_animate = with_animate and row_wants_animate and (animator3d_bin is not None)
         mres = run_master_pipeline(
             profile,
             row,
@@ -1128,8 +1133,6 @@ def _text3d_argv(
             args.extend(["--num-chunks", str(t3.num_chunks)])
     if t3.model_subfolder:
         args.extend(["--model-subfolder", t3.model_subfolder])
-    if t3.low_vram:
-        args.append("--low-vram")
     if t3.mc_level is not None:
         args.extend(["--mc-level", str(t3.mc_level)])
     if t3.guidance is not None:
@@ -1554,9 +1557,7 @@ def run_master_pipeline(
     # (rigging3d, animator3d). bpy não suporta EXT_meshopt_compression,
     # portanto saltamos a compressão em bake-master e re-aplicamos
     # gltf_transform_finish na promoção (Stage 9.5) sobre o output final.
-    needs_bpy_downstream = (with_rig and rigging3d_bin is not None) or (
-        with_animate and animator3d_bin is not None
-    )
+    needs_bpy_downstream = (with_rig and rigging3d_bin is not None) or (with_animate and animator3d_bin is not None)
     if needs_bpy_downstream:
         bake_argv.extend(["--no-meshopt", "--no-ktx2"])
     s = _run("bake-master", bake_argv, lod0_p)
@@ -1829,9 +1830,7 @@ def run_master_pipeline(
         if promotion_kind != "none":
             base_rules = rules_dir / "lod0.yaml"
             if base_rules.is_file() and lod0_p.is_file():
-                s = _run_check_glb(
-                    lod0_p, base_rules, category=row.category, env=child_env, cwd=manifest_dir
-                )
+                s = _run_check_glb(lod0_p, base_rules, category=row.category, env=child_env, cwd=manifest_dir)
                 s.name = "validate-lod0-base"
                 res.stages.append(s)
                 if not s.ok:
@@ -1929,6 +1928,5 @@ def aggregate_master_results(
     rec["timing"] = timing
     rec["total_elapsed_s"] = round(sum(s.elapsed_s for s in results), 2)
     rec["stages"] = [
-        {"name": s.name, "ok": s.ok, "elapsed_s": round(s.elapsed_s, 2), "error": s.error}
-        for s in results
+        {"name": s.name, "ok": s.ok, "elapsed_s": round(s.elapsed_s, 2), "error": s.error} for s in results
     ]

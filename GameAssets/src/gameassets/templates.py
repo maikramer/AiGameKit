@@ -65,8 +65,7 @@ text2d:
 #   audio_format: wav
 
 # Text3D with --with-3d: preset fast balances time/VRAM.
-# SDNQ/decoder/multi-GPU resolvem-se pelo hw-auto; low_vram=true forca Hunyuan
-# em CPU (qualidade muito pior) — evitar, o hw-auto ja cobre GPUs de 6GB.
+# SDNQ/decoder/multi-GPU resolvem-se pelo hw-auto (SDNQ INT4 em GPUs de 6GB).
 # Requires PAINT3D_BIN or paint3d in PATH when paint3d block is present.
 # PBR a partir de PNG (não GLB): texture2d.materialize — ver bloco texture2d.
 text3d:

@@ -45,7 +45,7 @@ class Text3DProfile:
     """Opções passadas ao CLI text3d generate (subconjunto)."""
 
     preset: str | None = None  # fast | balanced | hq
-    low_vram: bool = False
+    low_vram: bool = False  # Deprecated no-op: text3d removed --low-vram (hw-auto handles small GPUs)
     export_origin: str = "feet"
     steps: int | None = None
     octree_resolution: int | None = None

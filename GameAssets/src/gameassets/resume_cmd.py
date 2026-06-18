@@ -560,8 +560,6 @@ def resume_cmd(
                                 batch_args.extend(["--num-chunks", str(t3_opts.num_chunks)])
                         if t3_opts.model_subfolder:
                             batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
-                        if t3_opts.low_vram:
-                            batch_args.append("--low-vram")
                         if t3_opts.mc_level is not None:
                             batch_args.extend(["--mc-level", str(t3_opts.mc_level)])
                         if t3_opts.allow_shared_gpu:
@@ -1004,8 +1002,6 @@ def resume_cmd(
                                 batch_args.extend(["--num-chunks", str(t3_opts.num_chunks)])
                         if t3_opts.model_subfolder:
                             batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
-                        if t3_opts.low_vram:
-                            batch_args.append("--low-vram")
                         if t3_opts.mc_level is not None:
                             batch_args.extend(["--mc-level", str(t3_opts.mc_level)])
                         if t3_opts.allow_shared_gpu:

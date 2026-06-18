@@ -89,7 +89,6 @@ from .profile import (
     Paint3DProfile,
     Part3DProfile,
     Text2DProfile,
-    Text3DProfile,
 )
 from .prompt_builder import build_audio_prompt, build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
@@ -316,9 +315,6 @@ def batch_cmd(
         if profile.text2d is None:
             profile.text2d = Text2DProfile()
         profile.text2d.low_vram = True
-        if profile.text3d is None:
-            profile.text3d = Text3DProfile()
-        profile.text3d.low_vram = True
         if profile.paint3d is None:
             profile.paint3d = Paint3DProfile()
         profile.paint3d.low_vram_mode = True
@@ -691,8 +687,6 @@ def batch_cmd(
                             shape_argv.extend(["--octree-resolution", str(t3d.octree_resolution)])
                         if t3d.num_chunks is not None:
                             shape_argv.extend(["--num-chunks", str(t3d.num_chunks)])
-                    if t3d.low_vram:
-                        shape_argv.append("--low-vram")
                     if t3d.allow_shared_gpu:
                         shape_argv.append("--allow-shared-gpu")
                     if not t3d.gpu_kill_others:
@@ -1454,8 +1448,6 @@ def batch_cmd(
                                             batch_args.extend(["--num-chunks", str(t3.num_chunks)])
                                     if t3.model_subfolder:
                                         batch_args.extend(["--model-subfolder", t3.model_subfolder])
-                                    if t3.low_vram:
-                                        batch_args.append("--low-vram")
                                     if t3.mc_level is not None:
                                         batch_args.extend(["--mc-level", str(t3.mc_level)])
                                     if t3.guidance is not None:
@@ -2360,9 +2352,9 @@ def batch_cmd(
                         console.print(
                             Panel(
                                 "[bold]Fase 2 (Text3D)[/bold]: fecha o Godot e apps que usem a GPU; "
-                                "`nvidia-smi` deve mostrar VRAM livre. Em ~6 GB, "
-                                "[bold]text3d.low_vram: true[/bold] no [cyan]game.yaml[/cyan] "
-                                "evita OOM (malha pode ser mais grosseira). "
+                                "`nvidia-smi` deve mostrar VRAM livre. Em ~6 GB, o hw-auto "
+                                "aplica SDNQ INT4 automaticamente. Usa [bold]--preset fast[/bold] "
+                                "ou reduz steps/octree/chunks se der OOM. "
                                 "Com [bold]text3d.texture[/bold], o batch corre: shape (text3d) → "
                                 "paint3d texture (PBR no GLB), libertando VRAM entre passos.",
                                 border_style="yellow",
@@ -2476,8 +2468,6 @@ def batch_cmd(
                                             batch_args.extend(["--num-chunks", str(t3.num_chunks)])
                                     if t3.model_subfolder:
                                         batch_args.extend(["--model-subfolder", t3.model_subfolder])
-                                    if t3.low_vram:
-                                        batch_args.append("--low-vram")
                                     if t3.mc_level is not None:
                                         batch_args.extend(["--mc-level", str(t3.mc_level)])
                                     if t3.guidance is not None:
