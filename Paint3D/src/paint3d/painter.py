@@ -102,8 +102,8 @@ def _apply_optimization_config(config: Any, *, low_vram: bool, gpu_ids: list[int
     config.cfg_batch_chunking = _env_flag("PAINT3D_CFG_CHUNKING", low_vram)
     config.offload_ref_unet = _env_flag("PAINT3D_OFFLOAD_REF_UNET", low_vram)
     config.dino_device = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or _auto_dino_device(low_vram, gpu_ids)
-    config.realesrgan_device = (
-        os.environ.get("PAINT3D_ESRGAN_DEVICE", "").strip() or _auto_esrgan_device(low_vram, gpu_ids)
+    config.realesrgan_device = os.environ.get("PAINT3D_ESRGAN_DEVICE", "").strip() or _auto_esrgan_device(
+        low_vram, gpu_ids
     )
     config.realesrgan_tile = _defaults.ESRGAN_TILE_LOW_VRAM if low_vram else _defaults.ESRGAN_TILE
 
@@ -264,9 +264,7 @@ def _bounds_axis_swap_x_rad(
     """
     extent_before = np.asarray(before_max) - np.asarray(before_min)
     extent_after = np.asarray(after_max) - np.asarray(after_min)
-    if (
-        np.any(extent_before <= tol) or np.any(extent_after <= tol)
-    ):
+    if np.any(extent_before <= tol) or np.any(extent_after <= tol):
         return 0.0
     # Razão entre eixos Y/Z em ambos os AABBs. Se inverteu, houve swap.
     yz_before = extent_before[1] / extent_before[2]
@@ -287,7 +285,6 @@ def apply_hunyuan_paint(
     *,
     model_repo: str = _defaults.DEFAULT_PAINT_HF_REPO,
     subfolder: str = _defaults.DEFAULT_PAINT_SUBFOLDER,
-    paint_cpu_offload: bool = _defaults.DEFAULT_PAINT_CPU_OFFLOAD,
     max_num_view: int = _defaults.DEFAULT_PAINT_MAX_VIEWS,
     view_resolution: int = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION,
     render_size: int | None = None,
@@ -331,7 +328,7 @@ def apply_hunyuan_paint(
     if verbose:
         _logger.info(
             f"hy3dpaint={hy3dpaint_root}\n"
-            f"  repo={model_repo} weights_subfolder={subfolder} offload={paint_cpu_offload} "
+            f"  repo={model_repo} weights_subfolder={subfolder} "
             f"max_views={max_num_view} res={view_resolution}"
         )
 
@@ -477,16 +474,18 @@ def apply_hunyuan_paint(
         # 1) Detectar swap Y↔Z (Hunyuan paint exporta em Z-up; nós queremos
         # Y-up — convenção aplicada no shape pelo text3d generate).
         angle_x = _bounds_axis_swap_x_rad(
-            bounds_min_before, bounds_max_before,
-            bounds_min_after, bounds_max_after,
+            bounds_min_before,
+            bounds_max_before,
+            bounds_min_after,
+            bounds_max_after,
         )
         if abs(angle_x) > 1e-9:
             _apply_rotation_x(textured, angle_x)
             if verbose:
                 _logger.info(
                     f"orientação reposta: rot_x={angle_x:.4f} rad "
-                    f"(extent_before_yz={(bounds_max_before-bounds_min_before)[1:].tolist()}, "
-                    f"extent_after_yz={(bounds_max_after-bounds_min_after)[1:].tolist()})"
+                    f"(extent_before_yz={(bounds_max_before - bounds_min_before)[1:].tolist()}, "
+                    f"extent_after_yz={(bounds_max_after - bounds_min_after)[1:].tolist()})"
                 )
             # Recalcula bounds após rotação para que o offset translacional
             # use os números corretos.
@@ -514,7 +513,6 @@ def paint_file_to_file(
     *,
     model_repo: str | None = None,
     subfolder: str | None = None,
-    paint_cpu_offload: bool | None = None,
     max_num_view: int | None = None,
     view_resolution: int | None = None,
     render_size: int | None = None,
@@ -532,7 +530,6 @@ def paint_file_to_file(
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
     sub = subfolder or _defaults.DEFAULT_PAINT_SUBFOLDER
-    offload = _defaults.DEFAULT_PAINT_CPU_OFFLOAD if paint_cpu_offload is None else paint_cpu_offload
     if max_num_view is None:
         nviews = _defaults.LOW_VRAM_MAX_VIEWS if low_vram else _defaults.DEFAULT_PAINT_MAX_VIEWS
     else:
@@ -552,7 +549,6 @@ def paint_file_to_file(
         image_path,
         model_repo=repo,
         subfolder=sub,
-        paint_cpu_offload=offload,
         max_num_view=nviews,
         view_resolution=vres,
         render_size=render_size,
@@ -592,7 +588,6 @@ class PaintBatchProcessor:
         *,
         model_repo: str = _defaults.DEFAULT_PAINT_HF_REPO,
         subfolder: str = _defaults.DEFAULT_PAINT_SUBFOLDER,
-        paint_cpu_offload: bool = _defaults.DEFAULT_PAINT_CPU_OFFLOAD,
         max_num_view: int = _defaults.DEFAULT_PAINT_MAX_VIEWS,
         view_resolution: int = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION,
         render_size: int | None = None,
@@ -609,7 +604,6 @@ class PaintBatchProcessor:
     ):
         self._model_repo = model_repo
         self._subfolder = subfolder
-        self._paint_cpu_offload = paint_cpu_offload
         self._max_num_view = max_num_view
         self._view_resolution = view_resolution
         self._render_size = render_size
@@ -645,7 +639,7 @@ class PaintBatchProcessor:
             _logger.info(
                 f"[batch] hy3dpaint={hy3dpaint_root}\n"
                 f"  repo={self._model_repo} weights_subfolder={self._subfolder} "
-                f"offload={self._paint_cpu_offload} max_views={self._max_num_view} "
+                f"max_views={self._max_num_view} "
                 f"res={self._view_resolution}"
             )
 
@@ -785,8 +779,10 @@ class PaintBatchProcessor:
             bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
             # 1) Repor convenção Y-up se Hunyuan paint devolveu Z-up.
             angle_x = _bounds_axis_swap_x_rad(
-                bounds_min_before, bounds_max_before,
-                bounds_min_after, bounds_max_after,
+                bounds_min_before,
+                bounds_max_before,
+                bounds_min_after,
+                bounds_max_after,
             )
             if abs(angle_x) > 1e-9:
                 _apply_rotation_x(textured, angle_x)
