@@ -9,7 +9,8 @@ const pillar = createMysticObject({
   modelUrl: '/assets/meshes/stone_pillar.glb',
   emissiveColor: 0x8a5cff,
   toastColor: '#c9a6ff',
-  readRangeSq: 3.4 * 3.4,
+  readRangeSq: 4.6 * 4.6,
+  promptLabel: 'Receive power',
   message: `"The runes drink your gaze and answer in light — power stirs within you."  (+${SKILL_POINTS} skill points)`,
   onRead: () => addSkillPoints(SKILL_POINTS),
 });

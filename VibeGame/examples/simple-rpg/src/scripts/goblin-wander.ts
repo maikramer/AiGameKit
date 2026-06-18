@@ -17,6 +17,7 @@ const { start, update, onDestroy } = createCreatureBehaviours({
   attackDamage: 12,
   lootGoldMin: 8,
   lootGoldMax: 18,
+  strafe: true,
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

@@ -1,6 +1,6 @@
 declare global {
   interface Window {
-    __heroPos?: () => { x: number; y: number; z: number; eid: number };
+    __heroState?: State;
     __heroDebug?: () => Record<string, number>;
     __spawnFloatingText?: (
       text: string,
@@ -11,59 +11,23 @@ declare global {
   }
 }
 
-import type { System, State, SoundHandle } from 'vibegame';
+import type { System, State } from 'vibegame';
 import {
-  NavMeshPlugin,
-  PlayerController,
-  InputState,
   configure,
   disposeAllRuntimes,
   getBuilder,
-  playSound,
-  setBusVolume,
-  setBusMuted,
-  registerEntityScripts,
   resetBuilder,
-  resumeAudioContextIfSuspended,
-  setKTX2TranscoderPath,
   withPlugin,
   withSystem,
+  registerEntityScripts,
+  setKTX2TranscoderPath,
+  // Plugins (engine RPG stack)
   LoadingPlugin,
-  mountLoadingScreen,
-  isWorldLoadedLatched,
+  NavMeshPlugin,
   SaveLoadPlugin,
   I18nPlugin,
-  saveToLocalStorage,
-  loadFromLocalStorage,
-  loadDictionary,
-  loadEngineDefaultDictionary,
-  setLocale,
-  getLocale,
-  t,
-  isKeyDown,
-  addInputMapping,
-  spawnFloatingText,
-  onDestructibleDestroyed,
-  defineQuery,
-  Rigidbody,
-  Transform,
-  threeCameras,
-  NavMeshAgent,
-  Destructible,
   CombatPlugin,
   DebugPlugin,
-  Health,
-  isDead,
-  getBodyForEntity,
-  getCharacterFeetY,
-  getBvhSurfaceHeight,
-  getTerrainHeightAt,
-  getBodyYForFeetAt,
-  getRapierWorld,
-  getTerrainContext,
-  isTerrainDynamicsBlocking,
-  PhysicsStepSystem,
-  GROUND_CONTACT_SKIN,
   RpgCorePlugin,
   RpgVaultPlugin,
   InventoryPlugin,
@@ -74,42 +38,88 @@ import {
   StatusEffectsPlugin,
   RpgAiPlugin,
   SpawnGatePlugin,
+  // HUD / loading
+  mountLoadingScreen,
+  // i18n
+  loadDictionary,
+  loadEngineDefaultDictionary,
+  setLocale,
+  // audio
+  playSound,
+  setBusVolume,
+  setBusMuted,
+  resumeAudioContextIfSuspended,
+  // input
+  addInputMapping,
+  isKeyDown,
+  setPlayerAttackClip,
+  setPlayerHeldItem,
+  setPlayerFaceTarget,
+  PlayerGltfConfig,
+  animatorRegistry,
+  // ecs / gameplay
+  defineQuery,
+  Transform,
+  WorldTransform,
+  Rigidbody,
+  Health,
+  isDead,
   ProgressionComponent,
+  InventoryComponent,
+  addItem,
+  getItemQty,
+  removeItem,
   addXp,
-  getXpToNextLevel,
+  getStatModifiers,
+  isPaused,
   onEvent,
-  PROGRESSION_LEVEL_UP,
+  MODAL_OPTION_CHANGED,
+  spawnFloatingText,
+  Destructible,
+  onDestructibleDestroyed,
+  saveToLocalStorage,
+  loadFromLocalStorage,
+  getDataRegistry,
+  // physics / terrain
+  getBodyForEntity,
+  getBvhSurfaceHeight,
+  getTerrainHeightAt,
+  getBodyYForFeetAt,
+  getRapierWorld,
+  getTerrainContext,
+  isTerrainDynamicsBlocking,
+  PhysicsStepSystem,
+  GROUND_CONTACT_SKIN,
 } from 'vibegame';
-import * as THREE from 'three';
 import * as RAPIER from '@dimforge/rapier3d-compat';
+import { Euler, type Camera, type Object3D, type Quaternion } from 'three';
 
 setKTX2TranscoderPath('/libs/basis/');
-import {
-  addStone,
-  getStoneCount,
-  getLastCollectPosition,
-} from './scripts/inventory';
-import { addWood, getWoodCount } from './scripts/wood';
-import { getGold } from './game/economy';
+
 import { registerGameSounds } from './game/sounds';
+import { registerGameSkills } from './game/skills';
+import {
+  spawnBomb,
+  throwBomb,
+  updateBombs,
+  nearestEnemy,
+  updateThrowArc,
+  hideThrowArc,
+} from './game/bombs';
+import { bindEngine } from './game/engine-bridge';
 import { isWoodEntity } from './scripts/tree';
-import { anyCreatureAggro } from './scripts/creature';
-import { anyBossAggro } from './scripts/boss';
-import { isShopOpen } from './game/pause';
-import {
-  createPauseMenu,
-  type PauseMenu,
-  type PauseOption,
-} from './ui/pause-menu';
-import {
-  addSkillPoints,
-  SKILL_POINTS_PER_LEVEL,
-  setSkillEffectHandler,
-} from './game/skills';
-import { registerResource, defineItem, addItem } from './game/inventory';
+import { addStone } from './scripts/inventory';
+import { addWood } from './scripts/wood';
 
 const SAVE_KEY = 'simple-rpg-save';
+const BASE_MAX_HP = 100;
+const CHECKPOINT_X = 0;
+const CHECKPOINT_Y = 50;
+const CHECKPOINT_Z = 0;
+const RESPAWN_DELAY = 2.0;
 
+// ── Terrain-settle: freeze the hero at spawn until the heightmap is ready, then
+//    snap it onto the ground exactly once. ───────────────────────────────────
 function isTerrainReady(state: State): boolean {
   for (const [, data] of getTerrainContext(state)) {
     if (!data.initialized) continue;
@@ -224,1291 +234,517 @@ function physicsGroundBelow(
   return hit !== null;
 }
 
-const dictEN: Record<string, string> = {
-  'hud.title': 'Crystal Vale',
-  'hud.mission': 'Explore, hunt creatures, gather & trade!',
-  'hud.hp': 'HP: {hp} / {max}',
-  'hud.stats': 'Gold: {gold} · Wood: {wood} · Stone: {stone}',
-  'hud.enemies': 'Creatures nearby: {enemies}',
-  'hud.time': 'Time: {time}',
-  'hud.locale': 'Language: {lang}  [I] switch',
-  'hud.saved': 'Game saved!',
-  'hud.loaded': 'Save restored.',
-  'hud.no-save': 'No save found.',
-  'hud.healed': 'Health restored!',
-  'hud.sold': 'Sold! +{gold} gold',
-  'hud.gameOver': 'GAME OVER',
-  'hud.waveReached': 'You survived',
-  'hud.restart': 'Restart',
-  'hud.controls':
-    '[W/S] move  [A/D] turn  [Space] jump  [J] attack/chop  [K] talk/trade  [Q] menu',
-  'hud.stone': 'Stone: {count}',
-  'hud.stoneCollected': '+1 Stone!',
-  'hint.merchant': 'Talk to Merchant',
-  'hint.harvest.wood': 'Chop Tree',
-  'hint.harvest.stone': 'Mine Rock',
-  'tip.hp': 'Health — heal with potions',
-  'tip.gold': 'Gold — spend at the merchant',
-  'tip.wood': 'Wood — chop trees with [J]',
-  'tip.stone': 'Stone — mine rocks with [J]',
-  'tip.minimap':
-    'Minimap — red: enemies · purple: boss · gold: merchant · green: tree · gray: rock',
-  'tip.compass': 'Compass — facing direction',
-  'minimap.you': 'You',
-  'hud.levelUp': 'LEVEL UP!  Lv',
-  'tip.xp': 'Experience — defeat creatures to level up',
-  'tip.level': 'Level',
-  'tip.enemies': 'Creatures nearby',
-  'tip.time': 'Elapsed time',
-  'pause.title': 'Paused',
-  'pause.tab.menu': 'Menu',
-  'pause.tab.skills': 'Skills',
-  'pause.tab.inventory': 'Inventory',
-  'pause.tab.options': 'Options',
-  'pause.resume': 'Resume',
-  'pause.save': 'Save',
-  'pause.load': 'Load',
-  'pause.restart': 'Restart',
-  'pause.hint': '[Q] or [Esc] to resume',
-  'pause.option.language': 'Language',
-  'pause.option.music': 'Music',
-  'pause.option.musicVol': 'Music Vol',
-  'pause.option.sfx': 'Sound FX',
-  'pause.option.sfxVol': 'SFX Vol',
-  'opt.on': 'On',
-  'opt.off': 'Off',
-  'opt.mute': 'Mute',
-  'opt.25': '25%',
-  'opt.50': '50%',
-  'opt.75': '75%',
-  'opt.max': 'Max',
-  'pause.points': 'Skill points: {n}',
-  'pause.skill.vitality': 'Vitality',
-  'pause.skill.vitality.desc': '+12 max HP',
-  'pause.skill.strength': 'Strength',
-  'pause.skill.strength.desc': 'Attack power (soon)',
-  'pause.skill.agility': 'Agility',
-  'pause.skill.agility.desc': 'Move speed (soon)',
-  'pause.inventory.soon': 'Inventory coming soon',
-};
-
-const dictPT: Record<string, string> = {
-  'hud.title': 'Vale do Cristal',
-  'hud.mission': 'Explora, caça criaturas, recolhe e comercia!',
-  'hud.hp': 'HP: {hp} / {max}',
-  'hud.stats': 'Ouro: {gold} · Madeira: {wood} · Pedra: {stone}',
-  'hud.enemies': 'Criaturas próximas: {enemies}',
-  'hud.time': 'Tempo: {time}',
-  'hud.locale': 'Idioma: {lang}  [I] trocar',
-  'hud.saved': 'Jogo gravado!',
-  'hud.loaded': 'Progresso restaurado.',
-  'hud.no-save': 'Nenhuma gravação encontrada.',
-  'hud.healed': 'Saúde restaurada!',
-  'hud.sold': 'Vendido! +{gold} ouro',
-  'hud.gameOver': 'FIM DE JOGO',
-  'hud.waveReached': 'Sobreviveste',
-  'hud.restart': 'Recomeçar',
-  'hud.controls':
-    '[W/S] mover  [A/D] virar  [Espaço] saltar  [J] atacar/cortar  [K] falar/comerciar  [Q] menu',
-  'hud.stone': 'Pedra: {count}',
-  'hud.stoneCollected': '+1 Pedra!',
-  'hint.merchant': 'Falar com Mercador',
-  'hint.harvest.wood': 'Cortar Árvore',
-  'hint.harvest.stone': 'Minerar Rocha',
-  'tip.hp': 'Vida — cura com poções',
-  'tip.gold': 'Ouro — gasta no mercador',
-  'tip.wood': 'Madeira — corta árvores com [J]',
-  'tip.stone': 'Pedra — minera rochas com [J]',
-  'tip.minimap':
-    'Minimapa — vermelho: inimigos · roxo: chefe · ouro: mercador · verde: árvore · cinza: rocha',
-  'tip.compass': 'Bússola — direção que encaras',
-  'minimap.you': 'Tu',
-  'hud.levelUp': 'SUBIU DE NÍVEL!  Nível',
-  'tip.xp': 'Experiência — derrota criaturas para subir de nível',
-  'tip.level': 'Nível',
-  'tip.enemies': 'Criaturas próximas',
-  'tip.time': 'Tempo decorrido',
-  'pause.title': 'Pausa',
-  'pause.tab.menu': 'Menu',
-  'pause.tab.skills': 'Perícias',
-  'pause.tab.inventory': 'Inventário',
-  'pause.tab.options': 'Opções',
-  'pause.resume': 'Continuar',
-  'pause.save': 'Gravar',
-  'pause.load': 'Carregar',
-  'pause.restart': 'Recomeçar',
-  'pause.hint': '[Q] ou [Esc] para continuar',
-  'pause.option.language': 'Idioma',
-  'pause.option.music': 'Música',
-  'pause.option.musicVol': 'Vol Música',
-  'pause.option.sfx': 'Efeitos',
-  'pause.option.sfxVol': 'Vol Efeitos',
-  'opt.on': 'Ligado',
-  'opt.off': 'Desligado',
-  'opt.mute': 'Mudo',
-  'opt.25': '25%',
-  'opt.50': '50%',
-  'opt.75': '75%',
-  'opt.max': 'Máx',
-  'pause.points': 'Pontos de perícia: {n}',
-  'pause.skill.vitality': 'Vitalidade',
-  'pause.skill.vitality.desc': '+12 HP máx',
-  'pause.skill.strength': 'Força',
-  'pause.skill.strength.desc': 'Poder de ataque (em breve)',
-  'pause.skill.agility': 'Agilidade',
-  'pause.skill.agility.desc': 'Velocidade (em breve)',
-  'pause.inventory.soon': 'Inventário em breve',
-};
-
-let overlayMissionEl: HTMLDivElement | null = null;
-let enemiesChipEl: HTMLDivElement | null = null;
-let timeChipEl: HTMLDivElement | null = null;
-let overlayControlsEl: HTMLDivElement | null = null;
-let healthBarFill: HTMLDivElement | null = null;
-let healthBarText: HTMLSpanElement | null = null;
-let damageFlashEl: HTMLDivElement | null = null;
-let winEl: HTMLDivElement | null = null;
-let hudRootEl: HTMLDivElement | null = null;
-let stoneCountEl: HTMLDivElement | null = null;
-let goldCountEl: HTMLDivElement | null = null;
-let woodCountEl: HTMLDivElement | null = null;
-let bossBarEl: HTMLDivElement | null = null;
-let bossBarFill: HTMLDivElement | null = null;
-let bossBarText: HTMLSpanElement | null = null;
-let deathEl: HTMLDivElement | null = null;
-let hudRevealed = false;
-
-// Minimap + compass + interaction hint
-let minimapCanvas: HTMLCanvasElement | null = null;
-let minimapCtx: CanvasRenderingContext2D | null = null;
-let compassStripEl: HTMLDivElement | null = null;
-const compassMarks: { el: HTMLDivElement; az: number }[] = [];
-let interactHintEl: HTMLDivElement | null = null;
-let interactKeyEl: HTMLSpanElement | null = null;
-let interactLabelEl: HTMLSpanElement | null = null;
-const _camDir = new THREE.Vector3();
-// Half-angle (radians) of world visible across the compass strip.
-const COMPASS_FOV = 1.7;
-const MINIMAP_RANGE = 60; // world meters from player edge-to-center
-const MINIMAP_SIZE = 168; // px
-const destructibleQuery = defineQuery([Destructible, Transform]);
-
-let musicOn = true;
-let sfxOn = true;
-
-const VOLUME_LEVELS = [0, 0.25, 0.5, 0.75, 1.0] as const;
-const VOLUME_LABELS = ['opt.mute', 'opt.25', 'opt.50', 'opt.75', 'opt.max'];
-let musicVolIdx = 3;
-let sfxVolIdx = 3;
-
-// Music plays as three looped tracks on the 'music' bus; the battle track
-// crossfades against the ambient tracks via per-handle volume (× bank base).
-// The Music/SFX volume sliders drive the buses (see pause options below).
-const BGM_BASE = { field: 0.18, explore: 0.18, battle: 0.22 } as const;
-let bgmField: SoundHandle | null = null;
-let bgmExplore: SoundHandle | null = null;
-let bgmBattle: SoundHandle | null = null;
-let battleMusicFade = 0;
-let prevGoldFx = 0;
-
-function applyBattleMusic(): void {
-  const ambient = 1 - battleMusicFade;
-  bgmField?.setVolume(BGM_BASE.field * ambient);
-  bgmExplore?.setVolume(BGM_BASE.explore * ambient);
-  bgmBattle?.setVolume(BGM_BASE.battle * battleMusicFade);
-}
-
-function updateBattleMusic(_state: State, dt: number): void {
-  const target = anyCreatureAggro() || anyBossAggro() ? 1 : 0;
-  const speed = Math.min(1, dt * 1.5);
-  if (battleMusicFade < target)
-    battleMusicFade = Math.min(target, battleMusicFade + speed);
-  else if (battleMusicFade > target)
-    battleMusicFade = Math.max(target, battleMusicFade - speed);
-  applyBattleMusic();
-}
-
-/** Start/stop the background music tracks together (Options → Music). */
-function setMusicPlaying(on: boolean): void {
-  if (on) {
-    if (bgmField) return; // already playing
-    bgmField = playSound('bgm-field');
-    bgmExplore = playSound('bgm-explore');
-    bgmBattle = playSound('bgm-battle');
-    applyBattleMusic();
-  } else {
-    bgmField?.stop();
-    bgmExplore?.stop();
-    bgmBattle?.stop();
-    bgmField = bgmExplore = bgmBattle = null;
-  }
-}
-
-function playSfx(key: string): void {
-  if (sfxOn) playSound(key);
-}
-
-// ── Juice: screen shake ──────────────────────────────────────────────────
-let gameCanvasEl: HTMLElement | null = null;
-let shakeMag = 0;
-let shakeUntil = 0;
-/** Kick a screen shake. Strongest of overlapping requests wins. */
-function addShake(mag: number, durMs: number): void {
-  shakeMag = Math.max(shakeMag, mag);
-  shakeUntil = Math.max(shakeUntil, performance.now() + durMs);
-}
-function updateShake(): void {
-  if (!gameCanvasEl) gameCanvasEl = document.querySelector('#game-canvas');
-  if (!gameCanvasEl) return;
-  const now = performance.now();
-  if (now >= shakeUntil || shakeMag <= 0.05) {
-    if (shakeMag !== 0) gameCanvasEl.style.transform = '';
-    shakeMag = 0;
-    return;
-  }
-  const m = shakeMag;
-  const dx = (Math.random() * 2 - 1) * m;
-  const dy = (Math.random() * 2 - 1) * m;
-  const rot = (Math.random() * 2 - 1) * m * 0.04;
-  // Overscan (scale 1.04) hides the canvas edges revealed by the offset.
-  gameCanvasEl.style.transform = `scale(1.04) translate(${dx}px,${dy}px) rotate(${rot}deg)`;
-  shakeMag *= 0.86;
-}
-
-let levelUpFlashUntil = 0;
-let xpBarFill: HTMLDivElement | null = null;
-let levelBadgeEl: HTMLDivElement | null = null;
-let levelUpEl: HTMLDivElement | null = null;
-
-let pauseMenu: PauseMenu | null = null;
-let menuKeyDebounce = false;
-
-let prevHeroIsJumping = 0;
-let prevPrimaryAction = 0;
-
-let playTimeSec = 0;
-let fpsEl: HTMLDivElement | null = null;
-let fpsSmoothed = 60;
-let fpsFrameCount = 0;
-let fpsElapsed = 0;
-let statusFlashUntil = 0;
-let statusFlashKey = '';
-
-let prevPlayerHp = 100;
-let healFlashUntil = 0;
-let prevWaveNumber = 1;
-let waveCompleteFlashUntil = 0;
-let winShown = false;
-let prevStoneCollectVersion = 0;
-let heroHealthInit = false;
-let deathShown = false;
-let respawnAtTime = 0;
-const CHECKPOINT_X = 0;
-const CHECKPOINT_Y = 50;
-const CHECKPOINT_Z = 0;
-const BOSS_BAR_RANGE = 50;
-const RESPAWN_DELAY = 2.0;
-
-function pushFloat(
-  state: State,
-  wx: number,
-  wy: number,
-  wz: number,
-  text: string,
-  opts: { color?: string; size?: number; dur?: number } = {}
-): void {
-  spawnFloatingText(state, text, {
-    x: wx,
-    y: wy,
-    z: wz,
-    color: opts.color,
-    size: (opts.size ?? 20) * 0.015,
-    duration: opts.dur ?? 1.1,
-    space: 'world',
-  });
-}
-
-function formatTime(sec: number): string {
-  const s = Math.floor(sec % 60);
-  const m = Math.floor(sec / 60) % 60;
-  const h = Math.floor(sec / 3600);
-  if (h > 0)
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function pushFlash(state: State, key: string, seconds = 2.2): void {
-  statusFlashKey = key;
-  statusFlashUntil = state.time.elapsed + seconds;
-}
-
-const creatureQuery = defineQuery([NavMeshAgent, Health]);
-
-function countAliveCreatures(state: State): number {
-  let n = 0;
-  for (const e of creatureQuery(state.world)) {
-    if (state.hasComponent(e, PlayerController)) continue;
-    if (Health.current[e] > 0) n++;
-  }
-  return n;
-}
-
-function refreshHud(state: State): void {
-  if (enemiesChipEl) {
-    enemiesChipEl.textContent = `⚔ ${countAliveCreatures(state)}`;
-  }
-  if (timeChipEl) {
-    timeChipEl.textContent = `🕓 ${formatTime(playTimeSec)}`;
-  }
-}
-
-function updateHealthBar(heroEid: number, state: State): void {
-  if (!healthBarFill || !healthBarText) return;
-  const maxHp = Health.max[heroEid] || 100;
-  const hp = Math.max(0, Health.current[heroEid]);
-  const pct = Math.max(0, Math.min(100, (hp / maxHp) * 100));
-  healthBarFill.style.width = `${pct}%`;
-  healthBarText.textContent = t(state, 'hud.hp', {
-    hp: String(Math.round(hp)),
-    max: String(Math.round(maxHp)),
-  });
-}
-
-const healthFxQuery = defineQuery([Health, Transform]);
-const prevHpFx = new Map<number, number>();
-const prevPendingFx = new Map<number, number>();
-
-/** Watch every Health entity for a drop and pop a damage number + hurt SFX —
- * one place that covers player, enemies and the boss regardless of damage
- * source (melee, projectile, lunge). */
-function watchCombatFx(state: State, heroEid: number | null): void {
-  for (const e of healthFxQuery(state.world)) {
-    const cur = Health.current[e];
-    const prev = prevHpFx.get(e);
-    prevHpFx.set(e, cur);
-    if (prev === undefined) continue;
-    if (cur >= prev - 0.01) continue;
-    const dmg = Math.round(prev - cur);
-    if (dmg <= 0) continue;
-    const isHero = e === heroEid;
-    // Bigger blows read as crits: larger, hotter, with an emphatic glyph.
-    const big = !isHero && dmg >= 22;
-    pushFloat(
-      state,
-      Transform.posX[e],
-      Transform.posY[e] + (isHero ? 1.7 : 2.1),
-      Transform.posZ[e],
-      isHero ? `-${dmg}` : big ? `${dmg}!` : `${dmg}`,
-      {
-        color: isHero ? '#ff5a5a' : big ? '#ff8a2a' : '#fff0a0',
-        size: isHero ? 23 : big ? 32 : 21,
-        dur: big ? 1.3 : 1.1,
-      }
-    );
-    if (isHero) {
-      playSfx('player-hurt');
-      addShake(Math.min(12, 4 + dmg * 0.25), 280);
-    } else {
-      playSfx('enemy-hurt');
-      addShake(big ? 5 : 2.5, big ? 200 : 130);
-      // Award XP once, on the hit that drops the creature to 0.
-      if (cur <= 0 && prev > 0) {
-        const maxHp = Health.max[e] || 30;
-        if (heroEid !== null) {
-          addXp(state, heroEid, Math.max(2, Math.round(maxHp / 12)));
-        }
-      }
-    }
-  }
-}
-
-/** Per-swing harvest feedback: pop an impact spark + hit SFX at the moment the
- * blow actually lands. DestructibleSystem commits the hit on the button press
- * but delays the impact (Destructible.pendingImpact countdown ≈ end of swing);
- * we fire on the pending→0 transition so the spark matches the swing, not the
- * key press. The final hit destroys the prop (caught by the destroyed callback
- * which pops the resource gain), so this only covers non-breaking hits. */
-function watchDestructibleFx(state: State): void {
-  for (const e of destructibleQuery(state.world)) {
-    const pend = Destructible.pendingImpact[e];
-    const prev = prevPendingFx.get(e) ?? 0;
-    prevPendingFx.set(e, pend);
-    if (prev > 0 && pend <= 0) {
-      const wood = isWoodEntity(e);
-      pushFloat(
-        state,
-        Transform.posX[e],
-        Transform.posY[e] + 1.6,
-        Transform.posZ[e],
-        '✦',
-        { color: wood ? '#9be37a' : '#e2dccb', size: 24, dur: 0.55 }
-      );
-      if (wood) {
-        playSfx('chop-hit');
-      } else {
-        playSfx('mine-hit');
-      }
-    }
-  }
-}
-
-const GameplayHudSystem: System = {
+// ── Hero ECS setup: add the engine components the gameplay/HUD read. ─────────
+let heroInit = false;
+const HeroSetupSystem: System = {
   group: 'simulation',
+  first: true,
   update(state: State) {
-    // Keep the HUD hidden until the loading screen has handed off, then fade it
-    // in — so it never shows over a still-loading world.
-    if (!hudRevealed && isWorldLoadedLatched(state)) {
-      hudRevealed = true;
-      if (hudRootEl) hudRootEl.style.opacity = '1';
-    }
+    if (heroInit) return;
+    const hero = state.getEntityByName('hero');
+    if (hero === null) return;
 
-    const dt = state.time.deltaTime;
-    playTimeSec += dt;
+    if (!state.hasComponent(hero, Health)) state.addComponent(hero, Health);
+    Health.max[hero] = BASE_MAX_HP;
+    Health.current[hero] = BASE_MAX_HP;
 
-    // FPS counter (smoothed)
-    fpsFrameCount++;
-    fpsElapsed += dt;
-    if (fpsElapsed >= 0.5) {
-      const instant = fpsFrameCount / fpsElapsed;
-      fpsSmoothed = fpsSmoothed * 0.8 + instant * 0.2;
-      fpsFrameCount = 0;
-      fpsElapsed = 0;
-      if (fpsEl) {
-        if (fpsEl) {
-          fpsEl.textContent = `FPS: ${Math.round(fpsSmoothed)} | ${(dt * 1000).toFixed(1)}ms`;
-        }
-      }
-    }
+    if (!state.hasComponent(hero, ProgressionComponent))
+      state.addComponent(hero, ProgressionComponent);
+    ProgressionComponent.level[hero] = 1;
 
-    const heroEid = state.getEntityByName('hero');
+    if (!state.hasComponent(hero, InventoryComponent))
+      state.addComponent(hero, InventoryComponent);
 
-    if (heroEid !== null && !heroHealthInit) {
-      state.addComponent(heroEid, Health);
-      Health.max[heroEid] = 100;
-      Health.current[heroEid] = 100;
-      state.addComponent(heroEid, ProgressionComponent);
-      ProgressionComponent.level[heroEid] = 1;
-      heroHealthInit = true;
-    }
-
-    if (heroEid !== null && state.hasComponent(heroEid, Health)) {
-      const currentHp = Health.current[heroEid];
-      const maxHp = Health.max[heroEid];
-
-      updateHealthBar(heroEid, state);
-
-      // Red screen flash on hero damage. The damage number + hurt SFX are
-      // emitted centrally by watchCombatFx (covers every Health entity), so
-      // this block only owns the full-screen flash now.
-      if (currentHp < prevPlayerHp && prevPlayerHp > 0) {
-        if (damageFlashEl) {
-          damageFlashEl.style.transition = 'none';
-          damageFlashEl.style.opacity = '1';
-          void damageFlashEl.offsetHeight;
-          damageFlashEl.style.transition = 'opacity 0.2s ease-out';
-          damageFlashEl.style.opacity = '0';
-        }
-      }
-
-      if (state.time.elapsed < healFlashUntil && healFlashUntil > 0) {
-        if (overlayMissionEl) {
-          overlayMissionEl.innerHTML =
-            `<strong style="font-size:15px;letter-spacing:0.4px">${t(state, 'hud.title')}</strong><br/>` +
-            `<span style="opacity:0.95;font-size:13px;color:#88ffaa">${t(state, 'hud.healed')}</span>`;
-        }
-      }
-
-      prevPlayerHp = currentHp;
-
-      if (isDead(heroEid) && !deathShown) {
-        deathShown = true;
-        respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
-        if (deathEl) deathEl.style.display = 'flex';
-      }
-      if (deathShown && state.time.elapsed >= respawnAtTime) {
-        Health.current[heroEid] = Health.max[heroEid];
-        const body = getBodyForEntity(state, heroEid);
-        Transform.posX[heroEid] = CHECKPOINT_X;
-        Transform.posY[heroEid] = CHECKPOINT_Y;
-        Transform.posZ[heroEid] = CHECKPOINT_Z;
-        Transform.dirty[heroEid] = 1;
-        Rigidbody.velX[heroEid] = 0;
-        Rigidbody.velY[heroEid] = 0;
-        Rigidbody.velZ[heroEid] = 0;
-        if (body) {
-          body.setTranslation(
-            { x: CHECKPOINT_X, y: CHECKPOINT_Y, z: CHECKPOINT_Z },
-            true
-          );
-          body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
-          body.wakeUp();
-        }
-        heroGroundSnapped = false;
-        prevPlayerHp = Health.max[heroEid];
-        deathShown = false;
-        if (deathEl) deathEl.style.display = 'none';
-      }
-    }
-
-    const bossEid = state.getEntityByName('boss');
-    if (
-      bossBarEl &&
-      bossEid !== null &&
-      heroEid !== null &&
-      state.hasComponent(bossEid, Health) &&
-      state.hasComponent(heroEid, Transform)
-    ) {
-      const dx = Transform.posX[bossEid] - Transform.posX[heroEid];
-      const dz = Transform.posZ[bossEid] - Transform.posZ[heroEid];
-      const near = dx * dx + dz * dz < BOSS_BAR_RANGE * BOSS_BAR_RANGE;
-      if (near && !isDead(bossEid)) {
-        bossBarEl.style.display = 'block';
-        const ratio =
-          Health.max[bossEid] > 0
-            ? Math.max(
-                0,
-                Math.min(1, Health.current[bossEid] / Health.max[bossEid])
-              )
-            : 0;
-        if (bossBarFill)
-          bossBarFill.style.width = `${(ratio * 100).toFixed(1)}%`;
-        if (bossBarText)
-          bossBarText.textContent = `Boss Ogre: ${Math.round(Health.current[bossEid])} / ${Math.round(Health.max[bossEid])}`;
-      } else {
-        bossBarEl.style.display = 'none';
-      }
-    } else if (bossBarEl) {
-      bossBarEl.style.display = 'none';
-    }
-
-    if (
-      bossEid !== null &&
-      state.hasComponent(bossEid, Health) &&
-      isDead(bossEid) &&
-      !winShown
-    ) {
-      winShown = true;
-      if (winEl) winEl.style.display = 'flex';
-    }
-
-    if (statusFlashKey && state.time.elapsed >= statusFlashUntil) {
-      statusFlashKey = '';
-    }
-
-    const currentStone = getStoneCount();
-    if (stoneCountEl) {
-      stoneCountEl.textContent = `🪨 ${currentStone}`;
-    }
-    const currentGold = getGold();
-    if (goldCountEl) {
-      goldCountEl.textContent = `🪙 ${currentGold}`;
-    }
-    if (woodCountEl) {
-      woodCountEl.textContent = `🪵 ${getWoodCount()}`;
-    }
-    // Gold-gain pop near the hero (loot from kills, sales).
-    if (currentGold > prevGoldFx && heroEid !== null) {
-      pushFloat(
-        state,
-        Transform.posX[heroEid],
-        Transform.posY[heroEid] + 2.3,
-        Transform.posZ[heroEid],
-        `+${currentGold - prevGoldFx} 🪙`,
-        { color: '#ffd24a', size: 20 }
-      );
-    }
-    prevGoldFx = currentGold;
-    const collectPos = getLastCollectPosition();
-    if (collectPos.version !== prevStoneCollectVersion) {
-      prevStoneCollectVersion = collectPos.version;
-      playSfx('coin');
-    }
-    if (
-      overlayMissionEl &&
-      statusFlashKey &&
-      state.time.elapsed < statusFlashUntil
-    ) {
-      const extra = t(state, statusFlashKey);
-      overlayMissionEl.innerHTML =
-        `<strong style="font-size:15px;letter-spacing:0.4px">${t(state, 'hud.title')}</strong><br/>` +
-        `<span style="opacity:0.95;font-size:13px;color:#c8e0ff">${extra}</span>`;
-    } else if (overlayMissionEl && state.time.elapsed >= healFlashUntil) {
-      overlayMissionEl.innerHTML =
-        `<strong style="font-size:15px;letter-spacing:0.4px">${t(state, 'hud.title')}</strong><br/>` +
-        `<span style="opacity:0.88;font-size:13px">${t(state, 'hud.mission')}</span>`;
-    }
-    refreshHud(state);
-
-    watchCombatFx(state, heroEid);
-    watchDestructibleFx(state);
-    updateBattleMusic(state, dt);
-    updateShake();
-
-    if (
-      heroEid !== null &&
-      state.hasComponent(heroEid, ProgressionComponent)
-    ) {
-      const cur = ProgressionComponent.xp[heroEid];
-      const needed = getXpToNextLevel(state, heroEid) || 1;
-      if (xpBarFill) {
-        xpBarFill.style.width = `${Math.max(0, Math.min(100, (cur / needed) * 100))}%`;
-      }
-      if (levelBadgeEl) {
-        levelBadgeEl.textContent = `${ProgressionComponent.level[heroEid]}`;
-      }
-    }
-
-    if (
-      levelUpEl &&
-      levelUpFlashUntil > 0 &&
-      state.time.elapsed >= levelUpFlashUntil
-    ) {
-      levelUpEl.style.opacity = '0';
-      levelUpEl.style.transform =
-        'translateX(-50%) translateY(-12px) scale(0.9)';
-      levelUpFlashUntil = 0;
-    }
-
-    if (
-      hudRevealed &&
-      heroEid !== null &&
-      state.hasComponent(heroEid, Transform)
-    ) {
-      drawMinimap(state, heroEid);
-      updateCompass();
-      updateInteractionHint(state, heroEid);
-    }
-
-    if (heroEid !== null && state.hasComponent(heroEid, PlayerController)) {
-      const jumping = PlayerController.isJumping[heroEid];
-      if (jumping === 1 && prevHeroIsJumping === 0) {
-        playSfx('jump');
-      }
-      prevHeroIsJumping = jumping;
-    }
-
-    if (heroEid !== null && state.hasComponent(heroEid, InputState)) {
-      const primary = InputState.primaryAction[heroEid];
-      if (primary === 1 && prevPrimaryAction === 0) {
-        playSfx('swing');
-      }
-      prevPrimaryAction = primary;
-    }
-
-    // Q (or Esc) toggles the pause menu — which also hosts Save/Load/Options.
-    // Skipped while the merchant shop is open (Esc there closes the shop).
-    const menuKey = isKeyDown('KeyQ') || isKeyDown('Escape');
-    if (menuKey && !menuKeyDebounce) {
-      menuKeyDebounce = true;
-      if (!isShopOpen()) pauseMenu?.toggle();
-    }
-    if (!menuKey) menuKeyDebounce = false;
+    heroInit = true;
   },
 };
 
-/** Camera forward azimuth: 0=+Z(south), +π/2=+X(east), ±π=-Z(north). */
-function getCameraAzimuth(): number {
-  const camera = threeCameras.values().next().value as THREE.Camera | undefined;
-  if (!camera) return 0;
-  camera.getWorldDirection(_camDir);
-  return Math.atan2(_camDir.x, _camDir.z);
-}
+// ── Hero stats: max HP = base + Vitality skill modifiers (engine progression). ─
+const HeroStatsSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    const hero = state.getEntityByName('hero');
+    if (hero === null || !state.hasComponent(hero, ProgressionComponent))
+      return;
+    if (!state.hasComponent(hero, Health)) return;
 
-function wrapAngle(a: number): number {
-  while (a > Math.PI) a -= Math.PI * 2;
-  while (a < -Math.PI) a += Math.PI * 2;
-  return a;
-}
-
-/** Scrolling cardinal compass: each mark slides based on its world azimuth
- * relative to the camera heading; the centre of the strip is where you face. */
-function updateCompass(): void {
-  if (!compassStripEl || compassMarks.length === 0) return;
-  const camAz = getCameraAzimuth();
-  const halfW = compassStripEl.clientWidth / 2;
-  for (const m of compassMarks) {
-    const off = wrapAngle(m.az - camAz);
-    if (Math.abs(off) > COMPASS_FOV) {
-      m.el.style.opacity = '0';
-      continue;
+    let bonus = 0;
+    for (const mod of getStatModifiers(state, hero)) {
+      if (mod.stat === 'maxHp') bonus += mod.magnitude;
     }
-    const px = (off / COMPASS_FOV) * halfW;
-    const fade = 1 - Math.abs(off) / COMPASS_FOV;
-    m.el.style.transform = `translateX(${px}px)`;
-    m.el.style.opacity = String(0.25 + fade * 0.75);
-  }
-}
-
-interface MapDot {
-  x: number;
-  z: number;
-  color: string;
-  r: number;
-}
-
-const _mapDots: MapDot[] = [];
-
-/** Top-down minimap, north-up, player fixed at centre. Plots live enemies,
- * boss, merchant and harvestable resource nodes within MINIMAP_RANGE. */
-function drawMinimap(state: State, heroEid: number): void {
-  if (!minimapCtx || !minimapCanvas) return;
-  const ctx = minimapCtx;
-  const S = MINIMAP_SIZE;
-  const cx = S / 2;
-  const cz = S / 2;
-  const scale = S / 2 / MINIMAP_RANGE;
-
-  const px = Transform.posX[heroEid];
-  const pz = Transform.posZ[heroEid];
-
-  ctx.clearRect(0, 0, S, S);
-
-  // Circular ground disc.
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(cx, cz, S / 2 - 2, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.fillStyle = 'rgba(18,26,40,0.82)';
-  ctx.fillRect(0, 0, S, S);
-  // Range rings.
-  ctx.strokeStyle = 'rgba(120,150,210,0.12)';
-  ctx.lineWidth = 1;
-  for (let i = 1; i <= 2; i++) {
-    ctx.beginPath();
-    ctx.arc(cx, cz, (S / 2 - 2) * (i / 2.4), 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  // Collect dots.
-  _mapDots.length = 0;
-  const bossEid = state.getEntityByName('boss');
-  const merchantEid = state.getEntityByName('merchant');
-  for (const e of creatureQuery(state.world)) {
-    if (state.hasComponent(e, PlayerController)) continue;
-    if (Health.current[e] <= 0) continue;
-    if (e === bossEid) continue;
-    _mapDots.push({
-      x: Transform.posX[e],
-      z: Transform.posZ[e],
-      color: '#ff4d4d',
-      r: 2.6,
-    });
-  }
-  if (
-    bossEid !== null &&
-    state.hasComponent(bossEid, Health) &&
-    !isDead(bossEid)
-  ) {
-    _mapDots.push({
-      x: Transform.posX[bossEid],
-      z: Transform.posZ[bossEid],
-      color: '#c060ff',
-      r: 4.5,
-    });
-  }
-  if (merchantEid !== null && state.hasComponent(merchantEid, Transform)) {
-    _mapDots.push({
-      x: Transform.posX[merchantEid],
-      z: Transform.posZ[merchantEid],
-      color: '#ffd24a',
-      r: 3.5,
-    });
-  }
-  for (const e of destructibleQuery(state.world)) {
-    _mapDots.push({
-      x: Transform.posX[e],
-      z: Transform.posZ[e],
-      color: isWoodEntity(e) ? '#6fdc6f' : '#b9b2a6',
-      r: 1.8,
-    });
-  }
-
-  // Draw, clamped to disc edge with a faded off-range style.
-  const maxPix = S / 2 - 6;
-  for (const d of _mapDots) {
-    const rx = (d.x - px) * scale;
-    const rz = -(d.z - pz) * scale; // north (−Z world) = up
-    const dist = Math.hypot(rx, rz);
-    let dx = rx;
-    let dz = rz;
-    let edge = false;
-    if (dist > maxPix) {
-      dx = (rx / dist) * maxPix;
-      dz = (rz / dist) * maxPix;
-      edge = true;
+    const newMax = BASE_MAX_HP + bonus;
+    if (Health.max[hero] !== newMax) {
+      Health.max[hero] = newMax;
+      if (Health.current[hero] > newMax) Health.current[hero] = newMax;
     }
-    ctx.beginPath();
-    ctx.arc(cx + dx, cz + dz, edge ? d.r * 0.7 : d.r, 0, Math.PI * 2);
-    ctx.fillStyle = d.color;
-    ctx.globalAlpha = edge ? 0.5 : 1;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
+  },
+};
 
-  // Player arrow at centre, rotated to facing (eulerY = atan2(dirX,dirZ)).
-  const heading = Transform.eulerY[heroEid] || 0;
-  ctx.save();
-  ctx.translate(cx, cz);
-  ctx.rotate(-heading); // screen up = north; arrow points facing
-  ctx.beginPath();
-  ctx.moveTo(0, -7);
-  ctx.lineTo(5, 6);
-  ctx.lineTo(0, 3);
-  ctx.lineTo(-5, 6);
-  ctx.closePath();
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-  ctx.lineWidth = 1;
-  ctx.fill();
-  ctx.stroke();
-  ctx.restore();
+// ── Respawn: on death, after a delay, return the hero to the checkpoint. ──────
+let deathShown = false;
+let respawnAtTime = 0;
+const RespawnSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    const hero = state.getEntityByName('hero');
+    if (hero === null || !state.hasComponent(hero, Health)) return;
 
-  ctx.restore();
-
-  // North tick on the rim.
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.font = '700 9px system-ui,sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('N', cx, 11);
-}
-
-/** Show a contextual action prompt for the nearest interactable in range
- * (merchant to talk, tree/rock to harvest). Purely a hint — the entity scripts
- * still own the actual key handling. */
-function updateInteractionHint(state: State, heroEid: number): void {
-  if (!interactHintEl || !interactKeyEl || !interactLabelEl) return;
-  const px = Transform.posX[heroEid];
-  const pz = Transform.posZ[heroEid];
-
-  let bestDist = Infinity;
-  let bestKey = '';
-  let bestLabel = '';
-
-  const merchantEid = state.getEntityByName('merchant');
-  if (merchantEid !== null && state.hasComponent(merchantEid, Transform)) {
-    const dx = Transform.posX[merchantEid] - px;
-    const dz = Transform.posZ[merchantEid] - pz;
-    const d = dx * dx + dz * dz;
-    if (d < 4.5 * 4.5 && d < bestDist) {
-      bestDist = d;
-      bestKey = 'K';
-      bestLabel = t(state, 'hint.merchant');
+    if (isDead(hero) && !deathShown) {
+      deathShown = true;
+      respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
     }
-  }
+    if (deathShown && state.time.elapsed >= respawnAtTime) {
+      Health.current[hero] = Health.max[hero];
+      const body = getBodyForEntity(state, hero);
+      Transform.posX[hero] = CHECKPOINT_X;
+      Transform.posY[hero] = CHECKPOINT_Y;
+      Transform.posZ[hero] = CHECKPOINT_Z;
+      Transform.dirty[hero] = 1;
+      Rigidbody.velX[hero] = 0;
+      Rigidbody.velY[hero] = 0;
+      Rigidbody.velZ[hero] = 0;
+      if (body) {
+        body.setTranslation(
+          { x: CHECKPOINT_X, y: CHECKPOINT_Y, z: CHECKPOINT_Z },
+          true
+        );
+        body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
+        body.wakeUp();
+      }
+      heroGroundSnapped = false;
+      deathShown = false;
+    }
+  },
+};
 
-  for (const e of destructibleQuery(state.world)) {
-    const range = (Destructible.range[e] || 3.5) + 0.5;
-    const dx = Transform.posX[e] - px;
-    const dz = Transform.posZ[e] - pz;
-    const d = dx * dx + dz * dz;
-    if (d < range * range && d < bestDist) {
-      bestDist = d;
-      bestKey = 'J';
-      bestLabel = t(
+// ── Save / load on keys (the engine pause menu's OptionsTab has no button row). ─
+let savePressed = false;
+let loadPressed = false;
+const SaveLoadKeysSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    const save = isKeyDown('KeyG');
+    if (save && !savePressed) {
+      saveToLocalStorage(state, SAVE_KEY);
+      playSound('save');
+    }
+    savePressed = save;
+
+    const load = isKeyDown('KeyH');
+    if (load && !loadPressed) {
+      if (loadFromLocalStorage(state, SAVE_KEY)) playSound('load');
+    }
+    loadPressed = load;
+  },
+};
+
+// ── Combat & harvest feedback (game-side juice the engine doesn't own):
+//    floating damage numbers + hurt/kill SFX + XP-on-kill for any Health entity,
+//    and a hit spark + chop/mine SFX when a Destructible swing lands. ──────────
+const healthFxQuery = defineQuery([Health, Transform]);
+const destructibleFxQuery = defineQuery([Destructible, Transform]);
+const prevHp = new Map<number, number>();
+const prevPending = new Map<number, number>();
+
+const CombatFeedbackSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    const hero = state.getEntityByName('hero');
+
+    for (const e of healthFxQuery(state.world)) {
+      const cur = Health.current[e];
+      const prev = prevHp.get(e);
+      prevHp.set(e, cur);
+      if (prev === undefined || cur >= prev - 0.01) continue;
+      const dmg = Math.round(prev - cur);
+      if (dmg <= 0) continue;
+      const isHero = e === hero;
+      const big = !isHero && dmg >= 22;
+      spawnFloatingText(
         state,
-        isWoodEntity(e) ? 'hint.harvest.wood' : 'hint.harvest.stone'
+        isHero ? `-${dmg}` : big ? `${dmg}!` : `${dmg}`,
+        {
+          x: Transform.posX[e],
+          y: Transform.posY[e] + (isHero ? 1.7 : 2.1),
+          z: Transform.posZ[e],
+          color: isHero ? '#ff5a5a' : big ? '#ff8a2a' : '#fff0a0',
+          size: isHero ? 0.5 : big ? 0.7 : 0.46,
+          duration: big ? 1.3 : 1.0,
+        }
       );
+      playSound(isHero ? 'player-hurt' : 'enemy-hurt');
+      // Award XP to the hero on the blow that kills a creature.
+      if (!isHero && cur <= 0 && prev > 0 && hero !== null) {
+        addXp(state, hero, Math.max(2, Math.round((Health.max[e] || 30) / 12)));
+      }
     }
-  }
 
-  if (bestKey) {
-    interactKeyEl.textContent = bestKey;
-    interactLabelEl.textContent = bestLabel;
-    interactHintEl.style.opacity = '1';
-    interactHintEl.style.transform = 'translateX(-50%) translateY(0)';
-  } else {
-    interactHintEl.style.opacity = '0';
-    interactHintEl.style.transform = 'translateX(-50%) translateY(8px)';
-  }
-}
+    for (const e of destructibleFxQuery(state.world)) {
+      const pend = Destructible.pendingImpact[e];
+      const prev = prevPending.get(e) ?? 0;
+      prevPending.set(e, pend);
+      if (prev > 0 && pend <= 0) {
+        const wood = isWoodEntity(e);
+        spawnFloatingText(state, '✦', {
+          x: Transform.posX[e],
+          y: Transform.posY[e] + 1.6,
+          z: Transform.posZ[e],
+          color: wood ? '#9be37a' : '#e2dccb',
+          size: 0.55,
+          duration: 0.55,
+        });
+        playSound(wood ? 'chop-hit' : 'mine-hit');
+      }
+    }
+  },
+};
 
-function createOverlayHud(state: State): void {
-  const wrap = document.createElement('div');
-  wrap.style.cssText =
-    'position:fixed;inset:0;pointer-events:none;z-index:1000;font-family:system-ui,Segoe UI,sans-serif;' +
-    // Hidden until the loading screen finishes, so the HUD doesn't show over a
-    // half-built scene. Revealed by GameplayHudSystem once the world is loaded.
-    'opacity:0;transition:opacity 0.5s ease-in;';
-  hudRootEl = wrap;
+// ── i18n. Engine HUD widget keys (modal.pause, options.*) live alongside the
+//    game's own strings. ──────────────────────────────────────────────────────
+const dictEN: Record<string, string> = {
+  'modal.pause': 'Paused',
+  'options.music': 'Music',
+  'options.sfx': 'Sound FX',
+  'hud.title': 'Crystal Vale',
+  'hud.saved': 'Game saved!',
+  'hud.loaded': 'Save restored.',
+};
 
-  const topLeft = document.createElement('div');
-  topLeft.style.cssText =
-    'position:absolute;top:20px;left:20px;max-width:min(420px,92vw);' +
-    'display:flex;flex-direction:column;gap:10px;';
+const dictPT: Record<string, string> = {
+  'modal.pause': 'Pausa',
+  'options.music': 'Música',
+  'options.sfx': 'Efeitos',
+  'hud.title': 'Vale do Cristal',
+  'hud.saved': 'Jogo gravado!',
+  'hud.loaded': 'Progresso restaurado.',
+};
 
-  overlayMissionEl = document.createElement('div');
-  overlayMissionEl.style.cssText =
-    'background:rgba(8,12,28,0.72);color:#e8eef8;padding:12px 18px;' +
-    'border-radius:10px;font-size:13px;line-height:1.45;' +
-    'border:1px solid rgba(90,120,200,0.22);backdrop-filter:blur(10px);' +
-    'box-shadow:0 8px 32px rgba(0,0,0,0.25);';
+const MUSIC_VOL = 0.7;
+const SFX_VOL = 0.8;
 
-  const healthBarContainer = document.createElement('div');
-  healthBarContainer.title = t(state, 'tip.hp');
-  healthBarContainer.style.cssText =
-    'background:linear-gradient(135deg,rgba(14,18,34,0.72),rgba(10,14,26,0.6));' +
-    'border-radius:12px;padding:10px 14px;display:flex;align-items:center;gap:10px;' +
-    'border:1px solid rgba(120,150,220,0.2);backdrop-filter:blur(10px);' +
-    'box-shadow:0 6px 22px rgba(0,0,0,0.28);pointer-events:auto;';
-
-  const heartIcon = document.createElement('span');
-  heartIcon.textContent = '❤';
-  heartIcon.style.cssText =
-    'font-size:18px;color:#ff5a6e;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.5));';
-
-  const healthBarOuter = document.createElement('div');
-  healthBarOuter.style.cssText =
-    'flex:1;height:22px;background:rgba(60,20,20,0.6);border-radius:6px;' +
-    'position:relative;overflow:hidden;min-width:190px;' +
-    'box-shadow:inset 0 1px 3px rgba(0,0,0,0.5);';
-
-  healthBarFill = document.createElement('div');
-  healthBarFill.style.cssText =
-    'width:100%;height:100%;background:linear-gradient(90deg,#1f9d35,#3ee06a 60%,#8cf5a8);' +
-    'border-radius:6px;transition:width 0.15s ease-out;' +
-    'box-shadow:0 0 8px rgba(60,220,110,0.45);';
-
-  healthBarText = document.createElement('span');
-  healthBarText.style.cssText =
-    'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
-    'color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.6);';
-  healthBarText.textContent = t(state, 'hud.hp', { hp: '100', max: '100' });
-
-  healthBarOuter.appendChild(healthBarFill);
-  healthBarOuter.appendChild(healthBarText);
-  healthBarContainer.appendChild(heartIcon);
-  healthBarContainer.appendChild(healthBarOuter);
-
-  topLeft.appendChild(overlayMissionEl);
-  topLeft.appendChild(healthBarContainer);
-
-  // XP bar + level badge.
-  const xpRow = document.createElement('div');
-  xpRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
-
-  levelBadgeEl = document.createElement('div');
-  levelBadgeEl.title = t(state, 'tip.level');
-  levelBadgeEl.style.cssText =
-    'flex:0 0 auto;width:30px;height:30px;border-radius:50%;' +
-    'display:flex;align-items:center;justify-content:center;' +
-    'font:800 14px system-ui,sans-serif;color:#2a1c06;pointer-events:auto;' +
-    'background:radial-gradient(circle at 35% 30%,#ffe7a0,#ffc24a 60%,#d99320);' +
-    'border:1px solid rgba(255,225,150,0.85);' +
-    'box-shadow:0 3px 10px rgba(0,0,0,0.4),inset 0 1px 2px rgba(255,255,255,0.65);';
-  levelBadgeEl.textContent = '1';
-
-  const xpOuter = document.createElement('div');
-  xpOuter.title = t(state, 'tip.xp');
-  xpOuter.style.cssText =
-    'flex:1;height:9px;border-radius:6px;background:rgba(10,14,26,0.7);' +
-    'overflow:hidden;pointer-events:auto;' +
-    'border:1px solid rgba(120,150,220,0.2);box-shadow:inset 0 1px 2px rgba(0,0,0,0.5);';
-  xpBarFill = document.createElement('div');
-  xpBarFill.style.cssText =
-    'width:0%;height:100%;border-radius:6px;' +
-    'background:linear-gradient(90deg,#7a5cff,#b18cff 60%,#e6dbff);' +
-    'box-shadow:0 0 8px rgba(150,110,255,0.6);transition:width 0.25s ease-out;';
-  xpOuter.appendChild(xpBarFill);
-  xpRow.appendChild(levelBadgeEl);
-  xpRow.appendChild(xpOuter);
-  topLeft.appendChild(xpRow);
-
-  const chipRow = document.createElement('div');
-  chipRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-
-  const chipCss = (accent: string): string =>
-    'background:linear-gradient(135deg,rgba(14,18,34,0.72),rgba(10,14,26,0.6));' +
-    'border-radius:10px;padding:7px 13px;' +
-    `border:1px solid ${accent};backdrop-filter:blur(10px);` +
-    'box-shadow:0 5px 18px rgba(0,0,0,0.25);' +
-    'font-size:14px;font-weight:700;display:flex;align-items:center;gap:7px;' +
-    'pointer-events:auto;cursor:default;';
-
-  goldCountEl = document.createElement('div');
-  goldCountEl.style.cssText =
-    chipCss('rgba(255,210,60,0.3)') + 'color:#ffd24a;';
-  goldCountEl.title = t(state, 'tip.gold');
-  goldCountEl.textContent = '🪙 0';
-
-  woodCountEl = document.createElement('div');
-  woodCountEl.style.cssText =
-    chipCss('rgba(190,140,80,0.3)') + 'color:#d4a76a;';
-  woodCountEl.title = t(state, 'tip.wood');
-  woodCountEl.textContent = '🪵 0';
-
-  stoneCountEl = document.createElement('div');
-  stoneCountEl.style.cssText =
-    chipCss('rgba(170,165,150,0.3)') + 'color:#d4c9a8;';
-  stoneCountEl.title = t(state, 'tip.stone');
-  stoneCountEl.textContent = '🪨 0';
-
-  chipRow.appendChild(goldCountEl);
-  chipRow.appendChild(woodCountEl);
-  chipRow.appendChild(stoneCountEl);
-  topLeft.appendChild(chipRow);
-
-  // Status chips: nearby creatures + elapsed time (replaces the old verbose
-  // text panel; language hint lives in the bottom controls bar).
-  const statRow = document.createElement('div');
-  statRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;';
-
-  enemiesChipEl = document.createElement('div');
-  enemiesChipEl.style.cssText =
-    chipCss('rgba(200,80,80,0.28)') + 'color:#ff9a9a;';
-  enemiesChipEl.title = t(state, 'tip.enemies');
-  enemiesChipEl.textContent = '⚔ 0';
-
-  timeChipEl = document.createElement('div');
-  timeChipEl.style.cssText =
-    chipCss('rgba(120,150,210,0.24)') + 'color:#b8c8e8;';
-  timeChipEl.title = t(state, 'tip.time');
-  timeChipEl.textContent = '🕓 0:00';
-
-  statRow.appendChild(enemiesChipEl);
-  statRow.appendChild(timeChipEl);
-  topLeft.appendChild(statRow);
-
-  // Hurt feedback: a red vignette that bleeds in from the screen edges (rather
-  // than a flat full-screen wash), pulsed on hit by GameplayHudSystem.
-  damageFlashEl = document.createElement('div');
-  damageFlashEl.style.cssText =
-    'position:fixed;inset:0;pointer-events:none;opacity:0;z-index:1001;' +
-    'background:radial-gradient(ellipse at center,' +
-    'rgba(255,0,0,0) 38%,rgba(180,0,0,0.35) 78%,rgba(120,0,0,0.7) 100%);';
-
-  // Level-up banner (center).
-  levelUpEl = document.createElement('div');
-  levelUpEl.style.cssText =
-    'position:fixed;top:24%;left:50%;transform:translateX(-50%) translateY(-12px) scale(0.9);' +
-    'z-index:1004;pointer-events:none;white-space:nowrap;opacity:0;' +
-    'font:800 30px system-ui,Segoe UI,sans-serif;letter-spacing:1.5px;' +
-    'color:#ffe9a8;text-shadow:0 0 16px rgba(255,200,80,0.7),0 2px 8px rgba(0,0,0,0.6);' +
-    'transition:opacity 0.3s ease,transform 0.3s cubic-bezier(0.2,1.4,0.4,1);';
-  levelUpEl.textContent = '';
-  wrap.appendChild(levelUpEl);
-
-  winEl = document.createElement('div');
-  winEl.style.cssText =
-    'position:fixed;inset:0;z-index:2000;' +
-    'background:radial-gradient(ellipse at center,rgba(40,30,8,0.86),rgba(0,0,0,0.94));' +
-    'display:none;flex-direction:column;align-items:center;justify-content:center;' +
-    'pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;';
-
-  const winCrown = document.createElement('div');
-  winCrown.textContent = '👑';
-  winCrown.style.cssText =
-    'font-size:64px;margin-bottom:8px;filter:drop-shadow(0 4px 18px rgba(255,200,60,0.6));';
-
-  const winTitle = document.createElement('div');
-  winTitle.style.cssText =
-    'font-size:64px;font-weight:800;letter-spacing:4px;margin-bottom:14px;' +
-    'background:linear-gradient(180deg,#fff3c4,#ffd24a 55%,#e09a20);' +
-    '-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;' +
-    'filter:drop-shadow(0 2px 18px rgba(255,200,0,0.5));';
-  winTitle.textContent = 'VICTORY!';
-
-  const winSub = document.createElement('div');
-  winSub.style.cssText =
-    'color:#e8eef8;font-size:22px;margin-bottom:30px;text-align:center;opacity:0.9;';
-  winSub.textContent = 'You defeated the Boss Ogre!';
-
-  const winBtn = document.createElement('button');
-  winBtn.style.cssText =
-    'background:linear-gradient(180deg,rgba(150,110,40,0.5),rgba(90,65,20,0.5));' +
-    'color:#ffe08a;border:1px solid rgba(255,210,120,0.5);' +
-    'padding:13px 40px;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;' +
-    'pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;letter-spacing:0.5px;' +
-    'box-shadow:0 6px 22px rgba(0,0,0,0.45);transition:transform 0.12s ease,box-shadow 0.12s ease;';
-  winBtn.textContent = '↻ Play Again';
-  winBtn.addEventListener('click', () => location.reload());
-  winBtn.addEventListener('mouseenter', () => {
-    winBtn.style.transform = 'translateY(-2px)';
-    winBtn.style.boxShadow = '0 10px 28px rgba(255,200,80,0.3)';
-  });
-  winBtn.addEventListener('mouseleave', () => {
-    winBtn.style.transform = '';
-    winBtn.style.boxShadow = '0 6px 22px rgba(0,0,0,0.45)';
-  });
-
-  winEl.appendChild(winCrown);
-  winEl.appendChild(winTitle);
-  winEl.appendChild(winSub);
-  winEl.appendChild(winBtn);
-
-  deathEl = document.createElement('div');
-  deathEl.style.cssText =
-    'position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);z-index:1900;' +
-    'background:linear-gradient(160deg,rgba(60,4,4,0.9),rgba(28,0,0,0.88));' +
-    'color:#ff7070;padding:26px 52px;border-radius:14px;' +
-    'font:800 28px system-ui,Segoe UI,sans-serif;letter-spacing:1.5px;' +
-    'border:1px solid rgba(255,70,70,0.45);' +
-    'box-shadow:0 12px 48px rgba(0,0,0,0.6),0 0 40px rgba(180,0,0,0.25);' +
-    'text-shadow:0 2px 10px rgba(0,0,0,0.6);' +
-    'pointer-events:none;display:none;text-align:center;';
-  deathEl.textContent = '☠  You Died — Respawning...';
-
-  bossBarEl = document.createElement('div');
-  bossBarEl.style.cssText =
-    'position:fixed;top:58px;left:50%;transform:translateX(-50%);z-index:1000;' +
-    'background:rgba(8,12,28,0.7);border-radius:10px;padding:10px 16px;' +
-    'border:1px solid rgba(200,40,40,0.35);backdrop-filter:blur(8px);' +
-    'display:none;min-width:320px;';
-
-  const bossBarOuter = document.createElement('div');
-  bossBarOuter.style.cssText =
-    'width:300px;height:20px;background:rgba(60,12,12,0.7);border-radius:4px;' +
-    'position:relative;overflow:hidden;margin:0 auto;';
-
-  bossBarFill = document.createElement('div');
-  bossBarFill.style.cssText =
-    'width:100%;height:100%;background:linear-gradient(90deg,#b22222,#ff4444);' +
-    'border-radius:4px;transition:width 0.2s ease-out;';
-
-  bossBarText = document.createElement('span');
-  bossBarText.style.cssText =
-    'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;' +
-    'color:#fff;font-size:11px;font-weight:600;text-shadow:0 1px 3px rgba(0,0,0,0.7);';
-  bossBarText.textContent = 'Boss Ogre';
-
-  bossBarOuter.appendChild(bossBarFill);
-  bossBarOuter.appendChild(bossBarText);
-  bossBarEl.appendChild(bossBarOuter);
-
-  const bottom = document.createElement('div');
-  bottom.style.cssText =
-    'position:absolute;bottom:22px;left:50%;transform:translateX(-50%);';
-
-  overlayControlsEl = document.createElement('div');
-  overlayControlsEl.style.cssText =
-    'background:rgba(8,12,28,0.5);color:#8a9ab8;padding:8px 16px;' +
-    'border-radius:8px;font-size:11px;letter-spacing:0.2px;max-width:92vw;text-align:center;' +
-    'border:1px solid rgba(90,120,200,0.12);';
-  overlayControlsEl.textContent = t(state, 'hud.controls');
-
-  bottom.appendChild(overlayControlsEl);
-  wrap.appendChild(topLeft);
-  wrap.appendChild(damageFlashEl);
-  wrap.appendChild(bossBarEl);
-  wrap.appendChild(deathEl);
-  wrap.appendChild(bottom);
-
-  // ── Minimap (top-right) ──────────────────────────────────────────────
-  const minimapWrap = document.createElement('div');
-  minimapWrap.title = t(state, 'tip.minimap');
-  minimapWrap.style.cssText =
-    `position:fixed;top:18px;right:18px;width:${MINIMAP_SIZE}px;height:${MINIMAP_SIZE}px;` +
-    'border-radius:50%;z-index:1000;pointer-events:auto;' +
-    'border:2px solid rgba(150,180,240,0.35);' +
-    'box-shadow:0 8px 30px rgba(0,0,0,0.4),inset 0 0 18px rgba(0,0,0,0.5);' +
-    'background:rgba(8,12,28,0.4);';
-
-  minimapCanvas = document.createElement('canvas');
-  minimapCanvas.width = MINIMAP_SIZE;
-  minimapCanvas.height = MINIMAP_SIZE;
-  minimapCanvas.style.cssText = `width:${MINIMAP_SIZE}px;height:${MINIMAP_SIZE}px;border-radius:50%;display:block;`;
-  minimapCtx = minimapCanvas.getContext('2d');
-  minimapWrap.appendChild(minimapCanvas);
-  wrap.appendChild(minimapWrap);
-
-  // FPS counter (under the minimap)
-  fpsEl = document.createElement('div');
-  fpsEl.style.cssText =
-    `position:fixed;top:${18 + MINIMAP_SIZE + 8}px;right:18px;` +
-    'background:rgba(8,12,28,0.55);color:#aabbcc;padding:5px 11px;' +
-    'border-radius:6px;font-size:11px;font-weight:600;font-family:monospace;' +
-    'border:1px solid rgba(90,120,200,0.15);backdrop-filter:blur(6px);' +
-    'z-index:1000;pointer-events:none;';
-  fpsEl.textContent = 'FPS: --';
-  wrap.appendChild(fpsEl);
-
-  // ── Compass strip (top-center) ───────────────────────────────────────
-  compassStripEl = document.createElement('div');
-  compassStripEl.title = t(state, 'tip.compass');
-  compassStripEl.style.cssText =
-    'position:fixed;top:14px;left:50%;transform:translateX(-50%);' +
-    'width:min(300px,70vw);height:30px;overflow:hidden;z-index:1000;' +
-    'background:rgba(8,12,28,0.6);border-radius:8px;pointer-events:auto;' +
-    'border:1px solid rgba(120,150,220,0.22);backdrop-filter:blur(8px);' +
-    'box-shadow:0 5px 18px rgba(0,0,0,0.28);' +
-    // Soft edge fade so marks dissolve at the rim.
-    '-webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);' +
-    'mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);';
-
-  const compassCardinals: { az: number; label: string; major: boolean }[] = [
-    { az: Math.PI, label: 'N', major: true },
-    { az: (3 * Math.PI) / 4, label: 'NE', major: false },
-    { az: Math.PI / 2, label: 'E', major: true },
-    { az: Math.PI / 4, label: 'SE', major: false },
-    { az: 0, label: 'S', major: true },
-    { az: -Math.PI / 4, label: 'SW', major: false },
-    { az: -Math.PI / 2, label: 'W', major: true },
-    { az: (-3 * Math.PI) / 4, label: 'NW', major: false },
-  ];
-  for (const c of compassCardinals) {
-    const mark = document.createElement('div');
-    const color = c.label === 'N' ? '#ff8a6a' : c.major ? '#e8eef8' : '#8a9ab8';
-    mark.style.cssText =
-      'position:absolute;top:0;left:50%;height:30px;margin-left:-12px;width:24px;' +
-      'display:flex;align-items:center;justify-content:center;' +
-      `font:700 ${c.major ? '14' : '10'}px system-ui,sans-serif;color:${color};` +
-      'will-change:transform,opacity;';
-    mark.textContent = c.label;
-    compassStripEl.appendChild(mark);
-    compassMarks.push({ el: mark, az: c.az });
-  }
-  // Centre fixed tick marking your heading.
-  const compassTick = document.createElement('div');
-  compassTick.style.cssText =
-    'position:absolute;top:0;left:50%;width:2px;height:30px;margin-left:-1px;' +
-    'background:linear-gradient(#ffd24a,rgba(255,210,74,0));';
-  compassStripEl.appendChild(compassTick);
-  wrap.appendChild(compassStripEl);
-
-  // ── Interaction hint (bottom-center, above controls) ─────────────────
-  interactHintEl = document.createElement('div');
-  interactHintEl.style.cssText =
-    'position:fixed;bottom:62px;left:50%;transform:translateX(-50%) translateY(8px);' +
-    'display:flex;align-items:center;gap:9px;z-index:1001;pointer-events:none;' +
-    'background:linear-gradient(135deg,rgba(20,26,46,0.86),rgba(12,16,30,0.78));' +
-    'color:#eef3ff;padding:9px 16px;border-radius:24px;' +
-    'border:1px solid rgba(255,210,120,0.4);backdrop-filter:blur(10px);' +
-    'box-shadow:0 8px 26px rgba(0,0,0,0.4);font-size:14px;font-weight:600;' +
-    'opacity:0;transition:opacity 0.18s ease,transform 0.18s ease;white-space:nowrap;';
-
-  interactKeyEl = document.createElement('span');
-  interactKeyEl.style.cssText =
-    'display:inline-flex;align-items:center;justify-content:center;' +
-    'min-width:24px;height:24px;padding:0 5px;border-radius:6px;' +
-    'background:#2a3450;' +
-    'border:1px solid rgba(255,210,120,0.5);color:#ffe08a;' +
-    'font:800 13px system-ui,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,0.4);';
-  interactKeyEl.textContent = 'F';
-
-  interactLabelEl = document.createElement('span');
-  interactLabelEl.textContent = '';
-
-  interactHintEl.appendChild(interactKeyEl);
-  interactHintEl.appendChild(interactLabelEl);
-  wrap.appendChild(interactHintEl);
-
-  document.body.appendChild(wrap);
-  document.body.appendChild(winEl);
-
-  refreshHud(state);
-}
-
-/** Apply the saved Music/SFX volume + mute settings to the audio buses. */
 function initAudioBuses(): void {
-  setBusVolume('music', VOLUME_LEVELS[musicVolIdx]);
-  setBusVolume('sfx', VOLUME_LEVELS[sfxVolIdx]);
-  setBusMuted('music', !musicOn);
-  setBusMuted('sfx', !sfxOn);
+  setBusVolume('music', MUSIC_VOL);
+  setBusVolume('sfx', SFX_VOL);
+  setBusMuted('music', false);
+  setBusMuted('sfx', false);
 }
+
+// ── Attack-clip context: pick the player's swing animation by what they're
+//    about to hit — chop a tree, mine a rock, else the equipped weapon
+//    (sword/axe/spear, cycled with [V]). The gather/pickup gesture is the F
+//    interact (handled in the player system). ──────────────────────────────
+const WEAPON_CLIPS = ['sword', 'axe', 'spear'] as const;
+const MESH_BASE = '/assets/meshes/';
+// Held model per action clip. (Generated by text3d+paint3d; sword reuses the
+// existing hero sword.) Missing GLBs just leave the hand empty (load fails
+// silently) until generated.
+const HELD_MODEL: Record<string, string> = {
+  sword: MESH_BASE + 'sword_hero.glb',
+  axe: MESH_BASE + 'axe.glb',
+  spear: MESH_BASE + 'spear.glb',
+  chop: MESH_BASE + 'felling_axe.glb',
+  mine: MESH_BASE + 'pickaxe.glb',
+};
+const BOMB_MODEL = MESH_BASE + 'bomb.glb';
+// Grip on the RightHand bone — TUNE visually (scale especially depends on the
+// bone's world scale vs the model size).
+const HELD_GRIP = {
+  x: 0.04,
+  y: 0.02,
+  z: 0.05,
+  rx: 0,
+  ry: 0,
+  rz: 0,
+  scale: 0.6,
+};
+const BOMB_GRIP = {
+  x: 0.04,
+  y: 0.04,
+  z: 0.04,
+  rx: 0,
+  ry: 0,
+  rz: 0,
+  scale: 0.5,
+};
+
+let weaponIdx = 0;
+let weaponCyclePressed = false;
+let bombAiming = false; // BombSystem owns the hand + facing while aiming
+const HARVEST_HINT_RANGE_SQ = 3.6 * 3.6;
+const AttackContextSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    const hero = state.getEntityByName('hero');
+    if (hero === null) return;
+
+    const v = isKeyDown('KeyV');
+    if (v && !weaponCyclePressed) {
+      weaponIdx = (weaponIdx + 1) % WEAPON_CLIPS.length;
+    }
+    weaponCyclePressed = v;
+
+    const hx = Transform.posX[hero];
+    const hz = Transform.posZ[hero];
+    let near = 0;
+    let bestD2 = HARVEST_HINT_RANGE_SQ;
+    for (const e of destructibleFxQuery(state.world)) {
+      const dx = Transform.posX[e] - hx;
+      const dz = Transform.posZ[e] - hz;
+      const d2 = dx * dx + dz * dz;
+      if (d2 < bestD2) {
+        bestD2 = d2;
+        near = e;
+      }
+    }
+    const clip = near
+      ? isWoodEntity(near)
+        ? 'chop'
+        : 'mine'
+      : WEAPON_CLIPS[weaponIdx];
+    setPlayerAttackClip(clip);
+    // Show the matching model in hand (unless the bomb-aim owns the hand).
+    if (!bombAiming) setPlayerHeldItem(HELD_MODEL[clip] ?? null, HELD_GRIP);
+  },
+};
+
+// ── Bombs: tick live fuses every frame; throw one in front of the hero on [B]
+//    when a bomb is in the bag (bought from the merchant). ─────────────────────
+let bombPressed = false;
+let bombHoldT = 0;
+const BOMB_AIM_THRESHOLD = 0.18; // s held before the throw arc shows
+const BOMB_AIM_RANGE = 30; // m auto-aim search radius
+const BOMB_THROW_RANGE = 10; // m forward when no enemy is in range
+const _bombLand = { x: 0, y: 0, z: 0 };
+const _bombFrom = { x: 0, y: 0, z: 0 };
+let bombHudEl: HTMLDivElement | null = null;
+
+function updateBombHud(count: number): void {
+  if (typeof document === 'undefined') return;
+  if (!bombHudEl) {
+    bombHudEl = document.createElement('div');
+    // Sits in the resource-chip row (top-left), after gold/wood/stone.
+    bombHudEl.style.cssText =
+      'position:absolute;top:108px;left:284px;z-index:12;min-width:64px;' +
+      'display:inline-flex;align-items:center;justify-content:center;gap:7px;' +
+      'padding:7px 13px;border-radius:10px;font:700 14px system-ui,sans-serif;' +
+      'color:#ff8a6a;border:1px solid rgba(255,120,80,0.3);' +
+      'background:linear-gradient(135deg,rgba(14,18,34,0.72),rgba(10,14,26,0.6));' +
+      'backdrop-filter:blur(10px);box-shadow:0 5px 18px rgba(0,0,0,0.25);';
+    const layer =
+      document.querySelector('.vibe-hud-screen-layer') ?? document.body;
+    layer.appendChild(bombHudEl);
+  }
+  bombHudEl.textContent = `💣 ${count}`;
+  bombHudEl.style.display = count > 0 ? 'inline-flex' : 'none';
+}
+
+const BombSystem: System = {
+  group: 'simulation',
+  update(state: State) {
+    updateBombs(state, state.time.deltaTime);
+    const heroForHud = state.getEntityByName('hero');
+    updateBombHud(
+      heroForHud !== null ? getItemQty(state, heroForHud, 'bomb') : 0
+    );
+    const dt = state.time.deltaTime;
+    const held = isKeyDown('KeyB');
+    const hero = state.getEntityByName('hero');
+    const haveBomb = hero !== null && getItemQty(state, hero, 'bomb') > 0;
+
+    if (isPaused(state) || hero === null) {
+      if (bombPressed) hideThrowArc();
+      if (bombAiming) {
+        bombAiming = false;
+        setPlayerFaceTarget(null);
+      }
+      bombPressed = held;
+      bombHoldT = 0;
+      return;
+    }
+
+    // While holding (with a bomb): aim. Resolve the landing point (auto-aim the
+    // nearest enemy, else a point ahead) and draw the throw arc past the
+    // threshold. The bomb is only consumed on release.
+    if (held && haveBomb) {
+      bombHoldT += dt;
+      _bombFrom.x = Transform.posX[hero];
+      _bombFrom.y = Transform.posY[hero] + 1.0;
+      _bombFrom.z = Transform.posZ[hero];
+      const target = nearestEnemy(state, hero, BOMB_AIM_RANGE);
+      if (target) {
+        _bombLand.x = Transform.posX[target];
+        _bombLand.y = Transform.posY[target];
+        _bombLand.z = Transform.posZ[target];
+      } else {
+        const rx = WorldTransform.rotX[hero];
+        const ry = WorldTransform.rotY[hero];
+        const rz = WorldTransform.rotZ[hero];
+        const rw = WorldTransform.rotW[hero];
+        const fx = 2 * (rx * rz + rw * ry);
+        const fz = 1 - 2 * (rx * rx + ry * ry);
+        _bombLand.x = Transform.posX[hero] + fx * BOMB_THROW_RANGE;
+        _bombLand.z = Transform.posZ[hero] + fz * BOMB_THROW_RANGE;
+        let gy = getBvhSurfaceHeight(state, _bombLand.x, 500, _bombLand.z);
+        if (gy == null || !Number.isFinite(gy))
+          gy = getTerrainHeightAt(state, _bombLand.x, _bombLand.z);
+        _bombLand.y = Number.isFinite(gy) ? gy : Transform.posY[hero];
+      }
+      if (bombHoldT > BOMB_AIM_THRESHOLD) {
+        updateThrowArc(
+          state,
+          _bombFrom.x,
+          _bombFrom.y,
+          _bombFrom.z,
+          _bombLand.x,
+          _bombLand.y,
+          _bombLand.z
+        );
+        // Bomb to hand + turn the body to face the throw target while aiming.
+        if (!bombAiming) {
+          bombAiming = true;
+          setPlayerHeldItem(BOMB_MODEL, BOMB_GRIP);
+        }
+        setPlayerFaceTarget(_bombLand.x, _bombLand.z);
+      }
+    }
+
+    // Release: tap = drop at feet; held (aimed) = lob along the arc.
+    if (!held && bombPressed) {
+      hideThrowArc();
+      if (bombAiming) {
+        bombAiming = false;
+        setPlayerFaceTarget(null); // AttackContextSystem restores the weapon
+      }
+      if (haveBomb) {
+        if (bombHoldT <= BOMB_AIM_THRESHOLD) {
+          spawnBomb(
+            state,
+            Transform.posX[hero],
+            Transform.posY[hero],
+            Transform.posZ[hero],
+            hero
+          );
+        } else {
+          throwBomb(
+            state,
+            _bombFrom.x,
+            _bombFrom.y,
+            _bombFrom.z,
+            _bombLand.x,
+            _bombLand.y,
+            _bombLand.z,
+            hero
+          );
+        }
+        removeItem(state, hero, 'bomb', 1);
+      }
+      bombHoldT = 0;
+    }
+    bombPressed = held;
+  },
+};
+
+// ── Procedural bomb-aim torso twist: rotate the hero's Spine on Y to track the
+//    camera yaw while aiming. Must run in 'draw' (after 'simulation', where the
+//    engine ticks the AnimationMixer) so the override lands on top of the mixer.
+const MAX_SPINE_TWIST = 0.9; // rad (~51°) clamp for a believable torso twist
+const AIM_TWIST_RATE = 14; // 1/s exponential smoothing for aim-in / aim-out
+let aimSpineActive = false;
+let aimSpineBaseY = 0;
+let aimSpineDelta = 0;
+let cachedSpineBone: Object3D | null = null;
+
+function findAimSpineBone(root: Object3D): Object3D | null {
+  // Engine convention is plain names (cf. 'RightHand' in gltf-systems.ts), but
+  // also accept the 'mixamorig:Spine' suffix style.
+  for (const name of ['Spine', 'UpperChest', 'Chest']) {
+    const hit = root.getObjectByName(name);
+    if (hit) return hit;
+  }
+  let fallback: Object3D | null = null;
+  root.traverse((o) => {
+    if (fallback) return;
+    if (
+      o.name.endsWith(':Spine') ||
+      o.name.endsWith(':UpperChest') ||
+      o.name.endsWith(':Chest')
+    ) {
+      fallback = o;
+    }
+  });
+  return fallback;
+}
+
+function getActiveCamera(): Camera | undefined {
+  for (const cam of threeCameras.values()) return cam;
+  return undefined;
+}
+
+const _aimEuler = new Euler(0, 0, 0, 'YXZ');
+
+function yawFromQuaternion(q: Quaternion): number {
+  _aimEuler.setFromQuaternion(q, 'YXZ');
+  return _aimEuler.y;
+}
+
+function normalizeAngle(a: number): number {
+  let v = a;
+  while (v > Math.PI) v -= 2 * Math.PI;
+  while (v < -Math.PI) v += 2 * Math.PI;
+  return v;
+}
+
+const BombAimSpineSystem: System = {
+  group: 'draw',
+  update(state: State) {
+    const hero = state.getEntityByName('hero');
+    if (hero === null) return;
+    const regIdx = PlayerGltfConfig.animatorRegistryIndex[hero];
+    if (regIdx === 0) return;
+    const animator = animatorRegistry.get(regIdx);
+    if (!animator) return;
+
+    if (!cachedSpineBone || cachedSpineBone.parent === null) {
+      cachedSpineBone = findAimSpineBone(animator.root);
+    }
+    const spine = cachedSpineBone;
+    if (!spine) return;
+
+    const k = 1 - Math.exp(-AIM_TWIST_RATE * state.time.deltaTime);
+
+    if (bombAiming) {
+      if (!aimSpineActive) {
+        aimSpineActive = true;
+        aimSpineBaseY = spine.rotation.y;
+        aimSpineDelta = 0;
+      }
+      const cam = getActiveCamera();
+      if (cam) {
+        const heroYaw = yawFromQuaternion(animator.root.quaternion);
+        const camYaw = yawFromQuaternion(cam.quaternion);
+        const delta = Math.max(
+          -MAX_SPINE_TWIST,
+          Math.min(MAX_SPINE_TWIST, normalizeAngle(camYaw - heroYaw))
+        );
+        aimSpineDelta += (delta - aimSpineDelta) * k;
+        spine.rotation.y = aimSpineBaseY + aimSpineDelta;
+      }
+      return;
+    }
+
+    if (aimSpineActive) {
+      aimSpineDelta += (0 - aimSpineDelta) * k;
+      spine.rotation.y = aimSpineBaseY + aimSpineDelta;
+      if (Math.abs(aimSpineDelta) < 0.001) {
+        aimSpineDelta = 0;
+        spine.rotation.y = aimSpineBaseY;
+        aimSpineActive = false;
+      }
+    }
+  },
+};
 
 async function bootstrap(): Promise<void> {
-  // Paint the loading screen immediately — before building the runtime, parsing
-  // the scene, or loading any asset — so there's no gap where the blank scene
-  // or HUD shows through.
   const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
   mountLoadingScreen({
     title: bootLang === 'pt' ? 'Vale do Cristal' : 'Crystal Vale',
@@ -1516,11 +752,7 @@ async function bootstrap(): Promise<void> {
       bootLang === 'pt' ? 'A preparar o mundo…' : 'Preparing the world…',
   });
 
-  // Declare every game sound once (url + volume + bus). After this, any code
-  // can `playSound('coin')` — no scene entity, no eid lookup.
   registerGameSounds();
-
-  // J ataca como o clique esquerdo (animação + meleeHit + rochas destrutíveis).
   addInputMapping('primaryAction', 'KeyJ');
 
   withPlugin(LoadingPlugin);
@@ -1539,8 +771,16 @@ async function bootstrap(): Promise<void> {
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);
   withPlugin(DebugPlugin);
-  withSystem(GameplayHudSystem);
+
+  withSystem(HeroSetupSystem);
   withSystem(HeroGroundSnapSystem);
+  withSystem(HeroStatsSystem);
+  withSystem(RespawnSystem);
+  withSystem(SaveLoadKeysSystem);
+  withSystem(CombatFeedbackSystem);
+  withSystem(AttackContextSystem);
+  withSystem(BombSystem);
+  withSystem(BombAimSpineSystem);
 
   configure({ canvas: '#game-canvas' });
 
@@ -1549,191 +789,85 @@ async function bootstrap(): Promise<void> {
   const runtime = await builder.build();
   const state = runtime.getState();
 
+  bindEngine(state);
   registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
+  registerGameSkills(state);
 
-  window.__heroState = state;
+  // Item definitions — without a registered ItemDef the inventory caps every
+  // item's stack at 1, so bought bombs never accumulated. Stack them high.
+  const itemReg = getDataRegistry(state);
+  for (const [id, name, icon] of [
+    ['bomb', 'Bomb', '💣'],
+    ['wood', 'Wood', '🪵'],
+    ['stone', 'Stone', '🪨'],
+    ['potion', 'Potion', '🧪'],
+  ] as const) {
+    itemReg.register('item', id, { id, name, icon, maxStack: 99, tags: [] });
+  }
 
-  // Engine DestructiblePlugin breaks the rocks (swing timing, particles);
-  // the game only collects the loot — the HUD watcher then shows the
-  // localized "+1 Pedra!" popup and plays the SFX.
-  onDestructibleDestroyed(state, (eid, x, y, z) => {
-    if (eid !== null && isWoodEntity(eid)) {
-      addWood(1, x, y + 0.8, z);
-      addItem('wood', 1);
-      pushFloat(state, x, y + 1.5, z, '+1 🪵', { color: '#e0b87a', size: 19 });
-      playSfx('chop-break');
-    } else {
-      addStone(1, x, y, z);
-      addItem('stone', 1);
-      pushFloat(state, x, y + 1.2, z, '+1 🪨', { color: '#e2dccb', size: 19 });
-      playSfx('mine-break');
+  // Load data-driven RPG presets (boss/goblin/slime) into the DataRegistry
+  // before runtime.start() parses the scene.
+  const dataRegistry = getDataRegistry(state);
+  for (const name of ['boss', 'goblin', 'slime']) {
+    try {
+      const res = await fetch(`/data/ai/${name}.yaml`);
+      if (res.ok) dataRegistry.loadYaml(await res.text());
+    } catch (err) {
+      console.warn(`[simple-rpg] failed to load AI preset ${name}:`, err);
     }
-  });
-
-  // QA helper: spawn a floating text from the console / automated tests.
-  window.__spawnFloatingText = (text, x, y, z) =>
-    spawnFloatingText(state, text, { x, y, z, duration: 4 });
-
-  window.__heroDebug = () => {
-    const heroEid = state.getEntityByName('hero');
-    if (heroEid === null) return {};
-    const x = Transform.posX[heroEid];
-    const y = Transform.posY[heroEid];
-    const z = Transform.posZ[heroEid];
-    const terrainY =
-      getBvhSurfaceHeight(state, x, 500, z) ?? getTerrainHeightAt(state, x, z);
-    const feetY = getCharacterFeetY(state, heroEid, y);
-    const CM = state.getComponent('character-movement');
-    const CC = state.getComponent('character-controller');
-    const RB = state.getComponent('rigidbody');
-    const PC = state.getComponent('player-controller');
-    const IS = state.getComponent('input-state');
-    const body = getBodyForEntity(state, heroEid);
-    const rapierY = body?.translation().y;
-    const rapierVel = body ? body.linvel() : null;
-    return {
-      x,
-      y,
-      z,
-      rapierY,
-      terrainY,
-      feetY,
-      groundGap: feetY - terrainY,
-      vy: RB?.velY?.[heroEid] ?? 0,
-      rapierVx: rapierVel?.x ?? 0,
-      rapierVy: rapierVel?.y ?? 0,
-      rapierVz: rapierVel?.z ?? 0,
-      grounded: CC?.grounded?.[heroEid] ?? 0,
-      desiredVelX: CM?.desiredVelX?.[heroEid] ?? 0,
-      desiredVelZ: CM?.desiredVelZ?.[heroEid] ?? 0,
-      speed: PC?.speed?.[heroEid] ?? -1,
-      moveY: IS?.moveY?.[heroEid] ?? -1,
-      moveX: IS?.moveX?.[heroEid] ?? -1,
-      bodyType: RB?.type?.[heroEid] ?? -1,
-    };
-  };
-
-  initAudioBuses();
+  }
 
   loadEngineDefaultDictionary(state);
   loadDictionary(state, 'en', dictEN);
   loadDictionary(state, 'pt', dictPT);
+  setLocale(state, bootLang);
 
-  onEvent(state, PROGRESSION_LEVEL_UP, (payload) => {
-    const p = payload as { eid: number; level: number };
-    addSkillPoints(SKILL_POINTS_PER_LEVEL);
-    pauseMenu?.refresh();
-    levelUpFlashUntil = state.time.elapsed + 2.0;
-    if (levelUpEl) {
-      levelUpEl.textContent = `${t(state, 'hud.levelUp')} ${p.level}`;
-      levelUpEl.style.opacity = '1';
-      levelUpEl.style.transform = 'translateX(-50%) translateY(0) scale(1)';
+  // Harvest loot: the engine DestructiblePlugin breaks rocks/trees; the game
+  // banks the yield into the hero vault + bag and pops a floating "+1".
+  onDestructibleDestroyed(state, (eid, x, y, z) => {
+    const hero = state.getEntityByName('hero') ?? 0;
+    if (eid !== null && isWoodEntity(eid)) {
+      addWood(1);
+      addItem(state, hero, 'wood', 1);
+      spawnFloatingText(state, '+1 🪵', { x, y: y + 1.5, z, duration: 1.4 });
+      playSound('chop-break');
+    } else {
+      addStone(1);
+      addItem(state, hero, 'stone', 1);
+      spawnFloatingText(state, '+1 🪨', { x, y: y + 1.2, z, duration: 1.4 });
+      playSound('mine-break');
     }
-    addShake(6, 260);
-    playSfx('levelup');
   });
 
-  const userLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
-  setLocale(state, userLang);
+  // Engine OptionsTab sliders → audio buses.
+  onEvent(state, MODAL_OPTION_CHANGED, (payload) => {
+    const p = payload as { id: string; value: number };
+    if (p.id === 'music-volume') setBusVolume('music', p.value / 100);
+    else if (p.id === 'sfx-volume') setBusVolume('sfx', p.value / 100);
+  });
 
-  createOverlayHud(state);
+  initAudioBuses();
 
-  // Spending a Vitality point raises the hero's max HP (Strength/Agility are
-  // stored for future use). Kept here so the skills module stays ECS-free.
-  setSkillEffectHandler((key) => {
-    if (key !== 'vitality') return;
+  // QA / debug bridges.
+  window.__heroState = state;
+  window.__spawnFloatingText = (text, x, y, z) =>
+    spawnFloatingText(state, text, { x, y, z, duration: 4 });
+  window.__heroDebug = (): Record<string, number> => {
     const hero = state.getEntityByName('hero');
-    if (hero !== null && state.hasComponent(hero, Health)) {
-      Health.max[hero] += 12;
-      Health.current[hero] = Math.min(
-        Health.max[hero],
-        Health.current[hero] + 12
-      );
-    }
-  });
-
-  // Inventory mirrors the live resource counters (single source of truth) and
-  // can hold future bag-owned items.
-  registerResource('gold', '🪙', { en: 'Gold', pt: 'Ouro' }, () => getGold());
-  registerResource('wood', '🪵', { en: 'Wood', pt: 'Madeira' }, () =>
-    getWoodCount()
-  );
-  registerResource('stone', '🪨', { en: 'Stone', pt: 'Pedra' }, () =>
-    getStoneCount()
-  );
-  defineItem('potion', '🧪', { en: 'Potion', pt: 'Poção' });
-
-  const pauseOptions: PauseOption[] = [
-    {
-      labelKey: 'pause.option.language',
-      value: () => (getLocale(state) === 'pt' ? 'PT' : 'EN'),
-      activate: () => {
-        setLocale(state, getLocale(state) === 'pt' ? 'en' : 'pt');
-        if (overlayControlsEl)
-          overlayControlsEl.textContent = t(state, 'hud.controls');
-        refreshHud(state);
-      },
-    },
-    {
-      labelKey: 'pause.option.music',
-      value: () => t(state, musicOn ? 'opt.on' : 'opt.off'),
-      activate: () => {
-        musicOn = !musicOn;
-        setBusMuted('music', !musicOn);
-        if (musicOn) setMusicPlaying(true);
-      },
-    },
-    {
-      labelKey: 'pause.option.musicVol',
-      value: () => t(state, VOLUME_LABELS[musicVolIdx]),
-      activate: () => {
-        musicVolIdx = (musicVolIdx + 1) % VOLUME_LEVELS.length;
-        setBusVolume('music', VOLUME_LEVELS[musicVolIdx]);
-      },
-    },
-    {
-      labelKey: 'pause.option.sfx',
-      value: () => t(state, sfxOn ? 'opt.on' : 'opt.off'),
-      activate: () => {
-        sfxOn = !sfxOn;
-        setBusMuted('sfx', !sfxOn);
-      },
-    },
-    {
-      labelKey: 'pause.option.sfxVol',
-      value: () => t(state, VOLUME_LABELS[sfxVolIdx]),
-      activate: () => {
-        sfxVolIdx = (sfxVolIdx + 1) % VOLUME_LEVELS.length;
-        setBusVolume('sfx', VOLUME_LEVELS[sfxVolIdx]);
-      },
-    },
-  ];
-
-  pauseMenu = createPauseMenu({
-    state,
-    translate: (k, v) => t(state, k, v),
-    locale: () => (getLocale(state) === 'pt' ? 'pt' : 'en'),
-    getLevel: () => {
-      const hero = state.getEntityByName('hero');
-      return hero !== null ? ProgressionComponent.level[hero] : 1;
-    },
-    onSave: () => {
-      saveToLocalStorage(state, SAVE_KEY);
-      playSfx('save');
-      pushFlash(state, 'hud.saved', 2.5);
-    },
-    onLoad: () => {
-      const ok = loadFromLocalStorage(state, SAVE_KEY);
-      if (ok) playSfx('load');
-      pushFlash(state, ok ? 'hud.loaded' : 'hud.no-save', 2.5);
-    },
-    options: pauseOptions,
-  });
+    if (hero === null) return {};
+    return {
+      x: Transform.posX[hero],
+      y: Transform.posY[hero],
+      z: Transform.posZ[hero],
+      hp: Health.current[hero] ?? 0,
+      maxHp: Health.max[hero] ?? 0,
+      level: ProgressionComponent.level[hero] ?? 0,
+    };
+  };
 
   if (typeof document !== 'undefined') {
     const startBgm = () => {
       resumeAudioContextIfSuspended();
-      if (musicOn) setMusicPlaying(true);
       document.removeEventListener('pointerdown', startBgm);
     };
     document.addEventListener('pointerdown', startBgm, { once: true });
@@ -1744,11 +878,7 @@ async function bootstrap(): Promise<void> {
 
 void bootstrap();
 
-// HMR teardown: Vite full-reloads on every source save (no HMR boundary in the
-// engine). Without this, the old WebGL context + Rapier/recast WASM + GPU memory
-// are never freed before the reloaded page allocates a fresh set, so reloads
-// stack VRAM and eventually lock the tab. Dispose runs renderer.setAnimationLoop(null)
-// + renderer.dispose() + state.dispose() before the page reloads.
+// HMR teardown: dispose the runtime (WebGL/Rapier/recast) before Vite reloads.
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     try {

@@ -14,6 +14,8 @@ import {
   getTerrainHeightAt,
   getBvhSurfaceHeight,
   isKeyDown,
+  registerInteractionTarget,
+  unregisterInteractionTarget,
 } from 'vibegame';
 
 const TERRAIN_LAYER = 0x0001;
@@ -58,6 +60,8 @@ export interface MysticConfig {
   toastColor?: string;
   /** The mystic line shown on read. */
   message: string;
+  /** Button-prompt label shown when the player is in range (e.g. "Read"). */
+  promptLabel: string;
   /** Extra lift above the terrain surface (metres). */
   yOffset?: number;
   /** One-time reward applied when the player reads the object. */
@@ -82,6 +86,7 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
   let read = false;
   let fPressed = false;
   let cachedPlayer = 0;
+  let entityId = 0;
   const emissiveMats: THREE.MeshStandardMaterial[] = [];
   const _box = new THREE.Box3();
 
@@ -94,6 +99,13 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
 
   function start(ctx: MonoBehaviourContext): void {
     findPlayer(ctx);
+    entityId = ctx.entity;
+    // Button prompt ("Press F …") shown by the engine InteractionPrompt widget
+    // whenever the player is within its range of this entity.
+    registerInteractionTarget(ctx.state, entityId, {
+      label: cfg.promptLabel,
+      key: 'F',
+    });
     if (loadStarted) return;
     loadStarted = true;
     void loadGltfToSceneWithAnimator(ctx.state, cfg.modelUrl).then((result) => {
@@ -108,6 +120,9 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
         if (mat && 'emissiveIntensity' in mat) {
           mat.emissive = col.clone();
           mat.emissiveIntensity = baseI;
+          // Some source GLBs (the pillar) have inverted/one-sided normals that
+          // make the interior show through; render both sides to avoid it.
+          mat.side = THREE.DoubleSide;
           emissiveMats.push(mat);
         }
       });
@@ -141,6 +156,7 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
     if (f && !fPressed) {
       read = true;
       for (const m of emissiveMats) m.emissiveIntensity = 0;
+      unregisterInteractionTarget(ctx.state, entityId);
       cfg.onRead(ctx.state, player);
       showMysticToast(cfg.message, toastColor);
       playSound('levelup');

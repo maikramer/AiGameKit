@@ -1,38 +1,24 @@
-let woodCount = 0;
+// Wood adapter → engine RpgVault on the hero entity (read by the HUD
+// ResourceChip resource="wood"). Thin wrapper so callers keep the same API.
+import { addResource, spendResource, getResource } from 'vibegame';
+import { engineState, heroEid } from '../game/engine-bridge';
 
-let lastCollectX = 0;
-let lastCollectY = 0;
-let lastCollectZ = 0;
-let lastCollectVersion = 0;
+const WOOD = 'wood';
 
-export function addWood(amount: number, x = 0, y = 0, z = 0): void {
-  woodCount += amount;
-  lastCollectX = x;
-  lastCollectY = y;
-  lastCollectZ = z;
-  lastCollectVersion++;
+export function addWood(amount: number, _x = 0, _y = 0, _z = 0): void {
+  const s = engineState();
+  const h = heroEid();
+  if (s && h) addResource(s, h, WOOD, amount);
 }
 
 export function getWoodCount(): number {
-  return woodCount;
+  const s = engineState();
+  const h = heroEid();
+  return s && h ? getResource(s, h, WOOD) : 0;
 }
 
 export function removeWood(amount: number): boolean {
-  if (woodCount < amount) return false;
-  woodCount -= amount;
-  return true;
-}
-
-export function getLastWoodCollectPosition(): {
-  x: number;
-  y: number;
-  z: number;
-  version: number;
-} {
-  return {
-    x: lastCollectX,
-    y: lastCollectY,
-    z: lastCollectZ,
-    version: lastCollectVersion,
-  };
+  const s = engineState();
+  const h = heroEid();
+  return s && h ? spendResource(s, h, WOOD, amount) : false;
 }

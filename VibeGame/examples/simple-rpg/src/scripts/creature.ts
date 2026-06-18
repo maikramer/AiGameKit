@@ -1,54 +1,57 @@
 import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
+import {
+  loadGltfToSceneWithAnimator,
+  playSound,
+  spawnFloatingText,
+} from 'vibegame';
 import type { GltfAnimator, MonoBehaviourContext, State } from 'vibegame';
 import {
   Transform,
   defineQuery,
   PlayerController,
-  MonoBehaviour,
   getTerrainHeightAt,
   getBvhSurfaceHeight,
   Health,
-  damageHealth,
   isDead,
   spawnParticleBurst,
   threeCameras,
-  isNavMeshReady,
-  setAgentTarget,
-  clearAgentTarget,
+  // Engine melee-AI FSM (the brain): perception, state machine, navmesh
+  // steering + attack. This script is the *presentation* layer on top of it.
+  runMeleeAiFrame,
+  getOrCreateAiInstanceState,
+  removeAiInstanceState,
+  AiStateComponent,
+  AI_MODE_CHASE,
+  AI_MODE_ATTACK,
+  AI_MODE_LUNGE,
+  AI_MODE_DEAD,
   removeAgent,
-  getAgentPosition,
-  NavMeshAgent,
 } from 'vibegame';
+import type { MeleeAiConfig } from 'vibegame';
+import { registerEnemy, unregisterEnemy } from './enemy-registry';
 
-// Terrain collision layer for ground sampling. Sampling the terrain BVH (not a
-// Rapier ray against everything) keeps creatures off the player's head: the BVH
-// only contains terrain, so a creature standing over the player can't snap onto
-// it. Everything shares membership 0xffff, so a Rapier ray would hit the player.
 const TERRAIN_LAYER = 0x0001;
-// How close a lunge may bring the creature to the player's center — stops it
-// dashing through/over the player so melee stays face-to-face. ~2.2m keeps a
-// clear gap between the ~1m-wide meshes instead of letting them overlap.
-const LUNGE_STANDOFF = 2.2;
 const WATER_LEVEL = 1.25;
-const TURN_RATE = 2.0;
-const ACCEL = 3.0;
-const DETECT_RANGE = 18;
-const ATTACK_RANGE = 3.0;
-const ATTACK_COOLDOWN = 2.5;
-const LEASH_RADIUS = 30;
-const LUNGE_WINDUP = 0.25;
-const LUNGE_DURATION = 0.3;
-const LUNGE_SPEED = 6.0;
-const LUNGE_RECOVERY = 0.5;
-const LUNGE_HIT_RANGE = 4.0;
-const HOVER_MIN = 2.0;
-const HOVER_MAX = 5.0;
-const WANDER_PICK_DIST_MIN = 2;
 const HEALTH_BAR_WIDTH = 1.4;
+const FOOT_RADIUS = 0.3;
+
+// AI tuning not expressed in CreatureConfig — defaults from the original
+// creature prototype, fed into the engine MeleeAiConfig.
+const AI_DEFAULTS = {
+  detectRange: 18,
+  // Attack from ~1m (matches the engine combat ring), not 2-3m.
+  attackRange: 1.4,
+  attackCooldown: 2.5,
+  leashRadius: 30,
+  lungeWindup: 0.25,
+  lungeDuration: 0.3,
+  lungeRecovery: 0.5,
+  lungeStandoff: 0.9,
+  hoverMin: 2.0,
+  hoverMax: 5.0,
+};
 
 const aggroEntities = new Set<number>();
-
 export function anyCreatureAggro(): boolean {
   return aggroEntities.size > 0;
 }
@@ -59,6 +62,8 @@ export interface CreatureClips {
   run: string;
   lunge: string;
   death: string;
+  /** Optional intro roar clip (boss). */
+  roar?: string;
 }
 
 export interface CreatureConfig {
@@ -78,46 +83,47 @@ export interface CreatureConfig {
     y: number,
     z: number
   ) => void;
+  // ── Optional AI/boss extras (all default off) ──
+  detectRange?: number;
+  attackRange?: number;
+  attackCooldown?: number;
+  leashRadius?: number;
+  /** Orbit/strafe the player between swings. */
+  strafe?: boolean;
+  /** Back off + circle below this HP fraction. */
+  lowHpKiteFrac?: number;
+  /** Enrage (faster, shorter cooldown) below this HP fraction. */
+  enrageBelowFrac?: number;
+  /** SFX played on the intro roar / first activation. */
+  roarSound?: string;
+  /** Big banner shown on death (boss). */
+  defeatedText?: string;
+  /** Stay dormant (hidden, no AI) until this returns true (boss gate). */
+  gateUntil?: () => boolean;
 }
 
-type CombatState = 'idle' | 'chase' | 'attack' | 'dead';
-type LungePhase = 'ready' | 'windup' | 'lunge' | 'recovery';
-
-interface CreatureState {
-  heading: number;
-  targetHeading: number;
-  speed: number;
-  hovering: boolean;
-  stateTimer: number;
-  originX: number;
-  originZ: number;
-  footOffset: number;
-  ready: boolean;
+interface PresentationState {
   group: THREE.Group | null;
   animator: GltfAnimator | null;
+  footOffset: number;
+  ready: boolean;
   playing: string;
-  combatState: CombatState;
-  attackTimer: number;
-  lungePhase: LungePhase;
-  lungeTimer: number;
-  lungeDirX: number;
-  lungeDirZ: number;
-  deathTimer: number;
-  deathHandled: boolean;
-  healthBarBg: THREE.Mesh | null;
-  healthBarFill: THREE.Mesh | null;
+  heading: number;
+  prevX: number;
+  prevZ: number;
   lastHp: number;
   flashTimer: number;
   flashMats:
     | { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[]
     | null;
-  wanderTargetX: number;
-  wanderTargetZ: number;
-  prevPosX: number;
-  prevPosZ: number;
-  navHeading: number;
-  navInitialized: boolean;
-  agentCreated: boolean;
+  healthBarBg: THREE.Mesh | null;
+  healthBarFill: THREE.Mesh | null;
+  deathHandled: boolean;
+  deathTimer: number;
+  /** Gate: false while dormant (boss waiting), true once activated. */
+  activated: boolean;
+  /** Intro-roar countdown (holds still, plays roar clip). */
+  roarTimer: number;
 }
 
 const playerQuery = defineQuery([PlayerController]);
@@ -129,21 +135,12 @@ function groundHeight(
   z: number,
   fromY: number
 ): number {
-  const gy = getBvhSurfaceHeight(
-    ctx.state,
-    x,
-    fromY + 60,
-    z,
-    2000,
-    TERRAIN_LAYER
-  );
+  const gy = getBvhSurfaceHeight(ctx.state, x, fromY + 60, z, 2000, TERRAIN_LAYER);
   if (gy != null && Number.isFinite(gy)) return gy;
   const hm = getTerrainHeightAt(ctx.state, x, z);
   if (Number.isFinite(hm)) return hm;
   return 0;
 }
-
-const FOOT_RADIUS = 0.3;
 
 function footprintHeight(
   ctx: MonoBehaviourContext,
@@ -165,28 +162,26 @@ function footprintHeight(
   return best;
 }
 
-function ensureHealthBar(s: CreatureState): void {
+function ensureHealthBar(s: PresentationState): void {
   if (s.healthBarBg || !s.group) return;
-  const bgGeo = new THREE.PlaneGeometry(1.5, 0.22);
-  const bgMat = new THREE.MeshBasicMaterial({
-    color: 0x111111,
-    depthTest: false,
-    transparent: true,
-    opacity: 0.85,
-  });
-  const bg = new THREE.Mesh(bgGeo, bgMat);
+  const bg = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.5, 0.22),
+    new THREE.MeshBasicMaterial({
+      color: 0x111111,
+      depthTest: false,
+      transparent: true,
+      opacity: 0.85,
+    })
+  );
   bg.position.set(0, 2.0, 0);
   bg.renderOrder = 998;
   bg.visible = false;
   s.group.add(bg);
 
-  const fillGeo = new THREE.PlaneGeometry(HEALTH_BAR_WIDTH, 0.14);
-  const fillMat = new THREE.MeshBasicMaterial({
-    color: 0x44ddff,
-    depthTest: false,
-    transparent: true,
-  });
-  const fill = new THREE.Mesh(fillGeo, fillMat);
+  const fill = new THREE.Mesh(
+    new THREE.PlaneGeometry(HEALTH_BAR_WIDTH, 0.14),
+    new THREE.MeshBasicMaterial({ color: 0x44ddff, depthTest: false, transparent: true })
+  );
   fill.position.set(0, 2.0, 0.01);
   fill.renderOrder = 999;
   fill.visible = false;
@@ -196,7 +191,7 @@ function ensureHealthBar(s: CreatureState): void {
   s.healthBarFill = fill;
 }
 
-function disposeHealthBar(s: CreatureState): void {
+function disposeHealthBar(s: PresentationState): void {
   for (const mesh of [s.healthBarBg, s.healthBarFill]) {
     if (!mesh) continue;
     mesh.removeFromParent();
@@ -209,34 +204,24 @@ function disposeHealthBar(s: CreatureState): void {
   s.healthBarFill = null;
 }
 
-/** Cache the creature's emissive materials so a hit can tint them white. */
-function collectFlashMats(s: CreatureState): void {
+function collectFlashMats(s: PresentationState): void {
   if (s.flashMats || !s.group) return;
-  const mats: {
-    mat: THREE.MeshStandardMaterial;
-    emHex: number;
-    emInt: number;
-  }[] = [];
+  const mats: { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] = [];
   s.group.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
-    const m = mesh.material;
-    const arr = Array.isArray(m) ? m : [m];
+    const arr = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const mat of arr) {
       const sm = mat as THREE.MeshStandardMaterial;
       if (sm && sm.emissive) {
-        mats.push({
-          mat: sm,
-          emHex: sm.emissive.getHex(),
-          emInt: sm.emissiveIntensity ?? 1,
-        });
+        mats.push({ mat: sm, emHex: sm.emissive.getHex(), emInt: sm.emissiveIntensity ?? 1 });
       }
     }
   });
   s.flashMats = mats;
 }
 
-function applyFlash(s: CreatureState, on: boolean): void {
+function applyFlash(s: PresentationState, on: boolean): void {
   if (!s.flashMats) return;
   for (const f of s.flashMats) {
     if (on) {
@@ -258,46 +243,67 @@ export interface CreatureBehaviours {
 export function createCreatureBehaviours(
   cfg: CreatureConfig
 ): CreatureBehaviours {
-  const stateMap = new Map<number, CreatureState>();
-  let cachedPlayerEid = 0;
+  // One shared FSM config per creature type. `targetEid` (the hero) is resolved
+  // lazily — the engine FSM then chases/attacks it without needing a faction
+  // hostility matrix set up.
+  const meleeConfig: MeleeAiConfig = {
+    detectRange: cfg.detectRange ?? AI_DEFAULTS.detectRange,
+    attackRange: cfg.attackRange ?? AI_DEFAULTS.attackRange,
+    attackCooldown: cfg.attackCooldown ?? AI_DEFAULTS.attackCooldown,
+    attackDamage: cfg.attackDamage,
+    chaseSpeed: cfg.chaseSpeed,
+    wanderSpeed: cfg.wanderSpeed,
+    wanderRadius: cfg.wanderRadius,
+    leashRadius: cfg.leashRadius ?? AI_DEFAULTS.leashRadius,
+    lungeWindup: AI_DEFAULTS.lungeWindup,
+    lungeDuration: AI_DEFAULTS.lungeDuration,
+    lungeRecovery: AI_DEFAULTS.lungeRecovery,
+    lungeStandoff: AI_DEFAULTS.lungeStandoff,
+    hoverMin: AI_DEFAULTS.hoverMin,
+    hoverMax: AI_DEFAULTS.hoverMax,
+    strafe: cfg.strafe,
+    lowHpKiteFrac: cfg.lowHpKiteFrac,
+    enrageBelowFrac: cfg.enrageBelowFrac,
+  };
 
-  function findPlayer(ctx: MonoBehaviourContext): number {
-    if (cachedPlayerEid && Health.current[cachedPlayerEid] > 0)
-      return cachedPlayerEid;
-    const players = playerQuery(ctx.state.world);
-    cachedPlayerEid = players[0] ?? 0;
-    return cachedPlayerEid;
+  const stateMap = new Map<number, PresentationState>();
+  let cachedPlayer = 0;
+
+  function resolvePlayer(ctx: MonoBehaviourContext): number {
+    if (cachedPlayer && Health.current[cachedPlayer] > 0) return cachedPlayer;
+    cachedPlayer = playerQuery(ctx.state.world)[0] ?? 0;
+    if (cachedPlayer) meleeConfig.targetEid = cachedPlayer;
+    return cachedPlayer;
   }
 
-  function handleDeath(
-    ctx: MonoBehaviourContext,
-    s: CreatureState,
-    eid: number
-  ): void {
+  function handleDeath(ctx: MonoBehaviourContext, s: PresentationState, eid: number): void {
     if (s.deathHandled) return;
     s.deathHandled = true;
-    s.combatState = 'dead';
-    aggroEntities.delete(eid);
     s.deathTimer = 2.0;
-    s.speed = 0;
-    clearAgentTarget(ctx.state, eid);
-
+    aggroEntities.delete(eid);
+    unregisterEnemy(eid);
     if (s.healthBarBg) s.healthBarBg.visible = false;
     if (s.healthBarFill) s.healthBarFill.visible = false;
 
     playSound('enemy-death');
-
     const x = Transform.posX[eid];
     const y = Transform.posY[eid];
     const z = Transform.posZ[eid];
-
+    if (cfg.defeatedText) {
+      spawnFloatingText(ctx.state, cfg.defeatedText, {
+        x,
+        y: y + 3.0,
+        z,
+        color: 0xffd700,
+        size: 1.0,
+        duration: 3.0,
+      });
+    }
     const gold = Math.floor(
       cfg.lootGoldMin + Math.random() * (cfg.lootGoldMax - cfg.lootGoldMin + 1)
     );
     cfg.onDeathLoot?.(ctx.state, gold, x, y, z);
     playSound('item-drop');
-
-    // The "+gold" pop is emitted centrally (gold-delta watcher in main.ts).
     spawnParticleBurst(ctx.state, {
       x,
       y: y + 0.5,
@@ -306,205 +312,54 @@ export function createCreatureBehaviours(
       count: 16,
       duration: 0.8,
     });
-
     if (s.animator && s.playing !== cfg.clips.death) {
       s.animator.play(cfg.clips.death, { loop: false });
       s.playing = cfg.clips.death;
     }
   }
 
-  function updateNavMeshMovement(
-    ctx: MonoBehaviourContext,
-    s: CreatureState,
-    eid: number,
-    playerEid: number,
-    dt: number
-  ): void {
-    let moving = false;
-    let tx = 0;
-    let tz = 0;
-
-    if (s.lungePhase === 'windup' || s.lungePhase === 'recovery') {
-      moving = false;
-    } else if (s.combatState === 'chase' && playerEid > 0) {
-      // Hold a 1.1–1.6m band around the player. Crowd agents ignore RigidBodies
-      // and carry momentum, so a target pinned to the player's centroid lets the
-      // capsule glide through the agent; anchoring on a ring around the player
-      // makes the enemy approach face-to-face and retreat when the player walks
-      // into it, instead of overlapping.
-      const pdx = Transform.posX[playerEid] - Transform.posX[eid];
-      const pdz = Transform.posZ[playerEid] - Transform.posZ[eid];
-      const pdist = Math.sqrt(pdx * pdx + pdz * pdz) || 1e-3;
-      const DESIRED_DIST = 1.6;
-      const MIN_GAP = 1.1;
-      if (pdist > DESIRED_DIST) {
-        const k = (pdist - DESIRED_DIST) / pdist;
-        tx = Transform.posX[eid] + pdx * k;
-        tz = Transform.posZ[eid] + pdz * k;
-        moving = true;
-      } else if (pdist < MIN_GAP) {
-        const k = (MIN_GAP - pdist) / pdist;
-        tx = Transform.posX[eid] - pdx * k;
-        tz = Transform.posZ[eid] - pdz * k;
-        moving = true;
-      } else {
-        moving = false;
-      }
-    } else if (s.combatState === 'attack') {
-      // Player can still push in: keep the same gap during attack so lunges
-      // start from face-to-face distance instead of inside the capsule.
-      const pdx = Transform.posX[playerEid] - Transform.posX[eid];
-      const pdz = Transform.posZ[playerEid] - Transform.posZ[eid];
-      const pdist = Math.sqrt(pdx * pdx + pdz * pdz) || 1e-3;
-      const MIN_GAP = 1.1;
-      if (pdist < MIN_GAP) {
-        const k = (MIN_GAP - pdist) / pdist;
-        tx = Transform.posX[eid] - pdx * k;
-        tz = Transform.posZ[eid] - pdz * k;
-        moving = true;
-      } else {
-        moving = false;
-      }
-    } else {
-      const homeDx = s.originX - Transform.posX[eid];
-      const homeDz = s.originZ - Transform.posZ[eid];
-      const homeDistSq = homeDx * homeDx + homeDz * homeDz;
-      if (homeDistSq > cfg.wanderRadius * cfg.wanderRadius) {
-        tx = s.originX;
-        tz = s.originZ;
-        moving = true;
-      } else if (!s.hovering) {
-        tx = s.wanderTargetX;
-        tz = s.wanderTargetZ;
-        moving = true;
-      } else {
-        moving = false;
-      }
-    }
-
-    if (moving) {
-      const ty = getTerrainHeightAt(ctx.state, tx, tz);
-      setAgentTarget(ctx.state, eid, tx, ty, tz);
-    } else {
-      clearAgentTarget(ctx.state, eid);
-    }
-
-    const pos = getAgentPosition(eid);
-    if (!pos) return;
-
-    if (!s.navInitialized) {
-      s.prevPosX = pos.x;
-      s.prevPosZ = pos.z;
-      s.navInitialized = true;
-    }
-
-    const vx = pos.x - s.prevPosX;
-    const vz = pos.z - s.prevPosZ;
-    const moveSpeed = dt > 0 ? Math.hypot(vx, vz) / dt : 0;
-
-    let heading: number;
-    if (moveSpeed > 0.3) {
-      heading = Math.atan2(vx, vz);
-      s.navHeading = heading;
-    } else if (
-      playerEid > 0 &&
-      Health.max[playerEid] > 0 &&
-      (s.combatState === 'attack' ||
-        s.lungePhase === 'windup' ||
-        s.lungePhase === 'recovery')
-    ) {
-      const pdx = Transform.posX[playerEid] - pos.x;
-      const pdz = Transform.posZ[playerEid] - pos.z;
-      heading = Math.atan2(pdx, pdz);
-      s.navHeading = heading;
-    } else {
-      heading = s.navHeading;
-    }
-
-    const terrainY = groundHeight(ctx, pos.x, pos.z, 500);
-    const visualY =
-      (Number.isFinite(terrainY) ? terrainY : pos.y) + s.footOffset;
-    s.group!.position.set(pos.x, visualY, pos.z);
-    Transform.posX[eid] = pos.x;
-    Transform.posY[eid] = visualY;
-    Transform.posZ[eid] = pos.z;
-    Transform.dirty[eid] = 1;
-    s.group!.rotation.set(0, heading, 0);
-    s.prevPosX = pos.x;
-    s.prevPosZ = pos.z;
-
-    let clip: string;
-    if (s.lungePhase !== 'ready') {
-      clip = cfg.clips.lunge;
-    } else if (s.combatState === 'chase') {
-      clip = cfg.clips.run;
-    } else {
-      clip = moveSpeed > 0.3 ? cfg.clips.walk : cfg.clips.idle;
-    }
-    if (s.animator && s.playing !== clip) {
-      if (clip === cfg.clips.lunge) {
-        s.animator.play(cfg.clips.lunge, { loop: false });
-      } else {
-        s.animator.play(clip);
-      }
-      s.playing = clip;
-    }
+  function pickClip(mode: number, moving: boolean): string {
+    // Only the actual lunge burst plays the lunge clip; while waiting between
+    // swings (ATTACK) we hold idle so the rig doesn't freeze on the lunge's
+    // clamped last frame (the "stuck head-down" pose).
+    if (mode === AI_MODE_LUNGE) return cfg.clips.lunge;
+    if (mode === AI_MODE_CHASE) return cfg.clips.run;
+    if (mode === AI_MODE_ATTACK) return cfg.clips.idle;
+    return moving ? cfg.clips.walk : cfg.clips.idle;
   }
 
-  const behaviours: CreatureBehaviours = {
+  return {
     start(ctx: MonoBehaviourContext): void {
       const eid = ctx.entity;
-      const s: CreatureState = {
-        heading: 0,
-        targetHeading: 0,
-        speed: 0,
-        hovering: true,
-        stateTimer: HOVER_MIN + Math.random() * (HOVER_MAX - HOVER_MIN),
-        originX: 0,
-        originZ: 0,
-        footOffset: 0,
-        ready: false,
+      const s: PresentationState = {
         group: null,
         animator: null,
+        footOffset: 0,
+        ready: false,
         playing: '',
-        combatState: 'idle',
-        attackTimer: 0,
-        lungePhase: 'ready',
-        lungeTimer: 0,
-        lungeDirX: 0,
-        lungeDirZ: 1,
-        deathTimer: 0,
-        deathHandled: false,
-        healthBarBg: null,
-        healthBarFill: null,
+        heading: Math.random() * Math.PI * 2,
+        prevX: Transform.posX[eid],
+        prevZ: Transform.posZ[eid],
         lastHp: cfg.hp,
         flashTimer: 0,
         flashMats: null,
-        wanderTargetX: 0,
-        wanderTargetZ: 0,
-        prevPosX: 0,
-        prevPosZ: 0,
-        navHeading: 0,
-        navInitialized: false,
-        agentCreated: false,
+        healthBarBg: null,
+        healthBarFill: null,
+        deathHandled: false,
+        deathTimer: 0,
+        activated: !cfg.gateUntil,
+        roarTimer: 0,
       };
-      s.heading = Math.random() * Math.PI * 2;
-      s.navHeading = s.heading;
       stateMap.set(eid, s);
 
-      if (!ctx.state.hasComponent(eid, Health)) {
-        ctx.state.addComponent(eid, Health);
-      }
+      if (!ctx.state.hasComponent(eid, Health)) ctx.state.addComponent(eid, Health);
       Health.current[eid] = cfg.hp;
       Health.max[eid] = cfg.hp;
 
-      if (!ctx.state.hasComponent(eid, NavMeshAgent)) {
-        ctx.state.addComponent(eid, NavMeshAgent);
-      }
-      NavMeshAgent.speed[eid] = cfg.chaseSpeed;
-      NavMeshAgent.radius[eid] = 0.4;
-      NavMeshAgent.height[eid] = 1.0;
-      NavMeshAgent.enabled[eid] = 1;
+      // Normal enemies count toward the boss gate; the boss (gated) does not.
+      if (!cfg.gateUntil) registerEnemy(eid);
+
+      resolvePlayer(ctx);
 
       void loadGltfToSceneWithAnimator(ctx.state, cfg.modelUrl, {
         crossfadeDuration: 0.25,
@@ -518,59 +373,80 @@ export function createCreatureBehaviours(
         s.group.updateWorldMatrix(true, true);
         _box.setFromObject(s.group);
         s.footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
+        if (!s.activated) s.group.visible = false; // dormant boss stays hidden
       });
-    },
-
-    onDestroy(ctx: MonoBehaviourContext): void {
-      const s = stateMap.get(ctx.entity);
-      if (s) disposeHealthBar(s);
-      s?.group?.removeFromParent();
-      removeAgent(ctx.state, ctx.entity);
-      stateMap.delete(ctx.entity);
-      aggroEntities.delete(ctx.entity);
     },
 
     update(ctx: MonoBehaviourContext): void {
       const eid = ctx.entity;
       const s = stateMap.get(eid);
-      if (!s || !s.group) return;
+      if (!s) return;
 
-      s.animator?.update(ctx.deltaTime);
+      resolvePlayer(ctx);
 
-      const x = Transform.posX[eid];
-      const z = Transform.posZ[eid];
-
-      if (!s.ready) {
-        const gy = groundHeight(ctx, x, z, 500);
-        if (!Number.isFinite(gy) || gy === 0) return;
-        s.originX = x;
-        s.originZ = z;
-        s.ready = true;
+      // ── Boss gate: stay dormant (hidden, no AI) until the gate opens, then
+      //    reveal + intro roar before engaging. ──────────────────────────────
+      if (!s.activated) {
+        if (cfg.gateUntil && !cfg.gateUntil()) return;
+        s.activated = true;
+        if (s.group) s.group.visible = true;
+        if (cfg.clips.roar) {
+          s.roarTimer = 2.5;
+          if (cfg.roarSound) playSound(cfg.roarSound);
+        }
       }
-
-      const dt = ctx.deltaTime;
-
-      if (s.combatState === 'dead') {
-        s.deathTimer -= dt;
-        if (s.deathTimer <= 0) {
-          disposeHealthBar(s);
-          s.group?.removeFromParent();
-          s.group = null;
-          MonoBehaviour.enabled[eid] = 0;
+      if (s.roarTimer > 0 && s.group) {
+        s.roarTimer -= ctx.deltaTime;
+        s.animator?.update(ctx.deltaTime);
+        if (cfg.clips.roar && s.playing !== cfg.clips.roar) {
+          s.animator?.play(cfg.clips.roar, { loop: false });
+          s.playing = cfg.clips.roar;
+        }
+        const rx = Transform.posX[eid];
+        const rz = Transform.posZ[eid];
+        const ry = footprintHeight(ctx, rx, rz, Transform.posY[eid]);
+        if (Number.isFinite(ry)) {
+          Transform.posY[eid] = ry + s.footOffset;
+          s.group.position.set(rx, ry + s.footOffset, rz);
         }
         return;
       }
 
-      // Tick down a hit flash and restore the original emissive when it ends.
-      if (s.flashTimer > 0) {
-        s.flashTimer -= ctx.deltaTime;
-        if (s.flashTimer <= 0) applyFlash(s, false);
+      // ── AI (engine FSM): perception, FSM, navmesh steering, attack damage.
+      const inst = getOrCreateAiInstanceState(ctx.state, eid);
+      runMeleeAiFrame(ctx.state, eid, meleeConfig, inst);
+
+      // ── Presentation (this script): visuals, clips, terrain-Y, health bar,
+      //    hit-flash, death FX + loot.
+      if (!s.group) return;
+      s.animator?.update(ctx.deltaTime);
+      const dt = ctx.deltaTime;
+      const mode = AiStateComponent.mode[eid];
+
+      if (mode === AI_MODE_DEAD || isDead(eid)) {
+        handleDeath(ctx, s, eid);
+        s.deathTimer -= dt;
+        if (s.deathTimer <= 0) {
+          disposeHealthBar(s);
+          s.group.removeFromParent();
+          s.group = null;
+        }
+        return;
       }
 
-      const currentHp = Health.current[eid];
-      if (s.lastHp > currentHp) {
-        // Damage number + hurt SFX come from the central watchCombatFx in
-        // main.ts; here we add the 3D spark burst + a white flash for hit juice.
+      if (!s.ready) {
+        const gy = groundHeight(ctx, Transform.posX[eid], Transform.posZ[eid], 500);
+        if (!Number.isFinite(gy) || gy === 0) return;
+        s.ready = true;
+      }
+
+      // Hit flash on HP drop (damage numbers/SFX come from main.ts watcher).
+      if (s.flashTimer > 0) {
+        s.flashTimer -= dt;
+        if (s.flashTimer <= 0) applyFlash(s, false);
+      }
+      const hp = Health.current[eid];
+      if (s.lastHp > hp) {
         collectFlashMats(s);
         s.flashTimer = 0.11;
         applyFlash(s, true);
@@ -583,282 +459,83 @@ export function createCreatureBehaviours(
           duration: 0.4,
         });
       }
-      s.lastHp = currentHp;
+      s.lastHp = hp;
 
-      if (isDead(eid)) {
-        handleDeath(ctx, s, eid);
-        return;
-      }
+      // The FSM owns XZ (via the crowd agent / lunge). We own the terrain Y and
+      // the visual transform.
+      const x = Transform.posX[eid];
+      const z = Transform.posZ[eid];
+      const groundY = footprintHeight(ctx, x, z, Transform.posY[eid]);
+      const visualY = (Number.isFinite(groundY) ? groundY : Transform.posY[eid]) + s.footOffset;
+      Transform.posY[eid] = visualY;
+      Transform.dirty[eid] = 1;
 
-      const playerEid = findPlayer(ctx);
-      let inCombat = false;
-      let lunging = false;
-
-      const homeDx = s.originX - x;
-      const homeDz = s.originZ - z;
-      const homeDistSq = homeDx * homeDx + homeDz * homeDz;
-      const leashed = homeDistSq > LEASH_RADIUS * LEASH_RADIUS;
-
-      if (playerEid > 0 && Health.max[playerEid] > 0 && !leashed) {
-        const px = Transform.posX[playerEid];
-        const pz = Transform.posZ[playerEid];
-        const dx = px - x;
-        const dz = pz - z;
-        const distSq = dx * dx + dz * dz;
-        const homeToPlayerSq =
-          (px - s.originX) * (px - s.originX) +
-          (pz - s.originZ) * (pz - s.originZ);
-
-        if (
-          distSq <= ATTACK_RANGE * ATTACK_RANGE &&
-          homeToPlayerSq <= LEASH_RADIUS * LEASH_RADIUS
-        ) {
-          s.combatState = 'attack';
-          inCombat = true;
-          s.targetHeading = Math.atan2(dx, dz);
-
-          if (s.lungePhase === 'ready') {
-            s.attackTimer -= dt;
-            if (s.attackTimer <= 0) {
-              s.lungePhase = 'windup';
-              s.lungeTimer = LUNGE_WINDUP;
-              const len = Math.sqrt(distSq) || 1;
-              s.lungeDirX = dx / len;
-              s.lungeDirZ = dz / len;
-              s.playing = '';
-            }
-          } else if (s.lungePhase === 'windup') {
-            s.lungeTimer -= dt;
-            if (s.lungeTimer <= 0) {
-              s.lungePhase = 'lunge';
-              s.lungeTimer = LUNGE_DURATION;
-            }
-          } else if (s.lungePhase === 'lunge') {
-            lunging = true;
-            s.lungeTimer -= dt;
-            if (s.lungeTimer <= 0) {
-              const px2 = Transform.posX[playerEid];
-              const pz2 = Transform.posZ[playerEid];
-              const ddx = px2 - Transform.posX[eid];
-              const ddz = pz2 - Transform.posZ[eid];
-              if (ddx * ddx + ddz * ddz <= LUNGE_HIT_RANGE * LUNGE_HIT_RANGE) {
-                damageHealth(playerEid, cfg.attackDamage);
-                spawnParticleBurst(ctx.state, {
-                  x: px2,
-                  y: Transform.posY[playerEid] + 1.0,
-                  z: pz2,
-                  preset: 'sparks',
-                  count: 8,
-                  duration: 0.4,
-                });
-                playSound('hit');
-              }
-              s.lungePhase = 'recovery';
-              s.lungeTimer = LUNGE_RECOVERY;
-              s.attackTimer = ATTACK_COOLDOWN;
-            }
-          } else if (s.lungePhase === 'recovery') {
-            s.lungeTimer -= dt;
-            if (s.lungeTimer <= 0) s.lungePhase = 'ready';
-          }
-        } else if (
-          distSq <= DETECT_RANGE * DETECT_RANGE &&
-          homeToPlayerSq <= LEASH_RADIUS * LEASH_RADIUS
-        ) {
-          s.combatState = 'chase';
-          inCombat = true;
-          s.targetHeading = Math.atan2(dx, dz);
-          s.lungePhase = 'ready';
-          s.lungeTimer = 0;
-        } else {
-          s.combatState = 'idle';
-          s.lungePhase = 'ready';
-        }
-      } else {
-        s.combatState = 'idle';
-        s.lungePhase = 'ready';
-      }
-
-      if (s.combatState === 'chase' || s.combatState === 'attack') {
-        aggroEntities.add(eid);
-      } else {
-        aggroEntities.delete(eid);
-      }
-
-      if (!inCombat) {
-        s.stateTimer -= dt;
-        if (s.stateTimer <= 0) {
-          s.hovering = !s.hovering;
-          if (s.hovering) {
-            s.stateTimer = HOVER_MIN + Math.random() * (HOVER_MAX - HOVER_MIN);
-          } else {
-            s.stateTimer =
-              HOVER_MIN * 0.6 +
-              Math.random() * (HOVER_MAX * 0.6 - HOVER_MIN * 0.6);
-            s.targetHeading = s.heading + (Math.random() - 0.5) * Math.PI * 1.4;
-            const angle = Math.random() * Math.PI * 2;
-            const dist =
-              WANDER_PICK_DIST_MIN +
-              Math.random() * (cfg.wanderRadius * 0.6 - WANDER_PICK_DIST_MIN);
-            s.wanderTargetX = s.originX + Math.sin(angle) * dist;
-            s.wanderTargetZ = s.originZ + Math.cos(angle) * dist;
-          }
-        }
-
-        const homeDx2 = s.originX - x;
-        const homeDz2 = s.originZ - z;
-        if (
-          homeDx2 * homeDx2 + homeDz2 * homeDz2 >
-          cfg.wanderRadius * cfg.wanderRadius
-        ) {
-          s.targetHeading = Math.atan2(homeDx2, homeDz2);
-          s.hovering = false;
-          s.wanderTargetX = s.originX;
-          s.wanderTargetZ = s.originZ;
-        }
-      }
-
-      const navReady = isNavMeshReady();
-
-      if (lunging && NavMeshAgent.agentIndex[eid] !== -1) {
-        removeAgent(ctx.state, eid);
-        NavMeshAgent.enabled[eid] = 0;
-      } else if (!lunging && NavMeshAgent.enabled[eid] === 0 && navReady) {
-        NavMeshAgent.enabled[eid] = 1;
-        s.navInitialized = false;
-        s.agentCreated = false;
-      }
-
-      const hasAgent = navReady && NavMeshAgent.agentIndex[eid] !== -1;
-
-      if (lunging) {
-        let nx = x + s.lungeDirX * LUNGE_SPEED * dt;
-        let nz = z + s.lungeDirZ * LUNGE_SPEED * dt;
-        // Clamp the dash so the creature halts at a frontal standoff instead of
-        // sliding through / onto the player.
-        if (playerEid > 0) {
-          const pdx = nx - Transform.posX[playerEid];
-          const pdz = nz - Transform.posZ[playerEid];
-          const pd = Math.hypot(pdx, pdz);
-          if (pd < LUNGE_STANDOFF) {
-            const ux = pd > 1e-3 ? pdx / pd : -s.lungeDirX;
-            const uz = pd > 1e-3 ? pdz / pd : -s.lungeDirZ;
-            nx = Transform.posX[playerEid] + ux * LUNGE_STANDOFF;
-            nz = Transform.posZ[playerEid] + uz * LUNGE_STANDOFF;
-          }
-        }
-        const aheadY = groundHeight(ctx, nx, nz, Transform.posY[eid]);
-        if (Number.isFinite(aheadY) && aheadY >= WATER_LEVEL) {
-          const groundY = footprintHeight(ctx, nx, nz, Transform.posY[eid]);
-          if (Number.isFinite(groundY)) {
-            Transform.posX[eid] = nx;
-            Transform.posY[eid] = groundY + s.footOffset;
-            Transform.posZ[eid] = nz;
-            Transform.dirty[eid] = 1;
-            s.group.position.set(nx, groundY + s.footOffset, nz);
-          }
-        }
-        s.heading = Math.atan2(s.lungeDirX, s.lungeDirZ);
-        s.group.rotation.set(0, s.heading, 0);
-        if (s.animator && s.playing !== cfg.clips.lunge) {
-          s.animator.play(cfg.clips.lunge, { loop: false });
-          s.playing = cfg.clips.lunge;
-        }
-      } else if (hasAgent) {
-        if (!s.agentCreated) s.agentCreated = true;
-        updateNavMeshMovement(ctx, s, eid, playerEid, dt);
-      } else {
-        const turnRate = inCombat ? TURN_RATE : TURN_RATE * 0.6;
-        const err = Math.atan2(
-          Math.sin(s.targetHeading - s.heading),
-          Math.cos(s.targetHeading - s.heading)
+      // Heading from planar movement; face the target while attacking.
+      const vx = x - s.prevX;
+      const vz = z - s.prevZ;
+      const moveSpeed = dt > 0 ? Math.hypot(vx, vz) / dt : 0;
+      if (moveSpeed > 0.3) {
+        s.heading = Math.atan2(vx, vz);
+      } else if (
+        (mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE) &&
+        cachedPlayer > 0
+      ) {
+        s.heading = Math.atan2(
+          Transform.posX[cachedPlayer] - x,
+          Transform.posZ[cachedPlayer] - z
         );
-        const maxTurn = turnRate * dt;
-        s.heading += Math.min(maxTurn, Math.max(-maxTurn, err));
+      }
+      s.prevX = x;
+      s.prevZ = z;
 
-        let targetSpeed: number;
-        if (s.lungePhase === 'windup' || s.lungePhase === 'recovery') {
-          targetSpeed = 0;
-        } else if (s.combatState === 'chase') {
-          targetSpeed = cfg.chaseSpeed;
-        } else if (s.combatState === 'attack') {
-          targetSpeed = 0;
-        } else {
-          targetSpeed = s.hovering ? 0 : cfg.wanderSpeed;
-        }
-        if (s.speed < targetSpeed)
-          s.speed = Math.min(targetSpeed, s.speed + ACCEL * dt);
-        else if (s.speed > targetSpeed)
-          s.speed = Math.max(targetSpeed, s.speed - ACCEL * dt);
+      s.group.position.set(x, visualY, z);
+      s.group.rotation.set(0, s.heading, 0);
 
-        let nx = x;
-        let nz = z;
-        if (s.speed > 0.001) {
-          nx = x + Math.sin(s.heading) * s.speed * dt;
-          nz = z + Math.cos(s.heading) * s.speed * dt;
-        }
-        if (nx !== x || nz !== z) {
-          const aheadY = groundHeight(ctx, nx, nz, Transform.posY[eid]);
-          if (!Number.isFinite(aheadY) || aheadY < WATER_LEVEL) {
-            s.targetHeading = s.heading + Math.PI;
-            nx = x;
-            nz = z;
-          }
-        }
+      const inCombat =
+        mode === AI_MODE_CHASE || mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE;
+      if (inCombat) aggroEntities.add(eid);
+      else aggroEntities.delete(eid);
 
-        const groundY = footprintHeight(ctx, nx, nz, Transform.posY[eid]);
-        if (!Number.isFinite(groundY)) return;
-
-        let clip: string;
-        if (s.lungePhase !== 'ready') {
-          clip = cfg.clips.lunge;
-        } else if (s.combatState === 'chase') {
-          clip = cfg.clips.run;
-        } else {
-          clip = s.speed > 0.15 ? cfg.clips.walk : cfg.clips.idle;
-        }
-        if (s.animator && s.playing !== clip) {
-          if (clip === cfg.clips.lunge) {
-            s.animator.play(cfg.clips.lunge, { loop: false });
-          } else {
-            s.animator.play(clip);
-          }
-          s.playing = clip;
-        }
-
-        Transform.posX[eid] = nx;
-        Transform.posY[eid] = groundY + s.footOffset;
-        Transform.posZ[eid] = nz;
-        s.group.position.set(nx, groundY + s.footOffset, nz);
-        s.group.rotation.set(0, s.heading, 0);
+      const clip = pickClip(mode, moveSpeed > 0.3);
+      if (s.animator && s.playing !== clip) {
+        s.animator.play(clip, clip === cfg.clips.lunge ? { loop: false } : undefined);
+        s.playing = clip;
       }
 
+      // Health bar billboard (combat only).
       ensureHealthBar(s);
-      const showBar = inCombat;
-      if (s.healthBarBg) s.healthBarBg.visible = showBar;
+      if (s.healthBarBg) s.healthBarBg.visible = inCombat;
       if (s.healthBarFill) {
-        s.healthBarFill.visible = showBar;
-        if (showBar) {
-          const hpMax = Health.max[eid] || cfg.hp;
-          const ratio = Math.max(0, Math.min(1, currentHp / hpMax));
+        s.healthBarFill.visible = inCombat;
+        if (inCombat) {
+          const ratio = Math.max(0, Math.min(1, hp / (Health.max[eid] || cfg.hp)));
           s.healthBarFill.scale.x = ratio;
           s.healthBarFill.position.x = -(HEALTH_BAR_WIDTH / 2) * (1 - ratio);
-          const mat = s.healthBarFill.material as THREE.MeshBasicMaterial;
-          mat.color.setHex(
+          (s.healthBarFill.material as THREE.MeshBasicMaterial).color.setHex(
             ratio > 0.5 ? 0x22cc22 : ratio > 0.25 ? 0xeecc22 : 0xee2222
           );
         }
       }
-      if (showBar && s.healthBarBg && s.healthBarFill) {
+      if (inCombat && s.healthBarBg && s.healthBarFill) {
         const cam = threeCameras.values().next().value;
         if (cam) {
-          s.group.updateWorldMatrix(true, false);
           s.healthBarBg.lookAt(cam.position);
           s.healthBarFill.lookAt(cam.position);
         }
       }
     },
-  };
 
-  return behaviours;
+    onDestroy(ctx: MonoBehaviourContext): void {
+      const s = stateMap.get(ctx.entity);
+      if (s) {
+        disposeHealthBar(s);
+        s.group?.removeFromParent();
+      }
+      removeAgent(ctx.state, ctx.entity);
+      removeAiInstanceState(ctx.state, ctx.entity);
+      unregisterEnemy(ctx.entity);
+      stateMap.delete(ctx.entity);
+      aggroEntities.delete(ctx.entity);
+    },
+  };
 }

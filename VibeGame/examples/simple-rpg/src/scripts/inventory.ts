@@ -1,42 +1,28 @@
-let stoneCount = 0;
+// Stone adapter → engine RpgVault on the hero entity (read by the HUD
+// ResourceChip resource="stone"). Thin wrapper so callers keep the same API.
+import { addResource, spendResource, getResource } from 'vibegame';
+import { engineState, heroEid } from '../game/engine-bridge';
 
-let lastCollectX = 0;
-let lastCollectY = 0;
-let lastCollectZ = 0;
-let lastCollectVersion = 0;
+const STONE = 'stone';
 
-export function addStone(amount: number, x = 0, y = 0, z = 0): void {
-  stoneCount += amount;
-  lastCollectX = x;
-  lastCollectY = y;
-  lastCollectZ = z;
-  lastCollectVersion++;
+export function addStone(amount: number, _x = 0, _y = 0, _z = 0): void {
+  const s = engineState();
+  const h = heroEid();
+  if (s && h) addResource(s, h, STONE, amount);
 }
 
 export function getStoneCount(): number {
-  return stoneCount;
+  const s = engineState();
+  const h = heroEid();
+  return s && h ? getResource(s, h, STONE) : 0;
 }
 
 export function removeStone(amount: number): boolean {
-  if (stoneCount < amount) return false;
-  stoneCount -= amount;
-  return true;
+  const s = engineState();
+  const h = heroEid();
+  return s && h ? spendResource(s, h, STONE, amount) : false;
 }
 
 export function removeStones(amount: number): boolean {
   return removeStone(amount);
-}
-
-export function getLastCollectPosition(): {
-  x: number;
-  y: number;
-  z: number;
-  version: number;
-} {
-  return {
-    x: lastCollectX,
-    y: lastCollectY,
-    z: lastCollectZ,
-    version: lastCollectVersion,
-  };
 }

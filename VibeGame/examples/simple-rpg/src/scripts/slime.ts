@@ -17,6 +17,8 @@ const behaviours = createCreatureBehaviours({
   attackDamage: 18,
   lootGoldMin: 15,
   lootGoldMax: 30,
+  strafe: true,
+  lowHpKiteFrac: 0.35,
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

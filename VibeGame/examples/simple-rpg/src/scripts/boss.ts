@@ -1,331 +1,41 @@
-import * as THREE from 'three';
-import { loadGltfToSceneWithAnimator, playSound } from 'vibegame';
-import type { GltfAnimator, MonoBehaviourContext, State } from 'vibegame';
-import {
-  Transform,
-  defineQuery,
-  PlayerController,
-  MonoBehaviour,
-  getTerrainHeightAt,
-  getBvhSurfaceHeight,
-  Health,
-  damageHealth,
-  isDead,
-  spawnFloatingText,
-  spawnParticleBurst,
-} from 'vibegame';
+// Boss ogre — same engine MeleeAi FSM as the creatures (one AI brain), with
+// boss extras layered on by the shared presentation: dormant until every normal
+// enemy is dead (gate), an intro roar on reveal, relentless pursuit (huge detect
+// + leash), strafing, and an enrage phase at low HP.
+import { createCreatureBehaviours } from './creature';
+import { addGold } from '../game/economy';
+import { everSpawned, aliveEnemyCount } from './enemy-registry';
 
-const MODEL_URL = '/assets/meshes/boss_ogre_rigged_animated.glb';
-const IDLE_CLIP = 'Animator3D_BreatheIdle';
-const WALK_CLIP = 'Animator3D_Walk';
-const ATTACK_CLIP = 'Animator3D_Attack';
-const ROAR_CLIP = 'Animator3D_Roar';
+const behaviours = createCreatureBehaviours({
+  modelUrl: '/assets/meshes/boss_ogre_rigged_animated.glb',
+  clips: {
+    idle: 'Animator3D_BreatheIdle',
+    walk: 'Animator3D_Walk',
+    run: 'Animator3D_Walk',
+    lunge: 'Animator3D_Attack',
+    death: 'Animator3D_Fall',
+    roar: 'Animator3D_Roar',
+  },
+  hp: 300,
+  chaseSpeed: 3.0,
+  wanderSpeed: 0, // stays put until it spots the hero, then hunts
+  wanderRadius: 1,
+  attackDamage: 25,
+  attackRange: 2.2,
+  attackCooldown: 1.6,
+  detectRange: 120, // relentless — always sees the hero once awake
+  leashRadius: 1000, // never leashes home
+  strafe: true,
+  enrageBelowFrac: 0.3,
+  lootGoldMin: 100,
+  lootGoldMax: 150,
+  defeatedText: 'BOSS DEFEATED!',
+  roarSound: 'boss-roar',
+  // Gate: appear only after all goblins + slimes are dead.
+  gateUntil: () => everSpawned() && aliveEnemyCount() === 0,
+  onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
+});
 
-const DETECT_RANGE = 40;
-const ATTACK_RANGE = 4.0;
-const ATTACK_DAMAGE = 25;
-const ATTACK_COOLDOWN = 1.5;
-const BOSS_HP = 300;
-const CHASE_SPEED = 2.8;
-const TURN_RATE = 2.0;
-const ACCEL = 3.0;
-const WATER_LEVEL = 1.25;
-const ROAR_DURATION = 2.5;
-const DEATH_DISABLE_DELAY = 5.0;
-
-type CombatState = 'idle' | 'seek' | 'attack' | 'dead';
-
-interface BossState {
-  heading: number;
-  targetHeading: number;
-  speed: number;
-  footOffset: number;
-  ready: boolean;
-  group: THREE.Group | null;
-  animator: GltfAnimator | null;
-  playing: string;
-  combatState: CombatState;
-  attackTimer: number;
-  deathTimer: number;
-  deathHandled: boolean;
-  hasRoared: boolean;
-  roarTimer: number;
-}
-
-const state = new Map<number, BossState>();
-
-export function anyBossAggro(): boolean {
-  for (const b of state.values()) {
-    if (b.combatState === 'seek' || b.combatState === 'attack') return true;
-  }
-  return false;
-}
-
-const playerQuery = defineQuery([PlayerController]);
-const _box = new THREE.Box3();
-
-let cachedPlayerEid = 0;
-
-function findPlayer(ctx: MonoBehaviourContext): number {
-  if (cachedPlayerEid && Health.current[cachedPlayerEid] > 0)
-    return cachedPlayerEid;
-  const players = playerQuery(ctx.state.world);
-  cachedPlayerEid = players[0] ?? 0;
-  return cachedPlayerEid;
-}
-
-function wrapAngle(a: number): number {
-  return Math.atan2(Math.sin(a), Math.cos(a));
-}
-
-// Terrain collision layer — sample the terrain BVH (not a Rapier ray vs. every
-// collider) so the boss can't snap onto the player's head when overlapping.
-const TERRAIN_LAYER = 0x0001;
-
-function groundHeight(
-  ctx: MonoBehaviourContext,
-  x: number,
-  z: number,
-  fromY: number
-): number {
-  const gy = getBvhSurfaceHeight(
-    ctx.state,
-    x,
-    fromY + 60,
-    z,
-    2000,
-    TERRAIN_LAYER
-  );
-  if (gy != null && Number.isFinite(gy)) return gy;
-  const hm = getTerrainHeightAt(ctx.state, x, z);
-  if (Number.isFinite(hm)) return hm;
-  return 0;
-}
-
-const FOOT_RADIUS = 0.4;
-
-function footprintHeight(
-  ctx: MonoBehaviourContext,
-  x: number,
-  z: number,
-  fromY: number
-): number {
-  let best = groundHeight(ctx, x, z, fromY);
-  if (!Number.isFinite(best)) return best;
-  for (const [ox, oz] of [
-    [FOOT_RADIUS, 0],
-    [-FOOT_RADIUS, 0],
-    [0, FOOT_RADIUS],
-    [0, -FOOT_RADIUS],
-  ]) {
-    const h = groundHeight(ctx, x + ox, z + oz, fromY);
-    if (Number.isFinite(h) && h > best) best = h;
-  }
-  return best;
-}
-
-export function start(ctx: MonoBehaviourContext): void {
-  const eid = ctx.entity;
-  const b: BossState = {
-    heading: 0,
-    targetHeading: 0,
-    speed: 0,
-    footOffset: 0,
-    ready: false,
-    group: null,
-    animator: null,
-    playing: '',
-    combatState: 'idle',
-    attackTimer: 0,
-    deathTimer: 0,
-    deathHandled: false,
-    hasRoared: false,
-    roarTimer: 0,
-  };
-  state.set(eid, b);
-
-  if (!ctx.state.hasComponent(eid, Health)) {
-    ctx.state.addComponent(eid, Health);
-  }
-  Health.current[eid] = BOSS_HP;
-  Health.max[eid] = BOSS_HP;
-
-  void loadGltfToSceneWithAnimator(ctx.state, MODEL_URL, {
-    crossfadeDuration: 0.25,
-  }).then((result) => {
-    if (state.get(eid) !== b) {
-      result.group.removeFromParent();
-      return;
-    }
-    b.group = result.group;
-    b.animator = result.animator;
-    b.group.updateWorldMatrix(true, true);
-    _box.setFromObject(b.group);
-    b.footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
-  });
-}
-
-export function onDestroy(ctx: MonoBehaviourContext): void {
-  const b = state.get(ctx.entity);
-  b?.group?.removeFromParent();
-  state.delete(ctx.entity);
-}
-
-function handleDeath(
-  ctx: MonoBehaviourContext,
-  b: BossState,
-  eid: number
-): void {
-  if (b.deathHandled) return;
-  b.deathHandled = true;
-  b.combatState = 'dead';
-  playSound('enemy-death');
-  b.deathTimer = DEATH_DISABLE_DELAY;
-  b.speed = 0;
-
-  const x = Transform.posX[eid];
-  const y = Transform.posY[eid];
-  const z = Transform.posZ[eid];
-
-  spawnFloatingText(ctx.state, 'BOSS DEFEATED!', {
-    x,
-    y: y + 3.0,
-    z,
-    color: 0xffd700,
-    size: 1.0,
-    duration: 3.0,
-  });
-
-  spawnParticleBurst(ctx.state, {
-    x,
-    y: y + 1.0,
-    z,
-    preset: 'explosion',
-    count: 30,
-    duration: 1.2,
-  });
-}
-
-export function update(ctx: MonoBehaviourContext): void {
-  const eid = ctx.entity;
-  const b = state.get(eid);
-  if (!b || !b.group) return;
-
-  const dt = ctx.deltaTime;
-
-  if (b.combatState === 'dead') {
-    b.deathTimer -= dt;
-    if (b.deathTimer <= 0) {
-      MonoBehaviour.enabled[eid] = 0;
-    }
-    return;
-  }
-
-  if (isDead(eid)) {
-    handleDeath(ctx, b, eid);
-    return;
-  }
-
-  b.animator?.update(dt);
-
-  const x = Transform.posX[eid];
-  const z = Transform.posZ[eid];
-
-  if (!b.ready) {
-    const gy = groundHeight(ctx, x, z, 500);
-    if (!Number.isFinite(gy) || gy === 0) return;
-    b.ready = true;
-  }
-
-  const playerEid = findPlayer(ctx);
-
-  if (playerEid > 0 && Health.max[playerEid] > 0) {
-    const px = Transform.posX[playerEid];
-    const pz = Transform.posZ[playerEid];
-    const dx = px - x;
-    const dz = pz - z;
-    const distSq = dx * dx + dz * dz;
-
-    if (distSq <= ATTACK_RANGE * ATTACK_RANGE) {
-      b.combatState = 'attack';
-      b.targetHeading = Math.atan2(dx, dz);
-      b.attackTimer -= dt;
-      if (b.attackTimer <= 0) {
-        damageHealth(playerEid, ATTACK_DAMAGE);
-        b.attackTimer = ATTACK_COOLDOWN;
-      }
-    } else if (distSq <= DETECT_RANGE * DETECT_RANGE) {
-      b.combatState = 'seek';
-      b.targetHeading = Math.atan2(dx, dz);
-      if (!b.hasRoared) {
-        b.hasRoared = true;
-        b.roarTimer = ROAR_DURATION;
-        playSound('boss-roar');
-      }
-    } else {
-      b.combatState = 'idle';
-    }
-  } else {
-    b.combatState = 'idle';
-  }
-
-  const roaring = b.combatState === 'seek' && b.roarTimer > 0;
-  if (roaring) {
-    b.roarTimer -= dt;
-    b.attackTimer = ATTACK_COOLDOWN;
-  }
-
-  const err = wrapAngle(b.targetHeading - b.heading);
-  const maxTurn = TURN_RATE * dt;
-  b.heading = wrapAngle(b.heading + Math.min(maxTurn, Math.max(-maxTurn, err)));
-
-  const targetSpeed = b.combatState === 'seek' && !roaring ? CHASE_SPEED : 0;
-  if (b.speed < targetSpeed)
-    b.speed = Math.min(targetSpeed, b.speed + ACCEL * dt);
-  else if (b.speed > targetSpeed)
-    b.speed = Math.max(targetSpeed, b.speed - ACCEL * dt);
-
-  let nx = x;
-  let nz = z;
-  if (b.speed > 0.001) {
-    nx = x + Math.sin(b.heading) * b.speed * dt;
-    nz = z + Math.cos(b.heading) * b.speed * dt;
-    const aheadY = groundHeight(ctx, nx, nz, Transform.posY[eid]);
-    if (!Number.isFinite(aheadY) || aheadY < WATER_LEVEL) {
-      b.targetHeading = wrapAngle(b.heading + Math.PI);
-      nx = x;
-      nz = z;
-    }
-  }
-
-  const groundY = footprintHeight(ctx, nx, nz, Transform.posY[eid]);
-  if (!Number.isFinite(groundY)) return;
-
-  let clip: string;
-  if (b.combatState === 'attack') {
-    clip = ATTACK_CLIP;
-  } else if (roaring) {
-    clip = ROAR_CLIP;
-  } else if (b.combatState === 'seek') {
-    clip = WALK_CLIP;
-  } else {
-    clip = IDLE_CLIP;
-  }
-  if (b.animator && b.playing !== clip) {
-    if (clip === ROAR_CLIP) {
-      b.animator.play(ROAR_CLIP, { loop: false });
-    } else {
-      b.animator.play(clip);
-    }
-    b.playing = clip;
-  }
-
-  Transform.posX[eid] = nx;
-  Transform.posY[eid] = groundY + b.footOffset;
-  Transform.posZ[eid] = nz;
-  Transform.eulerY[eid] = b.heading * (180 / Math.PI);
-  Transform.dirty[eid] = 1;
-
-  b.group.position.set(nx, groundY + b.footOffset, nz);
-  b.group.rotation.set(0, b.heading, 0);
-}
+export const start = behaviours.start;
+export const update = behaviours.update;
+export const onDestroy = behaviours.onDestroy;

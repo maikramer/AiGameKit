@@ -9,8 +9,7 @@ import {
   setInputMovementSuppressed,
   Health,
   healHealth,
-  damageHealth,
-  isDead,
+  addItem,
 } from 'vibegame';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
@@ -41,8 +40,6 @@ const ANTIDOTE_HEAL = 35;
 const RING_PRICE = 80; // one-time permanent +15% move speed
 const RING_SPEED_MULT = 1.15;
 const BOMB_PRICE = 20;
-const BOMB_DAMAGE = 60;
-const BOMB_RADIUS = 14; // metres around the player
 
 const ICON_BASE = '/assets/images/';
 /** Shop button → 2D icon file (in public/assets/images). */
@@ -60,9 +57,7 @@ const ICONS: Record<string, string> = {
 let ringOwned = false;
 
 const playerQuery = defineQuery([PlayerController]);
-const damageableQuery = defineQuery([Health, Transform]);
 let cachedPlayer = 0;
-let cachedMerchant = 0;
 let shopState: MonoBehaviourContext['state'] | null = null;
 
 let group: THREE.Group | null = null;
@@ -252,7 +247,7 @@ function createShopPanel(): void {
   );
   shopButtons.push(
     makeButton(
-      `Buy Bomb (${BOMB_PRICE}g) \u2014 ${BOMB_DAMAGE} dmg nearby`,
+      `Buy Bomb (${BOMB_PRICE}g) \u2014 throw with [B]`,
       'bomb',
       buyBomb
     )
@@ -425,25 +420,9 @@ function buyBomb(): void {
     showShopError('Not enough gold!');
     return;
   }
-  // Detonate immediately: damage every living enemy within range of the player.
-  const player = activePlayer;
-  let hits = 0;
-  if (shopState) {
-    const px = Transform.posX[player];
-    const pz = Transform.posZ[player];
-    const r2 = BOMB_RADIUS * BOMB_RADIUS;
-    for (const eid of damageableQuery(shopState.world)) {
-      if (eid === player || eid === cachedMerchant) continue;
-      if (isDead(eid)) continue;
-      const dx = Transform.posX[eid] - px;
-      const dz = Transform.posZ[eid] - pz;
-      if (dx * dx + dz * dz > r2) continue;
-      damageHealth(eid, BOMB_DAMAGE);
-      hits++;
-    }
-  }
+  // Bomb goes into the bag; throw it later with [B] (see BombSystem).
+  if (shopState) addItem(shopState, activePlayer, 'bomb', 1);
   playSound('buy');
-  if (hits === 0) showShopError('No enemies in range — bomb wasted!');
   refreshShopDisplay();
 }
 
@@ -534,7 +513,6 @@ function handleShopKeys(): void {
 
 export function update(ctx: MonoBehaviourContext): void {
   const eid = ctx.entity;
-  cachedMerchant = eid;
   shopState = ctx.state;
   if (!group) return;
   // Frozen while the pause menu is open (don't open the shop on K, etc.).

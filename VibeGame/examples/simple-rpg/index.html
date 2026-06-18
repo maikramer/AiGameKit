@@ -158,46 +158,64 @@
         script="merchant.ts"
       ></GameObject>
 
-      <!-- Treasure chest (model from the project's text3d pipeline). Walk up
-           and press F for gold + a heal. Gold feeds the merchant shop loop. -->
-      <GameObject
-        name="chest"
-        place="at: 12 6; align-to-terrain: 0"
-        script="chest.ts"
-      ></GameObject>
+      <!-- Treasure chest (model from the project's text3d pipeline). Placed by
+           the spawner (avoid-overlaps + clearance) so it lands in a clear spot
+           near the merchant instead of glued to the hut. Walk up + press F for
+           gold + a heal. Trimesh collider blocks the player. -->
+      <DynamicSpawner
+        count="1"
+        seed="5"
+        region-min="-6 0 -18"
+        region-max="22 0 2"
+        align-to-terrain="true"
+        avoid-overlaps="true"
+        random-yaw="true"
+        max-slope-deg="25"
+      >
+        <GameObject
+          role="dynamic"
+          name="chest"
+          script="chest.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
+        ></GameObject>
+      </DynamicSpawner>
 
       <!-- Mystic readables: pre-generated GLBs from public/assets, each glowing
-           emissive until read (F), then granting a one-time reward. -->
+           emissive until read (F), then granting a one-time reward. Solid
+           trimesh colliders so they block the player like the chest. -->
       <GameObject
         name="rune-pillar"
-        place="at: -9 7; align-to-terrain: 0"
+        place="at: -9 7; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
         script="stone-pillar.ts"
       ></GameObject>
       <GameObject
         name="crystal-shrine"
-        place="at: 7 -9; align-to-terrain: 0"
+        place="at: 7 -9; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
         script="crystal-shrine.ts"
       ></GameObject>
       <GameObject
         name="glow-mushroom"
-        place="at: -6 -5; align-to-terrain: 0"
+        place="at: -6 -5; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/mushroom_red_collision.glb; mesh-anchor: base"
         script="mushroom.ts"
       ></GameObject>
 
-      <!-- Boss ogre — engine MeleeAi preset (T14) with the rigged visual
-           model as a child. Roams the far corner; high HP, heavy melee. -->
-      <MeleeAi
-        preset="boss"
+      <!-- Boss ogre — roams the far corner; high HP, heavy melee swings. -->
+      <GameObject
         name="boss"
-        faction="tag: enemy"
-        place="at: -120 -120; align-to-terrain: 0"
-      >
-        <GLTFLoader url="/assets/meshes/boss_ogre_rigged_animated.glb"></GLTFLoader>
-      </MeleeAi>
+        place="at: -38 -42; align-to-terrain: 0"
+        script="boss.ts"
+      ></GameObject>
 
       <!-- Enemies: DynamicSpawner shares the placement core with StaticSpawner
-            (region/seed/count/slope/terrain) but spawns one entity each. Creatures
-            use the engine MeleeAi presets (T14) with their rigged models. -->
+           (region/seed/count/slope/terrain) but spawns one scripted, animated
+           entity each — never instanced, since they move. -->
       <DynamicSpawner
         count="5"
         seed="11"
@@ -208,9 +226,7 @@
         avoid-overlaps="false"
         max-slope-deg="40"
       >
-        <MeleeAi preset="goblin" faction="tag: enemy">
-          <GLTFLoader url="/assets/meshes/goblin_rigged_animated.glb"></GLTFLoader>
-        </MeleeAi>
+        <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
       </DynamicSpawner>
 
       <DynamicSpawner
@@ -223,9 +239,7 @@
         avoid-overlaps="false"
         max-slope-deg="40"
       >
-        <MeleeAi preset="slime" faction="tag: enemy">
-          <GLTFLoader url="/assets/meshes/slime_rigged_animated.glb"></GLTFLoader>
-        </MeleeAi>
+        <GameObject role="enemy" script="slime.ts"></GameObject>
       </DynamicSpawner>
 
       <!-- Harvestable rocks (stone). StaticSpawner auto-routes the visual through
@@ -244,6 +258,7 @@
       >
         <GameObject
           role="static"
+          script="rock.ts"
           destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
@@ -252,7 +267,11 @@
             role="visual"
             url="/assets/meshes/rock_mossy_lod0.glb"
           ></GLTFLoader>
-          <ResourceNode kind="stone" yield="3"></ResourceNode>
+          <ResourceNode
+            kind="stone"
+            yield="3"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
@@ -282,7 +301,11 @@
             lod1-url="/assets/meshes/tree_oak_lod1.glb"
             lod2-url="/assets/meshes/tree_oak_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode kind="wood" yield="3"></ResourceNode>
+          <ResourceNode
+            kind="wood"
+            yield="3"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
@@ -305,20 +328,59 @@
       <HudScreenLayer></HudScreenLayer>
       <HealthBar target-entity="hero" icon="❤"></HealthBar>
       <XpBar target-entity="hero"></XpBar>
-      <ResourceChip resource="gold" icon="🪙" target-entity="hero"></ResourceChip>
-      <ResourceChip resource="wood" icon="🪵" target-entity="hero"></ResourceChip>
+      <ResourceChip
+        resource="gold"
+        icon="🪙"
+        target-entity="hero"
+      ></ResourceChip>
+      <ResourceChip
+        resource="wood"
+        icon="🪵"
+        target-entity="hero"
+      ></ResourceChip>
+      <ResourceChip
+        resource="stone"
+        icon="🪨"
+        target-entity="hero"
+      ></ResourceChip>
       <Minimap range="60"></Minimap>
       <Compass></Compass>
-      <InteractionPrompt key="F" range="4.5" position="bottom-center"></InteractionPrompt>
+      <BossBar target-entity="boss"></BossBar>
+      <InteractionPrompt
+        key="F"
+        range="4.5"
+        position="bottom-center"
+      ></InteractionPrompt>
 
       <!-- Pause menu: tabbed modal (Escape) with skills / inventory / options
            tabs (engine HudPlugin, T27). -->
-      <TabbedModal id="pause" key="Escape" target-entity="hero" title-key="modal.pause">
+      <TabbedModal
+        id="pause"
+        key="Escape"
+        target-entity="hero"
+        title-key="modal.pause"
+      >
         <SkillsTab></SkillsTab>
         <InventoryTab columns="5"></InventoryTab>
         <OptionsTab>
-          <OptionRow id="music-volume" type="slider" label-key="options.music" min="0" max="100" step="5" default="70"></OptionRow>
-          <OptionRow id="sfx-volume" type="slider" label-key="options.sfx" min="0" max="100" step="5" default="80"></OptionRow>
+          <OptionRow
+            id="music-volume"
+            type="slider"
+            label-key="options.music"
+            min="0"
+            max="100"
+            step="5"
+            default="70"
+          ></OptionRow>
+          <OptionRow
+            id="sfx-volume"
+            type="slider"
+            label-key="options.sfx"
+            min="0"
+            max="100"
+            step="5"
+            default="80"
+          ></OptionRow>
         </OptionsTab>
       </TabbedModal>
     </Scene>

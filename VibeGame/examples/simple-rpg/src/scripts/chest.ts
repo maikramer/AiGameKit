@@ -1,5 +1,10 @@
 import * as THREE from 'three';
-import { defineQuery, loadGltfToSceneWithAnimator, playSound } from 'vibegame';
+import {
+  defineQuery,
+  loadGltfToSceneWithAnimator,
+  playSound,
+  spawnParticleBurst,
+} from 'vibegame';
 import type { MonoBehaviourContext } from 'vibegame';
 import {
   Transform,
@@ -8,6 +13,8 @@ import {
   getBvhSurfaceHeight,
   isKeyDown,
   healHealth,
+  registerInteractionTarget,
+  unregisterInteractionTarget,
 } from 'vibegame';
 import { addGold } from '../game/economy.ts';
 
@@ -17,21 +24,27 @@ import { addGold } from '../game/economy.ts';
 
 const MODEL_URL = '/assets/meshes/treasure_chest_lod0.glb';
 const TERRAIN_LAYER = 0x0001;
-const OPEN_RANGE_SQ = 3.2 * 3.2;
+const OPEN_RANGE_SQ = 4.6 * 4.6;
 const GOLD_REWARD = 60;
 const HEAL_REWARD = 25;
+const LID_OPEN_ANGLE = -0.9; // radians, tip the top back as it opens
+const OPEN_ANIM_SECONDS = 0.4;
 
 const playerQuery = defineQuery([PlayerController]);
 let cachedPlayer = 0;
 
 let group: THREE.Group | null = null;
 let footOffset = 0;
+let baseY = 0;
 let loadStarted = false;
 let opened = false;
+let openProgress = 0; // 0..1 lid-open animation
+let glow = 0; // emissive flash, decays after opening
 let fPressed = false;
 let toast: HTMLDivElement | null = null;
 let toastTimeout: ReturnType<typeof setTimeout> | null = null;
 const _box = new THREE.Box3();
+const emissiveMats: THREE.MeshStandardMaterial[] = [];
 
 function findPlayer(ctx: MonoBehaviourContext): number {
   if (cachedPlayer && Transform.posX[cachedPlayer] !== undefined)
@@ -60,27 +73,55 @@ function showToast(message: string): void {
 
 export function start(ctx: MonoBehaviourContext): void {
   findPlayer(ctx);
+  registerInteractionTarget(ctx.state, ctx.entity, {
+    label: 'Open chest',
+    key: 'F',
+  });
   if (loadStarted) return;
   loadStarted = true;
   void loadGltfToSceneWithAnimator(ctx.state, MODEL_URL).then((result) => {
     group = result.group;
     _box.setFromObject(group);
     footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
+    group.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (mat && 'emissiveIntensity' in mat) {
+        mat.emissive = new THREE.Color(0xffd24a);
+        mat.emissiveIntensity = 0;
+        emissiveMats.push(mat);
+      }
+    });
   });
 }
 
 export function update(ctx: MonoBehaviourContext): void {
   if (!group) return;
   const eid = ctx.entity;
+  const dt = ctx.deltaTime;
 
   const x = Transform.posX[eid];
   const z = Transform.posZ[eid];
   const gy =
     getBvhSurfaceHeight(ctx.state, x, 500, z, 2000, TERRAIN_LAYER) ??
     getTerrainHeightAt(ctx.state, x, z);
-  group.position.set(x, gy + footOffset, z);
+  baseY = gy + footOffset;
 
-  if (opened) return;
+  if (opened) {
+    // Lid-open tween + a small lift, then the gold glow decays out.
+    openProgress = Math.min(1, openProgress + dt / OPEN_ANIM_SECONDS);
+    const ease = 1 - (1 - openProgress) * (1 - openProgress);
+    group.position.set(x, baseY + 0.15 * ease, z);
+    group.rotation.x = LID_OPEN_ANGLE * ease;
+    if (glow > 0) {
+      glow = Math.max(0, glow - dt * 1.5);
+      for (const m of emissiveMats) m.emissiveIntensity = glow;
+    }
+    return;
+  }
+
+  group.position.set(x, baseY, z);
 
   const player = findPlayer(ctx);
   if (!player) return;
@@ -91,12 +132,21 @@ export function update(ctx: MonoBehaviourContext): void {
   const f = isKeyDown('KeyF');
   if (near && f && !fPressed) {
     opened = true;
+    openProgress = 0;
+    glow = 1.6;
+    unregisterInteractionTarget(ctx.state, eid);
     addGold(GOLD_REWARD, x, gy, z);
     healHealth(player, HEAL_REWARD);
     playSound('coin');
     playSound('heal');
-    // Sink the lid slightly so the chest visibly reads as looted.
-    group.rotation.set(-0.35, group.rotation.y, 0);
+    spawnParticleBurst(ctx.state, {
+      x,
+      y: baseY + 0.6,
+      z,
+      preset: 'explosion',
+      count: 22,
+      duration: 0.9,
+    });
     showToast(`Treasure! +${GOLD_REWARD} gold  ·  +${HEAL_REWARD} HP`);
   }
   fPressed = f;

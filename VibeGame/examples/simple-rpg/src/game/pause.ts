@@ -1,22 +1,22 @@
-// Shared modal/pause state so independent scripts (main HUD, merchant) can
-// coordinate: the pause menu must not open over an active shop dialog, and
-// scripts must not act on input while the game is paused.
-
-let paused = false;
-let shopOpen = false;
+// Pause/modal adapter → engine PauseCoordinator. Opening the shop pushes a
+// 'shop' modal (which pauses the sim via the coordinator); the engine pause
+// menu (TabbedModal) pushes its own modal, so `isGamePaused` is true for both.
+import { isPaused, pushModal, popModal, getActiveModal } from 'vibegame';
+import { engineState } from './engine-bridge';
 
 export function isGamePaused(): boolean {
-  return paused;
-}
-
-export function setGamePaused(value: boolean): void {
-  paused = value;
+  const s = engineState();
+  return s ? isPaused(s) : false;
 }
 
 export function isShopOpen(): boolean {
-  return shopOpen;
+  const s = engineState();
+  return s ? getActiveModal(s) === 'shop' : false;
 }
 
 export function setShopOpen(value: boolean): void {
-  shopOpen = value;
+  const s = engineState();
+  if (!s) return;
+  if (value) pushModal(s, 'shop');
+  else popModal(s, 'shop');
 }

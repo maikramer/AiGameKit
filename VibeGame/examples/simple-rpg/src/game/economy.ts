@@ -1,42 +1,27 @@
-let goldCount = 0;
+// Gold adapter → engine RpgVault on the hero entity. Kept as a thin module so
+// the gameplay scripts keep calling addGold/spendGold/getGold while the actual
+// balance lives in the engine vault (read by the HUD ResourceChip).
+import { addResource, spendResource, getResource } from 'vibegame';
+import { engineState, heroEid } from './engine-bridge';
 
-let lastCollectX = 0;
-let lastCollectY = 0;
-let lastCollectZ = 0;
-let lastCollectVersion = 0;
+const GOLD = 'gold';
 
-export function addGold(amount: number, x = 0, y = 0, z = 0): void {
-  goldCount += amount;
-  lastCollectX = x;
-  lastCollectY = y;
-  lastCollectZ = z;
-  lastCollectVersion++;
+// x/y/z accepted for call-site compatibility (loot drops pass a position); the
+// engine vault is positionless, so they are ignored.
+export function addGold(amount: number, _x = 0, _y = 0, _z = 0): void {
+  const s = engineState();
+  const h = heroEid();
+  if (s && h) addResource(s, h, GOLD, amount);
 }
 
 export function spendGold(amount: number): boolean {
-  if (goldCount < amount) return false;
-  goldCount -= amount;
-  return true;
+  const s = engineState();
+  const h = heroEid();
+  return s && h ? spendResource(s, h, GOLD, amount) : false;
 }
 
 export function getGold(): number {
-  return goldCount;
-}
-
-export function getLastCollectPosition(): {
-  x: number;
-  y: number;
-  z: number;
-  version: number;
-} {
-  return {
-    x: lastCollectX,
-    y: lastCollectY,
-    z: lastCollectZ,
-    version: lastCollectVersion,
-  };
-}
-
-export function resetEconomy(): void {
-  goldCount = 0;
+  const s = engineState();
+  const h = heroEid();
+  return s && h ? getResource(s, h, GOLD) : 0;
 }
