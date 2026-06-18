@@ -217,9 +217,9 @@ Campos principais:
 | `image_ext` | `png` ou `jpg` |
 | `seed_base` | Opcional; seeds derivados por `id` para reprodutibilidade |
 | `image_source` | `text2d` (defeito), `texture2d` ou `skymap2d` — ferramenta de imagem por defeito (sobreponível por campo no manifest) |
-| `text2d` | Bloco opcional: `low_vram`, `cpu`, `width`, `height` |
+| `text2d` | Bloco opcional: `cpu`, `width`, `height` (`low_vram` é no-op deprecated — hw-auto cobre) |
 | `texture2d` | Bloco opcional se usas Texture2D (global ou só com linhas do manifest `texture2d`): resolução, `steps`, `guidance_scale`, `preset`, … e **PBR em difusa:** `materialize`, `materialize_maps_subdir`, `materialize_bin`, `materialize_format`, etc. |
-| `text3d` | Bloco opcional: `preset`, `low_vram`, `texture` (omitido = **`true`**), `steps` / `octree_resolution` / `num_chunks` (alternativa mútua a `preset`), `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder`. **Tuning Paint3D:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (defeito 6 — costuras mais nítidas) |
+| `text3d` | Bloco opcional: `preset`, `texture` (omitido = **`true`**), `steps` / `octree_resolution` / `num_chunks` (alternativa mútua a `preset`), `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder`. **Tuning Paint3D:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (defeito 6 — costuras mais nítidas) |
 | `rigging3d` | Bloco opcional (rig após Text3D): `output_suffix` (ex. `_rigged`), `root` (código do pacote Rigging3D), `python` (interprete). Presença activa rig para personagens; combina com `generate_rig=true` no manifest para linhas não-personagem |
 | `animator3d` | Bloco opcional (**Animator3D** após rig): `preset` (`humanoid` \| `creature` \| `flying`, …). Presença activa animação automática após rig com sucesso. Requer `animator3d` no `PATH` ou `ANIMATOR3D_BIN` |
 | `part3d` | Bloco opcional (Part3D após Text3D, antes do rig): `steps`, `octree_resolution`, `num_chunks`, `segment_only`, `no_cpu_offload`, `verbose`, `parts_suffix`, `segmented_suffix`. Presença activa parts para linhas 3D; combina com `generate_parts=true` no manifest para controlo explícito por linha |
@@ -228,7 +228,7 @@ Todos os sub-tools também aceitam `--gpu-ids` propagado pelo comando batch.
 
 ### Hunyuan3D e qualidade
 
-O `text3d.low_vram` foi removido (deprecated no-op). O **hw-auto** aplica SDNQ INT4 automaticamente em GPUs pequenas (~6 GB). Para assets de jogo sérios, usa `preset: balanced` ou `fast` na GPU e fecha outras aplicações que usem VRAM (ex.: editor Godot).
+O `text3d.low_vram` foi removido (deprecated no-op). `text2d.low_vram` e `paint3d.low_vram_mode` são igualmente no-ops — o GameAssets já não propaga flags de VRAM; cada sub-tool usa o **hw-auto** próprio (SDNQ INT4 automático em GPUs pequenas ~6 GB). O flag global `--low-vram` do `batch`/`dream` é igualmente um no-op deprecated. Para assets de jogo sérios, usa `preset: balanced` ou `fast` na GPU e fecha outras aplicações que usem VRAM (ex.: editor Godot).
 
 ### Layout de pastas (`path_layout`)
 

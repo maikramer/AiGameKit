@@ -194,8 +194,6 @@ def _append_text2d_profile_args(profile: GameProfile, argv: list[str]) -> None:
         argv.extend(["-W", str(t2.width)])
     if t2.height is not None:
         argv.extend(["-H", str(t2.height)])
-    if t2.low_vram:
-        argv.append("--low-vram")
     if t2.cpu:
         argv.append("--cpu")
     if t2.steps is not None:

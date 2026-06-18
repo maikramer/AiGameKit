@@ -87,8 +87,6 @@ from .pipeline import (
 from .profile import (
     Animator3DProfile,
     Paint3DProfile,
-    Part3DProfile,
-    Text2DProfile,
 )
 from .prompt_builder import build_audio_prompt, build_prompt
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
@@ -226,7 +224,7 @@ console = Console()
 @click.option(
     "--low-vram",
     is_flag=True,
-    help="Modo baixa VRAM: propaga --low-vram / --low-vram-mode a todos os sub-tools.",
+    help="Deprecated no-op: os sub-tools agora auto-detetam VRAM via hw-auto.",
 )
 @click.option(
     "--force",
@@ -310,18 +308,6 @@ def batch_cmd(
     has_rigging_profile = False
     has_parts_profile = False
     has_audio_profile = False
-
-    if low_vram:
-        if profile.text2d is None:
-            profile.text2d = Text2DProfile()
-        profile.text2d.low_vram = True
-        if profile.paint3d is None:
-            profile.paint3d = Paint3DProfile()
-        profile.paint3d.low_vram_mode = True
-        if profile.part3d is None:
-            profile.part3d = Part3DProfile()
-        profile.part3d.low_vram_mode = True
-        profile.part3d.quantization = "auto"
 
     any_row_wants_paint = any(r.generate_3d and r.generate_paint for r in rows)
     if any_row_wants_paint and profile.paint3d is None:
@@ -1632,8 +1618,6 @@ def batch_cmd(
                                                 batch_args.append("--no-preserve-origin")
                                             else:
                                                 batch_args.append("--preserve-origin")
-                                            if p3.low_vram_mode:
-                                                batch_args.append("--low-vram-mode")
                                             if p3.smooth:
                                                 batch_args.append("--smooth")
                                             else:
@@ -2671,8 +2655,6 @@ def batch_cmd(
                                             batch_args.append("--no-preserve-origin")
                                         else:
                                             batch_args.append("--preserve-origin")
-                                        if p3.low_vram_mode:
-                                            batch_args.append("--low-vram-mode")
                                         if p3.smooth:
                                             batch_args.append("--smooth")
                                         else:

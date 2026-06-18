@@ -522,9 +522,7 @@ def get_target_faces(category: str, default: int = 3000, face_ratio: float = 1.0
 # Ativado quando o asset tem detalhe orgânico/relevo (humanoid, creature, armor)
 # ou superfície complexa (weapon, chest, tool). Categorias planares ou de
 # baixa-frequência (vegetation, effects, terrain) não compensam o custo.
-BAKE_NORMALS_CATEGORIES: frozenset[str] = frozenset(
-    {"humanoid", "creature", "armor", "weapon", "chest", "tool"}
-)
+BAKE_NORMALS_CATEGORIES: frozenset[str] = frozenset({"humanoid", "creature", "armor", "weapon", "chest", "tool"})
 
 
 def category_wants_bake_normals(

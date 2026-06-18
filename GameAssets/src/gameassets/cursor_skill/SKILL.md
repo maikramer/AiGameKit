@@ -68,7 +68,7 @@ Sem `--presets-local`, o comando falha com **preset desconhecido**.
 
 - **`style_preset`**, **`output_dir`**, **`path_layout`**: `split` (pastas `images/` e `meshes/`) ou **`flat`** (PNG e GLB na mesma árvore; usa `id` com barra, ex. `Props/caixa_01`).
 - **`image_source`**: `text2d` (defeito), `texture2d` ou `skymap2d` — pode ser sobreposto **por linha** no manifest (campo `image_source`).
-- **`text2d`**: `low_vram`, `cpu`, `width`, `height` (resolução 2D).
+- **`text2d`**: `cpu`, `width`, `height` (resolução 2D). `low_vram` é no-op deprecated (hw-auto cobre).
 - **`texture2d`**: opções do CLI seamless + **`materialize`** para PBR a partir da difusa (mapas em `materialize_maps_subdir`).
 - **`text2sound`** (opcional): `duration`, `steps`, `cfg_scale`, `audio_format`, etc. — ver Text2Sound; `audio_subdir` no perfil para destino relativo a `output_dir`.
 - **`text3d`**: `preset` (`fast` \| `balanced` \| `hq`), `texture` (omitido = **`true`**), ou **Hunyuan explícito** (`steps`, `octree_resolution`, `num_chunks` — nesse caso não se passa `--preset` ao CLI), `mc_level`, `phased_batch`, GPU (`allow_shared_gpu`, `full_gpu`, …). PBR no GLB: **Paint 2.1** — ver `Text3D/docs/PBR_MATERIALIZE.md`.
@@ -76,7 +76,7 @@ Sem `--presets-local`, o comando falha com **preset desconhecido**.
 - **`rigging3d`** (opcional): `output_suffix`, `root`, `python` — presença activa rig para personagens; combina com `generate_rig` no manifest.
 - **`animator3d`** (opcional): `preset` (`humanoid`, …) — presença activa animação automática após rig.
 
-**Atenção:** o `text3d.low_vram` foi removido (deprecated no-op). O hw-auto aplica SDNQ INT4 automaticamente em GPUs pequenas (~6 GB). Para reduzir VRAM, usar `preset: fast` ou baixar `steps`/`octree_resolution`/`num_chunks`.
+**Atenção:** o `text3d.low_vram` foi removido (campo inexistente). `text2d.low_vram` e `paint3d.low_vram_mode` são no-ops deprecated — o GameAssets já não propaga flags de VRAM; cada sub-tool usa hw-auto próprio. O flag global `--low-vram` do `batch`/`dream` é igualmente um no-op deprecated. Para reduzir VRAM no Text3D, usar `preset: fast` ou baixar `steps`/`octree_resolution`/`num_chunks`.
 
 ## Manifest (`manifest.yaml`)
 

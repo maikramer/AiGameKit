@@ -273,15 +273,12 @@ def _part3d_profile_effective(profile: GameProfile, row: ManifestRow | None = No
         steps=steps,
         num_chunks=base.num_chunks,
         segment_only=seg_only,
-        no_cpu_offload=base.no_cpu_offload,
         verbose=base.verbose,
         parts_suffix=base.parts_suffix,
         segmented_suffix=base.segmented_suffix,
-        quantization=base.quantization,
         no_quantize_dit=base.no_quantize_dit,
         torch_compile=base.torch_compile,
         no_attention_slicing=base.no_attention_slicing,
-        low_vram_mode=base.low_vram_mode,
     )
 
 
@@ -336,23 +333,19 @@ def _part3d_decompose_argv(
         args.extend(["--num-chunks", str(p3.num_chunks)])
     if seed is not None:
         args.extend(["--seed", str(seed)])
-    if p3.no_cpu_offload:
-        args.append("--no-cpu-offload")
     if p3.segment_only:
         args.append("--segment-only")
     if p3.verbose:
         args.append("-v")
     # --- Otimizações de VRAM ---
-    if p3.quantization:
-        args.extend(["--quantization", p3.quantization])
+    # Nota: low_vram_mode / no_cpu_offload / quantization não são propagados —
+    # o part3d auto-deteta via hw-auto (PART3D_HW_AUTO).
     if p3.no_quantize_dit:
         args.append("--no-quantize-dit")
     if p3.torch_compile:
         args.append("--torch-compile")
     if p3.no_attention_slicing:
         args.append("--no-attention-slicing")
-    if p3.low_vram_mode:
-        args.append("--low-vram-mode")
     if gpu_ids:
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     return args
@@ -872,8 +865,6 @@ def _paint3d_texture_argv(
         args.append("--preserve-origin")
     else:
         args.append("--no-preserve-origin")
-    if p3.low_vram_mode:
-        args.append("--low-vram-mode")
     if p3.smooth:
         args.append("--smooth")
     else:
@@ -1288,7 +1279,7 @@ def _stage(
     *,
     item_id: str | None = None,
     profile_enabled: bool = False,
-    on_progress_line: "Callable[[str], None] | None" = None,
+    on_progress_line: Callable[[str], None] | None = None,
 ) -> StageResult:
     """Executa um stage do master pipeline.
 
@@ -1334,7 +1325,7 @@ def _stage(
             data.update(meta)
             try:
                 on_progress_line(_json.dumps(data))
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
 
     _emit("run", 0)
@@ -1381,7 +1372,7 @@ def _stage(
                                     data["phase"] = data["sub_tool"]
                                 forwarded = _json.dumps(data)
                         on_progress_line(forwarded)
-                    except Exception:  # noqa: BLE001
+                    except Exception:
                         pass
 
                 def _on_err(line: str) -> None:
@@ -1397,7 +1388,7 @@ def _stage(
                 r = rs
             else:
                 r = run_cmd(argv, extra_env=env, cwd=cwd)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         dt = _time.perf_counter() - t0
         _emit("run", 100, status="error")
         return StageResult(name, False, dt, f"ProfilerSession: {exc}", output)
@@ -1629,7 +1620,7 @@ def run_master_pipeline(
                     apply_dedup=True,
                     apply_prune=True,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("master: finish collision falhou: %s", exc)
 
     # Stage 7 — rigging3d pipeline sobre _clean.glb. Skip se já temos um
@@ -1693,7 +1684,7 @@ def run_master_pipeline(
                     from text3d.utils.gltf_finish import gltf_transform_finish
 
                     gltf_transform_finish(out, out)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     log.warning("master: finish rigged-lod%d falhou: %s", i, exc)
                 rigged_lods.append(out)
 
@@ -1724,7 +1715,7 @@ def run_master_pipeline(
                     from text3d.utils.gltf_finish import gltf_transform_finish
 
                     gltf_transform_finish(anim_p, anim_p)
-                except Exception as exc:  # noqa: BLE001
+                except Exception as exc:
                     log.warning("master: finish animated falhou em %s: %s", anim_p, exc)
                 animated_lods.append(anim_p)
 
@@ -1782,7 +1773,7 @@ def run_master_pipeline(
                 from text3d.utils.gltf_finish import gltf_transform_finish
 
                 gltf_transform_finish(target, target)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.warning("master: finish promoted lod%d falhou: %s", level, exc)
 
         # Se animated promovido, mover _rigged.glb para _intermediate/.
@@ -1869,12 +1860,6 @@ def resume_master_pipeline(
     """
     from .paths import (
         _ROW_DONE,
-        _ROW_NEED_ANIMATE_LOD,
-        _ROW_NEED_BAKE_MASTER,
-        _ROW_NEED_LOD_GEN,
-        _ROW_NEED_RIG_HI,
-        _ROW_NEED_TOPOLOGY_FIX,
-        _ROW_NEED_TRANSFER,
         _classify_row_state_master,
     )
 

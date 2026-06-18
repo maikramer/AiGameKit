@@ -197,7 +197,7 @@ def test_paint3d_texture_argv_gpu_flags() -> None:
     assert argv[0] == "/bin/paint3d"
     assert argv[1] == "texture"
     assert "--materialize" not in argv
-    assert "--low-vram-mode" in argv
+    assert "--low-vram-mode" not in argv
     assert "--preserve-origin" in argv
 
 
@@ -530,7 +530,7 @@ def test_text3d_low_vram_is_noop_after_removal() -> None:
         genre="G",
         tone="t",
         style_preset="lowpoly",
-        text3d=Text3DProfile(low_vram=True),
+        text3d=Text3DProfile(),
     )
     argv = _text3d_argv("text3d", p, Path("i.png"), Path("o.glb"))
     assert "--low-vram" not in argv

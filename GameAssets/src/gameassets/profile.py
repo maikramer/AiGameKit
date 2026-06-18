@@ -30,7 +30,7 @@ class Paint3DProfile:
     bake_exp: int | None = None
     smooth: bool = True
     smooth_passes: int | None = None
-    low_vram_mode: bool = False
+    low_vram_mode: bool = False  # Deprecated no-op: paint3d hw-auto covers small GPUs
     # Quick paint (solid / perlin)
     solid_color: str = "#888888"
     perlin_tint: str = "#7a7268"
@@ -45,7 +45,6 @@ class Text3DProfile:
     """Opções passadas ao CLI text3d generate (subconjunto)."""
 
     preset: str | None = None  # fast | balanced | hq
-    low_vram: bool = False  # Deprecated no-op: text3d removed --low-vram (hw-auto handles small GPUs)
     export_origin: str = "feet"
     steps: int | None = None
     octree_resolution: int | None = None
@@ -63,7 +62,7 @@ class Text3DProfile:
 class Text2DProfile:
     """Opções passadas ao CLI text2d generate (subconjunto)."""
 
-    low_vram: bool = False
+    low_vram: bool = False  # Deprecated no-op: GameAssets no longer propagates this; text2d hw-auto covers small GPUs
     cpu: bool = False
     width: int | None = None
     height: int | None = None
@@ -141,22 +140,20 @@ class Part3DProfile:
     num_chunks: int | None = None
     # True: só P3-SAM (mesh com cores por parte); não gera GLB multi-parte X-Part
     segment_only: bool = False
-    no_cpu_offload: bool = False
     verbose: bool = False
     # hero.glb → hero_parts.glb e hero_segmented.glb (sufixos antes de .glb)
     parts_suffix: str = "_parts"
     segmented_suffix: str = "_segmented"
     # --- Otimizações de VRAM ---
-    # Modo de quantização: auto, none, int8, int4, torchao-int8, torchao-int4
-    quantization: str | None = None
     # Não quantizar o DiT mesmo quando disponível
     no_quantize_dit: bool = False
     # Habilitar torch.compile para acelerar inferência
     torch_compile: bool = False
     # Desabilitar attention slicing
     no_attention_slicing: bool = False
-    # Modo low-vram (ativa todas as otimizações agressivas)
-    low_vram_mode: bool = False
+    # Nota: low_vram_mode / no_cpu_offload / quantization foram removidos — o
+    # part3d agora auto-deteta via hw-auto (PART3D_HW_AUTO). Chaves YAML
+    # obsoletas com esses nomes são ignoradas silenciosamente em from_dict.
 
 
 @dataclass
@@ -262,8 +259,8 @@ class GameProfile:
     master_bake_normals: bool = False
     # Auto-detecção de hardware nos sub-tools (text2d/text3d/paint3d/rigging3d):
     # True (defeito) deixa cada tool resolver SDNQ/offload/multi-GPU pela VRAM;
-    # False propaga --no-hw-auto a todos. Campos explícitos do perfil (low_vram,
-    # steps, octree, gpu_ids…) ganham sempre sobre a auto-detecção.
+    # False propaga --no-hw-auto a todos. Campos explícitos do perfil (steps,
+    # octree, gpu_ids…) ganham sempre sobre a auto-detecção.
     hw_auto: bool = True
     # Round 2: lista override de categorias que ativam bake-normals.
     # None = usar BAKE_NORMALS_CATEGORIES (humanoid, creature, armor,
@@ -502,7 +499,6 @@ class GameProfile:
                 raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
             t3 = Text3DProfile(
                 preset=pr,
-                low_vram=bool(raw_t3.get("low_vram", False)),
                 export_origin=eo,
                 steps=st_i,
                 octree_resolution=oc_i,
@@ -624,36 +620,19 @@ class GameProfile:
             ss = raw_p3.get("segmented_suffix")
             ps_s = str(ps).strip() if ps not in (None, "") else "_parts"
             ss_s = str(ss).strip() if ss not in (None, "") else "_segmented"
-            # Part3D otimizações de VRAM
-            p3_quant = raw_p3.get("quantization")
-            p3_quant_s = str(p3_quant).strip().lower() if p3_quant not in (None, "") else None
-            valid_p3_quants = (
-                "auto",
-                "none",
-                "int8",
-                "int4",
-                "torchao-int8",
-                "torchao-int4",
-                "sdnq-int8",
-                "sdnq-uint8",
-                "sdnq-int4",
-            )
-            if p3_quant_s and p3_quant_s not in valid_p3_quants:
-                raise ValueError(f"part3d.quantization deve ser um de: {', '.join(valid_p3_quants)}")
+            # Chaves obsoletas (low_vram_mode, no_cpu_offload, quantization) são
+            # ignoradas: o part3d auto-deteta via hw-auto.
             p3 = Part3DProfile(
                 octree_resolution=oc_i,
                 steps=st_i,
                 num_chunks=nc_i,
                 segment_only=bool(raw_p3.get("segment_only", False)),
-                no_cpu_offload=bool(raw_p3.get("no_cpu_offload", False)),
                 verbose=bool(raw_p3.get("verbose", False)),
                 parts_suffix=ps_s,
                 segmented_suffix=ss_s,
-                quantization=p3_quant_s,
                 no_quantize_dit=bool(raw_p3.get("no_quantize_dit", False)),
                 torch_compile=bool(raw_p3.get("torch_compile", False)),
                 no_attention_slicing=bool(raw_p3.get("no_attention_slicing", False)),
-                low_vram_mode=bool(raw_p3.get("low_vram_mode", False)),
             )
         lod: LODProfile | None = None
         raw_lod = data.get("lod")
@@ -838,7 +817,6 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
     t3 = profile.text3d or Text3DProfile()
     t3 = Text3DProfile(
         preset=t3.preset if t3.preset is not None else gp.text3d_preset,
-        low_vram=t3.low_vram,
         export_origin=t3.export_origin,
         steps=t3.steps,
         octree_resolution=t3.octree_resolution,

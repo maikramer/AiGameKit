@@ -81,12 +81,11 @@ def test_from_dict_text3d() -> None:
             "genre": "B",
             "tone": "C",
             "style_preset": "lowpoly",
-            "text3d": {"preset": "fast", "low_vram": True},
+            "text3d": {"preset": "fast"},
         }
     )
     assert p.text3d is not None
     assert p.text3d.preset == "fast"
-    assert p.text3d.low_vram is True
 
 
 def test_from_dict_text3d_with_paint3d() -> None:

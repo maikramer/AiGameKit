@@ -177,7 +177,7 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 | `--no-collision` | Skip collision mesh generation even if enabled |
 | `--profile-tools` | Enable CPU/RAM/GPU profiling via `GAMEDEV_PROFILE` |
 | `--profile-log FILE.jsonl` | Profiler log output |
-| `--low-vram` | Low VRAM mode for all sub-tools |
+| `--low-vram` | Deprecated no-op (sub-tools auto-detect VRAM via hw-auto) |
 | `--force` | Regenerate everything (ignore existing outputs) |
 | `--gpu-ids "0,1"` | Multi-GPU IDs (auto-detected via `nvidia-smi` if omitted) |
 | `--no-dashboard` | Simple progress bars instead of TUI dashboard |
@@ -271,7 +271,7 @@ Idea-to-game: an LLM plans assets + scene from a natural language description, g
 | `--presets-local FILE` | Custom presets YAML |
 | `--dry-run` | Generate files without running batch/sky (no GPU) |
 | `--plan-json FILE.json` | Export dream plan as JSON |
-| `--low-vram` | Low VRAM for all sub-tools |
+| `--low-vram` | Deprecated no-op (sub-tools auto-detect VRAM via hw-auto) |
 
 **LLM Providers:**
 
@@ -535,7 +535,7 @@ Options passed to the `text2d generate` CLI (FLUX Klein).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `low_vram` | `bool` | `false` | Low VRAM mode |
+| `low_vram` | `bool` | `false` | Deprecated no-op (hw-auto handles small GPUs) |
 | `cpu` | `bool` | `false` | CPU-only inference |
 | `width` | `int` | `None` | Image width (overridden by generation profile) |
 | `height` | `int` | `None` | Image height (overridden by generation profile) |
@@ -617,7 +617,7 @@ Options for Paint3D texturing (Hunyuan3D-Paint 2.1 AI or quick paint).
 | `bake_exp` | `int` | `None` | View blending sharpness (default: 6 from profile) |
 | `smooth` | `bool` | `true` | Bilateral smooth on painted mesh |
 | `smooth_passes` | `int` | `None` | Number of smooth passes |
-| `low_vram_mode` | `bool` | `false` | Low VRAM mode |
+| `low_vram_mode` | `bool` | `false` | Deprecated no-op (hw-auto handles small GPUs) |
 | `solid_color` | `str` | `"#888888"` | Quick paint solid color |
 | `perlin_tint` | `str` | `"#7a7268"` | Quick paint Perlin tint |
 | `perlin_frequency` | `float` | `4.0` | Perlin noise frequency |
@@ -677,15 +677,14 @@ Options for Part3D semantic decomposition after Text3D, before rigging.
 | `steps` | `int` | `None` | Inference steps |
 | `num_chunks` | `int` | `None` | Number of chunks |
 | `segment_only` | `bool` | `false` | Only P3-SAM (mesh with per-part colors, no X-Part) |
-| `no_cpu_offload` | `bool` | `false` | Disable CPU offload |
 | `verbose` | `bool` | `false` | Verbose output |
 | `parts_suffix` | `str` | `"_parts"` | Multi-part GLB suffix |
 | `segmented_suffix` | `str` | `"_segmented"` | Segmented mesh suffix |
-| `quantization` | `str` | `None` | `auto` / `none` / `int8` / `int4` / `torchao-int8` / `torchao-int4` / `sdnq-*` |
 | `no_quantize_dit` | `bool` | `false` | Never quantize the DiT |
 | `torch_compile` | `bool` | `false` | Enable torch.compile |
 | `no_attention_slicing` | `bool` | `false` | Disable attention slicing |
-| `low_vram_mode` | `bool` | `false` | Aggressive VRAM optimizations |
+
+> **VRAM note:** `low_vram_mode`, `no_cpu_offload` and `quantization` are deprecated no-ops — Part3D auto-detects via hw-auto (`PART3D_HW_AUTO`). Existing `game.yaml` entries with these keys are silently ignored.
 
 #### `lod` — LODProfile
 

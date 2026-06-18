@@ -858,7 +858,7 @@ def validate_cmd(
 @click.option(
     "--low-vram",
     is_flag=True,
-    help="Modo baixa VRAM: propaga --low-vram a todos os sub-tools.",
+    help="Deprecated no-op: os sub-tools agora auto-detetam VRAM via hw-auto.",
 )
 def dream_cmd(
     description: str,

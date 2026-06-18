@@ -35,8 +35,8 @@ image_ext: png
 # resolvem-se sozinhos. Para desligar em todos: hw_auto: false (ou <TOOL>_HW_AUTO=0).
 # hw_auto: true
 
-# Text2D em batch: low_vram resolve-se pelo hw-auto (GPUs <7.5GB → offload + 4B).
-# Forçar manualmente só se precisares de override: low_vram: true | cpu: true (lento).
+# Text2D em batch: a VRAM resolve-se pelo hw-auto (GPUs <7.5GB → offload + 4B).
+# low_vram é um no-op deprecated (o GameAssets já não o propaga); cpu: true força CPU (lento).
 text2d:
   width: 768
   height: 768

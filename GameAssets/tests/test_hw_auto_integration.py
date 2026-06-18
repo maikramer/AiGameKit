@@ -66,11 +66,11 @@ def test_rigging3d_argv_no_hw_auto_before_subcommand() -> None:
     assert "--no-hw-auto" not in args_on
 
 
-def test_explicit_profile_low_vram_text2d_still_passed() -> None:
-    """Text2D override manual continua a ganhar; Text3D low_vram é no-op (removido)."""
+def test_explicit_profile_low_vram_not_propagated_to_text2d() -> None:
+    """--low-vram global só propaga a Part3D; text2d usa hw-auto próprio."""
     p = _profile(text3d={"low_vram": True}, text2d={"low_vram": True})
     args = _text3d_argv("text3d", p, Path("img.png"), Path("out.glb"))
     assert "--low-vram" not in args
     argv: list[str] = []
     _append_text2d_profile_args(p, argv)
-    assert "--low-vram" in argv
+    assert "--low-vram" not in argv

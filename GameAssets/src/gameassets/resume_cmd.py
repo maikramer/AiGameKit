@@ -696,8 +696,6 @@ def resume_cmd(
                                 batch_args.append("--no-preserve-origin")
                             else:
                                 batch_args.append("--preserve-origin")
-                            if p3.low_vram_mode:
-                                batch_args.append("--low-vram-mode")
                         if gpu_ids:
                             batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 
@@ -1146,8 +1144,6 @@ def resume_cmd(
                                 batch_args.append("--no-preserve-origin")
                             else:
                                 batch_args.append("--preserve-origin")
-                            if p3.low_vram_mode:
-                                batch_args.append("--low-vram-mode")
                         if gpu_ids:
                             batch_args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
 
