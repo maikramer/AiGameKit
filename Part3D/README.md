@@ -112,6 +112,7 @@ part3d decompose character.glb --seed 42 --steps 25 --octree-resolution 256
 | `--torch-compile` / `--no-torch-compile` | flag | `false` | Enable `torch.compile` for the DiT |
 | `--no-attention-slicing` | flag | `false` | Disable attention slicing |
 | `--low-vram-mode` | flag | `false` | Low VRAM mode (auto quant + CPU offload + attention slicing) |
+| `--hw-auto/--no-hw-auto` | flag | `true` | Hardware auto-detection: enables `--low-vram-mode` on GPUs <6 GB (CPU offload + quantização auto). Explicit flags win. Env kill-switch: `PART3D_HW_AUTO=0` |
 | `--profile` | flag | `false` | Enable timing, CPU, RAM, and VRAM profiling |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU DiT dispatch (e.g., `0,1`) |
 
@@ -144,6 +145,17 @@ Enables a bundle of optimizations: auto quantization (`-q auto`), CPU offloading
 ```bash
 part3d decompose model.glb --low-vram-mode
 ```
+
+### Hardware auto-detection (`--hw-auto`)
+
+`--hw-auto` (default **on`) detects the available CUDA hardware and activates `--low-vram-mode` on GPUs with <6 GB VRAM. Explicit flags always win — `--low-vram-mode`, `--quantization`, `--no-cpu-offload` and `--quality` override the auto profile. Disable with `--no-hw-auto` or `PART3D_HW_AUTO=0`.
+
+| Detected hardware | Profile |
+|-------------------|---------|
+| Single GPU ≥ 6 GB | Defaults (no low-vram-mode) |
+| Single GPU < 6 GB (e.g. RTX 4050) | `--low-vram-mode` (quantização auto + CPU offload) |
+| Multi-GPU (total ≥ 6 GB) | Defaults (no low-vram-mode) |
+| No CUDA | CPU + low-vram (conservador) |
 
 ## Quality Presets
 

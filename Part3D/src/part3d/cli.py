@@ -108,6 +108,13 @@ def main() -> None:
     default=None,
     help="IDs de GPU para multi-GPU (ex: '0,1'). Só afecta o DiT.",
 )
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    default=_d.DEFAULT_HW_AUTO,
+    show_default=True,
+    help="Hardware auto-detection: activa --low-vram-mode em GPUs <6 GB (CPU offload + "
+    "quantização auto). Flags explícitas ganham sempre. Env kill-switch: PART3D_HW_AUTO=0",
+)
 @click.pass_context
 def decompose(
     ctx,
@@ -132,6 +139,7 @@ def decompose(
     low_vram_mode: bool,
     profile: bool,
     gpu_ids: str | None,
+    hw_auto: bool,
 ) -> None:
     """Decompõe uma mesh 3D em partes semânticas.
 
@@ -173,7 +181,18 @@ def decompose(
         no_cpu_offload = False
         no_attention_slicing = False
 
-    ensure_pytorch_cuda_alloc_conf()
+    # Hardware auto-detection (soft): --low-vram-mode explícito ganha sempre.
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+
+    hwp = None
+    if hw_auto and hw_auto_enabled():
+        hwp = detect_hardware_profile()
+        if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
+            low_vram_mode = True
+            quantization = "auto"
+            no_quantize_dit = False
+            no_cpu_offload = False
+            no_attention_slicing = False
 
     ensure_pytorch_cuda_alloc_conf()
 
@@ -222,8 +241,8 @@ def decompose(
         gpu_info = torch.cuda.get_device_properties(0)
         vram_gb = gpu_info.total_memory / (1024**3)
         console.print(f"GPU: {gpu_info.name} ({vram_gb:.1f} GB VRAM)")
-        if vram_gb < 6.0 and not no_cpu_offload:
-            console.print("[yellow]Aviso: VRAM < 6 GB — resultado pode ser instável[/]")
+        if hwp is not None:
+            console.print(f"[dim]Hardware (auto): {hwp.summary()}[/]")
         from gamedev_shared.gpu import warn_if_vram_occupied
 
         warn_if_vram_occupied()
