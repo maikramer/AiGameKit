@@ -379,6 +379,25 @@ def wave_idle_keyframes(
     finalize_current_action_to_nla(armature_name)
 
 
+def _name_side(name: str) -> str | None:
+    """Side ('r'/'l') from a bone name when it labels one (Mixamo Right/Left,
+    `*.R`/`*.L`, `*_r`). None when unlabeled (caller falls back to geometry).
+    Name beats geometry because a rig facing -Z puts its Right bones on -X,
+    which the x-sign heuristic mislabels as left (hero swung the wrong arm)."""
+    n = name.lower()
+    if "right" in n:
+        return "r"
+    if "left" in n:
+        return "l"
+    for tok in (".r", "_r", "-r", " r"):
+        if n.endswith(tok):
+            return "r"
+    for tok in (".l", "_l", "-l", " l"):
+        if n.endswith(tok):
+            return "l"
+    return None
+
+
 def _identify_root_layout(root_kids: list) -> tuple[object | None, list[tuple[object, str]]]:
     """Detect humanoid layout: one central spine + two lateral leg branches.
 
@@ -413,11 +432,11 @@ def _identify_root_layout(root_kids: list) -> tuple[object | None, list[tuple[ob
     if not has_hub:
         return None, []
 
+    # Side by bone name when labeled; geometry x-sign only as fallback.
     pairs: list[tuple[object, str]] = []
-    for c in pos:
-        pairs.append((c, "r"))
-    for c in neg:
-        pairs.append((c, "l"))
+    for c in pos + neg:
+        side = _name_side(c.bone.name) or ("r" if c.bone.head_local.x > 0 else "l")
+        pairs.append((c, side))
     return spine_candidate, pairs
 
 
@@ -553,20 +572,15 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
                 chains.setdefault("tail", tail_chain)
                 if tail_hub and len(tail_hub.children) >= 2:
                     _classify_tail_hub(tail_hub)
-            elif sx > 0.03:
+            elif abs(sx) > 0.03:
+                # Name-labeled side beats geometry (rig facing -Z flips x-sign).
+                side = _name_side(sc.bone.name) or ("r" if sx > 0 else "l")
                 if _lateral_branch_is_leg(sc, center_z):
-                    _merge_leg_chain("r", sc)
+                    _merge_leg_chain(side, sc)
                 elif _has_legs:
-                    _merge_arm_chain("r", sc)
+                    _merge_arm_chain(side, sc)
                 else:
-                    _classify_wing(sc, "wing_r")
-            elif sx < -0.03:
-                if _lateral_branch_is_leg(sc, center_z):
-                    _merge_leg_chain("l", sc)
-                elif _has_legs:
-                    _merge_arm_chain("l", sc)
-                else:
-                    _classify_wing(sc, "wing_l")
+                    _classify_wing(sc, "wing_r" if side == "r" else "wing_l")
 
     def _classify_wing(start, key: str):
         """Separa asa em tronco principal (3-4 ossos) e dedos."""
@@ -603,10 +617,11 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
 
         cx = child.bone.head_local.x
         if abs(cx) > 0.15:
+            side = _name_side(child.bone.name) or ("r" if cx > 0 else "l")
             if _lateral_branch_is_leg(child, rz):
-                _merge_leg_chain("r" if cx > 0 else "l", child)
+                _merge_leg_chain(side, child)
             else:
-                _classify_wing(child, "wing_r" if cx > 0 else "wing_l")
+                _classify_wing(child, "wing_r" if side == "r" else "wing_l")
             continue
 
         path_to_hub, hub = _find_first_hub(child)
@@ -1412,6 +1427,91 @@ def attack_keyframes(
 
     finalize_current_action_to_nla(armature_name)
     return chains
+
+
+def _humanoid_action_keyframes(
+    kind: str,
+    armature_name: str,
+    *,
+    frame_start: int,
+    frame_end: int,
+    action_name: str,
+) -> dict[str, list[str]]:
+    """Shared entry for the humanoid-only tool/action clips (mine, chop, spear,
+    axe, sword, gather). Delegates to the key-pose engine; non-humanoid rigs
+    get no clip (these are authored for humanoids)."""
+    from . import humanoid
+
+    chains = _classify_bone_chains(armature_name)
+    humanoid.try_humanoid_clip(
+        kind,
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+    )
+    return chains
+
+
+def mine_keyframes(
+    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    action_name: str = "Animator3D_Mine",
+) -> dict[str, list[str]]:
+    return _humanoid_action_keyframes(
+        "mine", armature_name, frame_start=frame_start, frame_end=frame_end,
+        action_name=action_name,
+    )
+
+
+def chop_keyframes(
+    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    action_name: str = "Animator3D_Chop",
+) -> dict[str, list[str]]:
+    return _humanoid_action_keyframes(
+        "chop", armature_name, frame_start=frame_start, frame_end=frame_end,
+        action_name=action_name,
+    )
+
+
+def spear_keyframes(
+    armature_name: str, *, frame_start: int = 1, frame_end: int = 34,
+    action_name: str = "Animator3D_Spear",
+) -> dict[str, list[str]]:
+    return _humanoid_action_keyframes(
+        "spear", armature_name, frame_start=frame_start, frame_end=frame_end,
+        action_name=action_name,
+    )
+
+
+def axe_keyframes(
+    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    action_name: str = "Animator3D_AxeAttack",
+) -> dict[str, list[str]]:
+    return _humanoid_action_keyframes(
+        "axe", armature_name, frame_start=frame_start, frame_end=frame_end,
+        action_name=action_name,
+    )
+
+
+def sword_keyframes(
+    armature_name: str, *, frame_start: int = 1, frame_end: int = 32,
+    action_name: str = "Animator3D_SwordAttack",
+) -> dict[str, list[str]]:
+    return _humanoid_action_keyframes(
+        "sword", armature_name, frame_start=frame_start, frame_end=frame_end,
+        action_name=action_name,
+    )
+
+
+def gather_keyframes(
+    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    action_name: str = "Animator3D_Gather",
+) -> dict[str, list[str]]:
+    return _humanoid_action_keyframes(
+        "gather", armature_name, frame_start=frame_start, frame_end=frame_end,
+        action_name=action_name,
+    )
 
 
 def walk_cycle_keyframes(

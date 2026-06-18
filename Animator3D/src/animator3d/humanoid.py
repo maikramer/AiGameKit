@@ -7,13 +7,15 @@ convertidas exactamente para o espaço local do osso via quaternions
 euler local por eixo do mundo" degenerava em ossos diagonais (braços em
 A-pose torciam em vez de balançar).
 
-Convenções (glTF importado no Blender: up=+Z, forward=−Y, +X=lado da cadeia
-"r" do classificador):
+Convenções (glTF importado no Blender: up=+Z, forward=−Y):
   pitch + : rotação sobre +X mundial — spine inclina à frente; perna/braço
             (a apontar para baixo) balançam para TRÁS; logo frente = pitch −.
-  roll  + : rotação sobre +Y mundial — membro pendente move-se para −X;
-            adução do braço da cadeia "r" (+X) = roll +, da cadeia "l" = roll −.
-  yaw   + : rotação sobre +Z mundial — ombro esquerdo (+X) recua.
+  roll  + : rotação sobre +Y mundial. O sinal de adução depende do sinal de X
+            da cadeia "r" em rest: rigs com Right em −X (caso do hero, facing
+            −Z — ver ``_name_side`` em bpy_ops) aduzem com roll −, pelo que
+            base_pose usa ``-s * mag``; rigs com Right em +X aduziriam com
+            roll + (``+s * mag``).
+  yaw   + : rotação sobre +Z mundial.
   up      : translação vertical (unidades do mundo) — só para a anca (bob).
 
 Todos os valores em radianos. Poses são absolutas a partir do rest pose
@@ -196,9 +198,9 @@ def base_pose(rig: HumanoidRig) -> Pose:
         if not ab:
             continue
         if "shoulder" in ab:
-            pose[ab["shoulder"]] = {"roll": s * 0.06}
-        pose[ab["upper"]] = {"roll": s * 0.52, "pitch": 0.06}
-        pose[ab["fore"]] = {"roll": s * 0.10, "pitch": -0.32}
+            pose[ab["shoulder"]] = {"roll": -s * 0.06}
+        pose[ab["upper"]] = {"roll": -s * 0.66, "pitch": 0.06}
+        pose[ab["fore"]] = {"roll": -s * 0.10, "pitch": -0.32}
         if "hand" in ab:
             pose[ab["hand"]] = {"pitch": -0.10}
     return pose
@@ -397,6 +399,24 @@ def idle_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, cycles: flo
                 pose = merge(pose, {ab["shoulder"]: {"roll": s * 0.02 * breath}})
             if ab:
                 pose = merge(pose, {ab["upper"]: {"pitch": 0.018 * breath}})
+        # Weapon (right) arm holds a ready stance: forearm flexed up and hand
+        # drawn slightly inward so a held sword rests in front of the belt
+        # instead of hanging stiff against the thigh.
+        abr = rig.arm_bones("r")
+        if abr:
+            pose = merge(pose, {
+                abr["upper"]: {"pitch": 0.22, "roll": 0.14},
+                abr["fore"]: {"pitch": -0.62, "yaw": 0.10},
+            })
+            if "hand" in abr:
+                pose = merge(pose, {abr["hand"]: {"pitch": -0.12}})
+        # Off (left) hand hangs relaxed and low against the side.
+        abl = rig.arm_bones("l")
+        if abl:
+            pose = merge(pose, {
+                abl["upper"]: {"roll": -0.20},
+                abl["fore"]: {"pitch": 0.10},
+            })
         rig.key_pose(frame, pose)
 
 
@@ -464,6 +484,199 @@ def attack_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, strikes: 
         rig.key_pose(at(0.48), strike())            # golpe rápido (snap)
         rig.key_pose(at(0.58), mix(strike(), base, 0.12))  # follow-through segura
         rig.key_pose(frame_start + round((k + 1) * seg) if k < strikes - 1 else frame_end, base)
+
+
+# ---------------------------------------------------------------------------
+# Tool / action clips (mine, chop, spear, axe, sword, gather)
+# ---------------------------------------------------------------------------
+
+
+def _both_arms(
+    rig: HumanoidRig, *, upper: float, fore: float, roll: float = 0.0
+) -> Pose:
+    """Symmetric two-handed arm pose (e.g. gripping a pick/axe/spear haft).
+    `roll` spreads the arms outward (mirrored). pitch- swings forward/down."""
+    pose: Pose = {}
+    for side, s in (("r", 1.0), ("l", -1.0)):
+        ab = rig.arm_bones(side)
+        if not ab:
+            continue
+        pose[ab["upper"]] = {"pitch": upper, "roll": s * roll}
+        pose[ab["fore"]] = {"pitch": fore}
+    return pose
+
+
+def _one_arm(
+    rig: HumanoidRig, side: str, *, upper: float, fore: float, roll: float = 0.0
+) -> Pose:
+    ab = rig.arm_bones(side)
+    if not ab:
+        return {}
+    pose: Pose = {ab["upper"]: {"pitch": upper, "roll": roll}, ab["fore"]: {"pitch": fore}}
+    return pose
+
+
+def mine_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
+    """Pickaxe: two-handed overhead raise then a hard slam down into the ground."""
+    total = frame_end - frame_start
+    base = base_pose(rig)
+
+    def at(t: float) -> int:
+        return frame_start + round(t * total)
+
+    raise_ = merge(
+        base,
+        _both_arms(rig, upper=1.5, fore=-0.55),
+        _spine_pose(rig, lean=-0.18),
+        _hips_pose(rig, up=0.02),
+    )
+    slam = merge(
+        base,
+        _both_arms(rig, upper=-1.35, fore=-0.15),
+        _spine_pose(rig, lean=0.55),
+        _hips_pose(rig, pitch=0.22, up=-0.04),
+        _leg_pose(rig, "r", knee=0.35),
+        _leg_pose(rig, "l", knee=0.35),
+    )
+    rig.key_pose(at(0.0), base)
+    rig.key_pose(at(0.35), raise_)
+    rig.key_pose(at(0.52), slam)
+    rig.key_pose(at(0.66), mix(slam, base, 0.2))
+    rig.key_pose(frame_end, base)
+
+
+def chop_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
+    """Axe felling a tree: two-handed diagonal overhead chop across the body."""
+    total = frame_end - frame_start
+    base = base_pose(rig)
+
+    def at(t: float) -> int:
+        return frame_start + round(t * total)
+
+    raise_ = merge(
+        base,
+        _both_arms(rig, upper=1.25, fore=-0.5, roll=0.4),
+        _spine_pose(rig, lean=-0.1, yaw=-0.42),
+    )
+    strike = merge(
+        base,
+        _both_arms(rig, upper=-1.0, fore=-0.2, roll=-0.2),
+        _spine_pose(rig, lean=0.35, yaw=0.45),
+        _hips_pose(rig, yaw=0.15),
+    )
+    rig.key_pose(at(0.0), base)
+    rig.key_pose(at(0.35), raise_)
+    rig.key_pose(at(0.52), strike)
+    rig.key_pose(at(0.64), mix(strike, base, 0.2))
+    rig.key_pose(frame_end, base)
+
+
+def spear_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
+    """Spear: cock both hands back, then a fast straight thrust + retract."""
+    total = frame_end - frame_start
+    base = base_pose(rig)
+
+    def at(t: float) -> int:
+        return frame_start + round(t * total)
+
+    cock = merge(
+        base,
+        _both_arms(rig, upper=0.4, fore=-1.3),
+        _spine_pose(rig, lean=-0.08, yaw=-0.1),
+        _leg_pose(rig, "l", hip_fwd=0.12, knee=0.1),
+        _leg_pose(rig, "r", hip_fwd=-0.1, knee=0.15),
+    )
+    thrust = merge(
+        base,
+        _both_arms(rig, upper=-0.95, fore=-0.1),
+        _spine_pose(rig, lean=0.28),
+        _leg_pose(rig, "r", hip_fwd=0.25, knee=0.3),
+        _leg_pose(rig, "l", hip_fwd=-0.12),
+    )
+    rig.key_pose(at(0.0), base)
+    rig.key_pose(at(0.32), cock)
+    rig.key_pose(at(0.46), thrust)
+    rig.key_pose(at(0.58), mix(thrust, base, 0.15))
+    rig.key_pose(frame_end, base)
+
+
+def axe_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
+    """One-handed axe: a heavy, wide horizontal swing (slower wind-up)."""
+    total = frame_end - frame_start
+    base = base_pose(rig)
+    guard = rig.arm_bones("l")
+
+    def at(t: float) -> int:
+        return frame_start + round(t * total)
+
+    windup = merge(
+        base,
+        _one_arm(rig, "r", upper=0.7, fore=-0.6, roll=-0.7),
+        _spine_pose(rig, yaw=-0.35),
+    )
+    strike = merge(
+        base,
+        _one_arm(rig, "r", upper=-0.9, fore=-0.15, roll=0.25),
+        _spine_pose(rig, lean=0.3, yaw=0.42),
+    )
+    if guard:
+        windup = merge(windup, {guard["upper"]: {"pitch": -0.3}})
+        strike = merge(strike, {guard["upper"]: {"pitch": 0.4}})
+    rig.key_pose(at(0.0), base)
+    rig.key_pose(at(0.40), windup)
+    rig.key_pose(at(0.56), strike)
+    rig.key_pose(at(0.68), mix(strike, base, 0.15))
+    rig.key_pose(frame_end, base)
+
+
+def sword_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
+    """One-handed sword: a crisp overhead diagonal slash."""
+    total = frame_end - frame_start
+    base = base_pose(rig)
+    guard = rig.arm_bones("l")
+
+    def at(t: float) -> int:
+        return frame_start + round(t * total)
+
+    windup = merge(
+        base,
+        _one_arm(rig, "r", upper=0.95, fore=-0.9, roll=-0.6),
+        _spine_pose(rig, lean=-0.05, yaw=-0.5),
+    )
+    strike = merge(
+        base,
+        _one_arm(rig, "r", upper=-1.2, fore=-0.2, roll=0.55),
+        _spine_pose(rig, lean=0.3, yaw=0.5),
+    )
+    if guard:
+        strike = merge(strike, {guard["upper"]: {"pitch": 0.3}})
+    rig.key_pose(at(0.0), base)
+    rig.key_pose(at(0.30), windup)
+    rig.key_pose(at(0.46), strike)
+    rig.key_pose(at(0.58), mix(strike, base, 0.12))
+    rig.key_pose(frame_end, base)
+
+
+def gather_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
+    """Bare-hand gather: crouch and reach down to pick something off the ground."""
+    total = frame_end - frame_start
+    base = base_pose(rig)
+
+    def at(t: float) -> int:
+        return frame_start + round(t * total)
+
+    reach = merge(
+        base,
+        _hips_pose(rig, pitch=0.45, up=-0.16),
+        _spine_pose(rig, lean=0.55),
+        _leg_pose(rig, "r", knee=0.55, hip_fwd=0.1),
+        _leg_pose(rig, "l", knee=0.55, hip_fwd=0.1),
+        _one_arm(rig, "r", upper=-1.0, fore=-0.35),
+    )
+    rig.key_pose(at(0.0), base)
+    rig.key_pose(at(0.40), reach)
+    rig.key_pose(at(0.62), reach)
+    rig.key_pose(frame_end, base)
 
 
 # ---------------------------------------------------------------------------
@@ -610,7 +823,10 @@ def turn_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, direction: 
 # Entrada única chamada por bpy_ops
 # ---------------------------------------------------------------------------
 
-_CLIPS = {"idle", "walk", "run", "attack", "jump", "fall", "turn"}
+_CLIPS = {
+  "idle", "walk", "run", "attack", "jump", "fall", "turn",
+  "mine", "chop", "spear", "axe", "sword", "gather",
+}
 
 
 def try_humanoid_clip(
@@ -686,6 +902,18 @@ def try_humanoid_clip(
             direction=float(params.get("direction", 1.0)),
             turn_amp=float(params.get("turn_amp", 0.45)),
         )
+    elif kind == "mine":
+        mine_clip(rig, frame_start=frame_start, frame_end=frame_end)
+    elif kind == "chop":
+        chop_clip(rig, frame_start=frame_start, frame_end=frame_end)
+    elif kind == "spear":
+        spear_clip(rig, frame_start=frame_start, frame_end=frame_end)
+    elif kind == "axe":
+        axe_clip(rig, frame_start=frame_start, frame_end=frame_end)
+    elif kind == "sword":
+        sword_clip(rig, frame_start=frame_start, frame_end=frame_end)
+    elif kind == "gather":
+        gather_clip(rig, frame_start=frame_start, frame_end=frame_end)
 
     rig.finish_action(action, cyclic=cyclic)
     bpy_ops.finalize_current_action_to_nla(armature_name)

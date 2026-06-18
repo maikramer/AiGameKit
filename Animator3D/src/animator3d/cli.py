@@ -924,6 +924,12 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
         ("attack_keyframes", {"frame_end": 28, "action_name": "Animator3D_Attack"}),
         ("turn_in_place_keyframes", {"frame_end": 32, "direction": 1.0, "action_name": "Animator3D_TurnLeft"}),
         ("turn_in_place_keyframes", {"frame_end": 32, "direction": -1.0, "action_name": "Animator3D_TurnRight"}),
+        ("mine_keyframes", {"frame_end": 40, "action_name": "Animator3D_Mine"}),
+        ("chop_keyframes", {"frame_end": 40, "action_name": "Animator3D_Chop"}),
+        ("spear_keyframes", {"frame_end": 34, "action_name": "Animator3D_Spear"}),
+        ("axe_keyframes", {"frame_end": 40, "action_name": "Animator3D_AxeAttack"}),
+        ("sword_keyframes", {"frame_end": 32, "action_name": "Animator3D_SwordAttack"}),
+        ("gather_keyframes", {"frame_end": 40, "action_name": "Animator3D_Gather"}),
     ],
     "creature": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),
