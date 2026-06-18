@@ -181,11 +181,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU (muito mais lento)")
 @click.option(
-    "--low-vram",
-    is_flag=True,
-    help="Perfil ~6GB VRAM: SDNQ INT4, octree 256, 8000 chunks, 24 steps.",
-)
-@click.option(
     "--image-width",
     "-W",
     default=_defaults.DEFAULT_T2D_WIDTH,
@@ -234,7 +229,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=_defaults.DEFAULT_HY_STEPS,
     show_default=True,
     type=int,
-    help=f"Passos Hunyuan3D (low VRAM com --low-vram: {_defaults.LOW_VRAM_STEPS})",
+    help=f"Passos Hunyuan3D (perfil balanced: {_defaults.LOW_VRAM_STEPS})",
 )
 @click.option(
     "--guidance",
@@ -249,14 +244,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=_defaults.DEFAULT_OCTREE_RESOLUTION,
     show_default=True,
     type=int,
-    help=(f"Octree Hunyuan (VRAM no decode). low VRAM: {_defaults.LOW_VRAM_OCTREE}"),
+    help=(f"Octree Hunyuan (VRAM no decode). Perfil balanced: {_defaults.LOW_VRAM_OCTREE}"),
 )
 @click.option(
     "--num-chunks",
     default=_defaults.DEFAULT_NUM_CHUNKS,
     show_default=True,
     type=int,
-    help=(f"Chunks extração de superfície. low VRAM: {_defaults.LOW_VRAM_NUM_CHUNKS}"),
+    help=(f"Chunks extração de superfície. Perfil balanced: {_defaults.LOW_VRAM_NUM_CHUNKS}"),
 )
 @click.option(
     "--preset",
@@ -293,7 +288,10 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--sdnq-preset",
     default=None,
     type=click.Choice(["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-fp8", "none"]),
-    help=("Preset SDNQ para quantização do DiT. Defeito: none (full precision), ou sdnq-int4 com --low-vram."),
+    help=(
+        "Preset SDNQ para quantização do DiT. Defeito: none (full precision), "
+        "ou sdnq-int4 via hw-auto em GPUs pequenas."
+    ),
 )
 @click.option(
     "--hw-auto/--no-hw-auto",
@@ -463,7 +461,6 @@ def generate(
     output,
     output_format,
     cpu,
-    low_vram,
     image_width,
     image_height,
     t2d_steps,
@@ -553,7 +550,7 @@ def generate(
         _params_untouched = not (
             _user_set_preset or _user_set_quality or _user_set_steps or _user_set_octree or _user_set_chunks
         )
-        if _params_untouched and not low_vram:
+        if _params_untouched:
             steps = hwp.steps
             octree_resolution = hwp.octree
             num_chunks = hwp.chunks
@@ -567,14 +564,6 @@ def generate(
             image_width = hwp.image_width
         if not _user_set_img_h and hwp.image_height is not None:
             image_height = hwp.image_height
-
-    # --low-vram: override to the low-VRAM profile (overrides balanced/fast/hq)
-    if low_vram:
-        steps = _defaults.LOW_VRAM_STEPS
-        octree_resolution = _defaults.LOW_VRAM_OCTREE
-        num_chunks = _defaults.LOW_VRAM_NUM_CHUNKS
-        if sdnq_preset is None:
-            sdnq_preset = "sdnq-int4"
 
     if sdnq_preset is None:
         sdnq_preset = "none"
@@ -636,7 +625,6 @@ def generate(
         f"origem={export_origin}"
         + (f", rotação X={export_rotation_x_deg}°" if export_rotation_x_deg is not None else ""),
     )
-    info_table.add_row("[bold]Modo[/bold]", "economia VRAM" if low_vram else "normal")
     if hwp is not None:
         info_table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     _accel_parts = []
@@ -683,7 +671,6 @@ def generate(
                 with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
                     generator = HunyuanTextTo3DGenerator(
                         device="cpu" if cpu else None,
-                        low_vram_mode=low_vram,
                         verbose=verbose,
                         hunyuan_subfolder=model_subfolder,
                         sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
@@ -955,7 +942,7 @@ def info():
                 Panel(
                     "[yellow]VRAM modesta: os defeitos do CLI já são conservadores "
                     "(ver text3d.defaults). Se der OOM, baixa --octree-resolution / "
-                    "--num-chunks ou usa --low-vram (Hunyuan em CPU).[/yellow]",
+                    "--num-chunks ou usa --preset fast.[/yellow]",
                     title="Aviso",
                     border_style="yellow",
                 )
@@ -1734,8 +1721,7 @@ def generate_batch(
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
         _params_untouched = not (
-            _user_set_preset or _user_set_quality or _user_set_steps
-            or _user_set_octree or _user_set_chunks
+            _user_set_preset or _user_set_quality or _user_set_steps or _user_set_octree or _user_set_chunks
         )
         if _params_untouched:
             base_steps = hwp.steps

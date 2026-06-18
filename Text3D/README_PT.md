@@ -4,7 +4,7 @@
 
 **Text-to-3D** em duas fases: **[Text2D](../Text2D)** (texto → imagem) e **[Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1)** (imagem → mesh, SDNQ INT4 quantizado). O modelo 2D é **sempre descarregado** antes de carregar o Hunyuan3D.
 
-Os **valores por defeito** do CLI/API estão em [`src/text3d/defaults.py`](src/text3d/defaults.py): perfil **~6 GB VRAM** (CUDA) **validado na prática** (boa qualidade text-to-3D com os mesmos números que o comando sem flags extra). O **Text2D (FLUX)** usa **CPU offload** por defeito (`DEFAULT_T2D_CPU_OFFLOAD`), senão o modelo não cabe na GPU. Em GPU grande, `--t2d-full-gpu`. `--low-vram` força o **Hunyuan** em CPU (último recurso).
+Os **valores por defeito** do CLI/API estão em [`src/text3d/defaults.py`](src/text3d/defaults.py): perfil **~6 GB VRAM** (CUDA) **validado na prática** (boa qualidade text-to-3D com os mesmos números que o comando sem flags extra). O **Text2D (FLUX)** usa **CPU offload** por defeito (`DEFAULT_T2D_CPU_OFFLOAD`), senão o modelo não cabe na GPU. Em GPU grande, `--t2d-full-gpu`. O **hw-auto** aplica SDNQ INT4 automaticamente em GPUs pequenas (~6 GB).
 
 **Atalhos:** `--preset fast` (menos tempo/VRAM), `balanced` (igual aos defeitos), `hq` (alta qualidade, GPU grande) — ajusta `--steps`, `--octree-resolution` e `--num-chunks` em conjunto (se usares `--preset`, não esperes que `--steps`/`--octree-resolution`/`--num-chunks` “ganhem” ao perfil — o preset tem prioridade). **`text3d doctor`** verifica PyTorch e VRAM. O CLI define `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` se a variável ainda não existir (menos fragmentação de VRAM).
 
@@ -76,9 +76,6 @@ text3d generate "cadeira" --preset hq -W 1024 -H 1024
 # Rápido (menos passos / octree mais baixo)
 text3d generate "cadeira" --preset fast -o cadeira_fast.glb
 
-# Último recurso: Hunyuan em CPU
-text3d generate "objeto" --low-vram
-
 text3d doctor
 text3d info
 text3d models
@@ -103,7 +100,6 @@ Ver [`defaults.py`](src/text3d/defaults.py). Resumo:
 | `--guidance` | 5.0 | 5.0 |
 | `--octree-resolution` | 256 | 380 |
 | `--num-chunks` | 8000 | 20000 |
-| `--low-vram` | off | força Hunyuan em CPU se ainda OOM |
 | `--seed` | — | — |
 | `--preset` | — | `fast` / `balanced` / `hq` (substitui steps+octree+chunks) |
 | `--mc-level` | 0 | Iso-superfície Hunyuan (ajuste fino) |

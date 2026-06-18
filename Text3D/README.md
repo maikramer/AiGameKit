@@ -83,8 +83,8 @@ text3d generate "chair" --preset fast -o chair_fast.glb
 # Image-to-3D only (skip Text2D)
 text3d generate -i ref.png -o mesh.glb
 
-# Low VRAM (~6 GB profile, Hunyuan SDNQ INT4)
-text3d generate "object" --low-vram
+# Low VRAM (~6 GB): hw-auto applies SDNQ INT4 automatically
+text3d generate "object" --preset balanced
 
 # Reproducible seed
 text3d generate "sword" --seed 42 -o sword.glb
@@ -115,7 +115,6 @@ text3d generate "scene" --gpu-ids 0,1 -o scene.glb
 | `--t2d-full-gpu` | flag | false | Load Text2D fully on GPU (~12 GB+ VRAM required) |
 | `--seed` | int | None | Reproducible seed for Text2D and Hunyuan3D |
 | `--cpu` | flag | false | Force CPU inference (much slower) |
-| `--low-vram` | flag | false | Low VRAM profile (~6 GB: SDNQ INT4, octree 256, 8000 chunks, 24 steps) |
 | `--no-remove-bg` | flag | false | Skip background removal (BiRefNet) |
 | `--sdnq-preset` | str | None | SDNQ quantization: `sdnq-uint8`, `sdnq-int8`, `sdnq-int4`, `sdnq-fp8`, `none` |
 | `--export-origin` | str | `feet` | Origin placement: `feet`, `center`, `none` |
@@ -184,7 +183,7 @@ All acceleration paths are **opt-in** — defaults keep the original behavior (d
 | `--mc-algo dmc` | Differentiable marching cubes on GPU (`diso`) instead of skimage on CPU | Requires `pip install diso` and CUDA; falls back to `mc` otherwise |
 | `--compile` | `torch.compile` over DiT, VAE and conditioner | First inference pays compile warmup; best for `generate-batch` |
 | `--sage-attn` | INT8 SageAttention kernels in the DiT and decoder attention | Requires `pip install sageattention`, Ampere+ GPU |
-| `--sdnq-matmul` | INT8 quantized matmul for SDNQ-quantized weights | Only meaningful with `--sdnq-preset`/`--low-vram` |
+| `--sdnq-matmul` | INT8 quantized matmul for SDNQ-quantized weights | Only meaningful with `--sdnq-preset` |
 
 Recommended fast profile for batch asset production:
 

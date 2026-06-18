@@ -78,7 +78,7 @@ O sistema aplica **prompt enhancement automático** (v2, framing positivo) que e
 
 ## Parâmetros úteis
 
-- **VRAM baixa:** `--low-vram` (Hunyuan em CPU; **muito** mais lento), ou reduzir `--octree-resolution`, `--num-chunks`, `--steps`, ou usar `--preset fast`.
+- **VRAM baixa:** `--preset fast` ou reduzir `--octree-resolution`, `--num-chunks`, `--steps` (hw-auto já aplica SDNQ INT4 em GPUs pequenas).
 - **Qualidade:** `--preset hq` ou valores altos de steps/octree/chunks (ver `src/text3d/defaults.py`).
 - **Text2D (quando aplicável):** `-W`/`-H`, `--t2d-steps`, `--t2d-guidance`, `--t2d-full-gpu`, `--model`.
 - **Mesh:** `--mc-level`.

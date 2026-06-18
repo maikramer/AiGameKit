@@ -5,8 +5,8 @@ Valores por defeito do Text3D.
 Octree 384, 20000 chunks, 30 steps Hunyuan, sem quantização SDNQ, remesh desligado,
 reparo "light" (merge+weld+normals).
 
-Para hardware modesto (~6 GB VRAM), usar ``--low-vram`` que activa o perfil antigo:
-SDNQ INT4, octree 256, 8000 chunks, 24 steps, remesh ligado, reparo "full".
+Para hardware modesto (~6 GB VRAM), o preset ``balanced`` usa estes valores
+(SDNQ INT4 via hw-auto, octree 256, 8000 chunks, 24 steps).
 """
 
 from __future__ import annotations
@@ -94,7 +94,7 @@ DEFAULT_MC_LEVEL = 0.0
 DEFAULT_REMOVE_BG = True
 DEFAULT_MAX_FACES = 40000
 
-# --- Perfil "low VRAM" (~6 GB): activado com ``--low-vram`` ---
+# --- Perfil "balanced" (~6 GB): usado pelo preset balanced e hw-auto ---
 LOW_VRAM_OCTREE = 256
 LOW_VRAM_NUM_CHUNKS = 8000
 LOW_VRAM_STEPS = 24

@@ -2,7 +2,7 @@
 Text3D — Text-to-3D via Text2D (texto → imagem) e Hunyuan3D-2.1 (imagem → mesh).
 
 Fluxo: KleinFluxGenerator → unload explícito → Hunyuan3DDiTFlowMatchingPipeline.
-SDNQ quantization é opcional (activada via ``sdnq_preset`` ou ``--low-vram``).
+SDNQ quantization é opcional (activada via ``sdnq_preset`` ou hw-auto em GPUs pequenas).
 Pre-quantização (save/load) não funciona devido a tensores SVD não-contíguos do SDNQ int4.
 """
 
@@ -51,8 +51,7 @@ class HunyuanTextTo3DGenerator:
     Gera mesh 3D a partir de texto: primeiro Text2D, depois Hunyuan3D-2.1 (image-to-3D).
 
     Por defeito os parâmetros de shape seguem ``text3d.defaults`` (perfil ~6-8GB VRAM em CUDA).
-    SDNQ quantization é opcional (activada via ``sdnq_preset`` ou ``--low-vram``).
-    Com ``low_vram_mode=True`` e CUDA, o Hunyuan corre em CPU (lento, último recurso).
+    SDNQ quantization é opcional (activada via ``sdnq_preset`` ou hw-auto em GPUs pequenas).
     O modelo 2D é sempre descarregado antes de carregar o Hunyuan.
     """
 
@@ -66,7 +65,6 @@ class HunyuanTextTo3DGenerator:
     def __init__(
         self,
         device: str | None = None,
-        low_vram_mode: bool = False,
         verbose: bool = False,
         cache_dir: str | None = None,
         hunyuan_model_id: str = DEFAULT_HF_ID,
@@ -85,7 +83,6 @@ class HunyuanTextTo3DGenerator:
             raise ValueError(f"mc_algo inválido: {mc_algo!r} (válidos: {sorted(self.MC_ALGOS)})")
 
         self.verbose = verbose
-        self.low_vram_mode = low_vram_mode
         self.cache_dir = cache_dir
         self.hunyuan_model_id = hunyuan_model_id
         self.hunyuan_subfolder = hunyuan_subfolder
@@ -106,7 +103,7 @@ class HunyuanTextTo3DGenerator:
         self._bg_remover: Any = None
 
         if self.verbose:
-            _logger.info(f"device={self.device} low_vram={self.low_vram_mode}")
+            _logger.info(f"device={self.device}")
             _logger.info(f"Hunyuan: {self.hunyuan_model_id} / {self.hunyuan_subfolder}")
             if gpu_ids is not None:
                 _logger.info(f"Multi-GPU IDs: {gpu_ids}")
@@ -170,18 +167,9 @@ class HunyuanTextTo3DGenerator:
         hunyuan_device = self.device
         wants_quant = bool(self.sdnq_preset) and hunyuan_device == "cuda"
 
-        if self.low_vram_mode and self.device == "cuda":
-            hunyuan_device = "cpu"
-            wants_quant = False
-            self._log(
-                "low_vram: Hunyuan3D em CPU (evita OOM; muito mais lento). "
-                "Preferir low_vram=false com SDNQ + CPU offload em GPU (~6GB)."
-            )
-
         load_device = "cpu"
         # fp16 em CPU é numericamente degradado (sem kernels half nativos —
-        # acumulação meia-precisão) e foi fonte de geometria extra (cascas,
-        # pedestais) no caminho --low-vram. Em CPU, sempre fp32.
+        # acumulação meia-precisão). Em CPU, sempre fp32.
         load_dtype = torch.float16 if hunyuan_device == "cuda" else torch.float32
 
         kwargs: dict = {
@@ -256,7 +244,7 @@ class HunyuanTextTo3DGenerator:
         """
         mc_algo = self.mc_algo
         if mc_algo == "dmc":
-            if self.device != "cuda" or (self.low_vram_mode and self.device == "cuda"):
+            if self.device != "cuda":
                 _logger.warn("dmc requer CUDA (pipeline em CPU) — fallback para mc_algo='mc'.")
                 mc_algo = "mc"
             else:
@@ -324,7 +312,7 @@ class HunyuanTextTo3DGenerator:
         elif t2d_full_gpu:
             low_t2d = False
         else:
-            low_t2d = self.low_vram_mode or _defaults.DEFAULT_T2D_CPU_OFFLOAD
+            low_t2d = _defaults.DEFAULT_T2D_CPU_OFFLOAD
 
         self._log("Fase 1: Text2D (texto → imagem)")
         if low_t2d and self.device == "cuda":

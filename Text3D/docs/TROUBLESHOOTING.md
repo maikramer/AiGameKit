@@ -19,9 +19,9 @@ Guia completo de resolução de problemas comuns.
 
 **Soluções:**
 
-1. **Use modo low-vram:**
+1. **Use preset fast ou balanced (hw-auto aplica SDNQ INT4 em GPUs pequenas):**
 ```bash
-text3d generate "prompt" --low-vram --steps 32
+text3d generate "prompt" --preset balanced --steps 24
 ```
 
 2. **Reduza frame-size:**

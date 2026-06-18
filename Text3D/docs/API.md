@@ -20,7 +20,6 @@ Padrões de qualidade/memória: módulo `text3d.defaults` (perfil ~6GB; `HUNYUAN
 ```python
 gen = HunyuanTextTo3DGenerator(
     device=None,              # "cuda" | "cpu" | auto
-    low_vram_mode=False,      # True + CUDA: Hunyuan em CPU (lento)
     verbose=False,
     cache_dir=None,
     hunyuan_model_id="tencent/Hunyuan3D-2.1",
