@@ -8,6 +8,10 @@ declare global {
       y: number,
       z: number
     ) => number;
+    __hold?: (key: string | null) => string | null;
+    __grip?: (key: string, patch: Record<string, number>) => unknown;
+    __cam?: (yaw: number, pitch: number, dist: number) => number;
+    __handInfo?: () => string;
   }
 }
 
@@ -90,9 +94,12 @@ import {
   isTerrainDynamicsBlocking,
   PhysicsStepSystem,
   GROUND_CONTACT_SKIN,
+  threeCameras,
+  ThirdPersonCamera,
+  getScene,
 } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import { Euler, type Camera, type Object3D, type Quaternion } from 'three';
+import { Euler, Vector3, type Camera, type Object3D, type Quaternion } from 'three';
 
 setKTX2TranscoderPath('/libs/basis/');
 
@@ -444,28 +451,33 @@ const HELD_MODEL: Record<string, string> = {
   spear: MESH_BASE + 'spear.glb',
   chop: MESH_BASE + 'felling_axe.glb',
   mine: MESH_BASE + 'pickaxe.glb',
+  bomb: MESH_BASE + 'bomb.glb',
 };
 const BOMB_MODEL = MESH_BASE + 'bomb.glb';
-// Grip on the RightHand bone — TUNE visually (scale especially depends on the
-// bone's world scale vs the model size).
-const HELD_GRIP = {
-  x: 0.04,
-  y: 0.02,
-  z: 0.05,
-  rx: 0,
-  ry: 0,
-  rz: 0,
-  scale: 0.6,
+// Per-weapon grip on the RightHand bone. Each generated model has a different
+// long axis (sword/axe/spear=Y, felling_axe=X, pickaxe=Z) and pivot, so each
+// needs its own offset/rotation/scale. TUNE visually via window.__grip(key,…).
+type Grip = {
+  x: number; y: number; z: number;
+  rx: number; ry: number; rz: number;
+  scale: number;
 };
-const BOMB_GRIP = {
-  x: 0.04,
-  y: 0.04,
-  z: 0.04,
-  rx: 0,
-  ry: 0,
-  rz: 0,
-  scale: 0.5,
+const GRIPS: Record<string, Grip> = {
+  // Tuned live in-browser (window.__hold/__grip + side camera). The hand bone's
+  // local +Y points world-down at rest, so rx≈+90° swings a Y-long model to
+  // point forward-down out of the fist.
+  // All tuned live in-browser (window.__hold/__grip + side camera).
+  sword: { x: 0, y: 0.03, z: 0.02, rx: Math.PI / 2, ry: 0, rz: 0, scale: 1.0 },
+  // axe + felling are HQ-regenerated (long-axis X) — carried head-forward.
+  axe: { x: 0, y: 0.02, z: 0, rx: 0, ry: 0, rz: 0, scale: 0.6 },
+  spear: { x: 0, y: 0.02, z: 0.02, rx: Math.PI / 2, ry: 0, rz: 0, scale: 0.9 },
+  chop: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, scale: 0.7 },
+  mine: { x: 0, y: 0.02, z: 0.02, rx: Math.PI / 2, ry: 0, rz: 0, scale: 0.55 },
+  bomb: { x: 0, y: 0.04, z: 0.03, rx: 0, ry: 0, rz: 0, scale: 0.25 },
 };
+const BOMB_GRIP = GRIPS.bomb;
+// Debug: force-hold a weapon (or null) regardless of proximity, for grip tuning.
+let forcedHold: string | null = null;
 
 let weaponIdx = 0;
 let weaponCyclePressed = false;
@@ -496,14 +508,16 @@ const AttackContextSystem: System = {
         near = e;
       }
     }
-    const clip = near
-      ? isWoodEntity(near)
-        ? 'chop'
-        : 'mine'
-      : WEAPON_CLIPS[weaponIdx];
+    const clip = forcedHold
+      ? forcedHold
+      : near
+        ? isWoodEntity(near)
+          ? 'chop'
+          : 'mine'
+        : WEAPON_CLIPS[weaponIdx];
     setPlayerAttackClip(clip);
     // Show the matching model in hand (unless the bomb-aim owns the hand).
-    if (!bombAiming) setPlayerHeldItem(HELD_MODEL[clip] ?? null, HELD_GRIP);
+    if (!bombAiming) setPlayerHeldItem(HELD_MODEL[clip] ?? null, GRIPS[clip]);
   },
 };
 
@@ -863,6 +877,45 @@ async function bootstrap(): Promise<void> {
       maxHp: Health.max[hero] ?? 0,
       level: ProgressionComponent.level[hero] ?? 0,
     };
+  };
+  // Grip-tuning bridge: __hold('sword'|'axe'|'spear'|'chop'|'mine'|'bomb'|null)
+  // pins a weapon in the hand; __grip(key, {scale, rz, …}) live-edits its grip.
+  window.__hold = (key: string | null) => {
+    forcedHold = key;
+    return key;
+  };
+  window.__grip = (key: string, patch: Record<string, number>) => {
+    if (GRIPS[key]) Object.assign(GRIPS[key], patch);
+    return GRIPS[key];
+  };
+  // Camera orbit for grip tuning: __cam(yawRad, pitchRad, distance).
+  const camQuery = defineQuery([ThirdPersonCamera]);
+  window.__cam = (yaw: number, pitch: number, dist: number) => {
+    for (const e of camQuery(state.world)) {
+      ThirdPersonCamera.yaw[e] = yaw;
+      ThirdPersonCamera.smoothYaw[e] = yaw;
+      ThirdPersonCamera.pitch[e] = pitch;
+      ThirdPersonCamera.distance[e] = dist;
+      return e;
+    }
+    return -1;
+  };
+  // Inspect what's attached to the RightHand bone (debug grip issues).
+  window.__handInfo = () => {
+    const scene = getScene(state);
+    const hands: { childCount: number; childNames: string[]; worldScale: number }[] = [];
+    const _v = new Vector3();
+    scene?.traverse((o: any) => {
+      if (o.name === 'RightHand') {
+        o.getWorldScale?.(_v);
+        hands.push({
+          childCount: o.children.length,
+          childNames: o.children.map((c: any) => `${c.name}(s${(c.scale?.x ?? 0).toFixed(2)})`),
+          worldScale: +_v.x.toFixed(3),
+        });
+      }
+    });
+    return JSON.stringify(hands);
   };
 
   if (typeof document !== 'undefined') {

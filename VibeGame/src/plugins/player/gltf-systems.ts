@@ -133,39 +133,42 @@ export function setPlayerFaceTarget(x: number | null, z = 0): void {
 }
 
 function applyHeldItem(animator: GltfAnimator, state: State): void {
-  if (heldCurrentUrl === heldItemUrl && (heldItemUrl === null || heldObj))
-    return;
+  // Swap the attached model when the requested url changes.
+  if (heldCurrentUrl !== heldItemUrl) {
+    if (heldObj) {
+      heldObj.removeFromParent();
+      heldObj = null;
+    }
+    heldCurrentUrl = null;
+    const want = heldItemUrl;
+    if (want) {
+      const bone = animator.root.getObjectByName('RightHand');
+      if (!bone) return; // skeleton not ready — retry next frame
+      const cached = heldCache.get(want);
+      if (cached) {
+        bone.add(cached); // reparent to the hand (three converts world→local)
+        cached.visible = true;
+        heldObj = cached;
+        heldCurrentUrl = want;
+      } else if (!heldLoading.has(want)) {
+        heldLoading.add(want);
+        void loadGltfAnimated(state, want)
+          .then((gltf) => {
+            heldLoading.delete(want);
+            gltf.scene.removeFromParent(); // we parent it to the bone instead
+            heldCache.set(want, gltf.scene);
+          })
+          .catch(() => heldLoading.delete(want));
+      }
+    }
+  }
+  // Re-apply the grip every frame so live grip edits (and any future
+  // per-frame grip animation) take effect without a url swap.
   if (heldObj) {
-    heldObj.removeFromParent();
-    heldObj = null;
+    heldObj.position.set(heldGrip.x, heldGrip.y, heldGrip.z);
+    heldObj.rotation.set(heldGrip.rx, heldGrip.ry, heldGrip.rz);
+    heldObj.scale.setScalar(heldGrip.scale);
   }
-  heldCurrentUrl = null;
-  const want = heldItemUrl;
-  if (!want) return;
-  const bone = animator.root.getObjectByName('RightHand');
-  if (!bone) return; // skeleton not ready — retry next frame
-  const cached = heldCache.get(want);
-  if (cached) {
-    bone.add(cached); // reparent to the hand (three converts world→local)
-    cached.position.set(heldGrip.x, heldGrip.y, heldGrip.z);
-    cached.rotation.set(heldGrip.rx, heldGrip.ry, heldGrip.rz);
-    cached.scale.setScalar(heldGrip.scale);
-    cached.visible = true;
-    heldObj = cached;
-    heldCurrentUrl = want;
-    return;
-  }
-  if (!heldLoading.has(want)) {
-    heldLoading.add(want);
-    void loadGltfAnimated(state, want)
-      .then((gltf) => {
-        heldLoading.delete(want);
-        gltf.scene.removeFromParent(); // we parent it to the bone instead
-        heldCache.set(want, gltf.scene);
-      })
-      .catch(() => heldLoading.delete(want));
-  }
-  // not cached yet — attaches next frame once loaded
 }
 
 // Natural stride speed (m/s) the gait clips were authored at — playback is
