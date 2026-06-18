@@ -32,6 +32,9 @@ export {
   PlayerController,
   PlayerGltfConfig,
   playerGltfRecipe,
+  setPlayerAttackClip,
+  setPlayerHeldItem,
+  setPlayerFaceTarget,
 } from './plugins/player';
 export { ThirdPersonCamera } from './plugins/player-controller/components';
 export { PlayerControllerPlugin } from './plugins/player-controller/plugin';

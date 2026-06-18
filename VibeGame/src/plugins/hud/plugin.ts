@@ -35,6 +35,19 @@ const minimapRecipe: Recipe = {
   name: 'Minimap',
   components: [],
   parserOwnsChildren: true,
+  parserAttributes: [
+    'range',
+    'size',
+    'anchor',
+    'categories',
+    'color-player',
+    'color-enemy',
+    'color-boss',
+    'color-merchant',
+    'color-wood',
+    'color-stone',
+    'color-neutral',
+  ],
 };
 
 function textAdapter(entity: number, value: string, state: State): void {

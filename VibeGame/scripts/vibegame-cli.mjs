@@ -218,7 +218,9 @@ function engineNodeModulesLookReady(engineRoot) {
   } catch {
     return false;
   }
-  return declaredDepsSatisfied(engineRoot, pkg);
+  if (!declaredDepsSatisfied(engineRoot, pkg)) return false;
+  // vibegame run needs the local vite binary to build the engine.
+  return existsSync(join(engineRoot, 'node_modules', '.bin', 'vite'));
 }
 
 /**

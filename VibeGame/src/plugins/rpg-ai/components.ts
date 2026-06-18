@@ -66,6 +66,17 @@ export interface MeleeAiConfig {
    * hostile (via `isHostile`) is acquired.
    */
   targetEid?: number;
+  // ── Optional behaviour enrichment (all back-compatible / off by default) ──
+  /** Orbit the target while waiting between swings instead of standing still. */
+  strafe?: boolean;
+  /** Below this HP fraction, back off + circle (kite) instead of pressing in. */
+  lowHpKiteFrac?: number;
+  /** Below this HP fraction, enrage: faster + shorter cooldown. */
+  enrageBelowFrac?: number;
+  /** Chase-speed multiplier while enraged (default 1.4). */
+  enrageSpeedMult?: number;
+  /** Attack-cooldown multiplier while enraged (default 0.5). */
+  enrageCooldownMult?: number;
 }
 
 export interface AiInstanceState {
@@ -81,6 +92,9 @@ export interface AiInstanceState {
   hovering: boolean;
   wanderX: number;
   wanderZ: number;
+  /** Current orbit direction (+1/-1), flipped on a timer for strafe. */
+  strafeDir: number;
+  strafeTimer: number;
 }
 
 export function createAiInstanceState(): AiInstanceState {
@@ -97,6 +111,8 @@ export function createAiInstanceState(): AiInstanceState {
     hovering: true,
     wanderX: 0,
     wanderZ: 0,
+    strafeDir: Math.random() < 0.5 ? -1 : 1,
+    strafeTimer: 0,
   };
 }
 

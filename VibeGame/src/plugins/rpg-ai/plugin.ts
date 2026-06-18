@@ -7,7 +7,7 @@ import { RpgAiSystem } from './systems';
 
 export const meleeAiRecipe: Recipe = {
   name: 'MeleeAi',
-  components: ['aiState', 'health', 'faction', 'transform'],
+  components: ['aiState', 'health', 'faction', 'transform', 'gltfPending'],
   parserAttributes: ['preset'],
 };
 

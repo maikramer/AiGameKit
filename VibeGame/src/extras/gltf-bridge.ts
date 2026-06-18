@@ -8,6 +8,7 @@ import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
+import { clone as cloneSkinnedObject } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import type { State } from '../core';
 import { getRenderingContext, getScene } from '../plugins/rendering';
@@ -132,6 +133,15 @@ export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
   return loader;
 }
 
+/** True if the loaded scene contains skinned meshes (needs SkeletonUtils.clone). */
+function hasSkinnedMesh(root: Object3D): boolean {
+  let found = false;
+  root.traverse((o) => {
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh) found = true;
+  });
+  return found;
+}
+
 /**
  * glTF defaults `metallicFactor` to 1.0 when omitted. Asset-pipeline GLBs that
  * only carry an albedo texture (no metallic-roughness map) then render almost
@@ -231,7 +241,9 @@ export function loadGltfLodToScene(
     Promise.all(
       urls.map((url, i) =>
         loadGltfMaster(state, url).then((gltf) => {
-          const child = gltf.scene.clone(true);
+          const child = hasSkinnedMesh(gltf.scene)
+            ? (cloneSkinnedObject(gltf.scene) as THREE.Group)
+            : gltf.scene.clone(true);
           child.name = `lod${i}`;
           child.visible = false;
           child.userData.lodLevel = i;
@@ -264,7 +276,9 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
   }
   return trackGltfLoad(
     loadGltfMaster(state, url).then((gltf) => {
-      const clone = gltf.scene.clone(true);
+      const clone = hasSkinnedMesh(gltf.scene)
+        ? (cloneSkinnedObject(gltf.scene) as Group)
+        : gltf.scene.clone(true);
       scene.add(clone);
       return clone;
     })

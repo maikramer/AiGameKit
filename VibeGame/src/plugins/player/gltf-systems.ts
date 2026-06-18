@@ -67,7 +67,7 @@ function setYOffset(state: State, eid: number, y: number): void {
 
 const DEFAULT_LOCOMOTION_SET = 'default';
 
-const ATTACK_RANGE = 2.2; // m
+const ATTACK_RANGE = 3.0; // m — forgiving reach so swings connect
 const ATTACK_DAMAGE = 25;
 // Fraction of the attack clip after which the blow lands — the hit registers
 // near the end of the swing (matching the visual impact) instead of the instant
@@ -78,6 +78,95 @@ const ATTACK_IMPACT_FALLBACK = 0.4; // s
 const prevPrimary = new Map<number, number>();
 // Per-attacker countdown until the pending melee blow lands (seconds).
 const pendingMelee = new Map<number, number>();
+const prevInteract = new Map<number, number>();
+
+// Context hint for the attack clip: the game sets a keyword (e.g. 'mine',
+// 'chop', 'sword', 'axe', 'spear') based on tool/target; the attack picks the
+// matching clip, falling back to a generic 'attack' swing.
+let attackClipHint: string | null = null;
+
+/** Choose which attack animation the player plays next (by keyword). Pass null
+ * to fall back to the generic attack/swing clip. */
+export function setPlayerAttackClip(hint: string | null): void {
+  attackClipHint = hint;
+}
+
+// ── Held item (weapon/tool in the hand) ──────────────────────────────────────
+export interface HeldItemGrip {
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  scale: number;
+}
+const DEFAULT_GRIP: HeldItemGrip = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, scale: 1 };
+
+let heldItemUrl: string | null = null;
+let heldGrip: HeldItemGrip = DEFAULT_GRIP;
+let heldObj: import('three').Object3D | null = null;
+let heldCurrentUrl: string | null = null;
+const heldCache = new Map<string, import('three').Object3D>();
+const heldLoading = new Set<string>();
+
+/** Attach a GLB to the hero's hand (follows the animation). null = empty hand.
+ * `grip` is the local offset/rotation/scale on the RightHand bone. */
+export function setPlayerHeldItem(
+  url: string | null,
+  grip?: Partial<HeldItemGrip>
+): void {
+  heldItemUrl = url;
+  heldGrip = grip ? { ...DEFAULT_GRIP, ...grip } : DEFAULT_GRIP;
+}
+
+// ── Aim facing: while set, the visual body yaws toward (x,z) instead of the
+//    movement heading (used for bomb aim). ─────────────────────────────────────
+let faceTargetX: number | null = null;
+let faceTargetZ = 0;
+const _yAxis = new Vector3(0, 1, 0);
+
+/** Turn the hero's body to face a world point (e.g. bomb aim). null clears. */
+export function setPlayerFaceTarget(x: number | null, z = 0): void {
+  faceTargetX = x;
+  faceTargetZ = z;
+}
+
+function applyHeldItem(animator: GltfAnimator, state: State): void {
+  if (heldCurrentUrl === heldItemUrl && (heldItemUrl === null || heldObj))
+    return;
+  if (heldObj) {
+    heldObj.removeFromParent();
+    heldObj = null;
+  }
+  heldCurrentUrl = null;
+  const want = heldItemUrl;
+  if (!want) return;
+  const bone = animator.root.getObjectByName('RightHand');
+  if (!bone) return; // skeleton not ready — retry next frame
+  const cached = heldCache.get(want);
+  if (cached) {
+    bone.add(cached); // reparent to the hand (three converts world→local)
+    cached.position.set(heldGrip.x, heldGrip.y, heldGrip.z);
+    cached.rotation.set(heldGrip.rx, heldGrip.ry, heldGrip.rz);
+    cached.scale.setScalar(heldGrip.scale);
+    cached.visible = true;
+    heldObj = cached;
+    heldCurrentUrl = want;
+    return;
+  }
+  if (!heldLoading.has(want)) {
+    heldLoading.add(want);
+    void loadGltfAnimated(state, want)
+      .then((gltf) => {
+        heldLoading.delete(want);
+        gltf.scene.removeFromParent(); // we parent it to the bone instead
+        heldCache.set(want, gltf.scene);
+      })
+      .catch(() => heldLoading.delete(want));
+  }
+  // not cached yet — attaches next frame once loaded
+}
 
 // Natural stride speed (m/s) the gait clips were authored at — playback is
 // time-scaled by actualSpeed/ref so the feet track the ground.
@@ -205,8 +294,9 @@ function meleeHit(state: State, attacker: number): void {
     const dz = Transform.posZ[target] - az;
     const dist = Math.hypot(dx, dz);
     if (dist > ATTACK_RANGE || dist < 0.001) continue;
-    // in front (within ~70°)
-    if ((dx * _fwd.x + dz * _fwd.z) / dist < 0.35) continue;
+    // in front hemisphere (~90° each side) — forgiving so the swing lands
+    // without pixel-perfect facing.
+    if ((dx * _fwd.x + dz * _fwd.z) / dist < 0.0) continue;
     Health.current[target] = Math.max(
       0,
       Health.current[target] - ATTACK_DAMAGE
@@ -320,6 +410,9 @@ export const PlayerGltfAnimStateSystem: System = {
         continue;
       }
 
+      // Keep the held weapon/tool attached to the hand bone (follows the rig).
+      applyHeldItem(animator, state);
+
       const grounded =
         !state.hasComponent(eid, CharacterController) ||
         CharacterController.grounded[eid] === 1;
@@ -335,17 +428,20 @@ export const PlayerGltfAnimStateSystem: System = {
       const wasPrimary = prevPrimary.get(eid) ?? 0;
       prevPrimary.set(eid, primary);
       if (primary && !wasPrimary && grounded && !animator.overrideLock) {
-        // Play the swing clip if the rig has one (don't gate the hit on it).
-        const attackClip = findClipFuzzy(
-          animator,
-          'attack',
-          'swing',
-          'punch',
-          'slash',
-          'hit',
-          'melee',
-          'strike'
-        );
+        // Tool/context clip first (mine/chop/sword/axe/spear), else a generic
+        // swing. Don't gate the hit on the clip existing.
+        const attackClip =
+          (attackClipHint && findClipFuzzy(animator, attackClipHint)) ||
+          findClipFuzzy(
+            animator,
+            'attack',
+            'swing',
+            'punch',
+            'slash',
+            'hit',
+            'melee',
+            'strike'
+          );
         let clipDur = 0;
         if (attackClip) {
           const action = animator.playOverride(attackClip, { loop: false });
@@ -359,6 +455,16 @@ export const PlayerGltfAnimStateSystem: System = {
             ? clipDur * ATTACK_IMPACT_FRACTION
             : ATTACK_IMPACT_FALLBACK
         );
+      }
+
+      // Interact (F): play the bare-hand "gather" reach as a one-shot gesture
+      // (opening chests, reading runes, picking up). No melee — purely visual.
+      const interact = isKeyDown('KeyF') ? 1 : 0;
+      const wasInteract = prevInteract.get(eid) ?? 0;
+      prevInteract.set(eid, interact);
+      if (interact && !wasInteract && grounded && !animator.overrideLock) {
+        const gatherClip = findClipFuzzy(animator, 'gather');
+        if (gatherClip) animator.playOverride(gatherClip, { loop: false });
       }
 
       // Land the scheduled melee hit when the swing reaches its impact frame.
@@ -466,12 +572,21 @@ function syncTransformToRoot(
   );
   // Exponential slerp toward the physics heading so the visible character
   // sweeps through turns instead of stepping with the fixed-tick rotation.
-  _visualQuat.set(
-    WorldTransform.rotX[eid],
-    WorldTransform.rotY[eid],
-    WorldTransform.rotZ[eid],
-    WorldTransform.rotW[eid]
-  );
+  // When aiming (face target set), yaw toward that world point instead.
+  if (faceTargetX !== null) {
+    const yaw = Math.atan2(
+      faceTargetX - WorldTransform.posX[eid],
+      faceTargetZ - WorldTransform.posZ[eid]
+    );
+    _visualQuat.setFromAxisAngle(_yAxis, yaw);
+  } else {
+    _visualQuat.set(
+      WorldTransform.rotX[eid],
+      WorldTransform.rotY[eid],
+      WorldTransform.rotZ[eid],
+      WorldTransform.rotW[eid]
+    );
+  }
   root.quaternion.slerp(_visualQuat, 1 - Math.exp(-VISUAL_TURN_RATE * dt));
 
   const debugCapsule = ensureDebugCapsule(state);

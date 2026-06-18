@@ -39,6 +39,14 @@ export function registerSpawnFootprint(
   getFootprints(state).push({ x, z, radius });
 }
 
+/**
+ * Breathing room (metres) added between any two footprints so sampled props
+ * never spawn flush against each other or against fixed placements (huts,
+ * chests). Keeps models from looking "glued" even when collider discs merely
+ * touch.
+ */
+const SPAWN_CLEARANCE = 0.6;
+
 /** True when a disc at (x, z) does not overlap any registered footprint. */
 export function isSpawnAreaFree(
   state: State,
@@ -51,7 +59,7 @@ export function isSpawnAreaFree(
   for (const f of list) {
     const dx = f.x - x;
     const dz = f.z - z;
-    const minDist = f.radius + radius;
+    const minDist = f.radius + radius + SPAWN_CLEARANCE;
     if (dx * dx + dz * dz < minDist * minDist) return false;
   }
   return true;

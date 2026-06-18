@@ -7,7 +7,12 @@ import {
   damageHealth,
   isHostile,
 } from '../combat/components';
-import { setAgentTarget, isNavMeshReady } from '../navmesh';
+import {
+  setAgentTarget,
+  clearAgentTarget,
+  isNavMeshReady,
+  removeAgent,
+} from '../navmesh';
 import { NavMeshAgent } from '../navmesh/components';
 import {
   AI_MODE_ATTACK,
@@ -26,6 +31,11 @@ const hostilesQuery = defineQuery([Health, FactionComponent]);
 const DETECT_GRACE = 0;
 const LUNGE_HIT_FACTOR = 1.5;
 const LUNGE_BURST_SPEED = 6.0;
+// Face-to-face combat ring: the creature approaches to RING_DESIRED and backs
+// off if the target presses inside RING_MIN_GAP, so it holds ~1m instead of
+// overlapping or attacking from far away.
+const RING_DESIRED = 1.0;
+const RING_MIN_GAP = 0.8;
 
 function distanceXZ(ax: number, az: number, bx: number, bz: number): number {
   const dx = ax - bx;
@@ -159,9 +169,25 @@ export function runMeleeAiFrame(
     inst.originZ = Transform.posZ[eid];
     inst.originSet = true;
     comp.leash[eid] = config.leashRadius;
+    // Steering is navmesh-driven: ensure the entity carries a NavMeshAgent so
+    // NavMeshAgentSystem creates a crowd agent and writes its position/heading
+    // back into Transform each frame. Without this the FSM had no mover (the
+    // old MeleeAi recipe omitted the agent → enemies never moved).
+    if (!state.hasComponent(eid, NavMeshAgent)) {
+      state.addComponent(eid, NavMeshAgent);
+    }
+    NavMeshAgent.speed[eid] = config.chaseSpeed;
+    NavMeshAgent.radius[eid] = 0.4;
+    NavMeshAgent.height[eid] = 1.0;
+    NavMeshAgent.enabled[eid] = 1;
   }
 
   if (entityDead(eid)) {
+    if (comp.mode[eid] !== AI_MODE_DEAD) {
+      clearAgentTarget(state, eid);
+      removeAgent(state, eid);
+      NavMeshAgent.enabled[eid] = 0;
+    }
     comp.mode[eid] = AI_MODE_DEAD;
     comp.target[eid] = 0;
     return;
@@ -197,7 +223,7 @@ export function runMeleeAiFrame(
     if (mode === AI_MODE_DETECT) {
       comp.mode[eid] = AI_MODE_CHASE;
     }
-    tickAttack(eid, inst, config, targetEid, dist, dt);
+    tickAttack(state, eid, inst, config, targetEid, dist, dt);
     return;
   }
 
@@ -216,7 +242,7 @@ export function runMeleeAiFrame(
     if (comp.mode[eid] !== AI_MODE_CHASE) {
       return;
     }
-    tickChase(state, eid, config, targetEid, tx, tz, dt);
+    tickChase(state, eid, config, targetEid, inst, dt);
     return;
   }
 
@@ -229,20 +255,110 @@ function entityDead(eid: number): boolean {
   return Health.current[eid] <= 0;
 }
 
+function hpFraction(eid: number): number {
+  const max = Health.max[eid] || 1;
+  return Health.current[eid] / max;
+}
+
+/** True when the creature is below its enrage HP threshold. */
+function isEnraged(eid: number, config: MeleeAiConfig): boolean {
+  return (
+    config.enrageBelowFrac !== undefined &&
+    hpFraction(eid) < config.enrageBelowFrac
+  );
+}
+
+function chaseSpeedFor(eid: number, config: MeleeAiConfig): number {
+  return isEnraged(eid, config)
+    ? config.chaseSpeed * (config.enrageSpeedMult ?? 1.4)
+    : config.chaseSpeed;
+}
+
+/**
+ * Combat steering: hold a ring around the target (approach / back off), and —
+ * when configured — orbit it (strafe) instead of standing still, and back off
+ * further (kite) at low HP. Reads as active circling rather than a statue.
+ */
+function steerCombat(
+  state: State,
+  eid: number,
+  targetEid: number,
+  inst: AiInstanceState,
+  config: MeleeAiConfig,
+  speed: number,
+  dt: number,
+  allowStrafe: boolean
+): void {
+  const x = Transform.posX[eid];
+  const z = Transform.posZ[eid];
+  const dx = Transform.posX[targetEid] - x;
+  const dz = Transform.posZ[targetEid] - z;
+  const dist = Math.sqrt(dx * dx + dz * dz) || 1e-3;
+  const ux = dx / dist;
+  const uz = dz / dist;
+
+  const lowHp =
+    config.lowHpKiteFrac !== undefined &&
+    hpFraction(eid) < config.lowHpKiteFrac;
+  const desired = lowHp
+    ? Math.max(RING_DESIRED, config.detectRange * 0.35)
+    : RING_DESIRED;
+
+  // Radial: move to the desired stand-off band.
+  let tx = x;
+  let tz = z;
+  if (dist > desired) {
+    const k = (dist - desired) / dist;
+    tx = x + dx * k;
+    tz = z + dz * k;
+  } else if (dist < RING_MIN_GAP) {
+    const k = (RING_MIN_GAP - dist) / dist;
+    tx = x - dx * k;
+    tz = z - dz * k;
+  }
+
+  // Tangential orbit (strafe / kite). Only while CLOSING THE GAP — never in
+  // melee range, so the enemy plants and commits to its attack instead of
+  // sliding circles around the player (which makes it impossible to hit).
+  if (allowStrafe && (config.strafe || lowHp) && dist > desired * 1.15) {
+    inst.strafeTimer -= dt;
+    if (inst.strafeTimer <= 0) {
+      inst.strafeTimer = 1.5 + Math.random() * 1.5;
+      inst.strafeDir = -inst.strafeDir;
+    }
+    tx += -uz * inst.strafeDir * 0.8;
+    tz += ux * inst.strafeDir * 0.8;
+  }
+
+  if (Math.abs(tx - x) > 0.05 || Math.abs(tz - z) > 0.05) {
+    moveToward(state, eid, tx, tz, speed, dt);
+  } else {
+    clearAgentTarget(state, eid);
+  }
+}
+
 function tickChase(
   state: State,
   eid: number,
   config: MeleeAiConfig,
   targetEid: number,
-  tx: number,
-  tz: number,
+  inst: AiInstanceState,
   dt: number
 ): void {
-  void targetEid;
-  moveToward(state, eid, tx, tz, config.chaseSpeed, dt);
+  steerCombat(
+    state,
+    eid,
+    targetEid,
+    inst,
+    config,
+    chaseSpeedFor(eid, config),
+    dt,
+    true
+  );
 }
 
 function tickAttack(
+  state: State,
   eid: number,
   inst: AiInstanceState,
   config: MeleeAiConfig,
@@ -254,6 +370,17 @@ function tickAttack(
 
   if (inst.lungePhase === 'ready') {
     comp.mode[eid] = AI_MODE_ATTACK;
+    // Hold the combat ring between swings (back off if the player closes in).
+    steerCombat(
+      state,
+      eid,
+      targetEid,
+      inst,
+      config,
+      chaseSpeedFor(eid, config),
+      dt,
+      false
+    );
     comp.cooldown[eid] = Math.max(0, comp.cooldown[eid] - dt);
     if (comp.cooldown[eid] <= 0) {
       inst.lungePhase = 'windup';
@@ -263,6 +390,11 @@ function tickAttack(
       const dz = Transform.posZ[targetEid] - Transform.posZ[eid];
       inst.lungeDirX = dx / len;
       inst.lungeDirZ = dz / len;
+      // The lunge is direct Transform motion; drop the crowd agent so its
+      // per-frame position readback doesn't overwrite the dash. Re-created
+      // (enabled below) once the lunge returns to 'ready'.
+      removeAgent(state, eid);
+      NavMeshAgent.enabled[eid] = 0;
     }
     return;
   }
@@ -297,7 +429,12 @@ function tickAttack(
   inst.lungeTimer -= dt;
   if (inst.lungeTimer <= 0) {
     inst.lungePhase = 'ready';
-    comp.cooldown[eid] = config.attackCooldown;
+    comp.cooldown[eid] = isEnraged(eid, config)
+      ? config.attackCooldown * (config.enrageCooldownMult ?? 0.5)
+      : config.attackCooldown;
+    // Lunge done: re-enable the agent so NavMeshAgentSystem recreates it and
+    // resumes navmesh steering.
+    NavMeshAgent.enabled[eid] = 1;
   }
 }
 

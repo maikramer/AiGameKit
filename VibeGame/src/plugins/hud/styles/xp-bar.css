@@ -1,4 +1,9 @@
 .hud-xp {
+  position: absolute;
+  top: 66px;
+  left: 14px;
+  width: 248px;
+  z-index: 12;
   display: flex;
   align-items: center;
   gap: 8px;
