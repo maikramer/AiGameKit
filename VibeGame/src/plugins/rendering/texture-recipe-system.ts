@@ -1,7 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
-import { defineQuery, type System } from '../../core';
+import { defineQuery, type State, type System } from '../../core';
 import { TextureRecipe } from './texture-recipe';
 import { getRenderingContext } from './utils';
 
@@ -157,6 +157,34 @@ export const TextureRecipeLoadSystem: System = {
         .finally(() => {
           TextureRecipe.pending[eid] = 0;
         });
+    }
+  },
+  dispose(_state: State) {
+    for (const texture of textureAssets.values()) {
+      try {
+        texture.dispose();
+      } catch {
+        // Texture may already be disposed.
+      }
+    }
+    textureAssets.clear();
+    for (const texture of invertedCache.values()) {
+      try {
+        texture.dispose();
+      } catch {
+        // Texture may already be disposed.
+      }
+    }
+    invertedCache.clear();
+    textureUrls.clear();
+    // KTX2Loader.dispose() terminates its worker pool.
+    if (_ktx2Loader && typeof _ktx2Loader.dispose === 'function') {
+      try {
+        _ktx2Loader.dispose();
+      } catch {
+        // Worker pool may already be gone.
+      }
+      _ktx2Loader = undefined;
     }
   },
 };

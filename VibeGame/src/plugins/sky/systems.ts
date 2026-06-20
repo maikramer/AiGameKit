@@ -74,4 +74,18 @@ export const EquirectSkyLoadSystem: System = {
         });
     }
   },
+  dispose(state: State) {
+    const ctx = getRenderingContext(state);
+    if (ctx.scene) {
+      const bg = ctx.scene.background;
+      if (bg && (bg as THREE.Texture).isTexture) {
+        (bg as THREE.Texture).dispose();
+        ctx.scene.background = null;
+      }
+    }
+    inFlight.clear();
+    for (const eid of equirectSkyQuery(state.world)) {
+      EquirectSky.applied[eid] = 0;
+    }
+  },
 };

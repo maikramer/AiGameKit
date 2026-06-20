@@ -1,4 +1,4 @@
-import { defineQuery, type System } from '../../core';
+import { defineQuery, type State, type System } from '../../core';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import { Transform, WorldTransform } from '../transforms';
 import { syncEulerFromQuaternion } from '../transforms/utils';
@@ -59,5 +59,19 @@ export const GltfAnimationUpdateSystem: System = {
         Transform.dirty[eid] = 1;
       }
     }
+  },
+  dispose(_state: State) {
+    for (const animator of animatorRegistry.values()) {
+      if (typeof animator.dispose === 'function') {
+        try {
+          animator.dispose();
+        } catch {
+          // Animator may already be disposed.
+        }
+      }
+    }
+    animatorRegistry.clear();
+    // 0 is the "no animator" sentinel in GltfAnimationState.registryIndex.
+    nextRegistryIndex = 1;
   },
 };

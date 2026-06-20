@@ -285,6 +285,29 @@ export const AudioSystem: System = {
       );
     }
   },
+  dispose(state: State) {
+    const audio = AUDIO_STATE.get(state);
+    if (audio) {
+      for (const howl of audio.howlMap.values()) {
+        try {
+          howl.unload();
+        } catch {
+          // Howl may already be unloaded.
+        }
+      }
+      audio.howlMap.clear();
+      audio.prevPlaying.clear();
+      audio.howlPropSnapshot.clear();
+      AUDIO_STATE.delete(state);
+    }
+    // Stops all Howler sounds and frees the shared AudioContext.
+    try {
+      Howler.unload();
+    } catch {
+      // No AudioContext to free.
+    }
+    clearAudioClipRegistry();
+  },
 };
 
 /** Per-entity normalized clip time last frame, for marker crossing detection. */
