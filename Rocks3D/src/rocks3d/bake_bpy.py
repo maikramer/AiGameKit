@@ -174,9 +174,18 @@ def bake_and_export(
     bpy.context.scene.render.engine = "CYCLES"
     bpy.context.scene.cycles.device = "CPU"
 
-    # Sit the rock on y=0 like the trimesh exporter does.
+    # Sit the rock on y=0 like the trimesh exporter does (input is Y-up).
     verts = np.asarray(vertices, dtype=np.float64).copy()
     verts[:, 1] -= verts[:, 1].min()
+
+    # Our geometry is Y-up, but Blender is Z-up and its glTF exporter re-applies
+    # a Z-up→Y-up rotation (export_yup). Feeding Y-up data straight in tips tall
+    # rocks 90° on export (invisible on near-spherical rocks, but it lays spires,
+    # arches and cliffs on their side). Pre-rotate +90° about X here so the
+    # export round-trips to the original Y-up coordinates: (x,y,z) → (x,-z,y).
+    norms = np.asarray(vertex_normals, dtype=np.float64)
+    verts = verts[:, [0, 2, 1]] * np.array([1.0, -1.0, 1.0])
+    norms = norms[:, [0, 2, 1]] * np.array([1.0, -1.0, 1.0])
 
     obj = create_mesh_from_arrays(verts, np.asarray(faces), name="rock")
     mesh = obj.data
@@ -185,7 +194,7 @@ def bake_and_export(
     for poly in mesh.polygons:
         poly.use_smooth = True
     with contextlib.suppress(RuntimeError, AttributeError):
-        mesh.normals_split_custom_set_from_vertices([tuple(map(float, n)) for n in np.asarray(vertex_normals)])
+        mesh.normals_split_custom_set_from_vertices([tuple(map(float, n)) for n in norms])
 
     # UV unwrap with an island margin so the bake margin has room.
     bpy.ops.object.select_all(action="DESELECT")

@@ -71,7 +71,12 @@ def _flatten_base(vertices: np.ndarray, fraction: float) -> np.ndarray:
     return vertices
 
 
-def generate_rock(type_name: str, seed: int | None = None, quality: str = "medium") -> "trimesh.Trimesh":  # noqa: F821, UP037
+def generate_rock(
+    type_name: str | None = None,
+    seed: int | None = None,
+    quality: str = "medium",
+    preset: "RockPreset | None" = None,  # noqa: F821, UP037
+) -> "trimesh.Trimesh":  # noqa: F821, UP037
     """Generate a procedural rock mesh.
 
     Creates an icosphere and reshapes it by blending an FBM-displaced
@@ -94,14 +99,18 @@ def generate_rock(type_name: str, seed: int | None = None, quality: str = "mediu
     """
     import trimesh
 
-    valid_types = {"pebble", "boulder"}
-    if type_name not in valid_types:
-        raise ValueError(f"Unknown rock type '{type_name}'. Must be one of: {', '.join(sorted(valid_types))}")
+    # A caller (e.g. the formation builder) may hand us a fully-formed preset
+    # to use as a chunk; otherwise resolve one from the named type + quality.
+    if preset is None:
+        from rocks3d.defaults import available_types
+
+        valid_types = available_types()
+        if type_name not in valid_types:
+            raise ValueError(f"Unknown rock type '{type_name}'. Must be one of: {', '.join(valid_types)}")
+        preset = get_preset(type_name, quality)
 
     if seed is None:
         seed = int(np.random.default_rng().integers(0, 2**32))
-
-    preset: RockPreset = get_preset(type_name, quality)
 
     mesh = trimesh.creation.icosphere(subdivisions=preset.subdivisions, radius=1.0)
     verts = mesh.vertices.astype(np.float64)

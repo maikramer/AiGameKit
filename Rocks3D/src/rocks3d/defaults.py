@@ -98,10 +98,84 @@ BOULDER = RockPreset(
     erosion_strength=0.30,
 )
 
+# ---------------------------------------------------------------------------
+# Scenery rock types — taller / flatter / chunkier single rocks used both on
+# their own and as the building blocks of multi-chunk formations.
+# ---------------------------------------------------------------------------
+
+SPIRE = RockPreset(
+    name="spire",
+    subdivisions=4,
+    radius=1.0,
+    scale_xyz=(0.55, 2.3, 0.6),
+    noise_type="simplex",
+    octaves=5,
+    frequency=2.0,
+    amplitude=0.16,
+    erosion_passes=0,
+    smooth=True,
+    color_range=("#7A7466", "#544E42"),
+    facet_strength=0.70,
+    plane_count=10,
+    detail_amp=0.05,
+    smooth_iterations=2,
+    base_flatten=0.06,
+    erosion_strength=0.25,
+)
+
+SLAB = RockPreset(
+    name="slab",
+    subdivisions=4,
+    radius=1.0,
+    scale_xyz=(1.6, 0.45, 1.25),
+    noise_type="simplex",
+    octaves=5,
+    frequency=2.0,
+    amplitude=0.16,
+    erosion_passes=0,
+    smooth=True,
+    color_range=("#807A6D", "#5A554A"),
+    facet_strength=0.72,
+    plane_count=8,
+    detail_amp=0.05,
+    smooth_iterations=2,
+    base_flatten=0.25,
+    erosion_strength=0.25,
+)
+
+OUTCROP = RockPreset(
+    name="outcrop",
+    subdivisions=4,
+    radius=1.0,
+    scale_xyz=(1.2, 1.0, 1.05),
+    noise_type="simplex",
+    octaves=5,
+    frequency=2.2,
+    amplitude=0.18,
+    erosion_passes=1,
+    smooth=True,
+    color_range=("#75706A", "#4F4A42"),
+    facet_strength=0.74,
+    plane_count=18,
+    detail_amp=0.05,
+    smooth_iterations=2,
+    base_flatten=0.10,
+    erosion_strength=0.28,
+)
+
 _PRESETS: dict[str, RockPreset] = {
     PEBBLE.name: PEBBLE,
     BOULDER.name: BOULDER,
+    SPIRE.name: SPIRE,
+    SLAB.name: SLAB,
+    OUTCROP.name: OUTCROP,
 }
+
+
+def available_types() -> list[str]:
+    """Sorted list of single-rock preset names."""
+    return sorted(_PRESETS)
+
 
 # ---------------------------------------------------------------------------
 # Quality overrides

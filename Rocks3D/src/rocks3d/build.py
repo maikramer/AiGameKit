@@ -70,6 +70,61 @@ def build_rock_glb(
     if scale != 1.0:
         mesh.apply_scale(scale)
 
+    # Pebbles get the cheap spherical UV; every larger/angular type (boulder and
+    # the scenery rocks) needs an atlas unwrap to texture cleanly.
+    return _texture_and_export(
+        mesh, preset, output_path, seed=seed or 0, use_bpy=use_bpy, spherical_uv=(type_name == "pebble")
+    )
+
+
+def build_formation_glb(
+    style: str,
+    output_path: Path,
+    *,
+    seed: int | None = None,
+    quality: str = "medium",
+    scale: float = 1.0,
+    chunks: int | None = None,
+    use_bpy: bool | None = None,
+) -> Mapping[str, object]:
+    """Generate one rock *formation* (a multi-chunk rochedo) and write it as GLB.
+
+    Args:
+        style: Formation style (see :data:`rocks3d.formation.STYLES`).
+        output_path: Destination ``.glb`` path.
+        seed: Reproducible seed (``None`` → random).
+        quality: Quality tier driving chunk subdivision.
+        scale: Uniform scale factor applied to the final mesh.
+        chunks: Override the chunk count for the style.
+        use_bpy: Texturing backend (``None`` auto-selects bpy when available).
+
+    Returns:
+        Summary mapping (same shape as :func:`build_rock_glb`) plus ``style``.
+    """
+    from rocks3d.formation import generate_formation
+
+    # Reuse the outcrop preset purely for colour/material; geometry is the union.
+    preset = get_preset("outcrop", quality)
+    mesh = generate_formation(style, seed=seed, quality=quality, chunks=chunks)
+
+    if scale != 1.0:
+        mesh.apply_scale(scale)
+
+    summary = _texture_and_export(mesh, preset, output_path, seed=seed or 0, use_bpy=use_bpy, spherical_uv=False)
+    summary["style"] = style
+    return summary
+
+
+def _texture_and_export(
+    mesh,  # noqa: ANN001 - trimesh.Trimesh, avoided to keep import light
+    preset,  # noqa: ANN001 - RockPreset
+    output_path: Path,
+    *,
+    seed: int,
+    use_bpy: bool | None,
+    spherical_uv: bool,
+) -> dict[str, object]:
+    """Shared texturing + GLB export tail for both rocks and formations."""
     if use_bpy is None:
         from rocks3d.bake_bpy import bpy_available
 
@@ -78,14 +133,7 @@ def build_rock_glb(
     if use_bpy:
         from rocks3d.bake_bpy import bake_and_export
 
-        bake_and_export(
-            mesh.vertices,
-            mesh.faces,
-            mesh.vertex_normals,
-            preset,
-            output_path,
-            seed=seed or 0,
-        )
+        bake_and_export(mesh.vertices, mesh.faces, mesh.vertex_normals, preset, output_path, seed=seed)
         return {
             "vertices": len(mesh.vertices),
             "faces": len(mesh.faces),
@@ -94,10 +142,9 @@ def build_rock_glb(
             "output": output_path,
         }
 
-    mesh = apply_uv_xatlas(mesh) if type_name == "boulder" else apply_uv_spherical(mesh)
-    textures = generate_pbr_textures(mesh, preset, seed=seed or 0)
+    mesh = apply_uv_spherical(mesh) if spherical_uv else apply_uv_xatlas(mesh)
+    textures = generate_pbr_textures(mesh, preset, seed=seed)
     export_glb(mesh, textures, output_path)
-
     return {
         "vertices": len(mesh.vertices),
         "faces": len(mesh.faces),
