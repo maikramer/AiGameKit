@@ -1,4 +1,5 @@
 import type { System } from '../../core';
+import { disposeBvhContext } from './utils';
 import { syncStaticMeshBvh } from './static-meshes';
 import { syncTerrainBvh } from './terrain';
 
@@ -19,5 +20,10 @@ export const BvhStaticMeshSyncSystem: System = {
   after: [BvhTerrainSyncSystem],
   update: (state) => {
     syncStaticMeshBvh(state);
+  },
+  // Sweep the shared bvh context (terrain + static meshes) on State teardown.
+  // Only one bvh system owns this so the context is cleared exactly once.
+  dispose: (state) => {
+    disposeBvhContext(state);
   },
 };

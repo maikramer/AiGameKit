@@ -117,7 +117,9 @@ export function unregisterBvhMesh(state: State, key: string): void {
   const geo = entry.mesh.geometry as THREE.BufferGeometry & {
     disposeBoundsTree?: () => void;
   };
+  // Free the BVH acceleration structure (CPU), then the GPU buffer.
   geo.disposeBoundsTree?.();
+  geo.dispose();
   ctx.entries.delete(key);
   if (entry.entity > 0) {
     const arr = ctx.entityKeys.get(entry.entity);
@@ -136,6 +138,35 @@ export function unregisterBvhForEntity(state: State, entity: number): void {
   for (const key of [...keys]) {
     unregisterBvhMesh(state, key);
   }
+}
+
+/**
+ * Dispose every registered BVH mesh geometry (bounds tree + GPU buffer) for
+ * `state` and drop the context. Idempotent: no-op when no context exists.
+ * Intended for the bvh system's `dispose(state)` hook on State teardown.
+ */
+export function disposeBvhContext(state: State): void {
+  const ctx = stateToContext.get(state);
+  if (!ctx) return;
+  for (const entry of ctx.entries.values()) {
+    const geo = entry.mesh.geometry as THREE.BufferGeometry & {
+      disposeBoundsTree?: () => void;
+    };
+    // Best-effort per item: keep sweeping even if one geometry throws.
+    try {
+      geo.disposeBoundsTree?.();
+    } catch {
+      /* ignore */
+    }
+    try {
+      geo.dispose();
+    } catch {
+      /* ignore */
+    }
+  }
+  ctx.entries.clear();
+  ctx.entityKeys.clear();
+  stateToContext.delete(state);
 }
 
 export interface BvhRaycastHit {

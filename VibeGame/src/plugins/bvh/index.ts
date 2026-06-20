@@ -3,6 +3,7 @@ export { BvhPlugin } from './plugin';
 export { BvhStaticMeshSyncSystem, BvhTerrainSyncSystem } from './systems';
 export {
   castBvhRay,
+  disposeBvhContext,
   getBvhContext,
   getBvhSurfaceHeight,
   getBvhStats,
