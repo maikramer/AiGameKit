@@ -223,10 +223,10 @@
            SpawnExclusion discs impedem árvores/pedras de nascer na vila.
            ============================================================ -->
 
-      <!-- Exclusão de spawn: 3 discos cobrem toda a área da vila. -->
-      <SpawnExclusion at="0 24" radius="14"></SpawnExclusion>
-      <SpawnExclusion at="0 36" radius="14"></SpawnExclusion>
-      <SpawnExclusion at="0 47" radius="9"></SpawnExclusion>
+      <!-- Exclusão de spawn: 3 discos largos cobrem toda a área da vila. -->
+      <SpawnExclusion at="0 24" radius="20"></SpawnExclusion>
+      <SpawnExclusion at="0 38" radius="20"></SpawnExclusion>
+      <SpawnExclusion at="0 48" radius="10"></SpawnExclusion>
 
       <!-- Palanques de cerca na borda sul da vila (marcador visual). -->
       <Composition place="at: -14 16; align-to-terrain: 0" body="fixed" collider="none">
@@ -251,6 +251,35 @@
         <Box pos="3 1.4 0" size="0.18 2.8 0.18" color="#4a3018"></Box>
         <Box pos="0 2.9 0" size="6.4 0.4 0.25" color="#5a3a20"></Box>
         <Box pos="0 2.3 0.1" size="2.8 0.7 0.06" color="#e8ddc8"></Box>
+      </Composition>
+
+      <!-- Caminho de terra: do arco sul até a praça do poço. -->
+      <Composition place="at: 0 20; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.02 0" size="3 0.05 5" color="#8a7a5a"></Box>
+      </Composition>
+      <Composition place="at: 0 26; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.02 0" size="3.5 0.05 4" color="#7a6a4a"></Box>
+      </Composition>
+      <Composition place="at: 0 31; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.02 0" size="4 0.05 4" color="#7a6a4a"></Box>
+      </Composition>
+
+      <!-- Vasos de flores junto ao poço. -->
+      <Composition place="at: -2.2 34; align-to-terrain: 0" body="fixed" collider="none">
+        <Cylinder pos="0 0.3 0" size="0.3 0.3 0.5" color="#8a5a30"></Cylinder>
+        <Sphere pos="0 0.7 0" size="0.35" color="#dd5577"></Sphere>
+      </Composition>
+      <Composition place="at: 2.2 34; align-to-terrain: 0" body="fixed" collider="none">
+        <Cylinder pos="0 0.3 0" size="0.3 0.3 0.5" color="#8a5a30"></Cylinder>
+        <Sphere pos="0 0.7 0" size="0.35" color="#ffdd44"></Sphere>
+      </Composition>
+
+      <!-- Fardos de feno perto da casa do ancião. -->
+      <Composition place="at: 6 42; align-to-terrain: 0" body="fixed" collider="auto">
+        <Cylinder pos="0 0.5 0" size="0.9 0.9 1.0" rotation="1.5708 0 0" color="#d4b85a"></Cylinder>
+      </Composition>
+      <Composition place="at: -6 42; align-to-terrain: 0" body="fixed" collider="auto">
+        <Cylinder pos="0 0.5 0" size="0.8 0.8 0.9" rotation="1.5708 0 0" color="#cda84e"></Cylinder>
       </Composition>
 
       <!-- Palanques laterais (oeste). -->
@@ -373,7 +402,7 @@
       </Composition>
 
       <!-- Banca de mercado 1 (frutas): postes + balcão + toldo listrado + caixotes/maçãs. -->
-      <Composition place="at: -5 34; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition place="at: -4 31; align-to-terrain: 0" body="fixed" collider="none">
         <Box pos="-1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
         <Box pos="1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
         <Box pos="-1.1 0.5 0.7" size="0.1 1.0 0.1" color="#5a3a20"></Box>
@@ -388,7 +417,7 @@
       </Composition>
 
       <!-- Banca de mercado 2 (peixe/tecidos): variação azul. -->
-      <Composition place="at: 5 34; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition place="at: 4 31; align-to-terrain: 0" body="fixed" collider="none">
         <Box pos="-1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
         <Box pos="1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
         <Box pos="-1.1 0.5 0.7" size="0.1 1.0 0.1" color="#5a3a20"></Box>

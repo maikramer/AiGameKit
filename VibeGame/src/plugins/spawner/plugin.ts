@@ -56,7 +56,6 @@ export const SpawnerPlugin: Plugin = {
     },
     adapters: {
       'spawn-exclusion': {
-        // `at: x z` — two world coordinates in one attribute.
         at: ((entity, value) => {
           const parts = String(value)
             .trim()
@@ -65,6 +64,12 @@ export const SpawnerPlugin: Plugin = {
           if (parts.length >= 2 && parts.every((n) => !Number.isNaN(n))) {
             SpawnExclusion.x[entity] = parts[0]!;
             SpawnExclusion.z[entity] = parts[1]!;
+          }
+        }) as Adapter,
+        radius: ((entity, value) => {
+          const n = parseFloat(String(value));
+          if (!Number.isNaN(n) && n > 0) {
+            SpawnExclusion.radius[entity] = n;
           }
         }) as Adapter,
       },
