@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import type { State, System } from '../../core';
 import { defineQuery } from '../../core';
@@ -400,16 +401,20 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
         if (!lodUrl) continue;
         const level = L;
         void loadGltfMaster(state, lodUrl)
-          .then((gltfLod) => buildLevelPrimitives(state, pool, level, gltfLod.scene))
+          .then((gltfLod) =>
+            buildLevelPrimitives(state, pool, level, gltfLod.scene)
+          )
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
-            console.warn(`[gltf-instance] lod${level} "${lodUrl}" failed: ${msg}`);
+            logger.warn(
+              `[gltf-instance] lod${level} "${lodUrl}" failed: ${msg}`
+            );
           });
       }
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(
+      logger.error(
         `[gltf-instance] failed to load "${pool.lodUrls[0]}": ${msg}`
       );
     });

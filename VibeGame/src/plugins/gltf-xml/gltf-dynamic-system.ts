@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { Rigidbody, BodyType, Collider } from '../physics/components';
@@ -43,7 +44,7 @@ export const GltfDynamicPhysicsSystem: System = {
       lodMid.updateMatrixWorld(true);
       _box.setFromObject(lodMid);
       if (_box.isEmpty()) {
-        console.warn(
+        logger.warn(
           `[gltf-dynamic] AABB vazio para entidade ${eid}; física omitida.`
         );
         GltfPhysicsPending.ready[eid] = 1;

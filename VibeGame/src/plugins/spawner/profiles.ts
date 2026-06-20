@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { XMLValue } from '../../core';
 import type { ScaleDistributionMode, YawDistributionMode } from './types';
 
@@ -190,7 +191,7 @@ export function normalizeGroupProfileId(
   const s = (raw ?? '').trim().toLowerCase();
   if (s === '' || s === 'none') return 'none';
   if (s in GROUP_PROFILES) return s as SpawnGroupProfileId;
-  console.warn(
+  logger.warn(
     `[spawn-group] profile="${raw}" desconhecido; use none | tree | foliage | physics-box | gltf-crate | place. Usando "none".`
   );
   return 'none';
@@ -209,7 +210,7 @@ export function normalizeChildTemplateProfileId(
   const s = String(raw).trim().toLowerCase();
   if (s === '') return '';
   if (KNOWN_CHILD_PROFILES.has(s)) return s as ChildTemplateProfileId;
-  console.warn(
+  logger.warn(
     `[spawn-group] profile no filho="${raw}" desconhecido; use physics-crate | gltf-crate. Ignorado.`
   );
   return '';

@@ -99,35 +99,6 @@
       >
       </PlayerGLTF>
 
-      <!-- 100 decorative oak trees. StaticSpawner = one shared instanced-mesh
-            pool (per LOD), one draw call per primitive for the whole set. Each is
-            a real entity with a fixed trunk trimesh collider, so the player
-            collides and the navmesh (built from colliders) makes AI path around. -->
-      <StaticSpawner
-        profile="tree"
-        count="100"
-        seed="42"
-        region-min="-200 0 -200"
-        region-max="200 0 200"
-        scale-min="2"
-        scale-max="3.5"
-        yaw-distribution="discrete"
-        yaw-step-deg="45"
-      >
-        <GameObject
-          role="static"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_collision.glb; mesh-anchor: base"
-        >
-          <GLTFLoader
-            role="visual"
-            url="/assets/meshes/tree_oak_lod0.glb"
-            lod1-url="/assets/meshes/tree_oak_lod1.glb"
-            lod2-url="/assets/meshes/tree_oak_lod2.glb"
-          ></GLTFLoader>
-        </GameObject>
-      </StaticSpawner>
-
       <!-- Merchant's hut — one Composition entity (1 entity, 1 Rapier body,
             7 box meshes + compound per-wall colliders). Open doorway at the front
             (+Z): the compound collider leaves the doorway gap walkable while each
@@ -247,10 +218,10 @@
             ResourceNode (T11) tags the yield kind/amount. -->
       <StaticSpawner
         profile="tree"
-        count="10"
+        count="30"
         seed="99"
-        region-min="-30 0 -30"
-        region-max="30 0 30"
+        region-min="-55 0 -55"
+        region-max="55 0 55"
         align-to-terrain="0"
         ground-align="none"
         scale-min="0.8"
@@ -279,10 +250,10 @@
             ResourceNode (T11) declares the wood yield. -->
       <StaticSpawner
         profile="tree"
-        count="14"
+        count="60"
         seed="7"
-        region-min="-60 0 -60"
-        region-max="60 0 60"
+        region-min="-110 0 -110"
+        region-max="110 0 110"
         align-to-terrain="0"
         ground-align="none"
         scale-min="1.4"

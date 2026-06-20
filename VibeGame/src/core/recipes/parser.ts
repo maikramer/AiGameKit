@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import type { ParsedElement, Recipe, State, XMLValue } from '../';
 import { toCamelCase } from '../';
 import { addTag, getTagId, Tag } from '../ecs/tags';
@@ -245,7 +246,7 @@ function applyAttributesFromRecipe(
 
   for (const rule of state.config.getValidations()) {
     if (rule.condition(recipe.name, expandedAttributes)) {
-      console.warn(`[${recipe.name}] Warning: ${rule.warning}`);
+      logger.warn(`[${recipe.name}] Warning: ${rule.warning}`);
     }
   }
 
@@ -352,7 +353,7 @@ function applyAttributesFromRecipe(
           availableAttrs,
           availableShorthands
         );
-        console.warn(warning);
+        logger.warn(warning);
       }
     }
   }
@@ -394,7 +395,7 @@ function processChildElementsForParent(
 
         if (Parent && Transform) {
           if (!state.hasComponent(parentEntity, Transform)) {
-            console.warn(
+            logger.warn(
               `[${parentTagName}] Parent entity is missing Transform component. Adding automatically.\n` +
                 `  Consider adding transform="pos: 0 0 0" to the parent element.`
             );
@@ -409,7 +410,7 @@ function processChildElementsForParent(
           }
 
           if (!state.hasComponent(childEntity, Transform)) {
-            console.warn(
+            logger.warn(
               `[${childElement.tagName}] Child entity is missing Transform component. Adding automatically.\n` +
                 `  Consider adding transform="pos: 0 0 0" to the child element.`
             );
@@ -432,7 +433,7 @@ function processChildElementsForParent(
               state.hasComponent(parentEntity, Rigidbody) &&
               state.hasComponent(childEntity, Rigidbody)
             ) {
-              console.warn(
+              logger.warn(
                 `[Physics Warning] "${childElement.tagName}" has a Rigidbody component and is nested inside "${parentTagName}" which also has a Rigidbody component.\n` +
                   `This configuration is not supported - a physics body should not be a child of another physics body.\n` +
                   `Consider one of these solutions:\n` +

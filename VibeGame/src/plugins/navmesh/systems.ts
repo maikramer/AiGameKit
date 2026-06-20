@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type {
   Crowd,
   CrowdAgent,
@@ -188,7 +189,7 @@ async function generateNavMesh(
       PLAY_AREA_RADIUS
     );
     if (indices.length === 0) {
-      console.warn('[NavMesh] No geometry collected — skipping generation');
+      logger.warn('[NavMesh] No geometry collected — skipping generation');
       rt.initStarted = false;
       return;
     }
@@ -196,7 +197,7 @@ async function generateNavMesh(
 
     const result = generateSoloNavMesh(positions, indices, config);
     if (!result.success) {
-      console.error('[NavMesh] Generation failed:', result.error);
+      logger.error('[NavMesh] Generation failed:', result.error);
       rt.initStarted = false;
       return;
     }
@@ -214,13 +215,13 @@ async function generateNavMesh(
     rt.crowd = crowd;
     rt.ready = true;
 
-    console.log(
+    logger.info(
       `[NavMesh] Generated (${indices.length / 3} tris, cs=${config.cs}) — ` +
         `collect ${(tCollect - t0).toFixed(0)}ms, ` +
         `recast ${(tGen - tCollect).toFixed(0)}ms`
     );
   } catch (err) {
-    console.error('[NavMesh] Generation error:', err);
+    logger.error('[NavMesh] Generation error:', err);
     rt.initStarted = false;
   }
 }

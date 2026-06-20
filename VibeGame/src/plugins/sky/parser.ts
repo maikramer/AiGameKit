@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Parser } from '../../core';
 import { EquirectSky, setEquirectSkyUrl } from './components';
 
@@ -18,7 +19,7 @@ export const equirectSkyParser: Parser = ({ entity, element }) => {
 
   const url = element.attributes['url'];
   if (typeof url !== 'string' || !url.trim()) {
-    console.warn('[sky] <EquirectSky> requires a "url" attribute — skipped');
+    logger.warn('[sky] <EquirectSky> requires a "url" attribute — skipped');
     EquirectSky.applied[entity] = 1;
     return;
   }

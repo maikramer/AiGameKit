@@ -16,7 +16,6 @@ import {
   LightSyncSystem,
   MeshInstanceSystem,
   PointSpotLightSyncSystem,
-  RendererSetupSystem,
   SceneRenderSystem,
 } from './systems';
 import {
@@ -28,7 +27,6 @@ import { TextureRecipe, TextureRecipeLoaded } from './texture-recipe';
 export const RenderingPlugin: Plugin = {
   recipes: [rendererRecipe, pointLightRecipe, spotLightRecipe],
   systems: [
-    RendererSetupSystem,
     TextureRecipeLoadSystem,
     DistanceCullSystem,
     MeshInstanceSystem,

@@ -1,3 +1,4 @@
+import { logger } from '../core/utils/logger';
 /**
  * Skymap2D / equirect PNG → ``Scene.environment`` (PMREM) para PBR no browser.
  *
@@ -87,7 +88,7 @@ export async function applyEquirectSkyEnvironment(
   if (img && img.width && img.height) {
     const ratio = img.width / img.height;
     if (Math.abs(ratio - 2.0) > 0.15) {
-      console.warn(
+      logger.warn(
         `[VibeGame] Sky texture "${url}" has aspect ratio ${ratio.toFixed(2)}:1 (expected 2:1 for equirectangular). ` +
           'The sky may look distorted. Generate with 2:1 ratio (e.g. 2048×1024) for correct results.'
       );

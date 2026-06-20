@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 // Generic (kind, id) data registry for data-driven RPG plugins. Loads from
 // YAML/JSON text or a directory of `.yaml`/`.yml`/`.json` files.
 //
@@ -28,7 +29,7 @@ function acquireBunRuntime(): BunRuntime | null {
   const B = (globalThis as Record<string, unknown>).Bun;
   if (B && typeof B === 'object') return B as BunRuntime;
   try {
-    const req = (new Function('return require'))() as (id: string) => unknown;
+    const req = new Function('return require')() as (id: string) => unknown;
     const mod = req('bun');
     if (mod && typeof mod === 'object') return mod as BunRuntime;
   } catch {
@@ -135,7 +136,7 @@ export class DataRegistry {
         typeof entries !== 'object' ||
         Array.isArray(entries)
       ) {
-        console.warn(
+        logger.warn(
           `[DataRegistry] skipping kind "${kind}": expected an object of definitions`
         );
         continue;
@@ -144,7 +145,7 @@ export class DataRegistry {
         entries as Record<string, unknown>
       )) {
         if (def === null || typeof def !== 'object' || Array.isArray(def)) {
-          console.warn(
+          logger.warn(
             `[DataRegistry] skipping ${kind}/${id}: definition must be an object`
           );
           continue;

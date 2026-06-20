@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Parser, Plugin, Recipe } from '../../core';
 import { SpawnGateComponent } from './components';
 import { SpawnGateSystem, gateEntity } from './systems';
@@ -22,7 +23,7 @@ export const spawnGateParser: Parser = ({ element, state }) => {
 
   const targetEid = state.getEntityByName(name);
   if (targetEid === null) {
-    console.warn(
+    logger.warn(
       `[SpawnGate] target-entity "${name}" not found at parse time; gate skipped. Place <SpawnGate> after the target entity.`
     );
     return;

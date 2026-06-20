@@ -1,3 +1,4 @@
+import { logger } from './utils/logger';
 import type { GameRuntime } from '../runtime';
 
 const activeRuntimes: GameRuntime[] = [];
@@ -15,14 +16,14 @@ export function unregisterRuntime(runtime: GameRuntime): void {
 
 export function disposeAllRuntimes(): void {
   if (activeRuntimes.length > 0) {
-    console.warn(
+    logger.warn(
       `[VibeGame] Disposing ${activeRuntimes.length} active runtime(s)`
     );
     for (const runtime of activeRuntimes) {
       try {
         runtime.destroy();
       } catch (error) {
-        console.error('[VibeGame] Failed to dispose runtime:', error);
+        logger.error('[VibeGame] Failed to dispose runtime:', error);
       }
     }
     activeRuntimes.length = 0;

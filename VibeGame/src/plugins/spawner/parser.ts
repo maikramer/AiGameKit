@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Parser, XMLValue } from '../../core';
 import { formatUnknownElement } from '../../core/recipes/diagnostics';
 import { setSpawnGroupSpec } from './context';
@@ -62,7 +63,7 @@ function parseRole(value: XMLValue | undefined): string {
   const s = String(value).trim().toLowerCase();
   if (s === '') return '';
   if (!VALID_ROLES.has(s)) {
-    console.warn(
+    logger.warn(
       `[spawner] Unrecognized role "%s" on SpawnGroup — ignoring`,
       value
     );

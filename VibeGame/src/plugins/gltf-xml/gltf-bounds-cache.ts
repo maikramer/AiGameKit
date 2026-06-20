@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 
 import { createGLTFLoader } from '../../extras/gltf-bridge';
@@ -71,7 +72,7 @@ export function warnMissingGltfBoundsOnce(url: string): void {
   const key = normalizeGltfUrlKey(url);
   if (warnedMissing.has(key)) return;
   warnedMissing.add(key);
-  console.warn(
+  logger.warn(
     `[spawn-group] AABB ainda não disponível para "${key}". ` +
       `Coloque um <gltf-load url="..."> antes do spawn ou aguarde o carregamento; ` +
       `até lá usa-se só base-y-offset.`

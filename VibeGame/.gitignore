@@ -52,4 +52,9 @@ sandbox/
 /blob-report/
 debug-errors.ts
 package-lock.json
+
+# Root-level test/debug screenshots
 srpg-initial.png
+full-restore-test.png
+screenshot-with-pillars.png
+minimal-test-1.png

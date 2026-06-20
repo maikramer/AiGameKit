@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { ParserParams, Plugin, Recipe } from '../../core';
 import { AiStateComponent, MELEE_AI_KIND } from './components';
 import type { MeleeAiConfig } from './components';
@@ -17,7 +18,7 @@ function meleeAiParser({ entity, element, state }: ParserParams): void {
   if (!preset) return;
   const cfg = getDataRegistry(state).get<MeleeAiConfig>(MELEE_AI_KIND, preset);
   if (!cfg) {
-    console.warn(`[rpg-ai] No '${MELEE_AI_KIND}' preset named "${preset}"`);
+    logger.warn(`[rpg-ai] No '${MELEE_AI_KIND}' preset named "${preset}"`);
     return;
   }
   setMeleeAiConfig(state, entity, cfg);

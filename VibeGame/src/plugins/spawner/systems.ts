@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import { defineQuery, type State, type System } from '../../core';
 import { getTerrainContext, registerHeightmapReloadCallback } from '../terrain';
 import { Transform } from '../transforms/components';
@@ -235,7 +236,7 @@ export const TerrainSpawnSystem: System = {
           }
         }
         if (!terrainReady) continue;
-        console.warn(
+        logger.warn(
           `[spawner] SpawnGroup "group-${eid}" skipped: no terrain surface in region (${minX.toFixed(0)}..${maxX.toFixed(0)}, ${minZ.toFixed(0)}..${maxZ.toFixed(0)})`
         );
         PlacePending.spawned[eid] = 1;

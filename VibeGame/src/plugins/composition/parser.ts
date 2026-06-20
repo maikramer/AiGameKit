@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Parser, XMLValue } from '../../core';
 import { Parent } from '../../core';
 import { BodyType, Rigidbody } from '../physics/components';
@@ -105,7 +106,7 @@ export const compositionParser: Parser = ({ entity, element, state }) => {
       continue;
     }
 
-    console.warn(
+    logger.warn(
       `[Composition] Ignoring unknown child <${child.tagName}>. ` +
         'Use Box/Sphere/Cylinder/Plane or a registered recipe (e.g. PointLight).'
     );

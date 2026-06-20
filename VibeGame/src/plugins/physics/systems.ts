@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
@@ -338,7 +339,7 @@ const meshColliderWarned = new Set<number>();
 function warnOnce(entity: number, message: string): void {
   if (meshColliderWarned.has(entity)) return;
   meshColliderWarned.add(entity);
-  console.warn(message);
+  logger.warn(message);
 }
 
 function createColliderForEntity(
@@ -485,7 +486,8 @@ export const PhysicsCleanupSystem: System = {
 
     for (const [entity, collider] of context.entityToCollider) {
       if (!state.hasComponent(entity, Collider)) {
-        worldRapier.removeCollider(collider, false);
+        worldRapier.removeCollider(collider, true);
+        (collider as unknown as { free: () => void }).free();
         context.entityToCollider.delete(entity);
         context.colliderToEntity.delete(collider.handle);
       }
@@ -494,6 +496,7 @@ export const PhysicsCleanupSystem: System = {
     for (const [entity, body] of context.entityToRigidbody) {
       if (!state.hasComponent(entity, Rigidbody)) {
         worldRapier.removeRigidBody(body);
+        (body as unknown as { free: () => void }).free();
         context.entityToRigidbody.delete(entity);
       }
     }
@@ -501,6 +504,7 @@ export const PhysicsCleanupSystem: System = {
     for (const [entity, controller] of context.entityToCharacterController) {
       if (!state.hasComponent(entity, CharacterController)) {
         worldRapier.removeCharacterController(controller);
+        (controller as unknown as { free: () => void }).free();
         context.entityToCharacterController.delete(entity);
       }
     }

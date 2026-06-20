@@ -1,3 +1,4 @@
+import { logger } from '../core/utils/logger';
 /**
  * Runtime animation controller for GLTF models with embedded clips.
  * Wraps Three.js AnimationMixer with crossfade and state management.
@@ -107,7 +108,7 @@ export class GltfAnimator {
 
     const clip = this.clips.get(clipName);
     if (!clip) {
-      console.warn(
+      logger.warn(
         `[GltfAnimator] Clip "${clipName}" not found. Available: ${this.clipNames.join(', ')}`
       );
       return null;
@@ -216,7 +217,7 @@ export class GltfAnimator {
 
   switchLocomotionSet(name: string, _crossfadeDuration?: number): void {
     if (!this.locomotionSets.has(name)) {
-      console.warn(`[GltfAnimator] Locomotion set "${name}" not found`);
+      logger.warn(`[GltfAnimator] Locomotion set "${name}" not found`);
       return;
     }
     this.activeLocomotionSetName = name;
@@ -254,21 +255,17 @@ export class GltfAnimator {
 
     if (action) {
       const onFinished = options?.onFinished;
-      const self = this;
+      const mixer = action.getMixer();
       // The mixer fires 'finished' for ANY LoopOnce action it owns, so filter
       // to this override's action — otherwise an unrelated one-shot finishing
       // first would release the lock early and fire the wrong callback.
-      action
-        .getMixer()
-        .addEventListener(
-          'finished',
-          function handler(e: { action?: unknown }) {
-            if (e.action !== action) return;
-            action.getMixer().removeEventListener('finished', handler);
-            self._overrideLock = false;
-            if (onFinished) onFinished();
-          }
-        );
+      const handler = (e: { action?: unknown }) => {
+        if (e.action !== action) return;
+        mixer.removeEventListener('finished', handler);
+        this._overrideLock = false;
+        if (onFinished) onFinished();
+      };
+      mixer.addEventListener('finished', handler);
     }
 
     return action;

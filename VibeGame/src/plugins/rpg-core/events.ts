@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { State, System } from '../../core';
 
 export type EventHandler = (payload: unknown) => void;
@@ -54,7 +55,7 @@ export class EventBus {
       try {
         sub.handler(payload);
       } catch (err) {
-        console.error(`[EventBus] handler error for "${event}":`, err);
+        logger.error(`[EventBus] handler error for "${event}":`, err);
       }
     }
   }

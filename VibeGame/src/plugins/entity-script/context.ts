@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { State } from '../../core';
 
 import type { MonoBehaviourModule } from './types';
@@ -109,7 +110,7 @@ export function resolveEntityScriptGlobKey(
     return undefined;
   }
   if (matches.length > 1) {
-    console.warn(
+    logger.warn(
       `[entity-script] Ambiguous glob match for "${file}": ${matches.join(', ')}. Using first.`
     );
   }

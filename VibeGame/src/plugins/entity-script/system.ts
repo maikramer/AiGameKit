@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Component } from '../../core';
 
 import {
@@ -189,7 +190,7 @@ export const EntityScriptSystem: System = {
         }
 
         if (!glob) {
-          console.warn(
+          logger.warn(
             `[entity-script] No script glob registered; call registerEntityScripts(state, import.meta.glob(...)). Entity ${eid}`
           );
           MonoBehaviour.ready[eid] = 1;
@@ -198,7 +199,7 @@ export const EntityScriptSystem: System = {
 
         const globKey = resolveEntityScriptGlobKey(glob, file);
         if (!globKey) {
-          console.warn(
+          logger.warn(
             `[entity-script] No script module for "${file}" in registered glob. Entity ${eid}`
           );
           MonoBehaviour.ready[eid] = 1;
@@ -217,7 +218,7 @@ export const EntityScriptSystem: System = {
               return;
             }
             if (!mod) {
-              console.warn(
+              logger.warn(
                 `[entity-script] Module for "${file}" has no start/update. Entity ${eid}`
               );
               MonoBehaviour.ready[eid] = 1;
@@ -256,7 +257,7 @@ export const EntityScriptSystem: System = {
             setEntityScriptSetupInflight(state, eid, false);
           })
           .catch((err: unknown) => {
-            console.error(`[entity-script] Failed to load "${file}":`, err);
+            logger.error(`[entity-script] Failed to load "${file}":`, err);
             if (state.exists(eid)) {
               MonoBehaviour.ready[eid] = 1;
             }

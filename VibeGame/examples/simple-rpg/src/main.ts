@@ -467,13 +467,12 @@ const GRIPS: Record<string, Grip> = {
   // local +Y points world-down at rest, so rx≈+90° swings a Y-long model to
   // point forward-down out of the fist.
   // All tuned live in-browser (window.__hold/__grip + side camera).
-  sword: { x: 0, y: 0.03, z: 0.02, rx: Math.PI / 2, ry: 0, rz: 0, scale: 1.0 },
-  // axe + felling are HQ-regenerated (long-axis X) — carried head-forward.
-  axe: { x: 0, y: 0.02, z: 0, rx: 0, ry: 0, rz: 0, scale: 0.6 },
-  spear: { x: 0, y: 0.02, z: 0.02, rx: Math.PI / 2, ry: 0, rz: 0, scale: 0.9 },
-  chop: { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, scale: 0.7 },
-  mine: { x: 0, y: 0.02, z: 0.02, rx: Math.PI / 2, ry: 0, rz: 0, scale: 0.55 },
-  bomb: { x: 0, y: 0.04, z: 0.03, rx: 0, ry: 0, rz: 0, scale: 0.25 },
+  sword: { x: 0.27, y: 0.04, z: 0.09, rx: -1.33, ry: 12.71, rz: 0.96, scale: 0.7 },
+  axe: { x: -0.12, y: 0.36, z: -0.24, rx: -1.42, ry: 12.71, rz: Math.PI * 0.5, scale: 0.55 },
+  spear: { x: -0.55, y: 0.36, z: -0.41, rx: -1.33, ry: 12.71, rz: 0.96, scale: 1.2 },
+  chop: { x: -0.22, y: 0.4, z: -0.39, rx: -4.96, ry: 9.2, rz: -0.61, scale: 0.7 },
+  mine: { x: -0.09, y: 0.05, z: -0.13, rx: -2.82, ry: 11.38, rz: 2.01, scale: 0.55 },
+  bomb: { x: -0.06, y: -0.08, z: -0.12, rx: -2.02, ry: 15.75, rz: -1.05, scale: 0.45 },
 };
 const BOMB_GRIP = GRIPS.bomb;
 // Debug: force-hold a weapon (or null) regardless of proximity, for grip tuning.

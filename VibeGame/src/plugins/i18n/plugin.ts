@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Adapter, Plugin } from '../../core';
 import { internString } from '../hud/context';
 import { I18nConfig, I18nText } from './components';
@@ -35,7 +36,7 @@ export const I18nPlugin: Plugin = {
   },
   initialize(state) {
     if (!state.getComponent('hud-panel')) {
-      console.warn(
+      logger.warn(
         '[i18n] I18nPlugin requires HudPlugin to function. Register HudPlugin first.'
       );
     }

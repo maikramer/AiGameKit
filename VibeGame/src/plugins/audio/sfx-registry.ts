@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { State, System } from '../../core';
 import { AudioSource } from './components';
 import { playAudioEmitter } from './systems';
@@ -13,7 +14,11 @@ function getOrCreateRegistry(state: State): Map<string, number> {
   return map;
 }
 
-export function registerNamedSfx(state: State, name: string, eid: number): void {
+export function registerNamedSfx(
+  state: State,
+  name: string,
+  eid: number
+): void {
   getOrCreateRegistry(state).set(name, eid);
 }
 
@@ -21,7 +26,7 @@ export function playNamedSfx(state: State, name: string): void {
   if (state.headless) return;
   const eid = getOrCreateRegistry(state).get(name);
   if (eid === undefined || !state.exists(eid)) {
-    console.warn(`[audio] playNamedSfx: unknown SFX name "${name}"`);
+    logger.warn(`[audio] playNamedSfx: unknown SFX name "${name}"`);
     return;
   }
   playAudioEmitter(state, eid);

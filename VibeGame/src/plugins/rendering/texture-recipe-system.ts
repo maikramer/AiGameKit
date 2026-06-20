@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { KTX2Loader } from 'three/examples/jsm/loaders/KTX2Loader.js';
 import { defineQuery, type System } from '../../core';
@@ -20,7 +21,7 @@ function tryInitKTX2(renderer: any): KTX2Loader | null {
       .detectSupport(renderer);
     return _ktx2Loader;
   } catch (e) {
-    console.warn(
+    logger.warn(
       '[texture-recipe] KTX2Loader init failed — KTX2 textures disabled.',
       e
     );
@@ -151,7 +152,7 @@ export const TextureRecipeLoadSystem: System = {
           }
         })
         .catch((err: unknown) => {
-          console.error('[texture-recipe] Falha ao carregar textura:', err);
+          logger.error('[texture-recipe] Falha ao carregar textura:', err);
         })
         .finally(() => {
           TextureRecipe.pending[eid] = 0;

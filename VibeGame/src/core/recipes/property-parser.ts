@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import type { State } from '../';
 import { eulerToQuaternion, quaternionToEuler } from '../math';
 import {
@@ -199,7 +200,7 @@ export function parseComponentProperties(
     }
 
     if (camelProp === 'rot' && detectQuaternionPattern(component, 'rot')) {
-      console.warn(
+      logger.warn(
         `[${componentName}.rot] Direct quaternion values are deprecated. ` +
           `Use 'euler' or 'rotation' for Euler angles in degrees instead.`
       );

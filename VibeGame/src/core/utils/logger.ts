@@ -30,7 +30,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
   error: 3,
 };
 
-const LOG_COLORS = {
+const ANSI_COLORS = {
   debug: '\x1b[36m', // Cyan
   info: '\x1b[32m', // Green
   warn: '\x1b[33m', // Yellow
@@ -38,6 +38,23 @@ const LOG_COLORS = {
   reset: '\x1b[0m',
   dim: '\x1b[2m',
 };
+
+const NO_COLORS = {
+  debug: '',
+  info: '',
+  warn: '',
+  error: '',
+  reset: '',
+  dim: '',
+};
+
+// ANSI escapes render as garbage (`[36m...`) in browser devtools, so only
+// colorize when writing to a real TTY (Node dev). Browsers and piped output
+// get plain text.
+const supportsAnsi =
+  typeof process !== 'undefined' && process.stdout?.isTTY === true;
+
+const LOG_COLORS = supportsAnsi ? ANSI_COLORS : NO_COLORS;
 
 export function formatLogMessage(message: LogMessage): string {
   const { level, message: msg, timestamp, args = [], context } = message;
@@ -219,4 +236,11 @@ export class Logger {
   }
 }
 
-export const logger = new Logger();
+// Library default: stay quiet in production (warnings + errors only), verbose
+// in dev. Apps can override via `logger.setConfig({ minLevel, enabled })`.
+const isProduction =
+  typeof process !== 'undefined' && process.env?.NODE_ENV === 'production';
+
+export const logger = new Logger({
+  minLevel: isProduction ? 'warn' : 'info',
+});

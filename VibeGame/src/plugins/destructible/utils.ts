@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { State } from '../../core';
 
 const popupTextByState = new WeakMap<State, Map<number, string>>();
@@ -72,7 +73,7 @@ export function emitDestructibleDestroyed(
     try {
       cb(entity, x, y, z);
     } catch (err) {
-      console.error('[destructible] destroyed callback error:', err);
+      logger.error('[destructible] destroyed callback error:', err);
     }
   }
 }

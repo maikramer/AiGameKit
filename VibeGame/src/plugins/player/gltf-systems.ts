@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import { loadGltfAnimated } from '../../extras/gltf-bridge';
@@ -101,7 +102,15 @@ export interface HeldItemGrip {
   rz: number;
   scale: number;
 }
-const DEFAULT_GRIP: HeldItemGrip = { x: 0, y: 0, z: 0, rx: 0, ry: 0, rz: 0, scale: 1 };
+const DEFAULT_GRIP: HeldItemGrip = {
+  x: 0,
+  y: 0,
+  z: 0,
+  rx: 0,
+  ry: 0,
+  rz: 0,
+  scale: 1,
+};
 
 let heldItemUrl: string | null = null;
 let heldGrip: HeldItemGrip = DEFAULT_GRIP;
@@ -374,7 +383,7 @@ export const PlayerGltfSetupSystem: System = {
           animator.play(loco.idle || animator.clipNames[0] || '');
         })
         .catch((err: unknown) => {
-          console.error('[player-gltf] load failed', err);
+          logger.error('[player-gltf] load failed', err);
         })
         .finally(() => {
           PlayerGltfConfig.loaded[eid] = 1;

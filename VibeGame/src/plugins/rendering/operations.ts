@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { State } from '../../core';
 import * as THREE from 'three';
 import { WorldTransform } from '../transforms';
@@ -100,7 +101,7 @@ export function updateInstance(
       !context.hasShownPerformanceWarning &&
       context.totalInstanceCount >= PERFORMANCE_WARNING_THRESHOLD
     ) {
-      console.warn(
+      logger.warn(
         `Performance warning: ${context.totalInstanceCount} rendered instances. ` +
           `Consider optimizing your scene or reducing object count for better performance.`
       );

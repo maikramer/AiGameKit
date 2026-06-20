@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
 import { loadGltfLodToScene, loadGltfToScene } from '../../extras/gltf-bridge';
@@ -88,7 +89,7 @@ export const GltfXmlLoadSystem: System = {
             const hint = looksLike404Html
               ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
               : '';
-            console.error('[gltf-load lod]', u, base + hint);
+            logger.error('[gltf-load lod]', u, base + hint);
             clearGltfLodUrls(state, eid);
             if (
               state.exists(eid) &&
@@ -144,7 +145,7 @@ export const GltfXmlLoadSystem: System = {
           const hint = looksLike404Html
             ? ' — resposta não é GLB (muitas vezes 404 HTML); confirme `public/` e `gameassets handoff`.'
             : '';
-          console.error('[gltf-load]', failedUrl ?? '(sem url)', base + hint);
+          logger.error('[gltf-load]', failedUrl ?? '(sem url)', base + hint);
           if (
             state.exists(eid) &&
             state.hasComponent(eid, GltfPhysicsPending)

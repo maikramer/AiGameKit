@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import type { State } from '../../core';
 
@@ -71,7 +72,7 @@ export function requestColliderMesh(url: string): ColliderMeshData | null {
     .catch((err: unknown) => {
       meshCache.set(url, { status: 'error' });
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[mesh-collider] failed to load "${url}": ${msg}`);
+      logger.error(`[mesh-collider] failed to load "${url}": ${msg}`);
     });
   return null;
 }

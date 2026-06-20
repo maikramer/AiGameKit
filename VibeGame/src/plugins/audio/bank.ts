@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 /**
  * Sound bank: declare sounds once by key, then fire them from anywhere with no
  * entity, no eid lookup, and no per-frame plumbing.
@@ -235,7 +236,7 @@ function playInternal(
 ): SoundHandle {
   const def = bank.get(key);
   if (!def) {
-    console.warn(`[audio] playSound: unknown key "${key}"`);
+    logger.warn(`[audio] playSound: unknown key "${key}"`);
     return NULL_HANDLE;
   }
   const h = ensureHowl(key, def);

@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { eulerToQuaternion } from '../../core/math';
 import { defineQuery, type State, type System } from '../../core';
@@ -185,7 +186,7 @@ export const TerrainPlaceSystem: System = {
         spec.spawn.surfaceEpsilonAuto
       );
       if (!s) {
-        console.warn(
+        logger.warn(
           '[spawner] Place skipped: no terrain surface at (%.0f, %.0f)',
           wx,
           wz

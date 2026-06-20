@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Plugin, Recipe, State } from '../../core';
 import { EventBusCleanupSystem, getEventBus } from './events';
 import { getDataRegistry } from './registry';
@@ -13,9 +14,8 @@ function acquireNodeFs(): NodeFsLike | null {
     // undefined in the browser, so bundlers never resolve `node:fs` for
     // browser builds. This replaces `(new Function('return require'))()`,
     // which fails in Bun ESM where bare `require` is not defined.
-    const req = (
-      import.meta as { require?: (id: string) => NodeFsLike }
-    ).require;
+    const req = (import.meta as { require?: (id: string) => NodeFsLike })
+      .require;
     if (typeof req !== 'function') return null;
     return req('node:fs');
   } catch {
@@ -57,7 +57,7 @@ const lootTableRecipe: Recipe = {
 function loadRpgDataFile(state: State, src: string): void {
   const fs = acquireNodeFs();
   if (!fs) {
-    console.error(
+    logger.error(
       `[RpgData] filesystem data loading is unavailable in this environment (browser). Cannot load "${src}".`
     );
     return;
@@ -66,11 +66,13 @@ function loadRpgDataFile(state: State, src: string): void {
   try {
     isDir = fs.statSync(src).isDirectory();
   } catch (err) {
-    console.error(`[RpgData] cannot stat "${src}": ${(err as Error).message ?? err}`);
+    logger.error(
+      `[RpgData] cannot stat "${src}": ${(err as Error).message ?? err}`
+    );
     return;
   }
   if (isDir) {
-    console.error(
+    logger.error(
       `[RpgData] src "${src}" is a directory; use DataRegistry.loadDirectory() programmatically`
     );
     return;
@@ -79,7 +81,9 @@ function loadRpgDataFile(state: State, src: string): void {
   try {
     text = fs.readFileSync(src, 'utf8');
   } catch (err) {
-    console.error(`[RpgData] cannot read "${src}": ${(err as Error).message ?? err}`);
+    logger.error(
+      `[RpgData] cannot read "${src}": ${(err as Error).message ?? err}`
+    );
     return;
   }
   const registry = getDataRegistry(state);
@@ -87,7 +91,9 @@ function loadRpgDataFile(state: State, src: string): void {
     if (src.endsWith('.json')) registry.loadJson(text);
     else registry.loadYaml(text);
   } catch (err) {
-    console.error(`[RpgData] failed to load "${src}": ${(err as Error).message ?? err}`);
+    logger.error(
+      `[RpgData] failed to load "${src}": ${(err as Error).message ?? err}`
+    );
   }
 }
 

@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
@@ -134,7 +135,7 @@ export const TerrainFieldBootstrapSystem: System = {
             fireHeightmapReloadCallbacks(state);
           })
           .catch((err) => {
-            console.error(
+            logger.error(
               `Heightmap load failed: ${heightmapUrl} — ${err instanceof Error ? err.message : err}`
             );
           });
@@ -359,7 +360,7 @@ export const TerrainMeshSystem: System = {
             }
           })
           .catch((err) => {
-            console.error(
+            logger.error(
               `Heightmap retry failed: ${data.heightmapUrl} — ${err instanceof Error ? err.message : err}`
             );
           });
@@ -663,7 +664,7 @@ export function reloadTerrainHeightmap(
       fireHeightmapReloadCallbacks(state);
     })
     .catch((err) => {
-      console.error(`Heightmap reload failed: ${url}`, err);
+      logger.error(`Heightmap reload failed: ${url}`, err);
     });
 }
 

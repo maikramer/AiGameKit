@@ -1,7 +1,8 @@
+import { logger } from '../../core/utils/logger';
 import { defineQuery } from '../../core';
 import type { Adapter, Parser, Recipe, State, System } from '../../core';
 import { onEvent } from '../rpg-core/events';
-import * as bank from './bank';
+import { setMasterVolume as bank_setMasterVolume, setBusVolume } from './bank';
 import { AudioSource, MusicLayerComponent } from './components';
 
 export const MUSIC_LAYER_EXPLORE = 0;
@@ -63,7 +64,9 @@ export function resolveMusicLayer(name: string | number): number {
   if (!Number.isNaN(asNum)) return asNum;
   const mapped = layerNames.get(name.toLowerCase());
   if (mapped === undefined) {
-    console.warn(`[audio] unknown music layer "${name}", falling back to explore`);
+    logger.warn(
+      `[audio] unknown music layer "${name}", falling back to explore`
+    );
     return MUSIC_LAYER_EXPLORE;
   }
   return mapped;
@@ -72,7 +75,7 @@ export function resolveMusicLayer(name: string | number): number {
 export function setMasterVolume(state: State, v: number): void {
   const mix = getAudioMix(state);
   mix.master = clamp01(v);
-  bank.setMasterVolume(mix.master);
+  bank_setMasterVolume(mix.master);
 }
 
 export function getMasterVolume(state: State): number {
@@ -82,7 +85,7 @@ export function getMasterVolume(state: State): number {
 export function setMusicVolume(state: State, v: number): void {
   const mix = getAudioMix(state);
   mix.music = clamp01(v);
-  bank.setBusVolume('music', mix.music);
+  setBusVolume('music', mix.music);
 }
 
 export function getMusicVolume(state: State): number {
@@ -92,7 +95,7 @@ export function getMusicVolume(state: State): number {
 export function setSfxVolume(state: State, v: number): void {
   const mix = getAudioMix(state);
   mix.sfx = clamp01(v);
-  bank.setBusVolume('sfx', mix.sfx);
+  setBusVolume('sfx', mix.sfx);
 }
 
 export function getSfxVolume(state: State): number {
@@ -183,7 +186,8 @@ export const audioMixerRecipe: Recipe = {
 
 export const audioMixerParser: Parser = ({ element, state }): void => {
   const a = element.attributes;
-  if (a.master != null) setMasterVolume(state, num(a.master as string | number));
+  if (a.master != null)
+    setMasterVolume(state, num(a.master as string | number));
   if (a.music != null) setMusicVolume(state, num(a.music as string | number));
   if (a.sfx != null) setSfxVolume(state, num(a.sfx as string | number));
 };

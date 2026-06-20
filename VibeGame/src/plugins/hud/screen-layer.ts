@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { ParserParams, State, System, XMLValue } from '../../core';
 
 const HUD_SCREEN_LAYER_CLASS = 'vibe-hud-screen-layer';
@@ -80,7 +81,7 @@ export function unregisterHudWidget(state: State, widgetId: string): void {
   try {
     removed.handle.unmount();
   } catch (err) {
-    console.error('[VibeGame] HudWidget unmount error:', err);
+    logger.error('[VibeGame] HudWidget unmount error:', err);
   }
 }
 
@@ -94,7 +95,7 @@ export const HudScreenUpdateSystem: System = {
       try {
         m.handle.update(state);
       } catch (err) {
-        console.error('[VibeGame] HudWidget update error:', err);
+        logger.error('[VibeGame] HudWidget update error:', err);
       }
     }
   },
@@ -105,7 +106,7 @@ export const HudScreenUpdateSystem: System = {
         try {
           m.handle.unmount();
         } catch (err) {
-          console.error('[VibeGame] HudWidget unmount error:', err);
+          logger.error('[VibeGame] HudWidget unmount error:', err);
         }
       }
     }
@@ -131,7 +132,7 @@ export function hudWidgetParser({ element, state }: ParserParams): void {
   if (type.length === 0) return;
   const factory = getHudWidgetFactory(type);
   if (!factory) {
-    console.warn(`[VibeGame] Unknown HudWidget type: "${type}"`);
+    logger.warn(`[VibeGame] Unknown HudWidget type: "${type}"`);
     return;
   }
   const widget = factory(element.attributes, state);

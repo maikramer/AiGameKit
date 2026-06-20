@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Plugin, State } from '../../core';
 import { AudioSource, AudioListener, MusicLayerComponent } from './components';
 import { getSoundDef } from './bank';
@@ -25,7 +26,7 @@ function audioUrlAdapter(entity: number, value: string, _state: State): void {
 function audioSoundAdapter(entity: number, value: string, _state: State): void {
   const def = getSoundDef(value.trim());
   if (!def) {
-    console.warn(`[audio] <AudioSource sound="${value}">: unknown bank key`);
+    logger.warn(`[audio] <AudioSource sound="${value}">: unknown bank key`);
     return;
   }
   registerAudioClip(entity, def.url);

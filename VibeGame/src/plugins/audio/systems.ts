@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import { Howl, Howler } from 'howler';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
@@ -247,7 +248,7 @@ export const AudioSystem: System = {
       !getOrCreateState(state)._listenerWarned
     ) {
       getOrCreateState(state)._listenerWarned = true;
-      console.warn(
+      logger.warn(
         '[audio] Nenhuma entidade com AudioListener + MainCamera + WorldTransform; áudio espacial pode falhar.'
       );
     }

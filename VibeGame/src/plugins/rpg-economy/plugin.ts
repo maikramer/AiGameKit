@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { Plugin, Recipe } from '../../core';
 import { getDataRegistry } from '../rpg-core';
 import { EconomyEventBridgeSystem } from './systems';
@@ -34,7 +35,7 @@ export const EconomyPlugin: Plugin = {
         if (typeof src !== 'string' || src.length === 0) return;
         const fs = acquireNodeFs();
         if (!fs) {
-          console.error(
+          logger.error(
             `[PriceTable] filesystem loading is unavailable in this environment (browser). Cannot load "${src}".`
           );
           return;
@@ -43,7 +44,7 @@ export const EconomyPlugin: Plugin = {
         try {
           text = fs.readFileSync(src, 'utf8');
         } catch (err) {
-          console.warn(`[PriceTable] failed to load "${src}":`, err);
+          logger.warn(`[PriceTable] failed to load "${src}":`, err);
           return;
         }
         getDataRegistry(state).loadYaml(text);

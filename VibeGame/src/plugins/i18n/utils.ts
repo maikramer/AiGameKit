@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import type { State } from '../../core';
 import { internString } from '../hud/context';
 
@@ -43,7 +44,7 @@ export function t(
     typeof process !== 'undefined' &&
     process.env?.NODE_ENV !== 'production'
   ) {
-    console.warn(
+    logger.warn(
       `[i18n] missing key "${key}" for locale "${lang}" — returning key as fallback`
     );
   }

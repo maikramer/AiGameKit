@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { defineQuery, type State, type System } from '../../core';
 import { getRenderingContext } from '../rendering';
@@ -65,7 +66,7 @@ export const EquirectSkyLoadSystem: System = {
           EquirectSky.applied[eid] = 1;
         })
         .catch((err) => {
-          console.error(`[sky] Failed to load equirect sky "${url}"`, err);
+          logger.error(`[sky] Failed to load equirect sky "${url}"`, err);
           EquirectSky.applied[eid] = 1;
         })
         .finally(() => {
