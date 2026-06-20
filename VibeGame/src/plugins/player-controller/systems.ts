@@ -10,7 +10,7 @@ import {
   syncEulerFromQuaternion,
 } from '../transforms';
 import { ThirdPersonCamera } from './components';
-import { castBvhRay, getBvhSurfaceHeight } from '../bvh';
+import { castBvhRay, getBvhSurfaceHeight, type BvhRaycastHit } from '../bvh';
 
 const thirdPersonCameraQuery = defineQuery([
   ThirdPersonCamera,
@@ -19,6 +19,36 @@ const thirdPersonCameraQuery = defineQuery([
 ]);
 const thirdPersonCameraAllQuery = defineQuery([ThirdPersonCamera]);
 const playerQuery = defineQuery([CharacterMovement, Rigidbody, InputState]);
+
+const _camDir = new THREE.Vector3();
+const _camOrigin = new THREE.Vector3();
+const _camRight = new THREE.Vector3();
+const _camLeftDir = new THREE.Vector3();
+const _camRightDir = new THREE.Vector3();
+const _camHit1: BvhRaycastHit = {
+  entity: 0,
+  layer: 0,
+  distance: 0,
+  point: new THREE.Vector3(),
+  normal: new THREE.Vector3(),
+  key: '',
+};
+const _camHit2: BvhRaycastHit = {
+  entity: 0,
+  layer: 0,
+  distance: 0,
+  point: new THREE.Vector3(),
+  normal: new THREE.Vector3(),
+  key: '',
+};
+const _camHit3: BvhRaycastHit = {
+  entity: 0,
+  layer: 0,
+  distance: 0,
+  point: new THREE.Vector3(),
+  normal: new THREE.Vector3(),
+  key: '',
+};
 
 export const ThirdPersonCameraSystem: System = {
   group: 'draw',
@@ -109,60 +139,67 @@ export const ThirdPersonCameraSystem: System = {
         const dz = desiredZ - targetZ;
         const fullDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (fullDist > 0.01) {
-          const dir = new THREE.Vector3(
-            dx / fullDist,
-            dy / fullDist,
-            dz / fullDist
-          );
+          _camDir.set(dx / fullDist, dy / fullDist, dz / fullDist);
           const radius = Math.max(minDist, 0.5);
-          const origin = new THREE.Vector3(targetX, eyeY, targetZ);
+          _camOrigin.set(targetX, eyeY, targetZ);
 
-          // Multi-ray "sphere-cast": centre + lateral offsets
           let minSafe = fullDist;
           let hasHit = false;
 
-          const hit1 = castBvhRay(state, origin, dir, fullDist, 0x0001);
+          const hit1 = castBvhRay(
+            state,
+            _camOrigin,
+            _camDir,
+            fullDist,
+            0x0001,
+            _camHit1
+          );
           if (hit1 && hit1.distance < minSafe) {
             minSafe = hit1.distance;
             hasHit = true;
           }
 
-          const right = new THREE.Vector3(dir.z, 0, -dir.x).normalize();
-          const leftDir = new THREE.Vector3(
-            dir.x * fullDist + right.x * radius,
-            dir.y * fullDist + right.y * radius,
-            dir.z * fullDist + right.z * radius
-          ).normalize();
+          _camRight.set(_camDir.z, 0, -_camDir.x).normalize();
+          _camLeftDir
+            .set(
+              _camDir.x * fullDist + _camRight.x * radius,
+              _camDir.y * fullDist + _camRight.y * radius,
+              _camDir.z * fullDist + _camRight.z * radius
+            )
+            .normalize();
           const hit2 = castBvhRay(
             state,
-            origin,
-            leftDir,
+            _camOrigin,
+            _camLeftDir,
             fullDist + radius,
-            0x0001
+            0x0001,
+            _camHit2
           );
           if (hit2 && hit2.distance < minSafe) {
             minSafe = hit2.distance;
             hasHit = true;
           }
 
-          const rightDir = new THREE.Vector3(
-            dir.x * fullDist - right.x * radius,
-            dir.y * fullDist - right.y * radius,
-            dir.z * fullDist - right.z * radius
-          ).normalize();
+          _camRightDir
+            .set(
+              _camDir.x * fullDist - _camRight.x * radius,
+              _camDir.y * fullDist - _camRight.y * radius,
+              _camDir.z * fullDist - _camRight.z * radius
+            )
+            .normalize();
           const hit3 = castBvhRay(
             state,
-            origin,
-            rightDir,
+            _camOrigin,
+            _camRightDir,
             fullDist + radius,
-            0x0001
+            0x0001,
+            _camHit3
           );
           if (hit3 && hit3.distance < minSafe) {
             minSafe = hit3.distance;
             hasHit = true;
           }
 
-          // Fallback when BVH has no entry yet (terrain still loading)
           if (!hasHit) {
             const terrainY = getBvhSurfaceHeight(
               state,
@@ -183,9 +220,9 @@ export const ThirdPersonCameraSystem: System = {
 
           if (hasHit) {
             const safeDist = Math.max(minSafe - radius, 0.01);
-            safeX = targetX + dir.x * safeDist;
-            safeY = eyeY + dir.y * safeDist;
-            safeZ = targetZ + dir.z * safeDist;
+            safeX = targetX + _camDir.x * safeDist;
+            safeY = eyeY + _camDir.y * safeDist;
+            safeZ = targetZ + _camDir.z * safeDist;
           }
         }
       }

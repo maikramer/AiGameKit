@@ -39,17 +39,9 @@
       "types": "./dist/plugins/rendering/index.d.ts",
       "import": "./dist/plugins/rendering/index.js"
     },
-    "./text": {
-      "types": "./dist/plugins/text/index.d.ts",
-      "import": "./dist/plugins/text/index.js"
-    },
     "./transforms": {
       "types": "./dist/plugins/transforms/index.d.ts",
       "import": "./dist/plugins/transforms/index.js"
-    },
-    "./respawn": {
-      "types": "./dist/plugins/respawn/index.d.ts",
-      "import": "./dist/plugins/respawn/index.js"
     },
     "./startup": {
       "types": "./dist/plugins/startup/index.d.ts",
@@ -58,10 +50,6 @@
     "./tweening": {
       "types": "./dist/plugins/tweening/index.d.ts",
       "import": "./dist/plugins/tweening/index.js"
-    },
-    "./line": {
-      "types": "./dist/plugins/line/index.d.ts",
-      "import": "./dist/plugins/line/index.js"
     },
     "./vite": {
       "types": "./dist/vite/index.d.ts",
@@ -79,21 +67,9 @@
       "types": "./dist/plugins/terrain/index.d.ts",
       "import": "./dist/plugins/terrain/index.js"
     },
-    "./vegetation": {
-      "types": "./dist/plugins/vegetation/index.d.ts",
-      "import": "./dist/plugins/vegetation/index.js"
-    },
     "./bvh": {
       "types": "./dist/plugins/bvh/index.d.ts",
       "import": "./dist/plugins/bvh/index.js"
-    },
-    "./water": {
-      "types": "./dist/plugins/water/index.d.ts",
-      "import": "./dist/plugins/water/index.js"
-    },
-    "./fog": {
-      "types": "./dist/plugins/fog/index.d.ts",
-      "import": "./dist/plugins/fog/index.js"
     },
     "./debug": {
       "types": "./dist/plugins/debug/index.d.ts",

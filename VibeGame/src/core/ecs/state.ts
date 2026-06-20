@@ -1,3 +1,4 @@
+import { logger } from '../utils/logger';
 import {
   addEntity,
   createWorld,
@@ -46,6 +47,12 @@ import {
   removeEventListener as _removeEventListener,
 } from './events';
 
+// Hoisted to module scope: defineQuery allocates a fresh per-world cache +
+// closure on each call, so building these inside hot methods (destroyEntity ->
+// getDescendants, findByTag) defeats the query cache and churns garbage.
+const parentQuery = defineQuery([Parent]);
+const tagQuery = defineQuery([Tag]);
+
 export class State {
   public readonly world: World;
   public readonly time: Time;
@@ -58,6 +65,7 @@ export class State {
   private readonly componentNames = new WeakMap<Component, string>();
   private readonly plugins: Plugin[] = [];
   private readonly entityNames = new Map<string, number>();
+  private readonly entityToName = new Map<number, string>();
   private readonly destroyCallbacks = new Map<
     number,
     Set<(eid: number) => void>
@@ -168,7 +176,19 @@ export class State {
   }
 
   setEntityName(name: string, entity: number): void {
+    // Drop the prior name this entity held (forward entry now orphaned)...
+    const oldName = this.entityToName.get(entity);
+    if (oldName) {
+      this.entityNames.delete(oldName);
+    }
+    // ...and drop the prior entity that held this name (reverse entry now
+    // orphaned), so both maps stay bijective after any reassignment.
+    const prevEntity = this.entityNames.get(name);
+    if (prevEntity !== undefined && prevEntity !== entity) {
+      this.entityToName.delete(prevEntity);
+    }
     this.entityNames.set(name, entity);
+    this.entityToName.set(entity, name);
   }
 
   getEntityByName(name: string): number | null {
@@ -176,10 +196,7 @@ export class State {
   }
 
   getEntityName(eid: number): string | undefined {
-    for (const [name, entity] of this.entityNames) {
-      if (entity === eid) return name;
-    }
-    return undefined;
+    return this.entityToName.get(eid);
   }
 
   getNamedEntities(): Map<string, number> {
@@ -201,7 +218,6 @@ export class State {
   }
 
   getDescendants(eid: number): number[] {
-    const parentQuery = defineQuery([Parent]);
     const entitiesWithParent = parentQuery(this.world);
     const childrenOf = new Map<number, number[]>();
     for (const childEid of entitiesWithParent) {
@@ -245,7 +261,7 @@ export class State {
         try {
           cb(eid);
         } catch (err) {
-          console.error('[VibeGame] destroyEntity callback error:', err);
+          logger.error('[VibeGame] destroyEntity callback error:', err);
         }
       }
       this.destroyCallbacks.delete(eid);
@@ -254,8 +270,13 @@ export class State {
       try {
         cb(eid);
       } catch (err) {
-        console.error('[VibeGame] destroyEntity global callback error:', err);
+        logger.error('[VibeGame] destroyEntity global callback error:', err);
       }
+    }
+    const name = this.entityToName.get(eid);
+    if (name) {
+      this.entityNames.delete(name);
+      this.entityToName.delete(eid);
     }
     removeAllListeners(eid);
     removeEntity(this.world, eid);
@@ -301,7 +322,7 @@ export class State {
   findByTag(name: string): number | undefined {
     const id = getTagId(name);
     if (id < 0) return undefined;
-    const entities = defineQuery([Tag])(this.world);
+    const entities = tagQuery(this.world);
     for (const eid of entities) {
       if (Tag.value[eid] === id) return eid;
     }
@@ -312,7 +333,7 @@ export class State {
     const id = getTagId(name);
     if (id < 0) return [];
     const result: number[] = [];
-    const entities = defineQuery([Tag])(this.world);
+    const entities = tagQuery(this.world);
     for (const eid of entities) {
       if (Tag.value[eid] === id) result.push(eid);
     }

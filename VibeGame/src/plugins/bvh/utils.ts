@@ -150,16 +150,53 @@ export interface BvhRaycastHit {
 const _raycaster = new THREE.Raycaster();
 const _hits: THREE.Intersection[] = [];
 
+const _scratchPoint = new THREE.Vector3();
+const _scratchNormal = new THREE.Vector3();
+const _scratchHit: BvhRaycastHit = {
+  entity: 0,
+  layer: 0,
+  distance: 0,
+  point: _scratchPoint,
+  normal: _scratchNormal,
+  key: '',
+};
+
+function writeHit(
+  target: BvhRaycastHit,
+  entity: number,
+  layer: number,
+  distance: number,
+  point: THREE.Vector3,
+  faceNormal: THREE.Vector3 | undefined,
+  key: string
+): void {
+  target.entity = entity;
+  target.layer = layer;
+  target.distance = distance;
+  target.point.copy(point);
+  if (faceNormal) {
+    target.normal.copy(faceNormal);
+  } else {
+    target.normal.set(0, 1, 0);
+  }
+  target.key = key;
+}
+
 /**
  * Cast a ray against every registered BVH mesh and return the closest hit.
  * Pass `layerMask` to ignore meshes whose layer has no overlapping bits.
+ *
+ * Pass `out` to write the result into a caller-owned object (avoids per-call
+ * allocation in hot paths like camera collision). If omitted, a shared module
+ * scratch is used — callers must consume it before the next `castBvhRay` call.
  */
 export function castBvhRay(
   state: State,
   origin: THREE.Vector3,
   direction: THREE.Vector3,
   maxDist: number,
-  layerMask = 0xffff
+  layerMask = 0xffff,
+  out?: BvhRaycastHit
 ): BvhRaycastHit | null {
   ensurePrototypes();
   const ctx = getBvhContext(state);
@@ -170,7 +207,14 @@ export function castBvhRay(
   _raycaster.far = maxDist;
   _raycaster.firstHitOnly = true;
 
-  let closest: BvhRaycastHit | null = null;
+  const target = out ?? _scratchHit;
+  let haveHit = false;
+  let bestDistance = Infinity;
+  let bestEntity = 0;
+  let bestLayer = 0;
+  let bestPoint: THREE.Vector3 | null = null;
+  let bestNormal: THREE.Vector3 | undefined = undefined;
+  let bestKey = '';
 
   for (const [key, entry] of ctx.entries) {
     if ((entry.layer & layerMask) === 0) continue;
@@ -178,22 +222,29 @@ export function castBvhRay(
     entry.mesh.raycast(_raycaster, _hits);
     if (_hits.length === 0) continue;
     const hit = _hits[0];
-    if (!closest || hit.distance < closest.distance) {
-      closest = {
-        entity: entry.entity,
-        layer: entry.layer,
-        distance: hit.distance,
-        point: hit.point.clone(),
-        normal: hit.face ? hit.face.normal.clone() : new THREE.Vector3(0, 1, 0),
-        key,
-      };
-      // Shrink the ray so later meshes are pruned at the bounds-tree root
-      // when they can't possibly beat the current closest hit.
+    if (hit.distance < bestDistance) {
+      bestDistance = hit.distance;
+      bestEntity = entry.entity;
+      bestLayer = entry.layer;
+      bestPoint = hit.point;
+      bestNormal = hit.face?.normal;
+      bestKey = key;
+      haveHit = true;
       _raycaster.far = hit.distance;
     }
   }
 
-  return closest;
+  if (!haveHit) return null;
+  writeHit(
+    target,
+    bestEntity,
+    bestLayer,
+    bestDistance,
+    bestPoint!,
+    bestNormal,
+    bestKey
+  );
+  return target;
 }
 
 const _downDir = new THREE.Vector3(0, -1, 0);

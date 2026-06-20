@@ -1,3 +1,4 @@
+import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import type { State } from '../../core';
 import { defineQuery, type System } from '../../core';
@@ -49,6 +50,8 @@ const pointLightQuery = defineQuery([PointLight, WorldTransform]);
 const spotLightQuery = defineQuery([SpotLight, WorldTransform]);
 const entityToPointLight = new Map<number, THREE.PointLight>();
 const entityToSpotLight = new Map<number, THREE.SpotLight>();
+const entityToDirectionalLight = new Map<number, THREE.DirectionalLight>();
+const entityToAmbientLight = new Map<number, THREE.HemisphereLight>();
 
 const MAX_POINT_LIGHTS = 4;
 const MAX_SPOT_LIGHTS = 2;
@@ -155,17 +158,25 @@ export const LightSyncSystem: System = {
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
-    const context = getRenderingContext(state);
     const scene = getScene(state);
     if (!scene) return;
 
+    // --- Ambient lights (per-entity, Map-based) ---
+    for (const [eid, light] of entityToAmbientLight) {
+      if (!state.exists(eid)) {
+        scene.remove(light);
+        light.dispose();
+        entityToAmbientLight.delete(eid);
+      }
+    }
+
     const ambients = ambientQuery(state.world);
     for (const entity of ambients) {
-      let light = context.lights.ambient;
+      let light = entityToAmbientLight.get(entity);
       if (!light) {
         light = new THREE.HemisphereLight();
         scene.add(light);
-        context.lights.ambient = light;
+        entityToAmbientLight.set(entity, light);
       }
 
       light.color.setHex(AmbientLight.skyColor[entity]);
@@ -173,16 +184,25 @@ export const LightSyncSystem: System = {
       light.intensity = AmbientLight.intensity[entity];
     }
 
-    const directionals = directionalQuery(state.world);
+    // --- Directional lights (per-entity, Map-based) ---
+    for (const [eid, light] of entityToDirectionalLight) {
+      if (!state.exists(eid)) {
+        scene.remove(light);
+        if (light.target) scene.remove(light.target);
+        light.dispose();
+        entityToDirectionalLight.delete(eid);
+      }
+    }
 
+    const directionals = directionalQuery(state.world);
     for (const entity of directionals) {
-      let light = context.lights.directional;
+      let light = entityToDirectionalLight.get(entity);
       if (!light) {
         light = new THREE.DirectionalLight();
         light.castShadow = true;
         scene.add(light);
         scene.add(light.target);
-        context.lights.directional = light;
+        entityToDirectionalLight.set(entity, light);
       }
 
       light.color.setHex(DirectionalLight.color[entity]);
@@ -270,7 +290,7 @@ export const PointSpotLightSyncSystem: System = {
       let light = entityToPointLight.get(eid);
       if (!light) {
         if (context.lights.pointLights.length >= MAX_POINT_LIGHTS) {
-          console.warn(
+          logger.warn(
             `PointLight limit (${MAX_POINT_LIGHTS}) reached — skipping entity ${eid}`
           );
           continue;
@@ -307,7 +327,7 @@ export const PointSpotLightSyncSystem: System = {
       let light = entityToSpotLight.get(eid);
       if (!light) {
         if (context.lights.spotLights.length >= MAX_SPOT_LIGHTS) {
-          console.warn(
+          logger.warn(
             `SpotLight limit (${MAX_SPOT_LIGHTS}) reached — skipping entity ${eid}`
           );
           continue;
@@ -348,37 +368,9 @@ export const PointSpotLightSyncSystem: System = {
   },
 };
 
-export const RendererSetupSystem: System = {
-  group: 'setup',
-  last: true,
-  async setup(state: State) {
-    if (state.headless) return;
-    const context = getRenderingContext(state);
-    if (context.renderer) return;
-
-    const contextEntities = renderContextQuery(state.world);
-    if (contextEntities.length === 0) return;
-
-    const entity = contextEntities[0];
-    const canvas = getCanvasElement(entity);
-    if (!canvas) return;
-
-    const clearColor = RenderContext.clearColor[entity];
-    const renderer = await createRenderer(canvas, clearColor);
-
-    context.renderer = renderer;
-    context.canvas = canvas;
-    applyNeutralEnvironment(renderer, context.scene);
-    // The post-processing scene pass renders scene.background (not the renderer
-    // clear colour), so mirror the clear colour there or the sky goes black.
-    if (clearColor !== 0)
-      context.scene.background = new THREE.Color(clearColor);
-
-    const onResize = () => handleWindowResize(state, renderer);
-    context.resizeHandler = onResize;
-    window.addEventListener('resize', onResize);
-  },
-};
+// NOTE: RendererSetupSystem was removed — its logic was identical to
+// SceneRenderSystem and caused duplicate resize listeners / double-setup.
+// All renderer creation is now handled by SceneRenderSystem.
 
 export const CameraSyncSystem: System = {
   group: 'draw',
@@ -462,6 +454,11 @@ export const SceneRenderSystem: System = {
       context.renderer = undefined;
       context.canvas = undefined;
     }
+
+    entityToPointLight.clear();
+    entityToSpotLight.clear();
+    entityToDirectionalLight.clear();
+    entityToAmbientLight.clear();
 
     const contextEntities = renderContextQuery(state.world);
     for (const entity of contextEntities) {

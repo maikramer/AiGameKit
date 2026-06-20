@@ -111,4 +111,45 @@ describe('Save-Load Snapshot Restore', () => {
     expect(payload.entities).toEqual([]);
     expect(payload.serializableEids).toEqual([]);
   });
+
+  it('should restore entities + components on loadSnapshot', () => {
+    const e1 = state.createEntity();
+    state.setEntityName('player', e1);
+    state.addComponent(e1, Serializable);
+    Serializable.flag[e1] = 1;
+    Serializable.serializationId[e1] = 42;
+
+    const data = saveSnapshot(state);
+
+    const state2 = new State();
+    state2.headless = true;
+    state2.registerPlugin(SaveLoadPlugin);
+
+    loadSnapshot(state2, data);
+
+    const restored = state2.getEntityByName('player');
+    expect(restored).not.toBeNull();
+    expect(state2.hasComponent(restored!, Serializable)).toBe(true);
+    expect(Serializable.flag[restored!]).toBe(1);
+    expect(Serializable.serializationId[restored!]).toBe(42);
+  });
+
+  it('should optionally clear existing entities on loadSnapshot', () => {
+    const pre = state.createEntity();
+    state.addComponent(pre, Serializable);
+    Serializable.flag[pre] = 1;
+    const data = saveSnapshot(state);
+
+    const state2 = new State();
+    state2.headless = true;
+    state2.registerPlugin(SaveLoadPlugin);
+    const transient = state2.createEntity();
+    state2.addComponent(transient, Serializable);
+    Serializable.flag[transient] = 1;
+    state2.setEntityName('transient', transient);
+
+    loadSnapshot(state2, data, { clearExisting: true });
+
+    expect(state2.getEntityByName('transient')).toBeNull();
+  });
 });

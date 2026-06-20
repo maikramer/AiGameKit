@@ -147,7 +147,6 @@ Available via `DefaultPlugins` export:
 - `OrbitCameraPlugin` - Orbital camera
 - `PlayerPlugin` - Character controller
 - `StartupPlugin` - Initialization
-- `RespawnPlugin` - Entity respawning
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->

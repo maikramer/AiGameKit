@@ -1,6 +1,22 @@
 import { defineQuery } from './query';
+import { addComponent } from 'bitecs';
+import { Parent } from './components';
 import type { Component } from './types';
 import type { State } from './state';
+import type { World } from 'bitecs';
+
+// Cache one query per component: defineQuery allocates a closure + per-world
+// cache, so rebuilding it on every snapshot churns garbage for no benefit.
+const componentQueries = new WeakMap<Component, (world: World) => number[]>();
+
+function getComponentQuery(component: Component): (world: World) => number[] {
+  let q = componentQueries.get(component);
+  if (!q) {
+    q = defineQuery([component]);
+    componentQueries.set(component, q);
+  }
+  return q;
+}
 
 export interface SnapshotOptions {
   entities?: string[];
@@ -79,7 +95,7 @@ export function createSnapshot(
     const component = state.getComponent(componentName);
     if (!component) continue;
 
-    const query = defineQuery([component]);
+    const query = getComponentQuery(component);
     const entities = query(state.world);
 
     for (const eid of entities) {
@@ -115,7 +131,7 @@ export function createSnapshot(
   if (options?.includeSequences) {
     const sequenceComponent = state.getComponent('sequence');
     if (sequenceComponent) {
-      const query = defineQuery([sequenceComponent]);
+      const query = getComponentQuery(sequenceComponent);
       const seqEntities = query(state.world);
       const sequences: SequenceSnapshot[] = [];
 
@@ -181,4 +197,57 @@ export function formatSnapshot(snapshot: WorldSnapshot): string {
   }
 
   return lines.join('\n');
+}
+
+export interface RestoreResult {
+  oldToNewEid: Map<number, number>;
+  restoredCount: number;
+  skippedComponents: string[];
+}
+
+export function restoreSnapshot(
+  state: State,
+  snapshot: WorldSnapshot
+): RestoreResult {
+  const oldToNewEid = new Map<number, number>();
+  const skippedComponents: string[] = [];
+
+  state.time.elapsed = snapshot.elapsed ?? 0;
+
+  for (const ent of snapshot.entities) {
+    const newEid = state.createEntity();
+    oldToNewEid.set(ent.eid, newEid);
+
+    if (ent.name) {
+      state.setEntityName(ent.name, newEid);
+    }
+
+    for (const [compName, fields] of Object.entries(ent.components)) {
+      if (compName === 'parent') continue;
+      const comp = state.getComponent(compName);
+      if (!comp) {
+        if (!skippedComponents.includes(compName)) {
+          skippedComponents.push(compName);
+        }
+        continue;
+      }
+      state.addComponent(newEid, comp, fields);
+    }
+  }
+
+  for (const ent of snapshot.entities) {
+    const parentFields = ent.components['parent'];
+    if (!parentFields || typeof parentFields.entity !== 'number') continue;
+    const newEid = oldToNewEid.get(ent.eid);
+    const newParent = oldToNewEid.get(parentFields.entity);
+    if (newEid === undefined || newParent === undefined) continue;
+    addComponent(state.world, newEid, Parent);
+    Parent.entity[newEid] = newParent;
+  }
+
+  return {
+    oldToNewEid,
+    restoredCount: snapshot.entities.length,
+    skippedComponents,
+  };
 }

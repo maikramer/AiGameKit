@@ -1,3 +1,4 @@
+import { logger } from '../core/utils/logger';
 /**
  * Bridge for GLB/GLTF assets produced by Text3D, Paint3D, Rigging3D, etc.
  * Adds the loaded scene graph to the VibeGame Three.js scene.
@@ -61,7 +62,7 @@ function tryInitKTX2(renderer: any): KTX2Loader | null {
       .detectSupport(renderer);
     return _ktx2Loader;
   } catch (e) {
-    console.warn(
+    logger.warn(
       '[VibeGame] KTX2Loader init failed — KTX2 textures disabled. ' +
         'Call setKTX2TranscoderPath() with a valid URL, or ensure ' +
         'basis_transcoder.js / .wasm are accessible from node_modules.',
@@ -87,6 +88,9 @@ function ensureKTX2FromState(state: State): void {
  * blob: URLs in some environments. TextureLoader's `<img>` approach is universally
  * compatible.
  *
+ * Concurrency-safe: nested/concurrent parse() calls share a single disable-depth
+ * counter so the global is only restored after the last parse completes.
+ *
  * @param manager - Optional Three.js LoadingManager.
  * @returns A configured GLTFLoader instance.
  */
@@ -102,26 +106,21 @@ export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
     onLoad: (gltf: GLTF) => void,
     onError?: (event: ErrorEvent) => void
   ): void {
-    const origBitmap = globalThis.createImageBitmap;
-    (globalThis as any).createImageBitmap = undefined;
-
-    const restore = () => {
-      (globalThis as any).createImageBitmap = origBitmap;
-    };
+    acquireImageBitmapDisable();
 
     const wrappedOnLoad = (gltf: GLTF) => {
-      restore();
+      releaseImageBitmapDisable();
       onLoad(gltf);
     };
     const wrappedOnError = (e: ErrorEvent) => {
-      restore();
+      releaseImageBitmapDisable();
       onError?.(e);
     };
 
     try {
       origParse(data, path, wrappedOnLoad, wrappedOnError);
     } catch (e) {
-      restore();
+      releaseImageBitmapDisable();
       throw e;
     }
   };
@@ -131,6 +130,31 @@ export function createGLTFLoader(manager?: THREE.LoadingManager): GLTFLoader {
     loader.setKTX2Loader(_ktx2Loader);
   }
   return loader;
+}
+
+// --- createImageBitmap disable ref-count --------------------------------
+// Concurrent GLTF parses share one disable-depth so the global is only restored
+// after the LAST parse completes (early restores used to permanently disable the
+// API for in-flight parses from sibling loaders).
+let _imageBitmapDisableDepth = 0;
+let _origCreateImageBitmap: typeof globalThis.createImageBitmap | undefined;
+
+function acquireImageBitmapDisable(): void {
+  if (_imageBitmapDisableDepth === 0) {
+    _origCreateImageBitmap = globalThis.createImageBitmap;
+    (globalThis as Record<string, unknown>).createImageBitmap = undefined;
+  }
+  _imageBitmapDisableDepth++;
+}
+
+function releaseImageBitmapDisable(): void {
+  if (_imageBitmapDisableDepth === 0) return;
+  _imageBitmapDisableDepth--;
+  if (_imageBitmapDisableDepth === 0) {
+    (globalThis as Record<string, unknown>).createImageBitmap =
+      _origCreateImageBitmap;
+    _origCreateImageBitmap = undefined;
+  }
 }
 
 /** True if the loaded scene contains skinned meshes (needs SkeletonUtils.clone). */
@@ -189,6 +213,74 @@ export function applyDefaultShadowFlags(root: Object3D): void {
 // asset no matter how many props use it. Skinned/animated paths stay
 // uncached (clones would share skeletons).
 const gltfMasterCache = new Map<string, Promise<GLTF>>();
+
+/**
+ * Drop one master GLB from the cache (use after a level/scene transition to
+ * free the GPU resources it was pinning). The caller is responsible for
+ * ensuring no live clone of this master remains in the scene.
+ */
+export function evictGltfMaster(url: string): boolean {
+  return gltfMasterCache.delete(url);
+}
+
+/** Drop every cached master GLB. See {@link evictGltfMaster}. */
+export function clearGltfMasterCache(): number {
+  const n = gltfMasterCache.size;
+  gltfMasterCache.clear();
+  return n;
+}
+
+/** Internal: groups tagged with this flag own private GPU resources that the
+ * engine must dispose when their owning entity is destroyed. Set only on
+ * animated/non-cached GLB loads. */
+export const OWNED_GPU_FLAG = 'vibegameOwnedGpu';
+
+function markGroupOwnedGpu(group: THREE.Object3D): void {
+  (group.userData as Record<string, unknown>)[OWNED_GPU_FLAG] = true;
+}
+
+/**
+ * Returns true when {@link markGroupOwnedGpu} flagged `root` — i.e. its
+ * geometries/materials/textures are NOT shared with the master cache and the
+ * engine must dispose them on entity destroy.
+ */
+export function isGroupOwnedGpu(root: THREE.Object3D): boolean {
+  return (root.userData as Record<string, unknown>)[OWNED_GPU_FLAG] === true;
+}
+
+/** Dispose every geometry/material/texture reachable from `root`. */
+export function disposeObject3DResources(root: THREE.Object3D): void {
+  const disposedGeometries = new Set<THREE.BufferGeometry>();
+  const disposedMaterials = new Set<THREE.Material>();
+  const disposedTextures = new Set<THREE.Texture>();
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh !== true) return;
+    const geos = Array.isArray(mesh.geometry) ? mesh.geometry : [mesh.geometry];
+    for (const g of geos) {
+      if (g && !disposedGeometries.has(g)) {
+        g.dispose();
+        disposedGeometries.add(g);
+      }
+    }
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (!m || disposedMaterials.has(m)) continue;
+      disposedMaterials.add(m);
+      for (const k in m) {
+        const v = (m as unknown as Record<string, unknown>)[k];
+        if (v && typeof v === 'object' && 'isTexture' in v) {
+          const tex = v as THREE.Texture;
+          if (!disposedTextures.has(tex)) {
+            tex.dispose();
+            disposedTextures.add(tex);
+          }
+        }
+      }
+      m.dispose();
+    }
+  });
+}
 
 /**
  * Parse a GLB once and cache it. The returned GLTF is the shared master —
@@ -303,6 +395,7 @@ export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
   return trackGltfLoad(
     loader.loadAsync(url).then((gltf) => {
       applyDefaultShadowFlags(gltf.scene);
+      markGroupOwnedGpu(gltf.scene);
       scene.add(gltf.scene);
       return gltf;
     })
@@ -343,6 +436,7 @@ export function loadGltfToSceneWithAnimator(
         url,
         (gltf) => {
           applyDefaultShadowFlags(gltf.scene);
+          markGroupOwnedGpu(gltf.scene);
           scene.add(gltf.scene);
           const animator =
             gltf.animations.length > 0

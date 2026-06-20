@@ -1,6 +1,20 @@
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 import type { State } from '../../core';
 
+let _aiRng: () => number = Math.random;
+
+export function setAiRng(rng: () => number): void {
+  _aiRng = rng;
+}
+
+export function resetAiRng(): void {
+  _aiRng = Math.random;
+}
+
+export function aiRandom(): number {
+  return _aiRng();
+}
+
 /** Registry kind under which preset configs are stored. */
 export const MELEE_AI_KIND = 'melee-ai';
 
@@ -111,7 +125,7 @@ export function createAiInstanceState(): AiInstanceState {
     hovering: true,
     wanderX: 0,
     wanderZ: 0,
-    strafeDir: Math.random() < 0.5 ? -1 : 1,
+    strafeDir: aiRandom() < 0.5 ? -1 : 1,
     strafeTimer: 0,
   };
 }

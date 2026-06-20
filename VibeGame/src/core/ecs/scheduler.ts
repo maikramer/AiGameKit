@@ -9,6 +9,8 @@ export class Scheduler {
   private readonly setup = new WeakSet<System>();
   private systemGroupCache = new Map<string, System[]>();
   private lastSystemsSize = 0;
+  private maxFixedStepsPerFrame: number =
+    TIME_CONSTANTS.MAX_FIXED_STEPS_PER_FRAME;
 
   getAccumulator(): number {
     return this.accumulator;
@@ -38,18 +40,32 @@ export class Scheduler {
 
     this.runSystemGroup(state, 'setup');
 
-    while (this.accumulator >= fixedDeltaTime) {
+    const maxFixedSteps = this.maxFixedStepsPerFrame;
+    let fixedSteps = 0;
+    while (this.accumulator >= fixedDeltaTime && fixedSteps < maxFixedSteps) {
       commitRemovals(state.world);
       mutableTime.deltaTime = fixedDeltaTime;
       mutableTime.fixedTime += fixedDeltaTime;
       this.runSystemGroup(state, 'fixed');
       this.accumulator -= fixedDeltaTime;
+      fixedSteps++;
+    }
+    if (fixedSteps >= maxFixedSteps) {
+      this.accumulator = 0;
     }
 
     mutableTime.deltaTime = scaledDelta;
     this.runSystemGroup(state, 'simulation');
     this.runSystemGroup(state, 'late');
     this.runSystemGroup(state, 'draw');
+  }
+
+  setMaxFixedStepsPerFrame(n: number): void {
+    this.maxFixedStepsPerFrame = n;
+  }
+
+  getMaxFixedStepsPerFrame(): number {
+    return this.maxFixedStepsPerFrame;
   }
 
   private runSystemGroup(

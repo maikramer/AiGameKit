@@ -7,11 +7,14 @@ export {
   AI_MODE_LUNGE,
   AiStateComponent,
   MELEE_AI_KIND,
+  aiRandom,
   createAiInstanceState,
   getMeleeAiConfig,
   getOrCreateAiInstanceState,
   removeAiInstanceState,
   removeMeleeAiConfig,
+  resetAiRng,
+  setAiRng,
   setMeleeAiConfig,
 } from './components';
 export type { AiInstanceState, AiMode, MeleeAiConfig } from './components';

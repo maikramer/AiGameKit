@@ -1,5 +1,9 @@
 ﻿import type { Group } from 'three';
 import type { State } from '../../core';
+import {
+  disposeObject3DResources,
+  isGroupOwnedGpu,
+} from '../../extras/gltf-bridge';
 
 const roots = new WeakMap<State, Map<number, Group>>();
 
@@ -14,12 +18,14 @@ export function registerGltfRootGroup(
     roots.set(state, m);
   }
   m.set(entity, group);
-  // Cleanup must ride the destroy callback, not an exists() sweep: entity ids
-  // are recycled, so a sweep can see the id alive again (now a different
-  // entity) and keep syncing this mesh to it — e.g. a destroyed rock's GLB
-  // reappearing glued to the pickup popup that reused its id.
+  // Cleanup rides onDestroy, not an exists() sweep: entity ids are recycled,
+  // so a sweep can see the id alive again (now a different entity) and keep
+  // syncing this mesh to it.
   state.onDestroy(entity, () => {
     group.removeFromParent();
+    if (isGroupOwnedGpu(group)) {
+      disposeObject3DResources(group);
+    }
     const map = roots.get(state);
     if (map && map.get(entity) === group) map.delete(entity);
   });

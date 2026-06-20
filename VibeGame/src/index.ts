@@ -8,7 +8,11 @@ export type { BuilderOptions };
 export type { GameRuntime } from './runtime';
 export {
   applyDefaultShadowFlags,
+  clearGltfMasterCache,
   createGLTFLoader,
+  disposeObject3DResources,
+  evictGltfMaster,
+  isGroupOwnedGpu,
   loadGltfAnimated,
   loadGltfLodToScene,
   loadGltfToScene,
@@ -555,6 +559,7 @@ export {
   RpgAiPlugin,
   RpgAiSystem,
   acquireTarget,
+  aiRandom,
   BossAiBehaviour,
   createAiInstanceState,
   createBossAi,
@@ -566,7 +571,9 @@ export {
   presetToMeleeAiConfig,
   removeAiInstanceState,
   removeMeleeAiConfig,
+  resetAiRng,
   runMeleeAiFrame,
+  setAiRng,
   setMeleeAiConfig,
 } from './plugins/rpg-ai';
 export type {

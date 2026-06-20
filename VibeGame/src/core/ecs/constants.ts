@@ -1,6 +1,8 @@
 export const TIME_CONSTANTS = {
   FIXED_TIMESTEP: 1 / 50,
   DEFAULT_DELTA: 1 / 144,
+  MAX_FRAME_DELTA: 0.25,
+  MAX_FIXED_STEPS_PER_FRAME: 20,
 } as const;
 
 export const NULL_ENTITY = 4294967295;

@@ -1,8 +1,10 @@
 /* eslint-disable no-undef -- CustomEvent e localStorage só no browser */
+import { commitRemovals } from 'bitecs';
 import { Packr } from 'msgpackr';
 import {
   createSnapshot,
   defineQuery,
+  restoreSnapshot,
   type State,
   type WorldSnapshot,
 } from '../../core';
@@ -25,11 +27,25 @@ export function saveSnapshot(state: State): Uint8Array {
   return packr.pack(payload) as Uint8Array;
 }
 
-export function loadSnapshot(state: State, data: Uint8Array): void {
+export function loadSnapshot(
+  state: State,
+  data: Uint8Array,
+  options: { clearExisting?: boolean } = {}
+): void {
   const payload = packr.unpack(data) as WorldSnapshot & {
     serializableEids?: number[];
   };
-  state.time.elapsed = payload.elapsed ?? 0;
+
+  if (options.clearExisting) {
+    const existing = serializableQuery(state.world);
+    for (const eid of existing) {
+      if (state.exists(eid)) state.destroyEntity(eid);
+    }
+    commitRemovals(state.world);
+  }
+
+  restoreSnapshot(state, payload);
+
   if (
     typeof window !== 'undefined' &&
     window.dispatchEvent &&
@@ -39,8 +55,6 @@ export function loadSnapshot(state: State, data: Uint8Array): void {
       new window.CustomEvent('snapshot-loaded', { detail: payload })
     );
   }
-  void payload;
-  void state;
 }
 
 export function saveToLocalStorage(state: State, key: string): void {

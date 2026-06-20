@@ -1,3 +1,4 @@
+import { logger } from './core/utils/logger';
 import type { BuilderOptions } from './builder';
 import type { State } from './core';
 import { TIME_CONSTANTS, XMLParser, XMLValueParser } from './core';
@@ -82,6 +83,7 @@ export class GameRuntime {
 
     if (renderer) {
       let lastTime = performance.now();
+      let lastErrorLogTime = 0;
 
       renderer.setAnimationLoop((currentTime: number) => {
         if (!this.isRunning) return;
@@ -90,7 +92,12 @@ export class GameRuntime {
           const deltaTime = ((currentTime as number) - lastTime) / 1000;
           lastTime = currentTime as number;
 
-          this.state.step(deltaTime);
+          const clamped =
+            deltaTime > TIME_CONSTANTS.MAX_FRAME_DELTA
+              ? TIME_CONSTANTS.MAX_FRAME_DELTA
+              : deltaTime;
+
+          this.state.step(clamped);
 
           const scene = getScene(this.state);
           if (!scene) return;
@@ -101,15 +108,17 @@ export class GameRuntime {
           const camera = threeCameras.get(cameraEntities[0]);
           if (!camera) return;
 
-          // Render through the post-processing pipeline when one is built,
-          // otherwise straight to screen.
           if (context.postProcessing) {
             context.postProcessing.render();
           } else {
             renderer.render(scene, camera);
           }
         } catch (e) {
-          console.error('[VibeGame] Animation loop error:', e);
+          const now = currentTime as number;
+          if (now - lastErrorLogTime >= 1000) {
+            logger.error('[VibeGame] Animation loop error:', e);
+            lastErrorLogTime = now;
+          }
         }
       });
 
@@ -125,7 +134,12 @@ export class GameRuntime {
       const deltaTime = (currentTime - lastTime) / 1000;
       lastTime = currentTime;
 
-      this.state.step(deltaTime);
+      const clamped =
+        deltaTime > TIME_CONSTANTS.MAX_FRAME_DELTA
+          ? TIME_CONSTANTS.MAX_FRAME_DELTA
+          : deltaTime;
+
+      this.state.step(clamped);
     };
 
     requestAnimationFrame(animate);
@@ -233,9 +247,9 @@ export class GameRuntime {
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       const errStack = error instanceof Error ? error.stack : undefined;
-      console.error('❌ World content parsing failed:', errMsg);
+      logger.error('❌ World content parsing failed:', errMsg);
       if (errStack) {
-        console.error(errStack);
+        logger.error(errStack);
       }
       if (
         typeof process !== 'undefined' &&
@@ -332,6 +346,8 @@ export class GameRuntime {
   private setupMutationObserver(): void {
     if (typeof MutationObserver === 'undefined') return;
 
+    const processedElements = new WeakSet<Element>();
+
     this.mutationObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
         mutation.addedNodes.forEach((node) => {
@@ -339,11 +355,17 @@ export class GameRuntime {
             const element = node as HTMLElement;
 
             if (element.tagName.toLowerCase() === 'scene') {
-              this.processWorldElement(element);
+              if (!processedElements.has(element)) {
+                processedElements.add(element);
+                this.processWorldElement(element);
+              }
             }
 
-            element.querySelectorAll?.('Scene').forEach((worldEl) => {
-              this.processWorldElement(worldEl as HTMLElement);
+            element.querySelectorAll?.('scene').forEach((worldEl) => {
+              if (!processedElements.has(worldEl)) {
+                processedElements.add(worldEl);
+                this.processWorldElement(worldEl as HTMLElement);
+              }
             });
           }
         });
@@ -356,7 +378,7 @@ export class GameRuntime {
               element.tagName.toLowerCase() === 'canvas' &&
               this.canvasElements.has(element as HTMLCanvasElement)
             ) {
-              console.warn(
+              logger.warn(
                 '[VibeGame] Canvas removed from DOM, disposing runtime'
               );
               this.destroy();
@@ -365,7 +387,7 @@ export class GameRuntime {
 
             element.querySelectorAll?.('canvas').forEach((canvasEl) => {
               if (this.canvasElements.has(canvasEl as HTMLCanvasElement)) {
-                console.warn(
+                logger.warn(
                   '[VibeGame] Canvas removed from DOM, disposing runtime'
                 );
                 this.destroy();
@@ -375,11 +397,6 @@ export class GameRuntime {
           }
         });
       });
-    });
-
-    this.mutationObserver.observe(document.body, {
-      childList: true,
-      subtree: true,
     });
 
     this.mutationObserver.observe(document.documentElement, {

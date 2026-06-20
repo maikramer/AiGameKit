@@ -1,3 +1,5 @@
+import { logger } from '../utils/logger';
+
 type Callback = (data?: unknown) => void;
 
 const entityListeners = new Map<number, Map<string, Set<Callback>>>();
@@ -54,7 +56,14 @@ export function dispatchEvent(
   const set = map?.get(eventName);
   if (!set) return;
   for (const cb of set) {
-    cb(data);
+    try {
+      cb(data);
+    } catch (err) {
+      logger.error(
+        `[VibeGame] dispatchEvent listener threw (eid=${eid}, event="${eventName}"):`,
+        err
+      );
+    }
   }
 }
 

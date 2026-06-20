@@ -444,7 +444,6 @@ VibeGame includes 30+ plugins organized by category. See [`src/plugins/README.md
 | Plugin     | Description                                                 |
 | ---------- | ----------------------------------------------------------- |
 | `gltf-xml` | Declarative GLB/GLTF loading via `<GLTFLoader>` XML element |
-| `text-3d`  | Text3D/Hunyuan GLB model loading                            |
 
 ### Environment
 
@@ -487,9 +486,7 @@ VibeGame includes 30+ plugins organized by category. See [`src/plugins/README.md
 
 ### Pipeline
 
-| Plugin           | Description                               |
-| ---------------- | ----------------------------------------- |
-| `scene-manifest` | Load scenes from GameAssets JSON manifest |
+The pipeline plugin (`scene-manifest`) listed in earlier revisions has been removed. Asset manifests are now loaded directly via the GLTF bridge and the GameAssets handoff command.
 
 ### Creating a New Plugin
 

@@ -5,7 +5,7 @@ import { getRenderingContext, threeCameras } from '../rendering/utils';
 import { MainCamera } from '../rendering/components';
 import { Postprocessing } from './components';
 import { registerBuiltinEffects } from './builtin-effects';
-import { getEffectDefinitions } from './effect-registry';
+import { type EffectDefinition, getEffectDefinitions } from './effect-registry';
 import { buildComposer } from './composer';
 import type { Effect } from 'postprocessing';
 
@@ -15,6 +15,12 @@ const mainCameraQuery = defineQuery([MainCamera]);
 let builtinEffectsRegistered = false;
 /** Renderer tone mapping captured before the composer takes ownership of it. */
 let savedRendererToneMapping: ToneMapping | null = null;
+
+const activeEffectInstances: Array<{
+  def: EffectDefinition;
+  effect: Effect;
+  entity: number;
+}> = [];
 
 /** Changing renderer.toneMapping only affects newly compiled programs. */
 function invalidateSceneMaterials(scene: import('three').Scene): void {
@@ -61,6 +67,7 @@ export const PostprocessingBuildSystem: System = {
     const regularEffects: Effect[] = [];
     const convolutionEffects: Effect[] = [];
 
+    activeEffectInstances.length = 0;
     for (const def of getEffectDefinitions()) {
       const effect = def.create(
         componentState,
@@ -70,6 +77,8 @@ export const PostprocessingBuildSystem: System = {
         camera
       );
       if (!effect) continue;
+
+      activeEffectInstances.push({ def, effect, entity: e });
 
       if (def.key === 'chromaticAberration') {
         convolutionEffects.push(effect);
@@ -111,9 +120,37 @@ export const PostprocessingBuildSystem: System = {
     const context = getRenderingContext(state);
     context.postProcessing?.dispose();
     context.postProcessing = undefined;
+    activeEffectInstances.length = 0;
     if (context.renderer && savedRendererToneMapping !== null) {
       context.renderer.toneMapping = savedRendererToneMapping;
       savedRendererToneMapping = null;
+    }
+  },
+};
+
+export const PostprocessingEffectUpdateSystem: System = {
+  group: 'draw',
+  after: [PostprocessingBuildSystem, CameraSyncSystem],
+  update(state: State) {
+    if (state.headless) return;
+    if (activeEffectInstances.length === 0) return;
+    const componentState = Postprocessing as unknown as Record<
+      string,
+      Float32Array | Uint8Array
+    >;
+    for (const { def, effect, entity } of activeEffectInstances) {
+      if (!def.update) continue;
+      try {
+        def.update(componentState, entity, effect);
+      } catch (err) {
+        // Effect update errors must not crash the render loop.
+        if (typeof console !== 'undefined') {
+          console.error(
+            `[VibeGame] Postprocessing effect "${def.key}" update threw:`,
+            err
+          );
+        }
+      }
     }
   },
 };

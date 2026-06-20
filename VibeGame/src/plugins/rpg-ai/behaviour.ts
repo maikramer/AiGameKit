@@ -22,6 +22,7 @@ import {
   AI_MODE_IDLE,
   AI_MODE_LUNGE,
   AiStateComponent,
+  aiRandom,
   type AiInstanceState,
   type MeleeAiConfig,
 } from './components';
@@ -323,7 +324,7 @@ function steerCombat(
   if (allowStrafe && (config.strafe || lowHp) && dist > desired * 1.15) {
     inst.strafeTimer -= dt;
     if (inst.strafeTimer <= 0) {
-      inst.strafeTimer = 1.5 + Math.random() * 1.5;
+      inst.strafeTimer = 1.5 + aiRandom() * 1.5;
       inst.strafeDir = -inst.strafeDir;
     }
     tx += -uz * inst.strafeDir * 0.8;
@@ -450,11 +451,11 @@ function tickIdle(
     inst.hovering = !inst.hovering;
     if (inst.hovering) {
       inst.idleTimer =
-        config.hoverMin + Math.random() * (config.hoverMax - config.hoverMin);
+        config.hoverMin + aiRandom() * (config.hoverMax - config.hoverMin);
     } else {
       inst.idleTimer = config.hoverMin * 0.6;
-      const angle = Math.random() * Math.PI * 2;
-      const r = Math.random() * config.wanderRadius * 0.6;
+      const angle = aiRandom() * Math.PI * 2;
+      const r = aiRandom() * config.wanderRadius * 0.6;
       inst.wanderX = inst.originX + Math.sin(angle) * r;
       inst.wanderZ = inst.originZ + Math.cos(angle) * r;
     }

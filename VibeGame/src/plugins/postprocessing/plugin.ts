@@ -1,9 +1,12 @@
 import type { Plugin } from '../../core';
 import { Postprocessing } from './components';
-import { PostprocessingBuildSystem } from './systems';
+import {
+  PostprocessingBuildSystem,
+  PostprocessingEffectUpdateSystem,
+} from './systems';
 
 export const PostprocessingPlugin: Plugin = {
-  systems: [PostprocessingBuildSystem],
+  systems: [PostprocessingBuildSystem, PostprocessingEffectUpdateSystem],
   components: { postprocessing: Postprocessing },
   config: {
     defaults: {
@@ -28,6 +31,12 @@ export const PostprocessingPlugin: Plugin = {
         dofFocusDistance: 0.01,
         dofFocusRange: 0.5,
         dofBokehScale: 3.0,
+        heightFog: 0,
+        fogColor: 0x10131a,
+        fogDensity: 0.06,
+        fogHeight: 2.0,
+        fogFalloff: 0.15,
+        fogNoise: 0.5,
       },
     },
     enums: {
