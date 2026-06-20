@@ -13,6 +13,7 @@ import { clone as cloneSkinnedObject } from 'three/examples/jsm/utils/SkeletonUt
 
 import type { State } from '../core';
 import { getRenderingContext, getScene } from '../plugins/rendering';
+import { getSceneGeneration } from './scene-generation';
 import { GltfAnimator } from './gltf-animator';
 
 let _ktx2Loader: KTX2Loader | null | undefined = undefined;
@@ -226,6 +227,14 @@ export function evictGltfMaster(url: string): boolean {
 /** Drop every cached master GLB. See {@link evictGltfMaster}. */
 export function clearGltfMasterCache(): number {
   const n = gltfMasterCache.size;
+  // Dispose each master's GPU resources. Clones share geometry/material with
+  // the master, so this releases the single shared upload — safe at teardown
+  // where group-registry onDestroy + auto-instance dispose have already torn
+  // down every live clone. `.then` covers in-flight parses that resolve after
+  // clear; rejecting loads have nothing to dispose.
+  for (const p of gltfMasterCache.values()) {
+    p.then((gltf) => disposeObject3DResources(gltf.scene)).catch(() => {});
+  }
   gltfMasterCache.clear();
   return n;
 }
@@ -318,6 +327,21 @@ export function loadGltfLodToScene(
   state: State,
   urls: readonly [string, string, string]
 ): Promise<Group> {
+  return loadGltfLodToSceneForEntity(state, urls, undefined);
+}
+
+/**
+ * Entity-aware variant: when ``entityId`` is provided the load bails (without
+ * parenting to the scene) if the entity no longer exists or the scene
+ * generation changed since the load started. Clones share geometry/material
+ * with the master cache, so an orphaned group is simply dropped — the shared
+ * GPU resources are released when the master cache is cleared.
+ */
+export function loadGltfLodToSceneForEntity(
+  state: State,
+  urls: readonly [string, string, string],
+  entityId: number | undefined
+): Promise<Group> {
   const scene = getScene(state);
   if (!scene) {
     return Promise.reject(
@@ -326,6 +350,7 @@ export function loadGltfLodToScene(
       )
     );
   }
+  const gen = getSceneGeneration(state);
   const root = new THREE.Group();
   root.name = 'gltf-lod-root';
 
@@ -351,13 +376,29 @@ export function loadGltfLodToScene(
       } else if (children[0]) {
         children[0].visible = true;
       }
-      scene.add(root);
+      const orphaned =
+        (entityId !== undefined && !state.exists(entityId)) ||
+        getSceneGeneration(state) !== gen;
+      if (!orphaned) {
+        scene.add(root);
+      }
       return root;
     })
   );
 }
 
 export function loadGltfToScene(state: State, url: string): Promise<Group> {
+  return loadGltfToSceneForEntity(state, url, undefined);
+}
+
+// Entity-aware variant: bails (no scene.add) when entityId is gone or the scene
+// generation changed. Clone shares GPU resources with the cached master, so an
+// orphan is just dropped — disposal happens via clearGltfMasterCache.
+export function loadGltfToSceneForEntity(
+  state: State,
+  url: string,
+  entityId: number | undefined
+): Promise<Group> {
   const scene = getScene(state);
   if (!scene) {
     return Promise.reject(
@@ -366,12 +407,18 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
       )
     );
   }
+  const gen = getSceneGeneration(state);
   return trackGltfLoad(
     loadGltfMaster(state, url).then((gltf) => {
       const clone = hasSkinnedMesh(gltf.scene)
         ? (cloneSkinnedObject(gltf.scene) as Group)
         : gltf.scene.clone(true);
-      scene.add(clone);
+      const orphaned =
+        (entityId !== undefined && !state.exists(entityId)) ||
+        getSceneGeneration(state) !== gen;
+      if (!orphaned) {
+        scene.add(clone);
+      }
       return clone;
     })
   );
@@ -382,6 +429,17 @@ export function loadGltfToScene(state: State, url: string): Promise<Group> {
  * Prefer this when using {@link GltfAnimator}.
  */
 export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
+  return loadGltfAnimatedForEntity(state, url, undefined);
+}
+
+// Entity-aware variant: bails (no scene.add) when entityId is gone or the scene
+// generation changed. This path loads fresh (not from the master cache) and
+// owns its GPU resources, so an orphan's resources are disposed to avoid leaks.
+export function loadGltfAnimatedForEntity(
+  state: State,
+  url: string,
+  entityId: number | undefined
+): Promise<GLTF> {
   const scene = getScene(state);
   if (!scene) {
     return Promise.reject(
@@ -390,13 +448,21 @@ export function loadGltfAnimated(state: State, url: string): Promise<GLTF> {
       )
     );
   }
+  const gen = getSceneGeneration(state);
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
   return trackGltfLoad(
     loader.loadAsync(url).then((gltf) => {
       applyDefaultShadowFlags(gltf.scene);
       markGroupOwnedGpu(gltf.scene);
-      scene.add(gltf.scene);
+      const orphaned =
+        (entityId !== undefined && !state.exists(entityId)) ||
+        getSceneGeneration(state) !== gen;
+      if (orphaned) {
+        disposeObject3DResources(gltf.scene);
+      } else {
+        scene.add(gltf.scene);
+      }
       return gltf;
     })
   );
@@ -428,6 +494,17 @@ export function loadGltfToSceneWithAnimator(
   url: string,
   options?: { crossfadeDuration?: number }
 ): Promise<GltfLoadResult> {
+  return loadGltfToSceneWithAnimatorForEntity(state, url, options, undefined);
+}
+
+// Entity-aware variant: bails (no scene.add, animator=null) when entityId is
+// gone or the scene generation changed; orphan GPU resources are disposed.
+export function loadGltfToSceneWithAnimatorForEntity(
+  state: State,
+  url: string,
+  options: { crossfadeDuration?: number } | undefined,
+  entityId: number | undefined
+): Promise<GltfLoadResult> {
   const scene = getScene(state);
   if (!scene) {
     return Promise.reject(
@@ -436,6 +513,7 @@ export function loadGltfToSceneWithAnimator(
       )
     );
   }
+  const gen = getSceneGeneration(state);
   ensureKTX2FromState(state);
   const loader = createGLTFLoader();
   return trackGltfLoad(
@@ -445,6 +523,14 @@ export function loadGltfToSceneWithAnimator(
         (gltf) => {
           applyDefaultShadowFlags(gltf.scene);
           markGroupOwnedGpu(gltf.scene);
+          const orphaned =
+            (entityId !== undefined && !state.exists(entityId)) ||
+            getSceneGeneration(state) !== gen;
+          if (orphaned) {
+            disposeObject3DResources(gltf.scene);
+            resolve({ group: gltf.scene, animator: null });
+            return;
+          }
           scene.add(gltf.scene);
           const animator =
             gltf.animations.length > 0

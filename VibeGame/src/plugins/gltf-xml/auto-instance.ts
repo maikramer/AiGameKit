@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { State, System } from '../../core';
 import { defineQuery } from '../../core';
 import { loadGltfMaster } from '../../extras/gltf-bridge';
+import { getSceneGeneration } from '../../extras/scene-generation';
 import { getScene } from '../rendering';
 import { MainCamera } from '../rendering/components';
 import { DistanceCull } from '../rendering/components';
@@ -380,6 +381,10 @@ function buildLevelPrimitives(
 
 function kickLoad(state: State, pool: GltfInstancePool): void {
   pool.loadKicked = true;
+  // Captured at kick time: if the scene generation changed by resolve time
+  // (scene swap / runtime teardown), the .then handlers bail before adding any
+  // InstancedMesh to a retired scene — those meshes would never be torn down.
+  const gen = getSceneGeneration(state);
   // lod0 first: gates the pending adds and finalizes pool.capacity from the
   // full pendingAdds queue. Higher LOD levels are kicked only after lod0 is
   // built so they allocate a buffer matching lod0; if they raced ahead they
@@ -387,6 +392,7 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
   // syncCounts would draw past the buffer ("Instance fetch requires N...").
   void loadGltfMaster(state, pool.lodUrls[0])
     .then((gltf) => {
+      if (getSceneGeneration(state) !== gen) return;
       registerGltfLocalYBounds(pool.lodUrls[0], gltf.scene);
       pool.capacity = Math.max(INITIAL_CAPACITY, pool.pendingAdds.length * 2);
       buildLevelPrimitives(state, pool, 0, gltf.scene);
@@ -401,9 +407,10 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
         if (!lodUrl) continue;
         const level = L;
         void loadGltfMaster(state, lodUrl)
-          .then((gltfLod) =>
-            buildLevelPrimitives(state, pool, level, gltfLod.scene)
-          )
+          .then((gltfLod) => {
+            if (getSceneGeneration(state) !== gen) return;
+            buildLevelPrimitives(state, pool, level, gltfLod.scene);
+          })
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
             logger.warn(

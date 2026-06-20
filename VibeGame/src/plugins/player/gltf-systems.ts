@@ -1,7 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
-import { loadGltfAnimated } from '../../extras/gltf-bridge';
+import { loadGltfAnimated, loadGltfAnimatedForEntity } from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import {
   animatorRegistry,
@@ -350,7 +350,7 @@ export const PlayerGltfSetupSystem: System = {
       }
 
       setLoadInFlight(state, eid, true);
-      void loadGltfAnimated(state, url)
+      void loadGltfAnimatedForEntity(state, url, eid)
         .then((gltf) => {
           // Entity may have been destroyed while the model loaded — don't leak
           // an orphan animator into the registry.

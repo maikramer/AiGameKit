@@ -1,7 +1,12 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { defineQuery, type System } from '../../core';
-import { loadGltfLodToScene, loadGltfToScene } from '../../extras/gltf-bridge';
+import {
+  clearGltfMasterCache,
+  loadGltfLodToSceneForEntity,
+  loadGltfToSceneForEntity,
+} from '../../extras/gltf-bridge';
+import { bumpSceneGeneration } from '../../extras/scene-generation';
 import { getScene } from '../rendering';
 import { Transform } from '../transforms/components';
 import {
@@ -70,7 +75,7 @@ export const GltfXmlLoadSystem: System = {
       const url = getGltfUrl(state, eid);
       if (lodTriple) {
         setGltfInFlight(state, eid, true);
-        void loadGltfLodToScene(state, lodTriple)
+        void loadGltfLodToSceneForEntity(state, lodTriple, eid)
           .then((group) => {
             registerGltfLocalYBounds(lodTriple[1], group.children[1] ?? group);
             applyTransformToGroup(group, eid);
@@ -127,7 +132,7 @@ export const GltfXmlLoadSystem: System = {
       }
 
       setGltfInFlight(state, eid, true);
-      void loadGltfToScene(state, url)
+      void loadGltfToSceneForEntity(state, url, eid)
         .then((group) => {
           registerGltfLocalYBounds(url, group);
           applyTransformToGroup(group, eid);
@@ -158,5 +163,13 @@ export const GltfXmlLoadSystem: System = {
           setGltfInFlight(state, eid, false);
         });
     }
+  },
+
+  dispose(state) {
+    // Bump generation BEFORE clearing the cache: an in-flight load whose .then
+    // runs after this dispose must see the new generation and bail, never
+    // re-populating the just-cleared cache nor attaching to the retired scene.
+    bumpSceneGeneration(state);
+    clearGltfMasterCache();
   },
 };
