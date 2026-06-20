@@ -40,6 +40,11 @@ interface HowlPropSnapshot {
   volume: number;
   loop: boolean;
   rate: number;
+  // Undefined for non-spatial sources; mirrored from the Howl ctor so the
+  // per-frame pannerAttr() call is skipped when the values are unchanged.
+  pannerRefDistance?: number;
+  pannerMaxDistance?: number;
+  pannerRolloff?: number;
 }
 
 interface AudioState {
@@ -177,6 +182,13 @@ export const AudioSystem: System = {
             volume: AudioSource.volume[eid],
             loop: AudioSource.loop[eid] === 1,
             rate: AudioSource.pitch[eid],
+            pannerRefDistance: spatial
+              ? AudioSource.minDistance[eid]
+              : undefined,
+            pannerMaxDistance: spatial
+              ? AudioSource.maxDistance[eid]
+              : undefined,
+            pannerRolloff: spatial ? AudioSource.rolloff[eid] : undefined,
           });
         }
         howl.play();
@@ -190,6 +202,7 @@ export const AudioSystem: System = {
         const nextVol = AudioSource.volume[eid];
         const nextLoop = AudioSource.loop[eid] === 1;
         const nextRate = AudioSource.pitch[eid];
+        const spatial = AudioSource.spatial[eid] === 1;
         const snap = howlPropSnapshot.get(eid);
         if (!snap || snap.volume !== nextVol) {
           howl.volume(nextVol);
@@ -200,24 +213,43 @@ export const AudioSystem: System = {
         if (!snap || snap.rate !== nextRate) {
           howl.rate(nextRate);
         }
-        howlPropSnapshot.set(eid, {
+
+        const nextSnap: HowlPropSnapshot = {
           volume: nextVol,
           loop: nextLoop,
           rate: nextRate,
-        });
+          pannerRefDistance: snap?.pannerRefDistance,
+          pannerMaxDistance: snap?.pannerMaxDistance,
+          pannerRolloff: snap?.pannerRolloff,
+        };
 
-        if (AudioSource.spatial[eid] === 1) {
+        if (spatial) {
           howl.pos(
             Transform.posX[eid],
             Transform.posY[eid],
             Transform.posZ[eid]
           );
-          howl.pannerAttr({
-            refDistance: AudioSource.minDistance[eid],
-            maxDistance: AudioSource.maxDistance[eid],
-            rolloffFactor: AudioSource.rolloff[eid],
-          });
+          const nextRef = AudioSource.minDistance[eid];
+          const nextMax = AudioSource.maxDistance[eid];
+          const nextRoll = AudioSource.rolloff[eid];
+          nextSnap.pannerRefDistance = nextRef;
+          nextSnap.pannerMaxDistance = nextMax;
+          nextSnap.pannerRolloff = nextRoll;
+          if (
+            !snap ||
+            snap.pannerRefDistance !== nextRef ||
+            snap.pannerMaxDistance !== nextMax ||
+            snap.pannerRolloff !== nextRoll
+          ) {
+            howl.pannerAttr({
+              refDistance: nextRef,
+              maxDistance: nextMax,
+              rolloffFactor: nextRoll,
+            });
+          }
         }
+
+        howlPropSnapshot.set(eid, nextSnap);
       }
 
       prevPlaying.set(eid, playing);

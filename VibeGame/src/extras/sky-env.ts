@@ -13,6 +13,26 @@ import * as THREE from 'three';
 import type { State } from '../core';
 import { getRenderingContext, getScene } from '../plugins/rendering';
 
+// PMREM render target backing the current scene.environment. Only its
+// .texture is referenced by the scene, so the RT itself (framebuffer + depth)
+// must be tracked and disposed on swap/teardown to avoid a GPU leak.
+let currentSkyRT: THREE.WebGLRenderTarget | null = null;
+let currentSkyScene: THREE.Scene | null = null;
+
+/** Dispose the current PMREM RT and clear scene environment/background. */
+export function disposeSkyEnv(): void {
+  if (currentSkyRT) {
+    currentSkyRT.dispose();
+    currentSkyRT = null;
+  }
+  const scene = currentSkyScene;
+  if (scene) {
+    if (scene.environment) scene.environment = null;
+    if (scene.background) scene.background = null;
+    currentSkyScene = null;
+  }
+}
+
 export interface EquirectSkyOptions {
   /** Se true (defeito), também define ``scene.background``; se false, só iluminação IBL. */
   background?: boolean;
@@ -103,6 +123,15 @@ export async function applyEquirectSkyEnvironment(
   const envMap = rt.texture;
   tex.dispose();
   pmrem.dispose();
+
+  // Dispose the previous PMREM render target (texture + framebuffer) before
+  // reassigning, fixing a GPU leak on every sky swap.
+  if (currentSkyRT && currentSkyRT !== rt) {
+    currentSkyRT.dispose();
+  }
+  currentSkyRT = rt;
+  currentSkyScene = scene;
+
   if (scene.environment && scene.environment !== envMap) {
     scene.environment.dispose();
   }

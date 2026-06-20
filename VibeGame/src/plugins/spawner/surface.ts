@@ -74,11 +74,11 @@ export function normalFromHeightSampler(
   const hU = heightAt(wx, wz + safeEps);
   const dhdx = (hR - hL) / (2 * safeEps);
   const dhdz = (hU - hD) / (2 * safeEps);
-  const v = new THREE.Vector3(-dhdx, 1, -dhdz);
-  if (v.lengthSq() < 1e-12) {
-    return new THREE.Vector3(0, 1, 0);
+  _n0.set(-dhdx, 1, -dhdz);
+  if (_n0.lengthSq() < 1e-12) {
+    return _n1.set(0, 1, 0);
   }
-  return v.normalize();
+  return _n0.normalize();
 }
 
 export interface TerrainSurfaceSample {
@@ -117,6 +117,12 @@ const _tiltAxis = /*@__PURE__*/ new THREE.Vector3();
 const _qTilt = /*@__PURE__*/ new THREE.Quaternion();
 const _qYawTrunk = /*@__PURE__*/ new THREE.Quaternion();
 const _eOut = /*@__PURE__*/ new THREE.Euler(0, 0, 0, 'XYZ');
+
+// Scratch for normalFromHeightSampler: the function is called sequentially
+// (never reentrant) and every caller consumes the result before the next call,
+// so the returned Vector3 is reused instead of allocating per probe.
+const _n0 = /*@__PURE__*/ new THREE.Vector3();
+const _n1 = /*@__PURE__*/ new THREE.Vector3();
 
 /**
  * Compute a partial terrain-alignment Euler (in RADIANS, XYZ order) for

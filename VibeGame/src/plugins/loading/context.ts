@@ -25,6 +25,11 @@ interface LoadingUI {
 // point is to paint it as early as possible.
 let text: LoadingScreenText = { title: 'Loading…', subtitle: '' };
 let ui: LoadingUI | null = null;
+// Pending fade-out timer (see updateLoadingScreen). Tracked so it can be
+// cancelled if the runtime is torn down during the fade window; otherwise the
+// callback fires on a detached node. runtime.destroy() should call
+// cancelLoadingFade().
+let fadeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function applyText(): void {
   if (!ui) return;
@@ -139,6 +144,25 @@ export function updateLoadingScreen(state: State): void {
     ui.done = true;
     const root = ui.root;
     root.style.opacity = '0';
-    setTimeout(() => root.remove(), FADE_MS);
+    fadeTimer = setTimeout(() => {
+      fadeTimer = null;
+      root.remove();
+    }, FADE_MS);
+  }
+}
+
+/**
+ * Cancel any pending loading-screen fade-out and remove the overlay.
+ * Call from runtime teardown (e.g. ``runtime.destroy()``) so the deferred
+ * ``setTimeout`` does not fire on a detached DOM node.
+ */
+export function cancelLoadingFade(): void {
+  if (fadeTimer !== null) {
+    clearTimeout(fadeTimer);
+    fadeTimer = null;
+  }
+  if (ui) {
+    ui.root.remove();
+    ui = null;
   }
 }

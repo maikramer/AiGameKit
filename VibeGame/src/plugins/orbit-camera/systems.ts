@@ -13,6 +13,10 @@ const orbitCameraQuery = defineQuery([OrbitCamera, Transform]);
 const orbitCameraInputQuery = defineQuery([OrbitCamera]);
 const inputStateQuery = defineQuery([InputState]);
 
+// Module-scope scratch: OrbitCameraSystem runs once per frame and is not
+// reentrant, so reusing this avoids a per-camera Vector3 allocation.
+const _targetPos = new THREE.Vector3();
+
 export const OrbitCameraSetupSystem: System = {
   group: 'setup',
   update: (state) => {
@@ -112,17 +116,14 @@ export const OrbitCameraSystem: System = {
 
       smoothCameraRotation(cameraEntity, state.time.deltaTime);
 
-      const targetPosition = new THREE.Vector3(
+      _targetPos.set(
         WorldTransform.posX[targetEntity] + OrbitCamera.offsetX[cameraEntity],
         WorldTransform.posY[targetEntity] + OrbitCamera.offsetY[cameraEntity],
         WorldTransform.posZ[targetEntity] + OrbitCamera.offsetZ[cameraEntity]
       );
 
-      const cameraPosition = calculateCameraPosition(
-        cameraEntity,
-        targetPosition
-      );
-      updateCameraTransform(cameraEntity, cameraPosition, targetPosition);
+      const cameraPosition = calculateCameraPosition(cameraEntity, _targetPos);
+      updateCameraTransform(cameraEntity, cameraPosition, _targetPos);
     }
   },
 };
