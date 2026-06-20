@@ -213,6 +213,249 @@
         <GameObject role="enemy" script="slime.ts"></GameObject>
       </DynamicSpawner>
 
+      <!-- ============================================================
+           ALDEIA DO VALE — vila ao norte do spawn, construída só com
+           itens compostos (Composition): cada casa/poço/torre = 1 entidade,
+           1 corpo Rapier, colliders compostos. `place at: X Z` amostra a
+           altura do terreno; align-to-terrain:0 mantém de pé.
+           Zona x∈[-13,13] z∈[18,47]: livre de inimigos
+           (gobelins a oeste, slimes a leste) e dos santuários centrais.
+           SpawnExclusion discs impedem árvores/pedras de nascer na vila.
+           ============================================================ -->
+
+      <!-- Exclusão de spawn: 3 discos cobrem toda a área da vila. -->
+      <SpawnExclusion at="0 24" radius="14"></SpawnExclusion>
+      <SpawnExclusion at="0 36" radius="14"></SpawnExclusion>
+      <SpawnExclusion at="0 47" radius="9"></SpawnExclusion>
+
+      <!-- Palanques de cerca na borda sul da vila (marcador visual). -->
+      <Composition place="at: -14 16; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: -8 15; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: 0 15; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: 8 15; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: 14 16; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+
+      <!-- Arco de entrada sul da vila com placa. -->
+      <Composition place="at: 0 15; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="-3 1.4 0" size="0.18 2.8 0.18" color="#4a3018"></Box>
+        <Box pos="3 1.4 0" size="0.18 2.8 0.18" color="#4a3018"></Box>
+        <Box pos="0 2.9 0" size="6.4 0.4 0.25" color="#5a3a20"></Box>
+        <Box pos="0 2.3 0.1" size="2.8 0.7 0.06" color="#e8ddc8"></Box>
+      </Composition>
+
+      <!-- Palanques laterais (oeste). -->
+      <Composition place="at: -15 22; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: -15 30; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: -15 38; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+
+      <!-- Palanques laterais (leste). -->
+      <Composition place="at: 15 22; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: 15 30; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+      <Composition place="at: 15 38; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
+      </Composition>
+
+      <!-- Barris perto das bancas de mercado. -->
+      <Composition place="at: -7 35; align-to-terrain: 0" body="fixed" collider="auto">
+        <Cylinder pos="0 0.55 0" size="0.4 0.4 0.8" color="#6b4a2b"></Cylinder>
+        <Cylinder pos="0.5 0.5 0.3" size="0.35 0.35 0.7" color="#5a3a20"></Cylinder>
+      </Composition>
+      <Composition place="at: 7 35; align-to-terrain: 0" body="fixed" collider="auto">
+        <Cylinder pos="0 0.55 0" size="0.4 0.4 0.8" color="#6b4a2b"></Cylinder>
+      </Composition>
+
+      <!-- Poço central da praça: anel de pedra + água + telhadinho de balde. -->
+      <Composition place="at: 0 34; align-to-terrain: 0" body="fixed" collider="auto">
+        <Cylinder pos="0 0.45 0" size="1.3 1.3 0.9" color="#9a958c"></Cylinder>
+        <Cylinder pos="0 0.55 0" size="1.0 1.0 0.1" color="#2f6fb0"></Cylinder>
+        <Box pos="-1.15 1.0 0" size="0.16 1.7 0.16" color="#5a3a20"></Box>
+        <Box pos="1.15 1.0 0" size="0.16 1.7 0.16" color="#5a3a20"></Box>
+        <Box pos="0 1.85 0" size="2.6 0.12 0.12" color="#4a2f18"></Box>
+        <Box pos="-0.95 2.05 0" size="1.4 0.14 1.0" rotation="0 0 0.6" color="#7a3b28"></Box>
+        <Box pos="0.95 2.05 0" size="1.4 0.14 1.0" rotation="0 0 -0.6" color="#7a3b28"></Box>
+        <Box pos="0 1.4 0" size="0.5 0.4 0.5" color="#6b4a2b"></Box>
+      </Composition>
+
+      <!-- Fogueira da praça: rodela de pedras + lenha cruzada + chama + luz quente. -->
+      <Composition place="at: 0 26; align-to-terrain: 0" body="fixed" collider="none">
+        <Cylinder pos="0 0.12 0" size="1.0 1.15 0.25" color="#6f6a63"></Cylinder>
+        <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 0 0.2" color="#5a3a20"></Cylinder>
+        <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 1.0 -0.2" color="#6b4a2b"></Cylinder>
+        <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 2.0 0.1" color="#5a3a20"></Cylinder>
+        <Sphere pos="0 0.7 0" size="0.55" color="#ff7722"></Sphere>
+        <Sphere pos="0 1.05 0" size="0.32" color="#ffcc33"></Sphere>
+        <PointLight pos="0 1.1 0" point-light="color: 0xff8a33; intensity: 14; distance: 16; decay: 2"></PointLight>
+      </Composition>
+
+      <!-- Casa A (oeste-sul): paredes de reboco, porta no +Z, telhado de duas águas, chaminé + lareira. -->
+      <Composition place="at: -10 28; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
+        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
+        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
+        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="0 2.5 2.4" size="1.8 0.4 0.3" color="#8a5a30"></Box>
+        <Box pos="-0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
+        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#7a3b28"></Box>
+        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#7a3b28"></Box>
+        <Box pos="1.6 3.5 -1.3" size="0.5 1.5 0.5" color="#8a8a8a"></Box>
+        <Box pos="-2.43 1.5 -1.0" size="0.05 0.8 0.8" color="#3a2a18"></Box>
+        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffcc88; intensity: 5; distance: 6; decay: 2"></PointLight>
+      </Composition>
+
+      <!-- Casa B (leste-sul): variação de cor/altura, sem lareira (luz fica no budget). -->
+      <Composition place="at: 10 28; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="4.4 0.2 4.4" color="#6b4a2b"></Box>
+        <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
+        <Box pos="2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
+        <Box pos="-1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="0 2.3 2.1" size="1.6 0.4 0.3" color="#8a5a30"></Box>
+        <Box pos="-1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 0.6" color="#6e4b2a"></Box>
+        <Box pos="1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 -0.6" color="#6e4b2a"></Box>
+        <Box pos="-2.13 1.4 1.0" size="0.05 0.7 0.7" color="#3a2a18"></Box>
+      </Composition>
+
+      <!-- Casa C (oeste-norte): mesma planta, paleta fria, lareira acesa. -->
+      <Composition place="at: -11 41; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
+        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
+        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
+        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="0 2.5 2.4" size="1.8 0.4 0.3" color="#7a5230"></Box>
+        <Box pos="-0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
+        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#55402a"></Box>
+        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#55402a"></Box>
+        <Box pos="-1.6 3.5 -1.3" size="0.5 1.5 0.5" color="#8a8a8a"></Box>
+        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffc070; intensity: 5; distance: 6; decay: 2"></PointLight>
+      </Composition>
+
+      <!-- Casa D (leste-norte): casa longa (longhouse) do ancião — maior, telhado alto. -->
+      <Composition place="at: 11 41; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="7 0.2 5" color="#6b4a2b"></Box>
+        <Box pos="0 1.6 -2.4" size="7 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="-3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
+        <Box pos="3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
+        <Box pos="-2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="0 1.6 2.4" size="2.5 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="-1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 0.6" color="#7a3b28"></Box>
+        <Box pos="1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 -0.6" color="#7a3b28"></Box>
+        <Box pos="0 4.35 0" size="0.5 0.5 5.4" color="#5a3a20"></Box>
+        <Box pos="-2.5 1.0 2.55" size="0.12 2.0 0.12" color="#5a3a20"></Box>
+        <Box pos="-1.3 1.0 2.55" size="0.12 2.0 0.12" color="#5a3a20"></Box>
+      </Composition>
+
+      <!-- Banca de mercado 1 (frutas): postes + balcão + toldo listrado + caixotes/maçãs. -->
+      <Composition place="at: -5 34; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="-1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
+        <Box pos="1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
+        <Box pos="-1.1 0.5 0.7" size="0.1 1.0 0.1" color="#5a3a20"></Box>
+        <Box pos="1.1 0.5 0.7" size="0.1 1.0 0.1" color="#5a3a20"></Box>
+        <Box pos="0 1.0 0" size="2.4 0.15 1.6" color="#8a5a30"></Box>
+        <Box pos="-0.6 1.7 0" size="1.2 0.08 1.8" rotation="0.25 0 0" color="#b03b3b"></Box>
+        <Box pos="0.6 1.7 0" size="1.2 0.08 1.8" rotation="0.25 0 0" color="#e8ddc8"></Box>
+        <Box pos="-0.6 1.18 0" size="0.5 0.3 0.5" color="#7a5230"></Box>
+        <Sphere pos="-0.6 1.42 0" size="0.13" color="#cc3322"></Sphere>
+        <Sphere pos="0.6 1.18 0.2" size="0.16" color="#e2a02a"></Sphere>
+        <Sphere pos="0.55 1.18 -0.2" size="0.16" color="#88aa33"></Sphere>
+      </Composition>
+
+      <!-- Banca de mercado 2 (peixe/tecidos): variação azul. -->
+      <Composition place="at: 5 34; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="-1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
+        <Box pos="1.1 0.85 -0.7" size="0.1 1.7 0.1" color="#5a3a20"></Box>
+        <Box pos="-1.1 0.5 0.7" size="0.1 1.0 0.1" color="#5a3a20"></Box>
+        <Box pos="1.1 0.5 0.7" size="0.1 1.0 0.1" color="#5a3a20"></Box>
+        <Box pos="0 1.0 0" size="2.4 0.15 1.6" color="#8a5a30"></Box>
+        <Box pos="-0.6 1.7 0" size="1.2 0.08 1.8" rotation="0.25 0 0" color="#2f6fb0"></Box>
+        <Box pos="0.6 1.7 0" size="1.2 0.08 1.8" rotation="0.25 0 0" color="#e8ddc8"></Box>
+        <Box pos="0.4 1.2 0" size="1.2 0.4 0.7" color="#b8b0a0"></Box>
+        <Box pos="-0.6 1.18 0.1" size="0.5 0.3 0.6" color="#7a5230"></Box>
+      </Composition>
+
+      <!-- Torre de vigia ao norte: base de pedra, plataforma com guarda-corpo, telhado cônico, farol. -->
+      <Composition place="at: 0 47; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 2.1 0" size="3 4.2 3" color="#8f8a80"></Box>
+        <Box pos="0 4.4 0" size="3.8 0.3 3.8" color="#6b4a2b"></Box>
+        <Box pos="0 4.9 -1.8" size="3.8 1.0 0.15" color="#7a5230"></Box>
+        <Box pos="0 4.9 1.8" size="3.8 1.0 0.15" color="#7a5230"></Box>
+        <Box pos="-1.8 4.9 0" size="0.15 1.0 3.8" color="#7a5230"></Box>
+        <Box pos="1.8 4.9 0" size="0.15 1.0 3.8" color="#7a5230"></Box>
+        <Cylinder pos="0 6.2 0" size="0.05 2.0 1.8" color="#7a3b28"></Cylinder>
+        <Sphere pos="0 5.6 0" size="0.3" color="#ffd27a"></Sphere>
+        <PointLight pos="0 5.6 0" point-light="color: 0xffd27a; intensity: 12; distance: 22; decay: 2"></PointLight>
+        <Box pos="0 0.6 1.55" size="0.9 1.2 0.1" color="#3a2a18"></Box>
+      </Composition>
+
+      <!-- Quadro de avisos da vila (perto da praça). -->
+      <Composition place="at: 3 27; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
+        <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
+        <Box pos="0 1.9 0" size="2.0 0.2 0.3" rotation="0 0 0" color="#55402a"></Box>
+      </Composition>
+
+      <!-- Tochas de caminho: do spawn (z~18) até a praça, mais cantos da praça.
+           Só chama + luz; sem collider, o jogador passa livre. -->
+      <Composition place="at: 0 18; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 6; distance: 9; decay: 2"></PointLight>
+      </Composition>
+      <Composition place="at: -3 26; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 6; distance: 9; decay: 2"></PointLight>
+      </Composition>
+      <Composition place="at: 3 26; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 6; distance: 9; decay: 2"></PointLight>
+      </Composition>
+      <Composition place="at: -7 34; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 6; distance: 9; decay: 2"></PointLight>
+      </Composition>
+      <Composition place="at: 7 34; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 6; distance: 9; decay: 2"></PointLight>
+      </Composition>
+
       <!-- Harvestable rocks (stone). StaticSpawner auto-routes the visual through
             the instanced pool; the trimesh collider feeds the navmesh. The
             ResourceNode (T11) tags the yield kind/amount. -->
@@ -226,6 +469,7 @@
         ground-align="none"
         scale-min="0.8"
         scale-max="1.5"
+        avoid-overlaps="1"
       >
         <GameObject
           role="static"
@@ -258,6 +502,7 @@
         ground-align="none"
         scale-min="1.4"
         scale-max="2.6"
+        avoid-overlaps="1"
       >
         <GameObject
           role="static"
