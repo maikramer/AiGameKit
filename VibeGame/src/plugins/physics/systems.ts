@@ -60,6 +60,9 @@ interface PhysicsContext {
   entityToCollider: Map<number, RAPIER.Collider>;
   entityToCharacterController: Map<number, RAPIER.KinematicCharacterController>;
   colliderToEntity: Map<number, number>;
+  failedRigidbodies: Set<number>;
+  failedColliders: Set<number>;
+  failedControllers: Set<number>;
 }
 
 const physicsWorldQuery = defineQuery([PhysicsWorld]);
@@ -96,6 +99,9 @@ function getPhysicsContext(state: State): PhysicsContext {
       entityToCollider: new Map(),
       entityToCharacterController: new Map(),
       colliderToEntity: new Map(),
+      failedRigidbodies: new Set(),
+      failedColliders: new Set(),
+      failedControllers: new Set(),
     };
     stateToPhysicsContext.set(state, context);
   }
@@ -186,21 +192,52 @@ export const PhysicsInitializationSystem: System = {
     for (const entity of bodyQuery(state.world)) {
       if (
         !context.entityToRigidbody.has(entity) &&
+        !context.failedRigidbodies.has(entity) &&
         !isPlacementPending(state, entity)
       ) {
-        createRigidbodyForEntity(entity, worldRapier, state, context);
+        try {
+          createRigidbodyForEntity(entity, worldRapier, state, context);
+        } catch (err) {
+          logger.error(
+            `[Physics] Failed to create rigidbody for entity ${entity}:`,
+            err
+          );
+          context.failedRigidbodies.add(entity);
+        }
       }
     }
 
     for (const entity of colliderQuery(state.world)) {
-      if (!context.entityToCollider.has(entity)) {
-        createColliderForEntity(entity, worldRapier, state, context);
+      if (
+        !context.entityToCollider.has(entity) &&
+        !context.failedColliders.has(entity)
+      ) {
+        try {
+          createColliderForEntity(entity, worldRapier, state, context);
+        } catch (err) {
+          logger.error(
+            `[Physics] Failed to create collider for entity ${entity}:`,
+            err
+          );
+          context.failedColliders.add(entity);
+        }
       }
     }
 
     for (const entity of characterControllerQuery(state.world)) {
-      if (!context.entityToCharacterController.has(entity)) {
-        createCharacterControllerForEntity(entity, worldRapier, context);
+      if (
+        !context.entityToCharacterController.has(entity) &&
+        !context.failedControllers.has(entity)
+      ) {
+        try {
+          createCharacterControllerForEntity(entity, worldRapier, context);
+        } catch (err) {
+          logger.error(
+            `[Physics] Failed to create character controller for entity ${entity}:`,
+            err
+          );
+          context.failedControllers.add(entity);
+        }
       }
     }
   },
