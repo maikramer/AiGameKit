@@ -97,6 +97,7 @@ import {
   threeCameras,
   ThirdPersonCamera,
   getScene,
+  registerSpawnFootprint,
 } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { Euler, Vector3, type Camera, type Object3D, type Quaternion } from 'three';
@@ -801,6 +802,17 @@ async function bootstrap(): Promise<void> {
   resetBuilder();
   const runtime = await builder.build();
   const state = runtime.getState();
+
+  // Village exclusion zones — registered directly in the occupancy registry
+  // before any StaticSpawner samples positions. Covers x∈[-20,20] z∈[4,58].
+  const villageZones: Array<[number, number, number]> = [
+    [0, 24, 20],
+    [0, 38, 20],
+    [0, 48, 10],
+  ];
+  for (const [x, z, r] of villageZones) {
+    registerSpawnFootprint(state, x, z, r);
+  }
 
   bindEngine(state);
   registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
