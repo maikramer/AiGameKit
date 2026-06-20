@@ -53,7 +53,59 @@ const entityToSpotLight = new Map<number, THREE.SpotLight>();
 const entityToDirectionalLight = new Map<number, THREE.DirectionalLight>();
 const entityToAmbientLight = new Map<number, THREE.HemisphereLight>();
 
-const MAX_POINT_LIGHTS = 4;
+// Last-applied light/shadow values keyed by the Three.js light object. The
+// sync systems compare the current ECS values against these and only write to
+// the light/uniform when something changed, so static lights cost ~0 per
+// frame instead of rewriting uniforms and rebuilding the shadow projection
+// matrix every tick. Mirrors the dirty-gating used in operations.ts for
+// instanced meshes. NaN sentinels force a first-frame apply.
+interface AmbientLightCache {
+  skyColor: number;
+  groundColor: number;
+  intensity: number;
+}
+interface DirectionalLightCache {
+  color: number;
+  intensity: number;
+  mapSize: number;
+  bias: number;
+  normalBias: number;
+  frustumLeft: number;
+  frustumRight: number;
+  frustumTop: number;
+  frustumBottom: number;
+  frustumNear: number;
+  frustumFar: number;
+}
+interface PointLightCache {
+  color: number;
+  intensity: number;
+  distance: number;
+  decay: number;
+}
+interface SpotLightCache {
+  color: number;
+  intensity: number;
+  distance: number;
+  decay: number;
+  angle: number;
+  penumbra: number;
+}
+const ambientLightCache = new WeakMap<
+  THREE.HemisphereLight,
+  AmbientLightCache
+>();
+const directionalLightCache = new WeakMap<
+  THREE.DirectionalLight,
+  DirectionalLightCache
+>();
+const pointLightCache = new WeakMap<THREE.PointLight, PointLightCache>();
+const spotLightCache = new WeakMap<THREE.SpotLight, SpotLightCache>();
+
+// Soft budget guard, not a shader-uniform limit (three recompiles per light
+// count). Point lights here don't cast shadows, so they're cheap; 12 comfortably
+// covers a lit village (torches, hearths, beacons) on desktop GPUs.
+const MAX_POINT_LIGHTS = 12;
 const MAX_SPOT_LIGHTS = 2;
 
 function resolveShadowCenter(state: State): THREE.Vector3 {
@@ -72,6 +124,52 @@ function resolveShadowCenter(state: State): THREE.Vector3 {
   }
 
   return _shadowCenter;
+}
+
+/** Dispose every geometry/material/texture reachable from `root`, dedup-guarded. */
+function disposeSceneGraph(root: THREE.Object3D): void {
+  const disposedGeometries = new Set<THREE.BufferGeometry>();
+  const disposedMaterials = new Set<THREE.Material>();
+  const disposedTextures = new Set<THREE.Texture>();
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh !== true) return;
+    const geos = Array.isArray(mesh.geometry) ? mesh.geometry : [mesh.geometry];
+    for (const g of geos) {
+      if (g && !disposedGeometries.has(g)) {
+        try {
+          g.dispose();
+        } catch {
+          /* one failed dispose must not block the rest */
+        }
+        disposedGeometries.add(g);
+      }
+    }
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (!m || disposedMaterials.has(m)) continue;
+      disposedMaterials.add(m);
+      for (const k in m) {
+        const v = (m as unknown as Record<string, unknown>)[k];
+        if (v && typeof v === 'object' && 'isTexture' in v) {
+          const tex = v as THREE.Texture;
+          if (!disposedTextures.has(tex)) {
+            try {
+              tex.dispose();
+            } catch {
+              /* ignore */
+            }
+            disposedTextures.add(tex);
+          }
+        }
+      }
+      try {
+        m.dispose();
+      } catch {
+        /* ignore */
+      }
+    }
+  });
 }
 
 export const MeshInstanceSystem: System = {
@@ -179,9 +277,26 @@ export const LightSyncSystem: System = {
         entityToAmbientLight.set(entity, light);
       }
 
-      light.color.setHex(AmbientLight.skyColor[entity]);
-      light.groundColor.setHex(AmbientLight.groundColor[entity]);
-      light.intensity = AmbientLight.intensity[entity];
+      const sky = AmbientLight.skyColor[entity];
+      const ground = AmbientLight.groundColor[entity];
+      const intensity = AmbientLight.intensity[entity];
+      let cache = ambientLightCache.get(light);
+      if (cache === undefined) {
+        cache = { skyColor: NaN, groundColor: NaN, intensity: NaN };
+        ambientLightCache.set(light, cache);
+      }
+      if (cache.skyColor !== sky) {
+        light.color.setHex(sky);
+        cache.skyColor = sky;
+      }
+      if (cache.groundColor !== ground) {
+        light.groundColor.setHex(ground);
+        cache.groundColor = ground;
+      }
+      if (cache.intensity !== intensity) {
+        light.intensity = intensity;
+        cache.intensity = intensity;
+      }
     }
 
     // --- Directional lights (per-entity, Map-based) ---
@@ -205,8 +320,34 @@ export const LightSyncSystem: System = {
         entityToDirectionalLight.set(entity, light);
       }
 
-      light.color.setHex(DirectionalLight.color[entity]);
-      light.intensity = DirectionalLight.intensity[entity];
+      const color = DirectionalLight.color[entity];
+      const intensity = DirectionalLight.intensity[entity];
+      let cache = directionalLightCache.get(light);
+      if (cache === undefined) {
+        cache = {
+          color: NaN,
+          intensity: NaN,
+          mapSize: NaN,
+          bias: NaN,
+          normalBias: NaN,
+          frustumLeft: NaN,
+          frustumRight: NaN,
+          frustumTop: NaN,
+          frustumBottom: NaN,
+          frustumNear: NaN,
+          frustumFar: NaN,
+        };
+        directionalLightCache.set(light, cache);
+      }
+
+      if (cache.color !== color) {
+        light.color.setHex(color);
+        cache.color = color;
+      }
+      if (cache.intensity !== intensity) {
+        light.intensity = intensity;
+        cache.intensity = intensity;
+      }
 
       _lightDir
         .set(
@@ -218,13 +359,60 @@ export const LightSyncSystem: System = {
 
       if (DirectionalLight.castShadow[entity] === 1) {
         light.castShadow = true;
-        light.shadow.mapSize.width = DirectionalLight.shadowMapSize[entity];
-        light.shadow.mapSize.height = DirectionalLight.shadowMapSize[entity];
-        light.shadow.bias = -0.0001;
-        light.shadow.normalBias = 0.02;
 
+        const mapSize = DirectionalLight.shadowMapSize[entity];
+        const bias = -0.0001;
+        const normalBias = 0.02;
+        const radius = SHADOW_CONFIG.CAMERA_RADIUS;
+        const near = SHADOW_CONFIG.NEAR_PLANE;
+        const far = SHADOW_CONFIG.FAR_PLANE;
+
+        // Static shadow config: apply + rebuild projection only when a value
+        // changed, not every frame.
+        let shadowChanged = false;
+        if (cache.mapSize !== mapSize) {
+          light.shadow.mapSize.width = mapSize;
+          light.shadow.mapSize.height = mapSize;
+          cache.mapSize = mapSize;
+          shadowChanged = true;
+        }
+        if (cache.bias !== bias) {
+          light.shadow.bias = bias;
+          cache.bias = bias;
+          shadowChanged = true;
+        }
+        if (cache.normalBias !== normalBias) {
+          light.shadow.normalBias = normalBias;
+          cache.normalBias = normalBias;
+          shadowChanged = true;
+        }
+        const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
+        if (
+          cache.frustumLeft !== -radius ||
+          cache.frustumRight !== radius ||
+          cache.frustumTop !== radius ||
+          cache.frustumBottom !== -radius ||
+          cache.frustumNear !== near ||
+          cache.frustumFar !== far
+        ) {
+          shadowCamera.left = -radius;
+          shadowCamera.right = radius;
+          shadowCamera.top = radius;
+          shadowCamera.bottom = -radius;
+          shadowCamera.near = near;
+          shadowCamera.far = far;
+          cache.frustumLeft = -radius;
+          cache.frustumRight = radius;
+          cache.frustumTop = radius;
+          cache.frustumBottom = -radius;
+          cache.frustumNear = near;
+          cache.frustumFar = far;
+          shadowChanged = true;
+        }
+        if (shadowChanged) shadowCamera.updateProjectionMatrix();
+
+        // Shadow frustum follows the player — keep this tracking per-frame.
         const shadowCenter = resolveShadowCenter(state);
-
         _lightPos
           .copy(shadowCenter)
           .add(
@@ -236,18 +424,8 @@ export const LightSyncSystem: System = {
         light.position.copy(_lightPos);
         light.target.position.copy(shadowCenter);
         light.target.updateMatrixWorld();
-
-        const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
-        const radius = SHADOW_CONFIG.CAMERA_RADIUS;
-        shadowCamera.left = -radius;
-        shadowCamera.right = radius;
-        shadowCamera.top = radius;
-        shadowCamera.bottom = -radius;
-        shadowCamera.near = SHADOW_CONFIG.NEAR_PLANE;
-        shadowCamera.far = SHADOW_CONFIG.FAR_PLANE;
         shadowCamera.position.copy(_lightPos);
         shadowCamera.lookAt(shadowCenter);
-        shadowCamera.updateProjectionMatrix();
         shadowCamera.updateMatrixWorld();
       } else {
         light.castShadow = false;
@@ -301,10 +479,31 @@ export const PointSpotLightSyncSystem: System = {
         context.lights.pointLights.push(light);
       }
 
-      light.color.setHex(PointLight.color[eid]);
-      light.intensity = PointLight.intensity[eid];
-      light.distance = PointLight.distance[eid];
-      light.decay = PointLight.decay[eid];
+      const color = PointLight.color[eid];
+      const intensity = PointLight.intensity[eid];
+      const distance = PointLight.distance[eid];
+      const decay = PointLight.decay[eid];
+      let cache = pointLightCache.get(light);
+      if (cache === undefined) {
+        cache = { color: NaN, intensity: NaN, distance: NaN, decay: NaN };
+        pointLightCache.set(light, cache);
+      }
+      if (cache.color !== color) {
+        light.color.setHex(color);
+        cache.color = color;
+      }
+      if (cache.intensity !== intensity) {
+        light.intensity = intensity;
+        cache.intensity = intensity;
+      }
+      if (cache.distance !== distance) {
+        light.distance = distance;
+        cache.distance = distance;
+      }
+      if (cache.decay !== decay) {
+        light.decay = decay;
+        cache.decay = decay;
+      }
 
       _lightPosition.set(
         WorldTransform.posX[eid],
@@ -339,12 +538,48 @@ export const PointSpotLightSyncSystem: System = {
         context.lights.spotLights.push(light);
       }
 
-      light.color.setHex(SpotLight.color[eid]);
-      light.intensity = SpotLight.intensity[eid];
-      light.distance = SpotLight.distance[eid];
-      light.decay = SpotLight.decay[eid];
-      light.angle = SpotLight.angle[eid];
-      light.penumbra = SpotLight.penumbra[eid];
+      const color = SpotLight.color[eid];
+      const intensity = SpotLight.intensity[eid];
+      const distance = SpotLight.distance[eid];
+      const decay = SpotLight.decay[eid];
+      const angle = SpotLight.angle[eid];
+      const penumbra = SpotLight.penumbra[eid];
+      let cache = spotLightCache.get(light);
+      if (cache === undefined) {
+        cache = {
+          color: NaN,
+          intensity: NaN,
+          distance: NaN,
+          decay: NaN,
+          angle: NaN,
+          penumbra: NaN,
+        };
+        spotLightCache.set(light, cache);
+      }
+      if (cache.color !== color) {
+        light.color.setHex(color);
+        cache.color = color;
+      }
+      if (cache.intensity !== intensity) {
+        light.intensity = intensity;
+        cache.intensity = intensity;
+      }
+      if (cache.distance !== distance) {
+        light.distance = distance;
+        cache.distance = distance;
+      }
+      if (cache.decay !== decay) {
+        light.decay = decay;
+        cache.decay = decay;
+      }
+      if (cache.angle !== angle) {
+        light.angle = angle;
+        cache.angle = angle;
+      }
+      if (cache.penumbra !== penumbra) {
+        light.penumbra = penumbra;
+        cache.penumbra = penumbra;
+      }
 
       _lightPosition.set(
         WorldTransform.posX[eid],
@@ -455,10 +690,113 @@ export const SceneRenderSystem: System = {
       context.canvas = undefined;
     }
 
+    // Dispose entity-level lights still held by the per-entity maps.
+    entityToPointLight.forEach((light) => {
+      try {
+        context.scene.remove(light);
+        light.dispose();
+      } catch (e) {
+        logger.warn('Failed to dispose point light', e);
+      }
+    });
+    entityToSpotLight.forEach((light) => {
+      try {
+        context.scene.remove(light);
+        if (light.target) context.scene.remove(light.target);
+        light.dispose();
+      } catch (e) {
+        logger.warn('Failed to dispose spot light', e);
+      }
+    });
+    entityToDirectionalLight.forEach((light) => {
+      try {
+        context.scene.remove(light);
+        if (light.target) context.scene.remove(light.target);
+        light.dispose();
+      } catch (e) {
+        logger.warn('Failed to dispose directional light', e);
+      }
+    });
+    entityToAmbientLight.forEach((light) => {
+      try {
+        context.scene.remove(light);
+        light.dispose();
+      } catch (e) {
+        logger.warn('Failed to dispose ambient light', e);
+      }
+    });
     entityToPointLight.clear();
     entityToSpotLight.clear();
     entityToDirectionalLight.clear();
     entityToAmbientLight.clear();
+
+    // Dispose bootstrap lights created in initializeContext.
+    try {
+      context.lights.ambient.dispose();
+    } catch (e) {
+      logger.warn('Failed to dispose ambient bootstrap light', e);
+    }
+    try {
+      context.scene.remove(context.lights.directional.target);
+      context.lights.directional.dispose();
+    } catch (e) {
+      logger.warn('Failed to dispose directional bootstrap light', e);
+    }
+
+    // Dispose InstancedMesh pools (each holds GPU instance buffers).
+    try {
+      context.meshPools.forEach((mesh) => mesh.dispose());
+      context.meshPools.clear();
+    } catch (e) {
+      logger.warn('Failed to dispose mesh pools', e);
+    }
+    try {
+      context.unlitMeshPools.forEach((mesh) => mesh.dispose());
+      context.unlitMeshPools.clear();
+    } catch (e) {
+      logger.warn('Failed to dispose unlit mesh pools', e);
+    }
+
+    // Dispose shared bootstrap geometries + materials.
+    try {
+      context.geometries.forEach((g) => g.dispose());
+      context.geometries.clear();
+    } catch (e) {
+      logger.warn('Failed to dispose geometries', e);
+    }
+    try {
+      context.material.dispose();
+    } catch (e) {
+      logger.warn('Failed to dispose material', e);
+    }
+    try {
+      context.unlitMaterial.dispose();
+    } catch (e) {
+      logger.warn('Failed to dispose unlit material', e);
+    }
+
+    // Dispose the PMREM environment texture applied by applyNeutralEnvironment.
+    try {
+      const env = context.scene.environment;
+      if (env && (env as THREE.Texture).isTexture) {
+        (env as THREE.Texture).dispose();
+      }
+      context.scene.environment = null;
+    } catch (e) {
+      logger.warn('Failed to dispose scene environment', e);
+    }
+
+    // Dispose remaining geometry/material/texture reachable from the scene
+    // (entity GLB meshes, etc.). Dedup guards against double-dispose of the
+    // shared bootstrap resources disposed above.
+    try {
+      disposeSceneGraph(context.scene);
+    } catch (e) {
+      logger.warn('Failed to dispose scene graph', e);
+    }
+
+    // Drop the camera cache so a re-init does not reuse stale cameras.
+    threeCameras.clear();
 
     const contextEntities = renderContextQuery(state.world);
     for (const entity of contextEntities) {
