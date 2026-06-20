@@ -3,6 +3,7 @@ import {
   addEntity,
   createWorld,
   entityExists,
+  getAllEntities,
   removeEntity,
   addComponent as bitecsAdd,
   removeComponent as bitecsRemove,
@@ -484,6 +485,14 @@ export class State {
   dispose(): void {
     if (this.isDisposed) {
       throw new Error('[VibeGame] State already disposed');
+    }
+    const allEntityIds = Array.from(getAllEntities(this.world));
+    for (const eid of allEntityIds) {
+      try {
+        this.destroyEntity(eid);
+      } catch (err) {
+        logger.error('[VibeGame] dispose: destroyEntity error:', err);
+      }
     }
     for (const system of this.systems) {
       system.dispose?.(this);

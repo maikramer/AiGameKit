@@ -38,6 +38,7 @@ export class Scheduler {
     mutableTime.deltaTime = scaledDelta;
     this.accumulator += scaledDelta;
 
+    commitRemovals(state.world);
     this.runSystemGroup(state, 'setup');
 
     const maxFixedSteps = this.maxFixedStepsPerFrame;
@@ -55,6 +56,7 @@ export class Scheduler {
     }
 
     mutableTime.deltaTime = scaledDelta;
+    commitRemovals(state.world);
     this.runSystemGroup(state, 'simulation');
     this.runSystemGroup(state, 'late');
     this.runSystemGroup(state, 'draw');
