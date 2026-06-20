@@ -104,7 +104,7 @@
             (+Z): the compound collider leaves the doorway gap walkable while each
             wall still blocks the player. Placed on terrain via SpawnerPlugin. -->
       <Composition
-        place="at: 16 8; align-to-terrain: 0; ground-align: none"
+        place="at: 8 38; align-to-terrain: 0; ground-align: none"
         body="fixed"
         collider="auto"
       >
@@ -125,7 +125,7 @@
            game-specific shop-flow script. Walk up and press K to trade. -->
       <GameObject
         name="merchant"
-        place="at: 16 9; align-to-terrain: 0"
+        place="at: 8 39; align-to-terrain: 0"
         script="merchant.ts"
       ></GameObject>
 
@@ -136,8 +136,8 @@
       <DynamicSpawner
         count="1"
         seed="5"
-        region-min="-6 0 -18"
-        region-max="22 0 2"
+        region-min="4 0 34"
+        region-max="12 0 42"
         align-to-terrain="true"
         avoid-overlaps="true"
         random-yaw="true"
@@ -224,9 +224,9 @@
            ============================================================ -->
 
       <!-- Exclusão de spawn: 3 discos largos cobrem toda a área da vila. -->
-      <SpawnExclusion at="0 24" radius="20"></SpawnExclusion>
-      <SpawnExclusion at="0 38" radius="20"></SpawnExclusion>
-      <SpawnExclusion at="0 48" radius="10"></SpawnExclusion>
+      <SpawnExclusion at="0 24" radius="22"></SpawnExclusion>
+      <SpawnExclusion at="0 40" radius="22"></SpawnExclusion>
+      <SpawnExclusion at="0 50" radius="12"></SpawnExclusion>
 
       <!-- Palanques de cerca na borda sul da vila (marcador visual). -->
       <Composition place="at: -14 16; align-to-terrain: 0" body="fixed" collider="none">
@@ -337,7 +337,7 @@
       </Composition>
 
       <!-- Casa A (oeste-sul): paredes de reboco, porta no +Z, telhado de duas águas, chaminé + lareira. -->
-      <Composition place="at: -10 28; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition place="at: -13 26; align-to-terrain: 0" body="fixed" collider="auto">
         <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
         <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#d8c7a0"></Box>
         <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
@@ -355,7 +355,7 @@
       </Composition>
 
       <!-- Casa B (leste-sul): variação de cor/altura, sem lareira (luz fica no budget). -->
-      <Composition place="at: 10 28; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition place="at: 13 26; align-to-terrain: 0" body="fixed" collider="auto">
         <Box pos="0 0.1 0" size="4.4 0.2 4.4" color="#6b4a2b"></Box>
         <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" color="#c9b48a"></Box>
         <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
@@ -369,7 +369,7 @@
       </Composition>
 
       <!-- Casa C (oeste-norte): mesma planta, paleta fria, lareira acesa. -->
-      <Composition place="at: -11 41; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition place="at: -13 44; align-to-terrain: 0" body="fixed" collider="auto">
         <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
         <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#cfc3b0"></Box>
         <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
@@ -386,7 +386,7 @@
       </Composition>
 
       <!-- Casa D (leste-norte): casa longa (longhouse) do ancião — maior, telhado alto. -->
-      <Composition place="at: 11 41; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition place="at: 13 44; align-to-terrain: 0" body="fixed" collider="auto">
         <Box pos="0 0.1 0" size="7 0.2 5" color="#6b4a2b"></Box>
         <Box pos="0 1.6 -2.4" size="7 3.0 0.3" color="#d2c1a0"></Box>
         <Box pos="-3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
@@ -430,7 +430,7 @@
       </Composition>
 
       <!-- Torre de vigia ao norte: base de pedra, plataforma com guarda-corpo, telhado cônico, farol. -->
-      <Composition place="at: 0 47; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition place="at: 0 50; align-to-terrain: 0" body="fixed" collider="auto">
         <Box pos="0 2.1 0" size="3 4.2 3" color="#8f8a80"></Box>
         <Box pos="0 4.4 0" size="3.8 0.3 3.8" color="#6b4a2b"></Box>
         <Box pos="0 4.9 -1.8" size="3.8 1.0 0.15" color="#7a5230"></Box>

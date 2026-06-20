@@ -806,9 +806,9 @@ async function bootstrap(): Promise<void> {
   // Village exclusion zones — registered directly in the occupancy registry
   // before any StaticSpawner samples positions. Covers x∈[-20,20] z∈[4,58].
   const villageZones: Array<[number, number, number]> = [
-    [0, 24, 20],
-    [0, 38, 20],
-    [0, 48, 10],
+    [0, 24, 22],
+    [0, 40, 22],
+    [0, 50, 12],
   ];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
