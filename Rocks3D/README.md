@@ -5,7 +5,8 @@ CLI for generating procedural 3D rocks as GLB meshes with embedded PBR materials
 ## Overview
 
 - **Believable geometry** — FBM lumps blended with a random fracture polytope give flat faces and sharp edges; `facet_strength` spans rounded pebbles → angular boulders
-- **Two rock types** — `pebble` (small, low-poly) and `boulder` (large, high-detail)
+- **Five rock types** — `pebble`, `boulder`, plus scenery rocks `spire`, `slab`, `outcrop`
+- **Rock formations (rochedos)** — `rocks3d formation` unions several chunks into one mesh, producing the *concave* geometry a heightmap cannot express: overhangs, arches, crevices and balanced stacks. Styles: `stack`, `outcrop`, `cliff`, `arch`, `spire-cluster`
 - **Quality presets** — 5 tiers (`fast` through `highest`) that control subdivision and noise octaves (geometry honours the tier, not just erosion)
 - **Embedded PBR** — base-color, normal, metallic-roughness and occlusion textures are generated (via [Materialize](../Materialize/), with a procedural fallback) and embedded in the GLB with UVs as a glTF `PBRMaterial`
 - **GLB output** — single self-contained file per rock, directly loadable in Three.js, Blender, or any GLTF consumer
@@ -88,6 +89,41 @@ rocks3d batch both -n 5 --quality high -o rocks/ # 5 pebbles + 5 boulders
 | `--erosion/--no-erosion` | flag | erosion | Toggle erosion |
 
 Files are written as `<output-dir>/<type>_<seed>.glb`.
+
+### `rocks3d formation STYLE`
+
+Generate a scenery rock **formation** (rochedo) by unioning several angular
+chunks. A single rock is roughly convex — exactly what heightmap terrain already
+gives you. Formations interpenetrate multiple chunks and boolean-union them, so
+the result is *non-convex*: overhangs, arches, crevices and balanced stacks that
+a heightmap cannot represent. Drop them on terrain to add cliffs and caves.
+
+```bash
+rocks3d formation arch --seed 7 -o arch.glb
+rocks3d formation outcrop -n 6 -o formations/ --quality high   # batch into a dir
+rocks3d formation cliff --chunks 6 --scale 3 -o cliff.glb
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `STYLE` | choice | required | `stack`, `outcrop`, `cliff`, `arch`, or `spire-cluster` |
+| `-o, --output` | path | auto | GLB file (when `-n 1`) or directory (when `-n > 1`) |
+| `--seed` | int | random | Reproducible seed (incremented per item when `-n > 1`) |
+| `-n, --count` | int | `1` | How many formations to generate |
+| `--chunks` | int | per-style | Override the number of chunks unioned |
+| `--quality` | choice | `medium` | Quality tier (chunk subdivision) |
+| `--scale` | float | `1.0` | Scale factor applied to the final mesh |
+| `--bake/--no-bake` | flag | auto | Seamless bpy bake (else trimesh fallback) |
+
+Each formation is recentred on XZ with its base at `y = 0`, ready to place.
+
+| Style | Shape | Concave feature |
+|-------|-------|-----------------|
+| `stack` | boulders piled into a tower | overhangs at the joints |
+| `outcrop` | boulders jammed at ground level | crevices, ledges |
+| `cliff` | row of tall tilted slabs | vertical rock wall / cliff face |
+| `arch` | two pillars bridged by a lintel | a real hole underneath |
+| `spire-cluster` | cluster of hoodoo spires | gaps between spires |
 
 ## Rock Types
 
