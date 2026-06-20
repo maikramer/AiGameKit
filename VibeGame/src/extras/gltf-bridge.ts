@@ -407,6 +407,14 @@ export interface GltfLoadResult {
   animator: GltfAnimator | null;
 }
 
+export { validateGltf } from './gltf-validator';
+export type {
+  GltfIssueSeverity,
+  GltfValidationIssue,
+  GltfValidationReport,
+  ValidateGltfOptions,
+} from './gltf-validator';
+
 /**
  * Load a glTF/GLB from URL, attach it to the current rendering scene, and optionally
  * wrap embedded clips in a {@link GltfAnimator}.

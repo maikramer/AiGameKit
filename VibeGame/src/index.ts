@@ -21,6 +21,13 @@ export {
   setKTX2TranscoderPath,
 } from './extras/gltf-bridge';
 export type { GltfLoadResult } from './extras/gltf-bridge';
+export { validateGltf } from './extras/gltf-validator';
+export type {
+  GltfIssueSeverity,
+  GltfValidationIssue,
+  GltfValidationReport,
+  ValidateGltfOptions,
+} from './extras/gltf-validator';
 export { GltfAnimator } from './extras/gltf-animator';
 export type {
   GltfAnimatorOptions,
