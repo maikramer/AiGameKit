@@ -16,6 +16,7 @@ import type { Camera, Scene, WebGLRenderer } from 'three';
 import type { Effect } from 'postprocessing';
 import { Postprocessing } from './components';
 import { registerEffect } from './effect-registry';
+import { HeightFogEffect } from './height-fog';
 
 type CS = Record<string, Float32Array | Uint8Array>;
 
@@ -56,6 +57,27 @@ registerEffect({
     const cs = Postprocessing as unknown as CS;
     if ((cs.aa as Uint8Array)[entity] !== 1) return null;
     return new FXAAEffect();
+  },
+});
+
+registerEffect({
+  key: 'heightFog',
+  create(
+    _state: CS,
+    entity: number,
+    _renderer: WebGLRenderer,
+    _scene: Scene,
+    camera: Camera
+  ): Effect | null {
+    const cs = Postprocessing as unknown as CS;
+    if (!(cs.heightFog as Uint8Array)[entity]) return null;
+    return new HeightFogEffect(camera, {
+      color: (cs.fogColor as unknown as Uint32Array)[entity],
+      density: (cs.fogDensity as Float32Array)[entity],
+      height: (cs.fogHeight as Float32Array)[entity],
+      falloff: (cs.fogFalloff as Float32Array)[entity],
+      noise: (cs.fogNoise as Float32Array)[entity],
+    });
   },
 });
 

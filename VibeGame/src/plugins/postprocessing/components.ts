@@ -21,4 +21,10 @@ export const Postprocessing = {
   dofFocusDistance: new Float32Array(MAX_ENTITIES),
   dofFocusRange: new Float32Array(MAX_ENTITIES),
   dofBokehScale: new Float32Array(MAX_ENTITIES),
+  heightFog: new Uint8Array(MAX_ENTITIES),
+  fogColor: new Uint32Array(MAX_ENTITIES),
+  fogDensity: new Float32Array(MAX_ENTITIES),
+  fogHeight: new Float32Array(MAX_ENTITIES),
+  fogFalloff: new Float32Array(MAX_ENTITIES),
+  fogNoise: new Float32Array(MAX_ENTITIES),
 } as const;
