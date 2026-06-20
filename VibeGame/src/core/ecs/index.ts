@@ -7,6 +7,7 @@ export {
   CoroutineRunnerSystem,
   getActiveCoroutines,
   getCoroutine,
+  getTotalActiveCoroutineCount,
   startCoroutine,
   stopAllCoroutines,
   stopCoroutine,

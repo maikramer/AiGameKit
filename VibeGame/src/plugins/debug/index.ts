@@ -1,4 +1,4 @@
-export { DebugPlugin } from './plugin';
+export { DebugPlugin, DebugOverlaySystem } from './plugin';
 export type { VibeGameDebugBridge } from './plugin';
 export {
   PostFxToggleSystem,

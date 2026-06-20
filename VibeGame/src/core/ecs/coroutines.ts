@@ -191,6 +191,16 @@ export function getActiveCoroutines(
   return coroutineState.get(state)?.get(eid);
 }
 
+export function getTotalActiveCoroutineCount(state: State): number {
+  const byState = coroutineState.get(state);
+  if (!byState) return 0;
+  let total = 0;
+  for (const entityMap of byState.values()) {
+    total += entityMap.size;
+  }
+  return total;
+}
+
 export function getCoroutine(
   state: State,
   eid: number,

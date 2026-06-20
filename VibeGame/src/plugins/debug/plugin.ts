@@ -1,8 +1,14 @@
-import { defineQuery, type Component } from '../../core';
-import type { Plugin, State } from '../../core';
+import {
+  defineQuery,
+  getAllEntities,
+  getTotalActiveCoroutineCount,
+  type Component,
+} from '../../core';
+import type { Plugin, State, System } from '../../core';
 import { getTerrainContext } from '../terrain/utils';
-import { getRenderingContext } from '../rendering/utils';
+import { getRenderingContext, getScene } from '../rendering/utils';
 import { getPhysicsContext } from '../physics/systems';
+import { getActiveGltfLoadCount } from '../../extras/gltf-bridge';
 import {
   PostFxToggleSystem,
   postFxToggleRecipe,
@@ -141,13 +147,206 @@ function createBridge(state: State): VibeGameDebugBridge {
   };
 }
 
+const OVERLAY_ID = 'vibegame-debug-overlay';
+const FRAME_RING_SIZE = 60;
+const FPS_EWMA_ALPHA = 0.1;
+const OVERLAY_REFRESH_FRAMES = 10;
+
+interface OverlayRuntime {
+  el: HTMLDivElement;
+  keyHandler: (event: KeyboardEvent) => void;
+  fps: number;
+  fpsReady: boolean;
+  ring: Float32Array;
+  ringIndex: number;
+  ringFull: boolean;
+  wireframeOn: boolean;
+}
+
+const overlayByState = new WeakMap<State, OverlayRuntime>();
+
+function createOverlayEl(): HTMLDivElement {
+  const el = document.createElement('div');
+  el.id = OVERLAY_ID;
+  el.setAttribute('aria-hidden', 'true');
+  const s = el.style;
+  s.position = 'fixed';
+  s.top = '8px';
+  s.left = '8px';
+  s.zIndex = '9999';
+  s.margin = '0';
+  s.padding = '8px 10px';
+  s.fontFamily = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  s.fontSize = '12px';
+  s.lineHeight = '1.45';
+  s.color = '#eaeaea';
+  s.background = 'rgba(0, 0, 0, 0.66)';
+  s.borderRadius = '6px';
+  s.whiteSpace = 'pre';
+  s.pointerEvents = 'none';
+  s.userSelect = 'none';
+  s.display = 'none';
+  return el;
+}
+
+function toggleWireframe(state: State, runtime: OverlayRuntime): void {
+  const scene = getScene(state);
+  if (!scene) return;
+  runtime.wireframeOn = !runtime.wireframeOn;
+  const on = runtime.wireframeOn;
+  scene.traverse((obj) => {
+    const mesh = obj as unknown as {
+      isMesh?: boolean;
+      material?: unknown;
+    };
+    if (mesh.isMesh !== true || !mesh.material) return;
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+    for (const mat of materials) {
+      const m = mat as { wireframe?: boolean } | null;
+      if (m && typeof m.wireframe === 'boolean') m.wireframe = on;
+    }
+  });
+}
+
+function isTextInput(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target.tagName === 'INPUT' ||
+    target.tagName === 'TEXTAREA'
+  );
+}
+
+function buildKeyHandler(state: State): (event: KeyboardEvent) => void {
+  return (event: KeyboardEvent) => {
+    if (isTextInput(event.target)) return;
+    const runtime = overlayByState.get(state);
+    if (!runtime) return;
+    if (event.key === '?') {
+      runtime.el.style.display =
+        runtime.el.style.display === 'none' ? 'block' : 'none';
+    } else if (event.key === '*') {
+      toggleWireframe(state, runtime);
+    }
+  };
+}
+
+function ensureOverlayRuntime(state: State): OverlayRuntime | null {
+  const existing = overlayByState.get(state);
+  if (existing) return existing;
+  if (typeof document === 'undefined' || typeof window === 'undefined') {
+    return null;
+  }
+  const el = createOverlayEl();
+  if (document.body) {
+    document.body.appendChild(el);
+  } else {
+    document.documentElement.appendChild(el);
+  }
+  const runtime: OverlayRuntime = {
+    el,
+    keyHandler: buildKeyHandler(state),
+    fps: 0,
+    fpsReady: false,
+    ring: new Float32Array(FRAME_RING_SIZE),
+    ringIndex: 0,
+    ringFull: false,
+    wireframeOn: false,
+  };
+  window.addEventListener('keydown', runtime.keyHandler);
+  overlayByState.set(state, runtime);
+  return runtime;
+}
+
+function ringStats(runtime: OverlayRuntime): {
+  min: number;
+  avg: number;
+  max: number;
+} {
+  const count = runtime.ringFull ? FRAME_RING_SIZE : runtime.ringIndex;
+  if (count === 0) return { min: 0, avg: 0, max: 0 };
+  let min = Infinity;
+  let max = 0;
+  let sum = 0;
+  for (let i = 0; i < count; i++) {
+    const v = runtime.ring[i];
+    if (v < min) min = v;
+    if (v > max) max = v;
+    sum += v;
+  }
+  return { min, avg: sum / count, max };
+}
+
+export const DebugOverlaySystem: System = {
+  group: 'draw',
+  last: true,
+  update(state: State): void {
+    if (state.headless) return;
+    const runtime = ensureOverlayRuntime(state);
+    if (!runtime) return;
+
+    const dt = state.time.unscaledDeltaTime;
+    if (dt > 0) {
+      const frameMs = dt * 1000;
+      const instantFps = 1000 / frameMs;
+      runtime.fps = runtime.fpsReady
+        ? runtime.fps * (1 - FPS_EWMA_ALPHA) + instantFps * FPS_EWMA_ALPHA
+        : instantFps;
+      runtime.fpsReady = true;
+      runtime.ring[runtime.ringIndex] = frameMs;
+      runtime.ringIndex += 1;
+      if (runtime.ringIndex >= FRAME_RING_SIZE) {
+        runtime.ringIndex = 0;
+        runtime.ringFull = true;
+      }
+    }
+
+    if (state.time.frameCount % OVERLAY_REFRESH_FRAMES !== 0) return;
+
+    const { min, avg, max } = ringStats(runtime);
+    const entityCount = Array.from(getAllEntities(state.world)).length;
+    const coroutineCount = getTotalActiveCoroutineCount(state);
+    const gltfLoads = getActiveGltfLoadCount();
+
+    runtime.el.textContent =
+      'VibeGame Debug\n' +
+      `FPS:        ${runtime.fps.toFixed(1)}\n` +
+      `Frame:      ${avg.toFixed(1)} ms  (min ${min.toFixed(1)} / max ${max.toFixed(1)})\n` +
+      `Entities:   ${entityCount}\n` +
+      `Systems:    ${state.systems.size}\n` +
+      `Coroutines: ${coroutineCount}\n` +
+      `GLTF loads: ${gltfLoads}\n` +
+      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}`;
+  },
+  dispose(state: State): void {
+    const runtime = overlayByState.get(state);
+    if (!runtime) return;
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', runtime.keyHandler);
+    }
+    if (runtime.el.parentNode) {
+      runtime.el.parentNode.removeChild(runtime.el);
+    }
+    overlayByState.delete(state);
+  },
+};
+
 /**
  * Installs `window.__VIBEGAME__`, a read-only introspection bridge over the live
- * ECS State for AI-driven / Playwright QA tooling. Not part of DefaultPlugins —
- * register it explicitly (e.g. in an example) so it never ships in production.
+ * ECS State for AI-driven / Playwright QA tooling, plus a visual debug overlay
+ * (FPS, frame time, entity/system/coroutine counts, GLTF loads in flight).
+ *
+ * In-browser keys (active only when this plugin is registered and not headless):
+ *   `?` (Shift+/) — toggle the stats overlay (hidden by default)
+ *   `*` (Shift+8) — toggle wireframe rendering on every scene mesh
+ *
+ * Not part of DefaultPlugins — register it explicitly (e.g. in an example) so
+ * it never ships in production.
  */
 export const DebugPlugin: Plugin = {
-  systems: [PostFxToggleSystem],
+  systems: [PostFxToggleSystem, DebugOverlaySystem],
   recipes: [postFxToggleRecipe],
   config: {
     parsers: {

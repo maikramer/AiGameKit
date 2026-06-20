@@ -380,6 +380,28 @@ if (!found) {
 }
 ```
 
+### `validateGltf(input, options?)`
+
+Validate a GLB/glTF asset at runtime and return a structured report. Accepts a URL string (fetched via `fetch`), raw GLB bytes (`ArrayBuffer`/`Uint8Array`), or bare glTF JSON text bytes. The glTF-transform modules are imported lazily, so the main bundle is unaffected unless this is called.
+
+The report exposes `valid` (no error-severity issues), plus `errors`, `warnings`, `infos`, and a combined `issues` array. Each issue has a stable `code` (e.g. `ASSET_VERSION_MISSING`), a human-readable `message`, and an RFC-6901 JSON `pointer` (e.g. `/asset/version`). Issue codes include: `ASSET_VERSION_MISSING`, `ASSET_VERSION_FORMAT`, `SCENE_INDEX_OUT_OF_RANGE`, `BUFFERVIEW_BUFFER_OUT_OF_RANGE`, `ACCESSOR_BUFFERVIEW_OUT_OF_RANGE`, `MESH_PRIMITIVE_NO_POSITION`, `GLTF_PARSE_FAILED`, plus `INSPECT_*` advisories folded in from `@gltf-transform/functions`' `inspect`.
+
+> **Note:** This is a focused engine-bundled structural validator, not the full Khronos `gltf-validator`. For exhaustive spec validation use `gamedev-lab check glb` or the `gltf-validator` CLI.
+
+```ts
+import { validateGltf } from 'vibegame';
+
+const report = await validateGltf('/assets/models/hero.glb');
+if (!report.valid) {
+  for (const issue of report.errors) {
+    console.error(`${issue.code} at ${issue.pointer}: ${issue.message}`);
+  }
+}
+
+// Skip advisory checks (duplicate materials, unused textures) for a fast spec-only pass:
+const fast = await validateGltf(bytes, { includeAdvisory: false });
+```
+
 ---
 
 ## PlayerGLTF Recipe
