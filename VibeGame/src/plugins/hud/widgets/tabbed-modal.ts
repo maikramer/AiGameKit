@@ -348,18 +348,21 @@ export function buildTabsFromChildren(
 ): TabDescriptor[] {
   const tabs: TabDescriptor[] = [];
   for (const child of children) {
+    // The XML parser lowercases custom tag names, so compare case-insensitively.
+    const tag = String(child.tagName).toLowerCase();
     const labelKey =
       readAttr(child.attributes, 'label-key') ??
-      `modal.tab.${child.tagName.toLowerCase()}`;
-    const tabId =
-      readAttr(child.attributes, 'id') ?? child.tagName.toLowerCase();
-    if (child.tagName === 'SkillsTab') {
+      // Strip a trailing "tab" so <SkillsTab> → modal.tab.skills, matching the
+      // engine default dictionary keys.
+      `modal.tab.${tag.replace(/tab$/, '')}`;
+    const tabId = readAttr(child.attributes, 'id') ?? tag;
+    if (tag === 'skillstab') {
       tabs.push({
         id: tabId,
         labelKey,
         build: (s) => createSkillsTab(s, { targetEntity }),
       });
-    } else if (child.tagName === 'InventoryTab') {
+    } else if (tag === 'inventorytab') {
       const cols = readAttr(child.attributes, 'columns');
       tabs.push({
         id: tabId,
@@ -370,14 +373,14 @@ export function buildTabsFromChildren(
             columns: cols ? Number(cols) : undefined,
           }),
       });
-    } else if (child.tagName === 'OptionsTab') {
+    } else if (tag === 'optionstab') {
       const defs = (
         child.children as readonly {
           tagName: string;
           attributes: Record<string, XMLValue>;
         }[]
       )
-        .filter((c) => c.tagName === 'OptionRow')
+        .filter((c) => String(c.tagName).toLowerCase() === 'optionrow')
         .map((c) => parseOptionDef(c.attributes));
       for (const d of defs) registerOptionDef(state, d);
       tabs.push({

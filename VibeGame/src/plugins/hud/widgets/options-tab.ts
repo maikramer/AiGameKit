@@ -6,7 +6,12 @@ import type { TabContent } from './tabbed-modal-shared';
 
 export const MODAL_OPTION_CHANGED = 'modal:option-changed';
 
-export type OptionRowType = 'cycle' | 'slider' | 'toggle';
+export type OptionRowType =
+  | 'cycle'
+  | 'slider'
+  | 'toggle'
+  | 'button' // fires MODAL_OPTION_CHANGED on click; holds no value (e.g. Save/Load)
+  | 'note'; // non-interactive multi-line info text (e.g. a controls list)
 
 export interface OptionDef {
   id: string;
@@ -109,6 +114,9 @@ const OPTION_CSS = `
 .hud-modal-option:hover{transform:translateY(-1px);filter:brightness(1.15);}
 .hud-modal-option-value{color:#ffd24a;font-weight:800;}
 .hud-modal-option-slider{flex:1;max-width:160px;accent-color:#5a7cff;}
+.hud-modal-note{cursor:default;display:block;background:rgba(16,22,38,0.6);}
+.hud-modal-note:hover{transform:none;filter:none;}
+.hud-modal-note-text{white-space:pre-line;line-height:1.55;font-weight:600;color:#aebbd6;}
 `;
 
 export function createOptionsTab(
@@ -155,6 +163,16 @@ export function createOptionsTab(
       });
       wrap.append(label, slider, value);
       wrap.style.cursor = 'default';
+      root.appendChild(wrap);
+      rows.set(def.id, { label, value });
+    } else if (def.type === 'note') {
+      // Read-only info block: the label carries the (possibly multi-line) text.
+      const wrap = document.createElement('div');
+      wrap.className = 'hud-modal-option hud-modal-note';
+      const label = document.createElement('span');
+      label.className = 'hud-modal-note-text';
+      const value = document.createElement('span'); // unused; keeps the row shape
+      wrap.append(label);
       root.appendChild(wrap);
       rows.set(def.id, { label, value });
     } else {
