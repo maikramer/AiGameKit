@@ -276,10 +276,7 @@ export class GltfAnimator {
     // A prior override's listener lingers on the mixer until its one-shot
     // 'finished' fires (which may never happen if the clip was interrupted).
     if (this._activeOverride) {
-      this.mixer.removeEventListener(
-        'finished',
-        this._activeOverride.handler
-      );
+      this.mixer.removeEventListener('finished', this._activeOverride.handler);
       this._activeOverride = null;
     }
 
@@ -332,10 +329,7 @@ export class GltfAnimator {
   /** Stop all animations and release mixer resources. */
   dispose(): void {
     if (this._activeOverride) {
-      this.mixer.removeEventListener(
-        'finished',
-        this._activeOverride.handler
-      );
+      this.mixer.removeEventListener('finished', this._activeOverride.handler);
       this._activeOverride = null;
     }
     this.mixer.stopAllAction();

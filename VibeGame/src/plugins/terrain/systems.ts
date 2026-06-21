@@ -538,8 +538,7 @@ export const TerrainChunkColliderSystem: System = {
         const dx = camLocalX - nearestX;
         const dz = camLocalZ - nearestZ;
         return (
-          dx * dx + dz * dz <=
-          PHYSICS_COLLIDER_RADIUS * PHYSICS_COLLIDER_RADIUS
+          dx * dx + dz * dz <= PHYSICS_COLLIDER_RADIUS * PHYSICS_COLLIDER_RADIUS
         );
       };
 

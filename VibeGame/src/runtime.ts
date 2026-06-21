@@ -216,10 +216,7 @@ export class GameRuntime {
             renderingCtx.canvas = canvas;
             applyNeutralEnvironment(renderer, renderingCtx.scene);
           } catch (e) {
-            logger.warn(
-              'WebGL renderer init failed; continuing headless',
-              e
-            );
+            logger.warn('WebGL renderer init failed; continuing headless', e);
           }
         }
       }
@@ -381,9 +378,9 @@ export class GameRuntime {
             element.querySelectorAll?.('scene').forEach((worldEl) => {
               if (!processedElements.has(worldEl)) {
                 processedElements.add(worldEl);
-                void this
-                  .processWorldElement(worldEl as HTMLElement)
-                  .catch((e) => logger.warn('processWorldElement failed', e));
+                void this.processWorldElement(worldEl as HTMLElement).catch(
+                  (e) => logger.warn('processWorldElement failed', e)
+                );
               }
             });
           }
