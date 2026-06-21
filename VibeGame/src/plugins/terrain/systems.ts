@@ -38,7 +38,21 @@ const _lastLodCam = new Map<number, { x: number; z: number }>();
 let _heightmapRetryFrame = 0;
 
 /** Shared materials per terrain field — avoids N duplicate Material instances for N chunks. */
-const _sharedTerrainMaterials = new Map<number, THREE.MeshStandardMaterial>();
+const _sharedTerrainMaterialsByState = new WeakMap<
+  State,
+  Map<number, THREE.MeshStandardMaterial>
+>();
+
+function getSharedTerrainMaterials(
+  state: State
+): Map<number, THREE.MeshStandardMaterial> {
+  let map = _sharedTerrainMaterialsByState.get(state);
+  if (!map) {
+    map = new Map();
+    _sharedTerrainMaterialsByState.set(state, map);
+  }
+  return map;
+}
 
 const terrainQuery = defineQuery([Terrain]);
 const chunkQuery = defineQuery([TerrainChunk]);
@@ -166,6 +180,7 @@ export const TerrainFieldBootstrapSystem: System = {
       registry.delete(chunk);
     }
     getTerrainContext(state).clear();
+    const _sharedTerrainMaterials = getSharedTerrainMaterials(state);
     for (const mat of _sharedTerrainMaterials.values()) {
       mat.dispose();
     }
@@ -269,6 +284,7 @@ export const TerrainMeshSystem: System = {
     const scene = getRenderingContext(state).scene;
     const registry = getChunkMeshRegistry(state);
     const context = getTerrainContext(state);
+    const _sharedTerrainMaterials = getSharedTerrainMaterials(state);
 
     for (const [chunk, mesh] of registry) {
       if (state.exists(chunk)) continue;
@@ -501,10 +517,30 @@ export const TerrainChunkColliderSystem: System = {
       const camLocalZ = hasCam ? WorldTransform.posZ[cams[0]] - offset.z : 0;
       const inRange = (chunk: number): boolean => {
         if (!hasCam) return true;
-        const dx = TerrainChunk.originX[chunk] - camLocalX;
-        const dz = TerrainChunk.originZ[chunk] - camLocalZ;
-        const reach = PHYSICS_COLLIDER_RADIUS + TerrainChunk.size[chunk] * 0.5;
-        return dx * dx + dz * dz <= reach * reach;
+        // A chunk is in range when the camera is within PHYSICS_COLLIDER_RADIUS
+        // of the chunk's AABB (clamp the camera to the chunk bounds, then measure
+        // to that nearest point). This includes the chunk the camera stands on
+        // (distance 0) AND any neighbour whose edge is within RADIUS — so as the
+        // player nears a chunk boundary the next chunk's collider is already
+        // built. A centre/corner distance test only covered the single chunk
+        // under the camera once LOD chunks got large (≥1250), letting the player
+        // walk off its edge and fall through the unbuilt neighbour.
+        //
+        // originX/Z is the chunk CENTRE (buildChunkHeightfield samples
+        // originX ± size/2); using [ox, ox+size] as the AABB treated the centre
+        // as the min corner and skipped the three non-negative quadrants at the
+        // player spawn, dropping the hero through any chunk without a collider.
+        const ox = TerrainChunk.originX[chunk];
+        const oz = TerrainChunk.originZ[chunk];
+        const half = TerrainChunk.size[chunk] * 0.5;
+        const nearestX = Math.max(ox - half, Math.min(camLocalX, ox + half));
+        const nearestZ = Math.max(oz - half, Math.min(camLocalZ, oz + half));
+        const dx = camLocalX - nearestX;
+        const dz = camLocalZ - nearestZ;
+        return (
+          dx * dx + dz * dz <=
+          PHYSICS_COLLIDER_RADIUS * PHYSICS_COLLIDER_RADIUS
+        );
       };
 
       for (const chunk of data.chunks) {
