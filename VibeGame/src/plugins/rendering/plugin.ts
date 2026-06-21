@@ -59,7 +59,9 @@ export const RenderingPlugin: Plugin = {
         color: 0xffffff,
         intensity: 1,
         castShadow: 1,
-        shadowMapSize: 4096,
+        // 2048 balances shadow quality and VRAM (~17MB). Opt into 4096 per-light
+        // for cinematic quality (~67MB each).
+        shadowMapSize: 2048,
         directionX: -1,
         directionY: 2,
         directionZ: -1,

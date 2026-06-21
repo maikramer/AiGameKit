@@ -48,10 +48,60 @@ const _lightForward = new THREE.Vector3(0, 0, -1);
 
 const pointLightQuery = defineQuery([PointLight, WorldTransform]);
 const spotLightQuery = defineQuery([SpotLight, WorldTransform]);
-const entityToPointLight = new Map<number, THREE.PointLight>();
-const entityToSpotLight = new Map<number, THREE.SpotLight>();
-const entityToDirectionalLight = new Map<number, THREE.DirectionalLight>();
-const entityToAmbientLight = new Map<number, THREE.HemisphereLight>();
+const entityToPointLightByState = new WeakMap<
+  State,
+  Map<number, THREE.PointLight>
+>();
+const entityToSpotLightByState = new WeakMap<
+  State,
+  Map<number, THREE.SpotLight>
+>();
+const entityToDirectionalLightByState = new WeakMap<
+  State,
+  Map<number, THREE.DirectionalLight>
+>();
+const entityToAmbientLightByState = new WeakMap<
+  State,
+  Map<number, THREE.HemisphereLight>
+>();
+
+function getPointLightMap(state: State): Map<number, THREE.PointLight> {
+  let map = entityToPointLightByState.get(state);
+  if (!map) {
+    map = new Map();
+    entityToPointLightByState.set(state, map);
+  }
+  return map;
+}
+
+function getSpotLightMap(state: State): Map<number, THREE.SpotLight> {
+  let map = entityToSpotLightByState.get(state);
+  if (!map) {
+    map = new Map();
+    entityToSpotLightByState.set(state, map);
+  }
+  return map;
+}
+
+function getDirectionalLightMap(
+  state: State
+): Map<number, THREE.DirectionalLight> {
+  let map = entityToDirectionalLightByState.get(state);
+  if (!map) {
+    map = new Map();
+    entityToDirectionalLightByState.set(state, map);
+  }
+  return map;
+}
+
+function getAmbientLightMap(state: State): Map<number, THREE.HemisphereLight> {
+  let map = entityToAmbientLightByState.get(state);
+  if (!map) {
+    map = new Map();
+    entityToAmbientLightByState.set(state, map);
+  }
+  return map;
+}
 
 // Last-applied light/shadow values keyed by the Three.js light object. The
 // sync systems compare the current ECS values against these and only write to
@@ -259,6 +309,9 @@ export const LightSyncSystem: System = {
     const scene = getScene(state);
     if (!scene) return;
 
+    const entityToAmbientLight = getAmbientLightMap(state);
+    const entityToDirectionalLight = getDirectionalLightMap(state);
+
     // --- Ambient lights (per-entity, Map-based) ---
     for (const [eid, light] of entityToAmbientLight) {
       if (!state.exists(eid)) {
@@ -272,8 +325,17 @@ export const LightSyncSystem: System = {
     for (const entity of ambients) {
       let light = entityToAmbientLight.get(entity);
       if (!light) {
-        light = new THREE.HemisphereLight();
-        scene.add(light);
+        // Adopt the bootstrap hemisphere light (already added to the scene in
+        // initializeContext) for the first ambient entity so it is actually
+        // synced rather than left orphaned; extra ambient entities get fresh
+        // lights.
+        const boot = getRenderingContext(state).lights.ambient;
+        if (boot && ![...entityToAmbientLight.values()].includes(boot)) {
+          light = boot;
+        } else {
+          light = new THREE.HemisphereLight();
+          scene.add(light);
+        }
         entityToAmbientLight.set(entity, light);
       }
 
@@ -313,10 +375,18 @@ export const LightSyncSystem: System = {
     for (const entity of directionals) {
       let light = entityToDirectionalLight.get(entity);
       if (!light) {
-        light = new THREE.DirectionalLight();
+        // Adopt the bootstrap directional light (already in the scene with its
+        // target) for the first directional entity so it is positioned/synced
+        // instead of left orphaned; extra directional entities get fresh lights.
+        const boot = getRenderingContext(state).lights.directional;
+        if (boot && ![...entityToDirectionalLight.values()].includes(boot)) {
+          light = boot;
+        } else {
+          light = new THREE.DirectionalLight();
+          scene.add(light);
+          scene.add(light.target);
+        }
         light.castShadow = true;
-        scene.add(light);
-        scene.add(light.target);
         entityToDirectionalLight.set(entity, light);
       }
 
@@ -441,6 +511,9 @@ export const PointSpotLightSyncSystem: System = {
     const context = getRenderingContext(state);
     const scene = getScene(state);
     if (!scene) return;
+
+    const entityToPointLight = getPointLightMap(state);
+    const entityToSpotLight = getSpotLightMap(state);
 
     for (const [eid, light] of entityToPointLight) {
       if (!state.exists(eid)) {
@@ -691,6 +764,10 @@ export const SceneRenderSystem: System = {
     }
 
     // Dispose entity-level lights still held by the per-entity maps.
+    const entityToPointLight = getPointLightMap(state);
+    const entityToSpotLight = getSpotLightMap(state);
+    const entityToDirectionalLight = getDirectionalLightMap(state);
+    const entityToAmbientLight = getAmbientLightMap(state);
     entityToPointLight.forEach((light) => {
       try {
         context.scene.remove(light);
