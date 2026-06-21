@@ -81,6 +81,7 @@ export interface Config {
   readonly shorthands?: Record<string, Record<string, ShorthandMapping>>;
   readonly enums?: Record<string, Record<string, EnumMapping>>;
   readonly validations?: ValidationRule[];
+  /** Component properties to ignore when applying recipe attributes (consumed in `applyConfig`). */
   readonly skip?: Record<string, readonly string[]>;
   readonly adapters?: Record<string, Record<string, Adapter>>;
 }

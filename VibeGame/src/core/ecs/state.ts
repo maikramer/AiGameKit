@@ -279,7 +279,7 @@ export class State {
       this.entityNames.delete(name);
       this.entityToName.delete(eid);
     }
-    removeAllListeners(eid);
+    removeAllListeners(this, eid);
     removeEntity(this.world, eid);
   }
 
@@ -360,7 +360,7 @@ export class State {
     eventName: string,
     callback: (data?: unknown) => void
   ): void {
-    _addEventListener(eid, eventName, callback);
+    _addEventListener(this, eid, eventName, callback);
   }
 
   removeEventListener(
@@ -368,7 +368,7 @@ export class State {
     eventName: string,
     callback: (data?: unknown) => void
   ): void {
-    _removeEventListener(eid, eventName, callback);
+    _removeEventListener(this, eid, eventName, callback);
   }
 
   addEventListenerOnce(
@@ -377,18 +377,18 @@ export class State {
     callback: (data?: unknown) => void
   ): void {
     const wrapper = (data?: unknown) => {
-      _removeEventListener(eid, eventName, wrapper);
+      _removeEventListener(this, eid, eventName, wrapper);
       callback(data);
     };
-    _addEventListener(eid, eventName, wrapper);
+    _addEventListener(this, eid, eventName, wrapper);
   }
 
   dispatchEvent(eid: number, eventName: string, data?: unknown): void {
-    _dispatchEvent(eid, eventName, data);
+    _dispatchEvent(this, eid, eventName, data);
   }
 
   removeAllEventListeners(eid: number, eventName?: string): void {
-    removeAllListeners(eid, eventName);
+    removeAllListeners(this, eid, eventName);
   }
 
   addComponent<T extends Component>(

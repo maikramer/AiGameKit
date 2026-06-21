@@ -1,24 +1,42 @@
+import type { State } from './state';
 import { logger } from '../utils/logger';
 
 type Callback = (data?: unknown) => void;
 
-const entityListeners = new Map<number, Map<string, Set<Callback>>>();
+const entityListenersByState = new WeakMap<
+  State,
+  Map<number, Map<string, Set<Callback>>>
+>();
 
-function getOrCreateListenerMap(eid: number): Map<string, Set<Callback>> {
-  let map = entityListeners.get(eid);
+function getListeners(state: State): Map<number, Map<string, Set<Callback>>> {
+  let map = entityListenersByState.get(state);
   if (!map) {
     map = new Map();
-    entityListeners.set(eid, map);
+    entityListenersByState.set(state, map);
+  }
+  return map;
+}
+
+function getOrCreateListenerMap(
+  state: State,
+  eid: number
+): Map<string, Set<Callback>> {
+  const listeners = getListeners(state);
+  let map = listeners.get(eid);
+  if (!map) {
+    map = new Map();
+    listeners.set(eid, map);
   }
   return map;
 }
 
 export function addEventListener(
+  state: State,
   eid: number,
   eventName: string,
   callback: Callback
 ): void {
-  const map = getOrCreateListenerMap(eid);
+  const map = getOrCreateListenerMap(state, eid);
   let set = map.get(eventName);
   if (!set) {
     set = new Set();
@@ -28,31 +46,34 @@ export function addEventListener(
 }
 
 export function removeEventListener(
+  state: State,
   eid: number,
   eventName: string,
   callback: Callback
 ): void {
-  entityListeners.get(eid)?.get(eventName)?.delete(callback);
+  getListeners(state).get(eid)?.get(eventName)?.delete(callback);
 }
 
 export function addEventListenerOnce(
+  state: State,
   eid: number,
   eventName: string,
   callback: Callback
 ): void {
   const wrapper: Callback = (data) => {
-    removeEventListener(eid, eventName, wrapper);
+    removeEventListener(state, eid, eventName, wrapper);
     callback(data);
   };
-  addEventListener(eid, eventName, wrapper);
+  addEventListener(state, eid, eventName, wrapper);
 }
 
 export function dispatchEvent(
+  state: State,
   eid: number,
   eventName: string,
   data?: unknown
 ): void {
-  const map = entityListeners.get(eid);
+  const map = getListeners(state).get(eid);
   const set = map?.get(eventName);
   if (!set) return;
   for (const cb of set) {
@@ -67,13 +88,18 @@ export function dispatchEvent(
   }
 }
 
-export function removeAllListeners(eid: number, eventName?: string): void {
-  const map = entityListeners.get(eid);
+export function removeAllListeners(
+  state: State,
+  eid: number,
+  eventName?: string
+): void {
+  const listeners = getListeners(state);
+  const map = listeners.get(eid);
   if (!map) return;
   if (eventName !== undefined) {
     map.delete(eventName);
   } else {
     map.clear();
-    entityListeners.delete(eid);
+    listeners.delete(eid);
   }
 }
