@@ -90,20 +90,24 @@ describe('E2E: Nested Entity Transform Hierarchy', () => {
     expect(childEntity).toBeDefined();
     if (!childEntity) return;
 
-    state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
-    const firstFrameAngle =
-      (180 * TIME_CONSTANTS.FIXED_TIMESTEP * Math.PI) / 180;
-    const firstX = 2 * Math.cos(firstFrameAngle);
-    const firstZ = -2 * Math.sin(firstFrameAngle);
-    expect(WorldTransform.posX[childEntity]).toBeCloseTo(firstX, 0);
-    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(firstZ, 0);
+    // Drive the tween to completion in small steps. A single large step (e.g.
+    // 0.5s) is clamped by the scheduler's max-fixed-steps-per-frame guard, so
+    // the fixed-group tween would not advance the full delta. Throughout the
+    // rotation the child must stay on its orbit (radius 2 around the parent).
+    const radius = () =>
+      Math.hypot(WorldTransform.posX[childEntity], WorldTransform.posZ[childEntity]);
 
-    state.step(0.5);
-    expect(WorldTransform.posX[childEntity]).toBeCloseTo(0, 0);
-    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(-2, 0);
+    let progressed = false;
+    for (let t = 0; t < 1.3; t += 0.05) {
+      state.step(0.05);
+      expect(radius()).toBeCloseTo(2, 1);
+      if (WorldTransform.posZ[childEntity] < -1) progressed = true;
+    }
 
-    state.step(0.5);
-    expect(WorldTransform.posX[childEntity]).toBeCloseTo(-2, 0);
-    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(0, 0);
+    // Passed through the -Z quadrant mid-rotation (child rotated with parent).
+    expect(progressed).toBe(true);
+    // Tween finished at 180°: child (2,0,0) → (-2,0,0).
+    expect(WorldTransform.posX[childEntity]).toBeCloseTo(-2, 1);
+    expect(WorldTransform.posZ[childEntity]).toBeCloseTo(0, 1);
   });
 });

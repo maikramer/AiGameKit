@@ -11,10 +11,14 @@ describe('spawn occupancy registry', () => {
     const state = new State();
     registerSpawnFootprint(state, 10, 10, 3);
 
-    // overlapping: distance 4 < 3 + 2
+    // Footprints keep a 0.6 SPAWN_CLEARANCE gap, so the no-overlap threshold is
+    // 3 + 2 + 0.6 = 5.6, not just the bare radii sum (5).
+    // overlapping: distance 4 < 5.6
     expect(isSpawnAreaFree(state, 14, 10, 2)).toBe(false);
-    // touching edge counts as free: distance 5 = 3 + 2
-    expect(isSpawnAreaFree(state, 15, 10, 2)).toBe(true);
+    // touching the bare radii (distance 5) still falls inside the clearance
+    expect(isSpawnAreaFree(state, 15, 10, 2)).toBe(false);
+    // clear of the buffer: distance 6 > 5.6
+    expect(isSpawnAreaFree(state, 16, 10, 2)).toBe(true);
     expect(isSpawnAreaFree(state, 20, 20, 2)).toBe(true);
   });
 

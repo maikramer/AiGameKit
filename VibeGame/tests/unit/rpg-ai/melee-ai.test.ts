@@ -57,6 +57,11 @@ interface StubState {
   time: { deltaTime: number; elapsed: number };
   exists: (eid: number) => boolean;
   destroyEntity: (eid: number) => void;
+  // The chase FSM ensures a NavMeshAgent on its entity; in these unit tests the
+  // navmesh is never ready (isNavMeshReady() === false), so the agent is only
+  // attached (no-op) and never driven.
+  hasComponent: (eid: number, component: unknown) => boolean;
+  addComponent: (eid: number, component: unknown) => void;
 }
 
 function makeStubState(): StubState {
@@ -64,6 +69,8 @@ function makeStubState(): StubState {
     time: { deltaTime: DT, elapsed: 0 },
     exists: () => true,
     destroyEntity: () => {},
+    hasComponent: () => false,
+    addComponent: () => {},
   };
 }
 

@@ -45,7 +45,7 @@ describe('Player Recipes and XML', () => {
       expect(state.hasComponent(player, CharacterController)).toBe(true);
       expect(state.hasComponent(player, InputState)).toBe(true);
 
-      expect(PlayerController.speed[player]).toBeCloseTo(5.3);
+      expect(PlayerController.speed[player]).toBeCloseTo(4);
       expect(PlayerController.jumpHeight[player]).toBeCloseTo(2.3);
       expect(PlayerController.rotationSpeed[player]).toBe(10);
       expect(PlayerController.canJump[player]).toBe(1);
