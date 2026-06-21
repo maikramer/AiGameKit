@@ -52,7 +52,7 @@ export function setKTX2TranscoderPath(path: string): void {
   _ktx2Loader = undefined;
 }
 
-function tryInitKTX2(renderer: any): KTX2Loader | null {
+function tryInitKTX2(renderer: THREE.WebGLRenderer): KTX2Loader | null {
   if (_ktx2Loader !== undefined) return _ktx2Loader;
   try {
     const transcoderPath =
@@ -233,7 +233,9 @@ export function clearGltfMasterCache(): number {
   // down every live clone. `.then` covers in-flight parses that resolve after
   // clear; rejecting loads have nothing to dispose.
   for (const p of gltfMasterCache.values()) {
-    p.then((gltf) => disposeObject3DResources(gltf.scene)).catch(() => {});
+    p.then((gltf) => disposeObject3DResources(gltf.scene)).catch((e) =>
+      logger.warn('clearGltfMasterCache disposal failed', e)
+    );
   }
   gltfMasterCache.clear();
   return n;

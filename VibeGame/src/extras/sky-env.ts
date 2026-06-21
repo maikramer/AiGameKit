@@ -68,7 +68,13 @@ function rotateEquirectBitmap(
   const canvas = document.createElement('canvas');
   canvas.width = w;
   canvas.height = h;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    logger.warn(
+      '[sky-env] canvas.getContext("2d") unavailable; skipping equirect rotation.'
+    );
+    return tex;
+  }
   ctx.drawImage(img, sx, 0, w - sx, h, 0, 0, w - sx, h);
   ctx.drawImage(img, 0, 0, sx, h, w - sx, 0, sx, h);
 
@@ -117,7 +123,7 @@ export async function applyEquirectSkyEnvironment(
 
   const tex = rotateEquirectBitmap(loaded, options?.rotationDeg ?? 0);
 
-  const pmrem = new THREE.PMREMGenerator(renderer as any);
+  const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();
   const rt = pmrem.fromEquirectangular(tex);
   const envMap = rt.texture;

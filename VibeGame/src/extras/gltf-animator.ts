@@ -52,6 +52,19 @@ export class GltfAnimator {
   private previousLocomotionClip = '';
   private _jumpState: 'none' | 'start' | 'loop' | 'end' = 'none';
 
+  // Cached clip-name arrays. `clips` is populated once in the ctor and never
+  // mutated thereafter, so the cache is filled lazily on first read and reused.
+  private _clipNamesCache: string[] | null = null;
+  private _clipNamesLowerCache: string[] | null = null;
+
+  // Tracks the active playOverride so its 'finished' listener can be removed
+  // before registering a new one (and on dispose). Without this the listener
+  // leaks across successive overrides, pinning closures and stale actions.
+  private _activeOverride: {
+    action: AnimationAction;
+    handler: (e: { action?: unknown }) => void;
+  } | null = null;
+
   // Additive overlay (e.g. turn-lean blended on top of locomotion).
   private additiveClips = new Map<string, AnimationClip>();
   private additiveAction: AnimationAction | null = null;
@@ -73,7 +86,18 @@ export class GltfAnimator {
   }
 
   get clipNames(): string[] {
-    return Array.from(this.clips.keys());
+    if (this._clipNamesCache === null) {
+      this._clipNamesCache = Array.from(this.clips.keys());
+    }
+    return this._clipNamesCache;
+  }
+
+  /** Lowercased clip names (cached); used by player-side fuzzy matching. */
+  get clipNamesLower(): string[] {
+    if (this._clipNamesLowerCache === null) {
+      this._clipNamesLowerCache = this.clipNames.map((n) => n.toLowerCase());
+    }
+    return this._clipNamesLowerCache;
   }
 
   get activeClipName(): string {
@@ -248,6 +272,17 @@ export class GltfAnimator {
     options?: { loop?: boolean; crossfade?: number; onFinished?: () => void }
   ): AnimationAction | null {
     this._overrideLock = true;
+
+    // A prior override's listener lingers on the mixer until its one-shot
+    // 'finished' fires (which may never happen if the clip was interrupted).
+    if (this._activeOverride) {
+      this.mixer.removeEventListener(
+        'finished',
+        this._activeOverride.handler
+      );
+      this._activeOverride = null;
+    }
+
     const action = this.play(clipName, {
       loop: options?.loop ?? false,
       crossfade: options?.crossfade,
@@ -262,10 +297,12 @@ export class GltfAnimator {
       const handler = (e: { action?: unknown }) => {
         if (e.action !== action) return;
         mixer.removeEventListener('finished', handler);
+        this._activeOverride = null;
         this._overrideLock = false;
         if (onFinished) onFinished();
       };
       mixer.addEventListener('finished', handler);
+      this._activeOverride = { action, handler };
     }
 
     return action;
@@ -294,6 +331,13 @@ export class GltfAnimator {
 
   /** Stop all animations and release mixer resources. */
   dispose(): void {
+    if (this._activeOverride) {
+      this.mixer.removeEventListener(
+        'finished',
+        this._activeOverride.handler
+      );
+      this._activeOverride = null;
+    }
     this.mixer.stopAllAction();
     this.mixer.uncacheRoot(this.root);
   }

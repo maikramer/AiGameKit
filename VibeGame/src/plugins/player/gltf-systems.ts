@@ -1,7 +1,10 @@
 import { logger } from '../../core/utils/logger';
 import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
-import { loadGltfAnimated, loadGltfAnimatedForEntity } from '../../extras/gltf-bridge';
+import {
+  loadGltfAnimated,
+  loadGltfAnimatedForEntity,
+} from '../../extras/gltf-bridge';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import {
   animatorRegistry,
@@ -194,9 +197,11 @@ const _q = new Quaternion();
 
 /** First clip whose name contains any of the keywords (case-insensitive). */
 function findClip(animator: GltfAnimator, ...keywords: string[]): string {
+  const names = animator.clipNames;
+  const lower = animator.clipNamesLower;
   for (const k of keywords) {
-    const hit = animator.clipNames.find((n) => n.toLowerCase().includes(k));
-    if (hit) return hit;
+    const idx = lower.findIndex((n) => n.includes(k));
+    if (idx >= 0) return names[idx];
   }
   return '';
 }
@@ -207,7 +212,8 @@ function findClipFuzzy(animator: GltfAnimator, ...keywords: string[]): string {
   const direct = findClip(animator, ...keywords);
   if (direct) return direct;
 
-  const lower = animator.clipNames.map((n) => n.toLowerCase());
+  const names = animator.clipNames;
+  const lower = animator.clipNamesLower;
 
   // Strategy 2: check for common animation naming variants
   const variants: Record<string, string[]> = {
@@ -233,7 +239,7 @@ function findClipFuzzy(animator: GltfAnimator, ...keywords: string[]): string {
     const alts = variants[k] ?? [];
     for (const alt of alts) {
       const idx = lower.findIndex((n) => n.includes(alt));
-      if (idx >= 0) return animator.clipNames[idx];
+      if (idx >= 0) return names[idx];
     }
   }
 
@@ -251,12 +257,36 @@ interface Locomotion {
   back: string;
 }
 
-/** Resolve clips by explicit index override (>0) else by name keyword (fuzzy). */
-function resolveLocomotion(animator: GltfAnimator, eid: number): Locomotion {
+const locomotionCache = new WeakMap<State, Map<number, Locomotion>>();
+
+function getLocomotionMap(state: State): Map<number, Locomotion> {
+  let m = locomotionCache.get(state);
+  if (!m) {
+    m = new Map();
+    locomotionCache.set(state, m);
+  }
+  return m;
+}
+
+function clearLocomotionCache(state: State, eid: number): void {
+  locomotionCache.get(state)?.delete(eid);
+}
+
+/** Resolve clips by explicit index override (>0) else by name keyword (fuzzy).
+ *  Memoized per-eid; clear via {@link clearLocomotionCache} on animator swap. */
+function resolveLocomotion(
+  state: State,
+  animator: GltfAnimator,
+  eid: number
+): Locomotion {
+  const cache = getLocomotionMap(state);
+  const cached = cache.get(eid);
+  if (cached) return cached;
+
   const names = animator.clipNames;
   const byIndex = (field: number): string =>
     field > 0 && field < names.length ? names[field] : '';
-  return {
+  const resolved: Locomotion = {
     idle:
       byIndex(PlayerGltfConfig.idleClipIndex[eid]) ||
       findClipFuzzy(animator, 'idle', 'breathe'),
@@ -272,6 +302,8 @@ function resolveLocomotion(animator: GltfAnimator, eid: number): Locomotion {
     turnRight: findClipFuzzy(animator, 'turnright'),
     back: findClipFuzzy(animator, 'back'),
   };
+  cache.set(eid, resolved);
+  return resolved;
 }
 
 function isRunModifier(): boolean {
@@ -350,6 +382,18 @@ export const PlayerGltfSetupSystem: System = {
       }
 
       setLoadInFlight(state, eid, true);
+
+      // Register teardown unconditionally so cleanup runs even if the GLB
+      // load fails — otherwise the eid-keyed maps leak on load error.
+      state.onDestroy(eid, () => {
+        const idx = PlayerGltfConfig.animatorRegistryIndex[eid];
+        if (idx !== 0) unregisterAnimator(idx);
+        prevPrimary.delete(eid);
+        pendingMelee.delete(eid);
+        prevInteract.delete(eid);
+        clearLocomotionCache(state, eid);
+      });
+
       void loadGltfAnimatedForEntity(state, url, eid)
         .then((gltf) => {
           // Entity may have been destroyed while the model loaded — don't leak
@@ -363,15 +407,8 @@ export const PlayerGltfSetupSystem: System = {
           const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });
           const regIdx = registerAnimator(animator);
           PlayerGltfConfig.animatorRegistryIndex[eid] = regIdx;
-          // Recycle-safe teardown: dispose the animator and clear per-eid
-          // sidecar state so a reused eid never inherits stale data.
-          state.onDestroy(eid, () => {
-            unregisterAnimator(regIdx);
-            prevPrimary.delete(eid);
-            pendingMelee.delete(eid);
-          });
 
-          const loco = resolveLocomotion(animator, eid);
+          const loco = resolveLocomotion(state, animator, eid);
           if (loco.idle && loco.walk && loco.run) {
             animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, {
               idle: loco.idle,
@@ -500,7 +537,7 @@ export const PlayerGltfAnimStateSystem: System = {
         continue;
       }
 
-      const loco = resolveLocomotion(animator, eid);
+      const loco = resolveLocomotion(state, animator, eid);
       if (loco.idle && loco.walk && loco.run) {
         animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, {
           idle: loco.idle,
