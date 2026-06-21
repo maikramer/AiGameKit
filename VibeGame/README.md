@@ -139,7 +139,7 @@ GAME.withPlugin(SaveLoadPlugin)
   .run();
 ```
 
-System execution groups (in order): `setup` → `fixed` (physics tick) → `simulation` → `draw` (render).
+System execution groups (in order): `setup` → `fixed` (physics tick) → `simulation` → `late` (UI/HUD/coroutine updates that must follow simulation) → `draw` (render).
 
 ---
 
@@ -221,7 +221,7 @@ Attributes on recipes are expanded via shorthands and adapters defined in each p
 
 ### Custom Components and Systems
 
-Register custom components and systems to handle arbitrary game logic:
+A component is a plain object literal of typed arrays (Struct-of-Arrays), declared with `as const` and registered with `withComponent(name, component)`. This matches how every built-in component is defined (see `Transform` in `src/plugins/transforms/components.ts`).
 
 ```html
 <Scene canvas="#game-canvas" sky="#87ceeb">
@@ -234,17 +234,19 @@ Register custom components and systems to handle arbitrary game logic:
 <script type="module">
   import * as GAME from 'vibegame';
 
-  const MyComponent = GAME.defineComponent({
-    value: GAME.Types.f32,
-  });
+  // Component = plain object of typed arrays (one slot per entity), `as const`.
+  // Size arrays to the engine's MAX_ENTITIES capacity (100000).
+  const MAX_ENTITIES = 100000;
+  const MyComponent = {
+    value: new Float32Array(MAX_ENTITIES),
+  } as const;
 
   const query = GAME.defineQuery([MyComponent]);
 
-  const MySystem: GAME.System = {
-    update: (state: GAME.State): void => {
-      const entities: number[] = query(state.world);
-      for (const entity of entities) {
-        console.log("my-component value for entity", entity, "is", MyComponent.value[entity]);
+  const MySystem = {
+    group: 'simulation',
+    update: (state) => {
+      for (const entity of query(state.world)) {
         MyComponent.value[entity] += 1;
       }
     },
@@ -255,6 +257,8 @@ Register custom components and systems to handle arbitrary game logic:
     .run();
 </script>
 ```
+
+Supported array types: `Float32Array` (f32), `Uint8Array` (ui8), `Uint16Array`, `Uint32Array` (ui32/eid), `Int8Array` (i8), `Int32Array` (i32).
 
 ---
 
@@ -518,7 +522,7 @@ Each plugin lives in `src/plugins/<name>/` with a standard structure:
 plugins/
 └── my-plugin/
     ├── plugin.ts        # Export MyPlugin: Plugin (required)
-    ├── components.ts    # defineComponent() for ECS data
+    ├── components.ts    # Typed-array component object (SOA) + `as const`
     ├── systems.ts       # Query + update logic per frame
     ├── recipes.ts       # Entity creation shortcuts
     ├── index.ts         # Public re-exports

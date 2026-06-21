@@ -44,7 +44,7 @@ Função `update(state: State)` que roda todo frame (ou a cada fixed tick). Sist
 
 ```ts
 export const FogSystem: System = {
-  group: 'draw',        // 'setup' | 'simulation' | 'fixed' | 'draw'
+  group: 'draw',        // 'setup' | 'simulation' | 'fixed' | 'late' | 'draw'
   after: [CameraSyncSystem],  // ordenação opcional
   update(state: State) {
     const entities = fogQuery(state.world);
@@ -53,7 +53,7 @@ export const FogSystem: System = {
 };
 ```
 
-**Grupos de execução (em ordem):** `setup` → `fixed` (physics) → `simulation` → `draw` (render).
+**Grupos de execução (em ordem):** `setup` → `fixed` (physics) → `simulation` → `late` (UI/HUD/corrotinas que devem seguir o simulation) → `draw` (render).
 
 ### Recipe
 
@@ -100,7 +100,7 @@ function fogColorAdapter(entity: number, value: string, state: State): void {
 plugins/
 └── meu-plugin/
     ├── plugin.ts        # Exporta MeuPlugin: Plugin (obrigatório)
-    ├── components.ts    # defineComponent() para dados ECS
+    ├── components.ts    # Objeto de typed arrays (SOA) + `as const`
     ├── systems.ts       # Lógica por frame (queries + update)
     ├── recipes.ts       # Atalhos de criação de entidades
     ├── index.ts         # Re-exports públicos
