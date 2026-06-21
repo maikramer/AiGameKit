@@ -63,6 +63,7 @@ interface PhysicsContext {
   failedRigidbodies: Set<number>;
   failedColliders: Set<number>;
   failedControllers: Set<number>;
+  removalsDirty: boolean;
 }
 
 const physicsWorldQuery = defineQuery([PhysicsWorld]);
@@ -102,8 +103,24 @@ function getPhysicsContext(state: State): PhysicsContext {
       failedRigidbodies: new Set(),
       failedColliders: new Set(),
       failedControllers: new Set(),
+      removalsDirty: true,
     };
     stateToPhysicsContext.set(state, context);
+    // Dirty-gate the cleanup scan: only run it when an entity that owns a
+    // physics handle is destroyed. Rigidbodies/Colliders/CharacterControllers
+    // are never removed via removeComponent in practice, so destroyEntity is
+    // the only exit path.
+    state.onDestroyAll((eid) => {
+      const ctx = stateToPhysicsContext.get(state);
+      if (!ctx) return;
+      if (
+        ctx.entityToRigidbody.has(eid) ||
+        ctx.entityToCollider.has(eid) ||
+        ctx.entityToCharacterController.has(eid)
+      ) {
+        ctx.removalsDirty = true;
+      }
+    });
   }
   return context;
 }
@@ -157,6 +174,22 @@ export const PhysicsWorldSystem: System = {
       if (context.eventQueue) {
         context.eventQueue.free();
         context.eventQueue = null;
+      }
+      // Free per-entity WASM handles that own a raw pointer (KinematicCharacter-
+      // Controller) BEFORE the world. RigidBody/Collider are world-owned indices
+      // with no `.free()` — `world.free()` releases their WASM — so we guard on
+      // the method's presence instead of calling it blindly (calling
+      // `collider.free()` throws "free is not a function" and aborts teardown,
+      // leaking the whole world).
+      for (const map of [
+        context.entityToCharacterController,
+        context.entityToCollider,
+        context.entityToRigidbody,
+      ]) {
+        for (const handle of map.values()) {
+          const free = (handle as unknown as { free?: () => void }).free;
+          if (typeof free === 'function') free.call(handle);
+        }
       }
       if (context.physicsWorld) {
         context.physicsWorld.free();
@@ -520,6 +553,8 @@ export const PhysicsCleanupSystem: System = {
     const context = getPhysicsContext(state);
     const worldRapier = context.physicsWorld;
     if (!worldRapier) return;
+    if (!context.removalsDirty) return;
+    context.removalsDirty = false;
 
     for (const [entity, collider] of context.entityToCollider) {
       if (!state.hasComponent(entity, Collider)) {
