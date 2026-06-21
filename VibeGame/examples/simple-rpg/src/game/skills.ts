@@ -7,6 +7,23 @@ import { ProgressionComponent, getDataRegistry } from 'vibegame';
 import type { State } from 'vibegame';
 import { engineState, heroEid } from './engine-bridge';
 
+// Resolved hero progress shared across gameplay modules.
+//   attackBonus — flat damage added to the hero's bombs (Strength ranks +
+//                 merchant sword upgrades); recomputed each frame by
+//                 HeroStatsSystem in main.ts, read by bombs.ts.
+//   ringOwned   — set by the merchant; read by HeroStatsSystem to apply the
+//                 speed multiplier. Persisted via the save-load serializer
+//                 registered in main.ts so it survives save/load (otherwise
+//                 re-buying the ring would compound the speed bonus).
+//   swordLevel  — set by the merchant; folded into attackBonus.
+export const heroStats = {
+  attackBonus: 0,
+  ringOwned: false,
+  swordLevel: 0,
+};
+
+export const RING_SPEED_MULT = 1.15;
+
 /** Grant skill points to the hero (e.g. the rune pillar). */
 export function addSkillPoints(n: number): void {
   const h = heroEid();
@@ -20,8 +37,9 @@ export function getSkillPoints(): number {
 
 /**
  * Register the three skills with the engine data registry so the SkillsTab can
- * list them. Vitality is a stat-modifier on max HP (applied by HeroStatsSystem
- * in main.ts); Strength/Agility are reserved stat-modifiers for future systems.
+ * list them. All three are stat-modifiers applied by HeroStatsSystem in
+ * main.ts: Vitality → max HP, Strength → bomb attack damage (heroStats.
+ * attackBonus), Agility → PlayerController.speed.
  */
 export function registerGameSkills(state: State = engineState()!): void {
   if (!state) return;

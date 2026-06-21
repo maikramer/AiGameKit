@@ -15,6 +15,7 @@ import {
   playSound,
 } from 'vibegame';
 import type { State } from 'vibegame';
+import { heroStats } from './skills';
 
 const FUSE_SECONDS = 1.5;
 const BLAST_RADIUS = 6;
@@ -91,7 +92,8 @@ export function spawnBomb(
     mesh: m.mesh, mat: m.mat, phase: 'fuse', fuse: FUSE_SECONDS,
     x, y, z, fx: x, fy: y, fz: z, apex: 0, flightT: 0, flightDur: 0, owner,
   });
-  playSound('mine-hit');
+  // TODO: dedicated bomb-drop / fuse SFX — reuse 'swing' (whoosh) for now.
+  playSound('swing');
 }
 
 /** Lob a bomb along an arc from→to, then it lands and fuses (hold + release). */
@@ -152,15 +154,17 @@ function explode(state: State, b: Bomb): void {
   spawnFloatingText(state, '💥', {
     x: b.x, y: b.y + 1.4, z: b.z, color: '#ff8a2a', size: 0.8, duration: 0.8,
   });
+  const merchantEid = state.getEntityByName('merchant');
+  const baseDamage = BLAST_DAMAGE + heroStats.attackBonus;
   const r2 = BLAST_RADIUS * BLAST_RADIUS;
   for (const e of healthQuery(state.world)) {
-    if (e === b.owner || isDead(e)) continue;
+    if (e === b.owner || e === merchantEid || isDead(e)) continue;
     const dx = Transform.posX[e] - b.x;
     const dz = Transform.posZ[e] - b.z;
     const d2 = dx * dx + dz * dz;
     if (d2 > r2) continue;
     const falloff = Math.max(0.3, 1 - Math.sqrt(d2) / BLAST_RADIUS);
-    damageHealth(e, BLAST_DAMAGE * falloff);
+    damageHealth(e, baseDamage * falloff);
   }
 }
 
@@ -170,10 +174,11 @@ export function nearestEnemy(
 ): number {
   const hx = Transform.posX[hero];
   const hz = Transform.posZ[hero];
+  const merchantEid = state.getEntityByName('merchant');
   let best = 0;
   let bestD2 = maxRange * maxRange;
   for (const e of healthQuery(state.world)) {
-    if (e === hero || isDead(e)) continue;
+    if (e === hero || e === merchantEid || isDead(e)) continue;
     const dx = Transform.posX[e] - hx;
     const dz = Transform.posZ[e] - hz;
     const d2 = dx * dx + dz * dz;

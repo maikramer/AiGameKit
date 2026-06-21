@@ -27,6 +27,23 @@
         transform-origin: center center;
         will-change: transform;
       }
+
+      #controls-hint {
+        position: fixed;
+        bottom: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        padding: 4px 14px;
+        background: rgba(20, 15, 10, 0.55);
+        border: 1px solid rgba(200, 160, 74, 0.35);
+        border-radius: 4px;
+        color: #e8d8b0;
+        font: 12px Georgia, serif;
+        letter-spacing: 0.5px;
+        pointer-events: none;
+        z-index: 50;
+        white-space: nowrap;
+      }
     </style>
   </head>
 
@@ -47,7 +64,7 @@
       </GameObject>
 
       <!-- Audio mixer tiers + layered music (engine AudioPlugin, T28).
-           Crossfade between explore/battle layers is driven from gameplay code. -->
+           Explore layer plays by default; battle layer crossfade is not yet wired. -->
       <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
       <MusicLayer
         url="/assets/audio/bgm_explore.ogg"
@@ -62,12 +79,17 @@
         loop="1"
       ></MusicLayer>
 
-      <!-- 2 km × 2 km terrain — quadtree LOD chunks (levels=4), 2048×2048 heightmap.
+      <!-- 10 km × 10 km terrain — quadtree LOD chunks (levels=4), 2048×2048
+           heightmap. world-size/max-height match public/assets/terrain/
+           terrain.json (world_size 10000, max_height 200) so the heightmap is
+           not squashed. NOTE: the playable area is 25× larger than the old
+           2000/130 config; spawners currently cluster near the centre (±110)
+           and may want enlarging in a follow-up.
            Physics: one Rapier heightfield per visual chunk, built/freed dynamically. -->
       <Terrain
         pos="0 0 0"
-        world-size="2000"
-        max-height="130"
+        world-size="10000"
+        max-height="200"
         levels="4"
         resolution="128"
         lod-hysteresis="1.3"
@@ -87,9 +109,6 @@
       <!-- Água gerada dinamicamente a partir de /assets/terrain/terrain.json no bootstrap. -->
 
       <!-- Fog disabled temporarily -->
-
-      <!-- WaveManager desativado enquanto ajustamos movimento/câmera -->
-      <!-- <GameObject name="WaveManager" script="wave-manager.ts"></GameObject> -->
 
       <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
       <PlayerGLTF
@@ -722,6 +741,55 @@
         <Sphere pos="-0.4 0.16 -2.2" size="0.4" color="#66615a"></Sphere>
       </Composition>
 
+      <!-- ============================================================
+           ESCARPA SUL — cordilheira contínua que fecha o vale ao sul.
+           Cliffs/outcrops alinhados e sobrepostos formam uma parede rochosa
+           (lógica geológica, vs rochas soltas). Collider convex-hull (shape:
+           hull) porque é barreira (sem walk-under) → bem mais leve no navmesh
+           que trimesh. Bases enterradas + apron de pedra contínuo no pé.
+           ============================================================ -->
+
+      <!-- Apron rochoso contínuo no pé da escarpa + scree espalhado. -->
+      <Composition place="at: -3 -55; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.09 0" size="64 0.18 7" color="#49433b"></Box>
+        <Sphere pos="-28 0.3 2.6" size="0.8" color="#6f6a60"></Sphere>
+        <Sphere pos="-21 0.25 -2.2" size="0.62" color="#76716a"></Sphere>
+        <Sphere pos="-14 0.3 2.9" size="0.7" color="#66615a"></Sphere>
+        <Sphere pos="-6 0.22 -2.6" size="0.55" color="#7a756c"></Sphere>
+        <Sphere pos="1 0.3 2.4" size="0.75" color="#6f6a60"></Sphere>
+        <Sphere pos="8 0.25 -2.0" size="0.6" color="#76716a"></Sphere>
+        <Sphere pos="15 0.3 2.8" size="0.68" color="#66615a"></Sphere>
+        <Sphere pos="23 0.22 -1.8" size="0.55" color="#7a756c"></Sphere>
+        <Sphere pos="29 0.28 2.2" size="0.6" color="#6f6a60"></Sphere>
+      </Composition>
+
+      <!-- Linha da parede (oeste → leste), sobreposta p/ leitura contínua. -->
+      <GameObject place="at: -32 -57; align-to-terrain: 0; base-y-offset: -2.5"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: hull; mesh-url: /assets/meshes/form_outcrop_30.glb; mesh-anchor: base">
+        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_30.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -20 -58; align-to-terrain: 0; base-y-offset: -3.5"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: hull; mesh-url: /assets/meshes/form_cliff_22.glb; mesh-anchor: base">
+        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_22.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: -2 -58; align-to-terrain: 0; base-y-offset: -3.5"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: hull; mesh-url: /assets/meshes/form_cliff_20.glb; mesh-anchor: base">
+        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 14 -58; align-to-terrain: 0; base-y-offset: -3.5"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: hull; mesh-url: /assets/meshes/form_cliff_21.glb; mesh-anchor: base">
+        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_21.glb"></GLTFLoader>
+      </GameObject>
+      <GameObject place="at: 27 -57; align-to-terrain: 0; base-y-offset: -2.5"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: hull; mesh-url: /assets/meshes/form_outcrop_31.glb; mesh-anchor: base">
+        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_31.glb"></GLTFLoader>
+      </GameObject>
+
       <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
       <ThirdPersonCamera
         distance="4"
@@ -765,11 +833,12 @@
         position="bottom-center"
       ></InteractionPrompt>
 
-      <!-- Pause menu: tabbed modal (Escape) with skills / inventory / options
-           tabs (engine HudPlugin, T27). -->
+      <!-- Pause menu: tabbed modal toggled with [Q] (Escape drops canvas focus in
+           Firefox). Skills / Inventory / Options tabs (engine HudPlugin). Options
+           also hosts Save / Load / Controls. -->
       <TabbedModal
         id="pause"
-        key="Escape"
+        key="q"
         target-entity="hero"
         title-key="modal.pause"
       >
@@ -793,6 +862,13 @@
             max="100"
             step="5"
             default="80"
+          ></OptionRow>
+          <OptionRow id="save" type="button" label-key="options.save"></OptionRow>
+          <OptionRow id="load" type="button" label-key="options.load"></OptionRow>
+          <OptionRow
+            id="controls"
+            type="note"
+            label-key="options.controls"
           ></OptionRow>
         </OptionsTab>
       </TabbedModal>

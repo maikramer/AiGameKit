@@ -68,6 +68,7 @@ import {
   Rigidbody,
   Health,
   isDead,
+  PlayerController,
   ProgressionComponent,
   InventoryComponent,
   addItem,
@@ -83,6 +84,7 @@ import {
   onDestructibleDestroyed,
   saveToLocalStorage,
   loadFromLocalStorage,
+  registerSaveSerializer,
   getDataRegistry,
   // physics / terrain
   getBodyForEntity,
@@ -100,12 +102,15 @@ import {
   registerSpawnFootprint,
 } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import { Euler, Vector3, type Camera, type Object3D, type Quaternion } from 'three';
+import { Euler, Vector3, type Camera, type Mesh, type Object3D, type Quaternion } from 'three';
 
 setKTX2TranscoderPath('/libs/basis/');
 
 import { registerGameSounds } from './game/sounds';
-import { registerGameSkills } from './game/skills';
+import { registerGameSkills, heroStats, RING_SPEED_MULT } from './game/skills';
+import { updateConsumables } from './game/consumables';
+import { updateAbilities } from './game/abilities';
+import { addGold } from './game/economy';
 import {
   spawnBomb,
   throwBomb,
@@ -113,6 +118,7 @@ import {
   nearestEnemy,
   updateThrowArc,
   hideThrowArc,
+  clearBombs,
 } from './game/bombs';
 import { bindEngine } from './game/engine-bridge';
 import { isWoodEntity } from './scripts/tree';
@@ -121,6 +127,9 @@ import { addWood } from './scripts/wood';
 
 const SAVE_KEY = 'simple-rpg-save';
 const BASE_MAX_HP = 100;
+// Flat bomb-damage bonus per merchant sword-upgrade level (folded into
+// heroStats.attackBonus by HeroStatsSystem; read by bombs.ts).
+const SWORD_DMG_PER_LEVEL = 10;
 const CHECKPOINT_X = 0;
 const CHECKPOINT_Y = 50;
 const CHECKPOINT_Z = 0;
@@ -267,7 +276,12 @@ const HeroSetupSystem: System = {
   },
 };
 
-// ── Hero stats: max HP = base + Vitality skill modifiers (engine progression). ─
+// ── Hero stats: resolve all three progression stat-modifiers (Vitality → max
+//    HP, Strength → attack damage, Agility → move speed) plus the merchant
+//    ring/sword upgrades. Strength+sword feed heroStats.attackBonus (read by
+//    bombs.ts); speed is owned here so the ring multiplier can't compound. ──────
+let baseHeroSpeed = 0;
+let baseHeroSpeedCaptured = false;
 const HeroStatsSystem: System = {
   group: 'simulation',
   update(state: State) {
@@ -276,14 +290,31 @@ const HeroStatsSystem: System = {
       return;
     if (!state.hasComponent(hero, Health)) return;
 
-    let bonus = 0;
+    let hpBonus = 0;
+    let attackBonus = 0;
+    let moveBonus = 0;
     for (const mod of getStatModifiers(state, hero)) {
-      if (mod.stat === 'maxHp') bonus += mod.magnitude;
+      if (mod.stat === 'maxHp') hpBonus += mod.magnitude;
+      else if (mod.stat === 'attack') attackBonus += mod.magnitude;
+      else if (mod.stat === 'moveSpeed') moveBonus += mod.magnitude;
     }
-    const newMax = BASE_MAX_HP + bonus;
+    heroStats.attackBonus =
+      attackBonus + heroStats.swordLevel * SWORD_DMG_PER_LEVEL;
+
+    const newMax = BASE_MAX_HP + hpBonus;
     if (Health.max[hero] !== newMax) {
       Health.max[hero] = newMax;
       if (Health.current[hero] > newMax) Health.current[hero] = newMax;
+    }
+
+    if (!baseHeroSpeedCaptured) {
+      baseHeroSpeed = PlayerController.speed[hero];
+      baseHeroSpeedCaptured = true;
+    }
+    const ringMult = heroStats.ringOwned ? RING_SPEED_MULT : 1;
+    const targetSpeed = (baseHeroSpeed + moveBonus) * ringMult;
+    if (PlayerController.speed[hero] !== targetSpeed) {
+      PlayerController.speed[hero] = targetSpeed;
     }
   },
 };
@@ -325,26 +356,8 @@ const RespawnSystem: System = {
   },
 };
 
-// ── Save / load on keys (the engine pause menu's OptionsTab has no button row). ─
-let savePressed = false;
-let loadPressed = false;
-const SaveLoadKeysSystem: System = {
-  group: 'simulation',
-  update(state: State) {
-    const save = isKeyDown('KeyG');
-    if (save && !savePressed) {
-      saveToLocalStorage(state, SAVE_KEY);
-      playSound('save');
-    }
-    savePressed = save;
-
-    const load = isKeyDown('KeyH');
-    if (load && !loadPressed) {
-      if (loadFromLocalStorage(state, SAVE_KEY)) playSound('load');
-    }
-    loadPressed = load;
-  },
-};
+// Save / load now live as Save / Load buttons in the pause menu's Options tab
+// (MODAL_OPTION_CHANGED handler below) — no dedicated keys.
 
 // ── Combat & harvest feedback (game-side juice the engine doesn't own):
 //    floating damage numbers + hurt/kill SFX + XP-on-kill for any Health entity,
@@ -411,8 +424,21 @@ const CombatFeedbackSystem: System = {
 //    game's own strings. ──────────────────────────────────────────────────────
 const dictEN: Record<string, string> = {
   'modal.pause': 'Paused',
+  'modal.hint': 'Press Q to resume',
+  'modal.tab.skills': 'Skills',
+  'modal.tab.inventory': 'Inventory',
+  'modal.tab.options': 'Options',
   'options.music': 'Music',
   'options.sfx': 'Sound FX',
+  'options.save': '💾 Save Game',
+  'options.load': '📂 Load Game',
+  'options.controls':
+    'Move: WASD   Jump: Space   Sprint: Shift\n' +
+    'Attack / Harvest: J   Interact: F   Trade: K\n' +
+    'Bomb: B (hold to aim)   Cycle weapon: V\n' +
+    'Use potion: 1   Use antidote: 2\n' +
+    'Dash: C   Heal: E   Power Strike: R\n' +
+    'Pause menu: Q',
   'hud.title': 'Crystal Vale',
   'hud.saved': 'Game saved!',
   'hud.loaded': 'Save restored.',
@@ -420,8 +446,21 @@ const dictEN: Record<string, string> = {
 
 const dictPT: Record<string, string> = {
   'modal.pause': 'Pausa',
+  'modal.hint': 'Aperte Q para voltar',
+  'modal.tab.skills': 'Habilidades',
+  'modal.tab.inventory': 'Inventário',
+  'modal.tab.options': 'Opções',
   'options.music': 'Música',
   'options.sfx': 'Efeitos',
+  'options.save': '💾 Salvar Jogo',
+  'options.load': '📂 Carregar Jogo',
+  'options.controls':
+    'Mover: WASD   Pular: Espaço   Correr: Shift\n' +
+    'Atacar / Coletar: J   Interagir: F   Comércio: K\n' +
+    'Bomba: B (segure p/ mirar)   Trocar arma: V\n' +
+    'Usar poção: 1   Usar antídoto: 2\n' +
+    'Investida: C   Cura: E   Golpe Forte: R\n' +
+    'Menu de pausa: Q',
   'hud.title': 'Vale do Cristal',
   'hud.saved': 'Jogo gravado!',
   'hud.loaded': 'Progresso restaurado.',
@@ -530,36 +569,15 @@ const BOMB_AIM_RANGE = 30; // m auto-aim search radius
 const BOMB_THROW_RANGE = 10; // m forward when no enemy is in range
 const _bombLand = { x: 0, y: 0, z: 0 };
 const _bombFrom = { x: 0, y: 0, z: 0 };
-let bombHudEl: HTMLDivElement | null = null;
-
-function updateBombHud(count: number): void {
-  if (typeof document === 'undefined') return;
-  if (!bombHudEl) {
-    bombHudEl = document.createElement('div');
-    // Sits in the resource-chip row (top-left), after gold/wood/stone.
-    bombHudEl.style.cssText =
-      'position:absolute;top:108px;left:284px;z-index:12;min-width:64px;' +
-      'display:inline-flex;align-items:center;justify-content:center;gap:7px;' +
-      'padding:7px 13px;border-radius:10px;font:700 14px system-ui,sans-serif;' +
-      'color:#ff8a6a;border:1px solid rgba(255,120,80,0.3);' +
-      'background:linear-gradient(135deg,rgba(14,18,34,0.72),rgba(10,14,26,0.6));' +
-      'backdrop-filter:blur(10px);box-shadow:0 5px 18px rgba(0,0,0,0.25);';
-    const layer =
-      document.querySelector('.vibe-hud-screen-layer') ?? document.body;
-    layer.appendChild(bombHudEl);
-  }
-  bombHudEl.textContent = `💣 ${count}`;
-  bombHudEl.style.display = count > 0 ? 'inline-flex' : 'none';
-}
+// (Bomb count now lives in the consumable hotbar — see game/consumables.ts.)
 
 const BombSystem: System = {
   group: 'simulation',
   update(state: State) {
     updateBombs(state, state.time.deltaTime);
     const heroForHud = state.getEntityByName('hero');
-    updateBombHud(
-      heroForHud !== null ? getItemQty(state, heroForHud, 'bomb') : 0
-    );
+    updateConsumables(state, heroForHud ?? 0);
+    updateAbilities(state, heroForHud ?? 0, state.time.deltaTime);
     const dt = state.time.deltaTime;
     const held = isKeyDown('KeyB');
     const hero = state.getEntityByName('hero');
@@ -790,7 +808,6 @@ async function bootstrap(): Promise<void> {
   withSystem(HeroGroundSnapSystem);
   withSystem(HeroStatsSystem);
   withSystem(RespawnSystem);
-  withSystem(SaveLoadKeysSystem);
   withSystem(CombatFeedbackSystem);
   withSystem(AttackContextSystem);
   withSystem(BombSystem);
@@ -818,6 +835,22 @@ async function bootstrap(): Promise<void> {
   registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
   registerGameSkills(state);
 
+  // Persist merchant progress that lives outside ECS (heroStats.ringOwned /
+  // swordLevel) so re-loading can't re-grant the ring (speed compounding) or
+  // reset sword levels. Attached to the hero entity; other eids are skipped.
+  registerSaveSerializer(state, 'simple-rpg-progress', {
+    serialize: (s, eid) => {
+      if (s.getEntityByName('hero') !== eid) return null;
+      return { ringOwned: heroStats.ringOwned, swordLevel: heroStats.swordLevel };
+    },
+    deserialize: (s, eid, data) => {
+      if (s.getEntityByName('hero') !== eid) return;
+      const d = data as { ringOwned?: boolean; swordLevel?: number };
+      heroStats.ringOwned = !!d.ringOwned;
+      heroStats.swordLevel = d.swordLevel ?? 0;
+    },
+  });
+
   // Item definitions — without a registered ItemDef the inventory caps every
   // item's stack at 1, so bought bombs never accumulated. Stack them high.
   const itemReg = getDataRegistry(state);
@@ -826,8 +859,20 @@ async function bootstrap(): Promise<void> {
     ['wood', 'Wood', '🪵'],
     ['stone', 'Stone', '🪨'],
     ['potion', 'Potion', '🧪'],
+    ['antidote', 'Antidote', '🟣'],
   ] as const) {
     itemReg.register('item', id, { id, name, icon, maxStack: 99, tags: [] });
+  }
+
+  // Dev cheats (vite DEV only): grant items/gold from the console for testing.
+  //   __give('potion', 3)   __gold(500)
+  if (import.meta.env.DEV) {
+    const w = window as unknown as Record<string, unknown>;
+    w.__give = (id: string, n = 1): void => {
+      const h = state.getEntityByName('hero') ?? 0;
+      if (h) addItem(state, h, id, n);
+    };
+    w.__gold = (n = 100): void => addGold(n);
   }
 
   // Load data-driven RPG presets (boss/goblin/slime) into the DataRegistry
@@ -850,7 +895,8 @@ async function bootstrap(): Promise<void> {
   // Harvest loot: the engine DestructiblePlugin breaks rocks/trees; the game
   // banks the yield into the hero vault + bag and pops a floating "+1".
   onDestructibleDestroyed(state, (eid, x, y, z) => {
-    const hero = state.getEntityByName('hero') ?? 0;
+    const hero = state.getEntityByName('hero');
+    if (hero === null) return;
     if (eid !== null && isWoodEntity(eid)) {
       addWood(1);
       addItem(state, hero, 'wood', 1);
@@ -864,11 +910,17 @@ async function bootstrap(): Promise<void> {
     }
   });
 
-  // Engine OptionsTab sliders → audio buses.
+  // Engine OptionsTab rows → audio buses + Save/Load buttons.
   onEvent(state, MODAL_OPTION_CHANGED, (payload) => {
     const p = payload as { id: string; value: number };
     if (p.id === 'music-volume') setBusVolume('music', p.value / 100);
     else if (p.id === 'sfx-volume') setBusVolume('sfx', p.value / 100);
+    else if (p.id === 'save') {
+      saveToLocalStorage(state, SAVE_KEY);
+      playSound('save');
+    } else if (p.id === 'load') {
+      if (loadFromLocalStorage(state, SAVE_KEY)) playSound('load');
+    }
   });
 
   initAudioBuses();
@@ -916,12 +968,12 @@ async function bootstrap(): Promise<void> {
     const scene = getScene(state);
     const hands: { childCount: number; childNames: string[]; worldScale: number }[] = [];
     const _v = new Vector3();
-    scene?.traverse((o: any) => {
+    scene?.traverse((o: Object3D) => {
       if (o.name === 'RightHand') {
         o.getWorldScale?.(_v);
         hands.push({
           childCount: o.children.length,
-          childNames: o.children.map((c: any) => `${c.name}(s${(c.scale?.x ?? 0).toFixed(2)})`),
+          childNames: o.children.map((c: Mesh) => `${c.name}(s${c.scale.x.toFixed(2)})`),
           worldScale: +_v.x.toFixed(3),
         });
       }
@@ -946,6 +998,7 @@ void bootstrap();
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     try {
+      clearBombs();
       disposeAllRuntimes();
     } catch (e) {
       console.error('[VibeGame] HMR dispose failed:', e);

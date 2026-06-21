@@ -436,7 +436,7 @@ export function createCreatureBehaviours(
 
       if (!s.ready) {
         const gy = groundHeight(ctx, Transform.posX[eid], Transform.posZ[eid], 500);
-        if (!Number.isFinite(gy) || gy === 0) return;
+        if (!Number.isFinite(gy)) return;
         s.ready = true;
       }
 

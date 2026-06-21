@@ -10,11 +10,12 @@ import { addClipSound, defineSoundBank } from 'vibegame';
 export function registerGameSounds(): void {
   defineSoundBank({
     // ── SFX (bus 'sfx') ──────────────────────────────────────────────
-    jump: { url: '/assets/audio/sfx_jump.wav', volume: 0.42 },
-    save: { url: '/assets/audio/sfx_save.wav', volume: 0.48 },
-    load: { url: '/assets/audio/sfx_load.wav', volume: 0.44 },
+    // Dedicated save/load WAVs were never generated, so we repurpose
+    // existing SFX: level-up chime for save (positive confirm), heal
+    // shimmer for load (magical restore). TODO: generate dedicated SFX.
+    save: { url: '/assets/audio/sfx_levelup.ogg', volume: 0.48 },
+    load: { url: '/assets/audio/sfx_heal.ogg', volume: 0.44 },
     heal: { url: '/assets/audio/sfx_heal.ogg', volume: 0.48 },
-    hit: { url: '/assets/audio/sfx_hit.ogg', volume: 0.45 },
     'enemy-hurt': { url: '/assets/audio/sfx_enemy_hurt.ogg', volume: 0.42 },
     'enemy-death': { url: '/assets/audio/sfx_enemy_death.ogg', volume: 0.5 },
     'boss-roar': { url: '/assets/audio/sfx_boss_roar.ogg', volume: 0.55 },
@@ -32,12 +33,6 @@ export function registerGameSounds(): void {
     swing: { url: '/assets/audio/sfx_swing.ogg', volume: 0.3 },
 
     // ── Music (bus 'music', looped) ──────────────────────────────────
-    'bgm-field': {
-      url: '/assets/audio/bgm_field.wav',
-      volume: 0.18,
-      bus: 'music',
-      loop: true,
-    },
     'bgm-battle': {
       url: '/assets/audio/bgm_battle.ogg',
       volume: 0.22,

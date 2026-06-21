@@ -8,13 +8,16 @@ import {
   isKeyDown,
   setInputMovementSuppressed,
   Health,
-  healHealth,
   addItem,
+  getItemQty,
+  registerInteractionTarget,
+  unregisterInteractionTarget,
 } from 'vibegame';
 import { getGold, spendGold, addGold } from '../game/economy.ts';
 import { isGamePaused, setShopOpen } from '../game/pause.ts';
 import { getStoneCount, removeStone } from './inventory.ts';
 import { getWoodCount, removeWood } from './wood.ts';
+import { heroStats, RING_SPEED_MULT } from '../game/skills';
 
 const TURN_SPEED = 6;
 const TERRAIN_LAYER = 0x0001;
@@ -37,8 +40,7 @@ const WOOD1_PRICE = 8;
 // Commerce-only items (2D shop icons via text2d, no 3D models).
 const ANTIDOTE_PRICE = 25;
 const ANTIDOTE_HEAL = 35;
-const RING_PRICE = 80; // one-time permanent +15% move speed
-const RING_SPEED_MULT = 1.15;
+const RING_PRICE = 80; // one-time permanent +15% move speed (applied by HeroStatsSystem)
 const BOMB_PRICE = 20;
 
 const ICON_BASE = '/assets/images/';
@@ -53,8 +55,6 @@ const ICONS: Record<string, string> = {
   stone5: 'rock_mossy.png',
   wood1: 'tree_oak.png',
 };
-
-let ringOwned = false;
 
 const playerQuery = defineQuery([PlayerController]);
 let cachedPlayer = 0;
@@ -74,13 +74,17 @@ let statsLabel: HTMLDivElement | null = null;
 let errorLabel: HTMLDivElement | null = null;
 let shopButtons: HTMLButtonElement[] = [];
 let focusedIndex = 0;
-let swordLevel = 0;
 let shopErrorTimeout: ReturnType<typeof setTimeout> | null = null;
 
 // Edge-trigger debounce flags: isKeyDown stays true while held, so these
 // convert it to a single-fire per keypress to prevent repeat triggers.
 let kPressed = false;
 let lPressed = false;
+// Merchant entity + whether its "[K] Trade" interaction prompt is registered.
+// The prompt is hidden while the shop is open (player is in range, but the
+// panel already covers the screen).
+let merchantEid = 0;
+let promptShown = false;
 let navUpPressed = false;
 let navDownPressed = false;
 let enterPressed = false;
@@ -103,8 +107,24 @@ function findPlayer(ctx: MonoBehaviourContext): number {
   return cachedPlayer;
 }
 
+function showTradePrompt(state: typeof shopState): void {
+  if (promptShown || !merchantEid || !state) return;
+  registerInteractionTarget(state, merchantEid, { label: 'Trade', key: 'K' });
+  promptShown = true;
+}
+
+function hideTradePrompt(state: typeof shopState): void {
+  if (!promptShown || !merchantEid || !state) return;
+  unregisterInteractionTarget(state, merchantEid);
+  promptShown = false;
+}
+
 export function start(ctx: MonoBehaviourContext): void {
   findPlayer(ctx);
+  merchantEid = ctx.entity;
+  // Show the "[K] Trade" prompt; the HUD InteractionPrompt widget only renders
+  // it while the player is within range, so K-to-open is discoverable.
+  showTradePrompt(ctx.state);
   if (!loadStarted) {
     loadStarted = true;
     void loadGltfToSceneWithAnimator(ctx.state, MODEL_URL, {
@@ -226,7 +246,7 @@ function createShopPanel(): void {
   );
   shopButtons.push(
     makeButton(
-      `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${swordLevel + 1}`,
+      `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${heroStats.swordLevel + 1}`,
       'sword',
       buySwordUpgrade
     )
@@ -307,6 +327,9 @@ function refreshShopDisplay(): void {
   const hpMax = Math.round(Health.max[player] ?? 0);
   const stones = getStoneCount();
   const wood = getWoodCount();
+  const ownedPotion = shopState ? getItemQty(shopState, player, 'potion') : 0;
+  const ownedAntidote = shopState ? getItemQty(shopState, player, 'antidote') : 0;
+  const ownedBomb = shopState ? getItemQty(shopState, player, 'bomb') : 0;
 
   if (statsLabel) {
     statsLabel.textContent = `Gold: ${gold}   |   HP: ${hp}/${hpMax}   |   Stones: ${stones}   |   Wood: ${wood}`;
@@ -315,29 +338,38 @@ function refreshShopDisplay(): void {
   for (const btn of shopButtons) {
     switch (btn.dataset.action) {
       case 'potion':
-        btn.disabled = gold < POTION_PRICE || (hpMax > 0 && hp >= hpMax);
+        btn.disabled = gold < POTION_PRICE;
+        setButtonLabel(
+          btn,
+          `Health Potion — ${POTION_PRICE}g  (have ${ownedPotion})`
+        );
         break;
       case 'sword':
         btn.disabled = gold < SWORD_PRICE;
         setButtonLabel(
           btn,
-          `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${swordLevel + 1}`
+          `Buy Sword Upgrade (${SWORD_PRICE}g) \u2014 Lv.${heroStats.swordLevel + 1}`
         );
         break;
       case 'antidote':
-        btn.disabled = gold < ANTIDOTE_PRICE || (hpMax > 0 && hp >= hpMax);
-        break;
-      case 'ring':
-        btn.disabled = ringOwned || gold < RING_PRICE;
+        btn.disabled = gold < ANTIDOTE_PRICE;
         setButtonLabel(
           btn,
-          ringOwned
+          `Antidote — ${ANTIDOTE_PRICE}g  (have ${ownedAntidote})`
+        );
+        break;
+      case 'ring':
+        btn.disabled = heroStats.ringOwned || gold < RING_PRICE;
+        setButtonLabel(
+          btn,
+          heroStats.ringOwned
             ? 'Magic Ring \u2014 owned (+15% speed)'
             : `Buy Magic Ring (${RING_PRICE}g) \u2014 +15% speed`
         );
         break;
       case 'bomb':
         btn.disabled = gold < BOMB_PRICE;
+        setButtonLabel(btn, `Bomb — ${BOMB_PRICE}g  (have ${ownedBomb})`);
         break;
       case 'stone1':
         btn.disabled = stones < 1;
@@ -355,20 +387,13 @@ function refreshShopDisplay(): void {
 }
 
 function buyHealthPotion(): void {
-  const player = activePlayer;
-  const hp = Health.current[player] ?? 0;
-  const hpMax = Health.max[player] ?? 0;
-  if (hpMax > 0 && hp >= hpMax) {
-    showShopError('HP already full!');
-    return;
-  }
   if (!spendGold(POTION_PRICE)) {
     showShopError('Not enough gold!');
     return;
   }
-  healHealth(player, POTION_HEAL);
+  // Potions go into the bag; use later with [1] (see game/consumables.ts).
+  if (shopState) addItem(shopState, activePlayer, 'potion', 1);
   playSound('buy');
-  playSound('heal');
   refreshShopDisplay();
 }
 
@@ -377,31 +402,26 @@ function buySwordUpgrade(): void {
     showShopError('Not enough gold!');
     return;
   }
-  swordLevel++;
+  // Sword upgrades raise the hero's attack damage: HeroStatsSystem folds
+  // swordLevel into heroStats.attackBonus, which bombs.ts adds to blast damage.
+  heroStats.swordLevel++;
   playSound('buy');
   refreshShopDisplay();
 }
 
 function buyAntidote(): void {
-  const player = activePlayer;
-  const hp = Health.current[player] ?? 0;
-  const hpMax = Health.max[player] ?? 0;
-  if (hpMax > 0 && hp >= hpMax) {
-    showShopError('HP already full!');
-    return;
-  }
   if (!spendGold(ANTIDOTE_PRICE)) {
     showShopError('Not enough gold!');
     return;
   }
-  healHealth(player, ANTIDOTE_HEAL);
+  // Antidote goes into the bag; use later with [2] (see game/consumables.ts).
+  if (shopState) addItem(shopState, activePlayer, 'antidote', 1);
   playSound('buy');
-  playSound('heal');
   refreshShopDisplay();
 }
 
 function buyRing(): void {
-  if (ringOwned) {
+  if (heroStats.ringOwned) {
     showShopError('Already owned!');
     return;
   }
@@ -409,8 +429,11 @@ function buyRing(): void {
     showShopError('Not enough gold!');
     return;
   }
-  ringOwned = true;
-  PlayerController.speed[activePlayer] *= RING_SPEED_MULT;
+  // Flag only — HeroStatsSystem applies RING_SPEED_MULT to
+  // PlayerController.speed each frame. This avoids the old compounding bug
+  // where save/load reset ringOwned=false and let the player re-buy and
+  // re-multiply the speed.
+  heroStats.ringOwned = true;
   playSound('buy');
   refreshShopDisplay();
 }
@@ -450,6 +473,7 @@ function openShop(player: number): void {
   shopOpen = true;
   setShopOpen(true);
   setInputMovementSuppressed(true);
+  hideTradePrompt(shopState);
   if (!shopPanel) createShopPanel();
   if (shopPanel) shopPanel.style.display = 'block';
   playSound('shop-open');
@@ -468,6 +492,7 @@ function closeShop(): void {
   shopOpen = false;
   setShopOpen(false);
   setInputMovementSuppressed(false);
+  showTradePrompt(shopState);
   if (shopPanel) shopPanel.style.display = 'none';
   if (shopErrorTimeout) {
     clearTimeout(shopErrorTimeout);
@@ -499,12 +524,14 @@ function handleShopKeys(): void {
   if (down && !navDownPressed) navigateShop(1);
   navDownPressed = down;
 
-  const enter = isKeyDown('Enter') || isKeyDown('Space');
-  if (enter && !enterPressed) {
+  // Buy/confirm with J (matches the world "[J]" interaction key); Enter also
+  // works for keyboard users. Space is intentionally not bound.
+  const confirm = isKeyDown('KeyJ') || isKeyDown('Enter');
+  if (confirm && !enterPressed) {
     const btn = shopButtons[focusedIndex];
     if (btn && !btn.disabled) btn.click();
   }
-  enterPressed = enter;
+  enterPressed = confirm;
 
   const close = isKeyDown('KeyL') || isKeyDown('Escape');
   if (close && !lPressed) closeShop();
