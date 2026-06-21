@@ -135,12 +135,6 @@ export {
   registerEntityScripts,
   resolveEntityScriptGlobKey,
 } from './plugins/entity-script';
-/** @deprecated Use coerceMonoBehaviourModule. */
-export { coerceMonoBehaviourModule as coerceEntityScriptModule } from './plugins/entity-script';
-/** @deprecated Use getCachedMonoBehaviourModule. */
-export { getCachedMonoBehaviourModule as getCachedEntityScriptModule } from './plugins/entity-script';
-/** @deprecated Use setCachedMonoBehaviourModule. */
-export { setCachedMonoBehaviourModule as setCachedEntityScriptModule } from './plugins/entity-script';
 export type {
   MonoBehaviourContext,
   MonoBehaviourModule,

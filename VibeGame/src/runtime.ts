@@ -17,6 +17,7 @@ import { defineQuery } from './core';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
 import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
+import { cancelLoadingFade } from './plugins/loading/context';
 
 const mainCameraQuery = defineQuery([MainCamera]);
 
@@ -53,6 +54,14 @@ export class GameRuntime {
 
   stop(): void {
     this.isRunning = false;
+    // Three.js keeps invoking the rAF callback after stop() until the loop is
+    // explicitly detached. Halting it here makes stop() actually stop.
+    if (this.state && !this.state.headless) {
+      const renderer = getRenderingContext(this.state).renderer;
+      if (renderer) {
+        renderer.setAnimationLoop(null);
+      }
+    }
     if (this.mutationObserver) {
       this.mutationObserver.disconnect();
     }
@@ -62,6 +71,9 @@ export class GameRuntime {
     if (this.isDestroyed) {
       throw new Error('[VibeGame] Runtime already destroyed');
     }
+    // Cancel any pending loading-screen fade so its setTimeout does not fire
+    // on a detached DOM node after teardown.
+    cancelLoadingFade();
     this.stop();
     this.state.dispose();
     this.canvasElements.clear();
@@ -203,8 +215,11 @@ export class GameRuntime {
             renderingCtx.renderer = renderer;
             renderingCtx.canvas = canvas;
             applyNeutralEnvironment(renderer, renderingCtx.scene);
-          } catch {
-            // WebGL unavailable (headless CI); continue without renderer
+          } catch (e) {
+            logger.warn(
+              'WebGL renderer init failed; continuing headless',
+              e
+            );
           }
         }
       }
@@ -357,14 +372,18 @@ export class GameRuntime {
             if (element.tagName.toLowerCase() === 'scene') {
               if (!processedElements.has(element)) {
                 processedElements.add(element);
-                this.processWorldElement(element);
+                void this.processWorldElement(element).catch((e) =>
+                  logger.warn('processWorldElement failed', e)
+                );
               }
             }
 
             element.querySelectorAll?.('scene').forEach((worldEl) => {
               if (!processedElements.has(worldEl)) {
                 processedElements.add(worldEl);
-                this.processWorldElement(worldEl as HTMLElement);
+                void this
+                  .processWorldElement(worldEl as HTMLElement)
+                  .catch((e) => logger.warn('processWorldElement failed', e));
               }
             });
           }
