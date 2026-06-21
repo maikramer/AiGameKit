@@ -79,16 +79,18 @@ export const GamepadInputSystem: System = {
   group: 'simulation',
 
   update: (state) => {
-    const gamepads: (Gamepad | null)[] =
-      typeof navigator !== 'undefined' && navigator.getGamepads
-        ? Array.from(navigator.getGamepads())
-        : [];
-
     const entities = inputStateQuery(state.world);
+    if (entities.length === 0) return;
+
+    const pads =
+      typeof navigator !== 'undefined' && navigator.getGamepads
+        ? navigator.getGamepads()
+        : [];
 
     for (const eid of entities) {
       let gp: Gamepad | null = null;
-      for (const g of gamepads) {
+      for (let i = 0; i < pads.length; i++) {
+        const g = pads[i];
         if (g) {
           gp = g;
           break;

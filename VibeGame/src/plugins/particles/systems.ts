@@ -5,12 +5,17 @@ import { ColorRange } from 'quarks.core';
 import { Vector4 } from 'quarks.core';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
+import { logger } from '../../core/utils/logger';
 import { getScene } from '../rendering';
 import { WorldTransform } from '../transforms';
 import { ParticleEmitter } from './components';
 import { createPresetParams, presetName } from './presets';
 
 const emitterQuery = defineQuery([ParticleEmitter]);
+
+// Soft budget: caps total emitter entities to keep three.quarks batch + GPU
+// draw cost bounded under heavy spawn scenarios (particle combat FX, weather).
+const MAX_PARTICLE_EMITTERS = 64;
 
 const stateRendererMap = new WeakMap<State, BatchedRenderer>();
 const stateParticleSystems = new WeakMap<State, Map<number, ParticleSystem>>();
@@ -172,6 +177,12 @@ export const ParticleUpdateSystem: System = {
 
       let ps = systems.get(entity);
       if (!ps) {
+        if (emitterQuery(state.world).length >= MAX_PARTICLE_EMITTERS) {
+          logger.warn(
+            `Particle emitter cap reached (MAX_PARTICLE_EMITTERS=${MAX_PARTICLE_EMITTERS}); skipping new emitter`
+          );
+          continue;
+        }
         const created = createParticleSystem(state, entity);
         if (created) {
           systems.set(entity, created);

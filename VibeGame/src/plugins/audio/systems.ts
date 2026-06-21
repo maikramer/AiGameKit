@@ -203,25 +203,27 @@ export const AudioSystem: System = {
         const nextLoop = AudioSource.loop[eid] === 1;
         const nextRate = AudioSource.pitch[eid];
         const spatial = AudioSource.spatial[eid] === 1;
-        const snap = howlPropSnapshot.get(eid);
-        if (!snap || snap.volume !== nextVol) {
-          howl.volume(nextVol);
-        }
-        if (!snap || snap.loop !== nextLoop) {
-          howl.loop(nextLoop);
-        }
-        if (!snap || snap.rate !== nextRate) {
-          howl.rate(nextRate);
+
+        // Mutate the cached snapshot in place instead of allocating a new
+        // object every frame. The dirty-gating still guards the Howl setters.
+        let snap = howlPropSnapshot.get(eid);
+        if (!snap) {
+          snap = { volume: nextVol, loop: nextLoop, rate: nextRate };
+          howlPropSnapshot.set(eid, snap);
         }
 
-        const nextSnap: HowlPropSnapshot = {
-          volume: nextVol,
-          loop: nextLoop,
-          rate: nextRate,
-          pannerRefDistance: snap?.pannerRefDistance,
-          pannerMaxDistance: snap?.pannerMaxDistance,
-          pannerRolloff: snap?.pannerRolloff,
-        };
+        if (snap.volume !== nextVol) {
+          howl.volume(nextVol);
+          snap.volume = nextVol;
+        }
+        if (snap.loop !== nextLoop) {
+          howl.loop(nextLoop);
+          snap.loop = nextLoop;
+        }
+        if (snap.rate !== nextRate) {
+          howl.rate(nextRate);
+          snap.rate = nextRate;
+        }
 
         if (spatial) {
           howl.pos(
@@ -232,15 +234,14 @@ export const AudioSystem: System = {
           const nextRef = AudioSource.minDistance[eid];
           const nextMax = AudioSource.maxDistance[eid];
           const nextRoll = AudioSource.rolloff[eid];
-          nextSnap.pannerRefDistance = nextRef;
-          nextSnap.pannerMaxDistance = nextMax;
-          nextSnap.pannerRolloff = nextRoll;
           if (
-            !snap ||
             snap.pannerRefDistance !== nextRef ||
             snap.pannerMaxDistance !== nextMax ||
             snap.pannerRolloff !== nextRoll
           ) {
+            snap.pannerRefDistance = nextRef;
+            snap.pannerMaxDistance = nextMax;
+            snap.pannerRolloff = nextRoll;
             howl.pannerAttr({
               refDistance: nextRef,
               maxDistance: nextMax,
@@ -248,8 +249,6 @@ export const AudioSystem: System = {
             });
           }
         }
-
-        howlPropSnapshot.set(eid, nextSnap);
       }
 
       prevPlaying.set(eid, playing);
@@ -356,7 +355,12 @@ export const SoundBankSystem: System = {
       } else {
         fireClipMarkers(eid, clip, prev.norm, norm);
       }
-      clipSoundTracker.set(eid, { clip, norm });
+      if (prev) {
+        prev.clip = clip;
+        prev.norm = norm;
+      } else {
+        clipSoundTracker.set(eid, { clip, norm });
+      }
       if (!clipSoundCleanupRegistered.has(eid)) {
         clipSoundCleanupRegistered.add(eid);
         // Recycle-safe: drop tracker state on destroy (not an exists() sweep,

@@ -49,14 +49,27 @@ function templateUrls(spec: SpawnGroupSpec): string[] {
   return urls;
 }
 
-let callbackRegistered = false;
+const spawnerStateMap = new WeakMap<State, SpawnerState>();
+
+interface SpawnerState {
+  callbackRegistered: boolean;
+  spawnHeightmapDeferFrames: number;
+}
+
+function getSpawnerState(state: State): SpawnerState {
+  let s = spawnerStateMap.get(state);
+  if (!s) {
+    s = { callbackRegistered: false, spawnHeightmapDeferFrames: 0 };
+    spawnerStateMap.set(state, s);
+  }
+  return s;
+}
 
 /** Frames a spawn group may wait for an async heightmap before giving up and
  * placing on whatever (possibly flat) sampler exists. ~10s at 60fps — long
  * enough for a slow heightmap decode, short enough to not hang forever if the
  * heightmap genuinely fails to load. */
 const MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES = 600;
-let _spawnHeightmapDeferFrames = 0;
 
 /**
  * A terrain declares a `heightmapUrl` but its sampler has no data yet — the
@@ -138,6 +151,8 @@ export const TerrainSpawnSystem: System = {
   update(state) {
     if (state.headless) return;
 
+    const spawnerState = getSpawnerState(state);
+
     // Explicit no-spawn zones go into the occupancy registry before any group
     // samples positions this frame.
     for (const e of exclusionQuery(state.world)) {
@@ -151,8 +166,8 @@ export const TerrainSpawnSystem: System = {
       );
     }
 
-    if (!callbackRegistered) {
-      callbackRegistered = true;
+    if (!spawnerState.callbackRegistered) {
+      spawnerState.callbackRegistered = true;
       registerHeightmapReloadCallback(state, () => {
         for (const eid of terrainSpawnedQuery(state.world)) {
           const x = state.hasComponent(eid, WorldTransform)
@@ -177,11 +192,17 @@ export const TerrainSpawnSystem: System = {
     // Defer spawning until the terrain heightmap has decoded, otherwise entities
     // get placed on the flat placeholder and end up buried when terrain rises.
     if (isTerrainHeightmapPending(state)) {
-      if (_spawnHeightmapDeferFrames < MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES) {
-        _spawnHeightmapDeferFrames++;
+      if (
+        spawnerState.spawnHeightmapDeferFrames <
+        MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES
+      ) {
+        spawnerState.spawnHeightmapDeferFrames++;
         return;
       }
       // Fallback: heightmap is taking too long (or failed) — spawn anyway.
+    } else if (spawnerState.spawnHeightmapDeferFrames > 0) {
+      // Terrain ready: reset so a later heightmap reload gets fresh defer protection.
+      spawnerState.spawnHeightmapDeferFrames = 0;
     }
 
     for (const eid of spawnerQuery(state.world)) {

@@ -161,13 +161,13 @@ export function syncStaticMeshBvh(state: State): {
   });
 
   // Cleanup destroyed entities.
-  for (const entity of [...map.keys()]) {
+  map.forEach((_value, entity) => {
     if (!state.exists(entity)) {
       unregisterBvhForEntity(state, entity);
       map.delete(entity);
       removed++;
     }
-  }
+  });
 
   // Untrack Fixed → Dynamic flips on existing entities.
   for (const entity of rigidbodyQuery(state.world)) {

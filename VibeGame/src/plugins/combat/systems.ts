@@ -14,6 +14,10 @@ const projectileQuery = defineQuery([ProjectileData]);
 const projectileConfigQuery = defineQuery([ProjectileConfig]);
 const healthQuery = defineQuery([Health]);
 
+// Hoisted per-frame scratch set for projectile-config membership checks
+// (bitecs query arrays are cached; only the Set allocation is hot-path waste).
+const _projectileConfigSet = new Set<number>();
+
 export const DamageResolutionSystem: System = {
   group: 'simulation',
   update(state: State): void {
@@ -41,11 +45,14 @@ export const ProjectileCleanupSystem: System = {
   group: 'simulation',
   update(state: State): void {
     const entities = projectileQuery(state.world);
-    const configured = new Set(projectileConfigQuery(state.world));
+    _projectileConfigSet.clear();
+    for (const e of projectileConfigQuery(state.world)) {
+      _projectileConfigSet.add(e);
+    }
     for (const eid of entities) {
       const newAge = ProjectileData.age[eid] + state.time.deltaTime;
       ProjectileData.age[eid] = newAge;
-      const maxLife = configured.has(eid)
+      const maxLife = _projectileConfigSet.has(eid)
         ? ProjectileConfig.maxLife[eid]
         : ProjectileData.lifetime[eid];
       if (newAge >= maxLife) {

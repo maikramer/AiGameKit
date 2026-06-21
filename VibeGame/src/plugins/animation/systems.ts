@@ -23,14 +23,9 @@ const animatedCharacterQuery = defineQuery([AnimatedCharacter]);
 export const AnimatedCharacterInitializationSystem: System = {
   group: 'setup',
   update(state) {
-    const uninitialized = animatedCharacterQuery(state.world).filter(
-      (entity) => {
-        const headEntity = AnimatedCharacter.headEntity[entity];
-        return headEntity === NULL_ENTITY;
-      }
-    );
+    for (const entity of animatedCharacterQuery(state.world)) {
+      if (AnimatedCharacter.headEntity[entity] !== NULL_ENTITY) continue;
 
-    for (const entity of uninitialized) {
       AnimatedCharacter.headEntity[entity] = createBodyPart(
         state,
         entity,

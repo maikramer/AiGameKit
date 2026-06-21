@@ -1,4 +1,3 @@
-/* eslint-disable no-undef -- CustomEvent e localStorage só no browser */
 import { commitRemovals } from 'bitecs';
 import { Packr } from 'msgpackr';
 import {

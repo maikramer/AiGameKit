@@ -16,7 +16,16 @@ import { getSteeringMap, type SteeringRow } from './context';
 
 const steerQuery = defineQuery([SteeringAgent, SteeringTarget, Transform]);
 const obstacleQuery = defineQuery([Rigidbody, Collider, Transform]);
-const _obstacleCache: GameEntity[] = [];
+const _obstacleCacheByState = new WeakMap<State, GameEntity[]>();
+
+function getObstacleCache(state: State): GameEntity[] {
+  let cache = _obstacleCacheByState.get(state);
+  if (!cache) {
+    cache = [];
+    _obstacleCacheByState.set(state, cache);
+  }
+  return cache;
+}
 
 function ensureVehicle(state: State, eid: number): SteeringRow {
   const map = getSteeringMap(state);
@@ -77,6 +86,7 @@ export const SteeringSyncSystem: System = {
   group: 'simulation',
   update: (state) => {
     const dt = state.time.deltaTime || 1 / 60;
+    const _obstacleCache = getObstacleCache(state);
 
     let obstacleCount = 0;
     for (const eid of obstacleQuery(state.world)) {
