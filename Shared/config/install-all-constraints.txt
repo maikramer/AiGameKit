@@ -7,4 +7,4 @@
 # Actualizar quando Rigging3D mudar `transformers` ou quando houver conflicto na resolução.
 
 transformers==4.51.3
-numpy>=2.4.5,<3
+numpy>=2.5.0,<3
