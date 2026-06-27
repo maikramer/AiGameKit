@@ -94,8 +94,13 @@ def test_ensure_directory_nested(tmp_path: Path) -> None:
 
 
 def test_format_bytes_tb() -> None:
-    s = format_bytes(1024**5)
+    s = format_bytes(1024**4)
     assert "TB" in s
+
+
+def test_format_bytes_pb() -> None:
+    s = format_bytes(1024**5)
+    assert "PB" in s
 
 
 def test_generate_seed_range() -> None:

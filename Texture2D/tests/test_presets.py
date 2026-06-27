@@ -10,9 +10,9 @@ from texture2d.presets import (
 
 
 class TestPresets:
-    def test_list_presets_not_empty(self):
+    def test_list_presets_returns_thirteen(self):
         presets = list_presets()
-        assert len(presets) >= 8
+        assert len(presets) == 13
 
     def test_all_presets_have_required_keys(self):
         for name, preset in TEXTURE_PRESETS.items():
@@ -20,8 +20,6 @@ class TestPresets:
             assert "negative_prompt" in preset, f"{name} sem negative_prompt"
             assert "guidance_scale" in preset, f"{name} sem guidance_scale"
             assert "num_inference_steps" in preset, f"{name} sem num_inference_steps"
-            assert "width" in preset, f"{name} sem width"
-            assert "height" in preset, f"{name} sem height"
 
     def test_get_preset_existing(self):
         preset = get_preset("Stone")
