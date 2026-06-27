@@ -2,15 +2,93 @@ use anyhow::{Context, Result};
 use image::{DynamicImage, ImageFormat};
 use std::path::Path;
 
-/// Paths for the six PBR map outputs.
-#[derive(Debug, Clone)]
+/// Flags selecting which PBR maps to generate. `curvature` is opt-in.
+#[derive(Debug, Clone, Default)]
+pub struct MapSelection {
+    pub height: bool,
+    pub normal: bool,
+    pub metallic: bool,
+    pub smoothness: bool,
+    pub edge: bool,
+    pub ao: bool,
+    pub curvature: bool,
+}
+
+impl MapSelection {
+    pub fn all(include_curvature: bool) -> Self {
+        Self {
+            height: true,
+            normal: true,
+            metallic: true,
+            smoothness: true,
+            edge: true,
+            ao: true,
+            curvature: include_curvature,
+        }
+    }
+
+    pub fn parse_only(spec: &str) -> std::result::Result<Self, String> {
+        let mut sel = Self::default();
+        for token in spec.split(',').map(str::trim) {
+            match token.to_lowercase().as_str() {
+                "height" => sel.height = true,
+                "normal" => sel.normal = true,
+                "metallic" => sel.metallic = true,
+                "smoothness" => sel.smoothness = true,
+                "edge" => sel.edge = true,
+                "ao" => sel.ao = true,
+                "curvature" => sel.curvature = true,
+                "" => continue,
+                other => return Err(format!("unknown map '{other}'")),
+            }
+        }
+        Ok(sel)
+    }
+
+    pub fn parse_skip(spec: &str) -> std::result::Result<Self, String> {
+        let mut sel = Self::all(false);
+        for token in spec.split(',').map(str::trim) {
+            match token.to_lowercase().as_str() {
+                "height" => sel.height = false,
+                "normal" => sel.normal = false,
+                "metallic" => sel.metallic = false,
+                "smoothness" => sel.smoothness = false,
+                "edge" => sel.edge = false,
+                "ao" => sel.ao = false,
+                "curvature" => sel.curvature = false,
+                "" => continue,
+                other => return Err(format!("unknown map '{other}'")),
+            }
+        }
+        Ok(sel)
+    }
+
+    #[allow(dead_code)]
+    pub fn count(&self) -> usize {
+        [
+            self.height,
+            self.normal,
+            self.metallic,
+            self.smoothness,
+            self.edge,
+            self.ao,
+            self.curvature,
+        ]
+        .iter()
+        .filter(|&&b| b)
+        .count()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct OutputPaths {
-    pub height_path: String,
-    pub normal_path: String,
-    pub metallic_path: String,
-    pub smoothness_path: String,
-    pub edge_path: String,
-    pub ao_path: String,
+    pub height_path: Option<String>,
+    pub normal_path: Option<String>,
+    pub metallic_path: Option<String>,
+    pub smoothness_path: Option<String>,
+    pub edge_path: Option<String>,
+    pub ao_path: Option<String>,
+    pub curvature_path: Option<String>,
 }
 
 pub fn load_image(path: &str) -> Result<DynamicImage> {
@@ -45,7 +123,6 @@ pub fn save_image(
             let file = std::fs::File::create(path)
                 .with_context(|| format!("Failed to create file: {}", path.display()))?;
             let mut writer = std::io::BufWriter::new(file);
-            // Quality 0 is invalid for JPEG; encoder expects 1-100
             let q = quality.clamp(1, 100);
             let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut writer, q);
             encoder
@@ -62,7 +139,13 @@ pub fn save_image(
     Ok(())
 }
 
-pub fn get_output_paths(input_path: &str, output_dir: &str, format: &str) -> OutputPaths {
+pub fn get_output_paths(
+    input_path: &str,
+    output_dir: &str,
+    format: &str,
+    selection: &MapSelection,
+    roughness_instead_of_smoothness: bool,
+) -> OutputPaths {
     let input_name = Path::new(input_path)
         .file_stem()
         .and_then(|s| s.to_str())
@@ -73,17 +156,40 @@ pub fn get_output_paths(input_path: &str, output_dir: &str, format: &str) -> Out
         _ => format,
     };
 
-    OutputPaths {
-        height_path: format!("{}/{}_height.{}", output_dir, input_name, ext),
-        normal_path: format!("{}/{}_normal.{}", output_dir, input_name, ext),
-        metallic_path: format!("{}/{}_metallic.{}", output_dir, input_name, ext),
-        smoothness_path: format!("{}/{}_smoothness.{}", output_dir, input_name, ext),
-        edge_path: format!("{}/{}_edge.{}", output_dir, input_name, ext),
-        ao_path: format!("{}/{}_ao.{}", output_dir, input_name, ext),
+    let smooth_suffix = if roughness_instead_of_smoothness {
+        "roughness"
+    } else {
+        "smoothness"
+    };
+
+    let mut out = OutputPaths::default();
+    if selection.height {
+        out.height_path = Some(format!("{}/{}_height.{}", output_dir, input_name, ext));
     }
+    if selection.normal {
+        out.normal_path = Some(format!("{}/{}_normal.{}", output_dir, input_name, ext));
+    }
+    if selection.metallic {
+        out.metallic_path = Some(format!("{}/{}_metallic.{}", output_dir, input_name, ext));
+    }
+    if selection.smoothness {
+        out.smoothness_path = Some(format!(
+            "{}/{}_{}.{}",
+            output_dir, input_name, smooth_suffix, ext
+        ));
+    }
+    if selection.edge {
+        out.edge_path = Some(format!("{}/{}_edge.{}", output_dir, input_name, ext));
+    }
+    if selection.ao {
+        out.ao_path = Some(format!("{}/{}_ao.{}", output_dir, input_name, ext));
+    }
+    if selection.curvature {
+        out.curvature_path = Some(format!("{}/{}_curvature.{}", output_dir, input_name, ext));
+    }
+    out
 }
 
-/// Convert height map (f32) to grayscale image
 pub fn height_to_image(width: u32, height: u32, data: &[f32]) -> DynamicImage {
     use image::{ImageBuffer, Luma};
 
@@ -98,7 +204,6 @@ pub fn height_to_image(width: u32, height: u32, data: &[f32]) -> DynamicImage {
     DynamicImage::ImageLuma8(img)
 }
 
-/// Convert normal map (RGBA8) to RGB image
 pub fn normal_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     use image::{ImageBuffer, Rgb};
 
@@ -121,27 +226,34 @@ fn channel_r8_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     DynamicImage::ImageLuma8(img)
 }
 
-/// Convert metallic map (R8) to grayscale image
 pub fn metallic_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     channel_r8_to_image(width, height, data)
 }
 
-/// Convert smoothness map (R8) to grayscale image
 pub fn smoothness_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     channel_r8_to_image(width, height, data)
 }
 
-/// Convert edge map (R8) to grayscale image
+pub fn roughness_to_image(width: u32, height: u32, smoothness: &[u8]) -> DynamicImage {
+    let inverted: Vec<u8> = smoothness
+        .iter()
+        .map(|&v| 255u8.saturating_sub(v))
+        .collect();
+    channel_r8_to_image(width, height, &inverted)
+}
+
 pub fn edge_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     channel_r8_to_image(width, height, data)
 }
 
-/// Convert AO map (R8) to grayscale image
 pub fn ao_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
     channel_r8_to_image(width, height, data)
 }
 
-/// Map OutputFormat to ImageFormat
+pub fn curvature_to_image(width: u32, height: u32, data: &[u8]) -> DynamicImage {
+    channel_r8_to_image(width, height, data)
+}
+
 pub fn output_format_to_image_format(format: &super::cli::OutputFormat) -> ImageFormat {
     match format {
         super::cli::OutputFormat::Png => ImageFormat::Png,
@@ -164,24 +276,51 @@ mod tests {
 
     #[test]
     fn test_get_output_paths() {
-        let p = get_output_paths("textures/brick.png", "./output", "png");
-        assert_eq!(p.height_path, "./output/brick_height.png");
-        assert_eq!(p.normal_path, "./output/brick_normal.png");
-        assert_eq!(p.metallic_path, "./output/brick_metallic.png");
-        assert_eq!(p.smoothness_path, "./output/brick_smoothness.png");
-        assert_eq!(p.edge_path, "./output/brick_edge.png");
-        assert_eq!(p.ao_path, "./output/brick_ao.png");
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("textures/brick.png", "./output", "png", &sel, false);
+        assert_eq!(p.height_path.as_deref(), Some("./output/brick_height.png"));
+        assert_eq!(p.normal_path.as_deref(), Some("./output/brick_normal.png"));
+        assert_eq!(
+            p.metallic_path.as_deref(),
+            Some("./output/brick_metallic.png")
+        );
+        assert_eq!(
+            p.smoothness_path.as_deref(),
+            Some("./output/brick_smoothness.png")
+        );
+        assert_eq!(p.edge_path.as_deref(), Some("./output/brick_edge.png"));
+        assert_eq!(p.ao_path.as_deref(), Some("./output/brick_ao.png"));
+        assert!(p.curvature_path.is_none());
     }
 
     #[test]
     fn test_get_output_paths_jpg() {
-        let p = get_output_paths("textures/brick.png", "./output", "jpg");
-        assert_eq!(p.height_path, "./output/brick_height.jpg");
-        assert_eq!(p.normal_path, "./output/brick_normal.jpg");
-        assert_eq!(p.metallic_path, "./output/brick_metallic.jpg");
-        assert_eq!(p.smoothness_path, "./output/brick_smoothness.jpg");
-        assert_eq!(p.edge_path, "./output/brick_edge.jpg");
-        assert_eq!(p.ao_path, "./output/brick_ao.jpg");
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("textures/brick.png", "./output", "jpg", &sel, false);
+        assert_eq!(p.height_path.as_deref(), Some("./output/brick_height.jpg"));
+        assert_eq!(p.ao_path.as_deref(), Some("./output/brick_ao.jpg"));
+    }
+
+    #[test]
+    fn test_get_output_paths_roughness_replaces_smoothness_suffix() {
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("textures/brick.png", "./output", "png", &sel, true);
+        assert_eq!(
+            p.smoothness_path.as_deref(),
+            Some("./output/brick_roughness.png")
+        );
+    }
+
+    #[test]
+    fn test_get_output_paths_curvature_only_when_selected() {
+        let sel_off = MapSelection::all(false);
+        let p = get_output_paths("a.png", "o", "png", &sel_off, false);
+        assert!(p.curvature_path.is_none());
+
+        let mut sel_on = MapSelection::all(true);
+        sel_on.curvature = true;
+        let p2 = get_output_paths("a.png", "o", "png", &sel_on, false);
+        assert_eq!(p2.curvature_path.as_deref(), Some("o/a_curvature.png"));
     }
 
     #[test]
@@ -245,14 +384,16 @@ mod tests {
 
     #[test]
     fn test_get_output_paths_stem_no_extension() {
-        let p = get_output_paths("folder/name", "./out", "png");
-        assert!(p.height_path.contains("name_height.png"));
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("folder/name", "./out", "png", &sel, false);
+        assert!(p.height_path.unwrap().contains("name_height.png"));
     }
 
     #[test]
     fn test_get_output_paths_jpeg_alias() {
-        let p = get_output_paths("a.png", "./o", "jpeg");
-        assert!(p.ao_path.ends_with(".jpg"));
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("a.png", "./o", "jpeg", &sel, false);
+        assert!(p.ao_path.unwrap().ends_with(".jpg"));
     }
 
     #[test]
@@ -291,15 +432,18 @@ mod tests {
 
     #[test]
     fn test_get_output_paths_preserves_nested_dir() {
-        let p = get_output_paths("textures/sub/tile.png", "out", "tga");
-        assert!(p.normal_path.contains("tile_normal.tga"));
-        assert!(p.normal_path.starts_with("out/"));
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("textures/sub/tile.png", "out", "tga", &sel, false);
+        let np = p.normal_path.unwrap();
+        assert!(np.contains("tile_normal.tga"));
+        assert!(np.starts_with("out/"));
     }
 
     #[test]
     fn test_get_output_paths_unknown_ext_defaults_to_format() {
-        let p = get_output_paths("file.xyz", "o", "exr");
-        assert!(p.height_path.ends_with("_height.exr"));
+        let sel = MapSelection::all(false);
+        let p = get_output_paths("file.xyz", "o", "exr", &sel, false);
+        assert!(p.height_path.unwrap().ends_with("_height.exr"));
     }
 
     #[test]

@@ -1,16 +1,20 @@
 struct Params {
-    height_blur_radius_0: f32,
-    height_blur_radius_1: f32,
-    height_blur_radius_2: f32,
-    height_contrast: f32,
-    normal_strength: f32,
-    metallic_scale: f32,
-    smoothness_base: f32,
-    smoothness_metallic_boost: f32,
-    edge_contrast: f32,
-    ao_depth_scale: f32,
-    _pad0: f32,
-    _pad1: f32,
+    height_blur_radius_0: f32,           // 1
+    height_blur_radius_1: f32,           // 2
+    height_blur_radius_2: f32,           // 3
+    height_contrast: f32,                // 4
+    normal_strength: f32,                // 5
+    normal_flip_y: u32,                  // 6  (NEW 2.0)
+    metallic_scale: f32,                 // 7
+    metallic_local_variance_factor: f32, // 8  (NEW 2.0)
+    smoothness_base: f32,                // 9
+    smoothness_metallic_boost: f32,      // 10
+    smoothness_roughness_factor: f32,    // 11 (NEW 2.0)
+    edge_contrast: f32,                  // 12
+    ao_depth_scale: f32,                 // 13
+    seamless: u32,                       // 14 (NEW 2.0)
+    _pad0: f32,                          // 15
+    _pad1: f32,                          // 16
 }
 
 @group(0) @binding(0)
@@ -24,19 +28,24 @@ var<uniform> params: Params;
 
 const LUM_WEIGHTS: vec3<f32> = vec3<f32>(0.2126, 0.7152, 0.0722);
 
+fn sample_coord(coords: vec2<i32>, dims: vec2<u32>) -> vec2<i32> {
+    let d = vec2<i32>(dims);
+    if (params.seamless == 1u) {
+        return ((coords % d) + d) % d;
+    }
+    return clamp(coords, vec2<i32>(0), d - vec2<i32>(1));
+}
+
 fn simple_blur(coords: vec2<i32>, dims: vec2<u32>, radius: i32) -> f32 {
     var sum = 0.0;
     var count = 0.0;
 
     for (var x = -radius; x <= radius; x++) {
         for (var y = -radius; y <= radius; y++) {
-            let sample_coords = coords + vec2<i32>(x, y);
-            if (sample_coords.x >= 0 && sample_coords.x < i32(dims.x) &&
-                sample_coords.y >= 0 && sample_coords.y < i32(dims.y)) {
-                let color = textureLoad(input_texture, sample_coords, 0).rgb;
-                sum += dot(color, LUM_WEIGHTS);
-                count += 1.0;
-            }
+            let sample_coords = sample_coord(coords + vec2<i32>(x, y), dims);
+            let color = textureLoad(input_texture, sample_coords, 0).rgb;
+            sum += dot(color, LUM_WEIGHTS);
+            count += 1.0;
         }
     }
 

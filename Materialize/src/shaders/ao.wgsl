@@ -1,16 +1,20 @@
 struct Params {
-    height_blur_radius_0: f32,
-    height_blur_radius_1: f32,
-    height_blur_radius_2: f32,
-    height_contrast: f32,
-    normal_strength: f32,
-    metallic_scale: f32,
-    smoothness_base: f32,
-    smoothness_metallic_boost: f32,
-    edge_contrast: f32,
-    ao_depth_scale: f32,
-    _pad0: f32,
-    _pad1: f32,
+    height_blur_radius_0: f32,           // 1
+    height_blur_radius_1: f32,           // 2
+    height_blur_radius_2: f32,           // 3
+    height_contrast: f32,                // 4
+    normal_strength: f32,                // 5
+    normal_flip_y: u32,                  // 6  (NEW 2.0)
+    metallic_scale: f32,                 // 7
+    metallic_local_variance_factor: f32, // 8  (NEW 2.0)
+    smoothness_base: f32,                // 9
+    smoothness_metallic_boost: f32,      // 10
+    smoothness_roughness_factor: f32,    // 11 (NEW 2.0)
+    edge_contrast: f32,                  // 12
+    ao_depth_scale: f32,                 // 13
+    seamless: u32,                       // 14 (NEW 2.0)
+    _pad0: f32,                          // 15
+    _pad1: f32,                          // 16
 }
 
 @group(0) @binding(0)
@@ -22,9 +26,17 @@ var output_texture: texture_storage_2d<rgba8unorm, write>;
 @group(1) @binding(0)
 var<uniform> params: Params;
 
+fn sample_coord(coords: vec2<i32>, dims: vec2<u32>) -> vec2<i32> {
+    let d = vec2<i32>(dims);
+    if (params.seamless == 1u) {
+        return ((coords % d) + d) % d;
+    }
+    return clamp(coords, vec2<i32>(0), d - vec2<i32>(1));
+}
+
 fn sample_height(coords: vec2<i32>, dims: vec2<u32>) -> f32 {
-    let clamped = clamp(coords, vec2<i32>(0), vec2<i32>(dims) - vec2<i32>(1));
-    return textureLoad(height_texture, clamped, 0).r;
+    let c = sample_coord(coords, dims);
+    return textureLoad(height_texture, c, 0).r;
 }
 
 @compute @workgroup_size(8, 8, 1)

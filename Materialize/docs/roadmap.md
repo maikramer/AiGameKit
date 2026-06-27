@@ -1,8 +1,10 @@
 # Roadmap
 
-## Versão 1.0 (MVP) - Atual
+> **Versão 2.0 entregue em 2026-06-26.** Ver [CHANGELOG.md](../CHANGELOG.md) para detalhes e alterações incompatíveis.
 
-**Status:** Estável
+## Versão 1.0 (MVP) — Entregue (2026-03-15)
+
+**Status:** Entregue (2026-03-15)
 
 ### Features
 
@@ -16,108 +18,65 @@
 - [x] wgpu compute shaders (incl. pipeline 2 inputs para smoothness)
 - [x] PNG/JPG/TGA/EXR support
 
-### Limitações Conhecidas
+### Limitações Conhecidas (na altura)
 
-- Parâmetros hardcoded (sem ajuste fino)
-- Sem configuração via arquivo
-- Um formato de saída por execução
-- Resolução limitada por GPU memory
-- Sem alpha handling
+- Parâmetros hardcoded (sem ajuste fino) — **resolvido em 2.0** (overrides inline + presets)
+- Sem configuração via arquivo — ainda pendente (TOML, ver Futuro)
+- Um formato de saída por execução — ainda assim
+- Resolução limitada por GPU memory — ainda assim
+- Sem alpha handling — ainda assim (entra apenas na auto-deteção)
 
 ---
 
-## Versão 1.1 - Parâmetros Inline
+## Versão 2.0 — Entregue (2026-06-26)
 
-**Timeline:** 1-2 semanas após MVP
+**Status:** Entregue. Detalhes e alterações incompatíveis em [CHANGELOG.md](../CHANGELOG.md).
 
-### Novos Features
+### Features entregues
 
-#### Parâmetros Inline
+#### Parâmetros inline
 
-- **Override de defaults:**
+- **Overrides por cima do preset:** `--height-contrast`, `--height-blur`, `--normal-strength`, `--metallic-scale`, `--metallic-local-variance`, `--smoothness-base`, `--smoothness-boost`, `--smoothness-roughness`, `--edge-contrast`, `--ao-depth-scale` (cada um `Option<f32>`).
+
   ```bash
-  materialize texture.png --height-blur=5.0 --normal-intensity=2.0
+  materialize texture.png --height-contrast 1.8 --normal-strength 2.0
   ```
 
-- **Configuração por mapa:**
+#### Batch processing
+
+- Diretório ou glob como input; `--jobs N` (paralelismo CPU; GPU serial); `--skip-existing` (resume); `--progress` (`[i/N]` por imagem).
+
   ```bash
-  materialize texture.png \
-    --height-contrast=1.8 \
-    --height-levels=5 \
-    --normal-flip-y \
-    --metallic-saturation-threshold=0.2
+  materialize ./textures/ -o ./output/ --jobs 4 --progress --skip-existing
   ```
 
-### API Preview
+#### Auto-deteção (`-p auto`) + `info`
 
-```bash
-materialize texture.png --help
+- Pré-passo CPU (luminância, saturação, histograma de matiz, densidade de edges, variância de contraste local, tile MSE, alpha) → preset + confiança. Auto-tile (`tile_mse < 0.005`) e auto-scale por `edge_density`. `materialize info <imagem>` imprime o relatório sem gerar mapas.
 
-Options:
-  --height-blur <FLOAT>         Sigma máximo do blur [default: 64.0]
-  --height-contrast <FLOAT>     Fator de contraste [default: 1.5]
-  --height-levels <INT>         Número de níveis de blur [default: 7]
-  --normal-intensity <FLOAT>    Escala dos gradientes [default: 1.0]
-  --normal-flip-y               Flip Y para OpenGL
-  --metallic-saturation <FLOAT>  Threshold de saturação [default: 0.15]
-  --metallic-luminance <FLOAT>  Threshold de luminância [default: 0.4]
-  --smoothness                  Incluir smoothness map
-```
+#### Mapas seletivos + novos mapas
 
----
+- `--only` / `--skip` (whitelist/blacklist); `--include-curvature` (7.º mapa, Laplaciano da height); `--roughness` (exporta `1 − smoothness`).
 
-## Versão 1.2 - Batch Processing
+#### Normal flip-Y + convenções
 
-**Timeline:** 2-3 semanas após v1.1
+- `--normal-format opengl|directx` controla o uniform `normal_flip_y` (F4.4).
 
-### Features
+#### Conclusão de shell + env vars
 
-#### Processamento de Diretórios
+- `--generate-completions bash|zsh|fish|elvish|powershell`; `MATERIALIZE_GPU_BACKEND` (`vulkan|metal|dx12|gl|primary`) e `MATERIALIZE_LOG` finalmente honrados.
 
-```bash
-# Processar pasta inteira
-materialize ./textures/ -o ./output/
+#### 12 novos presets
 
-# Padrão glob
-materialize "./textures/**/*.png" -o ./output/
+- `concrete`, `leather`, `marble`, `sand`, `foliage`, `plaster`, `asphalt`, `brick`, `ice`, `snow`, `lava`, `water` (+ `auto`).
 
-# Estrutura preservada
-# Input:  ./textures/bricks/red_brick.png
-# Output: ./output/bricks/red_brick_height.png, etc.
-```
+#### Qualidade dos mapas
 
-#### Paralelização
+- Smoothness espacial (contraste local 5×5, F4.1); detetor metálico de dois níveis (F4.5) + local-variance damping (F2.5); edge rewrite por magnitude do gradiente (F1.1).
 
-- Processa N imagens simultaneamente (configurável)
-- Reusa GPU context entre imagens
-- Progress bar com indicador de fila
+#### Listing + exit codes
 
-```bash
-materialize ./textures/ --jobs=4 --progress
-
-# Output:
-# [1/50] processing stone.png... done (120ms)
-# [2/50] processing brick.png... done (98ms)
-# [=====>              ] 2/50 (ETA: 4.8s)
-```
-
-#### Resume/Continue
-
-```bash
-# Se interrompido, resume do ponto onde parou
-materialize ./textures/ --resume
-
-# Skip existentes (útil para atualizações)
-materialize ./textures/ --skip-existing
-```
-
----
-
-## Versão 2.0 - AO Avançado (opcional)
-
-**Timeline:** Após v1.2 (opcional)
-
-AO cavity-style já está no MVP. Esta versão adicionaria AO por ray marching (normal+height) como no Materialize original, com parâmetros (ray count, spread, depth). Curvature map também considerado.
+- `--list-presets`, `--list-maps`; exit codes granulares (0–6).
 
 ---
 
@@ -356,6 +315,8 @@ materialize plugin new my-plugin  # Gera template
 - [ ] **Image Sequence:** Processar vídeos/texturas animadas
 - [ ] **Normal Map Combine:** Combinar múltiplas normais (detail mapping)
 - [ ] **Curvature-Driven:** Ajustar parâmetros baseado em curvatura local
+- [ ] **AO por ray marching:** AO com normal+height como no Materialize original (ray count, spread, depth); substituir o cavity-style atual
+- [ ] **Tiled processing:** Processar imagens maiores que a VRAM em tiles com costura
 
 ---
 

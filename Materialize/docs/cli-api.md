@@ -6,7 +6,7 @@
 materialize [OPTIONS] [INPUT] [COMMAND]
 ```
 
-**Subcomandos:** `skill install` — instala a skill do materialize-cli em `.cursor/skills/materialize-cli` do diretório atual (projeto em que você está trabalhando).
+`INPUT` pode ser um ficheiro, um diretório ou um padrão glob (`png`, `jpg`, `tga`, `exr`). É opcional apenas para `--list-presets`, `--list-maps`, `--generate-completions` e para os subcomandos (`info`, `skill`).
 
 ## Argumentos
 
@@ -14,24 +14,64 @@ materialize [OPTIONS] [INPUT] [COMMAND]
 
 | Argumento | Obrigatório | Descrição |
 |-----------|-------------|-----------|
-| `INPUT` | Sim | Caminho para a imagem de entrada |
+| `INPUT` | Sim* | Caminho para a imagem/dir/glob de entrada. *Opcional só para `--list-*`, `--generate-completions` e subcomandos. |
 
 ### Flags e Options
 
 | Opção | Curta | Tipo | Padrão | Descrição |
 |-------|-------|------|--------|-----------|
-| `--output` | `-o` | String | `./` | Diretório de saída |
-| `--format` | `-f` | Enum | `png` | Formato dos arquivos de saída |
-| `--preset` | `-p` | Enum | `default` | Preset de material (ver seção Presets) |
-| `--quality` | `-q` | Int (0-100) | `95` | Qualidade JPEG (quando aplicável) |
-| `--verbose` | `-v` | Bool | `false` | Modo verbose |
-| `--quiet` | | Bool | `false` | Não listar arquivos gerados no sucesso |
-| `--help` | `-h` | | | Mostrar ajuda |
-| `--version` | `-V` | | | Mostrar versão |
+| `--output` | `-o` | path | `.` | Diretório de saída |
+| `--format` | `-f` | enum | `png` | Formato dos arquivos: `png`, `jpg`, `tga`, `exr` |
+| `--preset` | `-p` | enum | `default` | Preset de material (ver seção Presets) |
+| `--quality` | `-q` | int | `95` | Qualidade JPEG 1–100 (ignorada noutros formatos); `0` é clampado a `1` |
+| `--verbose` | `-v` | flag | — | Progresso, tempos por estágio e info de auto-detect |
+| `--quiet` | — | flag | — | Não listar arquivos gerados no sucesso |
+| `--include-curvature` | — | flag | — | Gerar `texture_curvature.png` (7.º mapa) |
+| `--roughness` | — | flag | — | Gerar `texture_roughness.png` (= `1 - smoothness`) em vez de `texture_smoothness.png` |
+| `--normal-format` | — | enum | `opengl` | Eixo Y da normal: `opengl` (Y-up) ou `directx` (Y-down) |
+| `--only` | — | lista | — | Whitelist: `height,normal,metallic,smoothness,edge,ao,curvature` |
+| `--skip` | — | lista | — | Blacklist (mutuamente exclusivo com `--only`) |
+| `--seamless` / `--no-seamless` | — | flag | auto | Forçar wrap ou clamp na amostragem das bordas |
+| `--jobs` | — | int | `1` | Paralelismo CPU no batch (GPU fica serial) |
+| `--skip-existing` | — | flag | — | Saltar imagens cujo height já existe (resume) |
+| `--progress` | — | flag | — | Mostrar `[i/N]` por imagem no batch |
+| `--list-presets` | — | flag | — | Listar todos os presets e sair |
+| `--list-maps` | — | flag | — | Listar todos os nomes de mapas gerados e sair |
+| `--generate-completions` | — | enum | — | Gerar conclusão de shell: `bash`, `zsh`, `fish`, `elvish`, `powershell` |
+| `--help` | `-h` | — | — | Mostrar ajuda |
+| `--version` | `-V` | — | — | Mostrar versão |
+
+#### Overrides inline (aplicados por cima do preset)
+
+Cada um é `Option<f32>` aplicado por cima do preset selecionado:
+
+`--height-contrast`, `--height-blur`, `--normal-strength`, `--metallic-scale`,
+`--metallic-local-variance`, `--smoothness-base`, `--smoothness-boost`,
+`--smoothness-roughness`, `--edge-contrast`, `--ao-depth-scale`.
+
+## Subcomandos
+
+### `materialize info <imagem>`
+
+Analisa uma textura sem gerar mapas. Imprime o preset detetado, a pontuação de confiança e o vetor de features completo (luminância, saturação, histograma de matiz, densidade de edges, variância de contraste local, tile MSE, cobertura alpha).
+
+```bash
+materialize info texture.png
+```
+
+### `materialize skill install`
+
+Instala a skill do Cursor do Materialize CLI no projeto atual, em `.cursor/skills/materialize-cli/`.
+
+```bash
+materialize skill install
+```
 
 ## Enums
 
 ### Preset de Material (`--preset`)
+
+19 presets de material mais `auto`. Use `-p` / `--preset` para escolher.
 
 | Valor | Descrição | Uso ideal |
 |-------|-----------|-----------|
@@ -41,7 +81,20 @@ materialize [OPTIONS] [INPUT] [COMMAND]
 | `metal` | Metallic boost, edges nítidos, polido | Aço, ouro, cobre, alumínio |
 | `fabric` | Matte, sem metallic, edges suaves | Tecido, roupa, cortina |
 | `wood` | Sem metallic, detalhe de grão moderado | Madeira, móveis, piso de madeira |
-| `stone` | Muito áspero, AO profundo, normals fortes | Pedra, rocha, concreto |
+| `stone` | Muito áspero, AO profundo, normals fortes | Pedra, rocha |
+| `concrete` | Áspero, cinzento, ruído denso de superfície | Betão, cimento |
+| `leather` | Granulado, semi-liso, tons quentes | Couro, sofás, selas |
+| `marble` | Polido, veios, liso | Mármore, superfícies polidas |
+| `sand` | Grão fino, muito áspero | Areia, desertos, praias |
+| `foliage` | Orgânico, metallic baixo, detalhe médio | Folhas, erva, plantas |
+| `plaster` | Plano, normals suaves | Reboco, stucco, paredes |
+| `asphalt` | Escuro, áspero, edges densos | Asfalto, estradas |
+| `brick` | Edges nítidos, superfície áspera | Tijolo, alvenaria |
+| `ice` | Muito liso, detalhe ligeiro | Gelo, cristais |
+| `snow` | Suave, difuso | Neve, superfícies geladas |
+| `lava` | Fundida, semi-metálica | Lava, rocha incandescente |
+| `water` | Muito lisa, fluída | Água, líquidos |
+| `auto` | Análise automática (CPU) + escolha do melhor preset | Textura desconhecida |
 
 ### Formato de Saída (`--format`)
 
@@ -63,9 +116,10 @@ Output:
 - `texture_height.png`
 - `texture_normal.png`
 - `texture_metallic.png`
-- `texture_smoothness.png`
+- `texture_smoothness.png` (ou `texture_roughness.png` com `--roughness`)
 - `texture_edge.png`
 - `texture_ao.png`
+- `texture_curvature.png` (só com `--include-curvature`)
 
 ## Códigos de Saída
 
@@ -183,11 +237,17 @@ echo "Done! Processed $(ls "$INPUT_DIR"/*.png | wc -l) textures"
 materialize texture.png --height-format=exr --normal-format=png --metallic-format=png
 ```
 
-### Exemplo 5: Batch com paralelismo
+### Exemplo 5: Batch nativo
 
 ```bash
-# Processar 4 imagens simultaneamente
-ls *.png | xargs -P 4 -I {} materialize {} -o ./output/
+# Diretório inteiro; --jobs controla o paralelismo CPU, --progress mostra [i/N]
+materialize ./textures/ -o ./output/ --jobs 4 --progress
+
+# Retomar após interrupção
+materialize ./textures/ -o ./output/ --skip-existing
+
+# Padrão glob
+materialize "./textures/bricks/*.png" -o ./output/
 ```
 
 ## Integração com Scripts
@@ -212,11 +272,10 @@ materialize texture.png -o ./out/ --quiet
 
 ## Variáveis de Ambiente
 
-| Variável | Descrição |
-|----------|-----------|
-| `MATERIALIZE_GPU_BACKEND` | Forçar backend: `vulkan`, `metal`, `dx12` |
-| `MATERIALIZE_LOG` | Nível de log: `error`, `warn`, `info`, `debug`, `trace` |
-| `WGPU_BACKEND` | Backend wgpu (herdado da lib) |
+| Variável | Valores | Descrição |
+|----------|---------|-----------|
+| `MATERIALIZE_GPU_BACKEND` | `vulkan` · `metal` · `dx12` · `gl` · `primary` | Forçar um backend wgpu específico (padrão: `primary`) |
+| `MATERIALIZE_LOG` | `error` · `warn` · `info` · `debug` · `trace` | Nível de log (padrão: `warn`) |
 
 ### Exemplo
 
@@ -226,6 +285,8 @@ MATERIALIZE_LOG=debug materialize texture.png -v
 ```
 
 ## Auto-completion
+
+Gere o script de conclusão com `--generate-completions <shell>` e avalie-o ou grave-o no local apropriado da sua shell. Suporta `bash`, `zsh`, `fish`, `elvish` e `powershell`.
 
 ### Bash
 
@@ -243,4 +304,16 @@ materialize --generate-completions zsh > "${fpath[1]}/_materialize"
 
 ```bash
 materialize --generate-completions fish > ~/.config/fish/completions/materialize.fish
+```
+
+### Elvish
+
+```bash
+materialize --generate-completions elvish >> ~/.config/elvish/rc.elv
+```
+
+### PowerShell
+
+```powershell
+materialize --generate-completions powershell | Out-String | Invoke-Expression
 ```

@@ -44,20 +44,23 @@ Gera vetores de superfície a partir do height map.
 
 ### Metallic Map
 
-Detecta áreas metálicas por análise de cor.
+Detecta áreas metálicas por análise de cor usando um detetor de dois níveis.
 
 **Entrada:** Imagem difusa original (RGBA)
 **Saída:** Metallic map (grayscale, 0 = dieletric, 1 = metal)
 
-**Algoritmo:**
-1. Converter RGB para espaço HSL
-2. Analisar saturação e luminância
-3. Aplicar heurística de detecção metálica
+**Algoritmo:** Converter RGB para HSL e aplicar um detetor de dois níveis (F4.5):
 
-**Heurística:**
-- Metais puros têm saturação baixa e luminância alta
-- Ouro/cobre têm matiz específico
-- Thresholds adaptativos baseados na imagem
+1. **Grupo acromático** (saturação < 0.15): cobre aço, prata, alumínio, titânio, pewter e chrome, com um *bonus* opcional para tons azulados (blue steel). Score por luminância × (1 − saturação).
+2. **Quatro bandas cromáticas** de matiz não sobrepostas:
+   - **Cobre** — hue 0.00–0.06
+   - **Bronze** — hue 0.06–0.09
+   - **Ouro** — hue 0.09–0.14
+   - **Latão** — hue 0.14–0.17
+
+Cada banda tem score baseado em luminância e saturação. As bandas não se sobrepõem, ao contrário do detetor antigo (onde bronze/latão eram subconjuntos de cobre/ouro).
+
+**Local-variance damping (F2.5):** metais puros têm baixa variância local de luminância; texturas não-metálicas (betão, pedra cinzenta) têm variância alta. O uniform `metallic_local_variance_factor` (0..1, configurável via `--metallic-local-variance`) amortiza a deteção em regiões texturizadas, reduzindo falsos positivos.
 
 **Uso típico:**
 - Physically based rendering (PBR)
@@ -71,7 +74,13 @@ Define rugosidade/suavidade da superfície para PBR.
 **Entrada:** Imagem difusa + mapa metallic (gerados internamente)
 **Saída:** Smoothness map (grayscale, 0 = rugoso, 1 = liso)
 
-**Algoritmo:** Base smoothness (0.25) + contribuição do metallic (0.65 × metallic). Metais tendem a ser mais lisos.
+**Algoritmo:** A smoothness é agora espacial (F4.1) e combina três termos:
+
+```
+smoothness = base + metallic_boost * metallic - roughness_factor * local_contrast_5x5
+```
+
+Regiões texturizadas (alto contraste local numa janela 5×5) produzem menos smoothness; regiões planas produzem mais. O comportamento do MVP fica preservado quando `smoothness_roughness_factor == 0`. Metais continuam a tender para lisos (via o termo `metallic_boost`). Com `--roughness`, o CLI exporta `1 - smoothness` como mapa de roughness.
 
 **Uso típico:** Roughness/smoothness em shaders PBR (Unity, Unreal, etc.).
 
@@ -82,7 +91,7 @@ Destaca bordas e vincos a partir do mapa de normal.
 **Entrada:** Normal map (gerado internamente)
 **Saída:** Edge map (grayscale)
 
-**Algoritmo:** Gradiente da normal (amostras ±1 pixel em X e Y), combinado com contraste. Inspirado no Materialize original (Blit_Edge_From_Normal).
+**Algoritmo:** Usa a magnitude do gradiente da normal (amostras ±1 pixel em X e Y) com um limiar *smoothstep* (F1.1). O shader antigo calculava `(diff_x + 0.5) * (diff_y + 0.5) * 2.0` com gradientes centrados em 0, o que produzia uma saída quase plana (~0.5) em todo o lado; agora a magnitude real do gradiente é limiarizada de forma suave. Inspirado no Materialize original (Blit_Edge_From_Normal).
 
 **Uso típico:** Outline, cavity, ou máscaras para pós-processamento.
 
@@ -96,6 +105,36 @@ Oclusão ambiente no estilo cavity, a partir do height map.
 **Algoritmo:** Amostras em 8 direções (raios 1 e 2 pixels); oclusão quando altura da amostra > centro; resultado invertido e escalado.
 
 **Uso típico:** Sombreamento em frestas e cantos em pipelines PBR.
+
+### Curvature Map _(opt-in)_
+
+Curvatura convexa/côncava da superfície, derivada da height via Laplaciano.
+
+**Entrada:** Height map (gerado internamente)
+**Saída:** Curvature map (grayscale, 0.5 = plano, >0.5 = côncavo, <0.5 = convexo)
+
+**Algoritmo:** Laplaciano da height numa vizinhança 3×3, normalizado para [0,1] à volta de 0.5. É o sétimo mapa e é **opt-in**: só é gerado com `--include-curvature`. Pode ser combinado com `--only curvature,...` / `--skip`.
+
+**Uso típico:** Máscaras de desgaste (edge wear), oclusão de curvatura, guiar blend de materiais ou pintura procedural.
+
+## Auto-deteção (`-p auto`)
+
+Em vez de escolher um preset manualmente, `-p auto` faz um pré-passo rápido na CPU sobre a textura e extrai um vetor de features:
+
+- Média / desvio-padrão de **luminância**
+- Média / desvio-padrão de **saturação**
+- **Histograma de matiz** (12 bins)
+- **Densidade de edges** Sobel
+- **Variância de contraste local** (5×5)
+- **Tile MSE** (linhas/colunas de borda topo/fundo + esquerda/direita completas)
+- **Cobertura alpha**
+
+Uma árvore de decisão mapeia estas features para um dos presets (metal, skin, wood, stone, foliage, floor, default) e imprime uma **pontuação de confiança**. Aplica ainda:
+
+- **Auto-tile:** quando `tile_mse < 0.005`, todos os shaders de amostragem de vizinhança (height blur, Sobel, edge gradient, AO cavity, curvature Laplacian) mudam de clamp para wrap (módulo euclidiano) nas bordas, para os mapas ficarem tileáveis. Override manual via `--seamless` / `--no-seamless`.
+- **Auto-scale:** `height_contrast` e `normal_strength` são ajustados pela `edge_density` (texturas detalhadas ganham mais contraste; texturas muito ruidosas ficam com normais suavizadas).
+
+Use `materialize info <imagem>` para pré-visualizar a análise completa sem gerar mapas.
 
 ## Formatos Suportados
 
@@ -137,11 +176,29 @@ materialize <INPUT> [OPTIONS]
 |-------|-------|-----------|--------|
 | `--output` | `-o` | Diretório de saída | `.` |
 | `--format` | `-f` | Formato de saída (png, jpg, tga, exr) | png |
-| `--quality` | `-q` | Qualidade JPEG (0-100) | 95 |
-| `--verbose` | `-v` | Modo verbose | false |
-| `--quiet` | | Não listar arquivos gerados no sucesso | false |
+| `--preset` | `-p` | Preset de material (ver presets; `auto` deteta) | default |
+| `--quality` | `-q` | Qualidade JPEG (1-100); `0` clampado a `1` | 95 |
+| `--verbose` | `-v` | Progresso, tempos por estágio e auto-detect | false |
+| `--quiet` | | Suprimir lista de arquivos gerados | false |
+| `--include-curvature` | | Gerar `texture_curvature.png` (7.º mapa) | false |
+| `--roughness` | | Exportar roughness (`1 - smoothness`) em vez de smoothness | false |
+| `--normal-format` | | `opengl` (Y-up) ou `directx` (Y-down) | opengl |
+| `--only` | | Whitelist de mapas | — |
+| `--skip` | | Blacklist de mapas (exclui `--only`) | — |
+| `--seamless` / `--no-seamless` | | Forçar wrap/clamp nas bordas | auto |
+| `--jobs` | | Paralelismo CPU no batch (GPU serial) | 1 |
+| `--skip-existing` | | Retomar (saltar com height já existente) | false |
+| `--progress` | | Mostrar `[i/N]` por imagem no batch | false |
+| `--list-presets` | | Listar presets e sair | — |
+| `--list-maps` | | Listar mapas gerados e sair | — |
+| `--generate-completions` | | Conclusão de shell (bash/zsh/fish/elvish/powershell) | — |
 | `--help` | `-h` | Mostrar ajuda | - |
 | `--version` | `-V` | Mostrar versão | - |
+
+**Overrides inline** (por cima do preset): `--height-contrast`, `--height-blur`,
+`--normal-strength`, `--metallic-scale`, `--metallic-local-variance`,
+`--smoothness-base`, `--smoothness-boost`, `--smoothness-roughness`,
+`--edge-contrast`, `--ao-depth-scale`.
 
 ### Exemplos de Uso
 
@@ -168,23 +225,22 @@ materialize texture.png --quiet
 materialize skill install
 ```
 
-## Features Futuras (Roadmap)
+## Funcionalidades Futuras (Roadmap)
 
-### Versão 1.1 - Batch Processing
+O roadmap completo está em [docs/roadmap.md](roadmap.md). A versão 2.0 já entregou:
 
-- **Diretório como input:** `materialize ./textures/`
-- **Paralelização:** Processa múltiplas imagens simultaneamente
-- **Progress bar:** Indicação visual de progresso
+- **Batch processing** — diretório/glob como input, `--jobs N`, `--skip-existing`, `--progress`
+- **Parâmetros inline** — overrides por cima do preset (`--height-contrast`, `--normal-strength`, etc.)
+- **Auto-deteção** — `-p auto` + `materialize info`
+- **Mapas seletivos** — `--only` / `--skip`
+- **Curvature map** — opt-in via `--include-curvature`
+- **Roughness output** — `--roughness`
+- **Normais OpenGL/DirectX** — `--normal-format`
+- **Conclusão de shell** — `--generate-completions`
+- **Variáveis de ambiente** — `MATERIALIZE_GPU_BACKEND`, `MATERIALIZE_LOG`
+- **12 novos presets** (concrete, leather, marble, sand, foliage, plaster, asphalt, brick, ice, snow, lava, water)
 
-### Versão 2.0 - Configuração Avançada
-
-- **Arquivo de configuração:** `materialize.toml` para parâmetros customizados
-- **Override por mapa:** `--height-blur=5.0 --normal-intensity=2.5`
-
-### Versão 3.0 - Preview
-
-- **Janela de preview:** SDL2-based, visualização 3D rápida
-- **Rotação/Pan/Zoom:** Navegação básica
+Ainda no futuro: AO por ray marching, deteção metálica por ML, super-resolution, sistema de plugins, GUI, processamento em tiles e configuração TOML.
 
 ## Casos de Uso
 
@@ -222,14 +278,16 @@ materialize marble_scan.png -f exr -o ./materials/marble/
 
 ## Limitações Conhecidas
 
-### MVP (Versão 1.0)
+### Versão 2.0
 
-1. **Parâmetros fixos:** Defaults hardcoded (smoothness base/metal, AO depth scale, etc.), sem ajuste fino
-2. **Resolução máxima:** Limitada por GPU memory (tipicamente 8K+)
-3. **Um formato por execução:** Todos os seis mapas no mesmo formato
-4. **Sem alpha handling:** Canal alpha ignorado no processamento
-5. **AO simplificado:** Cavity-style a partir do height; o Materialize original usa ray marching com normal+height
+1. **Resolução máxima:** Limitada por memória GPU (tipicamente 8K+). Imagens que excedem a VRAM devolvem exit code `6`.
+2. **Um formato por execução:** Todos os mapas saem no mesmo formato (`-f`); não há formato por mapa individual.
+3. **Sem alpha handling:** O canal alpha ainda é ignorado no processamento (mas entra na análise de auto-deteção como cobertura alpha).
+4. **AO simplificado:** Ainda é cavity-style a partir da height; o AO por ray marching (normal+height) do Materialize original continua como trabalho futuro.
+5. **Paralelismo GPU:** `--jobs` só paraleliza a fase CPU (load/analyse); o despacho GPU é serializado.
+
+> Já resolvido em 2.0: parâmetros agora são sobreponíveis inline e por preset (antes eram hardcoded); exit codes granulares; conclusão de shell; variáveis de ambiente; auto-deteção e mapas seletivos.
 
 ### Futuro
 
-Limitações serão endereçadas conforme roadmap (configuração, tiled processing, etc.)
+As restantes limitações serão endereçadas conforme roadmap (AO ray-march, tiled processing, configuração TOML, etc.).

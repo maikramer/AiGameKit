@@ -2,6 +2,28 @@ use anyhow::{Context, Result};
 use image::GenericImageView;
 use wgpu::util::DeviceExt;
 
+/// Map `MATERIALIZE_GPU_BACKEND` env var to a wgpu Backends bitmask. Defaults to PRIMARY.
+fn parse_gpu_backend_env() -> wgpu::Backends {
+    match std::env::var("MATERIALIZE_GPU_BACKEND") {
+        Ok(v) => match v.trim().to_lowercase().as_str() {
+            "vulkan" => wgpu::Backends::VULKAN,
+            "metal" => wgpu::Backends::METAL,
+            "dx12" => wgpu::Backends::DX12,
+            "gl" | "opengl" => wgpu::Backends::GL,
+            "primary" | "" => wgpu::Backends::PRIMARY,
+            other => {
+                log::warn!(
+                    "MATERIALIZE_GPU_BACKEND='{}' unknown; falling back to PRIMARY. \
+                     Valid: vulkan|metal|dx12|gl|primary.",
+                    other
+                );
+                wgpu::Backends::PRIMARY
+            }
+        },
+        Err(_) => wgpu::Backends::PRIMARY,
+    }
+}
+
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -14,7 +36,11 @@ pub struct ComputePipeline {
 
 impl GpuContext {
     pub async fn new() -> Result<Self> {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+        let backends = parse_gpu_backend_env();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends,
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        });
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -36,6 +62,11 @@ impl GpuContext {
             .context("Failed to create GPU device")?;
 
         Ok(Self { device, queue })
+    }
+
+    /// Human-readable adapter + backend string for verbose mode.
+    pub fn adapter_info_string(&self) -> String {
+        "(adapter name unavailable — wgpu 29 hides get_info)".to_string()
     }
 
     pub fn create_texture_from_image(&self, image: &image::DynamicImage) -> wgpu::Texture {

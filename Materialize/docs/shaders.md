@@ -13,10 +13,11 @@ src/
 └── shaders/
     ├── height.wgsl      # Height map generation
     ├── normal.wgsl      # Normal map from height
-    ├── metallic.wgsl    # Metallic detection
-    ├── smoothness.wgsl  # Smoothness (diffuse + metallic)
-    ├── edge.wgsl        # Edge from normal gradient
-    └── ao.wgsl          # AO cavity-style from height
+    ├── metallic.wgsl    # Metallic detection (two-tier)
+    ├── smoothness.wgsl  # Smoothness (diffuse + metallic, spatial)
+    ├── edge.wgsl        # Edge from normal gradient magnitude
+    ├── ao.wgsl          # AO cavity-style from height
+    └── curvature.wgsl   # Curvature (Laplacian of height) — opt-in
 ```
 
 ### Compilação
@@ -31,9 +32,62 @@ const METALLIC_SHADER: &str = include_str!("shaders/metallic.wgsl");
 const SMOOTHNESS_SHADER: &str = include_str!("shaders/smoothness.wgsl");
 const EDGE_SHADER: &str = include_str!("shaders/edge.wgsl");
 const AO_SHADER: &str = include_str!("shaders/ao.wgsl");
+const CURVATURE_SHADER: &str = include_str!("shaders/curvature.wgsl");  // opt-in
 ```
 
+Todos os shaders partilham o mesmo *uniform* de preset em `@group(1) @binding(0)` (ver secção seguinte).
+
 Isso elimina dependências de arquivos externos em runtime.
+
+## Uniform Params (struct partilhada, 64 bytes)
+
+Todos os shaders recebem o mesmo *uniform* `Params` em `@group(1) @binding(0)`. O layout cresceu de 48 → 64 bytes em 2.0 (4 campos novos: `normal_flip_y`, `metallic_local_variance_factor`, `smoothness_roughness_factor`, `seamless`, mais *padding*). O bloco abaixo é a fonte de verdade (espelha `src/shaders/height.wgsl`):
+
+```wgsl
+struct Params {
+    height_blur_radius_0: f32,           // 1
+    height_blur_radius_1: f32,           // 2
+    height_blur_radius_2: f32,           // 3
+    height_contrast: f32,                // 4
+    normal_strength: f32,                // 5
+    normal_flip_y: u32,                  // 6  (NEW 2.0)
+    metallic_scale: f32,                 // 7
+    metallic_local_variance_factor: f32, // 8  (NEW 2.0)
+    smoothness_base: f32,                // 9
+    smoothness_metallic_boost: f32,      // 10
+    smoothness_roughness_factor: f32,    // 11 (NEW 2.0)
+    edge_contrast: f32,                  // 12
+    ao_depth_scale: f32,                 // 13
+    seamless: u32,                       // 14 (NEW 2.0)
+    _pad0: f32,                          // 15
+    _pad1: f32,                          // 16
+}
+
+@group(1) @binding(0)
+var<uniform> params: Params;
+```
+
+Os valores vêm do `PresetParams` em Rust (`src/preset.rs`), podendo ser sobrepostos pelos *overrides* inline (`--height-contrast`, `--normal-strength`, `--metallic-local-variance`, `--smoothness-roughness`, etc.).
+
+### `sample_coord` — clamp vs wrap (F2.4)
+
+Todos os shaders de amostragem de vizinhança (height blur, Sobel, edge gradient, AO cavity, curvature Laplacian) passam as coordenadas por um helper partilhado que alterna entre clamp e wrap consoante `params.seamless`:
+
+```wgsl
+fn sample_coord(coords: vec2<i32>, dims: vec2<u32>) -> vec2<i32> {
+    let d = vec2<i32>(dims);
+    if (params.seamless == 1u) {
+        return ((coords % d) + d) % d;              // wrap (tileável)
+    }
+    return clamp(coords, vec2<i32>(0), d - vec2<i32>(1));  // clamp
+}
+```
+
+`seamless` é definido por `--seamless`/`--no-seamless`, ou automaticamente por `-p auto` quando `tile_mse < 0.005`.
+
+### Nota: `var` é palavra reservada em WGSL
+
+`var` é uma palavra-chave reservada em WGSL (declara variáveis), por isso os identificadores de texturas usam nomes descritivos (`input_texture`, `height_texture`, `var input_texture: texture_2d<f32>;`). Nunca chamar uma variável simplesmente `var` — o compilador rejeita. Este bug foi atingido durante o desenvolvimento do 2.0.
 
 ## Shader: height.wgsl
 
@@ -434,6 +488,53 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let metallic = detect_metallic(color);
     
     textureStore(output_texture, coords, vec4<f32>(metallic, 0.0, 0.0, 0.0));
+}
+```
+
+## Shader: curvature.wgsl _(opt-in)_
+
+### Propósito
+
+Gera o mapa de curvatura (convexo/côncavo) a partir da height via Laplaciano. Só é despachado quando `--include-curvature` está ativo.
+
+### Entradas e Saídas
+
+```wgsl
+@group(0) @binding(0)
+var height_texture: texture_2d<f32>;          // r32float
+
+@group(0) @binding(1)
+var output_texture: texture_storage_2d<r32float, write>;
+```
+
+### Algoritmo
+
+Laplaciano da height numa vizinhança 3×3 (amostragem via `sample_coord`, respeitando `params.seamless`), normalizado para [0,1] centrado em 0.5:
+
+- `0.5` = plano
+- `> 0.5` = côncavo (frestas, cavidades)
+- `< 0.5` = convexo (arestas salientes)
+
+```wgsl
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let dims = textureDimensions(height_texture);
+    let coords = vec2<i32>(global_id.xy);
+
+    if (coords.x >= i32(dims.x) || coords.y >= i32(dims.y)) {
+        return;
+    }
+
+    let c  = textureLoad(height_texture, sample_coord(coords, dims), 0).r;
+    let n  = textureLoad(height_texture, sample_coord(coords + vec2<i32>( 0, -1), dims), 0).r;
+    let s  = textureLoad(height_texture, sample_coord(coords + vec2<i32>( 0,  1), dims), 0).r;
+    let w  = textureLoad(height_texture, sample_coord(coords + vec2<i32>(-1,  0), dims), 0).r;
+    let e  = textureLoad(height_texture, sample_coord(coords + vec2<i32>( 1,  0), dims), 0).r;
+
+    let laplacian = (n + s + w + e) * 0.25 - c;   // >0: vizinhos mais altos (côncavo)
+    let curvature = clamp(0.5 + laplacian, 0.0, 1.0);
+
+    textureStore(output_texture, coords, vec4<f32>(curvature, 0.0, 0.0, 1.0));
 }
 ```
 

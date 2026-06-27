@@ -2,14 +2,17 @@
 
 ## Visão Geral
 
-O Materialize CLI implementa seis algoritmos principais, cada um executado como compute shader WGSL:
+O Materialize CLI implementa sete algoritmos principais, cada um executado como compute shader WGSL, mais um pré-passo de análise na CPU para auto-deteção:
 
 1. **Height from Diffuse** - Extrai informação de altura da imagem colorida
 2. **Normal from Height** - Calcula vetores normais a partir do height map
-3. **Metallic from Diffuse** - Detecta metalicidade por análise de cor
-4. **Smoothness** - Base + contribuição do metallic (difusa + metallic como entrada)
-5. **Edge from Normal** - Gradiente da normal (X/Y) para detecção de bordas
+3. **Metallic from Diffuse** - Detecta metalicidade por análise de cor (detetor de dois níveis)
+4. **Smoothness** - base + metallic_boost × metallic − roughness_factor × contraste local 5×5 (difusa + metallic como entrada)
+5. **Edge from Normal** - Magnitude do gradiente da normal com limiar smoothstep
 6. **AO from Height** - Cavity-style: amostras em 8 direções, oclusão quando vizinho > centro
+7. **Curvature from Height** _(opt-in)_ - Laplaciano da height (0.5 = plano)
+
+Todos os shaders de amostragem de vizinhança partilham um helper `sample_coord` que alterna entre clamp e wrap consoante o uniform `params.seamless` (F2.4).
 
 ## 1. Height Map Generation
 
@@ -116,6 +119,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 }
 ```
 
+#### Amostragem `sample_coord` (F2.4)
+
+Na realidade, o shader `height.wgsl` não usa `gaussian_blur`/`safe_sample` separados; toda a amostragem de vizinhança passa por um helper `sample_coord` que alterna entre clamp e wrap consoante o uniform `params.seamless`:
+
+```wgsl
+fn sample_coord(coords: vec2<i32>, dims: vec2<u32>) -> vec2<i32> {
+    let d = vec2<i32>(dims);
+    if (params.seamless == 1u) {
+        return ((coords % d) + d) % d;              // wrap (tileável)
+    }
+    return clamp(coords, vec2<i32>(0), d - vec2<i32>(1));  // clamp
+}
+```
+
+Quando `-p auto` deteta `tile_mse < 0.005` (ou com `--seamless`), `seamless = 1` e os mapas ficam tileáveis nas bordas.
+
 ### Parâmetros (MVP Defaults)
 
 | Parâmetro | Valor | Descrição |
@@ -206,23 +225,25 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
 | Parâmetro | Valor | Descrição |
 |-----------|-------|-----------|
-| Intensity | 1.0 | Escala dos gradientes (multiplica gx, gy) |
-| Flip Y | false | Inverte eixo Y da normal |
+| Intensity (`normal_strength`) | 1.0 | Escala dos gradientes (multiplica gx, gy) |
+| Flip Y (`normal_flip_y`) | uniform u32 | Inverte eixo Y da normal (F4.4) |
 
 **Intensidade > 1.0:** Normais mais "fortes", superfície parece mais rugosa
 **Intensidade < 1.0:** Normais mais "fracas", superfície mais plana
 
+O flip de Y deixou de estar hard-coded: é controlado pelo uniform `normal_flip_y` (0/1), definido pela flag `--normal-format` (`opengl` = Y-up, default; `directx` = Y-down).
+
 ### Formatos de Normal Map
 
-#### DirectX (Minecraft, Unity)
-- Y-up: `normal.y = -normal.y` (ou não flip)
+#### OpenGL (padrão do 2.0; Blender, Godot)
+- Y-up: `normal.y` mantido
 - Canais: RGB
 
-#### OpenGL (Blender, Godot)
-- Y-up: `normal.y = normal.y` (flip em relação ao DirectX)
+#### DirectX (Unity)
+- Y-down: `normal.y = -normal.y` (i.e. `normal_flip_y = 1`)
 - Canais: RGB
 
-O MVP usa formato DirectX (Y down na textura).
+Seleção via `--normal-format opengl|directx`.
 
 ## 3. Metallic Map Generation
 
@@ -275,7 +296,21 @@ fn rgb_to_hsl(rgb: vec3<f32>) -> vec3<f32> {
 }
 ```
 
-### Algoritmo de Detecção
+### Algoritmo de Detecção (detetor de dois níveis, F4.5)
+
+O detetor antigo usava bandas de matiz sobrepostas (ouro/cobre eram subconjuntos uns dos outros). Em 2.0 foi redesenhado em dois níveis **não sobrepostos**:
+
+1. **Grupo acromático** (saturação < 0.15): cobre aço, prata, alumínio, titânio, pewter, chrome e blue steel. Score = `smoothstep(0.4, 0.8, l) * (1 − s/0.15)`, com um *bonus* opcional para tons azulados (blue steel).
+2. **Quatro bandas cromáticas** de matiz, mutuamente exclusivas:
+
+| Banda | Range de hue (h) | Metais típicos |
+|-------|------------------|----------------|
+| Cobre | 0.00 – 0.06 | cobre |
+| Bronze | 0.06 – 0.09 | bronze |
+| Ouro | 0.09 – 0.14 | ouro |
+| Latão | 0.14 – 0.17 | latão |
+
+Cada banda tem score por luminância e saturação. O resultado é o máximo de todos os grupos.
 
 ```wgsl
 fn detect_metallic(rgb: vec3<f32>) -> f32 {
@@ -283,30 +318,40 @@ fn detect_metallic(rgb: vec3<f32>) -> f32 {
     let h = hsl.x;  // Hue [0,1]
     let s = hsl.y;  // Saturation [0,1]
     let l = hsl.z;  // Luminance [0,1]
-    
-    // Heurística: metal = baixa saturação + alta luminância
-    // ou matiz específico (ouro/cobre)
-    
+
     var metallic = 0.0;
-    
-    // Metais cinzentos (prata, aço, alumínio)
-    if (s < 0.15 && l > 0.4) {
-        metallic = smoothstep(0.4, 0.8, l) * (1.0 - s * 6.0);
+
+    // (1) Grupo acromático (aço, prata, alumínio, titânio, pewter, chrome, blue steel)
+    if (s < GRAY_METAL_SAT_MAX && l > GRAY_METAL_LUM_MIN) {
+        let lum_factor = smoothstep(GRAY_METAL_LUM_MIN, 0.8, l);
+        let sat_factor = 1.0 - smoothstep(0.0, GRAY_METAL_SAT_MAX, s);
+        metallic = max(metallic, lum_factor * sat_factor);
     }
-    
-    // Ouro (matiz ~0.08-0.15)
-    if (h > 0.08 && h < 0.15 && s > 0.3 && l > 0.3) {
-        metallic = smoothstep(0.3, 0.6, l) * smoothstep(0.3, 0.7, s);
+
+    // (2) Quatro bandas cromáticas não sobrepostas
+    //     Cobre [0.00,0.06), Bronze [0.06,0.09), Ouro [0.09,0.14), Latão [0.14,0.17)
+    if (s > 0.3 && l > 0.25) {
+        var chroma = 0.0;
+        if (h >= 0.00 && h < 0.06) { chroma = smoothstep(0.25, 0.5, l) * smoothstep(0.4, 0.8, s); }      // cobre
+        else if (h >= 0.06 && h < 0.09) { chroma = smoothstep(0.25, 0.5, l) * smoothstep(0.35, 0.75, s); } // bronze
+        else if (h >= 0.09 && h < 0.14) { chroma = smoothstep(0.3, 0.6, l) * smoothstep(0.3, 0.7, s); }    // ouro
+        else if (h >= 0.14 && h < 0.17) { chroma = smoothstep(0.3, 0.6, l) * smoothstep(0.3, 0.7, s); }    // latão
+        metallic = max(metallic, chroma);
     }
-    
-    // Cobre (matiz ~0.02-0.08)
-    if (h > 0.02 && h < 0.08 && s > 0.4 && l > 0.25) {
-        metallic = smoothstep(0.25, 0.5, l) * smoothstep(0.4, 0.8, s);
-    }
-    
-    return saturate(metallic);
+
+    return clamp(metallic, 0.0, 1.0);
 }
 ```
+
+### Local-variance damping (F2.5)
+
+Metais puros têm **baixa variância local** de luminância; texturas não-metálicas (betão, pedra cinzenta) têm variância alta. Antes do `textureStore`, o shader amortiza a deteção em regiões texturizadas usando o uniform `metallic_local_variance_factor` (0..1, configurável via `--metallic-local-variance`):
+
+```
+final = metallic * (1.0 - metallic_local_variance_factor * local_luma_variance)
+```
+
+Isto reduz falsos positivos em superfícies ásperas/cinzentas sem afetar metais puros lisos.
 
 ### Pseudocódigo WGSL Completo
 
@@ -315,40 +360,137 @@ fn detect_metallic(rgb: vec3<f32>) -> f32 {
 fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let coords = vec2<i32>(gid.xy);
     let dims = textureDimensions(input_texture);
-    
+
     if (coords.x >= i32(dims.x) || coords.y >= i32(dims.y)) {
         return;
     }
-    
+
     let color = textureLoad(input_texture, coords, 0).rgb;
     let metallic = detect_metallic(color);
-    
+
     textureStore(output_texture, coords, vec4<f32>(metallic, 0.0, 0.0, 1.0));
 }
 ```
 
 ### Parâmetros
 
-| Parâmetro | Valor | Descrição |
-|-----------|-------|-----------|
-| Saturation threshold | 0.15 | Max saturação para metais cinzentos |
-| Luminance threshold | 0.4 | Min luminância para metais cinzentos |
-| Gold hue range | 0.08-0.15 | Range de matiz para ouro |
-| Copper hue range | 0.02-0.08 | Range de matiz para cobre |
+| Parâmetro | Default | Descrição |
+|-----------|---------|-----------|
+| `metallic_scale` | preset | Multiplicador global do score metálico |
+| `metallic_local_variance_factor` | preset | Damping por variância local (F2.5); `--metallic-local-variance` |
+| Achromatic sat max | 0.15 | Saturação máxima do grupo acromático |
+| Achromatic lum min | 0.4 | Luminância mínima do grupo acromático |
+| Copper hue | 0.00–0.06 | Banda de cobre |
+| Bronze hue | 0.06–0.09 | Banda de bronze |
+| Gold hue | 0.09–0.14 | Banda de ouro |
+| Brass hue | 0.14–0.17 | Banda de latão |
 
 ### Limitações
 
-**Algoritmo atual:**
-- Funciona bem para materiais puros
-- Pode falhar para:
-  - Metais sujos/oxidadas
+**Algoritmo atual (2.0):**
+- Funciona bem para metais puros e as ligas comuns (aço/prata/alumínio/cobre/bronze/ouro/latão)
+- Bronzes e latões já não são reportados como subconjuntos de cobre/ouro
+- Pode ainda falhar para:
+  - Metais sujos/oxidados
   - Metais pintados
-  - Materiais misturados
+  - Materiais muito misturados
 
 **Melhorias futuras:**
 - Machine learning (classificação por ML)
-- Amostras de cor definidas pelo usuário
-- Análise de contexto (vizinhança)
+- Amostras de cor definidas pelo utilizador
+
+## 4. Smoothness Map Generation
+
+### Objetivo
+
+Combinar difusa + metallic numa smoothness espacial.
+
+### Algoritmo (F4.1 — espacial)
+
+A smoothness deixou de ser apenas `base + metallic`. Agora combina três termos, incluindo o contraste local numa janela 5×5:
+
+```
+smoothness = base + metallic_boost * metallic - roughness_factor * local_contrast_5x5
+```
+
+- Regiões **texturizadas** (alto `local_contrast_5x5`) → menos smoothness (mais ásperas)
+- Regiões **planas** → mais smoothness
+- Comportamento do MVP preservado quando `smoothness_roughness_factor == 0`
+
+Com `--roughness`, o CLI exporta `1 − smoothness` como mapa de roughness.
+
+### Parâmetros
+
+| Parâmetro | Default | Descrição |
+|-----------|---------|-----------|
+| `smoothness_base` | preset | Termo base |
+| `smoothness_metallic_boost` | preset | Peso do metallic |
+| `smoothness_roughness_factor` | preset | Peso do contraste local (F4.1); `--smoothness-roughness` |
+
+## 5. Edge Map Generation
+
+### Objetivo
+
+Detectar bordas/vincos a partir da normal.
+
+### Algoritmo (F1.1 — reescrito)
+
+O shader antigo calculava `(diff_x + 0.5) * (diff_y + 0.5) * 2.0` com gradientes centrados em 0, produzindo uma saída quase plana (~0.5) em todo o lado. Agora usa a **magnitude do gradiente da normal** (amostras ±1 px em X e Y) com um limiar *smoothstep*:
+
+```
+grad_mag = length(dN_dx, dN_dy)
+edge = smoothstep(threshold_low, threshold_high, grad_mag) * contrast
+```
+
+### Parâmetros
+
+| Parâmetro | Default | Descrição |
+|-----------|---------|-----------|
+| `edge_contrast` | preset | Multiplicador de contraste; `--edge-contrast` |
+
+## 6. AO Map Generation
+
+### Algoritmo
+
+Cavity-style a partir da height: 8 amostras em torno do pixel (raios 1 e 2 px), oclusão quando a altura da amostra > altura do centro; resultado invertido e escalado por `ao_depth_scale`. O AO por ray marching (normal+height) do Materialize original continua como trabalho futuro.
+
+### Parâmetros
+
+| Parâmetro | Default | Descrição |
+|-----------|---------|-----------|
+| `ao_depth_scale` | preset | Escala de profundidade; `--ao-depth-scale` |
+
+## 7. Curvature Map Generation _(opt-in)_
+
+### Objetivo
+
+Curvatura convexa/côncava a partir da height, via Laplaciano. É o sétimo mapa, gerado apenas com `--include-curvature`.
+
+### Algoritmo
+
+Laplaciano da height numa vizinhança 3×3, normalizado para [0,1] à volta de 0.5:
+
+- `0.5` = plano
+- `> 0.5` = côncavo (frestas, cavidades)
+- `< 0.5` = convexo (arestas salientes)
+
+**Uso típico:** máscaras de desgaste (edge wear), oclusão de curvatura, pintura procedural.
+
+## 8. Auto-deteção (CPU, `src/analyze.rs`)
+
+Em `-p auto`, antes dos shaders, corre um pré-passo na CPU que calcula:
+
+| Feature | Cálculo |
+|---------|---------|
+| Luminância | média / desvio-padrão |
+| Saturação | média / desvio-padrão |
+| Histograma de matiz | 12 bins |
+| Densidade de edges | Sobel |
+| Variância de contraste local | janela 5×5 |
+| Tile MSE | bordas topo/fundo + esquerda/direita completas |
+| Cobertura alpha | fracção de pixels transparentes |
+
+Uma árvore de decisão mapeia o vetor de features para um preset (metal, skin, wood, stone, foliage, floor, default) + pontuação de confiança. Aplica ainda **auto-tile** (`seamless = 1` quando `tile_mse < 0.005`) e **auto-scale** (`height_contrast`/`normal_strength` ajustados pela `edge_density`). `materialize info <imagem>` imprime o relatório completo sem gerar mapas.
 
 ## Otimizações
 
