@@ -35,7 +35,7 @@ from .generator import QUANT_MODES, SEAMLESS_METHODS, TextureGenerator, default_
 from .presets import TEXTURE_PRESETS, list_presets
 from .utils import format_bytes
 
-_logger = Logger(__name__)
+_logger = Logger()
 console = Console()
 
 DEFAULT_OUTPUT_DIR = Path("outputs")
@@ -180,9 +180,9 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--seamless-method",
     "seamless_method",
     type=click.Choice(list(SEAMLESS_METHODS)),
-    default="late",
+    default="none",
     show_default=True,
-    help="Estratégia seamless: late (default), roll, full, none.",
+    help="Estratégia seamless: none (default, modelo nativo), late/roll/full (rolling+circular, experimental).",
 )
 @click.option(
     "--quant",
@@ -449,9 +449,9 @@ def presets_cmd() -> None:
     "--seamless-method",
     "seamless_method",
     type=click.Choice(list(SEAMLESS_METHODS)),
-    default="late",
+    default="none",
     show_default=True,
-    help="Estratégia seamless: late (default), roll, full, none.",
+    help="Estratégia seamless: none (default, modelo nativo), late/roll/full (rolling+circular, experimental).",
 )
 @click.option(
     "--quant",

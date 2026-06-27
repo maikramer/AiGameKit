@@ -27,8 +27,8 @@ profiles:
     texture2d:
       width: 512
       height: 512
-      steps: 14
-      guidance: 3.0
+      steps: 20
+      guidance: 7.0
     skymap2d:
       width: 1024
       height: 512
@@ -88,10 +88,10 @@ profiles:
       smooth: true
       smooth_passes: 3
     texture2d:
-      width: 768
-      height: 768
-      steps: 20
-      guidance: 3.5
+      width: 512
+      height: 512
+      steps: 30
+      guidance: 7.5
     skymap2d:
       width: 1536
       height: 768
@@ -150,10 +150,10 @@ profiles:
       smooth: true
       smooth_passes: 3
     texture2d:
-      width: 1024
-      height: 1024
-      steps: 28
-      guidance: 3.5
+      width: 512
+      height: 512
+      steps: 50
+      guidance: 7.5
     skymap2d:
       width: 2048
       height: 1024
@@ -212,10 +212,10 @@ profiles:
       smooth: true
       smooth_passes: 3
     texture2d:
-      width: 1024
-      height: 1024
-      steps: 40
-      guidance: 4.0
+      width: 768
+      height: 768
+      steps: 50
+      guidance: 7.5
     skymap2d:
       width: 2048
       height: 1024
@@ -274,10 +274,10 @@ profiles:
       smooth: true
       smooth_passes: 3
     texture2d:
-      width: 2048
-      height: 2048
-      steps: 50
-      guidance: 4.5
+      width: 1024
+      height: 1024
+      steps: 75
+      guidance: 7.5
     skymap2d:
       width: 4096
       height: 2048

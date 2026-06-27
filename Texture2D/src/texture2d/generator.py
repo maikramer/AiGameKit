@@ -212,7 +212,7 @@ class TextureGenerator:
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
-        seamless_method: str = "late",
+        seamless_method: str = "none",
         quant: str = "none",
         compile_flag: bool = False,
     ) -> None:
@@ -467,7 +467,7 @@ class TextureGenerator:
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
         # Lazy import para manter o módulo leve (diffusers/torch são pesados).
-        from diffusers import DDPMScheduler, StableDiffusionPipeline
+        from diffusers import StableDiffusionPipeline
 
         quant_cfg = _build_quantization_config(self.quant)
 
@@ -482,12 +482,9 @@ class TextureGenerator:
         # pattern-diffusion é SD2-base standard — pipeline nativo, sem trust_remote_code.
         pipe = StableDiffusionPipeline.from_pretrained(self.model_id, **kwargs)
 
-        # DDPMScheduler — coincide com a receita ótima (CLIP/FID) do model card.
-        try:
-            pipe.scheduler = DDPMScheduler.from_config(pipe.scheduler.config)
-        except Exception as exc:
-            self._log(f"Não foi possível trocar para DDPMScheduler ({exc}); mantendo scheduler default")
-
+        # Scheduler default (DDIM) do pattern-diffusion — produz output limpo.
+        # (Swap para DDPM + upcast_vae + sequential offload causavam corrupção
+        # de cor neon/crushed-blacks por dtype mismatch — removidos.)
         self._clear_cache()
 
         if torch.cuda.is_available() and self.device == "cuda":
@@ -500,16 +497,21 @@ class TextureGenerator:
             pipe.to("cpu")
         elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
             self._status("Modelo carregado — split multi-GPU (MultiGPUPlanner)")
-        elif self.low_vram:
-            self._apply_low_vram(pipe)
         else:
+            # SD2-base é leve (~5GB fp16 em 512). pipe.to(cuda) primeiro — é o
+            # caminho validado que produz output limpo. Offload só em OOM real.
             self._status(f"Pipeline em {self.device}")
             try:
                 pipe.to(self.device)
             except (torch.cuda.OutOfMemoryError, RuntimeError):
-                self._log("VRAM insuficiente — sequential offload")
-                pipe.enable_sequential_cpu_offload()
-                self.low_vram = True
+                self._log("VRAM insuficiente para pipe.to — model_cpu_offload")
+                try:
+                    pipe.enable_model_cpu_offload()
+                    self.low_vram = True
+                except (torch.cuda.OutOfMemoryError, RuntimeError):
+                    self._log("model_cpu_offload insuficiente — sequential offload")
+                    pipe.enable_sequential_cpu_offload()
+                    self.low_vram = True
 
         if (
             self.compile_flag
@@ -630,13 +632,10 @@ class TextureGenerator:
         (o pipeline é cacheado em ``self._pipe``).
         """
         _disable_seamless(pipe.unet)
-        if getattr(pipe, "vae", None) is not None:
-            _disable_seamless(pipe.vae)
+        # VAE NÃO recebe circular padding — causa artefactos de cor (magenta/neon) no decode.
         if self.seamless_method == "full":
             _make_seamless(pipe.unet)
-            if getattr(pipe, "vae", None) is not None:
-                _make_seamless(pipe.vae)
-            self._log("Seamless full: circular padding ativo desde o início")
+            self._log("Seamless full: circular padding ativo no UNet desde o início")
 
     def _diffusion_callback(
         self,
@@ -655,13 +654,13 @@ class TextureGenerator:
 
         if method == "late" and step_index == threshold:
             _make_seamless(pipe_self.unet)
-            if getattr(pipe_self, "vae", None) is not None:
-                _make_seamless(pipe_self.vae)
-            self._log(f"Seamless late: circular padding ativo no passo {step_index}/{pipe_self.num_timesteps}")
+            self._log(f"Seamless late: circular padding ativo no UNet no passo {step_index}/{pipe_self.num_timesteps}")
 
         if method in ("late", "roll") and step_index < threshold:
             latents = callback_kwargs.get("latents")
-            if latents is not None:
-                callback_kwargs["latents"] = torch.roll(latents, shifts=(64, 64), dims=(2, 3))
+            if latents is not None and latents.ndim == 4:
+                # shift dinâmico: metade da dimensão latent (não hardcoded — 64 em latent 64x64 = no-op)
+                sh, sw = max(1, latents.shape[-2] // 2), max(1, latents.shape[-1] // 2)
+                callback_kwargs["latents"] = torch.roll(latents, shifts=(sh, sw), dims=(2, 3))
 
         return callback_kwargs

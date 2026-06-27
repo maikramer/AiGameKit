@@ -12,7 +12,7 @@ import logging
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from PIL import Image
 
@@ -61,7 +61,7 @@ def save_image_with_metadata(
 
     filepath = output_dir / filename
     image.save(filepath, image_format)
-    logger.info("Image saved to %s", filepath)
+    logger.info(f"Image saved to {filepath}")
 
     metadata_path = filepath.with_suffix(".json")
     metadata_dict: dict[str, Any] = {
@@ -111,7 +111,7 @@ def create_zip(files: list[Path], zip_path: Path) -> Path:
         for file in files:
             if file.exists():
                 zipf.write(file, file.name)
-    logger.info("ZIP created at %s", zip_path)
+    logger.info(f"ZIP created at {zip_path}")
     return zip_path
 
 
@@ -132,7 +132,7 @@ def load_image_metadata(image_path: Path) -> dict[str, Any] | None:
         return None
     try:
         with open(metadata_path, encoding="utf-8") as f:
-            return json.load(f)
+            return cast(dict[str, Any] | None, json.load(f))
     except Exception as e:
         logger.error("Failed to load metadata: %s", e)
         return None

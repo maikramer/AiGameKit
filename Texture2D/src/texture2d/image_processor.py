@@ -22,7 +22,7 @@ from gamedev_shared.logging import Logger
 
 DEFAULT_OUTPUT_DIR = Path("outputs") / "textures"
 
-logger = Logger(__name__)
+logger = Logger()
 
 
 def save_image(
@@ -68,5 +68,5 @@ def save_image(
         metadata=extra_metadata,
         image_format="PNG",
     )
-    logger.info("Diffuse tileable + metadata JSON gravados em %s", saved)
+    logger.info(f"Diffuse tileable + metadata JSON gravados em {saved}")
     return saved
