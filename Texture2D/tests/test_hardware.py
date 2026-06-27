@@ -1,4 +1,4 @@
-"""Testes da auto-detecção de hardware do Texture2D (pattern-diffusion, SD2-base)."""
+"""Testes da auto-detecção de hardware do Texture2D (FLUX.1-dev + seamless LoRA)."""
 
 from __future__ import annotations
 
@@ -28,8 +28,8 @@ def test_no_gpu_cpu_profile() -> None:
     p = profile_from_specs([])
     assert p.device == "cpu"
     assert p.low_vram is True
-    assert p.max_width == 512
-    assert p.max_height == 512
+    assert p.max_width == 768
+    assert p.max_height == 768
 
 
 def test_16gb_full_gpu_no_offload() -> None:
@@ -40,52 +40,44 @@ def test_16gb_full_gpu_no_offload() -> None:
     assert p.max_height is None
 
 
-def test_8gb_full_gpu_no_offload() -> None:
-    p = profile_from_specs([(0, _gib(8))])
+def test_12gb_full_gpu_no_offload() -> None:
+    p = profile_from_specs([(0, _gib(12))])
     assert p.device == "cuda"
     assert p.low_vram is False
     assert p.max_width is None
     assert p.max_height is None
 
 
-def test_7gb_no_offload_clamp_512() -> None:
-    p = profile_from_specs([(0, _gib(7))])
-    assert p.device == "cuda"
-    assert p.low_vram is False
-    assert p.max_width == 512
-    assert p.max_height == 512
-
-
-def test_6gb_no_offload_clamp_512() -> None:
-    p = profile_from_specs([(0, _gib(6))])
-    assert p.device == "cuda"
-    assert p.low_vram is False
-    assert p.max_width == 512
-    assert p.max_height == 512
-
-
-def test_5gb_lowvram_clamp_512() -> None:
-    p = profile_from_specs([(0, _gib(5))])
+def test_8gb_offload_keep_resolution() -> None:
+    p = profile_from_specs([(0, _gib(8))])
     assert p.device == "cuda"
     assert p.low_vram is True
-    assert p.max_width == 512
-    assert p.max_height == 512
+    assert p.max_width is None
+    assert p.max_height is None
 
 
-def test_4gb_lowvram_clamp_512() -> None:
+def test_7gb_offload_clamp_1024() -> None:
+    p = profile_from_specs([(0, _gib(7))])
+    assert p.device == "cuda"
+    assert p.low_vram is True
+    assert p.max_width == 1024
+    assert p.max_height == 1024
+
+
+def test_6gb_offload_clamp_1024() -> None:
+    p = profile_from_specs([(0, _gib(6))])
+    assert p.device == "cuda"
+    assert p.low_vram is True
+    assert p.max_width == 1024
+    assert p.max_height == 1024
+
+
+def test_4gb_offload_clamp_768() -> None:
     p = profile_from_specs([(0, _gib(4))])
     assert p.device == "cuda"
     assert p.low_vram is True
-    assert p.max_width == 512
-    assert p.max_height == 512
-
-
-def test_3gb_lowvram_clamp_512() -> None:
-    p = profile_from_specs([(0, _gib(3))])
-    assert p.device == "cuda"
-    assert p.low_vram is True
-    assert p.max_width == 512
-    assert p.max_height == 512
+    assert p.max_width == 768
+    assert p.max_height == 768
 
 
 def test_dual_gpu_sets_gpu_ids() -> None:
@@ -98,9 +90,9 @@ def test_dual_gpu_sets_gpu_ids() -> None:
 
 def test_dual_small_gpu_clamp_and_ids() -> None:
     p = profile_from_specs([(0, _gib(6)), (1, _gib(6))])
-    assert p.low_vram is False
-    assert p.max_width == 512
-    assert p.max_height == 512
+    assert p.low_vram is True
+    assert p.max_width == 1024
+    assert p.max_height == 1024
     assert p.gpu_ids == [0, 1]
 
 
@@ -130,7 +122,7 @@ def test_cli_exposes_hw_auto_flag(command: str) -> None:
 
 def test_hw_auto_clamps_higher_resolution() -> None:
     """hw-auto must clamp resolution down to max_width/max_height on small GPUs."""
-    p = profile_from_specs([(0, _gib(5))])
+    p = profile_from_specs([(0, _gib(6))])
     assert p.max_width is not None
     assert p.max_width <= DEFAULT_WIDTH
     assert p.max_height is not None
@@ -140,13 +132,13 @@ def test_hw_auto_clamps_higher_resolution() -> None:
 def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
     """When user explicitly sets -W, hw-auto must NOT clamp."""
     fake_profile = Texture2DHardwareProfile(
-        name="cuda-1x5g",
+        name="cuda-1x6g",
         device="cuda",
         low_vram=True,
-        max_width=512,
-        max_height=512,
+        max_width=1024,
+        max_height=1024,
         gpu_ids=None,
-        total_vram_gib=5.0,
+        total_vram_gib=6.0,
     )
     monkeypatch.setattr("texture2d.hardware.detect_hardware_profile", lambda: fake_profile)
     monkeypatch.setattr("gamedev_shared.gpu.warn_if_vram_occupied", lambda: None)
@@ -157,7 +149,7 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("texture2d.image_processor.save_image", lambda *a, **kw: Path("/tmp/fake.png"))
 
     runner = CliRunner()
-    r = runner.invoke(cli, ["generate", "test", "-W", "768", "--hw-auto", "--no-pbr", "-o", "/tmp/out.png"])
+    r = runner.invoke(cli, ["generate", "test", "-W", "2048", "--hw-auto", "-o", "/tmp/out.png"])
     assert r.exit_code == 0, r.output
     _, kwargs = mock_gen.generate.call_args
-    assert kwargs.get("width") == 768
+    assert kwargs.get("width") == 2048

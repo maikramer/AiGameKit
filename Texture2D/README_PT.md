@@ -2,24 +2,19 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI para geração de texturas 2D seamless (tileable) localmente em GPU com [**pattern-diffusion**](https://huggingface.co/Arrexel/pattern-diffusion) e **mapas PBR** via [Materialize](../Materialize/).
+CLI para geração de texturas 2D seamless (tileable) via HF Inference API.
 
-Usa o modelo [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) — fine-tune de StableDiffusion-2-base treinado em **6,8M de padrões tileable** (Apache-2.0) — para gerar texturas que repetem sem costuras visíveis, ideal para chão, rochas, paredes e materiais de game dev. **PBR** opcional (normal / height / metallic / roughness / AO) é produzido pelo CLI Rust/wgpu [Materialize](../Materialize/).
+Usa o modelo [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) para gerar texturas que repetem sem costuras visíveis — ideal para chão, rochas, paredes, e materiais de game dev.
 
-No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**](../Shared/) (`gamedev_shared`): presets de qualidade, CLI Rich, helpers de GPU e utilitários alinhados com Text2D/Text3D/GameAssets.
+No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**](../Shared/) (`gamedev_shared`): CLI Rich, instalação de skills Cursor e utilitários alinhados com Text2D/Text3D/GameAssets.
 
 ## Características
 
-- **Inferência local em GPU** — pattern-diffusion (fine-tune SD2-base, Apache-2.0), sem cloud
-- **Seamless por construção** — o modelo é treinado em padrões tileable e a inferência usa padding circular em `Conv2d` (`make_seamless`); a recipe opcional `--seamless-method full` (noise-rolling) tem **zero perda mensurável de FID/CLIP** na costura (cf. [model card](https://huggingface.co/Arrexel/pattern-diffusion))
-- **PBR via Materialize** — quando o binário `materialize` está no `PATH` (ou `MATERIALIZE_BIN` está definido), `texture2d generate` deriva automaticamente normal / height / metallic / roughness / AO
+- **Sem GPU local** — geração 100% cloud via HF Inference API
+- **Prompt seamless automático** — acrescenta instruções tileable/seamless automaticamente
 - **13 presets de materiais** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, etc.
-- **Tiers de qualidade** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
-- **Quantização** — `--quant {none,fp8,nf4}` para reduzir VRAM (default `none`)
 - **Batch** — gera múltiplas texturas a partir de um ficheiro de prompts
-- **Multi-GPU** — `--gpu-ids 0,1` divide pesos entre GPUs via accelerate
 - **Metadata JSON** — cada textura acompanha ficheiro `.json` com seed, prompt final, parâmetros
-- **Modo low VRAM** — CPU offload para GPUs mais pequenas
 
 ## Arranque rápido
 
@@ -68,7 +63,7 @@ python3 scripts/installer.py --prefix ~/.local
 python3 scripts/installer.py --use-venv
 ```
 
-Sem GPU cloud — a inferência é local. Requer **CUDA GPU** (PyTorch, diffusers, transformers, accelerate são dependências de runtime).
+Sem PyTorch local — apenas `config/requirements.txt` e `gamedev-shared`.
 
 ## Comandos
 
@@ -92,40 +87,27 @@ Sem GPU cloud — a inferência é local. Requer **CUDA GPU** (PyTorch, diffuser
 | `--seed` | aleatório | Seed para reprodutibilidade |
 | `--negative-prompt/-n` | "" | Prompt negativo |
 | `--preset/-p` | None | Preset de material |
-| `--seamless-method` | `late` | Estratégia seamless: `none`, `late` (padding circular — default), `full` (noise-rolling, garantia máxima) |
-| `--quant` | `none` | Quantização do modelo: `none`, `fp8`, `nf4` (menos VRAM) |
-| `--model/-m` | `Arrexel/pattern-diffusion` | Modelo HF |
-| `--no-pbr` | `false` | Saltar o passo PBR automático do Materialize |
-| `--quality` | `medium` | Tier de qualidade: `fast`, `low`, `medium`, `high`, `highest` |
-| `--gpu-ids` | None | GPUs para split multi-GPU (ex. `"0,1"`) |
-| `--low-vram` | `false` | CPU offload (menos VRAM) |
+| `--cfg-scale` | guidance | CFG scale |
+| `--lora-strength` | 1.0 | Força do LoRA (0.0–2.0) |
+| `--model/-m` | Flux-Seamless-Texture-LoRA | Modelo HF |
 
 ## Configuração
 
 | Variável | Descrição |
 |----------|-----------|
-| `HF_TOKEN` | Token Hugging Face (usado para descarregar os pesos pattern-diffusion do Hub) |
-| `TEXTURE2D_MODEL_ID` | Override do modelo (default: `Arrexel/pattern-diffusion`) |
-| `TEXTURE2D_BIN` | Override do binário `texture2d` (usado pelo GameAssets) |
-| `MATERIALIZE_BIN` | Override do binário `materialize` (passo PBR automático) |
+| `HF_TOKEN` | Token Hugging Face (ou `HUGGINGFACEHUB_API_TOKEN`) |
+| `TEXTURE2D_MODEL_ID` | Override do modelo (default: `gokaygokay/Flux-Seamless-Texture-LoRA`) |
 
-> **Nota:** a inferência corre **localmente em GPU** (CUDA). O `HF_TOKEN` só é necessário para descarregar os pesos do Hub da Hugging Face na primeira execução; as execuções subsequentes usam a cache local (`~/.cache/huggingface`, override com `HF_HOME`).
+> **Nota:** a geração usa a HF Inference API (cloud). O tempo de resposta depende da carga dos servidores. Não há consumo de GPU local. A API pode ter rate limits — consulta a [documentação da HF Inference API](https://huggingface.co/docs/api-inference/) para detalhes.
 
 ## Integração com Materialize
 
-Por defeito, `texture2d generate` corre o passo PBR **automaticamente** quando o binário `materialize` está no `PATH` (ou `MATERIALIZE_BIN` definido): depois de produzir a textura seamless diffuse, invoca o [Materialize](../Materialize/) para derivar normal / height / metallic / roughness / ambient-occlusion na mesma pasta de saída.
+Gere a textura diffuse e use o Materialize para mapas PBR:
 
 ```bash
-# Um comando — diffuse + PBR (quando Materialize está disponível)
-texture2d generate "mossy stone" -o mossy_stone.png
-# escreve mossy_stone.png + mossy_stone_normal.png + mossy_stone_height.png + ...
-
-# Fluxo explícito em dois passos (ou quando Materialize não está instalado)
-texture2d generate "mossy stone" --no-pbr -o diffuse.png
+texture2d generate "mossy stone" -o diffuse.png
 materialize diffuse.png --output-dir pbr/
 ```
-
-Se o Materialize **não** for detetado, o `texture2d` emite um aviso de uma linha e salta o passo PBR (a diffuse seamless continua a ser gerada). Instala com `./install.sh materialize` na raiz do monorepo, ou define `MATERIALIZE_BIN` com o caminho do binário.
 
 ## Integração com GameAssets
 
@@ -146,7 +128,7 @@ Variável `TEXTURE2D_BIN` se o comando não estiver no `PATH`.
 Texture2D/
 ├── src/texture2d/
 │   ├── cli.py             # CLI Click (generate, batch, presets, info)
-│   ├── generator.py       # Inferência pattern-diffusion + PBR Materialize
+│   ├── generator.py       # Cliente HF Inference API
 │   ├── presets.py         # 13 presets de materiais
 │   ├── image_processor.py # Processamento de imagem
 │   └── utils.py           # Utilitários
@@ -171,5 +153,5 @@ pytest tests/ -v
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos (default):** [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) — **Apache-2.0** (fine-tune de StableDiffusion-2-base em 6,8M de padrões tileable). Lê o model card antes de distribuir ou usar em produção.
+- **Pesos (default):** [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) — metadata HF indica Apache 2.0; cumpre também os termos do **modelo base** (FLUX) e da [HF Inference API](https://huggingface.co/docs/api-inference/).
 - **Tabela completa:** [GameDev/README_PT.md](../README_PT.md) (secção Licenças).

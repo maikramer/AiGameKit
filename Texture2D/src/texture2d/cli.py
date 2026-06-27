@@ -1,16 +1,8 @@
 #!/usr/bin/env python3
-"""Texture2D — CLI principal (texturas 2D seamless).
-
-Usa o modelo `Arrexel/pattern-diffusion` (StableDiffusion-2-base fine-tune em
-6.8M padrões tileable, Apache-2.0) com tileabilidade garantida por construção
-(noise-rolling + late circular padding). PBR maps (normal/height/metallic/
-roughness/AO) são derivados opcionalmente pelo CLI `materialize` (Rust/wgpu).
-"""
+"""Texture2D — CLI principal (texturas 2D seamless)."""
 
 from __future__ import annotations
 
-import shutil
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -22,20 +14,16 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.env import get_tool_bin
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
-from gamedev_shared.logging import Logger
 from gamedev_shared.path_utils import safe_filename
 from gamedev_shared.quality import VALID_QUALITIES
 
-from ._validate_cli import validate_tileable_cmd
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
-from .generator import QUANT_MODES, SEAMLESS_METHODS, TextureGenerator, default_model_id
+from .generator import TextureGenerator, default_model_id
 from .presets import TEXTURE_PRESETS, list_presets
 from .utils import format_bytes
 
-_logger = Logger()
 console = Console()
 
 DEFAULT_OUTPUT_DIR = Path("outputs")
@@ -46,70 +34,12 @@ def ensure_dirs() -> None:
     DEFAULT_TEXTURE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _resolve_materialize_bin() -> str | None:
-    """Resolve o binário `materialize` via ``MATERIALIZE_BIN`` ou ``PATH``.
-
-    Returns:
-        Caminho do binário executável, ou ``None`` se não for encontrado.
-    """
-    via_env = get_tool_bin("materialize")
-    if via_env:
-        return via_env
-    return shutil.which("materialize")
-
-
-def _run_materialize(diffuse_path: Path) -> bool:
-    """Invoca o CLI `materialize` para gerar PBR maps a partir do diffuse.
-
-    Não-fatal: a ausência ou falha do Materialize **não** deve abortar a geração
-    da textura — apenas emite um aviso e devolve ``False``.
-
-    Args:
-        diffuse_path: Caminho do PNG diffuse tileable já gravado.
-
-    Returns:
-        ``True`` se o Materialize correu com sucesso (exit 0); ``False`` caso
-        o binário esteja em falta ou o subprocesso falhe.
-    """
-    bin_path = _resolve_materialize_bin()
-    if not bin_path:
-        console.print(
-            "[dim yellow]materialize não encontrado (MATERIALIZE_BIN/PATH) — "
-            "PBR saltado. Instale com `./install.sh materialize`.[/dim yellow]"
-        )
-        return False
-
-    output_dir = diffuse_path.parent / f"{diffuse_path.stem}_pbr"
-    cmd = [bin_path, str(diffuse_path), "--output-dir", str(output_dir)]
-
-    try:
-        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    except OSError as exc:
-        console.print(f"[yellow]PBR: falha ao lançar materialize ({exc}).[/yellow]")
-        _logger.warn(f"materialize launch failed: {exc}")
-        return False
-
-    if result.returncode != 0:
-        stderr_tail = (result.stderr or "").strip().splitlines()[-1] if result.stderr else ""
-        console.print(
-            f"[yellow]PBR: materialize terminou com código {result.returncode}"
-            + (f" — {stderr_tail}" if stderr_tail else "")
-            + "[/yellow]"
-        )
-        _logger.warn(f"materialize exited with {result.returncode}: {stderr_tail}")
-        return False
-
-    console.print(f"[bold green]\u2713[/bold green] PBR maps gerados em [cyan]{output_dir}[/cyan]")
-    _logger.info(f"materialize PBR maps written to {output_dir}")
-    return True
-
-
 @click.group()
 @click.version_option(version="0.1.0", prog_name="texture2d")
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
-    """Texture2D — texturas 2D seamless (pattern-diffusion + Materialize PBR)."""
+    """Texture2D — texturas 2D seamless (FLUX.1-dev + LoRA local)."""
     ctx.ensure_object(dict)
     ctx.obj["VERBOSE"] = verbose
 
@@ -150,16 +80,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @cli.command("generate")
 @click.argument("prompt")
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png)")
-@click.option("--width", "-W", default=512, show_default=True, type=int, help="Largura (múltiplo de 8)")
-@click.option("--height", "-H", default=512, show_default=True, type=int, help="Altura (múltiplo de 8)")
-@click.option("--steps", "-s", default=50, show_default=True, help="Passos de inferência")
+@click.option("--width", "-W", default=1024, show_default=True, type=int)
+@click.option("--height", "-H", default=1024, show_default=True, type=int)
+@click.option("--steps", "-s", default=28, show_default=True, help="Passos de inferência")
 @click.option(
     "--guidance",
     "-g",
     "guidance_scale",
-    default=7.5,
+    default=3.5,
     show_default=True,
-    help="Guidance scale (default nativo SD2-base)",
+    help="Guidance scale",
 )
 @click.option("--seed", type=int, default=None, help="Seed (None = aleatório)")
 @click.option(
@@ -176,33 +106,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.Choice(["None", *list_presets()], case_sensitive=False),
     help="Preset de material",
 )
-@click.option(
-    "--seamless-method",
-    "seamless_method",
-    type=click.Choice(list(SEAMLESS_METHODS)),
-    default="none",
-    show_default=True,
-    help="Estratégia seamless: none (default, modelo nativo), late/roll/full (rolling+circular, experimental).",
-)
-@click.option(
-    "--quant",
-    type=click.Choice(list(QUANT_MODES)),
-    default="none",
-    show_default=True,
-    help="Quantização do modelo (none/fp8/nf4) — reduz VRAM.",
-)
-@click.option(
-    "--compile",
-    "compile_flag",
-    is_flag=True,
-    help="Ativa torch.compile no UNet (GPU, mais lento no 1º run).",
-)
+@click.option("--cfg-scale", default=None, type=float, help="CFG scale (default = guidance)")
+@click.option("--lora-strength", default=1.0, show_default=True, type=float, help="Força do LoRA")
 @click.option(
     "--model",
     "-m",
     "model_id",
     default=None,
-    help="ID do modelo HF (default: Arrexel/pattern-diffusion)",
+    help="ID do modelo LoRA HF (default: Flux-Seamless-Texture-LoRA)",
 )
 @click.option(
     "--verbose",
@@ -227,16 +138,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Quality tier (fast / low / medium / high / highest).",
 )
 @click.option(
-    "--pbr/--no-pbr",
-    "pbr",
-    default=True,
-    show_default=True,
-    help=(
-        "PBR via Materialize: gera normal/height/metallic/roughness/AO a partir "
-        "do diffuse. --no-pbr saltá-lo. (Auto-deteta o binário materialize.)"
-    ),
-)
-@click.option(
     "--hw-auto/--no-hw-auto",
     "hw_auto",
     default=True,
@@ -258,16 +159,14 @@ def generate_cmd(
     seed: int | None,
     negative_prompt: str,
     preset: str | None,
-    seamless_method: str,
-    quant: str,
-    compile_flag: bool,
+    cfg_scale: float | None,
+    lora_strength: float,
     model_id: str | None,
     verbose_flag: bool,
     cpu: bool,
     low_vram: bool,
     gpu_ids_str: str | None,
     quality: str,
-    pbr: bool,
     hw_auto: bool,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT."""
@@ -323,14 +222,9 @@ def generate_cmd(
     table.add_row("[bold]Resolução[/bold]", f"{width}x{height}")
     table.add_row("[bold]Passos[/bold]", str(steps))
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
-    table.add_row("[bold]Seamless[/bold]", seamless_method)
-    table.add_row("[bold]Quant[/bold]", quant)
-    if compile_flag:
-        table.add_row("[bold]torch.compile[/bold]", "sim")
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
-    table.add_row("[bold]Modelo[/bold]", resolved_model)
-    table.add_row("[bold]PBR[/bold]", "auto (materialize)" if pbr else "off")
+    table.add_row("[bold]Modelo LoRA[/bold]", resolved_model)
     if hwp is not None:
         table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
@@ -344,9 +238,6 @@ def generate_cmd(
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
-            seamless_method=seamless_method,
-            quant=quant,
-            compile_flag=compile_flag,
         )
 
         with console.status(
@@ -377,10 +268,9 @@ def generate_cmd(
                 seed=seed,
                 width=width,
                 height=height,
+                cfg_scale=cfg_scale,
+                lora_strength=lora_strength,
                 preset=preset,
-                seamless_method=seamless_method,
-                quant=quant,
-                compile_flag=compile_flag,
             )
             progress.update(task, description="[green]Concluído")
 
@@ -403,10 +293,6 @@ def generate_cmd(
         console.print(f"[bold green]\u2713[/bold green] Textura: [cyan]{saved.resolve()}[/cyan] [dim]({sz})[/dim]")
         console.print(f"[dim]Seed: {metadata.get('seed', '?')}[/dim]")
         console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-
-        # PBR opcional (não-fatal): Materialize a partir do diffuse gravado.
-        if pbr:
-            _run_materialize(saved)
 
     except ImportError as e:
         console.print(f"\n[bold red]\u2717[/bold red] {e}")
@@ -431,8 +317,8 @@ def presets_cmd() -> None:
         t.add_row(
             name,
             preset["prompt"][:60] + "..." if len(preset["prompt"]) > 60 else preset["prompt"],
-            str(preset.get("num_inference_steps", 50)),
-            str(preset.get("guidance_scale", 7.5)),
+            str(preset.get("num_inference_steps", 28)),
+            str(preset.get("guidance_scale", 3.5)),
         )
     console.print(t)
 
@@ -441,45 +327,17 @@ def presets_cmd() -> None:
 @click.argument("file", type=click.Path(exists=True, path_type=Path))
 @click.option("--output-dir", "-d", type=click.Path(path_type=Path), default=None)
 @click.option("--preset", "-p", default=None, help="Preset aplicado a todos os prompts")
-@click.option("--width", "-W", default=512, show_default=True, type=int)
-@click.option("--height", "-H", default=512, show_default=True, type=int)
-@click.option("--steps", "-s", default=50, show_default=True, type=int)
-@click.option("--guidance", "-g", "guidance_scale", default=7.5, show_default=True, type=float)
-@click.option(
-    "--seamless-method",
-    "seamless_method",
-    type=click.Choice(list(SEAMLESS_METHODS)),
-    default="none",
-    show_default=True,
-    help="Estratégia seamless: none (default, modelo nativo), late/roll/full (rolling+circular, experimental).",
-)
-@click.option(
-    "--quant",
-    type=click.Choice(list(QUANT_MODES)),
-    default="none",
-    show_default=True,
-    help="Quantização do modelo (none/fp8/nf4).",
-)
-@click.option(
-    "--compile",
-    "compile_flag",
-    is_flag=True,
-    help="Ativa torch.compile no UNet (GPU).",
-)
-@click.option("--model", "-m", "model_id", default=None, help="ID do modelo HF (default: Arrexel/pattern-diffusion)")
+@click.option("--width", "-W", default=1024, type=int)
+@click.option("--height", "-H", default=1024, type=int)
+@click.option("--steps", "-s", default=28, type=int)
+@click.option("--guidance", "-g", "guidance_scale", default=3.5, type=float)
+@click.option("--model", "-m", "model_id", default=None)
 @click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
     help="IDs das GPUs para split multi-GPU (ex: '0,1')",
-)
-@click.option(
-    "--pbr/--no-pbr",
-    "pbr",
-    default=True,
-    show_default=True,
-    help="PBR via Materialize (auto-deteta o binário). --no-pbr saltá-lo.",
 )
 @click.option(
     "--quality",
@@ -505,13 +363,9 @@ def batch_cmd(
     height: int,
     steps: int,
     guidance_scale: float,
-    seamless_method: str,
-    quant: str,
-    compile_flag: bool,
     model_id: str | None,
     low_vram: bool,
     gpu_ids_str: str | None,
-    pbr: bool,
     quality: str,
     hw_auto: bool,
 ) -> None:
@@ -574,18 +428,12 @@ def batch_cmd(
         verbose=bool(ctx.obj.get("VERBOSE")),
         model_id=model_id,
         gpu_ids=gpu_ids,
-        seamless_method=seamless_method,
-        quant=quant,
-        compile_flag=compile_flag,
     )
-    base_params: dict[str, object] = {
+    base_params = {
         "guidance_scale": guidance_scale,
         "num_inference_steps": steps,
         "width": width,
         "height": height,
-        "seamless_method": seamless_method,
-        "quant": quant,
-        "compile_flag": compile_flag,
     }
     if preset and preset != "None":
         base_params["preset"] = preset
@@ -611,10 +459,6 @@ def batch_cmd(
         ok_count += 1
         console.print(f"  [green]\u2713[/green] {idx + 1}/{len(prompts)}: [cyan]{saved.name}[/cyan]")
 
-        # PBR opcional por textura (não-fatal).
-        if pbr:
-            _run_materialize(saved)
-
     console.print(
         Panel(
             f"[bold]{ok_count}/{len(prompts)}[/bold] texturas geradas em [cyan]{out.resolve()}[/cyan]",
@@ -639,7 +483,8 @@ def info_cmd() -> None:
     t.add_column("Componente", style="cyan", no_wrap=True)
     t.add_column("Valor", style="green")
 
-    t.add_row("Modelo (default)", default_model_id())
+    t.add_row("Modelo LoRA (default)", default_model_id())
+    t.add_row("Modelo base", "black-forest-labs/FLUX.1-dev")
     t.add_row("Python", data.get("python_version", "N/A"))
     t.add_row("PyTorch", data.get("torch_version", "N/A"))
     t.add_row("CUDA", str(data.get("cuda_available", False)))
@@ -652,7 +497,6 @@ def info_cmd() -> None:
     t.add_row("HF_HOME (cache Hub)", hf_home_display_rich())
     t.add_row("Saída padrão", str(DEFAULT_TEXTURE_DIR.resolve()))
     t.add_row("Presets disponíveis", str(len(TEXTURE_PRESETS)))
-    t.add_row("PBR (Materialize)", _resolve_materialize_bin() or "[yellow]não detetado[/yellow]")
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
@@ -661,9 +505,6 @@ def info_cmd() -> None:
     t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
     console.print(t)
-
-
-cli.add_command(validate_tileable_cmd)
 
 
 def main() -> None:

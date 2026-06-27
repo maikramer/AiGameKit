@@ -2,20 +2,18 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-CLI for **seamless (tileable) 2D textures** running locally on GPU with [**pattern-diffusion**](https://huggingface.co/Arrexel/pattern-diffusion) and **PBR maps** via [Materialize](../Materialize/).
+CLI for **seamless (tileable) 2D textures** using FLUX.1-dev + LoRA, running locally on GPU.
 
-Uses the [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) model — a StableDiffusion-2-base fine-tune trained on **6.8M tileable patterns** (Apache-2.0) — to generate textures that repeat without visible seams, ideal for floors, rocks, walls, and game-dev materials. Optional **PBR** (normal / height / metallic / roughness / AO) is produced by invoking the [Materialize](../Materialize/) Rust/wgpu CLI.
+Uses the [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) model to generate textures that repeat without visible seams — ideal for floors, rocks, walls, and game-dev materials.
 
 In the [GameDev](../README.md) monorepo, the package depends on [**gamedev-shared**](../Shared/) (`gamedev_shared`): quality presets, Rich CLI, GPU helpers, and shared conventions aligned with Text2D, Text3D, and GameAssets.
 
 ## Overview
 
-- **Local GPU inference** — pattern-diffusion (SD2-base fine-tune, Apache-2.0), no cloud API needed
-- **Seamless by construction** — the model is trained on tileable patterns and inference uses circular `Conv2d` padding (`make_seamless`); the optional `--seamless-method full` noise-rolling recipe yields **zero measurable FID/CLIP loss** on the seam (per the [model card](https://huggingface.co/Arrexel/pattern-diffusion))
-- **PBR via Materialize** — when the `materialize` binary is on `PATH` (or `MATERIALIZE_BIN` is set), `texture2d generate` derives normal / height / metallic / roughness / AO maps automatically; otherwise the two-step flow is documented below
+- **Local GPU inference** — FLUX.1-dev base + seamless LoRA, no cloud API needed
+- **Automatic seamless prompting** — appends tileable/seamless instructions automatically
 - **13 material presets** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, Fabric, Leather, Concrete, Marble, Gravel, Tile Floor
 - **Quality tiers** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
-- **Quantization** — `--quant {none,fp8,nf4}` to reduce VRAM (default `none`)
 - **Batch generation** — multiple textures from a prompt file
 - **Multi-GPU** — `--gpu-ids 0,1` splits weights across GPUs via accelerate
 - **JSON metadata** — each texture has a `.json` sidecar with seed, final prompt, and parameters
@@ -80,11 +78,9 @@ texture2d generate "dark marble floor" --low-vram -o marble.png
 | `--seed` | int | None | Random seed for reproducibility |
 | `-n, --negative-prompt` | str | `""` | Negative prompt |
 | `-p, --preset` | str | None | Material preset (see Presets below) |
-| `--seamless-method` | str | `late` | Seamless strategy: `none` (off), `late` (circular padding only — default), `full` (noise-rolling recipe, strongest guarantee) |
-| `--quant` | str | `none` | Model quantization: `none`, `fp8`, `nf4` (lower VRAM) |
-| `-m, --model` | str | None | HF model ID override (default `Arrexel/pattern-diffusion`) |
-| `--pbr` | flag | `true` | When set, generate PBR maps via Materialize if the binary is available |
-| `--no-pbr` | flag | `false` | Skip the automatic Materialize PBR step |
+| `--cfg-scale` | float | None | CFG scale override (defaults to guidance) |
+| `--lora-strength` | float | 1.0 | LoRA strength (0.0–2.0) |
+| `-m, --model` | str | None | HF LoRA model ID override |
 | `--cpu` | flag | `false` | Force CPU inference |
 | `--low-vram` | flag | `false` | CPU offload (lower VRAM usage) |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
@@ -116,9 +112,7 @@ texture2d batch prompts.txt -d textures/ --quality high
 | `-H, --height` | int | 1024 | Image height |
 | `-s, --steps` | int | 28 | Inference steps |
 | `-g, --guidance` | float | 3.5 | Guidance scale |
-| `-m, --model` | str | None | HF model ID override |
-| `--quant` | str | `none` | Model quantization: `none`, `fp8`, `nf4` |
-| `--no-pbr` | flag | `false` | Skip the automatic Materialize PBR step |
+| `-m, --model` | str | None | HF LoRA model ID override |
 | `--low-vram` | flag | `false` | CPU offload (lower VRAM usage) |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
 | `--quality` | str | `medium` | Quality tier |
@@ -185,10 +179,9 @@ texture2d generate "scratched surface" --preset Metal --quality high -o metal.pn
 
 | Variable | Description |
 |----------|-------------|
-| `HF_TOKEN` | Hugging Face token (used to download the pattern-diffusion weights from the Hub) |
-| `TEXTURE2D_MODEL_ID` | Override default model ID (`Arrexel/pattern-diffusion`) |
+| `HF_TOKEN` | Hugging Face API token (or `HUGGINGFACEHUB_API_TOKEN`) |
+| `TEXTURE2D_MODEL_ID` | Override default LoRA model ID (`gokaygokay/Flux-Seamless-Texture-LoRA`) |
 | `TEXTURE2D_BIN` | Override `texture2d` binary path (used by GameAssets) |
-| `MATERIALIZE_BIN` | Override `materialize` binary path (used for the automatic PBR step) |
 
 ## Output Layout
 
@@ -207,19 +200,12 @@ outputs/
 
 ### Materialize (PBR maps)
 
-By default `texture2d generate` runs the PBR step **automatically** when the `materialize` binary is on `PATH` (or `MATERIALIZE_BIN` is set): after producing the seamless diffuse texture, it invokes [Materialize](../Materialize/) to derive normal / height / metallic / roughness / ambient-occlusion maps into the same output directory.
+Generate a diffuse texture, then use [Materialize](../Materialize/) to create PBR maps (normal, height, metallic, roughness, ambient occlusion):
 
 ```bash
-# One command — diffuse + PBR (when Materialize is available)
-texture2d generate "mossy stone" -o mossy_stone.png
-# writes mossy_stone.png + mossy_stone_normal.png + mossy_stone_height.png + ...
-
-# Explicit two-step flow (or when Materialize is not installed)
-texture2d generate "mossy stone" --no-pbr -o diffuse.png
+texture2d generate "mossy stone" -o diffuse.png
 materialize diffuse.png --output-dir pbr/
 ```
-
-If Materialize is **not** detected, `texture2d` emits a one-line notice and skips the PBR step (the diffuse texture is still produced). Install Materialize with `./install.sh materialize` at the monorepo root, or set `MATERIALIZE_BIN` to the binary path.
 
 ### GameAssets batch
 
@@ -261,7 +247,7 @@ Texture2D/
 │   ├── __main__.py        # python -m texture2d
 │   ├── cli.py             # Click CLI (generate, batch, presets, info, skill)
 │   ├── cli_rich.py        # Rich-click integration
-│   ├── generator.py       # pattern-diffusion inference + Materialize PBR
+│   ├── generator.py       # FLUX.1-dev + LoRA inference
 │   ├── presets.py         # 13 material presets
 │   ├── image_processor.py # Image saving + metadata
 │   └── utils.py           # Helpers
@@ -279,5 +265,5 @@ Texture2D/
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights (default):** [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) — **Apache-2.0** (StableDiffusion-2-base fine-tune on 6.8M tileable patterns). Read the model card before shipping or using in production.
+- **Weights (default):** [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) — HF metadata indicates Apache 2.0; also comply with the **base model** (FLUX.1-dev) and Hugging Face terms of service.
 - **Full license table:** [GameDev/README.md](../README.md) (Licenses section).

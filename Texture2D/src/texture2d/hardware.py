@@ -1,13 +1,11 @@
-"""Detecção automática de hardware → perfil de inferência pattern-diffusion (SD2-base).
+"""Detecção automática de hardware → perfil de inferência FLUX.1-dev + seamless LoRA.
 
 Soft resolution no CLI: só preenche o que o utilizador não definiu (flags
-explícitas, ``--low-vram``/``--cpu`` ganham). Desligível com ``--no-hw-auto``
+explícitas, ``--low-vram``/``--cpu`` ganham). Desligável com ``--no-hw-auto``
 ou ``TEXTURE2D_HW_AUTO=0``.
 
-O modelo base é pattern-diffusion (Stable Diffusion 2-base, ~870M params) —
-muito mais leve que FLUX.1-dev 12B: pesos fp16 ~2 GB, pico de VRAM ~4-6 GB em
-512x512 nativo, ~6-8 GB em 768x768. O perfil decide apenas CPU offload e clamp
-de resolução conforme a VRAM disponível.
+O modelo base é sempre FLUX.1-dev com SDNQ quantized matmul aplicado; o perfil
+decide apenas CPU offload e clamp de resolução conforme a VRAM disponível.
 """
 
 from __future__ import annotations
@@ -19,15 +17,15 @@ from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "TEXTURE2D_HW_AUTO"
 
-# Tiers (GiB da maior GPU) — calibrados para pattern-diffusion (SD2-base):
-#   >= 8  full GPU, sem offload, resolução livre (default 512x512 nativo)
-#   >= 6  sem offload, clamp a 512x512 (nativo)
-#   >= 4  low_vram (group_offload no generator), clamp a 512x512
-#   <  4  low_vram + clamp a 512x512 (idealmente sequential offload)
+# Tiers (GiB da maior GPU):
+#   >= 12  full GPU, sem offload, resolução livre (default 1024x1024)
+#   >=  8  enable_model_cpu_offload, resolução livre
+#   <   8  offload + clamp a 1024 (se o utilizador pediu mais alto)
+#   <   6  offload + clamp a 768x768
 
-# Resolução nativa do pattern-diffusion (SD2-base).
-DEFAULT_WIDTH = 512
-DEFAULT_HEIGHT = 512
+# Resolução por defeito do Texture2D (mantida como referência para o summary).
+DEFAULT_WIDTH = 1024
+DEFAULT_HEIGHT = 1024
 
 
 def hw_auto_enabled() -> bool:
@@ -57,21 +55,14 @@ class Texture2DHardwareProfile:
 
 
 def profile_from_specs(gpus: list[tuple[int, int]]) -> Texture2DHardwareProfile:
-    """Resolve perfil a partir de specs (índice, bytes VRAM). Puro — testável sem GPU.
-
-    Args:
-        gpus: Lista de tuplos ``(device_index, vram_bytes)`` detectados.
-
-    Returns:
-        Perfil calibrado para pattern-diffusion (SD2-base, ~870M params).
-    """
+    """Resolve perfil a partir de specs (índice, bytes VRAM). Puro — testável sem GPU."""
     if not gpus:
         return Texture2DHardwareProfile(
             name="cpu",
             device="cpu",
             low_vram=True,
-            max_width=512,
-            max_height=512,
+            max_width=768,
+            max_height=768,
             gpu_ids=None,
             total_vram_gib=0.0,
         )
@@ -82,9 +73,8 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Texture2DHardwareProfile:
 
     gpu_ids = [idx for idx, _ in gpus] if len(gpus) > 1 else None
 
-    if largest_gib >= 8.0:
-        # Full GPU, sem offload, resolução livre — SD2-base cabe com folga
-        # (pico ~6-8 GB em 768x768).
+    if largest_gib >= 12.0:
+        # Full GPU, sem offload, resolução livre.
         return Texture2DHardwareProfile(
             name=name,
             device="cuda",
@@ -95,39 +85,37 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Texture2DHardwareProfile:
             total_vram_gib=round(total_gib, 1),
         )
 
-    if largest_gib >= 6.0:
-        # Sem offload; clamp a 512x512 (resolução nativa do SD2-base).
-        return Texture2DHardwareProfile(
-            name=name,
-            device="cuda",
-            low_vram=False,
-            max_width=512,
-            max_height=512,
-            gpu_ids=gpu_ids,
-            total_vram_gib=round(total_gib, 1),
-        )
-
-    if largest_gib >= 4.0:
-        # low_vram (group_offload no generator); clamp a 512x512.
+    if largest_gib >= 8.0:
+        # Offload módulo-a-módulo, resolução livre.
         return Texture2DHardwareProfile(
             name=name,
             device="cuda",
             low_vram=True,
-            max_width=512,
-            max_height=512,
+            max_width=None,
+            max_height=None,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
         )
 
-    # < 4 GiB: low_vram + clamp a 512x512. Idealmente sequential offload;
-    # o generator trata low_vram como group_offload, que cobre o essencial
-    # mesmo nas GPUs mais pequenas.
+    if largest_gib >= 6.0:
+        # Offload + clamp a 1024.
+        return Texture2DHardwareProfile(
+            name=name,
+            device="cuda",
+            low_vram=True,
+            max_width=1024,
+            max_height=1024,
+            gpu_ids=gpu_ids,
+            total_vram_gib=round(total_gib, 1),
+        )
+
+    # < 6 GiB: offload + clamp a 768x768.
     return Texture2DHardwareProfile(
         name=name,
         device="cuda",
         low_vram=True,
-        max_width=512,
-        max_height=512,
+        max_width=768,
+        max_height=768,
         gpu_ids=gpu_ids,
         total_vram_gib=round(total_gib, 1),
     )
