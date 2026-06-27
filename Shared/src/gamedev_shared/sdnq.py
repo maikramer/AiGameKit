@@ -283,13 +283,15 @@ def apply_quantized_matmul(pipe: Any, *, enabled: bool = True) -> None:
             return
         for name in ("transformer", "text_encoder", "text_encoder_2"):
             mod = getattr(pipe, name, None)
-            if mod is not None:
-                try:
-                    setattr(pipe, name, apply_sdnq_options_to_model(mod, use_quantized_matmul=True))
-                except RuntimeError as e:
-                    # CUDA pode reportar-se disponível sem Triton funcional (CI, drivers parciais).
-                    if "triton" not in str(e).lower():
-                        raise
+            if mod is None:
+                continue
+            if not hasattr(mod, "quantization_config"):
+                continue
+            try:
+                setattr(pipe, name, apply_sdnq_options_to_model(mod, use_quantized_matmul=True))
+            except RuntimeError as e:
+                if "triton" not in str(e).lower():
+                    raise
     except ImportError:
         pass
 
