@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import sys
 
-from gamedev_shared.quality import VALID_QUALITIES
-
 from rich import box
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
+
+from gamedev_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
 from .export import export_heightmap, export_metadata
