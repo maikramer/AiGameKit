@@ -20,15 +20,35 @@ export interface SerializableEntitySnapshot {
 export interface SaveSnapshot {
   version: '1.0';
   entities: SerializableEntitySnapshot[];
+  /** Optional global (non-entity) state, keyed by serializer kind. */
+  globals?: Record<string, SerializedKind>;
+}
+
+export interface GlobalSaveSerializer {
+  serialize(state: State): SerializedKind | null;
+  deserialize(state: State, data: SerializedKind): void;
 }
 
 const registries = new WeakMap<State, Map<string, SaveSerializer>>();
+const globalRegistries = new WeakMap<
+  State,
+  Map<string, GlobalSaveSerializer>
+>();
 
 function getRegistry(state: State): Map<string, SaveSerializer> {
   let map = registries.get(state);
   if (!map) {
     map = new Map();
     registries.set(state, map);
+  }
+  return map;
+}
+
+function getGlobalRegistry(state: State): Map<string, GlobalSaveSerializer> {
+  let map = globalRegistries.get(state);
+  if (!map) {
+    map = new Map();
+    globalRegistries.set(state, map);
   }
   return map;
 }
@@ -46,6 +66,14 @@ export function getSaveSerializer(
   kind: string
 ): SaveSerializer | undefined {
   return getRegistry(state).get(kind);
+}
+
+export function registerGlobalSaveSerializer(
+  state: State,
+  kind: string,
+  serializer: GlobalSaveSerializer
+): void {
+  getGlobalRegistry(state).set(kind, serializer);
 }
 
 export interface TransientExclusion {
@@ -110,7 +138,19 @@ export function serializeAll(state: State): SaveSnapshot {
   }
 
   entities.sort((a, b) => a.eid - b.eid);
-  return { version: '1.0', entities };
+
+  const globalSerializers = getGlobalRegistry(state);
+  const globals: Record<string, SerializedKind> = {};
+  for (const [kind, gss] of globalSerializers) {
+    const data = gss.serialize(state);
+    if (data !== null && data !== undefined) globals[kind] = data;
+  }
+
+  return {
+    version: '1.0',
+    entities,
+    ...(Object.keys(globals).length > 0 ? { globals } : {}),
+  };
 }
 
 export function deserializeAll(state: State, snapshot: SaveSnapshot): void {
@@ -120,6 +160,14 @@ export function deserializeAll(state: State, snapshot: SaveSnapshot): void {
     for (const [kind, data] of Object.entries(entity.kinds)) {
       const serializer = serializers.get(kind);
       if (serializer) serializer.deserialize(state, eid, data);
+    }
+  }
+  // Globals are optional (back-compat: snapshots without `globals` skip this).
+  if (snapshot.globals) {
+    const globalSerializers = getGlobalRegistry(state);
+    for (const [kind, data] of Object.entries(snapshot.globals)) {
+      const gss = globalSerializers.get(kind);
+      if (gss) gss.deserialize(state, data);
     }
   }
 }

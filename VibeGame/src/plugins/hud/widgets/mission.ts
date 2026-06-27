@@ -1,6 +1,10 @@
 import type { State, XMLValue } from '../../../core';
 import { t } from '../../i18n';
-import type { HudWidget, HudWidgetFactory, WidgetHandle } from '../screen-layer';
+import type {
+  HudWidget,
+  HudWidgetFactory,
+  WidgetHandle,
+} from '../screen-layer';
 import css from '../styles/mission.css?raw';
 import { injectWidgetCss, readAttr } from './shared';
 

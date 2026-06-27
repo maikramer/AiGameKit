@@ -11,11 +11,13 @@ export {
   deserializeAll,
   getSaveSerializer,
   isTransientEntity,
+  registerGlobalSaveSerializer,
   registerSaveSerializer,
   registerTransientExclusion,
   serializeAll,
 } from './serializer-registry';
 export type {
+  GlobalSaveSerializer,
   SaveSerializer,
   SaveSnapshot,
   SerializableEntitySnapshot,

@@ -111,8 +111,7 @@ function applyCommon(
     FloatingText.riseSpeed[eid] = options.riseSpeed ?? 50;
     FloatingText.fontSizePx[eid] = options.fontSizePx ?? 0;
     FloatingText.crit[eid] = options.crit ? 1 : 0;
-    FloatingText.driftX[eid] =
-      options.driftX ?? (Math.random() * 2 - 1) * 17;
+    FloatingText.driftX[eid] = options.driftX ?? (Math.random() * 2 - 1) * 17;
     FloatingText.screenX[eid] = options.x;
     FloatingText.screenY[eid] = options.y;
   } else {

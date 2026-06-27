@@ -1,11 +1,12 @@
-import { defineQuery, type ParsedElement, type State, type XMLValue } from '../../../core';
+import {
+  defineQuery,
+  type ParsedElement,
+  type State,
+  type XMLValue,
+} from '../../../core';
 import { Transform } from '../../transforms';
 import { PlayerController } from '../../player';
-import {
-  FACTION_TAG_NAMES,
-  FactionComponent,
-  Health,
-} from '../../combat';
+import { FACTION_TAG_NAMES, FactionComponent, Health } from '../../combat';
 import { NavMeshAgent } from '../../navmesh';
 import { ResourceNode } from '../../rpg-resource-node';
 import { getResourceNodeKind } from '../../rpg-resource-node/utils';
@@ -93,7 +94,11 @@ export interface MinimapOptions {
   readonly anchor: MinimapAnchor;
 }
 
-export type MinimapAnchor = 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+export type MinimapAnchor =
+  | 'top-right'
+  | 'top-left'
+  | 'bottom-right'
+  | 'bottom-left';
 
 interface ResolvedOptions extends MinimapOptions {
   readonly scale: number;
@@ -105,7 +110,10 @@ const resourceQuery = defineQuery([Transform, ResourceNode]);
 const playerQuery = defineQuery([Transform, PlayerController]);
 
 /** Resolve an entity to a minimap category, or `null` if it should be skipped. */
-export function resolveMinimapCategory(state: State, eid: number): MinimapCategory | null {
+export function resolveMinimapCategory(
+  state: State,
+  eid: number
+): MinimapCategory | null {
   if (state.hasComponent(eid, PlayerController)) return 'player';
 
   if (state.hasComponent(eid, ResourceNode)) {
@@ -125,7 +133,10 @@ export function resolveMinimapCategory(state: State, eid: number): MinimapCatego
     return 'neutral';
   }
 
-  if (state.hasComponent(eid, NavMeshAgent) && state.hasComponent(eid, Health)) {
+  if (
+    state.hasComponent(eid, NavMeshAgent) &&
+    state.hasComponent(eid, Health)
+  ) {
     return 'enemy';
   }
 
@@ -136,7 +147,10 @@ export function resolveMinimapCategory(state: State, eid: number): MinimapCatego
  * Collect every blip visible on the minimap plus the player marker. Pure: no
  * canvas, no DOM — drives both the runtime draw and the unit tests.
  */
-export function collectMinimapDots(state: State, options: MinimapOptions): MinimapCollection {
+export function collectMinimapDots(
+  state: State,
+  options: MinimapOptions
+): MinimapCollection {
   const enabled = options.categories;
 
   let player: MinimapPlayerMarker | null = null;
@@ -159,7 +173,11 @@ export function collectMinimapDots(state: State, options: MinimapOptions): Minim
     const category = resolveMinimapCategory(state, eid);
     if (!category) return;
     if (!enabled.has(category)) return;
-    if (category === 'enemy' || category === 'boss' || category === 'merchant') {
+    if (
+      category === 'enemy' ||
+      category === 'boss' ||
+      category === 'merchant'
+    ) {
       if (state.hasComponent(eid, Health) && Health.current[eid] <= 0) return;
     }
     const x = Transform.posX[eid];
@@ -225,7 +243,8 @@ export function drawMinimap(
     const radius = options.radii[dot.category] ?? 2;
     ctx.beginPath();
     ctx.arc(cx + dx, cy + dz, edge ? radius * 0.7 : radius, 0, Math.PI * 2);
-    ctx.fillStyle = options.colors[dot.category] ?? DEFAULT_MINIMAP_COLORS[dot.category];
+    ctx.fillStyle =
+      options.colors[dot.category] ?? DEFAULT_MINIMAP_COLORS[dot.category];
     ctx.globalAlpha = edge ? 0.5 : 1;
     ctx.fill();
     ctx.globalAlpha = 1;
@@ -274,7 +293,9 @@ export function parseMinimapOptions(
   }
   for (const child of children) {
     if (child.tagName !== MINIMAP_COLOR_CHILD_TAG) continue;
-    const cat = String(child.attributes.category ?? '').trim().toLowerCase();
+    const cat = String(child.attributes.category ?? '')
+      .trim()
+      .toLowerCase();
     const color = child.attributes.color;
     if (!isMinimapCategory(cat)) continue;
     if (typeof color !== 'string' || color.length === 0) continue;
@@ -291,14 +312,20 @@ export function minimapParser(params: {
   element: ParsedElement;
   state: State;
 }): void {
-  const options = parseMinimapOptions(params.element.attributes, params.element.children);
+  const options = parseMinimapOptions(
+    params.element.attributes,
+    params.element.children
+  );
   const widget = new MinimapWidget(options);
   registerHudWidget(params.state, widget);
 }
 
 /** Register the minimap as a `<HudWidget type="Minimap" …/>` factory. */
 export function registerMinimapWidgetFactory(): void {
-  const factory = (attributes: Record<string, XMLValue>, state: State): HudWidget => {
+  const factory = (
+    attributes: Record<string, XMLValue>,
+    state: State
+  ): HudWidget => {
     void state;
     const options = parseMinimapOptions(attributes, []);
     return new MinimapWidget(options);
@@ -311,7 +338,10 @@ export class MinimapWidget implements HudWidget {
   private readonly resolved: ResolvedOptions;
 
   constructor(options: MinimapOptions) {
-    this.resolved = { ...options, scale: (options.size / 2 - 6) / options.range };
+    this.resolved = {
+      ...options,
+      scale: (options.size / 2 - 6) / options.range,
+    };
   }
 
   mount(layer: HTMLDivElement): WidgetHandle {
@@ -370,7 +400,10 @@ function parseNumber(value: XMLValue | undefined, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-function parseAnchor(value: XMLValue | undefined, fallback: MinimapAnchor): MinimapAnchor {
+function parseAnchor(
+  value: XMLValue | undefined,
+  fallback: MinimapAnchor
+): MinimapAnchor {
   if (typeof value !== 'string') return fallback;
   switch (value.trim().toLowerCase()) {
     case 'top-left':

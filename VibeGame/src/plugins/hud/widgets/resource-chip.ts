@@ -1,13 +1,13 @@
 import type { State, XMLValue } from '../../../core';
 import { getResource } from '../../rpg-vault';
 import { t } from '../../i18n';
-import type { HudWidget, HudWidgetFactory, WidgetHandle } from '../screen-layer';
+import type {
+  HudWidget,
+  HudWidgetFactory,
+  WidgetHandle,
+} from '../screen-layer';
 import css from '../styles/resource-chip.css?raw';
-import {
-  injectWidgetCss,
-  readAttr,
-  resolveTargetEntity,
-} from './shared';
+import { injectWidgetCss, readAttr, resolveTargetEntity } from './shared';
 
 const WIDGET_TAG = 'resource';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];
@@ -24,14 +24,15 @@ export function createResourceChipWidget(
 ): HudWidget {
   const resourceRaw = readAttr(attributes, 'resource');
   const kind: ResourceKind =
-    resourceRaw && (SUPPORTED_RESOURCES as readonly string[]).includes(resourceRaw)
+    resourceRaw &&
+    (SUPPORTED_RESOURCES as readonly string[]).includes(resourceRaw)
       ? (resourceRaw as ResourceKind)
       : 'gold';
   const icon = readAttr(attributes, 'icon') ?? '';
   const targetRaw = readAttr(attributes, 'target-entity');
   const resolvedAtMount =
     resolveTargetEntity(state, targetRaw, DEFAULT_TARGET_NAMES) ?? -1;
-  const id = `${WIDGET_TAG}:${kind}:${resolvedAtMount >= 0 ? resolvedAtMount : targetRaw ?? 'default'}`;
+  const id = `${WIDGET_TAG}:${kind}:${resolvedAtMount >= 0 ? resolvedAtMount : (targetRaw ?? 'default')}`;
 
   injectWidgetCss(css);
 

@@ -6,14 +6,8 @@ import { getScene, threeCameras, MainCamera } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
 import { Transform } from '../transforms';
 import { FloatingText } from './components';
-import {
-  disposeScreenFloatPool,
-  getScreenFloatPool,
-} from './screen-pool';
-import {
-  deleteFloatingTextString,
-  getFloatingTextString,
-} from './utils';
+import { disposeScreenFloatPool, getScreenFloatPool } from './screen-pool';
+import { deleteFloatingTextString, getFloatingTextString } from './utils';
 
 const textQuery = defineQuery([FloatingText]);
 const cameraQuery = defineQuery([MainCamera]);

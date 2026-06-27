@@ -13,8 +13,15 @@
   cursor: default;
   font-size: 14px;
   font-weight: 700;
-  font-family: system-ui, Segoe UI, sans-serif;
-  background: linear-gradient(135deg, rgba(14, 18, 34, 0.72), rgba(10, 14, 26, 0.6));
+  font-family:
+    system-ui,
+    Segoe UI,
+    sans-serif;
+  background: linear-gradient(
+    135deg,
+    rgba(14, 18, 34, 0.72),
+    rgba(10, 14, 26, 0.6)
+  );
   backdrop-filter: blur(10px);
   box-shadow: 0 5px 18px rgba(0, 0, 0, 0.25);
 }

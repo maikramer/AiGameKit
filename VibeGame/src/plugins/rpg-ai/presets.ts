@@ -2,10 +2,7 @@ import type { State } from '../../core';
 import { getDataRegistry } from '../rpg-core/registry';
 import { MELEE_AI_KIND } from './components';
 import type { MeleeAiConfig } from './components';
-import {
-  MeleeAiBehaviour,
-  MonoBehaviour,
-} from '../../extras/melee-ai-base';
+import { MeleeAiBehaviour, MonoBehaviour } from '../../extras/melee-ai-base';
 
 export interface CreatureClips {
   idle: string;
@@ -47,9 +44,7 @@ export interface BossAiPreset extends MeleeAiPreset {
   roar: BossRoarConfig;
 }
 
-export function isBossPreset(
-  preset: MeleeAiPreset
-): preset is BossAiPreset {
+export function isBossPreset(preset: MeleeAiPreset): preset is BossAiPreset {
   const roar = (preset as Partial<BossAiPreset>).roar;
   return (
     typeof roar === 'object' &&
@@ -69,9 +64,7 @@ export function loadMeleeAiPreset(
  * Project a preset down to the pure {@link MeleeAiConfig} consumed by the FSM,
  * dropping the asset/hp/loot extensions.
  */
-export function presetToMeleeAiConfig(
-  preset: MeleeAiPreset
-): MeleeAiConfig {
+export function presetToMeleeAiConfig(preset: MeleeAiPreset): MeleeAiConfig {
   const cfg: MeleeAiConfig = {
     detectRange: preset.detectRange,
     attackRange: preset.attackRange,

@@ -8,8 +8,11 @@ export {
   setTerrainHeightmapUrl,
   getTerrainTextureUrl,
   setTerrainTextureUrl,
+  swapTerrainTexture,
+  setTerrainSplat,
+  getTerrainSplat,
 } from './utils';
-export type { TerrainEntityData } from './utils';
+export type { TerrainEntityData, TerrainSplatConfig } from './utils';
 export {
   createFlatSampler,
   createHeightmapSampler,

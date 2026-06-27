@@ -2,7 +2,11 @@ import type { State, XMLValue } from '../../../core';
 import { Health } from '../../combat';
 import { t } from '../../i18n';
 import { Transform } from '../../transforms';
-import type { HudWidget, HudWidgetFactory, WidgetHandle } from '../screen-layer';
+import type {
+  HudWidget,
+  HudWidgetFactory,
+  WidgetHandle,
+} from '../screen-layer';
 import css from '../styles/boss-bar.css?raw';
 import {
   applyPosition,
@@ -28,7 +32,7 @@ export function createBossBarWidget(
   const position = readPosition(attributes);
   const resolvedAtMount =
     resolveTargetEntity(state, targetRaw, DEFAULT_TARGET_NAMES) ?? -1;
-  const id = `${WIDGET_TAG}:${resolvedAtMount >= 0 ? resolvedAtMount : targetRaw ?? 'boss'}`;
+  const id = `${WIDGET_TAG}:${resolvedAtMount >= 0 ? resolvedAtMount : (targetRaw ?? 'boss')}`;
 
   injectWidgetCss(css);
 

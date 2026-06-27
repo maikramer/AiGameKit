@@ -14,6 +14,8 @@ import { createSkillsTab } from './skills-tab';
 import type { SkillsTabConfig } from './skills-tab';
 import { createInventoryTab } from './inventory-tab';
 import type { InventoryTabConfig } from './inventory-tab';
+import { createQuestsTab } from '../../quests/hud/quests-tab';
+import type { QuestsTabConfig } from '../../quests/hud/quests-tab';
 import {
   createOptionsTab,
   parseOptionDef,
@@ -28,10 +30,11 @@ export {
   createSkillsTab,
   createInventoryTab,
   createOptionsTab,
+  createQuestsTab,
   registerOptionDef,
 };
 
-export type { SkillsTabConfig, InventoryTabConfig };
+export type { SkillsTabConfig, InventoryTabConfig, QuestsTabConfig };
 
 const MODAL_CSS = `
 .hud-modal-overlay{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(4,6,14,0.55);backdrop-filter:blur(7px);pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;}
@@ -372,6 +375,12 @@ export function buildTabsFromChildren(
             targetEntity,
             columns: cols ? Number(cols) : undefined,
           }),
+      });
+    } else if (tag === 'queststab') {
+      tabs.push({
+        id: tabId,
+        labelKey,
+        build: (s) => createQuestsTab(s, { targetEntity }),
       });
     } else if (tag === 'optionstab') {
       const defs = (

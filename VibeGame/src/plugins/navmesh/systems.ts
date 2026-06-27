@@ -22,6 +22,12 @@ import { collectNavmeshGeometry, navmeshObstaclesLoaded } from './geometry';
 
 const TERRAIN_GRACE_FRAMES = 30;
 const MAX_INIT_WAIT_FRAMES = 600;
+// Failsafe: once generation has been kicked off, never let the world-ready gate
+// block on the navmesh longer than this. recast's wasm `init()` or the solo bake
+// can hang or silently fail; without a ceiling the loading screen would wait on
+// "navmesh…" forever and the game never starts. On timeout the gate releases in
+// degraded mode (no crowd → enemies fall back to direct steering).
+const NAVMESH_INIT_TIMEOUT_MS = 8000;
 
 const AGENT_HEIGHT = 2.0;
 const AGENT_RADIUS = 0.4;
@@ -69,18 +75,36 @@ function navMeshConfig(worldSize: number) {
 
 function navMeshReady(state: State): boolean {
   const rt = getNavMeshRuntime(state);
-  if (rt.ready) return true;
+  if (rt.ready || rt.failed) return true;
   if (!rt.initStarted) {
     const surfaces = surfaceQuery(state.world);
     if (!surfaces.some((eid) => NavMeshSurface.enabled[eid] === 1)) {
       return true;
     }
+    return false;
+  }
+  // Generation kicked off but never finished within the failsafe window — give
+  // up holding the gate so a hung/slow bake can't deadlock the whole load.
+  if (
+    rt.initStartedAt > 0 &&
+    performance.now() - rt.initStartedAt > NAVMESH_INIT_TIMEOUT_MS
+  ) {
+    rt.failed = true;
+    logger.warn(
+      '[NavMesh] Generation did not complete within ' +
+        `${NAVMESH_INIT_TIMEOUT_MS}ms — releasing load gate (degraded steering).`
+    );
+    return true;
   }
   return false;
 }
 
 export interface NavMeshRuntime {
   initStarted: boolean;
+  /** performance.now() when generateNavMesh was kicked off (0 = not yet). */
+  initStartedAt: number;
+  /** Generation gave up (empty geometry, error, or failsafe timeout). */
+  failed: boolean;
   ready: boolean;
   graceFrames: number;
   navMesh: NavMesh | null;
@@ -97,6 +121,8 @@ export function getNavMeshRuntime(state: State): NavMeshRuntime {
   if (!rt) {
     rt = {
       initStarted: false,
+      initStartedAt: 0,
+      failed: false,
       ready: false,
       graceFrames: 0,
       navMesh: null,
@@ -121,7 +147,7 @@ export const NavMeshInitSystem: System = {
   update(state: State) {
     if (state.headless) return;
     const rt = getNavMeshRuntime(state);
-    if (rt.ready || rt.initStarted) return;
+    if (rt.ready || rt.initStarted || rt.failed) return;
 
     const surfaces = surfaceQuery(state.world);
     const hasSurface = surfaces.some(
@@ -168,6 +194,7 @@ export const NavMeshInitSystem: System = {
     }
 
     rt.initStarted = true;
+    rt.initStartedAt = performance.now();
     void generateNavMesh(state, rt, worldSize);
   },
 };
@@ -190,7 +217,7 @@ async function generateNavMesh(
     );
     if (indices.length === 0) {
       logger.warn('[NavMesh] No geometry collected — skipping generation');
-      rt.initStarted = false;
+      rt.failed = true;
       return;
     }
     const tCollect = performance.now();
@@ -198,7 +225,7 @@ async function generateNavMesh(
     const result = generateSoloNavMesh(positions, indices, config);
     if (!result.success) {
       logger.error('[NavMesh] Generation failed:', result.error);
-      rt.initStarted = false;
+      rt.failed = true;
       return;
     }
     const tGen = performance.now();
@@ -222,7 +249,7 @@ async function generateNavMesh(
     );
   } catch (err) {
     logger.error('[NavMesh] Generation error:', err);
-    rt.initStarted = false;
+    rt.failed = true;
   }
 }
 

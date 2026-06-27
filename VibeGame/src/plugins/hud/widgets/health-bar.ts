@@ -1,13 +1,13 @@
 import type { State, XMLValue } from '../../../core';
 import { Health } from '../../combat';
 import { t } from '../../i18n';
-import type { HudWidget, HudWidgetFactory, WidgetHandle } from '../screen-layer';
+import type {
+  HudWidget,
+  HudWidgetFactory,
+  WidgetHandle,
+} from '../screen-layer';
 import css from '../styles/health-bar.css?raw';
-import {
-  injectWidgetCss,
-  readAttr,
-  resolveTargetEntity,
-} from './shared';
+import { injectWidgetCss, readAttr, resolveTargetEntity } from './shared';
 
 const WIDGET_TAG = 'health-bar';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];
@@ -25,7 +25,7 @@ export function createHealthBarWidget(
   const icon = readAttr(attributes, 'icon') ?? '❤';
   const resolvedAtMount =
     resolveTargetEntity(state, targetRaw, DEFAULT_TARGET_NAMES) ?? -1;
-  const id = `${WIDGET_TAG}:${resolvedAtMount >= 0 ? resolvedAtMount : targetRaw ?? 'default'}`;
+  const id = `${WIDGET_TAG}:${resolvedAtMount >= 0 ? resolvedAtMount : (targetRaw ?? 'default')}`;
 
   injectWidgetCss(css);
 

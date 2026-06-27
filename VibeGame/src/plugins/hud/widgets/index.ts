@@ -1,10 +1,7 @@
 import type { Parser, Recipe, XMLValue } from '../../../core';
 import { registerHudWidgetFactory } from '../screen-layer';
 import { bossBarFactory, createBossBarWidget } from './boss-bar';
-import {
-  controlsBarFactory,
-  createControlsBarWidget,
-} from './controls-bar';
+import { controlsBarFactory, createControlsBarWidget } from './controls-bar';
 import { createHealthBarWidget, healthBarFactory } from './health-bar';
 import { createMissionWidget, missionFactory } from './mission';
 import { createResourceChipWidget, resourceChipFactory } from './resource-chip';
@@ -81,12 +78,7 @@ export const widgetRecipes: readonly Recipe[] = [
   {
     name: BOSS_BAR_TAG,
     components: [],
-    parserAttributes: [
-      'target-entity',
-      'observer-entity',
-      'range',
-      'position',
-    ],
+    parserAttributes: ['target-entity', 'observer-entity', 'range', 'position'],
     parserOwnsChildren: true,
   },
   {

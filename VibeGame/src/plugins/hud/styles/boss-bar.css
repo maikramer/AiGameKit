@@ -11,7 +11,10 @@
   background: rgba(8, 12, 28, 0.7);
   border: 1px solid rgba(200, 40, 40, 0.35);
   backdrop-filter: blur(8px);
-  font-family: system-ui, Segoe UI, sans-serif;
+  font-family:
+    system-ui,
+    Segoe UI,
+    sans-serif;
 }
 
 .hud-boss-track {

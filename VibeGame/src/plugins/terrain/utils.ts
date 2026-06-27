@@ -129,3 +129,64 @@ export function getTerrainTextureUrl(
 ): string | undefined {
   return textureUrls.get(state)?.get(entity);
 }
+
+/**
+ * Per-field biome splat: a CPU-baked weight map (RGBA, one biome layer per
+ * channel) plus the layer texture URLs and the world-space rectangle the splat
+ * covers. The terrain material shader samples the splat by world XZ and blends
+ * the base texture with up to four biome layer textures simultaneously — so
+ * adjacent biomes cross-fade spatially instead of the whole map swapping.
+ */
+export interface TerrainSplatConfig {
+  splatTexture: THREE.Texture;
+  layerUrls: string[];
+  worldMinX: number;
+  worldMinZ: number;
+  worldSizeX: number;
+  worldSizeZ: number;
+  /** Bumped on every set so the mesh system re-applies uniforms. */
+  version: number;
+}
+
+const terrainSplats = new WeakMap<State, Map<number, TerrainSplatConfig>>();
+
+export function setTerrainSplat(
+  state: State,
+  entity: number,
+  cfg: Omit<TerrainSplatConfig, 'version'>
+): void {
+  let m = terrainSplats.get(state);
+  if (!m) {
+    m = new Map();
+    terrainSplats.set(state, m);
+  }
+  const prev = m.get(entity);
+  m.set(entity, { ...cfg, version: (prev?.version ?? 0) + 1 });
+}
+
+export function getTerrainSplat(
+  state: State,
+  entity: number
+): TerrainSplatConfig | undefined {
+  return terrainSplats.get(state)?.get(entity);
+}
+
+export function swapTerrainTexture(state: State, url: string): boolean {
+  const texMap = textureUrls.get(state);
+  if (texMap && texMap.size > 0) {
+    const entity = texMap.keys().next().value;
+    if (entity !== undefined) {
+      setTerrainTextureUrl(state, entity, url);
+      return true;
+    }
+  }
+  const hmMap = heightmapUrls.get(state);
+  if (hmMap && hmMap.size > 0) {
+    const entity = hmMap.keys().next().value;
+    if (entity !== undefined) {
+      setTerrainTextureUrl(state, entity, url);
+      return true;
+    }
+  }
+  return false;
+}

@@ -142,7 +142,10 @@ export class ScreenFloatPool {
   }
 }
 
-export function getScreenFloatPool(state: State, options?: ScreenPoolOptions): ScreenFloatPool {
+export function getScreenFloatPool(
+  state: State,
+  options?: ScreenPoolOptions
+): ScreenFloatPool {
   let pool = stateToPool.get(state);
   if (!pool) {
     pool = new ScreenFloatPool(state, options);

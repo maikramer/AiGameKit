@@ -707,6 +707,13 @@ export { isTerrainDynamicsBlocking } from './plugins/terrain/utils';
 export { Postprocessing } from './plugins/postprocessing/components';
 
 /**
+ * Biomes plugin: detects the player's biome region and applies interpolated
+ * fog/ambient/BGM crossfades. Register via {@link BiomesPlugin} (a default
+ * plugin); query the player's active region via {@link ActiveBiome}.
+ */
+export { ActiveBiome, BiomeRegion, BiomesPlugin } from './plugins/biomes';
+
+/**
  * Debug overlay plugin (wireframes, stats) + PostFx debug toggle system
  * (keys Digit1-6 to cycle bloom/CA/vignette/AA/SSAO/toneMapping; opt-in via DebugPlugin).
  */
@@ -766,6 +773,45 @@ export {
   suppressInput,
 } from './plugins/rpg-pause';
 export type { PauseState } from './plugins/rpg-pause';
+
+export {
+  acceptQuest,
+  applyQuestStateSnapshot,
+  DialogueData,
+  dialogueBalloonFactory,
+  endDialogue,
+  getActiveDialogue,
+  getAllQuestDefs,
+  getQuestDef,
+  getQuestDefByIndex,
+  getQuestIndex,
+  MAX_QUESTS,
+  notifyEnemyKilled,
+  notifyResourceHarvested,
+  QuestGiver,
+  QUEST_COMPLETED,
+  QuestProgressSystem,
+  QuestState,
+  QUEST_STATE_AVAILABLE,
+  QUEST_STATE_COMPLETED,
+  QUEST_STATE_FAILED,
+  QUEST_STATE_TAKEN,
+  QuestTriggerSystem,
+  QuestsPlugin,
+  registerQuest,
+  resetQuestState,
+  serializeQuestState,
+  showDialogue,
+} from './plugins/quests';
+export type {
+  ActiveDialogue,
+  DialoguePhase,
+  QuestDef,
+  QuestObjective,
+  QuestObjectiveType,
+  QuestRewards,
+  QuestStateSnapshot,
+} from './plugins/quests';
 
 let globalBuilder: GameBuilder | null = null;
 

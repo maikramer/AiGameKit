@@ -1,12 +1,12 @@
 import type { State, XMLValue } from '../../../core';
 import { ProgressionComponent, getXpToNextLevel } from '../../rpg-progression';
-import type { HudWidget, HudWidgetFactory, WidgetHandle } from '../screen-layer';
+import type {
+  HudWidget,
+  HudWidgetFactory,
+  WidgetHandle,
+} from '../screen-layer';
 import css from '../styles/xp-bar.css?raw';
-import {
-  injectWidgetCss,
-  readAttr,
-  resolveTargetEntity,
-} from './shared';
+import { injectWidgetCss, readAttr, resolveTargetEntity } from './shared';
 
 const WIDGET_TAG = 'xp-bar';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];
@@ -18,7 +18,7 @@ export function createXpBarWidget(
   const targetRaw = readAttr(attributes, 'target-entity');
   const resolvedAtMount =
     resolveTargetEntity(state, targetRaw, DEFAULT_TARGET_NAMES) ?? -1;
-  const id = `${WIDGET_TAG}:${resolvedAtMount >= 0 ? resolvedAtMount : targetRaw ?? 'default'}`;
+  const id = `${WIDGET_TAG}:${resolvedAtMount >= 0 ? resolvedAtMount : (targetRaw ?? 'default')}`;
 
   injectWidgetCss(css);
 

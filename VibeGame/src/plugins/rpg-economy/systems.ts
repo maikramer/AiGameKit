@@ -1,7 +1,13 @@
 import type { State, System } from '../../core';
 import { getDataRegistry } from '../rpg-core';
 import type { ItemDef } from '../rpg-core/types';
-import { InventoryComponent, addItem, getInventory, getItemQty, removeItem } from '../rpg-inventory';
+import {
+  InventoryComponent,
+  addItem,
+  getInventory,
+  getItemQty,
+  removeItem,
+} from '../rpg-inventory';
 import { addResource, getResource, spendResource } from '../rpg-vault';
 
 export const GOLD_KIND = 'gold';

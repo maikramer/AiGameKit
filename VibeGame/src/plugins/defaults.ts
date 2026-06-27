@@ -27,6 +27,8 @@ import { FloatingTextPlugin } from './floating-text/plugin';
 import { DestructiblePlugin } from './destructible/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
+import { QuestsPlugin } from './quests/plugin';
+import { BiomesPlugin } from './biomes/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -52,8 +54,10 @@ export const DefaultPlugins: Plugin[] = [
   NavMeshPlugin,
   AudioPlugin,
   EquirectSkyPlugin,
+  BiomesPlugin,
   ParticlesPlugin,
   FloatingTextPlugin,
   DestructiblePlugin,
   TweeningPlugin,
+  QuestsPlugin,
 ];
