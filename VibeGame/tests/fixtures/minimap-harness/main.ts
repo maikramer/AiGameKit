@@ -1,5 +1,9 @@
 import { State } from '../../../src/core';
-import { HudPlugin, MinimapWidget, registerHudWidget } from '../../../src/plugins/hud';
+import {
+  HudPlugin,
+  MinimapWidget,
+  registerHudWidget,
+} from '../../../src/plugins/hud';
 import { Transform } from '../../../src/plugins/transforms';
 import { PlayerController } from '../../../src/plugins/player';
 import { FactionComponent, Health } from '../../../src/plugins/combat';
@@ -20,7 +24,12 @@ async function bootstrap(): Promise<void> {
   state.addComponent(player, Transform);
   state.addComponent(player, PlayerController);
 
-  function spawnEnemy(x: number, z: number, faction: number, hp: number): number {
+  function spawnEnemy(
+    x: number,
+    z: number,
+    faction: number,
+    hp: number
+  ): number {
     const eid = state.createEntity();
     state.addComponent(eid, Transform);
     state.addComponent(eid, NavMeshAgent);
@@ -52,7 +61,15 @@ async function bootstrap(): Promise<void> {
     new MinimapWidget({
       range: 60,
       size: 168,
-      categories: new Set(['player', 'enemy', 'boss', 'merchant', 'wood', 'stone', 'neutral']),
+      categories: new Set([
+        'player',
+        'enemy',
+        'boss',
+        'merchant',
+        'wood',
+        'stone',
+        'neutral',
+      ]),
       colors: {
         player: '#ffffff',
         enemy: '#ff4d4d',

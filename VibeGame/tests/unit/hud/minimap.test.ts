@@ -26,9 +26,12 @@ beforeAll(() => {
   globalThis.DOMParser = dom.window.DOMParser as unknown as typeof DOMParser;
   globalThis.document = dom.window.document as unknown as typeof document;
   globalThis.window = dom.window as unknown as typeof window;
-  globalThis.HTMLElement = dom.window.HTMLElement as unknown as typeof HTMLElement;
-  globalThis.HTMLDivElement = dom.window.HTMLDivElement as unknown as typeof HTMLDivElement;
-  globalThis.HTMLCanvasElement = dom.window.HTMLCanvasElement as unknown as typeof HTMLCanvasElement;
+  globalThis.HTMLElement = dom.window
+    .HTMLElement as unknown as typeof HTMLElement;
+  globalThis.HTMLDivElement = dom.window
+    .HTMLDivElement as unknown as typeof HTMLDivElement;
+  globalThis.HTMLCanvasElement = dom.window
+    .HTMLCanvasElement as unknown as typeof HTMLCanvasElement;
 });
 
 function newWorld(): State {
@@ -38,11 +41,21 @@ function newWorld(): State {
   return state;
 }
 
-function defaultOptions(overrides: Partial<MinimapOptions> = {}): MinimapOptions {
+function defaultOptions(
+  overrides: Partial<MinimapOptions> = {}
+): MinimapOptions {
   return {
     range: 60,
     size: 168,
-    categories: new Set(['player', 'enemy', 'boss', 'merchant', 'wood', 'stone', 'neutral']),
+    categories: new Set([
+      'player',
+      'enemy',
+      'boss',
+      'merchant',
+      'wood',
+      'stone',
+      'neutral',
+    ]),
     colors: { ...DEFAULT_MINIMAP_COLORS },
     radii: { ...DEFAULT_MINIMAP_RADII },
     anchor: 'top-right',
@@ -57,7 +70,11 @@ function place(
   values?: Record<string, Record<string, number>>
 ): number {
   const eid = state.createEntity();
-  state.addComponent(eid, Transform, { posX: pos[0], posY: pos[1], posZ: pos[2] });
+  state.addComponent(eid, Transform, {
+    posX: pos[0],
+    posY: pos[1],
+    posZ: pos[2],
+  });
   for (let i = 0; i < components.length; i++) {
     state.addComponent(eid, components[i], values?.[i]);
   }
@@ -96,7 +113,10 @@ describe('parseMinimapOptions', () => {
   });
 
   it('reads inline color-* attribute overrides', () => {
-    const opts = parseMinimapOptions({ 'color-enemy': '#00ff00', 'color-boss': '#101010' }, []);
+    const opts = parseMinimapOptions(
+      { 'color-enemy': '#00ff00', 'color-boss': '#101010' },
+      []
+    );
     expect(opts.colors.enemy).toBe('#00ff00');
     expect(opts.colors.boss).toBe('#101010');
     expect(opts.colors.player).toBe(DEFAULT_MINIMAP_COLORS.player);
@@ -164,9 +184,15 @@ describe('resolveMinimapCategory', () => {
   });
 
   it('classifies faction enemies, bosses and merchants', () => {
-    const enemy = place(state, [0, 0, 0], [FactionComponent], { 0: { tag: 1 } });
-    const merchant = place(state, [0, 0, 0], [FactionComponent], { 0: { tag: 3 } });
-    const neutral = place(state, [0, 0, 0], [FactionComponent], { 0: { tag: 2 } });
+    const enemy = place(state, [0, 0, 0], [FactionComponent], {
+      0: { tag: 1 },
+    });
+    const merchant = place(state, [0, 0, 0], [FactionComponent], {
+      0: { tag: 3 },
+    });
+    const neutral = place(state, [0, 0, 0], [FactionComponent], {
+      0: { tag: 2 },
+    });
     expect(resolveMinimapCategory(state, enemy)).toBe('enemy');
     expect(resolveMinimapCategory(state, merchant)).toBe('merchant');
     expect(resolveMinimapCategory(state, neutral)).toBe('neutral');
@@ -193,8 +219,12 @@ describe('collectMinimapDots', () => {
 
   it('collects the player marker at origin and dots within range', () => {
     place(state, [0, 0, 0], [PlayerController]);
-    place(state, [10, 0, 0], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
-    place(state, [40, 0, 0], [NavMeshAgent, Health], { 1: { current: 200, max: 200 } });
+    place(state, [10, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
+    place(state, [40, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 200, max: 200 },
+    });
 
     const result = collectMinimapDots(state, defaultOptions({ range: 60 }));
 
@@ -210,8 +240,12 @@ describe('collectMinimapDots', () => {
 
   it('excludes entities outside the configured range', () => {
     place(state, [0, 0, 0], [PlayerController]);
-    place(state, [10, 0, 0], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
-    place(state, [70, 0, 0], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
+    place(state, [10, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
+    place(state, [70, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
 
     const result = collectMinimapDots(state, defaultOptions({ range: 60 }));
 
@@ -221,8 +255,12 @@ describe('collectMinimapDots', () => {
 
   it('skips dead creatures (Health.current <= 0)', () => {
     place(state, [0, 0, 0], [PlayerController]);
-    place(state, [10, 0, 0], [NavMeshAgent, Health], { 1: { current: 0, max: 50 } });
-    place(state, [12, 0, 0], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
+    place(state, [10, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 0, max: 50 },
+    });
+    place(state, [12, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
 
     const result = collectMinimapDots(state, defaultOptions());
 
@@ -232,7 +270,9 @@ describe('collectMinimapDots', () => {
 
   it('filters dots whose category is not in the enabled set', () => {
     place(state, [0, 0, 0], [PlayerController]);
-    place(state, [8, 0, 0], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
+    place(state, [8, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
     place(state, [5, 0, 0], [ResourceNode], { 0: { kind: 0 } });
 
     const result = collectMinimapDots(
@@ -257,8 +297,12 @@ describe('collectMinimapDots', () => {
 
   it('centers the scan on the player when the player is off-origin', () => {
     place(state, [20, 0, 20], [PlayerController]);
-    place(state, [25, 0, 20], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
-    place(state, [200, 0, 20], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
+    place(state, [25, 0, 20], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
+    place(state, [200, 0, 20], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
 
     const result = collectMinimapDots(state, defaultOptions({ range: 60 }));
 
@@ -275,7 +319,10 @@ describe('collectMinimapDots', () => {
 });
 
 describe('drawMinimap', () => {
-  function makeContext(size: number): { ctx: CanvasRenderingContext2D; canvas: HTMLCanvasElement } {
+  function makeContext(size: number): {
+    ctx: CanvasRenderingContext2D;
+    canvas: HTMLCanvasElement;
+  } {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
@@ -313,7 +360,9 @@ describe('drawMinimap', () => {
     const size = 128;
     const opts = defaultOptions({ size });
     const { ctx } = makeContext(size);
-    expect(() => drawMinimap(ctx, { player: null, dots: [] }, opts)).not.toThrow();
+    expect(() =>
+      drawMinimap(ctx, { player: null, dots: [] }, opts)
+    ).not.toThrow();
   });
 });
 
@@ -355,7 +404,9 @@ describe('MinimapWidget', () => {
     const widget = new MinimapWidget(defaultOptions());
     const handle = widget.mount(layer);
     place(state, [0, 0, 0], [PlayerController]);
-    place(state, [10, 0, 0], [NavMeshAgent, Health], { 1: { current: 50, max: 50 } });
+    place(state, [10, 0, 0], [NavMeshAgent, Health], {
+      1: { current: 50, max: 50 },
+    });
     const canvas = handle.root.querySelector('canvas')!;
     const realGetContext = canvas.getContext.bind(canvas);
     const probe = realGetContext('2d');

@@ -21,7 +21,8 @@ test.describe('Minimap Widget — canvas top-down render', () => {
     const stats = await canvas.evaluate((el) => {
       const htmlCanvas = el as HTMLCanvasElement;
       const ctx = htmlCanvas.getContext('2d');
-      if (!ctx) return { ctx: false, drawn: 0, reddish: 0, purpleish: 0, greenish: 0 };
+      if (!ctx)
+        return { ctx: false, drawn: 0, reddish: 0, purpleish: 0, greenish: 0 };
       const { width, height } = htmlCanvas;
       const data = ctx.getImageData(0, 0, width, height).data;
       let drawn = 0;
@@ -55,8 +56,9 @@ test.describe('Minimap Widget — canvas top-down render', () => {
     await page.waitForSelector('.vibe-hud-minimap-canvas', { timeout: 15000 });
 
     await page.evaluate(() => {
-      const w = (window as unknown as { __minimapHarness?: { clearBlips: () => void } })
-        .__minimapHarness;
+      const w = (
+        window as unknown as { __minimapHarness?: { clearBlips: () => void } }
+      ).__minimapHarness;
       w?.clearBlips();
     });
     await page.waitForTimeout(400);

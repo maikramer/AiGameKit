@@ -44,7 +44,9 @@ test.describe('lifecycle: transient entities do not leak', () => {
     ).toEqual([]);
   });
 
-  test('idle frames keep the entity count stable', async ({ gameInspector }) => {
+  test('idle frames keep the entity count stable', async ({
+    gameInspector,
+  }) => {
     const a = (await gameInspector.entities()).length;
     for (let i = 0; i < 30; i++) await gameInspector.step(1 / 60);
     const b = (await gameInspector.entities()).length;

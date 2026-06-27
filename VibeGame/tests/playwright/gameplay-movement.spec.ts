@@ -16,7 +16,8 @@ function quatAngle(
   a: Record<string, number>,
   b: Record<string, number>
 ): number {
-  const dot = a.rotX * b.rotX + a.rotY * b.rotY + a.rotZ * b.rotZ + a.rotW * b.rotW;
+  const dot =
+    a.rotX * b.rotX + a.rotY * b.rotY + a.rotZ * b.rotZ + a.rotW * b.rotW;
   return Math.acos(Math.min(1, Math.abs(dot))) * 2;
 }
 
@@ -33,10 +34,7 @@ test.describe('gameplay: player locomotion', () => {
     await vibegamePage.waitForTimeout(150);
     const after = await heroTransform(gameInspector, eid);
 
-    const dist = Math.hypot(
-      after.posX - before.posX,
-      after.posZ - before.posZ
-    );
+    const dist = Math.hypot(after.posX - before.posX, after.posZ - before.posZ);
     expect(
       dist,
       `hero should travel a meaningful distance forward (moved ${dist.toFixed(2)}m)`
@@ -68,10 +66,10 @@ test.describe('gameplay: player locomotion', () => {
 
     // And come back down (within a couple seconds) rather than floating away.
     await expect
-      .poll(
-        async () => (await heroTransform(gameInspector, eid)).posY,
-        { timeout: 4000, intervals: [200] }
-      )
+      .poll(async () => (await heroTransform(gameInspector, eid)).posY, {
+        timeout: 4000,
+        intervals: [200],
+      })
       .toBeLessThan(groundY + 0.2);
   });
 

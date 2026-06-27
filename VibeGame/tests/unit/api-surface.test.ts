@@ -118,11 +118,17 @@ describe('Examples must not deep-import engine internals', () => {
 
   function listTsFiles(dir: string, out: string[] = []): string[] {
     for (const entry of readdirSync(dir)) {
-      if (entry === 'node_modules' || entry === 'dist' || entry === '.cache') continue;
+      if (entry === 'node_modules' || entry === 'dist' || entry === '.cache')
+        continue;
       const full = join(dir, entry);
       if (statSync(full).isDirectory()) {
         listTsFiles(full, out);
-      } else if (entry.endsWith('.ts') || entry.endsWith('.tsx') || entry.endsWith('.js') || entry.endsWith('.mjs')) {
+      } else if (
+        entry.endsWith('.ts') ||
+        entry.endsWith('.tsx') ||
+        entry.endsWith('.js') ||
+        entry.endsWith('.mjs')
+      ) {
         out.push(full);
       }
     }
@@ -137,7 +143,9 @@ describe('Examples must not deep-import engine internals', () => {
       const lines = text.split('\n');
       for (let i = 0; i < lines.length; i++) {
         if (DEEP_IMPORT_RE.test(lines[i])) {
-          offenders.push(`${relative(process.cwd(), file)}:${i + 1}: ${lines[i].trim()}`);
+          offenders.push(
+            `${relative(process.cwd(), file)}:${i + 1}: ${lines[i].trim()}`
+          );
         }
       }
     }

@@ -95,7 +95,10 @@ describe('E2E: Nested Entity Transform Hierarchy', () => {
     // the fixed-group tween would not advance the full delta. Throughout the
     // rotation the child must stay on its orbit (radius 2 around the parent).
     const radius = () =>
-      Math.hypot(WorldTransform.posX[childEntity], WorldTransform.posZ[childEntity]);
+      Math.hypot(
+        WorldTransform.posX[childEntity],
+        WorldTransform.posZ[childEntity]
+      );
 
     let progressed = false;
     for (let t = 0; t < 1.3; t += 0.05) {

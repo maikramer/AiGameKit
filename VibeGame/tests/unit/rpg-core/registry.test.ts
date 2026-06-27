@@ -1,12 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import {
-  DataRegistry,
-  RpgCorePlugin,
-  State,
-  getDataRegistry,
-} from 'vibegame';
+import { DataRegistry, RpgCorePlugin, State, getDataRegistry } from 'vibegame';
 
 describe('DataRegistry', () => {
   let reg: DataRegistry;
@@ -151,8 +146,7 @@ describe('DataRegistry', () => {
     it('a YAML parse failure leaves the registry empty', () => {
       try {
         reg.loadYaml('item: { x: "bad');
-      } catch {
-      }
+      } catch {}
 
       expect(reg.all('item')).toEqual([]);
       expect(reg.kinds()).toEqual([]);
@@ -182,10 +176,7 @@ describe('DataRegistry', () => {
   });
 
   describe('loadDirectory', () => {
-    const tmpDir = join(
-      import.meta.dir,
-      '.tmp-registry-dir-' + process.pid
-    );
+    const tmpDir = join(import.meta.dir, '.tmp-registry-dir-' + process.pid);
 
     beforeEach(() => {
       rmSync(tmpDir, { recursive: true, force: true });

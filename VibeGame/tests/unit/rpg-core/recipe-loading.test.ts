@@ -43,10 +43,7 @@ describe('<RpgData> recipe loading', () => {
     expect(sword).toBeDefined();
     expect(sword!.name).toBe('Iron Sword');
 
-    const vit = reg.get<{ name: string; maxRank: number }>(
-      'skill',
-      'vitality'
-    );
+    const vit = reg.get<{ name: string; maxRank: number }>('skill', 'vitality');
     expect(vit).toBeDefined();
     expect(vit!.maxRank).toBe(5);
 
@@ -59,10 +56,7 @@ describe('<RpgData> recipe loading', () => {
 
     parseXMLToEntities(state, XMLParser.parse(xml).root);
 
-    const potion = getDataRegistry(state).get<{ id: string }>(
-      'item',
-      'potion'
-    );
+    const potion = getDataRegistry(state).get<{ id: string }>('item', 'potion');
     expect(potion!.id).toBe('potion');
   });
 

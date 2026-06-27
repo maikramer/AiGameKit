@@ -26,9 +26,12 @@ beforeAll(() => {
   globalThis.DOMParser = dom.window.DOMParser as unknown as typeof DOMParser;
   globalThis.document = dom.window.document as unknown as typeof document;
   globalThis.window = dom.window as unknown as typeof window;
-  globalThis.HTMLElement = dom.window.HTMLElement as unknown as typeof HTMLElement;
-  globalThis.HTMLDivElement = dom.window.HTMLDivElement as unknown as typeof HTMLDivElement;
-  globalThis.HTMLSpanElement = dom.window.HTMLSpanElement as unknown as typeof HTMLSpanElement;
+  globalThis.HTMLElement = dom.window
+    .HTMLElement as unknown as typeof HTMLElement;
+  globalThis.HTMLDivElement = dom.window
+    .HTMLDivElement as unknown as typeof HTMLDivElement;
+  globalThis.HTMLSpanElement = dom.window
+    .HTMLSpanElement as unknown as typeof HTMLSpanElement;
 });
 
 function newState(): State {
@@ -41,7 +44,9 @@ function newState(): State {
 describe('FloatingTextPlugin — registration surface', () => {
   it('FloatingTextPlugin registers both world and screen systems', () => {
     expect(FloatingTextPlugin.systems).toContain(FloatingTextUpdateSystem);
-    expect(FloatingTextPlugin.systems).toContain(FloatingTextScreenUpdateSystem);
+    expect(FloatingTextPlugin.systems).toContain(
+      FloatingTextScreenUpdateSystem
+    );
   });
 
   it('FloatingText component has screen-space SOA fields', () => {
@@ -293,9 +298,9 @@ describe('FloatingTextScreenUpdateSystem — full step cycle', () => {
     });
     state.step(0.016);
     const layer = getHudScreenLayer(state);
-    const active = Array.from(layer.querySelectorAll('.vibe-float-screen')).filter(
-      (el) => (el as HTMLSpanElement).style.opacity !== '0'
-    );
+    const active = Array.from(
+      layer.querySelectorAll('.vibe-float-screen')
+    ).filter((el) => (el as HTMLSpanElement).style.opacity !== '0');
     expect(active.length).toBeGreaterThanOrEqual(1);
     expect(state.exists(eid)).toBe(true);
   });
@@ -337,9 +342,9 @@ describe('FloatingTextScreenUpdateSystem — full step cycle', () => {
     });
     state.step(0.016);
     const layer = getHudScreenLayer(state);
-    const visible = Array.from(layer.querySelectorAll('.vibe-float-screen')).filter(
-      (el) => (el as HTMLSpanElement).style.opacity !== '0'
-    );
+    const visible = Array.from(
+      layer.querySelectorAll('.vibe-float-screen')
+    ).filter((el) => (el as HTMLSpanElement).style.opacity !== '0');
     expect(visible.length).toBe(0);
     expect(state.exists(eid)).toBe(true);
   });

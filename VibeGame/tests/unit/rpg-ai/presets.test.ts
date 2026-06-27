@@ -69,10 +69,7 @@ function resetAi(eid: number): void {
   AiStateComponent.leash[eid] = 0;
 }
 
-async function loadPresetFile(
-  state: State,
-  file: string
-): Promise<void> {
+async function loadPresetFile(state: State, file: string): Promise<void> {
   const text = await Bun.file(`${PRESET_DIR}/${file}`).text();
   getDataRegistry(state).loadYaml(text);
 }

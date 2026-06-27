@@ -53,8 +53,10 @@ beforeAll(() => {
   globalThis.DOMParser = dom.window.DOMParser as unknown as typeof DOMParser;
   globalThis.document = dom.window.document as unknown as typeof document;
   globalThis.window = dom.window as unknown as typeof window;
-  globalThis.HTMLElement = dom.window.HTMLElement as unknown as typeof HTMLElement;
-  globalThis.HTMLDivElement = dom.window.HTMLDivElement as unknown as typeof HTMLDivElement;
+  globalThis.HTMLElement = dom.window
+    .HTMLElement as unknown as typeof HTMLElement;
+  globalThis.HTMLDivElement = dom.window
+    .HTMLDivElement as unknown as typeof HTMLDivElement;
 });
 
 async function newState(): Promise<State> {
@@ -144,7 +146,9 @@ describe('HealthBarWidget', () => {
     registerHudWidget(state, widget);
     const root = layer.querySelector('.hud-health') as HTMLElement | null;
     expect(root).not.toBeNull();
-    expect(root!.querySelector('.hud-health-text')!.textContent).toBe('100/100');
+    expect(root!.querySelector('.hud-health-text')!.textContent).toBe(
+      '100/100'
+    );
     expect(hero).toBeGreaterThanOrEqual(0);
   });
 
@@ -184,7 +188,9 @@ describe('XpBarWidget', () => {
     const root = layer.querySelector('.hud-xp') as HTMLElement | null;
     expect(root).not.toBeNull();
     expect(root!.querySelector('.hud-xp-level')!.textContent).toBe('1');
-    expect(root!.querySelector('.hud-xp-fill')!.getAttribute('style')).toContain('0%');
+    expect(
+      root!.querySelector('.hud-xp-fill')!.getAttribute('style')
+    ).toContain('0%');
   });
 
   it('addXp grows the fill; level-up resets the bar', () => {
@@ -200,7 +206,9 @@ describe('XpBarWidget', () => {
     addXp(state, hero, 3);
     state.step(0.016);
     expect(layer.querySelector('.hud-xp-level')!.textContent).toBe('2');
-    expect(layer.querySelector('.hud-xp-fill')!.getAttribute('style')).toContain('0%');
+    expect(
+      layer.querySelector('.hud-xp-fill')!.getAttribute('style')
+    ).toContain('0%');
   });
 });
 
@@ -217,10 +225,12 @@ describe('ResourceChipWidget', () => {
     makeHero(state);
     const widget = createResourceChipWidget(
       { resource: 'gold', icon: '🪙' },
-      state,
+      state
     );
     registerHudWidget(state, widget);
-    const root = layer.querySelector('.hud-resource-gold') as HTMLElement | null;
+    const root = layer.querySelector(
+      '.hud-resource-gold'
+    ) as HTMLElement | null;
     expect(root).not.toBeNull();
     expect(root!.querySelector('.hud-resource-value')!.textContent).toBe('0');
   });
@@ -229,24 +239,26 @@ describe('ResourceChipWidget', () => {
     const hero = makeHero(state);
     const widget = createResourceChipWidget(
       { resource: 'gold', icon: '🪙' },
-      state,
+      state
     );
     registerHudWidget(state, widget);
     addResource(state, hero, 'gold', 50);
     state.step(0.016);
     expect(getResource(state, hero, 'gold')).toBe(50);
-    expect(layer.querySelector('.hud-resource-gold .hud-resource-value')!.textContent).toBe('50');
+    expect(
+      layer.querySelector('.hud-resource-gold .hud-resource-value')!.textContent
+    ).toBe('50');
   });
 
   it('supports wood and stone resource kinds', () => {
     makeHero(state);
     registerHudWidget(
       state,
-      createResourceChipWidget({ resource: 'wood', icon: '🪵' }, state),
+      createResourceChipWidget({ resource: 'wood', icon: '🪵' }, state)
     );
     registerHudWidget(
       state,
-      createResourceChipWidget({ resource: 'stone', icon: '🪨' }, state),
+      createResourceChipWidget({ resource: 'stone', icon: '🪨' }, state)
     );
     expect(layer.querySelector('.hud-resource-wood')).not.toBeNull();
     expect(layer.querySelector('.hud-resource-stone')).not.toBeNull();
@@ -288,7 +300,9 @@ describe('TimerWidget', () => {
     expect(root).not.toBeNull();
     state.time.realtimeSinceStartup = 125;
     state.step(0.016);
-    const value = layer.querySelector('.hud-timer .hud-resource-value')!.textContent;
+    const value = layer.querySelector(
+      '.hud-timer .hud-resource-value'
+    )!.textContent;
     expect(value).toBe('2:05');
   });
 });

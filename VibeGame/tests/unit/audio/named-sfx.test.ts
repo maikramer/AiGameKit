@@ -17,11 +17,9 @@ mock.module('howler', () => ({
 }));
 
 const { AudioSource } = await import('../../../src/plugins/audio/components');
-const {
-  registerNamedSfx,
-  playNamedSfx,
-  NamedSfxResolverSystem,
-} = await import('../../../src/plugins/audio/sfx-registry');
+const { registerNamedSfx, playNamedSfx, NamedSfxResolverSystem } = await import(
+  '../../../src/plugins/audio/sfx-registry'
+);
 
 describe('NamedSfxRegistry', () => {
   let state: State;

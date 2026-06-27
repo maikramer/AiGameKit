@@ -19,8 +19,9 @@ test.describe('FloatingText — screen-space DOM mode', () => {
 
     const visible = await page
       .locator('.vibe-float-screen')
-      .evaluateAll((els) =>
-        els.filter((el) => (el as HTMLElement).style.opacity !== '0').length
+      .evaluateAll(
+        (els) =>
+          els.filter((el) => (el as HTMLElement).style.opacity !== '0').length
       );
     expect(visible).toBeGreaterThanOrEqual(1);
 
@@ -68,9 +69,9 @@ test.describe('FloatingText — world-mode regression (troika 3D)', () => {
     await page.locator('#spawn-world').click();
     await page.waitForTimeout(200);
 
-    expect(
-      errors.some((e) => e.includes('Text') || e.includes('troika'))
-    ).toBe(false);
+    expect(errors.some((e) => e.includes('Text') || e.includes('troika'))).toBe(
+      false
+    );
 
     await page.screenshot({
       path: '../.sisyphus/evidence/task-25-float-world-regression.png',

@@ -272,7 +272,16 @@ describe('Economy plugin — <PriceTable> recipe loads a YAML file', () => {
     const yamlPath = join(dir, 'prices.yaml');
     writeFileSync(
       yamlPath,
-      ['price:', '  potion:', '    buy: 15', '    sell: 7', '  gem:', '    buy: 40', '    sell: 20', ''].join('\n')
+      [
+        'price:',
+        '  potion:',
+        '    buy: 15',
+        '    sell: 7',
+        '  gem:',
+        '    buy: 40',
+        '    sell: 20',
+        '',
+      ].join('\n')
     );
 
     const state = new State();
