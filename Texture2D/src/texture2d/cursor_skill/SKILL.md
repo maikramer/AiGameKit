@@ -1,6 +1,6 @@
 # Texture2D — Agent Skill
 
-Ferramenta CLI para geração de texturas 2D seamless (tileable) via HF Inference API.
+Ferramenta CLI para geração de texturas 2D seamless (tileable) localmente em GPU via pattern-diffusion, com PBR opcional via Materialize.
 
 ## Quando usar
 
@@ -42,18 +42,19 @@ Wood, Fabric, Metal, Stone, Brick, Leather, Concrete, Marble, Grass, Sand, Dirt,
 | `--seed` | aleatório | Seed para reprodutibilidade |
 | `--preset/-p` | None | Preset de material |
 | `--negative-prompt/-n` | "" | Prompt negativo |
-| `--lora-strength` | 1.0 | Força do LoRA |
-| `--model/-m` | Flux-Seamless-Texture-LoRA | Modelo HF |
+| `--seamless-method` | `late` | `none`, `late` (padding circular, default), `full` (noise-rolling) |
+| `--quant` | `none` | Quantização: `none`, `fp8`, `nf4` |
+| `--model/-m` | `Arrexel/pattern-diffusion` | Modelo HF |
 
 ## Requisitos
 
 - Python 3.10+
-- Token HF (env `HF_TOKEN` ou `HUGGINGFACEHUB_API_TOKEN`) — recomendado para modelos gated
-- Sem GPU local necessária (geração via API cloud)
+- GPU CUDA (inferência local com pattern-diffusion)
+- Token HF (env `HF_TOKEN`) — apenas para descarregar os pesos do Hub na primeira execução
 
 ## Integração com Materialize
 
-Após gerar a textura diffuse, use `materialize` para gerar mapas PBR:
+Quando o binário `materialize` está disponível, `texture2d generate` gera os mapas PBR automaticamente após a diffuse. Sem Materialize, use o fluxo explícito em dois passos:
 
 ```bash
 texture2d generate "mossy stone" -o diffuse.png
