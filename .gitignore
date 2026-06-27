@@ -110,6 +110,7 @@ VibeGame/examples/simple-rpg/screenshot*.png
 
 # Backups locais (.bak)
 *.bak.*
+*.bak
 
 # Libs de terceiros copiadas para public (basis transcoder, etc.)
 VibeGame/examples/simple-rpg/public/libs/

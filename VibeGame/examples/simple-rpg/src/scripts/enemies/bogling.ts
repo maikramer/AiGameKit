@@ -1,4 +1,4 @@
-// bogling — swamp biome (Phase 1 placeholder uses goblin GLB)
+// bogling — swamp biome
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 

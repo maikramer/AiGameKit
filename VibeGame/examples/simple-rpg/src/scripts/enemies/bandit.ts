@@ -1,4 +1,4 @@
-// bandit — plains/roads biome (Phase 1 placeholder uses goblin GLB)
+// bandit — plains/roads biome
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 

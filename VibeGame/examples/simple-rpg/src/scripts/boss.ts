@@ -4,7 +4,7 @@
 // + leash), strafing, and an enrage phase at low HP.
 import { createCreatureBehaviours } from './creature';
 import { addGold } from '../game/economy';
-import { everSpawned, aliveEnemyCount } from './enemy-registry';
+import { everSpawned, aliveInBiome } from './enemy-registry';
 
 const behaviours = createCreatureBehaviours({
   modelUrl: '/assets/meshes/boss_ogre_rigged_animated.glb',
@@ -31,8 +31,8 @@ const behaviours = createCreatureBehaviours({
   lootGoldMax: 150,
   defeatedText: 'BOSS DEFEATED!',
   roarSound: 'boss-roar',
-  // Gate: appear only after all goblins + slimes are dead.
-  gateUntil: () => everSpawned() && aliveEnemyCount() === 0,
+  // Gate: appear only after every enemy in the frozen-peaks biome is dead.
+  gateUntil: () => everSpawned() && aliveInBiome('frozen-peaks') === 0,
   enemyType: 'boss_ogre',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });

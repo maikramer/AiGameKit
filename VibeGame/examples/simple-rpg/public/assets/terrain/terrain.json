@@ -4,7 +4,7 @@
   "model_id": "xandergos/terrain-diffusion-30m",
   "terrain": {
     "size": 2048,
-    "world_size": 10000.0,
+    "world_size": 2000.0,
     "max_height": 200.0,
     "height_min": 0.0,
     "height_max": 1.0,

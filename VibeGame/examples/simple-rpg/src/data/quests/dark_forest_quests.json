@@ -44,7 +44,7 @@
     "rewards": {
       "gold": 250,
       "xp": 180,
-      "items": ["health_potion:3"]
+      "items": ["potion:3"]
     }
   },
   {

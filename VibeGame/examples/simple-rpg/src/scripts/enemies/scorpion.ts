@@ -1,4 +1,4 @@
-// scorpion — desert biome (Phase 1 placeholder uses goblin GLB)
+// scorpion — desert biome
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 

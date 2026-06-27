@@ -1,4 +1,4 @@
-// wolf — dark forest biome (Phase 1 placeholder uses goblin GLB)
+// wolf — dark forest biome
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 

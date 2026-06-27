@@ -1,4 +1,4 @@
-// shade — dark forest biome (Phase 1 placeholder uses goblin GLB)
+// shade — dark forest biome
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 

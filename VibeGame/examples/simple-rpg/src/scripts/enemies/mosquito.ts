@@ -1,4 +1,4 @@
-// mosquito — swamp biome (Phase 1 placeholder uses goblin GLB)
+// mosquito — swamp biome
 import { createCreatureBehaviours } from '../creature';
 import { addGold } from '../../game/economy';
 
