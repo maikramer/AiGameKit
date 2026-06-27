@@ -1,0 +1,63 @@
+__target__: unirig_skin
+bone_embed_dim: 1024
+feat_dim: 768
+global_encoder:
+  __target__: michelangelo_encoder
+  device: cpu
+  dtype: float32
+  embed_dim: 64
+  flash: true
+  freeze_encoder: false
+  heads: 8
+  include_pi: false
+  init_scale: 0.25
+  num_encoder_layers: 16
+  num_freqs: 8
+  num_latents: 512
+  point_feats: 3
+  pretrained_path: null
+  qkv_bias: false
+  query_method: false
+  supervision_type: sdf
+  token_num: 1024
+  use_checkpoint: false
+  use_ln_post: true
+  width: 512
+grid_size: 0.005
+mesh_encoder:
+  __target__: ptv3obj
+  cls_mode: false
+  drop_path: 0.0
+  enable_qknorm: true
+  enc_channels:
+  - 32
+  - 64
+  - 128
+  - 256
+  - 384
+  enc_depths:
+  - 3
+  - 3
+  - 3
+  - 6
+  - 16
+  enc_num_head:
+  - 2
+  - 4
+  - 8
+  - 16
+  - 24
+  freeze_encoder: false
+  in_channels: 9
+  layer_norm: false
+  pretrained_path: null
+  res_linear: true
+  shuffle_orders: true
+  upcast_attention: false
+  upcast_softmax: false
+mlp_dim: 512
+num_bone_attn: 8
+num_heads: 16
+num_mesh_bone_attn: 16
+num_train_vertex: 256
+voxel_mask: 2.5

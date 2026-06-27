@@ -93,7 +93,6 @@ def _transfer_one(
 ) -> TransferResult:
     """Transfere skin do source rigged para o target, exporta novo GLB."""
     import bpy
-
     from gamedev_shared.bpy_mesh import clear_scene
 
     clear_scene()

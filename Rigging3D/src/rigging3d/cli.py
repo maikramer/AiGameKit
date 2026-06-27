@@ -791,7 +791,7 @@ def pipeline_cmd(
                     model_cfg = yaml.safe_load(f)
                 model_cfg["num_train_vertex"] = 256
 
-                low_vram_model = wd / "_low_vram_unirig_skin.yaml"
+                low_vram_model = root / "configs" / "model" / "_low_vram_unirig_skin.yaml"
                 with open(low_vram_model, "w") as f:
                     yaml.dump(model_cfg, f, default_flow_style=False)
 

@@ -19,8 +19,6 @@ from __future__ import annotations
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Math tests — validate normalise→denormalise round-trip
@@ -173,7 +171,6 @@ class TestProcessMeshSkipUnskinned:
         mock_bpy.data.objects = [mesh_with_vg, mesh_no_vg, camera]
 
         # Import the function (skip_unskinned parameter)
-        from rigging3d.unirig.src.data.extract import process_mesh
 
         # Call with skip_unskinned=True
         with patch.object(mesh_with_vg.data, "vertices", []), \
@@ -184,9 +181,9 @@ class TestProcessMeshSkipUnskinned:
 
     def test_skip_unskinned_default_is_false(self):
         """By default, skip_unskinned=False so all meshes are included."""
-        from rigging3d.unirig.src.data.extract import process_mesh
-
         import inspect
+
+        from rigging3d.unirig.src.data.extract import process_mesh
         sig = inspect.signature(process_mesh)
         param = sig.parameters.get("skip_unskinned")
         assert param is not None, "skip_unskinned parameter should exist"

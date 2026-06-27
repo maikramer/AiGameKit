@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from click.testing import CliRunner
-
 from rigging3d.cli import cli
 from rigging3d.hardware import (
     GIB,
