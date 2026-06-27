@@ -1,0 +1,37 @@
+# Regra de validação de tileability (seam-difference metric) para texturas 2D.
+#
+# MÉTRICA NÃO NATIVA do motor `gamedev-lab check glb` (que valida GLBs, não
+# imagens). Este ficheiro serve como documentação canónica do portão de
+# qualidade e é avaliado pelo CLI dedicado:
+#
+#   texture2d validate-tileable <image> --threshold 0.85
+#   # ou (standalone, até cli.py estar estável):
+#   python -m texture2d._validate_cli <image> --threshold 0.85
+#
+# Sai com código 0 (PASS) se score >= threshold, caso contrário 1 (FAIL).
+# Adequado para CI / pre-commit hooks.
+#
+# Fonte da métrica: Texture2D tileability validator
+# (Texture2D/src/texture2d/tileability.py) — seam-MSE approximation do
+# classificador aprendido TexTile (arXiv:2403.12961), deliberadamente leve
+# (numpy + PIL, sem torch/model download, <50ms para 1024²).
+
+name: tileable
+
+# Métrica: seam_mse (diferença de píxel entre bordas opostas da imagem).
+metric: seam_mse
+
+# Score normalizado 0..1 (mais alto = mais tileable).
+# score = 1 - clamp(avg_mse / 255, 0, 1)
+threshold:
+  score_min: 0.85
+
+# Detalhes por costura reportados (referencia; o validator calcula ambos):
+#   edge_mse_horizontal: MSE entre colunas esquerda↔direita
+#   edge_mse_vertical:   MSE entre linhas topo↔base
+#   max_abs_edge_diff:   maior diferença de píxel (0..255) entre bordas
+edges:
+  - horizontal
+  - vertical
+
+source: Texture2D tileability validator (seam-MSE, arXiv:2403.12961 approximation)
