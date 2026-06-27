@@ -6,6 +6,16 @@
       "type": "remote",
       "url": "https://mcp.exa.ai/mcp",
       "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp@latest"],
+      "enabled": true
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp@latest"],
+      "enabled": true
     }
   }
 }
