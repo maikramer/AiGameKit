@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "texture2d"
-version = "0.1.0"
-description = "CLI para geração de texturas 2D seamless via FLUX.1-dev + LoRA local"
+version = "0.2.0"
+description = "CLI para geração de texturas 2D seamless (tileable) via pattern-diffusion + PBR via Materialize"
 readme = "README.md"
 authors = [{ name = "Texture2D Project" }]
 requires-python = ">=3.13,<3.14"
@@ -13,13 +13,12 @@ license = "MIT"
 dependencies = [
     "torch>=2.6.0",
     "torchvision>=0.21.0",
-    "diffusers>=0.37.0",
-    "transformers>=4.40.0",
-    "accelerate>=0.24.0",
+    "diffusers>=0.31.0",
+    "transformers>=4.41.2",
+    "accelerate>=0.31.0",
     "huggingface-hub>=0.20.0",
     "safetensors>=0.4.0",
-    "peft>=0.10.0",
-    "sdnq>=0.1.0",
+    "torchao>=0.7.0",
     "numpy>=1.24.0",
     "Pillow>=10.0.0",
     "python-dotenv>=1.0.0",
