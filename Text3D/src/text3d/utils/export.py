@@ -6,7 +6,6 @@ Suporta GLB/GLTF e PLY. Suporte a OBJ foi removido.
 
 from __future__ import annotations
 
-import contextlib
 import warnings
 from pathlib import Path
 from typing import Any
@@ -50,7 +49,7 @@ def _export_glb_bpy(objects: Any, output_path: Path) -> None:
         _weld_glb(str(output_path))
     except ImportError:
         pass
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _log_mod.getLogger(__name__).warning("weld_glb pós-export falhou: %s", exc)
 
 
@@ -60,8 +59,9 @@ def _apply_rotation_bpy(obj: Any) -> Any:
     if angle == 0.0:
         return obj
     _require_bpy()
-    import mathutils
     from math import cos, sin
+
+    import mathutils
 
     c, s = cos(angle), sin(angle)
     rx = mathutils.Matrix(((1, 0, 0, 0), (0, c, -s, 0), (0, s, c, 0), (0, 0, 0, 1)))

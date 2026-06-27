@@ -72,7 +72,7 @@ def _bake_master_bpy_session(
     clear_scene()
     try:
         bpy.ops.import_scene.gltf(filepath=str(decimated_glb))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("bake-master: import GLB falhou: %s", exc)
         if decimated_glb != output_glb:
             shutil.copy2(decimated_glb, output_glb)
@@ -149,7 +149,7 @@ def _bake_master_bpy_session(
 
                 # Remover high-poly antes do export para não inflar o GLB
                 bpy.data.objects.remove(high, do_unlink=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.warning("bake-master: bake-normal falhou: %s", exc)
             nm_path = None
 
@@ -158,7 +158,7 @@ def _bake_master_bpy_session(
         try:
             low.data.calc_tangents()
             tangents_added = True
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.debug("calc_tangents falhou: %s", exc)
 
     bpy.ops.object.select_all(action="DESELECT")
@@ -182,7 +182,7 @@ def _bake_master_bpy_session(
             export_animations=bool(arm_objs),
             export_skins=bool(arm_objs),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("bake-master: export bpy falhou: %s", exc)
         if decimated_glb != output_glb:
             shutil.copy2(decimated_glb, output_glb)
@@ -273,7 +273,7 @@ def bake_master(
                             faces += accs[idx].get("count", 0) // 3
         else:
             faces = 0
-    except Exception:  # noqa: BLE001
+    except Exception:
         faces = 0
 
     return BakeMasterResult(

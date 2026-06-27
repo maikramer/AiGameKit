@@ -73,7 +73,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     Falha graciosa em ausência de bpy.
     """
     try:
-        import bpy  # noqa: F401
+        import bpy
     except ImportError:
         log.debug("gltf_finish: bpy ausente — tangents não recalculados")
         return False
@@ -87,7 +87,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
     clear_scene()
     try:
         bpy.ops.import_scene.gltf(filepath=str(glb_path))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("gltf_finish: import bpy falhou: %s", exc)
         return False
 
@@ -102,7 +102,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
             has_uv = True
             try:
                 m.data.calc_tangents()
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.debug("calc_tangents falhou em %s: %s", m.name, exc)
 
     if not has_uv:
@@ -127,7 +127,7 @@ def _recalc_tangents_inplace(glb_path: Path) -> bool:
             export_animations=bool(arm_objs),
             export_skins=bool(arm_objs),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.warning("gltf_finish: export bpy falhou: %s", exc)
         return False
     return True
