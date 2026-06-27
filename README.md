@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](Text2D/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **textures and skymaps** (Hugging Face Inference API), **PBR texturing**, **part decomposition**, **rigging**, **animation**, **asset batching**, and **browser 3D engine**, sharing the same foundation (`gamedev-shared`), unified installer, and documentation.
+Monorepo for **text-to-image**, **text-to-3D**, **text-to-audio**, **seamless textures (local GPU)** and **skymaps** (Hugging Face Inference API), **PBR texturing**, **part decomposition**, **rigging**, **animation**, **asset batching**, and **browser 3D engine**, sharing the same foundation (`gamedev-shared`), unified installer, and documentation.
 
 All GPU tools support **multi-GPU** (`--gpu-ids 0,1`) and **quality presets** (`--quality fast|low|medium|high|highest`).
 
@@ -68,7 +68,7 @@ Key APIs: [`gltf-bridge.ts`](VibeGame/src/extras/gltf-bridge.ts) (`loadGltfToSce
 | [**Part3D**](Part3D/) | **Semantic 3D parts**: Hunyuan3D-Part (segmentation / mesh parts). |
 | [**Paint3D**](Paint3D/) | **3D texturing**: Hunyuan3D-Paint 2.1 (multiview PBR) + Materialize PBR + AI upscale (Real-ESRGAN). Standalone or via Text3D. |
 | [**GameAssets**](GameAssets/) | **Prompt/asset batching**: profile + CSV → `text2d` or `texture2d` + optional `text3d`, rig, **Animator3D** (auto-detected), **`gameassets dream`** (idea → Vite scaffold). |
-| [**Texture2D**](Texture2D/) | **Seamless 2D textures** (tileable) via HF Inference API — no local GPU required. |
+| [**Texture2D**](Texture2D/) | **Seamless 2D textures** (tileable) via pattern-diffusion (local GPU) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Equirectangular 360° skymaps** via HF Inference API — skyboxes for game dev, no local GPU. |
 | [**Text2Sound**](Text2Sound/) | **Text-to-audio** CLI with Stable Audio Open 1.0: stereo 44.1 kHz, game-dev presets. |
 | [**Rigging3D**](Rigging3D/) | **rigging3d** — 3D auto-rigging with [**UniRig**](https://github.com/VAST-AI-Research/UniRig) (skeleton + skinning + merge); CUDA GPU; Python **3.11**, **bpy** 5.0.x (Open3D). |
@@ -103,7 +103,7 @@ GameDev/
   Part3D/           ← part3d (pip) — Shared; Hunyuan3D-Part (torch-scatter/cluster)
   Paint3D/           ← paint3d (pip) — depends on Shared; Hunyuan3D-2.1 hy3dpaint + Materialize PBR + upscale
   GameAssets/        ← gameassets (pip) — depends on Shared; calls text2d/texture2d/text3d via subprocess
-  Texture2D/         ← texture2d (pip) — depends on Shared; HF inference in the cloud
+  Texture2D/         ← texture2d (pip) — depende de Shared; pattern-diffusion local + PBR via Materialize
   Skymap2D/          ← skymap2d (pip) — depends on Shared; equirectangular skymaps via HF
   Text2Sound/        ← text2sound (pip) — depends on Shared; Stable Audio Open 1.0
   Rigging3D/         ← rigging3d (pip) — Shared; inference Py 3.11 + bpy 5.0.x
@@ -118,7 +118,7 @@ GameDev/
 
 - **Python**: most tools require **3.10+**; exceptions: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). See each folder's README.
 - **VibeGame** uses **Bun** and **Node**-compatible tooling (see `VibeGame/package.json`); run `make test-vibegame` from the repo root after installing Bun.
-- **GPU** optional for Text2D; for Text3D/Paint3D/Part3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** and **Skymap2D** do not need a local GPU (Hugging Face API). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d). **Multi-GPU:** most GPU tools accept `--gpu-ids 0,1` to split model weights across multiple NVIDIA GPUs via accelerate dispatch.
+- **GPU** optional for Text2D; for Text3D/Paint3D/Part3D/Rigging3D, CUDA with enough VRAM is recommended for reasonable runtimes. **Texture2D** runs locally on a CUDA GPU (pattern-diffusion). **Skymap2D** does not need a local GPU (Hugging Face API). **GameAssets** only needs a GPU if the profile/row invokes local tools (e.g. text2d, text3d). **Multi-GPU:** most GPU tools accept `--gpu-ids 0,1` to split model weights across multiple NVIDIA GPUs via accelerate dispatch.
 - **Model weights** (Hugging Face, etc.) have their own licenses — read the model cards before shipping or using in production.
 
 ## Quick start
@@ -228,7 +228,7 @@ paint3d --help
 # 6. GameAssets (batch; Text2D/Text3D on PATH or TEXT2D_BIN/TEXT3D_BIN; Texture2D optional TEXTURE2D_BIN; Materialize optional MATERIALIZE_BIN)
 cd ../GameAssets && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && gameassets --help
 
-# 7. Texture2D (seamless textures via HF API; no local PyTorch)
+# 7. Texture2D (seamless textures via pattern-diffusion; local GPU + PBR via Materialize)
 cd ../Texture2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && texture2d --help
 
 # 8. Skymap2D (equirectangular 360° skymaps via HF API; no local PyTorch)
@@ -265,12 +265,12 @@ Full instructions: [docs/INSTALLING.md](docs/INSTALLING.md), [docs/NEW_TOOLS.md]
 | FLUX.2 Klein 4B SDNQ (Text2D default) | FLUX Non-Commercial (HF metadata) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declares `flux-non-commercial-license`; **not** the same as the official Apache 2.0 checkpoint. For commercial products prefer `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` or a BFL agreement |
 | Hunyuan3D-2.1 (shape + paint, Text3D + Paint3D) | Tencent Hunyuan Community License | [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) — read repo `LICENSE`: territory restrictions (e.g. EU, UK, South Korea), acceptable use, downstream obligations. Code: [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1); shape weights `hunyuan3d-dit-v2-1` (SDNQ INT4), paint weights `hunyuan3d-paintpbr-v2-1` |
 | Stable Audio Open 1.0 / Open Small (Text2Sound) | Stability AI Community License | [stabilityai/stable-audio-open-1.0](https://huggingface.co/stabilityai/stable-audio-open-1.0), [stabilityai/stable-audio-open-small](https://huggingface.co/stabilityai/stable-audio-open-small) — **gated** models (accept on Hub); free commercial use with annual revenue cap (see repo `LICENSE.md`, currently ~USD 1M; changes: [stability.ai/license](https://stability.ai/license)) |
-| Flux-Seamless-Texture-LoRA (Texture2D) | Apache 2.0 (HF metadata) | [gokaygokay/Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) — LoRA on FLUX.1-dev: also comply with base model and Inference API terms |
+| pattern-diffusion (Texture2D) | Apache 2.0 | [Arrexel/pattern-diffusion](https://huggingface.co/Arrexel/pattern-diffusion) — StableDiffusion-2-base fine-tune on 6.8M tileable patterns; commercial use allowed per license |
 | Flux-LoRA-Equirectangular-v3 (Skymap2D) | FLUX.1 [dev] base (NCL) + HF card | [MultiTrickFox/Flux-LoRA-Equirectangular-v3](https://huggingface.co/MultiTrickFox/Flux-LoRA-Equirectangular-v3) — no SPDX in README; base [FLUX.1-dev](https://huggingface.co/black-forest-labs/FLUX.1-dev) is BFL non-commercial; Civitai origin on card |
 | UniRig (code under `Rigging3D/…/unirig/`) | MIT | [VAST-AI-Research/UniRig](https://github.com/VAST-AI-Research/UniRig) · [THIRD_PARTY.md](Rigging3D/THIRD_PARTY.md) |
 | UniRig (HF weights) | MIT (many mirrors list MIT) | [VAST-AI/UniRig](https://huggingface.co/VAST-AI/UniRig) — confirm in README/`LICENSE` of the snapshot you use; [example with MIT LICENSE](https://huggingface.co/apozz/UniRig-safetensors) |
 
-> **Note:** weights have their own licenses. **Inference API** (Texture2D, Skymap2D): besides the model, [Hugging Face terms](https://huggingface.co/terms-of-service) and API policies apply. **Do not** redistribute checkpoints without complying with the author's license and attribution. Shap-E (`openai/shap-e`) in legacy Text3D scripts requires accepting Hub terms.
+> **Note:** weights have their own licenses. **Inference API** (Skymap2D): besides the model, [Hugging Face terms](https://huggingface.co/terms-of-service) and API policies apply. **Do not** redistribute checkpoints without complying with the author's license and attribution. Shap-E (`openai/shap-e`) in legacy Text3D scripts requires accepting Hub terms.
 
 ## Environment variables
 
@@ -286,7 +286,7 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `GAMEDEVLAB_BIN` | GameAssets | Path to `gamedev-lab` |
 | `TERRAIN3D_BIN` | GameAssets | Path to `terrain3d` |
 | `TEXT2D_MODEL_ID` | Text2D | HF model override for Text2D |
-| `TEXTURE2D_MODEL_ID` | Texture2D | HF model override for Texture2D |
+| `TEXTURE2D_MODEL_ID` | Texture2D | HF model override for Texture2D (default `Arrexel/pattern-diffusion`) |
 | `SKYMAP2D_MODEL_ID` | Skymap2D | HF model override for Skymap2D |
 | `HF_TOKEN` | Text2Sound, Texture2D, Skymap2D | Hugging Face token for authenticated APIs |
 | `HF_HOME` | All (Python) | Hugging Face cache directory (default: `~/.cache/huggingface`) |
