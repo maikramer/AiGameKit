@@ -217,10 +217,6 @@ def _append_texture2d_profile_args(tt: Texture2DProfile, argv: list[str], *, qua
         argv.extend(["-n", tt.negative_prompt])
     if tt.preset and tt.preset.lower() != "none":
         argv.extend(["-p", tt.preset])
-    if tt.cfg_scale is not None:
-        argv.extend(["--cfg-scale", str(tt.cfg_scale)])
-    if tt.lora_strength is not None:
-        argv.extend(["--lora-strength", str(tt.lora_strength)])
     if tt.model_id:
         argv.extend(["-m", tt.model_id])
 
