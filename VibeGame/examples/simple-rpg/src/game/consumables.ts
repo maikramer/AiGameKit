@@ -6,6 +6,7 @@
 //   [3] Bomb     → thrown with [B] (BombSystem owns it; slot is display-only)
 import {
   Health,
+  cancelAllStatuses,
   getItemQty,
   healHealth,
   isKeyDown,
@@ -134,6 +135,7 @@ export function useConsumable(state: State, hero: number, id: string): boolean {
 
   if (id === 'antidote') {
     removeItem(state, hero, id, 1);
+    cancelAllStatuses(state, hero); // cure poison/debuffs, not just heal
     healHealth(hero, ANTIDOTE_HEAL);
     playSound('heal');
     flash(id);

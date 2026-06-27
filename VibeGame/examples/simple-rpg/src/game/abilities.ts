@@ -11,6 +11,7 @@ import {
   damageHealth,
   defineQuery,
   getBvhSurfaceHeight,
+  getRapierWorld,
   getTerrainHeightAt,
   healHealth,
   isDead,
@@ -20,7 +21,9 @@ import {
   spawnParticleBurst,
 } from 'vibegame';
 import type { State } from 'vibegame';
+import * as RAPIER from '@dimforge/rapier3d-compat';
 import { isGamePaused } from './pause';
+import { heroStats } from './skills';
 
 interface Ability {
   id: string;
@@ -66,6 +69,7 @@ const HEAL_AMOUNT = 35;
 const DASH_DISTANCE = 4.2;
 const POWER_RADIUS = 4.8;
 const POWER_DAMAGE = 60;
+const POWER_VERTICAL = 3.0; // don't nuke high-flying mosquitoes from the ground
 const TERRAIN_LAYER = 0x0001;
 
 const cd: Record<string, number> = { dash: 0, heal: 0, power: 0 };
@@ -148,10 +152,36 @@ function heroForward(hero: number, out: { x: number; z: number }): void {
 
 const _fwd = { x: 0, z: 0 };
 
+/**
+ * Clamp the dash so it doesn't teleport through walls/rocks: cast a ray forward
+ * from chest height (offset past the hero's own capsule) and stop short of the
+ * first solid hit. Falls back to the full distance when no physics world.
+ */
+function clampDashDistance(state: State, hero: number): number {
+  const world = getRapierWorld(state);
+  if (!world) return DASH_DISTANCE;
+  const startOffset = 0.6; // clear the hero's own ~0.3 m capsule radius
+  const origin = {
+    x: Transform.posX[hero] + _fwd.x * startOffset,
+    y: Transform.posY[hero] + 0.9,
+    z: Transform.posZ[hero] + _fwd.z * startOffset,
+  };
+  const ray = new RAPIER.Ray(origin, { x: _fwd.x, y: 0, z: _fwd.z });
+  const hit = world.castRay(
+    ray,
+    DASH_DISTANCE,
+    true,
+    RAPIER.QueryFilterFlags.EXCLUDE_SENSORS
+  );
+  if (!hit) return DASH_DISTANCE;
+  return Math.max(0, startOffset + hit.timeOfImpact - 0.4);
+}
+
 function doDash(state: State, hero: number): void {
   heroForward(hero, _fwd);
-  const nx = Transform.posX[hero] + _fwd.x * DASH_DISTANCE;
-  const nz = Transform.posZ[hero] + _fwd.z * DASH_DISTANCE;
+  const dist = clampDashDistance(state, hero);
+  const nx = Transform.posX[hero] + _fwd.x * dist;
+  const nz = Transform.posZ[hero] + _fwd.z * dist;
   const gy =
     getBvhSurfaceHeight(state, nx, 500, nz, 2000, TERRAIN_LAYER) ??
     getTerrainHeightAt(state, nx, nz) ??
@@ -203,7 +233,9 @@ function doHeal(state: State, hero: number): void {
 
 function doPowerStrike(state: State, hero: number): void {
   const hx = Transform.posX[hero];
+  const hy = Transform.posY[hero];
   const hz = Transform.posZ[hero];
+  const merchant = state.getEntityByName('merchant');
   spawnParticleBurst(state, {
     x: hx,
     y: Transform.posY[hero] + 0.6,
@@ -214,13 +246,15 @@ function doPowerStrike(state: State, hero: number): void {
   });
   playSound('mine-break');
   const r2 = POWER_RADIUS * POWER_RADIUS;
+  const damage = POWER_DAMAGE + heroStats.attackBonus;
   let hits = 0;
   for (const e of healthQuery(state.world)) {
-    if (e === hero || isDead(e)) continue;
+    if (e === hero || e === merchant || isDead(e)) continue;
     const dx = Transform.posX[e] - hx;
     const dz = Transform.posZ[e] - hz;
-    if (dx * dx + dz * dz > r2) continue;
-    damageHealth(e, POWER_DAMAGE);
+    const dy = Transform.posY[e] - hy;
+    if (dx * dx + dz * dz > r2 || Math.abs(dy) > POWER_VERTICAL) continue;
+    damageHealth(e, damage);
     hits++;
   }
   if (hits > 0) {

@@ -1,21 +1,4 @@
-declare global {
-  interface Window {
-    __heroState?: State;
-    __heroDebug?: () => Record<string, number>;
-    __spawnFloatingText?: (
-      text: string,
-      x: number,
-      y: number,
-      z: number
-    ) => number;
-    __hold?: (key: string | null) => string | null;
-    __grip?: (key: string, patch: Record<string, number>) => unknown;
-    __cam?: (yaw: number, pitch: number, dist: number) => number;
-    __handInfo?: () => string;
-  }
-}
-
-import type { System, State, QuestDef } from 'vibegame';
+import type { System, State, QuestDef, HeldItemGripRegistry } from 'vibegame';
 import {
   configure,
   disposeAllRuntimes,
@@ -25,6 +8,7 @@ import {
   withSystem,
   registerEntityScripts,
   registerQuest,
+  notifyResourceHarvested,
   setKTX2TranscoderPath,
   // Plugins (engine RPG stack)
   LoadingPlugin,
@@ -33,6 +17,8 @@ import {
   I18nPlugin,
   CombatPlugin,
   DebugPlugin,
+  registerDebugAction,
+  registerDebugVar,
   RpgCorePlugin,
   RpgVaultPlugin,
   InventoryPlugin,
@@ -60,6 +46,8 @@ import {
   setPlayerAttackClip,
   setPlayerHeldItem,
   setPlayerFaceTarget,
+  attachHeldItem,
+  loadHeldItemGrips,
   PlayerGltfConfig,
   animatorRegistry,
   // ecs / gameplay
@@ -93,8 +81,7 @@ import {
   getTerrainHeightAt,
   getBodyYForFeetAt,
   getRapierWorld,
-  getTerrainContext,
-  isTerrainDynamicsBlocking,
+  terrainReady,
   PhysicsStepSystem,
   GROUND_CONTACT_SKIN,
   threeCameras,
@@ -116,8 +103,9 @@ setKTX2TranscoderPath('/libs/basis/');
 
 import { registerGameSounds } from './game/sounds';
 import { registerGameSkills, heroStats, RING_SPEED_MULT } from './game/skills';
-import { updateConsumables } from './game/consumables';
-import { updateAbilities } from './game/abilities';
+import { updateConsumables, clearHotbar } from './game/consumables';
+import { updateAbilities, clearAbilityBar } from './game/abilities';
+import { updateMelee, clearMelee } from './game/melee';
 import { addGold } from './game/economy';
 import {
   spawnBomb,
@@ -148,17 +136,6 @@ const CHECKPOINT_Y = 50;
 const CHECKPOINT_Z = 0;
 const RESPAWN_DELAY = 2.0;
 
-// ── Terrain-settle: freeze the hero at spawn until the heightmap is ready, then
-//    snap it onto the ground exactly once. ───────────────────────────────────
-function isTerrainReady(state: State): boolean {
-  for (const [, data] of getTerrainContext(state)) {
-    if (!data.initialized) continue;
-    if (data.heightmapUrl && !data.sampler.data) continue;
-    return true;
-  }
-  return false;
-}
-
 let heroGroundSnapped = false;
 let heroSpawnY: number | null = null;
 
@@ -177,7 +154,7 @@ const HeroGroundSnapSystem: System = {
     const x = Transform.posX[heroEid];
     const z = Transform.posZ[heroEid];
 
-    if (isTerrainDynamicsBlocking(state) || !isTerrainReady(state)) {
+    if (!terrainReady(state)) {
       if (heroSpawnY === null) heroSpawnY = Transform.posY[heroEid];
       Transform.posY[heroEid] = heroSpawnY;
       Transform.dirty[heroEid] = 1;
@@ -332,9 +309,22 @@ const HeroStatsSystem: System = {
   },
 };
 
-// ── Respawn: on death, after a delay, return the hero to the checkpoint. ──────
+// ── Respawn: on death, after a delay, return the hero to the nearest checkpoint
+//    — the city centre or just outside whichever cardinal gate is closest to
+//    where they fell. Beats always trekking back from the city centre after
+//    dying deep in a biome. Each point is just outside the wall (z/x ±28),
+//    short of the biome enemy bands (~45+), so respawns aren't instant re-deaths.
+const RESPAWN_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0], // city plaza
+  [0, 28], // north gate (forest)
+  [0, -28], // south gate (swamp)
+  [28, 0], // east gate (desert)
+  [-28, 0], // west gate (peaks)
+];
 let deathShown = false;
 let respawnAtTime = 0;
+let respawnX = CHECKPOINT_X;
+let respawnZ = CHECKPOINT_Z;
 const RespawnSystem: System = {
   group: 'simulation',
   update(state: State) {
@@ -344,20 +334,34 @@ const RespawnSystem: System = {
     if (isDead(hero) && !deathShown) {
       deathShown = true;
       respawnAtTime = state.time.elapsed + RESPAWN_DELAY;
+      // Pick the checkpoint nearest to where the hero died.
+      const dx = Transform.posX[hero];
+      const dz = Transform.posZ[hero];
+      let best = RESPAWN_POINTS[0];
+      let bestD2 = Infinity;
+      for (const p of RESPAWN_POINTS) {
+        const d2 = (p[0] - dx) ** 2 + (p[1] - dz) ** 2;
+        if (d2 < bestD2) {
+          bestD2 = d2;
+          best = p;
+        }
+      }
+      respawnX = best[0];
+      respawnZ = best[1];
     }
     if (deathShown && state.time.elapsed >= respawnAtTime) {
       Health.current[hero] = Health.max[hero];
       const body = getBodyForEntity(state, hero);
-      Transform.posX[hero] = CHECKPOINT_X;
+      Transform.posX[hero] = respawnX;
       Transform.posY[hero] = CHECKPOINT_Y;
-      Transform.posZ[hero] = CHECKPOINT_Z;
+      Transform.posZ[hero] = respawnZ;
       Transform.dirty[hero] = 1;
       Rigidbody.velX[hero] = 0;
       Rigidbody.velY[hero] = 0;
       Rigidbody.velZ[hero] = 0;
       if (body) {
         body.setTranslation(
-          { x: CHECKPOINT_X, y: CHECKPOINT_Y, z: CHECKPOINT_Z },
+          { x: respawnX, y: CHECKPOINT_Y, z: respawnZ },
           true
         );
         body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
@@ -507,79 +511,7 @@ const HELD_MODEL: Record<string, string> = {
   bomb: MESH_BASE + 'bomb.glb',
 };
 const BOMB_MODEL = MESH_BASE + 'bomb.glb';
-// Per-weapon grip on the RightHand bone. Each generated model has a different
-// long axis (sword/axe/spear=Y, felling_axe=X, pickaxe=Z) and pivot, so each
-// needs its own offset/rotation/scale. TUNE visually via window.__grip(key,…).
-type Grip = {
-  x: number;
-  y: number;
-  z: number;
-  rx: number;
-  ry: number;
-  rz: number;
-  scale: number;
-};
-const GRIPS: Record<string, Grip> = {
-  // Tuned live in-browser (window.__hold/__grip + side camera). The hand bone's
-  // local +Y points world-down at rest, so rx≈+90° swings a Y-long model to
-  // point forward-down out of the fist.
-  // All tuned live in-browser (window.__hold/__grip + side camera).
-  sword: {
-    x: 0.27,
-    y: 0.04,
-    z: 0.09,
-    rx: -1.33,
-    ry: 12.71,
-    rz: 0.96,
-    scale: 0.7,
-  },
-  axe: {
-    x: -0.12,
-    y: 0.36,
-    z: -0.24,
-    rx: -1.42,
-    ry: 12.71,
-    rz: Math.PI * 0.5,
-    scale: 0.55,
-  },
-  spear: {
-    x: -0.55,
-    y: 0.36,
-    z: -0.41,
-    rx: -1.33,
-    ry: 12.71,
-    rz: 0.96,
-    scale: 1.2,
-  },
-  chop: {
-    x: -0.22,
-    y: 0.4,
-    z: -0.39,
-    rx: -4.96,
-    ry: 9.2,
-    rz: -0.61,
-    scale: 0.7,
-  },
-  mine: {
-    x: -0.09,
-    y: 0.05,
-    z: -0.13,
-    rx: -2.82,
-    ry: 11.38,
-    rz: 2.01,
-    scale: 0.55,
-  },
-  bomb: {
-    x: -0.06,
-    y: -0.08,
-    z: -0.12,
-    rx: -2.02,
-    ry: 15.75,
-    rz: -1.05,
-    scale: 0.45,
-  },
-};
-const BOMB_GRIP = GRIPS.bomb;
+let GRIPS: HeldItemGripRegistry = {};
 // Debug: force-hold a weapon (or null) regardless of proximity, for grip tuning.
 let forcedHold: string | null = null;
 
@@ -621,7 +553,11 @@ const AttackContextSystem: System = {
         : WEAPON_CLIPS[weaponIdx];
     setPlayerAttackClip(clip);
     // Show the matching model in hand (unless the bomb-aim owns the hand).
-    if (!bombAiming) setPlayerHeldItem(HELD_MODEL[clip] ?? null, GRIPS[clip]);
+    if (!bombAiming) {
+      const url = HELD_MODEL[clip] ?? null;
+      if (!attachHeldItem(state, hero, clip, GRIPS, url))
+        setPlayerHeldItem(url);
+    }
   },
 };
 
@@ -643,6 +579,7 @@ const BombSystem: System = {
     const heroForHud = state.getEntityByName('hero');
     updateConsumables(state, heroForHud ?? 0);
     updateAbilities(state, heroForHud ?? 0, state.time.deltaTime);
+    updateMelee(state, heroForHud ?? 0, state.time.deltaTime);
     const dt = state.time.deltaTime;
     const held = isKeyDown('KeyB');
     const hero = state.getEntityByName('hero');
@@ -699,7 +636,7 @@ const BombSystem: System = {
         // Bomb to hand + turn the body to face the throw target while aiming.
         if (!bombAiming) {
           bombAiming = true;
-          setPlayerHeldItem(BOMB_MODEL, BOMB_GRIP);
+          attachHeldItem(state, hero, 'bomb', GRIPS, BOMB_MODEL);
         }
         setPlayerFaceTarget(_bombLand.x, _bombLand.z);
       }
@@ -893,6 +830,8 @@ async function bootstrap(): Promise<void> {
   const runtime = await builder.build();
   const state = runtime.getState();
 
+  GRIPS = await loadHeldItemGrips('/data/held-items.json');
+
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
   // (matches the <SpawnExclusion at="0 0" radius="30"> in index.html).
@@ -902,6 +841,13 @@ async function bootstrap(): Promise<void> {
   }
 
   bindEngine(state);
+  // Drop per-entity feedback sidecars when an entity is destroyed, so a recycled
+  // eid can't inherit a stale prev-HP (which would show a phantom damage number
+  // or swallow the first real hit). See [[eid-recycling-sidecars]].
+  state.onDestroyAll((eid: number) => {
+    prevHp.delete(eid);
+    prevPending.delete(eid);
+  });
   registerEntityScripts(state, import.meta.glob('./scripts/**/*.ts'));
   registerGameSkills(state);
 
@@ -947,20 +893,28 @@ async function bootstrap(): Promise<void> {
     ['stone', 'Stone', '🪨'],
     ['potion', 'Potion', '🧪'],
     ['antidote', 'Antidote', '🟣'],
+    // Quest reward items — registered so the grant actually stacks in the bag
+    // (an unregistered item silently caps at maxStack 1).
+    ['wolf_pelt', 'Wolf Pelt', '🐺'],
+    ['cactus_fiber', 'Cactus Fiber', '🌵'],
+    ['silk_cloth', 'Silk Cloth', '🧵'],
+    ['ancient_relic', 'Ancient Relic', '🏺'],
+    ['moss_potion', 'Moss Potion', '🟢'],
+    ['iron_axe', 'Iron Axe', '🪓'],
+    ['blessed_rod', 'Blessed Rod', '🎣'],
+    ['nature_amulet', 'Nature Amulet', '🔮'],
   ] as const) {
     itemReg.register('item', id, { id, name, icon, maxStack: 99, tags: [] });
   }
 
-  // Dev cheats (vite DEV only): grant items/gold from the console for testing.
-  //   __give('potion', 3)   __gold(500)
-  if (import.meta.env.DEV) {
-    const w = window as unknown as Record<string, unknown>;
-    w.__give = (id: string, n = 1): void => {
-      const h = state.getEntityByName('hero') ?? 0;
-      if (h) addItem(state, h, id, n);
-    };
-    w.__gold = (n = 100): void => addGold(n);
-  }
+  // Dev cheats (vite DEV only): grant items/gold via the debug surface for testing.
+  //   __VIBEGAME__.debug.callAction('give', 'potion', 3)
+  //   __VIBEGAME__.debug.callAction('gold', 500)
+  registerDebugAction(state, 'give', (id: string, n = 1) => {
+    const h = state.getEntityByName('hero') ?? 0;
+    if (h) addItem(state, h, id, n);
+  });
+  registerDebugAction(state, 'gold', (n = 100) => addGold(n));
 
   // Load data-driven RPG presets (boss/goblin/slime) into the DataRegistry
   // before runtime.start() parses the scene.
@@ -987,11 +941,13 @@ async function bootstrap(): Promise<void> {
     if (eid !== null && isWoodEntity(eid)) {
       addWood(1);
       addItem(state, hero, 'wood', 1);
+      notifyResourceHarvested(state, 'wood');
       spawnFloatingText(state, '+1 🪵', { x, y: y + 1.5, z, duration: 1.4 });
       playSound('chop-break');
     } else {
       addStone(1);
       addItem(state, hero, 'stone', 1);
+      notifyResourceHarvested(state, 'stone');
       spawnFloatingText(state, '+1 🪨', { x, y: y + 1.2, z, duration: 1.4 });
       playSound('mine-break');
     }
@@ -1012,11 +968,18 @@ async function bootstrap(): Promise<void> {
 
   initAudioBuses();
 
-  // QA / debug bridges.
-  window.__heroState = state;
-  window.__spawnFloatingText = (text, x, y, z) =>
-    spawnFloatingText(state, text, { x, y, z, duration: 4 });
-  window.__heroDebug = (): Record<string, number> => {
+  // QA / debug surface (registered through the engine DebugPlugin overlay;
+  // DEV-gated by the registry itself). Invoke via:
+  //   __VIBEGAME__.debug.getVar('heroDebug')
+  //   __VIBEGAME__.debug.callAction('spawnFloatingText', 'hi', 0, 2, 0)
+  registerDebugVar(state, 'heroState', () => state);
+  registerDebugAction(
+    state,
+    'spawnFloatingText',
+    (text: string, x: number, y: number, z: number) =>
+      spawnFloatingText(state, text, { x, y, z, duration: 4 })
+  );
+  registerDebugVar(state, 'heroDebug', () => {
     const hero = state.getEntityByName('hero');
     if (hero === null) return {};
     return {
@@ -1027,31 +990,39 @@ async function bootstrap(): Promise<void> {
       maxHp: Health.max[hero] ?? 0,
       level: ProgressionComponent.level[hero] ?? 0,
     };
-  };
-  // Grip-tuning bridge: __hold('sword'|'axe'|'spear'|'chop'|'mine'|'bomb'|null)
-  // pins a weapon in the hand; __grip(key, {scale, rz, …}) live-edits its grip.
-  window.__hold = (key: string | null) => {
+  });
+  // Grip-tuning: callAction('hold', 'sword') pins a weapon in the hand;
+  // callAction('grip', 'sword', { scale: 1.2 }) live-edits its grip.
+  registerDebugAction(state, 'hold', (key: string | null) => {
     forcedHold = key;
     return key;
-  };
-  window.__grip = (key: string, patch: Record<string, number>) => {
-    if (GRIPS[key]) Object.assign(GRIPS[key], patch);
-    return GRIPS[key];
-  };
-  // Camera orbit for grip tuning: __cam(yawRad, pitchRad, distance).
-  const camQuery = defineQuery([ThirdPersonCamera]);
-  window.__cam = (yaw: number, pitch: number, dist: number) => {
-    for (const e of camQuery(state.world)) {
-      ThirdPersonCamera.yaw[e] = yaw;
-      ThirdPersonCamera.smoothYaw[e] = yaw;
-      ThirdPersonCamera.pitch[e] = pitch;
-      ThirdPersonCamera.distance[e] = dist;
-      return e;
+  });
+  registerDebugAction(
+    state,
+    'grip',
+    (key: string, patch: Record<string, number>) => {
+      if (GRIPS[key]) Object.assign(GRIPS[key], patch);
+      return GRIPS[key];
     }
-    return -1;
-  };
+  );
+  // Camera orbit for grip tuning: callAction('cam', yawRad, pitchRad, distance).
+  const camQuery = defineQuery([ThirdPersonCamera]);
+  registerDebugAction(
+    state,
+    'cam',
+    (yaw: number, pitch: number, dist: number) => {
+      for (const e of camQuery(state.world)) {
+        ThirdPersonCamera.yaw[e] = yaw;
+        ThirdPersonCamera.smoothYaw[e] = yaw;
+        ThirdPersonCamera.pitch[e] = pitch;
+        ThirdPersonCamera.distance[e] = dist;
+        return e;
+      }
+      return -1;
+    }
+  );
   // Inspect what's attached to the RightHand bone (debug grip issues).
-  window.__handInfo = () => {
+  registerDebugVar(state, 'handInfo', () => {
     const scene = getScene(state);
     const hands: {
       childCount: number;
@@ -1072,7 +1043,7 @@ async function bootstrap(): Promise<void> {
       }
     });
     return JSON.stringify(hands);
-  };
+  });
 
   if (typeof document !== 'undefined') {
     const startBgm = () => {
@@ -1092,6 +1063,9 @@ if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     try {
       clearBombs();
+      clearAbilityBar();
+      clearHotbar();
+      clearMelee();
       disposeAllRuntimes();
     } catch (e) {
       console.error('[VibeGame] HMR dispose failed:', e);

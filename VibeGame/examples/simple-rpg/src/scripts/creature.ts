@@ -10,9 +10,8 @@ import {
   Transform,
   defineQuery,
   PlayerController,
-  getTerrainHeightAt,
+  sampleTerrainHeight,
   getBvhSurfaceHeight,
-  sampleTerrainSurface,
   Health,
   isDead,
   spawnParticleBurst,
@@ -35,7 +34,6 @@ import { registerEnemy, unregisterEnemy } from './enemy-registry';
 const TERRAIN_LAYER = 0x0001;
 const WATER_LEVEL = 1.25;
 const HEALTH_BAR_WIDTH = 1.4;
-const FOOT_RADIUS = 0.3;
 
 // AI tuning not expressed in CreatureConfig — defaults from the original
 // creature prototype, fed into the engine MeleeAiConfig.
@@ -150,37 +148,14 @@ function groundHeight(
     TERRAIN_LAYER
   );
   if (gy != null && Number.isFinite(gy)) return gy;
-  // Terrain: anchor to the *rendered* LOD mesh surface, NOT the full-resolution
-  // analytic height. On coarse LOD chunks the flat mesh triangles sit above the
-  // analytic surface in valleys, so an analytic anchor leaves the creature sunk
-  // into the visible ground (and floating on ridges). sampleTerrainSurface
-  // reproduces the drawn surface — same lattice the hero's CCT collider stands
-  // on — keeping the model flush with what is shown. See spawner/surface.ts.
-  const surf = sampleTerrainSurface(ctx.state, x, z, 0.75, true);
-  if (surf && Number.isFinite(surf.worldY)) return surf.worldY;
-  const hm = getTerrainHeightAt(ctx.state, x, z);
-  if (Number.isFinite(hm)) return hm;
-  return 0;
-}
-
-function footprintHeight(
-  ctx: MonoBehaviourContext,
-  x: number,
-  z: number,
-  fromY: number
-): number {
-  let best = groundHeight(ctx, x, z, fromY);
-  if (!Number.isFinite(best)) return best;
-  for (const [ox, oz] of [
-    [FOOT_RADIUS, 0],
-    [-FOOT_RADIUS, 0],
-    [0, FOOT_RADIUS],
-    [0, -FOOT_RADIUS],
-  ]) {
-    const h = groundHeight(ctx, x + ox, z + oz, fromY);
-    if (Number.isFinite(h) && h > best) best = h;
-  }
-  return best;
+  // Terrain: anchor to the *rendered* LOD mesh surface across the footprint,
+  // not the full-resolution analytic height. On coarse LOD chunks the flat mesh
+  // triangles sit above the analytic surface in valleys, so an analytic anchor
+  // leaves the creature sunk into the visible ground. sampleTerrainHeight
+  // multi-samples the rendered lattice the hero's CCT collider stands on,
+  // keeping the model flush with what is shown.
+  const h = sampleTerrainHeight(ctx.state, x, z);
+  return Number.isFinite(h) ? h : 0;
 }
 
 function ensureHealthBar(s: PresentationState): void {
@@ -398,7 +373,8 @@ export function createCreatureBehaviours(
       Health.max[eid] = cfg.hp;
 
       // Normal enemies count toward the boss gate; the boss (gated) does not.
-      if (!cfg.gateUntil) registerEnemy(eid);
+      if (!cfg.gateUntil)
+        registerEnemy(eid, Transform.posX[eid], Transform.posZ[eid]);
 
       resolvePlayer(ctx);
 
@@ -445,7 +421,7 @@ export function createCreatureBehaviours(
         }
         const rx = Transform.posX[eid];
         const rz = Transform.posZ[eid];
-        const ry = footprintHeight(ctx, rx, rz, Transform.posY[eid]);
+        const ry = groundHeight(ctx, rx, rz, Transform.posY[eid]);
         if (Number.isFinite(ry)) {
           Transform.posY[eid] = ry + s.footOffset;
           s.group.position.set(rx, ry + s.footOffset, rz);
@@ -511,7 +487,7 @@ export function createCreatureBehaviours(
       // the visual transform.
       const x = Transform.posX[eid];
       const z = Transform.posZ[eid];
-      const groundY = footprintHeight(ctx, x, z, Transform.posY[eid]);
+      const groundY = groundHeight(ctx, x, z, Transform.posY[eid]);
       const visualY =
         (Number.isFinite(groundY) ? groundY : Transform.posY[eid]) +
         s.footOffset;
