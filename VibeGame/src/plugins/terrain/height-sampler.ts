@@ -1,3 +1,8 @@
+import type { State } from '../../core';
+import { Terrain } from './components';
+import { getTerrainContext } from './utils';
+import type { TerrainEntityData } from './utils';
+
 /**
  * CPU-side height sampler for a terrain field.
  *
@@ -204,4 +209,94 @@ export function sampleHeightAt(
   const v = (localZ + half) / sampler.worldSize;
   if (u < 0 || u > 1 || v < 0 || v > 1) return 0;
   return sampleNormalized(sampler, u, v) * sampler.maxHeight;
+}
+
+function surfaceHeightAt(
+  sampler: HeightSampler,
+  localX: number,
+  localZ: number,
+  baseResolution: number
+): number {
+  const res = Math.floor(baseResolution);
+  if (res < 1 || !sampler.data) {
+    return sampleHeightAt(sampler, localX, localZ);
+  }
+
+  const half = sampler.worldSize / 2;
+  const step = sampler.worldSize / res;
+  const gx = (localX + half) / step;
+  const gz = (localZ + half) / step;
+  const x0 = Math.floor(gx);
+  const z0 = Math.floor(gz);
+  const fx = gx - x0;
+  const fz = gz - z0;
+
+  const lx0 = x0 * step - half;
+  const lz0 = z0 * step - half;
+  const lx1 = lx0 + step;
+  const lz1 = lz0 + step;
+
+  const hA = sampleHeightAt(sampler, lx0, lz0);
+  const hB = sampleHeightAt(sampler, lx1, lz0);
+  const hC = sampleHeightAt(sampler, lx0, lz1);
+  const hD = sampleHeightAt(sampler, lx1, lz1);
+
+  if (fx + fz <= 1) {
+    return hA + fx * (hB - hA) + fz * (hC - hA);
+  }
+  return hD + (1 - fx) * (hC - hD) + (1 - fz) * (hB - hD);
+}
+
+const TERRAIN_FOOTPRINT_RADIUS = 0.3;
+
+/**
+ * Terrain height at a world position, multi-sampled across a small footprint
+ * (centre + `samples` cardinal offsets at ±`radius`) and reduced to the highest
+ * finite probe so placed objects rest flush with the rendered LOD surface. Each
+ * probe samples the rendered mesh lattice, falling back to the analytic height
+ * when the field is flat or undecoded; with no ready field the result is 0
+ * (matching {@link getTerrainHeightAt}). Defaults reproduce the cross footprint
+ * (4 offsets at 0.3 m).
+ */
+export function sampleTerrainHeight(
+  state: State,
+  x: number,
+  z: number,
+  samples = 4,
+  radius = TERRAIN_FOOTPRINT_RADIUS
+): number {
+  const context = getTerrainContext(state);
+  let field: { data: TerrainEntityData; entity: number } | null = null;
+  for (const [entity, data] of context) {
+    if (!data.initialized) continue;
+    field = { data, entity };
+    break;
+  }
+
+  const pointHeight = (px: number, pz: number): number => {
+    if (!field) return 0;
+    const { data, entity } = field;
+    return surfaceHeightAt(
+      data.sampler,
+      px - data.worldOffset.x,
+      pz - data.worldOffset.z,
+      Terrain.resolution[entity]
+    );
+  };
+
+  let best = pointHeight(x, z);
+  if (!Number.isFinite(best)) best = 0;
+
+  const count = Math.max(0, Math.min(samples, 4));
+  const offsets: ReadonlyArray<readonly [number, number]> = [
+    [radius, 0],
+    [-radius, 0],
+    [0, radius],
+    [0, -radius],
+  ];
+  for (let i = 0; i < count; i++) {
+    const h = pointHeight(x + offsets[i]![0], z + offsets[i]![1]);
+    if (Number.isFinite(h) && h > best) best = h;
+  }
+  return best;
 }

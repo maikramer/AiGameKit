@@ -10,11 +10,12 @@ import { getTerrainContext, isTerrainDynamicsBlocking } from './utils';
 const terrainQuery = defineQuery([Terrain]);
 
 /**
- * Terrain readiness for the loading gate: a declared terrain field is fully
- * loaded when its heightmap has decoded and its collision is ready. Scenes with
- * no terrain report ready (nothing to wait for).
+ * Reports whether every declared terrain field is usable: heightmap decoded
+ * (when one is set) and Rapier heightfield collision built. Scenes with no
+ * terrain report ready. This is both the loading-gate signal and the public
+ * API games poll to defer spawn-time ground snapping until the floor exists.
  */
-function terrainReady(state: State): boolean {
+export function terrainReady(state: State): boolean {
   if (terrainQuery(state.world).length === 0) return true;
 
   let anyInitialized = false;

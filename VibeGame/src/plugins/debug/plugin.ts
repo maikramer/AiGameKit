@@ -15,6 +15,11 @@ import {
   parsePostFxBindings,
   setPostFxBindings,
 } from './postfx-toggle';
+import {
+  getDebugRegistry,
+  getDebugRegistryHandle,
+  type DebugRegistryHandle,
+} from './registry';
 
 export interface VibeGameDebugBridge {
   state: State;
@@ -37,6 +42,7 @@ export interface VibeGameDebugBridge {
   terrain(): Record<string, unknown>;
   rendering(): unknown;
   physics(): unknown;
+  debug: DebugRegistryHandle;
 }
 
 type TypedArrayField =
@@ -144,6 +150,7 @@ function createBridge(state: State): VibeGameDebugBridge {
     physics() {
       return getPhysicsContext(state);
     },
+    debug: getDebugRegistryHandle(state),
   };
 }
 
@@ -279,6 +286,70 @@ function ringStats(runtime: OverlayRuntime): {
   return { min, avg: sum / count, max };
 }
 
+function truncate(value: string, max: number): string {
+  return value.length > max ? value.slice(0, max - 3) + '...' : value;
+}
+
+function formatDebugValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  if (typeof value === 'string') return truncate(value, 40);
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    typeof value === 'bigint'
+  ) {
+    return String(value);
+  }
+  if (typeof value === 'function') return 'ƒ';
+  if (isTypedArrayField(value)) {
+    return `${value.constructor.name}(${value.length})`;
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return '[]';
+    return value.length > 8
+      ? `Array(${value.length})`
+      : truncate(safeStringify(value), 40);
+  }
+  const ctor = (value as { constructor?: { name?: string } }).constructor;
+  return ctor && ctor.name && ctor.name !== 'Object' ? ctor.name : '{obj}';
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function renderRegistrySection(state: State, visible: boolean): string {
+  if (!visible) return '';
+  const reg = getDebugRegistry(state);
+  const actionNames = Array.from(reg.actions.keys()).sort();
+  const varNames = Array.from(reg.vars.keys()).sort();
+  if (actionNames.length === 0 && varNames.length === 0) return '';
+  let out = '\n';
+  if (varNames.length > 0) {
+    out += 'Vars:\n';
+    for (const name of varNames) {
+      const entry = reg.vars.get(name);
+      const value = entry ? formatDebugValue(entry.get()) : '';
+      out += `  ${name} = ${value}\n`;
+    }
+  }
+  if (actionNames.length > 0) {
+    out += 'Actions:\n';
+    for (const name of actionNames) {
+      const entry = reg.actions.get(name);
+      const desc = entry?.description ? ` — ${entry.description}` : '';
+      out += `  ${name}${desc}\n`;
+    }
+    out += 'invoke: __VIBEGAME__.debug.callAction(name, ...args)';
+  }
+  return out;
+}
+
 export const DebugOverlaySystem: System = {
   group: 'draw',
   last: true,
@@ -309,6 +380,8 @@ export const DebugOverlaySystem: System = {
     const entityCount = Array.from(getAllEntities(state.world)).length;
     const coroutineCount = getTotalActiveCoroutineCount(state);
     const gltfLoads = getActiveGltfLoadCount();
+    const visible = runtime.el.style.display !== 'none';
+    const registrySection = renderRegistrySection(state, visible);
 
     runtime.el.textContent =
       'VibeGame Debug\n' +
@@ -318,7 +391,8 @@ export const DebugOverlaySystem: System = {
       `Systems:    ${state.systems.size}\n` +
       `Coroutines: ${coroutineCount}\n` +
       `GLTF loads: ${gltfLoads}\n` +
-      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}`;
+      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}` +
+      registrySection;
   },
   dispose(state: State): void {
     const runtime = overlayByState.get(state);
@@ -336,7 +410,9 @@ export const DebugOverlaySystem: System = {
 /**
  * Installs `window.__VIBEGAME__`, a read-only introspection bridge over the live
  * ECS State for AI-driven / Playwright QA tooling, plus a visual debug overlay
- * (FPS, frame time, entity/system/coroutine counts, GLTF loads in flight).
+ * (FPS, frame time, entity/system/coroutine counts, GLTF loads in flight). The
+ * bridge also exposes a `debug` namespace for invoking actions/vars registered
+ * via {@link registerDebugAction} / {@link registerDebugVar}.
  *
  * In-browser keys (active only when this plugin is registered and not headless):
  *   `?` (Shift+/) — toggle the stats overlay (hidden by default)

@@ -38,6 +38,9 @@ import {
   spawnFloatingText,
   getRenderingContext,
   threeCameras,
+  registerDebugAction,
+  registerDebugVar,
+  getDebugRegistry,
 } from 'vibegame';
 
 describe('Public API surface — promoted symbols', () => {
@@ -86,6 +89,12 @@ describe('Public API surface — promoted symbols', () => {
     expect(Postprocessing).toBeDefined();
     expect(Postprocessing.bloom).toBeInstanceOf(Uint8Array);
     expect(DebugPlugin).toBeDefined();
+  });
+
+  it('exports the debug registry API (registerDebugAction/registerDebugVar)', () => {
+    expect(typeof registerDebugAction).toBe('function');
+    expect(typeof registerDebugVar).toBe('function');
+    expect(typeof getDebugRegistry).toBe('function');
   });
 
   it('exports navmesh agent helpers', () => {

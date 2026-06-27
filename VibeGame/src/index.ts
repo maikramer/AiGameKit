@@ -33,6 +33,8 @@ export type {
   GltfAnimatorOptions,
   LocomotionSet,
 } from './extras/gltf-animator';
+export { attachHeldItem, loadHeldItemGrips } from './extras/held-item';
+export type { HeldItemGrip, HeldItemGripRegistry } from './extras/held-item';
 export {
   applyEquirectSkyEnvironment,
   autoLoadSkyEnvironment,
@@ -693,12 +695,20 @@ export {
 /**
  * Terrain height queries used to align gameplay objects to the ground.
  *
- * {@link getTerrainHeightAt} samples the terrain heightmap; {@link getBvhSurfaceHeight}
- * (re-exported above) raycasts the terrain BVH. {@link getTerrainContext} exposes
- * per-field runtime data; {@link isTerrainDynamicsBlocking} reports whether terrain
- * dynamics currently block spawning/placement.
+ * {@link getTerrainHeightAt} samples the terrain heightmap; {@link sampleTerrainHeight}
+ * multi-samples the rendered LOD surface across a small footprint for robust
+ * grounding on coarse chunks; {@link getBvhSurfaceHeight} (re-exported above)
+ * raycasts the terrain BVH. {@link getTerrainContext} exposes per-field runtime
+ * data; {@link isTerrainDynamicsBlocking} reports whether terrain dynamics
+ * currently block spawning/placement; {@link terrainReady} is the public signal
+ * that every terrain field's heightmap and heightfield collision are ready.
  */
-export { getTerrainHeightAt, getTerrainContext } from './plugins/terrain';
+export {
+  getTerrainHeightAt,
+  getTerrainContext,
+  sampleTerrainHeight,
+  terrainReady,
+} from './plugins/terrain';
 export { isTerrainDynamicsBlocking } from './plugins/terrain/utils';
 
 /**
@@ -718,6 +728,19 @@ export { ActiveBiome, BiomeRegion, BiomesPlugin } from './plugins/biomes';
  * (keys Digit1-6 to cycle bloom/CA/vignette/AA/SSAO/toneMapping; opt-in via DebugPlugin).
  */
 export { DebugPlugin, PostFxToggleSystem } from './plugins/debug';
+export {
+  getDebugRegistry,
+  getDebugRegistryHandle,
+  registerDebugAction,
+  registerDebugVar,
+} from './plugins/debug';
+export type {
+  DebugActionEntry,
+  DebugRegistry,
+  DebugRegistryHandle,
+  DebugVarEntry,
+  RegisterDebugActionOptions,
+} from './plugins/debug';
 
 /**
  * Spawn gate plugin: opt-in latch that holds entities at their spawn Y until
