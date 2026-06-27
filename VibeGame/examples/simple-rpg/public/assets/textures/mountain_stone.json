@@ -1,0 +1,18 @@
+{
+  "timestamp": 1782526076.979545,
+  "prompt": "seamless stone texture, natural rock surface, rough texture, tiling, grey mountain rock stone surface with cracks and moss patches, rough terrain",
+  "params": {
+    "seed": 444870383,
+    "prompt_final": "seamless stone texture, natural rock surface, rough texture, tiling, grey mountain rock stone surface with cracks and moss patches, rough terrain",
+    "prompt": "seamless stone texture, natural rock surface, rough texture, tiling, grey mountain rock stone surface with cracks and moss patches, rough terrain",
+    "negative_prompt": "smooth, polished, artificial",
+    "guidance_scale": 7.5,
+    "num_inference_steps": 50,
+    "width": 512,
+    "height": 512,
+    "cfg_scale": 7.5,
+    "lora_strength": 1.0
+  },
+  "image_path": "mountain_stone.png",
+  "filename": "mountain_stone.png"
+}

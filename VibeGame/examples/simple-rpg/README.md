@@ -41,6 +41,9 @@ and update `assets.lock.json` (`version` + `url` + `sha256`).
 | On-screen status overlay     | Custom DOM via gameplay system         | `withSystem(GameplayHudSystem)` in `src/main.ts`                                |
 | Sky IBL + background         | Skymap2D (equirect PNG) + `sky` plugin | **`<EquirectSky url="/assets/sky/sky.png">`** em `index.html`                   |
 | BGM + SFX (save, load, …)    | Text2Sound + `audio` plugin            | **`defineSoundBank`** + **`playSound`** em `src/game/sounds.ts`                 |
+| Biome regions (fog/ambient)  | **`biomes` plugin**                    | `<BiomeRegion polygon="[x,z;…]">` — dark forest, desert, swamp               |
+| Quest NPCs + dialogue        | **`quests` plugin**                    | `<DialogueNPC>` + `<DialogueBalloon>` + `<QuestsTab>` in pause modal          |
+| Biome creatures (animated)   | Text3D + Paint3D + Rigging3D + Animator3D | wolf, shade, witch_boss, scorpion, bandit, sand_wyrm_boss, bogling, mosquito |
 
 ## Engine features demonstrated
 
@@ -51,7 +54,7 @@ and update `assets.lock.json` (`version` + `url` + `sha256`).
 | AI Steering              | `AiSteeringPlugin` | 3 NPCs wandering autonomously (Yuka)                                                   |
 | Save / Load              | `SaveLoadPlugin`   | G = save, H = load via localStorage + msgpackr                                         |
 | i18n                     | `I18nPlugin`       | Auto-detect PT/EN; overlay messages localized                                          |
-| Audio                    | `AudioPlugin`      | `defineSoundBank` + `playSound`; `resume-audio-on-user-gesture`                     |
+| Audio                    | `AudioPlugin`      | `defineSoundBank` + `playSound`; `resume-audio-on-user-gesture`                        |
 | Raycast                  | `RaycastPlugin`    | Available (not used directly in this demo yet)                                         |
 | Joints                   | `JointsPlugin`     | Available (not used directly in this demo yet)                                         |
 | Navmesh                  | `NavmeshPlugin`    | Available (not used directly in this demo yet)                                         |
@@ -136,12 +139,26 @@ The scene still runs without GLBs — you see the terrain, the player capsule, p
 | G                | Save game (localStorage)              |
 | H                | Load game (localStorage)              |
 | B                | Drop / aim + throw a bomb             |
-| V                | Cycle held weapon (sword/axe/spear)   |
-| F                | Interact (chests, shrines, readables) |
-| J                | Harvest / gather (primary action)     |
-| K                | Trade with the merchant               |
+| V                 | Cycle held weapon (sword/axe/spear)   |
+| F                 | Interact (chests, shrines, NPCs, readables) |
+| J                 | Harvest / gather (primary action)     |
+| K                 | Trade with the merchant               |
 | Right mouse drag | Orbit camera                          |
 | Mouse wheel      | Zoom                                  |
+
+## Biomes + Quests (Round 3)
+
+The world now spans **three biome regions** beyond the central vale:
+
+| Biome | Location | Atmosphere | Enemies | Quest NPCs |
+|---|---|---|---|---|
+| **Dark Forest** (north) | z > 80 | Green-dark fog, mysterious | wolf, shade, witch_boss | hunter, witch NPC, lumberjack |
+| **Desert** (east) | x > 100 | Sandy fog, arid | scorpion, bandit, sand_wyrm_boss | nomad, merchant, archaeologist |
+| **Swamp** (south) | z < -80 | Murky fog, dense | bogling, mosquito, bog_warden_boss | hermit, fisherman, druid |
+
+Each biome is declared via `<BiomeRegion polygon="[x,z;x,z;...]">` in `index.html`. The `biomes` plugin detects the player's position and interpolates fog color, density, ambient light, and BGM layer when entering a new region.
+
+**Quest system:** 9 NPCs (3 per biome) offer simple quests (kill N enemies or collect N resources). Walk up + press **F** to open the dialogue balloon, accept the quest, then track progress in the **QuestsTab** (pause menu → Quests). Quest state persists via `SaveLoadPlugin`.
 
 ## Extending
 

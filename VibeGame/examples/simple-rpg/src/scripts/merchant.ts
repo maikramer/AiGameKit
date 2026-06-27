@@ -328,7 +328,9 @@ function refreshShopDisplay(): void {
   const stones = getStoneCount();
   const wood = getWoodCount();
   const ownedPotion = shopState ? getItemQty(shopState, player, 'potion') : 0;
-  const ownedAntidote = shopState ? getItemQty(shopState, player, 'antidote') : 0;
+  const ownedAntidote = shopState
+    ? getItemQty(shopState, player, 'antidote')
+    : 0;
   const ownedBomb = shopState ? getItemQty(shopState, player, 'bomb') : 0;
 
   if (statsLabel) {

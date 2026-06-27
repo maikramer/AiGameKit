@@ -1,0 +1,18 @@
+{
+  "timestamp": 1782525481.300011,
+  "prompt": "seamless dirt texture, brown earth soil, natural ground, game terrain, tiling, murky dark swamp mud with algae patches",
+  "params": {
+    "seed": 3678688334,
+    "prompt_final": "seamless dirt texture, brown earth soil, natural ground, game terrain, tiling, murky dark swamp mud with algae patches",
+    "prompt": "seamless dirt texture, brown earth soil, natural ground, game terrain, tiling, murky dark swamp mud with algae patches",
+    "negative_prompt": "grass, clean, polished, artificial",
+    "guidance_scale": 7.5,
+    "num_inference_steps": 50,
+    "width": 512,
+    "height": 512,
+    "cfg_scale": 7.5,
+    "lora_strength": 1.0
+  },
+  "image_path": "swamp_mud.png",
+  "filename": "swamp_mud.png"
+}

@@ -50,7 +50,10 @@ export function registerGameSkills(state: State = engineState()!): void {
     description: '+12 max HP per rank',
     maxRank: 5,
     cost: 1,
-    effect: { kind: 'stat-modifier', payload: { stat: 'maxHp', magnitude: 12, stackMode: 'stack' } },
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'maxHp', magnitude: 12, stackMode: 'stack' },
+    },
   });
   reg.register('skill', 'strength', {
     id: 'strength',
@@ -58,7 +61,10 @@ export function registerGameSkills(state: State = engineState()!): void {
     description: '+attack power',
     maxRank: 5,
     cost: 1,
-    effect: { kind: 'stat-modifier', payload: { stat: 'attack', magnitude: 5, stackMode: 'stack' } },
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'attack', magnitude: 5, stackMode: 'stack' },
+    },
   });
   reg.register('skill', 'agility', {
     id: 'agility',
@@ -66,6 +72,9 @@ export function registerGameSkills(state: State = engineState()!): void {
     description: '+move speed',
     maxRank: 5,
     cost: 1,
-    effect: { kind: 'stat-modifier', payload: { stat: 'moveSpeed', magnitude: 0.4, stackMode: 'stack' } },
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'moveSpeed', magnitude: 0.4, stackMode: 'stack' },
+    },
   });
 }

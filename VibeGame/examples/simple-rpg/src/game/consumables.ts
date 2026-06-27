@@ -4,7 +4,14 @@
 //   [1] Potion   → heal
 //   [2] Antidote → cure + small heal
 //   [3] Bomb     → thrown with [B] (BombSystem owns it; slot is display-only)
-import { Health, getItemQty, healHealth, isKeyDown, playSound, removeItem } from 'vibegame';
+import {
+  Health,
+  getItemQty,
+  healHealth,
+  isKeyDown,
+  playSound,
+  removeItem,
+} from 'vibegame';
 import type { State } from 'vibegame';
 import { isGamePaused } from './pause';
 
@@ -23,18 +30,43 @@ interface Slot {
 // Bomb's keyCode is KeyB to match the BombSystem; this bar doesn't act on it
 // (throw aiming lives in BombSystem), it only shows the count.
 const SLOTS: readonly Slot[] = [
-  { id: 'potion', key: '1', keyCode: 'Digit1', icon: '🧪', color: '#7ad27a', label: 'Potion — restore HP' },
-  { id: 'antidote', key: '2', keyCode: 'Digit2', icon: '🟣', color: '#c08af0', label: 'Antidote — cure + heal' },
-  { id: 'bomb', key: 'B', keyCode: 'KeyB', icon: '💣', color: '#ff8a6a', label: 'Bomb — hold [B] to throw' },
+  {
+    id: 'potion',
+    key: '1',
+    keyCode: 'Digit1',
+    icon: '🧪',
+    color: '#7ad27a',
+    label: 'Potion — restore HP',
+  },
+  {
+    id: 'antidote',
+    key: '2',
+    keyCode: 'Digit2',
+    icon: '🟣',
+    color: '#c08af0',
+    label: 'Antidote — cure + heal',
+  },
+  {
+    id: 'bomb',
+    key: 'B',
+    keyCode: 'KeyB',
+    icon: '💣',
+    color: '#ff8a6a',
+    label: 'Bomb — hold [B] to throw',
+  },
 ];
 
 const pressed: Record<string, boolean> = {};
 let hotbarEl: HTMLDivElement | null = null;
-const slotEls: Record<string, { root: HTMLDivElement; count: HTMLSpanElement }> = {};
+const slotEls: Record<
+  string,
+  { root: HTMLDivElement; count: HTMLSpanElement }
+> = {};
 
 function buildHotbar(): void {
   if (hotbarEl || typeof document === 'undefined') return;
-  const layer = document.querySelector('.vibe-hud-screen-layer') ?? document.body;
+  const layer =
+    document.querySelector('.vibe-hud-screen-layer') ?? document.body;
 
   hotbarEl = document.createElement('div');
   hotbarEl.style.cssText =

@@ -1,0 +1,74 @@
+[
+  {
+    "id": "forest_wolves",
+    "npc": "npc_forest_wolves",
+    "biome": "dark-forest",
+    "title": "Caçador da Floresta",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Lobos mataram meu gado esta semana.",
+      "Mate 5 deles e eu te recompensarei bem."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} lobos por abater."],
+    "lines_complete": ["Muito obrigado! Toma este ouro pela coragem."],
+    "objective": {
+      "type": "kill",
+      "target": "wolf",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 200,
+      "xp": 150,
+      "items": ["wolf_pelt:2"]
+    }
+  },
+  {
+    "id": "forest_shades",
+    "npc": "npc_forest_shades",
+    "biome": "dark-forest",
+    "title": "Bruxa da Cabana",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Sombras vêm dos pinhais ao anoitecer.",
+      "Dissipe 3 delas e lhe darei poções de cura."
+    ],
+    "lines_progress": ["Restam {remaining} sombras a banir."],
+    "lines_complete": ["As sombras recuaram. Leve estas poções."],
+    "objective": {
+      "type": "kill",
+      "target": "shade",
+      "count": 3
+    },
+    "rewards": {
+      "gold": 250,
+      "xp": 180,
+      "items": ["health_potion:3"]
+    }
+  },
+  {
+    "id": "forest_darkwood",
+    "npc": "npc_forest_darkwood",
+    "biome": "dark-forest",
+    "title": "Lenhador",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Preciso de madeira-escura das árvores mortas.",
+      "Colete 8 pedaços e te dou um machado de ferro."
+    ],
+    "lines_progress": ["Faltam {remaining} pedaços de madeira-escura."],
+    "lines_complete": ["Boa colheita! Este machado é seu."],
+    "objective": {
+      "type": "collect",
+      "target": "dark-wood",
+      "count": 8
+    },
+    "rewards": {
+      "gold": 150,
+      "xp": 120,
+      "items": ["iron_axe:1"]
+    }
+  }
+]

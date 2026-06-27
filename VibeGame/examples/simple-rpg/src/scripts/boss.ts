@@ -33,6 +33,7 @@ const behaviours = createCreatureBehaviours({
   roarSound: 'boss-roar',
   // Gate: appear only after all goblins + slimes are dead.
   gateUntil: () => everSpawned() && aliveEnemyCount() === 0,
+  enemyType: 'boss_ogre',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

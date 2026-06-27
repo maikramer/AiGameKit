@@ -1,0 +1,75 @@
+[
+  {
+    "id": "swamp_boglings",
+    "npc": "npc_swamp_boglings",
+    "biome": "swamp",
+    "title": "Eremita do Pântano",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Boglins devoram tudo que planto na margem.",
+      "Mate 5 e te preparo poções de musgo."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} boglins."],
+    "lines_complete": ["A margem está em paz. Leve as poções."],
+    "objective": {
+      "type": "kill",
+      "target": "bogling",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 220,
+      "xp": 170,
+      "items": ["moss_potion:2"]
+    }
+  },
+  {
+    "_comment": "Phase 1: kill target is bogling (count 5) so the quest is completable now. Phase 3: replace with bog_warden boss when its spawn exists.",
+    "id": "swamp_bogwarden",
+    "npc": "npc_swamp_bogwarden",
+    "biome": "swamp",
+    "title": "Pescador do Lago",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Algo antigo dorme no fundo do lago do pântano.",
+      "Prove seu valor abatendo 5 boglins e lhe forjo uma vara abençoada."
+    ],
+    "lines_progress": ["Restam {remaining} provas de força."],
+    "lines_complete": ["Você é forte. Esta vara abençoada é sua."],
+    "objective": {
+      "type": "kill",
+      "target": "bogling",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 500,
+      "xp": 350,
+      "items": ["blessed_rod:1"]
+    }
+  },
+  {
+    "id": "swamp_bogmoss",
+    "npc": "npc_swamp_bogmoss",
+    "biome": "swamp",
+    "title": "Druida",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "O musgo-do-pântano cresce nas pedras úmidas.",
+      "Colete 10 tufos e te entrego um amuleto da natureza."
+    ],
+    "lines_progress": ["Faltam {remaining} tufos de musgo-do-pântano."],
+    "lines_complete": ["A natureza agradece. Use este amuleto."],
+    "objective": {
+      "type": "collect",
+      "target": "bog-moss",
+      "count": 10
+    },
+    "rewards": {
+      "gold": 280,
+      "xp": 200,
+      "items": ["nature_amulet:1"]
+    }
+  }
+]

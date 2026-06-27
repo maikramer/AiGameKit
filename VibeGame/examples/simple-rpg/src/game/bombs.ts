@@ -50,9 +50,14 @@ function arcHeight(dist: number): number {
 
 /** Parabola point from→to at u∈[0,1] with the given apex lift. */
 function arcPoint(
-  fx: number, fy: number, fz: number,
-  tx: number, ty: number, tz: number,
-  apex: number, u: number,
+  fx: number,
+  fy: number,
+  fz: number,
+  tx: number,
+  ty: number,
+  tz: number,
+  apex: number,
+  u: number,
   out: THREE.Vector3
 ): THREE.Vector3 {
   const lift = apex * 4 * u * (1 - u);
@@ -64,7 +69,12 @@ function arcPoint(
   return out;
 }
 
-function makeBombMesh(state: State, x: number, y: number, z: number): {
+function makeBombMesh(
+  state: State,
+  x: number,
+  y: number,
+  z: number
+): {
   mesh: THREE.Mesh;
   mat: THREE.MeshStandardMaterial;
 } | null {
@@ -84,13 +94,29 @@ function makeBombMesh(state: State, x: number, y: number, z: number): {
 
 /** Drop a live bomb at the player's feet (tap). */
 export function spawnBomb(
-  state: State, x: number, y: number, z: number, owner: number
+  state: State,
+  x: number,
+  y: number,
+  z: number,
+  owner: number
 ): void {
   const m = makeBombMesh(state, x, y, z);
   if (!m) return;
   bombs.push({
-    mesh: m.mesh, mat: m.mat, phase: 'fuse', fuse: FUSE_SECONDS,
-    x, y, z, fx: x, fy: y, fz: z, apex: 0, flightT: 0, flightDur: 0, owner,
+    mesh: m.mesh,
+    mat: m.mat,
+    phase: 'fuse',
+    fuse: FUSE_SECONDS,
+    x,
+    y,
+    z,
+    fx: x,
+    fy: y,
+    fz: z,
+    apex: 0,
+    flightT: 0,
+    flightDur: 0,
+    owner,
   });
   // TODO: dedicated bomb-drop / fuse SFX — reuse 'swing' (whoosh) for now.
   playSound('swing');
@@ -99,18 +125,32 @@ export function spawnBomb(
 /** Lob a bomb along an arc from→to, then it lands and fuses (hold + release). */
 export function throwBomb(
   state: State,
-  fx: number, fy: number, fz: number,
-  tx: number, ty: number, tz: number,
+  fx: number,
+  fy: number,
+  fz: number,
+  tx: number,
+  ty: number,
+  tz: number,
   owner: number
 ): void {
   const m = makeBombMesh(state, fx, fy, fz);
   if (!m) return;
   const dist = Math.hypot(tx - fx, tz - fz);
   bombs.push({
-    mesh: m.mesh, mat: m.mat, phase: 'flight', fuse: FUSE_SECONDS,
-    x: tx, y: ty, z: tz, fx, fy, fz,
-    apex: arcHeight(dist), flightT: 0,
-    flightDur: Math.max(0.4, Math.min(0.9, dist * 0.06)), owner,
+    mesh: m.mesh,
+    mat: m.mat,
+    phase: 'flight',
+    fuse: FUSE_SECONDS,
+    x: tx,
+    y: ty,
+    z: tz,
+    fx,
+    fy,
+    fz,
+    apex: arcHeight(dist),
+    flightT: 0,
+    flightDur: Math.max(0.4, Math.min(0.9, dist * 0.06)),
+    owner,
   });
   playSound('swing');
 }
@@ -148,11 +188,21 @@ export function updateBombs(state: State, dt: number): void {
 
 function explode(state: State, b: Bomb): void {
   spawnParticleBurst(state, {
-    x: b.x, y: b.y + 0.5, z: b.z, preset: 'explosion', count: 40, duration: 1.0,
+    x: b.x,
+    y: b.y + 0.5,
+    z: b.z,
+    preset: 'explosion',
+    count: 40,
+    duration: 1.0,
   });
   playSound('mine-break');
   spawnFloatingText(state, '💥', {
-    x: b.x, y: b.y + 1.4, z: b.z, color: '#ff8a2a', size: 0.8, duration: 0.8,
+    x: b.x,
+    y: b.y + 1.4,
+    z: b.z,
+    color: '#ff8a2a',
+    size: 0.8,
+    duration: 0.8,
   });
   const merchantEid = state.getEntityByName('merchant');
   const baseDamage = BLAST_DAMAGE + heroStats.attackBonus;
@@ -170,7 +220,9 @@ function explode(state: State, b: Bomb): void {
 
 /** Nearest living enemy to `hero` within `maxRange` (XZ). 0 if none. */
 export function nearestEnemy(
-  state: State, hero: number, maxRange: number
+  state: State,
+  hero: number,
+  maxRange: number
 ): number {
   const hx = Transform.posX[hero];
   const hz = Transform.posZ[hero];
@@ -196,8 +248,12 @@ let arcMarker: THREE.Mesh | null = null;
 
 export function updateThrowArc(
   state: State,
-  fx: number, fy: number, fz: number,
-  tx: number, ty: number, tz: number
+  fx: number,
+  fy: number,
+  fz: number,
+  tx: number,
+  ty: number,
+  tz: number
 ): void {
   const scene = getScene(state);
   if (!scene) return;
@@ -209,21 +265,30 @@ export function updateThrowArc(
     );
     arcLine = new THREE.Line(
       geo,
-      new THREE.LineBasicMaterial({ color: 0xffae3a, transparent: true, opacity: 0.9 })
+      new THREE.LineBasicMaterial({
+        color: 0xffae3a,
+        transparent: true,
+        opacity: 0.9,
+      })
     );
     arcLine.renderOrder = 997;
     scene.add(arcLine);
     arcMarker = new THREE.Mesh(
       new THREE.RingGeometry(0.5, 0.75, 20),
       new THREE.MeshBasicMaterial({
-        color: 0xff5a3a, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+        color: 0xff5a3a,
+        transparent: true,
+        opacity: 0.85,
+        side: THREE.DoubleSide,
       })
     );
     arcMarker.rotation.x = -Math.PI / 2;
     scene.add(arcMarker);
   }
   const apex = arcHeight(Math.hypot(tx - fx, tz - fz));
-  const pos = arcLine.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const pos = arcLine.geometry.getAttribute(
+    'position'
+  ) as THREE.BufferAttribute;
   for (let i = 0; i <= ARC_SEGMENTS; i++) {
     arcPoint(fx, fy, fz, tx, ty, tz, apex, i / ARC_SEGMENTS, _p);
     pos.setXYZ(i, _p.x, _p.y, _p.z);

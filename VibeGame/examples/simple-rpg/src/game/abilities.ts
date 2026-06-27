@@ -33,9 +33,33 @@ interface Ability {
 }
 
 const ABILITIES: readonly Ability[] = [
-  { id: 'dash', key: 'C', keyCode: 'KeyC', icon: '💨', label: 'Dash — burst forward', color: '#5ad0ff', cooldown: 3 },
-  { id: 'heal', key: 'E', keyCode: 'KeyE', icon: '✚', label: 'Heal — restore HP', color: '#6ef07a', cooldown: 12 },
-  { id: 'power', key: 'R', keyCode: 'KeyR', icon: '💥', label: 'Power Strike — radial damage', color: '#ffb24a', cooldown: 8 },
+  {
+    id: 'dash',
+    key: 'C',
+    keyCode: 'KeyC',
+    icon: '💨',
+    label: 'Dash — burst forward',
+    color: '#5ad0ff',
+    cooldown: 3,
+  },
+  {
+    id: 'heal',
+    key: 'E',
+    keyCode: 'KeyE',
+    icon: '✚',
+    label: 'Heal — restore HP',
+    color: '#6ef07a',
+    cooldown: 12,
+  },
+  {
+    id: 'power',
+    key: 'R',
+    keyCode: 'KeyR',
+    icon: '💥',
+    label: 'Power Strike — radial damage',
+    color: '#ffb24a',
+    cooldown: 8,
+  },
 ];
 
 const HEAL_AMOUNT = 35;
@@ -50,11 +74,15 @@ const healthQuery = defineQuery([Health, Transform]);
 
 // ── HUD ability bar ────────────────────────────────────────────────────────
 let barEl: HTMLDivElement | null = null;
-const slotEls: Record<string, { cover: HTMLDivElement; secs: HTMLSpanElement; root: HTMLDivElement }> = {};
+const slotEls: Record<
+  string,
+  { cover: HTMLDivElement; secs: HTMLSpanElement; root: HTMLDivElement }
+> = {};
 
 function buildBar(): void {
   if (barEl || typeof document === 'undefined') return;
-  const layer = document.querySelector('.vibe-hud-screen-layer') ?? document.body;
+  const layer =
+    document.querySelector('.vibe-hud-screen-layer') ?? document.body;
   barEl = document.createElement('div');
   barEl.style.cssText =
     'position:absolute;bottom:18px;left:18px;z-index:12;display:flex;gap:8px;pointer-events:none;';
@@ -139,7 +167,14 @@ function doDash(state: State, hero: number): void {
     RB.posZ[hero] = nz;
     RB.posY[hero] = gy;
   }
-  spawnParticleBurst(state, { x: nx, y: gy + 0.5, z: nz, preset: 'dust', count: 16, duration: 0.5 });
+  spawnParticleBurst(state, {
+    x: nx,
+    y: gy + 0.5,
+    z: nz,
+    preset: 'dust',
+    count: 16,
+    duration: 0.5,
+  });
   playSound('swing');
   flash('dash');
 }
@@ -148,12 +183,20 @@ function doHeal(state: State, hero: number): void {
   healHealth(hero, HEAL_AMOUNT);
   playSound('heal');
   spawnFloatingText(state, `+${HEAL_AMOUNT}`, {
-    x: Transform.posX[hero], y: Transform.posY[hero] + 2.0, z: Transform.posZ[hero],
-    color: '#6ef07a', size: 0.6, duration: 1.0,
+    x: Transform.posX[hero],
+    y: Transform.posY[hero] + 2.0,
+    z: Transform.posZ[hero],
+    color: '#6ef07a',
+    size: 0.6,
+    duration: 1.0,
   });
   spawnParticleBurst(state, {
-    x: Transform.posX[hero], y: Transform.posY[hero] + 1.0, z: Transform.posZ[hero],
-    preset: 'sparkle', count: 18, duration: 0.8,
+    x: Transform.posX[hero],
+    y: Transform.posY[hero] + 1.0,
+    z: Transform.posZ[hero],
+    preset: 'sparkle',
+    count: 18,
+    duration: 0.8,
   });
   flash('heal');
 }
@@ -161,7 +204,14 @@ function doHeal(state: State, hero: number): void {
 function doPowerStrike(state: State, hero: number): void {
   const hx = Transform.posX[hero];
   const hz = Transform.posZ[hero];
-  spawnParticleBurst(state, { x: hx, y: Transform.posY[hero] + 0.6, z: hz, preset: 'explosion', count: 30, duration: 0.7 });
+  spawnParticleBurst(state, {
+    x: hx,
+    y: Transform.posY[hero] + 0.6,
+    z: hz,
+    preset: 'explosion',
+    count: 30,
+    duration: 0.7,
+  });
   playSound('mine-break');
   const r2 = POWER_RADIUS * POWER_RADIUS;
   let hits = 0;
@@ -174,7 +224,14 @@ function doPowerStrike(state: State, hero: number): void {
     hits++;
   }
   if (hits > 0) {
-    spawnFloatingText(state, '💥', { x: hx, y: Transform.posY[hero] + 1.6, z: hz, color: '#ffb24a', size: 0.8, duration: 0.7 });
+    spawnFloatingText(state, '💥', {
+      x: hx,
+      y: Transform.posY[hero] + 1.6,
+      z: hz,
+      color: '#ffb24a',
+      size: 0.8,
+      duration: 0.7,
+    });
   }
   flash('power');
 }

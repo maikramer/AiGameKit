@@ -1,0 +1,74 @@
+[
+  {
+    "id": "desert_scorpions",
+    "npc": "npc_desert_scorpions",
+    "biome": "desert",
+    "title": "Nômade do Deserto",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Escorpiões guardam as areias perto do acampamento.",
+      "Elimine 4 e te pago em ouro e fibra de cacto."
+    ],
+    "lines_progress": ["Ainda faltam {remaining} escorpiões."],
+    "lines_complete": ["As areias estão mais seguras. Tome sua recompensa."],
+    "objective": {
+      "type": "kill",
+      "target": "scorpion",
+      "count": 4
+    },
+    "rewards": {
+      "gold": 200,
+      "xp": 160,
+      "items": ["cactus_fiber:5"]
+    }
+  },
+  {
+    "id": "desert_bandits",
+    "npc": "npc_desert_bandits",
+    "biome": "desert",
+    "title": "Mercador Nômade",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Bandidos assaltam minhas caravanas na rota leste.",
+      "Lide com 3 deles e te darei seda fina."
+    ],
+    "lines_progress": ["Restam {remaining} bandidos na rota."],
+    "lines_complete": ["A rota está livre! Esta seda é sua."],
+    "objective": {
+      "type": "kill",
+      "target": "bandit",
+      "count": 3
+    },
+    "rewards": {
+      "gold": 300,
+      "xp": 220,
+      "items": ["silk_cloth:1"]
+    }
+  },
+  {
+    "id": "desert_ruins",
+    "npc": "npc_desert_ruins",
+    "biome": "desert",
+    "title": "Arqueólogo",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "As ruínas ao sul guardam fragmentos antigos.",
+      "Recolha 6 fragmentos e te revelo um relicário."
+    ],
+    "lines_progress": ["Faltam {remaining} fragmentos de ruína."],
+    "lines_complete": ["Excelente! Leve esta relíquia antiga."],
+    "objective": {
+      "type": "collect",
+      "target": "ruin_fragment",
+      "count": 6
+    },
+    "rewards": {
+      "gold": 400,
+      "xp": 280,
+      "items": ["ancient_relic:1"]
+    }
+  }
+]

@@ -15,7 +15,7 @@ declare global {
   }
 }
 
-import type { System, State } from 'vibegame';
+import type { System, State, QuestDef } from 'vibegame';
 import {
   configure,
   disposeAllRuntimes,
@@ -24,6 +24,7 @@ import {
   withPlugin,
   withSystem,
   registerEntityScripts,
+  registerQuest,
   setKTX2TranscoderPath,
   // Plugins (engine RPG stack)
   LoadingPlugin,
@@ -102,7 +103,14 @@ import {
   registerSpawnFootprint,
 } from 'vibegame';
 import * as RAPIER from '@dimforge/rapier3d-compat';
-import { Euler, Vector3, type Camera, type Mesh, type Object3D, type Quaternion } from 'three';
+import {
+  Euler,
+  Vector3,
+  type Camera,
+  type Mesh,
+  type Object3D,
+  type Quaternion,
+} from 'three';
 
 setKTX2TranscoderPath('/libs/basis/');
 
@@ -124,6 +132,11 @@ import { bindEngine } from './game/engine-bridge';
 import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
+
+import darkForestQuestsData from './data/quests/dark_forest_quests.json';
+import desertQuestsData from './data/quests/desert_quests.json';
+import swampQuestsData from './data/quests/swamp_quests.json';
+import mountainQuestsData from './data/quests/mountain_quests.json';
 
 const SAVE_KEY = 'simple-rpg-save';
 const BASE_MAX_HP = 100;
@@ -498,8 +511,12 @@ const BOMB_MODEL = MESH_BASE + 'bomb.glb';
 // long axis (sword/axe/spear=Y, felling_axe=X, pickaxe=Z) and pivot, so each
 // needs its own offset/rotation/scale. TUNE visually via window.__grip(key,…).
 type Grip = {
-  x: number; y: number; z: number;
-  rx: number; ry: number; rz: number;
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  ry: number;
+  rz: number;
   scale: number;
 };
 const GRIPS: Record<string, Grip> = {
@@ -507,12 +524,60 @@ const GRIPS: Record<string, Grip> = {
   // local +Y points world-down at rest, so rx≈+90° swings a Y-long model to
   // point forward-down out of the fist.
   // All tuned live in-browser (window.__hold/__grip + side camera).
-  sword: { x: 0.27, y: 0.04, z: 0.09, rx: -1.33, ry: 12.71, rz: 0.96, scale: 0.7 },
-  axe: { x: -0.12, y: 0.36, z: -0.24, rx: -1.42, ry: 12.71, rz: Math.PI * 0.5, scale: 0.55 },
-  spear: { x: -0.55, y: 0.36, z: -0.41, rx: -1.33, ry: 12.71, rz: 0.96, scale: 1.2 },
-  chop: { x: -0.22, y: 0.4, z: -0.39, rx: -4.96, ry: 9.2, rz: -0.61, scale: 0.7 },
-  mine: { x: -0.09, y: 0.05, z: -0.13, rx: -2.82, ry: 11.38, rz: 2.01, scale: 0.55 },
-  bomb: { x: -0.06, y: -0.08, z: -0.12, rx: -2.02, ry: 15.75, rz: -1.05, scale: 0.45 },
+  sword: {
+    x: 0.27,
+    y: 0.04,
+    z: 0.09,
+    rx: -1.33,
+    ry: 12.71,
+    rz: 0.96,
+    scale: 0.7,
+  },
+  axe: {
+    x: -0.12,
+    y: 0.36,
+    z: -0.24,
+    rx: -1.42,
+    ry: 12.71,
+    rz: Math.PI * 0.5,
+    scale: 0.55,
+  },
+  spear: {
+    x: -0.55,
+    y: 0.36,
+    z: -0.41,
+    rx: -1.33,
+    ry: 12.71,
+    rz: 0.96,
+    scale: 1.2,
+  },
+  chop: {
+    x: -0.22,
+    y: 0.4,
+    z: -0.39,
+    rx: -4.96,
+    ry: 9.2,
+    rz: -0.61,
+    scale: 0.7,
+  },
+  mine: {
+    x: -0.09,
+    y: 0.05,
+    z: -0.13,
+    rx: -2.82,
+    ry: 11.38,
+    rz: 2.01,
+    scale: 0.55,
+  },
+  bomb: {
+    x: -0.06,
+    y: -0.08,
+    z: -0.12,
+    rx: -2.02,
+    ry: 15.75,
+    rz: -1.05,
+    scale: 0.45,
+  },
 };
 const BOMB_GRIP = GRIPS.bomb;
 // Debug: force-hold a weapon (or null) regardless of proximity, for grip tuning.
@@ -776,6 +841,14 @@ const BombAimSpineSystem: System = {
   },
 };
 
+// Must register quests before runtime.start() so the scene parser can resolve
+// each <DialogueNPC dialogue-id> to its quest index. JSON import widens
+// objective.type to `string`, so bridge to the literal union via double assert.
+function loadQuests(raw: unknown): readonly QuestDef[] {
+  const list = (Array.isArray(raw) ? raw : [raw]) as readonly unknown[];
+  return list as unknown as readonly QuestDef[];
+}
+
 async function bootstrap(): Promise<void> {
   const bootLang = navigator.language.startsWith('pt') ? 'pt' : 'en';
   mountLoadingScreen({
@@ -820,20 +893,31 @@ async function bootstrap(): Promise<void> {
   const runtime = await builder.build();
   const state = runtime.getState();
 
-  // Village exclusion zones — registered directly in the occupancy registry
-  // before any StaticSpawner samples positions. Covers x∈[-20,20] z∈[4,58].
-  const villageZones: Array<[number, number, number]> = [
-    [0, 24, 22],
-    [0, 40, 22],
-    [0, 50, 12],
-  ];
+  // City exclusion zone — registered directly in the occupancy registry before
+  // any StaticSpawner samples positions. Central walled city is at the origin
+  // (matches the <SpawnExclusion at="0 0" radius="30"> in index.html).
+  const villageZones: Array<[number, number, number]> = [[0, 0, 30]];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
   }
 
   bindEngine(state);
-  registerEntityScripts(state, import.meta.glob('./scripts/*.ts'));
+  registerEntityScripts(state, import.meta.glob('./scripts/**/*.ts'));
   registerGameSkills(state);
+
+  let questCount = 0;
+  for (const data of [
+    darkForestQuestsData,
+    desertQuestsData,
+    swampQuestsData,
+    mountainQuestsData,
+  ]) {
+    for (const def of loadQuests(data)) {
+      registerQuest(state, def);
+      questCount++;
+    }
+  }
+  console.info(`[simple-rpg] Loaded ${questCount} quests`);
 
   // Persist merchant progress that lives outside ECS (heroStats.ringOwned /
   // swordLevel) so re-loading can't re-grant the ring (speed compounding) or
@@ -841,7 +925,10 @@ async function bootstrap(): Promise<void> {
   registerSaveSerializer(state, 'simple-rpg-progress', {
     serialize: (s, eid) => {
       if (s.getEntityByName('hero') !== eid) return null;
-      return { ringOwned: heroStats.ringOwned, swordLevel: heroStats.swordLevel };
+      return {
+        ringOwned: heroStats.ringOwned,
+        swordLevel: heroStats.swordLevel,
+      };
     },
     deserialize: (s, eid, data) => {
       if (s.getEntityByName('hero') !== eid) return;
@@ -966,14 +1053,20 @@ async function bootstrap(): Promise<void> {
   // Inspect what's attached to the RightHand bone (debug grip issues).
   window.__handInfo = () => {
     const scene = getScene(state);
-    const hands: { childCount: number; childNames: string[]; worldScale: number }[] = [];
+    const hands: {
+      childCount: number;
+      childNames: string[];
+      worldScale: number;
+    }[] = [];
     const _v = new Vector3();
     scene?.traverse((o: Object3D) => {
       if (o.name === 'RightHand') {
         o.getWorldScale?.(_v);
         hands.push({
           childCount: o.children.length,
-          childNames: o.children.map((c: Mesh) => `${c.name}(s${c.scale.x.toFixed(2)})`),
+          childNames: o.children.map(
+            (c: Mesh) => `${c.name}(s${c.scale.x.toFixed(2)})`
+          ),
           worldScale: +_v.x.toFixed(3),
         });
       }

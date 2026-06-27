@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
   loadGltfToSceneWithAnimator,
+  notifyEnemyKilled,
   playSound,
   spawnFloatingText,
 } from 'vibegame';
@@ -11,6 +12,7 @@ import {
   PlayerController,
   getTerrainHeightAt,
   getBvhSurfaceHeight,
+  sampleTerrainSurface,
   Health,
   isDead,
   spawnParticleBurst,
@@ -100,6 +102,8 @@ export interface CreatureConfig {
   defeatedText?: string;
   /** Stay dormant (hidden, no AI) until this returns true (boss gate). */
   gateUntil?: () => boolean;
+  /** Enemy type identifier for quest kill tracking (e.g. 'wolf', 'shade'). */
+  enemyType?: string;
 }
 
 interface PresentationState {
@@ -135,8 +139,25 @@ function groundHeight(
   z: number,
   fromY: number
 ): number {
-  const gy = getBvhSurfaceHeight(ctx.state, x, fromY + 60, z, 2000, TERRAIN_LAYER);
+  // Static obstacles registered on TERRAIN_LAYER (rocks, props): a BVH raycast
+  // lands the creature on top of them.
+  const gy = getBvhSurfaceHeight(
+    ctx.state,
+    x,
+    fromY + 60,
+    z,
+    2000,
+    TERRAIN_LAYER
+  );
   if (gy != null && Number.isFinite(gy)) return gy;
+  // Terrain: anchor to the *rendered* LOD mesh surface, NOT the full-resolution
+  // analytic height. On coarse LOD chunks the flat mesh triangles sit above the
+  // analytic surface in valleys, so an analytic anchor leaves the creature sunk
+  // into the visible ground (and floating on ridges). sampleTerrainSurface
+  // reproduces the drawn surface — same lattice the hero's CCT collider stands
+  // on — keeping the model flush with what is shown. See spawner/surface.ts.
+  const surf = sampleTerrainSurface(ctx.state, x, z, 0.75, true);
+  if (surf && Number.isFinite(surf.worldY)) return surf.worldY;
   const hm = getTerrainHeightAt(ctx.state, x, z);
   if (Number.isFinite(hm)) return hm;
   return 0;
@@ -180,7 +201,11 @@ function ensureHealthBar(s: PresentationState): void {
 
   const fill = new THREE.Mesh(
     new THREE.PlaneGeometry(HEALTH_BAR_WIDTH, 0.14),
-    new THREE.MeshBasicMaterial({ color: 0x44ddff, depthTest: false, transparent: true })
+    new THREE.MeshBasicMaterial({
+      color: 0x44ddff,
+      depthTest: false,
+      transparent: true,
+    })
   );
   fill.position.set(0, 2.0, 0.01);
   fill.renderOrder = 999;
@@ -206,7 +231,11 @@ function disposeHealthBar(s: PresentationState): void {
 
 function collectFlashMats(s: PresentationState): void {
   if (s.flashMats || !s.group) return;
-  const mats: { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] = [];
+  const mats: {
+    mat: THREE.MeshStandardMaterial;
+    emHex: number;
+    emInt: number;
+  }[] = [];
   s.group.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
@@ -214,7 +243,11 @@ function collectFlashMats(s: PresentationState): void {
     for (const mat of arr) {
       const sm = mat as THREE.MeshStandardMaterial;
       if (sm && sm.emissive) {
-        mats.push({ mat: sm, emHex: sm.emissive.getHex(), emInt: sm.emissiveIntensity ?? 1 });
+        mats.push({
+          mat: sm,
+          emHex: sm.emissive.getHex(),
+          emInt: sm.emissiveIntensity ?? 1,
+        });
       }
     }
   });
@@ -276,7 +309,11 @@ export function createCreatureBehaviours(
     return cachedPlayer;
   }
 
-  function handleDeath(ctx: MonoBehaviourContext, s: PresentationState, eid: number): void {
+  function handleDeath(
+    ctx: MonoBehaviourContext,
+    s: PresentationState,
+    eid: number
+  ): void {
     if (s.deathHandled) return;
     s.deathHandled = true;
     s.deathTimer = 2.0;
@@ -303,6 +340,9 @@ export function createCreatureBehaviours(
       cfg.lootGoldMin + Math.random() * (cfg.lootGoldMax - cfg.lootGoldMin + 1)
     );
     cfg.onDeathLoot?.(ctx.state, gold, x, y, z);
+    if (cfg.enemyType) {
+      notifyEnemyKilled(ctx.state, cfg.enemyType);
+    }
     playSound('item-drop');
     spawnParticleBurst(ctx.state, {
       x,
@@ -352,7 +392,8 @@ export function createCreatureBehaviours(
       };
       stateMap.set(eid, s);
 
-      if (!ctx.state.hasComponent(eid, Health)) ctx.state.addComponent(eid, Health);
+      if (!ctx.state.hasComponent(eid, Health))
+        ctx.state.addComponent(eid, Health);
       Health.current[eid] = cfg.hp;
       Health.max[eid] = cfg.hp;
 
@@ -435,7 +476,12 @@ export function createCreatureBehaviours(
       }
 
       if (!s.ready) {
-        const gy = groundHeight(ctx, Transform.posX[eid], Transform.posZ[eid], 500);
+        const gy = groundHeight(
+          ctx,
+          Transform.posX[eid],
+          Transform.posZ[eid],
+          500
+        );
         if (!Number.isFinite(gy)) return;
         s.ready = true;
       }
@@ -466,7 +512,9 @@ export function createCreatureBehaviours(
       const x = Transform.posX[eid];
       const z = Transform.posZ[eid];
       const groundY = footprintHeight(ctx, x, z, Transform.posY[eid]);
-      const visualY = (Number.isFinite(groundY) ? groundY : Transform.posY[eid]) + s.footOffset;
+      const visualY =
+        (Number.isFinite(groundY) ? groundY : Transform.posY[eid]) +
+        s.footOffset;
       Transform.posY[eid] = visualY;
       Transform.dirty[eid] = 1;
 
@@ -492,13 +540,18 @@ export function createCreatureBehaviours(
       s.group.rotation.set(0, s.heading, 0);
 
       const inCombat =
-        mode === AI_MODE_CHASE || mode === AI_MODE_ATTACK || mode === AI_MODE_LUNGE;
+        mode === AI_MODE_CHASE ||
+        mode === AI_MODE_ATTACK ||
+        mode === AI_MODE_LUNGE;
       if (inCombat) aggroEntities.add(eid);
       else aggroEntities.delete(eid);
 
       const clip = pickClip(mode, moveSpeed > 0.3);
       if (s.animator && s.playing !== clip) {
-        s.animator.play(clip, clip === cfg.clips.lunge ? { loop: false } : undefined);
+        s.animator.play(
+          clip,
+          clip === cfg.clips.lunge ? { loop: false } : undefined
+        );
         s.playing = clip;
       }
 
@@ -508,7 +561,10 @@ export function createCreatureBehaviours(
       if (s.healthBarFill) {
         s.healthBarFill.visible = inCombat;
         if (inCombat) {
-          const ratio = Math.max(0, Math.min(1, hp / (Health.max[eid] || cfg.hp)));
+          const ratio = Math.max(
+            0,
+            Math.min(1, hp / (Health.max[eid] || cfg.hp))
+          );
           s.healthBarFill.scale.x = ratio;
           s.healthBarFill.position.x = -(HEALTH_BAR_WIDTH / 2) * (1 - ratio);
           (s.healthBarFill.material as THREE.MeshBasicMaterial).color.setHex(

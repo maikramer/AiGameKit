@@ -18,6 +18,7 @@ const { start, update, onDestroy } = createCreatureBehaviours({
   lootGoldMin: 8,
   lootGoldMax: 18,
   strafe: true,
+  enemyType: 'goblin',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

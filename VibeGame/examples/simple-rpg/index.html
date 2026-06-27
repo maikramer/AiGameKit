@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -48,6 +48,20 @@
   </head>
 
   <body>
+    <!-- ================================================================
+         MAPA — CIDADE CENTRAL MURADA + 4 BIOMAS CARDEAIS
+         ----------------------------------------------------------------
+         A cidade (vale) fica no centro, dentro de uma muralha quadrada
+         (semi-extensão 22) com 4 portões cardeais. Cada portão leva a um
+         bioma distinto:
+           NORTE (+Z) → FLORESTA SOMBRIA   (pinheiros, lobos, sombras, bruxa)
+           LESTE (+X) → DESERTO            (cactos, escorpiões, bandidos, verme)
+           SUL   (-Z) → PÂNTANO            (salgueiros, boglings, mosquitos, warden)
+           OESTE (-X) → PICOS GELADOS       (rochedos, goblins, slimes, ogro)
+         Os <BiomeRegion> são cunhas (triângulos/trapézios) que ladrilham o
+         espaço fora do quadrado central (semi-lado 28), partidas pelas
+         diagonais — sem sobreposição e deixando a cidade como vale neutro.
+         ================================================================ -->
     <Scene
       canvas="#game-canvas"
       sky="#ffffff"
@@ -59,12 +73,13 @@
       <GameObject
         ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.8"
         directional-light="color: 0xfff0d0; intensity: 3.0; direction-x: -0.7; direction-y: 3.5; direction-z: -0.6; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
-        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.6; chromatic-aberration: 0; ca-strength: 0; vignette: 1; vignette-offset: 0.22; vignette-darkness: 0.62; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.05; ssao: 1; ssao-intensity: 0.55; ssao-radius: 0.9"
+        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.55; bloom-radius: 0.6; bloom-threshold: 0.6; chromatic-aberration: 0; ca-strength: 0; vignette: 1; vignette-offset: 0.22; vignette-darkness: 0.62; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.05; ssao: 1; ssao-intensity: 0.55; ssao-radius: 0.9; height-fog: 1; fog-color: 0xcfd8e0; fog-density: 0.006"
       >
       </GameObject>
 
       <!-- Audio mixer tiers + layered music (engine AudioPlugin, T28).
-           Explore layer plays by default; battle layer crossfade is not yet wired. -->
+           Explore layer plays by default; biomas fazem crossfade para a sua
+           camada via bgm-layer. -->
       <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
       <MusicLayer
         url="/assets/audio/bgm_explore.ogg"
@@ -79,16 +94,68 @@
         loop="1"
       ></MusicLayer>
 
-      <!-- 10 km × 10 km terrain — quadtree LOD chunks (levels=4), 2048×2048
-           heightmap. world-size/max-height match public/assets/terrain/
-           terrain.json (world_size 10000, max_height 200) so the heightmap is
-           not squashed. NOTE: the playable area is 25× larger than the old
-           2000/130 config; spawners currently cluster near the centre (±110)
-           and may want enlarging in a follow-up.
-           Physics: one Rapier heightfield per visual chunk, built/freed dynamically. -->
+      <!-- ============================================================
+           BIOMAS — 4 cunhas cardeais (spec §8). O BiomeDetectionSystem
+           aplica tint/fog/ambient/textura-de-terreno e crossfade de BGM
+           quando o herói entra. type: 1=FLORESTA, 2=DESERTO, 3=PÂNTANO,
+           4=MONTANHA. As cunhas começam fora do quadrado central (±28) e
+           são partidas pelas diagonais (±240 nos cantos).
+           ============================================================ -->
+      <!-- NORTE: Floresta Sombria -->
+      <BiomeRegion
+        id="dark-forest"
+        type="1"
+        polygon="[-28,28;28,28;240,240;-240,240]"
+        tint="#1a3320"
+        fog-color="#0d1c14"
+        fog-density="0.05"
+        ambient="#3a4a55"
+        bgm-layer="2"
+        terrain-texture="/assets/textures/forest_floor.png"
+      ></BiomeRegion>
+      <!-- LESTE: Deserto -->
+      <BiomeRegion
+        id="desert"
+        type="2"
+        polygon="[28,-28;28,28;240,240;240,-240]"
+        tint="#c2a878"
+        fog-color="#d8c89a"
+        fog-density="0.015"
+        ambient="#5a4a3a"
+        bgm-layer="3"
+        terrain-texture="/assets/textures/desert_sand.png"
+      ></BiomeRegion>
+      <!-- SUL: Pântano -->
+      <BiomeRegion
+        id="swamp"
+        type="3"
+        polygon="[-28,-28;28,-28;240,-240;-240,-240]"
+        tint="#3a4a30"
+        fog-color="#16241a"
+        fog-density="0.07"
+        ambient="#2a3a30"
+        bgm-layer="4"
+        terrain-texture="/assets/textures/swamp_mud.png"
+      ></BiomeRegion>
+      <!-- OESTE: Picos Gelados -->
+      <BiomeRegion
+        id="frozen-peaks"
+        type="4"
+        polygon="[-28,-28;-28,28;-240,240;-240,-240]"
+        tint="#cdd9e6"
+        fog-color="#dfe8f2"
+        fog-density="0.045"
+        ambient="#aeb9c8"
+        bgm-layer="2"
+        terrain-texture="/assets/textures/snow_peak.png"
+      ></BiomeRegion>
+
+      <!-- Terreno — quadtree LOD chunks. world-size/max-height batem com
+           public/assets/terrain/terrain.json. Física: uma heightfield Rapier
+           por chunk visual, criada/libertada dinamicamente. -->
       <Terrain
         pos="0 0 0"
-        world-size="10000"
+        world-size="2000"
         max-height="200"
         levels="4"
         resolution="128"
@@ -102,217 +169,79 @@
         metalness="0"
         normal-strength="1.0"
         base-color="#8cb866"
+        texture="/assets/textures/vale_grass.png"
       ></Terrain>
 
       <NavMesh></NavMesh>
 
-      <!-- Água gerada dinamicamente a partir de /assets/terrain/terrain.json no bootstrap. -->
-
-      <!-- Fog disabled temporarily -->
-
-      <!-- Terreno XZ ∈ [-5000,5000] centrado na origem (world size 10000). Colocar o herói no centro da ilha + câmera a olhar para dentro do mapa. -->
+      <!-- Herói no centro da praça da cidade. -->
       <PlayerGLTF
         name="hero"
-        pos="0 50 0"
+        pos="0 40 0"
         model-url="/assets/meshes/hero_rigged_animated.glb"
       >
       </PlayerGLTF>
 
-      <!-- The merchant NPC: tends the eastern market stall (banca de peixe/
-           tecidos, at 3.5 30). Stands on the plaza-facing side of the counter,
-           clear of the stall posts. Walk up and press K to trade. -->
-      <GameObject
-        name="merchant"
-        place="at: 3.5 31.4; align-to-terrain: 0"
-        script="merchant.ts"
-      ></GameObject>
-
-      <!-- Treasure chest (model from the project's text3d pipeline). Placed by
-           the spawner (avoid-overlaps + clearance) into the clearing east of the
-           market stalls, near the merchant. Walk up + press F for gold + a heal.
-           Trimesh collider blocks the player. -->
-      <DynamicSpawner
-        count="1"
-        seed="5"
-        region-min="6 0 24"
-        region-max="10 0 30"
-        align-to-terrain="true"
-        avoid-overlaps="true"
-        random-yaw="true"
-        max-slope-deg="25"
-      >
-        <GameObject
-          role="dynamic"
-          name="chest"
-          script="chest.ts"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
-        ></GameObject>
-      </DynamicSpawner>
-
-      <!-- Mystic readables: pre-generated GLBs from public/assets, each glowing
-           emissive until read (F), then granting a one-time reward. Solid
-           trimesh colliders so they block the player like the chest. -->
-      <GameObject
-        name="rune-pillar"
-        place="at: -9 7; align-to-terrain: 1"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
-        script="stone-pillar.ts"
-      ></GameObject>
-      <GameObject
-        name="crystal-shrine"
-        place="at: 7 -9; align-to-terrain: 1"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
-        script="crystal-shrine.ts"
-      ></GameObject>
-      <GameObject
-        name="glow-mushroom"
-        place="at: -6 -5; align-to-terrain: 1"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/mushroom_red_collision.glb; mesh-anchor: base"
-        script="mushroom.ts"
-      ></GameObject>
-
-      <!-- Boss ogre — roams the far corner; high HP, heavy melee swings. -->
-      <GameObject
-        name="boss"
-        place="at: -38 -42; align-to-terrain: 0"
-        script="boss.ts"
-      ></GameObject>
-
-      <!-- Enemies: DynamicSpawner shares the placement core with StaticSpawner
-           (region/seed/count/slope/terrain) but spawns one scripted, animated
-           entity each — never instanced, since they move. -->
-      <DynamicSpawner
-        count="5"
-        seed="11"
-        region-min="-45 0 -34"
-        region-max="-14 0 22"
-        align-to-terrain="false"
-        random-yaw="true"
-        avoid-overlaps="false"
-        max-slope-deg="40"
-      >
-        <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
-      </DynamicSpawner>
-
-      <DynamicSpawner
-        count="5"
-        seed="23"
-        region-min="22 0 -22"
-        region-max="48 0 36"
-        align-to-terrain="false"
-        random-yaw="true"
-        avoid-overlaps="false"
-        max-slope-deg="40"
-      >
-        <GameObject role="enemy" script="slime.ts"></GameObject>
-      </DynamicSpawner>
-
       <!-- ============================================================
-           ALDEIA DO VALE — vila ao norte do spawn, construída só com
-           itens compostos (Composition): cada casa/poço/torre = 1 entidade,
-           1 corpo Rapier, colliders compostos. `place at: X Z` amostra a
-           altura do terreno; align-to-terrain:0 mantém de pé.
-           Zona x∈[-13,13] z∈[18,47]: livre de inimigos
-           (gobelins a oeste, slimes a leste) e dos santuários centrais.
-           SpawnExclusion discs impedem árvores/pedras de nascer na vila.
+           CIDADE CENTRAL (VALE) — dentro da muralha (|x|,|z| ≲ 20).
+           Exclusões impedem vegetação/inimigos de nascer na cidade e nos
+           4 corredores de saída.
            ============================================================ -->
+      <SpawnExclusion at="0 0" radius="30"></SpawnExclusion>
 
-      <!-- Exclusão de spawn: 3 discos largos cobrem toda a área da vila. -->
-      <SpawnExclusion at="0 24" radius="22"></SpawnExclusion>
-      <SpawnExclusion at="0 40" radius="22"></SpawnExclusion>
-      <SpawnExclusion at="0 50" radius="12"></SpawnExclusion>
-
-      <!-- Palanques de cerca na borda sul da vila (marcador visual). -->
-      <Composition place="at: -14 16; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: -8 15; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: 0 15; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: 8 15; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: 14 16; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-
-      <!-- Arco de entrada sul da vila com placa. -->
-      <Composition place="at: 0 15; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="-3 1.4 0" size="0.18 2.8 0.18" color="#4a3018"></Box>
-        <Box pos="3 1.4 0" size="0.18 2.8 0.18" color="#4a3018"></Box>
-        <Box pos="0 2.9 0" size="6.4 0.4 0.25" color="#5a3a20"></Box>
-        <Box pos="0 2.3 0.1" size="2.8 0.7 0.06" color="#e8ddc8"></Box>
-      </Composition>
-
-      <!-- Caminho de terra: do arco sul até a praça do poço. -->
-      <Composition place="at: 0 20; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.04 0" size="3 0.05 5" color="#503c28"></Box>
-      </Composition>
-      <Composition place="at: 0 26; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.04 0" size="3.5 0.05 4" color="#4a3826"></Box>
-      </Composition>
-      <Composition place="at: 0 31; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.04 0" size="4 0.05 4" color="#4a3826"></Box>
+      <!-- Muralha quadrada (semi-lado 22, altura 3) com 4 portões cardeais
+           (vão de 7 m centrado em cada eixo). collider=auto → bloqueia o
+           jogador; os portões são a única passagem. -->
+      <Composition
+        place="at: 0 0; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
+        <!-- Norte (z=+22), vão central -->
+        <Box pos="-12.75 1.5 22" size="18.5 3 0.6" color="#6a5236"></Box>
+        <Box pos="12.75 1.5 22" size="18.5 3 0.6" color="#6a5236"></Box>
+        <!-- Sul (z=-22) -->
+        <Box pos="-12.75 1.5 -22" size="18.5 3 0.6" color="#6a5236"></Box>
+        <Box pos="12.75 1.5 -22" size="18.5 3 0.6" color="#6a5236"></Box>
+        <!-- Leste (x=+22) -->
+        <Box pos="22 1.5 -12.75" size="0.6 3 18.5" color="#6a5236"></Box>
+        <Box pos="22 1.5 12.75" size="0.6 3 18.5" color="#6a5236"></Box>
+        <!-- Oeste (x=-22) -->
+        <Box pos="-22 1.5 -12.75" size="0.6 3 18.5" color="#6a5236"></Box>
+        <Box pos="-22 1.5 12.75" size="0.6 3 18.5" color="#6a5236"></Box>
+        <!-- Torres de canto -->
+        <Box pos="22 2.1 22" size="1.4 4.2 1.4" color="#5a4530"></Box>
+        <Box pos="-22 2.1 22" size="1.4 4.2 1.4" color="#5a4530"></Box>
+        <Box pos="22 2.1 -22" size="1.4 4.2 1.4" color="#5a4530"></Box>
+        <Box pos="-22 2.1 -22" size="1.4 4.2 1.4" color="#5a4530"></Box>
+        <!-- Postes de portão (enquadram cada vão) -->
+        <Box pos="-3.5 1.8 22" size="0.5 3.6 0.7" color="#4a3018"></Box>
+        <Box pos="3.5 1.8 22" size="0.5 3.6 0.7" color="#4a3018"></Box>
+        <Box pos="-3.5 1.8 -22" size="0.5 3.6 0.7" color="#4a3018"></Box>
+        <Box pos="3.5 1.8 -22" size="0.5 3.6 0.7" color="#4a3018"></Box>
+        <Box pos="22 1.8 -3.5" size="0.7 3.6 0.5" color="#4a3018"></Box>
+        <Box pos="22 1.8 3.5" size="0.7 3.6 0.5" color="#4a3018"></Box>
+        <Box pos="-22 1.8 -3.5" size="0.7 3.6 0.5" color="#4a3018"></Box>
+        <Box pos="-22 1.8 3.5" size="0.7 3.6 0.5" color="#4a3018"></Box>
       </Composition>
 
-      <!-- Vasos de flores junto ao poço. -->
-      <Composition place="at: -2.2 34; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.3 0" size="0.3 0.3 0.5" color="#8a5a30"></Cylinder>
-        <Sphere pos="0 0.7 0" size="0.35" color="#dd5577"></Sphere>
+      <!-- Arcos de portão (lintéis) — decorativos, sem colisão para o vão
+           ficar livre. -->
+      <Composition place="at: 0 22; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 3.4 0" size="7.5 0.5 0.7" color="#4a3018"></Box>
       </Composition>
-      <Composition place="at: 2.2 34; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.3 0" size="0.3 0.3 0.5" color="#8a5a30"></Cylinder>
-        <Sphere pos="0 0.7 0" size="0.35" color="#ffdd44"></Sphere>
+      <Composition place="at: 0 -22; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 3.4 0" size="7.5 0.5 0.7" color="#4a3018"></Box>
       </Composition>
-
-      <!-- Fardos de feno perto da casa do ancião. -->
-      <Composition place="at: 6 42; align-to-terrain: 0" body="fixed" collider="auto">
-        <Cylinder pos="0 0.5 0" size="0.9 0.9 1.0" rotation="1.5708 0 0" color="#d4b85a"></Cylinder>
+      <Composition place="at: 22 0; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 3.4 0" size="0.7 0.5 7.5" color="#4a3018"></Box>
       </Composition>
-      <Composition place="at: -6 42; align-to-terrain: 0" body="fixed" collider="auto">
-        <Cylinder pos="0 0.5 0" size="0.8 0.8 0.9" rotation="1.5708 0 0" color="#cda84e"></Cylinder>
+      <Composition place="at: -22 0; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 3.4 0" size="0.7 0.5 7.5" color="#4a3018"></Box>
       </Composition>
 
-      <!-- Palanques laterais (oeste). -->
-      <Composition place="at: -15 22; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: -15 30; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: -15 38; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-
-      <!-- Palanques laterais (leste). -->
-      <Composition place="at: 15 22; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: 15 30; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-      <Composition place="at: 15 38; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#4a3018"></Box>
-      </Composition>
-
-      <!-- Barris perto das bancas de mercado. -->
-      <Composition place="at: -7 35; align-to-terrain: 0" body="fixed" collider="auto">
-        <Cylinder pos="0 0.55 0" size="0.4 0.4 0.8" color="#6b4a2b"></Cylinder>
-        <Cylinder pos="0.5 0.5 0.3" size="0.35 0.35 0.7" color="#5a3a20"></Cylinder>
-      </Composition>
-      <Composition place="at: -8.5 36.5; align-to-terrain: 0" body="fixed" collider="auto">
-        <Cylinder pos="0 0.55 0" size="0.4 0.4 0.8" color="#6b4a2b"></Cylinder>
-      </Composition>
-
-      <!-- Poço central da praça: anel de pedra + água + telhadinho de balde. -->
-      <Composition place="at: 0 34; align-to-terrain: 0" body="fixed" collider="auto">
+      <!-- Praça central: poço + fogueira ladeando o ponto de nascimento. -->
+      <Composition place="at: -7 6; align-to-terrain: 0" body="fixed" collider="auto">
         <Cylinder pos="0 0.45 0" size="1.3 1.3 0.9" color="#9a958c"></Cylinder>
         <Cylinder pos="0 0.55 0" size="1.0 1.0 0.1" color="#2f6fb0"></Cylinder>
         <Box pos="-1.15 1.0 0" size="0.16 1.7 0.16" color="#5a3a20"></Box>
@@ -321,288 +250,150 @@
         <Cylinder pos="0 2.4 0" size="0.05 1.5 0.95" color="#7a3b28"></Cylinder>
         <Box pos="0 1.45 0" size="0.5 0.5 0.5" color="#6b4a2b"></Box>
       </Composition>
-
-      <!-- Fogueira da praça: rodela de pedras + lenha cruzada + chama + luz quente. -->
-      <Composition place="at: 0 26; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition place="at: 7 -6; align-to-terrain: 0" body="fixed" collider="none">
         <Cylinder pos="0 0.12 0" size="1.0 1.15 0.25" color="#6f6a63"></Cylinder>
         <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 0 0.2" color="#5a3a20"></Cylinder>
         <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 1.0 -0.2" color="#6b4a2b"></Cylinder>
-        <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 2.0 0.1" color="#5a3a20"></Cylinder>
         <Sphere pos="0 0.7 0" size="0.55" color="#ff7722"></Sphere>
         <Sphere pos="0 1.05 0" size="0.32" color="#ffcc33"></Sphere>
         <PointLight pos="0 1.1 0" point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2"></PointLight>
       </Composition>
 
-      <!-- Casa A (oeste-sul): paredes de reboco, porta no +Z, telhado de duas águas, chaminé + lareira. -->
-      <Composition place="at: -13 26; align-to-terrain: 0" body="fixed" collider="auto">
-        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
-        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#d8c7a0"></Box>
-        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
-        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
-        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
-        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
-        <Box pos="0 2.5 2.4" size="1.8 0.4 0.3" color="#8a5a30"></Box>
-        <Box pos="-0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
-        <Box pos="0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
-        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#7a3b28"></Box>
-        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#7a3b28"></Box>
-        <Box pos="1.6 3.5 -1.3" size="0.5 1.5 0.5" color="#8a8a8a"></Box>
-        <Box pos="-2.43 1.5 -1.0" size="0.05 0.8 0.8" color="#3a2a18"></Box>
-        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffcc88; intensity: 2; distance: 5; decay: 2"></PointLight>
-      </Composition>
-
-      <!-- Casa B (leste-sul): variação de cor/altura, sem lareira (luz fica no budget). -->
-      <Composition place="at: 13 26; align-to-terrain: 0" body="fixed" collider="auto">
-        <Box pos="0 0.1 0" size="4.4 0.2 4.4" color="#6b4a2b"></Box>
-        <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" color="#c9b48a"></Box>
-        <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
-        <Box pos="2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
-        <Box pos="-1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
-        <Box pos="1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
-        <Box pos="0 2.3 2.1" size="1.6 0.4 0.3" color="#8a5a30"></Box>
-        <Box pos="-1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 0.6" color="#6e4b2a"></Box>
-        <Box pos="1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 -0.6" color="#6e4b2a"></Box>
-        <Box pos="-2.13 1.4 1.0" size="0.05 0.7 0.7" color="#3a2a18"></Box>
-      </Composition>
-
-      <!-- Casa C (oeste-norte): mesma planta, paleta fria, lareira acesa. -->
-      <Composition place="at: -13 44; align-to-terrain: 0" body="fixed" collider="auto">
-        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
-        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#cfc3b0"></Box>
-        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
-        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
-        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
-        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
-        <Box pos="0 2.5 2.4" size="1.8 0.4 0.3" color="#7a5230"></Box>
-        <Box pos="-0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
-        <Box pos="0.9 1.2 2.45" size="0.12 2.4 0.12" color="#5a3a20"></Box>
-        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#55402a"></Box>
-        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#55402a"></Box>
-        <Box pos="-1.6 3.5 -1.3" size="0.5 1.5 0.5" color="#8a8a8a"></Box>
-        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffc070; intensity: 2; distance: 5; decay: 2"></PointLight>
-      </Composition>
-
-      <!-- Casa D (leste-norte): casa longa (longhouse) do ancião — maior, telhado alto. -->
-      <Composition place="at: 13 44; align-to-terrain: 0" body="fixed" collider="auto">
-        <Box pos="0 0.1 0" size="7 0.2 5" color="#6b4a2b"></Box>
-        <Box pos="0 1.6 -2.4" size="7 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="-3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
-        <Box pos="3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
-        <Box pos="-2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="0 1.6 2.4" size="2.5 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="-1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 0.6" color="#7a3b28"></Box>
-        <Box pos="1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 -0.6" color="#7a3b28"></Box>
-        <Box pos="0 4.35 0" size="0.5 0.5 5.4" color="#5a3a20"></Box>
-        <Box pos="-2.5 1.0 2.55" size="0.12 2.0 0.12" color="#5a3a20"></Box>
-        <Box pos="-1.3 1.0 2.55" size="0.12 2.0 0.12" color="#5a3a20"></Box>
-      </Composition>
-
-      <!-- Banca de mercado 1 (frutas): postes + balcão + toldo listrado + caixotes/maçãs. -->
-      <Composition place="at: -3.5 30; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="-1.1 0.8 0.7" size="0.1 1.6 0.1" color="#5a3a20"></Box>
-        <Box pos="1.1 0.8 0.7" size="0.1 1.6 0.1" color="#5a3a20"></Box>
-        <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
-        <Box pos="-0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#b03b3b"></Box>
-        <Box pos="0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#e8ddc8"></Box>
-        <Box pos="-0.6 1.16 0" size="0.5 0.3 0.5" color="#7a5230"></Box>
-        <Sphere pos="-0.6 1.4 0" size="0.13" color="#cc3322"></Sphere>
-        <Sphere pos="0.6 1.16 0.2" size="0.16" color="#e2a02a"></Sphere>
-        <Sphere pos="0.55 1.16 -0.2" size="0.16" color="#88aa33"></Sphere>
-      </Composition>
-
-      <!-- Banca de mercado 2 (peixe/tecidos): variação azul. -->
-      <Composition place="at: 3.5 30; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="-1.1 0.8 0.7" size="0.1 1.6 0.1" color="#5a3a20"></Box>
-        <Box pos="1.1 0.8 0.7" size="0.1 1.6 0.1" color="#5a3a20"></Box>
-        <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
-        <Box pos="-0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#2f6fb0"></Box>
-        <Box pos="0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#e8ddc8"></Box>
-        <Box pos="0.4 1.22 0" size="1.2 0.4 0.7" color="#b8b0a0"></Box>
-        <Box pos="-0.6 1.16 0.1" size="0.5 0.3 0.6" color="#7a5230"></Box>
-      </Composition>
-
-      <!-- Torre de vigia ao norte: base de pedra, plataforma com guarda-corpo, telhado cônico, farol. -->
-      <Composition place="at: 0 50; align-to-terrain: 0" body="fixed" collider="auto">
-        <Box pos="0 2.1 0" size="3 4.2 3" color="#8f8a80"></Box>
-        <Box pos="0 4.4 0" size="3.8 0.3 3.8" color="#6b4a2b"></Box>
-        <Box pos="0 4.9 -1.8" size="3.8 1.0 0.15" color="#7a5230"></Box>
-        <Box pos="0 4.9 1.8" size="3.8 1.0 0.15" color="#7a5230"></Box>
-        <Box pos="-1.8 4.9 0" size="0.15 1.0 3.8" color="#7a5230"></Box>
-        <Box pos="1.8 4.9 0" size="0.15 1.0 3.8" color="#7a5230"></Box>
-        <Cylinder pos="0 6.2 0" size="0.05 2.0 1.8" color="#7a3b28"></Cylinder>
-        <Sphere pos="0 5.6 0" size="0.3" color="#ffd27a"></Sphere>
-        <PointLight pos="0 5.6 0" point-light="color: 0xffd27a; intensity: 3.5; distance: 14; decay: 2"></PointLight>
-        <Box pos="0 0.6 1.55" size="0.9 1.2 0.1" color="#3a2a18"></Box>
-      </Composition>
-
-      <!-- Quadro de avisos da vila (perto da praça). -->
-      <Composition place="at: 3 27; align-to-terrain: 0" body="fixed" collider="auto">
-        <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
-        <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
-        <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
-        <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
-        <Box pos="0 1.9 0" size="2.0 0.2 0.3" rotation="0 0 0" color="#55402a"></Box>
-      </Composition>
-
-      <!-- Tochas de caminho: do spawn (z~18) até a praça, mais cantos da praça.
-           Só chama + luz; sem collider, o jogador passa livre. -->
-      <Composition place="at: 0 18; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
-        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
-      </Composition>
-      <Composition place="at: -3 26; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
-        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
-      </Composition>
-      <Composition place="at: 3 26; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
-        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
-      </Composition>
-      <Composition place="at: -7 34; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
-        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
-      </Composition>
-      <Composition place="at: 7 34; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-        <Cylinder pos="0 1.85 0" size="0.22 0.12 0.2" color="#444444"></Cylinder>
-        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
-      </Composition>
-
-      <!-- ===== Vida da vila: props que sugerem habitantes (Composition) ===== -->
-
-      <!-- Carroça de mercado (leste da praça): rodas = cilindros deitados
-           (eixo→Z via rot X), leito + grades + carga (caixote/sacas). -->
-      <Composition place="at: 10 33; align-to-terrain: 0" body="fixed" collider="auto">
-        <Cylinder pos="-0.8 0.45 0.65" size="0.45 0.45 0.15" rotation="1.5708 0 0" color="#3a2a18"></Cylinder>
-        <Cylinder pos="0.8 0.45 0.65" size="0.45 0.45 0.15" rotation="1.5708 0 0" color="#3a2a18"></Cylinder>
-        <Cylinder pos="-0.8 0.45 -0.65" size="0.45 0.45 0.15" rotation="1.5708 0 0" color="#3a2a18"></Cylinder>
-        <Cylinder pos="0.8 0.45 -0.65" size="0.45 0.45 0.15" rotation="1.5708 0 0" color="#3a2a18"></Cylinder>
-        <Box pos="0 0.85 0" size="2.2 0.25 1.4" color="#8a5a30"></Box>
-        <Box pos="0 1.2 -0.65" size="2.2 0.5 0.1" color="#6b4a2b"></Box>
-        <Box pos="0 1.2 0.65" size="2.2 0.5 0.1" color="#6b4a2b"></Box>
-        <Box pos="-1.05 1.2 0" size="0.1 0.5 1.4" color="#6b4a2b"></Box>
-        <Box pos="1.05 1.2 0" size="0.1 0.5 1.4" color="#6b4a2b"></Box>
-        <Box pos="0 0.9 1.55" size="0.1 0.1 1.2" color="#5a3a20"></Box>
-        <Box pos="-0.4 1.35 0.2" size="0.6 0.5 0.6" color="#7a5230"></Box>
-        <Sphere pos="0.5 1.25 -0.2" size="0.3" color="#c79a5a"></Sphere>
-        <Sphere pos="0.4 1.25 0.3" size="0.28" color="#b88a4a"></Sphere>
-      </Composition>
-
-      <!-- Horta da vila (oeste): canteiro de terra + fileiras + couves/brotos + cerquinha. -->
-      <Composition place="at: -8 40; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.08 0" size="3.6 0.15 2.4" color="#4a3320"></Box>
-        <Box pos="0 0.18 -0.7" size="3.4 0.12 0.4" color="#3a2818"></Box>
-        <Box pos="0 0.18 0" size="3.4 0.12 0.4" color="#3a2818"></Box>
-        <Box pos="0 0.18 0.7" size="3.4 0.12 0.4" color="#3a2818"></Box>
-        <Sphere pos="-1.2 0.35 -0.7" size="0.18" color="#6a9a3a"></Sphere>
-        <Sphere pos="-0.4 0.35 -0.7" size="0.18" color="#6a9a3a"></Sphere>
-        <Sphere pos="0.4 0.35 -0.7" size="0.18" color="#5a8a32"></Sphere>
-        <Sphere pos="1.2 0.35 -0.7" size="0.18" color="#6a9a3a"></Sphere>
-        <Sphere pos="-1.2 0.34 0" size="0.16" color="#7aa84a"></Sphere>
-        <Sphere pos="-0.4 0.34 0" size="0.16" color="#7aa84a"></Sphere>
-        <Sphere pos="0.4 0.34 0" size="0.16" color="#7aa84a"></Sphere>
-        <Sphere pos="1.2 0.34 0" size="0.16" color="#7aa84a"></Sphere>
-        <Sphere pos="-1.2 0.38 0.7" size="0.16" color="#6a9a3a"></Sphere>
-        <Sphere pos="0.0 0.38 0.7" size="0.16" color="#6a9a3a"></Sphere>
-        <Sphere pos="1.2 0.38 0.7" size="0.16" color="#5a8a32"></Sphere>
-        <Box pos="-1.85 0.3 0" size="0.06 0.5 2.4" color="#6b4a2b"></Box>
-        <Box pos="1.85 0.3 0" size="0.06 0.5 2.4" color="#6b4a2b"></Box>
-      </Composition>
-
-      <!-- Espantalho junto à horta: presença humanoide decorativa (poste em cruz,
-           camisa, cabeça de juta, chapéu de palha). -->
-      <Composition place="at: -8 38; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 1.0 0" size="0.12 2.0 0.12" color="#5a3a20"></Box>
-        <Box pos="0 1.5 0" size="1.6 0.1 0.1" color="#6b4a2b"></Box>
-        <Box pos="0 1.25 0" size="0.55 0.7 0.3" color="#a8442a"></Box>
-        <Sphere pos="0 1.85 0" size="0.26" color="#d8c098"></Sphere>
-        <Cylinder pos="0 2.02 0" size="0.55 0.55 0.05" color="#9a7a3a"></Cylinder>
-        <Cylinder pos="0 2.18 0" size="0.06 0.34 0.34" color="#8a6a2a"></Cylinder>
-        <Sphere pos="-0.75 1.5 0" size="0.1" color="#d4b85a"></Sphere>
-        <Sphere pos="0.75 1.5 0" size="0.1" color="#d4b85a"></Sphere>
-      </Composition>
-
-      <!-- Pilha de lenha + sacas perto da casa do ancião: troncos deitados
-           (eixo→X via rot Z), empilhados em pirâmide. -->
-      <Composition place="at: 7 45; align-to-terrain: 0" body="fixed" collider="auto">
-        <Cylinder pos="0 0.16 -0.3" size="0.15 0.15 1.4" rotation="0 0 1.5708" color="#6b4a2b"></Cylinder>
-        <Cylinder pos="0 0.16 0" size="0.15 0.15 1.4" rotation="0 0 1.5708" color="#5a3a20"></Cylinder>
-        <Cylinder pos="0 0.16 0.3" size="0.15 0.15 1.4" rotation="0 0 1.5708" color="#6b4a2b"></Cylinder>
-        <Cylinder pos="0 0.45 -0.15" size="0.15 0.15 1.4" rotation="0 0 1.5708" color="#5a3a20"></Cylinder>
-        <Cylinder pos="0 0.45 0.15" size="0.15 0.15 1.4" rotation="0 0 1.5708" color="#6b4a2b"></Cylinder>
-        <Cylinder pos="0 0.72 0" size="0.15 0.15 1.4" rotation="0 0 1.5708" color="#5a3a20"></Cylinder>
-        <Sphere pos="1.0 0.35 0.4" size="0.35" color="#c79a5a"></Sphere>
-        <Sphere pos="1.4 0.32 0.0" size="0.32" color="#b88a4a"></Sphere>
-      </Composition>
-
-      <!-- Mastro com bandeira da vila junto ao poço. -->
-      <Composition place="at: 2.5 36; align-to-terrain: 0" body="fixed" collider="none">
+      <!-- Mastro com bandeira da cidade junto ao poço. -->
+      <Composition place="at: -7 9; align-to-terrain: 0" body="fixed" collider="none">
         <Box pos="0 2.0 0" size="0.1 4.0 0.1" color="#5a3a20"></Box>
         <Sphere pos="0 4.05 0" size="0.13" color="#d4b84a"></Sphere>
         <Box pos="0.5 3.2 0" size="0.06 1.0 0.8" color="#b03b3b"></Box>
         <Box pos="0.5 3.65 0" size="0.06 0.12 0.84" color="#d4b84a"></Box>
       </Composition>
 
-      <!-- Harvestable rocks (stone). StaticSpawner auto-routes the visual through
-            the instanced pool; the trimesh collider feeds the navmesh. The
-            ResourceNode (T11) tags the yield kind/amount. -->
-      <StaticSpawner
-        profile="tree"
-        count="30"
-        seed="99"
-        region-min="-55 0 -55"
-        region-max="55 0 55"
-        align-to-terrain="0"
-        ground-align="none"
-        scale-min="0.8"
-        scale-max="1.5"
-        avoid-overlaps="1"
-      >
-        <GameObject
-          role="static"
-          script="rock.ts"
-          destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
-        >
-          <GLTFLoader
-            role="visual"
-            url="/assets/meshes/rock_mossy_lod0.glb"
-          ></GLTFLoader>
-          <ResourceNode
-            kind="stone"
-            yield="3"
-            transform="pos: 0 0 0"
-          ></ResourceNode>
-        </GameObject>
-      </StaticSpawner>
+      <!-- Quatro casas nos cantos diagonais (deixam os corredores cardeais
+           livres). Cada casa = 1 entidade com corpo fixo e colisores compostos. -->
+      <!-- Casa NE -->
+      <Composition place="at: 13 13; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
+        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
+        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
+        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#7a3b28"></Box>
+        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#7a3b28"></Box>
+        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffcc88; intensity: 2; distance: 5; decay: 2"></PointLight>
+      </Composition>
+      <!-- Casa NW -->
+      <Composition place="at: -13 13; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="4.4 0.2 4.4" color="#6b4a2b"></Box>
+        <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
+        <Box pos="2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
+        <Box pos="-1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="-1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 0.6" color="#6e4b2a"></Box>
+        <Box pos="1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 -0.6" color="#6e4b2a"></Box>
+      </Composition>
+      <!-- Casa SW (lareira acesa) -->
+      <Composition place="at: -13 -13; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
+        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
+        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
+        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#55402a"></Box>
+        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#55402a"></Box>
+        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffc070; intensity: 2; distance: 5; decay: 2"></PointLight>
+      </Composition>
+      <!-- Casa SE — longhouse do ancião (maior) -->
+      <Composition place="at: 13 -13; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="0 0.1 0" size="7 0.2 5" color="#6b4a2b"></Box>
+        <Box pos="0 1.6 -2.4" size="7 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="-3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
+        <Box pos="3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
+        <Box pos="-2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="-1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 0.6" color="#7a3b28"></Box>
+        <Box pos="1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 -0.6" color="#7a3b28"></Box>
+        <Box pos="0 4.35 0" size="0.5 0.5 5.4" color="#5a3a20"></Box>
+      </Composition>
 
-      <!-- Harvestable oak trees (wood). Same single instancing path, with LOD.
-            ResourceNode (T11) declares the wood yield. -->
+      <!-- Bancas de mercado junto ao poço (oeste da praça). -->
+      <Composition place="at: -10 0; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
+        <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
+        <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
+        <Box pos="-0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#b03b3b"></Box>
+        <Box pos="0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#e8ddc8"></Box>
+        <Sphere pos="-0.6 1.4 0" size="0.13" color="#cc3322"></Sphere>
+        <Sphere pos="0.6 1.16 0.2" size="0.16" color="#e2a02a"></Sphere>
+      </Composition>
+
+      <!-- Quadro de avisos da cidade (perto do portão sul). -->
+      <Composition place="at: 4 -16; align-to-terrain: 0" body="fixed" collider="auto">
+        <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
+        <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
+      </Composition>
+
+      <!-- Tochas da praça (decorativas, sem colisão). -->
+      <Composition place="at: 6 6; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
+      </Composition>
+      <Composition place="at: -6 -6; align-to-terrain: 0" body="fixed" collider="none">
+        <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+        <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
+      </Composition>
+
+      <!-- Comerciante da cidade: banca a leste da praça. Aproxime e [K]. -->
+      <GameObject
+        name="merchant"
+        place="at: 9 2; align-to-terrain: 0"
+        script="merchant.ts"
+      ></GameObject>
+
+      <!-- Santuários / leituras místicas na praça (sólidos, bloqueiam). -->
+      <GameObject
+        name="rune-pillar"
+        place="at: -4 13; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
+        script="stone-pillar.ts"
+      ></GameObject>
+      <GameObject
+        name="crystal-shrine"
+        place="at: 4 14; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
+        script="crystal-shrine.ts"
+      ></GameObject>
+
+      <!-- Baú do tesouro perto da longhouse (canto SE da cidade). [F] -->
+      <GameObject
+        name="chest"
+        place="at: 16 -8; align-to-terrain: 1"
+        script="chest.ts"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
+      ></GameObject>
+
+      <!-- ============================================================
+           ANEL DO VALE — recursos básicos em volta da cidade (fora da
+           muralha, dentro de ~±45). Carvalhos (madeira) + pedras (pedra).
+           ============================================================ -->
       <StaticSpawner
         profile="tree"
-        count="60"
+        count="16"
         seed="7"
-        region-min="-110 0 -110"
-        region-max="110 0 110"
-        align-to-terrain="0"
-        ground-align="none"
+        region-min="-45 0 -45"
+        region-max="45 0 45"
+        align-to-terrain="1"
+        ground-align="auto"
         scale-min="1.4"
-        scale-max="2.6"
+        scale-max="2.4"
         avoid-overlaps="1"
       >
         <GameObject
@@ -618,179 +409,586 @@
             lod1-url="/assets/meshes/tree_oak_lod1.glb"
             lod2-url="/assets/meshes/tree_oak_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode
-            kind="wood"
-            yield="3"
-            transform="pos: 0 0 0"
-          ></ResourceNode>
+          <ResourceNode kind="wood" yield="3" transform="pos: 0 0 0"></ResourceNode>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="14"
+        seed="99"
+        region-min="-45 0 -45"
+        region-max="45 0 45"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.8"
+        scale-max="1.4"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          script="rock.ts"
+          destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod0.glb"></GLTFLoader>
+          <ResourceNode kind="stone" yield="3" transform="pos: 0 0 0"></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
+      <!-- Goblins de aviso logo fora do portão norte (briga inicial). A cidade
+           murada em si fica livre de inimigos — a DynamicSpawner não respeita o
+           SpawnExclusion, por isso a região começa fora da muralha (z>26). -->
+      <DynamicSpawner
+        count="3"
+        seed="11"
+        region-min="-26 0 28"
+        region-max="26 0 42"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
+      </DynamicSpawner>
+
       <!-- ============================================================
-           ROCHEDOS — formações de cenário geradas pelo Rocks3D
-           (rocks3d formation): união de chunks dá overhangs/arcos/fendas
-           que o terreno heightmap (só convexo) não consegue. Cada um é um
-           GLB único; collider trimesh preserva o vão (dá pra passar sob o
-           arco). align-to-terrain:0 = fica de pé; base já em y=0 + mesh-anchor
-           base = assenta no terreno. Espalhados longe da vila (x±16, z15-50).
+           NORTE — FLORESTA SOMBRIA  (z ∈ [40,160])
+           Pinheiros densos, cogumelos brilhantes, lobos + sombras, cabana
+           da bruxa + chefe Bruxa no fundo.
            ============================================================ -->
+      <StaticSpawner
+        profile="tree"
+        count="26"
+        seed="301"
+        region-min="-80 0 45"
+        region-max="80 0 160"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="1.6"
+        scale-max="3.0"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: dust; hits: 3; spark-on-hit: 1"
+          script="tree.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/pine_dark_lod0.glb"
+            lod1-url="/assets/meshes/pine_dark_lod1.glb"
+            lod2-url="/assets/meshes/pine_dark_lod2.glb"
+          ></GLTFLoader>
+          <ResourceNode kind="wood" yield="3" transform="pos: 0 0 0"></ResourceNode>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="14"
+        seed="311"
+        region-min="-80 0 45"
+        region-max="80 0 160"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="1.2"
+        scale-max="2.2"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/tree_pine_lod0.glb"
+            lod1-url="/assets/meshes/tree_pine_lod1.glb"
+            lod2-url="/assets/meshes/tree_pine_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="12"
+        seed="321"
+        region-min="-80 0 45"
+        region-max="80 0 160"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.6"
+        scale-max="1.1"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb"></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
 
-      <!-- base-y-offset negativo enterra a base no terreno → o rochedo *emerge*
-           do chão (bedrock aflorando) em vez de plantado no gramado. Arco enterra
-           pouco p/ manter o vão livre. -->
-
-      <!-- Paredão norte: penhascos como pano de fundo atrás da vila. -->
-      <GameObject place="at: -30 60; align-to-terrain: 0; base-y-offset: -3.0"
+      <!-- Cabana da bruxa (marco da floresta). -->
+      <GameObject
+        name="witch-hut"
+        place="at: -10 135; align-to-terrain: 1"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_4.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_4.glb"></GLTFLoader>
+        collider="shape: trimesh; mesh-url: /assets/meshes/witch_hut_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader role="visual" url="/assets/meshes/witch_hut_lod0.glb"></GLTFLoader>
       </GameObject>
-      <GameObject place="at: 26 63; align-to-terrain: 0; base-y-offset: -3.0"
+
+      <DynamicSpawner
+        count="6"
+        seed="101"
+        region-min="-75 0 45"
+        region-max="75 0 150"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="enemies/wolf.ts"></GameObject>
+      </DynamicSpawner>
+      <DynamicSpawner
+        count="4"
+        seed="202"
+        region-min="-75 0 45"
+        region-max="75 0 150"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="enemies/shade.ts"></GameObject>
+      </DynamicSpawner>
+      <!-- Chefe: Bruxa da Floresta (elite, fundo norte). -->
+      <GameObject
+        name="boss-witch"
+        place="at: 8 145; align-to-terrain: false"
+        script="bosses/witch.ts"
+      ></GameObject>
+
+      <!-- ============================================================
+           LESTE — DESERTO  (x ∈ [40,160])
+           Cactos, arbustos secos, pilares em ruínas, escorpiões + bandidos,
+           ninho de escorpiões + chefe Verme das Areias.
+           ============================================================ -->
+      <StaticSpawner
+        profile="tree"
+        count="18"
+        seed="302"
+        region-min="45 0 -75"
+        region-max="160 0 75"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.9"
+        scale-max="1.8"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          destructible="popup-text: Cactus; popup-color: #6a9a3a; preset: dust; hits: 2; spark-on-hit: 1"
+          script="tree.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/cactus_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/cactus_lod0.glb"
+            lod1-url="/assets/meshes/cactus_lod1.glb"
+            lod2-url="/assets/meshes/cactus_lod2.glb"
+          ></GLTFLoader>
+          <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0"></ResourceNode>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="14"
+        seed="312"
+        region-min="45 0 -75"
+        region-max="160 0 75"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.7"
+        scale-max="1.3"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader role="visual" url="/assets/meshes/dead_bush_lod0.glb"></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
+      <!-- Ruínas do deserto (pilares dispersos). -->
+      <StaticSpawner
+        profile="tree"
+        count="8"
+        seed="322"
+        region-min="60 0 -60"
+        region-max="150 0 60"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.9"
+        scale-max="1.6"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb"></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
+
+      <!-- Ninho de escorpiões (marco do deserto). -->
+      <GameObject
+        name="scorpion-nest"
+        place="at: 130 8; align-to-terrain: 1"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1.glb; mesh-anchor: base">
+        collider="shape: trimesh; mesh-url: /assets/meshes/scorpion_nest_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader role="visual" url="/assets/meshes/scorpion_nest_lod0.glb"></GLTFLoader>
+      </GameObject>
+
+      <DynamicSpawner
+        count="6"
+        seed="303"
+        region-min="45 0 -65"
+        region-max="150 0 65"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="enemies/scorpion.ts"></GameObject>
+      </DynamicSpawner>
+      <DynamicSpawner
+        count="3"
+        seed="404"
+        region-min="45 0 -65"
+        region-max="150 0 65"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="enemies/bandit.ts"></GameObject>
+      </DynamicSpawner>
+      <!-- Chefe: Verme das Areias (elite, fundo leste). -->
+      <GameObject
+        name="boss-sandwyrm"
+        place="at: 145 -6; align-to-terrain: false"
+        script="bosses/sand-wyrm.ts"
+      ></GameObject>
+
+      <!-- ============================================================
+           SUL — PÂNTANO  (z ∈ [-160,-40])
+           Salgueiros mortos, árvores secas, nenúfares, choça do pântano,
+           boglings + mosquitos, chefe Bog Warden.
+           ============================================================ -->
+      <StaticSpawner
+        profile="tree"
+        count="20"
+        seed="305"
+        region-min="-80 0 -160"
+        region-max="80 0 -45"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="1.4"
+        scale-max="2.6"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: dust; hits: 3; spark-on-hit: 1"
+          script="tree.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/dead_willow_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/dead_willow_lod0.glb"
+            lod1-url="/assets/meshes/dead_willow_lod1.glb"
+            lod2-url="/assets/meshes/dead_willow_lod2.glb"
+          ></GLTFLoader>
+          <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0"></ResourceNode>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="12"
+        seed="315"
+        region-min="-80 0 -160"
+        region-max="80 0 -45"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="1.2"
+        scale-max="2.2"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/dead_tree_lod0.glb"
+            lod1-url="/assets/meshes/dead_tree_lod1.glb"
+            lod2-url="/assets/meshes/dead_tree_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="16"
+        seed="325"
+        region-min="-80 0 -150"
+        region-max="80 0 -50"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.8"
+        scale-max="1.5"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader role="visual" url="/assets/meshes/lily_pad_lod0.glb"></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
+
+      <!-- Choça do pântano (marco). -->
+      <GameObject
+        name="swamp-shack"
+        place="at: 10 -130; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/swamp_shack_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader role="visual" url="/assets/meshes/swamp_shack_lod0.glb"></GLTFLoader>
+      </GameObject>
+
+      <DynamicSpawner
+        count="8"
+        seed="505"
+        region-min="-75 0 -150"
+        region-max="75 0 -45"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="enemies/bogling.ts"></GameObject>
+      </DynamicSpawner>
+      <DynamicSpawner
+        count="4"
+        seed="606"
+        region-min="-75 0 -150"
+        region-max="75 0 -45"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="40"
+      >
+        <GameObject role="enemy" script="enemies/mosquito.ts"></GameObject>
+      </DynamicSpawner>
+      <!-- Chefe: Bog Warden (elite, fundo sul). -->
+      <GameObject
+        name="boss-bogwarden"
+        place="at: -6 -145; align-to-terrain: false"
+        script="bosses/bog-warden.ts"
+      ></GameObject>
+
+      <!-- ============================================================
+           OESTE — PICOS GELADOS  (x ∈ [-160,-40])
+           Formações rochosas (rocks3d), pinheiros gelados, goblins + lobos
+           + slimes de gelo, chefe Ogro da Montanha (gated, final boss).
+           ============================================================ -->
+      <StaticSpawner
+        profile="tree"
+        count="16"
+        seed="307"
+        region-min="-160 0 -75"
+        region-max="-45 0 75"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="1.4"
+        scale-max="2.6"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          destructible="popup-text: Frost Wood; popup-color: #aeb9c8; preset: dust; hits: 3; spark-on-hit: 1"
+          script="tree.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/pine_dark_lod0.glb"
+            lod1-url="/assets/meshes/pine_dark_lod1.glb"
+            lod2-url="/assets/meshes/pine_dark_lod2.glb"
+          ></GLTFLoader>
+          <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0"></ResourceNode>
+        </GameObject>
+      </StaticSpawner>
+      <StaticSpawner
+        profile="tree"
+        count="22"
+        seed="317"
+        region-min="-160 0 -75"
+        region-max="-45 0 75"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.9"
+        scale-max="1.8"
+        avoid-overlaps="1"
+      >
+        <GameObject
+          role="static"
+          script="rock.ts"
+          destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod0.glb"></GLTFLoader>
+          <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0"></ResourceNode>
+        </GameObject>
+      </StaticSpawner>
+
+      <!-- Formações rochosas (rocks3d) — marcos dos picos. -->
+      <GameObject place="at: -120 20; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1.glb; mesh-anchor: base">
         <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1.glb"></GLTFLoader>
       </GameObject>
-
-      <!-- Arco de pedra: marco a leste (dá pra passar por baixo). -->
-      <GameObject place="at: 44 4; align-to-terrain: 0; base-y-offset: -1.2"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_arch_3.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_arch_3.glb"></GLTFLoader>
-      </GameObject>
-
-      <!-- Agulhas (hoodoos): oeste e arena do chefe. -->
-      <GameObject place="at: -54 -8; align-to-terrain: 0; base-y-offset: -2.2"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_spire-cluster_7.glb; mesh-anchor: base">
+      <GameObject place="at: -135 -30; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_spire-cluster_7.glb; mesh-anchor: base">
         <GLTFLoader role="visual" url="/assets/meshes/form_spire-cluster_7.glb"></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -46 -50; align-to-terrain: 0; base-y-offset: -2.2"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_spire-cluster_12.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_spire-cluster_12.glb"></GLTFLoader>
-      </GameObject>
-
-      <!-- Afloramentos rochosos espalhados (cobertura/relevo). -->
-      <GameObject place="at: -24 28; align-to-terrain: 0; base-y-offset: -2.2"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_5.glb"></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 31 -28; align-to-terrain: 0; base-y-offset: -2.2"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2.glb; mesh-anchor: base">
+      <GameObject place="at: -90 -50; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2.glb; mesh-anchor: base">
         <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2.glb"></GLTFLoader>
       </GameObject>
-      <GameObject place="at: 53 44; align-to-terrain: 0; base-y-offset: -2.0"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_8.glb"></GLTFLoader>
-      </GameObject>
-
-      <!-- Pilhas de pedra equilibradas. -->
-      <GameObject place="at: 16 57; align-to-terrain: 0; base-y-offset: -1.3"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6.glb; mesh-anchor: base">
+      <GameObject place="at: -100 55; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6.glb; mesh-anchor: base">
         <GLTFLoader role="visual" url="/assets/meshes/form_stack_6.glb"></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -48 18; align-to-terrain: 0; base-y-offset: -1.3"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_11.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_stack_11.glb"></GLTFLoader>
-      </GameObject>
 
-      <!-- Bases rochosas + scree: disco de pedra baixo (quebra a grama uniforme)
-           + pedregulhos meio-enterrados, dando transição rocha↔grama em volta dos
-           rochedos maiores. Decorativo (collider none). -->
-      <Composition place="at: 44 4; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.08 0" size="4.6 4.6 0.14" color="#514c44"></Cylinder>
-        <Sphere pos="-2.8 0.25 1.6" size="0.6" color="#6f6a60"></Sphere>
-        <Sphere pos="3.0 0.2 -1.1" size="0.5" color="#76716a"></Sphere>
-        <Sphere pos="-1.6 0.18 -2.6" size="0.45" color="#66615a"></Sphere>
-        <Sphere pos="3.4 0.22 2.0" size="0.55" color="#7a756c"></Sphere>
-        <Sphere pos="0.6 0.16 3.2" size="0.42" color="#6f6a60"></Sphere>
-      </Composition>
-      <Composition place="at: -30 60; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.08 0" size="7.6 7.6 0.14" color="#514c44"></Cylinder>
-        <Sphere pos="-5.5 0.3 2.4" size="0.8" color="#6f6a60"></Sphere>
-        <Sphere pos="5.8 0.25 -1.6" size="0.65" color="#76716a"></Sphere>
-        <Sphere pos="-3.2 0.2 -3.4" size="0.55" color="#66615a"></Sphere>
-        <Sphere pos="4.6 0.28 3.2" size="0.7" color="#7a756c"></Sphere>
-        <Sphere pos="1.2 0.18 4.2" size="0.5" color="#6f6a60"></Sphere>
-        <Sphere pos="-6.2 0.2 -2.0" size="0.5" color="#76716a"></Sphere>
-      </Composition>
-      <Composition place="at: 26 63; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.08 0" size="7.8 7.8 0.14" color="#514c44"></Cylinder>
-        <Sphere pos="-5.8 0.3 -2.2" size="0.78" color="#6f6a60"></Sphere>
-        <Sphere pos="5.4 0.25 1.8" size="0.62" color="#76716a"></Sphere>
-        <Sphere pos="-3.0 0.2 3.6" size="0.55" color="#66615a"></Sphere>
-        <Sphere pos="4.8 0.28 -3.0" size="0.68" color="#7a756c"></Sphere>
-        <Sphere pos="0.8 0.18 -4.4" size="0.5" color="#6f6a60"></Sphere>
-        <Sphere pos="6.0 0.2 -0.6" size="0.5" color="#76716a"></Sphere>
-      </Composition>
-      <Composition place="at: -54 -8; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.08 0" size="3.2 3.2 0.14" color="#514c44"></Cylinder>
-        <Sphere pos="-2.0 0.22 1.1" size="0.52" color="#6f6a60"></Sphere>
-        <Sphere pos="2.1 0.18 -0.8" size="0.46" color="#76716a"></Sphere>
-        <Sphere pos="0.4 0.16 2.2" size="0.4" color="#66615a"></Sphere>
-      </Composition>
-      <Composition place="at: -46 -50; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.08 0" size="3.2 3.2 0.14" color="#514c44"></Cylinder>
-        <Sphere pos="2.0 0.22 1.2" size="0.52" color="#6f6a60"></Sphere>
-        <Sphere pos="-2.1 0.18 -0.9" size="0.46" color="#76716a"></Sphere>
-        <Sphere pos="-0.4 0.16 -2.2" size="0.4" color="#66615a"></Sphere>
-      </Composition>
+      <DynamicSpawner
+        count="6"
+        seed="707"
+        region-min="-150 0 -65"
+        region-max="-45 0 65"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="45"
+      >
+        <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
+      </DynamicSpawner>
+      <DynamicSpawner
+        count="4"
+        seed="808"
+        region-min="-150 0 -65"
+        region-max="-45 0 65"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="45"
+      >
+        <GameObject role="enemy" script="slime.ts"></GameObject>
+      </DynamicSpawner>
+      <DynamicSpawner
+        count="3"
+        seed="909"
+        region-min="-150 0 -65"
+        region-max="-45 0 65"
+        align-to-terrain="false"
+        random-yaw="true"
+        avoid-overlaps="false"
+        max-slope-deg="45"
+      >
+        <GameObject role="enemy" script="enemies/wolf.ts"></GameObject>
+      </DynamicSpawner>
+      <!-- Chefe final: Ogro da Montanha — gated (aparece quando todos os
+           inimigos normais morrem), no fundo oeste. -->
+      <GameObject
+        name="boss"
+        place="at: -145 6; align-to-terrain: false"
+        script="boss.ts"
+      ></GameObject>
 
       <!-- ============================================================
-           ESCARPA SUL — cordilheira contínua que fecha o vale ao sul.
-           Cliffs/outcrops alinhados e sobrepostos formam uma parede rochosa
-           (lógica geológica, vs rochas soltas). Collider convex-hull (shape:
-           hull) porque é barreira (sem walk-under) → bem mais leve no navmesh
-           que trimesh. Bases enterradas + apron de pedra contínuo no pé.
+           NPCs DE QUEST — 3 por bioma, perto de cada portão. Cada um =
+           <Composition> com torso colorido por bioma + <DialogueNPC>.
+           dialogue-id == quest id (JSON).
            ============================================================ -->
-
-      <!-- Apron rochoso contínuo no pé da escarpa + scree espalhado. -->
-      <Composition place="at: -3 -55; align-to-terrain: 0" body="fixed" collider="none">
-        <Box pos="0 0.09 0" size="64 0.18 7" color="#49433b"></Box>
-        <Sphere pos="-28 0.3 2.6" size="0.8" color="#6f6a60"></Sphere>
-        <Sphere pos="-21 0.25 -2.2" size="0.62" color="#76716a"></Sphere>
-        <Sphere pos="-14 0.3 2.9" size="0.7" color="#66615a"></Sphere>
-        <Sphere pos="-6 0.22 -2.6" size="0.55" color="#7a756c"></Sphere>
-        <Sphere pos="1 0.3 2.4" size="0.75" color="#6f6a60"></Sphere>
-        <Sphere pos="8 0.25 -2.0" size="0.6" color="#76716a"></Sphere>
-        <Sphere pos="15 0.3 2.8" size="0.68" color="#66615a"></Sphere>
-        <Sphere pos="23 0.22 -1.8" size="0.55" color="#7a756c"></Sphere>
-        <Sphere pos="29 0.28 2.2" size="0.6" color="#6f6a60"></Sphere>
+      <!-- Floresta (norte) -->
+      <Composition name="npc_forest_wolves" place="at: -8 30; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="forest_wolves" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a6a3a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
+      </Composition>
+      <Composition name="npc_forest_shades" place="at: 8 34; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="forest_shades" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#6a3a8a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
+      </Composition>
+      <Composition name="npc_forest_darkwood" place="at: 0 50; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="forest_darkwood" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#7a5230"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
       </Composition>
 
-      <!-- Linha da parede (oeste → leste), sobreposta p/ leitura contínua. -->
-      <GameObject place="at: -32 -57; align-to-terrain: 0; base-y-offset: -2.5"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: hull; mesh-url: /assets/meshes/form_outcrop_30.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_30.glb"></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: -20 -58; align-to-terrain: 0; base-y-offset: -3.5"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: hull; mesh-url: /assets/meshes/form_cliff_22.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_22.glb"></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: -2 -58; align-to-terrain: 0; base-y-offset: -3.5"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: hull; mesh-url: /assets/meshes/form_cliff_20.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_20.glb"></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 14 -58; align-to-terrain: 0; base-y-offset: -3.5"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: hull; mesh-url: /assets/meshes/form_cliff_21.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_21.glb"></GLTFLoader>
-      </GameObject>
-      <GameObject place="at: 27 -57; align-to-terrain: 0; base-y-offset: -2.5"
-        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-        collider="shape: hull; mesh-url: /assets/meshes/form_outcrop_31.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_31.glb"></GLTFLoader>
-      </GameObject>
+      <!-- Deserto (leste) -->
+      <Composition name="npc_desert_scorpions" place="at: 30 -8; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="desert_scorpions" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#d98a2a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
+      </Composition>
+      <Composition name="npc_desert_bandits" place="at: 34 8; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="desert_bandits" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#c46a1a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
+      </Composition>
+      <Composition name="npc_desert_ruins" place="at: 50 0; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="desert_ruins" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#e0a040"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
+      </Composition>
 
-      <!-- Post-processing: bloom + vignette + SMAA + AGX tonemap + SSAO (moderate). CA off. Keys 1-6 toggle at runtime. -->
+      <!-- Pântano (sul) -->
+      <Composition name="npc_swamp_boglings" place="at: -8 -30; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="swamp_boglings" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#5a7a4a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
+      </Composition>
+      <Composition name="npc_swamp_bogwarden" place="at: 8 -34; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="swamp_bogwarden" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a5a4a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
+      </Composition>
+      <Composition name="npc_swamp_bogmoss" place="at: 0 -50; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="swamp_bogmoss" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#6a8a5a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
+      </Composition>
+
+      <!-- Picos Gelados (oeste) -->
+      <Composition name="npc_peaks_goblins" place="at: -30 -8; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="peaks_goblins" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#4a6a8a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
+      </Composition>
+      <Composition name="npc_peaks_frost" place="at: -34 8; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="peaks_frost" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#5a8ab0"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
+      </Composition>
+      <Composition name="npc_peaks_ogre" place="at: -50 0; align-to-terrain: 1" body="none" collider="none">
+        <DialogueNPC dialogue-id="peaks_ogre" portrait-url="" voice-sfx=""></DialogueNPC>
+        <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
+        <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a4a6a"></Box>
+        <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
+      </Composition>
+
+      <!-- Câmera 3ª pessoa. Teclas 1-6 alternam pós-processamento. -->
       <ThirdPersonCamera
         distance="4"
         height="1.6"
@@ -800,77 +998,36 @@
         mouse-sensitivity="0.003"
       ></ThirdPersonCamera>
 
-      <!-- SpawnGroups disabled for perf testing -->
-
       <PostFxDebugToggle></PostFxDebugToggle>
 
-      <!-- HUD: declarative screen-space layer + widgets (engine HudPlugin,
-           T20–T27). Bars/chips target the hero entity by name. -->
+      <!-- HUD: camada declarativa screen-space + widgets (engine HudPlugin). -->
       <HudScreenLayer></HudScreenLayer>
       <HealthBar target-entity="hero" icon="❤"></HealthBar>
       <XpBar target-entity="hero"></XpBar>
-      <ResourceChip
-        resource="gold"
-        icon="🪙"
-        target-entity="hero"
-      ></ResourceChip>
-      <ResourceChip
-        resource="wood"
-        icon="🪵"
-        target-entity="hero"
-      ></ResourceChip>
-      <ResourceChip
-        resource="stone"
-        icon="🪨"
-        target-entity="hero"
-      ></ResourceChip>
+      <ResourceChip resource="gold" icon="🪙" target-entity="hero"></ResourceChip>
+      <ResourceChip resource="wood" icon="🪵" target-entity="hero"></ResourceChip>
+      <ResourceChip resource="stone" icon="🪨" target-entity="hero"></ResourceChip>
       <Minimap range="60"></Minimap>
       <Compass></Compass>
       <BossBar target-entity="boss"></BossBar>
-      <InteractionPrompt
-        key="F"
-        range="4.5"
-        position="bottom-center"
-      ></InteractionPrompt>
+      <InteractionPrompt key="F" range="4.5" position="bottom-center"></InteractionPrompt>
 
-      <!-- Pause menu: tabbed modal toggled with [Q] (Escape drops canvas focus in
-           Firefox). Skills / Inventory / Options tabs (engine HudPlugin). Options
-           also hosts Save / Load / Controls. -->
-      <TabbedModal
-        id="pause"
-        key="q"
-        target-entity="hero"
-        title-key="modal.pause"
-      >
+      <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto de
+           um <DialogueNPC>; QuestsTab lista as quests ativas. -->
+      <DialogueBalloon></DialogueBalloon>
+
+      <!-- Menu de pausa: modal tabbed com [Q]. -->
+      <TabbedModal id="pause" key="q" target-entity="hero" title-key="modal.pause">
         <SkillsTab></SkillsTab>
         <InventoryTab columns="5"></InventoryTab>
         <OptionsTab>
-          <OptionRow
-            id="music-volume"
-            type="slider"
-            label-key="options.music"
-            min="0"
-            max="100"
-            step="5"
-            default="70"
-          ></OptionRow>
-          <OptionRow
-            id="sfx-volume"
-            type="slider"
-            label-key="options.sfx"
-            min="0"
-            max="100"
-            step="5"
-            default="80"
-          ></OptionRow>
+          <OptionRow id="music-volume" type="slider" label-key="options.music" min="0" max="100" step="5" default="70"></OptionRow>
+          <OptionRow id="sfx-volume" type="slider" label-key="options.sfx" min="0" max="100" step="5" default="80"></OptionRow>
           <OptionRow id="save" type="button" label-key="options.save"></OptionRow>
           <OptionRow id="load" type="button" label-key="options.load"></OptionRow>
-          <OptionRow
-            id="controls"
-            type="note"
-            label-key="options.controls"
-          ></OptionRow>
+          <OptionRow id="controls" type="note" label-key="options.controls"></OptionRow>
         </OptionsTab>
+        <QuestsTab></QuestsTab>
       </TabbedModal>
     </Scene>
 

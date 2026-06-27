@@ -1,0 +1,74 @@
+[
+  {
+    "id": "peaks_goblins",
+    "npc": "npc_peaks_goblins",
+    "biome": "frozen-peaks",
+    "title": "Sentinela dos Picos",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Goblins desceram das cavernas geladas e saqueiam a trilha.",
+      "Abata 5 deles e te recompenso com ouro."
+    ],
+    "lines_progress": ["Ainda restam {remaining} goblins nas encostas."],
+    "lines_complete": ["A trilha está mais segura. Tome sua recompensa."],
+    "objective": {
+      "type": "kill",
+      "target": "goblin",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 220,
+      "xp": 170,
+      "items": ["potion:2"]
+    }
+  },
+  {
+    "id": "peaks_frost",
+    "npc": "npc_peaks_frost",
+    "biome": "frozen-peaks",
+    "title": "Alquimista do Gelo",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Slimes de gelo se multiplicam perto das fontes congeladas.",
+      "Derreta 5 deles e te darei poções."
+    ],
+    "lines_progress": ["Faltam {remaining} slimes de gelo."],
+    "lines_complete": ["Excelente! As fontes voltarão a fluir. Tome isto."],
+    "objective": {
+      "type": "kill",
+      "target": "slime",
+      "count": 5
+    },
+    "rewards": {
+      "gold": 260,
+      "xp": 200,
+      "items": ["potion:3"]
+    }
+  },
+  {
+    "id": "peaks_ogre",
+    "npc": "npc_peaks_ogre",
+    "biome": "frozen-peaks",
+    "title": "Batedora da Montanha",
+    "portrait": "",
+    "voice": "",
+    "lines_intro": [
+      "Lobos das neves cercam o caminho para o covil do ogro.",
+      "Elimine 4 e abrirei a passagem para você."
+    ],
+    "lines_progress": ["Restam {remaining} lobos das neves."],
+    "lines_complete": ["O caminho está livre. Cuidado com o ogro lá no alto."],
+    "objective": {
+      "type": "kill",
+      "target": "wolf",
+      "count": 4
+    },
+    "rewards": {
+      "gold": 320,
+      "xp": 260,
+      "items": ["potion:2"]
+    }
+  }
+]

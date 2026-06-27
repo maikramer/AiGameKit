@@ -1,8 +1,9 @@
-import { createCreatureBehaviours } from './creature';
-import { addGold } from '../game/economy';
+// bogling — swamp biome (Phase 1 placeholder uses goblin GLB)
+import { createCreatureBehaviours } from '../creature';
+import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
-  modelUrl: '/assets/meshes/slime_rigged_animated.glb',
+  modelUrl: '/assets/meshes/bogling_rigged_animated.glb',
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',
@@ -10,16 +11,14 @@ const behaviours = createCreatureBehaviours({
     lunge: 'Animator3D_Jump',
     death: 'Animator3D_Fall',
   },
-  hp: 50,
-  chaseSpeed: 1.8,
-  wanderSpeed: 0.4,
-  wanderRadius: 8,
-  attackDamage: 18,
-  lootGoldMin: 15,
-  lootGoldMax: 30,
-  strafe: true,
-  lowHpKiteFrac: 0.35,
-  enemyType: 'slime',
+  hp: 30,
+  chaseSpeed: 2.8,
+  wanderSpeed: 1.0,
+  wanderRadius: 6,
+  attackDamage: 8,
+  lootGoldMin: 4,
+  lootGoldMax: 10,
+  enemyType: 'bogling',
   onDeathLoot: (state, gold, x, y, z) => addGold(gold, x, y, z),
 });
 

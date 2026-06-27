@@ -1,0 +1,18 @@
+{
+  "timestamp": 1782525753.966029,
+  "prompt": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling, bright green grass meadow with small flowers",
+  "params": {
+    "seed": 161501651,
+    "prompt_final": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling, bright green grass meadow with small flowers",
+    "prompt": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling, bright green grass meadow with small flowers",
+    "negative_prompt": "brown, dead, mud, artificial",
+    "guidance_scale": 7.5,
+    "num_inference_steps": 50,
+    "width": 512,
+    "height": 512,
+    "cfg_scale": 7.5,
+    "lora_strength": 1.0
+  },
+  "image_path": "vale_grass.png",
+  "filename": "vale_grass.png"
+}
