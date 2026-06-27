@@ -116,8 +116,8 @@ def build_formation_glb(
 
 
 def _texture_and_export(
-    mesh,  # noqa: ANN001 - trimesh.Trimesh, avoided to keep import light
-    preset,  # noqa: ANN001 - RockPreset
+    mesh,
+    preset,
     output_path: Path,
     *,
     seed: int,

@@ -75,7 +75,7 @@ def generate_rock(
     type_name: str | None = None,
     seed: int | None = None,
     quality: str = "medium",
-    preset: "RockPreset | None" = None,  # noqa: F821, UP037
+    preset: "RockPreset | None" = None,  # noqa: UP037
 ) -> "trimesh.Trimesh":  # noqa: F821, UP037
     """Generate a procedural rock mesh.
 

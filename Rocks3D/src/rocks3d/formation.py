@@ -82,10 +82,10 @@ def _chunk_preset(
 
 
 def _place(
-    mesh: "trimesh.Trimesh",
+    mesh: trimesh.Trimesh,
     translate: tuple[float, float, float],
     rot_euler: tuple[float, float, float] = (0.0, 0.0, 0.0),
-) -> "trimesh.Trimesh":
+) -> trimesh.Trimesh:
     """Rotate (XYZ euler radians) then translate a chunk in place."""
     import trimesh
 
@@ -95,7 +95,7 @@ def _place(
     return mesh
 
 
-def _combine(pieces: list["trimesh.Trimesh"]) -> "trimesh.Trimesh":
+def _combine(pieces: list[trimesh.Trimesh]) -> trimesh.Trimesh:
     """Union the chunks into a single solid; fall back to a plain concatenation
     if the boolean engine fails (still renders fine for scenery)."""
     import trimesh
@@ -106,12 +106,12 @@ def _combine(pieces: list["trimesh.Trimesh"]) -> "trimesh.Trimesh":
         merged = trimesh.boolean.union(pieces)
         if merged is not None and len(merged.vertices) > 0 and len(merged.faces) > 0:
             return merged
-    except Exception:  # noqa: BLE001 - boolean engines raise a zoo of errors
+    except Exception:
         pass
     return trimesh.util.concatenate(pieces)
 
 
-def _finalize(formation: "trimesh.Trimesh") -> "trimesh.Trimesh":
+def _finalize(formation: trimesh.Trimesh) -> trimesh.Trimesh:
     """Recentre on XZ and drop the formation so its base sits at ``y = 0``."""
     lo, hi = formation.bounds
     centre = (lo + hi) * 0.5
@@ -119,7 +119,7 @@ def _finalize(formation: "trimesh.Trimesh") -> "trimesh.Trimesh":
     return formation
 
 
-def _chunk(rng: np.random.Generator, **kwargs) -> "trimesh.Trimesh":
+def _chunk(rng: np.random.Generator, **kwargs) -> trimesh.Trimesh:
     preset = _chunk_preset(**kwargs)
     return generate_rock(preset=preset, seed=int(rng.integers(0, 2**31)))
 
@@ -129,7 +129,7 @@ def generate_formation(
     seed: int | None = None,
     quality: str = "medium",
     chunks: int | None = None,
-) -> "trimesh.Trimesh":
+) -> trimesh.Trimesh:
     """Generate one rock formation mesh of *style*.
 
     Args:
