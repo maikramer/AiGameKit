@@ -328,6 +328,35 @@ def _batch_signal_handler(signum: int, frame: object) -> None:
 atexit.register(_batch_cleanup)
 
 
+def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
+    """Parse a text2d batch manifest file.
+
+    Accepts either a JSON array of item objects or a single item object.
+    Each item must contain ``id``, ``prompt`` and ``output``; missing keys
+    raise ``ValueError`` listing the offending item index.
+
+    Raises:
+        json.JSONDecodeError: file is not valid JSON.
+        OSError: file cannot be read.
+        ValueError: parsed JSON is neither array nor object, or an item is
+            missing required keys.
+    """
+    parsed = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if isinstance(parsed, dict):
+        items: list[dict[str, Any]] = [parsed]
+    elif isinstance(parsed, list):
+        items = parsed
+    else:
+        raise ValueError(
+            f"esperado array JSON ou objeto único, recebido {type(parsed).__name__}"
+        )
+    for i, item in enumerate(items):
+        missing = [k for k in ("id", "prompt", "output") if k not in item]
+        if missing:
+            raise ValueError(f"Item {i} falta: {', '.join(missing)}")
+    return items
+
+
 @cli.command("generate-batch")
 @click.argument("manifest", type=click.Path(exists=True, dir_okay=False))
 @click.option("--output-dir", "-O", type=click.Path(), default=".", help="Diretório base para outputs relativos.")
@@ -400,16 +429,13 @@ def generate_batch_cmd(
     out_root = Path(output_dir)
 
     try:
-        items: list[dict[str, Any]] = json.loads(manifest_path.read_text(encoding="utf-8"))
+        items = _parse_batch_manifest(manifest_path)
     except (json.JSONDecodeError, OSError) as exc:
         console.print(f"[red]Manifesto inválido:[/red] {exc}")
         sys.exit(1)
-
-    for i, item in enumerate(items):
-        missing = [k for k in ("id", "prompt", "output") if k not in item]
-        if missing:
-            console.print(f"[red]Item {i} falta:[/red] {', '.join(missing)}")
-            sys.exit(1)
+    except ValueError as exc:
+        console.print(f"[red]Manifesto inválido:[/red] {exc}")
+        sys.exit(1)
 
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
