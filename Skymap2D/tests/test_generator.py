@@ -72,26 +72,26 @@ class TestDefaultModelId:
 
 
 class TestSkymapGenerator:
-    @patch("skymap2d.generator.SkymapGenerator._register_sdnq")
-    def test_init(self, mock_sdnq):
+    def test_init(self):
         from skymap2d.generator import SkymapGenerator
 
-        mock_sdnq.return_value = (MagicMock(), MagicMock())
-        gen = SkymapGenerator()
+        gen = SkymapGenerator(device="cpu")
         assert gen.model_id == DEFAULT_MODEL_ID
 
-    @patch("skymap2d.generator.SkymapGenerator._register_sdnq")
-    def test_generate_returns_image(self, mock_sdnq):
+    def test_generate_returns_image(self):
         from skymap2d.generator import SkymapGenerator
 
-        mock_sdnq.return_value = (MagicMock(), MagicMock())
+        gen = SkymapGenerator(device="cpu")
+        with patch.object(gen, "_load_pipeline") as mock_load:
+            mock_pipe = MagicMock()
+            mock_pipe.return_value = (Image.new("RGB", (128, 64)), {"sample": None})
+            mock_load.return_value = mock_pipe
 
-        gen = SkymapGenerator()
-        image, metadata = gen.generate(
-            prompt="test sunset sky",
-            width=1024,
-            height=512,
-            num_inference_steps=10,
-        )
-        assert isinstance(image, Image.Image)
-        assert "seed" in metadata
+            image, metadata = gen.generate(
+                prompt="test sunset sky",
+                width=1024,
+                height=512,
+                num_inference_steps=10,
+            )
+            assert isinstance(image, Image.Image)
+            assert "seed" in metadata
