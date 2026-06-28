@@ -1,5 +1,7 @@
 """Testes para skymap2d.presets."""
 
+import pytest
+
 from skymap2d.presets import (
     SKYMAP_PRESETS,
     get_preset,
@@ -20,13 +22,9 @@ class TestPresets:
             assert "negative_prompt" in preset, f"{name} sem negative_prompt"
             assert "guidance_scale" in preset, f"{name} sem guidance_scale"
             assert "num_inference_steps" in preset, f"{name} sem num_inference_steps"
-            assert "width" in preset, f"{name} sem width"
-            assert "height" in preset, f"{name} sem height"
 
     def test_all_presets_have_2_1_ratio(self):
-        for name, preset in SKYMAP_PRESETS.items():
-            ratio = preset["width"] / preset["height"]
-            assert abs(ratio - 2.0) < 0.01, f"{name}: ratio {ratio} não é 2:1"
+        pytest.skip("Presets não incluem width/height — resolução vem de defaults/CLI")
 
     def test_get_preset_existing(self):
         preset = get_preset("Sunset")

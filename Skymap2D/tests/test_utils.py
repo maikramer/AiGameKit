@@ -103,7 +103,7 @@ class TestFormatBytes:
         assert "GB" in result
 
     def test_terabytes(self):
-        result = format_bytes(1024**5)
+        result = format_bytes(1024**4)
         assert "TB" in result
 
 

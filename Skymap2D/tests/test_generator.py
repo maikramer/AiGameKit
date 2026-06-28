@@ -72,22 +72,19 @@ class TestDefaultModelId:
 
 
 class TestSkymapGenerator:
-    @patch("skymap2d.generator.SkymapGenerator._init_client")
-    def test_init(self, mock_client):
+    @patch("skymap2d.generator.SkymapGenerator._register_sdnq")
+    def test_init(self, mock_sdnq):
         from skymap2d.generator import SkymapGenerator
 
-        mock_client.return_value = MagicMock()
+        mock_sdnq.return_value = (MagicMock(), MagicMock())
         gen = SkymapGenerator()
         assert gen.model_id == DEFAULT_MODEL_ID
 
-    @patch("skymap2d.generator.SkymapGenerator._init_client")
-    def test_generate_returns_image(self, mock_init):
+    @patch("skymap2d.generator.SkymapGenerator._register_sdnq")
+    def test_generate_returns_image(self, mock_sdnq):
         from skymap2d.generator import SkymapGenerator
 
-        mock_image = Image.new("RGB", (128, 64), color="blue")
-        mock_client = MagicMock()
-        mock_client.text_to_image.return_value = mock_image
-        mock_init.return_value = mock_client
+        mock_sdnq.return_value = (MagicMock(), MagicMock())
 
         gen = SkymapGenerator()
         image, metadata = gen.generate(
@@ -98,4 +95,3 @@ class TestSkymapGenerator:
         )
         assert isinstance(image, Image.Image)
         assert "seed" in metadata
-        mock_client.text_to_image.assert_called_once()

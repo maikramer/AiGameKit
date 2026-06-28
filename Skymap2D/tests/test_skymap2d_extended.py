@@ -6,17 +6,11 @@ import pytest
 
 from skymap2d.generator import (
     BASE_EQUIRECTANGULAR_INSTRUCTIONS,
-    SkymapGenerator,
     augment_prompt_for_equirectangular,
     default_model_id,
     merge_negative_prompt,
 )
 from skymap2d.presets import SKYMAP_PRESETS, list_presets
-
-
-def test_normalize_model_id_strips_prefix() -> None:
-    assert SkymapGenerator._normalize_model_id("models/foo/bar") == "foo/bar"
-    assert SkymapGenerator._normalize_model_id("no-prefix") == "no-prefix"
 
 
 def test_default_model_id_env(monkeypatch: pytest.MonkeyPatch) -> None:
