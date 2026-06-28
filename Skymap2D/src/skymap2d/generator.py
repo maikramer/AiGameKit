@@ -20,6 +20,7 @@ _logger = Logger()
 
 DEFAULT_LORA_MODEL_ID = "MultiTrickFox/Flux-LoRA-Equirectangular-v3"
 DEFAULT_BASE_MODEL_ID = "Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32"
+DEFAULT_MODEL_ID = DEFAULT_LORA_MODEL_ID
 
 BASE_EQUIRECTANGULAR_INSTRUCTIONS = (
     "equirectangular 360 degree panorama, hdri environment map, "
