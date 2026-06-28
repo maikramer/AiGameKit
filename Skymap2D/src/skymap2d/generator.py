@@ -379,7 +379,7 @@ class SkymapGenerator:
 
         ratio = width / height if height > 0 else 0
         if abs(ratio - 2.0) > 0.1:
-            _logger.warning(
+            _logger.warn(
                 f"Aspect ratio {width}x{height} ({ratio:.2f}:1) não é 2:1. "
                 "O modelo Flux-LoRA-Equirectangular funciona melhor com ratio 2:1 "
                 "(ex: 2048x1024, 1408x704)."
@@ -432,7 +432,7 @@ class SkymapGenerator:
 
         iw, ih = image.size
         if (iw, ih) != (width, height):
-            _logger.warning(
+            _logger.warn(
                 f"Pipeline devolveu {iw}x{ih} em vez de {width}x{height}; "
                 "a redimensionar para o tamanho pedido (equirect 2:1)."
             )
