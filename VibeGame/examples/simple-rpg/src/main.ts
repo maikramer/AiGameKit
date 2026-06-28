@@ -82,6 +82,8 @@ import {
   getBodyYForFeetAt,
   getRapierWorld,
   terrainReady,
+  getTerrainContext,
+  isTerrainDynamicsBlocking,
   PhysicsStepSystem,
   GROUND_CONTACT_SKIN,
   threeCameras,
@@ -200,6 +202,8 @@ const HeroGroundSnapSystem: System = {
     }
 
     if (physicsGroundBelow(state, body, x, snapY, z)) {
+      heroGroundSnapped = true;
+    } else if (Number.isFinite(snapY) && terrainReady(state)) {
       heroGroundSnapped = true;
     }
   },
@@ -973,6 +977,55 @@ async function bootstrap(): Promise<void> {
   //   __VIBEGAME__.debug.getVar('heroDebug')
   //   __VIBEGAME__.debug.callAction('spawnFloatingText', 'hi', 0, 2, 0)
   registerDebugVar(state, 'heroState', () => state);
+  registerDebugVar(state, 'diagTerrainReady', () => terrainReady(state));
+  registerDebugVar(state, 'diagDynamicsBlocking', () =>
+    isTerrainDynamicsBlocking(state)
+  );
+  registerDebugVar(state, 'diagHeroSnapped', () => heroGroundSnapped);
+  registerDebugVar(state, 'diagHeroSpawnY', () => heroSpawnY);
+  registerDebugVar(state, 'diagSnapProbe', () => {
+    const heroEid = state.getEntityByName('hero');
+    if (heroEid === null) return { err: 'no hero' };
+    const x = Transform.posX[heroEid];
+    const z = Transform.posZ[heroEid];
+    const bvh = getBvhSurfaceHeight(state, x, 500, z);
+    const tH = getTerrainHeightAt(state, x, z);
+    const groundY = bvh ?? tH;
+    const snapY = getBodyYForFeetAt(
+      state,
+      heroEid,
+      (groundY ?? 0) + GROUND_CONTACT_SKIN
+    );
+    const body = getBodyForEntity(state, heroEid);
+    const ground = body
+      ? physicsGroundBelow(state, body, x, snapY, z)
+      : 'no body';
+    return {
+      x,
+      z,
+      bvh,
+      terrainH: tH,
+      groundY,
+      snapY,
+      bodyPresent: !!body,
+      bodyY: body?.translation().y ?? null,
+      physicsGroundBelow: ground,
+    };
+  });
+  registerDebugVar(state, 'diagTerrainCtx', () => {
+    const out: Record<string, unknown> = {};
+    for (const [eid, data] of getTerrainContext(state)) {
+      out[String(eid)] = {
+        initialized: data.initialized,
+        collisionReady: (data as Record<string, unknown>).collisionReady,
+        hasHeightmapUrl: !!(data as Record<string, unknown>).heightmapUrl,
+        samplerData:
+          !!(data as Record<string, unknown>).sampler &&
+          !!(data as Record<string, unknown>).sampler?.data,
+      };
+    }
+    return out;
+  });
   registerDebugAction(
     state,
     'spawnFloatingText',

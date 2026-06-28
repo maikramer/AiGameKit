@@ -7,11 +7,13 @@
         "@dimforge/rapier3d-compat": "^0.19.3",
         "@gltf-transform/core": "^4.3.0",
         "@gltf-transform/functions": "^4.3.0",
+        "@recast-navigation/three": "^0.43.1",
         "colyseus.js": "^0.16.22",
         "gsap": "^3.13.0",
         "howler": "^2.2.4",
         "msgpackr": "^1.11.9",
         "postprocessing": "^6.39.1",
+        "recast-navigation": "^0.43.1",
         "three-mesh-bvh": "^0.9.10",
         "three-mesh-ui": "^6.5.4",
         "three-pathfinding": "^1.3.0",
@@ -214,6 +216,14 @@
     "@pkgr/core": ["@pkgr/core@0.2.9", "", {}, "sha512-QNqXyfVS2wm9hweSYD2O7F0G06uurj9kZ96TRQE5Y9hU7+tgdZwIkbAKc5Ocy1HxEY2kuDQa6cQ1WRs/O5LFKA=="],
 
     "@playwright/test": ["@playwright/test@1.59.1", "", { "dependencies": { "playwright": "1.59.1" }, "bin": { "playwright": "cli.js" } }, "sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg=="],
+
+    "@recast-navigation/core": ["@recast-navigation/core@0.43.1", "", { "dependencies": { "@recast-navigation/wasm": "0.43.1" } }, "sha512-4igfPgnoV90O92sDSIA0xHa6tanh3z/udlgGmD0SqGQ6PKV4JS2l9jWO8YnxfZuXP/NV52H4c5FU6pSdZc9WDA=="],
+
+    "@recast-navigation/generators": ["@recast-navigation/generators@0.43.1", "", { "dependencies": { "@recast-navigation/core": "0.43.1", "@recast-navigation/wasm": "0.43.1" } }, "sha512-w7r6k/A93wWxuSN+Lg+PmlsUVXq06r5bqXmBglolxqDt2O/Y776BIhYtb6P2P6pbYqDWORu9NCZZJzfY4FNpaA=="],
+
+    "@recast-navigation/three": ["@recast-navigation/three@0.43.1", "", { "dependencies": { "@recast-navigation/core": "0.43.1", "@recast-navigation/generators": "0.43.1" }, "peerDependencies": { "@types/three": "0.x.x", "three": "0.x.x" } }, "sha512-XNA3z7/8SBzTswD9LBQkJ5+1yn4J6dzx5uI2zRFXu6G7UOkFEN+f1PeugJUOUOXNjyVdkaYVOg9dKqpaXtzUDw=="],
+
+    "@recast-navigation/wasm": ["@recast-navigation/wasm@0.43.1", "", {}, "sha512-XFL6PhO8JodwXUHBSAkfaLUdUEweIkJsdP3HTmtJvMs5fkqEWxWJmBskZlACHJepv55NAriqWxOtuLlG3t7+Hg=="],
 
     "@rolldown/binding-android-arm64": ["@rolldown/binding-android-arm64@1.0.0-rc.18", "", { "os": "android", "cpu": "arm64" }, "sha512-lIDyUAfD7U3+BWKzdxMbJcsYHuqXqmGz40aeRqvuAm3y5TkJSYTBW2RDrn65DJFPQqVjUAUqq5uz8urzQ8aBdQ=="],
 
@@ -936,6 +946,8 @@
     "rc": ["rc@1.2.8", "", { "dependencies": { "deep-extend": "^0.6.0", "ini": "~1.3.0", "minimist": "^1.2.0", "strip-json-comments": "~2.0.1" }, "bin": { "rc": "./cli.js" } }, "sha512-y3bGgqKj3QBdxLbLkomlohkvsA8gdAiUQlSBJnBhfn+BPxg4bc62d8TcBW15wavDfgexCgccckhcZvywyQYPOw=="],
 
     "readable-stream": ["readable-stream@3.6.2", "", { "dependencies": { "inherits": "^2.0.3", "string_decoder": "^1.1.1", "util-deprecate": "^1.0.1" } }, "sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA=="],
+
+    "recast-navigation": ["recast-navigation@0.43.1", "", { "dependencies": { "@recast-navigation/core": "0.43.1", "@recast-navigation/generators": "0.43.1" } }, "sha512-BVBQEHE6uqD36opJomVkI5TxMVZ8bBLdDn90mYtBUYJnNlqEuNFOL8DH8lLOksfVVaC+kjykYuS57P6MrxVB7A=="],
 
     "reflect.getprototypeof": ["reflect.getprototypeof@1.0.10", "", { "dependencies": { "call-bind": "^1.0.8", "define-properties": "^1.2.1", "es-abstract": "^1.23.9", "es-errors": "^1.3.0", "es-object-atoms": "^1.0.0", "get-intrinsic": "^1.2.7", "get-proto": "^1.0.1", "which-builtin-type": "^1.2.1" } }, "sha512-00o4I+DVrefhv+nX0ulyi3biSHCPDe+yLv5o/p6d/UVlirijB8E16FtfwSAi4g3tcqrQ4lRAqQSoFEZJehYEcw=="],
 
