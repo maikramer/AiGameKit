@@ -10,11 +10,9 @@ import { addClipSound, defineSoundBank } from 'vibegame';
 export function registerGameSounds(): void {
   defineSoundBank({
     // ── SFX (bus 'sfx') ──────────────────────────────────────────────
-    // Dedicated save/load WAVs were never generated, so we repurpose
-    // existing SFX: level-up chime for save (positive confirm), heal
-    // shimmer for load (magical restore). TODO: generate dedicated SFX.
-    save: { url: '/assets/audio/sfx_levelup.ogg', volume: 0.48 },
-    load: { url: '/assets/audio/sfx_heal.ogg', volume: 0.44 },
+    save: { url: '/assets/audio/sfx_save.ogg', volume: 0.48 },
+    load: { url: '/assets/audio/sfx_load.ogg', volume: 0.44 },
+    'bomb-drop': { url: '/assets/audio/sfx_bomb_drop.ogg', volume: 0.5 },
     heal: { url: '/assets/audio/sfx_heal.ogg', volume: 0.48 },
     'enemy-hurt': { url: '/assets/audio/sfx_enemy_hurt.ogg', volume: 0.42 },
     'enemy-death': { url: '/assets/audio/sfx_enemy_death.ogg', volume: 0.5 },

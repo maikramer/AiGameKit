@@ -27,6 +27,7 @@ const behaviours = createCreatureBehaviours({
   leashRadius: 1000, // never leashes home
   strafe: true,
   enrageBelowFrac: 0.3,
+  runTimeScale: 1.5,
   lootGoldMin: 100,
   lootGoldMax: 150,
   defeatedText: 'BOSS DEFEATED!',

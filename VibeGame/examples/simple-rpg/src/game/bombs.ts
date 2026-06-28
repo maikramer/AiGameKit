@@ -118,8 +118,7 @@ export function spawnBomb(
     flightDur: 0,
     owner,
   });
-  // TODO: dedicated bomb-drop / fuse SFX — reuse 'swing' (whoosh) for now.
-  playSound('swing');
+  playSound('bomb-drop');
 }
 
 /** Lob a bomb along an arc from→to, then it lands and fuses (hold + release). */

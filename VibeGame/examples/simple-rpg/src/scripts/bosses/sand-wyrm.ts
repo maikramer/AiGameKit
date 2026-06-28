@@ -23,6 +23,7 @@ const behaviours = createCreatureBehaviours({
   leashRadius: 50,
   strafe: false,
   enrageBelowFrac: 0.35,
+  runTimeScale: 1.5,
   lootGoldMin: 90,
   lootGoldMax: 130,
   defeatedText: 'VERME DAS AREIAS DERROTADO!',

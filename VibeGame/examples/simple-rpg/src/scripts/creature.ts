@@ -102,6 +102,8 @@ export interface CreatureConfig {
   gateUntil?: () => boolean;
   /** Enemy type identifier for quest kill tracking (e.g. 'wolf', 'shade'). */
   enemyType?: string;
+  /** Time-scale applied to the run clip while chasing (e.g. 1.5 to reuse walk as a jog). */
+  runTimeScale?: number;
 }
 
 interface PresentationState {
@@ -529,6 +531,9 @@ export function createCreatureBehaviours(
           clip === cfg.clips.lunge ? { loop: false } : undefined
         );
         s.playing = clip;
+      }
+      if (s.animator && cfg.runTimeScale !== undefined) {
+        s.animator.setTimeScale(mode === AI_MODE_CHASE ? cfg.runTimeScale : 1);
       }
 
       // Health bar billboard (combat only).

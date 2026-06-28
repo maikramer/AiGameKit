@@ -23,6 +23,7 @@ const behaviours = createCreatureBehaviours({
   leashRadius: 45,
   strafe: true,
   enrageBelowFrac: 0.3,
+  runTimeScale: 1.5,
   lootGoldMin: 80,
   lootGoldMax: 120,
   defeatedText: 'BOG WARDEN DERROTADO!',

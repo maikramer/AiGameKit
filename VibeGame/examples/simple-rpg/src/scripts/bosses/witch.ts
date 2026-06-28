@@ -24,6 +24,7 @@ const behaviours = createCreatureBehaviours({
   leashRadius: 45,
   strafe: true,
   enrageBelowFrac: 0.3,
+  runTimeScale: 1.5,
   lootGoldMin: 70,
   lootGoldMax: 110,
   defeatedText: 'BRUXA DERROTADA!',
