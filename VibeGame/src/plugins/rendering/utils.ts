@@ -450,8 +450,14 @@ export function handleWindowResize(
 export const SHADOW_CONFIG = {
   LIGHT_DIRECTION: new THREE.Vector3(5, 10, 2).normalize(),
   LIGHT_DISTANCE: 25,
-  /** Raio ortográfico da câmara de sombras (metade da largura do frustum). Maior = mais cobertura ao redor do alvo. */
-  CAMERA_RADIUS: 140,
+  /** Raio ortográfico da câmara de sombras (metade da largura do frustum). Maior = mais cobertura ao redor do alvo.
+   * A frustum SEGUE o alvo da câmara (ver `resolveShadowCenter`), por isso só
+   * precisa de cobrir a distância de visão à volta do jogador — não o mapa todo.
+   * 140 (=280 m) era exagerado: desperdiça resolução do shadow map e mete
+   * centenas de casters distantes no shadow pass. 90 (=180 m) cobre a vista com
+   * folga, dá sombras mais nítidas (mesmo 2048 sobre menos área) e um shadow
+   * pass mais barato. */
+  CAMERA_RADIUS: 90,
   NEAR_PLANE: 0.5,
   FAR_PLANE: 250,
   /**

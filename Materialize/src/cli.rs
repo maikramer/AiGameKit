@@ -268,3 +268,64 @@ pub static MAP_NAMES: &[&str] = &[
     "ao",
     "curvature",
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_output_format_parse_roundtrip() {
+        let png: OutputFormat = "png".parse().unwrap();
+        assert_eq!(png, OutputFormat::Png);
+        assert_eq!(png.to_string(), "png");
+
+        let jpg: OutputFormat = "jpg".parse().unwrap();
+        assert_eq!(jpg, OutputFormat::Jpg);
+        assert_eq!(jpg.to_string(), "jpg");
+
+        // "jpeg" is an accepted alias that normalises to the "jpg" token.
+        let jpeg: OutputFormat = "jpeg".parse().unwrap();
+        assert_eq!(jpeg, OutputFormat::Jpg);
+        assert_eq!(jpeg.to_string(), "jpg");
+
+        let tga: OutputFormat = "tga".parse().unwrap();
+        assert_eq!(tga, OutputFormat::Tga);
+        assert_eq!(tga.to_string(), "tga");
+
+        let exr: OutputFormat = "exr".parse().unwrap();
+        assert_eq!(exr, OutputFormat::Exr);
+        assert_eq!(exr.to_string(), "exr");
+    }
+
+    #[test]
+    fn test_output_format_case_insensitive() {
+        assert_eq!("PNG".parse::<OutputFormat>().unwrap(), OutputFormat::Png);
+        assert_eq!("JPG".parse::<OutputFormat>().unwrap(), OutputFormat::Jpg);
+        assert_eq!("TGA".parse::<OutputFormat>().unwrap(), OutputFormat::Tga);
+        assert_eq!("Exr".parse::<OutputFormat>().unwrap(), OutputFormat::Exr);
+    }
+
+    #[test]
+    fn test_output_format_rejects_unknown() {
+        for bad in ["gif", "webp", "bmp"] {
+            let err = bad.parse::<OutputFormat>().unwrap_err();
+            assert!(
+                err.contains("Unsupported format"),
+                "expected 'Unsupported format' in error for {bad:?}, got: {err}"
+            );
+            assert!(
+                err.contains(bad),
+                "error should echo the bad value {bad:?}: {err}"
+            );
+        }
+        assert!("".parse::<OutputFormat>().is_err());
+    }
+
+    #[test]
+    fn test_normal_format_to_flag() {
+        // These integers are uploaded into a WGSL uniform (normal_flip_y) and are
+        // part of the shader contract; both values are asserted exactly.
+        assert_eq!(NormalFormat::Opengl.to_flag(), 0);
+        assert_eq!(NormalFormat::Directx.to_flag(), 1);
+    }
+}

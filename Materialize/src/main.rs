@@ -407,3 +407,102 @@ fn emit_completions(shell: cli::ShellKind) {
     };
     generate_completion(shell_enum, &mut cmd, name, &mut std::io::stdout());
 }
+
+#[cfg(test)]
+mod tests {
+    use image::{Rgba, RgbaImage};
+
+    use super::*;
+
+    #[test]
+    fn test_contains_glob_metachar() {
+        assert!(contains_glob_metachar("*.png"));
+        assert!(contains_glob_metachar("a?b"));
+        assert!(contains_glob_metachar("dir/[0-9].png"));
+        assert!(contains_glob_metachar("textures/*.png"));
+        assert!(!contains_glob_metachar("plain.png"));
+        assert!(!contains_glob_metachar("dir/a.png"));
+        assert!(!contains_glob_metachar("normal name.png"));
+    }
+
+    fn white_image() -> DynamicImage {
+        DynamicImage::ImageRgba8(RgbaImage::from_pixel(64, 64, Rgba([255, 255, 255, 255])))
+    }
+
+    #[test]
+    fn test_apply_overrides_override_each_field() {
+        // Non-Auto preset so the auto-scale/auto-tile branches (which call analyze)
+        // are skipped and the override values pass through unchanged.
+        let args = Cli::parse_from([
+            "materialize",
+            "x.png",
+            "--height-contrast",
+            "9",
+            "--normal-strength",
+            "5",
+            "--metallic-scale",
+            "0",
+            "--ao-depth-scale",
+            "1",
+            "--height-blur",
+            "1",
+            "--metallic-local-variance",
+            "5",
+        ]);
+        let img = DynamicImage::ImageRgba8(RgbaImage::new(4, 4));
+        let params =
+            apply_overrides_and_auto_scale(&args, &img, Preset::Default, Preset::Default.params());
+
+        // Scalar overrides replace the preset value verbatim.
+        assert_eq!(params.height_contrast, 9.0);
+        assert_eq!(params.normal_strength, 5.0);
+        assert_eq!(params.metallic_scale, 0.0);
+        assert_eq!(params.ao_depth_scale, 1.0);
+
+        // --height-blur is ADDITIVE on top of the preset radii (default 1/2/4).
+        assert_eq!(params.height_blur_radius_0, 2.0);
+        assert_eq!(params.height_blur_radius_1, 3.0);
+        assert_eq!(params.height_blur_radius_2, 5.0);
+
+        // metallic_local_variance clamps to [0, 1]; 5 → 1.0.
+        assert_eq!(params.metallic_local_variance_factor, 1.0);
+    }
+
+    #[test]
+    fn test_apply_overrides_height_blur_clamped_nonnegative() {
+        // A large negative offset would push radii below zero; clamp keeps them >= 0.
+        let args = Cli::parse_from(["materialize", "x.png", "--height-blur=-5"]);
+        let img = DynamicImage::ImageRgba8(RgbaImage::new(4, 4));
+        let params =
+            apply_overrides_and_auto_scale(&args, &img, Preset::Default, Preset::Default.params());
+        assert_eq!(params.height_blur_radius_0, 0.0);
+        assert_eq!(params.height_blur_radius_1, 0.0);
+        assert_eq!(params.height_blur_radius_2, 0.0);
+    }
+
+    #[test]
+    fn test_resolve_base_params_non_auto() {
+        // Non-Auto: params come straight from the preset (no analyze call).
+        let args = Cli::parse_from(["materialize", "x.png", "-p", "stone"]);
+        let img = DynamicImage::ImageRgba8(RgbaImage::new(4, 4));
+        let (preset, params) = resolve_base_params(&args, &img);
+        assert_eq!(preset, Preset::Stone);
+        let stone = Preset::Stone.params();
+        assert_eq!(params.height_contrast, stone.height_contrast);
+        assert_eq!(params.normal_strength, stone.normal_strength);
+        assert_eq!(params.ao_depth_scale, stone.ao_depth_scale);
+    }
+
+    #[test]
+    fn test_resolve_base_params_auto_white_resolves_default() {
+        // Mirrors analyze::tests::test_classify_white_is_default: a solid-white
+        // image must resolve to Preset::Default even on the Auto path.
+        let args = Cli::parse_from(["materialize", "x.png", "-p", "auto"]);
+        let (preset, params) = resolve_base_params(&args, &white_image());
+        assert_eq!(preset, Preset::Default);
+        assert_eq!(
+            params.height_contrast,
+            Preset::Default.params().height_contrast
+        );
+    }
+}

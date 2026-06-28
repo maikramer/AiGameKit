@@ -586,14 +586,16 @@
         </GameObject>
       </StaticSpawner>
 
-      <!-- Goblins de aviso logo fora do portão norte (briga inicial). A cidade
-           murada em si fica livre de inimigos — a DynamicSpawner não respeita o
-           SpawnExclusion, por isso a região começa fora da muralha (z>26). -->
+      <!-- Goblins de aviso a caminho da floresta norte (briga inicial). A cidade
+           murada fica livre de inimigos — a DynamicSpawner não respeita o
+           SpawnExclusion. A banda começa em z>=40 (e não em 28) para não ficar
+           em cima do ponto de respawn do portão norte (0,28): com detectRange=18
+           os goblins nasciam a ~3.6 m do herói e matavam-no logo ao renascer. -->
       <DynamicSpawner
         count="3"
         seed="11"
-        region-min="-26 0 28"
-        region-max="26 0 42"
+        region-min="-26 0 40"
+        region-max="26 0 52"
         align-to-terrain="false"
         random-yaw="true"
         avoid-overlaps="false"

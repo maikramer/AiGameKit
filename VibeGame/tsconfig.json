@@ -35,6 +35,7 @@
       "vibegame/respawn": ["./src/plugins/respawn/index.ts"],
       "vibegame/startup": ["./src/plugins/startup/index.ts"],
       "vibegame/transforms": ["./src/plugins/transforms/index.ts"],
+      "vibegame/composition": ["./src/plugins/composition/index.ts"],
       "vibegame/tweening": ["./src/plugins/tweening/index.ts"],
       "vibegame/line": ["./src/plugins/line/index.ts"],
       "vibegame/vite": ["./src/vite/index.ts"],

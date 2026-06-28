@@ -236,3 +236,137 @@ fn save_job(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use clap::Parser;
+
+    use super::*;
+    use crate::cli::Cli;
+    use crate::io::MapSelection;
+
+    #[test]
+    fn test_is_supported_image_extensions() {
+        for ext in ["png", "jpg", "jpeg", "tga", "exr"] {
+            assert!(
+                is_supported_image(&PathBuf::from(format!("x.{ext}"))),
+                ".{ext} should be supported"
+            );
+        }
+        // Extension matching is case-insensitive (paths from some scanners are upper-case).
+        assert!(is_supported_image(&PathBuf::from("IMG.PNG")));
+        assert!(is_supported_image(&PathBuf::from("Photo.JPG")));
+
+        for bad in ["gif", "bmp", "txt", "tif"] {
+            assert!(
+                !is_supported_image(&PathBuf::from(format!("x.{bad}"))),
+                ".{bad} should NOT be supported"
+            );
+        }
+        assert!(!is_supported_image(&PathBuf::from("noext")));
+        assert!(!is_supported_image(&PathBuf::from("README")));
+    }
+
+    #[test]
+    fn test_expand_inputs_directory_sorted_and_filtered() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        // Written in non-sorted order; c.txt must be filtered out.
+        fs::write(dir.path().join("d.jpg"), b"x").expect("write d.jpg");
+        fs::write(dir.path().join("a.png"), b"x").expect("write a.png");
+        fs::write(dir.path().join("c.txt"), b"x").expect("write c.txt");
+        fs::write(dir.path().join("b.exr"), b"x").expect("write b.exr");
+
+        let dir_str = dir.path().to_str().expect("utf8 path");
+        let got = expand_inputs(dir_str).expect("expand_inputs");
+        let expected = vec![
+            dir.path().join("a.png"),
+            dir.path().join("b.exr"),
+            dir.path().join("d.jpg"),
+        ];
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn test_build_selection_only() {
+        let cli = Cli::parse_from(["materialize", "x.png", "--only", "height,normal"]);
+        let sel = build_selection(&cli).expect("build_selection");
+        assert!(sel.height);
+        assert!(sel.normal);
+        assert!(!sel.metallic);
+        assert!(!sel.smoothness);
+        assert!(!sel.edge);
+        assert!(!sel.ao);
+        assert!(!sel.curvature);
+    }
+
+    #[test]
+    fn test_build_selection_skip() {
+        let cli = Cli::parse_from(["materialize", "x.png", "--skip", "height"]);
+        let sel = build_selection(&cli).expect("build_selection");
+        assert!(!sel.height);
+        assert!(sel.normal);
+        assert!(sel.metallic);
+        assert!(sel.smoothness);
+        assert!(sel.edge);
+        assert!(sel.ao);
+        assert!(!sel.curvature);
+    }
+
+    #[test]
+    fn test_build_selection_include_curvature() {
+        // Default selection is all(false) (six maps on, curvature off); the flag
+        // then forces curvature on.
+        let cli = Cli::parse_from(["materialize", "x.png", "--include-curvature"]);
+        let sel = build_selection(&cli).expect("build_selection");
+        assert!(sel.height);
+        assert!(sel.normal);
+        assert!(sel.metallic);
+        assert!(sel.smoothness);
+        assert!(sel.edge);
+        assert!(sel.ao);
+        assert!(sel.curvature);
+    }
+
+    #[test]
+    fn test_output_exists_height_marker() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let dir_str = dir.path().to_str().expect("utf8 path");
+        let sel = MapSelection::all(false);
+
+        assert!(!output_exists(
+            &PathBuf::from("foo.png"),
+            dir_str,
+            "png",
+            &sel
+        ));
+
+        fs::write(dir.path().join("foo_height.png"), b"marker").expect("write marker");
+        assert!(output_exists(
+            &PathBuf::from("foo.png"),
+            dir_str,
+            "png",
+            &sel
+        ));
+
+        // "jpeg" extension collapses to ".jpg" to mirror io::get_output_paths.
+        fs::write(dir.path().join("bar_height.jpg"), b"marker").expect("write jpg marker");
+        assert!(output_exists(
+            &PathBuf::from("bar.jpeg"),
+            dir_str,
+            "jpeg",
+            &sel
+        ));
+
+        // selection.height == false short-circuits to false even with a marker present.
+        let sel_no_height = MapSelection::default();
+        assert!(!output_exists(
+            &PathBuf::from("foo.png"),
+            dir_str,
+            "png",
+            &sel_no_height
+        ));
+    }
+}
