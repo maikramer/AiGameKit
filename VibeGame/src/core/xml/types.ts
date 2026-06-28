@@ -9,8 +9,4 @@ export interface XMLParseResult {
 }
 
 export type XMLValue =
-  | string
-  | number
-  | boolean
-  | Record<string, number>
-  | number[];
+  string | number | boolean | Record<string, number> | number[];

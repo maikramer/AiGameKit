@@ -1,4 +1,5 @@
-import { NoToneMapping, type ToneMapping } from 'three';
+import type { Scene, ToneMapping } from 'three';
+import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { defineQuery, type State, type System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, threeCameras } from '../rendering/utils';
@@ -7,23 +8,20 @@ import { Postprocessing } from './components';
 import { registerBuiltinEffects } from './builtin-effects';
 import { type EffectDefinition, getEffectDefinitions } from './effect-registry';
 import { buildComposer } from './composer';
-import type { Effect } from 'postprocessing';
 
 const postprocessingQuery = defineQuery([Postprocessing]);
 const mainCameraQuery = defineQuery([MainCamera]);
 
 let builtinEffectsRegistered = false;
-/** Renderer tone mapping captured before the composer takes ownership of it. */
 let savedRendererToneMapping: ToneMapping | null = null;
 
 const activeEffectInstances: Array<{
   def: EffectDefinition;
-  effect: Effect;
+  pass: Pass;
   entity: number;
 }> = [];
 
-/** Changing renderer.toneMapping only affects newly compiled programs. */
-function invalidateSceneMaterials(scene: import('three').Scene): void {
+function invalidateSceneMaterials(scene: Scene): void {
   scene.traverse((obj) => {
     const mesh = obj as {
       material?: { needsUpdate: boolean } | { needsUpdate: boolean }[];
@@ -64,57 +62,56 @@ export const PostprocessingBuildSystem: System = {
       string,
       Float32Array | Uint8Array
     >;
-    const regularEffects: Effect[] = [];
-    const convolutionEffects: Effect[] = [];
 
-    activeEffectInstances.length = 0;
-    for (const def of getEffectDefinitions()) {
-      const effect = def.create(
-        componentState,
-        e,
-        context.renderer!,
-        context.scene,
-        camera
-      );
-      if (!effect) continue;
-
-      activeEffectInstances.push({ def, effect, entity: e });
-
-      if (def.key === 'chromaticAberration') {
-        convolutionEffects.push(effect);
-      } else {
-        regularEffects.push(effect);
-      }
-    }
-
-    if (regularEffects.length === 0 && convolutionEffects.length === 0) return;
-
-    context.postProcessing = buildComposer(
-      context.renderer,
-      context.scene,
-      camera,
-      regularEffects,
-      convolutionEffects
-    );
-
-    // Tone mapping must happen exactly once. When the composer carries a
-    // ToneMappingEffect, the scene must reach it linear/HDR — leaving the
-    // renderer's own tone mapping on would apply the curve twice and wash the
-    // image out (flat contrast, desaturated colors).
-    const usesToneMappingEffect = Postprocessing.toneMapping[e] !== 0;
-    if (usesToneMappingEffect) {
+    // Save the renderer's original tone mapping before any definition mutates it.
+    // The tonemapping definition sets renderer.toneMapping as a side effect of
+    // create(); OutputPass then applies that value at render time.
+    const usesToneMapping = Postprocessing.toneMapping[e] !== 0;
+    if (usesToneMapping) {
       if (savedRendererToneMapping === null) {
         savedRendererToneMapping = context.renderer.toneMapping;
-      }
-      if (context.renderer.toneMapping !== NoToneMapping) {
-        context.renderer.toneMapping = NoToneMapping;
-        invalidateSceneMaterials(context.scene);
       }
     } else if (savedRendererToneMapping !== null) {
       context.renderer.toneMapping = savedRendererToneMapping;
       savedRendererToneMapping = null;
       invalidateSceneMaterials(context.scene);
     }
+
+    const firstPasses: Pass[] = [];
+    const regularPasses: Pass[] = [];
+    const lastPasses: Pass[] = [];
+
+    activeEffectInstances.length = 0;
+    for (const def of getEffectDefinitions()) {
+      const pass = def.create(
+        componentState,
+        e,
+        context.renderer,
+        context.scene,
+        camera
+      );
+      if (!pass) continue;
+
+      activeEffectInstances.push({ def, pass, entity: e });
+
+      if (def.position === 'first') {
+        firstPasses.push(pass);
+      } else if (def.position === 'last') {
+        lastPasses.push(pass);
+      } else {
+        regularPasses.push(pass);
+      }
+    }
+
+    const orderedPasses = [...firstPasses, ...regularPasses, ...lastPasses];
+    if (orderedPasses.length === 0) return;
+
+    context.postProcessing = buildComposer(
+      context.renderer,
+      context.scene,
+      camera,
+      orderedPasses
+    );
   },
   dispose(state: State) {
     const context = getRenderingContext(state);
@@ -138,12 +135,11 @@ export const PostprocessingEffectUpdateSystem: System = {
       string,
       Float32Array | Uint8Array
     >;
-    for (const { def, effect, entity } of activeEffectInstances) {
+    for (const { def, pass, entity } of activeEffectInstances) {
       if (!def.update) continue;
       try {
-        def.update(componentState, entity, effect);
+        def.update(componentState, entity, pass);
       } catch (err) {
-        // Effect update errors must not crash the render loop.
         if (typeof console !== 'undefined') {
           console.error(
             `[VibeGame] Postprocessing effect "${def.key}" update threw:`,

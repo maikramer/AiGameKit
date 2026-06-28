@@ -10,7 +10,6 @@
     "isolatedModules": true,
     "resolveJsonModule": true,
     "types": ["vite/client"],
-    "baseUrl": ".",
     "paths": {
       "vibegame": ["../../src/index.ts"],
       "vibegame/*": ["../../src/*"]

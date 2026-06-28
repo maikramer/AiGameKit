@@ -920,8 +920,11 @@ export const TerrainChunkColliderSystem: System = {
         continue;
       }
 
-      // Heights are ready: drop the flat stand-in and switch to per-chunk fields.
-      if (data.physicsBody) {
+      // Heights are ready: keep the flat stand-in until at least one real
+      // chunk heightfield is built, so the player never falls through a window
+      // between the flat ground and the per-chunk colliders.
+      const hasChunkCollider = data.chunkColliders.size > 0;
+      if (data.physicsBody && hasChunkCollider) {
         rapierWorld.removeRigidBody(data.physicsBody);
         data.physicsBody = null;
         data.physicsCollider = null;
@@ -1040,6 +1043,36 @@ export function getTerrainHeightAt(
     return sampleHeightAt(data.sampler, localX, localZ);
   }
   return 0;
+}
+
+/**
+ * True if the terrain has a real chunk heightfield collider that covers
+ * (worldX, worldZ). Unlike terrainReady(), this checks the actual collider set
+ * under the point rather than the field-level "collisionReady" latch.
+ */
+export function isTerrainColliderAt(
+  state: State,
+  worldX: number,
+  worldZ: number
+): boolean {
+  const rapierWorld = getRapierWorld(state);
+  if (!rapierWorld) return false;
+  const context = getTerrainContext(state);
+  for (const [, data] of context) {
+    if (!data.initialized || data.chunkColliders.size === 0) continue;
+    const localX = worldX - data.worldOffset.x;
+    const localZ = worldZ - data.worldOffset.z;
+    for (const [chunk, body] of data.chunkColliders) {
+      if (!state.exists(chunk)) continue;
+      const ox = TerrainChunk.originX[chunk];
+      const oz = TerrainChunk.originZ[chunk];
+      const half = TerrainChunk.size[chunk] * 0.5;
+      if (localX < ox - half || localX > ox + half) continue;
+      if (localZ < oz - half || localZ > oz + half) continue;
+      if (body.numColliders() > 0) return true;
+    }
+  }
+  return false;
 }
 
 export function findNearestTerrainEntity(

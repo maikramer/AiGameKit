@@ -46,11 +46,7 @@ export interface VibeGameDebugBridge {
 }
 
 type TypedArrayField =
-  | Float32Array
-  | Int32Array
-  | Uint8Array
-  | Uint16Array
-  | Uint32Array;
+  Float32Array | Int32Array | Uint8Array | Uint16Array | Uint32Array;
 
 function isTypedArrayField(v: unknown): v is TypedArrayField {
   return (

@@ -705,6 +705,7 @@ export {
  */
 export {
   getTerrainHeightAt,
+  isTerrainColliderAt,
   getTerrainContext,
   sampleTerrainHeight,
   terrainReady,

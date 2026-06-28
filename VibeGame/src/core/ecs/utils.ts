@@ -1,11 +1,7 @@
 import type { Component } from './types';
 
 type ComponentField =
-  | Float32Array
-  | Int32Array
-  | Uint8Array
-  | Uint16Array
-  | Uint32Array;
+  Float32Array | Int32Array | Uint8Array | Uint16Array | Uint32Array;
 
 export function setComponentFields(
   component: Component,
@@ -14,8 +10,7 @@ export function setComponentFields(
 ): void {
   for (const [key, value] of Object.entries(values)) {
     const field = component[key as keyof Component] as
-      | ComponentField
-      | undefined;
+      ComponentField | undefined;
     if (field) {
       field[entity] = value;
     }
@@ -37,8 +32,7 @@ export function clearComponentFields(
 ): void {
   for (const key in component) {
     const field = component[key as keyof Component] as
-      | ComponentField
-      | undefined;
+      ComponentField | undefined;
     if (field && ArrayBuffer.isView(field)) {
       field[entity] = 0;
     }

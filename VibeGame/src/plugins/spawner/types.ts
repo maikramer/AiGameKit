@@ -6,11 +6,7 @@ import type {
 } from './profiles';
 
 export type SpawnTemplateRole =
-  | 'visual'
-  | 'dynamic'
-  | 'static'
-  | 'kinematic'
-  | '';
+  'visual' | 'dynamic' | 'static' | 'kinematic' | '';
 
 export interface SpawnTemplateSpec {
   tagName: string;

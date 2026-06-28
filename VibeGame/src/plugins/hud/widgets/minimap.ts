@@ -22,13 +22,7 @@ import {
  * The player is always rendered as a directional arrow at the centre.
  */
 export type MinimapCategory =
-  | 'player'
-  | 'enemy'
-  | 'boss'
-  | 'merchant'
-  | 'wood'
-  | 'stone'
-  | 'neutral';
+  'player' | 'enemy' | 'boss' | 'merchant' | 'wood' | 'stone' | 'neutral';
 
 export const MINIMAP_CATEGORY_VALUES: readonly MinimapCategory[] = [
   'player',
@@ -95,10 +89,7 @@ export interface MinimapOptions {
 }
 
 export type MinimapAnchor =
-  | 'top-right'
-  | 'top-left'
-  | 'bottom-right'
-  | 'bottom-left';
+  'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
 
 interface ResolvedOptions extends MinimapOptions {
   readonly scale: number;

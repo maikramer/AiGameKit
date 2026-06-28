@@ -110,10 +110,10 @@ async function resolveBytes(
 }
 
 async function makeIO(): Promise<unknown> {
-  const core = await import('@gltf-transform/core');
   const inBrowser =
     typeof window !== 'undefined' &&
     typeof (globalThis as { fetch?: unknown }).fetch === 'function';
+  const core = await import('@gltf-transform/core');
   return inBrowser ? new core.WebIO() : new core.NodeIO();
 }
 

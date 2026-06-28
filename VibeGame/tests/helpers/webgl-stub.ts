@@ -490,13 +490,11 @@ export function installWebGLStub(): void {
   const CanvasCtor = ((
     globalThis as { HTMLCanvasElement?: typeof HTMLCanvasElement }
   ).HTMLCanvasElement ?? w.HTMLCanvasElement) as
-    | typeof HTMLCanvasElement
-    | undefined;
+    typeof HTMLCanvasElement | undefined;
 
   const canvasProto = CanvasCtor?.prototype as CanvasPrototype | undefined;
   const originalGetContext = canvasProto?.getContext as
-    | ((...args: unknown[]) => unknown)
-    | undefined;
+    ((...args: unknown[]) => unknown) | undefined;
 
   if (canvasProto) {
     const stubbed = function getContext(

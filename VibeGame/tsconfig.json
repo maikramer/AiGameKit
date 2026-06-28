@@ -22,7 +22,6 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "types": ["vite/client", "bun-types"],
-    "baseUrl": ".",
     "paths": {
       "vibegame": ["./src/index.ts"],
       "vibegame/defaults": ["./src/defaults.ts"],

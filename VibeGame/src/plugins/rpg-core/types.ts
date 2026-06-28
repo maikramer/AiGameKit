@@ -7,11 +7,7 @@
 export type ResourceKind = 'gold' | 'wood' | 'stone' | (string & {});
 
 export type FactionTag =
-  | 'player'
-  | 'enemy'
-  | 'neutral'
-  | 'merchant'
-  | (string & {});
+  'player' | 'enemy' | 'neutral' | 'merchant' | (string & {});
 
 export interface ItemDef {
   id: string;

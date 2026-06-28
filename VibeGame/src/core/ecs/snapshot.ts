@@ -46,11 +46,7 @@ export interface WorldSnapshot {
 }
 
 type ComponentField =
-  | Float32Array
-  | Int32Array
-  | Uint8Array
-  | Uint16Array
-  | Uint32Array;
+  Float32Array | Int32Array | Uint8Array | Uint16Array | Uint32Array;
 
 function getComponentFields(
   component: Component,

@@ -23,6 +23,7 @@ export {
 export type { HeightSamplerData } from './height-sampler';
 export {
   getTerrainHeightAt,
+  isTerrainColliderAt,
   findNearestTerrainEntity,
   setTerrainWireframe,
   reloadTerrainHeightmap,

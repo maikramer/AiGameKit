@@ -79,6 +79,7 @@ import {
   getBodyForEntity,
   getBvhSurfaceHeight,
   getTerrainHeightAt,
+  isTerrainColliderAt,
   getBodyYForFeetAt,
   getRapierWorld,
   terrainReady,
@@ -203,7 +204,7 @@ const HeroGroundSnapSystem: System = {
 
     if (physicsGroundBelow(state, body, x, snapY, z)) {
       heroGroundSnapped = true;
-    } else if (Number.isFinite(snapY) && terrainReady(state)) {
+    } else if (Number.isFinite(snapY) && isTerrainColliderAt(state, x, z)) {
       heroGroundSnapped = true;
     }
   },

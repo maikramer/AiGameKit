@@ -1,5 +1,5 @@
 import type { Camera, Scene, WebGLRenderer } from 'three';
-import type { Effect } from 'postprocessing';
+import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import type { Component } from '../../core';
 
 export interface EffectDefinition {
@@ -11,11 +11,11 @@ export interface EffectDefinition {
     renderer: WebGLRenderer,
     scene: Scene,
     camera: Camera
-  ): Effect | null;
+  ): Pass | null;
   update?(
     state: Record<string, Float32Array | Uint8Array>,
     entity: number,
-    effect: Effect
+    pass: Pass
   ): void;
   readonly position?: 'first' | 'last';
 }

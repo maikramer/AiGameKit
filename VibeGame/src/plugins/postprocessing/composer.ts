@@ -1,11 +1,19 @@
-import { HalfFloatType, FloatType, UnsignedByteType } from 'three';
-import type { WebGLRenderer, Scene, Camera } from 'three';
-import { EffectComposer, EffectPass, RenderPass } from 'postprocessing';
-import type { Effect } from 'postprocessing';
+import {
+  FloatType,
+  HalfFloatType,
+  UnsignedByteType,
+  Vector2,
+  WebGLRenderTarget,
+} from 'three';
+import type { Camera, Scene, TextureDataType, WebGLRenderer } from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 
 export type PostProcessingPipeline = EffectComposer;
 
-function resolveFrameBufferType(renderer: WebGLRenderer): number {
+function resolveFrameBufferType(renderer: WebGLRenderer): TextureDataType {
   const gl = renderer.getContext() as WebGL2RenderingContext;
   // Half-float framebuffers require EXT_color_buffer_half_float (WebGL2) or
   // the equivalent color-renderable format in the WebGL2 internal table.
@@ -26,22 +34,26 @@ export function buildComposer(
   renderer: WebGLRenderer,
   scene: Scene,
   camera: Camera,
-  effects: Effect[],
-  convolutionEffects: Effect[]
+  passes: Pass[]
 ): EffectComposer {
-  const composer = new EffectComposer(renderer, {
-    frameBufferType: resolveFrameBufferType(renderer),
-  });
+  const frameBufferType = resolveFrameBufferType(renderer);
+  const size = renderer.getSize(new Vector2());
+  const pixelRatio = renderer.getPixelRatio();
+  const renderTarget = new WebGLRenderTarget(
+    Math.max(1, Math.floor(size.width * pixelRatio)),
+    Math.max(1, Math.floor(size.height * pixelRatio)),
+    { type: frameBufferType }
+  );
+
+  const composer = new EffectComposer(renderer, renderTarget);
 
   composer.addPass(new RenderPass(scene, camera));
 
-  if (convolutionEffects.length > 0) {
-    composer.addPass(new EffectPass(camera, ...convolutionEffects));
+  for (const pass of passes) {
+    composer.addPass(pass);
   }
 
-  if (effects.length > 0) {
-    composer.addPass(new EffectPass(camera, ...effects));
-  }
+  composer.addPass(new OutputPass());
 
   return composer;
 }

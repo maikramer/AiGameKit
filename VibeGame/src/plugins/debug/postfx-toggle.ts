@@ -4,12 +4,7 @@ import { getRenderingContext } from '../rendering/utils';
 import { Postprocessing } from '../postprocessing/components';
 
 export type PostFxEffectField =
-  | 'bloom'
-  | 'chromaticAberration'
-  | 'vignette'
-  | 'aa'
-  | 'toneMapping'
-  | 'ssao';
+  'bloom' | 'chromaticAberration' | 'vignette' | 'aa' | 'toneMapping' | 'ssao';
 
 export type PostFxKeyBindings = Map<string, PostFxEffectField>;
 

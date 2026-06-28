@@ -66,9 +66,7 @@ export const tweenParser: Parser = ({ entity, element, state, context }) => {
   const isRotationAxis = axis >= TweenAxis.RotX && axis <= TweenAxis.RotZ;
   const vectorAxis = isRotationAxis
     ? ((axis === TweenAxis.RotX ? 0 : axis === TweenAxis.RotY ? 1 : 2) as
-        | 0
-        | 1
-        | 2)
+        0 | 1 | 2)
     : 0;
 
   state.addComponent(entity, TweenData);

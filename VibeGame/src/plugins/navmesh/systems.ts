@@ -181,8 +181,7 @@ export const NavMeshInitSystem: System = {
       if (!navmeshObstaclesLoaded(state, PLAY_AREA_RADIUS)) return;
       if (loading) {
         const gltfPendingComp = state.getComponent('gltf-pending') as
-          | { loaded: Uint8Array }
-          | undefined;
+          { loaded: Uint8Array } | undefined;
         if (gltfPendingComp) {
           let pending = 0;
           for (let e = 0; e < gltfPendingComp.loaded.length; e++) {

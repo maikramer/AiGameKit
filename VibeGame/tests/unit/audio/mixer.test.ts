@@ -19,9 +19,8 @@ mock.module('howler', () => ({
 
 // Imported after the howler mock is registered (bank.ts imports howler).
 const { emitEvent } = await import('../../../src/plugins/rpg-core/events');
-const { AudioSource, MusicLayerComponent } = await import(
-  '../../../src/plugins/audio/components'
-);
+const { AudioSource, MusicLayerComponent } =
+  await import('../../../src/plugins/audio/components');
 const mixer = await import('../../../src/plugins/audio/mixer');
 const bank = await import('../../../src/plugins/audio/bank');
 

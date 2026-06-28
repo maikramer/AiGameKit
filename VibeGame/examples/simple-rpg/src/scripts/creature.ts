@@ -118,8 +118,7 @@ interface PresentationState {
   lastHp: number;
   flashTimer: number;
   flashMats:
-    | { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[]
-    | null;
+    { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] | null;
   healthBarBg: THREE.Mesh | null;
   healthBarFill: THREE.Mesh | null;
   deathHandled: boolean;
