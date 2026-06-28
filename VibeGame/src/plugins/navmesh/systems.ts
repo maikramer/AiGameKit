@@ -47,6 +47,9 @@ const FIXED_CS = 0.4;
 // Source-mesh resolution for the terrain collision surface. Independent of cs:
 // recast re-voxelises at cs regardless, so a fine source mesh only wastes time.
 // 180 over 240 m ≈ 1.3 m steps, plenty to capture the walkable slope.
+// (Tested lower: recast cost is grid-bound by cs, not source tri count, so
+// reducing this gives no measurable bake speedup — the real win is not waiting
+// the full MAX_INIT_WAIT_FRAMES cap, fixed in the gltf-pending check above.)
 const TERRAIN_SOURCE_DIVISIONS = 180;
 
 const MAX_AGENTS = 256;
@@ -185,7 +188,20 @@ export const NavMeshInitSystem: System = {
         if (gltfPendingComp) {
           let pending = 0;
           for (let e = 0; e < gltfPendingComp.loaded.length; e++) {
-            if (gltfPendingComp.loaded[e] === 0 && state.exists(e)) pending++;
+            // Count only entities that actually carry the gltf-pending
+            // component and haven't loaded. `loaded` is a MAX_ENTITIES array
+            // defaulting to 0, so without the hasComponent guard this counted
+            // every entity *without* the component (hero, NPCs, lights, …) as
+            // "pending" — `pending` never hit 0 and the navmesh always waited
+            // the full MAX_INIT_WAIT_FRAMES cap before baking, even though all
+            // GLBs had finished loading.
+            if (
+              gltfPendingComp.loaded[e] === 0 &&
+              state.exists(e) &&
+              state.hasComponent(e, gltfPendingComp)
+            ) {
+              pending++;
+            }
           }
           if (pending > 0) return;
         }

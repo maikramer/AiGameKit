@@ -142,14 +142,39 @@ const RESPAWN_DELAY = 2.0;
 let heroGroundSnapped = false;
 let heroSpawnY: number | null = null;
 
+// How far below the terrain surface the hero must drop before we treat it as a
+// fall-through and re-seat. Generous enough to ignore slopes/steps/CCT skin.
+const VOID_FALL_MARGIN = 8;
+
 const HeroGroundSnapSystem: System = {
   group: 'fixed',
   after: [PhysicsStepSystem],
   update(state: State) {
-    if (heroGroundSnapped) return;
-
     const heroEid = state.getEntityByName('hero');
     if (heroEid === null || !state.hasComponent(heroEid, Transform)) return;
+
+    // Void-recovery failsafe: even once "snapped", the kinematic CCT can walk
+    // into the void if the snap was released (via the isTerrainColliderAt
+    // branch below) before the chunk's Rapier collider actually existed, or if
+    // a respawn landed over not-yet-built ground. If the hero has fallen well
+    // below the terrain surface, re-arm the snap so it re-seats the hero
+    // instead of falling forever (seen as the world greying out to a void).
+    if (heroGroundSnapped) {
+      if (!terrainReady(state)) return;
+      const gx = Transform.posX[heroEid];
+      const gz = Transform.posZ[heroEid];
+      const surfaceY =
+        getBvhSurfaceHeight(state, gx, 500, gz) ??
+        getTerrainHeightAt(state, gx, gz);
+      if (
+        Number.isFinite(surfaceY) &&
+        Transform.posY[heroEid] < surfaceY - VOID_FALL_MARGIN
+      ) {
+        heroGroundSnapped = false;
+      } else {
+        return;
+      }
+    }
 
     const body = getBodyForEntity(state, heroEid);
     if (!body) return;
@@ -357,21 +382,38 @@ const RespawnSystem: System = {
     if (deathShown && state.time.elapsed >= respawnAtTime) {
       Health.current[hero] = Health.max[hero];
       const body = getBodyForEntity(state, hero);
+      // Place the hero on the actual terrain surface at the respawn point, not
+      // a hardcoded altitude — CHECKPOINT_Y (50) sits *below* most of the world
+      // (plaza ground ≈ 66), so the old path dropped the hero underground and
+      // relied on the snap system to pop it back up (a visible fall/jerk, and a
+      // fall-through into the void whenever that chunk's collider wasn't ready).
+      let respawnY = CHECKPOINT_Y;
+      if (terrainReady(state)) {
+        const groundY =
+          getBvhSurfaceHeight(state, respawnX, 500, respawnZ) ??
+          getTerrainHeightAt(state, respawnX, respawnZ);
+        if (Number.isFinite(groundY)) {
+          respawnY = getBodyYForFeetAt(
+            state,
+            hero,
+            groundY + GROUND_CONTACT_SKIN
+          );
+        }
+      }
       Transform.posX[hero] = respawnX;
-      Transform.posY[hero] = CHECKPOINT_Y;
+      Transform.posY[hero] = respawnY;
       Transform.posZ[hero] = respawnZ;
       Transform.dirty[hero] = 1;
       Rigidbody.velX[hero] = 0;
       Rigidbody.velY[hero] = 0;
       Rigidbody.velZ[hero] = 0;
       if (body) {
-        body.setTranslation(
-          { x: respawnX, y: CHECKPOINT_Y, z: respawnZ },
-          true
-        );
+        body.setTranslation({ x: respawnX, y: respawnY, z: respawnZ }, true);
         body.setLinvel(new RAPIER.Vector3(0, 0, 0), true);
         body.wakeUp();
       }
+      // Still re-arm the snap so it confirms ground with physics and the
+      // void-recovery failsafe owns the case where the collider is late.
       heroGroundSnapped = false;
       deathShown = false;
     }
