@@ -88,6 +88,9 @@ Text3D/testdata/baseline_meshes_raw/*
 # Screenshots / QA locais na raiz do monorepo (não versionar)
 /qa-*.png
 /f3-game-loaded.png
+/melee-*.jpeg
+/melee-*.png
+/w4-*.png
 
 # Agent tool artifacts
 .sisyphus/
