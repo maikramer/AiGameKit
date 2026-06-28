@@ -14,11 +14,18 @@ import json
 import struct
 from pathlib import Path
 
-import bpy
 import pytest
+
+pytest.importorskip("bpy")
+import bpy
 
 GOBLIN_SRC = (
     Path(__file__).resolve().parents[2] / "VibeGame/examples/simple-rpg/public/assets/meshes/goblin_rigged_animated.glb"
+)
+
+pytestmark = pytest.mark.skipif(
+    not GOBLIN_SRC.is_file(),
+    reason=f"Binary asset not available on CI: {GOBLIN_SRC.name}",
 )
 TARGET_FACES = 16000
 

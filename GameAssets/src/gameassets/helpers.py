@@ -355,10 +355,10 @@ def _resolve_manifest_path(raw: str | Path) -> Path:
     if p.suffix.lower() in (".yaml", ".yml"):
         return p
     for ext in (".yaml", ".yml"):
-        candidate = p.with_suffix(ext)
+        candidate = p.parent / (p.name + ext)
         if candidate.is_file():
             return candidate
-    return p.with_suffix(".yaml")
+    return p.parent / (p.name + ".yaml")
 
 
 def _build_context(

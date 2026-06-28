@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 torch = pytest.importorskip("torch")
+pytest.importorskip("torch_cluster")
 
 _UNIRIG = Path(__file__).resolve().parents[1] / "src" / "rigging3d" / "unirig"
 sys.path.insert(0, str(_UNIRIG))

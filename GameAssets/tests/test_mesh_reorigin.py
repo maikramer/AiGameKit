@@ -20,7 +20,7 @@ from gamedev_shared.bpy_mesh import clear_scene, get_bounds, load_glb, save_glb
 
 def _save_box_glb(path: Path, extents: tuple[float, ...] = (1.0, 2.0, 1.0)) -> Path:
     clear_scene()
-    bpy.ops.mesh.primitive_cube_add(size=1.0)
+    bpy.ops.mesh.primitive_cube_add(size=2.0)
     obj = bpy.context.active_object
     obj.scale = (extents[0] / 2, extents[1] / 2, extents[2] / 2)
     bpy.ops.object.transform_apply(scale=True)

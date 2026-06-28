@@ -1509,9 +1509,13 @@ def run_master_pipeline(
     if clean_existing is not None and clean_existing.is_file():
         res.stages.append(StageResult("topology-fix", True, 0.0, "skipped (clean existente)", clean_p))
     else:
+        t3_prof = profile.text3d
+        topo_argv = [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)]
+        if t3_prof is not None and t3_prof.export_origin:
+            topo_argv.extend(["--export-origin", t3_prof.export_origin])
         s = _run(
             "topology-fix",
-            [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)],
+            topo_argv,
             clean_p,
         )
         res.stages.append(s)

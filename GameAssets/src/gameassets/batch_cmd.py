@@ -344,65 +344,53 @@ def batch_cmd(
 
     any_text2d_row, any_texture2d_row = _row_sources()
 
+    def _resolve_bin(env_var: str, tool_name: str) -> str:
+        try:
+            return resolve_binary(env_var, tool_name)
+        except FileNotFoundError:
+            if dry_run:
+                return tool_name
+            raise click.ClickException(f"{tool_name} não encontrado no PATH (defina {env_var})") from None
+
     text2d_bin: str | None = None
     texture2d_bin: str | None = None
     if not skip_text2d:
         if any_text2d_row:
-            try:
-                text2d_bin = resolve_binary("TEXT2D_BIN", "text2d")
-            except FileNotFoundError as e:
-                raise click.ClickException(str(e)) from e
+            text2d_bin = _resolve_bin("TEXT2D_BIN", "text2d")
         if any_texture2d_row:
-            try:
-                texture2d_bin = resolve_binary("TEXTURE2D_BIN", "texture2d")
-            except FileNotFoundError as e:
-                raise click.ClickException(str(e)) from e
+            texture2d_bin = _resolve_bin("TEXTURE2D_BIN", "texture2d")
     text3d_bin: str | None = None
     paint3d_bin: str | None = None
     if with_3d:
-        try:
-            text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e)) from e
+        text3d_bin = _resolve_bin("TEXT3D_BIN", "text3d")
         if any_row_wants_paint:
-            try:
-                paint3d_bin = resolve_binary("PAINT3D_BIN", "paint3d")
-            except FileNotFoundError as e:
-                raise click.ClickException(
-                    "Linhas com paint no pipeline requerem paint3d no PATH ou PAINT3D_BIN."
-                ) from e
+            paint3d_bin = _resolve_bin("PAINT3D_BIN", "paint3d")
 
     rigging3d_bin: str | None = None
     if with_rig and any(_row_wants_rig(r, has_rigging_profile) for r in rows):
-        try:
-            rigging3d_bin = resolve_binary("RIGGING3D_BIN", "rigging3d")
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e)) from e
+        rigging3d_bin = _resolve_bin("RIGGING3D_BIN", "rigging3d")
 
     animator3d_bin: str | None = None
     if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows)) or (
         with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows)
     ):
         animator3d_bin = _resolve_animator3d_bin()
-        if not animator3d_bin and with_animate:
-            raise click.ClickException(
-                "Comando não encontrado: 'animator3d'. Instala Animator3D ou define ANIMATOR3D_BIN."
-            )
+        if not animator3d_bin:
+            if dry_run:
+                animator3d_bin = "animator3d"
+            elif with_animate:
+                raise click.ClickException(
+                    "Comando não encontrado: 'animator3d'. Instala Animator3D ou define ANIMATOR3D_BIN."
+                ) from None
 
     part3d_bin: str | None = None
     if with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows):
-        try:
-            part3d_bin = resolve_binary("PART3D_BIN", "part3d")
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e)) from e
+        part3d_bin = _resolve_bin("PART3D_BIN", "part3d")
 
     any_audio_row = any(_row_wants_audio(r, has_audio_profile) for r in rows)
     text2sound_bin: str | None = None
     if any_audio_row and not skip_audio:
-        try:
-            text2sound_bin = resolve_binary("TEXT2SOUND_BIN", "text2sound")
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e)) from e
+        text2sound_bin = _resolve_bin("TEXT2SOUND_BIN", "text2sound")
 
     # --- Scene-level tools: Terrain3D and Skymap2D ---
     with_terrain = not no_terrain and profile.terrain3d is not None
@@ -410,16 +398,22 @@ def batch_cmd(
     if with_terrain:
         try:
             terrain3d_bin = _resolve_terrain3d_bin()
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e)) from e
+        except FileNotFoundError:
+            if dry_run:
+                terrain3d_bin = "terrain3d"
+            else:
+                raise click.ClickException("terrain3d não encontrado (defina TERRAIN3D_BIN)") from None
 
     with_skymap = not no_skymap and profile.skymap2d is not None and bool(_skymap2d_profile_effective(profile).prompt)
     skymap2d_bin: str | None = None
     if with_skymap:
         try:
             skymap2d_bin = _resolve_skymap2d_bin()
-        except FileNotFoundError as e:
-            raise click.ClickException(str(e)) from e
+        except FileNotFoundError:
+            if dry_run:
+                skymap2d_bin = "skymap2d"
+            else:
+                raise click.ClickException("skymap2d não encontrado (defina SKYMAP2D_BIN)") from None
 
     meta = Table(show_header=False, box=box.SIMPLE, title="[bold]Batch[/bold]")
     meta.add_row("Perfil", str(profile_path.resolve()))
