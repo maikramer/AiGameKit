@@ -209,7 +209,14 @@ class TestSkin:
         monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
         captured_args: list[str] = []
 
-        def fake_run_bash(_root: Path, _script: str, args: list[str], *, python_bin: str | None = None, **_kwargs: object) -> int:
+        def fake_run_bash(
+            _root: Path,
+            _script: str,
+            args: list[str],
+            *,
+            python_bin: str | None = None,
+            **_kwargs: object,
+        ) -> int:
             captured_args.extend(args)
             return 0
 
@@ -469,7 +476,36 @@ class TestRootOption:
 # ── _rename_generic_bones ──────────────────────────────────────────────
 
 # NPZ parents for a 28-bone humanoid (model output with cls_none).
-_HUMANOID_PARENTS = [None, 0, 1, 2, 3, 4, 3, 6, 7, 8, 9, 10, 11, 3, 13, 14, 15, 16, 17, 18, 0, 20, 21, 22, 0, 24, 25, 26]
+_HUMANOID_PARENTS = [
+    None,
+    0,
+    1,
+    2,
+    3,
+    4,
+    3,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    3,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    0,
+    20,
+    21,
+    22,
+    0,
+    24,
+    25,
+    26,
+]
 
 
 def _build_glb_with_bones(tmp_path: Path, parents: list[int | None], prefix: str = "bone_") -> Path:
@@ -547,15 +583,35 @@ class TestRenameGenericBones:
         # Verify key bone names
         bone_names = {n for n in names if not n.startswith("_")}
         expected = {
-            "Hips", "Spine", "Chest", "UpperChest",
-            "Neck", "Head",
-            "LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand",
-            "RightShoulder", "RightArm", "RightForeArm", "RightHand",
-            "LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase",
-            "RightUpLeg", "RightLeg", "RightFoot", "RightToeBase",
+            "Hips",
+            "Spine",
+            "Chest",
+            "UpperChest",
+            "Neck",
+            "Head",
+            "LeftShoulder",
+            "LeftArm",
+            "LeftForeArm",
+            "LeftHand",
+            "RightShoulder",
+            "RightArm",
+            "RightForeArm",
+            "RightHand",
+            "LeftUpLeg",
+            "LeftLeg",
+            "LeftFoot",
+            "LeftToeBase",
+            "RightUpLeg",
+            "RightLeg",
+            "RightFoot",
+            "RightToeBase",
             # Finger bones (3 per hand, beyond the 4-arm template)
-            "LeftHandFinger1", "LeftHandFinger2", "LeftHandFinger3",
-            "RightHandFinger1", "RightHandFinger2", "RightHandFinger3",
+            "LeftHandFinger1",
+            "LeftHandFinger2",
+            "LeftHandFinger3",
+            "RightHandFinger1",
+            "RightHandFinger2",
+            "RightHandFinger3",
         }
         assert expected <= bone_names
 

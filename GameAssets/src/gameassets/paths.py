@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import shutil
 from pathlib import Path
 
@@ -178,19 +179,15 @@ def move_to_intermediate(src: Path, mesh_final: Path) -> Path:
     except OSError:
         pass
     if dst.exists():
-        try:
+        with contextlib.suppress(OSError):
             dst.unlink()
-        except OSError:
-            pass
     try:
         src.rename(dst)
     except OSError:
         # Cross-device fallback
         shutil.copy2(src, dst)
-        try:
+        with contextlib.suppress(OSError):
             src.unlink()
-        except OSError:
-            pass
     return dst
 
 

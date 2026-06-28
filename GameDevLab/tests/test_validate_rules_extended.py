@@ -53,7 +53,7 @@ def test_texture_format_ktx2() -> None:
     assert ok
 
     insp_bad = _base_inspect(texture_mime_types=["image/png"])
-    ok, fails, _ = evaluate_inspect_rules(insp_bad, rules)
+    ok, _fails, _ = evaluate_inspect_rules(insp_bad, rules)
     assert not ok
 
 
@@ -64,7 +64,7 @@ def test_compression_meshopt() -> None:
     assert ok
 
     insp_bad = _base_inspect(extensions_used=[])
-    ok, fails, _ = evaluate_inspect_rules(insp_bad, rules)
+    ok, _fails, _ = evaluate_inspect_rules(insp_bad, rules)
     assert not ok
 
 

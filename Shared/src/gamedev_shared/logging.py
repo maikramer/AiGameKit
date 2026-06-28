@@ -74,6 +74,13 @@ class Logger:
         else:
             print(f"\033[0;34m[STEP]\033[0m {msg}")
 
+    def dim(self, msg: str) -> None:
+        """Mensagem secundária/esmaecida (progresso fino, detalhes não-críticos)."""
+        if self.rich_available:
+            self._console.print(f"[dim]{msg}[/dim]")  # type: ignore[union-attr]
+        else:
+            print(f"\033[2m{msg}\033[0m")
+
     def success(self, msg: str) -> None:
         if self.rich_available:
             self._console.print(f"[bold green]✓[/bold green] {msg}")  # type: ignore[union-attr]

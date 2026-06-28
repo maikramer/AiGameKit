@@ -144,8 +144,20 @@ def batch(
 
 @main.command()
 @click.argument("style", type=click.Choice(list(STYLES)))
-@click.option("-o", "--output", type=click.Path(), default=None, help="Output GLB path (file when -n 1, else a directory)")
-@click.option("--seed", type=int, default=None, show_default=True, help="Random seed (incremented per item when -n > 1)")
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(),
+    default=None,
+    help="Output GLB path (file when -n 1, else a directory)",
+)
+@click.option(
+    "--seed",
+    type=int,
+    default=None,
+    show_default=True,
+    help="Random seed (incremented per item when -n > 1)",
+)
 @click.option("-n", "--count", type=int, default=1, show_default=True, help="How many formations to generate")
 @click.option("--chunks", type=int, default=None, help="Override chunk count for the style")
 @click.option(

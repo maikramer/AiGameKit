@@ -137,9 +137,7 @@ class HumanoidRig:
         if pb is None or rest_inv is None:
             return
         q_world = (
-            Quaternion((0.0, 0.0, 1.0), yaw)
-            @ Quaternion((1.0, 0.0, 0.0), pitch)
-            @ Quaternion((0.0, 1.0, 0.0), roll)
+            Quaternion((0.0, 0.0, 1.0), yaw) @ Quaternion((1.0, 0.0, 0.0), pitch) @ Quaternion((0.0, 1.0, 0.0), roll)
         )
         q_local = rest_inv @ q_world @ self._rest[bone]
         prev = self._last_q.get(bone)
@@ -404,19 +402,25 @@ def idle_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, cycles: flo
         # instead of hanging stiff against the thigh.
         abr = rig.arm_bones("r")
         if abr:
-            pose = merge(pose, {
-                abr["upper"]: {"pitch": 0.22, "roll": 0.14},
-                abr["fore"]: {"pitch": -0.62, "yaw": 0.10},
-            })
+            pose = merge(
+                pose,
+                {
+                    abr["upper"]: {"pitch": 0.22, "roll": 0.14},
+                    abr["fore"]: {"pitch": -0.62, "yaw": 0.10},
+                },
+            )
             if "hand" in abr:
                 pose = merge(pose, {abr["hand"]: {"pitch": -0.12}})
         # Off (left) hand hangs relaxed and low against the side.
         abl = rig.arm_bones("l")
         if abl:
-            pose = merge(pose, {
-                abl["upper"]: {"roll": -0.20},
-                abl["fore"]: {"pitch": 0.10},
-            })
+            pose = merge(
+                pose,
+                {
+                    abl["upper"]: {"roll": -0.20},
+                    abl["fore"]: {"pitch": 0.10},
+                },
+            )
         rig.key_pose(frame, pose)
 
 
@@ -480,8 +484,8 @@ def attack_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, strikes: 
             return f0 + round(t * seg)
 
         rig.key_pose(at(0.0), base)
-        rig.key_pose(at(0.30), windup())            # antecipação lenta
-        rig.key_pose(at(0.48), strike())            # golpe rápido (snap)
+        rig.key_pose(at(0.30), windup())  # antecipação lenta
+        rig.key_pose(at(0.48), strike())  # golpe rápido (snap)
         rig.key_pose(at(0.58), mix(strike(), base, 0.12))  # follow-through segura
         rig.key_pose(frame_start + round((k + 1) * seg) if k < strikes - 1 else frame_end, base)
 
@@ -491,9 +495,7 @@ def attack_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, strikes: 
 # ---------------------------------------------------------------------------
 
 
-def _both_arms(
-    rig: HumanoidRig, *, upper: float, fore: float, roll: float = 0.0
-) -> Pose:
+def _both_arms(rig: HumanoidRig, *, upper: float, fore: float, roll: float = 0.0) -> Pose:
     """Symmetric two-handed arm pose (e.g. gripping a pick/axe/spear haft).
     `roll` spreads the arms outward (mirrored). pitch- swings forward/down."""
     pose: Pose = {}
@@ -506,9 +508,7 @@ def _both_arms(
     return pose
 
 
-def _one_arm(
-    rig: HumanoidRig, side: str, *, upper: float, fore: float, roll: float = 0.0
-) -> Pose:
+def _one_arm(rig: HumanoidRig, side: str, *, upper: float, fore: float, roll: float = 0.0) -> Pose:
     ab = rig.arm_bones(side)
     if not ab:
         return {}
@@ -752,7 +752,7 @@ def jump_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
     rig.key_pose(at(0.0), base)
     rig.key_pose(at(0.10), mix(base, crouch(), 0.3))  # antecipação
     rig.key_pose(at(0.24), crouch())
-    rig.key_pose(at(0.36), launch())                   # extensão rápida
+    rig.key_pose(at(0.36), launch())  # extensão rápida
     rig.key_pose(at(0.52), tuck())
     rig.key_pose(at(0.72), descend())
     rig.key_pose(at(0.86), land())
@@ -824,8 +824,19 @@ def turn_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, direction: 
 # ---------------------------------------------------------------------------
 
 _CLIPS = {
-  "idle", "walk", "run", "attack", "jump", "fall", "turn",
-  "mine", "chop", "spear", "axe", "sword", "gather",
+    "idle",
+    "walk",
+    "run",
+    "attack",
+    "jump",
+    "fall",
+    "turn",
+    "mine",
+    "chop",
+    "spear",
+    "axe",
+    "sword",
+    "gather",
 }
 
 

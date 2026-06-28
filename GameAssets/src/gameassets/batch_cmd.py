@@ -2895,7 +2895,7 @@ def batch_cmd(
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
-                                        on_progress_line=dash.feed_line,
+                                        on_progress_line=None,
                                     ):
                                         failures += 1
                                 append_log(rec)

@@ -24,7 +24,7 @@ def _rasterize_vertex_colors_to_texture(
     size: int,
 ) -> np.ndarray:
     """
-    ``uvs`` (N,2) [0,1], ``vertex_rgb`` (N,3) linear 0–1.
+    ``uvs`` (N,2) [0,1], ``vertex_rgb`` (N,3) linear 0-1.
     Devolve ``(H,W,3)`` uint8 sRGB por pixel.
     """
     h = w = int(size)

@@ -20,6 +20,8 @@ _logger = Logger()
 
 DEFAULT_LORA_MODEL_ID = "gokaygokay/Flux-Seamless-Texture-LoRA"
 DEFAULT_BASE_MODEL_ID = "Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32"
+# Alias compat: o "modelo" do Texture2D é a LoRA seamless aplicada sobre o FLUX base.
+DEFAULT_MODEL_ID = DEFAULT_LORA_MODEL_ID
 
 BASE_TEXTURE_INSTRUCTIONS = (
     "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, "

@@ -155,6 +155,18 @@ class AudioGenerator:
             return
         self.load()
 
+    def _preflight_download(self) -> None:
+        """Garante o checkpoint em disco antes do load (download com resume/progresso).
+
+        Best-effort: se falhar, ``get_pretrained_model`` faz o download como antes.
+        """
+        try:
+            from gamedev_shared.model_download import ensure_model
+
+            ensure_model(self._model_id)
+        except Exception:
+            pass
+
     def load(self) -> None:
         """Carrega o modelo pré-treinado para o device configurado."""
         if self._loaded:
@@ -167,6 +179,7 @@ class AudioGenerator:
         except ImportError:
             pass
 
+        self._preflight_download()
         self._model, self._model_config = get_pretrained_model(self._model_id)
         # Stable Audio Open Small declares diffusion_objective='rf_denoiser'
         # (rectified flow), but stable_audio_tools' generation loop only

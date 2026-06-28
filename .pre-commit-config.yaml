@@ -13,3 +13,4 @@ repos:
       - id: mypy
         args: [--ignore-missing-imports]
         files: ^Shared/src/
+        additional_dependencies: [types-PyYAML]

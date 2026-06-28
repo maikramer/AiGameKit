@@ -110,7 +110,7 @@
         fog-color="#0d1c14"
         fog-density="0.05"
         ambient="#3a4a55"
-        bgm-layer="2"
+        bgm-layer="1"
         terrain-texture="/assets/textures/forest_floor.png"
       ></BiomeRegion>
       <!-- LESTE: Deserto -->
@@ -122,7 +122,7 @@
         fog-color="#d8c89a"
         fog-density="0.015"
         ambient="#5a4a3a"
-        bgm-layer="3"
+        bgm-layer="1"
         terrain-texture="/assets/textures/desert_sand.png"
       ></BiomeRegion>
       <!-- SUL: Pântano -->
@@ -134,7 +134,7 @@
         fog-color="#16241a"
         fog-density="0.07"
         ambient="#2a3a30"
-        bgm-layer="4"
+        bgm-layer="1"
         terrain-texture="/assets/textures/swamp_mud.png"
       ></BiomeRegion>
       <!-- OESTE: Picos Gelados -->
@@ -146,7 +146,7 @@
         fog-color="#dfe8f2"
         fog-density="0.045"
         ambient="#aeb9c8"
-        bgm-layer="2"
+        bgm-layer="1"
         terrain-texture="/assets/textures/snow_peak.png"
       ></BiomeRegion>
 
@@ -227,21 +227,41 @@
 
       <!-- Arcos de portão (lintéis) — decorativos, sem colisão para o vão
            ficar livre. -->
-      <Composition place="at: 0 22; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: 0 22; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 3.4 0" size="7.5 0.5 0.7" color="#4a3018"></Box>
       </Composition>
-      <Composition place="at: 0 -22; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: 0 -22; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 3.4 0" size="7.5 0.5 0.7" color="#4a3018"></Box>
       </Composition>
-      <Composition place="at: 22 0; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: 22 0; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 3.4 0" size="0.7 0.5 7.5" color="#4a3018"></Box>
       </Composition>
-      <Composition place="at: -22 0; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: -22 0; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 3.4 0" size="0.7 0.5 7.5" color="#4a3018"></Box>
       </Composition>
 
       <!-- Praça central: poço + fogueira ladeando o ponto de nascimento. -->
-      <Composition place="at: -7 6; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition
+        place="at: -7 6; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
         <Cylinder pos="0 0.45 0" size="1.3 1.3 0.9" color="#9a958c"></Cylinder>
         <Cylinder pos="0 0.55 0" size="1.0 1.0 0.1" color="#2f6fb0"></Cylinder>
         <Box pos="-1.15 1.0 0" size="0.16 1.7 0.16" color="#5a3a20"></Box>
@@ -250,17 +270,42 @@
         <Cylinder pos="0 2.4 0" size="0.05 1.5 0.95" color="#7a3b28"></Cylinder>
         <Box pos="0 1.45 0" size="0.5 0.5 0.5" color="#6b4a2b"></Box>
       </Composition>
-      <Composition place="at: 7 -6; align-to-terrain: 0" body="fixed" collider="none">
-        <Cylinder pos="0 0.12 0" size="1.0 1.15 0.25" color="#6f6a63"></Cylinder>
-        <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 0 0.2" color="#5a3a20"></Cylinder>
-        <Cylinder pos="0 0.35 0" size="0.12 0.12 1.5" rotation="1.5 1.0 -0.2" color="#6b4a2b"></Cylinder>
+      <Composition
+        place="at: 7 -6; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
+        <Cylinder
+          pos="0 0.12 0"
+          size="1.0 1.15 0.25"
+          color="#6f6a63"
+        ></Cylinder>
+        <Cylinder
+          pos="0 0.35 0"
+          size="0.12 0.12 1.5"
+          rotation="1.5 0 0.2"
+          color="#5a3a20"
+        ></Cylinder>
+        <Cylinder
+          pos="0 0.35 0"
+          size="0.12 0.12 1.5"
+          rotation="1.5 1.0 -0.2"
+          color="#6b4a2b"
+        ></Cylinder>
         <Sphere pos="0 0.7 0" size="0.55" color="#ff7722"></Sphere>
         <Sphere pos="0 1.05 0" size="0.32" color="#ffcc33"></Sphere>
-        <PointLight pos="0 1.1 0" point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2"></PointLight>
+        <PointLight
+          pos="0 1.1 0"
+          point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2"
+        ></PointLight>
       </Composition>
 
       <!-- Mastro com bandeira da cidade junto ao poço. -->
-      <Composition place="at: -7 9; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: -7 9; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 2.0 0" size="0.1 4.0 0.1" color="#5a3a20"></Box>
         <Sphere pos="0 4.05 0" size="0.13" color="#d4b84a"></Sphere>
         <Box pos="0.5 3.2 0" size="0.06 1.0 0.8" color="#b03b3b"></Box>
@@ -270,66 +315,146 @@
       <!-- Quatro casas nos cantos diagonais (deixam os corredores cardeais
            livres). Cada casa = 1 entidade com corpo fixo e colisores compostos. -->
       <!-- Casa NE -->
-      <Composition place="at: 13 13; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition
+        place="at: 13 13; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
         <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
         <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#d8c7a0"></Box>
         <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
         <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
         <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
         <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
-        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#7a3b28"></Box>
-        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#7a3b28"></Box>
-        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffcc88; intensity: 2; distance: 5; decay: 2"></PointLight>
+        <Box
+          pos="-1.3 3.05 0"
+          size="3.1 0.2 5.4"
+          rotation="0 0 0.62"
+          color="#7a3b28"
+        ></Box>
+        <Box
+          pos="1.3 3.05 0"
+          size="3.1 0.2 5.4"
+          rotation="0 0 -0.62"
+          color="#7a3b28"
+        ></Box>
+        <PointLight
+          pos="0 1.5 -0.5"
+          point-light="color: 0xffcc88; intensity: 2; distance: 5; decay: 2"
+        ></PointLight>
       </Composition>
       <!-- Casa NW -->
-      <Composition place="at: -13 13; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition
+        place="at: -13 13; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
         <Box pos="0 0.1 0" size="4.4 0.2 4.4" color="#6b4a2b"></Box>
         <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" color="#c9b48a"></Box>
         <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
         <Box pos="2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
         <Box pos="-1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
         <Box pos="1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
-        <Box pos="-1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 0.6" color="#6e4b2a"></Box>
-        <Box pos="1.15 2.8 0" size="2.8 0.2 4.8" rotation="0 0 -0.6" color="#6e4b2a"></Box>
+        <Box
+          pos="-1.15 2.8 0"
+          size="2.8 0.2 4.8"
+          rotation="0 0 0.6"
+          color="#6e4b2a"
+        ></Box>
+        <Box
+          pos="1.15 2.8 0"
+          size="2.8 0.2 4.8"
+          rotation="0 0 -0.6"
+          color="#6e4b2a"
+        ></Box>
       </Composition>
       <!-- Casa SW (lareira acesa) -->
-      <Composition place="at: -13 -13; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition
+        place="at: -13 -13; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
         <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
         <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#cfc3b0"></Box>
         <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
         <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
         <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
         <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
-        <Box pos="-1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 0.62" color="#55402a"></Box>
-        <Box pos="1.3 3.05 0" size="3.1 0.2 5.4" rotation="0 0 -0.62" color="#55402a"></Box>
-        <PointLight pos="0 1.5 -0.5" point-light="color: 0xffc070; intensity: 2; distance: 5; decay: 2"></PointLight>
+        <Box
+          pos="-1.3 3.05 0"
+          size="3.1 0.2 5.4"
+          rotation="0 0 0.62"
+          color="#55402a"
+        ></Box>
+        <Box
+          pos="1.3 3.05 0"
+          size="3.1 0.2 5.4"
+          rotation="0 0 -0.62"
+          color="#55402a"
+        ></Box>
+        <PointLight
+          pos="0 1.5 -0.5"
+          point-light="color: 0xffc070; intensity: 2; distance: 5; decay: 2"
+        ></PointLight>
       </Composition>
       <!-- Casa SE — longhouse do ancião (maior) -->
-      <Composition place="at: 13 -13; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition
+        place="at: 13 -13; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
         <Box pos="0 0.1 0" size="7 0.2 5" color="#6b4a2b"></Box>
         <Box pos="0 1.6 -2.4" size="7 3.0 0.3" color="#d2c1a0"></Box>
         <Box pos="-3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
         <Box pos="3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
         <Box pos="-2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
         <Box pos="2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="-1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 0.6" color="#7a3b28"></Box>
-        <Box pos="1.9 3.4 0" size="4.0 0.22 5.4" rotation="0 0 -0.6" color="#7a3b28"></Box>
+        <Box
+          pos="-1.9 3.4 0"
+          size="4.0 0.22 5.4"
+          rotation="0 0 0.6"
+          color="#7a3b28"
+        ></Box>
+        <Box
+          pos="1.9 3.4 0"
+          size="4.0 0.22 5.4"
+          rotation="0 0 -0.6"
+          color="#7a3b28"
+        ></Box>
         <Box pos="0 4.35 0" size="0.5 0.5 5.4" color="#5a3a20"></Box>
       </Composition>
 
       <!-- Bancas de mercado junto ao poço (oeste da praça). -->
-      <Composition place="at: -10 0; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: -10 0; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
         <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
         <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
-        <Box pos="-0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#b03b3b"></Box>
-        <Box pos="0.6 2.1 0" size="1.2 0.08 2.2" rotation="-0.5 0 0" color="#e8ddc8"></Box>
+        <Box
+          pos="-0.6 2.1 0"
+          size="1.2 0.08 2.2"
+          rotation="-0.5 0 0"
+          color="#b03b3b"
+        ></Box>
+        <Box
+          pos="0.6 2.1 0"
+          size="1.2 0.08 2.2"
+          rotation="-0.5 0 0"
+          color="#e8ddc8"
+        ></Box>
         <Sphere pos="-0.6 1.4 0" size="0.13" color="#cc3322"></Sphere>
         <Sphere pos="0.6 1.16 0.2" size="0.16" color="#e2a02a"></Sphere>
       </Composition>
 
       <!-- Quadro de avisos da cidade (perto do portão sul). -->
-      <Composition place="at: 4 -16; align-to-terrain: 0" body="fixed" collider="auto">
+      <Composition
+        place="at: 4 -16; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
         <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
         <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
         <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
@@ -337,15 +462,29 @@
       </Composition>
 
       <!-- Tochas da praça (decorativas, sem colisão). -->
-      <Composition place="at: 6 6; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: 6 6; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
         <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
+        <PointLight
+          pos="0 2.05 0"
+          point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+        ></PointLight>
       </Composition>
-      <Composition place="at: -6 -6; align-to-terrain: 0" body="fixed" collider="none">
+      <Composition
+        place="at: -6 -6; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
         <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
         <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-        <PointLight pos="0 2.05 0" point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"></PointLight>
+        <PointLight
+          pos="0 2.05 0"
+          point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+        ></PointLight>
       </Composition>
 
       <!-- Comerciante da cidade: banca a leste da praça. Aproxime e [K]. -->
@@ -409,7 +548,11 @@
             lod1-url="/assets/meshes/tree_oak_lod1.glb"
             lod2-url="/assets/meshes/tree_oak_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode kind="wood" yield="3" transform="pos: 0 0 0"></ResourceNode>
+          <ResourceNode
+            kind="wood"
+            yield="3"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
       <StaticSpawner
@@ -431,8 +574,15 @@
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
         >
-          <GLTFLoader role="visual" url="/assets/meshes/rock_mossy_lod0.glb"></GLTFLoader>
-          <ResourceNode kind="stone" yield="3" transform="pos: 0 0 0"></ResourceNode>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/rock_mossy_lod0.glb"
+          ></GLTFLoader>
+          <ResourceNode
+            kind="stone"
+            yield="3"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
@@ -482,7 +632,11 @@
             lod1-url="/assets/meshes/pine_dark_lod1.glb"
             lod2-url="/assets/meshes/pine_dark_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode kind="wood" yield="3" transform="pos: 0 0 0"></ResourceNode>
+          <ResourceNode
+            kind="wood"
+            yield="3"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
       <StaticSpawner
@@ -519,7 +673,10 @@
         avoid-overlaps="1"
       >
         <GameObject role="static">
-          <GLTFLoader role="visual" url="/assets/meshes/mushroom_glow_lod0.glb"></GLTFLoader>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/mushroom_glow_lod0.glb"
+          ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
 
@@ -530,7 +687,10 @@
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
         collider="shape: trimesh; mesh-url: /assets/meshes/witch_hut_collision.glb; mesh-anchor: base"
       >
-        <GLTFLoader role="visual" url="/assets/meshes/witch_hut_lod0.glb"></GLTFLoader>
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/witch_hut_lod0.glb"
+        ></GLTFLoader>
       </GameObject>
 
       <DynamicSpawner
@@ -594,7 +754,11 @@
             lod1-url="/assets/meshes/cactus_lod1.glb"
             lod2-url="/assets/meshes/cactus_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0"></ResourceNode>
+          <ResourceNode
+            kind="wood"
+            yield="2"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
       <StaticSpawner
@@ -610,7 +774,10 @@
         avoid-overlaps="1"
       >
         <GameObject role="static">
-          <GLTFLoader role="visual" url="/assets/meshes/dead_bush_lod0.glb"></GLTFLoader>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/dead_bush_lod0.glb"
+          ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
       <!-- Ruínas do deserto (pilares dispersos). -->
@@ -631,7 +798,10 @@
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base"
         >
-          <GLTFLoader role="visual" url="/assets/meshes/ruin_pillar_lod0.glb"></GLTFLoader>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/ruin_pillar_lod0.glb"
+          ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
 
@@ -642,7 +812,10 @@
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
         collider="shape: trimesh; mesh-url: /assets/meshes/scorpion_nest_collision.glb; mesh-anchor: base"
       >
-        <GLTFLoader role="visual" url="/assets/meshes/scorpion_nest_lod0.glb"></GLTFLoader>
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/scorpion_nest_lod0.glb"
+        ></GLTFLoader>
       </GameObject>
 
       <DynamicSpawner
@@ -706,7 +879,11 @@
             lod1-url="/assets/meshes/dead_willow_lod1.glb"
             lod2-url="/assets/meshes/dead_willow_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0"></ResourceNode>
+          <ResourceNode
+            kind="wood"
+            yield="2"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
       <StaticSpawner
@@ -743,7 +920,10 @@
         avoid-overlaps="1"
       >
         <GameObject role="static">
-          <GLTFLoader role="visual" url="/assets/meshes/lily_pad_lod0.glb"></GLTFLoader>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/lily_pad_lod0.glb"
+          ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
 
@@ -754,7 +934,10 @@
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
         collider="shape: trimesh; mesh-url: /assets/meshes/swamp_shack_collision.glb; mesh-anchor: base"
       >
-        <GLTFLoader role="visual" url="/assets/meshes/swamp_shack_lod0.glb"></GLTFLoader>
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/swamp_shack_lod0.glb"
+        ></GLTFLoader>
       </GameObject>
 
       <DynamicSpawner
@@ -818,7 +1001,11 @@
             lod1-url="/assets/meshes/pine_dark_lod1.glb"
             lod2-url="/assets/meshes/pine_dark_lod2.glb"
           ></GLTFLoader>
-          <ResourceNode kind="wood" yield="2" transform="pos: 0 0 0"></ResourceNode>
+          <ResourceNode
+            kind="wood"
+            yield="2"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
       <StaticSpawner
@@ -840,23 +1027,58 @@
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
         >
-          <GLTFLoader role="visual" url="/assets/meshes/moss_rock_lod0.glb"></GLTFLoader>
-          <ResourceNode kind="stone" yield="4" transform="pos: 0 0 0"></ResourceNode>
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/moss_rock_lod0.glb"
+          ></GLTFLoader>
+          <ResourceNode
+            kind="stone"
+            yield="4"
+            transform="pos: 0 0 0"
+          ></ResourceNode>
         </GameObject>
       </StaticSpawner>
 
       <!-- Formações rochosas (rocks3d) — marcos dos picos. -->
-      <GameObject place="at: -120 20; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_cliff_1.glb"></GLTFLoader>
+      <GameObject
+        place="at: -120 20; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_cliff_1.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -135 -30; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_spire-cluster_7.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_spire-cluster_7.glb"></GLTFLoader>
+      <GameObject
+        place="at: -135 -30; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_spire-cluster_7.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_spire-cluster_7.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -90 -50; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_outcrop_2.glb"></GLTFLoader>
+      <GameObject
+        place="at: -90 -50; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_outcrop_2.glb"
+        ></GLTFLoader>
       </GameObject>
-      <GameObject place="at: -100 55; align-to-terrain: 1" rigidbody="type: fixed; mass: 0; gravity-scale: 0" collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6.glb; mesh-anchor: base">
-        <GLTFLoader role="visual" url="/assets/meshes/form_stack_6.glb"></GLTFLoader>
+      <GameObject
+        place="at: -100 55; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_stack_6.glb"
+        ></GLTFLoader>
       </GameObject>
 
       <DynamicSpawner
@@ -909,80 +1131,188 @@
            dialogue-id == quest id (JSON).
            ============================================================ -->
       <!-- Floresta (norte) -->
-      <Composition name="npc_forest_wolves" place="at: -8 30; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="forest_wolves" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_forest_wolves"
+        place="at: -8 30; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="forest_wolves"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a6a3a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
       </Composition>
-      <Composition name="npc_forest_shades" place="at: 8 34; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="forest_shades" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_forest_shades"
+        place="at: 8 34; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="forest_shades"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#6a3a8a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
       </Composition>
-      <Composition name="npc_forest_darkwood" place="at: 0 50; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="forest_darkwood" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_forest_darkwood"
+        place="at: 0 50; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="forest_darkwood"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#5a3a20"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#7a5230"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#ddccbb"></Sphere>
       </Composition>
 
       <!-- Deserto (leste) -->
-      <Composition name="npc_desert_scorpions" place="at: 30 -8; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="desert_scorpions" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_desert_scorpions"
+        place="at: 30 -8; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="desert_scorpions"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#d98a2a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
       </Composition>
-      <Composition name="npc_desert_bandits" place="at: 34 8; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="desert_bandits" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_desert_bandits"
+        place="at: 34 8; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="desert_bandits"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#c46a1a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
       </Composition>
-      <Composition name="npc_desert_ruins" place="at: 50 0; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="desert_ruins" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_desert_ruins"
+        place="at: 50 0; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="desert_ruins"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a5a30"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#e0a040"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#e8d8b0"></Sphere>
       </Composition>
 
       <!-- Pântano (sul) -->
-      <Composition name="npc_swamp_boglings" place="at: -8 -30; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="swamp_boglings" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_swamp_boglings"
+        place="at: -8 -30; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="swamp_boglings"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#5a7a4a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
       </Composition>
-      <Composition name="npc_swamp_bogwarden" place="at: 8 -34; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="swamp_bogwarden" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_swamp_bogwarden"
+        place="at: 8 -34; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="swamp_bogwarden"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a5a4a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
       </Composition>
-      <Composition name="npc_swamp_bogmoss" place="at: 0 -50; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="swamp_bogmoss" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_swamp_bogmoss"
+        place="at: 0 -50; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="swamp_bogmoss"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#4a4a3a"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#6a8a5a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#b0c0a0"></Sphere>
       </Composition>
 
       <!-- Picos Gelados (oeste) -->
-      <Composition name="npc_peaks_goblins" place="at: -30 -8; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="peaks_goblins" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_peaks_goblins"
+        place="at: -30 -8; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="peaks_goblins"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#4a6a8a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
       </Composition>
-      <Composition name="npc_peaks_frost" place="at: -34 8; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="peaks_frost" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_peaks_frost"
+        place="at: -34 8; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="peaks_frost"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#5a8ab0"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
       </Composition>
-      <Composition name="npc_peaks_ogre" place="at: -50 0; align-to-terrain: 1" body="none" collider="none">
-        <DialogueNPC dialogue-id="peaks_ogre" portrait-url="" voice-sfx=""></DialogueNPC>
+      <Composition
+        name="npc_peaks_ogre"
+        place="at: -50 0; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <DialogueNPC
+          dialogue-id="peaks_ogre"
+          portrait-url=""
+          voice-sfx=""
+        ></DialogueNPC>
         <Box pos="0 0.1 0" size="1.4 0.2 1.4" color="#7a8290"></Box>
         <Box pos="0 1.1 0" size="0.6 1.8 0.4" color="#3a4a6a"></Box>
         <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
@@ -1004,28 +1334,77 @@
       <HudScreenLayer></HudScreenLayer>
       <HealthBar target-entity="hero" icon="❤"></HealthBar>
       <XpBar target-entity="hero"></XpBar>
-      <ResourceChip resource="gold" icon="🪙" target-entity="hero"></ResourceChip>
-      <ResourceChip resource="wood" icon="🪵" target-entity="hero"></ResourceChip>
-      <ResourceChip resource="stone" icon="🪨" target-entity="hero"></ResourceChip>
+      <ResourceChip
+        resource="gold"
+        icon="🪙"
+        target-entity="hero"
+      ></ResourceChip>
+      <ResourceChip
+        resource="wood"
+        icon="🪵"
+        target-entity="hero"
+      ></ResourceChip>
+      <ResourceChip
+        resource="stone"
+        icon="🪨"
+        target-entity="hero"
+      ></ResourceChip>
       <Minimap range="60"></Minimap>
       <Compass></Compass>
       <BossBar target-entity="boss"></BossBar>
-      <InteractionPrompt key="F" range="4.5" position="bottom-center"></InteractionPrompt>
+      <InteractionPrompt
+        key="F"
+        range="4.5"
+        position="bottom-center"
+      ></InteractionPrompt>
 
       <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto de
            um <DialogueNPC>; QuestsTab lista as quests ativas. -->
       <DialogueBalloon></DialogueBalloon>
 
       <!-- Menu de pausa: modal tabbed com [Q]. -->
-      <TabbedModal id="pause" key="q" target-entity="hero" title-key="modal.pause">
+      <TabbedModal
+        id="pause"
+        key="q"
+        target-entity="hero"
+        title-key="modal.pause"
+      >
         <SkillsTab></SkillsTab>
         <InventoryTab columns="5"></InventoryTab>
         <OptionsTab>
-          <OptionRow id="music-volume" type="slider" label-key="options.music" min="0" max="100" step="5" default="70"></OptionRow>
-          <OptionRow id="sfx-volume" type="slider" label-key="options.sfx" min="0" max="100" step="5" default="80"></OptionRow>
-          <OptionRow id="save" type="button" label-key="options.save"></OptionRow>
-          <OptionRow id="load" type="button" label-key="options.load"></OptionRow>
-          <OptionRow id="controls" type="note" label-key="options.controls"></OptionRow>
+          <OptionRow
+            id="music-volume"
+            type="slider"
+            label-key="options.music"
+            min="0"
+            max="100"
+            step="5"
+            default="70"
+          ></OptionRow>
+          <OptionRow
+            id="sfx-volume"
+            type="slider"
+            label-key="options.sfx"
+            min="0"
+            max="100"
+            step="5"
+            default="80"
+          ></OptionRow>
+          <OptionRow
+            id="save"
+            type="button"
+            label-key="options.save"
+          ></OptionRow>
+          <OptionRow
+            id="load"
+            type="button"
+            label-key="options.load"
+          ></OptionRow>
+          <OptionRow
+            id="controls"
+            type="note"
+            label-key="options.controls"
+          ></OptionRow>
         </OptionsTab>
         <QuestsTab></QuestsTab>
       </TabbedModal>

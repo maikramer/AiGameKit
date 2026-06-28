@@ -33,6 +33,7 @@ class HardwareProfile:
     total_vram_gib: float
     image_width: int | None = None  # None = não override (usa default do CLI)
     image_height: int | None = None
+    offload: bool = False  # True = CPU offload (conditioner->model->vae) em VRAM baixa
 
     def summary(self) -> str:
         parts = [
@@ -42,6 +43,8 @@ class HardwareProfile:
         ]
         if self.sdnq_preset:
             parts.append(f"sdnq={self.sdnq_preset}")
+        if self.offload:
+            parts.append("cpu-offload")
         if self.image_width:
             parts.append(f"img={self.image_width}x{self.image_height}")
         if self.gpu_ids:
@@ -111,6 +114,11 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
         img_w = 1024
         img_h = 1024
 
+    # CPU offload proativo só em GPUs muito pequenas (<5GB): em 6GB o DiT int4 cabe
+    # com pipe.to(cuda) (caminho rápido validado), e o generator tem fallback OOM ->
+    # enable_model_cpu_offload se a colocação estourar. Multi-GPU divide os pesos.
+    offload = (not multi) and largest_gib < 5.0
+
     return HardwareProfile(
         name=name,
         device="cuda",
@@ -123,6 +131,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
         total_vram_gib=round(total_gib, 1),
         image_width=img_w,
         image_height=img_h,
+        offload=offload,
     )
 
 

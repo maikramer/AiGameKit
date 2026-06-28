@@ -367,7 +367,7 @@ def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
 
             c = Console()
         except ImportError:
-            c = None  # type: ignore[assignment]
+            c = None
         msg = (
             f"\u26a0 VRAM preflight: {len(big)} GPU process(es) detected using {total_mib} MiB total:\n"
             + "\n".join(f"  - {line}" for line in big)

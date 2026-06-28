@@ -55,14 +55,14 @@
     "portrait": "",
     "voice": "",
     "lines_intro": [
-      "As ruínas ao sul guardam fragmentos antigos.",
-      "Recolha 6 fragmentos e te revelo um relicário."
+      "As ruínas guardam pedra rúnica sob os escombros.",
+      "Extraia 6 pedras e te revelo um relicário."
     ],
-    "lines_progress": ["Faltam {remaining} fragmentos de ruína."],
+    "lines_progress": ["Faltam {remaining} pedras rúnicas."],
     "lines_complete": ["Excelente! Leve esta relíquia antiga."],
     "objective": {
       "type": "collect",
-      "target": "ruin_fragment",
+      "target": "stone",
       "count": 6
     },
     "rewards": {

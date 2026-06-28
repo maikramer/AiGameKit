@@ -9,6 +9,7 @@ paths: planner → apply → subprocess propagation → CUDA cleanup → package
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -295,13 +296,15 @@ class TestSubprocessGPUPropagation:
         """No gpu_ids → CUDA_VISIBLE_DEVICES absent from env."""
         from gamedev_shared.env import subprocess_gpu_env
 
-        env = subprocess_gpu_env()
-        # If the outer env happens to have it, remove for test purity
-        assert "CUDA_VISIBLE_DEVICES" not in env or env.get("CUDA_VISIBLE_DEVICES") is None or True
-        # Verify the function did NOT add it (it only adds when gpu_ids is truthy)
-        # Re-run with explicit None to be sure
-        env2 = subprocess_gpu_env(gpu_ids=None)
-        assert "CUDA_VISIBLE_DEVICES" not in env2 or True  # not set by function
+        # Isolate from outer env so the assert is deterministic
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            env = subprocess_gpu_env()
+            assert "CUDA_VISIBLE_DEVICES" not in env
+            # Verify the function did NOT add it (it only adds when gpu_ids is truthy)
+            # Re-run with explicit None to be sure
+            env2 = subprocess_gpu_env(gpu_ids=None)
+            assert "CUDA_VISIBLE_DEVICES" not in env2
 
     def test_gpu_ids_list_sets_cuda_visible(self) -> None:
         """gpu_ids=[0, 1] → CUDA_VISIBLE_DEVICES='0,1'."""
@@ -321,9 +324,10 @@ class TestSubprocessGPUPropagation:
         """gpu_ids=[] → CUDA_VISIBLE_DEVICES not set (empty list is falsy)."""
         from gamedev_shared.env import subprocess_gpu_env
 
-        env = subprocess_gpu_env(gpu_ids=[])
-        # Empty list is falsy → function skips setting CUDA_VISIBLE_DEVICES
-        assert "CUDA_VISIBLE_DEVICES" not in env or True
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+            env = subprocess_gpu_env(gpu_ids=[])
+            assert "CUDA_VISIBLE_DEVICES" not in env
 
     def test_gpu_ids_with_extra_env(self) -> None:
         """gpu_ids and extra env vars are both applied."""

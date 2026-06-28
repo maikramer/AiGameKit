@@ -39,7 +39,7 @@ class DevicePlan:
 
     device_map: dict[str, int | str] = field(default_factory=dict)
     status: str = "cpu_only"
-    max_memory: dict[int | str, int] = field(default_factory=dict)
+    max_memory: dict[int | str, int | str] = field(default_factory=dict)
     primary_device: int | str = "cpu"
     warnings: list[str] = field(default_factory=list)
 

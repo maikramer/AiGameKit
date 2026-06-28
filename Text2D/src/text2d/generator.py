@@ -20,8 +20,27 @@ from gamedev_shared.logging import Logger
 
 _logger = Logger()
 
-HIGH_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32"
-LOW_VRAM_MODEL_ID = "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic"
+# Modelos BASE (fp16, não pré-quantizados). A quantização (uint8/int8/int4/fp8) é
+# escolhida por VRAM e aplicada em **runtime** via SDNQ — assim seguimos as melhorias
+# do SDNQ upstream em vez de depender de checkpoints pré-quantizados congelados.
+HIGH_VRAM_MODEL_ID = "black-forest-labs/FLUX.2-klein-9B"
+LOW_VRAM_MODEL_ID = "black-forest-labs/FLUX.2-klein-4B"
+
+
+def model_footprint(model_id: str) -> Any:
+    """Pegada fp16 (GiB) do modelo BASE — alimenta ``plan_offload`` para escolher o
+    preset de quantização + offload por VRAM.
+    """
+    from gamedev_shared.lowvram import ModelFootprint
+
+    # Pegadas calibradas com medições reais no RTX 4050 6GB: o "4B"/"9B" é só o
+    # transformer; o pipeline inclui um text-encoder grande (Mistral-class), por isso o
+    # fp16 total é bem maior. Com int4, o residente do 4B ~4.5GB → em 6GB tem de ir a
+    # offload (validado: pico ~4.1GiB em model_cpu offload).
+    if model_id == LOW_VRAM_MODEL_ID:
+        return ModelFootprint(fp16_weights_gib=14.0, activation_gib=1.5, largest_module_gib=5.0)
+    # 9B base (default/high ou override desconhecido).
+    return ModelFootprint(fp16_weights_gib=26.0, activation_gib=1.5, largest_module_gib=9.0)
 
 
 def _model_id(low_vram: bool = False) -> str:
@@ -76,12 +95,15 @@ class KleinFluxGenerator:
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
+        quant_preset: str | None = None,
     ):
         self.verbose = verbose
         self.low_vram = low_vram
         self.model_id = model_id or _model_id(low_vram=self.low_vram)
         self.cache_dir = cache_dir
         self.gpu_ids = gpu_ids
+        # Preset SDNQ explícito (override); None = o planner decide por VRAM em runtime.
+        self.quant_preset = quant_preset
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -90,6 +112,7 @@ class KleinFluxGenerator:
 
         self.torch_dtype = _torch_dtype_for(self.device)
         self._pipe: Any = None
+        self._plan: Any = None
         self._on_status: Callable[[str], None] | None = None
         self._multi_gpu: bool = False
 
@@ -125,9 +148,18 @@ class KleinFluxGenerator:
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
+        # Allocator com expandable_segments ANTES do 1º alloc CUDA — reduz fragmentação
+        # (decisiva no limite de 6GB) e evita OOM por memória reservada-mas-não-alocada.
+        from gamedev_shared.quantization import set_memory_optimization_env
+
+        set_memory_optimization_env()
+
         triton_is_available, _ = _register_sdnq()
 
         from diffusers import Flux2KleinPipeline
+
+        plan = self._resolve_plan()
+        self._plan = plan
 
         kwargs: dict[str, Any] = {
             "torch_dtype": self.torch_dtype,
@@ -135,21 +167,26 @@ class KleinFluxGenerator:
         if self.cache_dir:
             kwargs["cache_dir"] = self.cache_dir
 
-        self._status("Passo 1/3 — from_pretrained (rede/disco na 1ª vez: vários GB; GPU pode ficar em ~0% — normal)")
-        self._log(f"Carregando {self.model_id}...")
+        # Preset SDNQ a aplicar em runtime (post-load), decidido por VRAM. O pipeline
+        # diffusers não aceita SDNQConfig no from_pretrained (precisaria de um backend
+        # registado); a quantização do modelo base faz-se depois do load, layer-by-layer.
+        preset = self._resolve_preset(plan)
+        qlabel = preset or "fp16 (sem quant)"
+
+        self._preflight_download()
+
+        self._status(f"Passo 1/4 — from_pretrained base em CPU (quant={qlabel}; 1ª vez baixa vários GB)")
+        self._log(f"Carregando base {self.model_id} (quant={qlabel})...")
         pipe = Flux2KleinPipeline.from_pretrained(self.model_id, **kwargs)
 
-        self._status("Passo 2/3 — SDNQ (matmul quantizado opcional via Triton)")
+        if preset:
+            self._status(f"Passo 2/4 — quantização SDNQ {preset} em runtime (layer-by-layer)")
+            self._runtime_quantize(pipe, preset)
+
+        self._status("Passo 3/4 — SDNQ (matmul quantizado opcional via Triton)")
         _maybe_apply_quantized_matmul(pipe, triton_is_available)
 
-        if self.device == "cpu":
-            mode_label = "cpu"
-        elif self.low_vram:
-            mode_label = f"{self.device} (cpu_offload — módulos migram 1 a 1)"
-        else:
-            mode_label = self.device
-        self._status(f"Passo 3/3 — a mover o pipeline para {mode_label}")
-
+        self._status(f"Passo 4/4 — colocação: {plan.summary()}")
         self._clear_cache()
 
         if torch.cuda.is_available() and self.device == "cuda":
@@ -157,16 +194,26 @@ class KleinFluxGenerator:
                 if gid < torch.cuda.device_count():
                     torch.cuda.reset_peak_memory_stats(gid)
 
+        did_offload = False
         if self.device == "cpu":
             pipe.to("cpu")
-        elif self.low_vram:
-            pipe.enable_model_cpu_offload()
-        elif self._try_multi_gpu(pipe):
+        elif plan.multi_gpu_ids and self._try_multi_gpu(pipe):
             self._status("Modelo carregado — split multi-GPU (accelerate)")
+        elif plan.low_vram or self.low_vram:
+            self._apply_offload(pipe, plan, forced=self.low_vram)
+            did_offload = True
         else:
-            pipe.to(self.device)
+            # Full-GPU é a estimativa do planner; se a colocação real estourar a VRAM
+            # (footprint otimista), cai para CPU offload — rede de segurança always-fit.
+            try:
+                pipe.to(self.device)
+            except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+                self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para CPU offload")
+                self._clear_cache()
+                self._apply_offload(pipe, plan, forced=True)
+                did_offload = True
 
-        if torch.cuda.is_available() and self.device == "cuda" and not self.low_vram:
+        if torch.cuda.is_available() and self.device == "cuda" and not did_offload:
             if self._multi_gpu:
                 gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
                 parts = []
@@ -184,6 +231,93 @@ class KleinFluxGenerator:
 
         self._pipe = pipe
         return pipe
+
+    def _preflight_download(self) -> None:
+        """Garante o checkpoint em disco antes do load (download com resume/progresso).
+
+        Não-bloqueante: se o preflight falhar (offline mas em cache, ou hub indisponível),
+        deixa o ``from_pretrained`` tentar/cair como antes.
+        """
+        try:
+            from gamedev_shared.model_download import ensure_model
+
+            ensure_model(self.model_id, cache_dir=self.cache_dir, on_status=self._status)
+        except Exception as exc:
+            self._log(f"preflight download falhou ({exc}); a deixar from_pretrained tratar")
+
+    def _resolve_plan(self) -> Any:
+        """Resolve o :class:`OffloadPlan` por VRAM (quant + offload) para o modelo base.
+
+        Respeita ``gpu_ids`` (restringe às GPUs escolhidas) e o device. Puro quanto à
+        decisão; só lê specs de GPU.
+        """
+        from gamedev_shared.hardware import cuda_gpu_specs
+        from gamedev_shared.lowvram import plan_offload
+
+        specs = [] if self.device == "cpu" else cuda_gpu_specs()
+        if self.gpu_ids:
+            keep = set(self.gpu_ids)
+            specs = [(i, m) for i, m in specs if i in keep]
+        allow_multi = self.gpu_ids is None or len(self.gpu_ids) >= 2
+        return plan_offload(specs, model_footprint(self.model_id), allow_multi_gpu=allow_multi)
+
+    def _resolve_preset(self, plan: Any) -> str | None:
+        """Preset SDNQ a aplicar (``quant_preset`` explícito ganha; senão o do plano).
+
+        Devolve ``None`` quando não há quant (``none``) ou o SDNQ não está disponível.
+        """
+        preset = self.quant_preset or (plan.quant_mode if plan.quant_mode != "none" else None)
+        if not preset or preset == "none":
+            return None
+        from gamedev_shared.sdnq import is_available
+
+        if not is_available():
+            self._log("SDNQ indisponível — base em fp16 (sem quantização)")
+            return None
+        return preset
+
+    def _runtime_quantize(self, pipe: Any, preset: str) -> None:
+        """Quantiza os componentes pesados do pipeline em runtime (SDNQ post-load).
+
+        Carregado em CPU, cada componente é quantizado layer-by-layer (peso baixo na GPU)
+        e devolvido já quantizado — evita o pico fp16 do modelo inteiro na VRAM.
+        """
+        from gamedev_shared.sdnq import quantize_model
+
+        # Quantizar na GPU (rápido) mas devolver os pesos int4 à CPU: a colocação
+        # final (pipe.to(cuda) ou offload) move-os depois, evitando o pico fp16+int4
+        # simultâneo na VRAM que estoura os 6GB.
+        quant_device = "cuda" if self.device == "cuda" and torch.cuda.is_available() else "cpu"
+        for attr in ("transformer", "text_encoder", "text_encoder_2"):
+            mod = getattr(pipe, attr, None)
+            if mod is None:
+                continue
+            try:
+                setattr(
+                    pipe,
+                    attr,
+                    quantize_model(mod, preset, quantization_device=quant_device, return_device="cpu"),
+                )
+                self._log(f"SDNQ {preset} aplicado a {attr}")
+            except Exception as exc:
+                self._log(f"quantização de {attr} falhou ({exc}); componente fica em fp16")
+        self._clear_cache()
+
+    def _apply_offload(self, pipe: Any, plan: Any, *, forced: bool) -> None:
+        """Aplica offload + VAE/attn slicing via planner partilhado.
+
+        Se ``forced`` (utilizador pediu ``--low-vram``) e o plano não traz offload,
+        promove a ``model_cpu`` para honrar a intenção. O planner pode já trazer
+        ``sequential`` quando nem ``model_cpu`` cabe.
+        """
+        from dataclasses import replace
+
+        from gamedev_shared.lowvram import OFFLOAD_MODEL, OFFLOAD_NONE, apply_offload_plan
+
+        if forced and plan.offload == OFFLOAD_NONE:
+            plan = replace(plan, offload=OFFLOAD_MODEL, vae_slicing=True, vae_tiling=True, attention_slicing=True)
+        apply_offload_plan(pipe, plan, device=self.device if self.device != "cuda" else None)
+        self._log(f"offload: {plan.summary()}")
 
     def _try_multi_gpu(self, pipe: Any) -> bool:
         if not torch.cuda.is_available() or torch.cuda.device_count() < 2:

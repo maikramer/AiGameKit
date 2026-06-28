@@ -111,8 +111,7 @@ class TestNormalizationRoundTrip:
 
         # The displacement should be significant (bug present)
         assert displacement > 0.1, (
-            f"Expected significant joint displacement from icosphere inflation, "
-            f"got only {displacement:.4f}"
+            f"Expected significant joint displacement from icosphere inflation, got only {displacement:.4f}"
         )
 
     def test_roundtrip_succeeds_when_icosphere_filtered(self):
@@ -123,7 +122,7 @@ class TestNormalizationRoundTrip:
         mesh_verts = rng.uniform([-1, 0, -1], [1, 2, 1], size=(1000, 3)).astype(np.float32)
 
         # Icosphere (would be filtered)
-        ico_verts = rng.uniform([-1, -1, -1], [1, 1, 1], size=(42, 3)).astype(np.float32)
+        _ = rng.uniform([-1, -1, -1], [1, 1, 1], size=(42, 3)).astype(np.float32)
 
         joints = np.array([[0.0, 1.0, 0.0]], dtype=np.float32)  # Hips
         tails = joints + np.array([[0, 0.1, 0]], dtype=np.float32)
@@ -173,8 +172,7 @@ class TestProcessMeshSkipUnskinned:
         # Import the function (skip_unskinned parameter)
 
         # Call with skip_unskinned=True
-        with patch.object(mesh_with_vg.data, "vertices", []), \
-             patch.object(mesh_with_vg.data, "polygons", []):
+        with patch.object(mesh_with_vg.data, "vertices", []), patch.object(mesh_with_vg.data, "polygons", []):
             # We need to mock enough of the function internals
             # For this test, we just verify the filtering logic
             pass
@@ -184,6 +182,7 @@ class TestProcessMeshSkipUnskinned:
         import inspect
 
         from rigging3d.unirig.src.data.extract import process_mesh
+
         sig = inspect.signature(process_mesh)
         param = sig.parameters.get("skip_unskinned")
         assert param is not None, "skip_unskinned parameter should exist"

@@ -16,6 +16,7 @@ Contém:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import struct
@@ -1323,10 +1324,8 @@ def _stage(
                 "percent": round(percent, 1),
             }
             data.update(meta)
-            try:
+            with contextlib.suppress(Exception):
                 on_progress_line(_json.dumps(data))
-            except Exception:
-                pass
 
     _emit("run", 0)
 

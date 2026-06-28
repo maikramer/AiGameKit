@@ -62,30 +62,30 @@ class TestDefaultModelId:
 
 
 class TestTextureGenerator:
-    @patch("texture2d.generator.TextureGenerator._init_client")
-    def test_init(self, mock_client):
+    def test_init(self):
         from texture2d.generator import TextureGenerator
 
-        mock_client.return_value = MagicMock()
-        gen = TextureGenerator()
+        gen = TextureGenerator(device="cpu")
         assert gen.model_id == DEFAULT_MODEL_ID
 
-    @patch("texture2d.generator.TextureGenerator._init_client")
-    def test_generate_returns_image(self, mock_init):
+    @patch("texture2d.generator.TextureGenerator._load_pipeline")
+    def test_generate_returns_image(self, mock_load):
         from texture2d.generator import TextureGenerator
 
         mock_image = Image.new("RGB", (64, 64), color="red")
-        mock_client = MagicMock()
-        mock_client.text_to_image.return_value = mock_image
-        mock_init.return_value = mock_client
+        fake_out = MagicMock()
+        fake_out.images = [mock_image]
+        fake_pipe = MagicMock(return_value=fake_out)
+        mock_load.return_value = fake_pipe
 
-        gen = TextureGenerator()
+        gen = TextureGenerator(device="cpu")
         image, metadata = gen.generate(
             prompt="test stone",
             width=256,
             height=256,
             num_inference_steps=10,
+            seed=1,
         )
         assert isinstance(image, Image.Image)
         assert "seed" in metadata
-        mock_client.text_to_image.assert_called_once()
+        fake_pipe.assert_called_once()

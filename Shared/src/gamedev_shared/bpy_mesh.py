@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 
-def _require_bpy():
+def _require_bpy() -> Any:
     try:
         import bpy
 
@@ -86,7 +86,7 @@ def _needs_tangents(objects: Any) -> bool:
     return False
 
 
-def save_glb(objects, path: str | Path, **kwargs: Any) -> None:
+def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
     """Export scene/objects to GLB via bpy native exporter.
 
     Preserves armature, skinning, animations, materials, UVs.
@@ -165,7 +165,7 @@ def get_mesh_objects() -> list:
     return [o for o in bpy.context.scene.objects if o.type == "MESH"]
 
 
-def get_bounds(obj) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+def get_bounds(obj: Any) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
     """World-space AABB of *obj* as (min_corner, max_corner)."""
     _require_bpy()
     verts_world = [obj.matrix_world @ v.co for v in obj.data.vertices]
@@ -177,12 +177,12 @@ def get_bounds(obj) -> tuple[tuple[float, float, float], tuple[float, float, flo
     return ((min(xs), min(ys), min(zs)), (max(xs), max(ys), max(zs)))
 
 
-def face_count(obj) -> int:
+def face_count(obj: Any) -> int:
     """Total polygon count of *obj*."""
     return len(obj.data.polygons)
 
 
-def vertex_count(obj) -> int:
+def vertex_count(obj: Any) -> int:
     """Total vertex count of *obj*."""
     return len(obj.data.vertices)
 
@@ -313,7 +313,7 @@ def save_scene_geometries(scene: Any, path: str | Path) -> None:
     save_glb(None, path)
 
 
-def load_mesh_as_trimesh(path: str | Path):
+def load_mesh_as_trimesh(path: str | Path) -> Any:
     """Load mesh via bpy, return trimesh.Trimesh for pipeline compatibility.
 
     Lazy-imports trimesh internally so the calling module stays trimesh-free.

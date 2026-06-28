@@ -25,26 +25,30 @@ def test_no_gpu_cpu_profile() -> None:
     assert p.device == "cpu"
     assert p.model_id == LOW_VRAM_MODEL_ID
     assert p.low_vram is True
+    assert p.quant_preset == "none"
 
 
-def test_rtx4050_6gb_gets_4b_with_offload() -> None:
-    """Validado no hardware: 4B full-GPU dá OOM em 6GB; offload pico ~4.6GB."""
+def test_rtx4050_6gb_4b_int4_offload() -> None:
+    """6GB (validado no hardware): 4B int4 não cabe full-GPU → model_cpu offload."""
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
     assert p.model_id == LOW_VRAM_MODEL_ID
+    assert p.quant_preset == "sdnq-int4"
     assert p.low_vram is True
     assert p.gpu_ids is None
 
 
-def test_single_8gb_4b_full_gpu() -> None:
+def test_single_8gb_4b_int4_full_gpu() -> None:
     p = profile_from_specs([(0, _gib(8))])
     assert p.model_id == LOW_VRAM_MODEL_ID
+    assert p.quant_preset == "sdnq-int4"
     assert p.low_vram is False
 
 
-def test_single_12gb_gets_9b_full_gpu() -> None:
+def test_single_12gb_gets_9b_int4_full_gpu() -> None:
     p = profile_from_specs([(0, _gib(12))])
     assert p.model_id == HIGH_VRAM_MODEL_ID
+    assert p.quant_preset == "sdnq-int4"
     assert p.low_vram is False
     assert p.gpu_ids is None
 

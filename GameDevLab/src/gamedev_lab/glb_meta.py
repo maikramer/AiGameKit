@@ -75,7 +75,7 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
     texture_mime_types: list[str] = []
     for img in images:
         mt = img.get("mimeType") or ""
-        ext = (img.get("extensions") or {})
+        ext = img.get("extensions") or {}
         if "EXT_texture_webp" in ext or "image/webp" in mt:
             texture_mime_types.append("image/webp")
         elif "KHR_texture_basisu" in (chunk.get("extensionsUsed") or []) and not mt:
@@ -90,10 +90,7 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
     # Heurística: se há textures que apontam para KHR_texture_basisu, todas as
     # imagens fonte são KTX2 mesmo sem mimeType.
     if "KHR_texture_basisu" in extensions_used:
-        texture_mime_types = [
-            mt if mt and mt != "unknown" else "image/ktx2"
-            for mt in texture_mime_types
-        ]
+        texture_mime_types = [mt if mt and mt != "unknown" else "image/ktx2" for mt in texture_mime_types]
 
     return {
         "attributes_present": sorted(union_attrs),

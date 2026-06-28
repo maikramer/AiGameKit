@@ -201,7 +201,8 @@ def generate_cmd(
     low = low_vram or cpu
     if low and width == 2048 and height == 2048:
         width, height = 1024, 1024
-    resolved_model = model_id or _model_id(low_vram=low)
+    resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(low_vram=low))
+    quant_preset = hwp.quant_preset if hwp is not None else None
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if gpu_ids is None and hwp is not None and hwp.gpu_ids:
@@ -237,8 +238,9 @@ def generate_cmd(
                 device=device,
                 low_vram=low,
                 verbose=verbose,
-                model_id=model_id,
+                model_id=resolved_model,
                 gpu_ids=gpu_ids,
+                quant_preset=quant_preset,
             )
 
             with (
@@ -347,9 +349,7 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     elif isinstance(parsed, list):
         items = parsed
     else:
-        raise ValueError(
-            f"esperado array JSON ou objeto único, recebido {type(parsed).__name__}"
-        )
+        raise ValueError(f"esperado array JSON ou objeto único, recebido {type(parsed).__name__}")
     for i, item in enumerate(items):
         missing = [k for k in ("id", "prompt", "output") if k not in item]
         if missing:
@@ -469,6 +469,8 @@ def generate_batch_cmd(
             low_vram = True
 
     low = low_vram or cpu
+    resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(low_vram=low))
+    quant_preset = hwp.quant_preset if hwp is not None else None
     parsed_gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if parsed_gpu_ids is None and hwp is not None and hwp.gpu_ids:
         parsed_gpu_ids = hwp.gpu_ids
@@ -480,8 +482,9 @@ def generate_batch_cmd(
             device="cpu" if cpu else None,
             low_vram=low,
             verbose=batch_verbose,
-            model_id=model_id,
+            model_id=resolved_model,
             gpu_ids=parsed_gpu_ids,
+            quant_preset=quant_preset,
         )
         _batch_gen = gen
 

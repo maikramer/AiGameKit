@@ -38,7 +38,12 @@ def test_load_manifest_yaml_pipeline() -> None:
     content = yaml.dump(
         {
             "assets": [
-                {"id": "hero", "idea": "chibi hero", "kind": "character", "pipeline": ["3d", "paint", "rig", "animate"]},
+                {
+                    "id": "hero",
+                    "idea": "chibi hero",
+                    "kind": "character",
+                    "pipeline": ["3d", "paint", "rig", "animate"],
+                },
             ]
         }
     )

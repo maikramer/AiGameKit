@@ -76,6 +76,7 @@ class HunyuanTextTo3DGenerator:
         compile_models: bool = False,
         sage_attention: bool = False,
         sdnq_quantized_matmul: bool = False,
+        offload: bool = False,
     ):
         if volume_decoder not in self.VOLUME_DECODERS:
             raise ValueError(f"volume_decoder inválido: {volume_decoder!r} (válidos: {sorted(self.VOLUME_DECODERS)})")
@@ -92,6 +93,7 @@ class HunyuanTextTo3DGenerator:
         self.mc_algo = mc_algo
         self.compile_models = compile_models
         self.sdnq_quantized_matmul = sdnq_quantized_matmul
+        self.offload = offload
         self.sage_attention = self._setup_sage_attention(sage_attention)
 
         if device is None:
@@ -181,6 +183,8 @@ class HunyuanTextTo3DGenerator:
         if self.cache_dir:
             kwargs["cache_dir"] = self.cache_dir
 
+        self._preflight_hunyuan()
+
         self._log(f"A carregar Hunyuan3DDiTFlowMatchingPipeline ({self.hunyuan_model_id})...")
         _clear_cuda_cache()
         pipe = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(self.hunyuan_model_id, **kwargs)
@@ -225,7 +229,7 @@ class HunyuanTextTo3DGenerator:
 
         if hunyuan_device == "cuda":
             _clear_cuda_cache()
-            pipe.to(hunyuan_device)
+            self._place_on_cuda(pipe)
             if torch.cuda.is_available():
                 alloc = torch.cuda.memory_allocated() / (1024**3)
                 self._log(f"Shape na VRAM: {alloc:.2f} GB")
@@ -233,6 +237,43 @@ class HunyuanTextTo3DGenerator:
         self._configure_acceleration(pipe)
         self._hunyuan_pipeline = pipe
         return pipe
+
+    def _preflight_hunyuan(self) -> None:
+        """Garante o snapshot Hunyuan em disco antes do load (download com progresso).
+
+        Best-effort e restrito ao subfolder de shape para não baixar paint/outros. Se
+        falhar (offline mas em cache, ou hub indisponível), o ``from_pretrained`` trata.
+        """
+        try:
+            from gamedev_shared.model_download import ensure_model
+
+            ensure_model(
+                self.hunyuan_model_id,
+                cache_dir=self.cache_dir,
+                allow_patterns=[f"{self.hunyuan_subfolder}/*", "*.json"],
+                on_status=lambda m: self._log(f"preflight: {m}"),
+            )
+        except Exception as exc:
+            self._log(f"preflight Hunyuan falhou ({exc}); a deixar from_pretrained tratar")
+
+    def _place_on_cuda(self, pipe: Any) -> None:
+        """Coloca o pipeline Hunyuan na GPU: offload em VRAM baixa, senão ``to(cuda)``.
+
+        Rede de segurança always-fit: se a colocação direta estourar a VRAM, cai para
+        ``enable_model_cpu_offload`` (seq conditioner->model->vae) — o caminho que faz o
+        Hunyuan caber em 6GB.
+        """
+        if self.offload:
+            self._log("VRAM baixa: enable_model_cpu_offload (conditioner->model->vae)")
+            pipe.enable_model_cpu_offload(device=self.device)
+            return
+        try:
+            pipe.to(self.device)
+        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+            self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para model_cpu offload")
+            _clear_cuda_cache()
+            pipe.enable_model_cpu_offload(device=self.device)
+            self.offload = True
 
     def _configure_acceleration(self, pipe: Any) -> None:
         """Liga decoder volumétrico esparso, extractor GPU e torch.compile no pipeline.

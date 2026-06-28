@@ -46,9 +46,7 @@ def test_has_npx_helper_returns_bool() -> None:
     assert isinstance(_has_npx(), bool)
 
 
-@pytest.mark.skipif(
-    not __import__("shutil").which("npx"), reason="npx não está disponível neste ambiente"
-)
+@pytest.mark.skipif(not __import__("shutil").which("npx"), reason="npx não está disponível neste ambiente")
 def test_finish_runs_dedup_prune_when_npx_available(tmp_path: Path) -> None:
     """Smoke: pelo menos os passos sem texturas devem aplicar quando há npx.
 

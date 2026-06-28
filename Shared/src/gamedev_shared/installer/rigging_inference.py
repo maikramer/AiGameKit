@@ -139,8 +139,7 @@ def install_rigging_inference_extras(
         torch_short, cuda_tag = info.stdout.strip().split()
     except (subprocess.CalledProcessError, ValueError) as e:
         logger.warn(
-            f"Não foi possível detectar torch/CUDA ({e}) — a saltar torch-scatter/spconv; "
-            "verifica o ambiente PyTorch."
+            f"Não foi possível detectar torch/CUDA ({e}) — a saltar torch-scatter/spconv; verifica o ambiente PyTorch."
         )
         return True
 

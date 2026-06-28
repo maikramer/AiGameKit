@@ -35,7 +35,10 @@ def _decompress_meshopt_glb(src: Path) -> Path:
     try:
         r = _sp.run(
             ["npx", "--yes", "@gltf-transform/cli", "copy", str(src), str(out)],
-            capture_output=True, text=True, timeout=300, check=False,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
         )
     except (FileNotFoundError, _sp.TimeoutExpired):
         return src
@@ -761,9 +764,7 @@ def _resolve_bone_axes(arm_obj: Any, bone_name: str, forward: Any) -> dict | Non
     }
 
 
-def _build_axes_map(
-    arm_obj: Any, chains: dict[str, list[str]], forward: Any, keys: tuple[str, ...]
-) -> dict[str, dict]:
+def _build_axes_map(arm_obj: Any, chains: dict[str, list[str]], forward: Any, keys: tuple[str, ...]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for key in keys:
         for bn in chains.get(key, []):
@@ -829,7 +830,9 @@ def _locomotion_cycle(
 
     bpy = _bpy()
     axes = _build_axes_map(
-        arm_obj, chains, forward,
+        arm_obj,
+        chains,
+        forward,
         ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
     )
     two_pi = math.pi * 2.0
@@ -860,13 +863,14 @@ def _locomotion_cycle(
                     _key_humanoid_bone(pb, ax, frame, swing=hip_swing(phi))
                 elif ci == 1:  # knee
                     _key_humanoid_bone(
-                        pb, ax, frame,
-                        bend=knee_flex(phi), swing=hip_swing(phi) * 0.12,
+                        pb,
+                        ax,
+                        frame,
+                        bend=knee_flex(phi),
+                        swing=hip_swing(phi) * 0.12,
                     )
                 elif ci == 2:  # ankle/foot: counter-rotate to stay roughly flat
-                    _key_humanoid_bone(
-                        pb, ax, frame, swing=-ankle_amp * math.cos(phi * two_pi)
-                    )
+                    _key_humanoid_bone(pb, ax, frame, swing=-ankle_amp * math.cos(phi * two_pi))
 
     def anim_arm(names: list[str], phase: float, side: float) -> None:
         # Bring the arm down from the A-pose to the side (constant adduction via
@@ -885,7 +889,9 @@ def _locomotion_cycle(
                 phi = (t * cycles + phase) % 1.0
                 bpy.context.scene.frame_set(frame)
                 _key_humanoid_bone(
-                    pb, ax, frame,
+                    pb,
+                    ax,
+                    frame,
                     medio=arm_amp * scale * math.cos(phi * two_pi),
                     lift=side * adduct,
                 )
@@ -903,7 +909,9 @@ def _locomotion_cycle(
                 phi = (t * cycles) % 1.0
                 bpy.context.scene.frame_set(frame)
                 _key_humanoid_bone(
-                    pb, ax, frame,
+                    pb,
+                    ax,
+                    frame,
                     swing=body_lean * scale,
                     yaw=spine_twist * scale * math.sin(phi * two_pi),
                 )
@@ -922,7 +930,9 @@ def _locomotion_cycle(
             phi = (t * cycles) % 1.0
             bpy.context.scene.frame_set(frame)
             _key_humanoid_bone(
-                pb, ax, frame,
+                pb,
+                ax,
+                frame,
                 swing=body_lean * 0.5 + body_lean * 0.2 * math.cos(phi * two_pi * 2),
             )
             if body_bob > 0.0:
@@ -1002,9 +1012,14 @@ def turn_in_place_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "turn", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
-        direction=direction, turn_amp=turn_amp,
+        "turn",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        direction=direction,
+        turn_amp=turn_amp,
     ):
         return chains
 
@@ -1021,7 +1036,9 @@ def turn_in_place_keyframes(
     total = frame_end - frame_start + 1
     forward = _detect_forward(arm_obj, chains)
     axes = _build_axes_map(
-        arm_obj, chains, forward,
+        arm_obj,
+        chains,
+        forward,
         ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
     )
     two_pi = math.pi * 2.0
@@ -1078,9 +1095,7 @@ def turn_in_place_keyframes(
                 if pb is None or ax is None:
                     continue
                 scale = max(0.3, 1.0 - ci * 0.1)
-                _key_humanoid_bone(
-                    pb, ax, frame, swing=0.12 * scale * math.sin(t * two_pi) * sgn
-                )
+                _key_humanoid_bone(pb, ax, frame, swing=0.12 * scale * math.sin(t * two_pi) * sgn)
 
     finalize_current_action_to_nla(armature_name)
     return chains
@@ -1108,9 +1123,14 @@ def breathe_idle_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "idle", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
-        cycles=cycles, breath_amp=breath_amp,
+        "idle",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
+        cycles=cycles,
+        breath_amp=breath_amp,
     ):
         return chains
 
@@ -1283,8 +1303,12 @@ def attack_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "attack", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        "attack",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
         strikes=strikes,
     ):
         return chains
@@ -1455,61 +1479,97 @@ def _humanoid_action_keyframes(
 
 
 def mine_keyframes(
-    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 40,
     action_name: str = "Animator3D_Mine",
 ) -> dict[str, list[str]]:
     return _humanoid_action_keyframes(
-        "mine", armature_name, frame_start=frame_start, frame_end=frame_end,
+        "mine",
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
         action_name=action_name,
     )
 
 
 def chop_keyframes(
-    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 40,
     action_name: str = "Animator3D_Chop",
 ) -> dict[str, list[str]]:
     return _humanoid_action_keyframes(
-        "chop", armature_name, frame_start=frame_start, frame_end=frame_end,
+        "chop",
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
         action_name=action_name,
     )
 
 
 def spear_keyframes(
-    armature_name: str, *, frame_start: int = 1, frame_end: int = 34,
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 34,
     action_name: str = "Animator3D_Spear",
 ) -> dict[str, list[str]]:
     return _humanoid_action_keyframes(
-        "spear", armature_name, frame_start=frame_start, frame_end=frame_end,
+        "spear",
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
         action_name=action_name,
     )
 
 
 def axe_keyframes(
-    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 40,
     action_name: str = "Animator3D_AxeAttack",
 ) -> dict[str, list[str]]:
     return _humanoid_action_keyframes(
-        "axe", armature_name, frame_start=frame_start, frame_end=frame_end,
+        "axe",
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
         action_name=action_name,
     )
 
 
 def sword_keyframes(
-    armature_name: str, *, frame_start: int = 1, frame_end: int = 32,
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 32,
     action_name: str = "Animator3D_SwordAttack",
 ) -> dict[str, list[str]]:
     return _humanoid_action_keyframes(
-        "sword", armature_name, frame_start=frame_start, frame_end=frame_end,
+        "sword",
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
         action_name=action_name,
     )
 
 
 def gather_keyframes(
-    armature_name: str, *, frame_start: int = 1, frame_end: int = 40,
+    armature_name: str,
+    *,
+    frame_start: int = 1,
+    frame_end: int = 40,
     action_name: str = "Animator3D_Gather",
 ) -> dict[str, list[str]]:
     return _humanoid_action_keyframes(
-        "gather", armature_name, frame_start=frame_start, frame_end=frame_end,
+        "gather",
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
         action_name=action_name,
     )
 
@@ -1532,8 +1592,12 @@ def walk_cycle_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "walk", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        "walk",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
         cycles=cycles,
     ):
         return chains
@@ -1552,15 +1616,19 @@ def walk_cycle_keyframes(
     forward = _detect_forward(arm, chains)
 
     _locomotion_cycle(
-        arm, chains, forward,
-        frame_start=frame_start, total=total, cycles=cycles,
-        hip_amp=leg_amp * 3.2,      # ~26° hip swing (was ~8°, looked shuffly)
-        knee_swing=leg_amp * 6.0,   # ~48° flexion clearing the ground in swing
+        arm,
+        chains,
+        forward,
+        frame_start=frame_start,
+        total=total,
+        cycles=cycles,
+        hip_amp=leg_amp * 3.2,  # ~26° hip swing (was ~8°, looked shuffly)
+        knee_swing=leg_amp * 6.0,  # ~48° flexion clearing the ground in swing
         knee_stance=leg_amp * 0.7,
         ankle_amp=leg_amp * 1.2,
-        arm_amp=leg_amp * 3.5,      # ~28° forward/back arm pendulum
+        arm_amp=leg_amp * 3.5,  # ~28° forward/back arm pendulum
         arm_decay=0.35,
-        arm_adduct=0.6,             # bring arms down ~34° from the A-pose
+        arm_adduct=0.6,  # bring arms down ~34° from the A-pose
         body_lean=body_amp * 1.5,
         spine_twist=body_amp * 1.5,
         body_bob=0.035,
@@ -1568,8 +1636,13 @@ def walk_cycle_keyframes(
 
     # Non-humanoid chains keep the legacy sinusoidal flap/sway.
     _legacy_secondary_motion(
-        arm, chains, frame_start=frame_start, total=total, cycles=cycles,
-        wing_amp=wing_amp, tail_amp=tail_amp,
+        arm,
+        chains,
+        frame_start=frame_start,
+        total=total,
+        cycles=cycles,
+        wing_amp=wing_amp,
+        tail_amp=tail_amp,
     )
 
     finalize_current_action_to_nla(armature_name)
@@ -2314,8 +2387,12 @@ def run_cycle_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "run", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        "run",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
         cycles=cycles,
     ):
         return chains
@@ -2334,23 +2411,32 @@ def run_cycle_keyframes(
     forward = _detect_forward(arm_obj, chains)
 
     _locomotion_cycle(
-        arm_obj, chains, forward,
-        frame_start=frame_start, total=total, cycles=cycles,
-        hip_amp=leg_amp * 3.0,      # ~38° hip swing for a run
-        knee_swing=leg_amp * 5.5,   # deep ~70° flexion in swing
+        arm_obj,
+        chains,
+        forward,
+        frame_start=frame_start,
+        total=total,
+        cycles=cycles,
+        hip_amp=leg_amp * 3.0,  # ~38° hip swing for a run
+        knee_swing=leg_amp * 5.5,  # deep ~70° flexion in swing
         knee_stance=leg_amp * 1.0,
         ankle_amp=leg_amp * 1.4,
-        arm_amp=arm_amp * 3.0,      # strong forward/back drive
+        arm_amp=arm_amp * 3.0,  # strong forward/back drive
         arm_decay=0.3,
-        arm_adduct=0.7,             # arms tucked closer for a run
-        body_lean=body_amp * 2.2,   # pronounced forward lean
+        arm_adduct=0.7,  # arms tucked closer for a run
+        body_lean=body_amp * 2.2,  # pronounced forward lean
         spine_twist=body_amp * 2.0,
         body_bob=0.06,
     )
 
     _legacy_secondary_motion(
-        arm_obj, chains, frame_start=frame_start, total=total, cycles=cycles,
-        wing_amp=wing_amp, tail_amp=tail_amp,
+        arm_obj,
+        chains,
+        frame_start=frame_start,
+        total=total,
+        cycles=cycles,
+        wing_amp=wing_amp,
+        tail_amp=tail_amp,
     )
 
     finalize_current_action_to_nla(armature_name)
@@ -2374,8 +2460,12 @@ def jump_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "jump", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        "jump",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
     ):
         return chains
 
@@ -2392,7 +2482,9 @@ def jump_keyframes(
     total = frame_end - frame_start + 1
     forward = _detect_forward(arm_obj, chains)
     axes = _build_axes_map(
-        arm_obj, chains, forward,
+        arm_obj,
+        chains,
+        forward,
         ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
     )
 
@@ -2419,16 +2511,17 @@ def jump_keyframes(
                 ax = axes.get(leg[1])
                 if pb and ax:
                     _key_humanoid_bone(
-                        pb, ax, bpy.context.scene.frame_current,
-                        bend=value_knee_bend, swing=value_hip * 0.1,
+                        pb,
+                        ax,
+                        bpy.context.scene.frame_current,
+                        bend=value_knee_bend,
+                        swing=value_hip * 0.1,
                     )
             if len(leg) > 2:
                 pb = arm_obj.pose.bones.get(leg[2])
                 ax = axes.get(leg[2])
                 if pb and ax:
-                    _key_humanoid_bone(
-                        pb, ax, bpy.context.scene.frame_current, bend=-value_knee_bend * 0.25
-                    )
+                    _key_humanoid_bone(pb, ax, bpy.context.scene.frame_current, bend=-value_knee_bend * 0.25)
 
     for fi in range(total):
         t = fi / max(total - 1, 1)
@@ -2523,8 +2616,12 @@ def fall_keyframes(
 
     chains = _classify_bone_chains(armature_name)
     if humanoid.try_humanoid_clip(
-        "fall", armature_name, chains,
-        frame_start=frame_start, frame_end=frame_end, action_name=action_name,
+        "fall",
+        armature_name,
+        chains,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        action_name=action_name,
     ):
         return chains
 
@@ -2542,7 +2639,9 @@ def fall_keyframes(
 
     forward = _detect_forward(arm_obj, chains)
     axes = _build_axes_map(
-        arm_obj, chains, forward,
+        arm_obj,
+        chains,
+        forward,
         ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
     )
 
@@ -2553,9 +2652,7 @@ def fall_keyframes(
             if pb is None or ax is None:
                 continue
             s = max(0.3, 1.0 - ci * decay)
-            _key_humanoid_bone(
-                pb, ax, bpy.context.scene.frame_current, swing=val * s, bend=bend * s
-            )
+            _key_humanoid_bone(pb, ax, bpy.context.scene.frame_current, swing=val * s, bend=bend * s)
 
     for fi in range(total):
         t = fi / max(total - 1, 1)

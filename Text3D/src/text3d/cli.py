@@ -565,6 +565,8 @@ def generate(
         if not _user_set_img_h and hwp.image_height is not None:
             image_height = hwp.image_height
 
+    offload = hwp.offload if hwp is not None else False
+
     if sdnq_preset is None:
         sdnq_preset = "none"
 
@@ -680,6 +682,7 @@ def generate(
                         compile_models=compile_models,
                         sage_attention=sage_attention,
                         sdnq_quantized_matmul=sdnq_matmul,
+                        offload=offload,
                     )
 
                 if output is None:
@@ -1755,6 +1758,7 @@ def generate_batch(
         raise click.ClickException(str(e)) from e
 
     resolved_sdnq = sdnq_preset if sdnq_preset else ""
+    batch_offload = hwp.offload if hwp is not None else False
 
     need_load = force or any(not (out_base / it["output"]).is_file() for it in items if "output" in it)
 
@@ -1775,6 +1779,7 @@ def generate_batch(
                     compile_models=compile_models,
                     sage_attention=sage_attention,
                     sdnq_quantized_matmul=sdnq_matmul,
+                    offload=batch_offload,
                 )
 
         _err.print(

@@ -123,9 +123,9 @@ class ViewProcessor:
             project_cos_map = weight * (project_cos_map**self.config.bake_exp)
 
             if _blur_k is None:
-                _blur_k = torch.ones(
-                    1, 1, blur_radius, blur_radius, device=project_boundary_map.device
-                ) / (blur_radius * blur_radius)
+                _blur_k = torch.ones(1, 1, blur_radius, blur_radius, device=project_boundary_map.device) / (
+                    blur_radius * blur_radius
+                )
             bm_blurred = (
                 torch.nn.functional.conv2d(
                     project_boundary_map.permute(2, 0, 1).unsqueeze(0),

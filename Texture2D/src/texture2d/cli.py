@@ -19,6 +19,7 @@ from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
 from gamedev_shared.quality import VALID_QUALITIES
 
+from ._validate_cli import validate_tileable_cmd
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
 from .generator import TextureGenerator, default_model_id
 from .presets import TEXTURE_PRESETS, list_presets
@@ -505,6 +506,9 @@ def info_cmd() -> None:
     t.add_row("Perfil hardware (auto)", f"{_hwp.summary()}{_state}")
 
     console.print(t)
+
+
+cli.add_command(validate_tileable_cmd)
 
 
 def main() -> None:

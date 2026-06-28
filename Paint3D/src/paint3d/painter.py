@@ -87,6 +87,26 @@ def _auto_esrgan_device(low_vram: bool, gpu_ids: list[int] | None) -> str:
     return "cuda"
 
 
+def _preflight_paint_model(model_repo: str, subfolder: str, *, verbose: bool = False) -> None:
+    """Garante os pesos do Hunyuan3D-Paint em disco antes de construir o pipeline.
+
+    Download com resume/progresso, restrito ao subfolder de paint (não baixa shape/dit).
+    Best-effort: se falhar (offline mas em cache, ou hub indisponível), o pipeline trata
+    do download on-demand como antes.
+    """
+    try:
+        from gamedev_shared.model_download import ensure_model
+
+        ensure_model(
+            model_repo,
+            allow_patterns=[f"{subfolder}/*", "*.json", "*.yaml"],
+            on_status=(lambda m: _logger.info(f"preflight: {m}")) if verbose else None,
+        )
+    except Exception as exc:
+        if verbose:
+            _logger.info(f"preflight paint falhou ({exc}); pipeline baixa on-demand")
+
+
 def _apply_optimization_config(config: Any, *, low_vram: bool, gpu_ids: list[int] | None) -> None:
     """Anexa knobs de otimização ao Hunyuan3DPaintConfig.
 
@@ -223,60 +243,115 @@ def _apply_translation(objects: list, offset: np.ndarray) -> None:
         obj.data.update()
 
 
-def _apply_rotation_x(objects: list, angle_rad: float) -> None:
-    """Roda objectos em torno do eixo X (in-place, sobre os vértices).
+def _fit_glb_aabb_to_reference(output_path: str | Path, reference_path: str | Path, *, verbose: bool = False) -> None:
+    """Encaixa o AABB do GLB de saída no AABB do GLB de referência (input), em
+    espaço glTF (Y-up), preservando texturas/materiais.
 
-    Usado para reaplicar a convenção Y-up quando o pipeline de pintura
-    devolve a mesh em Z-up (Hunyuan default). Operamos sobre os vértices
-    (não na transform do objecto) para que o GLB exportado já chegue na
-    orientação certa, sem depender de matrizes de nó.
+    Determinístico, **sem heurística e sem rotação**: o paint preserva a orientação
+    do mesh (verificado: extents por-eixo coincidem), apenas re-normaliza posição e
+    escala. Operar diretamente sobre os ficheiros glTF evita a ambiguidade de eixos
+    Y-up/Z-up do roundtrip por bpy (onde um offset em Y mapeava para -Z). Aplica
+    escala uniforme + translação ao grafo da cena.
     """
-    if abs(angle_rad) < 1e-9:
-        return
-    c = float(np.cos(angle_rad))
-    s = float(np.sin(angle_rad))
+    import trimesh
+
+    ref = trimesh.load(str(reference_path), force="scene")
+    out_scene = trimesh.load(str(output_path), force="scene")
+
+    # Rotação do input lida do node-transform do seu nó de geometria (o paint normaliza
+    # a geometria para o seu frame canónico e descarta esse node-transform). Copiamos
+    # exatamente essa rotação — não a adivinhamos por rácios de AABB.
+    rot = np.eye(3)
+    nodes = list(ref.graph.nodes_geometry)
+    if nodes:
+        node_t, _ = ref.graph[nodes[0]]
+        r = np.asarray(node_t, float)[:3, :3]
+        norms = np.linalg.norm(r, axis=0)
+        norms[norms < 1e-9] = 1.0
+        rot = r / norms  # remove escala, mantém só a orientação
+
+    mesh = out_scene.dump(concatenate=True)  # painted baked nos vértices (frame canónico)
+    center0 = mesh.bounds.mean(axis=0)
+    rot4 = np.eye(4)
+    rot4[:3, :3] = rot
+    # roda em torno do centro do painted para não introduzir translação espúria
+    mesh.apply_transform(
+        trimesh.transformations.translation_matrix(center0)
+        @ rot4
+        @ trimesh.transformations.translation_matrix(-center0)
+    )
+
+    # Encaixa o AABB (world) no AABB world do input: escala uniforme + translação.
+    rmin, rmax = np.asarray(ref.bounds[0], float), np.asarray(ref.bounds[1], float)
+    omin, omax = mesh.bounds[0], mesh.bounds[1]
+    rext, oext = rmax - rmin, omax - omin
+    safe = np.where(oext > 1e-9, oext, 1.0)
+    scale = float(np.median(rext / safe))
+    ref_center = (rmin + rmax) * 0.5
+    out_center = (omin + omax) * 0.5
+    fit = np.eye(4)
+    fit[:3, :3] *= scale
+    fit[:3, 3] = ref_center - scale * out_center
+    mesh.apply_transform(fit)
+
+    mesh.export(str(output_path))
+
+    if verbose:
+        ang = float(np.degrees(np.arccos(np.clip((np.trace(rot) - 1.0) / 2.0, -1.0, 1.0))))
+        _logger.info(f"placement preservado (glTF): rot_input={ang:.1f}° scale={scale:.4f}")
+
+
+def _apply_uniform_scale(objects: list, center: np.ndarray, scale: float) -> None:
+    """Escala uniforme dos vértices em torno de ``center`` (in-place)."""
+    cx, cy, cz = float(center[0]), float(center[1]), float(center[2])
     for obj in objects:
         for v in obj.data.vertices:
-            y = float(v.co[1])
-            z = float(v.co[2])
-            v.co[1] = c * y - s * z
-            v.co[2] = s * y + c * z
+            v.co[0] = cx + (float(v.co[0]) - cx) * scale
+            v.co[1] = cy + (float(v.co[1]) - cy) * scale
+            v.co[2] = cz + (float(v.co[2]) - cz) * scale
         obj.data.update()
 
 
-def _bounds_axis_swap_x_rad(
-    before_min: np.ndarray,
-    before_max: np.ndarray,
-    after_min: np.ndarray,
-    after_max: np.ndarray,
+def _preserve_placement(
+    objects: list,
+    bounds_min_before: np.ndarray,
+    bounds_max_before: np.ndarray,
     *,
-    tol: float = 0.05,
-) -> float:
-    """Detecta swap Y↔Z entre input e output, comparando AABBs.
+    verbose: bool = False,
+) -> None:
+    """Repõe a colocação do input no output do paint, **sem heurística**.
 
-    Devolve o ângulo (em radianos) a aplicar em torno de X para repor a
-    convenção do input. ``+π/2`` se o output está em Z-up vs input Y-up,
-    ``-π/2`` no caso contrário, ``0.0`` se as dimensões coincidem.
-
-    Heurística: para um asset de personagem, a dimensão "altura" é a
-    maior das três (ou pelo menos não a menor). Se a altura está em Y no
-    input mas em Z no output (ou vice-versa), houve rotação.
+    O pipeline de paint preserva a orientação do mesh (apenas re-normaliza
+    posição/escala), por isso encaixamos deterministicamente o AABB do output no
+    AABB do input: escala uniforme para o mesmo tamanho + translação para o mesmo
+    centro. O resultado ocupa exatamente o bounding box do input → rotação, origem
+    e escala preservadas. Não roda o mesh (rodar com base em rácios de AABB era
+    frágil e introduzia erros em assets não-altos).
     """
-    extent_before = np.asarray(before_max) - np.asarray(before_min)
-    extent_after = np.asarray(after_max) - np.asarray(after_min)
-    if np.any(extent_before <= tol) or np.any(extent_after <= tol):
-        return 0.0
-    # Razão entre eixos Y/Z em ambos os AABBs. Se inverteu, houve swap.
-    yz_before = extent_before[1] / extent_before[2]
-    yz_after = extent_after[1] / extent_after[2]
-    # Toleramos ±10% (mesh de saída pode ter pequenas variações por remesh).
-    if yz_before > 1.0 and yz_after < 1.0 and abs(yz_before - 1.0 / yz_after) < max(yz_before, 1.0 / yz_after) * 0.30:
-        # Input era Y-tall, output é Z-tall → Hunyuan rodou +90° em X
-        # ((0,1,0)→(0,0,1)); para repor a convenção Y-up rodamos -90° em X.
-        return float(-np.pi / 2.0)
-    if yz_before < 1.0 and yz_after > 1.0 and abs(1.0 / yz_before - yz_after) < max(1.0 / yz_before, yz_after) * 0.30:
-        return float(np.pi / 2.0)
-    return 0.0
+    bmin_before = np.asarray(bounds_min_before, dtype=float)
+    bmax_before = np.asarray(bounds_max_before, dtype=float)
+    bmin_after, bmax_after = _get_combined_bounds(objects)
+
+    ext_before = bmax_before - bmin_before
+    ext_after = bmax_after - bmin_after
+    center_before = (bmin_before + bmax_before) * 0.5
+    center_after = (bmin_after + bmax_after) * 0.5
+
+    # Escala uniforme = mediana dos rácios por eixo (robusta a pequenas variações
+    # de remesh; ~1.0 quando o paint preserva a escala).
+    safe_after = np.where(ext_after > 1e-9, ext_after, 1.0)
+    scale = float(np.median(ext_before / safe_after))
+    if abs(scale - 1.0) > 1e-4:
+        _apply_uniform_scale(objects, center_after, scale)
+        bmin_after, bmax_after = _get_combined_bounds(objects)
+        center_after = (bmin_after + bmax_after) * 0.5
+
+    offset = center_before - center_after
+    if float(np.dot(offset, offset)) > 1e-12:
+        _apply_translation(objects, offset)
+
+    if verbose:
+        _logger.info(f"placement preservado (sem rotação): scale={scale:.4f} offset={offset.tolist()}")
 
 
 def apply_hunyuan_paint(
@@ -395,6 +470,7 @@ def apply_hunyuan_paint(
                 _log_optimization_config(config)
 
         with profile_span("paint_load_pipeline"):
+            _preflight_paint_model(model_repo, subfolder, verbose=verbose)
             pipe = Hunyuan3DPaintPipeline(config)
 
         with profile_span("paint_optimize_pipeline"):
@@ -469,39 +545,7 @@ def apply_hunyuan_paint(
         raise TypeError(f"Paint devolveu tipos inesperados: {[type(o) for o in textured]}")
 
     if preserve_origin:
-        bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
-
-        # 1) Detectar swap Y↔Z (Hunyuan paint exporta em Z-up; nós queremos
-        # Y-up — convenção aplicada no shape pelo text3d generate).
-        angle_x = _bounds_axis_swap_x_rad(
-            bounds_min_before,
-            bounds_max_before,
-            bounds_min_after,
-            bounds_max_after,
-        )
-        if abs(angle_x) > 1e-9:
-            _apply_rotation_x(textured, angle_x)
-            if verbose:
-                _logger.info(
-                    f"orientação reposta: rot_x={angle_x:.4f} rad "
-                    f"(extent_before_yz={(bounds_max_before - bounds_min_before)[1:].tolist()}, "
-                    f"extent_after_yz={(bounds_max_after - bounds_min_after)[1:].tolist()})"
-                )
-            # Recalcula bounds após rotação para que o offset translacional
-            # use os números corretos.
-            bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
-
-        # 2) Realinhar centroide ao input.
-        centroid_before = (bounds_min_before + bounds_max_before) * 0.5
-        centroid_after = (bounds_min_after + bounds_max_after) * 0.5
-        offset = centroid_before - centroid_after
-        if np.dot(offset, offset) > 1e-12:
-            _apply_translation(textured, offset)
-            if verbose:
-                _logger.info(
-                    f"origin corrigido: offset={offset.tolist()} "
-                    f"(antes={centroid_before.tolist()}, depois_pintura={centroid_after.tolist()})"
-                )
+        _preserve_placement(textured, bounds_min_before, bounds_max_before, verbose=verbose)
 
     return textured
 
@@ -559,7 +603,8 @@ def paint_file_to_file(
         enable_vae_slicing=enable_vae_slicing,
         enable_vae_tiling=enable_vae_tiling,
         vae_tile_size=vae_tile_size,
-        preserve_origin=preserve_origin,
+        # Preservação feita em glTF sobre o ficheiro final (frame correto), não em bpy.
+        preserve_origin=False,
         low_vram=low_vram,
         gpu_ids=gpu_ids,
     )
@@ -567,6 +612,9 @@ def paint_file_to_file(
     output_path = Path(output_path)
     with profile_span("paint_save_glb"):
         save_glb(out, output_path)
+    if preserve_origin:
+        with profile_span("paint_preserve_placement"):
+            _fit_glb_aabb_to_reference(output_path, mesh_path, verbose=verbose)
     return output_path
 
 
@@ -685,6 +733,7 @@ class PaintBatchProcessor:
                 _log_optimization_config(config, prefix="[batch] ")
 
         with profile_span("paint_load_pipeline"):
+            _preflight_paint_model(self._model_repo, self._subfolder, verbose=self._verbose)
             pipe = Hunyuan3DPaintPipeline(config)
 
         with profile_span("paint_optimize_pipeline"):
@@ -776,22 +825,6 @@ class PaintBatchProcessor:
             raise TypeError(f"Paint devolveu tipos inesperados: {[type(o) for o in textured]}")
 
         if self._preserve_origin:
-            bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
-            # 1) Repor convenção Y-up se Hunyuan paint devolveu Z-up.
-            angle_x = _bounds_axis_swap_x_rad(
-                bounds_min_before,
-                bounds_max_before,
-                bounds_min_after,
-                bounds_max_after,
-            )
-            if abs(angle_x) > 1e-9:
-                _apply_rotation_x(textured, angle_x)
-                bounds_min_after, bounds_max_after = _get_combined_bounds(textured)
-            # 2) Realinhar centroide.
-            centroid_before = (bounds_min_before + bounds_max_before) * 0.5
-            centroid_after = (bounds_min_after + bounds_max_after) * 0.5
-            offset = centroid_before - centroid_after
-            if np.dot(offset, offset) > 1e-12:
-                _apply_translation(textured, offset)
+            _preserve_placement(textured, bounds_min_before, bounds_max_before, verbose=self._verbose)
 
         return textured

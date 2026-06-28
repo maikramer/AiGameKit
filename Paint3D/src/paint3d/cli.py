@@ -72,8 +72,7 @@ def _enable_sage_attention(requested: bool) -> bool:
         import sageattention  # noqa: F401
     except ImportError:
         console.print(
-            "[yellow]sageattention não instalado — a continuar com SDPA "
-            "(pip install sageattention).[/yellow]"
+            "[yellow]sageattention não instalado — a continuar com SDPA (pip install sageattention).[/yellow]"
         )
         return False
     os.environ["PAINT3D_USE_SAGEATTN"] = "1"
@@ -520,7 +519,7 @@ def texture_batch(
     batch_verbose,
 ):
     """Texturizar batch via manifest JSON. Saída JSONL em stdout."""
-    from .painter import PaintBatchProcessor
+    from .painter import PaintBatchProcessor, _fit_glb_aabb_to_reference
     from .texture_smooth import smooth_trimesh_texture
     from .utils.mesh_io import load_mesh_trimesh, save_glb
 
@@ -639,7 +638,9 @@ def texture_batch(
                 texture_size=texture_size,
                 bake_exp=bake_exp,
                 verbose=verbose,
-                preserve_origin=preserve_origin,
+                # Preservação feita em glTF sobre o ficheiro final (frame correto); o
+                # preserve por bpy do processor era frágil/em frame errado.
+                preserve_origin=False,
                 low_vram=low_vram_mode,
                 gpu_ids=parsed_gpu_ids,
             )
@@ -685,6 +686,8 @@ def texture_batch(
 
                 emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=0)
                 save_glb(textured, output_path)
+                if preserve_origin:
+                    _fit_glb_aabb_to_reference(output_path, mesh_path, verbose=verbose)
                 emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=100)
                 elapsed = time.time() - t0
                 emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))

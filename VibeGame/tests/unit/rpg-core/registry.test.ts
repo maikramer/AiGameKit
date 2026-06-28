@@ -146,7 +146,9 @@ describe('DataRegistry', () => {
     it('a YAML parse failure leaves the registry empty', () => {
       try {
         reg.loadYaml('item: { x: "bad');
-      } catch {}
+      } catch {
+        /* expected — YAML parse failure leaves registry empty */
+      }
 
       expect(reg.all('item')).toEqual([]);
       expect(reg.kinds()).toEqual([]);

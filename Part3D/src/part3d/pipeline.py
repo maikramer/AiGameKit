@@ -169,17 +169,14 @@ class Part3DPipeline:
     # ------------------------------------------------------------------
 
     def _ensure_model_dir(self) -> str:
-        """Download/cache do modelo via huggingface_hub."""
+        """Preflight do modelo (download com resume/progresso) via helper partilhado."""
         if self._model_dir is not None:
             return self._model_dir
 
-        from huggingface_hub import snapshot_download
+        from gamedev_shared.model_download import ensure_model
 
         self._log(f"A descarregar modelo de {self.model_path}...")
-        self._model_dir = snapshot_download(
-            repo_id=self.model_path,
-            repo_type="model",
-        )
+        self._model_dir = str(ensure_model(self.model_path, on_status=self._log))
         self._log(f"Modelo em: {self._model_dir}")
         return self._model_dir
 

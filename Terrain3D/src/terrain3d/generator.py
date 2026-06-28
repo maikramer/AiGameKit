@@ -111,6 +111,16 @@ def generate_terrain(config: TerrainConfig) -> TerrainResult:
 
     t0 = time.perf_counter()
 
+    # Preflight best-effort: garante o repo do modelo em disco (download com resume/
+    # progresso) antes do load. Se falhar, o from_pretrained trata on-demand.
+    if model_id and "/" in model_id and not os.path.exists(model_id):
+        try:
+            from gamedev_shared.model_download import ensure_model
+
+            ensure_model(model_id)
+        except Exception:
+            pass
+
     pipeline = WorldPipeline.from_pretrained(
         model_id,
         seed=config.seed,

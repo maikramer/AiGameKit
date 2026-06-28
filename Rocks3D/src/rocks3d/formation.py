@@ -160,12 +160,20 @@ def generate_formation(
         for i in range(n):
             r = (1.0 - 0.11 * i) * float(rng.uniform(0.85, 1.05))
             sxyz = (r * rng.uniform(0.9, 1.2), r * rng.uniform(0.6, 0.85), r * rng.uniform(0.9, 1.2))
-            m = _chunk(rng, scale_xyz=sxyz, subdivisions=sub, facet=float(rng.uniform(0.55, 0.7)),
-                       planes=int(rng.integers(10, 16)))
+            m = _chunk(
+                rng,
+                scale_xyz=sxyz,
+                subdivisions=sub,
+                facet=float(rng.uniform(0.55, 0.7)),
+                planes=int(rng.integers(10, 16)),
+            )
             h = float(m.bounds[1][1] - m.bounds[0][1])
             jitter = rng.uniform(-0.28, 0.28, 2) * r  # horizontal slip → overhangs
-            _place(m, (float(jitter[0]), y + h * 0.4, float(jitter[1])),
-                   (float(rng.uniform(-0.2, 0.2)), float(rng.uniform(0, 6.28)), float(rng.uniform(-0.2, 0.2))))
+            _place(
+                m,
+                (float(jitter[0]), y + h * 0.4, float(jitter[1])),
+                (float(rng.uniform(-0.2, 0.2)), float(rng.uniform(0, 6.28)), float(rng.uniform(-0.2, 0.2))),
+            )
             y += h * 0.55  # overlap so neighbours fuse on union
             pieces.append(m)
 
@@ -174,12 +182,20 @@ def generate_formation(
         for _ in range(n):
             r = float(rng.uniform(0.6, 1.15))
             sxyz = (r * rng.uniform(0.9, 1.35), r * rng.uniform(0.8, 1.35), r * rng.uniform(0.9, 1.35))
-            m = _chunk(rng, scale_xyz=sxyz, subdivisions=sub, facet=float(rng.uniform(0.6, 0.78)),
-                       planes=int(rng.integers(12, 20)))
+            m = _chunk(
+                rng,
+                scale_xyz=sxyz,
+                subdivisions=sub,
+                facet=float(rng.uniform(0.6, 0.78)),
+                planes=int(rng.integers(12, 20)),
+            )
             ang = float(rng.uniform(0, 6.28))
             rad = float(rng.uniform(0.0, 0.95))
-            _place(m, (np.cos(ang) * rad, float(rng.uniform(-0.1, 0.5)) * r, np.sin(ang) * rad),
-                   (float(rng.uniform(-0.5, 0.5)), float(rng.uniform(0, 6.28)), float(rng.uniform(-0.5, 0.5))))
+            _place(
+                m,
+                (np.cos(ang) * rad, float(rng.uniform(-0.1, 0.5)) * r, np.sin(ang) * rad),
+                (float(rng.uniform(-0.5, 0.5)), float(rng.uniform(0, 6.28)), float(rng.uniform(-0.5, 0.5))),
+            )
             pieces.append(m)
 
     elif style == "cliff":
@@ -188,8 +204,11 @@ def generate_formation(
             sxyz = (float(rng.uniform(0.7, 1.1)), float(rng.uniform(1.6, 2.6)), float(rng.uniform(0.8, 1.3)))
             m = _chunk(rng, scale_xyz=sxyz, subdivisions=sub, facet=0.72, planes=int(rng.integers(8, 12)))
             x = (i - (n - 1) / 2.0) * float(rng.uniform(1.0, 1.5))
-            _place(m, (x, float(rng.uniform(-0.2, 0.2)), float(rng.uniform(-0.3, 0.3))),
-                   (float(rng.uniform(-0.25, 0.25)), float(rng.uniform(-0.3, 0.3)), float(rng.uniform(-0.15, 0.15))))
+            _place(
+                m,
+                (x, float(rng.uniform(-0.2, 0.2)), float(rng.uniform(-0.3, 0.3))),
+                (float(rng.uniform(-0.25, 0.25)), float(rng.uniform(-0.3, 0.3)), float(rng.uniform(-0.15, 0.15))),
+            )
             pieces.append(m)
 
     elif style == "arch":
@@ -215,8 +234,11 @@ def generate_formation(
             m = _chunk(rng, scale_xyz=sxyz, subdivisions=sub, facet=0.72, planes=10)
             ang = float(rng.uniform(0, 6.28))
             rad = float(rng.uniform(0.3, 1.1))
-            _place(m, (np.cos(ang) * rad, float(rng.uniform(-0.2, 0.3)), np.sin(ang) * rad),
-                   (float(rng.uniform(-0.1, 0.1)), float(rng.uniform(0, 6.28)), float(rng.uniform(-0.1, 0.1))))
+            _place(
+                m,
+                (np.cos(ang) * rad, float(rng.uniform(-0.2, 0.3)), np.sin(ang) * rad),
+                (float(rng.uniform(-0.1, 0.1)), float(rng.uniform(0, 6.28)), float(rng.uniform(-0.1, 0.1))),
+            )
             pieces.append(m)
 
     return _finalize(_combine(pieces))

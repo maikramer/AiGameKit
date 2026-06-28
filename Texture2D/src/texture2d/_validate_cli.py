@@ -2,11 +2,9 @@
 
 Comando equivalente a ``texture2d validate-tileable <IMAGE>``.
 
-Nota de integração: ``cli.py`` ainda referencia ``FLUX.1-dev`` (em mid-rewrite
-para pattern-diffusion), por isso este subcomando vive num script autónomo para
-não colidir com a refacção paralela. Quando ``cli.py`` estiver estável, mover
-este comando para lá como ``@cli.command("validate-tileable")`` e registar a
-função :func:`validate_tileable_cmd`.
+A função :func:`validate_tileable_cmd` é registada em ``cli.py`` via
+``cli.add_command(validate_tileable_cmd)``; vive neste módulo autónomo para manter
+o validador (puro numpy, sem deps de modelo) desacoplado do gerador.
 
 Uso::
 

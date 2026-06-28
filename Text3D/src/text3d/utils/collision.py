@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 
@@ -58,10 +59,8 @@ def generate_collision_mesh(
         mesh.color_attributes.remove(attr)
     if hasattr(mesh, "use_auto_smooth"):
         mesh.use_auto_smooth = False
-    try:
+    with contextlib.suppress(AttributeError, RuntimeError):
         bpy.ops.mesh.customdata_custom_splitnormals_clear()
-    except (AttributeError, RuntimeError):
-        pass
 
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)

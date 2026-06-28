@@ -178,6 +178,20 @@ class SkymapGenerator:
         """Carrega o pipeline (download HF + pesos). Idempotente."""
         self._load_pipeline()
 
+    def _preflight_download(self) -> None:
+        """Garante o base SDNQ + a LoRA equirectangular em disco antes do load.
+
+        Download com resume/progresso, não-bloqueante: se falhar (offline mas em cache,
+        ou hub indisponível), deixa o ``from_pretrained``/``load_lora_weights`` tratar.
+        """
+        try:
+            from gamedev_shared.model_download import ensure_model
+
+            ensure_model(self.base_model_id, cache_dir=self.cache_dir, on_status=self._status)
+            ensure_model(self.model_id, cache_dir=self.cache_dir, on_status=self._status)
+        except Exception as exc:
+            self._log(f"preflight download falhou ({exc}); a deixar from_pretrained tratar")
+
     def _load_pipeline(self) -> Any:
         if self._pipe is not None:
             return self._pipe
@@ -193,6 +207,8 @@ class SkymapGenerator:
         }
         if self.cache_dir:
             kwargs["cache_dir"] = self.cache_dir
+
+        self._preflight_download()
 
         self._status("Passo 1/4 — from_pretrained (SDNQ uint4, ~7 GB)")
         self._log(f"Carregando base {self.base_model_id}...")
@@ -220,7 +236,15 @@ class SkymapGenerator:
         elif self.low_vram:
             pipe.enable_model_cpu_offload()
         else:
-            pipe.to(self.device)
+            # Rede de segurança always-fit: se a colocação direta estourar a VRAM, cai
+            # para CPU offload em vez de abortar (decisivo no limiar de 6GB).
+            try:
+                pipe.to(self.device)
+            except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
+                self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para model_cpu offload")
+                self._clear_cache()
+                pipe.enable_model_cpu_offload()
+                self.low_vram = True
 
         self._status("Modelo carregado — pronto")
         if torch.cuda.is_available() and self.device == "cuda" and not self.low_vram:

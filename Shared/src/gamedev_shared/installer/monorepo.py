@@ -32,8 +32,5 @@ def find_monorepo_root(start: Path | None = None) -> Path:
     found = _walk_monorepo_root(start)
     if found is not None:
         return found
-    msg = (
-        "Raiz do monorepo GameDev não encontrada. "
-        "Execute a partir de dentro do repositório."
-    )
+    msg = "Raiz do monorepo GameDev não encontrada. Execute a partir de dentro do repositório."
     raise FileNotFoundError(msg)

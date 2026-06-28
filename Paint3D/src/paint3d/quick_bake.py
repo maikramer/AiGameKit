@@ -120,7 +120,7 @@ def bake_perlin_vertex(
     preserve_origin: bool = True,
 ) -> Path:
     """
-    Cor por vértice = ``tint`` × (variação FBM em torno de 1).
+    Cor por vértice = ``tint`` x (variação FBM em torno de 1).
     ``contrast`` ∈ [0,1] controla quanto o ruído modula o tom (estilo pedra).
     """
     r0, g0, b0 = parse_hex_rgb(tint_hex)

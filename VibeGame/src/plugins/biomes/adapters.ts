@@ -94,7 +94,11 @@ export function pointInPolygon(
 }
 
 /** Parse a color attribute: `"#RRGGBB"` hex or `"r g b"` floats (0..1 / 0..255). */
-export function parseColor(value: string | number): { r: number; g: number; b: number } {
+export function parseColor(value: string | number): {
+  r: number;
+  g: number;
+  b: number;
+} {
   const s = String(value).trim();
   const asNum = Number(s);
   if (Number.isFinite(asNum) && s !== '' && !s.startsWith('0.')) {

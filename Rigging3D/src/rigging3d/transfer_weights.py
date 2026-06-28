@@ -30,7 +30,10 @@ def _decompress_glb(src: Path, dst: Path) -> bool:
     try:
         r = subprocess.run(
             ["npx", "--yes", "@gltf-transform/cli", "copy", str(src), str(dst)],
-            capture_output=True, text=True, timeout=300, check=False,
+            capture_output=True,
+            text=True,
+            timeout=300,
+            check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         log.warning("transfer-weights decompress falhou: %s", exc)

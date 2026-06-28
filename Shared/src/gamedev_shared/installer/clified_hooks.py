@@ -39,9 +39,7 @@ def part3d_post_install(installer: PythonProjectInstaller) -> bool:
         show_part3d_install_summary,
     )
 
-    if not ensure_part3d_torch_geometric_extras(
-        installer.venv_python, installer.logger
-    ):
+    if not ensure_part3d_torch_geometric_extras(installer.venv_python, installer.logger):
         return False
     _ensure_part3d_dit_quantized(installer)
     show_part3d_install_summary(installer)

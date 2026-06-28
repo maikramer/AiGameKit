@@ -26,8 +26,12 @@ export default [
         HTMLDivElement: 'readonly',
         HTMLCanvasElement: 'readonly',
         HTMLImageElement: 'readonly',
+        HTMLInputElement: 'readonly',
+        HTMLButtonElement: 'readonly',
+        HTMLSpanElement: 'readonly',
         ImageData: 'readonly',
         CanvasImageSource: 'readonly',
+        CanvasRenderingContext2D: 'readonly',
         OffscreenCanvas: 'readonly',
         KeyboardEvent: 'readonly',
         MouseEvent: 'readonly',
@@ -64,6 +68,9 @@ export default [
         TextEncoder: 'readonly',
         Gamepad: 'readonly',
         require: 'readonly',
+        localStorage: 'readonly',
+        location: 'readonly',
+        Bun: 'readonly',
       },
     },
     plugins: {
@@ -184,6 +191,7 @@ export default [
     files: ['tests/**/*.ts', '**/__tests__/**/*.ts', '**/*.test.ts'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
       'no-restricted-imports': [
         'error',
         {
@@ -233,6 +241,8 @@ export default [
         __dirname: 'readonly',
         __filename: 'readonly',
         URL: 'readonly',
+        window: 'readonly',
+        document: 'readonly',
       },
     },
     rules: {
