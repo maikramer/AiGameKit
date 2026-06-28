@@ -84,7 +84,9 @@ class TestSkymapGenerator:
         gen = SkymapGenerator(device="cpu")
         with patch.object(gen, "_load_pipeline") as mock_load:
             mock_pipe = MagicMock()
-            mock_pipe.return_value = (Image.new("RGB", (128, 64)), {"sample": None})
+            mock_out = MagicMock()
+            mock_out.images = [Image.new("RGB", (128, 64))]
+            mock_pipe.return_value = mock_out
             mock_load.return_value = mock_pipe
 
             image, metadata = gen.generate(
