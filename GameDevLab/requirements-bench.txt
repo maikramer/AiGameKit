@@ -4,7 +4,7 @@
 # Core ML
 torch>=2.6.0
 torchvision>=0.26.0
-torchaudio>=2.6.0
+torchaudio>=2.11.0
 
 # Quantização
 optimum-quanto>=0.2.0
