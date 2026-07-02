@@ -10,7 +10,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/_bootstrap.sh"
 
 clified_bootstrap() {
-  local min_ver="${CLIFIED_MIN_VERSION:-0.7.3}"
+  local min_ver="${CLIFIED_MIN_VERSION:-0.8.1}"
 
   local py
   py="$(clified_resolve_python)" || return 1

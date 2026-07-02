@@ -23,6 +23,22 @@ curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh |
 
 List catalog entries: `clified-install --catalog` (after the engine is installed). Keys match [`tools.yaml`](../tools.yaml) (`text2d`, `text3d`, `materialize`, `vibegame`, …).
 
+### Managing installed tools (Clified ≥ 0.8)
+
+Once a tool is installed, the `clified` subcommands track and manage it via a local state file (`~/.config/clified/state.json`):
+
+```bash
+clified list                       # installed tools + ok/broken status
+clified search text                # filter the remote catalog (marks [instalado])
+clified update text2d              # git pull + refresh deps (or: clified update --all)
+clified uninstall text2d --purge   # remove wrapper/venv/clone/receipt
+clified get text2d@<ref>           # pin to a branch, tag, or commit SHA
+clified doctor                     # diagnose broken receipts / orphan wrappers (--fix)
+clified <cmd> --json               # machine-readable output for any of the above
+```
+
+Add `--json` for machine-readable output. See `clified --help` and the [Clified README](https://github.com/maikramer/clified#managing-installed-tools).
+
 ---
 
 ## Official method (from clone)
@@ -42,7 +58,7 @@ gamedev-install --list
 gamedev-install text2d
 ```
 
-**Installer prerequisites:** Python **3.13** recommended for most GPU tools (see table); `pip`. [Clified](https://pypi.org/project/clified/) **≥ 0.7.3** is installed automatically via PyPI when missing (`CLIFIED_MIN_VERSION`). User Scripts are prepended to PATH (session + persistent). `uv` is bootstrapped by Clified during tool installs.
+**Installer prerequisites:** Python **3.13** recommended for most GPU tools (see table); `pip`. [Clified](https://pypi.org/project/clified/) **≥ 0.8.1** is installed automatically via PyPI when missing (`CLIFIED_MIN_VERSION`). User Scripts are prepended to PATH (session + persistent). `uv` is bootstrapped by Clified during tool installs.
 
 Useful env vars: `CLIFIED_TOOLS` (defaults to `GameDev/tools.yaml`), `PYTHON_CMD`, `CLIFIED_MIN_VERSION`, `CLIFIED_PERSIST_PATH=0` to skip writing `~/.profile` on Unix.
 

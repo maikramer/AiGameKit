@@ -13,7 +13,7 @@ function Invoke-ClifiedBootstrapMonorepo {
 
     $py = Get-ClifiedPython
     Add-PythonUserScriptsToPath -PythonExe $py | Out-Null
-    $minVer = if ($env:CLIFIED_MIN_VERSION) { $env:CLIFIED_MIN_VERSION } else { "0.7.3" }
+    $minVer = if ($env:CLIFIED_MIN_VERSION) { $env:CLIFIED_MIN_VERSION } else { "0.8.1" }
 
     if (Get-Command clified-install -ErrorAction SilentlyContinue) {
         Invoke-ClifiedExecArgs -PythonExe $py -ClifiedArgs $ClifiedArgs
