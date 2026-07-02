@@ -72,14 +72,34 @@ Guia completo em português: **[docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)**.
 
 | Forma | Quando usar |
 |-------|-------------|
-| **Scripts na raiz** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recomendado: prepara dependências do instalador (ex. Rich), cria `.venv` por projeto e instala em modo editável. |
-| **`gamedev-install`** | Depois de `pip install -e Shared/` (ou com `PYTHONPATH` a apontar para `Shared/src`): mesmo registry que os scripts, útil em CI ou quando já tens o pacote Shared. |
-| **Instalador local do projeto** (`<Projeto>/scripts/install.sh` ou `python scripts/installer.py`) | Atalho quando já estás dentro da pasta do projeto; **não** confundir com `GameDev/install.sh` da raiz (ver [docs/INSTALLING_PT.md](docs/INSTALLING_PT.md)). |
-| **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` por pasta; ver READMEs e secções «Manual» — para debugging ou CI sem o wrapper unificado. |
+| **One-liner (Clified, sem clone)** | Máquina limpa — instala o motor Clified + ferramenta GameDev via [catálogo remoto](https://github.com/maikramer/clified-catalog). |
+| **Scripts na raiz** (`./install.sh`, `.\install.ps1`, `install.bat`) | Com clone: [Clified](https://pypi.org/project/clified/) via PyPI + `tools.yaml` deste repo. |
+| **`gamedev-install`** | Depois de `pip install -e Shared/` (ou `PYTHONPATH` → `Shared/src`): mesmo registry que os scripts. |
+| **Instalador local** (`python scripts/installer.py` numa pasta de ferramenta) | Atalho dentro do projecto — **não** confundir com `GameDev/install.sh` da raiz. |
+| **Manual / pipelines** | `venv` + `pip install -e .` por pasta — debugging ou CI. |
 
-Variável útil: **`PYTHON_CMD`** (ou `--python` no instalador) para forçar o interpretador (por defeito `python3` em Unix, `python` no Windows nos scripts).
+Variável útil: **`PYTHON_CMD`** (ou `--python` no instalador).
 
-### Instalador unificado (recomendado)
+### One-liner (Clified / sem clone)
+
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get text2d
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get materialize
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get gamedev   # todas
+```
+
+**Windows (PowerShell):**
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get text2d
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get materialize
+```
+
+Chaves do catálogo = entradas em `tools.yaml` (`text2d`, `text3d`, `materialize`, `vibegame`, …). Lista: `clified-install --catalog`.
+
+### Instalador unificado (a partir de clone)
 
 O monorepo inclui um instalador unificado que instala qualquer ferramenta registada:
 
@@ -97,7 +117,10 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 ./install.sh paint3d                    # Paint3D (textura + nvdiffrast)
 ./install.sh rigging3d                  # Rigging3D (UniRig empacotado + PyTorch/CUDA via instalador)
 ./install.sh animator3d                 # Animator3D (bpy / animação; sem PyTorch)
-./install.sh terrain3d                   # Terrain3D (terreno IA; CUDA GPU)
+./install.sh gamedevlab                 # GameDevLab (debug 3D, benches, profiling)
+./install.sh terrain3d                  # Terrain3D (terreno IA; CUDA GPU)
+./install.sh rocks3d                    # Rocks3D (rochas procedurais)
+./install.sh vibegame                   # VibeGame (Bun + motor 3D Vite)
 ./install.sh all                        # Instalar tudo
 
 # Windows PowerShell (recomendado no Windows: o script detecta `python` e passa-o ao instalador)
@@ -113,7 +136,10 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 .\install.ps1 paint3d
 .\install.ps1 rigging3d
 .\install.ps1 animator3d
+.\install.ps1 gamedevlab
 .\install.ps1 terrain3d
+.\install.ps1 rocks3d
+.\install.ps1 vibegame
 .\install.ps1 all
 
 # Windows CMD (idem: `install.bat` passa o interpretador ao instalador)

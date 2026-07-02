@@ -29,7 +29,7 @@ def _ensure_clified_importable() -> None:
     except ImportError:
         import subprocess
 
-        min_ver = os.environ.get("CLIFIED_MIN_VERSION", "0.6.0")
+        min_ver = os.environ.get("CLIFIED_MIN_VERSION", "0.7.3")
         subprocess.run(
             [
                 sys.executable,

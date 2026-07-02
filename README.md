@@ -133,14 +133,37 @@ Full guide (tool table, minimum Python per CLI, **repo root vs `Project/scripts/
 
 | Method | When to use |
 |--------|-------------|
-| **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | Recommended: [Clified](https://pypi.org/project/clified/) via PyPI using `tools.yaml` in this repo. |
-| **`gamedev-install`** | Mesmo fluxo via ponte `gamedev_shared.installer` (instala `clified` via PyPI se necessário). |
-| **Project-local installer** (`<Project>/scripts/install.sh` or `python scripts/installer.py`) | Shortcut when you are already inside the project folder; do **not** confuse with `GameDev/install.sh` at the repo root (see [docs/INSTALLING.md](docs/INSTALLING.md)). |
-| **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` per folder; see READMEs and "Manual" sections — for debugging or CI without the unified wrapper. |
+| **One-liner (Clified, no clone)** | Fastest on a clean machine — installs the Clified engine + a GameDev tool from the [remote catalog](https://github.com/maikramer/clified-catalog). |
+| **Root scripts** (`./install.sh`, `.\install.ps1`, `install.bat`) | From a clone: [Clified](https://pypi.org/project/clified/) via PyPI using `tools.yaml` in this repo. |
+| **`gamedev-install`** | Same flow via `gamedev_shared.installer` bridge (installs `clified` via PyPI if needed). |
+| **Project-local installer** (`python scripts/installer.py` in a tool folder) | Shortcut when already inside a project folder — **not** the root `GameDev/install.sh` (see [docs/INSTALLING.md](docs/INSTALLING.md)). |
+| **Manual / pipelines** | `python -m venv .venv` + `pip install -e .` per folder — debugging or CI without the unified wrapper. |
 
-Useful variable: **`PYTHON_CMD`** (or `--python` on the installer) to force the interpreter (default `python3` on Unix, `python` on Windows in the scripts).
+Useful variable: **`PYTHON_CMD`** (or `--python` on the installer) to force the interpreter.
 
-### Installer via Clified (recommended)
+### One-liner (Clified / no clone)
+
+Install the Clified engine and a GameDev tool in one step (`~/.local/bin` wrappers; repo public on GitHub):
+
+**Linux / macOS:**
+
+```bash
+# Examples — replace <tool> with text2d, text3d, materialize, gameassets, vibegame, all, …
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get text2d
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get materialize
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --catalog   # list all
+```
+
+**Windows (PowerShell):**
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get text2d
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get materialize
+```
+
+Catalog keys match `tools.yaml` entries: `text2d`, `text3d`, `texture2d`, `skymap2d`, `text2sound`, `terrain3d`, `rocks3d`, `gameassets`, `gamedevlab`, `part3d`, `paint3d`, `rigging3d`, `animator3d`, `materialize`, `vibegame`, or `all` for every tool in the checkout.
+
+### Installer via Clified (from clone)
 
 Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.org/project/clified/) on PyPI (installed automatically by the root scripts):
 
@@ -159,7 +182,9 @@ Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.
 ./install.sh rigging3d                  # Rigging3D (bundled UniRig + PyTorch/CUDA via installer)
 ./install.sh animator3d                 # Animator3D (bpy / animation; no PyTorch)
 ./install.sh gamedevlab                 # GameDevLab (debug 3D, benches, profiling)
-./install.sh terrain3d                   # Terrain3D (AI terrain; CUDA GPU)
+./install.sh terrain3d                  # Terrain3D (AI terrain; CUDA GPU)
+./install.sh rocks3d                    # Rocks3D (procedural rocks)
+./install.sh vibegame                   # VibeGame (Bun + Vite 3D engine)
 ./install.sh all                        # Install everything present
 
 # Windows PowerShell (recommended on Windows: script detects `python` and passes it to the installer)
@@ -177,6 +202,8 @@ Installation is driven by [`tools.yaml`](tools.yaml) and [Clified](https://pypi.
 .\install.ps1 animator3d
 .\install.ps1 gamedevlab
 .\install.ps1 terrain3d
+.\install.ps1 rocks3d
+.\install.ps1 vibegame
 .\install.ps1 all
 
 # Windows CMD (same: `install.bat` passes the interpreter to the installer)
