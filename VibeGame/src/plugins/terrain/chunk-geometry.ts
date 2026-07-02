@@ -11,6 +11,12 @@ import { sampleHeightAt, type HeightSampler } from './height-sampler';
  * epsilon (not `computeVertexNormals`), so a vertex shared by two chunks of
  * different LOD gets the *same* normal on both sides — no lighting seam. A
  * vertical skirt of `skirtDepth` plugs the geometric T-junction gaps.
+ *
+ * UVs are world-space when `textureTileSize > 0`: `uv = fieldLocalXZ / tile`,
+ * continuous across chunk borders and with constant texel density on every
+ * LOD level. The legacy per-chunk 0..1 UV (tileSize = 0) made the texture
+ * density depend on the chunk *size*, so every LOD boundary showed a visible
+ * seam where the pattern scale jumped and restarted.
  */
 export function buildChunkGeometry(
   sampler: HeightSampler,
@@ -19,7 +25,8 @@ export function buildChunkGeometry(
   size: number,
   resolution: number,
   skirtDepth = 0,
-  normalEpsilon = 1
+  normalEpsilon = 1,
+  textureTileSize = 0
 ): THREE.BufferGeometry {
   const segments = Math.max(1, resolution);
   const verts = segments + 1;
@@ -63,8 +70,13 @@ export function buildChunkGeometry(
       normals[i * 3 + 1] = ny;
       normals[i * 3 + 2] = nz;
 
-      uvs[i * 2] = x / segments;
-      uvs[i * 2 + 1] = z / segments;
+      if (textureTileSize > 0) {
+        uvs[i * 2] = localX / textureTileSize;
+        uvs[i * 2 + 1] = localZ / textureTileSize;
+      } else {
+        uvs[i * 2] = x / segments;
+        uvs[i * 2 + 1] = z / segments;
+      }
     }
   }
 

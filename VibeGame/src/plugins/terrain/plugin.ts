@@ -46,6 +46,7 @@ export const TerrainPlugin: Plugin = {
         roughness: 0.85,
         metalness: 0.0,
         normalStrength: 1.0,
+        textureTileSize: 0,
         skirtDepth: 1.0,
         skirtWidth: 0.015625,
         baseColor: 0x4a7a3a,
