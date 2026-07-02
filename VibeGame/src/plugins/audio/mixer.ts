@@ -149,6 +149,17 @@ export const MusicMixerSystem: System = {
     const step = mix.fadeDuration > 0 ? Math.min(1, dt / mix.fadeDuration) : 1;
 
     for (const eid of musicLayerQuery(state.world)) {
+      // Music layers are always-running loops gated by their fade — nothing
+      // else ever flips `playing`, so a declarative <MusicLayer> would stay
+      // silent forever without this. Non-spatial by definition: the
+      // audioSource default (spatial=1) would tie the music to a world
+      // position and kill it beyond maxDistance. Native seamless looping is
+      // also mandatory: `loop` is not in musicLayerRecipe.parserAttributes, so
+      // a declarative `loop="1"` is dropped and Howler would otherwise fall
+      // back to a gappy end→play() restart every cycle.
+      if (AudioSource.playing[eid] === 0) AudioSource.playing[eid] = 1;
+      if (AudioSource.spatial[eid] === 1) AudioSource.spatial[eid] = 0;
+      if (AudioSource.loop[eid] === 0) AudioSource.loop[eid] = 1;
       const target = MusicLayerComponent.layer[eid] === mix.activeLayer ? 1 : 0;
       let fade = MusicLayerComponent.fade[eid];
       if (fade < target) fade = Math.min(target, fade + step);
