@@ -25,28 +25,31 @@ def _clean_bpy_scene() -> None:
         bpy.data.actions.remove(block)
 
 
-def _compute_reorigin_offset(min_corner: Any, max_corner: Any, mode: str) -> tuple[float, float, float]:
+def _compute_reorigin_offset(
+    min_corner: Any, max_corner: Any, mode: str, up_axis: int = 1
+) -> tuple[float, float, float]:
     """Compute translation offset for a given AABB and mode.
 
     Args:
         min_corner: AABB minimum (x, y, z).
         max_corner: AABB maximum (x, y, z).
         mode: One of ``"feet"``, ``"center"``, ``"none"``.
+        up_axis: Index of the *up* axis in the given coordinate space —
+            1 (Y) for glTF-space bounds, 2 (Z) for Blender-world bounds.
+            ``feet`` puts the AABB base at 0 along this axis and centers
+            the other two.
 
     Returns:
         (dx, dy, dz) translation vector.
     """
     if mode == "none":
         return (0.0, 0.0, 0.0)
+    center = [-0.5 * (min_corner[i] + max_corner[i]) for i in range(3)]
     if mode == "center":
-        cx = -0.5 * (min_corner[0] + max_corner[0])
-        cy = -0.5 * (min_corner[1] + max_corner[1])
-        cz = -0.5 * (min_corner[2] + max_corner[2])
-        return (cx, cy, cz)
-    dx = -0.5 * (min_corner[0] + max_corner[0])
-    dy = -float(min_corner[1])
-    dz = -0.5 * (min_corner[2] + max_corner[2])
-    return (dx, dy, dz)
+        return (center[0], center[1], center[2])
+    offset = list(center)
+    offset[up_axis] = -float(min_corner[up_axis])
+    return (offset[0], offset[1], offset[2])
 
 
 def reorigin_glb_bpy(path: Path, mode: str = "feet") -> bool:
@@ -94,10 +97,16 @@ def reorigin_glb_bpy(path: Path, mode: str = "feet") -> bool:
             _clean_bpy_scene()
             return True
 
+        # Bounds above are in Blender world space (Z-up); the glTF importer
+        # maps glTF +Y (up) to Blender +Z. "feet" must therefore zero the
+        # Blender *Z* minimum — zeroing Blender Y would (and, before this
+        # fix, did) shift the model along glTF Z instead of dropping its
+        # base to glTF Y=0.
         dx, dy, dz = _compute_reorigin_offset(
             (min_x, min_y, min_z),
             (max_x, max_y, max_z),
             mode,
+            up_axis=2,
         )
 
         if dx == 0.0 and dy == 0.0 and dz == 0.0:

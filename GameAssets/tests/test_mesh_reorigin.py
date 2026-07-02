@@ -36,27 +36,30 @@ def _load_bounds(path: Path):
 
 
 def test_reorigin_glb_file_feet_yup(tmp_path: Path) -> None:
-    path = _save_box_glb(tmp_path / "t.glb", extents=(1.0, 2.0, 1.0))
+    # Bounds are checked in Blender world space (Z-up). glTF "feet" (base at
+    # glTF Y=0) therefore means Blender min *Z* = 0, with X and Y centered —
+    # the importer maps glTF +Y (up) onto Blender +Z.
+    path = _save_box_glb(tmp_path / "t.glb", extents=(1.0, 1.0, 2.0))
     b0 = _load_bounds(path)
-    assert np.isclose(b0[0][1], -1.0) and np.isclose(b0[1][1], 1.0)
+    assert np.isclose(b0[0][2], -1.0) and np.isclose(b0[1][2], 1.0)
 
     reorigin_glb_file(path)
 
     b1 = _load_bounds(path)
-    assert np.isclose(b1[0][1], 0.0), b1
-    assert np.isclose(b1[1][1], 2.0), b1
+    assert np.isclose(b1[0][2], 0.0), b1
+    assert np.isclose(b1[1][2], 2.0), b1
     cx = 0.5 * (b1[0][0] + b1[1][0])
-    cz = 0.5 * (b1[0][2] + b1[1][2])
-    assert abs(cx) < 1e-3 and abs(cz) < 1e-3
+    cy = 0.5 * (b1[0][1] + b1[1][1])
+    assert abs(cx) < 1e-3 and abs(cy) < 1e-3
 
 
 def test_reorigin_glb_file_roundtrip(tmp_path: Path) -> None:
-    path = _save_box_glb(tmp_path / "t.glb", extents=(0.4, 1.2, 0.4))
+    path = _save_box_glb(tmp_path / "t.glb", extents=(0.4, 0.4, 1.2))
     reorigin_glb_file(path)
 
     b = _load_bounds(path)
-    assert np.isclose(b[0][1], 0.0, atol=1e-3)
-    assert np.isclose(b[1][1], 1.2, atol=0.01)
+    assert np.isclose(b[0][2], 0.0, atol=1e-3)
+    assert np.isclose(b[1][2], 1.2, atol=0.01)
 
 
 def test_filter_excluded_paths() -> None:
