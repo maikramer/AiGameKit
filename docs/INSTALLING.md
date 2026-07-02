@@ -2,7 +2,30 @@
 
 **Language:** English · [Português (`INSTALLING_PT.md`)](INSTALLING_PT.md)
 
-## Official method
+## One-liner (Clified / no clone)
+
+Install the Clified engine and a GameDev tool from the [remote catalog](https://github.com/maikramer/clified-catalog) without cloning this repo:
+
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get text2d
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get materialize
+curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh | bash -s -- --get gamedev   # all tools
+```
+
+**Windows (PowerShell):**
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get text2d
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/maikramer/clified/main/install.ps1))) --get materialize
+```
+
+List catalog entries: `clified-install --catalog` (after the engine is installed). Keys match [`tools.yaml`](../tools.yaml) (`text2d`, `text3d`, `materialize`, `vibegame`, …).
+
+---
+
+## Official method (from clone)
 
 At the **repository root** (folder containing `Shared/`, `install.sh`, `.git`):
 
@@ -19,9 +42,9 @@ gamedev-install --list
 gamedev-install text2d
 ```
 
-**Installer prerequisites:** Python **3.10+** and `pip`. [Clified](https://pypi.org/project/clified/) is installed automatically via PyPI when missing. `uv` is bootstrapped by Clified during tool installs.
+**Installer prerequisites:** Python **3.13** recommended for most GPU tools (see table); `pip`. [Clified](https://pypi.org/project/clified/) **≥ 0.7.3** is installed automatically via PyPI when missing (`CLIFIED_MIN_VERSION`). User Scripts are prepended to PATH (session + persistent). `uv` is bootstrapped by Clified during tool installs.
 
-Useful env vars: `CLIFIED_TOOLS` (defaults to `GameDev/tools.yaml`), `PYTHON_CMD`, `CLIFIED_MIN_VERSION`.
+Useful env vars: `CLIFIED_TOOLS` (defaults to `GameDev/tools.yaml`), `PYTHON_CMD`, `CLIFIED_MIN_VERSION`, `CLIFIED_PERSIST_PATH=0` to skip writing `~/.profile` on Unix.
 
 Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `python` on Windows in the scripts).
 
@@ -31,20 +54,23 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 
 | `./install.sh …` command | Folder | Type | Min Python | Notes |
 |--------------------------|--------|------|------------|-------|
-| `text2d` | Text2D | Python | 3.10 | PyTorch/CUDA recommended |
-| `text3d` | Text3D | Python | 3.8 | Depends on Text2D; nvdiffrast after venv |
-| `gameassets` | GameAssets | Python | 3.10 | No PyTorch in package; `batch` orchestrates CLIs (auto-detects 3D, rig, parts, animate from manifest + profile) |
-| `text2sound` | Text2Sound | Python | 3.10 | PyTorch/CUDA |
-| `texture2d` | Texture2D | Python | 3.10 | HF API; local GPU optional |
-| `skymap2d` | Skymap2D | Python | 3.10 | HF API |
-| `rigging3d` | Rigging3D | Python | 3.11 | UniRig; inference extras **always** via unified installer |
+| `text2d` | Text2D | Python | 3.13 | PyTorch/CUDA; SDNQ FLUX |
+| `text3d` | Text3D | Python | 3.13 | Depends on Text2D; nvdiffrast after venv |
+| `gameassets` | GameAssets | Python | 3.13 | Batch + `dream`; orchestrates CLIs |
+| `gamedevlab` | GameDevLab | Python | 3.13 | Debug 3D, benches, profiling |
+| `text2sound` | Text2Sound | Python | 3.13 | PyTorch/CUDA |
+| `texture2d` | Texture2D | Python | 3.13 | Local GPU or HF API |
+| `skymap2d` | Skymap2D | Python | 3.13 | HF Inference API |
+| `terrain3d` | Terrain3D | Python | 3.13 | Diffusion terrain; CUDA |
+| `rocks3d` | Rocks3D | Python | 3.13 | Procedural rocks; no PyTorch |
+| `rigging3d` | Rigging3D | Python | 3.13 | UniRig; inference extras via unified installer |
 | `animator3d` | Animator3D | Python | 3.13 | `bpy` 5.1 |
-| `part3d` | Part3D | Python | 3.10 | torch-scatter/cluster after venv |
-| `paint3d` | Paint3D | Python | 3.10 | Vendored code in `Paint3D/src/paint3d/hy3dpaint/` + patches + Real-ESRGAN; models on-demand via `huggingface_hub`; nvdiffrast after venv |
-| `materialize` | Materialize | Rust | — | Needs `cargo`; binary in `~/.local/bin` by default |
-| `vibegame` | VibeGame | Bun | — | Needs **Bun** and **Node** on PATH; `bun install` + `bun run build`; CLI `vibegame` → `~/.local/bin` |
+| `part3d` | Part3D | Python | 3.13 | torch-scatter/cluster after venv |
+| `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
+| `materialize` | Materialize | Rust | — | Needs `cargo`; binary in `~/.local/bin` |
+| `vibegame` | VibeGame | Bun | — | Needs **Bun**; CLI `vibegame` → `~/.local/bin` |
 
-Install everything present in the checkout: `./install.sh all`.
+Install everything present in the checkout: `./install.sh all` or one-liner `--get gamedev`.
 
 Technical details: [`tools.yaml`](../tools.yaml) (Clified registry) and hooks in [`Shared/src/gamedev_shared/installer/clified_hooks.py`](../Shared/src/gamedev_shared/installer/clified_hooks.py).
 
@@ -52,16 +78,14 @@ Technical details: [`tools.yaml`](../tools.yaml) (Clified registry) and hooks in
 
 ---
 
-## Do not confuse two `install.sh` files
+## Do not confuse root vs project installers
 
 | File | Role |
 |------|------|
 | **`GameDev/install.sh`** (root) | Delegates to **Clified** (`tools.yaml` + repo hooks). |
-| **`<Project>/scripts/install.sh`** | Local shortcut that only calls **that** project’s `scripts/installer.py` (same logic as unified when equivalent). **Not** the root script. |
+| **`<Project>/scripts/installer.py`** | Local shortcut for that project only. **Not** the root script. |
 
-Prefer `./install.sh <name>` **from the repo root**. The `scripts/` wrapper exists for people already inside the project folder.
-
-Text2D, Text3D, and Texture2D also expose `scripts/run_installer.sh` (implementation); `scripts/install.sh` delegates to it for compatibility.
+Prefer `./install.sh <name>` **from the repo root**. Per-project `scripts/installer.py` exists for people already inside a tool folder.
 
 ---
 
@@ -75,4 +99,4 @@ For pipelines or debugging, you can create a `venv` and `pip install -e` in each
 
 - **[Adding a new tool to the monorepo](NEW_TOOLS.md)** — registry, unified installer, Shared, GameAssets, CI, checklist.
 - [Shared/README.md](../Shared/README.md) — `gamedev-shared`, `gamedev-install`
-- [Text2D/README.md](../Text2D/README.md), [Text3D/README.md](../Text3D/README.md), [GameAssets/README.md](../GameAssets/README.md), [Texture2D/README.md](../Texture2D/README.md), [Skymap2D/README.md](../Skymap2D/README.md), [Text2Sound/README.md](../Text2Sound/README.md), [Rigging3D/README.md](../Rigging3D/README.md), [Animator3D/README.md](../Animator3D/README.md), [Part3D/README.md](../Part3D/README.md), [Paint3D/README.md](../Paint3D/README.md), [Materialize/README.md](../Materialize/README.md)
+- [Text2D/README.md](../Text2D/README.md), [Text3D/README.md](../Text3D/README.md), [GameAssets/README.md](../GameAssets/README.md), [Texture2D/README.md](../Texture2D/README.md), [Skymap2D/README.md](../Skymap2D/README.md), [Text2Sound/README.md](../Text2Sound/README.md), [Rigging3D/README.md](../Rigging3D/README.md), [Animator3D/README.md](../Animator3D/README.md), [Part3D/README.md](../Part3D/README.md), [Paint3D/README.md](../Paint3D/README.md), [Materialize/README.md](../Materialize/README.md), [VibeGame/README.md](../VibeGame/README.md), [GameDevLab/README.md](../GameDevLab/README.md), [Terrain3D/README.md](../Terrain3D/README.md), [Rocks3D/README.md](../Rocks3D/README.md)
