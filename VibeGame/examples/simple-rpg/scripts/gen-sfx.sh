@@ -33,15 +33,30 @@ gen sfx_coin         "bright coin pickup chime, gold coin collect, cheerful curr
 gen sfx_item_drop    "item dropping on ground, object landing thud, loot drop impact"                    item-drop      211 1.5
 
 echo
-echo "=== Generating BGM battle loop ==="
+echo "=== Generating BGM battle loop (seamless) ==="
+# BGM always uses the music model (Open 1.0). The old fallback to the effects
+# model (Open Small, 11 s, cfg 1) produced the short low-quality loops this
+# script used to ship: text2sound's hw-auto now fits Open 1.0 in 6 GB-class
+# GPUs (fp16 + chunked VAE decode), so the fallback is gone on purpose.
+# --seamless-loop crossfades tail→head and drops the folded head, so the OGG
+# loops gapless under the engine's native loop=1 playback.
+# -d 47 + --loop-edge-trim 4: the model composes an intro swell and a quiet
+# outro for the requested length; looped raw those become a repeated
+# creature-like transient at every cycle start plus an energy dip at the wrap.
+# Trimming 4 s off each edge keeps only steady-state music for the loop.
 bgm_prompt="intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm"
-if ! text2sound generate "$bgm_prompt" -p battle --profile music -d 30 --seed 220 --crop --trim \
-     -f ogg --low-vram -o bgm_battle.ogg >/dev/null 2>&1 || [ ! -f bgm_battle.ogg ]; then
-  echo "    music/Open 1.0 failed -- falling back to effects 11s loop"
-  text2sound generate "$bgm_prompt, epic adventure" --profile effects \
-    -d 11 -s 100 --seed 220 --crop --trim -f ogg -o bgm_battle.ogg >/dev/null 2>&1
-fi
+# seed 220 composes a ~12 s quiet build-up, so battle needs a deeper edge trim
+# than explore for uniform loop energy (validated: first/last 3 s RMS ≥ 60% of
+# the track median).
+text2sound generate "$bgm_prompt" -p battle --profile music -d 47 -s 100 --seed 220 --trim \
+  --seamless-loop --crossfade-ms 2000 --loop-edge-trim 8 -f ogg -o bgm_battle.ogg >/dev/null 2>&1
 printf "    -> bgm_battle.ogg (%s)\n" "$(du -h bgm_battle.ogg | cut -f1)"
+
+echo
+echo "=== Generating BGM explore loop (seamless) ==="
+text2sound generate "peaceful fantasy village exploration music, gentle acoustic guitar and flute, warm ambient adventure melody, calm countryside" \
+  --profile music -d 47 -s 100 --seed 300 --trim --seamless-loop --crossfade-ms 2000 --loop-edge-trim 4 -f ogg -o bgm_explore.ogg >/dev/null 2>&1
+printf "    -> bgm_explore.ogg (%s)\n" "$(du -h bgm_explore.ogg | cut -f1)"
 
 echo
 echo "=== Done. OGG files: ==="
