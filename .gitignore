@@ -131,3 +131,11 @@ VibeGame/screenshot*.png
 /v-*.jpeg
 /simple-rpg-initial.png
 /simple-rpg-loaded.png
+
+# Stray root debug screenshots (scale tests, manual browser captures, etc.)
+/scale-*.jpeg
+/user-view.jpeg
+
+# Backup de assets regenerados (ex.: bgm_*.orig.ogg antes do seamless-loop)
+*.orig.ogg
+*.orig.*
