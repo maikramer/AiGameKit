@@ -72,20 +72,41 @@ class AudioGenerator:
         auto_clear: bool = True,
         half_precision: bool | None = None,
         gpu_ids: list[int] | None = None,
+        chunked_vae: bool | None = None,
     ) -> None:
         self._model_id = model_id
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._auto_clear = auto_clear
+        hw = self._detect_hw_profile()
         if half_precision is None:
-            self._half = self._device == "cuda" and self._should_use_half()
+            if hw is not None and self._device.startswith("cuda"):
+                self._half = hw.half
+            else:
+                self._half = self._device == "cuda" and self._should_use_half()
         else:
             self._half = half_precision
+        if chunked_vae is None:
+            self._chunked_vae = hw.chunked_vae if hw is not None else False
+        else:
+            self._chunked_vae = chunked_vae
         self._gpu_ids = gpu_ids
         self._multi_gpu: bool = False
         self._model: Any = None
         self._model_config: dict[str, Any] = {}
         self._loaded = False
         self._cache_key: tuple[Any, ...] | None = None
+
+    @staticmethod
+    def _detect_hw_profile() -> Any:
+        """Perfil hw-auto (None se desligado via TEXT2SOUND_HW_AUTO=0 ou indisponível)."""
+        try:
+            from .hardware import detect_hardware_profile, hw_auto_enabled
+
+            if not hw_auto_enabled():
+                return None
+            return detect_hardware_profile()
+        except Exception:
+            return None
 
     @staticmethod
     def _should_use_half() -> bool:
@@ -105,16 +126,23 @@ class AudioGenerator:
         device: str | None = None,
         half_precision: bool | None = None,
         gpu_ids: list[int] | None = None,
+        chunked_vae: bool | None = None,
     ) -> AudioGenerator:
         """Singleton thread-safe — reutiliza modelo já carregado."""
         with cls._lock:
-            _cache_key = (model_id, half_precision, tuple(gpu_ids) if gpu_ids else None)
+            _cache_key = (
+                model_id,
+                half_precision,
+                tuple(gpu_ids) if gpu_ids else None,
+                chunked_vae,
+            )
             if cls._instance is None or cls._instance._cache_key != _cache_key:
                 cls._instance = cls(
                     model_id=model_id,
                     device=device,
                     half_precision=half_precision,
                     gpu_ids=gpu_ids,
+                    chunked_vae=chunked_vae,
                 )
                 cls._instance._cache_key = _cache_key
             return cls._instance
@@ -193,6 +221,14 @@ class AudioGenerator:
             # Stable Audio VAE/pretransform NaNs in fp16; keep it in fp32.
             if hasattr(self._model, "pretransform"):
                 self._model.pretransform.float()
+        # Chunked VAE decode: peak activation memory stays ~constant with
+        # duration (the full-latent fp32 decode is what OOMed 6 GB GPUs).
+        if (
+            self._chunked_vae
+            and getattr(self._model, "pretransform", None) is not None
+            and hasattr(self._model.pretransform, "chunked")
+        ):
+            self._model.pretransform.chunked = True
         self._model = self._model.to(self._device)
 
         if self._gpu_ids and len(self._gpu_ids) >= 2 and self._device == "cuda":
@@ -219,6 +255,39 @@ class AudioGenerator:
                 self._multi_gpu = True
         except Exception:
             pass
+
+    def _decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
+        """Decodifica latents → áudio com escada de fallback de memória.
+
+        1. Decode normal (respeita ``pretransform.chunked`` do perfil hw).
+        2. OOM → re-tenta com decode chunked.
+        3. OOM → decode em CPU (lento mas nunca falha por VRAM).
+        """
+        pre = self._model.pretransform
+        dtype = next(pre.parameters()).dtype
+        latents = latents.to(dtype)
+
+        try:
+            with torch.no_grad():
+                return pre.decode(latents)
+        except torch.cuda.OutOfMemoryError:
+            self._clear_cuda()
+
+        if hasattr(pre, "chunked") and not pre.chunked:
+            pre.chunked = True
+            try:
+                with torch.no_grad():
+                    return pre.decode(latents)
+            except torch.cuda.OutOfMemoryError:
+                self._clear_cuda()
+
+        device = next(pre.parameters()).device
+        try:
+            pre.to("cpu")
+            with torch.no_grad():
+                return pre.decode(latents.cpu()).to(latents.device)
+        finally:
+            pre.to(device)
 
     def unload(self) -> None:
         """Descarrega modelo e libera VRAM."""
@@ -300,6 +369,7 @@ class AudioGenerator:
             rf_sampler = sampler_type
             if getattr(self._model, "diffusion_objective", "") == "rectified_flow":
                 rf_sampler = _RF_SAMPLER_MAP.get(sampler_type, "euler")
+            has_pretransform = getattr(self._model, "pretransform", None) is not None
             output = generate_diffusion_cond(
                 self._model,
                 steps=steps,
@@ -310,7 +380,13 @@ class AudioGenerator:
                 sigma_max=sigma_max,
                 sampler_type=rf_sampler,
                 device=gen_device,
+                # Latents out + decode próprio: o decode do VAE é o passo que
+                # OOMa em GPUs pequenas; separado, dá para re-tentar chunked ou
+                # em CPU sem repetir a difusão inteira.
+                return_latents=has_pretransform,
             )
+            if has_pretransform:
+                output = self._decode_latents(output)
 
         audio = rearrange(output, "b d n -> d (b n)")
 
