@@ -29,6 +29,7 @@ import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
 import { QuestsPlugin } from './quests/plugin';
 import { BiomesPlugin } from './biomes/plugin';
+import { WaterPlugin } from './water/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -55,6 +56,7 @@ export const DefaultPlugins: Plugin[] = [
   AudioPlugin,
   EquirectSkyPlugin,
   BiomesPlugin,
+  WaterPlugin,
   ParticlesPlugin,
   FloatingTextPlugin,
   DestructiblePlugin,

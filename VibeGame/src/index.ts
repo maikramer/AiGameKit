@@ -885,3 +885,12 @@ export async function run() {
   globalBuilder = null;
   return builder.run();
 }
+
+export {
+  WaterPlugin,
+  Lake,
+  isPointInWater,
+  waterLevelAt,
+  getWaterBodies,
+} from './plugins/water';
+export type { WaterBody } from './plugins/water';
