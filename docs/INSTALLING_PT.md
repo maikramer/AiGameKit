@@ -23,6 +23,22 @@ curl -fsSL https://raw.githubusercontent.com/maikramer/clified/main/install.sh |
 
 Lista de entradas: `clified-install --catalog` (após instalar o motor). Chaves = [`tools.yaml`](../tools.yaml) (`text2d`, `text3d`, `materialize`, `vibegame`, …).
 
+### Gerir ferramentas instaladas (Clified ≥ 0.8)
+
+Depois de instalar uma ferramenta, os subcomandos `clified` acompanham-na e gerem-na via um ficheiro de estado local (`~/.config/clified/state.json`):
+
+```bash
+clified list                       # ferramentas instaladas + estado ok/broken
+clified search text                # filtra o catálogo remoto (marca [instalado])
+clified update text2d              # git pull + refrescar deps (ou: clified update --all)
+clified uninstall text2d --purge   # remove wrapper/venv/clone/receipt
+clified get text2d@<ref>           # fixar num branch, tag ou commit SHA
+clified doctor                     # diagnosticar receipts partidos / wrappers órfãos (--fix)
+clified <cmd> --json               # saída machine-readable para qualquer um dos acima
+```
+
+Acrescenta `--json` para saída machine-readable. Ver `clified --help` e o [README do Clified](https://github.com/maikramer/clified#managing-installed-tools).
+
 ---
 
 ## Forma oficial (a partir de clone)
@@ -42,7 +58,7 @@ gamedev-install --list
 gamedev-install text2d
 ```
 
-**Pré-requisitos do instalador:** Python **3.13** recomendado para a maioria das ferramentas GPU (ver tabela); `pip`. [Clified](https://pypi.org/project/clified/) **≥ 0.7.3** é instalado automaticamente via PyPI quando ausente (`CLIFIED_MIN_VERSION`). User Scripts são prependidos ao PATH (sessão + persistente). O `uv` é instalado pelo Clified durante a instalação das ferramentas.
+**Pré-requisitos do instalador:** Python **3.13** recomendado para a maioria das ferramentas GPU (ver tabela); `pip`. [Clified](https://pypi.org/project/clified/) **≥ 0.8.1** é instalado automaticamente via PyPI quando ausente (`CLIFIED_MIN_VERSION`). User Scripts são prependidos ao PATH (sessão + persistente). O `uv` é instalado pelo Clified durante a instalação das ferramentas.
 
 Variáveis úteis: `CLIFIED_TOOLS` (por defeito `GameDev/tools.yaml`), `PYTHON_CMD`, `CLIFIED_MIN_VERSION`, `CLIFIED_PERSIST_PATH=0` para não escrever `~/.profile` no Unix.
 
