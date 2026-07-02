@@ -104,6 +104,14 @@ export interface CreatureConfig {
   enemyType?: string;
   /** Time-scale applied to the run clip while chasing (e.g. 1.5 to reuse walk as a jog). */
   runTimeScale?: number;
+  /**
+   * Uniform visual scale applied to the loaded model (default 1).
+   * The asset pipeline (Hunyuan) normalizes every GLB to a ~2-unit bounding
+   * box — a mosquito ships as tall as the hero and the ogre *shorter* — so
+   * each creature declares its real in-world size here. footOffset and the
+   * health bar are children of the scaled group, so they follow for free.
+   */
+  modelScale?: number;
 }
 
 interface PresentationState {
@@ -388,6 +396,8 @@ export function createCreatureBehaviours(
         }
         s.group = result.group;
         s.animator = result.animator;
+        const scale = cfg.modelScale ?? 1;
+        if (scale !== 1) s.group.scale.setScalar(scale);
         s.group.updateWorldMatrix(true, true);
         _box.setFromObject(s.group);
         s.footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;

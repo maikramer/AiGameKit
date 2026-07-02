@@ -7,6 +7,7 @@ const SKILL_POINTS = 2;
 
 const pillar = createMysticObject({
   modelUrl: '/assets/meshes/stone_pillar.glb',
+  modelScale: 1.2,
   emissiveColor: 0x8a5cff,
   toastColor: '#c9a6ff',
   readRangeSq: 4.6 * 4.6,

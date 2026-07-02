@@ -5,6 +5,7 @@ import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
   modelUrl: '/assets/meshes/sand_wyrm_boss_rigged_animated.glb',
+  modelScale: 1.6,
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',

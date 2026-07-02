@@ -8,6 +8,7 @@ import { everSpawned, aliveInBiome } from './enemy-registry';
 
 const behaviours = createCreatureBehaviours({
   modelUrl: '/assets/meshes/boss_ogre_rigged_animated.glb',
+  modelScale: 1.7,
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',

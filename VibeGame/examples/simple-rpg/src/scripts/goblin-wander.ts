@@ -3,6 +3,7 @@ import { addGold } from '../game/economy';
 
 const { start, update, onDestroy } = createCreatureBehaviours({
   modelUrl: '/assets/meshes/goblin_rigged_animated.glb',
+  modelScale: 0.65,
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',
