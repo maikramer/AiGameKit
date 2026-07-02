@@ -10,6 +10,8 @@ export const Terrain = {
   roughness: new Float32Array(MAX_ENTITIES),
   metalness: new Float32Array(MAX_ENTITIES),
   normalStrength: new Float32Array(MAX_ENTITIES),
+  /** Metros por tile de textura (UV em espaço de mundo). 0 = auto (densidade do menor chunk). */
+  textureTileSize: new Float32Array(MAX_ENTITIES),
   skirtDepth: new Float32Array(MAX_ENTITIES),
   skirtWidth: new Float32Array(MAX_ENTITIES),
   baseColor: new Uint32Array(MAX_ENTITIES),

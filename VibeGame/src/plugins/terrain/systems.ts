@@ -72,12 +72,12 @@ function _loadTex(url: string): THREE.Texture {
   tex = _textureLoader.load(url, (t) => {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(32, 32);
+    t.repeat.set(1, 1);
     t.colorSpace = THREE.SRGBColorSpace;
   });
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(32, 32);
+  tex.repeat.set(1, 1);
   _terrainTextureCache.set(url, tex);
   return tex;
 }
@@ -88,11 +88,11 @@ function _loadNormalTex(url: string): THREE.Texture {
   tex = _textureLoader.load(url, (t) => {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
-    t.repeat.set(32, 32);
+    t.repeat.set(1, 1);
   });
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(32, 32);
+  tex.repeat.set(1, 1);
   _terrainTextureCache.set(url, tex);
   return tex;
 }
@@ -108,7 +108,7 @@ const _flatNRTexture = (() => {
   );
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(32, 32);
+  t.repeat.set(1, 1);
   t.needsUpdate = true;
   return t;
 })();
@@ -139,13 +139,16 @@ function _loadPackedNR(albedoUrl: string): THREE.Texture {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = 'rgba(128,128,255,255)';
+  // Flat tangent normal (128,128,255) + full alpha. NOTE: css rgba() takes
+  // alpha in 0–1 — 'rgba(...,255)' is invalid and silently leaves the canvas
+  // black (normal (-1,-1,-1), roughness 0 → shiny) until the maps load.
+  ctx.fillStyle = 'rgb(128,128,255)';
   ctx.fillRect(0, 0, size, size);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(32, 32);
+  tex.repeat.set(1, 1);
   tex.colorSpace = THREE.NoColorSpace;
   _packedNRCache.set(albedoUrl, tex);
 
@@ -696,6 +699,15 @@ export const TerrainMeshSystem: System = {
       // both neighbouring chunks (no lighting seam), independent of their LOD.
       const normalEpsilon = Terrain.worldSize[field] / 1024;
 
+      // World-space UV tile: constant texel density on every LOD level and
+      // continuous across chunk borders (per-chunk 0..1 UVs made the pattern
+      // scale jump/restart at every LOD boundary — a visible seam). Auto (0)
+      // matches the old near-camera density: smallest chunk = worldSize /
+      // 2^(levels-1), which used to hold 32 tiles.
+      const tileSize =
+        Terrain.textureTileSize[field] ||
+        Terrain.worldSize[field] / 2 ** (Terrain.levels[field] - 1) / 32;
+
       const geometry = buildChunkGeometry(
         data.sampler,
         TerrainChunk.originX[chunk],
@@ -703,7 +715,8 @@ export const TerrainMeshSystem: System = {
         TerrainChunk.size[chunk],
         TerrainChunk.resolution[chunk],
         skirtDepth,
-        normalEpsilon
+        normalEpsilon,
+        tileSize
       );
 
       let mesh = registry.get(chunk);
@@ -714,12 +727,14 @@ export const TerrainMeshSystem: System = {
         let material = _sharedTerrainMaterials.get(field);
         const texUrl = getTerrainTextureUrl(state, field);
         const expectedColor = texUrl ? 0xffffff : Terrain.baseColor[field];
+        const normalStrength = Terrain.normalStrength[field] || 1;
         if (
           !material ||
           material.wireframe !== (Terrain.wireframe[field] === 1) ||
           material.color.getHex() !== expectedColor ||
           material.roughness !== Terrain.roughness[field] ||
-          material.metalness !== Terrain.metalness[field]
+          material.metalness !== Terrain.metalness[field] ||
+          (material.normalMap && material.normalScale.x !== normalStrength)
         ) {
           if (material) material.dispose();
           const matOpts: THREE.MeshStandardMaterialParameters = {
@@ -736,7 +751,12 @@ export const TerrainMeshSystem: System = {
             const texName = texUrl.split('/').pop()!.replace('.png', '');
             const normalUrl = `${baseName}/pbr_${texName}/${texName}_normal.png`;
             matOpts.normalMap = _loadNormalTex(normalUrl);
-            matOpts.normalScale = new THREE.Vector2(0.8, 0.8);
+            // `normal-strength` XML attr (Terrain.normalStrength); the blend
+            // shader multiplies the packed uNR* normals by this normalScale.
+            matOpts.normalScale = new THREE.Vector2(
+              normalStrength,
+              normalStrength
+            );
             // Packed normal+roughness for the base layer. Assigned as the
             // roughnessMap purely to switch on USE_ROUGHNESSMAP (the shader
             // override re-samples it); the real per-biome blend uses uNR*.
