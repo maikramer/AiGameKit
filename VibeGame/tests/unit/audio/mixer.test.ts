@@ -45,6 +45,51 @@ describe('MusicMixer', () => {
     mixer._resetAudioMix(state);
   });
 
+  describe('declarative <MusicLayer> playback', () => {
+    it('autostarts layers and forces them non-spatial (BGM was silent: nothing ever set playing=1)', () => {
+      const explore = makeLayer(state, mixer.MUSIC_LAYER_EXPLORE, 0.7);
+      AudioSource.playing[explore] = 0;
+      AudioSource.spatial[explore] = 1;
+
+      mixer.MusicMixerSystem.update!(state);
+
+      expect(AudioSource.playing[explore]).toBe(1);
+      expect(AudioSource.spatial[explore]).toBe(0);
+    });
+
+    it('forces native seamless looping (loop attr is not in parserAttributes, so Howler would gap-restart)', () => {
+      const explore = makeLayer(state, mixer.MUSIC_LAYER_EXPLORE, 0.7);
+      AudioSource.loop[explore] = 0;
+
+      mixer.MusicMixerSystem.update!(state);
+
+      expect(AudioSource.loop[explore]).toBe(1);
+      expect(AudioSource.playing[explore]).toBe(1);
+      expect(AudioSource.spatial[explore]).toBe(0);
+
+      // idempotent: running again must not flip loop back
+      mixer.MusicMixerSystem.update!(state);
+      expect(AudioSource.loop[explore]).toBe(1);
+    });
+
+    it('applies base-volume from the XML attr via the music-layer shorthand', async () => {
+      const { createEntityFromRecipe } =
+        await import('../../../src/core/recipes/parser');
+      const { AudioPlugin } = await import('../../../src/plugins/audio/plugin');
+      const fresh = new State();
+      fresh.registerPlugin(AudioPlugin);
+      const eid = createEntityFromRecipe(fresh, 'MusicLayer', {
+        url: '/assets/audio/bgm.ogg',
+        layer: 'battle',
+        'base-volume': '0.9',
+        loop: '1',
+      });
+      expect(MusicLayerComponent.layer[eid]).toBe(mixer.MUSIC_LAYER_BATTLE);
+      expect(MusicLayerComponent.volume[eid]).toBeCloseTo(0.9, 5);
+      expect(AudioSource.loop[eid]).toBe(1);
+    });
+  });
+
   describe('volume tiers', () => {
     it('stores master/music/sfx tiers in the audio mix', () => {
       mixer.setMasterVolume(state, 0.8);

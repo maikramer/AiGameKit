@@ -81,6 +81,14 @@ export const AudioPlugin: Plugin = {
       },
       'music-layer': musicLayerAdapters,
     },
+    shorthands: {
+      // Route the top-level XML attr to the component field: without this,
+      // `base-volume="0.9"` never reaches the music-layer adapter (the
+      // expander only camelizes against field names, `baseVolume` matches
+      // nothing, and the raw attr dies in the recipe's parserAttributes
+      // skip) — leaving every layer at the default volume 1.
+      'music-layer': { 'base-volume': 'volume' },
+    },
     parsers: {
       AudioMixer: audioMixerParser,
     },
