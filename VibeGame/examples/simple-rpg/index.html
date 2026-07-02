@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RPG Simples — Vale do Cristal (VibeGame)</title>
+    <title>Simple RPG Demo — Vale do Cristal (VibeGame)</title>
     <style>
       * {
         margin: 0;
@@ -48,28 +48,57 @@
   </head>
 
   <body>
-    <!-- ================================================================
-         MAPA — CIDADE CENTRAL MURADA + 4 BIOMAS CARDEAIS
-         ----------------------------------------------------------------
-         A cidade (vale) fica no centro, dentro de uma muralha quadrada
-         (semi-extensão 22) com 4 portões cardeais. Cada portão leva a um
-         bioma distinto:
-           NORTE (+Z) → FLORESTA SOMBRIA   (pinheiros, lobos, sombras, bruxa)
-           LESTE (+X) → DESERTO            (cactos, escorpiões, bandidos, verme)
-           SUL   (-Z) → PÂNTANO            (salgueiros, boglings, mosquitos, warden)
-           OESTE (-X) → PICOS GELADOS       (rochedos, goblins, slimes, ogro)
-         Os <BiomeRegion> são cunhas (triângulos/trapézios) que ladrilham o
-         espaço fora do quadrado central (semi-lado 28), partidas pelas
-         diagonais — sem sobreposição e deixando a cidade como vale neutro.
-         ================================================================ -->
+    <!-- ==================================================================
+         VALE DO CRISTAL — MAPA DO MUNDO
+         ------------------------------------------------------------------
+
+                              N (+Z) FLORESTA SOMBRIA
+                              pinheiros · lobos · sombras
+                              clareira da bruxa (chefe)
+                                        │
+         O (-X) PICOS GELADOS ──── CIDADE MURADA ──── L (+X) DESERTO
+         rochedos · goblins          (vale, ±22)      cactos · escorpiões
+         cristais · OGRO (final)                      ruínas · VERME
+                                        │
+                              S (-Z) PÂNTANO
+                              salgueiros · boglings
+                              choça · BOG WARDEN (chefe)
+
+         ÍNDICE DA CENA
+           §0  Céu, luz, pós-processamento, áudio
+           §1  Biomas (4 cunhas cardeais)
+           §2  Terreno + NavMesh
+           §3  Herói
+           §4  Cidade murada (muralha, praça, casas, mercado, props)
+           §5  Anel do vale (recursos) + goblins de aviso
+           §6  Norte  — Floresta Sombria
+           §7  Leste  — Deserto
+           §8  Sul    — Pântano
+           §9  Oeste  — Picos Gelados
+           §10 NPCs de quest (3 por bioma)
+           §11 Câmera, HUD e UI
+
+         CONTRATOS COM src/main.ts (não alterar sem sincronizar):
+           · name="hero" / name="boss" / name="merchant"
+           · SpawnExclusion at="0 0" radius="30" (espelha villageZones)
+           · Portões cardeais na muralha ±22 (RESPAWN_POINTS usa ±28)
+           · Banda de goblins do norte começa em z>=40 (segurança do respawn)
+           · dialogue-id de cada NPC == id nos JSON em src/data/quests/
+         ================================================================== -->
     <Scene
       canvas="#game-canvas"
       sky="#ffffff"
       resume-audio-on-user-gesture="true"
     >
+      <!-- ============================================================
+           §0 CÉU, LUZ, PÓS-PROCESSAMENTO E ÁUDIO
+           Valores de bloom/fog/SSAO já calibrados para jogabilidade —
+           intensidade moderada de propósito.
+           ============================================================ -->
       <EquirectSky url="/assets/sky/sky.png"></EquirectSky>
 
-      <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto = sombras mais curtas e terreno menos “enterrado”. -->
+      <!-- Fill + sol: mais fill no hemisfério + sol um pouco mais alto =
+           sombras mais curtas e terreno menos “enterrado”. -->
       <GameObject
         ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.8"
         directional-light="color: 0xfff0d0; intensity: 3.0; direction-x: -0.7; direction-y: 3.5; direction-z: -0.6; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
@@ -77,9 +106,8 @@
       >
       </GameObject>
 
-      <!-- Audio mixer tiers + layered music (engine AudioPlugin, T28).
-           Explore layer plays by default; biomas fazem crossfade para a sua
-           camada via bgm-layer. -->
+      <!-- Mixer + música em camadas (engine AudioPlugin). A camada explore
+           toca por omissão; os biomas fazem crossfade via bgm-layer. -->
       <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
       <MusicLayer
         url="/assets/audio/bgm_explore.ogg"
@@ -95,11 +123,12 @@
       ></MusicLayer>
 
       <!-- ============================================================
-           BIOMAS — 4 cunhas cardeais (spec §8). O BiomeDetectionSystem
-           aplica tint/fog/ambient/textura-de-terreno e crossfade de BGM
-           quando o herói entra. type: 1=FLORESTA, 2=DESERTO, 3=PÂNTANO,
-           4=MONTANHA. As cunhas começam fora do quadrado central (±28) e
-           são partidas pelas diagonais (±240 nos cantos).
+           §1 BIOMAS — 4 cunhas cardeais. O BiomeDetectionSystem aplica
+           tint/fog/ambient/textura-de-terreno e crossfade de BGM quando
+           o herói entra. type: 1=FLORESTA, 2=DESERTO, 3=PÂNTANO,
+           4=MONTANHA. As cunhas começam fora do quadrado central (±28)
+           e são partidas pelas diagonais (±240 nos cantos) — sem
+           sobreposição; a cidade fica como vale neutro.
            ============================================================ -->
       <!-- NORTE: Floresta Sombria -->
       <BiomeRegion
@@ -150,9 +179,12 @@
         terrain-texture="/assets/textures/snow_peak.png"
       ></BiomeRegion>
 
-      <!-- Terreno — quadtree LOD chunks. world-size/max-height batem com
-           public/assets/terrain/terrain.json. Física: uma heightfield Rapier
-           por chunk visual, criada/libertada dinamicamente. -->
+      <!-- ============================================================
+           §2 TERRENO + NAVMESH
+           Quadtree LOD chunks; world-size/max-height batem com
+           public/assets/terrain/terrain.json. Física: uma heightfield
+           Rapier por chunk visual, criada/libertada dinamicamente.
+           ============================================================ -->
       <Terrain
         pos="0 0 0"
         world-size="2000"
@@ -167,14 +199,16 @@
         skirt-width="0.015625"
         roughness="0.78"
         metalness="0"
-        normal-strength="1.0"
+        normal-strength="3.0"
         base-color="#8cb866"
         texture="/assets/textures/vale_grass.png"
       ></Terrain>
 
       <NavMesh></NavMesh>
 
-      <!-- Herói no centro da praça da cidade. -->
+      <!-- ============================================================
+           §3 HERÓI — nasce no centro da praça da cidade.
+           ============================================================ -->
       <PlayerGLTF
         name="hero"
         pos="0 40 0"
@@ -183,15 +217,16 @@
       </PlayerGLTF>
 
       <!-- ============================================================
-           CIDADE CENTRAL (VALE) — dentro da muralha (|x|,|z| ≲ 20).
-           Exclusões impedem vegetação/inimigos de nascer na cidade e nos
-           4 corredores de saída.
+           §4 CIDADE MURADA (VALE) — |x|,|z| ≲ 22.
+           A exclusão impede vegetação de nascer na cidade e nos 4
+           corredores de saída (DynamicSpawners de inimigos ficam sempre
+           fora, a ≥40 do centro — não respeitam SpawnExclusion).
            ============================================================ -->
       <SpawnExclusion at="0 0" radius="30"></SpawnExclusion>
 
-      <!-- Muralha quadrada (semi-lado 22, altura 3) com 4 portões cardeais
-           (vão de 7 m centrado em cada eixo). collider=auto → bloqueia o
-           jogador; os portões são a única passagem. -->
+      <!-- §4.1 Muralha quadrada (semi-lado 22, altura 3) com 4 portões
+           cardeais (vão de 7 m centrado em cada eixo). collider=auto →
+           bloqueia o jogador; os portões são a única passagem. -->
       <Composition
         place="at: 0 0; align-to-terrain: 0"
         body="fixed"
@@ -209,11 +244,15 @@
         <!-- Oeste (x=-22) -->
         <Box pos="-22 1.5 -12.75" size="0.6 3 18.5" color="#6a5236"></Box>
         <Box pos="-22 1.5 12.75" size="0.6 3 18.5" color="#6a5236"></Box>
-        <!-- Torres de canto -->
+        <!-- Torres de canto (com telhadinho) -->
         <Box pos="22 2.1 22" size="1.4 4.2 1.4" color="#5a4530"></Box>
         <Box pos="-22 2.1 22" size="1.4 4.2 1.4" color="#5a4530"></Box>
         <Box pos="22 2.1 -22" size="1.4 4.2 1.4" color="#5a4530"></Box>
         <Box pos="-22 2.1 -22" size="1.4 4.2 1.4" color="#5a4530"></Box>
+        <Box pos="22 4.4 22" size="1.8 0.4 1.8" color="#7a3b28"></Box>
+        <Box pos="-22 4.4 22" size="1.8 0.4 1.8" color="#7a3b28"></Box>
+        <Box pos="22 4.4 -22" size="1.8 0.4 1.8" color="#7a3b28"></Box>
+        <Box pos="-22 4.4 -22" size="1.8 0.4 1.8" color="#7a3b28"></Box>
         <!-- Postes de portão (enquadram cada vão) -->
         <Box pos="-3.5 1.8 22" size="0.5 3.6 0.7" color="#4a3018"></Box>
         <Box pos="3.5 1.8 22" size="0.5 3.6 0.7" color="#4a3018"></Box>
@@ -225,38 +264,59 @@
         <Box pos="-22 1.8 3.5" size="0.7 3.6 0.5" color="#4a3018"></Box>
       </Composition>
 
-      <!-- Arcos de portão (lintéis) — decorativos, sem colisão para o vão
-           ficar livre. -->
+      <!-- §4.2 Portões: lintel + braseiro decorativo + estandarte por
+           portão. Tudo decorativo (collider none) para o vão ficar
+           livre. Cor do estandarte = bioma para onde o portão aponta.
+           NOTA: sem PointLight aqui — a engine tem limite de 12 luzes
+           pontuais e as 12 estão reservadas para praça/casas/biomas. -->
+      <!-- Portão NORTE → Floresta -->
       <Composition
         place="at: 0 22; align-to-terrain: 0"
         body="fixed"
         collider="none"
       >
         <Box pos="0 3.4 0" size="7.5 0.5 0.7" color="#4a3018"></Box>
+        <Box pos="-3.2 4.3 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="-2.8 4.6 0" size="0.7 0.9 0.06" color="#2a5a34"></Box>
+        <Sphere pos="0 3.85 0" size="0.16" color="#ffaa33"></Sphere>
       </Composition>
+      <!-- Portão SUL → Pântano -->
       <Composition
         place="at: 0 -22; align-to-terrain: 0"
         body="fixed"
         collider="none"
       >
         <Box pos="0 3.4 0" size="7.5 0.5 0.7" color="#4a3018"></Box>
+        <Box pos="3.2 4.3 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="2.8 4.6 0" size="0.7 0.9 0.06" color="#3a5a40"></Box>
+        <Sphere pos="0 3.85 0" size="0.16" color="#ffaa33"></Sphere>
       </Composition>
+      <!-- Portão LESTE → Deserto -->
       <Composition
         place="at: 22 0; align-to-terrain: 0"
         body="fixed"
         collider="none"
       >
         <Box pos="0 3.4 0" size="0.7 0.5 7.5" color="#4a3018"></Box>
+        <Box pos="0 4.3 -3.2" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0 4.6 -2.8" size="0.06 0.9 0.7" color="#c28a3a"></Box>
+        <Sphere pos="0 3.85 0" size="0.16" color="#ffaa33"></Sphere>
       </Composition>
+      <!-- Portão OESTE → Picos -->
       <Composition
         place="at: -22 0; align-to-terrain: 0"
         body="fixed"
         collider="none"
       >
         <Box pos="0 3.4 0" size="0.7 0.5 7.5" color="#4a3018"></Box>
+        <Box pos="0 4.3 3.2" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+        <Box pos="0 4.6 2.8" size="0.06 0.9 0.7" color="#5a8ab0"></Box>
+        <Sphere pos="0 3.85 0" size="0.16" color="#ffaa33"></Sphere>
       </Composition>
 
-      <!-- Praça central: poço + fogueira ladeando o ponto de nascimento. -->
+      <!-- §4.3 Praça central: poço, fogueira comunitária e mastro com a
+           bandeira da cidade. O herói nasce no centro. -->
+      <!-- Poço (sólido) com balde e telhadinho -->
       <Composition
         place="at: -7 6; align-to-terrain: 0"
         body="fixed"
@@ -270,6 +330,7 @@
         <Cylinder pos="0 2.4 0" size="0.05 1.5 0.95" color="#7a3b28"></Cylinder>
         <Box pos="0 1.45 0" size="0.5 0.5 0.5" color="#6b4a2b"></Box>
       </Composition>
+      <!-- Fogueira comunitária -->
       <Composition
         place="at: 7 -6; align-to-terrain: 0"
         body="fixed"
@@ -299,8 +360,7 @@
           point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2"
         ></PointLight>
       </Composition>
-
-      <!-- Mastro com bandeira da cidade junto ao poço. -->
+      <!-- Mastro com bandeira da cidade junto ao poço -->
       <Composition
         place="at: -7 9; align-to-terrain: 0"
         body="fixed"
@@ -311,9 +371,35 @@
         <Box pos="0.5 3.2 0" size="0.06 1.0 0.8" color="#b03b3b"></Box>
         <Box pos="0.5 3.65 0" size="0.06 0.12 0.84" color="#d4b84a"></Box>
       </Composition>
+      <!-- Bancos de pedra virados para a fogueira -->
+      <Composition
+        place="at: 4.5 -3.5; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
+        <Box
+          pos="0 0.3 0"
+          size="1.8 0.3 0.55"
+          rotation="0 0.6 0"
+          color="#9a958c"
+        ></Box>
+      </Composition>
+      <Composition
+        place="at: 9.5 -3.5; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
+        <Box
+          pos="0 0.3 0"
+          size="1.8 0.3 0.55"
+          rotation="0 -0.6 0"
+          color="#9a958c"
+        ></Box>
+      </Composition>
 
-      <!-- Quatro casas nos cantos diagonais (deixam os corredores cardeais
-           livres). Cada casa = 1 entidade com corpo fixo e colisores compostos. -->
+      <!-- §4.4 Casas nos cantos diagonais (deixam os corredores cardeais
+           livres). Cada casa = 1 entidade com corpo fixo e colisores
+           compostos. -->
       <!-- Casa NE -->
       <Composition
         place="at: 13 13; align-to-terrain: 0"
@@ -343,7 +429,7 @@
           point-light="color: 0xffcc88; intensity: 2; distance: 5; decay: 2"
         ></PointLight>
       </Composition>
-      <!-- Casa NW -->
+      <!-- Casa NW (com horta ao lado) -->
       <Composition
         place="at: -13 13; align-to-terrain: 0"
         body="fixed"
@@ -367,6 +453,20 @@
           rotation="0 0 -0.6"
           color="#6e4b2a"
         ></Box>
+      </Composition>
+      <!-- Horta da casa NW: canteiro + legumes -->
+      <Composition
+        place="at: -13 8; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
+        <Box pos="0 0.12 0" size="3.4 0.24 1.8" color="#4a3424"></Box>
+        <Sphere pos="-1.1 0.32 -0.35" size="0.18" color="#d97a2a"></Sphere>
+        <Sphere pos="-0.3 0.32 0.3" size="0.16" color="#7ab040"></Sphere>
+        <Sphere pos="0.5 0.32 -0.25" size="0.18" color="#d97a2a"></Sphere>
+        <Sphere pos="1.2 0.32 0.25" size="0.16" color="#7ab040"></Sphere>
+        <Box pos="-1.65 0.5 0" size="0.08 0.8 0.08" color="#5a3a20"></Box>
+        <Box pos="1.65 0.5 0" size="0.08 0.8 0.08" color="#5a3a20"></Box>
       </Composition>
       <!-- Casa SW (lareira acesa) -->
       <Composition
@@ -397,7 +497,7 @@
           point-light="color: 0xffc070; intensity: 2; distance: 5; decay: 2"
         ></PointLight>
       </Composition>
-      <!-- Casa SE — longhouse do ancião (maior) -->
+      <!-- Casa SE — longhouse do ancião (maior, com cumeeira) -->
       <Composition
         place="at: 13 -13; align-to-terrain: 0"
         body="fixed"
@@ -423,8 +523,20 @@
         ></Box>
         <Box pos="0 4.35 0" size="0.5 0.5 5.4" color="#5a3a20"></Box>
       </Composition>
+      <!-- Boneco de treino em frente à longhouse (contexto para o melee) -->
+      <Composition
+        place="at: 8 -11; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
+        <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#5a3a20"></Box>
+        <Box pos="0 1.25 0" size="1.3 0.12 0.12" color="#6b4a2b"></Box>
+        <Sphere pos="0 1.75 0" size="0.26" color="#c9a86a"></Sphere>
+        <Box pos="0 1.05 0" size="0.5 0.7 0.3" color="#b8934a"></Box>
+      </Composition>
 
-      <!-- Bancas de mercado junto ao poço (oeste da praça). -->
+      <!-- §4.5 Mercado (lado oeste da praça): duas bancas, barris e
+           caixas de mercadoria. O comerciante fica ao lado leste. -->
       <Composition
         place="at: -10 0; align-to-terrain: 0"
         body="fixed"
@@ -448,8 +560,82 @@
         <Sphere pos="-0.6 1.4 0" size="0.13" color="#cc3322"></Sphere>
         <Sphere pos="0.6 1.16 0.2" size="0.16" color="#e2a02a"></Sphere>
       </Composition>
+      <Composition
+        place="at: -10 -4; align-to-terrain: 0"
+        body="fixed"
+        collider="none"
+      >
+        <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
+        <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
+        <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
+        <Box
+          pos="-0.6 2.1 0"
+          size="1.2 0.08 2.2"
+          rotation="-0.5 0 0"
+          color="#3a6a8a"
+        ></Box>
+        <Box
+          pos="0.6 2.1 0"
+          size="1.2 0.08 2.2"
+          rotation="-0.5 0 0"
+          color="#e8ddc8"
+        ></Box>
+        <Cylinder pos="-0.5 1.2 0.1" size="0.14 0.14 0.3" color="#8a3a6a">
+        </Cylinder>
+        <Cylinder pos="0.55 1.2 -0.1" size="0.14 0.14 0.3" color="#3a8a5a">
+        </Cylinder>
+      </Composition>
+      <!-- Barris atrás das bancas -->
+      <Composition
+        place="at: -12.5 -2; align-to-terrain: 0"
+        body="fixed"
+        collider="auto"
+      >
+        <Cylinder pos="0 0.55 0" size="0.45 0.5 1.1" color="#7a5230"></Cylinder>
+        <Cylinder
+          pos="1.05 0.55 0.3"
+          size="0.45 0.5 1.1"
+          color="#6b4a2b"
+        ></Cylinder>
+        <Cylinder
+          pos="0.5 1.55 0.1"
+          size="0.45 0.5 1.1"
+          rotation="0 0 1.5708"
+          color="#7a5230"
+        ></Cylinder>
+      </Composition>
+      <!-- Pilha de caixas de mercadoria (asset wooden_crate) -->
+      <GameObject
+        transform="scale: 0.55"
+        place="at: -12 2.5; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_crate_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        transform="scale: 0.55"
+        place="at: -13.4 3.2; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_crate_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
 
-      <!-- Quadro de avisos da cidade (perto do portão sul). -->
+      <!-- Comerciante da cidade: banca a leste da praça. Aproxime e [K]. -->
+      <GameObject
+        name="merchant"
+        place="at: 9 2; align-to-terrain: 0"
+        script="merchant.ts"
+      ></GameObject>
+
+      <!-- §4.6 Quadro de avisos da cidade (perto do portão sul). -->
       <Composition
         place="at: 4 -16; align-to-terrain: 0"
         body="fixed"
@@ -459,9 +645,10 @@
         <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
         <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
         <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
+        <Box pos="0 1.9 0" size="2.0 0.14 0.3" color="#4a3018"></Box>
       </Composition>
 
-      <!-- Tochas da praça (decorativas, sem colisão). -->
+      <!-- §4.7 Tochas da praça (decorativas, sem colisão). -->
       <Composition
         place="at: 6 6; align-to-terrain: 0"
         body="fixed"
@@ -487,14 +674,7 @@
         ></PointLight>
       </Composition>
 
-      <!-- Comerciante da cidade: banca a leste da praça. Aproxime e [K]. -->
-      <GameObject
-        name="merchant"
-        place="at: 9 2; align-to-terrain: 0"
-        script="merchant.ts"
-      ></GameObject>
-
-      <!-- Santuários / leituras místicas na praça (sólidos, bloqueiam). -->
+      <!-- §4.8 Santuários / leituras místicas na praça (sólidos). -->
       <GameObject
         name="rune-pillar"
         place="at: -4 13; align-to-terrain: 1"
@@ -520,8 +700,9 @@
       ></GameObject>
 
       <!-- ============================================================
-           ANEL DO VALE — recursos básicos em volta da cidade (fora da
-           muralha, dentro de ~±45). Carvalhos (madeira) + pedras (pedra).
+           §5 ANEL DO VALE — recursos básicos em volta da cidade (fora
+           da muralha, dentro de ~±45): carvalhos (madeira) + pedras
+           (pedra). A SpawnExclusion mantém tudo fora da cidade.
            ============================================================ -->
       <StaticSpawner
         profile="tree"
@@ -531,8 +712,8 @@
         region-max="45 0 45"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="1.4"
-        scale-max="2.4"
+        scale-min="3.0"
+        scale-max="4.5"
         avoid-overlaps="1"
       >
         <GameObject
@@ -563,8 +744,8 @@
         region-max="45 0 45"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.8"
-        scale-max="1.4"
+        scale-min="0.6"
+        scale-max="1.1"
         avoid-overlaps="1"
       >
         <GameObject
@@ -586,11 +767,12 @@
         </GameObject>
       </StaticSpawner>
 
-      <!-- Goblins de aviso a caminho da floresta norte (briga inicial). A cidade
-           murada fica livre de inimigos — a DynamicSpawner não respeita o
-           SpawnExclusion. A banda começa em z>=40 (e não em 28) para não ficar
-           em cima do ponto de respawn do portão norte (0,28): com detectRange=18
-           os goblins nasciam a ~3.6 m do herói e matavam-no logo ao renascer. -->
+      <!-- Goblins de aviso a caminho da floresta norte (briga inicial). A
+           cidade murada fica livre de inimigos — a DynamicSpawner não
+           respeita o SpawnExclusion. A banda começa em z>=40 (e não em 28)
+           para não ficar em cima do ponto de respawn do portão norte
+           (0,28): com detectRange=18 os goblins nasciam a ~3.6 m do herói
+           e matavam-no logo ao renascer. -->
       <DynamicSpawner
         count="3"
         seed="11"
@@ -605,10 +787,11 @@
       </DynamicSpawner>
 
       <!-- ============================================================
-           NORTE — FLORESTA SOMBRIA  (z ∈ [40,160])
-           Pinheiros densos, cogumelos brilhantes, lobos + sombras, cabana
-           da bruxa + chefe Bruxa no fundo.
+           §6 NORTE — FLORESTA SOMBRIA  (z ∈ [40,160])
+           Pinheiros densos, cogumelos brilhantes, clareira da bruxa,
+           lobos + sombras, chefe Bruxa no fundo.
            ============================================================ -->
+      <!-- §6.1 Vegetação -->
       <StaticSpawner
         profile="tree"
         count="26"
@@ -617,8 +800,8 @@
         region-max="80 0 160"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="1.6"
-        scale-max="3.0"
+        scale-min="4.0"
+        scale-max="5.5"
         avoid-overlaps="1"
       >
         <GameObject
@@ -649,8 +832,8 @@
         region-max="80 0 160"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="1.2"
-        scale-max="2.2"
+        scale-min="3.0"
+        scale-max="4.5"
         avoid-overlaps="1"
       >
         <GameObject role="static">
@@ -670,8 +853,8 @@
         region-max="80 0 160"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.6"
-        scale-max="1.1"
+        scale-min="0.35"
+        scale-max="0.6"
         avoid-overlaps="1"
       >
         <GameObject role="static">
@@ -682,10 +865,41 @@
         </GameObject>
       </StaticSpawner>
 
-      <!-- Cabana da bruxa (marco da floresta). -->
+      <!-- §6.2 Cogumelos místicos (mushroom.ts: [F] come e cura 40 HP,
+           uma vez cada). Escondidos fora do caminho principal. -->
+      <GameObject
+        name="forage-mushroom-1"
+        place="at: -22 62; align-to-terrain: 1"
+        script="mushroom.ts"
+      ></GameObject>
+      <GameObject
+        name="forage-mushroom-2"
+        place="at: 26 96; align-to-terrain: 1"
+        script="mushroom.ts"
+      ></GameObject>
+
+      <!-- §6.3 Bosque encantado: aglomerado de cogumelos-lanterna com
+           luz fria própria (marco de orientação a meio da floresta). -->
+      <Composition
+        place="at: 18 72; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Sphere pos="0 0.35 0" size="0.3" color="#7adfd0"></Sphere>
+        <Sphere pos="0.7 0.25 0.4" size="0.2" color="#8ae8da"></Sphere>
+        <Sphere pos="-0.5 0.28 0.5" size="0.24" color="#6ad0c8"></Sphere>
+        <PointLight
+          pos="0 0.8 0"
+          point-light="color: 0x6ee8d8; intensity: 1.4; distance: 9; decay: 2"
+        ></PointLight>
+      </Composition>
+
+      <!-- §6.4 Clareira da bruxa (fundo norte): cabana + caldeirão +
+           cerca de ossos. O chefe ronda aqui perto. -->
       <GameObject
         name="witch-hut"
         place="at: -10 135; align-to-terrain: 1"
+        transform="scale: 2.5"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
         collider="shape: trimesh; mesh-url: /assets/meshes/witch_hut_collision.glb; mesh-anchor: base"
       >
@@ -694,7 +908,76 @@
           url="/assets/meshes/witch_hut_lod0.glb"
         ></GLTFLoader>
       </GameObject>
+      <!-- Caldeirão borbulhante com fogo verde -->
+      <Composition
+        place="at: -4 130; align-to-terrain: 1"
+        body="fixed"
+        collider="auto"
+      >
+        <Cylinder
+          pos="0 0.35 0"
+          size="0.55 0.45 0.7"
+          color="#2a2a30"
+        ></Cylinder>
+        <Cylinder pos="0 0.72 0" size="0.5 0.5 0.08" color="#4ab04a"></Cylinder>
+        <Sphere pos="0.15 0.85 0.1" size="0.09" color="#7ae87a"></Sphere>
+        <Sphere pos="-0.18 0.9 -0.05" size="0.07" color="#9af89a"></Sphere>
+        <Box
+          pos="-0.5 0.15 0.3"
+          size="0.7 0.1 0.12"
+          rotation="0 0.5 0"
+          color="#5a3a20"
+        ></Box>
+        <Box
+          pos="0.45 0.12 -0.35"
+          size="0.6 0.1 0.12"
+          rotation="0 -0.7 0"
+          color="#4a2f18"
+        ></Box>
+        <PointLight
+          pos="0 1.1 0"
+          point-light="color: 0x55e055; intensity: 2.2; distance: 9; decay: 2"
+        ></PointLight>
+      </Composition>
+      <!-- Cerca de estacas tortas à volta da clareira -->
+      <Composition
+        place="at: -10 128; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Box
+          pos="-3 0.6 0"
+          size="0.14 1.2 0.14"
+          rotation="0.12 0 0.1"
+          color="#d8d2c4"
+        ></Box>
+        <Box
+          pos="-1.5 0.55 -0.3"
+          size="0.14 1.1 0.14"
+          rotation="-0.1 0 -0.14"
+          color="#cfc9ba"
+        ></Box>
+        <Box
+          pos="0.2 0.62 -0.2"
+          size="0.14 1.25 0.14"
+          rotation="0.08 0 0.16"
+          color="#d8d2c4"
+        ></Box>
+        <Box
+          pos="1.8 0.55 0.1"
+          size="0.14 1.1 0.14"
+          rotation="-0.14 0 -0.08"
+          color="#cfc9ba"
+        ></Box>
+        <Box
+          pos="3.2 0.6 0.3"
+          size="0.14 1.2 0.14"
+          rotation="0.1 0 0.12"
+          color="#d8d2c4"
+        ></Box>
+      </Composition>
 
+      <!-- §6.5 Inimigos + chefe -->
       <DynamicSpawner
         count="6"
         seed="101"
@@ -727,10 +1010,12 @@
       ></GameObject>
 
       <!-- ============================================================
-           LESTE — DESERTO  (x ∈ [40,160])
-           Cactos, arbustos secos, pilares em ruínas, escorpiões + bandidos,
-           ninho de escorpiões + chefe Verme das Areias.
+           §7 LESTE — DESERTO  (x ∈ [40,160])
+           Cactos, arbustos secos, ruínas com arco monumental, oásis,
+           acampamento de bandidos, ninho de escorpiões, chefe Verme
+           das Areias.
            ============================================================ -->
+      <!-- §7.1 Vegetação -->
       <StaticSpawner
         profile="tree"
         count="18"
@@ -739,8 +1024,8 @@
         region-max="160 0 75"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.9"
-        scale-max="1.8"
+        scale-min="1.3"
+        scale-max="2.0"
         avoid-overlaps="1"
       >
         <GameObject
@@ -771,8 +1056,8 @@
         region-max="160 0 75"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.7"
-        scale-max="1.3"
+        scale-min="0.35"
+        scale-max="0.6"
         avoid-overlaps="1"
       >
         <GameObject role="static">
@@ -782,7 +1067,9 @@
           ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
-      <!-- Ruínas do deserto (pilares dispersos). -->
+
+      <!-- §7.2 Ruínas do deserto: pilares dispersos + arco monumental
+           (rocks3d) como marco visível de longe. -->
       <StaticSpawner
         profile="tree"
         count="8"
@@ -791,8 +1078,8 @@
         region-max="150 0 60"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.9"
-        scale-max="1.6"
+        scale-min="1.5"
+        scale-max="2.2"
         avoid-overlaps="1"
       >
         <GameObject
@@ -806,11 +1093,131 @@
           ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
+      <GameObject
+        name="desert-arch"
+        place="at: 95 32; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_arch_3.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_arch_3.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <!-- Mesas rochosas no horizonte leste -->
+      <GameObject
+        place="at: 150 55; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_4.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_cliff_4.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: 120 -48; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_outcrop_8.glb"
+        ></GLTFLoader>
+      </GameObject>
 
-      <!-- Ninho de escorpiões (marco do deserto). -->
+      <!-- §7.3 Oásis (poça + juncos) — descanso visual no meio da areia. -->
+      <Composition
+        place="at: 70 46; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Cylinder pos="0 0.06 0" size="3.6 4.0 0.12" color="#3a8fb0"></Cylinder>
+        <Cylinder pos="0 0.1 0" size="2.6 3.0 0.1" color="#4aa8c8"></Cylinder>
+        <Box
+          pos="-3.4 0.5 1.2"
+          size="0.08 1.0 0.08"
+          rotation="0.1 0 0.08"
+          color="#6a8a3a"
+        ></Box>
+        <Box
+          pos="-3.1 0.55 1.6"
+          size="0.08 1.1 0.08"
+          rotation="-0.08 0 -0.1"
+          color="#7a9a4a"
+        ></Box>
+        <Box
+          pos="3.3 0.5 -1.0"
+          size="0.08 1.0 0.08"
+          rotation="0.06 0 0.12"
+          color="#6a8a3a"
+        ></Box>
+      </Composition>
+
+      <!-- §7.4 Acampamento de bandidos: tendas, fogueira e pilhagem.
+           Ambienta os bandidos que rondam a região. -->
+      <Composition
+        place="at: 85 -35; align-to-terrain: 1"
+        body="fixed"
+        collider="none"
+      >
+        <!-- Tenda 1 (duas abas inclinadas) -->
+        <Box
+          pos="-2.6 0.9 0"
+          size="2.6 0.08 2.4"
+          rotation="0 0 0.8"
+          color="#a8875a"
+        ></Box>
+        <Box
+          pos="-1.0 0.9 0"
+          size="2.6 0.08 2.4"
+          rotation="0 0 -0.8"
+          color="#987a4e"
+        ></Box>
+        <Box pos="-1.8 1.4 0" size="0.1 0.1 2.5" color="#5a3a20"></Box>
+        <!-- Tenda 2 -->
+        <Box
+          pos="2.2 0.8 1.4"
+          size="2.2 0.08 2.0"
+          rotation="0 0.6 0.8"
+          color="#a8875a"
+        ></Box>
+        <Box
+          pos="3.4 0.8 0.6"
+          size="2.2 0.08 2.0"
+          rotation="0 0.6 -0.8"
+          color="#987a4e"
+        ></Box>
+        <!-- Fogueira do acampamento -->
+        <Cylinder
+          pos="0.4 0.1 -1.6"
+          size="0.7 0.8 0.2"
+          color="#6f6a63"
+        ></Cylinder>
+        <Sphere pos="0.4 0.45 -1.6" size="0.32" color="#ff7722"></Sphere>
+        <PointLight
+          pos="0.4 0.8 -1.6"
+          point-light="color: 0xff8a33; intensity: 2.2; distance: 9; decay: 2"
+        ></PointLight>
+      </Composition>
+      <!-- Pilhagem dos bandidos (caixa roubada) -->
+      <GameObject
+        transform="scale: 0.55"
+        place="at: 88 -32; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_crate_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+
+      <!-- §7.5 Ninho de escorpiões (marco do deserto profundo). -->
       <GameObject
         name="scorpion-nest"
         place="at: 130 8; align-to-terrain: 1"
+        transform="scale: 1.5"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
         collider="shape: trimesh; mesh-url: /assets/meshes/scorpion_nest_collision.glb; mesh-anchor: base"
       >
@@ -820,6 +1227,7 @@
         ></GLTFLoader>
       </GameObject>
 
+      <!-- §7.6 Inimigos + chefe -->
       <DynamicSpawner
         count="6"
         seed="303"
@@ -852,10 +1260,11 @@
       ></GameObject>
 
       <!-- ============================================================
-           SUL — PÂNTANO  (z ∈ [-160,-40])
-           Salgueiros mortos, árvores secas, nenúfares, choça do pântano,
-           boglings + mosquitos, chefe Bog Warden.
+           §8 SUL — PÂNTANO  (z ∈ [-160,-40])
+           Salgueiros mortos, nenúfares, fogos-fátuos, passadiço podre
+           até a choça, boglings + mosquitos, chefe Bog Warden.
            ============================================================ -->
+      <!-- §8.1 Vegetação -->
       <StaticSpawner
         profile="tree"
         count="20"
@@ -864,8 +1273,8 @@
         region-max="80 0 -45"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="1.4"
-        scale-max="2.6"
+        scale-min="2.5"
+        scale-max="4.0"
         avoid-overlaps="1"
       >
         <GameObject
@@ -896,8 +1305,8 @@
         region-max="80 0 -45"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="1.2"
-        scale-max="2.2"
+        scale-min="2.0"
+        scale-max="3.0"
         avoid-overlaps="1"
       >
         <GameObject role="static">
@@ -917,8 +1326,8 @@
         region-max="80 0 -50"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.8"
-        scale-max="1.5"
+        scale-min="0.5"
+        scale-max="0.9"
         avoid-overlaps="1"
       >
         <GameObject role="static">
@@ -928,11 +1337,107 @@
           ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
+      <!-- Pedras musgosas semi-afundadas na lama -->
+      <StaticSpawner
+        profile="tree"
+        count="8"
+        seed="335"
+        region-min="-70 0 -140"
+        region-max="70 0 -55"
+        align-to-terrain="1"
+        ground-align="auto"
+        scale-min="0.6"
+        scale-max="1.1"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/moss_rock_lod0.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
 
-      <!-- Choça do pântano (marco). -->
+      <!-- §8.2 Fogos-fátuos: luzes verdes pálidas a flutuar sobre a
+           lama (só ambiente; nada de gameplay). -->
+      <Composition
+        place="at: -30 -90; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Sphere pos="0 1.6 0" size="0.14" color="#a8ffb0"></Sphere>
+        <Sphere pos="0.8 2.1 0.5" size="0.1" color="#c0ffc8"></Sphere>
+        <PointLight
+          pos="0 1.8 0"
+          point-light="color: 0x7dff8a; intensity: 1.2; distance: 8; decay: 2"
+        ></PointLight>
+      </Composition>
+      <Composition
+        place="at: 26 -72; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Sphere pos="0 1.4 0" size="0.12" color="#a8ffb0"></Sphere>
+        <PointLight
+          pos="0 1.6 0"
+          point-light="color: 0x7dff8a; intensity: 1.1; distance: 8; decay: 2"
+        ></PointLight>
+      </Composition>
+
+      <!-- §8.3 Choça do pântano + passadiço de tábuas podres que marca
+           o caminho de aproximação (decorativo, meio afundado). -->
+      <Composition
+        place="at: 8 -104; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Box
+          pos="0 0.06 0"
+          size="1.1 0.08 2.6"
+          rotation="0 0.12 0"
+          color="#5a4a34"
+        ></Box>
+      </Composition>
+      <Composition
+        place="at: 9 -110; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Box
+          pos="0 0.06 0"
+          size="1.1 0.08 2.6"
+          rotation="0 -0.1 0"
+          color="#54452f"
+        ></Box>
+      </Composition>
+      <Composition
+        place="at: 9.5 -116; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Box
+          pos="0 0.06 0"
+          size="1.1 0.08 2.6"
+          rotation="0 0.08 0"
+          color="#5a4a34"
+        ></Box>
+      </Composition>
+      <Composition
+        place="at: 10 -122; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <Box
+          pos="0 0.06 0"
+          size="1.1 0.08 2.6"
+          rotation="0 -0.06 0"
+          color="#54452f"
+        ></Box>
+      </Composition>
       <GameObject
         name="swamp-shack"
         place="at: 10 -130; align-to-terrain: 1"
+        transform="scale: 2.3"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
         collider="shape: trimesh; mesh-url: /assets/meshes/swamp_shack_collision.glb; mesh-anchor: base"
       >
@@ -942,6 +1447,7 @@
         ></GLTFLoader>
       </GameObject>
 
+      <!-- §8.4 Inimigos + chefe -->
       <DynamicSpawner
         count="8"
         seed="505"
@@ -974,10 +1480,14 @@
       ></GameObject>
 
       <!-- ============================================================
-           OESTE — PICOS GELADOS  (x ∈ [-160,-40])
-           Formações rochosas (rocks3d), pinheiros gelados, goblins + lobos
-           + slimes de gelo, chefe Ogro da Montanha (gated, final boss).
+           §9 OESTE — PICOS GELADOS  (x ∈ [-160,-40])
+           Formações rochosas (rocks3d), pinheiros gelados, cristais,
+           goblins + slimes + lobos, arena do chefe final Ogro da
+           Montanha (gated: aparece quando os inimigos normais morrem).
+           O corredor z ∈ [-10,10] fica livre de formações — é o caminho
+           até a arena.
            ============================================================ -->
+      <!-- §9.1 Vegetação e pedras -->
       <StaticSpawner
         profile="tree"
         count="16"
@@ -986,8 +1496,8 @@
         region-max="-45 0 75"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="1.4"
-        scale-max="2.6"
+        scale-min="3.5"
+        scale-max="5.5"
         avoid-overlaps="1"
       >
         <GameObject
@@ -1018,8 +1528,8 @@
         region-max="-45 0 75"
         align-to-terrain="1"
         ground-align="auto"
-        scale-min="0.9"
-        scale-max="1.8"
+        scale-min="0.7"
+        scale-max="1.4"
         avoid-overlaps="1"
       >
         <GameObject
@@ -1041,7 +1551,8 @@
         </GameObject>
       </StaticSpawner>
 
-      <!-- Formações rochosas (rocks3d) — marcos dos picos. -->
+      <!-- §9.2 Formações rochosas (rocks3d) — a “muralha natural” dos
+           picos. Todas fora do corredor z ∈ [-10,10]. -->
       <GameObject
         place="at: -120 20; align-to-terrain: 1"
         rigidbody="type: fixed; mass: 0; gravity-scale: 0"
@@ -1082,7 +1593,185 @@
           url="/assets/meshes/form_stack_6.glb"
         ></GLTFLoader>
       </GameObject>
+      <GameObject
+        place="at: -70 38; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_20.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_cliff_20.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -128 58; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_21.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_cliff_21.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -150 -48; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_22.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_cliff_22.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -60 -32; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_outcrop_30.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -82 64; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_31.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_outcrop_31.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -140 42; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_spire-cluster_12.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_spire-cluster_12.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -112 -58; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_11.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_stack_11.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -56 18; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/form_outcrop_5.glb"
+        ></GLTFLoader>
+      </GameObject>
 
+      <!-- §9.3 Jazida de cristais gelados: aglomerado azul com brilho
+           frio a meio caminho da arena (ligação visual ao “Vale do
+           Cristal”). -->
+      <GameObject
+        place="at: -95 12; align-to-terrain: 1"
+        transform="scale: 1.6"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/crystal_blue_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -97 14.5; align-to-terrain: 1"
+        transform="scale: 1.1"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/crystal_blue_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -93.5 15; align-to-terrain: 1"
+        transform="scale: 0.8"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/crystal_blue_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <Composition
+        place="at: -95 13.5; align-to-terrain: 1"
+        body="none"
+        collider="none"
+      >
+        <PointLight
+          pos="0 1.6 0"
+          point-light="color: 0x5ab0ff; intensity: 1.8; distance: 11; decay: 2"
+        ></PointLight>
+      </Composition>
+
+      <!-- §9.4 Arena do Ogro (fundo oeste): círculo de pilares antigos
+           e braseiro — o palco do chefe final em (-145, 6). -->
+      <GameObject
+        place="at: -150 14; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/ruin_pillar_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -152 -2; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/ruin_pillar_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -140 16; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/ruin_pillar_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        place="at: -138 -4; align-to-terrain: 1"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/ruin_pillar_collision.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/ruin_pillar_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <!-- Braseiro da arena -->
+      <Composition
+        place="at: -138 6; align-to-terrain: 1"
+        body="fixed"
+        collider="none"
+      >
+        <Cylinder pos="0 0.3 0" size="0.5 0.6 0.6" color="#4a4a50"></Cylinder>
+        <Sphere pos="0 0.75 0" size="0.3" color="#ff7722"></Sphere>
+        <PointLight
+          pos="0 1.0 0"
+          point-light="color: 0xff8a33; intensity: 2.4; distance: 11; decay: 2"
+        ></PointLight>
+      </Composition>
+
+      <!-- §9.5 Inimigos + chefe final -->
       <DynamicSpawner
         count="6"
         seed="707"
@@ -1128,9 +1817,10 @@
       ></GameObject>
 
       <!-- ============================================================
-           NPCs DE QUEST — 3 por bioma, perto de cada portão. Cada um =
-           <Composition> com torso colorido por bioma + <DialogueNPC>.
-           dialogue-id == quest id (JSON).
+           §10 NPCs DE QUEST — 3 por bioma, perto de cada portão. Cada
+           um = <Composition> com torso colorido por bioma +
+           <DialogueNPC>. dialogue-id == quest id (JSON em
+           src/data/quests/). [F] abre o diálogo.
            ============================================================ -->
       <!-- Floresta (norte) -->
       <Composition
@@ -1320,6 +2010,9 @@
         <Sphere pos="0 2.2 0" size="0.4" color="#e8eef5"></Sphere>
       </Composition>
 
+      <!-- ============================================================
+           §11 CÂMERA, HUD E UI
+           ============================================================ -->
       <!-- Câmera 3ª pessoa. Teclas 1-6 alternam pós-processamento. -->
       <ThirdPersonCamera
         distance="4"
@@ -1360,8 +2053,8 @@
         position="bottom-center"
       ></InteractionPrompt>
 
-      <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto de
-           um <DialogueNPC>; QuestsTab lista as quests ativas. -->
+      <!-- Diálogo (instância única). QuestTriggerSystem abre ao [F] perto
+           de um <DialogueNPC>; QuestsTab lista as quests ativas. -->
       <DialogueBalloon></DialogueBalloon>
 
       <!-- Menu de pausa: modal tabbed com [Q]. -->
@@ -1413,6 +2106,10 @@
     </Scene>
 
     <canvas id="game-canvas"></canvas>
+    <div id="controls-hint">
+      WASD mover · Espaço pular · J atacar · F interagir · K comércio · B bomba
+      · Q menu
+    </div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
