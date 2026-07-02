@@ -154,9 +154,15 @@ def apply_seamless_loop_crossfade(
     """Apply equal-power crossfade between the end and start of audio for seamless looping.
 
     Blends the last ``crossfade_ms`` milliseconds with the first ``crossfade_ms``
-    milliseconds using cos²/sin² curves, preserving RMS energy during the transition.
-    The output has the same duration as the input — the crossfaded region replaces
-    the tail of the audio.
+    milliseconds using cos²/sin² curves (RMS-preserving), then **drops the head**
+    that was folded into the tail: the loop region is ``audio[n:]``. At the wrap
+    point the blended tail has converged onto ``audio[n-1]`` and playback
+    restarts at ``audio[n]`` — sample-continuous.
+
+    Keeping the original length instead (the previous behaviour) is audibly
+    wrong: the first ``n`` samples play once at the start *and again* inside
+    the blended tail, and the wrap jumps from ``≈audio[n-1]`` back to
+    ``audio[0]`` — a stutter plus a discontinuity every cycle.
 
     Args:
         audio: Tensor (channels, samples) float.
@@ -164,7 +170,7 @@ def apply_seamless_loop_crossfade(
         crossfade_ms: Crossfade duration in milliseconds.
 
     Returns:
-        Tensor with crossfade applied (channels, samples), same length as input.
+        Tensor (channels, samples - n) ready for native gapless looping.
     """
     total_samples = audio.shape[-1]
     if total_samples == 0:
@@ -186,7 +192,7 @@ def apply_seamless_loop_crossfade(
     # Broadcast: (channels, n) * (n,) → (channels, n)
     crossfaded = tail * fade_out + head * fade_in
 
-    result = audio.clone()
+    result = audio[:, n:].clone()
     result[:, -n:] = crossfaded
     return result
 
@@ -205,6 +211,7 @@ def save_audio(
     apply_fade: bool = True,
     seamless_loop: bool = False,
     crossfade_ms: float = 500.0,
+    loop_edge_trim_s: float = 0.0,
     crop_seconds: float | None = None,
     fade_out_seconds: float = 0.06,
 ) -> Path:
@@ -224,6 +231,8 @@ def save_audio(
         apply_fade: Aplicar micro fade-in/out nas bordas do clip.
         seamless_loop: Apply equal-power crossfade for seamless loop playback.
         crossfade_ms: Crossfade duration in milliseconds (only used when seamless_loop=True).
+        loop_edge_trim_s: Seconds of musical intro/outro removed from each edge
+            before the loop crossfade (only used when seamless_loop=True).
 
     Returns:
         Caminho do ficheiro de áudio gravado.
@@ -238,12 +247,26 @@ def save_audio(
         audio = peak_normalize(audio)
 
     if trim:
-        audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=trim_buffer_ms)
+        # For loops the buffer must be 0: it deliberately keeps up to
+        # ``trim_buffer_ms`` of below-threshold audio at each edge, and the
+        # loop crossfade would blend musical tail into near-silence — an
+        # audible dip every cycle.
+        effective_buffer_ms = 0 if seamless_loop else trim_buffer_ms
+        audio = trim_silence(audio, sample_rate, threshold_db=trim_threshold_db, buffer_ms=effective_buffer_ms)
 
     if crop_seconds is not None:
         audio = crop_to_duration(audio, sample_rate, crop_seconds, fade_out_seconds)
 
     if seamless_loop:
+        # Stable Audio composes an *intro* (attack/swell) and an *outro*
+        # (decay to near-silence) for the requested duration. Looped as-is,
+        # the outro→intro wrap is an audible energy dip plus a repeated
+        # intro transient every cycle. Cutting the musical edges keeps only
+        # steady-state material for the loop.
+        if loop_edge_trim_s > 0:
+            edge = int(loop_edge_trim_s * sample_rate)
+            if audio.shape[-1] > edge * 3:
+                audio = audio[:, edge:-edge]
         audio = apply_seamless_loop_crossfade(audio, sample_rate, crossfade_ms=crossfade_ms)
     elif apply_fade:
         audio = apply_edge_fade(audio, sample_rate)
@@ -260,6 +283,8 @@ def save_audio(
         if seamless_loop:
             metadata["seamless_loop"] = True
             metadata["crossfade_ms"] = crossfade_ms
+            if loop_edge_trim_s > 0:
+                metadata["loop_edge_trim_s"] = loop_edge_trim_s
         if crop_seconds is not None:
             metadata["crop_seconds"] = crop_seconds
             metadata["fade_out_seconds"] = fade_out_seconds

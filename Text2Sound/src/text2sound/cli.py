@@ -104,6 +104,32 @@ def _apply_spec_inference_defaults(
     return duration, steps, cfg_scale, sigma_min, sigma_max, sampler
 
 
+def resolve_seamless_loop_params(
+    *,
+    user_seamless: bool | None,
+    user_crossfade_ms: float,
+    category_seamless: bool,
+    category_crossfade_ms: float,
+) -> tuple[bool, float]:
+    """Resolve seamless-loop params with explicit-CLI > category > default precedence.
+
+    Args:
+        user_seamless: Tri-state from ``--seamless-loop`` (None = not given → defer to category).
+        user_crossfade_ms: Value from ``--crossfade-ms`` (honored when loop is forced on/off).
+        category_seamless: seamless_loop resolved from QualityEngine ``--category``.
+        category_crossfade_ms: crossfade_ms resolved from QualityEngine/kind_info.
+
+    Returns:
+        ``(seamless_loop, crossfade_ms)`` after applying precedence. When the user
+        forces the flag, ``user_crossfade_ms`` wins; when deferring, ``category_*`` wins.
+    """
+    if user_seamless is True:
+        return True, float(user_crossfade_ms)
+    if user_seamless is False:
+        return False, float(user_crossfade_ms)
+    return category_seamless, float(category_crossfade_ms)
+
+
 @click.group()
 @click.version_option(version=_CLI_VERSION, prog_name="text2sound")
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
@@ -291,6 +317,43 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.FloatRange(min=0.0, max=5.0),
     help="Linear fade-out in seconds on the tail when --crop is active (0 = hard cut).",
 )
+@click.option(
+    "--seamless-loop/--no-seamless-loop",
+    "seamless_loop_override",
+    default=None,
+    help="Force seamless-loop crossfade on/off (overrides --category). Default: defer to category.",
+)
+@click.option(
+    "--crossfade-ms",
+    "crossfade_ms_override",
+    type=int,
+    default=500,
+    show_default=True,
+    help="Crossfade duration in ms when seamless loop is enabled.",
+)
+@click.option(
+    "--loop-edge-trim",
+    "loop_edge_trim_s",
+    type=click.FloatRange(min=0.0, max=10.0),
+    default=0.0,
+    show_default=True,
+    help="Segundos de intro/outro musicais removidos de cada borda antes do crossfade "
+    "de loop (o modelo compõe ataque inicial e fade final — num loop viram "
+    "transiente repetido + dip de energia). Só com seamless loop ativo.",
+)
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help="Perfil automático por VRAM (fp16, VAE chunked). TEXT2SOUND_HW_AUTO=0 também desliga.",
+)
+@click.option(
+    "--chunked-vae/--no-chunked-vae",
+    "chunked_vae",
+    default=None,
+    help="Força decode do VAE em chunks (auto: ligado em GPUs < 8.5 GB).",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -316,11 +379,36 @@ def generate_cmd(
     category: str | None,
     crop: bool,
     fade_out: float,
+    seamless_loop_override: bool | None,
+    crossfade_ms_override: int,
+    loop_edge_trim_s: float,
+    hw_auto: bool,
+    chunked_vae: bool | None,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
 
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
+
+    # hw-auto: estratégia de memória por VRAM (soft — flags explícitas vencem).
+    hw_profile = None
+    if hw_auto:
+        try:
+            from .hardware import detect_hardware_profile, hw_auto_enabled
+
+            if hw_auto_enabled():
+                hw_profile = detect_hardware_profile()
+        except Exception:
+            hw_profile = None
+    if hw_profile is not None:
+        if half_precision is None:
+            half_precision = hw_profile.half if hw_profile.device == "cuda" else None
+        if chunked_vae is None:
+            chunked_vae = hw_profile.chunked_vae
+        if gpu_ids is None and hw_profile.gpu_ids:
+            gpu_ids = hw_profile.gpu_ids
+    elif not hw_auto and chunked_vae is None:
+        chunked_vae = False
 
     try:
         from gamedev_shared.gpu import warn_if_vram_occupied
@@ -335,17 +423,23 @@ def generate_cmd(
         except KeyError as e:
             raise click.ClickException(str(e)) from e
         prompt = f"{prompt}, {preset_data['prompt']}" if prompt.strip() else preset_data["prompt"]
-        duration = preset_data.get("duration", duration)
-        steps = preset_data.get("steps", steps)
-        cfg_scale = preset_data.get("cfg_scale", cfg_scale)
+        # Preset só preenche o que o utilizador não passou: um -d/-s/-c
+        # explícito tem de vencer o preset (antes o preset sobrescrevia).
+        if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT:
+            duration = preset_data.get("duration", duration)
+        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT:
+            steps = preset_data.get("steps", steps)
+        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT:
+            cfg_scale = preset_data.get("cfg_scale", cfg_scale)
 
     # QualityEngine resolution: merge quality + category params (CLI always wins)
     resolved_hints: list[str] = []
     trim_buffer_ms: int = 200  # default buffer
     trim_threshold_db: float = -60.0  # default threshold
     quality_audio_kind: str | None = None
-    seamless_loop: bool = False
-    crossfade_ms: float = 500.0
+    # Category-resolved seamless-loop defaults (overridden by explicit --seamless-loop below)
+    category_seamless: bool = False
+    category_crossfade_ms: float = 500.0
 
     try:
         from gamedev_shared.quality import QualityEngine
@@ -378,19 +472,27 @@ def generate_cmd(
                     kind_info = qe.audio_kind_info(quality_audio_kind)
                     trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
                     trim_threshold_db = float(kind_info.get("trim_threshold_db", -60.0))
-                    # Seamless loop from audio_kind
+                    # Seamless loop from audio_kind (overridden later by --seamless-loop if given)
                     if kind_info.get("loop_hint"):
-                        seamless_loop = True
+                        category_seamless = True
                         # crossfade_ms: quality profile override > audio_kind default
                         if "crossfade_ms" in resolved.params:
-                            crossfade_ms = float(resolved.params["crossfade_ms"])
+                            category_crossfade_ms = float(resolved.params["crossfade_ms"])
                         elif "crossfade_ms" in kind_info:
-                            crossfade_ms = float(kind_info["crossfade_ms"])
+                            category_crossfade_ms = float(kind_info["crossfade_ms"])
                 except KeyError:
                     pass
 
     except Exception:
         pass  # QualityEngine unavailable — continue with defaults
+
+    # Precedence: explicit --seamless-loop > --category/QualityEngine > default (False)
+    seamless_loop, crossfade_ms = resolve_seamless_loop_params(
+        user_seamless=seamless_loop_override,
+        user_crossfade_ms=crossfade_ms_override,
+        category_seamless=category_seamless,
+        category_crossfade_ms=category_crossfade_ms,
+    )
 
     try:
         resolved_model_id = resolve_model_from_profile(profile, model_id)
@@ -442,6 +544,8 @@ def generate_cmd(
         table.add_row("[bold]Audio Kind[/bold]", quality_audio_kind)
     if seamless_loop:
         table.add_row("[bold]Seamless Loop[/bold]", f"[green]ON[/green] ({crossfade_ms:.0f}ms crossfade)")
+    if hw_profile is not None:
+        table.add_row("[bold]HW Auto[/bold]", hw_profile.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     _prof_params = {
@@ -470,6 +574,7 @@ def generate_cmd(
                 model_id=resolved_model_id,
                 half_precision=half_precision,
                 gpu_ids=gpu_ids,
+                chunked_vae=chunked_vae,
             )
 
             if output is None:
@@ -529,6 +634,8 @@ def generate_cmd(
                     "device": result.device,
                     "text2sound_version": _CLI_VERSION,
                 }
+                if hw_profile is not None:
+                    metadata["hw_profile"] = hw_profile.summary()
                 if preset and preset != "None":
                     metadata["preset"] = preset
                 if quality != "medium":
@@ -550,6 +657,7 @@ def generate_cmd(
                         trim_threshold_db=trim_threshold_db,
                         seamless_loop=seamless_loop,
                         crossfade_ms=crossfade_ms,
+                        loop_edge_trim_s=loop_edge_trim_s,
                         crop_seconds=duration if crop else None,
                         fade_out_seconds=fade_out,
                     )
@@ -701,9 +809,12 @@ def batch_cmd(
             preset_data = get_preset(preset)
         except KeyError as e:
             raise click.ClickException(str(e)) from e
-        duration = preset_data.get("duration", duration)
-        steps = preset_data.get("steps", steps)
-        cfg_scale = preset_data.get("cfg_scale", cfg_scale)
+        if ctx.get_parameter_source("duration") == ParameterSource.DEFAULT:
+            duration = preset_data.get("duration", duration)
+        if ctx.get_parameter_source("steps") == ParameterSource.DEFAULT:
+            steps = preset_data.get("steps", steps)
+        if ctx.get_parameter_source("cfg_scale") == ParameterSource.DEFAULT:
+            cfg_scale = preset_data.get("cfg_scale", cfg_scale)
 
     try:
         resolved_model_id = resolve_model_from_profile(profile, model_id)

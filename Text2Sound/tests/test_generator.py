@@ -141,6 +141,7 @@ class TestAudioGenerator:
     def test_generate(self, mock_get, mock_gen_diff):
         mock_model = MagicMock()
         mock_model.to.return_value = mock_model
+        mock_model.pretransform = None  # sem VAE → caminho de áudio direto
         mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
 
         mock_gen_diff.return_value = torch.randn(1, 2, 44100)
@@ -153,18 +154,47 @@ class TestAudioGenerator:
         assert result.duration == 1.0
         assert result.steps == 10
         assert result.audio.shape[0] == 2
+        # Sem pretransform o decode fica no generate_diffusion_cond (sem latents).
+        assert mock_gen_diff.call_args.kwargs["return_latents"] is False
 
     @patch("text2sound.generator.generate_diffusion_cond")
     @patch("text2sound.generator.get_pretrained_model")
     def test_generate_with_seed(self, mock_get, mock_gen_diff):
         mock_model = MagicMock()
         mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
         mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
         mock_gen_diff.return_value = torch.randn(1, 2, 44100)
 
         gen = AudioGenerator(device="cpu", auto_clear=False)
         result = gen.generate(prompt="test", seed=42)
         assert result.seed == 42
+
+    @patch("text2sound.generator.generate_diffusion_cond")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_generate_decodes_latents_via_pretransform(self, mock_get, mock_gen_diff):
+        """Com pretransform, pede latents e decodifica fora do sampler (fallback OOM)."""
+
+        class FakePretransform(torch.nn.Module):
+            def __init__(self) -> None:
+                super().__init__()
+                self.scale = torch.nn.Parameter(torch.ones(1))
+                self.chunked = False
+
+            def decode(self, z: torch.Tensor) -> torch.Tensor:
+                return z.repeat_interleave(4, dim=-1)  # latent 4x upsample fake
+
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = FakePretransform()
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+        mock_gen_diff.return_value = torch.randn(1, 2, 1024)
+
+        gen = AudioGenerator(device="cpu", auto_clear=False, chunked_vae=False)
+        result = gen.generate(prompt="test", duration=1.0, steps=10)
+
+        assert mock_gen_diff.call_args.kwargs["return_latents"] is True
+        assert result.audio.shape == (2, 4096)
 
 
 class TestDefaults:
@@ -209,23 +239,19 @@ class TestShouldUseHalfExceptionPath:
 
 
 class TestHalfPrecisionDecoupled:
+    # half agora vem do perfil hw-auto (text2sound.hardware); os specs são
+    # mockados na fonte para o teste não depender da GPU real da máquina.
     def test_fp16_fires_on_small_gpu(self):
-        props = MagicMock()
-        props.total_memory = 8 * 1024**3
-        with patch("text2sound.generator.torch") as mock_torch:
-            mock_torch.cuda.is_available.return_value = True
-            mock_torch.cuda.get_device_properties.return_value = props
+        with patch("text2sound.hardware.cuda_gpu_specs", return_value=[(0, 6 * 1024**3)]):
             gen = AudioGenerator(device="cuda")
         assert gen._half is True
+        assert gen._chunked_vae is True
 
     def test_fp16_stays_off_on_large_gpu(self):
-        props = MagicMock()
-        props.total_memory = 12 * 1024**3
-        with patch("text2sound.generator.torch") as mock_torch:
-            mock_torch.cuda.is_available.return_value = True
-            mock_torch.cuda.get_device_properties.return_value = props
+        with patch("text2sound.hardware.cuda_gpu_specs", return_value=[(0, 16 * 1024**3)]):
             gen = AudioGenerator(device="cuda")
         assert gen._half is False
+        assert gen._chunked_vae is False
 
 
 class TestNoCpuOffload:

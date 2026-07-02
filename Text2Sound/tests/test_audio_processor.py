@@ -152,11 +152,15 @@ class TestApplyEdgeFade:
 
 
 class TestApplySeamlessLoopCrossfade:
-    def test_output_shape_matches_input(self):
+    def test_output_drops_folded_head(self):
+        """Loop region is audio[n:]: the head folded into the tail must not replay."""
         sr = 44100
         audio = torch.randn(2, sr * 5)  # 5 seconds stereo
+        n = int(sr * 500.0 / 1000)
         result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
-        assert result.shape == audio.shape
+        assert result.shape == (2, audio.shape[-1] - n)
+        # Loop starts where the blend converged: first sample == audio[:, n]
+        assert torch.equal(result[:, 0], audio[:, n])
 
     def test_equal_power_property(self):
         """cos^2 + sin^2 should equal ~1.0 for all points."""
@@ -169,26 +173,37 @@ class TestApplySeamlessLoopCrossfade:
         assert torch.allclose(energy, torch.ones_like(energy), atol=1e-6)
 
     def test_center_unchanged(self):
-        """Samples outside crossfade zone should be identical to input."""
+        """Samples outside crossfade zone should match the input (shifted by n)."""
         sr = 44100
         audio = torch.randn(2, sr * 5)
         n = int(sr * 500.0 / 1000)
         result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
-        # Middle section (excluding last n samples which are crossfaded)
-        assert torch.equal(result[:, :-n], audio[:, :-n])
+        assert torch.equal(result[:, :-n], audio[:, n:-n])
+
+    def test_wrap_is_sample_continuous(self):
+        """On a smooth sine, the wrap-point jump must be no bigger than a normal
+        sample-to-sample step — the old keep-the-head behaviour failed this."""
+        sr = 44100
+        t = torch.arange(sr * 5, dtype=torch.float32) / sr
+        audio = torch.sin(2 * torch.pi * 220.0 * t).repeat(2, 1)
+        result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
+        step = (result[:, 1:] - result[:, :-1]).abs().max()
+        wrap_jump = (result[:, -1] - result[:, 0]).abs().max()
+        assert wrap_jump <= step * 1.5
 
     def test_works_with_mono(self):
         sr = 44100
         audio = torch.randn(1, sr * 5)
+        n = int(sr * 500.0 / 1000)
         result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
-        assert result.shape == audio.shape
+        assert result.shape == (1, audio.shape[-1] - n)
 
     def test_short_audio_crossfade_clamped(self):
         """Audio shorter than crossfade_ms should clamp crossfade to half length."""
         sr = 44100
         audio = torch.randn(2, 100)  # very short
         result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
-        assert result.shape == audio.shape
+        assert result.shape == (2, 100 - 50)
 
     def test_does_not_modify_original(self):
         sr = 44100
@@ -198,14 +213,69 @@ class TestApplySeamlessLoopCrossfade:
         assert torch.equal(audio, original)
 
     def test_crossfade_500ms_stereo(self):
-        """Full integration: 500ms crossfade on stereo audio, verify smooth transition."""
+        """Full integration: the blended tail differs from the raw tail."""
         sr = 44100
-        # Create audio with distinct start and end
         audio = torch.randn(2, sr * 5)
         result = apply_seamless_loop_crossfade(audio, sr, crossfade_ms=500.0)
-        # The last 500ms should be a mix (not identical to input)
         n = int(sr * 500.0 / 1000)
         assert not torch.equal(result[:, -n:], audio[:, -n:])
+
+
+class TestLoopEdgeTrim:
+    def test_edges_removed_before_crossfade(self, tmp_path):
+        sr = 44100
+        audio = torch.randn(2, sr * 10)
+        out = save_audio(
+            audio,
+            sr,
+            tmp_path / "loop",
+            fmt="wav",
+            normalize=False,
+            seamless_loop=True,
+            crossfade_ms=500.0,
+            loop_edge_trim_s=2.0,
+        )
+        import soundfile as sf
+
+        data, _ = sf.read(str(out))
+        # 10s - 2*2s edges - 0.5s folded head = 5.5s
+        assert abs(data.shape[0] - int(sr * 5.5)) <= 2
+
+    def test_trim_skipped_when_audio_too_short(self, tmp_path):
+        sr = 44100
+        audio = torch.randn(2, sr * 2)  # 2s < 3 * edge
+        out = save_audio(
+            audio,
+            sr,
+            tmp_path / "loop",
+            fmt="wav",
+            normalize=False,
+            seamless_loop=True,
+            crossfade_ms=100.0,
+            loop_edge_trim_s=1.0,
+        )
+        import soundfile as sf
+
+        data, _ = sf.read(str(out))
+        # edges kept (2s ≤ 3*1s); only the folded head (0.1s) is dropped
+        assert abs(data.shape[0] - int(sr * 1.9)) <= 2
+
+    def test_no_trim_without_seamless(self, tmp_path):
+        sr = 44100
+        audio = torch.randn(2, sr * 4)
+        out = save_audio(
+            audio,
+            sr,
+            tmp_path / "plain",
+            fmt="wav",
+            normalize=False,
+            seamless_loop=False,
+            loop_edge_trim_s=2.0,
+        )
+        import soundfile as sf
+
+        data, _ = sf.read(str(out))
+        assert data.shape[0] == sr * 4
 
 
 class TestSaveAudio:
