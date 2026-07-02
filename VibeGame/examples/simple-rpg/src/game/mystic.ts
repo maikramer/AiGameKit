@@ -64,6 +64,8 @@ export interface MysticConfig {
   promptLabel: string;
   /** Extra lift above the terrain surface (metres). */
   yOffset?: number;
+  /** Uniform visual scale (default 1) — pipeline GLBs are ~2 units tall. */
+  modelScale?: number;
   /** One-time reward applied when the player reads the object. */
   onRead: (state: State, player: number) => void;
 }
@@ -110,6 +112,9 @@ export function createMysticObject(cfg: MysticConfig): MysticBehaviour {
     loadStarted = true;
     void loadGltfToSceneWithAnimator(ctx.state, cfg.modelUrl).then((result) => {
       group = result.group;
+      const scale = cfg.modelScale ?? 1;
+      if (scale !== 1) group.scale.setScalar(scale);
+      group.updateWorldMatrix(true, true);
       _box.setFromObject(group);
       footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
       const col = new THREE.Color(cfg.emissiveColor);

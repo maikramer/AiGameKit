@@ -132,6 +132,9 @@ export function start(ctx: MonoBehaviourContext): void {
     }).then((result) => {
       group = result.group;
       animator = result.animator;
+      // NPC ships 2 units tall (pipeline normalization); human ≈ 1.75 m.
+      group.scale.setScalar(0.88);
+      group.updateWorldMatrix(true, true);
       _box.setFromObject(group);
       footOffset = Number.isFinite(_box.min.y) ? -_box.min.y : 0;
       animator?.play(IDLE_CLIP);

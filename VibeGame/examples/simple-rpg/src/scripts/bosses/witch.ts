@@ -6,6 +6,7 @@ import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
   modelUrl: '/assets/meshes/witch_boss_rigged_animated.glb',
+  modelScale: 0.95,
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',

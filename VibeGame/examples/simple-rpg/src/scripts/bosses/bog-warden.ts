@@ -5,6 +5,7 @@ import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
   modelUrl: '/assets/meshes/bog_warden_boss_rigged_animated.glb',
+  modelScale: 1.4,
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',

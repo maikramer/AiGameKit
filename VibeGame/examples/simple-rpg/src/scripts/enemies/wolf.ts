@@ -4,6 +4,7 @@ import { addGold } from '../../game/economy';
 
 const behaviours = createCreatureBehaviours({
   modelUrl: '/assets/meshes/wolf_rigged_animated.glb',
+  modelScale: 0.6,
   clips: {
     idle: 'Animator3D_BreatheIdle',
     walk: 'Animator3D_Walk',

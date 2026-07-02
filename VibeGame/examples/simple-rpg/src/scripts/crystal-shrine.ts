@@ -7,6 +7,7 @@ const XP_REWARD = 50;
 
 const shrine = createMysticObject({
   modelUrl: '/assets/meshes/crystal_blue.glb',
+  modelScale: 0.8,
   emissiveColor: 0x3fd0ff,
   toastColor: '#9fe8ff',
   readRangeSq: 4.6 * 4.6,
