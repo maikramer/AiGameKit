@@ -4,6 +4,10 @@ import { BiomeRegion } from './components';
 import {
   ambientAdapter,
   bgmLayerAdapter,
+  ppExposureAdapter,
+  ppBloomStrengthAdapter,
+  ppVignetteDarknessAdapter,
+  rainAdapter,
   fogColorAdapter,
   fogDensityAdapter,
   parsePolygonString,
@@ -76,6 +80,10 @@ export const biomeRegionParser: Parser = ({ entity, element, state }) => {
   BiomeRegion.ambientR[entity] = 1;
   BiomeRegion.ambientG[entity] = 1;
   BiomeRegion.ambientB[entity] = 1;
+  BiomeRegion.ppExposure[entity] = 0;
+  BiomeRegion.ppBloomStrength[entity] = 0;
+  BiomeRegion.ppVignetteDarkness[entity] = 0;
+  BiomeRegion.rain[entity] = 0;
 
   const typeRaw = attr(a, 'type');
   if (typeRaw !== undefined) typeAdapter(entity, typeRaw, state);
@@ -98,6 +106,18 @@ export const biomeRegionParser: Parser = ({ entity, element, state }) => {
 
   const bgmRaw = attr(a, 'bgm-layer');
   if (bgmRaw !== undefined) bgmLayerAdapter(entity, bgmRaw, state);
+
+  const ppExposureRaw = attr(a, 'pp-exposure');
+  if (ppExposureRaw !== undefined)
+    ppExposureAdapter(entity, ppExposureRaw, state);
+  const ppBloomRaw = attr(a, 'pp-bloom-strength');
+  if (ppBloomRaw !== undefined)
+    ppBloomStrengthAdapter(entity, ppBloomRaw, state);
+  const ppVignetteRaw = attr(a, 'pp-vignette-darkness');
+  if (ppVignetteRaw !== undefined)
+    ppVignetteDarknessAdapter(entity, ppVignetteRaw, state);
+  const rainRaw = attr(a, 'rain');
+  if (rainRaw !== undefined) rainAdapter(entity, rainRaw, state);
 
   const terrainTextureRaw = attr(a, 'terrain-texture');
 

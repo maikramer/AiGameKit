@@ -181,6 +181,26 @@ export const typeAdapter: Adapter = (entity, value) => {
   if (!Number.isNaN(n)) BiomeRegion.type[entity] = n;
 };
 
+const floatField =
+  (field: Float32Array) =>
+  (entity: number, value: string): void => {
+    const n = parseFloat(String(value));
+    if (!Number.isNaN(n)) field[entity] = n;
+  };
+
+/** `pp-exposure` — tone-mapping exposure override (0 = inherit baseline). */
+export const ppExposureAdapter: Adapter = floatField(BiomeRegion.ppExposure);
+/** `pp-bloom-strength` — bloom strength override (0 = inherit baseline). */
+export const ppBloomStrengthAdapter: Adapter = floatField(
+  BiomeRegion.ppBloomStrength
+);
+/** `pp-vignette-darkness` — vignette darkness override (0 = inherit). */
+export const ppVignetteDarknessAdapter: Adapter = floatField(
+  BiomeRegion.ppVignetteDarkness
+);
+/** `rain` — precipitation intensity 0..1 inside the biome. */
+export const rainAdapter: Adapter = floatField(BiomeRegion.rain);
+
 export const bgmLayerAdapter: Adapter = (entity, value) => {
   const n = parseInt(String(value), 10);
   if (!Number.isNaN(n)) BiomeRegion.bgmLayer[entity] = n;

@@ -29,6 +29,12 @@ export const BiomeRegion = {
   ambientG: new Float32Array(MAX_ENTITIES),
   ambientB: new Float32Array(MAX_ENTITIES),
   bgmLayer: new Uint8Array(MAX_ENTITIES),
+  // Per-biome post-processing overrides (0 = inherit the scene baseline).
+  ppExposure: new Float32Array(MAX_ENTITIES),
+  ppBloomStrength: new Float32Array(MAX_ENTITIES),
+  ppVignetteDarkness: new Float32Array(MAX_ENTITIES),
+  /** Rain intensity 0..1 while the player is inside this biome. */
+  rain: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**
