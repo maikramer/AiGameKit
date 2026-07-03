@@ -261,7 +261,7 @@ function hexToInt(v: number): number {
  * -PI/2 about X on top of XZ-plane vertices, which stood the disc upright as
  * a giant vertical wall.)
  */
-function makeLakeGeometry(
+export function makeLakeGeometry(
   radius: number,
   seedX: number,
   seedZ: number,
