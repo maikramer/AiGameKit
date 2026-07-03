@@ -297,6 +297,9 @@ export const TerrainSpawnSystem: System = {
           if (spec.inWater) {
             const body = waterBodyAt(state, wx, wz);
             if (!body) continue;
+            // `in-water` floats instances on a lake surface (lilies, boats).
+            // Rivers have no beach ring, so only lakes qualify here.
+            if (body.kind !== 'lake') continue;
             const dx = wx - body.x;
             const dz = wz - body.z;
             if (Math.hypot(dx, dz) > body.shoreRadius * 0.72) continue;

@@ -422,6 +422,7 @@ export const LakeApplySystem: System = {
       scene.add(mesh);
 
       const body: WaterBody = {
+        kind: 'lake',
         x: Transform.posX[eid],
         z: Transform.posZ[eid],
         radius,

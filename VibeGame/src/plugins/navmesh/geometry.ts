@@ -442,6 +442,9 @@ export function collectWaterObstacles(
   }
 
   for (const body of bodies) {
+    // The navmesh water obstacle is a cylinder (lake disc). Rivers would need
+    // a ribbon obstacle — out of scope here, so skip non-lake bodies for now.
+    if (body.kind !== 'lake') continue;
     // Keep a lake only when its disc intersects the square bake area.
     if (Math.abs(body.x) - body.radius > bounds) continue;
     if (Math.abs(body.z) - body.radius > bounds) continue;

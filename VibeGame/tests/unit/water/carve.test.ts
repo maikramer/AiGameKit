@@ -173,7 +173,14 @@ describe('shoreFraction', () => {
 describe('water registry', () => {
   it('point membership + level lookup + unregister', () => {
     const state = new State();
-    const body = { x: 10, z: -5, radius: 6, shoreRadius: 4.5, waterY: 42 };
+    const body = {
+      kind: 'lake' as const,
+      x: 10,
+      z: -5,
+      radius: 6,
+      shoreRadius: 4.5,
+      waterY: 42,
+    };
     registerWaterBody(state, body);
 
     expect(isPointInWater(state, 10, -5)).toBe(true);
