@@ -21,6 +21,7 @@ import { Transform } from '../transforms/components';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import type { HeightSampler } from '../terrain/height-sampler';
 import { getTerrainContext } from '../terrain/utils';
+import { getWaterBodies } from '../water/registry';
 
 export interface NavMeshGeometry {
   positions: Float32Array;
@@ -397,6 +398,83 @@ function collectColliderObstacles(
   };
 }
 
+// Radial resolution of the lake-exclusion cylinder. 16 segments is a smooth
+// circle at the typical lake radii (<= ~10 m) and stays cheap: few lakes exist.
+const WATER_CYLINDER_SEGMENTS = 16;
+
+// Lake wall band: straddles the water surface so the vertical face reliably
+// intersects the walkable terrain skin. Below the surface reaches under the
+// carved basin floor; above clears the agent height (~1.0 m).
+const WATER_WALL_DROP = 1.0;
+const WATER_WALL_RISE = 1.5;
+
+const _waterMat = new THREE.Matrix4();
+const _waterPos = new THREE.Vector3();
+const _waterQuat = new THREE.Quaternion();
+const _waterScl = new THREE.Vector3(1, 1, 1);
+
+/** Bake a short vertical cylinder per registered lake so the recast voxelizer
+ * carves a hole through the water footprint. The Water plugin already lowers
+ * the terrain into a bowl, but a default lake (depth 1.5, radius 6) has a rim
+ * gradient of only ~26.6° — well under the 45° `walkableSlopeAngle` — so the
+ * basin stays WALKABLE and NPCs path straight through the water. recast only
+ * carves non-walkable cells from input geometry steeper than the walkable
+ * slope, so we feed it a 90° wall (an open cylinder tube) at each lake centre.
+ * `fullCarve` is set so the per-mesh height cap cannot clip the wall away. */
+export function collectWaterObstacles(
+  state: State,
+  bounds: number
+): NavMeshGeometry | null {
+  const bodies = getWaterBodies(state);
+  if (bodies.length === 0) return null;
+
+  const soup: MeshSoup = { positions: [], indices: [] };
+  const seg = WATER_CYLINDER_SEGMENTS;
+  const verts = new Float32Array(seg * 2 * 3);
+  const wallIndices: number[] = [];
+  for (let i = 0; i < seg; i++) {
+    const ni = (i + 1) % seg;
+    const b0 = i;
+    const b1 = ni;
+    const t0 = seg + i;
+    const t1 = seg + ni;
+    wallIndices.push(b0, b1, t1, b0, t1, t0);
+  }
+
+  for (const body of bodies) {
+    // Keep a lake only when its disc intersects the square bake area.
+    if (Math.abs(body.x) - body.radius > bounds) continue;
+    if (Math.abs(body.z) - body.radius > bounds) continue;
+
+    const yBottom = body.waterY - WATER_WALL_DROP;
+    const yTop = body.waterY + WATER_WALL_RISE;
+
+    for (let i = 0; i < seg; i++) {
+      const a = (i / seg) * Math.PI * 2;
+      const cx = Math.cos(a) * body.radius;
+      const cz = Math.sin(a) * body.radius;
+      verts[i * 3] = cx;
+      verts[i * 3 + 1] = yBottom;
+      verts[i * 3 + 2] = cz;
+      verts[(seg + i) * 3] = cx;
+      verts[(seg + i) * 3 + 1] = yTop;
+      verts[(seg + i) * 3 + 2] = cz;
+    }
+
+    _waterPos.set(body.x, 0, body.z);
+    _waterQuat.identity();
+    _waterScl.set(1, 1, 1);
+    _waterMat.compose(_waterPos, _waterQuat, _waterScl);
+    appendMesh(verts, wallIndices, _waterMat, soup, true);
+  }
+
+  if (soup.indices.length === 0) return null;
+  return {
+    positions: new Float32Array(soup.positions),
+    indices: new Uint32Array(soup.indices),
+  };
+}
+
 export function collectNavmeshGeometry(
   state: State,
   terrainDivisions = 128,
@@ -409,6 +487,9 @@ export function collectNavmeshGeometry(
 
   const obstacles = collectColliderObstacles(state, bounds);
   if (obstacles) parts.push(obstacles);
+
+  const water = collectWaterObstacles(state, bounds);
+  if (water) parts.push(water);
 
   if (parts.length === 0) {
     return { positions: new Float32Array(0), indices: new Uint32Array(0) };
