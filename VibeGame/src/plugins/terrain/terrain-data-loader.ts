@@ -1,4 +1,5 @@
 import { createEntityFromRecipe } from '../../core/recipes/parser';
+import { setRiverPath } from '../water/components';
 
 export interface TerrainData {
   version: string;
@@ -131,14 +132,19 @@ export function spawnWaterEntitiesFromTerrainData(
   state: import('../../core').State,
   terrainData: TerrainData
 ): void {
-  for (const plane of terrainData.lake_planes) {
-    const size = Math.max(plane.size_x, plane.size_z);
-    createEntityFromRecipe(state, 'Water', {
-      pos: `${plane.pos_x} ${plane.pos_y} ${plane.pos_z}`,
-      size,
-      'water-level': plane.pos_y,
-      'size-x': plane.size_x,
-      'size-z': plane.size_z,
-    });
+  const { size, world_size } = terrainData.terrain;
+  // pixel → world: world = (pixel / size) * world_size - world_size/2.
+  const toWorld = (px: number): number =>
+    (px / size) * world_size - world_size / 2;
+  for (const river of terrainData.rivers) {
+    if (!river.path || river.path.length < 2) continue;
+    const flat: number[] = [];
+    for (const [px, pz] of river.path) {
+      flat.push(toWorld(px), toWorld(pz));
+    }
+    const eid = createEntityFromRecipe(state, 'River', {});
+    if (eid >= 0) {
+      setRiverPath(state, eid, flat);
+    }
   }
 }

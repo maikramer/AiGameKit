@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import type { State } from '../../../src/core';
+import { State } from 'vibegame';
+import { TransformsPlugin } from 'vibegame/transforms';
+import { WaterPlugin } from '../../../src/plugins/water/plugin';
+import { getRiverPath } from '../../../src/plugins/water/components';
 import {
   parseTerrainData,
   spawnWaterEntitiesFromTerrainData,
@@ -167,11 +170,12 @@ describe('terrain-data-loader', () => {
       const data: TerrainData = {
         version: '1.0',
         terrain: { size: 1024, world_size: 256.0, max_height: 50.0 },
-        rivers: VALID_TERRAIN_JSON.rivers,
-        lakes: VALID_TERRAIN_JSON.lakes,
+        rivers: [],
+        lakes: [],
         lake_planes: [],
       };
 
+      // No rivers → no entity creation → no State API needed.
       expect(() =>
         spawnWaterEntitiesFromTerrainData({} as State, data)
       ).not.toThrow();
@@ -215,6 +219,50 @@ describe('terrain-data-loader', () => {
       };
       const result = parseTerrainData(data);
       expect(result.heightmap_format).toBe('png');
+    });
+  });
+
+  describe('spawnWaterEntitiesFromTerrainData — rivers', () => {
+    it('creates a River entity per river with world-coord path', () => {
+      // terrain 4 px over 8 m world → pixel→world scale 2 m/px, centred.
+      // world = (px/4)*8 - 4 = px*2 - 4.
+      const data = {
+        version: '1.0',
+        terrain: { size: 4, world_size: 8, max_height: 5 },
+        rivers: [
+          {
+            id: 0,
+            source: [0, 0] as [number, number],
+            path: [
+              [0, 0],
+              [2, 2],
+              [4, 0],
+            ] as Array<[number, number]>,
+            length: 10,
+          },
+        ],
+        lakes: [],
+        lake_planes: [],
+      };
+      const state = new State();
+      state.registerPlugin(TransformsPlugin);
+      state.registerPlugin(WaterPlugin);
+      const parsed = parseTerrainData(data);
+      spawnWaterEntitiesFromTerrainData(state, parsed);
+
+      // Find the River entity by scanning for a non-empty path in the
+      // side-channel (entity ids are small integers starting near 0).
+      let foundPath: number[] | null = null;
+      for (let e = 0; e < 2000; e++) {
+        const p = getRiverPath(state, e);
+        if (p.length > 0) {
+          foundPath = p;
+          break;
+        }
+      }
+      expect(foundPath).not.toBeNull();
+      // pixel (0,0) → world (-4,-4); (2,2) → (0,0); (4,0) → (4,-4).
+      expect(foundPath).toEqual([-4, -4, 0, 0, 4, -4]);
     });
   });
 });
