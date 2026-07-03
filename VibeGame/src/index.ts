@@ -894,3 +894,12 @@ export {
   getWaterBodies,
 } from './plugins/water';
 export type { WaterBody } from './plugins/water';
+
+export {
+  WeatherPlugin,
+  getWeather,
+  setWeather,
+  getWindVector,
+  setEnvironmentRain,
+} from './plugins/weather';
+export type { WeatherPatch, WeatherRuntime } from './plugins/weather';
