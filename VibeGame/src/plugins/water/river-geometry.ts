@@ -16,9 +16,14 @@ import * as THREE from 'three';
  *              alpha fade at the bank falls over the carved channel, not a
  *              hard polygon edge (analogous to makeLakeGeometry's pad).
  */
-export function makeRiverGeometry(path: number[], width: number): THREE.BufferGeometry {
+export function makeRiverGeometry(
+  path: number[],
+  width: number
+): THREE.BufferGeometry {
   if (path.length < 4) {
-    throw new Error('makeRiverGeometry: path must have at least 2 points (4 numbers)');
+    throw new Error(
+      'makeRiverGeometry: path must have at least 2 points (4 numbers)'
+    );
   }
   const nodeCount = path.length / 2;
   const pad = 1.05;
