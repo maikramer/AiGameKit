@@ -1,314 +1,313 @@
-# Adaptive Heightmap — Format + Runtime Sampler (B + C)
+# Adaptive Heightmap — Variable Mesh Resolution (B + C)
 
-**Data:** 2026-07-03
+**Data:** 2026-07-03 (revisto 2026-07-03 — ver §12 Revisão)
 **Scope:** VibeGame (`VibeGame/src/plugins/terrain/`, `VibeGame/src/plugins/water/`)
 **Estado:** Design aprovado, pronto para plano de implementação
-**Specs relacionados:** Terrain3D generation-adaptive (spec A, *follow-up — fora do âmbito deste documento*)
+**Specs relacionados:** Terrain3D generation-adaptive (spec A, *follow-up — fora do âmbito*)
 
 ---
 
 ## 1. Problema
 
 O heightfield do VibeGame é um grid **uniforme**: `Float32Array` de dimensão igual à do PNG
-(2048² no `simple-rpg`, ≈0,98 m/texel sobre 2000 m). Três dores resultam:
+(2048² no `simple-rpg`, ≈0,98 m/texel sobre 2000 m). O `<Lake>` carve escreve neste grid em
+resolução fina. Mas a malha de render, perto da câmera (LOD level 5), usa um chunk de 62,5 m
+com apenas **4 segmentos** (`resolutionForLevel(64, 5) = 4`) → **15,6 m/segmento**. Um lago
+de 6 m de raio é **menos de 1 segmento** → a malha re-amostra a bacia fina do heightfield
+para uma malha grossa e **apaga-a**. O mesmo se passa na collision (`buildChunkHeightfield`
+amostra à resolução da malha).
 
-1. **Detalhe perdido em mutações finas.** O carve do `<Lake>` (`water/carve.ts`) opera no grid
-   2048 fino, mas o downstream (mesh, collision, gameplay queries) re-amostra a bacia numa
-   grade mais grossa (`resolutionForLevel(64, level)`), arredondando a borda fina da bacia.
-2. **Memória desperdiçada em zonas planas.** Um planalto de 500 m/texel ocupa o mesmo que um
-   canyon de 0,5 m/texel. Não há compressão espacial.
-3. **Precisão de 8 bits insuficiente.** O PNG grayscale actual tem 256 níveis; sobre
-   `maxHeight=200 m`, isso são passos de ~0,78 m — escadas visíveis em lagos rasos.
-
-O utilizador quer **resolução variável por região**: alta densidade onde há detalhe (lagos,
-canyons, costas) e baixa densidade em zonas planas, com compressão ponta-a-ponta
-(disco → RAM → caminho para geração adaptive no Terrain3D).
+Resultado: a borda fina da bacia do `<Lake>` é arredondada na renderização e na física,
+mesmo existindo em alta resolução no heightfield.
 
 ## 2. Objetivos e Não-Objetivos
 
 ### Objetivos
 
-- **O-1.** Reduzir memória em disco: heightfield adaptativo comprimido (`.ahgt`), com poucas
-  amostras em zonas planas.
-- **O-2.** Reduzir RAM em runtime: estrutura de amostragem que não materializa o grid fino
-  onde não é preciso.
-- **O-3.** Detalhe fino em lagos esculpidos: a borda da bacia de um `<Lake>` deve renderizar e
-  colidir em alta resolução, sem arredondamento.
-- **O-4.** Caminho aberto para spec A (Terrain3D generation-adaptive): o formato `.ahgt` deve
-  poder transportar uma árvore pré-computada no futuro, sem redesenhar o runtime.
+- **O-1.** Detalhe fino em lagos esculpidos: a malha e o collider dentro/ao redor de um
+  `<Lake>` devem capturar a resolução que já existe no heightfield, sem arredondamento.
+- **O-2.** Reduzir VRAM de vertex buffers em zonas que não precisam de detalhe (planaltos):
+  menos segmentos onde não há features.
+- **O-3.** Formato `.ahgt` uint16 em disco (maior precisão que o PNG 8-bit atual) com
+  compressão deflate.
+- **O-4.** Caminho aberto para spec A (Terrain3D): o `.ahgt` deve poder transportar uma
+  árvore de densidade pré-computada no futuro, sem redesenhar o runtime.
 - **O-5.** Retrocompatibilidade total: mapas antigos (PNG 8-bit) continuam a funcionar sem
   mudança de markup.
 
 ### Não-objetivos (fora do âmbito)
 
-- **N-1.** Geração adaptive no Terrain3D (difusão por região) — **spec A, follow-up**.
-- **N-2.** Sistema completo de LOD dinâmico de runtime (mantém-se o LOD por câmera actual; a
-  patch tree funde-se com ele mas não o substitui).
-- **N-3.** Refactor arbitrário do plugin de terrain — só o necessário para integrar a patch
-  tree.
+- **N-1.** Geração adaptive no Terrain3D — **spec A, follow-up**.
+- **N-2.** Sparse baseGrid para poupar RAM do heightfield (16 MB Float32). A poupança real
+  de RAM exigiria sparse baseGrid, que fica para follow-up / spec A.
+- **N-3.** Patch tree de amostras de altura (abordagem rejeitada na revisão — ver §12).
+- **N-4.** Refactor arbitrário do plugin de terrain.
 
 ## 3. Contexto do Código Actual
 
-Fonte da verdade hoje: `HeightSampler` (`VibeGame/src/plugins/terrain/height-sampler.ts:13-24`):
-
-```ts
-export interface HeightSampler {
-  width: number; height: number;
-  data: Float32Array | null;  // [0,1] normalizado, row-major
-  worldSize: number; maxHeight: number;
-}
-```
-
-Três grids derivados, todos lidos do mesmo sampler:
+Fonte da verdade: `HeightSampler` (`VibeGame/src/plugins/terrain/height-sampler.ts:13-24`).
 
 | Grid | Resolução | Definido em |
 |---|---|---|
-| Heightfield lógico | = dim do PNG (2048²) | `loadHeightmapFromUrl` (`height-sampler.ts:109-166`) |
-| Render mesh (por chunk) | `resolutionForLevel(64, level)` → 64…4 seg | `buildChunkGeometry` (`chunk-geometry.ts`), `lod-select.ts:traverse` |
-| Collision (Rapier, por chunk) | = mesh (`(res+1)²` amostras) | `buildChunkHeightfield` (`systems.ts:983-1006`) |
+| Heightfield lógico (baseGrid) | = dim do PNG (2048²) | `loadHeightmapFromUrl` (`height-sampler.ts:109-166`) |
+| Render mesh (por chunk) | `resolutionForLevel(base, level)` → 64…4 seg | `TerrainLodSelectSystem` (`systems.ts:816`), `lod-select.ts:149` |
+| Collision (Rapier, por chunk) | = mesh (`(res+1)²` amostras) | `buildChunkHeightfield` (`systems.ts:1003-1026`) |
 
-Amostragem é **bilinear** em todos os casos (`sampleHeightAt`, `height-sampler.ts:202-212`).
-`sampleTerrainHeight` (`height-sampler.ts:261-302`) sobe extra para o lattice do mesh via
-`surfaceHeightAt`.
+`TerrainLodSelectSystem` (`systems.ts:706`) chama `selectChunks` (quadtree por distância de
+câmera) e atribui `resolutionForLevel(baseResolution, desc.level)` a cada chunk
+(`systems.ts:816`). É **exatamente o ponto** onde a densidade espacial se sobrepõe.
 
-O carve do `<Lake>` (`water/carve.ts:carveBowl`) muta `sampler.data` diretamente com operação
-`min` (só desce). O `LakeApplySystem` (`water/systems.ts:167-269`) repropaga derivados
-(marca `meshDirty`, remove colliders por chunk, invalida BVH).
+Skirts já existem em `chunk-geometry.ts:93-127` (`addSkirtStrip`) — cobrem T-junctions entre
+chunks de níveis diferentes; reutilizam-se sem mudança.
 
-Componente `Terrain.collisionResolution` (`components.ts:20`) existe mas **não é lido** em
-nenhum sistema — ponto morto.
+Carve (`water/carve.ts:carveBowl`) muta `sampler.data` (Float32Array) em O(1) por texel.
+`LakeApplySystem` (`water/systems.ts:232`) repropaga derivados. **Não muda neste design.**
 
-## 4. Abordagem: Patch Tree (quadtree de patches com stitch)
+## 4. Abordagem: Resolução de Malha Variável por Região
 
-Heightfield = quadtree balanceada. Cada leaf guarda um patch retangular `(res+1)×(res+1)`
-com `res ∈ {4, 8, 16, 32, 64}` (5 níveis, 2× cada). Regiões planas = poucas leaves coarse;
-regiões detalhadas = subdivididas até alta resolução.
+A "densidade variável" que resolve o problema não é uma nova estrutura de dados de altura —
+é uma **resolução de malha/collision variável por região**: chunks dentro/ao redor de uma
+feature importante (lago, canyon) usam mais segmentos; planaltos usam menos.
 
-**Porquê patch tree e não RLE ou TIN:**
+Isto funde-se com a quadtree de LOD que **já existe** em `lod-select.ts`: sobrepõe-se uma
+"densidade espacial" à "densidade por câmera". O heightfield base continua full-res (fonte
+do detalhe); a malha é que aprende a amostrá-lo mais finamente onde importa.
 
-- vs **RLE/sparse sobre uniforme** (Abordagem 2): RLE poupa disco mas não RAM runtime
-  (descomprime para o mesmo `Float32Array`) nem dá mais densidade aos lagos. Falha O-2 e O-3.
-- vs **TIN** (Abordagem 3): TIN é máxima compressão mas colide com o Rapier (quer grids),
-  exige re-triangulação sob carve e não se funde com a quadtree de render existente
-  (toda grid-based). Custo/benefício mau neste codebase.
-- **Patch tree** é a única que poupa disco **e** RAM **e** deixa caminho aberto para spec A,
-  **e** resolve o sintoma do lago, **e** se funde com a quadtree que já existe em
-  `lod-select.ts`.
+### 4.1 Density map
 
-### 4.1 Topologia da árvore
+Grelha coarse (default 64×64 tiles sobre o mundo). Cada tile tem um `densityBoost`
+(uint8, 0…255) que indica "quanto mais segmentos este tile merece". Fontes:
 
-- Quadtree balanceada em XY sobre o plano do terreno.
-- Profundidade máxima `D_max = 6` (alinhado com `levels=6` de `lod-select.ts`).
-- Leaf mínima (profundidade 6 sobre 2000 m) ≈ 31 m; a `res=64` → ~0,5 m/texel
-  (mais fino que o 0,98 m/texel actual).
-- Leaf de profundidade 0 sobre 2000 m com `res=4` → ~500 m/texel (essencialmente plano).
+1. **Densidade-map automática** (construída em runtime na primeira carga): para cada tile,
+   score = combinação de (a) gradiente/variância local das alturas, (b) curvatura.
+   Tiles high-score → densityBoost alto; low-score → 0.
+2. **Overrides declarativos** — recolhidos antes/durante a construção:
+   - `<Lake>` força densityBoost máximo na AABB do disco (centro ± radius × margem).
+   - Futuro: `<DensityRegion>`, etc.
 
-### 4.2 Resolução de cracks: skirts
+O density map vive no `TerrainEntityData` (ao lado do sampler) e é **lido pelo
+`TerrainLodSelectSystem`** quando atribui resolução a cada chunk.
 
-- **Render:** skirts verticais em cada patch (vértices extra que caem abaixo da borda)
-  escondem geometricamente o crack entre níveis. Robusto a LOD dinâmico e a mutações
-  (carve), não requer re-welding quando um vizinho subdivide. Técnica standard (Cesium,
-  Google Earth).
-- **Collision:** ignora cracks — os heightfields Rapier são por-chunk independentes;
-  pequenas discontinuidades físicas na fronteira são aceitáveis e já existem hoje.
+### 4.2 Resolução efetiva por chunk
 
-### 4.3 Atribuição de densidade
+```ts
+// Pseudo: resolutionForLevel hoje retorna max(4, base >> level).
+// Nova versão:
+export function effectiveResolution(
+  baseResolution: number,
+  level: number,
+  densityBoost: number   // 0..255 do tile(s) que cobrem o chunk
+): number {
+  const lodRes = Math.max(4, baseResolution >> level);
+  if (densityBoost <= 0) return lodRes;
+  // Capped multiplier: boost máx dobra a resolução (ou outro fator calibrável).
+  const boostFactor = 1 + (densityBoost / 255);   // 1..2
+  return Math.min(baseResolution, Math.max(lodRes, Math.round(lodRes * boostFactor)));
+}
+```
 
-**Árvore construída em runtime** na carga do terreno (não no export Terrain3D), a partir de:
+O `densityBoost` de um chunk = **máximo** sobre os tiles que ele intersetam (garante que um
+chunk que toca um lago denso fica denso todo, evitando cracks internos ao chunk). Capado em
+`baseResolution` (64) para não exceder a malha mais fina do LOD.
 
-1. **Densidade-map automática** — para cada tile de uma grelha grosseira (ex.: 64×64 tiles),
-   score = combinação de (a) gradiente/variância local das alturas, (b) curvatura,
-   (c) proximidade a água marcada. Tiles high-score → subdividir; low-score → manter coarse.
-   Thresholds calibráveis.
-2. **Overrides declarativos** — `terrain.json` e/ou XML do VibeGame marcam AABBs como
-   "important" (lagos via `<Lake>`, cidades, etc.). Um `<Lake>` força a árvore a subdividir
-   até ao nível máximo dentro do disco do lago, **antes** do carve acontecer.
+### 4.3 Cracks entre chunks de resolução diferente
 
-**Regra de balanceamento:** restricted quadtree 2-to-1 — um patch pode estar no máximo
-1 nível mais fino que o vizinho. Aplicada como post-pass depois de atribuir densidades:
-se um tile subdivide, força os 4 vizinhos a pelo menos nível N-1. Reduz complexidade do
-stitching (skirt só cobre 1 nível de gap).
+Os vizinhos de um chunk podem ter resolução diferente (já acontecia por LOD de câmera;
+agrava-se com densidade espacial). **Skirts já existem** (`chunk-geometry.ts:93-127`) e
+cobrem isto — não há trabalho novo. Validação visual no browser confirma que não há
+regressão.
 
-**Justificação runtime vs offline:** runtime permite overrides declarativos (`<Lake>`
-adicionado no XML), não bloqueia no spec A (Terrain3D), e a construção para 2048² é da
-ordem de dezenas de ms — aceitável.
+### 4.4 Justificação vs alternativas
+
+- vs **Patch tree de amostras** (rejeitada na revisão, §12): se a baseGrid já é full-res,
+  os patches não adicionam detalhe (só re-amostram). E se a baseGrid fosse coarse, o carve
+  ao mutar só a baseGrid produziria bacia coarse. **Nenhuma leitura entrega O-1.**
+- vs **Carve directo em patches finos** (opção B do brainstorm): entrega detalhe + RAM
+  sparse mas muda `carveBowl` de assinatura e é muito mais arriscado.
+- **Resolução de malha variável** é o mais simples, carve inalterado, resolve O-1
+  diretamente (a malha aprende a amostrar o heightfield fino onde há features).
 
 ## 5. Formato `.ahgt` (B)
 
-A árvore é reconstruída em runtime, logo o ficheiro guarda o heightfield **uniforme**
-comprimido + metadados.
+A árvore de densidade é construída em runtime, logo o ficheiro guarda o heightfield
+**uniforme** comprimido + metadados.
 
 ```
 Header (16 bytes):
   magic: "AHGT" (4B)
   version: u16 = 1
   size: u16            # grid dim, ex.: 2048
-  maxLevels: u16 = 6
-  flags: u16           # bit0 = tem density hints, bit1 = reservado
+  reserved: u16 = 0
+  flags: u16           # bit0 = tem density hints inline
 
-Metadata block (JSON inline, length-prefixed):
-  worldSize: f32       # metros X/Z
-  maxHeight: f32       # metros
-  origin: [f32, f32]   # offset world (default [0,0])
-  densityHints?: AABB[] + nivel min   # opcional
+Metadata block (JSON inline, length-prefixed u32):
+  worldSize: f32
+  maxHeight: f32
+  origin: [f32, f32]
+  densityHints?: AABB[]   # opcional; default constrói do gradiente
 
 Height data:
   uint16 array (size*size*2 bytes), quantizado [0, maxHeight]
-  comprimido com deflate (ou zstd se disponível no runtime)
+  comprimido com deflate (fflate, já transitivo via three)
 ```
 
-- **Quantização uint16:** 65536 níveis → ~3 mm sobre 200 m. Resolve o defeito das escadas
-  visíveis em lagos rasos (vs ~0,78 m do uint8 actual). ~2× o tamanho do uint8 mas
-  altamente compressível (terreno tem baixa entropia).
-- **Magic + version** permitem evolução futura (ex.: transportar árvore pré-computada no
-  spec A via um novo flag/version).
+- **Quantização uint16:** 65536 níveis → ~3 mm sobre 200 m. Resolve escadas visíveis em
+  lagos rasos (vs ~0,78 m do uint8 atual).
+- **Magic + version** permitem evolução (spec A transporta árvore pré-computada via novo
+  flag/version).
 
 ### 5.1 Retrocompatibilidade
 
-- Se o URL aponta para `.png` → `loadHeightmapFromUrl` (actual) carrega como hoje; envolve
-  num `AdaptiveHeightSampler` cuja baseGrid é o PNG decodificado (convertido para uint16
-  interno, sem ganho de precisão mas sem perda), árvore = trivial (1 leaf coarse).
-  **Comportamento = igual ao de hoje.**
-- Se o URL aponta para `.ahgt` → carrega o novo formato, constrói árvore.
-- `terrain.json` ganha campo opcional `heightmap_format: "png" | "ahgt"` (default `png`).
+- URL `.png` → `loadHeightmapFromUrl` (atual) carrega; baseGrid = PNG decodificado
+  (convertido a Float32 internamente, sem ganho nem perda). **Comportamento = igual hoje.**
+- URL `.ahgt` → novo loader, baseGrid uint16 → Float32.
+- `terrain.json` ganha `heightmap_format: "png" | "ahgt"` (default `png`).
 - Sintaxe `<Terrain url="...">` não muda.
 
-## 6. Runtime Sampler (C)
+## 6. Runtime (C)
 
-### 6.1 Estrutura
+Sem nova estrutura de altura. O `HeightSampler` (Float32Array full-res) **não muda**.
+As mudanças estão no **consumidor** da resolução:
+
+### 6.1 DensityMap (novo)
 
 ```ts
-export interface AdaptiveHeightSampler {
-  // Fonte uniforme (O(1) por texel):
-  baseGrid: Uint16Array;     // size×size, quantizado [0, maxHeight]
-  size: number;
-  worldSize: number;
-  maxHeight: number;
-
-  // Árvore de densidade (construída na carga):
-  tree: PatchTree;           // quadtree de leaves; cada leaf = {aabb, resolution, patch?}
-
-  // Overrides declarativos (recolhidos antes da construção):
-  densityOverrides: DensityHint[];
+// terrain/density-map.ts (novo)
+export interface DensityMap {
+  tilesX: number;          // ex.: 64
+  tilesZ: number;          // ex.: 64
+  boost: Uint8Array;       // tilesX*tilesZ, 0..255
+  worldSize: number;       // para converter world→tile
 }
+
+export function buildDensityMap(
+  sampler: HeightSampler,
+  tilesPerAxis = 64,
+  opts?: { varianceWeight?: number; curvatureWeight?: number; threshold?: number }
+): DensityMap;
+
+export function applyOverride(density: DensityMap, aabb: { minX: number; minZ: number; maxX: number; maxZ: number }, boost: number): void;
+
+export function boostAt(density: DensityMap, worldX: number, worldZ: number): number;
+
+// Máximo boost sobre os tiles que um chunk AABB intersetem:
+export function maxBoostOverAabb(density: DensityMap, aabb: { minX: number; minZ: number; maxX: number; maxZ: number }): number;
 ```
 
-### 6.2 Amostragem
+### 6.2 Resolução efetiva (modificação em lod-select.ts)
 
-`sampleHeightAt(x, z)`:
-1. Desce a quadtree até à leaf que contém (x, z) — O(log D) ≈ 6 hops.
-2. Se a leaf tem patch próprio (densa): interpola bilinear no patch.
-3. Se a leaf é "virtual" (só uma região coarse da baseGrid): amostra bilinear da baseGrid.
+Nova função `effectiveResolution(base, level, densityBoost)` (ver §4.2). `lod-select.ts`
+passa a exportá-la; `TerrainLodSelectSystem` lê-a.
 
-**Equivalência de interface:** o `HeightSampler` actual é consumido em N sítios
-(`carveBowl`, `buildChunkGeometry`, `buildChunkHeightfield`, `sampleTerrainHeight`,
-`getTerrainHeightAt`). O `AdaptiveHeightSampler` **expõe a mesma interface** — consumidores
-não mudam. A `baseGrid` continua acessível para quem precisar (carve usa-a quando muta).
+### 6.3 LakeApplySystem (toque)
 
-### 6.3 Mutação: carve do lago + patch tree
-
-Sequência (resolve o sintoma O-3):
-
-1. Na carga: heightmap + overrides `<Lake>` → construir árvore (lago já denso).
-2. `LakeApplySystem` corre `carveBowl`:
-   - **(baseGrid)** para cada texel na AABB do disco: `baseGrid[i] = min(baseGrid[i], bowlY)`.
-     Igual ao hoje, O(1) por texel.
-   - **(invalidação)** para cada leaf que intersectar o disco: `leaf.dirty = true`.
-   - **(lazy)** no próximo sample/render da leaf dirty: re-amostra patch da baseGrid mutada.
-3. Render/collision/gameplay veem a bacia em alta resolução porque a leaf do lago estava
-   subdividida ao nível máximo (passo 1).
-
-**Caso dinâmico** (`<Lake>` adicionado depois da carga, scripting sandbox): `carveBowl`
-adiciona um passo 0 — `forceRefine(diskAABB, maxLevel)` — que subdivide as leaves no disco
-*antes* de mutar. Barato (O(log D)) e mantém o contrato.
+Antes de `carveBowl`, recolhe a AABB do disco do `<Lake>` e faz
+`applyOverride(density, aabb, 255)` no density map do field. Isto garante que os chunks que
+vão renderizar o lago ficam com resolução alta **antes** de a malha ser construída.
+`carveBowl` em si **não muda**.
 
 ## 7. Integração com o Existente
 
-### 7.1 Render mesh — fundir com `lod-select.ts`
+### 7.1 `TerrainLodSelectSystem` (`systems.ts:706`)
 
-A quadtree de LOD actual torna-se a **mesma** quadtree da patch tree. Um leaf é selecionado
-para render quando: (i) está dentro do range da câmera (regra actual) **e** (ii) a sua
-resolução de densidade ≥ resolução de LOD pedida.
+Ponto de modificação: onde atribui `TerrainChunk.resolution[chunk]` (linha 816). Passa a:
 
-- Densidade local alta (leaf fina): LOD-render usa-a diretamente — detalhe nativo.
-- Densidade local baixa (leaf coarse) mas câmera perto: LOD-render **upsample** a leaf coarse
-  para a resolução pedida (interpola). Sem detalhe extra, mas sem crack.
+```ts
+const lodRes = resolutionForLevel(baseResolution, desc.level);
+const chunkAabb = chunkAabbFromDesc(desc);   // origin ± size/2
+const boost = data.density ? maxBoostOverAabb(data.density, chunkAabb) : 0;
+const res = effectiveResolution(baseResolution, desc.level, boost);
+TerrainChunk.resolution[chunk] = res;
+```
 
-A densidade espacial e a densidade de câmera combinam-se naturalmente.
+### 7.2 Build de chunks
 
-### 7.2 Collision (Rapier) — por-chunk, como hoje
-
-`buildChunkHeightfield` não muda quase nada: `sampleHeightAt` agora desce a quadtree
-internamente, mas o output é o mesmo `(res+1)²` grid para o Rapier. Opcional: em leaves
-densas coincidentes com o chunk, amostrar diretamente do patch (pulo de interpolação).
+`buildChunkGeometry` (`chunk-geometry.ts`) e `buildChunkHeightfield` (`systems.ts:1003`)
+**não mudam** — já consomem `TerrainChunk.resolution[chunk]` e `sampleHeightAt`. Herdam a
+densidade extra automaticamente. Skirts (`chunk-geometry.ts:93-127`) continuam a cobrir
+T-junctions.
 
 ### 7.3 `sampleTerrainHeight` (gameplay/spawner)
 
-Não muda — continua multi-amostragem via `sampleHeightAt`, agora adaptativo por baixo.
-Spawners beneficiam automaticamente da maior densidade nos lagos.
+Não muda — continua multi-amostragem via `sampleHeightAt`. Beneficia automaticamente da
+maior densidade de collider nos lagos.
 
 ### 7.4 Ficheiros (bounded units)
 
 | Ficheiro | Responsabilidade | Estado |
 |---|---|---|
-| `terrain/adaptive-sampler.ts` (novo) | `AdaptiveHeightSampler`, `sampleHeightAt` adaptativo | Novo |
-| `terrain/patch-tree.ts` (novo) | Quadtree de densidade, construção, balanceamento 2-to-1, query de leaf, `forceRefine` | Novo |
-| `terrain/ahgt-format.ts` (novo) | Parser/serializer `.ahgt` (header + uint16 + deflate) | Novo |
-| `terrain/density-source.ts` (novo) | Score densidade (gradiente/curvatura), merge overrides declarativos | Novo |
-| `terrain/height-sampler.ts` (refactor) | Mantém interface; delega para `AdaptiveHeightSampler` | Refactor leve |
-| `terrain/chunk-geometry.ts` (refactor) | Geração de skirts; consome `sampleHeightAt` adaptativo | Refactor médio |
-| `terrain/systems.ts` (toques) | Bootstrap lê `.ahgt` vs `.png`; `LakeApplySystem` chama `forceRefine` antes do carve | Toques |
-| `water/carve.ts` (toque) | `forceRefine(diskAABB)` no início do `carveBowl`; resto igual | Toque mínimo |
+| `terrain/density-map.ts` (novo) | `DensityMap`, `buildDensityMap`, `applyOverride`, `boostAt`, `maxBoostOverAabb` | Novo |
+| `terrain/ahgt-format.ts` (novo) | Parser/serializer `.ahgt` (header + uint16 + deflate via fflate) | Novo |
+| `terrain/lod-select.ts` (toque) | Adiciona `effectiveResolution(base, level, boost)` | Toque |
+| `terrain/utils.ts` (toque) | `TerrainEntityData.density?: DensityMap` | Toque |
+| `terrain/systems.ts` (toque) | Bootstrap constrói density map após heightmap; `TerrainLodSelectSystem` usa `effectiveResolution` | Toque médio |
+| `water/systems.ts` (toque) | `LakeApplySystem` chama `applyOverride` antes do carve | Toque mínimo |
+| `terrain/height-sampler.ts` | **Não muda** | — |
+| `water/carve.ts` | **Não muda** | — |
+| `terrain/chunk-geometry.ts` | **Não muda** (skirts já existem) | — |
 
 ## 8. Testes (Bun)
 
-```
-VibeGame/src/plugins/terrain/
-  patch-tree.test.ts         # novo
-  adaptive-sampler.test.ts   # novo
-  ahgt-format.test.ts        # novo
-  density-source.test.ts     # novo
-```
+Padrão: `tests/unit/terrain/*.test.ts` (existem 6 ficheiros deste género).
 
 **Casos críticos:**
 
-- **`patch-tree`**: construção de density-map sintético; regra 2-to-1 (vizinhos ≤1 nível de
-  diferença); `forceRefine(AABB)` subdivide e re-balanceia; query de leaf por ponto em
-  cantos/bordas.
-- **`adaptive-sampler`**: equivalência com bilinear atual para árvore trivial (snapshot dos
-  valores atuais); amostragem em patch denso retorna altura correta; continuidade na
-  fronteira de níveis (sem salto > tolerância); mutação carve invalida e re-amostra.
-- **`ahgt-format`**: round-trip uint16 sem perda; deflate round-trip; retrocompat PNG 8-bit.
-- **`density-source`**: score alto em zona rugosa, baixo em plana; merge override `<Lake>`
-  força nível máximo; thresholds não regressam.
+- **`density-map.test.ts`** (novo): `buildDensityMap` dá boost alto em zona rugosa sintética,
+  baixo em plana; `applyOverride` força máximo numa AABB; `maxBoostOverAabb` retorna o
+  máximo correto sobre tiles intersectados; thresholds não regressam.
+- **`effective-resolution.test.ts`** (novo, em `tests/unit/terrain/`): sem boost → igual a
+  `resolutionForLevel`; boost=255 dobra (capado em baseResolution); boost intermédio escala.
+- **`ahgt-format.test.ts`** (novo): round-trip uint16 sem perda; deflate round-trip;
+  retrocompat lê PNG antigo (via `loadHeightmapFromUrl`, snapshot dos valores).
+- **Regressão `terrain-height-sampler.test.ts`** (existe): continua a passar.
+- **Regressão `carve.test.ts`** (existe em `tests/unit/water/`): continua a passar.
 
 **Validação visual (manual, alinhado com preferência de iterar no browser):** depois de
-implementado, correr `simple-rpg` no Chrome MCP e comparar a borda de um `<Lake>` antes/depois.
+implementado, correr `simple-rpg` no Chrome MCP e comparar a borda de um `<Lake>` antes/
+depois.
 
 ## 9. Definição de Pronto
 
 - `make test-vibegame` passa (testes novos + existentes não regressam).
 - `simple-rpg` carrega com PNG antigo (retrocompat) sem mudanças de markup.
 - Um `<Lake>` renderiza com borda de bacia mais nítida que antes (validação visual browser).
-- Memória: baseGrid uint16 de 2048² ≈ 8 MB (vs 16 MB Float32 atual) — poupança ~50% em RAM só
-  com a migração de formato, antes mesmo da patch tree comprimir.
+- `.ahgt` uint16 round-trip sem perda (teste automatizado).
 
 ## 10. Riscos e Mitigações
 
 | Risco | Prob | Impacto | Mitigação |
 |---|---|---|---|
-| Bugs de stitching (cracks, normais erradas na fronteira) | Alta | Médio | Skirts (robustez); testes de continuidade; validação visual no browser |
-| Performance de descida da quadtree em hot path (cada sample) | Média | Médio | O(log D) ≈ 6 hops; cache da leaf no chunk; benchmarks |
-| Regressão em consumidores do `HeightSampler` antigo | Média | Alto | Interface idêntica; snapshot test de equivalência |
-| Densidade-map automática mal calibrada (over/under-refine) | Média | Baixo | Thresholds calibráveis; overrides declarativos como escape hatch |
-| `collisionResolution` morto — ligá-lo adiciona complexidade extra | Baixa | Baixo | Não obrigatório neste spec; follow-up opcional |
+| Cracks entre chunks de resolução diferente agrava-se | Média | Médio | Skirts já existem; validação visual no browser |
+| Overdraw/excesso de segmentos perto de features | Média | Baixo | Cap em `baseResolution`; boost máx dobra apenas |
+| Density map mal calibrada (over/under-refine) | Média | Baixo | Thresholds calibráveis; overrides declarativos como escape hatch |
+| Regressão em `TerrainLodSelectSystem` (caminho crítico) | Média | Alto | Sem boost → comportamento idêntico ao de hoje; tests de regressão |
+| Performance: `maxBoostOverAabb` no hot path de LOD select | Baixa | Médio | Tiles coarse (64×64), iteração sobre poucos tiles; cache por chunk key |
 
 ## 11. Follow-ups (fora do âmbito)
 
-- **Spec A — Terrain3D generation-adaptive:** o `.ahgt` (com novo flag/version) transporta
-  árvore pré-computada; o runtime lê-a em vez de construir. Reduz trabalho de construção e
-  permite difusão por região no Terrain3D.
-- **Ligar `collisionResolution`:** heightfield de colisão com resolução independente do
-  mesh LOD (componente já existe, está morto).
-- **LOD dinâmico completo:** subsituir o LOD por câmera por LOD por densidade+erro screen.
-  Fora do âmbito; a patch tree funde-se com o LOD actual mas não o substitui.
+- **Spec A — Terrain3D generation-adaptive:** `.ahgt` (novo flag/version) transporta árvore
+  pré-computada; runtime lê-a em vez de construir.
+- **Sparse baseGrid:** poupar os 16 MB Float32 do heightfield (RAM runtime). Exige patch
+  tree ou sparse storage — follow-up.
+- **Ligar `collisionResolution`** (componente morto): collider com resolução independente
+  do mesh LOD.
+- **`<DensityRegion>`** declarativa para forçar densidade em cidades/estradas/etc.
+
+## 12. Revisão (2026-07-03, antes do plano)
+
+Durante o mapeamento do código para o plano, descobriu-se uma **contradição no design
+original (patch tree de amostras)**:
+
+> Se a baseGrid é full-res (2048²), os patches não adicionam detalhe (só re-amostram). Se a
+> baseGrid fosse coarse, o carve ao mutar só a baseGrid produziria bacia coarse, e o
+> re-sample dos patches dela não criaria detalhe fino. Nenhuma leitura entrega O-1.
+
+**Causa-raiz real do sintoma:** o detalhe do lago **já existe** no heightfield (0,98 m/texel);
+é a **malha de render** que o deita fora (15,6 m/segmento no LOD 5). Um lago de 6 m de raio
+cabe em menos de 1 segmento.
+
+**Decisão:** reenquadrar para "resolução de malha variável por região" — mais simples, carve
+inalterado, resolve O-1 diretamente. baseGrid full-res Float32 (sem poupança de RAM nesta
+fase; fica para sparse baseGrid / spec A). O utilizador aprovou o reenquadramento.
+
+ Este documento reflete o design revisto. A versão anterior (patch tree) está obsoleta.
