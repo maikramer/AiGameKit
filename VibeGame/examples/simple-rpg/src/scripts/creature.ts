@@ -22,6 +22,7 @@ import {
   getOrCreateAiInstanceState,
   removeAiInstanceState,
   AiStateComponent,
+  AI_MODE_IDLE,
   AI_MODE_CHASE,
   AI_MODE_ATTACK,
   AI_MODE_LUNGE,
@@ -306,6 +307,18 @@ export function createCreatureBehaviours(
     if (s.healthBarBg) s.healthBarBg.visible = false;
     if (s.healthBarFill) s.healthBarFill.visible = false;
 
+    // Diagnostic: legit death has hp<=0; hp>0 means a stale DEAD mode slipped through.
+    if (Health.current[eid] > 0) {
+      console.warn(
+        '[creature] spurious enemy-death: alive creature treated as dead',
+        {
+          eid,
+          hp: Health.current[eid],
+          mode: AiStateComponent.mode[eid],
+          type: cfg.enemyType,
+        }
+      );
+    }
     playSound('enemy-death');
     const x = Transform.posX[eid];
     const y = Transform.posY[eid];
@@ -380,6 +393,10 @@ export function createCreatureBehaviours(
         ctx.state.addComponent(eid, Health);
       Health.current[eid] = cfg.hp;
       Health.max[eid] = cfg.hp;
+      // AiStateComponent is a raw global array never cleared on eid recycle —
+      // reset it so a fresh creature can't inherit a stale DEAD slot.
+      AiStateComponent.mode[eid] = AI_MODE_IDLE;
+      AiStateComponent.target[eid] = 0;
 
       // Normal enemies count toward the boss gate; the boss (gated) does not.
       if (!cfg.gateUntil)
@@ -579,6 +596,8 @@ export function createCreatureBehaviours(
       }
       removeAgent(ctx.state, ctx.entity);
       removeAiInstanceState(ctx.state, ctx.entity);
+      AiStateComponent.mode[ctx.entity] = AI_MODE_IDLE;
+      AiStateComponent.target[ctx.entity] = 0;
       unregisterEnemy(ctx.entity);
       stateMap.delete(ctx.entity);
       aggroEntities.delete(ctx.entity);
