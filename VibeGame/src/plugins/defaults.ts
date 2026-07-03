@@ -30,6 +30,7 @@ import { PostprocessingPlugin } from './postprocessing/plugin';
 import { QuestsPlugin } from './quests/plugin';
 import { BiomesPlugin } from './biomes/plugin';
 import { WaterPlugin } from './water/plugin';
+import { WeatherPlugin } from './weather/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -57,6 +58,7 @@ export const DefaultPlugins: Plugin[] = [
   EquirectSkyPlugin,
   BiomesPlugin,
   WaterPlugin,
+  WeatherPlugin,
   ParticlesPlugin,
   FloatingTextPlugin,
   DestructiblePlugin,
