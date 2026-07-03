@@ -8,6 +8,7 @@ import { PlayerController } from '../player/components';
 import { Postprocessing } from '../postprocessing/components';
 import { AmbientLight } from '../rendering/components';
 import { crossfadeMusicLayers } from '../audio/mixer';
+import { setEnvironmentRain } from '../weather/state';
 import { Terrain, setTerrainSplat } from '../terrain';
 import { ActiveBiome, BiomeRegion } from './components';
 import { findBiomeRegionAt, getBiomeRegions } from './parser';
@@ -76,6 +77,9 @@ interface BiomeBaselines {
   fogDensity: number;
   fogColor: number;
   ambientSky: number;
+  ppExposure: number;
+  ppBloomStrength: number;
+  ppVignetteDarkness: number;
 }
 const baselines = new WeakMap<State, BiomeBaselines>();
 
@@ -109,6 +113,13 @@ function firstHeightFogEntity(state: State): number | null {
   return null;
 }
 
+function firstPostprocessingEntity(state: State): number | null {
+  for (const eid of heightFogQuery(state.world)) {
+    if (Postprocessing.enabled[eid]) return eid;
+  }
+  return null;
+}
+
 function firstAmbientEntity(state: State): number | null {
   const ids = ambientQuery(state.world);
   return ids.length > 0 ? ids[0] : null;
@@ -119,10 +130,15 @@ function ensureBaselines(state: State): BiomeBaselines {
   if (b) return b;
   const fogEid = firstHeightFogEntity(state);
   const ambEid = firstAmbientEntity(state);
+  const ppEid = firstPostprocessingEntity(state);
   b = {
     fogDensity: fogEid != null ? Postprocessing.fogDensity[fogEid] : 0,
     fogColor: fogEid != null ? Postprocessing.fogColor[fogEid] : 0,
     ambientSky: ambEid != null ? AmbientLight.skyColor[ambEid] : 0xffffff,
+    ppExposure: ppEid != null ? Postprocessing.toneMappingExposure[ppEid] : 1,
+    ppBloomStrength: ppEid != null ? Postprocessing.bloomStrength[ppEid] : 0,
+    ppVignetteDarkness:
+      ppEid != null ? Postprocessing.vignetteDarkness[ppEid] : 0,
   };
   baselines.set(state, b);
   return b;
@@ -191,6 +207,37 @@ function applyVisuals(
     warnedNoAmbient = true;
     logger.warn('[biomes] No AmbientLight entity — ambient override disabled');
   }
+
+  // Per-biome post-processing (0 on the region = inherit the baseline).
+  const ppEid = firstPostprocessingEntity(state);
+  if (ppEid != null) {
+    const pick = (eid: number, field: Float32Array, base: number): number =>
+      eid === NO_BIOME || field[eid] === 0 ? base : field[eid]!;
+    Postprocessing.toneMappingExposure[ppEid] = lerp(
+      pick(fromEid, BiomeRegion.ppExposure, baseline.ppExposure),
+      pick(toEid, BiomeRegion.ppExposure, baseline.ppExposure),
+      blend
+    );
+    Postprocessing.bloomStrength[ppEid] = lerp(
+      pick(fromEid, BiomeRegion.ppBloomStrength, baseline.ppBloomStrength),
+      pick(toEid, BiomeRegion.ppBloomStrength, baseline.ppBloomStrength),
+      blend
+    );
+    Postprocessing.vignetteDarkness[ppEid] = lerp(
+      pick(
+        fromEid,
+        BiomeRegion.ppVignetteDarkness,
+        baseline.ppVignetteDarkness
+      ),
+      pick(toEid, BiomeRegion.ppVignetteDarkness, baseline.ppVignetteDarkness),
+      blend
+    );
+  }
+
+  // Biome-driven precipitation → weather plugin (swamp drizzle etc.).
+  const rainOf = (eid: number): number =>
+    eid === NO_BIOME ? 0 : BiomeRegion.rain[eid]!;
+  setEnvironmentRain(state, lerp(rainOf(fromEid), rainOf(toEid), blend));
 }
 
 function bgmLayerFor(entity: number): number {
