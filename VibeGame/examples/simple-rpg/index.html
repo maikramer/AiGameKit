@@ -122,6 +122,18 @@
         loop="1"
       ></MusicLayer>
 
+      <!-- Clima global: vento constante de SW, nuvens com ciclo lento
+           (cobertura "respira" ao longo de minutos), chuva controlada por
+           bioma (pântano) ou via setWeather() em runtime. -->
+      <Weather
+        wind="0.7 0.25"
+        wind-strength="1.5"
+        clouds="0.5"
+        cloud-height="150"
+        rain="0"
+        cycle="1"
+      ></Weather>
+
       <!-- ============================================================
            §1 BIOMAS — 4 cunhas cardeais. O BiomeDetectionSystem aplica
            tint/fog/ambient/textura-de-terreno e crossfade de BGM quando
@@ -136,10 +148,12 @@
         type="1"
         polygon="[-28,28;28,28;240,240;-240,240]"
         tint="#1a3320"
-        fog-color="#0d1c14"
-        fog-density="0.05"
+        fog-color="#16241c"
+        fog-density="0.095"
         ambient="#3a4a55"
         bgm-layer="1"
+        pp-exposure="0.8"
+        pp-vignette-darkness="0.8"
         terrain-texture="/assets/textures/forest_floor.png"
       ></BiomeRegion>
       <!-- LESTE: Deserto -->
@@ -152,6 +166,8 @@
         fog-density="0.015"
         ambient="#5a4a3a"
         bgm-layer="1"
+        pp-exposure="1.12"
+        pp-bloom-strength="0.22"
         terrain-texture="/assets/textures/desert_sand.png"
       ></BiomeRegion>
       <!-- SUL: Pântano -->
@@ -164,6 +180,8 @@
         fog-density="0.07"
         ambient="#2a3a30"
         bgm-layer="1"
+        rain="0.55"
+        pp-exposure="0.9"
         terrain-texture="/assets/textures/swamp_mud.png"
       ></BiomeRegion>
       <!-- OESTE: Picos Gelados -->
@@ -176,6 +194,7 @@
         fog-density="0.045"
         ambient="#aeb9c8"
         bgm-layer="1"
+        pp-exposure="1.05"
         terrain-texture="/assets/textures/snow_peak.png"
       ></BiomeRegion>
 
@@ -704,6 +723,14 @@
            da muralha, dentro de ~±45): carvalhos (madeira) + pedras
            (pedra). A SpawnExclusion mantém tudo fora da cidade.
            ============================================================ -->
+      <!-- Laguinho do vale, a NW da cidade (os carvalhos usam avoid-water). -->
+      <Lake
+        at="-34 32"
+        radius="7"
+        depth="1.5"
+        color="#2f7a9a"
+        opacity="0.75"
+      ></Lake>
       <StaticSpawner
         profile="tree"
         count="16"
@@ -1126,28 +1153,34 @@
         ></GLTFLoader>
       </GameObject>
 
-      <!-- §7.3 Oásis (poça + juncos) — descanso visual no meio da areia. -->
+      <!-- §7.3 Oásis — lago esculpido (<Lake> carva a bacia no terreno e
+           enche de água animada; nada de disco fake) + juncos na margem. -->
+      <Lake
+        at="70 46"
+        radius="5"
+        depth="1.2"
+        color="#3a9ab5"
+        opacity="0.72"
+      ></Lake>
       <Composition
         place="at: 70 46; align-to-terrain: 1"
         body="none"
         collider="none"
       >
-        <Cylinder pos="0 0.06 0" size="3.6 4.0 0.12" color="#3a8fb0"></Cylinder>
-        <Cylinder pos="0 0.1 0" size="2.6 3.0 0.1" color="#4aa8c8"></Cylinder>
         <Box
-          pos="-3.4 0.5 1.2"
+          pos="-5.4 0.5 1.2"
           size="0.08 1.0 0.08"
           rotation="0.1 0 0.08"
           color="#6a8a3a"
         ></Box>
         <Box
-          pos="-3.1 0.55 1.6"
+          pos="-5.1 0.55 1.6"
           size="0.08 1.1 0.08"
           rotation="-0.08 0 -0.1"
           color="#7a9a4a"
         ></Box>
         <Box
-          pos="3.3 0.5 -1.0"
+          pos="5.3 0.5 -1.0"
           size="0.08 1.0 0.08"
           rotation="0.06 0 0.12"
           color="#6a8a3a"
@@ -1383,6 +1416,26 @@
           point-light="color: 0x7dff8a; intensity: 1.1; distance: 8; decay: 2"
         ></PointLight>
       </Composition>
+
+      <!-- §8.2b Lagoa do pântano — lago esculpido entre os salgueiros
+           mortos (a poça baked nos GLBs dos salgueiros ganha um corpo
+           d'água real ao lado). avoid-water mantém os spawns fora. -->
+      <Lake
+        at="8 -95"
+        radius="12"
+        depth="1.8"
+        color="#2f5a4a"
+        opacity="0.8"
+        ripple="0.7"
+      ></Lake>
+      <Lake
+        at="-34 -78"
+        radius="7"
+        depth="1.4"
+        color="#2f5a4a"
+        opacity="0.8"
+        ripple="0.7"
+      ></Lake>
 
       <!-- §8.3 Choça do pântano + passadiço de tábuas podres que marca
            o caminho de aproximação (decorativo, meio afundado). -->
