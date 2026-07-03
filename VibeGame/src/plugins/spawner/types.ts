@@ -78,6 +78,12 @@ export interface SpawnGroupSpec {
   pickStrategy: 'round-robin' | 'random';
   /** Re-sample XZ when terrain would sit under a Water plane (lakes). */
   avoidWater: boolean;
+  /**
+   * Inverse of avoid-water: accept only points INSIDE a lake's waterline and
+   * anchor Y to the water surface (aquatic plants, buoys). Slope/terrain
+   * sampling is skipped for these instances.
+   */
+  inWater: boolean;
   /** Re-sample XZ when the instance footprint overlaps a registered one (trees, hut colliders, other instances, SpawnExclusion zones). */
   avoidOverlaps: boolean;
   /** Per-instance XZ footprint radius before scale. 0 = auto (GLB AABB half-width, fallback 0.8). */

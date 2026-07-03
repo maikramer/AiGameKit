@@ -10,3 +10,9 @@ export {
 export type { WaterBody } from './registry';
 export { carveBowl, rimHeight } from './carve';
 export { LakeApplySystem, WaterAnimSystem } from './systems';
+export {
+  WaterInteractionSystem,
+  WaterRippleFxSystem,
+  computeWaterDrag,
+  spawnWaterRipple,
+} from './effects';

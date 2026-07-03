@@ -2,6 +2,13 @@ import { createEntityFromRecipe } from '../../core/recipes/parser';
 
 export interface TerrainData {
   version: string;
+  /**
+   * On-disk heightmap encoding. `png` (default) keeps the legacy uint8
+   * luminance decode; `ahgt` selects the uint16+deflate binary format
+   * (see terrain/ahgt-format.ts) for ~3mm precision over 200m. Optional in
+   * hand-built literals; parseTerrainData always fills it in.
+   */
+  heightmap_format?: 'png' | 'ahgt';
   terrain: {
     size: number;
     world_size: number;
@@ -100,6 +107,7 @@ export function parseTerrainData(data: unknown): TerrainData {
 
   return {
     version: root.version,
+    heightmap_format: root.heightmap_format === 'ahgt' ? 'ahgt' : 'png',
     terrain: {
       size: terrain.size,
       world_size: terrain.world_size,

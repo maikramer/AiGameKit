@@ -14,7 +14,7 @@ import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
 import { getGltfLocalAABB } from '../gltf-xml/gltf-bounds-cache';
-import { isPointInWater } from '../water/registry';
+import { isPointInWater, waterBodyAt } from '../water/registry';
 import {
   SpawnExclusion,
   isSpawnAreaFree,
@@ -282,10 +282,40 @@ export const TerrainSpawnSystem: System = {
         let wz = minZ;
         let s: TerrainSurfaceSample | null = null;
         let foundValidSlope = false;
+        let waterSurfaceY: number | null = null;
         const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
         for (let attempt = 0; attempt < attempts; attempt++) {
           wx = minX + rand() * (maxX - minX);
           wz = minZ + rand() * (maxZ - minZ);
+
+          // `in-water`: the instance floats on a lake surface — accept only
+          // points inside the waterline (the [shoreRadius, radius] ring is
+          // beach floor, not water) and anchor Y to the surface instead of
+          // the terrain sample. The organic shoreline (shapeRadius) can pull
+          // the waterline in to 0.72× the nominal shore radius, so stay
+          // inside that worst case or instances beach themselves.
+          if (spec.inWater) {
+            const body = waterBodyAt(state, wx, wz);
+            if (!body) continue;
+            const dx = wx - body.x;
+            const dz = wz - body.z;
+            if (Math.hypot(dx, dz) > body.shoreRadius * 0.72) continue;
+            if (
+              spec.avoidOverlaps &&
+              !isSpawnAreaFree(
+                state,
+                wx,
+                wz,
+                templateRadiusBase * spec.scaleMax
+              )
+            ) {
+              continue;
+            }
+            waterSurfaceY = body.waterY;
+            foundValidSlope = true;
+            break;
+          }
+
           const cand = sampleTerrainSurface(
             state,
             wx,
@@ -309,19 +339,26 @@ export const TerrainSpawnSystem: System = {
           break;
         }
 
-        if (!s) continue;
-        if (!foundValidSlope && !acceptAnySlope) {
-          continue;
-        }
-        if (
-          !foundValidSlope &&
-          spec.avoidOverlaps &&
-          !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
-        ) {
-          continue;
+        if (spec.inWater) {
+          // Water placement either succeeded exactly or found no wet spot in
+          // the attempt budget — there is no terrain fallback to relax to.
+          if (waterSurfaceY === null) continue;
+        } else {
+          if (!s) continue;
+          if (!foundValidSlope && !acceptAnySlope) {
+            continue;
+          }
+          if (
+            !foundValidSlope &&
+            spec.avoidOverlaps &&
+            !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
+          ) {
+            continue;
+          }
         }
 
-        const wy = s.worldY;
+        // Slightly above the surface so the mesh never z-fights the water disc.
+        const wy = waterSurfaceY !== null ? waterSurfaceY + 0.02 : s!.worldY;
 
         let template: SpawnTemplateSpec;
         if (spec.pickStrategy === 'round-robin') {

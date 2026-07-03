@@ -589,9 +589,16 @@ export function applyCharacterMovement(
   CharacterController.platformVelY[entity] = platformVelY + tangentialVelY;
   CharacterController.platformVelZ[entity] = platformVelZ + tangentialVelZ;
 
-  _desiredTranslation.x = CharacterMovement.desiredVelX[entity] * deltaTime;
+  // Environmental drag (water wading): scales the horizontal stride only —
+  // vertical velocity is handled by the writer (buoyancy) so jumps still work.
+  const moveScale =
+    1 - Math.min(Math.max(CharacterMovement.waterDrag[entity] || 0, 0), 0.9);
+
+  _desiredTranslation.x =
+    CharacterMovement.desiredVelX[entity] * moveScale * deltaTime;
   _desiredTranslation.y = totalVelY * deltaTime;
-  _desiredTranslation.z = CharacterMovement.desiredVelZ[entity] * deltaTime;
+  _desiredTranslation.z =
+    CharacterMovement.desiredVelZ[entity] * moveScale * deltaTime;
 
   // The CCT automatically excludes the controlled collider itself.
   controller.computeColliderMovement(
@@ -602,10 +609,11 @@ export function applyCharacterMovement(
 
   const correctedMovement = controller.computedMovement();
 
-  const desiredHorizontalSpeed = Math.sqrt(
-    CharacterMovement.desiredVelX[entity] ** 2 +
-      CharacterMovement.desiredVelZ[entity] ** 2
-  );
+  const desiredHorizontalSpeed =
+    Math.sqrt(
+      CharacterMovement.desiredVelX[entity] ** 2 +
+        CharacterMovement.desiredVelZ[entity] ** 2
+    ) * moveScale;
   const actualHorizontalSpeed = Math.sqrt(
     (correctedMovement.x / deltaTime) ** 2 +
       (correctedMovement.z / deltaTime) ** 2

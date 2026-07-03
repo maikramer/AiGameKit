@@ -27,8 +27,29 @@ export {
   findNearestTerrainEntity,
   setTerrainWireframe,
   reloadTerrainHeightmap,
+  refreshChunkResolutions,
   getTerrainStats,
   TerrainLodSelectSystem,
 } from './systems';
-export { selectChunks, chunkKey, resolutionForLevel } from './lod-select';
+export {
+  selectChunks,
+  chunkKey,
+  resolutionForLevel,
+  effectiveResolution,
+} from './lod-select';
 export type { ChunkDesc } from './lod-select';
+export {
+  buildDensityMap,
+  applyOverride,
+  boostAt,
+  maxBoostOverAabb,
+} from './density-map';
+export type { DensityMap, WorldAabb, BuildDensityOptions } from './density-map';
+export {
+  serializeAhgt,
+  parseAhgt,
+  AHGT_MAGIC,
+  AHGT_VERSION,
+} from './ahgt-format';
+export type { AhgtMeta } from './ahgt-format';
+export { loadHeightfield } from './ahgt-loader';

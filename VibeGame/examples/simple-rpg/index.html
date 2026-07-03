@@ -723,14 +723,38 @@
            da muralha, dentro de ~±45): carvalhos (madeira) + pedras
            (pedra). A SpawnExclusion mantém tudo fora da cidade.
            ============================================================ -->
-      <!-- Laguinho do vale, a NW da cidade (os carvalhos usam avoid-water). -->
+      <!-- Laguinho do vale, a NW da cidade (os carvalhos usam avoid-water).
+           depth maior (5) para a depressão ser bem visível no relevo; radius 9
+           dá um lago de proporções decentes; opacity 0.72 mantém o fundo
+           visível através da água com cor por profundidade + fresnel. -->
       <Lake
         at="-34 32"
-        radius="7"
-        depth="1.5"
-        color="#2f7a9a"
-        opacity="0.75"
+        radius="9"
+        depth="5.0"
+        color="#2a6685"
+        opacity="0.72"
       ></Lake>
+      <!-- Vitórias-régias a flutuar no laguinho do vale. -->
+      <StaticSpawner
+        profile="tree"
+        count="5"
+        seed="326"
+        region-min="-45 0 21"
+        region-max="-23 0 43"
+        in-water="1"
+        align-to-terrain="0"
+        max-slope-attempts="128"
+        scale-min="0.45"
+        scale-max="0.8"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/lily_pad_lod0.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
       <StaticSpawner
         profile="tree"
         count="16"
@@ -1162,6 +1186,27 @@
         color="#3a9ab5"
         opacity="0.72"
       ></Lake>
+      <!-- Vitórias-régias no espelho de água do oásis. -->
+      <StaticSpawner
+        profile="tree"
+        count="3"
+        seed="327"
+        region-min="64 0 40"
+        region-max="76 0 52"
+        in-water="1"
+        align-to-terrain="0"
+        max-slope-attempts="128"
+        scale-min="0.4"
+        scale-max="0.65"
+        avoid-overlaps="1"
+      >
+        <GameObject role="static">
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/lily_pad_lod0.glb"
+          ></GLTFLoader>
+        </GameObject>
+      </StaticSpawner>
       <Composition
         place="at: 70 46; align-to-terrain: 1"
         body="none"
@@ -1351,14 +1396,17 @@
           ></GLTFLoader>
         </GameObject>
       </StaticSpawner>
+      <!-- Vitórias-régias A FLUTUAR nos lagos do pântano (in-water ancora o Y
+           à superfície da água e só aceita pontos dentro da linha de água). -->
       <StaticSpawner
         profile="tree"
-        count="16"
+        count="12"
         seed="325"
-        region-min="-80 0 -150"
-        region-max="80 0 -50"
-        align-to-terrain="1"
-        ground-align="auto"
+        region-min="-50 0 -150"
+        region-max="30 0 -60"
+        in-water="1"
+        align-to-terrain="0"
+        max-slope-attempts="192"
         scale-min="0.5"
         scale-max="0.9"
         avoid-overlaps="1"

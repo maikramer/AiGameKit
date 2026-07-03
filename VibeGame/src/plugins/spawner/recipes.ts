@@ -26,6 +26,7 @@ const SPAWNER_PARSER_ATTRIBUTES = [
   'max-slope-deg',
   'max-slope-attempts',
   'avoid-water',
+  'in-water',
   'avoid-overlaps',
   'footprint-radius',
   'max-distance',

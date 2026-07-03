@@ -9,14 +9,16 @@ import { WorldTransform } from '../transforms';
 import { getRapierWorld } from '../physics';
 import { Terrain, TerrainChunk, TerrainDebugInfo } from './components';
 import { buildChunkGeometry } from './chunk-geometry';
-import {
-  createFlatSampler,
-  createHeightmapSampler,
-  loadHeightmapFromUrl,
-  sampleHeightAt,
-} from './height-sampler';
+import { createFlatSampler, sampleHeightAt } from './height-sampler';
 import type { HeightSampler } from './height-sampler';
-import { chunkKey, resolutionForLevel, selectChunks } from './lod-select';
+import {
+  chunkKey,
+  effectiveResolution,
+  resolutionForLevel,
+  selectChunks,
+} from './lod-select';
+import { buildDensityMap, maxBoostOverAabb } from './density-map';
+import { loadHeightfield } from './ahgt-loader';
 import { invalidateTerrainBvh } from '../bvh';
 import {
   fireHeightmapReloadCallbacks,
@@ -302,8 +304,9 @@ function _setupBlendShader(
     shader.uniforms.uSandScale = { value: SAND_UV_SCALE };
     shader.uniforms.uSandBlend = { value: 0 };
     shader.uniforms.uLakeCount = { value: 0 };
-    const lakeVecs: THREE.Vector3[] = [];
-    for (let i = 0; i < MAX_LAKES; i++) lakeVecs.push(new THREE.Vector3());
+    // Per-lake: xy = world centre, z = bowl radius, w = shore radius (waterline).
+    const lakeVecs: THREE.Vector4[] = [];
+    for (let i = 0; i < MAX_LAKES; i++) lakeVecs.push(new THREE.Vector4());
     shader.uniforms.uLakes = { value: lakeVecs };
 
     shader.vertexShader = shader.vertexShader.replace(
@@ -343,17 +346,34 @@ function _setupBlendShader(
        uniform float uSandScale;
        uniform float uSandBlend;
        uniform int uLakeCount;
-       uniform vec3 uLakes[${MAX_LAKES}];
+       uniform vec4 uLakes[${MAX_LAKES}];
        vec4 biomeSplat() {
          return texture2D(uSplatMap, (vWorldXZ - uSplatMin) * uSplatInvSize);
+       }
+       // GLSL port of shapeRadius() — must stay in sync with water/carve.ts.
+       const float SHORE_SHAPE_AMP = 0.28;
+       float lakeShapeRadius(float angle, float seedX, float seedZ) {
+         float phi1 = (seedX * 12.9898 + seedZ * 78.233) * 0.1;
+         float phi2 = (seedX * 4.1764 - seedZ * 29.113) * 0.1;
+         float n = sin(angle * 2.0 + phi1) * 0.6
+                 + sin(angle * 3.0 - phi2) * 0.3
+                 + sin(angle * 5.0 + phi1 * 1.7) * 0.1;
+         return 1.0 + n * SHORE_SHAPE_AMP;
        }
        float lakeMask() {
          float m = 0.0;
          for (int i = 0; i < ${MAX_LAKES}; i++) {
            if (i >= uLakeCount) break;
            float r = uLakes[i].z;
-           float d = distance(vWorldXZ, uLakes[i].xy);
-           m = max(m, 1.0 - smoothstep(r * 0.55, r, d));
+           float shoreR = uLakes[i].w;
+           vec2 rel = vWorldXZ - uLakes[i].xy;
+           float d = length(rel);
+           float angle = atan(rel.y, rel.x);
+           // Organic shoreline: shape both the beach ring radii by the same
+           // perturbation the bowl/water use, so the sand outline matches.
+           float s = lakeShapeRadius(angle, uLakes[i].x, uLakes[i].y);
+           float beach = 1.0 - smoothstep(shoreR * s, max(r * s, shoreR * s + 0.001), d);
+           m = max(m, beach);
          }
          return clamp(m, 0.0, 1.0) * uSandBlend;
        }`
@@ -510,10 +530,13 @@ function applyLakeSand(state: State, field: number): void {
 
   const count = Math.min(MAX_LAKES, bodies.length);
   for (const sh of refs) {
-    const lakes = sh.uniforms.uLakes.value as THREE.Vector3[];
+    const lakes = sh.uniforms.uLakes.value as THREE.Vector4[];
     for (let i = 0; i < count; i++) {
       const b = bodies[i];
-      lakes[i].set(b.x, b.z, b.radius);
+      // Guard for legacy bodies without shoreRadius: fall back to 0.7·radius so
+      // the mask degrades gracefully rather than sanding the whole bowl.
+      const shoreR = b.shoreRadius ?? b.radius * 0.7;
+      lakes[i].set(b.x, b.z, b.radius, shoreR);
     }
     sh.uniforms.uLakeCount.value = count;
     sh.uniforms.uSandBlend.value = count > 0 ? 1 : 0;
@@ -584,6 +607,71 @@ function removeChunkColliders(
   data.chunkColliders.clear();
 }
 
+/**
+ * Recompute the resolution of every live chunk of a field from the current
+ * density map, dirtying the ones that changed. Without this, chunks that
+ * already exist keep their spawn-time resolution forever (LOD reselect matches
+ * them by key and skips re-creation), so a density change — heightmap load or
+ * a `<Lake>` override — would never reach the mesh under the camera.
+ */
+export function refreshChunkResolutions(
+  state: State,
+  field: number,
+  data: import('./utils').TerrainEntityData
+): void {
+  const baseResolution = Terrain.resolution[field];
+  for (const chunk of data.chunks) {
+    if (!state.exists(chunk)) continue;
+    const level = TerrainChunk.level[chunk];
+    let res = resolutionForLevel(baseResolution, level);
+    if (data.density) {
+      const half = TerrainChunk.size[chunk] / 2;
+      const boost = maxBoostOverAabb(data.density, {
+        minX: TerrainChunk.originX[chunk] - half,
+        minZ: TerrainChunk.originZ[chunk] - half,
+        maxX: TerrainChunk.originX[chunk] + half,
+        maxZ: TerrainChunk.originZ[chunk] + half,
+      });
+      if (boost > 0) res = effectiveResolution(baseResolution, level, boost);
+    }
+    if (TerrainChunk.resolution[chunk] !== res) {
+      TerrainChunk.resolution[chunk] = res;
+      TerrainChunk.meshDirty[chunk] = 1;
+    }
+  }
+}
+
+/**
+ * Install a freshly loaded height sampler on a field and rebuild everything
+ * derived from it: density map, BVH, chunk meshes, physics stand-in and
+ * per-chunk heightfield colliders. Shared by the bootstrap load, the periodic
+ * retry and {@link reloadTerrainHeightmap} so no path misses a derivative
+ * (the retry path used to skip the collider/BVH reset, leaving stale physics).
+ */
+function applyLoadedSampler(
+  state: State,
+  field: number,
+  data: import('./utils').TerrainEntityData,
+  sampler: HeightSampler
+): void {
+  data.sampler = sampler;
+  data.density = buildDensityMap(sampler, 64);
+  refreshChunkResolutions(state, field, data);
+  invalidateTerrainBvh(state, field);
+  for (const chunk of data.chunks) {
+    TerrainChunk.meshDirty[chunk] = 1;
+  }
+  const rapierWorld = getRapierWorld(state);
+  if (data.physicsBody && rapierWorld) {
+    rapierWorld.removeRigidBody(data.physicsBody);
+    data.physicsBody = null;
+    data.physicsCollider = null;
+  }
+  removeChunkColliders(rapierWorld, data);
+  data.collisionReady = false;
+  fireHeightmapReloadCallbacks(state);
+}
+
 export const TerrainFieldBootstrapSystem: System = {
   group: 'fixed',
   update(state: State) {
@@ -619,28 +707,11 @@ export const TerrainFieldBootstrapSystem: System = {
         const field = entity;
         const worldSize = Terrain.worldSize[entity];
         const maxHeight = Terrain.maxHeight[entity];
-        loadHeightmapFromUrl(heightmapUrl)
-          .then((imgData) => {
+        loadHeightfield(heightmapUrl, worldSize, maxHeight)
+          .then((sampler) => {
             const data = context.get(field);
             if (!data) return;
-            data.sampler = createHeightmapSampler(
-              worldSize,
-              maxHeight,
-              imgData
-            );
-            invalidateTerrainBvh(state, field);
-            for (const chunk of data.chunks) {
-              TerrainChunk.meshDirty[chunk] = 1;
-            }
-            const rapierWorld = getRapierWorld(state);
-            if (data.physicsBody && rapierWorld) {
-              rapierWorld.removeRigidBody(data.physicsBody);
-              data.physicsBody = null;
-              data.physicsCollider = null;
-            }
-            removeChunkColliders(rapierWorld, data);
-            data.collisionReady = false;
-            fireHeightmapReloadCallbacks(state);
+            applyLoadedSampler(state, field, data, sampler);
           })
           .catch((err) => {
             logger.error(
@@ -791,7 +862,22 @@ export const TerrainLodSelectSystem: System = {
         if (existingKeys.has(key)) continue;
 
         const chunk = state.createEntity();
-        const res = resolutionForLevel(baseResolution, desc.level);
+        // Camera LOD picks the floor; the density map raises it for chunks
+        // overlapping featured regions (carved lakes, ridges). max over the
+        // chunk AABB so a chunk merely touching a feature has no crack inside.
+        let res = resolutionForLevel(baseResolution, desc.level);
+        if (data.density) {
+          const half = desc.size / 2;
+          const boost = maxBoostOverAabb(data.density, {
+            minX: desc.originX - half,
+            minZ: desc.originZ - half,
+            maxX: desc.originX + half,
+            maxZ: desc.originZ + half,
+          });
+          if (boost > 0) {
+            res = effectiveResolution(baseResolution, desc.level, boost);
+          }
+        }
         state.addComponent(chunk, TerrainChunk, {
           field: fieldEntity,
           originX: desc.originX,
@@ -951,16 +1037,14 @@ export const TerrainMeshSystem: System = {
     if (_heightmapRetryFrame % _heightmapRetryInterval === 0) {
       for (const [entity, data] of context) {
         if (data.sampler.data !== null || !data.heightmapUrl) continue;
-        loadHeightmapFromUrl(data.heightmapUrl)
-          .then((imgData) => {
-            data.sampler = createHeightmapSampler(
-              Terrain.worldSize[entity],
-              Terrain.maxHeight[entity],
-              imgData
-            );
-            for (const chunk of data.chunks) {
-              TerrainChunk.meshDirty[chunk] = 1;
-            }
+        loadHeightfield(
+          data.heightmapUrl,
+          Terrain.worldSize[entity],
+          Terrain.maxHeight[entity]
+        )
+          .then((sampler) => {
+            if (!context.has(entity)) return;
+            applyLoadedSampler(state, entity, data, sampler);
           })
           .catch((err) => {
             logger.error(
@@ -1300,23 +1384,11 @@ export function reloadTerrainHeightmap(
 
   const worldSize = Terrain.worldSize[entity];
   const maxHeight = Terrain.maxHeight[entity];
-  loadHeightmapFromUrl(url)
-    .then((imgData) => {
+  loadHeightfield(url, worldSize, maxHeight)
+    .then((sampler) => {
       const d = context.get(entity);
       if (!d) return;
-      d.sampler = createHeightmapSampler(worldSize, maxHeight, imgData);
-      for (const chunk of d.chunks) {
-        TerrainChunk.meshDirty[chunk] = 1;
-      }
-      const rapierWorld = getRapierWorld(state);
-      if (d.physicsBody && rapierWorld) {
-        rapierWorld.removeRigidBody(d.physicsBody);
-        d.physicsBody = null;
-        d.physicsCollider = null;
-      }
-      removeChunkColliders(rapierWorld, d);
-      d.collisionReady = false;
-      fireHeightmapReloadCallbacks(state);
+      applyLoadedSampler(state, entity, d, sampler);
     })
     .catch((err) => {
       logger.error(`Heightmap reload failed: ${url}`, err);
