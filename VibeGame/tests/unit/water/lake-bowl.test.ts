@@ -13,6 +13,8 @@ describe('LakeBowl', () => {
     const bowl = new LakeBowl({
       localX: 20,
       localZ: 0,
+      worldX: 20,
+      worldZ: 0,
       radius: 6,
       depth: 2,
       waterOffset: 0.3,
@@ -30,6 +32,8 @@ describe('LakeBowl', () => {
     const bowl = new LakeBowl({
       localX: 0,
       localZ: 0,
+      worldX: 0,
+      worldZ: 0,
       radius: 10,
       depth: 8,
       waterOffset: 0.3,
@@ -52,6 +56,8 @@ describe('LakeBowl', () => {
     const bowl = new LakeBowl({
       localX: 0,
       localZ: 0,
+      worldX: 0,
+      worldZ: 0,
       radius: 10,
       depth: 8,
       waterOffset: 0.3,
@@ -59,10 +65,25 @@ describe('LakeBowl', () => {
     expect(bowl.carve(flat).carved).toBe(false);
   });
 
+  it('worldOrigin returns the world centre for mesh placement', () => {
+    const bowl = new LakeBowl({
+      localX: 5,
+      localZ: 7,
+      worldX: 105,
+      worldZ: 107,
+      radius: 6,
+      depth: 2,
+      waterOffset: 0.3,
+    });
+    expect(bowl.worldOrigin()).toEqual({ x: 105, z: 107 });
+  });
+
   it('densityBoost returns 255', () => {
     const bowl = new LakeBowl({
       localX: 0,
       localZ: 0,
+      worldX: 0,
+      worldZ: 0,
       radius: 6,
       depth: 2,
       waterOffset: 0.3,
@@ -74,6 +95,8 @@ describe('LakeBowl', () => {
     const bowl = new LakeBowl({
       localX: 5,
       localZ: 7,
+      worldX: 5,
+      worldZ: 7,
       radius: 6,
       depth: 2,
       waterOffset: 0.3,

@@ -7,8 +7,12 @@ import type { WaterBody } from './registry';
 import type { WaterShape, WaterShapeResult } from './water-shape';
 
 export interface LakeBowlOpts {
+  /** Lake centre in field-local coords (for carve + geometry seed). */
   localX: number;
   localZ: number;
+  /** Lake centre in world coords (for mesh placement + registry). */
+  worldX: number;
+  worldZ: number;
   radius: number;
   depth: number;
   waterOffset: number;
@@ -18,9 +22,6 @@ export interface LakeBowlOpts {
  * Lake water shape: a sculpted bowl. Wraps the existing carveBowl + rimHeight +
  * makeLakeGeometry so lakes flow through the same WaterShape pipeline as rivers
  * without changing their behaviour.
- *
- * The `aWaterT` attribute (radial distance / shaped shore radius, 0..1) is set
- * inside makeLakeGeometry (Task 6 bakes it there).
  */
 export class LakeBowl implements WaterShape {
   private readonly rimMargin = 1.3; // covers shapeRadius overshoot (amplitude 0.28)
@@ -49,7 +50,12 @@ export class LakeBowl implements WaterShape {
   buildGeometry(): THREE.BufferGeometry {
     const { localX, localZ, radius } = this.opts;
     // seedX/seedZ = lake centre in local carve space (drives shapeRadius).
+    // The fan is origin-centred; worldOrigin() tells applyWaterShape where to place it.
     return makeLakeGeometry(radius, localX, localZ);
+  }
+
+  worldOrigin(): { x: number; z: number } {
+    return { x: this.opts.worldX, z: this.opts.worldZ };
   }
 
   densityBoost(): number {
@@ -57,12 +63,12 @@ export class LakeBowl implements WaterShape {
   }
 
   toWaterBody(worldWaterY: number): WaterBody {
-    const { localX, localZ, radius, depth, waterOffset } = this.opts;
+    const { worldX, worldZ, radius, depth, waterOffset } = this.opts;
     const shoreR = shoreFraction(depth, waterOffset) * radius;
     return {
       kind: 'lake',
-      x: localX,
-      z: localZ,
+      x: worldX,
+      z: worldZ,
       radius,
       shoreRadius: shoreR,
       waterY: worldWaterY,

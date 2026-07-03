@@ -1,36 +1,32 @@
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { getRenderingContext } from '../rendering';
 import { Transform } from '../transforms/components';
-import { TerrainChunk } from '../terrain/components';
 import { getTerrainContext } from '../terrain/utils';
-import { invalidateTerrainBvh } from '../bvh';
-import { getRapierWorld } from '../physics';
-import { applyOverride } from '../terrain/density-map';
-import { refreshChunkResolutions } from '../terrain/systems';
-import { logger } from '../../core/utils/logger';
 import { Lake } from './components';
-import { carveBowl, rimHeight, shoreFraction, shapeRadius } from './carve';
-import { registerWaterBody, unregisterWaterBody } from './registry';
-import type { WaterBody } from './registry';
+import { shapeRadius } from './carve';
+import { LakeBowl } from './lake-bowl';
+import {
+  applyWaterShape,
+  type WaterMaterialConfig,
+  type WaterShaderHandle,
+  type WaterSideCar,
+} from './water-shape';
 
 const lakeQuery = defineQuery([Lake, Transform]);
 
-interface LakeSideCar {
-  mesh: THREE.Mesh;
-  material: THREE.MeshStandardMaterial;
-  shader: { uniforms: Record<string, { value: unknown }> } | null;
-  body: WaterBody;
-}
+/**
+ * Shared sidecar map for all water surfaces (lakes + rivers). `applyWaterShape`
+ * writes here; `WaterAnimSystem` reads it to advance `uTime`. Lives here (not in
+ * water-shape.ts) to avoid a circular import with the material builder.
+ */
+const WATER_SIDECARS = new WeakMap<State, Map<number, WaterSideCar>>();
 
-const SIDECARS = new WeakMap<State, Map<number, LakeSideCar>>();
-
-function sidecars(state: State): Map<number, LakeSideCar> {
-  let m = SIDECARS.get(state);
+export function waterSideCars(state: State): Map<number, WaterSideCar> {
+  let m = WATER_SIDECARS.get(state);
   if (!m) {
     m = new Map();
-    SIDECARS.set(state, m);
+    WATER_SIDECARS.set(state, m);
   }
   return m;
 }
@@ -38,18 +34,6 @@ function sidecars(state: State): Map<number, LakeSideCar> {
 /** Shape-agnostic water material inputs. The depth fade and alpha falloff are
  *  driven by the geometry's `aWaterT` attribute (0 at centre/axis, 1 at margin),
  *  so the same material works for lakes and rivers. */
-interface WaterMaterialConfig {
-  /** Deep-water tint (hex). */
-  color: number;
-  /** Base surface opacity 0..1 (faded further at the shoreline). */
-  opacity: number;
-  /** Ripple animation strength (0 = still water). */
-  ripple: number;
-  /** Wave amplitude in metres (already resolved: auto or explicit). */
-  waveHeight: number;
-  /** Wave/shimmer animation speed multiplier. */
-  waveSpeed: number;
-}
 
 /**
  * Derive a lighter near-shore tint from a deep-water hex by lifting value a
@@ -65,7 +49,7 @@ function shallowTint(hex: number): number {
 
 function makeWaterMaterial(
   cfg: WaterMaterialConfig,
-  onShader: (shader: LakeSideCar['shader']) => void
+  onShader: (shader: WaterShaderHandle) => void
 ): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({
     color: 0xffffff,
@@ -205,7 +189,7 @@ function makeWaterMaterial(
          // Foam stays visible through the shoreline alpha fade-out.
          diffuseColor.a = max(diffuseColor.a * shoreAlpha(), foam * 0.9 * shoreAlpha());`
       );
-    onShader(shader as unknown as LakeSideCar['shader']);
+    onShader(shader as unknown as WaterShaderHandle);
   };
   return mat;
 }
@@ -276,96 +260,53 @@ export const LakeApplySystem: System = {
   update(state: State) {
     if (state.headless) return;
 
-    const context = getTerrainContext(state);
-    let field: {
-      entity: number;
-      data: import('../terrain/utils').TerrainEntityData;
-    } | null = null;
-    for (const [entity, data] of context) {
-      if (data.initialized && data.sampler.data) {
-        field = { entity, data };
-        break;
-      }
-    }
-    if (!field) return;
-
-    const cars = sidecars(state);
+    const cars = waterSideCars(state);
     for (const eid of lakeQuery(state.world)) {
       if (Lake.applied[eid] === 1) continue;
 
       const radius = Lake.radius[eid] || 6;
       const depth = Lake.depth[eid] || 1.5;
       const waterOffset = Lake.waterOffset[eid];
-      const { data } = field;
-      const lx = Transform.posX[eid] - data.worldOffset.x;
-      const lz = Transform.posZ[eid] - data.worldOffset.z;
+      const posX = Transform.posX[eid];
+      const posZ = Transform.posZ[eid];
 
-      // Bump the density map around the lake so chunks rendering it use a
-      // finer mesh — capturing the basin detail the carve writes into the
-      // heightfield. carveBowl itself is unchanged; this only raises the
-      // sampling resolution. Margin covers the organic shoreline overshoot
-      // (shapeRadius amplitude) so boosted tiles reach past the rim.
-      if (data.density) {
-        const margin = 1.3;
-        applyOverride(
-          data.density,
-          {
-            minX: lx - radius * margin,
-            minZ: lz - radius * margin,
-            maxX: lx + radius * margin,
-            maxZ: lz + radius * margin,
-          },
-          255
-        );
-        refreshChunkResolutions(state, field.entity, data);
-      }
-
-      const rimY = rimHeight(data.sampler, lx, lz, radius);
-      const waterY = rimY - waterOffset;
-      const carved = carveBowl(data.sampler, lx, lz, radius, rimY, depth);
-      // Only commit once the carve ran against a real heightmap. On a flat
-      // (dataless) sampler carveBowl returns false and carves nothing — without
-      // this guard the lake would be marked applied and never retry, so the
-      // bowl would silently never appear (colour yes, geometry no).
-      if (!carved) {
-        logger.warn(
-          `[water] Lake ${eid} carve skipped (sampler not ready at ${lx.toFixed(1)},${lz.toFixed(
-            1
-          )}); will retry next frame`
-        );
-        continue;
-      }
-      const shoreR = shoreFraction(depth, waterOffset) * radius;
-      Lake.waterY[eid] = waterY;
-      Lake.applied[eid] = 1;
-      logger.info(
-        `[water] Lake ${eid} carved: rimY=${rimY.toFixed(1)} depth=${depth} ` +
-          `waterY=${waterY.toFixed(1)} shoreR=${shoreR.toFixed(1)} radius=${radius}`
-      );
-
-      // Terrain derivatives all read the sampler — force their rebuild.
-      for (const chunk of data.chunks) TerrainChunk.meshDirty[chunk] = 1;
-      const world = getRapierWorld(state);
-      if (world) {
-        for (const body of data.chunkColliders.values()) {
-          world.removeRigidBody(body);
+      // LakeBowl works in field-local coords for carve/geometry; worldOrigin()
+      // returns the world centre for mesh placement. The field offset is read
+      // inside applyWaterShape, so we pass both local and world centres here.
+      // We don't have the field offset in this loop cleanly, but the terrain
+      // field's worldOffset is (0, y, 0) for the default single-field case;
+      // local == world - worldOffset, resolved lazily by reading the field.
+      // To keep the contract, fetch the field once for the local offset.
+      const context = getTerrainContext(state);
+      let fieldData: import('../terrain/utils').TerrainEntityData | null = null;
+      for (const fd of context.values()) {
+        if (fd.initialized && fd.sampler.data) {
+          fieldData = fd;
+          break;
         }
-        data.chunkColliders.clear();
       }
-      invalidateTerrainBvh(state, field.entity);
+      if (!fieldData) continue;
+      const lx = posX - fieldData.worldOffset.x;
+      const lz = posZ - fieldData.worldOffset.z;
 
-      // Water surface: the disc covers the full bowl radius; the alpha fades
-      // to zero at the waterline (shoreR) in-shader so the edge meets the
-      // beach floor, not the outer bowl rim.
-      const scene = getRenderingContext(state).scene;
-      // Auto wave amplitude: proportional to the lake size so a small pond
-      // barely stirs while a big lake visibly swells. Explicit wave-height
-      // XML overrides.
+      const bowl = new LakeBowl({
+        localX: lx,
+        localZ: lz,
+        worldX: posX,
+        worldZ: posZ,
+        radius,
+        depth,
+        waterOffset,
+      });
       const waveHeight =
         Lake.waveHeight[eid] > 0
           ? Lake.waveHeight[eid]
           : Math.min(0.09, Math.max(0.02, radius * 0.006));
-      const material = makeWaterMaterial(
+      const applied = applyWaterShape(
+        state,
+        eid,
+        bowl,
+        makeWaterMaterial,
         {
           color: hexToInt(Lake.color[eid]),
           opacity: Lake.opacity[eid],
@@ -373,45 +314,11 @@ export const LakeApplySystem: System = {
           waveHeight,
           waveSpeed: Lake.waveSpeed[eid] || 1,
         },
-        (shader) => {
-          // onBeforeCompile fires on the first draw, after the sidecar below
-          // is registered — write the shader ref into the LIVE sidecar. (The
-          // old code captured a stale `?? null` at registration time, so
-          // uTime was never advanced and every lake rendered frozen.)
-          const c = cars.get(eid);
-          if (c) c.shader = shader;
-        }
+        cars
       );
-      const mesh = new THREE.Mesh(makeLakeGeometry(radius, lx, lz), material);
-      mesh.position.set(
-        Transform.posX[eid],
-        data.worldOffset.y + waterY,
-        Transform.posZ[eid]
-      );
-      mesh.renderOrder = 2;
-      mesh.receiveShadow = true;
-      scene.add(mesh);
-
-      const body: WaterBody = {
-        kind: 'lake',
-        x: Transform.posX[eid],
-        z: Transform.posZ[eid],
-        radius,
-        shoreRadius: shoreR,
-        waterY: data.worldOffset.y + waterY,
-      };
-      registerWaterBody(state, body);
-      cars.set(eid, { mesh, material, shader: null, body });
-
-      state.onDestroy(eid, () => {
-        const c = cars.get(eid);
-        if (!c) return;
-        cars.delete(eid);
-        c.mesh.removeFromParent();
-        c.mesh.geometry.dispose();
-        c.material.dispose();
-        unregisterWaterBody(state, c.body);
-      });
+      if (applied) {
+        Lake.applied[eid] = 1;
+      }
     }
   },
 };
@@ -421,7 +328,7 @@ export const WaterAnimSystem: System = {
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
-    const cars = SIDECARS.get(state);
+    const cars = WATER_SIDECARS.get(state);
     if (!cars) return;
     for (const car of cars.values()) {
       if (car.shader) {
