@@ -1,5 +1,6 @@
 import type { HeightSampler } from '../terrain/height-sampler';
 import { sampleHeightAt } from '../terrain/height-sampler';
+import { pathAabb } from './path-utils';
 
 /**
  * Amplitude of the organic shoreline perturbation, as a fraction of the lake
@@ -154,4 +155,117 @@ export function carveBowl(
     }
   }
   return changed;
+}
+
+/**
+ * Carve a river channel along a polyline. For each texel within the path AABB,
+ * find the nearest path segment, compute the lateral coordinate `t = d/(width/2)`
+ * (0 on the axis, 1 at the bank), and apply the same C1-smooth profile as
+ * `carveBowl`: `rimY − depth·(1 − t²)^1.5`. Heights only go down (min), so
+ * overlapping channels and pre-existing valleys are safe.
+ *
+ * @returns true when at least one texel changed (false on a flat sampler).
+ */
+export function carveChannel(
+  sampler: HeightSampler,
+  path: number[],
+  width: number,
+  rimY: number,
+  depth: number
+): boolean {
+  const { data, width: gw, height: gh, worldSize, maxHeight } = sampler;
+  if (!data || gw < 2 || gh < 2 || maxHeight <= 0) return false;
+
+  const half = worldSize / 2;
+  const stepX = worldSize / (gw - 1);
+  const stepZ = worldSize / (gh - 1);
+  const halfWidth = width / 2;
+
+  const aabb = pathAabb(path, halfWidth);
+  const x0 = Math.max(0, Math.floor((aabb.minX + half) / stepX));
+  const x1 = Math.min(gw - 1, Math.ceil((aabb.maxX + half) / stepX));
+  const z0 = Math.max(0, Math.floor((aabb.minZ + half) / stepZ));
+  const z1 = Math.min(gh - 1, Math.ceil((aabb.maxZ + half) / stepZ));
+
+  // Inline nearest-segment distance to keep the inner loop allocation-free.
+  let changed = false;
+  for (let zi = z0; zi <= z1; zi++) {
+    const wz = zi * stepZ - half;
+    for (let xi = x0; xi <= x1; xi++) {
+      const wx = xi * stepX - half;
+      // nearest distance to the polyline
+      let best = Infinity;
+      for (let i = 0; i + 3 < path.length; i += 2) {
+        const ax = path[i]!;
+        const az = path[i + 1]!;
+        const bx = path[i + 2]!;
+        const bz = path[i + 3]!;
+        const dx = bx - ax;
+        const dz = bz - az;
+        const lenSq = dx * dx + dz * dz;
+        let t = lenSq === 0 ? 0 : ((wx - ax) * dx + (wz - az) * dz) / lenSq;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const cx = ax + t * dx;
+        const cz = az + t * dz;
+        const d = Math.hypot(wx - cx, wz - cz);
+        if (d < best) best = d;
+      }
+      const tLat = best / halfWidth;
+      if (tLat >= 1) continue;
+      const bowlY =
+        rimY - depth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
+      const target = Math.min(1, Math.max(0, bowlY / maxHeight));
+      const idx = zi * gw + xi;
+      if (data[idx]! > target) {
+        data[idx] = target;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
+
+/**
+ * Lowest terrain height along both banks of the river path. Probes ~16 points
+ * per bank (offset ±width/2 along the segment normal) and returns the minimum
+ * so the water surface never leaks over a low bank. Analogous to `rimHeight`
+ * for lakes but sampled along the polyline instead of a ring.
+ */
+export function rimHeightAlongPath(
+  sampler: HeightSampler,
+  path: number[],
+  width: number
+): number {
+  let min = Infinity;
+  const halfWidth = width / 2;
+  for (let i = 0; i + 3 < path.length; i += 2) {
+    const ax = path[i]!;
+    const az = path[i + 1]!;
+    const bx = path[i + 2]!;
+    const bz = path[i + 3]!;
+    const dx = bx - ax;
+    const dz = bz - az;
+    const len = Math.hypot(dx, dz);
+    if (len === 0) continue;
+    const nx = -dz / len; // segment normal (perpendicular)
+    const nz = dx / len;
+    for (let s = 0; s <= 16; s++) {
+      const f = s / 16;
+      const px = ax + dx * f;
+      const pz = az + dz * f;
+      const hPlus = sampleHeightAt(
+        sampler,
+        px + nx * halfWidth,
+        pz + nz * halfWidth
+      );
+      const hMinus = sampleHeightAt(
+        sampler,
+        px - nx * halfWidth,
+        pz - nz * halfWidth
+      );
+      if (hPlus < min) min = hPlus;
+      if (hMinus < min) min = hMinus;
+    }
+  }
+  return Number.isFinite(min) ? min : 0;
 }

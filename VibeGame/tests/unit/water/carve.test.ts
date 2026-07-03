@@ -2,7 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { State } from '../../../src/core/ecs/state';
 import {
   carveBowl,
+  carveChannel,
   rimHeight,
+  rimHeightAlongPath,
   shoreFraction,
   shapeRadius,
   SHORE_SHAPE_AMPLITUDE,
@@ -226,5 +228,76 @@ describe('Lake density override (pre-carve)', () => {
     expect(boostAt(density, lakeX, lakeZ)).toBe(255);
     // A point well outside the lake is unaffected (flat field → 0).
     expect(boostAt(density, 40, 40)).toBe(0);
+  });
+});
+
+describe('carveChannel', () => {
+  const W = 100; // worldSize
+  const SIZE = 128;
+
+  function flatField(): HeightSampler {
+    const data = new Float32Array(SIZE * SIZE).fill(0.5);
+    return { width: SIZE, height: SIZE, data, worldSize: W, maxHeight: 100 };
+  }
+
+  it('lowers the sampler along the path axis and returns true', () => {
+    const s = flatField();
+    const path = [-40, 0, 40, 0]; // straight river along X through the origin
+    const rim = rimHeightAlongPath(s, path, 6);
+    const before = sampleHeightAt(s, 0, 0);
+    const carved = carveChannel(s, path, 6, rim, 8);
+    const after = sampleHeightAt(s, 0, 0);
+    expect(carved).toBe(true);
+    expect(after).toBeLessThan(before);
+  });
+
+  it('does not carve outside width/2 of the path', () => {
+    const s = flatField();
+    const path = [-40, 0, 40, 0];
+    const rim = rimHeightAlongPath(s, path, 6);
+    carveChannel(s, path, 6, rim, 8);
+    // A point 20 m off-axis (well outside width/2 = 3) keeps the original height.
+    expect(sampleHeightAt(s, 0, 20)).toBeCloseTo(50, 1);
+  });
+
+  it('only ever lowers heights (idempotent second pass)', () => {
+    const s = flatField();
+    const path = [-40, 0, 40, 0];
+    const rim = rimHeightAlongPath(s, path, 6);
+    carveChannel(s, path, 6, rim, 8);
+    const atCenter = sampleHeightAt(s, 0, 0);
+    // A second pass must not lower it further (already at the channel floor).
+    carveChannel(s, path, 6, rim, 8);
+    expect(sampleHeightAt(s, 0, 0)).toBeCloseTo(atCenter, 4);
+  });
+
+  it('returns false on a dataless sampler', () => {
+    const flat: HeightSampler = {
+      width: 1,
+      height: 1,
+      data: null,
+      worldSize: W,
+      maxHeight: 100,
+    };
+    expect(carveChannel(flat, [-40, 0, 40, 0], 6, 10, 8)).toBe(false);
+  });
+});
+
+describe('rimHeightAlongPath', () => {
+  it('returns the minimum height along both banks', () => {
+    // Build a field that is 50 everywhere except a low spot on the bank.
+    const data = new Float32Array(128 * 128).fill(0.5);
+    const half = 50;
+    const step = 100 / 127;
+    // Poke a low texel near (10, 3) world — on the +Z bank of the path.
+    const tx = Math.round((10 + half) / step);
+    const tz = Math.round((3 + half) / step);
+    data[tz * 128 + tx] = 0.2;
+    const s = { width: 128, height: 128, data, worldSize: 100, maxHeight: 100 };
+    const path = [-40, 0, 40, 0];
+    const rim = rimHeightAlongPath(s, path, 6);
+    // rim is the min height along the banks; the low spot (20 m) is below 50.
+    expect(rim).toBeLessThanOrEqual(50);
+    expect(rim).toBeGreaterThanOrEqual(0);
   });
 });
