@@ -35,15 +35,10 @@ function sidecars(state: State): Map<number, LakeSideCar> {
   return m;
 }
 
-/** Lake-specific material inputs. The water colour, depth fade and alpha
- *  falloff are all driven from these so each lake can be tuned independently. */
+/** Shape-agnostic water material inputs. The depth fade and alpha falloff are
+ *  driven by the geometry's `aWaterT` attribute (0 at centre/axis, 1 at margin),
+ *  so the same material works for lakes and rivers. */
 interface WaterMaterialConfig {
-  /** Lake centre in world XZ (drives the radial depth + alpha falloff). */
-  center: THREE.Vector2;
-  /** Full bowl radius (m). */
-  radius: number;
-  /** shoreFraction()·radius — radius of the waterline. */
-  shoreRadius: number;
   /** Deep-water tint (hex). */
   color: number;
   /** Base surface opacity 0..1 (faded further at the shoreline). */
@@ -85,18 +80,11 @@ function makeWaterMaterial(
     shader.uniforms.uRipple = { value: cfg.ripple };
     shader.uniforms.uWaveHeight = { value: cfg.waveHeight };
     shader.uniforms.uWaveSpeed = { value: cfg.waveSpeed };
-    shader.uniforms.uCenter = { value: cfg.center };
-    shader.uniforms.uShoreRadius = { value: cfg.shoreRadius };
-    shader.uniforms.uOpacity = { value: cfg.opacity };
     shader.uniforms.uShallowColor = {
       value: new THREE.Color(shallowTint(cfg.color)),
     };
     shader.uniforms.uDeepColor = { value: new THREE.Color(cfg.color) };
     shader.uniforms.uSkyTint = { value: new THREE.Color(0xbfd8e6) };
-    // Lake centre in local carve space — seeds the organic shoreline so the
-    // shader's depth/alpha falloff tracks the carved bowl's outline, not a circle.
-    shader.uniforms.uSeedX = { value: cfg.center.x };
-    shader.uniforms.uSeedZ = { value: cfg.center.y };
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -105,16 +93,15 @@ function makeWaterMaterial(
          uniform float uRipple;
          uniform float uWaveHeight;
          uniform float uWaveSpeed;
-         uniform vec2 uCenter;
-         uniform float uShoreRadius;
-         uniform float uSeedX;
-         uniform float uSeedZ;
+         attribute float aWaterT;
+         varying float vWaterT;
          varying vec2 vWaveXZ;
          varying vec3 vViewDir;`
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
+         vWaterT = aWaterT;
          vec4 wPos = modelMatrix * vec4(transformed, 1.0);
          vWaveXZ = wPos.xz;
          float wt = uTime * uWaveSpeed;
@@ -136,42 +123,20 @@ function makeWaterMaterial(
          uniform float uTime;
          uniform float uRipple;
          uniform float uWaveSpeed;
-         uniform vec2 uCenter;
-         uniform float uShoreRadius;
-         uniform float uOpacity;
          uniform vec3 uShallowColor;
          uniform vec3 uDeepColor;
          uniform vec3 uSkyTint;
-         uniform float uSeedX;
-         uniform float uSeedZ;
+         varying float vWaterT;
          varying vec2 vWaveXZ;
          varying vec3 vViewDir;
-         // GLSL port of shapeRadius() — must stay in sync with carve.ts.
-         const float SHORE_SHAPE_AMP = 0.28;
-         float shapeRadius(float angle) {
-           float phi1 = (uSeedX * 12.9898 + uSeedZ * 78.233) * 0.1;
-           float phi2 = (uSeedX * 4.1764 - uSeedZ * 29.113) * 0.1;
-           float n = sin(angle * 2.0 + phi1) * 0.6
-                   + sin(angle * 3.0 - phi2) * 0.3
-                   + sin(angle * 5.0 + phi1 * 1.7) * 0.1;
-           return 1.0 + n * SHORE_SHAPE_AMP;
-         }
-         // Organic depth/alpha: normalise the radial distance by the shaped
-         // radius at this angle so the falloff tracks the shoreline, not a circle.
-         float lakeShapeT() {
-           vec2 rel = vWaveXZ - uCenter;
-           float dist = length(rel);
-           float angle = atan(rel.y, rel.x);
-           float effShore = uShoreRadius * shapeRadius(angle);
-           return clamp(dist / max(effShore, 0.001), 0.0, 1.5);
-         }
+         // Shape-agnostic depth/alpha: the geometry bakes t into aWaterT
+         // (0 at centre/axis, 1 at margin/bank) so these no longer depend on a
+         // radial distance metric.
          float lakeDepthNorm() {
-           float t = lakeShapeT();
-           return 1.0 - smoothstep(0.0, 1.0, t);
+           return 1.0 - smoothstep(0.0, 1.0, vWaterT);
          }
          float shoreAlpha() {
-           float t = lakeShapeT();
-           return 1.0 - smoothstep(0.9, 1.0, t);
+           return 1.0 - smoothstep(0.9, 1.0, vWaterT);
          }
          float lakeFresnel() {
            float cosTheta = abs(dot(normalize(vViewDir), vec3(0.0, 1.0, 0.0)));
@@ -195,7 +160,7 @@ function makeWaterMaterial(
          // Cartoon shoreline foam: a wobbling band just inside the waterline
          // plus a broken dashed line further in (wave wash), both toon-stepped.
          float lakeFoam() {
-           float t = lakeShapeT();
+           float t = vWaterT;
            float ft = uTime * uWaveSpeed;
            float wob = (vnoise(vWaveXZ * 0.8 + vec2(ft * 0.15, -ft * 0.12)) - 0.5) * 0.1;
            float band = smoothstep(0.86 + wob, 0.90 + wob, t) *
@@ -269,14 +234,22 @@ export function makeLakeGeometry(
 ): THREE.BufferGeometry {
   const positions: number[] = [0, 0, 0];
   const uvs: number[] = [0.5, 0.5];
+  // aWaterT: 0 at the centre vertex, ~1 at the rim. The shader's depth/alpha
+  // falloff is driven by this varying instead of a radial distance metric, so
+  // the same material works for any shape (lake fan or river ribbon).
+  const waterT: number[] = [0];
   const indices: number[] = [];
   // Oversize the outer ring a touch so the rim texels never alpha-clip hard.
   const pad = 1.04;
   for (let i = 0; i < segments; i++) {
     const a = (i / segments) * Math.PI * 2;
-    const r = radius * shapeRadius(a, seedX, seedZ) * pad;
+    const shaped = shapeRadius(a, seedX, seedZ);
+    const r = radius * shaped * pad;
     positions.push(Math.cos(a) * r, 0, Math.sin(a) * r);
     uvs.push(0.5 + Math.cos(a) * 0.5, 0.5 + Math.sin(a) * 0.5);
+    // t at the rim: the shaped radius scaled by the oversize pad, clamped to
+    // 1 so the margin never overshoots the fade range.
+    waterT.push(Math.min(1, shaped * pad));
     // Winding: (centre, next, current) keeps the face normal at +Y so the
     // surface is lit (and not backface-culled) when seen from above.
     indices.push(0, ((i + 1) % segments) + 1, i + 1);
@@ -284,6 +257,7 @@ export function makeLakeGeometry(
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setAttribute('aWaterT', new THREE.Float32BufferAttribute(waterT, 1));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;
@@ -393,9 +367,6 @@ export const LakeApplySystem: System = {
           : Math.min(0.09, Math.max(0.02, radius * 0.006));
       const material = makeWaterMaterial(
         {
-          center: new THREE.Vector2(Transform.posX[eid], Transform.posZ[eid]),
-          radius,
-          shoreRadius: shoreR,
           color: hexToInt(Lake.color[eid]),
           opacity: Lake.opacity[eid],
           ripple: Lake.ripple[eid],
