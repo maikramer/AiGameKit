@@ -3,9 +3,10 @@ import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { Transform } from '../transforms/components';
 import { getTerrainContext } from '../terrain/utils';
-import { Lake } from './components';
+import { Lake, River, getRiverPath } from './components';
 import { shapeRadius } from './carve';
 import { LakeBowl } from './lake-bowl';
+import { RiverChannel } from './river-channel';
 import {
   applyWaterShape,
   type WaterMaterialConfig,
@@ -335,6 +336,48 @@ export const WaterAnimSystem: System = {
         (car.shader.uniforms.uTime as { value: number }).value =
           state.time.elapsed;
       }
+    }
+  },
+};
+
+const riverQuery = defineQuery([River, Transform]);
+
+/**
+ * Applies each `<River>` once the terrain heightmap is decoded: builds a
+ * RiverChannel (WaterShape) and runs the shared apply flow via
+ * {@link applyWaterShape}. The path comes from the side-channel (set by the
+ * River recipe parser); width/depth/etc. from the component.
+ */
+export const RiverApplySystem: System = {
+  group: 'setup',
+  update(state: State) {
+    if (state.headless) return;
+    const cars = waterSideCars(state);
+    for (const eid of riverQuery(state.world)) {
+      if (River.applied[eid] === 1) continue;
+      const path = getRiverPath(state, eid);
+      if (path.length < 4) continue; // need ≥ 2 points
+      const channel = new RiverChannel({
+        path,
+        width: River.width[eid] || 6,
+        depth: River.depth[eid] || 1.5,
+        waterOffset: River.waterOffset[eid],
+      });
+      const applied = applyWaterShape(
+        state,
+        eid,
+        channel,
+        makeWaterMaterial,
+        {
+          color: River.color[eid] >>> 0,
+          opacity: River.opacity[eid],
+          ripple: River.ripple[eid],
+          waveHeight: River.waveHeight[eid] || 0.04,
+          waveSpeed: River.waveSpeed[eid] || 1,
+        },
+        cars
+      );
+      if (applied) River.applied[eid] = 1;
     }
   },
 };
