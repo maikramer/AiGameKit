@@ -55,7 +55,7 @@ export const WaterPlugin: Plugin = {
         waterOffset: 0.3,
         color: 0x2f7a9a,
         opacity: 0.78,
-        ripple: 1,
+        ripple: 0.6,
         waterY: 0,
         applied: 0,
       },

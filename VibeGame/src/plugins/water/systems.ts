@@ -63,8 +63,8 @@ function makeWaterMaterial(
          vec4 wPos = modelMatrix * vec4(transformed, 1.0);
          vWaveXZ = wPos.xz;
          transformed.z += uRipple *
-           (sin(wPos.x * 1.9 + uTime * 1.1) * 0.5 +
-            cos(wPos.z * 2.3 + uTime * 0.8) * 0.5) * 0.06;`
+           (sin(wPos.x * 1.3 + uTime * 0.6) * 0.5 +
+            cos(wPos.z * 1.6 + uTime * 0.45) * 0.5) * 0.03;`
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -77,9 +77,12 @@ function makeWaterMaterial(
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
-         float shimmer = sin(vWaveXZ.x * 2.7 + uTime * 1.4) *
-                         cos(vWaveXZ.y * 3.1 - uTime);
-         diffuseColor.rgb += shimmer * 0.035 * uRipple;`
+         // Low-frequency drift — high frequencies read as a checker pattern
+         // on the flat disc instead of water.
+         float shimmer = sin(vWaveXZ.x * 0.5 + uTime * 0.6) *
+                         cos(vWaveXZ.y * 0.65 - uTime * 0.5) +
+                         0.5 * sin((vWaveXZ.x + vWaveXZ.y) * 1.0 + uTime * 1.1);
+         diffuseColor.rgb += shimmer * 0.013 * uRipple;`
       );
     onShader(shader as unknown as LakeSideCar['shader']);
   };
