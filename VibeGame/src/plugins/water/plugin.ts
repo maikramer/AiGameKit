@@ -2,6 +2,7 @@ import type { Adapter, Parser, Plugin, Recipe } from '../../core';
 import { Transform } from '../transforms/components';
 import { Lake } from './components';
 import { LakeApplySystem, WaterAnimSystem } from './systems';
+import { WaterInteractionSystem, WaterRippleFxSystem } from './effects';
 
 /**
  * `<Lake at="70 46" radius="6" depth="1.5" color="#2f7a9a">` — sculpted
@@ -42,7 +43,12 @@ const lakeParser: Parser = ({ entity, element }) => {
 };
 
 export const WaterPlugin: Plugin = {
-  systems: [LakeApplySystem, WaterAnimSystem],
+  systems: [
+    LakeApplySystem,
+    WaterAnimSystem,
+    WaterInteractionSystem,
+    WaterRippleFxSystem,
+  ],
   recipes: [lakeRecipe],
   components: {
     lake: Lake,
@@ -56,6 +62,9 @@ export const WaterPlugin: Plugin = {
         color: 0x2f7a9a,
         opacity: 0.78,
         ripple: 0.6,
+        // 0 = auto (scales with radius); override via wave-height="0.05".
+        waveHeight: 0,
+        waveSpeed: 1,
         waterY: 0,
         applied: 0,
       },

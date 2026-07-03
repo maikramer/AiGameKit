@@ -35,6 +35,12 @@ export interface GroupSpawnDefaults {
   maxSlopePlacementAttempts: number;
   /** Re-amostra posições que cairiam sob planos de água (lagos). */
   avoidWater: boolean;
+  /**
+   * Inverso de avoid-water: só aceita pontos DENTRO da linha de água de um
+   * lago e ancora o Y à superfície (plantas aquáticas, boias). Opcional nos
+   * perfis; default false.
+   */
+  inWater?: boolean;
   /** Re-amostra posições que colidem com footprints já registados (árvores, casa, outras instâncias). */
   avoidOverlaps: boolean;
   /** Raio XZ do footprint por instância (antes da escala). 0 = automático (meia-largura do AABB do GLB, fallback 0.8). */
@@ -422,6 +428,7 @@ export function resolveGroupSpawnFields(
       )
     ),
     avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
+    inWater: optBool(attrs['in-water'], p.inWater ?? false),
     avoidOverlaps: optBool(attrs['avoid-overlaps'], p.avoidOverlaps),
     footprintRadius: optNumber(attrs['footprint-radius'], p.footprintRadius),
     maxDistance: optNumber(attrs['max-distance'], p.maxDistance),

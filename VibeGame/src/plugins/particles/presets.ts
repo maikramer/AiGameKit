@@ -17,8 +17,10 @@ export type PresetName =
   | 'explosion'
   | 'sparks'
   | 'magic'
-  | 'fireflies';
+  | 'fireflies'
+  | 'splash';
 
+// New presets append at the end: ParticleEmitter.preset stores the index.
 const PRESET_NAMES: readonly PresetName[] = [
   'fire',
   'rain',
@@ -29,6 +31,7 @@ const PRESET_NAMES: readonly PresetName[] = [
   'sparks',
   'magic',
   'fireflies',
+  'splash',
 ];
 
 export function presetIndex(name: string): number {
@@ -323,6 +326,47 @@ function firefliesPreset(): Partial<SystemParams> {
   };
 }
 
+function splashPreset(): Partial<SystemParams> {
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+  });
+
+  return {
+    material,
+    looping: false,
+    duration: 0.7,
+    autoDestroy: true,
+    startLife: new IntervalValue(0.3, 0.6),
+    startSpeed: new IntervalValue(2, 5.5),
+    startSize: new IntervalValue(0.05, 0.16),
+    startColor: new ColorRange(
+      new Vector4(0.85, 0.95, 1, 0.9),
+      new Vector4(0.6, 0.85, 1, 1)
+    ),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [
+      {
+        time: 0,
+        count: new ConstantValue(45),
+        cycle: 1,
+        interval: 0.01,
+        probability: 1,
+      },
+    ],
+    shape: new ConeEmitter({ radius: 0.25, angle: Math.PI / 3.5 }),
+    worldSpace: true,
+    renderMode: RenderMode.StretchedBillBoard,
+    behaviors: [
+      new GravityForce(new Vector3(0, 0, 0), -18),
+      new SizeOverLife(
+        new PiecewiseBezier([[new Bezier(1, 0.9, 0.6, 0.1), 0]])
+      ),
+    ],
+  };
+}
+
 type SystemParams = ParticleSystemParameters;
 
 const PRESET_FACTORIES: Record<PresetName, () => Partial<SystemParams>> = {
@@ -335,6 +379,7 @@ const PRESET_FACTORIES: Record<PresetName, () => Partial<SystemParams>> = {
   sparks: sparksPreset,
   magic: magicPreset,
   fireflies: firefliesPreset,
+  splash: splashPreset,
 };
 
 export function createPresetParams(name: PresetName): Partial<SystemParams> {

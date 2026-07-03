@@ -177,4 +177,44 @@ describe('terrain-data-loader', () => {
       ).not.toThrow();
     });
   });
+
+  describe('heightmap_format', () => {
+    it('defaults to "png" when the field is absent', () => {
+      const data = {
+        version: '1.0',
+        terrain: { size: 1024, world_size: 256.0, max_height: 50.0 },
+        rivers: [],
+        lakes: [],
+        lake_planes: [],
+      };
+      const result = parseTerrainData(data);
+      expect(result.heightmap_format).toBe('png');
+    });
+
+    it('reads "ahgt" when declared', () => {
+      const data = {
+        version: '1.0',
+        terrain: { size: 1024, world_size: 256.0, max_height: 50.0 },
+        rivers: [],
+        lakes: [],
+        lake_planes: [],
+        heightmap_format: 'ahgt',
+      };
+      const result = parseTerrainData(data);
+      expect(result.heightmap_format).toBe('ahgt');
+    });
+
+    it('normalizes an unknown value back to "png"', () => {
+      const data = {
+        version: '1.0',
+        terrain: { size: 1024, world_size: 256.0, max_height: 50.0 },
+        rivers: [],
+        lakes: [],
+        lake_planes: [],
+        heightmap_format: 'exr',
+      };
+      const result = parseTerrainData(data);
+      expect(result.heightmap_format).toBe('png');
+    });
+  });
 });

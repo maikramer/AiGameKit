@@ -110,6 +110,12 @@ export const CharacterMovement = {
   actualMoveX: new Float32Array(MAX_ENTITIES),
   actualMoveY: new Float32Array(MAX_ENTITIES),
   actualMoveZ: new Float32Array(MAX_ENTITIES),
+  /**
+   * Horizontal movement resistance 0..0.9 (0 = none, so the zeroed default is
+   * "no drag"). Written by environment systems (e.g. water submersion) and
+   * consumed by applyCharacterMovement as a stride scale of (1 - waterDrag).
+   */
+  waterDrag: new Float32Array(MAX_ENTITIES),
 } as const;
 
 export const InterpolatedTransform = {

@@ -892,6 +892,8 @@ export {
   isPointInWater,
   waterLevelAt,
   getWaterBodies,
+  computeWaterDrag,
+  spawnWaterRipple,
 } from './plugins/water';
 export type { WaterBody } from './plugins/water';
 

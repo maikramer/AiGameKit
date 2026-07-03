@@ -19,6 +19,13 @@ export const Lake = {
   opacity: new Float32Array(MAX_ENTITIES),
   /** Ripple animation strength (0 = still water). */
   ripple: new Float32Array(MAX_ENTITIES),
+  /**
+   * Wave amplitude in metres. 0 (default) = auto: scales with the lake radius
+   * so small ponds barely stir while big lakes visibly swell.
+   */
+  waveHeight: new Float32Array(MAX_ENTITIES),
+  /** Wave/shimmer animation speed multiplier (1 = default pacing). */
+  waveSpeed: new Float32Array(MAX_ENTITIES),
   /** Resolved world Y of the water surface (set by the system). */
   waterY: new Float32Array(MAX_ENTITIES),
   /** 1 once the carve + surface have been applied. */

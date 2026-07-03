@@ -24,7 +24,13 @@ describe('collectWaterObstacles', () => {
 
   it('emits a vertical cylinder per registered lake', () => {
     const state = new State();
-    const body: WaterBody = { x: 5, z: -3, radius: 6, waterY: 10 };
+    const body: WaterBody = {
+      x: 5,
+      z: -3,
+      radius: 6,
+      shoreRadius: 4.2,
+      waterY: 10,
+    };
     registerWaterBody(state, body);
 
     const geom = collectWaterObstacles(state, 120);
@@ -49,8 +55,14 @@ describe('collectWaterObstacles', () => {
 
   it('emits one cylinder per body when several lakes overlap the bake area', () => {
     const state = new State();
-    const a: WaterBody = { x: 0, z: 0, radius: 4, waterY: 0 };
-    const b: WaterBody = { x: 20, z: -10, radius: 5, waterY: 3 };
+    const a: WaterBody = { x: 0, z: 0, radius: 4, shoreRadius: 2.8, waterY: 0 };
+    const b: WaterBody = {
+      x: 20,
+      z: -10,
+      radius: 5,
+      shoreRadius: 3.5,
+      waterY: 3,
+    };
     registerWaterBody(state, a);
     registerWaterBody(state, b);
 
@@ -64,7 +76,13 @@ describe('collectWaterObstacles', () => {
 
   it('skips lakes whose disc lies entirely outside the bake bounds', () => {
     const state = new State();
-    const far: WaterBody = { x: 500, z: 500, radius: 6, waterY: 0 };
+    const far: WaterBody = {
+      x: 500,
+      z: 500,
+      radius: 6,
+      shoreRadius: 4.2,
+      waterY: 0,
+    };
     registerWaterBody(state, far);
     expect(collectWaterObstacles(state, 120)).toBeNull();
     unregisterWaterBody(state, far);
@@ -72,7 +90,13 @@ describe('collectWaterObstacles', () => {
 
   it('keeps a lake that merely clips the edge of the bake area', () => {
     const state = new State();
-    const edge: WaterBody = { x: 122, z: 0, radius: 6, waterY: 0 };
+    const edge: WaterBody = {
+      x: 122,
+      z: 0,
+      radius: 6,
+      shoreRadius: 4.2,
+      waterY: 0,
+    };
     registerWaterBody(state, edge);
     const geom = collectWaterObstacles(state, 120);
     expect(geom).not.toBeNull();
@@ -81,7 +105,13 @@ describe('collectWaterObstacles', () => {
 
   it('is merged into collectNavmeshGeometry even without terrain', () => {
     const state = new State();
-    registerWaterBody(state, { x: 0, z: 0, radius: 6, waterY: 0 });
+    registerWaterBody(state, {
+      x: 0,
+      z: 0,
+      radius: 6,
+      shoreRadius: 4.2,
+      waterY: 0,
+    });
 
     const geom = collectNavmeshGeometry(state, 64, 60);
     expect(geom.indices.length).toBeGreaterThan(0);

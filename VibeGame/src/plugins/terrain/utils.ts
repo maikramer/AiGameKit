@@ -1,6 +1,7 @@
 import type * as THREE from 'three';
 import type { State } from '../../core';
 import type { HeightSampler } from './height-sampler';
+import type { DensityMap } from './density-map';
 
 /**
  * Per-field terrain state. The ECS components are the source of truth for
@@ -19,6 +20,8 @@ export interface TerrainEntityData {
   lastShowChunkBorders: number;
   physicsBody: import('@dimforge/rapier3d-compat').RigidBody | null;
   physicsCollider: import('@dimforge/rapier3d-compat').Collider | null;
+  /** Per-region mesh density boost, rebuilt whenever the heightmap (re)loads. */
+  density?: DensityMap;
   // One Rapier heightfield body per visual chunk entity, sampled at the chunk's
   // mesh resolution so the collider surface matches what the player sees. Keyed
   // by chunk entity id; created/removed as LOD chunks come and go.
