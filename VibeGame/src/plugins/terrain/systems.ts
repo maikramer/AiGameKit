@@ -528,11 +528,14 @@ function applyLakeSand(state: State, field: number): void {
   }
   if (perState.get(field) === sig) return;
 
-  const count = Math.min(MAX_LAKES, bodies.length);
+  // The sand mask is lake-specific (radial disc shader); filter to lake bodies
+  // so rivers don't corrupt the uniform layout.
+  const lakeBodies = bodies.filter((b) => b.kind === 'lake');
+  const count = Math.min(MAX_LAKES, lakeBodies.length);
   for (const sh of refs) {
     const lakes = sh.uniforms.uLakes.value as THREE.Vector4[];
     for (let i = 0; i < count; i++) {
-      const b = bodies[i];
+      const b = lakeBodies[i]!;
       // Guard for legacy bodies without shoreRadius: fall back to 0.7·radius so
       // the mask degrades gracefully rather than sanding the whole bowl.
       const shoreR = b.shoreRadius ?? b.radius * 0.7;

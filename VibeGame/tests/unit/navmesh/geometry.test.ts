@@ -25,6 +25,7 @@ describe('collectWaterObstacles', () => {
   it('emits a vertical cylinder per registered lake', () => {
     const state = new State();
     const body: WaterBody = {
+      kind: 'lake',
       x: 5,
       z: -3,
       radius: 6,
@@ -55,8 +56,16 @@ describe('collectWaterObstacles', () => {
 
   it('emits one cylinder per body when several lakes overlap the bake area', () => {
     const state = new State();
-    const a: WaterBody = { x: 0, z: 0, radius: 4, shoreRadius: 2.8, waterY: 0 };
+    const a: WaterBody = {
+      kind: 'lake',
+      x: 0,
+      z: 0,
+      radius: 4,
+      shoreRadius: 2.8,
+      waterY: 0,
+    };
     const b: WaterBody = {
+      kind: 'lake',
       x: 20,
       z: -10,
       radius: 5,
@@ -77,6 +86,7 @@ describe('collectWaterObstacles', () => {
   it('skips lakes whose disc lies entirely outside the bake bounds', () => {
     const state = new State();
     const far: WaterBody = {
+      kind: 'lake',
       x: 500,
       z: 500,
       radius: 6,
@@ -91,6 +101,7 @@ describe('collectWaterObstacles', () => {
   it('keeps a lake that merely clips the edge of the bake area', () => {
     const state = new State();
     const edge: WaterBody = {
+      kind: 'lake',
       x: 122,
       z: 0,
       radius: 6,
@@ -106,6 +117,7 @@ describe('collectWaterObstacles', () => {
   it('is merged into collectNavmeshGeometry even without terrain', () => {
     const state = new State();
     registerWaterBody(state, {
+      kind: 'lake',
       x: 0,
       z: 0,
       radius: 6,

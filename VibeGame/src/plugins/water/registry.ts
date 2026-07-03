@@ -1,7 +1,9 @@
 import type { State } from '../../core';
+import { distanceToPath } from './path-utils';
 
-/** A registered water surface (for spawn avoidance / gameplay queries). */
-export interface WaterBody {
+/** Lake water body: a disc centred at (x,z). */
+export interface LakeWaterBody {
+  kind: 'lake';
   x: number;
   z: number;
   /** Full bowl radius (m). Spawner/navmesh membership + the disc geometry. */
@@ -15,6 +17,19 @@ export interface WaterBody {
   shoreRadius: number;
   waterY: number;
 }
+
+/** River water body: a channel along a polyline of given width. */
+export interface RiverWaterBody {
+  kind: 'river';
+  /** Polyline points `[x,z]` in world coords. */
+  path: ReadonlyArray<readonly [number, number]>;
+  /** Channel width (m). Points within width/2 of the path are "in water". */
+  width: number;
+  waterY: number;
+}
+
+/** A registered water surface (spawn avoidance / gameplay queries). */
+export type WaterBody = LakeWaterBody | RiverWaterBody;
 
 const WATER_BODIES = new WeakMap<State, WaterBody[]>();
 
@@ -37,30 +52,40 @@ export function unregisterWaterBody(state: State, body: WaterBody): void {
   if (i >= 0) list.splice(i, 1);
 }
 
+/** True when the world XZ point lies inside a water surface (disc or channel). */
+function containsPoint(body: WaterBody, x: number, z: number): boolean {
+  if (body.kind === 'lake') {
+    const dx = x - body.x;
+    const dz = z - body.z;
+    return dx * dx + dz * dz <= body.radius * body.radius;
+  }
+  // river: distance to the polyline ≤ width/2. Flatten the [x,z] pairs.
+  const flat: number[] = [];
+  for (const p of body.path) {
+    flat.push(p[0], p[1]);
+  }
+  return distanceToPath(flat, x, z) <= body.width / 2;
+}
+
 /**
- * True when the world XZ point lies inside a water surface. Backs the
- * spawner's `avoid-water` flag (which parsed but checked nothing before
- * lakes existed) and any gameplay splash/swim checks.
+ * True when the world XZ point lies inside a water surface. Backs the spawner's
+ * `avoid-water` flag and any gameplay splash/swim checks (lakes AND rivers).
  */
 export function isPointInWater(state: State, x: number, z: number): boolean {
   for (const b of getWaterBodies(state)) {
-    const dx = x - b.x;
-    const dz = z - b.z;
-    if (dx * dx + dz * dz <= b.radius * b.radius) return true;
+    if (containsPoint(b, x, z)) return true;
   }
   return false;
 }
 
-/** The water body whose bowl contains the world XZ point, or null. */
+/** The water body whose surface contains the world XZ point, or null. */
 export function waterBodyAt(
   state: State,
   x: number,
   z: number
 ): WaterBody | null {
   for (const b of getWaterBodies(state)) {
-    const dx = x - b.x;
-    const dz = z - b.z;
-    if (dx * dx + dz * dz <= b.radius * b.radius) return b;
+    if (containsPoint(b, x, z)) return b;
   }
   return null;
 }
@@ -72,9 +97,7 @@ export function waterLevelAt(
   z: number
 ): number | null {
   for (const b of getWaterBodies(state)) {
-    const dx = x - b.x;
-    const dz = z - b.z;
-    if (dx * dx + dz * dz <= b.radius * b.radius) return b.waterY;
+    if (containsPoint(b, x, z)) return b.waterY;
   }
   return null;
 }
