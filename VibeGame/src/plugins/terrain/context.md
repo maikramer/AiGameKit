@@ -19,7 +19,6 @@ terrain/
 ├── chunk-geometry.ts     # BufferGeometry builder from sampler per chunk
 ├── lod-select.ts         # Pure-function quadtree LOD selection
 ├── terrain-data-loader.ts # Terrain3D JSON data loader + lake/river water spawning
-└── lake-renderer.ts      # XML generator for lake/river water entities
 ```
 
 ## Scope
