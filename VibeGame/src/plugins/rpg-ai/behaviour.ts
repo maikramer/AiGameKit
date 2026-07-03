@@ -163,7 +163,16 @@ export function runMeleeAiFrame(
   const dt: number = state.time.deltaTime;
   const comp = AiStateComponent;
 
-  if (comp.mode[eid] === AI_MODE_DEAD) return;
+  if (comp.mode[eid] === AI_MODE_DEAD) {
+    // Stale DEAD on a live eid (recycled slot, AiStateComponent is a raw array
+    // never cleared on recycle): recover so a respawned full-HP creature isn't
+    // treated as dead.
+    if (!entityDead(eid)) {
+      comp.mode[eid] = AI_MODE_IDLE;
+      comp.target[eid] = 0;
+    }
+    return;
+  }
 
   if (!inst.originSet) {
     inst.originX = Transform.posX[eid];
