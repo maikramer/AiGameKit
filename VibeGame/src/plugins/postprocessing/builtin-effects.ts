@@ -1,6 +1,7 @@
 import {
   ACESFilmicToneMapping,
   AgXToneMapping,
+  Color,
   NeutralToneMapping,
   NoToneMapping,
   ReinhardToneMapping,
@@ -90,6 +91,24 @@ registerEffect({
       falloff: (cs.fogFalloff as Float32Array)[entity],
       noise: (cs.fogNoise as Float32Array)[entity],
     });
+  },
+  update(state: CS, entity: number, pass: Pass): void {
+    // Sync biome/postprocessing-driven fog values each frame so the HeightFogPass
+    // (which captures them at creation) actually responds to runtime changes.
+    const fp = pass as HeightFogPass;
+    if (!fp.uniforms) return;
+    const density = (state.fogDensity as Float32Array)[entity];
+    const height = (state.fogHeight as Float32Array)[entity];
+    const falloff = (state.fogFalloff as Float32Array)[entity];
+    if (density !== undefined)
+      (fp.uniforms.uFogDensity.value as number) = density;
+    if (height !== undefined) (fp.uniforms.uFogHeight.value as number) = height;
+    if (falloff !== undefined)
+      (fp.uniforms.uFogFalloff.value as number) = falloff;
+    const color = (state.fogColor as unknown as Uint32Array)[entity];
+    if (color !== undefined) {
+      (fp.uniforms.uFogColor.value as Color).set(color);
+    }
   },
 });
 
