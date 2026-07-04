@@ -1,11 +1,7 @@
 import * as THREE from 'three';
-import {
-  Block,
-  Text,
-  update as meshUiUpdate,
-} from 'three-mesh-ui/build/three-mesh-ui.module.js';
+import { Container, reversePainterSortStable, Text } from '@pmndrs/uikit';
 import { defineQuery, type State, type System } from '../../core';
-import { getScene } from '../rendering';
+import { getRenderingContext, getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
 import { HudPanel } from './components';
 import { getStringAt } from './context';
@@ -13,14 +9,15 @@ import { I18nText } from '../i18n/components';
 
 const hudQuery = defineQuery([HudPanel, Transform]);
 
-const blockByEntity = new WeakMap<State, Map<number, Block>>();
+const panelByEntity = new WeakMap<State, Map<number, Container>>();
 const textByEntity = new WeakMap<State, Map<number, Text>>();
+const rendererConfigured = new WeakSet<THREE.WebGLRenderer>();
 
-function getBlocks(state: State): Map<number, Block> {
-  let m = blockByEntity.get(state);
+function getPanels(state: State): Map<number, Container> {
+  let m = panelByEntity.get(state);
   if (!m) {
     m = new Map();
-    blockByEntity.set(state, m);
+    panelByEntity.set(state, m);
   }
   return m;
 }
@@ -34,6 +31,14 @@ function getTexts(state: State): Map<number, Text> {
   return m;
 }
 
+/** uikit needs sorted-transparency + local clipping on the renderer once. */
+function ensureRendererConfigured(renderer: THREE.WebGLRenderer): void {
+  if (rendererConfigured.has(renderer)) return;
+  rendererConfigured.add(renderer);
+  renderer.localClippingEnabled = true;
+  renderer.setTransparentSort(reversePainterSortStable);
+}
+
 export const HudBuildSystem: System = {
   group: 'setup',
   update: (state) => {
@@ -41,38 +46,52 @@ export const HudBuildSystem: System = {
     const scene = getScene(state);
     if (!scene) return;
 
-    const blocks = getBlocks(state);
+    const panels = getPanels(state);
     const texts = getTexts(state);
     for (const eid of hudQuery(state.world)) {
       if (HudPanel.built[eid]) {
         if (state.hasComponent(eid, I18nText) && I18nText.resolved[eid]) {
           const text = texts.get(eid);
           if (text) {
-            text.set({ content: getStringAt(state, HudPanel.textIndex[eid]) });
+            text.setProperties({
+              text: getStringAt(state, HudPanel.textIndex[eid]),
+            });
           }
         }
         continue;
       }
 
-      const block = new Block({
+      const renderer = getRenderingContext(state).renderer;
+      if (renderer) ensureRendererConfigured(renderer);
+
+      // pixelSize: 1 keeps width/height in plain world units (metres), matching
+      // the previous three-mesh-ui convention (no px→world scaling).
+      const panel = new Container({
+        pixelSize: 1,
         width: HudPanel.width[eid],
         height: HudPanel.height[eid],
-        backgroundOpacity: HudPanel.opacity[eid],
         backgroundColor: new THREE.Color(
           HudPanel.bgR[eid],
           HudPanel.bgG[eid],
           HudPanel.bgB[eid]
         ),
+        // uikit has no separate background-alpha prop (unlike three-mesh-ui's
+        // backgroundOpacity): `opacity` applies to the whole panel, background
+        // and content together.
+        opacity: HudPanel.opacity[eid],
+        alignItems: 'center',
+        justifyContent: 'center',
       });
 
       const text = new Text({
-        content: getStringAt(state, HudPanel.textIndex[eid]),
+        text: getStringAt(state, HudPanel.textIndex[eid]),
         fontSize: 0.08,
+        color: 0xffffff,
       });
-      block.add(text);
+      panel.add(text);
 
-      scene.add(block);
-      blocks.set(eid, block);
+      scene.add(panel);
+      panels.set(eid, panel);
       texts.set(eid, text);
       HudPanel.built[eid] = 1;
     }
@@ -83,10 +102,11 @@ export const HudSyncSystem: System = {
   group: 'draw',
   update: (state) => {
     if (state.headless) return;
-    const blocks = getBlocks(state);
+    const panels = getPanels(state);
+    const dt = state.time.deltaTime || 0;
     for (const eid of hudQuery(state.world)) {
-      const block = blocks.get(eid);
-      if (!block) continue;
+      const panel = panels.get(eid);
+      if (!panel) continue;
 
       const wx = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posX[eid]
@@ -97,8 +117,10 @@ export const HudSyncSystem: System = {
       const wz = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posZ[eid]
         : Transform.posZ[eid];
-      block.position.set(wx, wy, wz);
+      panel.position.set(wx, wy, wz);
+      // uikit's per-instance update() drives its own layout/text re-flow;
+      // delta is in milliseconds (matches the library's own render-loop example).
+      panel.update(dt * 1000);
     }
-    meshUiUpdate();
   },
 };

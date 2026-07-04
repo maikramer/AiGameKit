@@ -1,6 +1,6 @@
 import { MAX_ENTITIES } from '../../core/ecs/constants';
 
-/** Painel world-space (three-mesh-ui Block). */
+/** Painel world-space (@pmndrs/uikit Container). */
 export const HudPanel = {
   width: new Float32Array(MAX_ENTITIES),
   height: new Float32Array(MAX_ENTITIES),
