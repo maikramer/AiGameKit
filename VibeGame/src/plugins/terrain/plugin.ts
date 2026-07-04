@@ -1,7 +1,13 @@
 ﻿import type { Adapter, Plugin, State } from '../../core';
 import { parseColor } from '../../core/validation/schemas';
-import { Terrain, TerrainChunk, TerrainDebugInfo } from './components';
-import { terrainRecipe } from './recipes';
+import {
+  Terrain,
+  TerrainChunk,
+  TerrainDebugInfo,
+  TerrainPad,
+} from './components';
+import { terrainPadRecipe, terrainRecipe } from './recipes';
+import { TerrainPadApplySystem, terrainPadParser } from './pad-systems';
 import {
   TerrainDebugSystem,
   TerrainFieldBootstrapSystem,
@@ -19,9 +25,10 @@ function terrainColorAdapter(field: keyof typeof Terrain): Adapter {
 }
 
 export const TerrainPlugin: Plugin = {
-  recipes: [terrainRecipe],
+  recipes: [terrainRecipe, terrainPadRecipe],
   systems: [
     TerrainFieldBootstrapSystem,
+    TerrainPadApplySystem,
     TerrainChunkColliderSystem,
     TerrainLodSelectSystem,
     TerrainMeshSystem,
@@ -32,9 +39,18 @@ export const TerrainPlugin: Plugin = {
     terrain: Terrain,
     terrainChunk: TerrainChunk,
     terrainDebugInfo: TerrainDebugInfo,
+    'terrain-pad': TerrainPad,
   },
   config: {
     defaults: {
+      'terrain-pad': {
+        halfX: 8,
+        halfZ: 8,
+        height: 0,
+        falloff: 8,
+        cornerRadius: 4,
+        applied: 0,
+      },
       terrain: {
         worldSize: 256,
         maxHeight: 50,
@@ -77,6 +93,9 @@ export const TerrainPlugin: Plugin = {
         'color-low': terrainColorAdapter('colorLow') as Adapter,
         'color-rock': terrainColorAdapter('colorRock') as Adapter,
       },
+    },
+    parsers: {
+      TerrainPad: terrainPadParser,
     },
   },
 };

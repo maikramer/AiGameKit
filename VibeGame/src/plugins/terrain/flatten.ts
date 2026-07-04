@@ -1,0 +1,86 @@
+import type { HeightSampler } from './height-sampler';
+
+export interface FlattenRectOpts {
+  /** Pad centre in field-local world coords. */
+  centerX: number;
+  centerZ: number;
+  /** Half-extents of the fully-flat core (m). */
+  halfX: number;
+  halfZ: number;
+  /** Target terrain height (m) inside the core. */
+  targetY: number;
+  /** Blend distance (m) from the core edge back to the original terrain. */
+  falloff: number;
+  /** Corner rounding radius (m) of the core rectangle. */
+  cornerRadius: number;
+}
+
+/**
+ * Level a rounded-rectangle pad into the sampler's height data (in place).
+ *
+ * The classic "settlement pad" used to seat man-made structures on rugged
+ * terrain: inside the core the terrain is set exactly to `targetY` (raising
+ * hollows and shaving bumps — unlike the water carve this writes both
+ * directions), and a `smoothstep` ring of width `falloff` blends back into
+ * the untouched terrain so the pad reads as a groomed embankment, not a
+ * cliff-edged stamp.
+ *
+ * Distance metric is the signed distance to a rounded rectangle, so square
+ * pads keep soft corners. Mutating the sampler keeps every consumer (chunk
+ * meshes, physics heightfields, BVH, spawner placement) consistent — same
+ * contract as the water carve.
+ *
+ * Returns true when at least one texel changed.
+ */
+export function flattenRect(
+  sampler: HeightSampler,
+  opts: FlattenRectOpts
+): boolean {
+  const { data, width, height, worldSize, maxHeight } = sampler;
+  if (!data || width < 2 || height < 2 || maxHeight <= 0) return false;
+
+  const { centerX, centerZ, targetY, falloff } = opts;
+  const cr = Math.max(0, Math.min(opts.cornerRadius, opts.halfX, opts.halfZ));
+  const coreX = Math.max(0.01, opts.halfX - cr);
+  const coreZ = Math.max(0.01, opts.halfZ - cr);
+  const fall = Math.max(0.01, falloff);
+
+  const half = worldSize / 2;
+  const stepX = worldSize / (width - 1);
+  const stepZ = worldSize / (height - 1);
+
+  const reachX = opts.halfX + fall;
+  const reachZ = opts.halfZ + fall;
+  const x0 = Math.max(0, Math.floor((centerX - reachX + half) / stepX));
+  const x1 = Math.min(width - 1, Math.ceil((centerX + reachX + half) / stepX));
+  const z0 = Math.max(0, Math.floor((centerZ - reachZ + half) / stepZ));
+  const z1 = Math.min(height - 1, Math.ceil((centerZ + reachZ + half) / stepZ));
+
+  const target = Math.min(1, Math.max(0, targetY / maxHeight));
+
+  let changed = false;
+  for (let zi = z0; zi <= z1; zi++) {
+    const wz = zi * stepZ - half;
+    for (let xi = x0; xi <= x1; xi++) {
+      const wx = xi * stepX - half;
+      // Signed distance to the rounded-rect core: ≤ 0 inside, grows outward.
+      const dx = Math.max(Math.abs(wx - centerX) - coreX, 0);
+      const dz = Math.max(Math.abs(wz - centerZ) - coreZ, 0);
+      const d = Math.sqrt(dx * dx + dz * dz) - cr;
+      if (d >= fall) continue;
+      // Blend weight: 1 in the core, smoothstep down to 0 at the falloff edge.
+      let w = 1;
+      if (d > 0) {
+        const t = d / fall;
+        w = 1 - t * t * (3 - 2 * t);
+      }
+      const i = zi * width + xi;
+      const next = data[i]! + (target - data[i]!) * w;
+      if (next !== data[i]!) {
+        data[i] = next;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+}
