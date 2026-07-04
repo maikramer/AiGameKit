@@ -25,6 +25,8 @@ export interface LakeBowlOpts {
  */
 export class LakeBowl implements WaterShape {
   private readonly rimMargin = 1.3; // covers shapeRadius overshoot (amplitude 0.28)
+  /** Local water-surface Y, captured during carve() for mesh placement. */
+  private localWaterY = 0;
 
   constructor(private readonly opts: LakeBowlOpts) {}
 
@@ -43,6 +45,7 @@ export class LakeBowl implements WaterShape {
     const { localX, localZ, radius, depth, waterOffset } = this.opts;
     const rimY = rimHeight(sampler, localX, localZ, radius);
     const waterY = rimY - waterOffset;
+    this.localWaterY = waterY;
     const carved = carveBowl(sampler, localX, localZ, radius, rimY, depth);
     return { carved, rimY, waterY };
   }
@@ -54,8 +57,13 @@ export class LakeBowl implements WaterShape {
     return makeLakeGeometry(radius, localX, localZ);
   }
 
-  worldOrigin(): { x: number; z: number } {
-    return { x: this.opts.worldX, z: this.opts.worldZ };
+  worldOrigin(worldOffsetY: number): { x: number; y: number; z: number } {
+    // The fan is origin-centred and flat (Y=0); lift it to the world water Y.
+    return {
+      x: this.opts.worldX,
+      y: worldOffsetY + this.localWaterY,
+      z: this.opts.worldZ,
+    };
   }
 
   densityBoost(): number {

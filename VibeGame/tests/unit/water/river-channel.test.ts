@@ -38,14 +38,15 @@ describe('RiverChannel', () => {
     expect(after).toBeLessThan(before);
   });
 
-  it('worldOrigin returns (0,0) — ribbon vertices are already in world coords', () => {
+  it('worldOrigin returns (0, worldOffsetY, 0) — ribbon vertices carry X/Z and field-local Y', () => {
     const rc = new RiverChannel({
       path: [0, 0, 100, 0],
       width: 6,
       depth: 4,
       waterOffset: 0.3,
     });
-    expect(rc.worldOrigin()).toEqual({ x: 0, z: 0 });
+    // The mesh only needs the field's world Y offset; per-node Y is in the vertices.
+    expect(rc.worldOrigin(12)).toEqual({ x: 0, y: 12, z: 0 });
   });
 
   it('densityBoost returns 255', () => {

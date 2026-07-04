@@ -244,8 +244,10 @@ describe('carveChannel', () => {
     const s = flatField();
     const path = [-40, 0, 40, 0]; // straight river along X through the origin
     const rim = rimHeightAlongPath(s, path, 6);
+    // Pre-sample axis heights (terrain-following, as RiverChannel does).
+    const axis = [sampleHeightAt(s, -40, 0), sampleHeightAt(s, 40, 0)];
     const before = sampleHeightAt(s, 0, 0);
-    const carved = carveChannel(s, path, 6, rim, 8);
+    const carved = carveChannel(s, path, 6, rim, 8, axis);
     const after = sampleHeightAt(s, 0, 0);
     expect(carved).toBe(true);
     expect(after).toBeLessThan(before);
@@ -255,19 +257,22 @@ describe('carveChannel', () => {
     const s = flatField();
     const path = [-40, 0, 40, 0];
     const rim = rimHeightAlongPath(s, path, 6);
-    carveChannel(s, path, 6, rim, 8);
+    const axis = [sampleHeightAt(s, -40, 0), sampleHeightAt(s, 40, 0)];
+    carveChannel(s, path, 6, rim, 8, axis);
     // A point 20 m off-axis (well outside width/2 = 3) keeps the original height.
     expect(sampleHeightAt(s, 0, 20)).toBeCloseTo(50, 1);
   });
 
-  it('only ever lowers heights (idempotent second pass)', () => {
+  it('is idempotent: a second pass (same stable axis heights) does not dig deeper', () => {
     const s = flatField();
     const path = [-40, 0, 40, 0];
     const rim = rimHeightAlongPath(s, path, 6);
-    carveChannel(s, path, 6, rim, 8);
+    // Axis heights are sampled ONCE from the unmutated field (as RiverChannel
+    // does), so a re-carve samples the same floor and doesn't deepen.
+    const axis = [sampleHeightAt(s, -40, 0), sampleHeightAt(s, 40, 0)];
+    carveChannel(s, path, 6, rim, 8, axis);
     const atCenter = sampleHeightAt(s, 0, 0);
-    // A second pass must not lower it further (already at the channel floor).
-    carveChannel(s, path, 6, rim, 8);
+    carveChannel(s, path, 6, rim, 8, axis);
     expect(sampleHeightAt(s, 0, 0)).toBeCloseTo(atCenter, 4);
   });
 
