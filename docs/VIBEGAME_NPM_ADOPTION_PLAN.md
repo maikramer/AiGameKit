@@ -9,6 +9,30 @@ Contexto: a engine já migrou várias áreas para pacotes maduros nos últimos c
 `three.quarks`, `troika-three-text`, `@recast-navigation/three`, `three-mesh-bvh`,
 `@dimforge/rapier3d-compat`). Este plano continua esse movimento.
 
+## Status de execução (2026-07-04)
+
+Executado numa sessão sem gate de teste manual entre fases (pedido explícito do
+usuário); validação final: `tsc --noEmit` limpo, `eslint` sem novos erros,
+`bun test` 2075 pass / 0 fail.
+
+| Fase | Status |
+|---|---|
+| 1 — remover `three-pathfinding`, `colyseus.js` | ✅ feito |
+| 2 — `@three.ez/instanced-mesh` em `auto-instance.ts` | ✅ feito (rewrite completo, LOD/culling nativos) |
+| 3 — yuka → substituto | ✅ feito, **mas diferente do plano**: `ai-steering` não tinha navmesh (esse já usa DetourCrowd via `recast-navigation`, plugin `navmesh`, sem yuka). Escrito `vehicle.ts` — steering Reynolds (seek/flee/wander/obstacle) sem nenhuma lib nova, só `THREE.Vector3` |
+| 4 — CSM (`three-custom-shader-material`) | ⚠️ parcial: `destructible/fx.ts` e `water/systems.ts` migrados (e corrigem o bug histórico de `uTime` congelado). **`terrain/systems.ts` NÃO migrado** — shader de ~230 linhas, 5 pontos de injeção incl. blend de normal tangent-space por camada; risco alto sem verificação visual, deixado para outra sessão com QA no browser |
+| 5.1 — `n8ao` (SSAO) | ✅ feito, substitui `SSAOPass` (que não tinha `.intensity`) |
+| 5.2 — `detect-gpu` | ✅ feito, tier usado só para sample count do n8ao (`setQualityMode`); radius/intensity continuam 100% autor-controlados |
+| 5.3 — `tweakpane` | ✅ feito, painel auto-bind no registry de debug vars existente, tecla `T`, import dinâmico (dev-only) |
+| 6 — `three-mesh-ui` → `@pmndrs/uikit` | ✅ feito. Achado extra: `three-mesh-ui` já tinha sido removido do `package.json` (fase 1 cleanup) mas o pacote ainda existia fisicamente em `node_modules/` sem estar no lockfile — teria quebrado num install limpo |
+| 7 — `@takram/three-clouds`/`three-atmosphere` | ❌ não implementado (recomendação mantida como protótipo futuro, GPU pesada, precisa QA visual) |
+| 7 — `alea` | ❌ não implementado: inspeção mostrou que `weather/rng.ts` já tem `mulberry32` seedável funcionando — trocar seria só churn |
+| 8 — manter custom | sem mudanças, conforme plano |
+
+Commits gerados automaticamente por hooks do ambiente (não por `git commit`
+explícito do agente) — revisar/squash conforme desejado:
+`07109add6`, `072a3c1e0`, `da65461c8`, `92294d6c0`.
+
 ---
 
 ## Fase 1 — Limpeza: dependências mortas (esforço: trivial)
