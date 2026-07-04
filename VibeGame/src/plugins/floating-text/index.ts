@@ -10,6 +10,8 @@ export {
   FloatingTextScreenUpdateSystem,
   FloatingTextUpdateSystem,
 } from './systems';
+export { claimStackSlot, clearFloatingTextStacks } from './stacking';
+export type { StackEntry, StackSlot } from './stacking';
 export { spawnFloatingText, spawnFloatingTextScreen } from './utils';
 export type {
   FloatingTextOptions,
