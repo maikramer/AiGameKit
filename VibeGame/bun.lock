@@ -45,6 +45,7 @@
         "jsdom": "^29.1.1",
         "prettier": "^3.9.1",
         "rollup-plugin-visualizer": "^7.0.1",
+        "stats-gl": "^4.2.2",
         "three": "^0.185.0",
         "typescript": "^6.0.3",
         "vite": "^8.1.0",
@@ -758,6 +759,8 @@
     "source-map-js": ["source-map-js@1.2.1", "", {}, "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA=="],
 
     "stable-hash-x": ["stable-hash-x@0.2.0", "", {}, "sha512-o3yWv49B/o4QZk5ZcsALc6t0+eCelPc44zZsLtCQnZPDwFpDYSWcDnrv2TtMmMbQ7uKo3J0HTURCqckw23czNQ=="],
+
+    "stats-gl": ["stats-gl@4.2.2", "", { "peerDependencies": { "three": "*" }, "optionalPeers": ["three"] }, "sha512-SvWXaevBiPsf72GAybnLKXUqQI3Su09t/RGQWM0s2ZLqqhhVw1meNrORVRJcmZcQb4PB131XdFg0/jF+GqhSvw=="],
 
     "string-width": ["string-width@7.2.0", "", { "dependencies": { "emoji-regex": "^10.3.0", "get-east-asian-width": "^1.0.0", "strip-ansi": "^7.1.0" } }, "sha512-tsaTIkKW9b4N+AEj+SVA+WhJzV7/zMhcSu78mLKWSk7cXMOSHsBKFWUs0fWwq8QyK3MgJBQRX6Gbi4kYbdvGkQ=="],
 

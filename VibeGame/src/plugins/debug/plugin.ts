@@ -5,6 +5,7 @@ import {
   type Component,
 } from '../../core';
 import type { Plugin, State, System } from '../../core';
+import Stats from 'stats-gl';
 import { getTerrainContext } from '../terrain/utils';
 import { getRenderingContext, getScene } from '../rendering/utils';
 import { getPhysicsContext } from '../physics/systems';
@@ -164,6 +165,11 @@ interface OverlayRuntime {
   ringIndex: number;
   ringFull: boolean;
   wireframeOn: boolean;
+  /** stats-gl WebGL/GPU profiler (draw calls, GPU time, memory). Lazy-init
+   *  against the rendering plugin's canvas/renderer; null in headless/SSR. */
+  statsGl: Stats | null;
+  statsGlInitFailed: boolean;
+  statsGlVisible: boolean;
 }
 
 const overlayByState = new WeakMap<State, OverlayRuntime>();
@@ -232,8 +238,62 @@ function buildKeyHandler(state: State): (event: KeyboardEvent) => void {
         runtime.el.style.display === 'none' ? 'block' : 'none';
     } else if (event.key === '*') {
       toggleWireframe(state, runtime);
+    } else if (event.key === 'g' || event.key === 'G') {
+      toggleStatsGl(state, runtime);
     }
   };
+}
+
+/**
+ * Lazily construct the stats-gl profiler against the rendering plugin's canvas.
+ * GPU/timing tracking is async-initialized by stats-gl; the panel DOM is
+ * appended hidden and revealed on toggle. Fails silently (one-shot) when there
+ * is no canvas/renderer yet or init throws — the overlay still works without it.
+ */
+function ensureStatsGl(state: State, runtime: OverlayRuntime): void {
+  if (runtime.statsGl || runtime.statsGlInitFailed) return;
+  let context: ReturnType<typeof getRenderingContext>;
+  try {
+    context = getRenderingContext(state);
+  } catch {
+    runtime.statsGlInitFailed = true;
+    return;
+  }
+  const canvas = context.canvas;
+  if (!canvas) {
+    runtime.statsGlInitFailed = true;
+    return;
+  }
+  const stats = new Stats({ trackGPU: true, trackCPT: true, trackFPS: true });
+  // init() resolves async; surface failures via the flag, not a crash.
+  stats.init(canvas).then(
+    () => {
+      runtime.statsGl = stats;
+      const dom = stats.dom;
+      dom.style.display = runtime.statsGlVisible ? 'block' : 'none';
+      // Park it top-right so it doesn't overlap the text overlay (top-left).
+      dom.style.position = 'fixed';
+      dom.style.top = '8px';
+      dom.style.right = '8px';
+      dom.style.zIndex = '9999';
+      dom.style.pointerEvents = 'none';
+      if (document.body) document.body.appendChild(dom);
+      else document.documentElement.appendChild(dom);
+    },
+    () => {
+      runtime.statsGlInitFailed = true;
+    }
+  );
+}
+
+function toggleStatsGl(state: State, runtime: OverlayRuntime): void {
+  runtime.statsGlVisible = !runtime.statsGlVisible;
+  ensureStatsGl(state, runtime);
+  if (runtime.statsGl) {
+    runtime.statsGl.dom.style.display = runtime.statsGlVisible
+      ? 'block'
+      : 'none';
+  }
 }
 
 function ensureOverlayRuntime(state: State): OverlayRuntime | null {
@@ -257,6 +317,9 @@ function ensureOverlayRuntime(state: State): OverlayRuntime | null {
     ringIndex: 0,
     ringFull: false,
     wireframeOn: false,
+    statsGl: null,
+    statsGlInitFailed: false,
+    statsGlVisible: false,
   };
   window.addEventListener('keydown', runtime.keyHandler);
   overlayByState.set(state, runtime);
@@ -370,6 +433,20 @@ export const DebugOverlaySystem: System = {
       }
     }
 
+    // Drive the stats-gl profiler when present (draw calls, GPU/CPU time,
+    // memory). Lazy-init keeps it out of the hot path until first toggle.
+    if (runtime.statsGlVisible && !runtime.statsGl) {
+      ensureStatsGl(state, runtime);
+    }
+    if (runtime.statsGl) {
+      try {
+        runtime.statsGl.update();
+      } catch {
+        // Swallow per-frame profiler errors: the overlay must never crash the
+        // render loop, and stats-gl can throw transiently during teardown.
+      }
+    }
+
     if (state.time.frameCount % OVERLAY_REFRESH_FRAMES !== 0) return;
 
     const { min, avg, max } = ringStats(runtime);
@@ -387,7 +464,7 @@ export const DebugOverlaySystem: System = {
       `Systems:    ${state.systems.size}\n` +
       `Coroutines: ${coroutineCount}\n` +
       `GLTF loads: ${gltfLoads}\n` +
-      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}` +
+      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}   [G] GPU stats${runtime.statsGlVisible ? ' ON' : ''}` +
       registrySection;
   },
   dispose(state: State): void {
@@ -398,6 +475,12 @@ export const DebugOverlaySystem: System = {
     }
     if (runtime.el.parentNode) {
       runtime.el.parentNode.removeChild(runtime.el);
+    }
+    if (runtime.statsGl) {
+      const dom = runtime.statsGl.dom;
+      if (dom.parentNode) dom.parentNode.removeChild(dom);
+      runtime.statsGl.dispose();
+      runtime.statsGl = null;
     }
     overlayByState.delete(state);
   },
@@ -413,6 +496,7 @@ export const DebugOverlaySystem: System = {
  * In-browser keys (active only when this plugin is registered and not headless):
  *   `?` (Shift+/) — toggle the stats overlay (hidden by default)
  *   `*` (Shift+8) — toggle wireframe rendering on every scene mesh
+ *   `G`           — toggle the stats-gl GPU/CPU/draw-call profiler panel
  *
  * Not part of DefaultPlugins — register it explicitly (e.g. in an example) so
  * it never ships in production.
