@@ -14,7 +14,7 @@ import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
 import { getGltfLocalAABB } from '../gltf-xml/gltf-bounds-cache';
-import { isPointInWater, waterBodyAt } from '../water/registry';
+import { isPointNearWater, waterBodyAt } from '../water/registry';
 import {
   SpawnExclusion,
   isSpawnAreaFree,
@@ -329,9 +329,10 @@ export const TerrainSpawnSystem: System = {
           if (!cand) continue;
           s = cand;
           if (!isNormalWithinSlopeLimit(cand.normal, maxSlope)) continue;
-          // `avoid-water` parsed for years but checked nothing — lakes now
-          // register real water bodies, so honour it.
-          if (spec.avoidWater && isPointInWater(state, wx, wz)) continue;
+          // `avoid-water` excludes the FULL carve footprint (water + carved
+          // banks/beach), not just the wet surface — otherwise props land on
+          // the bank slope with their trunks leaning into the channel.
+          if (spec.avoidWater && isPointNearWater(state, wx, wz)) continue;
           if (
             spec.avoidOverlaps &&
             !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)

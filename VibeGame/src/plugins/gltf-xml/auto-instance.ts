@@ -125,6 +125,53 @@ export function getInstancedLodUrls(
   );
 }
 
+/** URL of the GLB pool holding this entity's instance slot, if any. */
+export function getInstancedPoolUrl(
+  state: State,
+  entity: number
+): string | undefined {
+  const pools = poolsByState.get(state);
+  if (!pools) return undefined;
+  for (const pool of pools.values()) {
+    if (pool.slotByEntity.has(entity)) return pool.url;
+  }
+  return undefined;
+}
+
+/**
+ * Detach the entity's instance slot from its pool (the pooled visual vanishes
+ * immediately). Used to "de-instance" a prop that needs a private scene-graph
+ * visual (per-entity shader FX, felled-tree animation). Returns the pool URL
+ * so the caller can clone the master GLB as the replacement visual.
+ */
+export function detachInstanceSlot(
+  state: State,
+  entity: number
+): string | undefined {
+  const pools = poolsByState.get(state);
+  if (!pools) return undefined;
+  for (const pool of pools.values()) {
+    if (pool.slotByEntity.has(entity)) {
+      removeSlot(pool, entity);
+      instancedFlagByState.get(state)?.delete(entity);
+      return pool.url;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * World matrix an instance slot renders with (WorldTransform when computed,
+ * local Transform otherwise — same rule as the pool writer). Returns a fresh
+ * matrix safe to keep.
+ */
+export function getInstancedEntityMatrix(
+  state: State,
+  entity: number
+): THREE.Matrix4 {
+  return composeEntityMatrix(state, entity).clone();
+}
+
 function getPools(state: State): Map<string, GltfInstancePool> {
   let m = poolsByState.get(state);
   if (!m) {

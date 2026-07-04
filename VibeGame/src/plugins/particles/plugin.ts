@@ -58,6 +58,10 @@ export const ParticlesPlugin: Plugin = {
           sparks: 6,
           magic: 7,
           fireflies: 8,
+          splash: 9,
+          woodchips: 10,
+          rockshards: 11,
+          leaves: 12,
         },
         'render-mode': {
           billboard: 0,
