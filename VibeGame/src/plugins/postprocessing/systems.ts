@@ -1,5 +1,4 @@
-import type { Scene, ToneMapping } from 'three';
-import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
+import type { Pass } from 'postprocessing';
 import { defineQuery, type State, type System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, threeCameras } from '../rendering/utils';
@@ -13,27 +12,12 @@ const postprocessingQuery = defineQuery([Postprocessing]);
 const mainCameraQuery = defineQuery([MainCamera]);
 
 let builtinEffectsRegistered = false;
-let savedRendererToneMapping: ToneMapping | null = null;
 
 const activeEffectInstances: Array<{
   def: EffectDefinition;
   pass: Pass;
   entity: number;
 }> = [];
-
-function invalidateSceneMaterials(scene: Scene): void {
-  scene.traverse((obj) => {
-    const mesh = obj as {
-      material?: { needsUpdate: boolean } | { needsUpdate: boolean }[];
-    };
-    if (!mesh.material) return;
-    if (Array.isArray(mesh.material)) {
-      for (const m of mesh.material) m.needsUpdate = true;
-    } else {
-      mesh.material.needsUpdate = true;
-    }
-  });
-}
 
 export const PostprocessingBuildSystem: System = {
   group: 'draw',
@@ -63,19 +47,8 @@ export const PostprocessingBuildSystem: System = {
       Float32Array | Uint8Array
     >;
 
-    // Save the renderer's original tone mapping before any definition mutates it.
-    // The tonemapping definition sets renderer.toneMapping as a side effect of
-    // create(); OutputPass then applies that value at render time.
-    const usesToneMapping = Postprocessing.toneMapping[e] !== 0;
-    if (usesToneMapping) {
-      if (savedRendererToneMapping === null) {
-        savedRendererToneMapping = context.renderer.toneMapping;
-      }
-    } else if (savedRendererToneMapping !== null) {
-      context.renderer.toneMapping = savedRendererToneMapping;
-      savedRendererToneMapping = null;
-      invalidateSceneMaterials(context.scene);
-    }
+    // Tone mapping is now a ToneMappingEffect (shader pass) rather than a
+    // renderer mutation, so there is no renderer state to save/restore.
 
     const firstPasses: Pass[] = [];
     const regularPasses: Pass[] = [];
@@ -118,10 +91,6 @@ export const PostprocessingBuildSystem: System = {
     context.postProcessing?.dispose();
     context.postProcessing = undefined;
     activeEffectInstances.length = 0;
-    if (context.renderer && savedRendererToneMapping !== null) {
-      context.renderer.toneMapping = savedRendererToneMapping;
-      savedRendererToneMapping = null;
-    }
   },
 };
 

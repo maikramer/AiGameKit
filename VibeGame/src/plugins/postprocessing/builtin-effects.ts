@@ -1,34 +1,54 @@
+import { Vector2, type Camera, type Scene, type WebGLRenderer } from 'three';
 import {
-  ACESFilmicToneMapping,
-  AgXToneMapping,
-  Color,
-  NeutralToneMapping,
-  NoToneMapping,
-  ReinhardToneMapping,
-  Vector2,
-  type Camera,
-  type Scene,
-  type ToneMapping,
-  type WebGLRenderer,
-} from 'three';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
-import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
+  BloomEffect,
+  ChromaticAberrationEffect,
+  DepthOfFieldEffect,
+  EffectPass,
+  FXAAEffect,
+  SMAAEffect,
+  SMAAPreset,
+  ToneMappingEffect,
+  ToneMappingMode,
+  VignetteEffect,
+  type Effect,
+  type Pass,
+} from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { getGpuTierForRenderer } from '../rendering/utils';
-import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
-import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
-import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
 import { Postprocessing } from './components';
 import { registerEffect } from './effect-registry';
-import { HeightFogPass } from './height-fog';
 
 type CS = Record<string, Float32Array | Uint8Array>;
 
-// BokehPass aperture is a tiny sensitivity value (default 0.025) while the old
-// postprocessing bokehScale is a coarse strength multiplier (~1-8). Scale so the
-// default bokehScale lands near BokehPass's own default aperture.
-const BOKEH_APERTURE_SCALE = 0.005;
+/**
+ * Maps the component's toneMapping enum (0=off,1=AgX,2=ACES,3=Neutral,
+ * 4=Reinhard) to the library's ToneMappingMode. Index 0 is handled by the
+ * create() returning null (no tone-mapping pass).
+ */
+const ToneMappingModes = [
+  ToneMappingMode.AGX,
+  ToneMappingMode.ACES_FILMIC,
+  ToneMappingMode.NEUTRAL,
+  ToneMappingMode.REINHARD2,
+] as const;
+
+/**
+ * EffectPass keeps its `effects` array private, so to update an effect's
+ * parameters each frame we hold the Effect reference alongside the pass that
+ * wraps it. SSAO uses N8AOPostPass directly (no EffectPass wrapper) and is
+ * resolved by casting in its own update().
+ */
+const effectByPass = new WeakMap<Pass, Effect>();
+
+function wrap(camera: Camera, effect: Effect): Pass {
+  const pass = new EffectPass(camera, effect);
+  effectByPass.set(pass, effect);
+  return pass;
+}
+
+function effectOf(pass: Pass): Effect | undefined {
+  return effectByPass.get(pass);
+}
 
 /** Maps a `detect-gpu` tier (0-3, undefined = unresolved yet) to n8ao's sample-count preset. */
 function qualityModeForTier(
@@ -41,15 +61,6 @@ function qualityModeForTier(
   return 'High';
 }
 
-// LINEAR was intentionally dropped from the tonemapping menu. Index 0 in the
-// component selects NoToneMapping (a renderer side-effect, no Pass emitted).
-const ToneMappings = [
-  AgXToneMapping,
-  ACESFilmicToneMapping,
-  NeutralToneMapping,
-  ReinhardToneMapping,
-] as const;
-
 registerEffect({
   key: 'smaa',
   position: 'first',
@@ -58,11 +69,11 @@ registerEffect({
     entity: number,
     _renderer: WebGLRenderer,
     _scene: Scene,
-    _camera: Camera
+    camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     if ((cs.aa as Uint8Array)[entity] !== 2) return null;
-    return new SMAAPass();
+    return wrap(camera, new SMAAEffect({ preset: SMAAPreset.HIGH }));
   },
 });
 
@@ -72,55 +83,13 @@ registerEffect({
   create(
     _state: CS,
     entity: number,
-    renderer: WebGLRenderer,
-    _scene: Scene,
-    _camera: Camera
-  ): Pass | null {
-    const cs = Postprocessing as unknown as CS;
-    if ((cs.aa as Uint8Array)[entity] !== 1) return null;
-    const size = renderer.getDrawingBufferSize(new Vector2());
-    const pass = new ShaderPass(FXAAShader);
-    (pass.uniforms.resolution.value as Vector2).set(1 / size.x, 1 / size.y);
-    return pass;
-  },
-});
-
-registerEffect({
-  key: 'heightFog',
-  create(
-    _state: CS,
-    entity: number,
     _renderer: WebGLRenderer,
     _scene: Scene,
     camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
-    if (!(cs.heightFog as Uint8Array)[entity]) return null;
-    return new HeightFogPass(camera, {
-      color: (cs.fogColor as unknown as Uint32Array)[entity],
-      density: (cs.fogDensity as Float32Array)[entity],
-      height: (cs.fogHeight as Float32Array)[entity],
-      falloff: (cs.fogFalloff as Float32Array)[entity],
-      noise: (cs.fogNoise as Float32Array)[entity],
-    });
-  },
-  update(state: CS, entity: number, pass: Pass): void {
-    // Sync biome/postprocessing-driven fog values each frame so the HeightFogPass
-    // (which captures them at creation) actually responds to runtime changes.
-    const fp = pass as HeightFogPass;
-    if (!fp.uniforms) return;
-    const density = (state.fogDensity as Float32Array)[entity];
-    const height = (state.fogHeight as Float32Array)[entity];
-    const falloff = (state.fogFalloff as Float32Array)[entity];
-    if (density !== undefined)
-      (fp.uniforms.uFogDensity.value as number) = density;
-    if (height !== undefined) (fp.uniforms.uFogHeight.value as number) = height;
-    if (falloff !== undefined)
-      (fp.uniforms.uFogFalloff.value as number) = falloff;
-    const color = (state.fogColor as unknown as Uint32Array)[entity];
-    if (color !== undefined) {
-      (fp.uniforms.uFogColor.value as Color).set(color);
-    }
+    if ((cs.aa as Uint8Array)[entity] !== 1) return null;
+    return wrap(camera, new FXAAEffect());
   },
 });
 
@@ -129,25 +98,28 @@ registerEffect({
   create(
     _state: CS,
     entity: number,
-    renderer: WebGLRenderer,
+    _renderer: WebGLRenderer,
     _scene: Scene,
-    _camera: Camera
+    camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     if (!(cs.bloom as Uint8Array)[entity]) return null;
-    const size = renderer.getDrawingBufferSize(new Vector2());
-    return new UnrealBloomPass(
-      size,
-      (cs.bloomStrength as Float32Array)[entity],
-      (cs.bloomRadius as Float32Array)[entity],
-      (cs.bloomThreshold as Float32Array)[entity]
-    );
+    const bloom = new BloomEffect({
+      mipmapBlur: true,
+      luminanceThreshold: (cs.bloomThreshold as Float32Array)[entity],
+      intensity: (cs.bloomStrength as Float32Array)[entity],
+      radius: (cs.bloomRadius as Float32Array)[entity],
+    });
+    return wrap(camera, bloom);
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const bloom = pass as UnrealBloomPass;
-    bloom.strength = (state.bloomStrength as Float32Array)[entity];
-    bloom.radius = (state.bloomRadius as Float32Array)[entity];
-    bloom.threshold = (state.bloomThreshold as Float32Array)[entity];
+    const bloom = effectOf(pass) as BloomEffect | undefined;
+    if (!bloom) return;
+    bloom.intensity = (state.bloomStrength as Float32Array)[entity];
+    bloom.mipmapBlurPass.radius = (state.bloomRadius as Float32Array)[entity];
+    bloom.luminanceMaterial.threshold = (
+      state.bloomThreshold as Float32Array
+    )[entity];
   },
 });
 
@@ -158,44 +130,21 @@ registerEffect({
     entity: number,
     _renderer: WebGLRenderer,
     _scene: Scene,
-    _camera: Camera
+    camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     if (!(cs.vignette as Uint8Array)[entity]) return null;
-    const pass = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        offset: { value: (cs.vignetteOffset as Float32Array)[entity] },
-        darkness: { value: (cs.vignetteDarkness as Float32Array)[entity] },
-      },
-      vertexShader: /* glsl */ `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform sampler2D tDiffuse;
-        uniform float offset;
-        uniform float darkness;
-        varying vec2 vUv;
-        void main() {
-          vec4 texel = texture2D(tDiffuse, vUv);
-          vec2 uv = (vUv - 0.5) * (1.0 + offset);
-          float vig = clamp(1.0 - dot(uv, uv) * darkness, 0.0, 1.0);
-          gl_FragColor = vec4(texel.rgb * vig, texel.a);
-        }
-      `,
+    const vignette = new VignetteEffect({
+      offset: (cs.vignetteOffset as Float32Array)[entity],
+      darkness: (cs.vignetteDarkness as Float32Array)[entity],
     });
-    return pass;
+    return wrap(camera, vignette);
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const v = pass as ShaderPass;
-    v.uniforms.offset.value = (state.vignetteOffset as Float32Array)[entity];
-    v.uniforms.darkness.value = (state.vignetteDarkness as Float32Array)[
-      entity
-    ];
+    const vignette = effectOf(pass) as VignetteEffect | undefined;
+    if (!vignette) return;
+    vignette.offset = (state.vignetteOffset as Float32Array)[entity];
+    vignette.darkness = (state.vignetteDarkness as Float32Array)[entity];
   },
 });
 
@@ -211,22 +160,20 @@ registerEffect({
     const cs = Postprocessing as unknown as CS;
     if (!(cs.ssao as Uint8Array)[entity]) return null;
     const size = renderer.getDrawingBufferSize(new Vector2());
-    const pass = new N8AOPostPass(scene, camera, size.x, size.y);
-    pass.configuration.aoRadius = Math.max(
+    const n8ao = new N8AOPostPass(scene, camera, size.x, size.y);
+    n8ao.configuration.aoRadius = Math.max(
       1e-6,
       (cs.ssaoRadius as Float32Array)[entity]
     );
-    pass.configuration.intensity = Math.max(
+    n8ao.configuration.intensity = Math.max(
       0,
       (cs.ssaoIntensity as Float32Array)[entity]
     );
-    // Sample counts (not user-configurable via XML) follow the detected GPU
-    // tier; radius/intensity above stay fully author-controlled.
-    pass.setQualityMode(qualityModeForTier(getGpuTierForRenderer(renderer)));
-    return pass;
+    n8ao.setQualityMode(qualityModeForTier(getGpuTierForRenderer(renderer)));
+    return n8ao as unknown as Pass;
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const ssao = pass as N8AOPostPass;
+    const ssao = pass as unknown as N8AOPostPass;
     ssao.configuration.aoRadius = Math.max(
       1e-6,
       (state.ssaoRadius as Float32Array)[entity]
@@ -244,33 +191,28 @@ registerEffect({
     _state: CS,
     entity: number,
     _renderer: WebGLRenderer,
-    scene: Scene,
+    _scene: Scene,
     camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     if (!(cs.depthOfField as Uint8Array)[entity]) return null;
-    // BokehPass parameterization differs from the previous DepthOfFieldEffect:
-    //   focus     = focusDistance (world units along the view ray)
-    //   aperture  = bokehScale * BOKEH_APERTURE_SCALE (mapped to BokehPass's
-    //               tiny aperture sensitivity, default 0.025)
-    //   maxblur   = clamp(focusRange, 0, 1) (reused as the max-blur cap)
-    const focus = (cs.dofFocusDistance as Float32Array)[entity];
-    const aperture =
-      (cs.dofBokehScale as Float32Array)[entity] * BOKEH_APERTURE_SCALE;
-    const maxblur = Math.min(1, (cs.dofFocusRange as Float32Array)[entity]);
-    return new BokehPass(scene, camera, { focus, aperture, maxblur });
+    const dof = new DepthOfFieldEffect(camera, {
+      focusDistance: (cs.dofFocusDistance as Float32Array)[entity],
+      focusRange: (cs.dofFocusRange as Float32Array)[entity],
+      bokehScale: (cs.dofBokehScale as Float32Array)[entity],
+    });
+    return wrap(camera, dof);
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const dof = pass as BokehPass;
-    dof.materialBokeh.uniforms.focus.value = (
-      state.dofFocusDistance as Float32Array
-    )[entity];
-    dof.materialBokeh.uniforms.aperture.value =
-      (state.dofBokehScale as Float32Array)[entity] * BOKEH_APERTURE_SCALE;
-    dof.materialBokeh.uniforms.maxblur.value = Math.min(
-      1,
-      (state.dofFocusRange as Float32Array)[entity]
-    );
+    const dof = effectOf(pass) as DepthOfFieldEffect | undefined;
+    if (!dof) return;
+    dof.cocMaterial.focusDistance = (state.dofFocusDistance as Float32Array)[
+      entity
+    ];
+    dof.cocMaterial.focusRange = (state.dofFocusRange as Float32Array)[entity];
+    // bokehScale is a target-circle count; use the component's coarse scale
+    // divided down so the default (~3) lands near the library default (1).
+    dof.bokehScale = (state.dofBokehScale as Float32Array)[entity] / 3;
   },
 });
 
@@ -280,23 +222,15 @@ registerEffect({
   create(
     _state: CS,
     entity: number,
-    renderer: WebGLRenderer,
+    _renderer: WebGLRenderer,
     _scene: Scene,
-    _camera: Camera
+    camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     const idx = (cs.toneMapping as Uint8Array)[entity];
-    if (idx === 0) {
-      renderer.toneMapping = NoToneMapping;
-      return null;
-    }
-    renderer.toneMapping = ToneMappings[
-      Math.min(idx, ToneMappings.length) - 1
-    ] as ToneMapping;
-    renderer.toneMappingExposure = (cs.toneMappingExposure as Float32Array)[
-      entity
-    ];
-    return null;
+    if (idx === 0) return null;
+    const mode = ToneMappingModes[Math.min(idx, ToneMappingModes.length) - 1];
+    return wrap(camera, new ToneMappingEffect({ mode }));
   },
 });
 
@@ -307,42 +241,23 @@ registerEffect({
     entity: number,
     _renderer: WebGLRenderer,
     _scene: Scene,
-    _camera: Camera
+    camera: Camera
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     if (!(cs.chromaticAberration as Uint8Array)[entity]) return null;
     const strength = (cs.caStrength as Float32Array)[entity];
-    const pass = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        caOffset: { value: new Vector2(strength, strength) },
-      },
-      vertexShader: /* glsl */ `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform sampler2D tDiffuse;
-        uniform vec2 caOffset;
-        varying vec2 vUv;
-        void main() {
-          vec2 offset = caOffset * (vUv - 0.5);
-          float r = texture2D(tDiffuse, vUv - offset).r;
-          float g = texture2D(tDiffuse, vUv).g;
-          float b = texture2D(tDiffuse, vUv + offset).b;
-          gl_FragColor = vec4(r, g, b, 1.0);
-        }
-      `,
+    const ca = new ChromaticAberrationEffect({
+      offset: new Vector2(strength, strength),
+      radialModulation: true,
+      modulationOffset: 0.15,
     });
-    return pass;
+    return wrap(camera, ca);
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const ca = pass as ShaderPass;
+    const ca = effectOf(pass) as ChromaticAberrationEffect | undefined;
+    if (!ca) return;
     const strength = (state.caStrength as Float32Array)[entity];
-    (ca.uniforms.caOffset.value as Vector2).set(strength, strength);
+    ca.offset.set(strength, strength);
   },
 });
 
