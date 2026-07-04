@@ -265,38 +265,45 @@ export function carveChannel(
 }
 
 export interface RiverCarveOpts {
-  /** Channel width (m). */
+  /** Waterline width (m): the carved floor crosses the water surface at
+   *  exactly ±width/2 — the water ribbon and the carve agree by construction. */
   width: number;
   /** Water depth below the surface at the channel axis (m). */
   channelDepth: number;
-  /** Width of the raised bank band outside the channel (m). */
-  leveeWidth: number;
-  /** How far the levee crest sits above the local water surface (m). */
-  leveeLip: number;
-  /** Max the levee may raise the terrain (m) — bigger deficits are left to
-   *  read as waterfalls/cliffs instead of building aqueduct walls. */
-  maxLeveeRaise: number;
+  /** Exposed carved-bank width outside the waterline, each side (m). */
+  bankWidth: number;
+  /** Bank crest height above the local water surface (m) — the freeboard that
+   *  keeps the water visibly recessed inside the carve. */
+  bankHeight: number;
+  /** Feather band width outside the bank crest blending back to terrain (m). */
+  featherWidth: number;
+  /** Max the bank/feather may raise low terrain (m) — bigger deficits are left
+   *  to read as waterfalls/cliffs instead of building aqueduct walls. */
+  maxBankRaise: number;
 }
 
 /**
  * Carve a river channel along dense stations with a known water-surface
- * profile, and raise low banks (levees) so the water never floats over open
- * ground.
+ * profile. The transverse profile has three zones (d = lateral distance):
+ *
+ *  - **Water bowl** (d ≤ width/2): `surface − channelDepth·(1−t²)^1.5` —
+ *    depth at the axis, crossing the surface exactly at the waterline. Lower
+ *    only, so pre-existing gorges are kept.
+ *  - **Bank** (width/2 < d ≤ width/2+bankWidth): smoothstep rise from the
+ *    surface up to `surface + bankHeight`. Cuts high terrain down (the exposed
+ *    earth bank) AND raises low terrain up (capped) so the water is contained
+ *    and always sits below a visible lip.
+ *  - **Feather** (…+featherWidth): raise-only smoothstep from the crest back
+ *    to nothing, so raised banks don't end in a wall.
  *
  * Unlike {@link carveChannel} (single global AABB, nearest-segment search per
  * texel — O(texels × segments), unusable for map-length rivers), this stamps
- * each segment into its own sub-AABB. Two passes:
- *
- *  1. **Levees** (max): terrain in the band [halfW, halfW+leveeWidth] either
- *     side is raised to `surface + lip·falloff` when the deficit is small
- *     (≤ maxLeveeRaise). Big deficits are skipped — those are waterfall drops.
- *  2. **Floor** (min): terrain within halfW of the segment is lowered to
- *     `surface − channelDepth·(1−t²)^1.5`. Runs after the levees so a bend's
- *     levee can never poke into a neighbouring segment's channel.
+ * each segment into its own sub-AABB. Raises run first, lowers second, so a
+ * bend's raised bank can never poke into a neighbouring segment's channel.
  *
  * `surface` holds one water-surface height per station (field-local), already
- * descending (see RiverChannel). Floors key off the surface — not the raw
- * terrain — so the channel always contains the water.
+ * descending (see RiverChannel). The profile keys off the surface — not the
+ * raw terrain — so the channel always contains the water.
  *
  * Returns true when at least one texel changed.
  */
@@ -315,7 +322,9 @@ export function carveRiverChannel(
   const stepX = worldSize / (gw - 1);
   const stepZ = worldSize / (gh - 1);
   const halfW = opts.width / 2;
-  const outer = halfW + opts.leveeWidth;
+  const bankW = Math.max(0.01, opts.bankWidth);
+  const halfCarve = halfW + bankW;
+  const outer = halfCarve + opts.featherWidth;
 
   let changed = false;
 
@@ -362,24 +371,43 @@ export function carveRiverChannel(
     }
   };
 
-  // Pass 1 — levees (raise, capped).
+  // Height of the bank/feather profile above the water surface at lateral d.
+  // Bank zone rises 0 → bankHeight (smoothstep); feather falls back to 0.
+  const bankRise = (d: number): number => {
+    if (d <= halfW) return 0;
+    if (d <= halfCarve) {
+      const s = (d - halfW) / bankW;
+      return opts.bankHeight * (s * s * (3 - 2 * s));
+    }
+    const f = 1 - (d - halfCarve) / Math.max(opts.featherWidth, 0.01);
+    return opts.bankHeight * (f * f * (3 - 2 * f));
+  };
+
+  // Pass 1 — banks + feather (raise, capped): low terrain outside the
+  // waterline is lifted to the bank profile so the water is contained and
+  // sits below a visible lip. Big deficits are skipped (waterfall/cliff).
   eachSegmentTexel(outer, (idx, d, surfY) => {
-    if (d < halfW) return null;
+    if (d <= halfW) return null;
     const cur = data[idx]! * maxHeight;
-    // Crest at the channel edge, feathering to nothing at the outer edge.
-    const f = 1 - (d - halfW) / Math.max(opts.leveeWidth, 0.01);
-    const targetY = surfY + opts.leveeLip * (f * f * (3 - 2 * f));
+    const targetY = surfY + bankRise(d);
     if (cur >= targetY) return null;
-    if (targetY - cur > opts.maxLeveeRaise) return null; // waterfall/cliff zone
+    if (targetY - cur > opts.maxBankRaise) return null; // waterfall/cliff zone
     return Math.min(1, Math.max(0, targetY / maxHeight));
   });
 
-  // Pass 2 — channel floor (lower only).
-  eachSegmentTexel(halfW, (idx, d, surfY) => {
-    const tLat = d / halfW;
-    const floorY =
-      surfY -
-      opts.channelDepth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
+  // Pass 2 — water bowl + bank cut (lower only): high terrain is carved down
+  // to the bowl inside the waterline and to the rising bank profile outside
+  // it, exposing an earth bank between the water and the natural terrain.
+  eachSegmentTexel(halfCarve, (idx, d, surfY) => {
+    let floorY: number;
+    if (d <= halfW) {
+      const tLat = d / halfW;
+      floorY =
+        surfY -
+        opts.channelDepth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
+    } else {
+      floorY = surfY + bankRise(d);
+    }
     const target = Math.min(1, Math.max(0, floorY / maxHeight));
     if (data[idx]! <= target) return null;
     return target;

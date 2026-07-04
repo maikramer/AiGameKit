@@ -1,7 +1,12 @@
 import type * as THREE from 'three';
 import type { HeightSampler } from '../terrain/height-sampler';
 import type { WorldAabb } from '../terrain/density-map';
-import { carveBowl, rimHeight, shoreFraction } from './carve';
+import {
+  SHORE_SHAPE_AMPLITUDE,
+  carveBowl,
+  rimHeight,
+  shoreFraction,
+} from './carve';
 import { makeLakeGeometry } from './systems';
 import type { WaterBody } from './registry';
 import type { WaterShape, WaterShapeResult } from './water-shape';
@@ -33,10 +38,6 @@ export class LakeBowl implements WaterShape {
 
   constructor(private readonly opts: LakeBowlOpts) {
     this.carveMarginValue = opts.carveMargin ?? 1.15;
-  }
-
-  carveMargin(): number {
-    return this.carveMarginValue;
   }
 
   computeAabb(): WorldAabb {
@@ -97,6 +98,9 @@ export class LakeBowl implements WaterShape {
       z: worldZ,
       radius,
       shoreRadius: shoreR,
+      // Full carve footprint incl. margin and the organic outline's outward
+      // overshoot — spawn exclusion keeps props off the carved beach slope.
+      carveRadius: radius * this.carveMarginValue * (1 + SHORE_SHAPE_AMPLITUDE),
       waterY: worldWaterY,
     };
   }

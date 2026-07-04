@@ -3,6 +3,7 @@ import { State } from '../../../src/core/ecs/state';
 import {
   carveBowl,
   carveChannel,
+  carveRiverChannel,
   rimHeight,
   rimHeightAlongPath,
   shoreFraction,
@@ -16,6 +17,7 @@ import {
 } from '../../../src/plugins/terrain/density-map';
 import {
   isPointInWater,
+  isPointNearWater,
   registerWaterBody,
   unregisterWaterBody,
   waterLevelAt,
@@ -285,6 +287,130 @@ describe('carveChannel', () => {
       maxHeight: 100,
     };
     expect(carveChannel(flat, [-40, 0, 40, 0], 6, 10, 8)).toBe(false);
+  });
+});
+
+describe('carveRiverChannel (bank profile)', () => {
+  const SIZE = 512; // fine grid → bilinear interpolation error negligible
+  const W = 100;
+
+  function field(heightNorm: number): HeightSampler {
+    return {
+      width: SIZE,
+      height: SIZE,
+      data: new Float32Array(SIZE * SIZE).fill(heightNorm),
+      worldSize: W,
+      maxHeight: 100,
+    };
+  }
+
+  // Straight river along X through the origin; flat 50 m terrain, water at 48.
+  const stations = [-40, 0, 40, 0];
+  const surface = [48, 48];
+  const opts = {
+    width: 8, // waterline half = 4
+    channelDepth: 2,
+    bankWidth: 2, // carve half = 6
+    bankHeight: 1,
+    featherWidth: 2, // outer = 8
+    maxBankRaise: 2.5,
+  };
+
+  it('crosses the water surface at exactly ±width/2 (waterline = width)', () => {
+    const s = field(0.5);
+    expect(carveRiverChannel(s, stations, surface, opts)).toBe(true);
+    expect(sampleHeightAt(s, 0, 4)).toBeCloseTo(48, 1);
+    // Axis is channelDepth below the surface.
+    expect(sampleHeightAt(s, 0, 0)).toBeCloseTo(46, 1);
+    // Inside the waterline the floor is below the surface.
+    expect(sampleHeightAt(s, 0, 2)).toBeLessThan(48);
+  });
+
+  it('cuts an exposed bank rising to surface + bankHeight at the carve edge', () => {
+    const s = field(0.5); // terrain 50 = surface 48 + 2 → bank cut into it
+    carveRiverChannel(s, stations, surface, opts);
+    // Mid-bank: between the surface and the crest.
+    const mid = sampleHeightAt(s, 0, 5);
+    expect(mid).toBeGreaterThan(48);
+    expect(mid).toBeLessThan(49);
+    // Crest at the carve edge: surface + bankHeight, below natural terrain.
+    // (Bilinear interpolation bleeds a little of the untouched 50 m terrain
+    // just outside the cut, so allow a small upward tolerance.)
+    const crest = sampleHeightAt(s, 0, 6);
+    expect(crest).toBeGreaterThan(48.9);
+    expect(crest).toBeLessThan(49.3);
+    // Beyond the feather band the terrain is untouched.
+    expect(sampleHeightAt(s, 0, 12)).toBeCloseTo(50, 2);
+  });
+
+  it('raises low terrain up to the bank profile so the water stays contained', () => {
+    // Terrain at 47 — below the 48 surface. Banks must be raised or the
+    // water would float over open ground.
+    const s = field(0.47);
+    carveRiverChannel(s, stations, surface, opts);
+    expect(sampleHeightAt(s, 0, 6)).toBeCloseTo(49, 1);
+    // Feather blends the raised crest back to natural terrain.
+    expect(sampleHeightAt(s, 0, 12)).toBeCloseTo(47, 2);
+  });
+
+  it('skips raises beyond maxBankRaise (waterfall/cliff zones)', () => {
+    const s = field(0.4); // terrain 40, crest target 49 → deficit 9 > cap
+    carveRiverChannel(s, stations, surface, opts);
+    expect(sampleHeightAt(s, 0, 6)).toBeCloseTo(40, 2);
+  });
+
+  it('is idempotent (same surface → same floor on a second pass)', () => {
+    const s = field(0.5);
+    carveRiverChannel(s, stations, surface, opts);
+    const atAxis = sampleHeightAt(s, 0, 0);
+    const atBank = sampleHeightAt(s, 0, 5);
+    carveRiverChannel(s, stations, surface, opts);
+    expect(sampleHeightAt(s, 0, 0)).toBeCloseTo(atAxis, 4);
+    expect(sampleHeightAt(s, 0, 5)).toBeCloseTo(atBank, 4);
+  });
+});
+
+describe('isPointNearWater (carve-footprint exclusion)', () => {
+  it('rivers: excludes the carve width, not just the waterline', () => {
+    const state = new State();
+    const body = {
+      kind: 'river' as const,
+      path: [
+        [-40, 0],
+        [40, 0],
+      ] as Array<readonly [number, number]>,
+      width: 8,
+      carveWidth: 16,
+      waterY: 48,
+    };
+    registerWaterBody(state, body);
+    expect(isPointInWater(state, 0, 6)).toBe(false); // outside waterline
+    expect(isPointNearWater(state, 0, 6)).toBe(true); // on the carved bank
+    expect(isPointNearWater(state, 0, 9)).toBe(false); // outside the carve
+    unregisterWaterBody(state, body);
+  });
+
+  it('lakes: excludes carveRadius, falling back to radius for legacy bodies', () => {
+    const state = new State();
+    const body = {
+      kind: 'lake' as const,
+      x: 0,
+      z: 0,
+      radius: 6,
+      shoreRadius: 4.5,
+      carveRadius: 9,
+      waterY: 42,
+    };
+    registerWaterBody(state, body);
+    expect(isPointInWater(state, 8, 0)).toBe(false);
+    expect(isPointNearWater(state, 8, 0)).toBe(true);
+    expect(isPointNearWater(state, 10, 0)).toBe(false);
+    unregisterWaterBody(state, body);
+
+    const legacy = { ...body, carveRadius: undefined };
+    registerWaterBody(state, legacy);
+    expect(isPointNearWater(state, 8, 0)).toBe(false); // falls back to radius 6
+    unregisterWaterBody(state, legacy);
   });
 });
 
