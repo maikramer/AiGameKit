@@ -33,11 +33,26 @@ destructible/
 - burstCount: f32 (60)
 - faceOnHit: ui8 (1) — snap player yaw toward the prop on swing
 - sparkOnHit: ui8 (1) — sparks feedback on non-final hits
+- hitPreset: ui8 (sparks) — particle preset spawned on each non-final hit
+- hitBurstCount: f32 (15)
+- breakStyle: ui8 (burst) — break FX: `burst` (0), `fall` (1), `shatter` (2),
+  `split` (3). `fall` tips the top half over (felled tree); `shatter` breaks
+  into tumbling chunks (rock); `split` fends the trunk vertically in two halves
+  that tip apart (wood). Each falls back to a plain burst when the prop has no
+  visual group/scene.
+- crackOnHit: ui8 (0) — darkening crack overlay that deepens with each hit
+- crackStyle: ui8 (voronoi) — crack overlay style: `voronoi` (0, jagged
+  cell-edge lines — rocks) or `vertical` (1, long grain splits — wood). Picked
+  once per entity on the first hit.
+- shakeOnHit: ui8 (0) — decaying wobble on the visual with each hit (trees)
+- cutHeight: f32 (0.6) — trunk cut height in meters for `fall`/`split`
+  (clamped to `[0.2, height*0.4]` so the top is always the larger piece)
 - popupColorR/G/B: f32 (1) — set via `popup-color: #d4c9a8`
 - popupSize: f32 (0.4)
 
 Adapters: `popup-text` (string sidecar — popup only shows when set),
-`popup-color` (hex).
+`popup-color` (hex). Enum fields (`preset`, `hitPreset`, `breakStyle`,
+`crackStyle`) accept their enum name (e.g. `break-style: split`).
 
 ### System
 

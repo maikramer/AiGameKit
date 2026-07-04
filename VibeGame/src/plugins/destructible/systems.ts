@@ -12,6 +12,13 @@ import { PlayerController, PlayerGltfConfig } from '../player/components';
 import { Transform } from '../transforms/components';
 import { Destructible } from './components';
 import {
+  applyCrackAmount,
+  startHitShake,
+  startRockShatter,
+  startTreeFall,
+  startTreeSplit,
+} from './fx';
+import {
   deleteDestructiblePopupText,
   emitDestructibleDestroyed,
   getDestructiblePopupText,
@@ -19,6 +26,33 @@ import {
 
 const SWING_COOLDOWN_SEC = 0.4;
 const FALLBACK_IMPACT_DELAY = 0.5;
+
+/**
+ * World point where the blow visually lands: on the player-facing side of the
+ * prop at swing height, so bursts don't spawn inside (or behind) a thick
+ * trunk where the player can't see them.
+ */
+function impactPoint(
+  eid: number,
+  player: number,
+  height: number
+): { x: number; y: number; z: number } {
+  const x = Transform.posX[eid];
+  const y = Transform.posY[eid];
+  const z = Transform.posZ[eid];
+  if (!player) return { x, y: y + height, z };
+  const dx = Transform.posX[player] - x;
+  const dz = Transform.posZ[player] - z;
+  const len = Math.hypot(dx, dz);
+  if (len < 1e-4) return { x, y: y + height, z };
+  const scale = Transform.scaleX[eid] || 1;
+  const offset = Math.min(Math.max(0.45 * scale, 0.3), 1.2);
+  return {
+    x: x + (dx / len) * offset,
+    y: y + height,
+    z: z + (dz / len) * offset,
+  };
+}
 
 const destructibleQuery = defineQuery([Destructible, Transform]);
 const playerQuery = defineQuery([PlayerController, InputState]);
@@ -64,10 +98,52 @@ function facePlayerToward(state: State, player: number, eid: number): void {
   Transform.dirty[player] = 1;
 }
 
-function breakProp(state: State, eid: number): void {
+function breakProp(state: State, eid: number, player: number): void {
   const x = Transform.posX[eid];
   const y = Transform.posY[eid];
   const z = Transform.posZ[eid];
+
+  // Rich break FX by style; each falls back to the plain burst when the prop
+  // has no visual group (headless, instanced) or no scene.
+  const style = Destructible.breakStyle[eid];
+  if (style === 1) {
+    // fall direction: away from the player who felled it
+    const dirX = player ? x - Transform.posX[player] : 0;
+    const dirZ = player ? z - Transform.posZ[player] : 0;
+    if (
+      startTreeFall(state, eid, dirX, dirZ, Destructible.cutHeight[eid] || 0.6)
+    ) {
+      const p = impactPoint(eid, player, Destructible.cutHeight[eid] || 0.6);
+      spawnParticleBurst(state, {
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        preset: 'woodchips',
+        count: 30,
+        duration: 0.5,
+      });
+    }
+  } else if (style === 3) {
+    // split: the trunk fends along a vertical plane perpendicular to the swing.
+    const dirX = player ? x - Transform.posX[player] : 0;
+    const dirZ = player ? z - Transform.posZ[player] : 0;
+    if (
+      startTreeSplit(state, eid, dirX, dirZ, Destructible.cutHeight[eid] || 0.6)
+    ) {
+      const p = impactPoint(eid, player, Destructible.cutHeight[eid] || 0.6);
+      spawnParticleBurst(state, {
+        x: p.x,
+        y: p.y,
+        z: p.z,
+        preset: 'woodchips',
+        count: 30,
+        duration: 0.5,
+      });
+    }
+  } else if (style === 2) {
+    const scale = Transform.scaleX[eid] || 1;
+    startRockShatter(state, eid, x, y, z, scale);
+  }
 
   spawnParticleBurst(state, {
     x,
@@ -90,6 +166,11 @@ function breakProp(state: State, eid: number): void {
       z,
       color: _color.getHex(),
       size: Destructible.popupSize[eid] || 0.4,
+      // Stack with the game's harvest feedback (+1 Wood/Stone) keyed by the
+      // prop's rounded position so the two never overlap on the same target.
+      stackKey: `harvest@${Math.round(x)},${Math.round(z)}`,
+      stackBaseY: y + 1.2,
+      stackGap: 0.5,
     });
   }
 
@@ -119,16 +200,28 @@ export const DestructibleSystem: System = {
       }
       Destructible.pendingImpact[eid] = 0;
       if (Destructible.hitsTaken[eid] >= (Destructible.hits[eid] || 1)) {
-        breakProp(state, eid);
-      } else if (Destructible.sparkOnHit[eid]) {
+        breakProp(state, eid, player);
+        continue;
+      }
+      if (Destructible.sparkOnHit[eid]) {
+        const p = impactPoint(eid, player, 1.0);
         spawnParticleBurst(state, {
-          x: Transform.posX[eid],
-          y: Transform.posY[eid] + 0.8,
-          z: Transform.posZ[eid],
-          preset: 'sparks',
-          count: 15,
+          x: p.x,
+          y: p.y,
+          z: p.z,
+          preset: presetName(Destructible.hitPreset[eid] || 6), // sparks
+          count: Destructible.hitBurstCount[eid] || 15,
           duration: 0.3,
         });
+      }
+      if (Destructible.shakeOnHit[eid]) startHitShake(state, eid);
+      if (Destructible.crackOnHit[eid]) {
+        applyCrackAmount(
+          state,
+          eid,
+          Destructible.hitsTaken[eid] / (Destructible.hits[eid] || 1),
+          Destructible.crackStyle[eid]
+        );
       }
     }
 

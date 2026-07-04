@@ -2,6 +2,16 @@ export { Destructible } from './components';
 export { DestructiblePlugin } from './plugin';
 export { DestructibleSystem } from './systems';
 export {
+  applyCrackAmount,
+  CRACK_STYLE_VERTICAL,
+  CRACK_STYLE_VORONOI,
+  DestructibleFxSystem,
+  startHitShake,
+  startRockShatter,
+  startTreeFall,
+  startTreeSplit,
+} from './fx';
+export {
   onDestructibleDestroyed,
   setDestructiblePopupText,
   getDestructiblePopupText,

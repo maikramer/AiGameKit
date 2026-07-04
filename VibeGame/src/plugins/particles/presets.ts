@@ -18,7 +18,10 @@ export type PresetName =
   | 'sparks'
   | 'magic'
   | 'fireflies'
-  | 'splash';
+  | 'splash'
+  | 'woodchips'
+  | 'rockshards'
+  | 'leaves';
 
 // New presets append at the end: ParticleEmitter.preset stores the index.
 const PRESET_NAMES: readonly PresetName[] = [
@@ -32,6 +35,9 @@ const PRESET_NAMES: readonly PresetName[] = [
   'magic',
   'fireflies',
   'splash',
+  'woodchips',
+  'rockshards',
+  'leaves',
 ];
 
 export function presetIndex(name: string): number {
@@ -367,6 +373,132 @@ function splashPreset(): Partial<SystemParams> {
   };
 }
 
+/** Splinters that fly off a tree with each axe blow. */
+function woodchipsPreset(): Partial<SystemParams> {
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+  });
+
+  return {
+    material,
+    looping: false,
+    duration: 0.9,
+    autoDestroy: true,
+    startLife: new IntervalValue(0.35, 0.8),
+    startSpeed: new IntervalValue(2.5, 6),
+    startSize: new IntervalValue(0.04, 0.14),
+    startColor: new ColorRange(
+      new Vector4(0.55, 0.36, 0.18, 1),
+      new Vector4(0.8, 0.62, 0.38, 1)
+    ),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [
+      {
+        time: 0,
+        count: new ConstantValue(25),
+        cycle: 1,
+        interval: 0.01,
+        probability: 1,
+      },
+    ],
+    shape: new ConeEmitter({ radius: 0.15, angle: Math.PI / 2.6 }),
+    worldSpace: true,
+    renderMode: RenderMode.StretchedBillBoard,
+    behaviors: [
+      new GravityForce(new Vector3(0, 0, 0), -22),
+      new SizeOverLife(
+        new PiecewiseBezier([[new Bezier(1, 0.95, 0.7, 0.2), 0]])
+      ),
+    ],
+  };
+}
+
+/** Angular grey fragments knocked off a rock by the pickaxe. */
+function rockshardsPreset(): Partial<SystemParams> {
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 1,
+    depthWrite: false,
+  });
+
+  return {
+    material,
+    looping: false,
+    duration: 0.9,
+    autoDestroy: true,
+    startLife: new IntervalValue(0.3, 0.7),
+    startSpeed: new IntervalValue(3, 7),
+    startSize: new IntervalValue(0.05, 0.16),
+    startColor: new ColorRange(
+      new Vector4(0.45, 0.45, 0.47, 1),
+      new Vector4(0.72, 0.72, 0.75, 1)
+    ),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [
+      {
+        time: 0,
+        count: new ConstantValue(22),
+        cycle: 1,
+        interval: 0.01,
+        probability: 1,
+      },
+    ],
+    shape: new ConeEmitter({ radius: 0.2, angle: Math.PI / 2.4 }),
+    worldSpace: true,
+    renderMode: RenderMode.BillBoard,
+    behaviors: [
+      new GravityForce(new Vector3(0, 0, 0), -26),
+      new SizeOverLife(
+        new PiecewiseBezier([[new Bezier(1, 0.9, 0.6, 0.15), 0]])
+      ),
+    ],
+  };
+}
+
+/** Slow fluttering foliage puff for a felled tree's canopy. */
+function leavesPreset(): Partial<SystemParams> {
+  const material = new THREE.MeshBasicMaterial({
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+  });
+
+  return {
+    material,
+    looping: false,
+    duration: 2.5,
+    autoDestroy: true,
+    startLife: new IntervalValue(1.2, 2.4),
+    startSpeed: new IntervalValue(0.6, 2.2),
+    startSize: new IntervalValue(0.08, 0.2),
+    startColor: new ColorRange(
+      new Vector4(0.25, 0.5, 0.15, 1),
+      new Vector4(0.45, 0.7, 0.25, 1)
+    ),
+    emissionOverTime: new ConstantValue(0),
+    emissionBursts: [
+      {
+        time: 0,
+        count: new ConstantValue(35),
+        cycle: 1,
+        interval: 0.01,
+        probability: 1,
+      },
+    ],
+    shape: new SphereEmitter({ radius: 0.9, thickness: 1 }),
+    worldSpace: true,
+    renderMode: RenderMode.BillBoard,
+    behaviors: [
+      new GravityForce(new Vector3(0, 0, 0), -1.6),
+      new SizeOverLife(
+        new PiecewiseBezier([[new Bezier(1, 0.95, 0.8, 0.3), 0]])
+      ),
+    ],
+  };
+}
+
 type SystemParams = ParticleSystemParameters;
 
 const PRESET_FACTORIES: Record<PresetName, () => Partial<SystemParams>> = {
@@ -380,6 +512,9 @@ const PRESET_FACTORIES: Record<PresetName, () => Partial<SystemParams>> = {
   magic: magicPreset,
   fireflies: firefliesPreset,
   splash: splashPreset,
+  woodchips: woodchipsPreset,
+  rockshards: rockshardsPreset,
+  leaves: leavesPreset,
 };
 
 export function createPresetParams(name: PresetName): Partial<SystemParams> {

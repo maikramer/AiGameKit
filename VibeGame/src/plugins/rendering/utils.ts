@@ -370,6 +370,8 @@ export async function createRenderer(
   );
   renderer.setPixelRatio(pixelRatio);
   renderer.setSize(width, height, false);
+  // Per-material clipping planes (e.g. destructible tree-fall trunk split).
+  renderer.localClippingEnabled = true;
 
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;

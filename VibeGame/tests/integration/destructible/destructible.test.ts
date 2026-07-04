@@ -117,6 +117,62 @@ describe('Destructible Integration', () => {
     expect(state.exists(rock)).toBe(false);
   });
 
+  it('break-style fall/shatter degrada para burst sem cena (headless)', () => {
+    const player = createPlayer(state, 0, 0);
+    const tree = createRock(state, 2, 0);
+    Destructible.breakStyle[tree] = 1; // fall
+    Destructible.cutHeight[tree] = 0.6;
+
+    InputState.primaryAction[player] = 1;
+    state.step(STEP);
+    InputState.primaryAction[player] = 0;
+    for (let i = 0; i < 40; i++) state.step(STEP);
+
+    // sem grupo visual/cena o efeito de queda não arranca, mas o prop quebra
+    // na mesma com o burst clássico
+    expect(state.exists(tree)).toBe(false);
+    const emitters = defineQuery([ParticleEmitter])(state.world);
+    expect(emitters.length).toBe(1);
+  });
+
+  it('break-style split degrada para burst sem cena (headless)', () => {
+    const player = createPlayer(state, 0, 0);
+    const tree = createRock(state, 2, 0);
+    Destructible.breakStyle[tree] = 3; // split
+    Destructible.cutHeight[tree] = 0.6;
+
+    InputState.primaryAction[player] = 1;
+    state.step(STEP);
+    InputState.primaryAction[player] = 0;
+    for (let i = 0; i < 40; i++) state.step(STEP);
+
+    // sem grupo visual/cena o split vertical não arranca, mas o prop quebra
+    // na mesma com o burst clássico (igual ao fall/shatter)
+    expect(state.exists(tree)).toBe(false);
+    const emitters = defineQuery([ParticleEmitter])(state.world);
+    expect(emitters.length).toBe(1);
+  });
+
+  it('hit não-final usa hit-preset e hit-burst-count', () => {
+    const player = createPlayer(state, 0, 0);
+    const tree = createRock(state, 2, 0);
+    Destructible.hits[tree] = 3;
+    Destructible.sparkOnHit[tree] = 1;
+    Destructible.hitPreset[tree] = 10; // woodchips
+    Destructible.hitBurstCount[tree] = 22;
+
+    InputState.primaryAction[player] = 1;
+    state.step(STEP);
+    InputState.primaryAction[player] = 0;
+    for (let i = 0; i < 40; i++) state.step(STEP);
+
+    expect(state.exists(tree)).toBe(true);
+    const emitters = defineQuery([ParticleEmitter])(state.world);
+    expect(emitters.length).toBe(1);
+    expect(ParticleEmitter.preset[emitters[0]]).toBe(10);
+    expect(ParticleEmitter.burstCount[emitters[0]]).toBe(22);
+  });
+
   it('commits the swing to the nearest prop only', () => {
     const player = createPlayer(state, 0, 0);
     const near = createRock(state, 1.5, 0);

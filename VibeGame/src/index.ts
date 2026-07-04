@@ -156,6 +156,13 @@ export {
   DestructiblePlugin,
   Destructible,
   onDestructibleDestroyed,
+  applyCrackAmount,
+  CRACK_STYLE_VERTICAL,
+  CRACK_STYLE_VORONOI,
+  startHitShake,
+  startRockShatter,
+  startTreeFall,
+  startTreeSplit,
 } from './plugins/destructible';
 export {
   FloatingTextPlugin,
@@ -890,6 +897,7 @@ export {
   WaterPlugin,
   Lake,
   isPointInWater,
+  isPointNearWater,
   waterLevelAt,
   getWaterBodies,
   computeWaterDrag,
