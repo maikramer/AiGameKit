@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { createNoise2D } from 'simplex-noise';
+import { rngForSeed } from './rng';
 
 export const CLOUD_COUNT = 42;
 export const CLOUD_RING_MIN = 70;
@@ -46,7 +48,14 @@ export interface CloudField {
   heights: Float32Array;
 }
 
-export function createCloudField(): CloudField {
+/**
+ * Build the cloud instance field. When `seed` is provided (non-zero), the
+ * per-instance placement (ring radius, angle, scale, height) is deterministic
+ * via 2D simplex noise, so the same seed reproduces the same cloud layout and
+ * clouds cluster more naturally than uniform random. With seed=0 placement is
+ * identical to the prior Math.random() behaviour.
+ */
+export function createCloudField(seed = 0): CloudField {
   const geo = new THREE.PlaneGeometry(1, 0.55);
   const material = new THREE.MeshBasicMaterial({
     map: makeCloudTexture(),
@@ -60,17 +69,36 @@ export function createCloudField(): CloudField {
   mesh.frustumCulled = false;
   mesh.renderOrder = 1;
 
+  const rng = rngForSeed(seed);
+  const noise2d = createNoise2D(rng);
   const offsets = new Float32Array(CLOUD_COUNT * 2);
   const scales = new Float32Array(CLOUD_COUNT);
   const heights = new Float32Array(CLOUD_COUNT);
   for (let i = 0; i < CLOUD_COUNT; i++) {
-    const r =
-      CLOUD_RING_MIN + Math.random() * (CLOUD_RING_MAX - CLOUD_RING_MIN);
-    const a = Math.random() * Math.PI * 2;
+    let r: number;
+    let a: number;
+    let scale: number;
+    let height: number;
+    if (seed) {
+      // Map noise [-1,1] to the placement ranges at varied frequencies so the
+      // four properties aren't perfectly correlated.
+      r =
+        CLOUD_RING_MIN +
+        (noise2d(i * 0.13, 0.0) * 0.5 + 0.5) *
+          (CLOUD_RING_MAX - CLOUD_RING_MIN);
+      a = (noise2d(0.0, i * 0.17) * 0.5 + 0.5) * Math.PI * 2;
+      scale = 26 + (noise2d(i * 0.11, i * 0.19) * 0.5 + 0.5) * 34;
+      height = noise2d(i * 0.07, i * 0.23) * 24;
+    } else {
+      r = CLOUD_RING_MIN + Math.random() * (CLOUD_RING_MAX - CLOUD_RING_MIN);
+      a = Math.random() * Math.PI * 2;
+      scale = 26 + Math.random() * 34;
+      height = (Math.random() - 0.5) * 24;
+    }
     offsets[i * 2] = Math.cos(a) * r;
     offsets[i * 2 + 1] = Math.sin(a) * r;
-    scales[i] = 26 + Math.random() * 34;
-    heights[i] = (Math.random() - 0.5) * 24;
+    scales[i] = scale;
+    heights[i] = height;
   }
   return { mesh, material, offsets, scales, heights };
 }

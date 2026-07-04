@@ -4,12 +4,13 @@ import { WeatherSystem } from './systems';
 
 /**
  * `<Weather wind="0.7 0.3" wind-strength="1.5" clouds="0.5" rain="0"
- *  cloud-height="150" cycle="1">` — scene-wide weather baseline.
+ *  cloud-height="150" cycle="1" seed="12345">` — scene-wide weather baseline.
+ *  `seed` (optional) makes cloud/rain placement deterministic across reloads.
  */
 export const weatherRecipe: Recipe = {
   name: 'Weather',
   components: ['weather'],
-  parserAttributes: ['wind'],
+  parserAttributes: ['wind', 'seed'],
 };
 
 /** `wind="x z"` — direction (normalized by the runtime). */
@@ -37,6 +38,7 @@ export const WeatherPlugin: Plugin = {
         cloudHeight: 150,
         rain: 0,
         cycle: 1,
+        seed: 0,
         seeded: 0,
       },
     },

@@ -104,7 +104,7 @@ export const WeatherSystem: System = {
 
     // ── Clouds ──
     if (!cars.clouds) {
-      cars.clouds = createCloudField();
+      cars.clouds = createCloudField(WeatherComponent.seed[eid]);
       scene.add(cars.clouds.mesh);
     }
     const windX = w.windDirX * w.windStrength;
@@ -126,7 +126,7 @@ export const WeatherSystem: System = {
 
     // ── Rain ──
     if (!cars.rain && w.rain > 0.01) {
-      cars.rain = createRain();
+      cars.rain = createRain(WeatherComponent.seed[eid]);
       scene.add(cars.rain.points);
     }
     if (cars.rain) {
