@@ -117,19 +117,24 @@ export function carveBowl(
   localZ: number,
   radius: number,
   rimY: number,
-  depth: number
+  depth: number,
+  carveMargin: number = 1.0
 ): boolean {
   const { data, width, height, worldSize, maxHeight } = sampler;
   if (!data || width < 2 || height < 2 || maxHeight <= 0) return false;
+
+  // The carve can extend past the water disc by `carveMargin` so a beach/margin
+  // of exposed basin floor shows between the waterline and the natural terrain.
+  const carveR = radius * carveMargin;
 
   const half = worldSize / 2;
   const stepX = worldSize / (width - 1);
   const stepZ = worldSize / (height - 1);
 
-  const x0 = Math.max(0, Math.floor((localX - radius + half) / stepX));
-  const x1 = Math.min(width - 1, Math.ceil((localX + radius + half) / stepX));
-  const z0 = Math.max(0, Math.floor((localZ - radius + half) / stepZ));
-  const z1 = Math.min(height - 1, Math.ceil((localZ + radius + half) / stepZ));
+  const x0 = Math.max(0, Math.floor((localX - carveR + half) / stepX));
+  const x1 = Math.min(width - 1, Math.ceil((localX + carveR + half) / stepX));
+  const z0 = Math.max(0, Math.floor((localZ - carveR + half) / stepZ));
+  const z1 = Math.min(height - 1, Math.ceil((localZ + carveR + half) / stepZ));
 
   let changed = false;
   for (let zi = z0; zi <= z1; zi++) {
@@ -142,7 +147,7 @@ export function carveBowl(
       // Organic outline: the effective radius varies with angle, so the bowl is
       // an irregular pond, not a stamped circle. t = dist / shapeRadius(angle).
       const angle = Math.atan2(dz, dx);
-      const effR = radius * shapeRadius(angle, localX, localZ);
+      const effR = carveR * shapeRadius(angle, localX, localZ);
       const t2 = (dist * dist) / (effR * effR);
       if (t2 >= 1) continue;
       const bowlY = rimY - depth * Math.pow(1 - t2, BOWL_PROFILE_EXPONENT);
@@ -187,15 +192,20 @@ export function carveChannel(
   width: number,
   _rimY: number,
   depth: number,
-  axisHeights: number[] = []
+  axisHeights: number[] = [],
+  carveMargin: number = 1.0
 ): boolean {
   const { data, width: gw, height: gh, worldSize, maxHeight } = sampler;
   if (!data || gw < 2 || gh < 2 || maxHeight <= 0) return false;
 
+  // The carve can extend past the water ribbon by `carveMargin` so a bank/margin
+  // of exposed channel floor shows between the waterline and the natural terrain.
+  const carveWidth = width * carveMargin;
+
   const half = worldSize / 2;
   const stepX = worldSize / (gw - 1);
   const stepZ = worldSize / (gh - 1);
-  const halfWidth = width / 2;
+  const halfWidth = carveWidth / 2;
   const useAxis = axisHeights.length >= path.length / 2;
 
   const aabb = pathAabb(path, halfWidth);
@@ -251,6 +261,130 @@ export function carveChannel(
       }
     }
   }
+  return changed;
+}
+
+export interface RiverCarveOpts {
+  /** Channel width (m). */
+  width: number;
+  /** Water depth below the surface at the channel axis (m). */
+  channelDepth: number;
+  /** Width of the raised bank band outside the channel (m). */
+  leveeWidth: number;
+  /** How far the levee crest sits above the local water surface (m). */
+  leveeLip: number;
+  /** Max the levee may raise the terrain (m) — bigger deficits are left to
+   *  read as waterfalls/cliffs instead of building aqueduct walls. */
+  maxLeveeRaise: number;
+}
+
+/**
+ * Carve a river channel along dense stations with a known water-surface
+ * profile, and raise low banks (levees) so the water never floats over open
+ * ground.
+ *
+ * Unlike {@link carveChannel} (single global AABB, nearest-segment search per
+ * texel — O(texels × segments), unusable for map-length rivers), this stamps
+ * each segment into its own sub-AABB. Two passes:
+ *
+ *  1. **Levees** (max): terrain in the band [halfW, halfW+leveeWidth] either
+ *     side is raised to `surface + lip·falloff` when the deficit is small
+ *     (≤ maxLeveeRaise). Big deficits are skipped — those are waterfall drops.
+ *  2. **Floor** (min): terrain within halfW of the segment is lowered to
+ *     `surface − channelDepth·(1−t²)^1.5`. Runs after the levees so a bend's
+ *     levee can never poke into a neighbouring segment's channel.
+ *
+ * `surface` holds one water-surface height per station (field-local), already
+ * descending (see RiverChannel). Floors key off the surface — not the raw
+ * terrain — so the channel always contains the water.
+ *
+ * Returns true when at least one texel changed.
+ */
+export function carveRiverChannel(
+  sampler: HeightSampler,
+  stations: number[],
+  surface: number[],
+  opts: RiverCarveOpts
+): boolean {
+  const { data, width: gw, height: gh, worldSize, maxHeight } = sampler;
+  if (!data || gw < 2 || gh < 2 || maxHeight <= 0) return false;
+  const nodeCount = stations.length / 2;
+  if (nodeCount < 2 || surface.length < nodeCount) return false;
+
+  const half = worldSize / 2;
+  const stepX = worldSize / (gw - 1);
+  const stepZ = worldSize / (gh - 1);
+  const halfW = opts.width / 2;
+  const outer = halfW + opts.leveeWidth;
+
+  let changed = false;
+
+  const eachSegmentTexel = (
+    reach: number,
+    visit: (idx: number, lateral: number, surfY: number) => number | null
+  ): void => {
+    for (let i = 0; i + 1 < nodeCount; i++) {
+      const ax = stations[i * 2]!;
+      const az = stations[i * 2 + 1]!;
+      const bx = stations[i * 2 + 2]!;
+      const bz = stations[i * 2 + 3]!;
+      const sa = surface[i]!;
+      const sb = surface[i + 1]!;
+      const minX = Math.min(ax, bx) - reach;
+      const maxX = Math.max(ax, bx) + reach;
+      const minZ = Math.min(az, bz) - reach;
+      const maxZ = Math.max(az, bz) + reach;
+      const x0 = Math.max(0, Math.floor((minX + half) / stepX));
+      const x1 = Math.min(gw - 1, Math.ceil((maxX + half) / stepX));
+      const z0 = Math.max(0, Math.floor((minZ + half) / stepZ));
+      const z1 = Math.min(gh - 1, Math.ceil((maxZ + half) / stepZ));
+      const dx = bx - ax;
+      const dz = bz - az;
+      const lenSq = dx * dx + dz * dz;
+      for (let zi = z0; zi <= z1; zi++) {
+        const wz = zi * stepZ - half;
+        for (let xi = x0; xi <= x1; xi++) {
+          const wx = xi * stepX - half;
+          let t = lenSq === 0 ? 0 : ((wx - ax) * dx + (wz - az) * dz) / lenSq;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const cx = ax + t * dx;
+          const cz = az + t * dz;
+          const d = Math.hypot(wx - cx, wz - cz);
+          if (d >= reach) continue;
+          const idx = zi * gw + xi;
+          const next = visit(idx, d, sa + t * (sb - sa));
+          if (next !== null) {
+            data[idx] = next;
+            changed = true;
+          }
+        }
+      }
+    }
+  };
+
+  // Pass 1 — levees (raise, capped).
+  eachSegmentTexel(outer, (idx, d, surfY) => {
+    if (d < halfW) return null;
+    const cur = data[idx]! * maxHeight;
+    // Crest at the channel edge, feathering to nothing at the outer edge.
+    const f = 1 - (d - halfW) / Math.max(opts.leveeWidth, 0.01);
+    const targetY = surfY + opts.leveeLip * (f * f * (3 - 2 * f));
+    if (cur >= targetY) return null;
+    if (targetY - cur > opts.maxLeveeRaise) return null; // waterfall/cliff zone
+    return Math.min(1, Math.max(0, targetY / maxHeight));
+  });
+
+  // Pass 2 — channel floor (lower only).
+  eachSegmentTexel(halfW, (idx, d, surfY) => {
+    const tLat = d / halfW;
+    const floorY =
+      surfY -
+      opts.channelDepth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
+    const target = Math.min(1, Math.max(0, floorY / maxHeight));
+    if (data[idx]! <= target) return null;
+    return target;
+  });
+
   return changed;
 }
 

@@ -85,7 +85,11 @@ function makeWaterMaterial(
          uniform float uWaveHeight;
          uniform float uWaveSpeed;
          attribute float aWaterT;
+         attribute float aGroundDepth;
+         attribute float aFoamExtra;
          varying float vWaterT;
+         varying float vGroundDepth;
+         varying float vFoamExtra;
          varying vec2 vWaveXZ;
          varying vec3 vViewDir;`
       )
@@ -93,6 +97,8 @@ function makeWaterMaterial(
         '#include <begin_vertex>',
         `#include <begin_vertex>
          vWaterT = aWaterT;
+         vGroundDepth = aGroundDepth;
+         vFoamExtra = aFoamExtra;
          vec4 wPos = modelMatrix * vec4(transformed, 1.0);
          vWaveXZ = wPos.xz;
          float wt = uTime * uWaveSpeed;
@@ -121,6 +127,8 @@ function makeWaterMaterial(
          uniform float uFresnelStrength;
          uniform float uSparkleStrength;
          varying float vWaterT;
+         varying float vGroundDepth;
+         varying float vFoamExtra;
          varying vec2 vWaveXZ;
          varying vec3 vViewDir;
          // Shape-agnostic depth/alpha: the geometry bakes t into aWaterT
@@ -167,6 +175,17 @@ function makeWaterMaterial(
            float foam = clamp(band + dashBand * dashes * 0.8, 0.0, 1.0);
            // Hard-ish step keeps the froth crisp and cel-shaded.
            return smoothstep(0.25, 0.55, foam);
+         }
+         // Contact foam: wherever the water sheet grazes the terrain
+         // (per-vertex clearance baked as aGroundDepth), froth it up so the
+         // waterline reads as churned water instead of a polygon edge. A
+         // noisy threshold keeps the fringe organic. vFoamExtra marks
+         // waterfall/rapids stations for a full white sheet.
+         float contactFoam() {
+           float n = vnoise(vWaveXZ * 1.4 + vec2(uTime * uWaveSpeed * 0.2, 0.0));
+           float edge = 0.22 + n * 0.3;
+           float contact = 1.0 - smoothstep(0.03, edge, vGroundDepth);
+           return max(contact, clamp(vFoamExtra, 0.0, 1.0));
          }`
       )
       .replace(
@@ -191,7 +210,7 @@ function makeWaterMaterial(
          float sp2 = vnoise(vWaveXZ * 1.7 - st * 0.27);
          float sparkle = smoothstep(0.82, 0.98, sp1 * sp2 * 1.6);
          diffuseColor.rgb += sparkle * uSparkleStrength * uRipple;
-         float foam = lakeFoam();
+         float foam = max(lakeFoam(), contactFoam());
          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), foam * 0.85);`
       )
       .replace(
@@ -253,6 +272,18 @@ export function makeLakeGeometry(
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setAttribute('aWaterT', new THREE.Float32BufferAttribute(waterT, 1));
+  // Contact-foam attributes exist on every water geometry so the shared
+  // material never reads an unbound attribute: lakes opt out (deep + no
+  // extra foam) — their shoreline foam comes from the aWaterT band.
+  const vcount = positions.length / 3;
+  geo.setAttribute(
+    'aGroundDepth',
+    new THREE.Float32BufferAttribute(new Array(vcount).fill(10), 1)
+  );
+  geo.setAttribute(
+    'aFoamExtra',
+    new THREE.Float32BufferAttribute(new Array(vcount).fill(0), 1)
+  );
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;

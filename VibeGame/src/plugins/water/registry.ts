@@ -33,7 +33,14 @@ export interface RiverWaterBody {
    * legacy bodies — consumers fall back to `0.95 · width`.
    */
   shoreWidth?: number;
+  /** Highest surface point (the source). Prefer `surfaceY` for local level. */
   waterY: number;
+  /**
+   * World-space water-surface height per path point. Rivers descend (and
+   * plunge at waterfalls), so a single scalar level is wrong away from the
+   * source — queries interpolate this instead when present.
+   */
+  surfaceY?: number[];
 }
 
 /** A registered water surface (spawn avoidance / gameplay queries). */
@@ -98,6 +105,29 @@ export function waterBodyAt(
   return null;
 }
 
+/** Local water level of a body at the XZ point (rivers descend station by
+ *  station; lakes are flat). */
+export function bodySurfaceYAt(body: WaterBody, x: number, z: number): number {
+  if (body.kind === 'lake' || !body.surfaceY || body.surfaceY.length === 0) {
+    return body.waterY;
+  }
+  // Nearest path point wins — stations are metres apart, well inside the
+  // vertical tolerance of splash/drag/spawn queries.
+  let best = Infinity;
+  let bestY = body.waterY;
+  for (let i = 0; i < body.path.length; i++) {
+    const p = body.path[i]!;
+    const dx = x - p[0];
+    const dz = z - p[1];
+    const d = dx * dx + dz * dz;
+    if (d < best) {
+      best = d;
+      bestY = body.surfaceY[Math.min(i, body.surfaceY.length - 1)]!;
+    }
+  }
+  return bestY;
+}
+
 /** Water surface height at the point, or null when not over water. */
 export function waterLevelAt(
   state: State,
@@ -105,7 +135,7 @@ export function waterLevelAt(
   z: number
 ): number | null {
   for (const b of getWaterBodies(state)) {
-    if (containsPoint(b, x, z)) return b.waterY;
+    if (containsPoint(b, x, z)) return bodySurfaceYAt(b, x, z);
   }
   return null;
 }

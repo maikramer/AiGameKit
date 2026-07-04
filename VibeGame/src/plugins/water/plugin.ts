@@ -133,7 +133,7 @@ export const WaterPlugin: Plugin = {
       lake: {
         radius: 6,
         depth: 1.5,
-        waterOffset: 0.3,
+        waterOffset: 0.5,
         color: 0x2f7a9a,
         opacity: 0.78,
         ripple: 0.6,
@@ -146,10 +146,9 @@ export const WaterPlugin: Plugin = {
       river: {
         width: 6,
         depth: 1.5,
-        // Rivers run nearly full: the surface sits just below the lowest bank
-        // point, so the channel reads as flowing water rather than a dry ditch
-        // with a puddle at the bottom. Override per-river via water-offset.
-        waterOffset: 0.08,
+        // Surface sits below the bank so a margin of exposed channel floor
+        // (the bank/beach) reads between the waterline and the terrain.
+        waterOffset: 0.3,
         color: 0x3a5a7a,
         opacity: 0.85,
         ripple: 0.6,
