@@ -39,12 +39,16 @@ export const Lake = {
  * ribbon. The path itself lives in a side-channel (bitecs can't store arrays).
  */
 export const River = {
-  /** Channel width (m). */
+  /** Waterline width (m) — the visible water; the carve is wider by the banks. */
   width: new Float32Array(MAX_ENTITIES),
   /** Channel depth below the water surface (m). */
   depth: new Float32Array(MAX_ENTITIES),
   /** Water surface distance below the lowest bank point (m). */
   waterOffset: new Float32Array(MAX_ENTITIES),
+  /** Exposed carved-bank width each side of the waterline (m). */
+  bankWidth: new Float32Array(MAX_ENTITIES),
+  /** Bank crest height above the water surface (m) — the freeboard. */
+  bankHeight: new Float32Array(MAX_ENTITIES),
   /** Water tint (hex). */
   color: new Uint32Array(MAX_ENTITIES),
   /** Water surface opacity 0..1. */

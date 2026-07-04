@@ -35,12 +35,6 @@ export interface WaterShapeResult {
 export interface WaterShape {
   /** AABB in field-local coords (X/Z), for density boost + chunk invalidation. */
   computeAabb(): WorldAabb;
-  /**
-   * Multiplier widening the carve beyond the water geometry (1.0 = carve matches
-   * the water edge exactly). >1.0 exposes a beach/bank of basin floor between
-   * the waterline and the natural terrain. Read by `carve()` internally.
-   */
-  carveMargin(): number;
   /** Carve the shape into the sampler in place (heights only go down). */
   carve(sampler: HeightSampler): WaterShapeResult;
   /** Surface mesh geometry. Must set the `aWaterT` attribute (0=center, 1=margin). */

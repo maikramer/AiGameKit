@@ -15,6 +15,13 @@ export interface LakeWaterBody {
    * mask keys off it so the two edges coincide.
    */
   shoreRadius: number;
+  /**
+   * Radius of the full carve footprint (m): carve margin + the organic
+   * outline's outward overshoot. Spawn exclusion (`avoid-water`) uses this so
+   * props stay off the carved beach slope, not just out of the water. Optional
+   * for legacy bodies — consumers fall back to `radius`.
+   */
+  carveRadius?: number;
   waterY: number;
 }
 
@@ -33,6 +40,13 @@ export interface RiverWaterBody {
    * legacy bodies — consumers fall back to `0.95 · width`.
    */
   shoreWidth?: number;
+  /**
+   * Full width of the carve footprint (m): waterline + exposed banks + the
+   * outer feather band. Spawn exclusion (`avoid-water`) uses this so props
+   * stay off the carved banks, not just out of the water. Optional for legacy
+   * bodies — consumers fall back to `width`.
+   */
+  carveWidth?: number;
   /** Highest surface point (the source). Prefer `surfaceY` for local level. */
   waterY: number;
   /**
@@ -67,19 +81,48 @@ export function unregisterWaterBody(state: State, body: WaterBody): void {
   if (i >= 0) list.splice(i, 1);
 }
 
-/** True when the world XZ point lies inside a water surface (disc or channel). */
-function containsPoint(body: WaterBody, x: number, z: number): boolean {
+/** True when the world XZ point lies within `reach(body)` of the body centre/axis. */
+function withinReach(
+  body: WaterBody,
+  x: number,
+  z: number,
+  reach: number
+): boolean {
   if (body.kind === 'lake') {
     const dx = x - body.x;
     const dz = z - body.z;
-    return dx * dx + dz * dz <= body.radius * body.radius;
+    return dx * dx + dz * dz <= reach * reach;
   }
-  // river: distance to the polyline ≤ width/2. Flatten the [x,z] pairs.
+  // river: distance to the polyline ≤ reach. Flatten the [x,z] pairs.
   const flat: number[] = [];
   for (const p of body.path) {
     flat.push(p[0], p[1]);
   }
-  return distanceToPath(flat, x, z) <= body.width / 2;
+  return distanceToPath(flat, x, z) <= reach;
+}
+
+/** True when the world XZ point lies inside a water surface (disc or channel). */
+function containsPoint(body: WaterBody, x: number, z: number): boolean {
+  return withinReach(
+    body,
+    x,
+    z,
+    body.kind === 'lake' ? body.radius : body.width / 2
+  );
+}
+
+/** True when the point lies inside the full carve footprint (water + carved
+ *  banks/beach). Legacy bodies without carve extents fall back to the water
+ *  extents, matching the old behaviour. */
+function insideCarve(body: WaterBody, x: number, z: number): boolean {
+  return withinReach(
+    body,
+    x,
+    z,
+    body.kind === 'lake'
+      ? (body.carveRadius ?? body.radius)
+      : (body.carveWidth ?? body.width) / 2
+  );
 }
 
 /**
@@ -89,6 +132,18 @@ function containsPoint(body: WaterBody, x: number, z: number): boolean {
 export function isPointInWater(state: State, x: number, z: number): boolean {
   for (const b of getWaterBodies(state)) {
     if (containsPoint(b, x, z)) return true;
+  }
+  return false;
+}
+
+/**
+ * True when the world XZ point lies inside a water body's full carve footprint
+ * (water + exposed carved banks/beach). The spawner's `avoid-water` uses this
+ * so props don't land on the carved slope with their trunks in the channel.
+ */
+export function isPointNearWater(state: State, x: number, z: number): boolean {
+  for (const b of getWaterBodies(state)) {
+    if (insideCarve(b, x, z)) return true;
   }
   return false;
 }

@@ -3,6 +3,7 @@ export { Lake, River, getRiverPath, setRiverPath } from './components';
 export {
   getWaterBodies,
   isPointInWater,
+  isPointNearWater,
   registerWaterBody,
   unregisterWaterBody,
   waterLevelAt,

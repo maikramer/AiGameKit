@@ -28,6 +28,8 @@ export const riverRecipe: Recipe = {
     'width',
     'depth',
     'water-offset',
+    'bank-width',
+    'bank-height',
     'color',
     'opacity',
     'ripple',
@@ -149,6 +151,10 @@ export const WaterPlugin: Plugin = {
         // Surface sits below the bank so a margin of exposed channel floor
         // (the bank/beach) reads between the waterline and the terrain.
         waterOffset: 0.3,
+        // Exposed carved bank each side + how far its crest sits above the
+        // water (freeboard) — the river reads recessed inside its carve.
+        bankWidth: 2,
+        bankHeight: 0.9,
         color: 0x3a5a7a,
         opacity: 0.85,
         ripple: 0.6,

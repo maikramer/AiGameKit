@@ -597,10 +597,13 @@ function applyLakeSand(state: State, field: number): void {
       const pts = b.path;
       if (pts.length < 2) continue;
       const shoreHalf = (b.shoreWidth ?? b.width * 0.95) / 2;
-      // Beach extends past the carved channel edge, scaled to the river but
+      // Sand covers the carve footprint (waterline + exposed banks + feather)
+      // when the body carries it; legacy fallback scales a beach to the river,
       // clamped so narrow creeks still read and wide rivers don't flood sand.
-      const beach = Math.min(4, Math.max(1.5, b.width * 0.35));
-      const outerHalf = b.width / 2 + beach;
+      const outerHalf =
+        b.carveWidth != null
+          ? b.carveWidth / 2
+          : b.width / 2 + Math.min(4, Math.max(1.5, b.width * 0.35));
       const stride = Math.max(1, Math.ceil((pts.length - 1) / budget));
       for (
         let i = 0;

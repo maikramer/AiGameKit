@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { HeightSampler } from '../terrain/height-sampler';
 import type { WorldAabb } from '../terrain/density-map';
-import { carveRiverChannel, rimHeightAlongPath, shoreFraction } from './carve';
+import { carveRiverChannel, rimHeightAlongPath } from './carve';
 import { makeRiverGeometry } from './river-geometry';
 import { pathAabb, resamplePath } from './path-utils';
 import type { WaterBody } from './registry';
@@ -12,11 +12,16 @@ export interface RiverChannelOpts {
   /** Flat polyline `[x0,z0,...]` in field-local world coords, SOURCE FIRST —
    *  the water surface only ever descends along the path order. */
   path: number[];
+  /** Waterline width (m): the visible water. The carve is wider — an exposed
+   *  earth bank of `bankWidth` each side plus an outer feather band. */
   width: number;
   depth: number;
   waterOffset: number;
-  /** Carve-width multiplier (1.0 = carve matches water edge). Default 1.2. */
-  carveMargin?: number;
+  /** Exposed carved-bank width each side of the waterline (m). Default 2. */
+  bankWidth?: number;
+  /** Bank crest height above the water surface (m) — how recessed the water
+   *  sits inside the carve. Default 0.9. */
+  bankHeight?: number;
 }
 
 /**
@@ -38,11 +43,14 @@ const SMOOTH_HALF_WINDOW = 2;
  *  stations get full foam and the ribbon segment turns into a plunging sheet. */
 const WATERFALL_DROP = 1.1;
 
-/** Levee tuning: band width outside the channel, crest above the surface, and
- *  the max raise before we give up and let the drop read as a fall. */
-const LEVEE_WIDTH = 2.5;
-const LEVEE_LIP = 0.45;
-const MAX_LEVEE_RAISE = 1.6;
+/** Bank tuning (defaults; bankWidth/bankHeight are per-river overridable):
+ *  exposed bank width and crest height, the feather band blending the crest
+ *  back into natural terrain, and the max raise before we give up and let
+ *  the drop read as a waterfall/cliff. */
+const DEFAULT_BANK_WIDTH = 2.0;
+const DEFAULT_BANK_HEIGHT = 0.9;
+const FEATHER_WIDTH = 2.5;
+const MAX_BANK_RAISE = 2.0;
 
 /** Box-smooth `values` (returns a new array). */
 function boxSmooth(values: number[], halfWindow: number): number[] {
@@ -74,22 +82,23 @@ export class RiverChannel implements WaterShape {
   private sampler: HeightSampler | null = null;
   /** Field-local highest surface (rim − offset), for world-offset recovery. */
   private localWaterY = 0;
-  /** Carve-width multiplier (carve wider than the water → exposed bank). */
-  private readonly carveMarginValue: number;
+  /** Exposed carved-bank width each side of the waterline (m). */
+  private readonly bankWidth: number;
+  /** Bank crest height above the water surface (m). */
+  private readonly bankHeight: number;
 
   constructor(private readonly opts: RiverChannelOpts) {
-    this.carveMarginValue = opts.carveMargin ?? 1.2;
+    this.bankWidth = opts.bankWidth ?? DEFAULT_BANK_WIDTH;
+    this.bankHeight = opts.bankHeight ?? DEFAULT_BANK_HEIGHT;
   }
 
-  carveMargin(): number {
-    return this.carveMarginValue;
+  /** Half-width of the full carve footprint (waterline + bank + feather). */
+  private carveHalfWidth(): number {
+    return this.opts.width / 2 + this.bankWidth + FEATHER_WIDTH;
   }
 
   computeAabb(): WorldAabb {
-    return pathAabb(
-      this.opts.path,
-      (this.opts.width * this.carveMarginValue) / 2 + LEVEE_WIDTH
-    );
+    return pathAabb(this.opts.path, this.carveHalfWidth());
   }
 
   carve(sampler: HeightSampler): WaterShapeResult {
@@ -141,34 +150,24 @@ export class RiverChannel implements WaterShape {
     const waterY = rimY - waterOffset;
     this.localWaterY = waterY;
     const carved = carveRiverChannel(sampler, stations, surface, {
-      width: width * this.carveMarginValue,
+      width,
       channelDepth: Math.max(0.2, depth - waterOffset),
-      leveeWidth: LEVEE_WIDTH,
-      leveeLip: LEVEE_LIP,
-      maxLeveeRaise: MAX_LEVEE_RAISE,
+      bankWidth: this.bankWidth,
+      bankHeight: this.bankHeight,
+      featherWidth: FEATHER_WIDTH,
+      maxBankRaise: MAX_BANK_RAISE,
     });
     return { carved, rimY, waterY };
-  }
-
-  /**
-   * Fraction of the half-width where the carved floor meets the water surface
-   * (the waterline). 0 (degenerate: surface at the rim) falls back to 0.95 so
-   * the ribbon still spans the channel.
-   */
-  private shoreT(): number {
-    const t = shoreFraction(this.opts.depth, this.opts.waterOffset);
-    return t > 0 ? t : 0.95;
   }
 
   buildGeometry(): THREE.BufferGeometry {
     // Prefer the dense carve stations; fall back to the authored path when
     // buildGeometry is called without a carve (tests/legacy flat ribbon).
     const path = this.stations.length >= 4 ? this.stations : this.opts.path;
-    // Size the ribbon to the waterline, not the full carved channel: with a
-    // visible bank a full-width ribbon would overhang the exposed carved
-    // slope. Small pad so the in-shader alpha fade, not the polygon edge,
-    // ends the water.
-    const width = this.opts.width * Math.min(1, this.shoreT() + 0.08);
+    // The carve profile crosses the water surface at exactly ±width/2, so the
+    // ribbon spans the full waterline (makeRiverGeometry pads it slightly and
+    // the in-shader alpha fade + contact foam end the water, not the polygon).
+    const width = this.opts.width;
     // Per-vertex ground clearance from the POST-carve terrain: the shader
     // turns shallow contact (water grazing the banks/floor) into foam, giving
     // the ribbon a natural frothy outline instead of a hard polygon edge.
@@ -230,7 +229,11 @@ export class RiverChannel implements WaterShape {
       kind: 'river',
       path: pairs,
       width: this.opts.width,
-      shoreWidth: this.opts.width * this.shoreT(),
+      // The carve pins the floor to the surface at ±width/2: the waterline IS
+      // the nominal width.
+      shoreWidth: this.opts.width,
+      // Full carve footprint (banks + feather) for spawn exclusion / sand.
+      carveWidth: this.carveHalfWidth() * 2,
       // Highest surface point (source). Per-point queries should prefer
       // surfaceY, which tracks the descending profile station by station.
       waterY: worldWaterY,

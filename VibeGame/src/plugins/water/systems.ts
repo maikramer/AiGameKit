@@ -407,6 +407,9 @@ export const RiverApplySystem: System = {
         width: River.width[eid] || 6,
         depth: River.depth[eid] || 1.5,
         waterOffset: River.waterOffset[eid],
+        // 0 (fresh addComponent zeroes fields) → shape defaults kick in via ||.
+        bankWidth: River.bankWidth[eid] || undefined,
+        bankHeight: River.bankHeight[eid] || undefined,
       });
       const applied = applyWaterShape(
         state,
