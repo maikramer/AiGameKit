@@ -1,4 +1,9 @@
-﻿export { Terrain, TerrainChunk, TerrainDebugInfo } from './components';
+﻿export {
+  Terrain,
+  TerrainChunk,
+  TerrainDebugInfo,
+  TerrainPad,
+} from './components';
 export { TerrainPlugin } from './plugin';
 export { terrainReady } from './ready-gate';
 export { terrainRecipe } from './recipes';
@@ -53,3 +58,7 @@ export {
 } from './ahgt-format';
 export type { AhgtMeta } from './ahgt-format';
 export { loadHeightfield } from './ahgt-loader';
+export { flattenRect } from './flatten';
+export type { FlattenRectOpts } from './flatten';
+export { TerrainPadApplySystem, terrainPadParser } from './pad-systems';
+export { terrainPadRecipe } from './recipes';

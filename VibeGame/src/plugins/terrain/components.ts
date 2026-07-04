@@ -28,6 +28,24 @@ export const Terrain = {
   slopeSoftness: new Float32Array(MAX_ENTITIES),
 } as const;
 
+/**
+ * `<TerrainPad>` — a levelled rounded-rect settlement pad stamped into the
+ * heightmap (see flatten.ts). Centre comes from Transform posX/posZ.
+ */
+export const TerrainPad = {
+  /** Half-extent of the flat core along X (m). */
+  halfX: new Float32Array(MAX_ENTITIES),
+  /** Half-extent of the flat core along Z (m). */
+  halfZ: new Float32Array(MAX_ENTITIES),
+  /** Target height (m). 0 = auto: sample the pre-flatten terrain at centre. */
+  height: new Float32Array(MAX_ENTITIES),
+  /** Blend ring width (m) back to the original terrain. */
+  falloff: new Float32Array(MAX_ENTITIES),
+  /** Corner rounding radius (m). */
+  cornerRadius: new Float32Array(MAX_ENTITIES),
+  applied: new Uint8Array(MAX_ENTITIES),
+} as const;
+
 export const TerrainChunk = {
   field: new Uint32Array(MAX_ENTITIES),
   originX: new Float32Array(MAX_ENTITIES),

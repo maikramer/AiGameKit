@@ -3,6 +3,7 @@ import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { Transform } from '../transforms/components';
 import { getTerrainContext } from '../terrain/utils';
+import { TerrainPadApplySystem } from '../terrain/pad-systems';
 import { Lake, River, getRiverPath } from './components';
 import { shapeRadius } from './carve';
 import { LakeBowl } from './lake-bowl';
@@ -266,7 +267,10 @@ export const LakeApplySystem: System = {
   // 'setup' runs before the spawner's fixed-group placement pass: lakes must
   // carve in the same frame the heightmap lands, or the first spawn batch
   // samples pre-carve heights and plants trees inside the water.
+  // After TerrainPadApplySystem: pads write both directions, so a pad applied
+  // after a carve would fill the basin back in.
   group: 'setup',
+  after: [TerrainPadApplySystem],
   update(state: State) {
     if (state.headless) return;
 
@@ -359,6 +363,7 @@ const riverQuery = defineQuery([River, Transform]);
  */
 export const RiverApplySystem: System = {
   group: 'setup',
+  after: [TerrainPadApplySystem],
   update(state: State) {
     if (state.headless) return;
     const cars = waterSideCars(state);

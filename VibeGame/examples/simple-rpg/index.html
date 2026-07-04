@@ -243,6 +243,17 @@
            ============================================================ -->
       <SpawnExclusion at="0 0" radius="30"></SpawnExclusion>
 
+      <!-- Pad de assentamento: aplaina o terreno sob a cidade inteira
+           (muralha ±22 + respawns ±28) antes de qualquer placement, com
+           anel de blend de 12 m de volta ao relevo natural. Sem ele, o
+           terreno acidentado deixa muros e casas com cantos flutuando. -->
+      <TerrainPad
+        at="0 0"
+        size="60 60"
+        falloff="12"
+        corner-radius="10"
+      ></TerrainPad>
+
       <!-- §4.1 Muralha quadrada (semi-lado 22, altura 3) com 4 portões
            cardeais (vão de 7 m centrado em cada eixo). collider=auto →
            bloqueia o jogador; os portões são a única passagem. -->
