@@ -28,7 +28,9 @@ import * as THREE from 'three';
 export function makeRiverGeometry(
   path: number[],
   width: number,
-  surfaceHeights: number[] = []
+  surfaceHeights: number[] = [],
+  groundDepth?: number[],
+  stationFoam?: number[]
 ): THREE.BufferGeometry {
   if (path.length < 4) {
     throw new Error(
@@ -42,6 +44,8 @@ export function makeRiverGeometry(
   const positions: number[] = [];
   const uvs: number[] = [];
   const waterT: number[] = [];
+  const depths: number[] = [];
+  const foams: number[] = [];
   const indices: number[] = [];
 
   let accLen = 0;
@@ -90,6 +94,20 @@ export function makeRiverGeometry(
     uvs.push(accLen, 0, accLen, 0.5, accLen, 1);
     // aWaterT: 1 at banks, 0 at axis — drives depth/alpha interpolation.
     waterT.push(1, 0, 1);
+    // aGroundDepth: water clearance over the post-carve terrain per vertex
+    // (left/axis/right). Missing data → deep (no contact foam).
+    if (groundDepth && groundDepth.length > i * 3 + 2) {
+      depths.push(
+        groundDepth[i * 3]!,
+        groundDepth[i * 3 + 1]!,
+        groundDepth[i * 3 + 2]!
+      );
+    } else {
+      depths.push(10, 10, 10);
+    }
+    // aFoamExtra: waterfall/rapids weight for the whole station.
+    const fw = stationFoam && i < stationFoam.length ? stationFoam[i]! : 0;
+    foams.push(fw, fw, fw);
 
     // Accumulate length at the node boundary (for the next node's u).
     if (i < nodeCount - 1) {
@@ -120,6 +138,8 @@ export function makeRiverGeometry(
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setAttribute('aWaterT', new THREE.Float32BufferAttribute(waterT, 1));
+  geo.setAttribute('aGroundDepth', new THREE.Float32BufferAttribute(depths, 1));
+  geo.setAttribute('aFoamExtra', new THREE.Float32BufferAttribute(foams, 1));
   geo.setIndex(indices);
   geo.computeVertexNormals();
   return geo;

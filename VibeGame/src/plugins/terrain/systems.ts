@@ -121,8 +121,9 @@ const _flatNRTexture = (() => {
 const MAX_LAKES = 16;
 
 /** Max river path segments the sand shader can mask. Rivers register dense
- *  (~3 m) stations; applyLakeSand downsamples each river to fit this budget. */
-const MAX_RIVER_SEGS = 32;
+ *  (~3 m) stations; applyLakeSand downsamples each river to fit this budget.
+ *  48 keeps a map-length (~700 m) river within ~15 m chords. */
+const MAX_RIVER_SEGS = 48;
 
 /**
  * Peak sand opacity of the water-bed mask. Deliberately < 1 so ~30% of the

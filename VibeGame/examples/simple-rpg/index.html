@@ -746,17 +746,48 @@
         color="#2a6685"
         opacity="0.72"
       ></Lake>
-      <!-- Rio que cruza o vale a partir do laguinho, contornando a cidade
-           (centrada em 0,0, raio ~30) pelo sul. path é uma lista plana de
-           world coords [x0 z0 x1 z1 ...]; width 8 dá um canal navegável. -->
+      <!-- Rio que corta o mapa: nasce nas montanhas do LESTE (~56 m), desce
+           em quedas d'água pelas encostas do deserto, contorna a cidade pelo
+           sul, passa junto ao laguinho do vale e deságua no canto NW (~26 m).
+           path é uma lista plana de world coords [x0 z0 ...], NASCENTE
+           PRIMEIRO — a superfície só desce ao longo do path (prefix-min),
+           com quedas onde o terreno despenca. -->
       <River
-        path="-34 23 -38 5 -36 -18 -20 -40 12 -46 48 -42 82 -34"
+        path="205 -62 170 -55 140 -45 110 -38 82 -34 48 -42 12 -46 -20 -40 -36 -18 -38 5 -48 20 -58 34 -72 46 -90 58 -115 76 -140 98 -170 128 -200 158 -235 192"
         width="8"
         depth="2.8"
         water-offset="0.45"
         color="#2a6685"
         opacity="0.88"
       ></River>
+      <!-- Ponte de madeira sobre o rio, na saída sul da cidade (o corredor
+           do portão sul cruza o rio aqui). Deck em arco raso + guarda-corpos;
+           collider auto bloqueia queda lateral e dá piso sólido. pos Y é
+           absoluto (deck ~1.2 m acima da lâmina d'água local ~33.4). -->
+      <Composition pos="4 33.2 -44.5" body="fixed" collider="auto">
+        <!-- Rampas de acesso e vão central (arco raso) -->
+        <Box
+          pos="0 0.4 -6"
+          size="3.4 0.25 4.2"
+          rotation="-0.18 0 0"
+          color="#7a5a38"
+        ></Box>
+        <Box pos="0 0.95 0" size="3.4 0.28 9.0" color="#8a6a44"></Box>
+        <Box
+          pos="0 0.4 6"
+          size="3.4 0.25 4.2"
+          rotation="0.18 0 0"
+          color="#7a5a38"
+        ></Box>
+        <!-- Guarda-corpos -->
+        <Box pos="-1.55 1.65 0" size="0.18 1.1 9.0" color="#6a4a2c"></Box>
+        <Box pos="1.55 1.65 0" size="0.18 1.1 9.0" color="#6a4a2c"></Box>
+        <!-- Pilares nas margens -->
+        <Box pos="-1.4 -0.8 -4.2" size="0.5 2.4 0.5" color="#5a4026"></Box>
+        <Box pos="1.4 -0.8 -4.2" size="0.5 2.4 0.5" color="#5a4026"></Box>
+        <Box pos="-1.4 -0.8 4.2" size="0.5 2.4 0.5" color="#5a4026"></Box>
+        <Box pos="1.4 -0.8 4.2" size="0.5 2.4 0.5" color="#5a4026"></Box>
+      </Composition>
       <!-- Vitórias-régias a flutuar no laguinho do vale. -->
       <StaticSpawner
         profile="tree"

@@ -16,6 +16,8 @@ export interface LakeBowlOpts {
   radius: number;
   depth: number;
   waterOffset: number;
+  /** Carve-width multiplier (1.0 = carve matches water edge). Default 1.15. */
+  carveMargin?: number;
 }
 
 /**
@@ -27,12 +29,20 @@ export class LakeBowl implements WaterShape {
   private readonly rimMargin = 1.3; // covers shapeRadius overshoot (amplitude 0.28)
   /** Local water-surface Y, captured during carve() for mesh placement. */
   private localWaterY = 0;
+  private readonly carveMarginValue: number;
 
-  constructor(private readonly opts: LakeBowlOpts) {}
+  constructor(private readonly opts: LakeBowlOpts) {
+    this.carveMarginValue = opts.carveMargin ?? 1.15;
+  }
+
+  carveMargin(): number {
+    return this.carveMarginValue;
+  }
 
   computeAabb(): WorldAabb {
     const { localX, localZ, radius } = this.opts;
-    const m = radius * this.rimMargin;
+    // AABB covers the carve (which is wider than the water by carveMargin).
+    const m = radius * this.carveMarginValue * this.rimMargin;
     return {
       minX: localX - m,
       minZ: localZ - m,
@@ -46,7 +56,15 @@ export class LakeBowl implements WaterShape {
     const rimY = rimHeight(sampler, localX, localZ, radius);
     const waterY = rimY - waterOffset;
     this.localWaterY = waterY;
-    const carved = carveBowl(sampler, localX, localZ, radius, rimY, depth);
+    const carved = carveBowl(
+      sampler,
+      localX,
+      localZ,
+      radius,
+      rimY,
+      depth,
+      this.carveMarginValue
+    );
     return { carved, rimY, waterY };
   }
 
