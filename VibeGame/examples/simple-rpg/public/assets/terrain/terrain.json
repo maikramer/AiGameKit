@@ -8,14 +8,14 @@
     "max_height": 200.0,
     "height_min": 0.0,
     "height_max": 1.0,
-    "height_mean": 0.053262845993785904,
-    "height_std": 0.19024962941083437
+    "height_mean": 0.3154894195480886,
+    "height_std": 0.25796839468464183
   },
   "rivers": [],
   "lakes": [],
   "lake_planes": [],
   "stats": {
-    "generation_time_seconds": 167.976
+    "generation_time_seconds": 89.978
   },
-  "prompt": "ilha de fantasia RPG — colinas centrais, costas baixas, modo island (Terrain3D)"
+  "prompt": "continente de fantasia RPG — planaltos centrais suaves, montanhas nas bordas, rios"
 }
