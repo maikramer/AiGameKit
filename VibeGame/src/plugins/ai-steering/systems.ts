@@ -1,24 +1,17 @@
-import {
-  FleeBehavior,
-  GameEntity,
-  ObstacleAvoidanceBehavior,
-  SeekBehavior,
-  Vector3,
-  Vehicle,
-  WanderBehavior,
-} from 'yuka';
+import * as THREE from 'three';
 import { defineQuery, type State, type System } from '../../core';
 import { BodyType, Collider, Rigidbody } from '../physics/components';
 import { getBodyForEntity } from '../physics/systems';
 import { Transform, WorldTransform } from '../transforms';
 import { SteeringAgent, SteeringTarget } from './components';
 import { getSteeringMap, type SteeringRow } from './context';
+import { SteeringVehicle, type ObstacleLike } from './vehicle';
 
 const steerQuery = defineQuery([SteeringAgent, SteeringTarget, Transform]);
 const obstacleQuery = defineQuery([Rigidbody, Collider, Transform]);
-const _obstacleCacheByState = new WeakMap<State, GameEntity[]>();
+const _obstacleCacheByState = new WeakMap<State, ObstacleLike[]>();
 
-function getObstacleCache(state: State): GameEntity[] {
+function getObstacleCache(state: State): ObstacleLike[] {
   let cache = _obstacleCacheByState.get(state);
   if (!cache) {
     cache = [];
@@ -32,24 +25,14 @@ function ensureVehicle(state: State, eid: number): SteeringRow {
   let row = map.get(eid);
   if (row) return row;
 
-  const vehicle = new Vehicle();
-  const seek = new SeekBehavior(new Vector3());
-  const flee = new FleeBehavior(new Vector3(), 500);
-  const wander = new WanderBehavior();
-  const obstacle = new ObstacleAvoidanceBehavior([]);
+  const vehicle = new SteeringVehicle();
+  vehicle.seekActive = true;
+  vehicle.fleeActive = false;
+  vehicle.wanderActive = false;
+  vehicle.obstacleActive = true;
+  vehicle.obstacleWeight = 1.5;
 
-  vehicle.steering.add(seek);
-  vehicle.steering.add(flee);
-  vehicle.steering.add(wander);
-  vehicle.steering.add(obstacle);
-
-  seek.active = true;
-  flee.active = false;
-  wander.active = false;
-  obstacle.active = true;
-  obstacle.weight = 1.5;
-
-  row = { vehicle, seek, flee, wander, obstacle };
+  row = { vehicle };
   map.set(eid, row);
   return row;
 }
@@ -71,15 +54,15 @@ function syncTarget(state: State, eid: number, row: SteeringRow): void {
     ty = Transform.posY[te];
     tz = Transform.posZ[te];
   }
-  row.seek!.target.set(tx, ty, tz);
-  row.flee!.target.set(tx, ty, tz);
+  row.vehicle.seekTarget.set(tx, ty, tz);
+  row.vehicle.fleeTarget.set(tx, ty, tz);
 }
 
 function applyBehavior(eid: number, row: SteeringRow): void {
   const b = SteeringAgent.behavior[eid];
-  row.seek!.active = b === 0;
-  row.wander!.active = b === 1;
-  row.flee!.active = b === 2;
+  row.vehicle.seekActive = b === 0;
+  row.vehicle.wanderActive = b === 1;
+  row.vehicle.fleeActive = b === 2;
 }
 
 export const SteeringSyncSystem: System = {
@@ -93,7 +76,7 @@ export const SteeringSyncSystem: System = {
       if (Rigidbody.type[eid] !== BodyType.Fixed) continue;
       let ge = _obstacleCache[obstacleCount];
       if (!ge) {
-        ge = new GameEntity();
+        ge = { position: new THREE.Vector3(), boundingRadius: 0 };
         _obstacleCache[obstacleCount] = ge;
       }
       ge.position.set(
@@ -126,12 +109,12 @@ export const SteeringSyncSystem: System = {
       syncFromEcs(eid, row);
       syncTarget(state, eid, row);
       applyBehavior(eid, row);
-      row.obstacle!.obstacles = _obstacleCache;
+      row.vehicle.obstacles = _obstacleCache;
 
       row.vehicle.update(dt);
 
       // Steering is planar: Y is owned externally (terrain snap / placement),
-      // not the steerer. yuka's wander/seek are 3D and would otherwise let the
+      // not the steerer. Seek/wander operate in 3D and would otherwise let the
       // agent drift up or sink into the ground.
       row.vehicle.position.y = groundY;
       row.vehicle.velocity.y = 0;
@@ -185,7 +168,7 @@ export const SteeringSyncSystem: System = {
     }
 
     // Drop steering rows whose entities were destroyed, so the per-state map
-    // (and its yuka Vehicles) don't leak across waves/levels.
+    // doesn't leak across waves/levels.
     const map = getSteeringMap(state);
     if (map.size > 0) {
       for (const key of map.keys()) {
