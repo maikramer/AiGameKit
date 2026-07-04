@@ -3,7 +3,7 @@ import type { HeightSampler } from '../terrain/height-sampler';
 import type { WorldAabb } from '../terrain/density-map';
 import { carveChannel, rimHeightAlongPath } from './carve';
 import { makeRiverGeometry } from './river-geometry';
-import { pathAabb } from './path-utils';
+import { pathAabb, resamplePath } from './path-utils';
 import type { WaterBody } from './registry';
 import type { WaterShape, WaterShapeResult } from './water-shape';
 import { sampleHeightAt } from '../terrain/height-sampler';
@@ -16,9 +16,44 @@ export interface RiverChannelOpts {
   waterOffset: number;
 }
 
+/**
+ * Spacing (metres) between resampled path stations. Authored river nodes sit
+ * tens of metres apart; carve and surface both need terrain samples every few
+ * metres or the channel/ribbon turns into straight ramps between nodes that
+ * float over dips and tunnel through rises.
+ */
+const STATION_SPACING = 3;
+
+/**
+ * Half-window (in stations) of the box smoothing applied to the axis heights.
+ * ±2 stations at 3 m spacing ≈ a 15 m window: kills per-texel terrain jitter
+ * so the water surface reads as calm water, while still following the valley.
+ */
+const SMOOTH_HALF_WINDOW = 2;
+
+/** Box-smooth `values` in place-safe fashion (returns a new array). */
+function boxSmooth(values: number[], halfWindow: number): number[] {
+  const n = values.length;
+  const out = new Array<number>(n);
+  for (let i = 0; i < n; i++) {
+    let sum = 0;
+    let count = 0;
+    const lo = Math.max(0, i - halfWindow);
+    const hi = Math.min(n - 1, i + halfWindow);
+    for (let j = lo; j <= hi; j++) {
+      sum += values[j]!;
+      count++;
+    }
+    out[i] = sum / count;
+  }
+  return out;
+}
+
 /** River water shape: a sculpted channel along a polyline. */
 export class RiverChannel implements WaterShape {
-  /** Water-surface height per path node (field-local), filled by carve(). */
+  /** Dense resampled stations (`[x0,z0,...]`), filled by carve(). */
+  private stations: number[] = [];
+  /** Water-surface height per station (field-local), filled by carve(). */
   private surfaceHeights: number[] = [];
 
   constructor(private readonly opts: RiverChannelOpts) {}
@@ -29,35 +64,51 @@ export class RiverChannel implements WaterShape {
 
   carve(sampler: HeightSampler): WaterShapeResult {
     const { path, width, depth, waterOffset } = this.opts;
-    // Sample the terrain axis height at every path node from the UNMUTATED
-    // sampler — both to drive the terrain-following floor (stable across
-    // repeated carves → idempotent) and the descending water surface ribbon.
-    const nodeCount = path.length / 2;
+    // Densify the authored polyline into ~3 m stations, then sample the
+    // terrain axis height at every station from the UNMUTATED sampler — both
+    // to drive the terrain-following floor (stable across repeated carves →
+    // idempotent) and the water surface ribbon. Sparse per-node sampling is
+    // not enough: between nodes the linear ramp floats over dips and buries
+    // itself in rises.
+    const stations = resamplePath(path, STATION_SPACING);
+    const nodeCount = stations.length / 2;
     const axisHeights = new Array<number>(nodeCount);
-    this.surfaceHeights = new Array<number>(nodeCount);
     for (let i = 0; i < nodeCount; i++) {
-      const axisY = sampleHeightAt(sampler, path[i * 2]!, path[i * 2 + 1]!);
-      axisHeights[i] = axisY;
-      this.surfaceHeights[i] = axisY - waterOffset;
+      axisHeights[i] = sampleHeightAt(
+        sampler,
+        stations[i * 2]!,
+        stations[i * 2 + 1]!
+      );
     }
+    // Smooth so the surface reads as water, not a cloth draped over bumps.
+    const smoothed = boxSmooth(axisHeights, SMOOTH_HALF_WINDOW);
+    this.stations = stations;
+    this.surfaceHeights = smoothed.map((h) => h - waterOffset);
     // rimHeightAlongPath keeps bank-probe behaviour consistent with lakes and
-    // guards the flat-sampler no-op; carveChannel uses axisHeights for the floor.
-    const rimY = rimHeightAlongPath(sampler, path, width);
+    // guards the flat-sampler no-op; carveChannel digs the floor `depth` below
+    // the smoothed axis line, so the channel always contains the surface.
+    const rimY = rimHeightAlongPath(sampler, stations, width);
     const waterY = rimY - waterOffset;
-    const carved = carveChannel(sampler, path, width, rimY, depth, axisHeights);
+    const carved = carveChannel(
+      sampler,
+      stations,
+      width,
+      rimY,
+      depth,
+      smoothed
+    );
     return { carved, rimY, waterY };
   }
 
   buildGeometry(): THREE.BufferGeometry {
-    return makeRiverGeometry(
-      this.opts.path,
-      this.opts.width,
-      this.surfaceHeights
-    );
+    // Prefer the dense carve stations; fall back to the authored path when
+    // buildGeometry is called without a carve (tests/legacy flat ribbon).
+    const path = this.stations.length >= 4 ? this.stations : this.opts.path;
+    return makeRiverGeometry(path, this.opts.width, this.surfaceHeights);
   }
 
   worldOrigin(worldOffsetY: number): { x: number; y: number; z: number } {
-    // Ribbon vertices carry world X/Z and field-local surface Y (per node).
+    // Ribbon vertices carry world X/Z and field-local surface Y (per station).
     // The mesh only needs the field's world Y offset to lift field-local into world.
     return { x: 0, y: worldOffsetY, z: 0 };
   }
@@ -67,10 +118,12 @@ export class RiverChannel implements WaterShape {
   }
 
   toWaterBody(worldWaterY: number): WaterBody {
-    // Convert flat path to [x,z] pairs for the registry.
+    // Registry gets the dense stations when available so distance queries
+    // (spawner in-water, splash/drag) track curves, not just authored nodes.
+    const src = this.stations.length >= 4 ? this.stations : this.opts.path;
     const pairs: Array<readonly [number, number]> = [];
-    for (let i = 0; i < this.opts.path.length; i += 2) {
-      pairs.push([this.opts.path[i]!, this.opts.path[i + 1]!]);
+    for (let i = 0; i < src.length; i += 2) {
+      pairs.push([src[i]!, src[i + 1]!]);
     }
     return {
       kind: 'river',

@@ -64,6 +64,19 @@ export interface WaterMaterialConfig {
   ripple: number;
   waveHeight: number;
   waveSpeed: number;
+  /**
+   * Where the shallow→deep colour ramp starts/ends along `aWaterT` (1 = margin,
+   * 0 = centre/axis). Lakes default to [0, 1] (gentle radial gradient); narrow
+   * shapes like rivers want the deep colour to win sooner ([0.35, 0.85]) or the
+   * whole ribbon reads as washed-out shallow tint.
+   */
+  depthRampStart?: number;
+  depthRampEnd?: number;
+  /** Strength of the sky-tint fresnel mix (default 0.5). Rivers are viewed at
+   *  grazing angles almost permanently, so they use a lower value. */
+  fresnelStrength?: number;
+  /** Additive sparkle glint strength (default 0.3). */
+  sparkleStrength?: number;
 }
 
 /**
