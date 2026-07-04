@@ -21,6 +21,7 @@ import {
   createRenderer,
   createThreeCamera,
   deleteCanvasElement,
+  detectGpuTier,
   getCanvasElement,
   getRenderingContext,
   getScene,
@@ -736,6 +737,7 @@ export const SceneRenderSystem: System = {
 
     context.renderer = renderer;
     context.canvas = canvas;
+    void detectGpuTier(state, renderer, renderer.getContext());
     applyNeutralEnvironment(renderer, context.scene);
     // The post-processing scene pass renders scene.background (not the renderer
     // clear colour), so mirror the clear colour there or the sky goes black.

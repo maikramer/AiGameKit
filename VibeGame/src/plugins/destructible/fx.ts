@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import type { State, System } from '../../core';
 import { getScene } from '../rendering';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
@@ -8,8 +9,9 @@ import { spawnParticleBurst } from '../particles/utils';
  * Visual feedback for destructible props beyond the particle burst:
  *
  * - `applyCrackAmount` — procedural crack overlay that darkens/deepens with
- *   each hit (rocks). Injected via `onBeforeCompile` on per-entity cloned
- *   materials so other props sharing the master GLB stay pristine.
+ *   each hit (rocks). Built with `three-custom-shader-material` on per-entity
+ *   cloned materials so other props sharing the master GLB stay pristine, and
+ *   the overlay survives Three.js upgrades that reshuffle internal chunks.
  * - `startHitShake` — short decaying wobble of the visual (trees).
  * - `startTreeFall` — the trunk is cut at `cutHeight`: a stump stays behind
  *   while the top half tips over away from the player (clipping-plane split),
@@ -134,6 +136,13 @@ function findVisualGroup(
 export const CRACK_STYLE_VORONOI = 0; // jagged cell-edge lines (rocks)
 export const CRACK_STYLE_VERTICAL = 1; // long vertical grain splits (wood)
 
+const CRACK_VERTEX_SHADER = `
+varying vec3 vCrackPos;
+void main() {
+  vCrackPos = position;
+}
+`;
+
 const CRACK_GLSL_COMMON = `
 uniform float uCrackAmount;
 varying vec3 vCrackPos;
@@ -161,79 +170,61 @@ float crackEdgeDist(vec2 p) {
 `;
 
 const CRACK_GLSL_APPLY = `
-if (uCrackAmount > 0.001) {
-  vec2 cp = vCrackPos.xz * 3.5 + vCrackPos.y * 2.1;
-  float edge = crackEdgeDist(cp);
-  float width = 0.04 + 0.12 * uCrackAmount;
-  float crack = 1.0 - smoothstep(width * 0.25, width, edge);
-  diffuseColor.rgb *= 1.0 - crack * (0.4 + 0.45 * uCrackAmount);
+void main() {
+  if (uCrackAmount > 0.001) {
+    vec2 cp = vCrackPos.xz * 3.5 + vCrackPos.y * 2.1;
+    float edge = crackEdgeDist(cp);
+    float width = 0.04 + 0.12 * uCrackAmount;
+    float crack = 1.0 - smoothstep(width * 0.25, width, edge);
+    csm_DiffuseColor.rgb *= 1.0 - crack * (0.4 + 0.45 * uCrackAmount);
+  }
 }
 `;
 
 // Vertical grain-split style for wood: a few long splits running up the trunk,
 // offset by a low-freq hash in X so the cracks aren't perfectly periodic.
-const CRACK_VERT_COMMON = CRACK_GLSL_COMMON; // reuse the hash + uniform
-
 const CRACK_VERT_APPLY = `
-if (uCrackAmount > 0.001) {
-  // Base position along the trunk circumference; small high-freq jitter so each
-  // split wobbles instead of reading as a perfectly straight line.
-  float xc = vCrackPos.x + vCrackPos.z * 0.35;
-  float jitter = (crackHash2(vec2(floor(vCrackPos.y * 1.8), 7.0)).x - 0.5) * 0.18;
-  float p = xc * 5.2 + jitter;
-  // Distance to the nearest periodic seam: 0 on the line, 0.5 between.
-  float nearest = abs(fract(p + 0.5) - 0.5);
-  // Fade the splits toward the top/bottom so they look like stresses, not a
-  // full-length saw cut.
-  float yFade = 1.0 - smoothstep(0.42, 0.5, abs(vCrackPos.y - 0.0));
-  float width = 0.022 + 0.10 * uCrackAmount;
-  float split = 1.0 - smoothstep(width * 0.3, width, nearest);
-  split *= yFade;
-  diffuseColor.rgb *= 1.0 - split * (0.42 + 0.5 * uCrackAmount);
+void main() {
+  if (uCrackAmount > 0.001) {
+    // Base position along the trunk circumference; small high-freq jitter so
+    // each split wobbles instead of reading as a perfectly straight line.
+    float xc = vCrackPos.x + vCrackPos.z * 0.35;
+    float jitter = (crackHash2(vec2(floor(vCrackPos.y * 1.8), 7.0)).x - 0.5) * 0.18;
+    float p = xc * 5.2 + jitter;
+    // Distance to the nearest periodic seam: 0 on the line, 0.5 between.
+    float nearest = abs(fract(p + 0.5) - 0.5);
+    // Fade the splits toward the top/bottom so they look like stresses, not a
+    // full-length saw cut.
+    float yFade = 1.0 - smoothstep(0.42, 0.5, abs(vCrackPos.y - 0.0));
+    float width = 0.022 + 0.10 * uCrackAmount;
+    float split = 1.0 - smoothstep(width * 0.3, width, nearest);
+    split *= yFade;
+    csm_DiffuseColor.rgb *= 1.0 - split * (0.42 + 0.5 * uCrackAmount);
+  }
 }
 `;
 
 /**
  * Clone `source` with a crack overlay shader for `style`. Exported for tests
- * that verify the program-cache key varies by style (otherwise THREE hands
- * back the wrong compiled shader across voronoi/vertical props).
+ * that verify the program-cache key varies by style (otherwise the cached GL
+ * program would be reused across voronoi/vertical props).
  */
 export function makeCrackMaterial(
   source: THREE.Material,
   uniform: { value: number },
   style: number
 ): THREE.Material {
-  const mat = source.clone();
-  mat.customProgramCacheKey = () => 'destructible-crack-' + style;
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uCrackAmount = uniform;
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        '#include <common>\nvarying vec3 vCrackPos;'
-      )
-      .replace(
-        '#include <begin_vertex>',
-        '#include <begin_vertex>\nvCrackPos = transformed;'
-      );
-    if (style === CRACK_STYLE_VERTICAL) {
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>' + CRACK_VERT_COMMON)
-        .replace(
-          '#include <map_fragment>',
-          '#include <map_fragment>' + CRACK_VERT_APPLY
-        );
-    } else {
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>' + CRACK_GLSL_COMMON)
-        .replace(
-          '#include <map_fragment>',
-          '#include <map_fragment>' + CRACK_GLSL_APPLY
-        );
-    }
-  };
-  mat.needsUpdate = true;
-  return mat;
+  const fragmentShader =
+    CRACK_GLSL_COMMON +
+    (style === CRACK_STYLE_VERTICAL ? CRACK_VERT_APPLY : CRACK_GLSL_APPLY);
+
+  return new CustomShaderMaterial({
+    baseMaterial: source.clone(),
+    vertexShader: CRACK_VERTEX_SHADER,
+    fragmentShader,
+    uniforms: { uCrackAmount: uniform },
+    cacheKey: () => 'destructible-crack-' + style,
+  }) as unknown as THREE.Material;
 }
 
 /**

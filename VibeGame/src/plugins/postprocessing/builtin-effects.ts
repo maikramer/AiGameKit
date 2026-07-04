@@ -14,7 +14,8 @@ import {
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/examples/jsm/postprocessing/SMAAPass.js';
-import { SSAOPass } from 'three/examples/jsm/postprocessing/SSAOPass.js';
+import { N8AOPostPass } from 'n8ao';
+import { getGpuTierForRenderer } from '../rendering/utils';
 import { BokehPass } from 'three/examples/jsm/postprocessing/BokehPass.js';
 import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
 import { FXAAShader } from 'three/examples/jsm/shaders/FXAAShader.js';
@@ -28,6 +29,17 @@ type CS = Record<string, Float32Array | Uint8Array>;
 // postprocessing bokehScale is a coarse strength multiplier (~1-8). Scale so the
 // default bokehScale lands near BokehPass's own default aperture.
 const BOKEH_APERTURE_SCALE = 0.005;
+
+/** Maps a `detect-gpu` tier (0-3, undefined = unresolved yet) to n8ao's sample-count preset. */
+function qualityModeForTier(
+  tier: { tier: number } | null
+): 'Performance' | 'Low' | 'Medium' | 'High' | 'Ultra' {
+  if (!tier) return 'Medium';
+  if (tier.tier <= 0) return 'Performance';
+  if (tier.tier === 1) return 'Low';
+  if (tier.tier === 2) return 'Medium';
+  return 'High';
+}
 
 // LINEAR was intentionally dropped from the tonemapping menu. Index 0 in the
 // component selects NoToneMapping (a renderer side-effect, no Pass emitted).
@@ -199,21 +211,30 @@ registerEffect({
     const cs = Postprocessing as unknown as CS;
     if (!(cs.ssao as Uint8Array)[entity]) return null;
     const size = renderer.getDrawingBufferSize(new Vector2());
-    const pass = new SSAOPass(scene, camera, size.x, size.y);
-    pass.kernelRadius = Math.max(1e-6, (cs.ssaoRadius as Float32Array)[entity]);
-    // SSAOPass exposes no `.intensity` property: AO strength is baked into the
-    // output blend, and spread is governed by kernelRadius/minDistance/maxDistance.
-    // ssaoIntensity therefore has no 1:1 mapping here; tuning required to recover
-    // the previous visual.
+    const pass = new N8AOPostPass(scene, camera, size.x, size.y);
+    pass.configuration.aoRadius = Math.max(
+      1e-6,
+      (cs.ssaoRadius as Float32Array)[entity]
+    );
+    pass.configuration.intensity = Math.max(
+      0,
+      (cs.ssaoIntensity as Float32Array)[entity]
+    );
+    // Sample counts (not user-configurable via XML) follow the detected GPU
+    // tier; radius/intensity above stay fully author-controlled.
+    pass.setQualityMode(qualityModeForTier(getGpuTierForRenderer(renderer)));
     return pass;
   },
   update(state: CS, entity: number, pass: Pass): void {
-    const ssao = pass as SSAOPass;
-    ssao.kernelRadius = Math.max(
+    const ssao = pass as N8AOPostPass;
+    ssao.configuration.aoRadius = Math.max(
       1e-6,
       (state.ssaoRadius as Float32Array)[entity]
     );
-    // ssaoIntensity has no SSAOPass equivalent (see create() TODO).
+    ssao.configuration.intensity = Math.max(
+      0,
+      (state.ssaoIntensity as Float32Array)[entity]
+    );
   },
 });
 
