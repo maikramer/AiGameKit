@@ -1,7 +1,7 @@
 import type * as THREE from 'three';
 import type { HeightSampler } from '../terrain/height-sampler';
 import type { WorldAabb } from '../terrain/density-map';
-import { carveChannel, rimHeightAlongPath } from './carve';
+import { carveChannel, rimHeightAlongPath, shoreFraction } from './carve';
 import { makeRiverGeometry } from './river-geometry';
 import { pathAabb, resamplePath } from './path-utils';
 import type { WaterBody } from './registry';
@@ -100,11 +100,26 @@ export class RiverChannel implements WaterShape {
     return { carved, rimY, waterY };
   }
 
+  /**
+   * Fraction of the half-width where the carved floor meets the water surface
+   * (the waterline). 0 (degenerate: surface at the rim) falls back to 0.95 so
+   * the ribbon still spans the channel.
+   */
+  private shoreT(): number {
+    const t = shoreFraction(this.opts.depth, this.opts.waterOffset);
+    return t > 0 ? t : 0.95;
+  }
+
   buildGeometry(): THREE.BufferGeometry {
     // Prefer the dense carve stations; fall back to the authored path when
     // buildGeometry is called without a carve (tests/legacy flat ribbon).
     const path = this.stations.length >= 4 ? this.stations : this.opts.path;
-    return makeRiverGeometry(path, this.opts.width, this.surfaceHeights);
+    // Size the ribbon to the waterline, not the full carved channel: with a
+    // visible bank (waterOffset a decent fraction of depth) a full-width
+    // ribbon would overhang the exposed carved slope. Small pad so the
+    // in-shader alpha fade (t 0.9–1), not the polygon edge, ends the water.
+    const width = this.opts.width * Math.min(1, this.shoreT() + 0.08);
+    return makeRiverGeometry(path, width, this.surfaceHeights);
   }
 
   worldOrigin(worldOffsetY: number): { x: number; y: number; z: number } {
@@ -129,6 +144,7 @@ export class RiverChannel implements WaterShape {
       kind: 'river',
       path: pairs,
       width: this.opts.width,
+      shoreWidth: this.opts.width * this.shoreT(),
       // worldWaterY passed by applyWaterShape = worldOffset.y + (rimY - waterOffset).
       // It's the highest surface point; queries use it as the water level.
       waterY: worldWaterY,

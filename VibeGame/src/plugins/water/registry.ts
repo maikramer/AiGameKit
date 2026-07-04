@@ -25,6 +25,14 @@ export interface RiverWaterBody {
   path: ReadonlyArray<readonly [number, number]>;
   /** Channel width (m). Points within width/2 of the path are "in water". */
   width: number;
+  /**
+   * Full width of the waterline (m): where the carved channel floor rises to
+   * the water surface (`width · shoreFraction(depth, waterOffset)`). The strip
+   * [shoreWidth/2, width/2] either side is exposed carved bank; the terrain
+   * sand mask keys off it so the sand edge hugs the water edge. Optional for
+   * legacy bodies — consumers fall back to `0.95 · width`.
+   */
+  shoreWidth?: number;
   waterY: number;
 }
 

@@ -120,6 +120,18 @@ const _flatNRTexture = (() => {
  *  keep small so the GLSL loop stays cheap. */
 const MAX_LAKES = 16;
 
+/** Max river path segments the sand shader can mask. Rivers register dense
+ *  (~3 m) stations; applyLakeSand downsamples each river to fit this budget. */
+const MAX_RIVER_SEGS = 32;
+
+/**
+ * Peak sand opacity of the water-bed mask. Deliberately < 1 so ~30% of the
+ * underlying terrain/biome albedo bleeds through — lakebeds pick up a local
+ * colour cast (mud in the swamp, snow in the peaks) instead of an identical
+ * stamped beach everywhere.
+ */
+const SAND_BLEND_MAX = 0.7;
+
 /** World metres per sand-texel repeat — sand grains should tile finer than the
  *  biome albedo (which uses the chunk's world-space UV). Sampled by vWorldXZ. */
 const SAND_UV_SCALE = 0.25;
@@ -308,6 +320,17 @@ function _setupBlendShader(
     const lakeVecs: THREE.Vector4[] = [];
     for (let i = 0; i < MAX_LAKES; i++) lakeVecs.push(new THREE.Vector4());
     shader.uniforms.uLakes = { value: lakeVecs };
+    // Per river segment: xyzw = (ax, az, bx, bz) world endpoints; dims per
+    // segment: x = shore half-width (waterline), y = outer sand half-width.
+    const riverSegs: THREE.Vector4[] = [];
+    const riverDims: THREE.Vector2[] = [];
+    for (let i = 0; i < MAX_RIVER_SEGS; i++) {
+      riverSegs.push(new THREE.Vector4());
+      riverDims.push(new THREE.Vector2());
+    }
+    shader.uniforms.uRiverSegs = { value: riverSegs };
+    shader.uniforms.uRiverDims = { value: riverDims };
+    shader.uniforms.uRiverSegCount = { value: 0 };
 
     shader.vertexShader = shader.vertexShader.replace(
       '#include <common>',
@@ -347,6 +370,9 @@ function _setupBlendShader(
        uniform float uSandBlend;
        uniform int uLakeCount;
        uniform vec4 uLakes[${MAX_LAKES}];
+       uniform vec4 uRiverSegs[${MAX_RIVER_SEGS}];
+       uniform vec2 uRiverDims[${MAX_RIVER_SEGS}];
+       uniform int uRiverSegCount;
        vec4 biomeSplat() {
          return texture2D(uSplatMap, (vWorldXZ - uSplatMin) * uSplatInvSize);
        }
@@ -375,7 +401,28 @@ function _setupBlendShader(
            float beach = 1.0 - smoothstep(shoreR * s, max(r * s, shoreR * s + 0.001), d);
            m = max(m, beach);
          }
-         return clamp(m, 0.0, 1.0) * uSandBlend;
+         return m;
+       }
+       // Sand band along river channels: full sand inside the waterline
+       // (dims.x), fading out at the outer beach edge (dims.y) — the polyline
+       // analogue of the lake's shoreR→r ring.
+       float riverMask() {
+         float m = 0.0;
+         for (int i = 0; i < ${MAX_RIVER_SEGS}; i++) {
+           if (i >= uRiverSegCount) break;
+           vec2 a = uRiverSegs[i].xy;
+           vec2 b = uRiverSegs[i].zw;
+           vec2 ab = b - a;
+           float lenSq = max(dot(ab, ab), 1e-6);
+           float t = clamp(dot(vWorldXZ - a, ab) / lenSq, 0.0, 1.0);
+           float d = length(vWorldXZ - (a + ab * t));
+           float band = 1.0 - smoothstep(uRiverDims[i].x, max(uRiverDims[i].y, uRiverDims[i].x + 0.001), d);
+           m = max(m, band);
+         }
+         return m;
+       }
+       float sandMask() {
+         return clamp(max(lakeMask(), riverMask()), 0.0, 1.0) * uSandBlend;
        }`
     );
 
@@ -396,7 +443,7 @@ function _setupBlendShader(
          if (uLayerCount > 3.5)
               groundCol = mix(groundCol, texture2D(uLayer3, vMapUv), splat.a);
           }
-          float sand = lakeMask();
+          float sand = sandMask();
           if (sand > 0.001) {
             vec2 sandUv = vWorldXZ * uSandScale;
             groundCol = mix(groundCol, texture2D(uSandAlbedo, sandUv), sand);
@@ -421,7 +468,7 @@ function _setupBlendShader(
             if (uLayerCount > 3.5)
               nrm = mix(nrm, texture2D(uNR3, vMapUv).xyz, splat.a);
           }
-          float sandN = lakeMask();
+          float sandN = sandMask();
           if (sandN > 0.001)
             nrm = mix(nrm, texture2D(uSandNR, vWorldXZ * uSandScale).xyz, sandN);
            vec3 mapN = nrm * 2.0 - 1.0;
@@ -442,7 +489,7 @@ function _setupBlendShader(
          if (uLayerCount > 2.5) rgh = mix(rgh, texture2D(uNR2, vMapUv).a, splat.b);
          if (uLayerCount > 3.5) rgh = mix(rgh, texture2D(uNR3, vMapUv).a, splat.a);
        }
-       float sandR = lakeMask();
+       float sandR = sandMask();
        if (sandR > 0.001)
          rgh = mix(rgh, texture2D(uSandNR, vWorldXZ * uSandScale).a, sandR);
        roughnessFactor *= rgh;`
@@ -528,10 +575,51 @@ function applyLakeSand(state: State, field: number): void {
   }
   if (perState.get(field) === sig) return;
 
-  // The sand mask is lake-specific (radial disc shader); filter to lake bodies
-  // so rivers don't corrupt the uniform layout.
   const lakeBodies = bodies.filter((b) => b.kind === 'lake');
   const count = Math.min(MAX_LAKES, lakeBodies.length);
+
+  // Rivers: downsample each body's (dense, ~3 m) station path so all rivers
+  // share the MAX_RIVER_SEGS budget. The sand band is metres wide and soft —
+  // a coarser polyline is invisible in the mask.
+  const riverBodies = bodies.filter((b) => b.kind === 'river');
+  const segs: Array<{
+    ax: number;
+    az: number;
+    bx: number;
+    bz: number;
+    shoreHalf: number;
+    outerHalf: number;
+  }> = [];
+  if (riverBodies.length > 0) {
+    const budget = Math.max(1, Math.floor(MAX_RIVER_SEGS / riverBodies.length));
+    for (const b of riverBodies) {
+      const pts = b.path;
+      if (pts.length < 2) continue;
+      const shoreHalf = (b.shoreWidth ?? b.width * 0.95) / 2;
+      // Beach extends past the carved channel edge, scaled to the river but
+      // clamped so narrow creeks still read and wide rivers don't flood sand.
+      const beach = Math.min(4, Math.max(1.5, b.width * 0.35));
+      const outerHalf = b.width / 2 + beach;
+      const stride = Math.max(1, Math.ceil((pts.length - 1) / budget));
+      for (
+        let i = 0;
+        i + 1 < pts.length && segs.length < MAX_RIVER_SEGS;
+        i += stride
+      ) {
+        const a = pts[i]!;
+        const bPt = pts[Math.min(i + stride, pts.length - 1)]!;
+        segs.push({
+          ax: a[0],
+          az: a[1],
+          bx: bPt[0],
+          bz: bPt[1],
+          shoreHalf,
+          outerHalf,
+        });
+      }
+    }
+  }
+
   for (const sh of refs) {
     const lakes = sh.uniforms.uLakes.value as THREE.Vector4[];
     for (let i = 0; i < count; i++) {
@@ -542,7 +630,16 @@ function applyLakeSand(state: State, field: number): void {
       lakes[i].set(b.x, b.z, b.radius, shoreR);
     }
     sh.uniforms.uLakeCount.value = count;
-    sh.uniforms.uSandBlend.value = count > 0 ? 1 : 0;
+    const riverSegs = sh.uniforms.uRiverSegs.value as THREE.Vector4[];
+    const riverDims = sh.uniforms.uRiverDims.value as THREE.Vector2[];
+    for (let i = 0; i < segs.length; i++) {
+      const s = segs[i]!;
+      riverSegs[i].set(s.ax, s.az, s.bx, s.bz);
+      riverDims[i].set(s.shoreHalf, s.outerHalf);
+    }
+    sh.uniforms.uRiverSegCount.value = segs.length;
+    sh.uniforms.uSandBlend.value =
+      count > 0 || segs.length > 0 ? SAND_BLEND_MAX : 0;
   }
   perState.set(field, sig);
 }
