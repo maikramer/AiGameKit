@@ -148,7 +148,8 @@ export class HeightFogPass extends Pass {
 
   private readonly cam: Camera;
   private readonly material: ShaderMaterial;
-  private readonly uniforms: Record<string, IUniform>;
+  /** Exposed so the postprocessing update step can sync biome-driven changes. */
+  readonly uniforms: Record<string, IUniform>;
   private readonly fsQuad: FullScreenQuad;
   private time = 0;
 
