@@ -33,6 +33,36 @@ export function pathAabb(path: FlatPath, pad: number): PathAabb {
   };
 }
 
+/**
+ * Resample the polyline at roughly `spacing`-metre intervals, preserving every
+ * original node (corners stay sharp). Consumers that follow terrain (river
+ * carve/surface) need dense stations: with authored nodes 20–40 m apart, any
+ * per-node terrain sampling turns into long straight ramps that float over
+ * dips and tunnel through rises between nodes.
+ */
+export function resamplePath(path: FlatPath, spacing: number): FlatPath {
+  if (path.length < 4) {
+    throw new Error(
+      'resamplePath: path must have at least 2 points (4 numbers)'
+    );
+  }
+  const step = Math.max(0.5, spacing);
+  const out: number[] = [path[0]!, path[1]!];
+  for (let i = 0; i + 3 < path.length; i += 2) {
+    const ax = path[i]!;
+    const az = path[i + 1]!;
+    const bx = path[i + 2]!;
+    const bz = path[i + 3]!;
+    const len = Math.hypot(bx - ax, bz - az);
+    const steps = Math.max(1, Math.ceil(len / step));
+    for (let s = 1; s <= steps; s++) {
+      const f = s / steps;
+      out.push(ax + (bx - ax) * f, az + (bz - az) * f);
+    }
+  }
+  return out;
+}
+
 /** Total length of the polyline (sum of segment lengths). */
 export function pathLength(path: FlatPath): number {
   let total = 0;

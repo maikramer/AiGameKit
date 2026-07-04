@@ -70,6 +70,11 @@ function makeWaterMaterial(
     };
     shader.uniforms.uDeepColor = { value: new THREE.Color(cfg.color) };
     shader.uniforms.uSkyTint = { value: new THREE.Color(0xbfd8e6) };
+    shader.uniforms.uDepthRamp = {
+      value: new THREE.Vector2(cfg.depthRampStart ?? 0, cfg.depthRampEnd ?? 1),
+    };
+    shader.uniforms.uFresnelStrength = { value: cfg.fresnelStrength ?? 0.5 };
+    shader.uniforms.uSparkleStrength = { value: cfg.sparkleStrength ?? 0.3 };
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -111,14 +116,18 @@ function makeWaterMaterial(
          uniform vec3 uShallowColor;
          uniform vec3 uDeepColor;
          uniform vec3 uSkyTint;
+         uniform vec2 uDepthRamp;
+         uniform float uFresnelStrength;
+         uniform float uSparkleStrength;
          varying float vWaterT;
          varying vec2 vWaveXZ;
          varying vec3 vViewDir;
          // Shape-agnostic depth/alpha: the geometry bakes t into aWaterT
          // (0 at centre/axis, 1 at margin/bank) so these no longer depend on a
-         // radial distance metric.
+         // radial distance metric. uDepthRamp compresses the shallow→deep
+         // gradient (rivers reach deep colour sooner than lakes).
          float lakeDepthNorm() {
-           return 1.0 - smoothstep(0.0, 1.0, vWaterT);
+           return 1.0 - smoothstep(uDepthRamp.x, uDepthRamp.y, vWaterT);
          }
          float shoreAlpha() {
            return 1.0 - smoothstep(0.9, 1.0, vWaterT);
@@ -168,7 +177,7 @@ function makeWaterMaterial(
          float banded = floor(depthNorm * 3.0 + 0.5) / 3.0;
          diffuseColor.rgb = mix(uShallowColor, uDeepColor, mix(depthNorm, banded, 0.55));
          float fres = lakeFresnel();
-         diffuseColor.rgb = mix(diffuseColor.rgb, uSkyTint, clamp(fres * 0.5, 0.0, 0.5));
+         diffuseColor.rgb = mix(diffuseColor.rgb, uSkyTint, clamp(fres * uFresnelStrength, 0.0, 0.5));
          // Low-frequency drift — high frequencies read as a checker pattern
          // on the flat disc instead of water.
          float st = uTime * uWaveSpeed;
@@ -180,7 +189,7 @@ function makeWaterMaterial(
          float sp1 = vnoise(vWaveXZ * 0.9 + st * 0.35);
          float sp2 = vnoise(vWaveXZ * 1.7 - st * 0.27);
          float sparkle = smoothstep(0.82, 0.98, sp1 * sp2 * 1.6);
-         diffuseColor.rgb += sparkle * 0.3 * uRipple;
+         diffuseColor.rgb += sparkle * uSparkleStrength * uRipple;
          float foam = lakeFoam();
          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), foam * 0.85);`
       )
@@ -374,6 +383,13 @@ export const RiverApplySystem: System = {
           ripple: River.ripple[eid],
           waveHeight: River.waveHeight[eid] || 0.04,
           waveSpeed: River.waveSpeed[eid] || 1,
+          // A ribbon is viewed at grazing angles and is only a few metres
+          // wide: reach the deep colour early and mute the sky-fresnel and
+          // sparkles, or the whole river washes out to icy white.
+          depthRampStart: 0.35,
+          depthRampEnd: 0.85,
+          fresnelStrength: 0.3,
+          sparkleStrength: 0.15,
         },
         cars
       );
