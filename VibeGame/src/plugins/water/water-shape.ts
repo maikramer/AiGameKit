@@ -40,12 +40,13 @@ export interface WaterShape {
   /** Surface mesh geometry. Must set the `aWaterT` attribute (0=center, 1=margin). */
   buildGeometry(): THREE.BufferGeometry;
   /**
-   * World-space X/Z offset to position the mesh at. Lakes return their centre
-   * (the fan geometry is origin-centred); rivers return (0,0) (the ribbon
-   * vertices already carry world coords). `applyWaterShape` sets
-   * `mesh.position = (origin.x, worldWaterY, origin.z)`.
+   * World-space position for the mesh. `worldOffsetY` is the terrain field's
+   * world Y offset (the only world datum the shape doesn't own). Lakes place a
+   * flat origin-centred fan → `{ x: centreX, y: worldOffsetY + localWaterY, z: centreZ }`.
+   * Rivers bake per-node surface Y into the ribbon vertices → `{ x:0, y: worldOffsetY, z:0 }`
+   * (the field offset lifts field-local vertex Y into world).
    */
-  worldOrigin(): { x: number; z: number };
+  worldOrigin(worldOffsetY: number): { x: number; y: number; z: number };
   /** Density boost for terrain chunks overlapping this shape (255 = max detail). */
   densityBoost(): number;
   /**
@@ -141,8 +142,10 @@ export function applyWaterShape(
     if (c) c.shader = shader;
   });
   const mesh = new THREE.Mesh(shape.buildGeometry(), material);
-  const origin = shape.worldOrigin();
-  mesh.position.set(origin.x, worldWaterY, origin.z);
+  // The shape owns the full mesh position: lakes lift a flat fan to the surface,
+  // rivers bake per-node Y into the ribbon and only need the field offset.
+  const origin = shape.worldOrigin(data.worldOffset.y);
+  mesh.position.set(origin.x, origin.y, origin.z);
   mesh.renderOrder = 2;
   mesh.receiveShadow = true;
   scene.add(mesh);

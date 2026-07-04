@@ -158,20 +158,36 @@ export function carveBowl(
 }
 
 /**
- * Carve a river channel along a polyline. For each texel within the path AABB,
- * find the nearest path segment, compute the lateral coordinate `t = d/(width/2)`
- * (0 on the axis, 1 at the bank), and apply the same C1-smooth profile as
- * `carveBowl`: `rimY − depth·(1 − t²)^1.5`. Heights only go down (min), so
- * overlapping channels and pre-existing valleys are safe.
+ * Carve a river channel along a polyline, terrain-following. For each texel
+ * within the path AABB, find the nearest point on the path axis, look up the
+ * pre-sampled axis height there (`axisY`, linearly interpolated between path
+ * nodes), and carve a transverse profile `axisY − depth·(1 − t²)^1.5` where
+ * `t = lateralDist/(width/2)`.
  *
+ * `axisHeights` (one terrain-axis height per path node, sampled once from the
+ * **unmutated** sampler before carving) makes the carve idempotent: re-running
+ * it doesn't sample the already-lowered floor and dig deeper each pass.
+ *
+ * Following the local axis height (rather than a single global rim) means:
+ *  - high terrain → a deep channel cut `depth` below the local surface,
+ *  - low terrain → a shallow/surface channel, no trench,
+ *  - no flat-plane discontinuities where the terrain dips below a global floor.
+ *
+ * Heights only ever go down (min), so overlapping channels and pre-existing
+ * valleys are safe.
+ *
+ * @param axisHeights  Terrain height at each path node (pre-sampled, unmutated).
+ *                     Length must equal `path.length/2`. If empty, falls back to
+ *                     a flat floor at `_rimY − depth` (legacy/global behaviour).
  * @returns true when at least one texel changed (false on a flat sampler).
  */
 export function carveChannel(
   sampler: HeightSampler,
   path: number[],
   width: number,
-  rimY: number,
-  depth: number
+  _rimY: number,
+  depth: number,
+  axisHeights: number[] = []
 ): boolean {
   const { data, width: gw, height: gh, worldSize, maxHeight } = sampler;
   if (!data || gw < 2 || gh < 2 || maxHeight <= 0) return false;
@@ -180,6 +196,7 @@ export function carveChannel(
   const stepX = worldSize / (gw - 1);
   const stepZ = worldSize / (gh - 1);
   const halfWidth = width / 2;
+  const useAxis = axisHeights.length >= path.length / 2;
 
   const aabb = pathAabb(path, halfWidth);
   const x0 = Math.max(0, Math.floor((aabb.minX + half) / stepX));
@@ -187,14 +204,15 @@ export function carveChannel(
   const z0 = Math.max(0, Math.floor((aabb.minZ + half) / stepZ));
   const z1 = Math.min(gh - 1, Math.ceil((aabb.maxZ + half) / stepZ));
 
-  // Inline nearest-segment distance to keep the inner loop allocation-free.
   let changed = false;
   for (let zi = z0; zi <= z1; zi++) {
     const wz = zi * stepZ - half;
     for (let xi = x0; xi <= x1; xi++) {
       const wx = xi * stepX - half;
-      // nearest distance to the polyline
+      // nearest segment: track distance AND the parametric `t` (for axis lookup).
       let best = Infinity;
+      let bestSeg = 0;
+      let bestT = 0;
       for (let i = 0; i + 3 < path.length; i += 2) {
         const ax = path[i]!;
         const az = path[i + 1]!;
@@ -208,13 +226,24 @@ export function carveChannel(
         const cx = ax + t * dx;
         const cz = az + t * dz;
         const d = Math.hypot(wx - cx, wz - cz);
-        if (d < best) best = d;
+        if (d < best) {
+          best = d;
+          bestSeg = i;
+          bestT = t;
+        }
       }
       const tLat = best / halfWidth;
       if (tLat >= 1) continue;
-      const bowlY =
-        rimY - depth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
-      const target = Math.min(1, Math.max(0, bowlY / maxHeight));
+      // Axis height: interpolate between the two nodes of the nearest segment
+      // using the pre-sampled (stable) axis heights, or fall back to the rim.
+      const nodeIdx = bestSeg / 2;
+      const axisY = useAxis
+        ? axisHeights[nodeIdx]! +
+          bestT * (axisHeights[nodeIdx + 1]! - axisHeights[nodeIdx]!)
+        : _rimY;
+      const floorY =
+        axisY - depth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
+      const target = Math.min(1, Math.max(0, floorY / maxHeight));
       const idx = zi * gw + xi;
       if (data[idx]! > target) {
         data[idx] = target;

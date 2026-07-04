@@ -65,7 +65,7 @@ describe('LakeBowl', () => {
     expect(bowl.carve(flat).carved).toBe(false);
   });
 
-  it('worldOrigin returns the world centre for mesh placement', () => {
+  it('worldOrigin returns the world centre + surface Y for mesh placement', () => {
     const bowl = new LakeBowl({
       localX: 5,
       localZ: 7,
@@ -75,7 +75,14 @@ describe('LakeBowl', () => {
       depth: 2,
       waterOffset: 0.3,
     });
-    expect(bowl.worldOrigin()).toEqual({ x: 105, z: 107 });
+    // carve first so the bowl captures the local water Y.
+    const sampler = flatSampler(0.5);
+    bowl.carve(sampler);
+    // worldOffsetY = 10; surface Y = 10 + localWaterY.
+    const origin = bowl.worldOrigin(10);
+    expect(origin.x).toBe(105);
+    expect(origin.z).toBe(107);
+    expect(origin.y).toBe(10 + 50 - 0.3); // worldOffsetY + (rim 50 − waterOffset 0.3)
   });
 
   it('densityBoost returns 255', () => {

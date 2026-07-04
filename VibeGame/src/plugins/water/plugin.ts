@@ -27,6 +27,7 @@ export const riverRecipe: Recipe = {
     'path',
     'width',
     'depth',
+    'water-offset',
     'color',
     'opacity',
     'ripple',
@@ -145,7 +146,10 @@ export const WaterPlugin: Plugin = {
       river: {
         width: 6,
         depth: 1.5,
-        waterOffset: 0.3,
+        // Rivers run nearly full: the surface sits just below the lowest bank
+        // point, so the channel reads as flowing water rather than a dry ditch
+        // with a puddle at the bottom. Override per-river via water-offset.
+        waterOffset: 0.08,
         color: 0x3a5a7a,
         opacity: 0.85,
         ripple: 0.6,
