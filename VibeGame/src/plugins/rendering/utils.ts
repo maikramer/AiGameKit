@@ -359,7 +359,7 @@ export function getGpuTierForRenderer(
 export async function detectGpuTier(
   state: State,
   renderer: THREE.WebGLRenderer,
-  glContext?: WebGLRenderingContext | WebGL2RenderingContext
+  glContext?: WebGL2RenderingContext
 ): Promise<void> {
   const context = getRenderingContext(state);
   if (context.gpuTier !== undefined) return;
