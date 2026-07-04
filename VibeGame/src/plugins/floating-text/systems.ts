@@ -46,8 +46,13 @@ function createTextObject(state: State, entity: number): Text {
   obj.textAlign = 'center';
   obj.outlineWidth = '6%';
   obj.outlineColor = 0x000000;
+  // Combat text / "floaters": render always-on-top (HUD-style) so a tree
+  // trunk or wall between the text and the camera can't occlude it. We render
+  // after the opaque geometry (renderOrder) without writing or testing depth.
   obj.renderOrder = 999;
   obj.depthOffset = -4;
+  obj.material.depthTest = false;
+  obj.material.depthWrite = false;
   obj.sync();
   return obj;
 }
