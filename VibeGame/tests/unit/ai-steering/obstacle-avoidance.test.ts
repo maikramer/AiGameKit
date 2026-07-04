@@ -12,26 +12,15 @@ import { AiSteeringPlugin } from '../../../src/plugins/ai-steering/plugin';
 import { GltfXmlPlugin } from '../../../src/plugins/gltf-xml/plugin';
 import { getSteeringMap } from '../../../src/plugins/ai-steering/context';
 
-describe('SteeringRow obstacle field', () => {
-  it('should have optional obstacle field on SteeringRow interface', () => {
-    // Type check: SteeringRow is an interface, we verify via structure
-    const row: SteeringRow = {
-      vehicle: {} as any,
-      obstacle: {} as any,
-    };
+describe('SteeringRow shape', () => {
+  it('holds a single steering vehicle', () => {
+    const row: SteeringRow = { vehicle: {} as any };
     expect(row).toBeDefined();
-    expect(row.obstacle).toBeDefined();
-  });
-
-  it('should allow SteeringRow without obstacle (optional)', () => {
-    const row: SteeringRow = {
-      vehicle: {} as any,
-    };
-    expect(row.obstacle).toBeUndefined();
+    expect(row.vehicle).toBeDefined();
   });
 });
 
-describe('ObstacleAvoidanceBehavior integration', () => {
+describe('SteeringVehicle obstacle-avoidance config', () => {
   let state: State;
   let eid: number;
 
@@ -45,33 +34,31 @@ describe('ObstacleAvoidanceBehavior integration', () => {
     SteeringAgent.active[eid] = 1;
   });
 
-  it('should create ObstacleAvoidanceBehavior when vehicle is ensured', () => {
+  it('should create a SteeringVehicle when ensured', () => {
     const map = getSteeringMap(state);
     expect(map.has(eid)).toBe(false);
 
-    // Trigger ensureVehicle by running the system's internal logic
-    // We access it indirectly: system update populates the map
     state.step();
 
     const row = map.get(eid);
     expect(row).toBeDefined();
-    expect(row!.obstacle).toBeDefined();
+    expect(row!.vehicle.obstacleActive).toBe(true);
   });
 
-  it('should set OA weight to 1.5', () => {
+  it('should set obstacle avoidance weight to 1.5', () => {
     state.step();
 
     const row = getSteeringMap(state).get(eid)!;
-    expect(row.obstacle!.weight).toBeCloseTo(1.5);
+    expect(row.vehicle.obstacleWeight).toBeCloseTo(1.5);
   });
 
-  it('should keep OA active regardless of behavior value', () => {
+  it('should keep obstacle avoidance active regardless of behavior value', () => {
     for (const behavior of [0, 1, 2]) {
       SteeringAgent.behavior[eid] = behavior;
       state.step();
 
       const row = getSteeringMap(state).get(eid)!;
-      expect(row.obstacle!.active).toBe(true);
+      expect(row.vehicle.obstacleActive).toBe(true);
     }
   });
 });
@@ -112,10 +99,10 @@ describe('Obstacle list from Fixed-body entities', () => {
     state.step();
 
     const row = getSteeringMap(state).get(npcEid)!;
-    expect(row.obstacle!.obstacles).toBeDefined();
-    expect(row.obstacle!.obstacles.length).toBeGreaterThanOrEqual(1);
+    expect(row.vehicle.obstacles).toBeDefined();
+    expect(row.vehicle.obstacles.length).toBeGreaterThanOrEqual(1);
 
-    const obs = row.obstacle!.obstacles[0];
+    const obs = row.vehicle.obstacles[0];
     expect(obs.position.x).toBeCloseTo(5);
     expect(obs.position.y).toBeCloseTo(0);
     expect(obs.position.z).toBeCloseTo(10);
@@ -133,6 +120,6 @@ describe('Obstacle list from Fixed-body entities', () => {
     state.step();
 
     const row = getSteeringMap(state).get(npcEid)!;
-    expect(row.obstacle!.obstacles.length).toBe(0);
+    expect(row.vehicle.obstacles.length).toBe(0);
   });
 });
