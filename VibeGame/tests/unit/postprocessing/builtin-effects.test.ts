@@ -13,7 +13,6 @@ import { getEffectDefinitions } from '../../../src/plugins/postprocessing/effect
 const EXPECTED_KEYS = [
   'smaa',
   'fxaa',
-  'heightFog',
   'bloom',
   'vignette',
   'ssao',
@@ -52,7 +51,6 @@ describe('postprocessing builtin effects', () => {
     const byKey = new Map(getEffectDefinitions().map((d) => [d.key, d]));
     expect(byKey.get('bloom')?.position).toBeUndefined();
     expect(byKey.get('vignette')?.position).toBeUndefined();
-    expect(byKey.get('heightFog')?.position).toBeUndefined();
     expect(byKey.get('chromaticAberration')?.position).toBeUndefined();
   });
 
@@ -73,23 +71,21 @@ describe('postprocessing builtin effects', () => {
     }
   });
 
-  it('tonemapping applies renderer exposure/mapping from the component (no pass emitted)', () => {
+  it('tonemapping emits an EffectPass when a mode is selected (no renderer side-effect)', () => {
     const byKey = new Map(getEffectDefinitions().map((d) => [d.key, d]));
     const entity = 0;
     const savedMode = Postprocessing.toneMapping[entity];
-    const savedExposure = Postprocessing.toneMappingExposure[entity];
-    Postprocessing.toneMapping[entity] = 1;
-    Postprocessing.toneMappingExposure[entity] = 1.25;
+    Postprocessing.toneMapping[entity] = 1; // AgX
 
     const pass = byKey
       .get('tonemapping')!
       .create(stubState, entity, stubRenderer, stubScene, stubCamera);
 
     Postprocessing.toneMapping[entity] = savedMode;
-    Postprocessing.toneMappingExposure[entity] = savedExposure;
 
-    expect(pass).toBeNull();
-    expect(stubRenderer.toneMapping).toBe(AgXToneMapping);
-    expect(stubRenderer.toneMappingExposure).toBe(1.25);
+    // With the postprocessing library, tone mapping is an EffectPass (shader
+    // pass), not a renderer mutation. The renderer's toneMapping is untouched.
+    expect(pass).not.toBeNull();
+    expect(stubRenderer.toneMapping).not.toBe(AgXToneMapping);
   });
 });

@@ -1,59 +1,34 @@
-import {
-  FloatType,
-  HalfFloatType,
-  UnsignedByteType,
-  Vector2,
-  WebGLRenderTarget,
-} from 'three';
-import type { Camera, Scene, TextureDataType, WebGLRenderer } from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
+import { HalfFloatType } from 'three';
+import type { Camera, Scene, WebGLRenderer } from 'three';
+import { EffectComposer, RenderPass } from 'postprocessing';
+import type { Pass } from 'postprocessing';
 
 export type PostProcessingPipeline = EffectComposer;
 
-function resolveFrameBufferType(renderer: WebGLRenderer): TextureDataType {
-  const gl = renderer.getContext() as WebGL2RenderingContext;
-  // Half-float framebuffers require EXT_color_buffer_half_float (WebGL2) or
-  // the equivalent color-renderable format in the WebGL2 internal table.
-  if (
-    gl.getExtension('EXT_color_buffer_half_float') ??
-    gl.getExtension('OES_texture_half_float')
-  ) {
-    return HalfFloatType;
-  }
-  // Full float is widely supported on desktop.
-  if (gl.getExtension('EXT_color_buffer_float')) {
-    return FloatType;
-  }
-  return UnsignedByteType;
-}
-
+/**
+ * Build a post-processing pipeline around the `postprocessing` library's
+ * EffectComposer. The composer owns half-float frame buffers and (optionally)
+ * MSAA; callers add RenderPass + their effect passes.
+ *
+ * Note: passes here are the library's own `Pass` base (EffectPass wrapping an
+ * Effect, N8AOPostPass, etc.) — not the three-examples Pass.
+ */
 export function buildComposer(
   renderer: WebGLRenderer,
   scene: Scene,
   camera: Camera,
   passes: Pass[]
 ): EffectComposer {
-  const frameBufferType = resolveFrameBufferType(renderer);
-  const size = renderer.getSize(new Vector2());
-  const pixelRatio = renderer.getPixelRatio();
-  const renderTarget = new WebGLRenderTarget(
-    Math.max(1, Math.floor(size.width * pixelRatio)),
-    Math.max(1, Math.floor(size.height * pixelRatio)),
-    { type: frameBufferType }
-  );
-
-  const composer = new EffectComposer(renderer, renderTarget);
+  const composer = new EffectComposer(renderer, {
+    frameBufferType: HalfFloatType,
+    depthBuffer: true,
+  });
 
   composer.addPass(new RenderPass(scene, camera));
 
   for (const pass of passes) {
     composer.addPass(pass);
   }
-
-  composer.addPass(new OutputPass());
 
   return composer;
 }

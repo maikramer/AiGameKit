@@ -1,5 +1,5 @@
 import type { Camera, Scene, WebGLRenderer } from 'three';
-import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
+import type { Pass } from 'postprocessing';
 import type { Component } from '../../core';
 
 export interface EffectDefinition {

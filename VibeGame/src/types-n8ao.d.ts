@@ -1,6 +1,6 @@
 declare module 'n8ao' {
   import type { Camera, Color, Scene } from 'three';
-  import type { Pass } from 'three/examples/jsm/postprocessing/Pass.js';
+  import type { Pass } from 'postprocessing';
 
   export interface N8AOConfiguration {
     aoSamples: number;
