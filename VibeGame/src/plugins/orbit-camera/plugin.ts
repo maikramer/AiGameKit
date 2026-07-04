@@ -1,4 +1,6 @@
-import type { Plugin } from '../../core';
+import * as THREE from 'three';
+import CameraControls from 'camera-controls';
+import type { Plugin, State } from '../../core';
 import { OrbitCamera } from './components';
 import { orbitCameraRecipe } from './recipes';
 import {
@@ -6,6 +8,16 @@ import {
   OrbitCameraInputSystem,
   OrbitCameraSystem,
 } from './systems';
+
+// camera-controls requires a one-time install with the host's THREE instance
+// before any CameraControls can be constructed. Guarded so repeated plugin
+// initialization is a no-op.
+let installed = false;
+function ensureInstalled(): void {
+  if (installed) return;
+  CameraControls.install({ THREE });
+  installed = true;
+}
 
 export const OrbitCameraPlugin: Plugin = {
   systems: [OrbitCameraSetupSystem, OrbitCameraInputSystem, OrbitCameraSystem],
@@ -36,5 +48,8 @@ export const OrbitCameraPlugin: Plugin = {
         zoomSensitivity: 1.5,
       },
     },
+  },
+  initialize(_state: State): void {
+    ensureInstalled();
   },
 };
