@@ -17,6 +17,12 @@ export const WeatherComponent = {
   rain: new Float32Array(MAX_ENTITIES),
   /** 1 = slow ambient cloud cycle (coverage breathes over minutes). */
   cycle: new Uint8Array(MAX_ENTITIES),
+  /**
+   * Optional deterministic seed for cloud/rain placement. 0 = Math.random
+   * (backward compatible); any non-zero value makes the cloud field and rain
+   * distribution reproducible across reloads.
+   */
+  seed: new Uint32Array(MAX_ENTITIES),
   /** Internal: 1 once the runtime picked up the declarative values. */
   seeded: new Uint8Array(MAX_ENTITIES),
 } as const;
