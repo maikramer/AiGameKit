@@ -1,6 +1,7 @@
 import type { State } from '../../core';
 import { Transform, WorldTransform } from '../transforms/components';
 import { FloatingText } from './components';
+import { claimStackSlot } from './stacking';
 
 const textByState = new WeakMap<State, Map<number, string>>();
 
@@ -50,6 +51,19 @@ export interface FloatingTextOptions {
   driftX?: number;
   /** Screen mode: crit flag (bigger font + red-orange tint). */
   crit?: boolean;
+  /**
+   * Vertical-stack key: texts sharing a key stack upward instead of overlapping.
+   * When set, the spawn Y is offset by `claimStackSlot(key)` (0, gap, 2*gap, …).
+   */
+  stackKey?: string;
+  /**
+   * Anchor Y for the stack; when set, the spawn Y becomes `stackBaseY +
+   * yOffset` (rather than `options.y + yOffset`). Use to align a stack across
+   * callers that pass different raw `y` values.
+   */
+  stackBaseY?: number;
+  /** Vertical gap between stacked texts in world meters (default 0.5). */
+  stackGap?: number;
 }
 
 export interface ScreenFloatingTextOptions {
@@ -125,6 +139,10 @@ function applyCommon(
  * billboarded troika 3D glyph at `x/y/z`; in screen mode (`space: 'screen'`)
  * it is a DOM span recycled through the HudScreenLayer pool anchored at
  * screen pixel `x/y`. Returns the new entity id.
+ *
+ * When `stackKey` is set, the spawn Y is offset vertically by `claimStackSlot`
+ * so texts sharing the key stack upward instead of overlapping (damage, loot,
+ * popups on the same target).
  */
 export function spawnFloatingText(
   state: State,
@@ -134,11 +152,28 @@ export function spawnFloatingText(
   const eid = state.createEntity();
   const space: FloatingTextSpace = options.space ?? 'world';
 
+  // Resolve the spawn Y, applying a vertical stack offset when requested. In
+  // screen mode the gap is interpreted as CSS pixels; in world mode as meters.
+  let spawnY = options.y;
+  if (options.stackKey) {
+    const duration = options.duration ?? 1.4;
+    // Screen mode works in px; convert the (meter-typed) gap to px for stacking.
+    const gap =
+      space === 'screen'
+        ? (options.stackGap ?? 0.5) * 100
+        : (options.stackGap ?? 0.5);
+    const slot = claimStackSlot(state, options.stackKey, eid, duration, gap);
+    spawnY =
+      options.stackBaseY !== undefined
+        ? options.stackBaseY + slot.yOffset
+        : options.y + slot.yOffset;
+  }
+
   if (space === 'world') {
     const z = options.z ?? 0;
     state.addComponent(eid, Transform);
     Transform.posX[eid] = options.x;
-    Transform.posY[eid] = options.y;
+    Transform.posY[eid] = spawnY;
     Transform.posZ[eid] = z;
     Transform.scaleX[eid] = 1;
     Transform.scaleY[eid] = 1;
@@ -147,12 +182,19 @@ export function spawnFloatingText(
     Transform.dirty[eid] = 1;
     state.addComponent(eid, WorldTransform);
     WorldTransform.posX[eid] = options.x;
-    WorldTransform.posY[eid] = options.y;
+    WorldTransform.posY[eid] = spawnY;
     WorldTransform.posZ[eid] = z;
     WorldTransform.scaleX[eid] = 1;
     WorldTransform.scaleY[eid] = 1;
     WorldTransform.scaleZ[eid] = 1;
     WorldTransform.rotW[eid] = 1;
+  } else if (options.stackKey) {
+    // Screen mode: fold the stacked offset into screenY so the pool update
+    // (which reads screenY) keeps the text at the right place.
+    applyCommon(state, eid, options, space);
+    FloatingText.screenY[eid] = spawnY;
+    setFloatingTextString(state, eid, text);
+    return eid;
   }
 
   applyCommon(state, eid, options, space);
