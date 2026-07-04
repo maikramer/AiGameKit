@@ -264,6 +264,8 @@ export interface RenderingContext {
   resizeHandler?: () => void;
   totalInstanceCount: number;
   hasShownPerformanceWarning: boolean;
+  /** Populated asynchronously by `detectGpuTier` once the renderer exists. */
+  gpuTier?: import('detect-gpu').TierResult | null;
 }
 
 const stateToRenderingContext = new WeakMap<State, RenderingContext>();
@@ -322,6 +324,52 @@ export function getRenderingContext(state: State): RenderingContext {
 export function getScene(state: State): THREE.Scene | null {
   const context = stateToRenderingContext.get(state);
   return context?.scene || null;
+}
+
+/** GPU tier resolved by `detectGpuTier`, or `null` before it resolves / on SSR. */
+export function getGpuTier(
+  state: State
+): import('detect-gpu').TierResult | null {
+  return stateToRenderingContext.get(state)?.gpuTier ?? null;
+}
+
+/**
+ * Also keyed by renderer instance (not just ECS `State`): effect factories in
+ * `postprocessing/builtin-effects.ts` only receive the `WebGLRenderer`, not
+ * the `State`, so they consult this map instead of `getGpuTier`.
+ */
+const gpuTierByRenderer = new WeakMap<
+  THREE.WebGLRenderer,
+  import('detect-gpu').TierResult | null
+>();
+
+export function getGpuTierForRenderer(
+  renderer: THREE.WebGLRenderer
+): import('detect-gpu').TierResult | null {
+  return gpuTierByRenderer.get(renderer) ?? null;
+}
+
+/**
+ * Benchmarks a GPU tier (0-3) via `detect-gpu` and caches it on the rendering
+ * context for quality-sensitive subsystems (postprocessing, particle counts,
+ * terrain resolution) to consult. Fetches benchmark data from unpkg by
+ * default — failures (offline, blocked CDN) are swallowed and leave the tier
+ * `null`, so callers must treat "unknown" as "use the current defaults".
+ */
+export async function detectGpuTier(
+  state: State,
+  renderer: THREE.WebGLRenderer,
+  glContext?: WebGLRenderingContext | WebGL2RenderingContext
+): Promise<void> {
+  const context = getRenderingContext(state);
+  if (context.gpuTier !== undefined) return;
+  try {
+    const { getGPUTier } = await import('detect-gpu');
+    context.gpuTier = await getGPUTier(glContext ? { glContext } : {});
+  } catch {
+    context.gpuTier = null;
+  }
+  gpuTierByRenderer.set(renderer, context.gpuTier);
 }
 
 export function setCanvasElement(

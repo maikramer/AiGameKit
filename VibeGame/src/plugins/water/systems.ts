@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { Transform } from '../transforms/components';
@@ -10,8 +11,8 @@ import { LakeBowl } from './lake-bowl';
 import { RiverChannel } from './river-channel';
 import {
   applyWaterShape,
+  type WaterMaterial,
   type WaterMaterialConfig,
-  type WaterShaderHandle,
   type WaterSideCar,
 } from './water-shape';
 
@@ -49,179 +50,173 @@ function shallowTint(hex: number): number {
   return ((lift(r) << 16) | (lift(g) << 8) | lift(b)) >>> 0;
 }
 
-function makeWaterMaterial(
-  cfg: WaterMaterialConfig,
-  onShader: (shader: WaterShaderHandle) => void
-): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({
+const WATER_VERTEX_SHADER = `
+uniform float uTime;
+uniform float uRipple;
+uniform float uWaveHeight;
+uniform float uWaveSpeed;
+attribute float aWaterT;
+attribute float aGroundDepth;
+attribute float aFoamExtra;
+varying float vWaterT;
+varying float vGroundDepth;
+varying float vFoamExtra;
+varying vec2 vWaveXZ;
+varying vec3 vViewDir;
+
+void main() {
+  vWaterT = aWaterT;
+  vGroundDepth = aGroundDepth;
+  vFoamExtra = aFoamExtra;
+
+  vec3 pos = position;
+  vec4 wPos = modelMatrix * vec4(pos, 1.0);
+  vWaveXZ = wPos.xz;
+  float wt = uTime * uWaveSpeed;
+  // Two crossing waves plus a slow diagonal swell — reads as gentle open-water
+  // motion instead of a single repeating sine.
+  float wave = sin(wPos.x * 1.3 + wt * 0.9) * 0.5 +
+               cos(wPos.z * 1.6 + wt * 0.7) * 0.5 +
+               sin((wPos.x + wPos.z) * 0.55 + wt * 1.4) * 0.35;
+  // The disc lies in the local XZ plane (no mesh rotation), so local +Y is
+  // world up. Amplitude is per-lake (wave-height XML attr or radius-scaled
+  // auto), muted entirely when ripple is 0.
+  pos.y += min(uRipple, 1.0) * wave * uWaveHeight;
+  csm_Position = pos;
+
+  vViewDir = normalize(cameraPosition - (modelMatrix * vec4(pos, 1.0)).xyz);
+}
+`;
+
+const WATER_FRAGMENT_SHADER = `
+uniform float uTime;
+uniform float uRipple;
+uniform float uWaveSpeed;
+uniform vec3 uShallowColor;
+uniform vec3 uDeepColor;
+uniform vec3 uSkyTint;
+uniform vec2 uDepthRamp;
+uniform float uFresnelStrength;
+uniform float uSparkleStrength;
+varying float vWaterT;
+varying float vGroundDepth;
+varying float vFoamExtra;
+varying vec2 vWaveXZ;
+varying vec3 vViewDir;
+
+// Shape-agnostic depth/alpha: the geometry bakes t into aWaterT (0 at
+// centre/axis, 1 at margin/bank) so these no longer depend on a radial
+// distance metric. uDepthRamp compresses the shallow→deep gradient (rivers
+// reach deep colour sooner than lakes).
+float lakeDepthNorm() {
+  return 1.0 - smoothstep(uDepthRamp.x, uDepthRamp.y, vWaterT);
+}
+float shoreAlpha() {
+  return 1.0 - smoothstep(0.9, 1.0, vWaterT);
+}
+float lakeFresnel() {
+  float cosTheta = abs(dot(normalize(vViewDir), vec3(0.0, 1.0, 0.0)));
+  return pow(1.0 - cosTheta, 3.0);
+}
+float hash21(vec2 p) {
+  p = fract(p * vec2(123.34, 456.21));
+  p += dot(p, p + 45.32);
+  return fract(p.x * p.y);
+}
+float vnoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21(i);
+  float b = hash21(i + vec2(1.0, 0.0));
+  float c = hash21(i + vec2(0.0, 1.0));
+  float d = hash21(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+// Cartoon shoreline foam: a wobbling band just inside the waterline plus a
+// broken dashed line further in (wave wash), both toon-stepped.
+float lakeFoam() {
+  float t = vWaterT;
+  float ft = uTime * uWaveSpeed;
+  float wob = (vnoise(vWaveXZ * 0.8 + vec2(ft * 0.15, -ft * 0.12)) - 0.5) * 0.1;
+  float band = smoothstep(0.86 + wob, 0.90 + wob, t) *
+               (1.0 - smoothstep(0.97 + wob, 1.01 + wob, t));
+  float dashT = t + wob;
+  float dashBand = smoothstep(0.76, 0.78, dashT) *
+                   (1.0 - smoothstep(0.82, 0.84, dashT));
+  float dashes = step(0.5, vnoise(vWaveXZ * 2.0 + vec2(ft * 0.1, 0.0)));
+  float foam = clamp(band + dashBand * dashes * 0.8, 0.0, 1.0);
+  // Hard-ish step keeps the froth crisp and cel-shaded.
+  return smoothstep(0.25, 0.55, foam);
+}
+// Contact foam: wherever the water sheet grazes the terrain (per-vertex
+// clearance baked as aGroundDepth), froth it up so the waterline reads as
+// churned water instead of a polygon edge. A noisy threshold keeps the
+// fringe organic. vFoamExtra marks waterfall/rapids stations for a full
+// white sheet.
+float contactFoam() {
+  float n = vnoise(vWaveXZ * 1.4 + vec2(uTime * uWaveSpeed * 0.2, 0.0));
+  float edge = 0.22 + n * 0.3;
+  float contact = 1.0 - smoothstep(0.03, edge, vGroundDepth);
+  return max(contact, clamp(vFoamExtra, 0.0, 1.0));
+}
+
+void main() {
+  float depthNorm = lakeDepthNorm();
+  // Posterize the depth gradient into soft cel bands (cartoon read), blended
+  // with the smooth ramp so band edges stay gentle.
+  float banded = floor(depthNorm * 3.0 + 0.5) / 3.0;
+  csm_DiffuseColor.rgb = mix(uShallowColor, uDeepColor, mix(depthNorm, banded, 0.55));
+  float fres = lakeFresnel();
+  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, uSkyTint, clamp(fres * uFresnelStrength, 0.0, 0.5));
+  // Low-frequency drift — high frequencies read as a checker pattern on the
+  // flat disc instead of water.
+  float st = uTime * uWaveSpeed;
+  float shimmer = sin(vWaveXZ.x * 0.5 + st * 0.6) *
+                  cos(vWaveXZ.y * 0.65 - st * 0.5) +
+                  0.5 * sin((vWaveXZ.x + vWaveXZ.y) * 1.0 + st * 1.1);
+  csm_DiffuseColor.rgb += shimmer * 0.011 * uRipple;
+  // Sparse animated glints — stylized sun sparkle without real specular.
+  float sp1 = vnoise(vWaveXZ * 0.9 + st * 0.35);
+  float sp2 = vnoise(vWaveXZ * 1.7 - st * 0.27);
+  float sparkle = smoothstep(0.82, 0.98, sp1 * sp2 * 1.6);
+  csm_DiffuseColor.rgb += sparkle * uSparkleStrength * uRipple;
+  float foam = max(lakeFoam(), contactFoam());
+  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, vec3(1.0), foam * 0.85);
+  // Foam stays visible through the shoreline alpha fade-out.
+  csm_DiffuseColor.a = max(csm_DiffuseColor.a * shoreAlpha(), foam * 0.9 * shoreAlpha());
+}
+`;
+
+function makeWaterMaterial(cfg: WaterMaterialConfig): WaterMaterial {
+  return new CustomShaderMaterial({
+    baseMaterial: THREE.MeshStandardMaterial,
     color: 0xffffff,
     transparent: true,
     opacity: cfg.opacity,
     roughness: 0.08,
     metalness: 0,
     depthWrite: false,
-  });
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uTime = { value: 0 };
-    shader.uniforms.uRipple = { value: cfg.ripple };
-    shader.uniforms.uWaveHeight = { value: cfg.waveHeight };
-    shader.uniforms.uWaveSpeed = { value: cfg.waveSpeed };
-    shader.uniforms.uShallowColor = {
-      value: new THREE.Color(shallowTint(cfg.color)),
-    };
-    shader.uniforms.uDeepColor = { value: new THREE.Color(cfg.color) };
-    shader.uniforms.uSkyTint = { value: new THREE.Color(0xbfd8e6) };
-    shader.uniforms.uDepthRamp = {
-      value: new THREE.Vector2(cfg.depthRampStart ?? 0, cfg.depthRampEnd ?? 1),
-    };
-    shader.uniforms.uFresnelStrength = { value: cfg.fresnelStrength ?? 0.5 };
-    shader.uniforms.uSparkleStrength = { value: cfg.sparkleStrength ?? 0.3 };
-    shader.vertexShader = shader.vertexShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-         uniform float uTime;
-         uniform float uRipple;
-         uniform float uWaveHeight;
-         uniform float uWaveSpeed;
-         attribute float aWaterT;
-         attribute float aGroundDepth;
-         attribute float aFoamExtra;
-         varying float vWaterT;
-         varying float vGroundDepth;
-         varying float vFoamExtra;
-         varying vec2 vWaveXZ;
-         varying vec3 vViewDir;`
-      )
-      .replace(
-        '#include <begin_vertex>',
-        `#include <begin_vertex>
-         vWaterT = aWaterT;
-         vGroundDepth = aGroundDepth;
-         vFoamExtra = aFoamExtra;
-         vec4 wPos = modelMatrix * vec4(transformed, 1.0);
-         vWaveXZ = wPos.xz;
-         float wt = uTime * uWaveSpeed;
-         // Two crossing waves plus a slow diagonal swell — reads as gentle
-         // open-water motion instead of a single repeating sine.
-         float wave = sin(wPos.x * 1.3 + wt * 0.9) * 0.5 +
-                      cos(wPos.z * 1.6 + wt * 0.7) * 0.5 +
-                      sin((wPos.x + wPos.z) * 0.55 + wt * 1.4) * 0.35;
-         // The disc lies in the local XZ plane (no mesh rotation), so local
-         // +Y is world up. Amplitude is per-lake (wave-height XML attr or
-         // radius-scaled auto), muted entirely when ripple is 0.
-         transformed.y += min(uRipple, 1.0) * wave * uWaveHeight;
-         vViewDir = normalize(cameraPosition - (modelMatrix * vec4(transformed, 1.0)).xyz);`
-      );
-    shader.fragmentShader = shader.fragmentShader
-      .replace(
-        '#include <common>',
-        `#include <common>
-         uniform float uTime;
-         uniform float uRipple;
-         uniform float uWaveSpeed;
-         uniform vec3 uShallowColor;
-         uniform vec3 uDeepColor;
-         uniform vec3 uSkyTint;
-         uniform vec2 uDepthRamp;
-         uniform float uFresnelStrength;
-         uniform float uSparkleStrength;
-         varying float vWaterT;
-         varying float vGroundDepth;
-         varying float vFoamExtra;
-         varying vec2 vWaveXZ;
-         varying vec3 vViewDir;
-         // Shape-agnostic depth/alpha: the geometry bakes t into aWaterT
-         // (0 at centre/axis, 1 at margin/bank) so these no longer depend on a
-         // radial distance metric. uDepthRamp compresses the shallow→deep
-         // gradient (rivers reach deep colour sooner than lakes).
-         float lakeDepthNorm() {
-           return 1.0 - smoothstep(uDepthRamp.x, uDepthRamp.y, vWaterT);
-         }
-         float shoreAlpha() {
-           return 1.0 - smoothstep(0.9, 1.0, vWaterT);
-         }
-         float lakeFresnel() {
-           float cosTheta = abs(dot(normalize(vViewDir), vec3(0.0, 1.0, 0.0)));
-           return pow(1.0 - cosTheta, 3.0);
-         }
-         float hash21(vec2 p) {
-           p = fract(p * vec2(123.34, 456.21));
-           p += dot(p, p + 45.32);
-           return fract(p.x * p.y);
-         }
-         float vnoise(vec2 p) {
-           vec2 i = floor(p);
-           vec2 f = fract(p);
-           f = f * f * (3.0 - 2.0 * f);
-           float a = hash21(i);
-           float b = hash21(i + vec2(1.0, 0.0));
-           float c = hash21(i + vec2(0.0, 1.0));
-           float d = hash21(i + vec2(1.0, 1.0));
-           return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-         }
-         // Cartoon shoreline foam: a wobbling band just inside the waterline
-         // plus a broken dashed line further in (wave wash), both toon-stepped.
-         float lakeFoam() {
-           float t = vWaterT;
-           float ft = uTime * uWaveSpeed;
-           float wob = (vnoise(vWaveXZ * 0.8 + vec2(ft * 0.15, -ft * 0.12)) - 0.5) * 0.1;
-           float band = smoothstep(0.86 + wob, 0.90 + wob, t) *
-                        (1.0 - smoothstep(0.97 + wob, 1.01 + wob, t));
-           float dashT = t + wob;
-           float dashBand = smoothstep(0.76, 0.78, dashT) *
-                            (1.0 - smoothstep(0.82, 0.84, dashT));
-           float dashes = step(0.5, vnoise(vWaveXZ * 2.0 + vec2(ft * 0.1, 0.0)));
-           float foam = clamp(band + dashBand * dashes * 0.8, 0.0, 1.0);
-           // Hard-ish step keeps the froth crisp and cel-shaded.
-           return smoothstep(0.25, 0.55, foam);
-         }
-         // Contact foam: wherever the water sheet grazes the terrain
-         // (per-vertex clearance baked as aGroundDepth), froth it up so the
-         // waterline reads as churned water instead of a polygon edge. A
-         // noisy threshold keeps the fringe organic. vFoamExtra marks
-         // waterfall/rapids stations for a full white sheet.
-         float contactFoam() {
-           float n = vnoise(vWaveXZ * 1.4 + vec2(uTime * uWaveSpeed * 0.2, 0.0));
-           float edge = 0.22 + n * 0.3;
-           float contact = 1.0 - smoothstep(0.03, edge, vGroundDepth);
-           return max(contact, clamp(vFoamExtra, 0.0, 1.0));
-         }`
-      )
-      .replace(
-        '#include <color_fragment>',
-        `#include <color_fragment>
-         float depthNorm = lakeDepthNorm();
-         // Posterize the depth gradient into soft cel bands (cartoon read),
-         // blended with the smooth ramp so band edges stay gentle.
-         float banded = floor(depthNorm * 3.0 + 0.5) / 3.0;
-         diffuseColor.rgb = mix(uShallowColor, uDeepColor, mix(depthNorm, banded, 0.55));
-         float fres = lakeFresnel();
-         diffuseColor.rgb = mix(diffuseColor.rgb, uSkyTint, clamp(fres * uFresnelStrength, 0.0, 0.5));
-         // Low-frequency drift — high frequencies read as a checker pattern
-         // on the flat disc instead of water.
-         float st = uTime * uWaveSpeed;
-         float shimmer = sin(vWaveXZ.x * 0.5 + st * 0.6) *
-                         cos(vWaveXZ.y * 0.65 - st * 0.5) +
-                         0.5 * sin((vWaveXZ.x + vWaveXZ.y) * 1.0 + st * 1.1);
-         diffuseColor.rgb += shimmer * 0.011 * uRipple;
-         // Sparse animated glints — stylized sun sparkle without real specular.
-         float sp1 = vnoise(vWaveXZ * 0.9 + st * 0.35);
-         float sp2 = vnoise(vWaveXZ * 1.7 - st * 0.27);
-         float sparkle = smoothstep(0.82, 0.98, sp1 * sp2 * 1.6);
-         diffuseColor.rgb += sparkle * uSparkleStrength * uRipple;
-         float foam = max(lakeFoam(), contactFoam());
-         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), foam * 0.85);`
-      )
-      .replace(
-        '#include <alphatest_fragment>',
-        `#include <alphatest_fragment>
-         // Foam stays visible through the shoreline alpha fade-out.
-         diffuseColor.a = max(diffuseColor.a * shoreAlpha(), foam * 0.9 * shoreAlpha());`
-      );
-    onShader(shader as unknown as WaterShaderHandle);
-  };
-  return mat;
+    vertexShader: WATER_VERTEX_SHADER,
+    fragmentShader: WATER_FRAGMENT_SHADER,
+    uniforms: {
+      uTime: { value: 0 },
+      uRipple: { value: cfg.ripple },
+      uWaveHeight: { value: cfg.waveHeight },
+      uWaveSpeed: { value: cfg.waveSpeed },
+      uShallowColor: { value: new THREE.Color(shallowTint(cfg.color)) },
+      uDeepColor: { value: new THREE.Color(cfg.color) },
+      uSkyTint: { value: new THREE.Color(0xbfd8e6) },
+      uDepthRamp: {
+        value: new THREE.Vector2(
+          cfg.depthRampStart ?? 0,
+          cfg.depthRampEnd ?? 1
+        ),
+      },
+      uFresnelStrength: { value: cfg.fresnelStrength ?? 0.5 },
+      uSparkleStrength: { value: cfg.sparkleStrength ?? 0.3 },
+    },
+  }) as unknown as WaterMaterial;
 }
 
 function hexToInt(v: number): number {
@@ -376,10 +371,8 @@ export const WaterAnimSystem: System = {
     const cars = WATER_SIDECARS.get(state);
     if (!cars) return;
     for (const car of cars.values()) {
-      if (car.shader) {
-        (car.shader.uniforms.uTime as { value: number }).value =
-          state.time.elapsed;
-      }
+      (car.material.uniforms.uTime as { value: number }).value =
+        state.time.elapsed;
     }
   },
 };

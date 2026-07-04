@@ -170,6 +170,17 @@ interface OverlayRuntime {
   statsGl: Stats | null;
   statsGlInitFailed: boolean;
   statsGlVisible: boolean;
+  /** tweakpane panel auto-bound to the debug var registry. Dynamically
+   *  imported (dev tool, kept out of the always-loaded bundle) on first
+   *  toggle; null until then / if the import fails. */
+  tweakpane: TweakpaneHandle | null;
+  tweakpaneInitFailed: boolean;
+  tweakpaneVisible: boolean;
+}
+
+interface TweakpaneHandle {
+  pane: { dispose(): void; element: HTMLElement };
+  refresh(reg: DebugRegistryHandle): void;
 }
 
 const overlayByState = new WeakMap<State, OverlayRuntime>();
@@ -240,8 +251,74 @@ function buildKeyHandler(state: State): (event: KeyboardEvent) => void {
       toggleWireframe(state, runtime);
     } else if (event.key === 'g' || event.key === 'G') {
       toggleStatsGl(state, runtime);
+    } else if (event.key === 't' || event.key === 'T') {
+      toggleTweakpane(state, runtime);
     }
   };
+}
+
+/**
+ * Lazily construct a tweakpane panel auto-bound to every var registered via
+ * {@link registerDebugVar} (dev-only tuning UI on top of the same registry the
+ * text overlay/bridge already expose). Dynamically imported so tweakpane never
+ * enters the always-loaded bundle. Fails silently (one-shot) like stats-gl.
+ */
+function ensureTweakpane(state: State, runtime: OverlayRuntime): void {
+  if (runtime.tweakpane || runtime.tweakpaneInitFailed) return;
+  if (typeof document === 'undefined') {
+    runtime.tweakpaneInitFailed = true;
+    return;
+  }
+  void import('tweakpane')
+    .then(({ Pane }) => {
+      const pane = new Pane({ title: 'VibeGame Debug' });
+      pane.element.style.position = 'fixed';
+      pane.element.style.top = '8px';
+      pane.element.style.right = '8px';
+      pane.element.style.zIndex = '10000';
+      pane.element.style.width = '260px';
+      pane.element.style.display = runtime.tweakpaneVisible ? '' : 'none';
+      if (document.body) document.body.appendChild(pane.element);
+      else document.documentElement.appendChild(pane.element);
+
+      const reg = getDebugRegistryHandle(state);
+      const proxy: Record<string, unknown> = {};
+      const bindings: Array<{ name: string }> = [];
+      for (const name of reg.varNames()) {
+        proxy[name] = reg.getVar(name);
+        const canSet = reg.setVar(name, proxy[name]);
+        const binding = pane.addBinding(proxy, name, { readonly: !canSet });
+        if (canSet) {
+          binding.on('change', (ev: { value: unknown }) => {
+            reg.setVar(name, ev.value);
+          });
+        }
+        bindings.push({ name });
+      }
+
+      runtime.tweakpane = {
+        pane,
+        refresh(liveReg: DebugRegistryHandle) {
+          for (const { name } of bindings) {
+            proxy[name] = liveReg.getVar(name);
+          }
+          pane.refresh();
+        },
+      };
+    })
+    .catch(() => {
+      runtime.tweakpaneInitFailed = true;
+    });
+}
+
+function toggleTweakpane(state: State, runtime: OverlayRuntime): void {
+  runtime.tweakpaneVisible = !runtime.tweakpaneVisible;
+  ensureTweakpane(state, runtime);
+  if (runtime.tweakpane) {
+    runtime.tweakpane.pane.element.style.display = runtime.tweakpaneVisible
+      ? ''
+      : 'none';
+  }
 }
 
 /**
@@ -320,6 +397,9 @@ function ensureOverlayRuntime(state: State): OverlayRuntime | null {
     statsGl: null,
     statsGlInitFailed: false,
     statsGlVisible: false,
+    tweakpane: null,
+    tweakpaneInitFailed: false,
+    tweakpaneVisible: false,
   };
   window.addEventListener('keydown', runtime.keyHandler);
   overlayByState.set(state, runtime);
@@ -438,6 +518,13 @@ export const DebugOverlaySystem: System = {
     if (runtime.statsGlVisible && !runtime.statsGl) {
       ensureStatsGl(state, runtime);
     }
+    if (runtime.tweakpaneVisible && !runtime.tweakpane) {
+      ensureTweakpane(state, runtime);
+    }
+    if (runtime.tweakpane) {
+      runtime.tweakpane.refresh(getDebugRegistryHandle(state));
+    }
+
     if (runtime.statsGl) {
       try {
         runtime.statsGl.update();
@@ -464,7 +551,7 @@ export const DebugOverlaySystem: System = {
       `Systems:    ${state.systems.size}\n` +
       `Coroutines: ${coroutineCount}\n` +
       `GLTF loads: ${gltfLoads}\n` +
-      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}   [G] GPU stats${runtime.statsGlVisible ? ' ON' : ''}` +
+      `[?] toggle   [*] wireframe${runtime.wireframeOn ? ' ON' : ''}   [G] GPU stats${runtime.statsGlVisible ? ' ON' : ''}   [T] tweak panel${runtime.tweakpaneVisible ? ' ON' : ''}` +
       registrySection;
   },
   dispose(state: State): void {
@@ -481,6 +568,10 @@ export const DebugOverlaySystem: System = {
       if (dom.parentNode) dom.parentNode.removeChild(dom);
       runtime.statsGl.dispose();
       runtime.statsGl = null;
+    }
+    if (runtime.tweakpane) {
+      runtime.tweakpane.pane.dispose();
+      runtime.tweakpane = null;
     }
     overlayByState.delete(state);
   },

@@ -91,7 +91,9 @@ export interface WaterMaterialConfig {
  * @param state          ECS state.
  * @param entity         The water entity id (for sidecar + onDestroy).
  * @param shape          The WaterShape (LakeBowl / RiverChannel / future).
- * @param createMaterial Factory `(config, onShader) => MeshStandardMaterial`.
+ * @param createMaterial Factory `(config) => Material` (CustomShaderMaterial;
+ *                       its `uniforms` are read directly off the returned
+ *                       material — no onBeforeCompile shader-ref plumbing).
  * @param config         Material config (color/opacity/ripple/wave).
  * @param cars           Sidecar map (shared WaterSideCars) for uTime animation.
  * @returns true if applied this frame, false if deferred (sampler not ready).
@@ -100,10 +102,7 @@ export function applyWaterShape(
   state: import('../../core').State,
   entity: number,
   shape: WaterShape,
-  createMaterial: (
-    config: WaterMaterialConfig,
-    onShader: (shader: WaterShaderHandle) => void
-  ) => import('three').MeshStandardMaterial,
+  createMaterial: (config: WaterMaterialConfig) => WaterMaterial,
   config: WaterMaterialConfig,
   cars: Map<number, WaterSideCar>
 ): boolean {
@@ -150,10 +149,7 @@ export function applyWaterShape(
 
   // 4. Spawn surface mesh with the shape-agnostic material.
   const scene = getRenderingContext(state).scene;
-  const material = createMaterial(config, (shader) => {
-    const c = cars.get(entity);
-    if (c) c.shader = shader;
-  });
+  const material = createMaterial(config);
   const mesh = new THREE.Mesh(shape.buildGeometry(), material);
   // The shape owns the full mesh position: lakes lift a flat fan to the surface,
   // rivers bake per-node Y into the ribbon and only need the field offset.
@@ -166,7 +162,7 @@ export function applyWaterShape(
   // 5. Register the water body (resolved worldY = field offset + local waterY).
   const body = shape.toWaterBody(worldWaterY);
   registerWaterBody(state, body);
-  cars.set(entity, { mesh, material, shader: null, body });
+  cars.set(entity, { mesh, material, body });
 
   // 6. Cleanup on destroy.
   state.onDestroy(entity, () => {
@@ -185,15 +181,18 @@ export function applyWaterShape(
   return true;
 }
 
-/** Minimal shader-handle type so water-shape.ts doesn't import systems.ts. */
-export interface WaterShaderHandle {
+/**
+ * A `CustomShaderMaterial` instance exposes its live `uniforms` directly (no
+ * onBeforeCompile shader-ref indirection, which used to go stale across
+ * recompiles — see the `uTime` freeze noted in project history).
+ */
+export interface WaterMaterial extends THREE.Material {
   uniforms: Record<string, { value: unknown }>;
 }
 
-/** Sidecar holding the live mesh/material/shader/body for animation + cleanup. */
+/** Sidecar holding the live mesh/material/body for animation + cleanup. */
 export interface WaterSideCar {
   mesh: THREE.Mesh;
-  material: THREE.MeshStandardMaterial;
-  shader: WaterShaderHandle | null;
+  material: WaterMaterial;
   body: import('./registry').WaterBody;
 }

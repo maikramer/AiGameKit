@@ -1,5 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
+import { InstancedMesh2 } from '@three.ez/instanced-mesh';
 import type { State, System } from '../../core';
 import { defineQuery } from '../../core';
 import { loadGltfMaster } from '../../extras/gltf-bridge';
@@ -9,42 +10,45 @@ import { MainCamera } from '../rendering/components';
 import { DistanceCull } from '../rendering/components';
 import { Transform, WorldTransform } from '../transforms/components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
-import { pickLodLevel } from './gltf-lod-level';
 
 /**
  * Auto-instancing for identical static GLBs (`<GLTFLoader instanced="true">`).
  *
- * All entities sharing a URL render through ONE `InstancedMesh` per GLB
- * primitive — one draw call per (geometry, material) for the whole set,
- * instead of a scene-graph clone per entity. This is the project's single
- * instancing path: dense static props (trees, rocks) AND interactive ones
- * (destructible, scripted) all flow through here as real ECS entities, so they
- * keep colliders/scripts/DistanceCull while sharing draw calls.
+ * All entities sharing a URL render through ONE `InstancedMesh2` per GLB
+ * primitive (@three.ez/instanced-mesh) — one draw call per (geometry,
+ * material) for the whole set, instead of a scene-graph clone per entity.
+ * This is the project's single instancing path: dense static props (trees,
+ * rocks) AND interactive ones (destructible, scripted) all flow through here
+ * as real ECS entities, so they keep colliders/scripts/DistanceCull while
+ * sharing draw calls.
  *
- * LOD: when `lod1-url` / `lod2-url` are provided, the pool holds up to three
- * InstancedMesh sets (one per level) and each instance is drawn in exactly the
- * level its camera distance selects (others zero-scaled). Single-LOD pools keep
- * the cheap one-level path.
+ * LOD and frustum culling are handled natively by `InstancedMesh2`: when
+ * `lod1-url` / `lod2-url` are provided, their geometries are chained onto the
+ * lod0 mesh via `addLOD`, and the library selects/culls per instance every
+ * frame — no manual zero-scale trick or per-level mesh bookkeeping needed.
  *
  * Instances are dynamic: entities can be destroyed at any time (destructible
- * props) and their slot is swap-removed; `DistanceCull` collapses the instance
- * to zero scale.
+ * props) and their slot is freed via `removeInstances`; `DistanceCull` maps to
+ * `setVisibilityAt`.
+ *
+ * A pool with multiple primitives (multi-mesh GLBs) keeps every primitive's
+ * `InstancedMesh2` in lockstep: `addInstances`/`removeInstances` are called on
+ * all primitives for the same entity in the same order, so the library's
+ * internal free-list assigns identical ids across primitives.
  */
 
-const LEVELS = 3;
 const LOD1_DIST = 80;
 const LOD2_DIST = 200;
 
 interface PoolPrimitive {
-  mesh: THREE.InstancedMesh;
+  mesh: InstancedMesh2;
   /** Node transform of the primitive inside the GLB. */
   local: THREE.Matrix4;
 }
 
 interface InstanceSlotState {
   entity: number;
-  /** Active LOD level (-1 forces a rewrite next frame). */
-  level: number;
+  id: number;
   // last written source values — rewrite only on change
   x: number;
   y: number;
@@ -60,12 +64,13 @@ interface GltfInstancePool {
   url: string;
   /** [lod0, lod1?, lod2?] — lod0 always present. */
   lodUrls: [string, string | undefined, string | undefined];
-  /** Primitives per level; null until that level's GLB finishes loading. */
-  levels: (PoolPrimitive[] | null)[];
+  /** One InstancedMesh2 per primitive found in the lod0 GLB. */
+  primitives: PoolPrimitive[] | null;
+  /** How many LOD levels have been chained onto `primitives` so far. */
+  lodLevelsBuilt: number;
   slots: InstanceSlotState[];
   slotByEntity: Map<number, number>;
   pendingAdds: number[];
-  capacity: number;
   loadKicked: boolean;
   boundsDirty: boolean;
   /** LOD thresholds (near = lod0→1, mid = lod1→2). */
@@ -187,7 +192,6 @@ const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _euler = new THREE.Euler();
 const _scale = new THREE.Vector3();
-const ZERO_SCALE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
 
 /** Compose the entity's world matrix (same euler-vs-quat rule as scene sync). */
 function composeEntityMatrix(state: State, eid: number): THREE.Matrix4 {
@@ -219,39 +223,17 @@ function composeEntityMatrix(state: State, eid: number): THREE.Matrix4 {
   return _entityMatrix.compose(_pos, _quat, _scale);
 }
 
-/** Highest loaded level ≤ desired (lod0 always loaded). */
-function clampLevel(pool: GltfInstancePool, desired: number): number {
-  for (let L = Math.min(desired, LEVELS - 1); L > 0; L--) {
-    if (pool.levels[L]) return L;
-  }
-  return 0;
-}
-
-function writeSlotMatrices(
+function writeSlotMatrix(
   state: State,
   pool: GltfInstancePool,
-  slotIndex: number
+  slot: InstanceSlotState
 ): void {
-  const slot = pool.slots[slotIndex];
-  const active = clampLevel(pool, slot.level < 0 ? 0 : slot.level);
-
-  const entityMatrix = slot.culled
-    ? null
-    : composeEntityMatrix(state, slot.entity);
-
-  for (let L = 0; L < LEVELS; L++) {
-    const prims = pool.levels[L];
-    if (!prims) continue;
-    const drawHere = entityMatrix !== null && L === active;
-    for (const prim of prims) {
-      if (drawHere) {
-        _instanceMatrix.multiplyMatrices(entityMatrix, prim.local);
-        prim.mesh.setMatrixAt(slotIndex, _instanceMatrix);
-      } else {
-        prim.mesh.setMatrixAt(slotIndex, ZERO_SCALE_MATRIX);
-      }
-      prim.mesh.instanceMatrix.needsUpdate = true;
-    }
+  if (!pool.primitives) return;
+  if (slot.culled) return;
+  const entityMatrix = composeEntityMatrix(state, slot.entity);
+  for (const prim of pool.primitives) {
+    _instanceMatrix.multiplyMatrices(entityMatrix, prim.local);
+    prim.mesh.setMatrixAt(slot.id, _instanceMatrix);
   }
   pool.boundsDirty = true;
 }
@@ -280,62 +262,30 @@ function slotSourceChanged(slot: InstanceSlotState): boolean {
   );
 }
 
-function syncCounts(pool: GltfInstancePool): void {
-  const n = pool.slots.length;
-  for (let L = 0; L < LEVELS; L++) {
-    const prims = pool.levels[L];
-    if (!prims) continue;
-    for (const prim of prims) {
-      // Clamp to the instanceMatrix buffer capacity so a level whose buffer was
-      // allocated before the pool grew never draws more instances than it holds
-      // (otherwise WebGL warns "Instance fetch requires N, but attribs only
-      // supply M").
-      prim.mesh.count = Math.min(n, prim.mesh.instanceMatrix.count);
-    }
-  }
-}
-
-function growPool(pool: GltfInstancePool, scene: THREE.Scene): void {
-  const newCapacity = Math.max(INITIAL_CAPACITY, pool.capacity * 2);
-  for (let L = 0; L < LEVELS; L++) {
-    const prims = pool.levels[L];
-    if (!prims) continue;
-    pool.levels[L] = prims.map((prim) => {
-      const next = new THREE.InstancedMesh(
-        prim.mesh.geometry,
-        prim.mesh.material,
-        newCapacity
-      );
-      next.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      next.castShadow = prim.mesh.castShadow;
-      next.receiveShadow = prim.mesh.receiveShadow;
-      next.count = pool.slots.length;
-      next.instanceMatrix.array.set(
-        prim.mesh.instanceMatrix.array.subarray(0, pool.slots.length * 16)
-      );
-      next.instanceMatrix.needsUpdate = true;
-      scene.add(next);
-      scene.remove(prim.mesh);
-      prim.mesh.dispose(); // releases the instance buffer; geometry/material shared
-      return { mesh: next, local: prim.local };
-    });
-  }
-  pool.capacity = newCapacity;
-}
-
 function addSlot(state: State, pool: GltfInstancePool, eid: number): void {
   const scene = getScene(state);
-  if (!scene || !pool.levels[0]) return;
+  if (!scene || !pool.primitives || pool.primitives.length === 0) return;
   if (pool.slotByEntity.has(eid)) return;
 
-  if (pool.slots.length === pool.capacity) {
-    growPool(pool, scene);
+  let id = -1;
+  for (const prim of pool.primitives) {
+    prim.mesh.addInstances(1, (instance, index) => {
+      if (id === -1) id = index;
+      else if (index !== id) {
+        // Primitives fell out of lockstep (should not happen if every add/remove
+        // is mirrored across all primitives of the pool) — log so it's visible.
+        logger.warn(
+          `[gltf-instance] primitive id mismatch for "${pool.url}": ${index} vs ${id}`
+        );
+      }
+      instance.visible = true;
+    });
   }
+  if (id === -1) return;
 
-  const slotIndex = pool.slots.length;
   const slot: InstanceSlotState = {
     entity: eid,
-    level: -1,
+    id,
     x: NaN,
     y: NaN,
     z: NaN,
@@ -346,52 +296,36 @@ function addSlot(state: State, pool: GltfInstancePool, eid: number): void {
     culled: false,
   };
   pool.slots.push(slot);
-  pool.slotByEntity.set(eid, slotIndex);
-  syncCounts(pool);
+  pool.slotByEntity.set(eid, pool.slots.length - 1);
   snapshotSlotSource(slot);
-  slot.level = 0;
-  writeSlotMatrices(state, pool, slotIndex);
+  writeSlotMatrix(state, pool, slot);
 
   state.onDestroy(eid, () => removeSlot(pool, eid));
 }
 
 function removeSlot(pool: GltfInstancePool, eid: number): void {
   const slotIndex = pool.slotByEntity.get(eid);
-  if (slotIndex === undefined || !pool.levels[0]) {
+  if (slotIndex === undefined || !pool.primitives) {
     pool.slotByEntity.delete(eid);
     return;
   }
   pool.slotByEntity.delete(eid);
 
+  const slot = pool.slots[slotIndex];
   const lastIndex = pool.slots.length - 1;
-  const last = pool.slots[lastIndex];
+  pool.slots[slotIndex] = pool.slots[lastIndex];
   pool.slots.pop();
-
   if (slotIndex !== lastIndex) {
-    pool.slots[slotIndex] = last;
-    pool.slotByEntity.set(last.entity, slotIndex);
-    for (let L = 0; L < LEVELS; L++) {
-      const prims = pool.levels[L];
-      if (!prims) continue;
-      for (const prim of prims) {
-        prim.mesh.getMatrixAt(lastIndex, _instanceMatrix);
-        prim.mesh.setMatrixAt(slotIndex, _instanceMatrix);
-      }
-    }
+    pool.slotByEntity.set(pool.slots[slotIndex].entity, slotIndex);
   }
-  syncCounts(pool);
-  for (let L = 0; L < LEVELS; L++) {
-    const prims = pool.levels[L];
-    if (!prims) continue;
-    for (const prim of prims) prim.mesh.instanceMatrix.needsUpdate = true;
-  }
+
+  for (const prim of pool.primitives) prim.mesh.removeInstances(slot.id);
   pool.boundsDirty = true;
 }
 
 function buildLevelPrimitives(
   state: State,
   pool: GltfInstancePool,
-  level: number,
   master: THREE.Group
 ): void {
   const scene = getScene(state);
@@ -402,61 +336,76 @@ function buildLevelPrimitives(
   master.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (mesh.isMesh !== true) return;
-    const instanced = new THREE.InstancedMesh(
-      mesh.geometry,
-      mesh.material,
-      pool.capacity
-    );
-    instanced.name = `gltf-instances:${pool.lodUrls[level]}`;
-    instanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const instanced = new InstancedMesh2(mesh.geometry, mesh.material, {
+      capacity: INITIAL_CAPACITY,
+    });
+    instanced.name = `gltf-instances:${pool.lodUrls[0]}`;
     instanced.castShadow = mesh.castShadow;
     instanced.receiveShadow = mesh.receiveShadow;
-    instanced.count = pool.slots.length;
+    instanced.setFirstLODDistance(pool.near);
     scene.add(instanced);
     primitives.push({ mesh: instanced, local: mesh.matrixWorld.clone() });
   });
-  pool.levels[level] = primitives;
+  pool.primitives = primitives;
+  pool.lodLevelsBuilt = 1;
+}
 
-  // A freshly built level starts with garbage (identity) matrices for existing
-  // slots — zero them, then force the LOD system to re-place the right ones.
-  for (let i = 0; i < pool.slots.length; i++) {
-    for (const prim of primitives) prim.mesh.setMatrixAt(i, ZERO_SCALE_MATRIX);
-    pool.slots[i].level = -1;
+function attachLodLevel(
+  pool: GltfInstancePool,
+  level: 1 | 2,
+  group: THREE.Group
+): void {
+  if (!pool.primitives) return;
+  group.updateMatrixWorld(true);
+  const meshes: THREE.Mesh[] = [];
+  group.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh === true) meshes.push(mesh);
+  });
+
+  if (meshes.length !== pool.primitives.length) {
+    logger.warn(
+      `[gltf-instance] lod${level} "${pool.lodUrls[level]}" has ${meshes.length} primitives, ` +
+        `lod0 has ${pool.primitives.length} — extra/missing primitives are skipped`
+    );
   }
-  for (const prim of primitives) prim.mesh.instanceMatrix.needsUpdate = true;
+
+  const distance = level === 1 ? pool.near : pool.mid;
+  const count = Math.min(meshes.length, pool.primitives.length);
+  for (let i = 0; i < count; i++) {
+    pool.primitives[i].mesh.addLOD(
+      meshes[i].geometry,
+      meshes[i].material,
+      distance
+    );
+  }
+  pool.lodLevelsBuilt = Math.max(pool.lodLevelsBuilt, level + 1);
 }
 
 function kickLoad(state: State, pool: GltfInstancePool): void {
   pool.loadKicked = true;
   // Captured at kick time: if the scene generation changed by resolve time
   // (scene swap / runtime teardown), the .then handlers bail before adding any
-  // InstancedMesh to a retired scene — those meshes would never be torn down.
+  // InstancedMesh2 to a retired scene — those meshes would never be torn down.
   const gen = getSceneGeneration(state);
-  // lod0 first: gates the pending adds and finalizes pool.capacity from the
-  // full pendingAdds queue. Higher LOD levels are kicked only after lod0 is
-  // built so they allocate a buffer matching lod0; if they raced ahead they
-  // would build at INITIAL_CAPACITY (16) while slots later exceed it, and
-  // syncCounts would draw past the buffer ("Instance fetch requires N...").
   void loadGltfMaster(state, pool.lodUrls[0])
     .then((gltf) => {
       if (getSceneGeneration(state) !== gen) return;
       registerGltfLocalYBounds(pool.lodUrls[0], gltf.scene);
-      pool.capacity = Math.max(INITIAL_CAPACITY, pool.pendingAdds.length * 2);
-      buildLevelPrimitives(state, pool, 0, gltf.scene);
+      buildLevelPrimitives(state, pool, gltf.scene);
       const adds = pool.pendingAdds;
       pool.pendingAdds = [];
       for (const eid of adds) {
         if (state.exists(eid)) addSlot(state, pool, eid);
       }
 
-      for (let L = 1; L < LEVELS; L++) {
-        const lodUrl = pool.lodUrls[L];
+      for (const level of [1, 2] as const) {
+        const lodUrl = pool.lodUrls[level];
         if (!lodUrl) continue;
-        const level = L;
         void loadGltfMaster(state, lodUrl)
           .then((gltfLod) => {
             if (getSceneGeneration(state) !== gen) return;
-            buildLevelPrimitives(state, pool, level, gltfLod.scene);
+            attachLodLevel(pool, level, gltfLod.scene);
           })
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);
@@ -488,11 +437,11 @@ export function addInstancedGltf(
     pool = {
       url,
       lodUrls: [url, lod1, lod2],
-      levels: new Array(LEVELS).fill(null),
+      primitives: null,
+      lodLevelsBuilt: 0,
       slots: [],
       slotByEntity: new Map(),
       pendingAdds: [],
-      capacity: INITIAL_CAPACITY,
       loadKicked: false,
       boundsDirty: false,
       near: LOD1_DIST,
@@ -501,7 +450,7 @@ export function addInstancedGltf(
     pools.set(url, pool);
   }
 
-  if (pool.levels[0]) {
+  if (pool.primitives) {
     addSlot(state, pool, entity);
     return;
   }
@@ -510,31 +459,13 @@ export function addInstancedGltf(
   if (!pool.loadKicked) kickLoad(state, pool);
 }
 
-function entityDistanceToCamera(
-  state: State,
-  eid: number,
-  cx: number,
-  cy: number,
-  cz: number
-): number {
-  const useWorld =
-    state.hasComponent(eid, WorldTransform) && WorldTransform.scaleX[eid] !== 0;
-  const x = useWorld ? WorldTransform.posX[eid] : Transform.posX[eid];
-  const y = useWorld ? WorldTransform.posY[eid] : Transform.posY[eid];
-  const z = useWorld ? WorldTransform.posZ[eid] : Transform.posZ[eid];
-  const dx = x - cx;
-  const dy = y - cy;
-  const dz = z - cz;
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
-}
-
 const cameraQuery = defineQuery([MainCamera, WorldTransform]);
 
 /**
  * Per-frame slot maintenance: rewrite matrices for entities whose Transform
- * changed, whose DistanceCull state flipped, or whose camera-distance LOD level
- * changed, and refresh bounding spheres (instances participate in frustum
- * culling as one unit).
+ * changed or whose `DistanceCull` state flipped, and refresh bounding spheres.
+ * LOD selection and frustum culling per instance are handled internally by
+ * `InstancedMesh2` every render — no camera-distance bookkeeping needed here.
  */
 export const GltfAutoInstanceSystem: System = {
   group: 'draw',
@@ -544,59 +475,37 @@ export const GltfAutoInstanceSystem: System = {
     const pools = poolsByState.get(state);
     if (!pools) return;
 
-    const cams = cameraQuery(state.world);
-    let cx = 0;
-    let cy = 0;
-    let cz = 0;
-    if (cams.length > 0) {
-      const cam = cams[0];
-      cx = WorldTransform.posX[cam];
-      cy = WorldTransform.posY[cam];
-      cz = WorldTransform.posZ[cam];
-    }
+    // Camera presence is still required by other systems reading MainCamera;
+    // InstancedMesh2 resolves the active render camera on its own.
+    cameraQuery(state.world);
 
     for (const [, pool] of pools) {
-      if (!pool.levels[0]) continue;
-      const multiLevel = pool.levels[1] != null || pool.levels[2] != null;
+      if (!pool.primitives) continue;
 
-      for (let i = 0; i < pool.slots.length; i++) {
-        const slot = pool.slots[i];
+      for (const slot of pool.slots) {
         const eid = slot.entity;
-
         const culled =
           state.hasComponent(eid, DistanceCull) &&
           DistanceCull.culled[eid] === 1;
 
-        let level = slot.level;
-        if (multiLevel && !culled) {
-          const dist = entityDistanceToCamera(state, eid, cx, cy, cz);
-          level = clampLevel(
-            pool,
-            pickLodLevel(
-              dist,
-              pool.near,
-              pool.mid,
-              slot.level < 0 ? undefined : slot.level
-            )
-          );
-        }
-
         const moved = slotSourceChanged(slot);
-        if (culled === slot.culled && level === slot.level && !moved) continue;
+        if (culled === slot.culled && !moved) continue;
 
+        if (culled !== slot.culled) {
+          for (const prim of pool.primitives) {
+            prim.mesh.setVisibilityAt(slot.id, !culled);
+          }
+        }
         slot.culled = culled;
-        slot.level = level;
-        snapshotSlotSource(slot);
-        writeSlotMatrices(state, pool, i);
+        if (!culled) {
+          snapshotSlotSource(slot);
+          writeSlotMatrix(state, pool, slot);
+        }
       }
 
       if (pool.boundsDirty) {
         pool.boundsDirty = false;
-        for (let L = 0; L < LEVELS; L++) {
-          const prims = pool.levels[L];
-          if (!prims) continue;
-          for (const prim of prims) prim.mesh.computeBoundingSphere();
-        }
+        for (const prim of pool.primitives) prim.mesh.computeBoundingSphere();
       }
     }
   },
@@ -606,11 +515,9 @@ export const GltfAutoInstanceSystem: System = {
     if (!pools) return;
     const scene = getScene(state);
     for (const [, pool] of pools) {
-      for (let L = 0; L < LEVELS; L++) {
-        for (const prim of pool.levels[L] ?? []) {
-          if (scene) scene.remove(prim.mesh);
-          prim.mesh.dispose();
-        }
+      for (const prim of pool.primitives ?? []) {
+        if (scene) scene.remove(prim.mesh);
+        prim.mesh.dispose();
       }
     }
     pools.clear();
