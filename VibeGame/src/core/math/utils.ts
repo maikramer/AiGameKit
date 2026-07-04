@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 
-export function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+// `lerp` is re-exported from maath/misc so the engine and its consumers share
+// one well-tested implementation. The formula is identical (a + (b - a) * t).
+export { lerp } from 'maath/misc';
 
 export function slerp(
   fromX: number,

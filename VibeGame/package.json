@@ -171,6 +171,7 @@
     "colyseus.js": "^0.16.22",
     "fflate": "^0.8.3",
     "howler": "^2.2.4",
+    "maath": "^0.10.8",
     "msgpackr": "^2.0.4",
     "recast-navigation": "^0.43.1",
     "three-mesh-bvh": "^0.9.10",

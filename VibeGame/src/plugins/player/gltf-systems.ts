@@ -1,5 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import { Box3, LineSegments, Quaternion, Vector3 } from 'three';
+import { dampQ } from 'maath/easing';
 import { defineQuery, type Adapter, type State, type System } from '../../core';
 import {
   loadGltfAnimated,
@@ -636,7 +637,10 @@ function syncTransformToRoot(
       WorldTransform.rotW[eid]
     );
   }
-  root.quaternion.slerp(_visualQuat, 1 - Math.exp(-VISUAL_TURN_RATE * dt));
+  // Frame-rate-independent quaternion damping toward the facing target.
+  // Replaces the manual `slerp(q, 1 - exp(-k*dt))` form; smoothTime ≈ 1/k
+  // (VISUAL_TURN_RATE=10 → ~0.1s to settle).
+  dampQ(root.quaternion, _visualQuat, 1 / VISUAL_TURN_RATE, dt);
 
   const debugCapsule = ensureDebugCapsule(state);
   if (debugCapsule) {

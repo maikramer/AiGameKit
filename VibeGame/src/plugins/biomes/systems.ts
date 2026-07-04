@@ -1,6 +1,7 @@
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { NULL_ENTITY } from '../../core/ecs/constants';
+import { lerp } from '../../core/math';
 import { logger } from '../../core/utils/logger';
 import { Transform } from '../transforms/components';
 import { WorldTransform } from '../transforms/components';
@@ -92,10 +93,6 @@ export function advanceBlend(
   if (duration <= 0) return 1;
   const next = blend + dt / duration;
   return next > 1 ? 1 : next;
-}
-
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
 }
 
 function unpackRgb(packed: number): { r: number; g: number; b: number } {
