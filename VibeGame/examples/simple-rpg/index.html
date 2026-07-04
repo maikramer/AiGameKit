@@ -752,19 +752,26 @@
            path é uma lista plana de world coords [x0 z0 ...], NASCENTE
            PRIMEIRO — a superfície só desce ao longo do path (prefix-min),
            com quedas onde o terreno despenca. -->
+      <!-- width é a LÂMINA DE ÁGUA; o carve total é mais largo (bancos de
+           terra expostos de bank-width por lado + feather). bank-height é o
+           freeboard: a água corre rebaixada ~1 m abaixo da crista do banco. -->
       <River
         path="205 -62 170 -55 140 -45 110 -38 82 -34 48 -42 12 -46 -20 -40 -36 -18 -38 5 -48 20 -58 34 -72 46 -90 58 -115 76 -140 98 -170 128 -200 158 -235 192"
         width="8"
-        depth="2.8"
-        water-offset="0.45"
+        depth="3.7"
+        water-offset="1.2"
+        bank-width="2"
+        bank-height="0.8"
         color="#2a6685"
         opacity="0.88"
       ></River>
       <!-- Ponte de madeira sobre o rio, na saída sul da cidade (o corredor
            do portão sul cruza o rio aqui). Deck em arco raso + guarda-corpos;
            collider auto bloqueia queda lateral e dá piso sólido. pos Y é
-           absoluto (deck ~1.2 m acima da lâmina d'água local ~33.4). -->
-      <Composition pos="4 33.2 -44.5" body="fixed" collider="auto">
+           absoluto: lâmina d'água local ~34.8 (terreno ~36 − water-offset
+           1.2), crista do banco ~35.6 — deck (Y+0.95) fica ~1 m acima da
+           água e acima da crista. -->
+      <Composition pos="4 35 -44.5" body="fixed" collider="auto">
         <!-- Rampas de acesso e vão central (arco raso) -->
         <Box
           pos="0 0.4 -6"
@@ -823,7 +830,7 @@
       >
         <GameObject
           role="static"
-          destructible="popup-text: Wood; popup-color: #8b4513; preset: dust; hits: 3; spark-on-hit: 1"
+          destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
           script="tree.ts"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_collision.glb; mesh-anchor: base"
@@ -856,7 +863,7 @@
         <GameObject
           role="static"
           script="rock.ts"
-          destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
+          destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 35; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 18; crack-on-hit: 1; break-style: shatter"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
         >
@@ -879,6 +886,7 @@
            (0,28): com detectRange=18 os goblins nasciam a ~3.6 m do herói
            e matavam-no logo ao renascer. -->
       <DynamicSpawner
+        avoid-water="1"
         count="3"
         seed="11"
         region-min="-26 0 40"
@@ -911,7 +919,7 @@
       >
         <GameObject
           role="static"
-          destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: dust; hits: 3; spark-on-hit: 1"
+          destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
           script="tree.ts"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_collision.glb; mesh-anchor: base"
@@ -1084,6 +1092,7 @@
 
       <!-- §6.5 Inimigos + chefe -->
       <DynamicSpawner
+        avoid-water="1"
         count="6"
         seed="101"
         region-min="-75 0 45"
@@ -1096,6 +1105,7 @@
         <GameObject role="enemy" script="enemies/wolf.ts"></GameObject>
       </DynamicSpawner>
       <DynamicSpawner
+        avoid-water="1"
         count="4"
         seed="202"
         region-min="-75 0 45"
@@ -1135,7 +1145,7 @@
       >
         <GameObject
           role="static"
-          destructible="popup-text: Cactus; popup-color: #6a9a3a; preset: dust; hits: 2; spark-on-hit: 1"
+          destructible="popup-text: Cactus; popup-color: #6a9a3a; preset: dust; hits: 2; spark-on-hit: 1; hit-preset: leaves; hit-burst-count: 14; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.4"
           script="tree.ts"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/cactus_collision.glb; mesh-anchor: base"
@@ -1362,6 +1372,7 @@
 
       <!-- §7.6 Inimigos + chefe -->
       <DynamicSpawner
+        avoid-water="1"
         count="6"
         seed="303"
         region-min="45 0 -65"
@@ -1374,6 +1385,7 @@
         <GameObject role="enemy" script="enemies/scorpion.ts"></GameObject>
       </DynamicSpawner>
       <DynamicSpawner
+        avoid-water="1"
         count="3"
         seed="404"
         region-min="45 0 -65"
@@ -1412,7 +1424,7 @@
       >
         <GameObject
           role="static"
-          destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: dust; hits: 3; spark-on-hit: 1"
+          destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
           script="tree.ts"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/dead_willow_collision.glb; mesh-anchor: base"
@@ -1607,6 +1619,7 @@
 
       <!-- §8.4 Inimigos + chefe -->
       <DynamicSpawner
+        avoid-water="1"
         count="8"
         seed="505"
         region-min="-75 0 -150"
@@ -1619,6 +1632,7 @@
         <GameObject role="enemy" script="enemies/bogling.ts"></GameObject>
       </DynamicSpawner>
       <DynamicSpawner
+        avoid-water="1"
         count="4"
         seed="606"
         region-min="-75 0 -150"
@@ -1660,7 +1674,7 @@
       >
         <GameObject
           role="static"
-          destructible="popup-text: Frost Wood; popup-color: #aeb9c8; preset: dust; hits: 3; spark-on-hit: 1"
+          destructible="popup-text: Frost Wood; popup-color: #aeb9c8; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
           script="tree.ts"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_collision.glb; mesh-anchor: base"
@@ -1693,7 +1707,7 @@
         <GameObject
           role="static"
           script="rock.ts"
-          destructible="popup-text: Stone; popup-color: #cccccc; preset: explosion; hits: 3; spark-on-hit: 1"
+          destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 35; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 18; crack-on-hit: 1; break-style: shatter"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
         >
@@ -1931,6 +1945,7 @@
 
       <!-- §9.5 Inimigos + chefe final -->
       <DynamicSpawner
+        avoid-water="1"
         count="6"
         seed="707"
         region-min="-150 0 -65"
@@ -1943,6 +1958,7 @@
         <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
       </DynamicSpawner>
       <DynamicSpawner
+        avoid-water="1"
         count="4"
         seed="808"
         region-min="-150 0 -65"
@@ -1955,6 +1971,7 @@
         <GameObject role="enemy" script="slime.ts"></GameObject>
       </DynamicSpawner>
       <DynamicSpawner
+        avoid-water="1"
         count="3"
         seed="909"
         region-min="-150 0 -65"

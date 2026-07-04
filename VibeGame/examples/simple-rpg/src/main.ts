@@ -425,11 +425,18 @@ const RespawnSystem: System = {
 
 // ── Combat & harvest feedback (game-side juice the engine doesn't own):
 //    floating damage numbers + hurt/kill SFX + XP-on-kill for any Health entity,
-//    and a hit spark + chop/mine SFX when a Destructible swing lands. ──────────
+//    and a hit spark + chop/mine SFX when a Destructible swing lands. Damage and
+//    harvest feedback share a per-target vertical stack so the numbers/icons/loot
+//    never pile on top of each other at the same spot. ──────────────────────────
 const healthFxQuery = defineQuery([Health, Transform]);
 const destructibleFxQuery = defineQuery([Destructible, Transform]);
 const prevHp = new Map<number, number>();
 const prevPending = new Map<number, number>();
+
+/** Stack key shared by all feedback spawned at one prop position. */
+function harvestStackKey(x: number, z: number): string {
+  return `harvest@${Math.round(x)},${Math.round(z)}`;
+}
 
 const CombatFeedbackSystem: System = {
   group: 'simulation',
@@ -455,6 +462,10 @@ const CombatFeedbackSystem: System = {
           color: isHero ? '#ff5a5a' : big ? '#ff8a2a' : '#fff0a0',
           size: isHero ? 0.5 : big ? 0.7 : 0.46,
           duration: big ? 1.3 : 1.0,
+          // Stack repeated hits on the same enemy so they don't overlap.
+          stackKey: `dmg@${e}`,
+          stackBaseY: Transform.posY[e] + (isHero ? 1.7 : 2.1),
+          stackGap: 0.45,
         }
       );
       playSound(isHero ? 'player-hurt' : 'enemy-hurt');
@@ -469,16 +480,11 @@ const CombatFeedbackSystem: System = {
       const prev = prevPending.get(e) ?? 0;
       prevPending.set(e, pend);
       if (prev > 0 && pend <= 0) {
-        const wood = isWoodEntity(e);
-        spawnFloatingText(state, '✦', {
-          x: Transform.posX[e],
-          y: Transform.posY[e] + 1.6,
-          z: Transform.posZ[e],
-          color: wood ? '#9be37a' : '#e2dccb',
-          size: 0.55,
-          duration: 0.55,
-        });
-        playSound(wood ? 'chop-hit' : 'mine-hit');
+        // Hit feedback is the crack overlay + shake + woodchip/shard burst +
+        // SFX (all driven by the engine destructible plugin). No floating text
+        // here — a lone '*' reads as a square box and the popup/loot already
+        // stack on break.
+        playSound(isWoodEntity(e) ? 'chop-hit' : 'mine-hit');
       }
     }
   },
@@ -981,7 +987,9 @@ async function bootstrap(): Promise<void> {
   setLocale(state, bootLang);
 
   // Harvest loot: the engine DestructiblePlugin breaks rocks/trees; the game
-  // banks the yield into the hero vault + bag and pops a floating "+1".
+  // banks the yield into the hero vault + bag and pops a floating "+1". The
+  // loot joins the harvest stack (engine break popup + hit icon) so the three
+  // texts line up instead of overlapping at the prop's origin.
   onDestructibleDestroyed(state, (eid, x, y, z) => {
     const hero = state.getEntityByName('hero');
     if (hero === null) return;
@@ -989,13 +997,31 @@ async function bootstrap(): Promise<void> {
       addWood(1);
       addItem(state, hero, 'wood', 1);
       notifyResourceHarvested(state, 'wood');
-      spawnFloatingText(state, '+1 🪵', { x, y: y + 1.5, z, duration: 1.4 });
+      spawnFloatingText(state, '+1 Wood', {
+        x,
+        y: y + 1.5,
+        z,
+        duration: 1.4,
+        color: '#c8a35a',
+        stackKey: harvestStackKey(x, z),
+        stackBaseY: y + 1.2,
+        stackGap: 0.5,
+      });
       playSound('chop-break');
     } else {
       addStone(1);
       addItem(state, hero, 'stone', 1);
       notifyResourceHarvested(state, 'stone');
-      spawnFloatingText(state, '+1 🪨', { x, y: y + 1.2, z, duration: 1.4 });
+      spawnFloatingText(state, '+1 Stone', {
+        x,
+        y: y + 1.2,
+        z,
+        duration: 1.4,
+        color: '#d8d8d2',
+        stackKey: harvestStackKey(x, z),
+        stackBaseY: y + 1.2,
+        stackGap: 0.5,
+      });
       playSound('mine-break');
     }
   });
