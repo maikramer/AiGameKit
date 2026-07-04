@@ -3,6 +3,9 @@ import { lerp, slerp } from 'vibegame';
 
 describe('Math Utilities', () => {
   describe('lerp', () => {
+    // `lerp` is re-exported from maath/misc; this block guards that the
+    // formula stays a + (b - a) * t after the migration. If maath ever
+    // changes semantics, these assertions catch it.
     it('should interpolate between two values', () => {
       const startPos = 0;
       const endPos = 10;
