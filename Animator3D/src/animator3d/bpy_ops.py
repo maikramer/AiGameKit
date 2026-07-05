@@ -526,11 +526,17 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
 
     def _merge_leg_chain(side: str, sc) -> None:
         key = "leg_r" if side == "r" else "leg_l"
-        sub = _collect_all(sc)
-        if key in chains:
-            chains[key].extend(sub)
-        else:
-            chains[key] = sub
+        legs_key = "legs_r" if side == "r" else "legs_l"
+        # Recolher a cadeia linear DESTA pata (não a sub-árvore inteira).
+        # _collect_all fundia todas as patas vizinhas numa só cadeia —
+        # inviável para aracnídeos (8 patas) e insetos (6 patas).
+        sub, _tip = _linear_until_branch(sc)
+        # Pata principal (leg_r/leg_l) = primeira detetada; usada por
+        # humanoid.py e consumidores antigos que só leem 2 cadeias.
+        if key not in chains:
+            chains[key] = list(sub)
+        # Lista de patas individuais (legs_r/legs_l): uma sub-lista por pata.
+        chains.setdefault(legs_key, []).append(list(sub))
 
     def _merge_arm_chain(side: str, sc) -> None:
         key = "arm_r" if side == "r" else "arm_l"
@@ -636,7 +642,71 @@ def _classify_bone_chains(armature_name: str) -> dict[str, list[str]]:
         else:
             chains.setdefault("spine", spine_names)
 
+    # Pós-classificação: dedos (filhos do hand) e acessórios de cabeça (filhos
+    # de Head que não pescoço). Estes não tinham chain própria e ficavam rígidos.
+    _extract_fingers(arm, chains)
+    _extract_head_accessories(arm, chains)
+
     return chains
+
+
+def _extract_fingers(arm: Any, chains: dict[str, list[str]]) -> None:
+    """Extrai cadeias de dedos como filhos do bone 'hand' em cada braço.
+
+    Os dedos já estão em arm_r/arm_l (via _collect_all interno), mas sem chain
+    própria ficavam rígidos. Aqui criamos fingers_r/fingers_l com todas as
+    sub-cadeias que ramificam do hand.
+    """
+
+    def _all_descendants(pb: Any) -> list[str]:
+        out = [pb.name]
+        for c in pb.children:
+            out.extend(_all_descendants(c))
+        return out
+
+    for side in ("r", "l"):
+        arm_chain = chains.get(f"arm_{side}", [])
+        if len(arm_chain) < 4:
+            continue
+        hand_name = arm_chain[3]  # shoulder/upper/fore/hand
+        hand_pb = arm.pose.bones.get(hand_name)
+        if hand_pb is None:
+            continue
+        fingers: list[str] = []
+        for child in hand_pb.children:
+            fingers.extend(_all_descendants(child))
+        if fingers:
+            chains[f"fingers_{side}"] = fingers
+
+
+def _extract_head_accessories(arm: Any, chains: dict[str, list[str]]) -> None:
+    """Extrai acessórios de cabeça (chapéu, cabelo, orelhas) como filhos de Head.
+
+    Head é tipicamente o último bone do chain 'neck'. Os seus filhos que não
+    sejam o pescoço (já classificado) são acessórios.
+    """
+
+    def _all_descendants(pb: Any) -> list[str]:
+        out = [pb.name]
+        for c in pb.children:
+            out.extend(_all_descendants(c))
+        return out
+
+    neck_chain = chains.get("neck", [])
+    if not neck_chain:
+        return
+    head_name = neck_chain[-1]
+    head_pb = arm.pose.bones.get(head_name)
+    if head_pb is None:
+        return
+    accessories: list[str] = []
+    classified = set(neck_chain)
+    for child in head_pb.children:
+        if child.name in classified:
+            continue
+        accessories.extend(_all_descendants(child))
+    if accessories:
+        chains["head_accessories"] = accessories
 
 
 def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
@@ -663,14 +733,26 @@ def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
         "wing_l": ["LeftWing", "LeftWing1", "LeftWing2", "LeftWing3"],
         "wing_r_fingers": ["RightWingFinger1", "RightWingFinger2", "RightWingFinger3"],
         "wing_l_fingers": ["LeftWingFinger1", "LeftWingFinger2", "LeftWingFinger3"],
+        "fingers_r": ["RightHandFinger1", "RightHandFinger2", "RightHandFinger3"],
+        "fingers_l": ["LeftHandFinger1", "LeftHandFinger2", "LeftHandFinger3"],
+        "head_accessories": ["HeadAccessory1", "HeadAccessory2", "HeadAccessory3"],
     }
 
     renamed: dict[str, str] = {}
 
     for chain_key, bone_names in chains.items():
+        # legs_r/legs_l são listas de listas (multi-leg); o rename opera sobre
+        # bone names planos, não sub-listas. Saltar (as patas mantêm os nomes
+        # já atribuídos pelo Rigging3D ou pelo chain leg_r/leg_l principal).
+        if chain_key in ("legs_r", "legs_l"):
+            continue
         name_pool = _CHAIN_NAMES.get(chain_key, [])
         for ci, old_name in enumerate(bone_names):
-            new_name = name_pool[ci] if ci < len(name_pool) else f"{name_pool[-1]}_{ci}"
+            if name_pool:
+                new_name = name_pool[ci] if ci < len(name_pool) else f"{name_pool[-1]}_{ci}"
+            else:
+                # Chain sem pool de nomes (e.g. leg_l/leg_r extras): preservar.
+                continue
             bone = arm.pose.bones.get(old_name) if old_name else None
             if bone is None:
                 continue
@@ -681,7 +763,14 @@ def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
     if renamed:
         updated_chains: dict[str, list[str]] = {}
         for chain_key, bone_names in chains.items():
-            updated_chains[chain_key] = [renamed.get(b, b) for b in bone_names]
+            # legs_r/legs_l são listas de listas (multi-leg); o rename opera
+            # sobre bone names, não sub-listas. Preservar a estrutura.
+            if chain_key in ("legs_r", "legs_l"):
+                updated_chains[chain_key] = [
+                    [renamed.get(b, b) for b in leg] for leg in bone_names
+                ]
+            else:
+                updated_chains[chain_key] = [renamed.get(b, b) for b in bone_names]
         return updated_chains
 
     return chains
@@ -767,7 +856,14 @@ def _resolve_bone_axes(arm_obj: Any, bone_name: str, forward: Any) -> dict | Non
 def _build_axes_map(arm_obj: Any, chains: dict[str, list[str]], forward: Any, keys: tuple[str, ...]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for key in keys:
-        for bn in chains.get(key, []):
+        val = chains.get(key, [])
+        # legs_r/legs_l são listas de listas (uma sub-lista por pata individual).
+        # Achatar para iterar os bone names.
+        if val and isinstance(val[0], list):
+            flat = [bn for leg in val for bn in leg]
+        else:
+            flat = val
+        for bn in flat:
             ax = _resolve_bone_axes(arm_obj, bn, forward)
             if ax is not None:
                 out[bn] = ax
@@ -805,6 +901,29 @@ def _key_humanoid_bone(
     pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
 
+def _gait_phases(n_legs_per_side: int) -> list[float]:
+    """Phase offsets (em fracções de ciclo) para N patas de um lado.
+
+    Suporte multi-pata para aracnídeos (8) e insetos (6):
+    - 1 pata/lado (bípede): [0.0] — a outra perna está anti-fase via lado oposto.
+    - 2 patas/lado (quadrúpede): [0.0, 0.5] — trot diagonal.
+    - 3 patas/lado (inseto hexápode): [0.0, 0.5, 0.5] — trípede alternado
+      (R1+R3+L2 em fase, R2+L1+L3 anti-fase).
+    - 4 patas/lado (aracnídeo): [0.0, 0.5, 0.5, 0.0] — tetrapod alternado.
+
+    O lado oposto (legs_l) é sempre anti-fase do lado direito, pelo que basta
+    definir o pattern dum lado e somar 0.5 para o outro.
+    """
+    if n_legs_per_side <= 1:
+        return [0.0]
+    if n_legs_per_side == 2:
+        return [0.0, 0.5]
+    if n_legs_per_side == 3:
+        return [0.0, 0.5, 0.5]
+    # 4+ patas/lado: alternar em 2 grupos (tetrapod). Generaliza para N par.
+    return [0.0 if i % 2 == 0 else 0.5 for i in range(n_legs_per_side)]
+
+
 def _locomotion_cycle(
     arm_obj: Any,
     chains: dict[str, list[str]],
@@ -833,18 +952,24 @@ def _locomotion_cycle(
         arm_obj,
         chains,
         forward,
-        ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
+        ("body", "spine", "neck", "leg_r", "leg_l", "legs_r", "legs_l", "arm_r", "arm_l"),
     )
     two_pi = math.pi * 2.0
+    # Primitivos de movimento orgânico (noise + easing) — eliminam o aspecto
+    # "robótico" de ciclos perfeitamente periódicos.
+    from ._motion import fbm, shaped_cos
 
     def hip_swing(phi: float) -> float:
         # +forward at heel-strike (phi=0), -back at toe-off (phi=0.5).
-        return hip_amp * math.cos(phi * two_pi)
+        # shaped_cos desacelera nos picos (weight shift natural) vs cos puro.
+        return hip_amp * shaped_cos(phi)
 
     def knee_flex(phi: float) -> float:
         # Slight cushion in stance, large flexion mid-swing to clear the ground.
+        # Stance onset envolvido em smoothstep para evitar joelho "duro".
         if phi < 0.5:
-            return knee_stance * (0.5 - 0.5 * math.cos(phi / 0.5 * two_pi))
+            w = phi / 0.5
+            return knee_stance * (0.5 - 0.5 * math.cos(w * two_pi)) * _smoothstep01(w)
         w = (phi - 0.5) / 0.5
         return knee_swing * math.sin(w * math.pi)
 
@@ -859,23 +984,35 @@ def _locomotion_cycle(
                 frame = frame_start + fi
                 phi = (t * cycles + phase) % 1.0
                 bpy.context.scene.frame_set(frame)
+                # Jitter orgânico por stride (±1% no hip, ±0.5% no knee).
+                noise_hip = hip_amp * 0.01 * fbm(t * cycles, seed=ci)
                 if ci == 0:  # hip
-                    _key_humanoid_bone(pb, ax, frame, swing=hip_swing(phi))
+                    _key_humanoid_bone(pb, ax, frame, swing=hip_swing(phi) + noise_hip)
                 elif ci == 1:  # knee
                     _key_humanoid_bone(
                         pb,
                         ax,
                         frame,
                         bend=knee_flex(phi),
-                        swing=hip_swing(phi) * 0.12,
+                        swing=(hip_swing(phi) + noise_hip) * 0.12,
                     )
-                elif ci == 2:  # ankle/foot: counter-rotate to stay roughly flat
-                    _key_humanoid_bone(pb, ax, frame, swing=-ankle_amp * math.cos(phi * two_pi))
+                elif ci == 2:  # ankle/foot: counter-rotate (shaped_cos) to stay roughly flat
+                    _key_humanoid_bone(pb, ax, frame, swing=-ankle_amp * shaped_cos(phi))
+                elif ci == 3:  # toe: curl during push-off (phi em ~0.6-0.8 = stance final)
+                    # Toe planta no chão no contato, curl para cima no push-off,
+                    # relaxa no swing. Onset suavizado com smoothstep.
+                    if 0.5 < phi < 1.0:
+                        w = (phi - 0.5) / 0.5
+                        push = math.sin(w * math.pi) * _smoothstep01(w)
+                    else:
+                        push = 0.0
+                    _key_humanoid_bone(pb, ax, frame, bend=0.35 * push)
 
     def anim_arm(names: list[str], phase: float, side: float) -> None:
         # Bring the arm down from the A-pose to the side (constant adduction via
         # the frontal axis), then swing it forward/back about the world
         # mediolateral axis — an arm left pointing sideways can't pendulum.
+        # Phase lag subtil: braços seguem as pernas com ~0.05 de delay (overlapping action).
         for ci, bn in enumerate(names[:3]):
             pb = arm_obj.pose.bones.get(bn)
             ax = axes.get(bn)
@@ -886,13 +1023,16 @@ def _locomotion_cycle(
             for fi in range(total):
                 t = fi / max(total - 1, 1)
                 frame = frame_start + fi
-                phi = (t * cycles + phase) % 1.0
+                # Lag: braço segue a perna com 0.05 de fase (whip natural).
+                phi = (t * cycles + phase + 0.05 * (ci + 1)) % 1.0
                 bpy.context.scene.frame_set(frame)
+                # Jitter orgânico no braço (±1.5%).
+                noise_arm = arm_amp * scale * 0.015 * fbm(t * cycles, seed=ci + 10)
                 _key_humanoid_bone(
                     pb,
                     ax,
                     frame,
-                    medio=arm_amp * scale * math.cos(phi * two_pi),
+                    medio=arm_amp * scale * shaped_cos(phi) + noise_arm,
                     lift=side * adduct,
                 )
 
@@ -913,11 +1053,12 @@ def _locomotion_cycle(
                     ax,
                     frame,
                     swing=body_lean * scale,
-                    yaw=spine_twist * scale * math.sin(phi * two_pi),
+                    yaw=spine_twist * scale * shaped_cos(phi),
                 )
 
     # Hips: gentle forward lean + a real vertical bob (translate the root bone
     # along world up). Two dips per stride, lowest at foot contact.
+    # Bob com jitter orgânico para strides não-idênticos.
     for bn in chains.get("body", []):
         pb = arm_obj.pose.bones.get(bn)
         ax = axes.get(bn)
@@ -936,15 +1077,31 @@ def _locomotion_cycle(
                 swing=body_lean * 0.5 + body_lean * 0.2 * math.cos(phi * two_pi * 2),
             )
             if body_bob > 0.0:
+                # Jitter no bob (±10%) para cada stride variar ligeiramente.
+                bob_noise = 1.0 + 0.1 * fbm(t * cycles, seed=99)
                 loc = [0.0, 0.0, 0.0]
-                loc[ui] = us * (-body_bob * math.cos(phi * two_pi * 2.0))
+                loc[ui] = us * (-body_bob * math.cos(phi * two_pi * 2.0) * bob_noise)
                 pb.location = (loc[0], loc[1], loc[2])
                 pb.keyframe_insert(data_path="location", frame=frame)
 
     anim_spine()
-    # Legs half a cycle out of phase.
-    anim_leg(chains.get("leg_r", []), phase=0.0)
-    anim_leg(chains.get("leg_l", []), phase=0.5)
+    # Multi-leg gait: iterar todas as patas individuais (legs_r/legs_l) com
+    # phase offset por pata. Bípedes (1 pata/lado) caem no gateio anti-fase
+    # atual. Aracnídeos/insetos usam trot/tétrpod alternado.
+    legs_r = chains.get("legs_r", [])
+    legs_l = chains.get("legs_l", [])
+    if legs_r or legs_l:
+        n = max(len(legs_r), len(legs_l), 1)
+        phases = _gait_phases(n)
+        for i, leg in enumerate(legs_r):
+            anim_leg(leg, phase=phases[min(i, len(phases) - 1)])
+        for i, leg in enumerate(legs_l):
+            ph = phases[min(i, len(phases) - 1)] + 0.5  # lado oposto: anti-fase
+            anim_leg(leg, phase=ph % 1.0)
+    else:
+        # Fallback: pata principal (leg_r/leg_l) para rigs sem legs_r/legs_l.
+        anim_leg(chains.get("leg_r", []), phase=0.0)
+        anim_leg(chains.get("leg_l", []), phase=0.5)
     # Arms swing opposite the same-side leg (contralateral). `side` lowers each
     # arm to its own side: arm_r points +X (adduct about +Y), arm_l points -X.
     anim_arm(chains.get("arm_r", []), phase=0.5, side=1.0)
@@ -990,6 +1147,15 @@ def _legacy_secondary_motion(
         _sway(chains["wing_l"], 1, -wing_amp, phase_step=0.25, decay=0.15)
     if "tail" in chains:
         _sway(chains["tail"], 2, tail_amp, phase_step=0.4, decay=0.1)
+    # Acessórios de cabeça (chapéu/cabelo/orelhas): sway subtil faseado com a
+    # respiração. Amplitude muito baixa para não ser perturbadora.
+    if "head_accessories" in chains:
+        _sway(chains["head_accessories"], 0, 0.05, phase_step=0.3, decay=0.2)
+    # Dedos: curl de repouso subtil (semi-fechados), estático no idle.
+    for side in ("r", "l"):
+        fkey = f"fingers_{side}"
+        if fkey in chains:
+            _sway(chains[fkey], 0, 0.04, phase_step=0.5, decay=0.1)
 
 
 def turn_in_place_keyframes(
@@ -1039,13 +1205,16 @@ def turn_in_place_keyframes(
         arm_obj,
         chains,
         forward,
-        ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
+        ("body", "spine", "neck", "leg_r", "leg_l", "legs_r", "legs_l", "arm_r", "arm_l"),
     )
     two_pi = math.pi * 2.0
     d = 1.0 if direction >= 0 else -1.0
 
     def twist(t: float) -> float:
-        return d * turn_amp * math.sin(t * two_pi)
+        # shaped_sin (sin³) faz o twist linger no pico em vez de velocidade constante.
+        from ._motion import shaped_sin
+
+        return d * turn_amp * shaped_sin(t)
 
     for fi in range(total):
         t = fi / max(total - 1, 1)
@@ -1073,19 +1242,51 @@ def turn_in_place_keyframes(
                 _key_humanoid_bone(pb, ax, frame, yaw=body_yaw * 0.4)
 
         # Feet shuffle: the leg on the turn side steps, the other pivots.
+        # Multi-leg: iterar todas as patas (legs_r/legs_l) com pequeno offset
+        # por pata para o shuffle não ser em sincronia total.
         step = step_amp * math.sin(t * two_pi)
-        for leg_key, sgn in (("leg_r", 1.0), ("leg_l", -1.0)):
-            names = chains.get(leg_key, [])
-            for ci, bn in enumerate(names):
-                pb = arm_obj.pose.bones.get(bn)
-                ax = axes.get(bn)
-                if pb is None or ax is None:
-                    continue
-                if ci == 0:
-                    _key_humanoid_bone(pb, ax, frame, swing=step * sgn * d)
-                elif ci == 1:
-                    lift = max(0.0, step * sgn * d)
-                    _key_humanoid_bone(pb, ax, frame, bend=lift * 0.8)
+        legs_r = chains.get("legs_r", [])
+        legs_l = chains.get("legs_l", [])
+        if legs_r or legs_l:
+            for leg_idx, names in enumerate(legs_r):
+                # Offset subtil por pata para evitar movimento em bloco.
+                leg_step = step * (1.0 - leg_idx * 0.1)
+                for ci, bn in enumerate(names):
+                    pb = arm_obj.pose.bones.get(bn)
+                    ax = axes.get(bn)
+                    if pb is None or ax is None:
+                        continue
+                    if ci == 0:
+                        _key_humanoid_bone(pb, ax, frame, swing=leg_step * 1.0 * d)
+                    elif ci == 1:
+                        lift = max(0.0, leg_step * d)
+                        _key_humanoid_bone(pb, ax, frame, bend=lift * 0.8)
+            for leg_idx, names in enumerate(legs_l):
+                leg_step = step * (1.0 - leg_idx * 0.1)
+                for ci, bn in enumerate(names):
+                    pb = arm_obj.pose.bones.get(bn)
+                    ax = axes.get(bn)
+                    if pb is None or ax is None:
+                        continue
+                    if ci == 0:
+                        _key_humanoid_bone(pb, ax, frame, swing=leg_step * -1.0 * d)
+                    elif ci == 1:
+                        lift = max(0.0, leg_step * -1.0 * d)
+                        _key_humanoid_bone(pb, ax, frame, bend=lift * 0.8)
+        else:
+            # Fallback: pata principal (leg_r/leg_l).
+            for leg_key, sgn in (("leg_r", 1.0), ("leg_l", -1.0)):
+                names = chains.get(leg_key, [])
+                for ci, bn in enumerate(names):
+                    pb = arm_obj.pose.bones.get(bn)
+                    ax = axes.get(bn)
+                    if pb is None or ax is None:
+                        continue
+                    if ci == 0:
+                        _key_humanoid_bone(pb, ax, frame, swing=step * sgn * d)
+                    elif ci == 1:
+                        lift = max(0.0, step * sgn * d)
+                        _key_humanoid_bone(pb, ax, frame, bend=lift * 0.8)
 
         # Arms counter-swing slightly for balance.
         for arm_key, sgn in (("arm_r", -1.0), ("arm_l", 1.0)):
@@ -1157,6 +1358,8 @@ def breathe_idle_keyframes(
         max_bones: int | None = None,
         decay: float = 0.0,
     ):
+        from ._motion import fbm, shaped_sin
+
         names = bone_names[:max_bones] if max_bones else bone_names
         for ci, bname in enumerate(names):
             pb = arm.pose.bones.get(bname)
@@ -1167,12 +1370,17 @@ def breathe_idle_keyframes(
             for fi in range(total):
                 t = fi / max(total - 1, 1)
                 frame = frame_start + fi
-                angle = amp * scale * math.sin(t * math.pi * 2 * freq + phase)
+                # shaped_sin (sin³) segura no pico — respiração não-metronómica.
+                angle = amp * scale * shaped_sin(t + phase / (math.pi * 2), freq=freq)
+                # Micro-noise orgânico (±0.5% do amp) para cada bone variar.
+                angle += amp * scale * 0.005 * fbm(t * freq, seed=ci)
                 bpy.context.scene.frame_set(frame)
                 euler = list(pb.rotation_euler)
                 euler[axis] = angle
                 if secondary_axis is not None:
-                    euler[secondary_axis] = secondary_amp * scale * math.sin(t * math.pi * 2 * freq * 0.5 + phase + 0.7)
+                    euler[secondary_axis] = secondary_amp * scale * shaped_sin(
+                        t + phase / (math.pi * 2), freq=freq * 0.5
+                    ) + secondary_amp * scale * 0.003 * fbm(t * freq, seed=ci + 50)
                 _set_pose_bone_rotation(pb, tuple(euler))
                 pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
@@ -1264,16 +1472,27 @@ def _smoothstep01(x: float) -> float:
 
 
 def _attack_strike_profile(t: float) -> float:
-    """Um golpe: recuar ligeiro -> investida -> pico -> recuperacao. t em [0,1]."""
-    if t < 0.15:
+    """Um golpe: recuar ligeiro -> investida -> pico -> overshoot -> settle.
+
+    t em [0,1]. Desde a revisão orgânica, inclui overshoot (~15% past strike)
+    e settle oscilatório amortecido (follow-through natural em vez de snap).
+    """
+    import math
+
+    if t < 0.15:  # anticipo: recuar ligeiro
         return -0.1 * _smoothstep01(t / 0.15)
-    if t < 0.42:
+    if t < 0.42:  # investida até ao strike
         w = (t - 0.15) / 0.27
         return -0.1 + _smoothstep01(w) * 1.1
-    if t < 0.58:
+    if t < 0.58:  # strike (pico)
         return 1.0
-    w = (t - 0.58) / 0.42
-    return 1.0 - _smoothstep01(w)
+    if t < 0.68:  # overshoot: passa ~15% além do strike, depois recua
+        w = (t - 0.58) / 0.10
+        return 1.0 + 0.15 * math.sin(w * math.pi)
+    # settle: oscilação amortecida (follow-through) em vez de snap linear.
+    w = (t - 0.68) / 0.32
+    decay = math.exp(-w * 3.0)
+    return 1.0 * decay * math.cos(w * math.pi * 1.5)
 
 
 def attack_keyframes(
@@ -1339,9 +1558,11 @@ def attack_keyframes(
             for fi in range(total):
                 td = max(0.0, min(1.0, _strike_t(fi)))
                 prof = _attack_strike_profile(td)
-                frame = frame_start + fi
-                bpy.context.scene.frame_set(frame)
-                _key_humanoid_bone(pb, ax, frame, swing=sign * amp * scale * prof)
+                # Stagger: cada bone da cadeia é animado 2 frames depois do
+                # anterior (whip down-chain — shoulder→forearm→hand).
+                staggered = max(frame_start, frame_start + fi - ci * 2)
+                bpy.context.scene.frame_set(staggered)
+                _key_humanoid_bone(pb, ax, staggered, swing=sign * amp * scale * prof)
 
     def _strike_t(fi: int) -> float:
         u = fi / max(total - 1, 1)
@@ -1403,6 +1624,7 @@ def attack_keyframes(
             decay=0.08,
             secondary_axis=2,
             secondary_scale=spine_amp * 0.15,
+            phase_delay=0.04,  # energia viaja de baixo para cima (overlapping action)
         )
 
     if "neck" in chains:
@@ -1413,6 +1635,7 @@ def attack_keyframes(
             decay=0.1,
             secondary_axis=2,
             secondary_scale=neck_amp * 0.2,
+            phase_delay=0.08,  # pescoço segue a spine (whip up-chain)
         )
 
     if "tail" in chains:
@@ -1462,17 +1685,50 @@ def _humanoid_action_keyframes(
     action_name: str,
 ) -> dict[str, list[str]]:
     """Shared entry for the humanoid-only tool/action clips (mine, chop, spear,
-    axe, sword, gather). Delegates to the key-pose engine; non-humanoid rigs
-    get no clip (these are authored for humanoids)."""
+    axe, sword, gather).
+
+    Humanoid rigs: delegates to the key-pose engine (``humanoid.try_humanoid_clip``).
+    Non-humanoid rigs: **fallback procedural** — reuses ``attack_keyframes`` with
+    amplitude/anchor variations per kind so creatures no longer get a silent
+    no-op (regression: game-pack on a creature used to emit GLBs missing 6/14
+    clips with no warning).
+    """
     from . import humanoid
 
     chains = _classify_bone_chains(armature_name)
-    humanoid.try_humanoid_clip(
+    if humanoid.try_humanoid_clip(
         kind,
         armature_name,
         chains,
         frame_start=frame_start,
         frame_end=frame_end,
+        action_name=action_name,
+    ):
+        return chains
+
+    # Fallback procedural para criaturas: variação do attack_keyframes por tipo.
+    # Cada kind ajusta amplitude do tronco/braços/pescoço para sugerir o gesto.
+    _CREATURE_PROFILES = {
+        # kind: (strikes, body_amp, spine_amp, arm_amp, neck_amp)
+        "mine": (1, 0.30, 0.45, 1.20, 0.40),
+        "chop": (1, 0.35, 0.55, 1.60, 0.50),
+        "spear": (1, 0.20, 0.35, 1.00, 0.60),
+        "axe": (1, 0.40, 0.60, 1.70, 0.45),
+        "sword": (2, 0.22, 0.40, 1.45, 0.55),
+        "gather": (1, 0.18, 0.30, 0.80, 0.35),
+    }
+    strikes, body_amp, spine_amp, arm_amp, neck_amp = _CREATURE_PROFILES.get(
+        kind, (1, 0.25, 0.40, 1.30, 0.45)
+    )
+    attack_keyframes(
+        armature_name,
+        frame_start=frame_start,
+        frame_end=frame_end,
+        strikes=strikes,
+        body_amp=body_amp,
+        spine_amp=spine_amp,
+        arm_amp=arm_amp,
+        neck_amp=neck_amp,
         action_name=action_name,
     )
     return chains
@@ -2197,11 +2453,12 @@ def land_keyframes(
                 _set_pose_bone_rotation(pb, (0.0, side_sign * (wing_y + flutter) * scale, 0.0))
                 pb.keyframe_insert(data_path=_rotation_data_path(pb), frame=frame)
 
-    # Pernas - extensão para pouso
-    for leg_name, side_sign in [("leg_r", 1.0), ("leg_l", -1.0)]:
-        if leg_name not in chains:
-            continue
-        for ci, bname in enumerate(chains[leg_name][:3]):
+    # Pernas - extensão para pouso (multi-leg: todas as patas amortecem)
+    all_legs = chains.get("legs_r", []) + chains.get("legs_l", [])
+    if not all_legs:
+        all_legs = [chains.get("leg_r", []), chains.get("leg_l", [])]
+    for leg in all_legs:
+        for ci, bname in enumerate(leg[:3]):
             pb = arm.pose.bones.get(bname)
             if pb is None:
                 continue
@@ -2485,7 +2742,7 @@ def jump_keyframes(
         arm_obj,
         chains,
         forward,
-        ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
+        ("body", "spine", "neck", "leg_r", "leg_l", "legs_r", "legs_l", "arm_r", "arm_l"),
     )
 
     def _swing_chain(chain_key: str, value: float, decay: float = 0.1):
@@ -2499,13 +2756,18 @@ def jump_keyframes(
             _key_humanoid_bone(pb, ax, bpy.context.scene.frame_current, swing=value * scale)
 
     def _key_leg(value_hip: float, value_knee_bend: float):
-        for leg_key in ("leg_r", "leg_l"):
-            leg = chains.get(leg_key, [])
-            if leg:
-                pb = arm_obj.pose.bones.get(leg[0])
-                ax = axes.get(leg[0])
-                if pb and ax:
-                    _key_humanoid_bone(pb, ax, bpy.context.scene.frame_current, swing=value_hip)
+        # Multi-leg: todas as patas dobram em sincronia no salto (crouch/launch).
+        all_legs = chains.get("legs_r", []) + chains.get("legs_l", [])
+        if not all_legs:
+            # Fallback: pata principal.
+            all_legs = [chains.get("leg_r", []), chains.get("leg_l", [])]
+        for leg in all_legs:
+            if not leg:
+                continue
+            pb = arm_obj.pose.bones.get(leg[0])
+            ax = axes.get(leg[0])
+            if pb and ax:
+                _key_humanoid_bone(pb, ax, bpy.context.scene.frame_current, swing=value_hip)
             if len(leg) > 1:
                 pb = arm_obj.pose.bones.get(leg[1])
                 ax = axes.get(leg[1])
@@ -2610,7 +2872,6 @@ def fall_keyframes(
     action_name: str = "Animator3D_Fall",
 ) -> dict[str, list[str]]:
     """Falling: splay -> mid-fall sway -> terminal velocity -> impact prep. Non-looping."""
-    import math
 
     from . import humanoid
 
@@ -2642,7 +2903,7 @@ def fall_keyframes(
         arm_obj,
         chains,
         forward,
-        ("body", "spine", "neck", "leg_r", "leg_l", "arm_r", "arm_l"),
+        ("body", "spine", "neck", "leg_r", "leg_l", "legs_r", "legs_l", "arm_r", "arm_l"),
     )
 
     def _swing_chain(chain_key: str, val: float, decay: float = 0.1, *, bend: float = 0.0):
@@ -2663,9 +2924,12 @@ def fall_keyframes(
         # MID_FALL:     0.25-0.50 — wind sway begins
         # TERMINAL:     0.50-0.85 — stabilize with subtle sway
         # IMPACT_PREP:  0.85-1.00 — slight limb tuck
+        # Wind orgânico: fbm (3 oitavas) em vez de sin puro — variação rica.
+        from ._motion import fbm
+
         settle = _smoothstep01(min(t / 0.25, 1.0))
-        wind = 0.05 * math.sin(t * 2 * math.pi * 2.0)
-        wind_secondary = 0.025 * math.sin(t * 2 * math.pi * 3.0 + 0.5)
+        wind = 0.05 * fbm(t * 4.0, octaves=3, seed=10)
+        wind_secondary = 0.025 * fbm(t * 6.0, octaves=3, seed=20)
 
         if t < 0.25:
             spread_blend = settle
@@ -2695,8 +2959,39 @@ def fall_keyframes(
         _swing_chain("arm_r", -arm_sway * 4.0 + wind, decay=0.08)
         _swing_chain("arm_l", -arm_sway * 4.0 - wind, decay=0.08)
         # Legs hang slightly forward with knee tuck (more at impact prep).
-        _swing_chain("leg_r", leg_val * 0.5 + wind_secondary, decay=0.1, bend=leg_val + tuck)
-        _swing_chain("leg_l", leg_val * 0.5 - wind_secondary, decay=0.1, bend=leg_val + tuck)
+        # Multi-leg: iterar todas as patas individuais.
+        legs_r = chains.get("legs_r", [])
+        legs_l = chains.get("legs_l", [])
+        if legs_r or legs_l:
+            for li, leg in enumerate(legs_r):
+                wind_l = wind_secondary * (1.0 - li * 0.1)
+                for ci, bname in enumerate(leg):
+                    pb = arm_obj.pose.bones.get(bname)
+                    ax = axes.get(bname)
+                    if pb is None or ax is None:
+                        continue
+                    s = max(0.3, 1.0 - ci * 0.1)
+                    _key_humanoid_bone(
+                        pb, ax, bpy.context.scene.frame_current,
+                        swing=(leg_val * 0.5 + wind_l) * s,
+                        bend=(leg_val + tuck) * s,
+                    )
+            for li, leg in enumerate(legs_l):
+                wind_l = wind_secondary * (1.0 - li * 0.1)
+                for ci, bname in enumerate(leg):
+                    pb = arm_obj.pose.bones.get(bname)
+                    ax = axes.get(bname)
+                    if pb is None or ax is None:
+                        continue
+                    s = max(0.3, 1.0 - ci * 0.1)
+                    _key_humanoid_bone(
+                        pb, ax, bpy.context.scene.frame_current,
+                        swing=(leg_val * 0.5 - wind_l) * s,
+                        bend=(leg_val + tuck) * s,
+                    )
+        else:
+            _swing_chain("leg_r", leg_val * 0.5 + wind_secondary, decay=0.1, bend=leg_val + tuck)
+            _swing_chain("leg_l", leg_val * 0.5 - wind_secondary, decay=0.1, bend=leg_val + tuck)
 
     finalize_current_action_to_nla(armature_name)
     return chains
