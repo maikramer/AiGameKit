@@ -1,14 +1,23 @@
 """
-Detecção automática de hardware → escolha de GPU para o UniRig.
+Detecção automática de hardware → escolha de GPU (SkinTokens).
 
-O UniRig corre single-GPU em subprocessos (CUDA_VISIBLE_DEVICES). Em rigs
-multi-GPU, o hw-auto escolhe a placa com mais VRAM LIVRE (a GPU 0 costuma
-estar ocupada pelo desktop). ``--gpu-ids`` explícito ganha sempre.
-Desligável com ``--no-hw-auto`` ou ``RIGGING3D_HW_AUTO=0``.
+O backend (SkinTokens/TokenRig) corre single-GPU num único processo
+in-process (``CUDA_VISIBLE_DEVICES``). Em rigs multi-GPU, o hw-auto escolhe
+a placa com mais VRAM LIVRE (a GPU 0 costuma estar ocupada pelo desktop).
+``--gpu-ids`` explícito ganha sempre. Desligável com ``--no-hw-auto`` ou
+``RIGGING3D_HW_AUTO=0``.
+
+Nota sobre VRAM: medido empiricamente (ver
+``docs/RIGGING3D_SKINTOKENS_MIGRATION_PLAN.md`` §0) pico de ~3.9GB numa RTX
+4050 6GB mesmo em meshes densas/multi-parte, com settings default (sem
+quantização, num_beams=10). O aviso abaixo é uma margem de segurança, não
+um requisito documentado — ao contrário do UniRig, não há aqui um mecanismo
+de "low VRAM mode" (não existe equivalente a ``num_train_vertex`` no
+SkinTokens); em GPUs muito pequenas a mitigação é reduzir ``--num-beams``.
 
 Hardwares de referência:
-- 2x RTX 3060 12GB → pina o UniRig na placa mais livre.
-- RTX 4050 6GB → única GPU; aviso (UniRig pede ~6-8GB em meshes densas).
+- 2x RTX 3060 12GB → pina o modelo na placa mais livre.
+- RTX 4050 6GB → única GPU; confortável mesmo em meshes densas (~3.9GB pico).
 """
 
 from __future__ import annotations
@@ -20,8 +29,9 @@ from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 HW_AUTO_ENV = "RIGGING3D_HW_AUTO"
 
-# Abaixo disto (VRAM total da placa escolhida) avisar: UniRig precisa ~6-8GB.
-LOW_VRAM_WARN_GIB = 6.5
+# Abaixo disto (VRAM total da placa escolhida) avisar — margem de segurança,
+# não um limiar de OOM conhecido (ver nota acima).
+LOW_VRAM_WARN_GIB = 4.0
 
 
 def hw_auto_enabled() -> bool:
@@ -36,14 +46,13 @@ class Rigging3DHardwareProfile:
     gpu_ids: list[int] | None  # GPU escolhida p/ CUDA_VISIBLE_DEVICES (1 elem)
     free_gib: float  # VRAM livre da GPU escolhida
     low_vram_warning: bool
-    low_vram: bool
 
     def summary(self) -> str:
         parts = [self.name]
         if self.gpu_ids is not None:
             parts.append(f"gpu={self.gpu_ids[0]} ({self.free_gib:.1f}GiB livre)")
         if self.low_vram_warning:
-            parts.append(f"aviso: <{LOW_VRAM_WARN_GIB}GiB — meshes densas podem dar OOM")
+            parts.append(f"aviso: <{LOW_VRAM_WARN_GIB}GiB — considera --num-beams menor")
         return " | ".join(parts)
 
 
@@ -56,7 +65,6 @@ def profile_from_specs(gpus: list[tuple[int, int, int]]) -> Rigging3DHardwarePro
             gpu_ids=None,
             free_gib=0.0,
             low_vram_warning=True,
-            low_vram=True,
         )
 
     largest_total = max(total for _, _, total in gpus) / GIB
@@ -71,7 +79,6 @@ def profile_from_specs(gpus: list[tuple[int, int, int]]) -> Rigging3DHardwarePro
         gpu_ids=[best_idx] if multi else None,
         free_gib=round(best_free / GIB, 1),
         low_vram_warning=(best_total / GIB) < LOW_VRAM_WARN_GIB,
-        low_vram=(best_total / GIB) < LOW_VRAM_WARN_GIB,
     )
 
 

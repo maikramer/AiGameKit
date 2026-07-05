@@ -1,18 +1,20 @@
-"""Rigging3D — CLI principal."""
+"""Rigging3D — CLI principal.
+
+Backend: SkinTokens (VAST-AI-Research), autoregressivo unificado
+(skeleton+skin numa única passada). Ver
+``docs/RIGGING3D_SKINTOKENS_MIGRATION_PLAN.md`` no root do monorepo.
+"""
 
 from __future__ import annotations
 
 import json
 import os
-import shutil
-import subprocess
-import sys
-import tempfile
+import re
+import struct
 import time
-from collections.abc import Sequence
+from collections.abc import Callable
 from pathlib import Path
 
-import yaml
 from gamedev_shared.profiler.session import ProfilerSession
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_RIGGING3D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -23,417 +25,335 @@ from .cli_rich import click
 
 console = Console()
 
-DEFAULT_SKELETON_TASK = "configs/task/quick_inference_skeleton_articulationxl_ar_256.yaml"
-DEFAULT_SKIN_TASK = "configs/task/quick_inference_unirig_skin.yaml"
-
-_WIN32 = sys.platform == "win32"
-
 # ---------------------------------------------------------------------------
-# Resolução de caminhos
+# Pós-processo backend-agnóstico (nomeação de bones, validação de origem)
 # ---------------------------------------------------------------------------
 
 
-def _package_root() -> Path:
-    """Raiz da árvore UniRig empacotada (configs/, src/, launch/)."""
-    return Path(__file__).resolve().parent / "unirig"
+def _is_humanoid_topology(
+    bone_nodes: dict[int, int],
+    nodes: list[dict[str, object]],
+    parent_map: dict[int, int | None],
+) -> bool:
+    """Gate topológico: a hierarquia de bones tem forma humanoide?
 
+    Evita impor nomes Mixamo (Hips/LeftArm/RightUpLeg...) a criaturas
+    articuladas (mosquito com 6 patas + asas, scorpion com 8 patas +
+    pinças) onde são semanticamente errados e atrapalham o retarget.
+    Critério puramente topológico (forma da árvore parent-child):
 
-def _resolve_root(explicit: Path | None) -> Path:
-    if explicit is not None:
-        root = explicit.expanduser().resolve()
-    else:
-        env = os.environ.get("RIGGING3D_ROOT", "").strip()
-        root = Path(env).expanduser().resolve() if env else _package_root()
+      - exatamente **uma raiz** de bone (parent não-ossso ou sem parent);
+      - **exatamente 2 ramos laterais** saindo da raiz (pernas);
+      - a cadeia central (spine) tem **≥2 bones**;
+      - o topo do spine ramifica em **2 ou 3 cadeias** (2 braços, opcionalmente
+        pescoço/cabeça) — não 6+ como num inseto.
 
-    if not (root / "configs").is_dir() or not (root / "src").is_dir():
-        raise FileNotFoundError(
-            f"Árvore de inferência não encontrada em {root} (falta configs/ ou src/). "
-            "Define RIGGING3D_ROOT ou usa --root."
-        )
-    return root
-
-
-def _resolve_python(explicit: str | None) -> str:
-    if explicit:
-        return explicit
-    env = os.environ.get("RIGGING3D_PYTHON", "").strip()
-    return env if env else sys.executable
-
-
-def _shell_path(path: Path) -> str:
-    s = str(path.expanduser().resolve())
-    if _WIN32:
-        s = s.replace("\\", "/")
-    return s
-
-
-# ---------------------------------------------------------------------------
-# Bash
-# ---------------------------------------------------------------------------
-
-
-def _find_bash() -> str | None:
-    if _WIN32:
-        for c in (
-            Path(r"C:\Program Files\Git\bin\bash.exe"),
-            Path(r"C:\Program Files\Git\usr\bin\bash.exe"),
-            Path(r"C:\Program Files (x86)\Git\bin\bash.exe"),
-            Path(r"C:\msys64\usr\bin\bash.exe"),
-        ):
-            if c.is_file():
-                return str(c)
-        w = shutil.which("bash")
-        if w:
-            low = w.lower().replace("/", "\\")
-            if "\\system32\\bash.exe" in low or "\\windowsapps\\" in low:
-                return None
-            return w
-        return None
-    return shutil.which("bash")
-
-
-def _require_bash() -> None:
-    if not _find_bash():
-        raise click.ClickException(
-            "bash não encontrado. No Windows: Git Bash ou MSYS2; noutros sistemas: bash no PATH."
-        )
-
-
-# ---------------------------------------------------------------------------
-# Subprocess
-# ---------------------------------------------------------------------------
-
-
-def _make_env(
-    root: Path,
-    extra: dict[str, str] | None = None,
-    *,
-    python_bin: str | None = None,
-    propagate_profile: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> dict[str, str]:
-    merged = {**os.environ, **(extra or {})}
-    root_s = str(root)
-    pp = merged.get("PYTHONPATH", "")
-    merged["PYTHONPATH"] = root_s if not pp else root_s + os.pathsep + pp
-    if python_bin:
-        abspath = os.path.abspath(os.path.expanduser(python_bin))
-        bindir = os.path.dirname(abspath)
-        merged["PATH"] = bindir + os.pathsep + merged.get("PATH", "")
-        merged["PYTHON"] = abspath
-    if not _WIN32:
-        merged.setdefault("PYOPENGL_PLATFORM", "egl")
-        merged.setdefault("__NV_PRIME_RENDER_OFFLOAD", "1")
-        merged.setdefault("__GLX_VENDOR_LIBRARY_NAME", "nvidia")
-    if propagate_profile:
-        merged["GAMEDEV_PROFILE"] = "1"
-    if gpu_ids:
-        merged["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
-    return merged
-
-
-def _run(
-    cmd: list[str],
-    *,
-    root: Path,
-    env: dict[str, str] | None = None,
-    python_bin: str | None = None,
-    propagate_profile: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> int:
-    return subprocess.run(
-        cmd,
-        cwd=str(root),
-        env=_make_env(root, env, python_bin=python_bin, propagate_profile=propagate_profile, gpu_ids=gpu_ids),
-    ).returncode
-
-
-def _run_bash(
-    root: Path,
-    script: str,
-    args: Sequence[str],
-    *,
-    python_bin: str | None = None,
-    propagate_profile: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> int:
-    bash = _find_bash()
-    if not bash:
-        raise RuntimeError("bash não encontrado")
-    full = root / script
-    if not full.is_file():
-        raise FileNotFoundError(f"Script em falta: {full}")
-    return _run(
-        [bash, _shell_path(full), *args],
-        root=root,
-        python_bin=python_bin,
-        propagate_profile=propagate_profile,
-        gpu_ids=gpu_ids,
-    )
-
-
-def _run_module(
-    root: Path,
-    py: str,
-    module: str,
-    args: Sequence[str],
-    *,
-    env: dict[str, str] | None = None,
-    gpu_ids: list[int] | None = None,
-) -> int:
-    return _run([py, "-m", module, *args], root=root, env=env, python_bin=py, gpu_ids=gpu_ids)
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
-
-
-@click.group()
-@click.version_option(version=__version__, prog_name="rigging3d")
-@click.option(
-    "--root",
-    type=click.Path(file_okay=False, path_type=Path),
-    default=None,
-    envvar="RIGGING3D_ROOT",
-    help="Raiz da árvore de inferência (configs/ + src/). Por defeito: pacote ou RIGGING3D_ROOT",
-)
-@click.option(
-    "--python",
-    "python_cmd",
-    default=None,
-    envvar="RIGGING3D_PYTHON",
-    help="Interpretador Python (conda/venv).",
-)
-@click.option(
-    "--profiler",
-    "profiler_flag",
-    is_flag=True,
-    help="Gravar métricas de performance (perf DB).",
-)
-@click.option(
-    "--gpu-ids",
-    "gpu_ids_str",
-    default=None,
-    help='IDs de GPU visíveis aos subprocessos (ex: "0,1"). Propaga CUDA_VISIBLE_DEVICES.',
-)
-@click.option(
-    "--hw-auto/--no-hw-auto",
-    "hw_auto",
-    default=True,
-    show_default=True,
-    help=(
-        "Auto-detecção de hardware: em rigs multi-GPU pina o UniRig na placa "
-        "com mais VRAM livre; avisa em GPUs <6.5GB. --gpu-ids explícito ganha. "
-        "Env: RIGGING3D_HW_AUTO=0."
-    ),
-)
-@click.pass_context
-def cli(
-    ctx: click.Context,
-    root: Path | None,
-    python_cmd: str | None,
-    profiler_flag: bool,
-    gpu_ids_str: str | None,
-    hw_auto: bool,
-) -> None:
-    """Rigging3D — auto-rigging 3D (skeleton, skinning, merge)."""
-    ctx.ensure_object(dict)
-    ctx.obj["PROFILER"] = profiler_flag
-    gpu_ids: list[int] | None = None
-    if gpu_ids_str:
-        gpu_ids = [int(x) for x in gpu_ids_str.split(",") if x.strip()]
-
-    if hw_auto:
-        from .hardware import detect_hardware_profile, hw_auto_enabled
-
-        if hw_auto_enabled():
-            hwp = detect_hardware_profile()
-            if hwp.device == "cuda":
-                ctx.obj["HW_LOW_VRAM"] = hwp.low_vram
-            if gpu_ids is None and hwp.gpu_ids is not None:
-                gpu_ids = hwp.gpu_ids
-                click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
-            elif hwp.low_vram_warning and hwp.device == "cuda":
-                click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
-    ctx.obj["GPU_IDS"] = gpu_ids
-    if profiler_flag:
-        os.environ["GAMEDEV_PROFILE"] = "1"
-
-
-def _ctx_root_py(ctx: click.Context) -> tuple[Path, str]:
-    p = ctx.parent.params if ctx.parent is not None else ctx.params
-    try:
-        root = _resolve_root(p.get("root"))
-    except FileNotFoundError as e:
-        raise click.ClickException(str(e)) from e
-    return root, _resolve_python(p.get("python_cmd"))
-
-
-def _ctx_profiler(ctx: click.Context) -> bool:
-    parent = ctx.parent
-    if parent is None:
+    Validação empírica sobre os assets do simple-rpg (sobre os rigs gerados
+    pelo SkinTokens, que têm mais bones do que os LOD0s correspondentes):
+      Passam (humanoid): hero(28), bandit(28), witch_boss(62), npc_merchant(28),
+              slime(28), boss_ogre(46), bogling(43), sand_wyrm_boss(46).
+      Rejeitados (criatura): mosquito(65, 5 cadeias superiores = asas+patas),
+                  scorpion(30, 4 pernas).
+    Sem limite superior de joints — humanoides detalhados (witch_boss com 62
+    bones) dariam falso-negativo. A forma topológica discrimina melhor.
+    """
+    if len(bone_nodes) < 8:
         return False
-    return bool(parent.obj.get("PROFILER"))
+    children_of_bone: dict[int, list[int]] = {}
+    root_bi: int | None = None
+    for bi, ni in bone_nodes.items():
+        parent_ni = parent_map.get(ni)
+        if parent_ni is None:
+            root_bi = bi
+            continue
+        parent_name = nodes[parent_ni].get("name", "")
+        pm = re.match(r"^bone_(\d+)$", parent_name)
+        if pm:
+            children_of_bone.setdefault(int(pm.group(1)), []).append(bi)
+        else:
+            root_bi = bi
+    if root_bi is None:
+        return False
+    root_kids = children_of_bone.get(root_bi, [])
+    if len(root_kids) < 2:
+        return False
+    # Spine = cadeia linear a partir do filho com mais descendentes.
+    _descendants = _bone_descendants(children_of_bone)
+    spine_start = max(root_kids, key=_descendants)
+    spine = [root_bi] + _bone_linear_chain(children_of_bone, spine_start)
+    if len(spine) < 2:
+        return False
+    # Laterais = filhos da raiz que não são o spine. Filtrar artefactos do
+    # modelo SkinTokens (bones isolados, desc<2) que não são pernas reais.
+    # Uma perna real tem pelo menos 2 segmentos (coxa+joelho).
+    leg_candidates = [c for c in root_kids if c != spine_start and _descendants(c) >= 2]
+    # Legs: >=2 saindo da raiz OU 1 que se ramifica em 2 (pelvis intermédio).
+    if len(leg_candidates) >= 2:
+        legs_ok = True
+    elif len(leg_candidates) == 1 and len(children_of_bone.get(leg_candidates[0], [])) == 2:
+        legs_ok = True
+    elif len(leg_candidates) == 0 and len(root_kids) >= 3:
+        # Fallback: se não há laterais com desc>=2 mas há >=3 filhos na raiz,
+        # pode ser um humanoid com pernas curtas — contar laterais não-spine.
+        leg_candidates = [c for c in root_kids if c != spine_start]
+        legs_ok = len(leg_candidates) >= 2
+    else:
+        legs_ok = False
+    if not legs_ok:
+        return False
+    uc_kids = children_of_bone.get(spine[-1], [])
+    # 2-4 cadeias superiores: 2 braços + opcional pescoço + extra (asas híbridas).
+    return 2 <= len(uc_kids) <= 4
 
 
-def _ctx_gpu_ids(ctx: click.Context) -> list[int] | None:
-    parent = ctx.parent
-    if parent is None:
-        return None
-    return parent.obj.get("GPU_IDS")
+def _bone_linear_chain(children_of_bone: dict[int, list[int]], start_bi: int) -> list[int]:
+    """Cadeia linear (1 filho) a partir de ``start_bi`` até ramificação/ponta."""
+    chain = [start_bi]
+    cur = start_bi
+    while len(children_of_bone.get(cur, [])) == 1:
+        cur = children_of_bone[cur][0]
+        chain.append(cur)
+    return chain
 
 
-# --- skeleton ---
+def _bone_descendants(children_of_bone: dict[int, list[int]]) -> Callable[[int], int]:
+    """Devolve ``children_count(bi)`` sobre o mapa de filhos dado."""
+
+    def _count(bi: int) -> int:
+        n = 0
+        for c in children_of_bone.get(bi, []):
+            n += 1 + _count(c)
+        return n
+
+    return _count
 
 
-@cli.command("skeleton")
-@click.option("--input", "-i", "input_path", type=click.Path(path_type=Path), default=None)
-@click.option("--output", "-o", "output_path", type=click.Path(path_type=Path), default=None)
-@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
-@click.option("--skeleton-task", default=DEFAULT_SKELETON_TASK, show_default=True, help="YAML de task")
-@click.option("--input-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.pass_context
-def skeleton_cmd(
-    ctx: click.Context,
-    input_path: Path | None,
-    output_path: Path | None,
-    seed: int | None,
-    skeleton_task: str,
-    input_dir: Path | None,
-    output_dir: Path | None,
+def _assign_fingers(
+    hand_bi: int,
+    side: str,
+    children_of_bone: dict[int, list[int]],
+    assignments: dict[int, str],
 ) -> None:
-    """Gera skeleton (GLB por defeito; .fbx ainda suportado) a partir de mesh (.glb/.obj/…)."""
-    root, py = _ctx_root_py(ctx)
-    gpu_ids = _ctx_gpu_ids(ctx)
-    _require_bash()
-    _validate_io(input_path, output_path, input_dir, output_dir)
-    seed_args: list[str] = []
-    if seed is not None:
-        seed_args = ["--seed", str(seed)]
-    args: list[str] = [*seed_args, "--skeleton_task", skeleton_task]
-    args += _io_args(input_path, output_path, input_dir, output_dir)
-    rc = _run_bash(root, "launch/inference/generate_skeleton.sh", args, python_bin=py, gpu_ids=gpu_ids)
-    if rc != 0:
-        raise click.ClickException(f"generate_skeleton.sh terminou com código {rc}")
-    console.print("[green]Skeleton concluído.[/green]")
+    """Nomeia cadeias de dedos ramificadas sob um hand bone.
 
-
-# --- skin ---
-
-
-@cli.command("skin")
-@click.option("--input", "-i", "input_path", type=click.Path(path_type=Path), default=None)
-@click.option("--output", "-o", "output_path", type=click.Path(path_type=Path), default=None)
-@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
-@click.option("--skin-task", default=DEFAULT_SKIN_TASK, show_default=True, help="YAML de task")
-@click.option("--input-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.option("--output-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.option("--data-name", default="raw_data.npz", show_default=True)
-@click.pass_context
-def skin_cmd(
-    ctx: click.Context,
-    input_path: Path | None,
-    output_path: Path | None,
-    seed: int | None,
-    skin_task: str,
-    input_dir: Path | None,
-    output_dir: Path | None,
-    data_name: str,
-) -> None:
-    """Prevê pesos de skinning a partir do GLB/FBX com skeleton."""
-    root, py = _ctx_root_py(ctx)
-    gpu_ids = _ctx_gpu_ids(ctx)
-    _require_bash()
-    _validate_io(input_path, output_path, input_dir, output_dir)
-    seed_args: list[str] = []
-    if seed is not None:
-        seed_args = ["--seed", str(seed)]
-    args: list[str] = [*seed_args, "--skin_task", skin_task, "--data_name", data_name]
-    args += _io_args(input_path, output_path, input_dir, output_dir)
-    rc = _run_bash(root, "launch/inference/generate_skin.sh", args, python_bin=py, gpu_ids=gpu_ids)
-    if rc != 0:
-        raise click.ClickException(f"generate_skin.sh terminou com código {rc}")
-    console.print("[green]Skinning concluído.[/green]")
-
-
-# --- merge ---
-
-
-@cli.command("merge")
-@click.option("--source", "-s", type=click.Path(path_type=Path), required=True, help="GLB/FBX com skin")
-@click.option("--target", "-t", type=click.Path(path_type=Path), required=True, help="Mesh original")
-@click.option("--output", "-o", type=click.Path(path_type=Path), required=True)
-@click.option("--require-suffix", default="obj,fbx,FBX,dae,glb,gltf,vrm", show_default=True)
-@click.option("--smooth-iterations", type=int, default=3, show_default=True, help="Passagens de suavização Laplaciana.")
-@click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
-@click.option(
-    "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
-)
-@click.pass_context
-def merge_cmd(
-    ctx: click.Context,
-    source: Path,
-    target: Path,
-    output: Path,
-    require_suffix: str,
-    smooth_iterations: int,
-    groups_per_vertex: int,
-    draco: bool,
-) -> None:
-    """Combina resultado da fase skin com o mesh original (GLB rigado)."""
-    root, py = _ctx_root_py(ctx)
-    gpu_ids = _ctx_gpu_ids(ctx)
-    args = [
-        f"--require_suffix={require_suffix}",
-        "--num_runs=1",
-        "--id=0",
-        f"--source={_shell_path(source)}",
-        f"--target={_shell_path(target)}",
-        f"--output={_shell_path(output)}",
-    ]
-    merge_env = {
-        "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
-        "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
-        "RIGGING3D_DRACO": "1" if draco else "0",
-    }
-    rc = _run_module(root, py, "src.inference.merge", args, env=merge_env, gpu_ids=gpu_ids)
-    if rc != 0:
-        raise click.ClickException(f"merge terminou com código {rc}")
-    console.print("[green]Merge concluído.[/green]")
-
-
-# --- pipeline ---
-
-
-def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
-    """Rename ``bone_0..bone_N`` nodes to semantic humanoid names.
-
-    UniRig's autoregressive model sometimes predicts ``cls_none`` instead of the
-    expected ``articulationxl`` token, causing ``order.make_names()`` to produce
-    generic placeholder names.  This post-merge step analyses the **bone hierarchy
-    tree** in the GLB and assigns Mixamo-style semantic names (Hips, Spine,
-    LeftArm, RightUpLeg, …) based on each bone's structural role.
-
-    Classification is purely topological (parent-child tree shape), not
-    positional, so it works regardless of bone transforms or model predictions
-    of ``cls`` tokens.  Bones that cannot be confidently classified keep their
-    ``bone_*`` names for downstream tools (e.g. Animator3D spatial rename).
+    O SkinTokens gera tipicamente 5 cadeias de 3 falanges por mão. Cada cadeia
+    linear (a partir de cada filho do hand) recebe ``{side}HandFingerN`` na
+    base e ``{side}HandFingerN_1/_2`` nas falanges seguintes. Bones já
+    atribuídos (e.g. o hand em si) são preservados.
 
     Args:
-        glb_path: Output GLB file to rewrite in-place.
-        root: UniRig package root (unused — kept for API compatibility).
+        hand_bi: Bone index do LeftHand/RightHand.
+        side: "Left" | "Right".
+        children_of_bone: mapa bone_index → filhos.
+        assignments: mapa bone_index → nome (mutado in-place).
+    """
+    kids = children_of_bone.get(hand_bi, [])
+    if len(kids) < 2:
+        return  # Sem dedos ramificados (mão linear já tratada pelo template).
+    # Ordena por “lateralidade” para nomeação estável (não é essencial, mas dá
+    # resultados reproduzíveis entre runs). Sem geometria, usa a ordem do índice.
+    for fi, finger_root in enumerate(kids):
+        chain = _bone_linear_chain(children_of_bone, finger_root)
+        base = f"{side}HandFinger{fi + 1}"
+        for ci, bi in enumerate(chain):
+            if bi in assignments:
+                continue
+            assignments[bi] = base if ci == 0 else f"{base}_{ci}"
+
+
+def _assign_head_accessories(
+    head_bi: int,
+    children_of_bone: dict[int, list[int]],
+    assignments: dict[int, str],
+) -> None:
+    """Nomeia cadeias filhas de Head (chapéu, cabelo, orelhas, antenas).
+
+    Cada cadeia linear (a partir de cada filho de Head não já atribuído)
+    recebe ``HeadAccessoryN`` na base e ``HeadAccessoryN_1/_2`` nos
+    segmentos seguintes. Isto cobre acessórios comuns do SkinTokens como o
+    chapéu pontiagudo da bruxa (2 cadeias de 4 bones) ou orelhas élficas.
+
+    Args:
+        head_bi: Bone index do Head.
+        children_of_bone: mapa bone_index → filhos.
+        assignments: mapa bone_index → nome (mutado in-place).
+    """
+    kids = children_of_bone.get(head_bi, [])
+    if not kids:
+        return
+    ai = 0
+    for acc_root in kids:
+        if acc_root in assignments:
+            continue  # Já classificado (e.g. pescoço invertido).
+        chain = _bone_linear_chain(children_of_bone, acc_root)
+        base = f"HeadAccessory{ai + 1}"
+        for ci, bi in enumerate(chain):
+            if bi in assignments:
+                continue
+            assignments[bi] = base if ci == 0 else f"{base}_{ci}"
+        ai += 1
+
+
+def _write_glb_json_chunk(glb_path: Path, glb_json: dict, remaining: bytes) -> None:
+    """Reescreve o chunk JSON de um GLB in-place, mantendo o BIN chunk.
+
+    Args:
+        glb_path: Caminho do GLB a reescrever.
+        glb_json: Documento JSON (nodes já modificados) a serializar.
+        remaining: Bytes do BIN chunk (e chunks seguintes) já lidos.
+    """
+    new_json_bytes = json.dumps(glb_json, separators=(",", ":")).encode("utf-8")
+    pad = (4 - len(new_json_bytes) % 4) % 4
+    new_json_bytes += b" " * pad
+    new_chunk0_len = len(new_json_bytes)
+    new_total = 12 + 8 + new_chunk0_len + len(remaining)
+    with open(glb_path, "wb") as f:
+        f.write(struct.pack("<III", 0x46546C67, 2, new_total))
+        f.write(struct.pack("<II", new_chunk0_len, 0x4E4F534A))
+        f.write(new_json_bytes)
+        f.write(remaining)
+
+
+def _rename_creature_bones(
+    bone_nodes: dict[int, int],
+    nodes: list[dict[str, object]],
+    parent_map: dict[int, int | None],
+) -> dict[int, str]:
+    """Classifica bones de criaturas (quando o gate humanoid falha).
+
+    Para criaturas articuladas (mosquito, scorpion, dragões) onde não faz
+    sentido impor nomes humanoides, atribui nomes genéricos por papel:
+    - ``Spine``/``Spine1``...: cadeia central descendente do maior ramo.
+    - ``LeftWing``/``RightWing``: ramos laterais do tronco com sub-ramificação
+      (asas têm tipicamente dedos/penas — detectamos ramos que se ramificam).
+    - ``Tail``/``Tail1``...: cadeia central descendente longa (>=4 bones).
+    - ``LegL1..N``/``LegR1..N``: ramos laterais sem sub-ramificação (patas).
+
+    Isto alinha com os ``_CHAIN_NAMES`` do animator3d (wing/tail/leg) para
+    que o retarget funcione por nome, não só por geometria.
 
     Returns:
-        Number of bones renamed (0 if nothing to do).
+        Mapa bone_index → nome (vazio se nada a classificar).
     """
-    import re
-    import struct
+    if not bone_nodes:
+        return {}
+    children_of_bone: dict[int, list[int]] = {}
+    root_bi: int | None = None
+    for bi, ni in bone_nodes.items():
+        parent_ni = parent_map.get(ni)
+        if parent_ni is None:
+            root_bi = bi
+            continue
+        parent_name = nodes[parent_ni].get("name", "")
+        pm = re.match(r"^bone_(\d+)$", parent_name)
+        if pm:
+            children_of_bone.setdefault(int(pm.group(1)), []).append(bi)
+        else:
+            root_bi = bi
+    if root_bi is None:
+        return {}
+    _descendants = _bone_descendants(children_of_bone)
+    root_kids = children_of_bone.get(root_bi, [])
+    if not root_kids:
+        return {}
+    assignments: dict[int, str] = {root_bi: "Root"}
 
-    # ------------------------------------------------------------------ #
-    # Name templates (Mixamo-style, compatible with Animator3D chains)     #
-    # ------------------------------------------------------------------ #
+    # Spine = maior ramo (tronco principal). Seguir até ao primeiro hub (≥2 kids).
+    spine_start = max(root_kids, key=_descendants)
+    spine: list[int] = []
+    cur = spine_start
+    while cur is not None:
+        spine.append(cur)
+        kids = children_of_bone.get(cur, [])
+        cur = kids[0] if len(kids) == 1 else None
+    for i, bi in enumerate(spine):
+        assignments[bi] = f"Spine{i+1}" if i > 0 else "Spine"
+
+    # Recolher hubs ao longo do spine: cada hub é um bone do spine com ≥2 filhos.
+    # Os hubs classificam patas dianteiras (quadrúpedes) e asas.
+    hubs: list[int] = []
+    for bi in spine:
+        if len(children_of_bone.get(bi, [])) >= 2:
+            hubs.append(bi)
+
+    # Função para classificar um ramo lateral como pata ou asa.
+    def _classify_lateral(start: int, idx: int) -> None:
+        chain = _bone_linear_chain(children_of_bone, start)
+        kids = children_of_bone.get(start, [])
+        n_desc = _descendants(start)
+        # Wing: ramificado (≥2 kids diretos) com muitos descendentes (asas têm
+        # dedos/penas). Leg: cadeia linear (pata de inseto/quadrúpede) ou com
+        # poucos descendentes.
+        is_wing = len(kids) >= 2 and n_desc >= 8
+        if is_wing:
+            side = "Left" if idx % 2 == 0 else "Right"
+            for i, bi in enumerate(chain):
+                if bi in assignments:
+                    continue
+                assignments[bi] = f"{side}Wing" if i == 0 else f"{side}Wing{i}"
+        else:
+            side = "Left" if idx % 2 == 0 else "Right"
+            leg_n = idx // 2 + 1
+            for i, bi in enumerate(chain):
+                if bi in assignments:
+                    continue
+                assignments[bi] = f"Leg{side}{leg_n}" if i == 0 else f"Leg{side}{leg_n}_{i}"
+
+    # 1. Patas/asas que saem diretamente da raiz (traseiras em quadrúpedes).
+    lateral_idx = 0
+    for c in root_kids:
+        if c == spine_start:
+            continue
+        _classify_lateral(c, lateral_idx)
+        lateral_idx += 1
+
+    # 2. Patas/asas que saem de hubs do spine (dianteiras em quadrúpedes).
+    # Cada hub pode ter um ramo "central" (continuação do spine/pescoço) que
+    # não deve ser classificado como pata — identificamo-lo como o filho mais
+    # alinhado com o spine (menor |dx| ou mais acima).
+    for hub in hubs:
+        hub_kids = list(children_of_bone.get(hub, []))
+        if len(hub_kids) < 2:
+            continue
+        # O filho central é o que tem mais descendentes (continuação do tronco).
+        central = max(hub_kids, key=_descendants)
+        for c in hub_kids:
+            if c == central or c in spine:
+                continue
+            _classify_lateral(c, lateral_idx)
+            lateral_idx += 1
+
+    return assignments
+
+
+def _rename_generic_bones(glb_path: Path, root: Path | None = None) -> int:  # noqa: ARG001
+    """Rename ``bone_0..bone_N`` nodes to semantic humanoid names.
+
+    O TokenRig (SkinTokens) prediz nomes genéricos ``bone_N`` para qualquer
+    asset cujo ``cls`` não esteja mapeado em ``configs/skeleton/*.yaml``
+    (ex.: ``cls="articulation"``, o caso comum aqui — ver
+    ``docs/RIGGING3D_SKINTOKENS_MIGRATION_PLAN.md`` §0, risco #5). Este
+    pós-processo analisa a **hierarquia de bones** no GLB e atribui nomes
+    Mixamo-style (Hips, Spine, LeftArm, RightUpLeg, …) por papel estrutural.
+
+    Classificação é puramente topológica (forma da árvore parent-child), não
+    posicional — funciona independentemente de transforms dos bones. Bones
+    que não podem ser classificados com confiança mantêm o nome ``bone_*``.
+
+    **Gate de humanoide** (ver ``_is_humanoid_topology``): só renomeia se a
+    hierarquia tiver forma humanoide (2 pernas + spine + 2-3 cadeias
+    superiores). Criaturas articuladas (mosquito, scorpion) mantêm ``bone_*``
+    — o ``animator3d`` faz retarget geométrico e nomes humanoides mal-postos
+    eram piores do que genéricos.
+
+    Args:
+        glb_path: Ficheiro GLB de saída, reescrito in-place.
+        root: não usado (mantido por compatibilidade de assinatura).
+
+    Returns:
+        Número de bones renomeados (0 se nada a fazer ou se a topologia
+        não for humanoid).
+    """
     _SPINE_NAMES = ["Hips", "Spine", "Chest", "UpperChest", "UpperChest2", "UpperChest3"]
     _NECK_NAMES = ["Neck", "Head", "Neck1", "Neck2"]
     _ARM_L = ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand"]
@@ -441,9 +361,6 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
     _LEG_L = ["LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase"]
     _LEG_R = ["RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"]
 
-    # ------------------------------------------------------------------ #
-    # Parse GLB                                                           #
-    # ------------------------------------------------------------------ #
     try:
         if glb_path.stat().st_size < 20:
             return 0
@@ -467,9 +384,6 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
         return 0
     nodes = glb_json.get("nodes", [])
 
-    # ------------------------------------------------------------------ #
-    # Identify bone nodes and build hierarchy                             #
-    # ------------------------------------------------------------------ #
     bone_re = re.compile(r"^bone_(\d+)$")
     bone_nodes: dict[int, int] = {}  # bone_index → node_index
     for ni, node in enumerate(nodes):
@@ -481,11 +395,30 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
     if not bone_nodes:
         return 0
 
-    # Build children map (bone-index space)
     parent_map: dict[int, int | None] = {}  # node_index → parent_node_index
     for ni, node in enumerate(nodes):
         for c in node.get("children", []):
             parent_map[c] = ni
+
+    # Gate topológico: só impor nomes Mixamo se o esqueleto for humanoid-like.
+    # Criaturas articuladas (mosquito, scorpion): o gate humanoid falha, mas
+    # ainda classificamos por papel estrutural (Spine/Wings/Legs/Tail) para
+    # alinhar com o retarget do animator3d. Humanoides seguem o camário abaixo.
+    if not _is_humanoid_topology(bone_nodes, nodes, parent_map):
+        creature_assignments = _rename_creature_bones(bone_nodes, nodes, parent_map)
+        if not creature_assignments:
+            return 0
+        renames: dict[int, str] = {}
+        for bi, new_name in creature_assignments.items():
+            ni = bone_nodes.get(bi)
+            if ni is not None:
+                renames[ni] = new_name
+        if not renames:
+            return 0
+        for ni, new_name in renames.items():
+            nodes[ni]["name"] = new_name
+        _write_glb_json_chunk(glb_path, glb_json, remaining)
+        return len(renames)
 
     children_of_bone: dict[int, list[int]] = {}
     for bi, ni in bone_nodes.items():
@@ -497,25 +430,6 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
                 parent_bi = int(pm.group(1))
                 children_of_bone.setdefault(parent_bi, []).append(bi)
 
-    def _linear_chain(start_bi: int) -> list[int]:
-        """Follow single-child path from *start_bi*."""
-        chain = [start_bi]
-        cur = start_bi
-        while len(children_of_bone.get(cur, [])) == 1:
-            cur = children_of_bone[cur][0]
-            chain.append(cur)
-        return chain
-
-    def _descendants(bi: int) -> int:
-        n = 0
-        for c in children_of_bone.get(bi, []):
-            n += 1 + _descendants(c)
-        return n
-
-    # ------------------------------------------------------------------ #
-    # Classify the tree                                                   #
-    # ------------------------------------------------------------------ *
-    # Find root (bone whose parent is not a bone)
     root_bi: int | None = None
     for bi, ni in bone_nodes.items():
         parent_ni = parent_map.get(ni)
@@ -529,44 +443,51 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
     if root_bi is None:
         return 0
 
-    # Spine: follow the child with the most descendants
     root_kids = children_of_bone.get(root_bi, [])
     if not root_kids:
         return 0
+    _descendants = _bone_descendants(children_of_bone)
     spine_start = max(root_kids, key=_descendants)
-    spine = [root_bi] + _linear_chain(spine_start)
+    spine = [root_bi] + _bone_linear_chain(children_of_bone, spine_start)
 
-    # Upper-chest = last bone in spine
     upper_chest = spine[-1]
     uc_kids = children_of_bone.get(upper_chest, [])
 
-    # Legs = root children that are NOT the spine start
     leg_starts = [c for c in root_kids if c != spine_start]
+    assignments: dict[int, str] = {}
+    # Padrão "pelvis intermédio": 1 leg_start que ramifica em 2 pernas
+    # (alguns modelos SkinTokens inserem um bone pelvis entre raiz e pernas).
+    if len(leg_starts) == 1 and len(children_of_bone.get(leg_starts[0], [])) == 2:
+        pelvis = leg_starts[0]
+        assignments[pelvis] = "Pelvis"
+        leg_starts = children_of_bone[pelvis]
+    elif len(leg_starts) > 2:
+        # Filtrar artefactos do SkinTokens (bones isolados/curtos na raiz).
+        # Manter só os 2 laterais com mais descendentes = pernas reais.
+        leg_starts = sorted(leg_starts, key=_descendants, reverse=True)[:2]
 
-    # Chains from upper-chest, sorted shortest first
     uc_chains = sorted(
-        [_linear_chain(c) for c in uc_kids],
+        [_bone_linear_chain(children_of_bone, c) for c in uc_kids],
         key=len,
     )
 
-    # ------------------------------------------------------------------ #
-    # Assign names                                                        #
-    # ------------------------------------------------------------------ #
-    assignments: dict[int, str] = {}
-
-    # Spine
     for i, bi in enumerate(spine):
         assignments[bi] = _SPINE_NAMES[i] if i < len(_SPINE_NAMES) else f"Spine{i}"
 
-    # From upper-chest: shortest chain(s) = neck/head, rest = arms
     neck_done = False
     arm_idx = 0
     arm_templates = [_ARM_L, _ARM_R]
+    hand_bones: list[tuple[str, int]] = []  # (side, bone_index) para classificar dedos depois
     for chain in uc_chains:
         if not neck_done and len(chain) <= 3:
             for i, bi in enumerate(chain):
                 assignments[bi] = _NECK_NAMES[i] if i < len(_NECK_NAMES) else f"NeckExtra{i}"
             neck_done = True
+            # Acessórios de cabeça: filhos de Head (último bone do pescoço) que
+            # não foram classificados — chapéu, cabelo, orelhas, antenas.
+            head_bi = chain[-1] if chain else None
+            if head_bi is not None:
+                _assign_head_accessories(head_bi, children_of_bone, assignments)
         else:
             tpl = arm_templates[arm_idx] if arm_idx < len(arm_templates) else None
             side = "Left" if arm_idx == 0 else "Right"
@@ -575,23 +496,26 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
                 if tpl and i < tpl_len:
                     assignments[bi] = tpl[i]
                 else:
-                    # Finger bones beyond the standard arm template
                     finger_idx = i - tpl_len
                     assignments[bi] = f"{side}HandFinger{finger_idx + 1}"
+            # Marca o hand bone (último do template) para classificar dedos ramificados.
+            if tpl and len(chain) >= tpl_len:
+                hand_bones.append((side, chain[tpl_len - 1]))
             arm_idx += 1
 
-    # Legs from root
+    # Dedos das mãos: cada cadeia linear ramificada sob o hand bone.
+    # O SkinTokens gera tipicamente 5 cadeias de 3 falanges por mão.
+    for side, hand_bi in hand_bones:
+        _assign_fingers(hand_bi, side, children_of_bone, assignments)
+
     leg_templates = [_LEG_L, _LEG_R]
     for idx, start in enumerate(leg_starts):
-        chain = _linear_chain(start)
+        chain = _bone_linear_chain(children_of_bone, start)
         tpl = leg_templates[idx] if idx < len(leg_templates) else None
         for i, bi in enumerate(chain):
             if tpl and i < len(tpl):
                 assignments[bi] = tpl[i]
 
-    # ------------------------------------------------------------------ #
-    # Apply renames in GLB node space                                     #
-    # ------------------------------------------------------------------ #
     renames: dict[int, str] = {}  # node_index → new_name
     for bi, new_name in assignments.items():
         ni = bone_nodes.get(bi)
@@ -604,21 +528,7 @@ def _rename_generic_bones(glb_path: Path, root: Path) -> int:  # noqa: ARG001
     for ni, new_name in renames.items():
         nodes[ni]["name"] = new_name
 
-    # ------------------------------------------------------------------ #
-    # Write back                                                          #
-    # ------------------------------------------------------------------ #
-    new_json_bytes = json.dumps(glb_json, separators=(",", ":")).encode("utf-8")
-    pad = (4 - len(new_json_bytes) % 4) % 4
-    new_json_bytes += b" " * pad
-    new_chunk0_len = len(new_json_bytes)
-    new_total = 12 + 8 + new_chunk0_len + len(remaining)
-
-    with open(glb_path, "wb") as f:
-        f.write(struct.pack("<III", 0x46546C67, 2, new_total))
-        f.write(struct.pack("<II", new_chunk0_len, 0x4E4F534A))
-        f.write(new_json_bytes)
-        f.write(remaining)
-
+    _write_glb_json_chunk(glb_path, glb_json, remaining)
     return len(renames)
 
 
@@ -628,7 +538,7 @@ def _validate_and_fix_origin(glb_path: Path, tolerance: float = 0.1) -> bool:
     Não aplica correção: reexportar com trimesh removeria armature/skin do GLB rigado.
 
     Args:
-        glb_path: GLB final após merge.
+        glb_path: GLB final após geração.
         tolerance: Aceita |min_y| até este valor.
 
     Returns:
@@ -654,19 +564,111 @@ def _validate_and_fix_origin(glb_path: Path, tolerance: float = 0.1) -> bool:
         return False
 
 
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+@click.group()
+@click.version_option(version=__version__, prog_name="rigging3d")
+@click.option(
+    "--profiler",
+    "profiler_flag",
+    is_flag=True,
+    help="Gravar métricas de performance (perf DB).",
+)
+@click.option(
+    "--gpu-ids",
+    "gpu_ids_str",
+    default=None,
+    help='ID de GPU visível ao processo (ex: "0"). Propaga CUDA_VISIBLE_DEVICES.',
+)
+@click.option(
+    "--hw-auto/--no-hw-auto",
+    "hw_auto",
+    default=True,
+    show_default=True,
+    help=(
+        "Auto-detecção de hardware: em rigs multi-GPU pina o modelo na placa com "
+        "mais VRAM livre; avisa em GPUs muito pequenas. --gpu-ids explícito ganha. "
+        "Env: RIGGING3D_HW_AUTO=0."
+    ),
+)
+@click.pass_context
+def cli(
+    ctx: click.Context,
+    profiler_flag: bool,
+    gpu_ids_str: str | None,
+    hw_auto: bool,
+) -> None:
+    """Rigging3D — auto-rigging 3D (skeleton + skin numa única passada, SkinTokens)."""
+    ctx.ensure_object(dict)
+    ctx.obj["PROFILER"] = profiler_flag
+    gpu_ids: list[int] | None = None
+    if gpu_ids_str:
+        gpu_ids = [int(x) for x in gpu_ids_str.split(",") if x.strip()]
+
+    if hw_auto:
+        from .hardware import detect_hardware_profile, hw_auto_enabled
+
+        if hw_auto_enabled():
+            hwp = detect_hardware_profile()
+            if gpu_ids is None and hwp.gpu_ids is not None:
+                gpu_ids = hwp.gpu_ids
+                click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
+            elif hwp.low_vram_warning and hwp.device == "cuda":
+                click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
+    ctx.obj["GPU_IDS"] = gpu_ids
+    if profiler_flag:
+        os.environ["GAMEDEV_PROFILE"] = "1"
+
+
+def _ctx_profiler(ctx: click.Context) -> bool:
+    parent = ctx.parent
+    if parent is None:
+        return False
+    return bool(parent.obj.get("PROFILER"))
+
+
+def _ctx_gpu_ids(ctx: click.Context) -> list[int] | None:
+    parent = ctx.parent
+    if parent is None:
+        return None
+    return parent.obj.get("GPU_IDS")
+
+
+# --- pipeline ---
+
+
 @cli.command("pipeline")
 @click.option("--input", "-i", "mesh", type=click.Path(exists=True, path_type=Path), required=True)
 @click.option("--output", "-o", "out", type=click.Path(path_type=Path), required=True)
-@click.option("--work-dir", type=click.Path(file_okay=False, path_type=Path), default=None, help="Dir intermédio")
-@click.option("--seed", type=int, default=None, show_default=True, help="Seed reprodutível (None = aleatório)")
-@click.option("--keep-temp", is_flag=True, help="Não apagar work-dir temporário")
+@click.option("--seed", type=int, default=123, show_default=True, help="Seed reprodutível.")
 @click.option(
-    "--smooth-iterations", type=int, default=3, show_default=True, help="Passadas de suavização Laplaciana no merge."
+    "--use-existing-skeleton",
+    is_flag=True,
+    help="--input já tem skeleton (ex.: de uma corrida anterior); gera só o skin.",
 )
-@click.option("--groups-per-vertex", type=int, default=8, show_default=True, help="Influências de osso por vértice.")
-@click.option("--low-vram", is_flag=True, help="Modo baixa VRAM: num_train_vertex 256 (padrão: 512).")
 @click.option(
-    "--draco/--no-draco", default=False, show_default=True, help="Comprimir meshes com Draco no GLB de saída."
+    "--transfer/--no-transfer",
+    "use_transfer",
+    default=True,
+    show_default=True,
+    help="Reanexa o rig à mesh/textura/escala originais (equivalente ao antigo merge).",
+)
+@click.option(
+    "--postprocess",
+    "use_postprocess",
+    is_flag=True,
+    help="Suaviza skin via voxel (requer `pip install open3d`, não é dependência do pacote).",
+)
+@click.option("--groups-per-vertex", type=int, default=4, show_default=True, help="Influências de osso por vértice.")
+@click.option("--top-k", type=int, default=5, show_default=True)
+@click.option("--top-p", type=float, default=0.95, show_default=True)
+@click.option("--temperature", type=float, default=1.0, show_default=True)
+@click.option("--repetition-penalty", type=float, default=2.0, show_default=True)
+@click.option(
+    "--num-beams", type=int, default=10, show_default=True, help="Beam search — mais alto = mais qualidade/tempo."
 )
 @click.option(
     "--quality",
@@ -680,233 +682,105 @@ def pipeline_cmd(
     ctx: click.Context,
     mesh: Path,
     out: Path,
-    work_dir: Path | None,
-    seed: int | None,
-    keep_temp: bool,
-    smooth_iterations: int,
+    seed: int,
+    use_existing_skeleton: bool,
+    use_transfer: bool,
+    use_postprocess: bool,
     groups_per_vertex: int,
-    low_vram: bool,
-    draco: bool,
+    top_k: int,
+    top_p: float,
+    temperature: float,
+    repetition_penalty: float,
+    num_beams: int,
     quality: str,
 ) -> None:
-    """Encadeia skeleton → skin → merge até um GLB rigado."""
+    """Gera um GLB rigado (skeleton + skin, um único passo autoregressivo)."""
     from gamedev_shared.gpu import warn_if_vram_occupied
     from gamedev_shared.quality import QualityEngine
 
-    from .oneshot import run_skeleton_inprocess, run_skin_inprocess
+    from .skintokens_runner import run_rig_inprocess
 
-    root, py = _ctx_root_py(ctx)
     gpu_ids = _ctx_gpu_ids(ctx)
     do_profile = _ctx_profiler(ctx)
 
     warn_if_vram_occupied()
 
-    # QualityEngine: soft resolution — fills defaults when user didn't specify.
     _src = click.core.ParameterSource
-    _user_set_smooth = ctx.get_parameter_source("smooth_iterations") not in (_src.DEFAULT,)
     _user_set_groups = ctx.get_parameter_source("groups_per_vertex") not in (_src.DEFAULT,)
-    _user_set_low_vram = ctx.get_parameter_source("low_vram") not in (_src.DEFAULT,)
 
     _qengine = QualityEngine()
     _qresolved = _qengine.resolve("rigging3d", quality=quality)
-    if not _user_set_smooth and "smooth_iterations" in _qresolved.params:
-        smooth_iterations = _qresolved.params["smooth_iterations"]
     if not _user_set_groups and "groups_per_vertex" in _qresolved.params:
         groups_per_vertex = _qresolved.params["groups_per_vertex"]
-    if not _user_set_low_vram and "low_vram" in _qresolved.params:
-        low_vram = bool(_qresolved.params["low_vram"])
-
-    # hw-auto: auto-enable low_vram on small GPUs unless user explicitly passed --low-vram.
-    if not _user_set_low_vram and ctx.obj.get("HW_LOW_VRAM", False):
-        low_vram = True
 
     item_id = mesh.stem
     t0 = time.monotonic()
 
-    cleanup: Path | None = None
-    if work_dir is None:
-        cleanup = Path(tempfile.mkdtemp(prefix="rigging3d_"))
-        wd = cleanup
-    else:
-        wd = work_dir
-        wd.mkdir(parents=True, exist_ok=True)
+    _old_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
+    try:
+        if gpu_ids:
+            os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
+        elif _old_cuda is not None:
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
 
-    with ProfilerSession(
-        "rigging3d",
-        cli_profile=do_profile,
-        params={"seed": seed, "smooth_iterations": smooth_iterations, "groups_per_vertex": groups_per_vertex},
-    ):
-        actual_mesh = mesh
-
-        skel = wd / "_skeleton.glb"
-        skin = wd / "_skin.glb"
-        _low_vram_cleanup: list[Path] = []
-        try:
-            skel_gpu = gpu_ids[:1] if gpu_ids and len(gpu_ids) >= 2 else gpu_ids
-            skin_gpu = gpu_ids[1:2] if gpu_ids and len(gpu_ids) >= 2 else gpu_ids
-            if gpu_ids and len(gpu_ids) >= 2:
-                console.print(f"[dim]Multi-GPU: skeleton→cuda:{gpu_ids[0]}, skin→cuda:{gpu_ids[1]}[/dim]")
-
-            emit_progress(item_id, TOOL_RIGGING3D, phase="skeleton", percent=0)
-            _old_cuda = os.environ.get("CUDA_VISIBLE_DEVICES")
+        with ProfilerSession(
+            "rigging3d",
+            cli_profile=do_profile,
+            params={"seed": seed, "groups_per_vertex": groups_per_vertex, "num_beams": num_beams},
+        ):
+            emit_progress(item_id, TOOL_RIGGING3D, phase="rig", percent=0)
             try:
-                if skel_gpu:
-                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in skel_gpu)
-                elif _old_cuda is not None:
-                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-                run_skeleton_inprocess(
-                    root,
-                    input_path=_shell_path(actual_mesh),
-                    output_path=_shell_path(skel),
-                    seed=seed if seed is not None else 123,
-                    npz_dir=str(wd / "_npz"),
+                run_rig_inprocess(
+                    str(mesh),
+                    str(out),
+                    use_skeleton=use_existing_skeleton,
+                    use_transfer=use_transfer,
+                    use_postprocess=use_postprocess,
+                    top_k=top_k,
+                    top_p=top_p,
+                    temperature=temperature,
+                    repetition_penalty=repetition_penalty,
+                    num_beams=num_beams,
+                    group_per_vertex=groups_per_vertex,
+                    seed=seed,
                 )
             except Exception as exc:
-                raise click.ClickException(
-                    f"skeleton falhou: {exc}. Confirma deps inferência, pesos HF e logs acima."
-                ) from exc
-            finally:
-                if _old_cuda is not None:
-                    os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda
-                else:
-                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-            if not skel.is_file() or skel.stat().st_size == 0:
                 emit_result(
                     item_id,
                     TOOL_RIGGING3D,
                     STATUS_ERROR,
-                    phase="skeleton",
-                    error="skeleton falhou (GLB em falta)",
+                    phase="rig",
+                    error=str(exc),
                     seconds=time.monotonic() - t0,
                 )
-                raise click.ClickException(
-                    "skeleton falhou (GLB em falta). Confirma deps inferência, pesos HF e logs acima."
-                )
-            emit_progress(item_id, TOOL_RIGGING3D, phase="skeleton", percent=100)
-
-            skin_task_path = DEFAULT_SKIN_TASK
-            if low_vram:
-                model_yaml_path = root / "configs" / "model" / "unirig_skin.yaml"
-                with open(model_yaml_path) as f:
-                    model_cfg = yaml.safe_load(f)
-                model_cfg["num_train_vertex"] = 256
-
-                low_vram_model = root / "configs" / "model" / "_low_vram_unirig_skin.yaml"
-                with open(low_vram_model, "w") as f:
-                    yaml.dump(model_cfg, f, default_flow_style=False)
-
-                task_yaml_path = root / "configs" / "task" / "quick_inference_unirig_skin.yaml"
-                with open(task_yaml_path) as f:
-                    task_cfg = yaml.safe_load(f)
-                task_cfg["components"]["model"] = "_low_vram_unirig_skin"
-
-                low_vram_task = wd / "_low_vram_skin_task.yaml"
-                with open(low_vram_task, "w") as f:
-                    yaml.dump(task_cfg, f, default_flow_style=False)
-
-                skin_task_path = str(low_vram_task)
-                _low_vram_cleanup.extend([low_vram_model, low_vram_task])
-                console.print("[dim]Low-VRAM: num_train_vertex=256[/dim]")
-
-            emit_progress(item_id, TOOL_RIGGING3D, phase="skin", percent=0)
-            _old_cuda_skin = os.environ.get("CUDA_VISIBLE_DEVICES")
-            try:
-                if skin_gpu:
-                    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in skin_gpu)
-                elif _old_cuda_skin is not None:
-                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-                run_skin_inprocess(
-                    root,
-                    input_path=_shell_path(skel),
-                    output_path=_shell_path(skin),
-                    seed=seed if seed is not None else 123,
-                    skin_task=skin_task_path,
-                    npz_dir=str(wd / "_npz"),
-                )
-            except Exception as exc:
-                raise click.ClickException(f"skin falhou: {exc}. Confirma spconv, VRAM e logs acima.") from exc
-            finally:
-                if _old_cuda_skin is not None:
-                    os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda_skin
-                else:
-                    os.environ.pop("CUDA_VISIBLE_DEVICES", None)
-            if not skin.is_file() or skin.stat().st_size == 0:
-                emit_result(
-                    item_id,
-                    TOOL_RIGGING3D,
-                    STATUS_ERROR,
-                    phase="skin",
-                    error="skin falhou (GLB em falta)",
-                    seconds=time.monotonic() - t0,
-                )
-                raise click.ClickException("skin falhou (GLB em falta). Confirma spconv, VRAM e logs acima.")
-            emit_progress(item_id, TOOL_RIGGING3D, phase="skin", percent=100)
-
-            emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=0)
-            merge_env = {
-                "RIGGING3D_SMOOTH_ITERATIONS": str(smooth_iterations),
-                "RIGGING3D_GROUPS_PER_VERTEX": str(groups_per_vertex),
-                "RIGGING3D_DRACO": "1" if draco else "0",
-            }
-            rc = _run_module(
-                root,
-                py,
-                "src.inference.merge",
-                [
-                    "--require_suffix=obj,fbx,FBX,dae,glb,gltf,vrm",
-                    "--num_runs=1",
-                    "--id=0",
-                    f"--source={_shell_path(skin)}",
-                    f"--target={_shell_path(mesh)}",
-                    f"--output={_shell_path(out)}",
-                ],
-                env=merge_env,
-                gpu_ids=None,
-            )
+                raise click.ClickException(f"pipeline falhou: {exc}") from exc
             if not out.is_file() or out.stat().st_size == 0:
                 emit_result(
                     item_id,
                     TOOL_RIGGING3D,
                     STATUS_ERROR,
-                    phase="merge",
-                    error=f"merge falhou (código {rc})",
+                    phase="rig",
+                    error="pipeline não produziu GLB",
                     seconds=time.monotonic() - t0,
                 )
-                raise click.ClickException(f"merge falhou (código {rc} ou GLB vazio). Confirma bpy e caminhos acima.")
-            if rc != 0:
-                console.print(f"[yellow]merge rc={rc}, output={out.stat().st_size}B- prosseguindo.[/yellow]")
-            emit_progress(item_id, TOOL_RIGGING3D, phase="merge", percent=100)
-            renamed = _rename_generic_bones(out, root)
+                raise click.ClickException("pipeline não produziu GLB.")
+            emit_progress(item_id, TOOL_RIGGING3D, phase="rig", percent=100)
+
+            renamed = _rename_generic_bones(out)
             if renamed:
                 console.print(f"[green]Renomeados {renamed} ossos para nomes semânticos (humanoid).[/green]")
             _validate_and_fix_origin(out)
-        finally:
-            if cleanup is not None and not keep_temp:
-                shutil.rmtree(cleanup, ignore_errors=True)
-            elif low_vram and not keep_temp:
-                for p in _low_vram_cleanup:
-                    p.unlink(missing_ok=True)
+    finally:
+        if _old_cuda is not None:
+            os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda
+        else:
+            os.environ.pop("CUDA_VISIBLE_DEVICES", None)
 
     console.print(f"[green]Pipeline concluído:[/green] {out}")
     emit_result(item_id, TOOL_RIGGING3D, STATUS_OK, output=str(out), seconds=time.monotonic() - t0)
 
 
-# ---------------------------------------------------------------------------
-# Helpers I/O
-# ---------------------------------------------------------------------------
-
-
-def _validate_io(
-    input_path: Path | None,
-    output_path: Path | None,
-    input_dir: Path | None,
-    output_dir: Path | None,
-) -> None:
-    if input_dir is not None:
-        if output_dir is None:
-            raise click.ClickException("Com --input-dir indica também --output-dir.")
-    elif input_path is None or output_path is None:
-        raise click.ClickException("Indica --input e --output, ou --input-dir e --output-dir.")
+# --- transfer-weights (stage 8, independente de backend) ---
 
 
 @cli.command("transfer-weights")
@@ -971,7 +845,7 @@ def transfer_weights_cmd(
     Usa ``bpy.ops.object.data_transfer`` (POLYINTERP_NEAREST) e ata cada
     target ao mesmo armature do source. Ideal para reaproveitar um rig
     high-fidelity (gerado em ``id_clean.glb`` via ``rigging3d pipeline``)
-    em meshes decimadas (LOD0/1/2).
+    em meshes decimadas (LOD0/1/2). Independente de backend de geração.
     """
     from .transfer_weights import transfer_weights
 
@@ -1002,23 +876,6 @@ def transfer_weights_cmd(
             f"[cyan]{r.target_out}[/cyan] [dim]({sz_str}, "
             f"{r.bones} bones, {r.vertex_groups} vgroups)[/dim]"
         )
-
-
-def _io_args(
-    input_path: Path | None,
-    output_path: Path | None,
-    input_dir: Path | None,
-    output_dir: Path | None,
-) -> list[str]:
-    args: list[str] = []
-    if input_dir is not None:
-        args += ["--input_dir", _shell_path(input_dir), "--output_dir", _shell_path(output_dir)]
-    else:
-        assert input_path is not None and output_path is not None
-        args += ["--input", _shell_path(input_path), "--output", _shell_path(output_path)]
-        if output_dir is not None:
-            args += ["--output_dir", _shell_path(output_dir)]
-    return args
 
 
 # ---------------------------------------------------------------------------
