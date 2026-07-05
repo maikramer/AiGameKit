@@ -13,14 +13,16 @@ Contexto: a engine já migrou várias áreas para pacotes maduros nos últimos c
 
 Executado numa sessão sem gate de teste manual entre fases (pedido explícito do
 usuário); validação final: `tsc --noEmit` limpo, `eslint` sem novos erros,
-`bun test` 2075 pass / 0 fail.
+`bun test` 2072-2075 pass / 0 fail (variação de contagem entre runs é flake
+pré-existente, não relacionada às mudanças — suíte `tests/unit/terrain` isolada
+roda 68/68 estável).
 
 | Fase | Status |
 |---|---|
 | 1 — remover `three-pathfinding`, `colyseus.js` | ✅ feito |
 | 2 — `@three.ez/instanced-mesh` em `auto-instance.ts` | ✅ feito (rewrite completo, LOD/culling nativos) |
 | 3 — yuka → substituto | ✅ feito, **mas diferente do plano**: `ai-steering` não tinha navmesh (esse já usa DetourCrowd via `recast-navigation`, plugin `navmesh`, sem yuka). Escrito `vehicle.ts` — steering Reynolds (seek/flee/wander/obstacle) sem nenhuma lib nova, só `THREE.Vector3` |
-| 4 — CSM (`three-custom-shader-material`) | ⚠️ parcial: `destructible/fx.ts` e `water/systems.ts` migrados (e corrigem o bug histórico de `uTime` congelado). **`terrain/systems.ts` NÃO migrado** — shader de ~230 linhas, 5 pontos de injeção incl. blend de normal tangent-space por camada; risco alto sem verificação visual, deixado para outra sessão com QA no browser |
+| 4 — CSM (`three-custom-shader-material`) | ✅ feito, **incluindo terrain** (ver detalhe abaixo). `destructible/fx.ts` e `water/systems.ts` migrados primeiro (corrigem o bug histórico de `uTime` congelado). `terrain/systems.ts` migrado numa segunda passada com QA visual no browser — ver "Terrain shader — migração + QA visual" |
 | 5.1 — `n8ao` (SSAO) | ✅ feito, substitui `SSAOPass` (que não tinha `.intensity`) |
 | 5.2 — `detect-gpu` | ✅ feito, tier usado só para sample count do n8ao (`setQualityMode`); radius/intensity continuam 100% autor-controlados |
 | 5.3 — `tweakpane` | ✅ feito, painel auto-bind no registry de debug vars existente, tecla `T`, import dinâmico (dev-only) |
@@ -32,6 +34,52 @@ usuário); validação final: `tsc --noEmit` limpo, `eslint` sem novos erros,
 Commits gerados automaticamente por hooks do ambiente (não por `git commit`
 explícito do agente) — revisar/squash conforme desejado:
 `07109add6`, `072a3c1e0`, `da65461c8`, `92294d6c0`.
+
+### Terrain shader — migração + QA visual (2026-07-04, sessão seguinte)
+
+Migração completa do `onBeforeCompile` de ~230 linhas em
+`terrain/systems.ts` para `three-custom-shader-material`, com QA visual real
+no browser (Playwright, exemplo `simple-rpg`).
+
+- **`_shaderRefs` eliminado por completo.** Como CSM mantém `uniforms` vivos
+  diretamente no material (não recriados a cada recompile), `applyTerrainSplat`,
+  `applyLakeSand` e o crossfade de textura em `TerrainLodSelectSystem` agora
+  escrevem direto em `mat.uniforms.X.value` — sem laço `for (const sh of refs)`.
+  Isso também elimina os 9 avisos `@typescript-eslint/no-explicit-any` que
+  existiam nesse arquivo (todos vinham de `(mat as any)._shaderRefs`).
+- **Armadilha real encontrada e corrigida:** o hook de corpo principal do CSM
+  (`csm_DiffuseColor`/`csm_FragNormal`/`csm_Roughness`) roda **antes** dos
+  chunks padrão do three (`normal_fragment_begin`, `normal_fragment_maps`) no
+  mesmo escopo de função — não em um bloco isolado. Declarar variáveis locais
+  com os mesmos nomes que esses chunks usam mais adiante (`tbn`, `mapN`) causa
+  erro de compilação GLSL `'tbn' : redefinition`. Corrigido renomeando para
+  `csmTbn`/`csmMapN`. A blendagem de normal tangent-space reconstrói o TBN
+  manualmente via `getTangentFrame()` (função de arquivo do three, sempre
+  declarada quando `USE_NORMALMAP_TANGENTSPACE` está ativo sem tangentes de
+  vértice) em vez de depender do `tbn` chunk-local — usa `csm_FragNormal`
+  (que já tem o valor default `normalize(vNormal)` nesse ponto) como
+  `surf_norm`, equivalente exato ao `normal` pré-perturbação do código original.
+- **Segunda armadilha (mecânica, não de shader):** um backtick literal dentro
+  de um comentário GLSL escrito como texto (`` `tbn`/`mapN` ``) fechou
+  prematuramente o template string JS que envolve o shader inteiro — quebrou
+  o parse do arquivo TypeScript (erro Vite/oxc "Expected a semicolon"), não o
+  GLSL. Aconteceu duas vezes (uma vez já na primeira sessão, em outro
+  comentário). Lição: nunca usar `` ` `` dentro de comentários dentro de
+  shaders escritos como template literals — usar aspas simples ("...") em vez
+  de crase para destacar identificadores GLSL nos comentários.
+- **QA visual (Playwright, `examples/simple-rpg`):** capturado o erro real via
+  monkey-patch de `WebGL2RenderingContext.prototype.{compileShader,linkProgram}`
+  (o browser não expõe o info-log de compilação via `console.error` nesse
+  caso — só o warning genérico `WebGL: INVALID_OPERATION: useProgram: program
+  not valid`, centenas de vezes). Antes da correção: terreno renderizava azul
+  liso (shader não linkava, nenhum fragmento desenhado). Depois: confirmado
+  visualmente — textura base com detalhe de normal mapping (grama com relevo
+  direcional), blend de bioma (transição grama → deserto/wasteland visível),
+  e sand-blend de rio (faixa de areia clara na margem, exatamente como o
+  código original). Zero erros de console durante navegação/movimento.
+
+Arquivo de referência: `VibeGame/src/plugins/terrain/systems.ts`
+(`buildTerrainMaterial`, `terrainFragmentShader`, `TERRAIN_VERTEX_SHADER`).
 
 ---
 

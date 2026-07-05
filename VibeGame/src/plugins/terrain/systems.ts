@@ -1,6 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
@@ -274,8 +275,24 @@ function _loadPackedNR(albedoUrl: string): THREE.Texture {
   return tex;
 }
 
+/** Material returned by {@link buildTerrainMaterial}: a `MeshStandardMaterial`
+ *  (base-material params like color/roughness/wireframe stay real properties)
+ *  whose `uniforms` are live — write `mat.uniforms.uSplatMap.value = …` any
+ *  time, no `onBeforeCompile`/shader-ref indirection (see the `uTime`-freeze
+ *  bug fixed the same way in the water shader). */
+export type TerrainMaterial = THREE.MeshStandardMaterial & {
+  uniforms: Record<string, { value: unknown }>;
+};
+
+const TERRAIN_VERTEX_SHADER = `
+varying vec2 vWorldXZ;
+void main() {
+  vWorldXZ = (modelMatrix * vec4(position, 1.0)).xz;
+}
+`;
+
 /**
- * Inject the terrain biome-blend shader. Two layers of blending:
+ * Biome-blend fragment shader. Two layers of blending:
  *  1. `uMap2`/`uMixFactor` — legacy global crossfade kept for
  *     {@link swapTerrainTexture}.
  *  2. Biome splat — `uSplatMap` (RGBA, one biome per channel) sampled by world
@@ -285,236 +302,240 @@ function _loadPackedNR(albedoUrl: string): THREE.Texture {
  * renders correctly before any splat is supplied; {@link setTerrainSplat} +
  * the mesh system fill them in later.
  */
-function _setupBlendShader(
-  mat: THREE.MeshStandardMaterial,
-  baseNR: THREE.Texture
-): void {
-  (mat as any)._shaderRefs = [];
+function terrainFragmentShader(): string {
+  return `
+uniform sampler2D uMap2;
+uniform float uMixFactor;
+uniform sampler2D uSplatMap;
+uniform sampler2D uLayer0;
+uniform sampler2D uLayer1;
+uniform sampler2D uLayer2;
+uniform sampler2D uLayer3;
+uniform sampler2D uNRBase;
+uniform sampler2D uNR0;
+uniform sampler2D uNR1;
+uniform sampler2D uNR2;
+uniform sampler2D uNR3;
+uniform float uLayerCount;
+uniform vec2 uSplatMin;
+uniform vec2 uSplatInvSize;
+uniform sampler2D uSandAlbedo;
+uniform sampler2D uSandNR;
+uniform float uSandScale;
+uniform float uSandBlend;
+uniform int uLakeCount;
+uniform vec4 uLakes[${MAX_LAKES}];
+uniform vec4 uRiverSegs[${MAX_RIVER_SEGS}];
+uniform vec2 uRiverDims[${MAX_RIVER_SEGS}];
+uniform int uRiverSegCount;
+varying vec2 vWorldXZ;
 
-  mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uMap2 = { value: _emptyTexture };
-    shader.uniforms.uMixFactor = { value: 0 };
-    shader.uniforms.uSplatMap = { value: _emptyTexture };
-    shader.uniforms.uLayer0 = { value: _emptyTexture };
-    shader.uniforms.uLayer1 = { value: _emptyTexture };
-    shader.uniforms.uLayer2 = { value: _emptyTexture };
-    shader.uniforms.uLayer3 = { value: _emptyTexture };
-    // Packed normal (RGB) + roughness (A) per layer; base + 4 biome layers.
-    shader.uniforms.uNRBase = { value: baseNR };
-    shader.uniforms.uNR0 = { value: _flatNRTexture };
-    shader.uniforms.uNR1 = { value: _flatNRTexture };
-    shader.uniforms.uNR2 = { value: _flatNRTexture };
-    shader.uniforms.uNR3 = { value: _flatNRTexture };
-    shader.uniforms.uLayerCount = { value: 0 };
-    shader.uniforms.uSplatMin = { value: new THREE.Vector2(0, 0) };
-    shader.uniforms.uSplatInvSize = { value: new THREE.Vector2(0, 0) };
+vec4 biomeSplat() {
+  return texture2D(uSplatMap, (vWorldXZ - uSplatMin) * uSplatInvSize);
+}
+// GLSL port of shapeRadius() — must stay in sync with water/carve.ts.
+const float SHORE_SHAPE_AMP = 0.28;
+float lakeShapeRadius(float angle, float seedX, float seedZ) {
+  float phi1 = (seedX * 12.9898 + seedZ * 78.233) * 0.1;
+  float phi2 = (seedX * 4.1764 - seedZ * 29.113) * 0.1;
+  float n = sin(angle * 2.0 + phi1) * 0.6
+          + sin(angle * 3.0 - phi2) * 0.3
+          + sin(angle * 5.0 + phi1 * 1.7) * 0.1;
+  return 1.0 + n * SHORE_SHAPE_AMP;
+}
+float lakeMask() {
+  float m = 0.0;
+  for (int i = 0; i < ${MAX_LAKES}; i++) {
+    if (i >= uLakeCount) break;
+    float r = uLakes[i].z;
+    float shoreR = uLakes[i].w;
+    vec2 rel = vWorldXZ - uLakes[i].xy;
+    float d = length(rel);
+    float angle = atan(rel.y, rel.x);
+    // Organic shoreline: shape both the beach ring radii by the same
+    // perturbation the bowl/water use, so the sand outline matches.
+    float s = lakeShapeRadius(angle, uLakes[i].x, uLakes[i].y);
+    float beach = 1.0 - smoothstep(shoreR * s, max(r * s, shoreR * s + 0.001), d);
+    m = max(m, beach);
+  }
+  return m;
+}
+// Sand band along river channels: full sand inside the waterline (dims.x),
+// fading out at the outer beach edge (dims.y) — the polyline analogue of the
+// lake's shoreR→r ring.
+float riverMask() {
+  float m = 0.0;
+  for (int i = 0; i < ${MAX_RIVER_SEGS}; i++) {
+    if (i >= uRiverSegCount) break;
+    vec2 a = uRiverSegs[i].xy;
+    vec2 b = uRiverSegs[i].zw;
+    vec2 ab = b - a;
+    float lenSq = max(dot(ab, ab), 1e-6);
+    float t = clamp(dot(vWorldXZ - a, ab) / lenSq, 0.0, 1.0);
+    float d = length(vWorldXZ - (a + ab * t));
+    float band = 1.0 - smoothstep(uRiverDims[i].x, max(uRiverDims[i].y, uRiverDims[i].x + 0.001), d);
+    m = max(m, band);
+  }
+  return m;
+}
+float sandMask() {
+  return clamp(max(lakeMask(), riverMask()), 0.0, 1.0) * uSandBlend;
+}
 
-    // Lake-bed sand blend: independent of the 4-channel splat budget (which is
-    // already full), masked in-shader by world-XZ distance to each registered
-    // lake. Pure uniform push — no geometry/material rebuild (see applyLakeSand).
-    shader.uniforms.uSandAlbedo = { value: _getSandAlbedo() };
-    shader.uniforms.uSandNR = { value: _sandNRTexture };
-    shader.uniforms.uSandScale = { value: SAND_UV_SCALE };
-    shader.uniforms.uSandBlend = { value: 0 };
-    shader.uniforms.uLakeCount = { value: 0 };
-    // Per-lake: xy = world centre, z = bowl radius, w = shore radius (waterline).
-    const lakeVecs: THREE.Vector4[] = [];
-    for (let i = 0; i < MAX_LAKES; i++) lakeVecs.push(new THREE.Vector4());
-    shader.uniforms.uLakes = { value: lakeVecs };
-    // Per river segment: xyzw = (ax, az, bx, bz) world endpoints; dims per
-    // segment: x = shore half-width (waterline), y = outer sand half-width.
-    const riverSegs: THREE.Vector4[] = [];
-    const riverDims: THREE.Vector2[] = [];
-    for (let i = 0; i < MAX_RIVER_SEGS; i++) {
-      riverSegs.push(new THREE.Vector4());
-      riverDims.push(new THREE.Vector2());
+void main() {
+  // Albedo: base ↔ uMap2 legacy crossfade, then biome layers by splat, then
+  // sand. Mirrors the original diffuseColor *= groundCol (diffuseColor starts
+  // as vec4(diffuse, opacity) — csm_DiffuseColor's own default already folds
+  // that in when there's no map, so the #ifdef USE_MAP branch fully overwrites
+  // it and the no-map fallback is left untouched).
+  #ifdef USE_MAP
+    vec4 t1 = texture2D(map, vMapUv);
+    vec4 t2 = texture2D(uMap2, vMapUv);
+    vec4 groundCol = mix(t1, t2, uMixFactor);
+    if (uLayerCount > 0.5) {
+      vec4 splat = biomeSplat();
+      groundCol = mix(groundCol, texture2D(uLayer0, vMapUv), splat.r);
+      if (uLayerCount > 1.5)
+        groundCol = mix(groundCol, texture2D(uLayer1, vMapUv), splat.g);
+      if (uLayerCount > 2.5)
+        groundCol = mix(groundCol, texture2D(uLayer2, vMapUv), splat.b);
+      if (uLayerCount > 3.5)
+        groundCol = mix(groundCol, texture2D(uLayer3, vMapUv), splat.a);
     }
-    shader.uniforms.uRiverSegs = { value: riverSegs };
-    shader.uniforms.uRiverDims = { value: riverDims };
-    shader.uniforms.uRiverSegCount = { value: 0 };
+    float sand = sandMask();
+    if (sand > 0.001) {
+      vec2 sandUv = vWorldXZ * uSandScale;
+      groundCol = mix(groundCol, texture2D(uSandAlbedo, sandUv), sand);
+    }
+    csm_DiffuseColor = vec4(diffuse, opacity) * groundCol;
+  #endif
 
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <common>',
-      `#include <common>
-       varying vec2 vWorldXZ;`
-    );
-    shader.vertexShader = shader.vertexShader.replace(
-      '#include <begin_vertex>',
-      `#include <begin_vertex>
-       vWorldXZ = (modelMatrix * vec4(transformed, 1.0)).xz;`
-    );
+  // Tangent-space normal: blend the base + biome packed normals (RGB), then
+  // transform by a TBN reconstructed the same way three's own
+  // normal_fragment_begin/_maps chunks do (getTangentFrame is declared at
+  // file scope by three whenever USE_NORMALMAP_TANGENTSPACE is active without
+  // vertex tangents — safe to call here even though this hook runs before
+  // those chunks in program order). csm_FragNormal's default at this point
+  // (normalize(vNormal), optionally face-flipped) is exactly what "normal"
+  // holds at the same stage in the original chunk-based code, so it's the
+  // correct surf_norm input.
+  #ifdef USE_NORMALMAP_TANGENTSPACE
+    vec3 nrm = texture2D(uNRBase, vMapUv).xyz;
+    if (uLayerCount > 0.5) {
+      vec4 splat = biomeSplat();
+      nrm = mix(nrm, texture2D(uNR0, vMapUv).xyz, splat.r);
+      if (uLayerCount > 1.5)
+        nrm = mix(nrm, texture2D(uNR1, vMapUv).xyz, splat.g);
+      if (uLayerCount > 2.5)
+        nrm = mix(nrm, texture2D(uNR2, vMapUv).xyz, splat.b);
+      if (uLayerCount > 3.5)
+        nrm = mix(nrm, texture2D(uNR3, vMapUv).xyz, splat.a);
+    }
+    float sandN = sandMask();
+    if (sandN > 0.001)
+      nrm = mix(nrm, texture2D(uSandNR, vWorldXZ * uSandScale).xyz, sandN);
+    // Named csmTbn/csmMapN (not tbn/mapN) to avoid colliding with the locals
+    // three's own normal_fragment_begin/_maps chunks declare later in this
+    // same function body (this hook runs before them, in the same GLSL scope
+    // — reusing those names is a "redefinition" compile error).
+    mat3 csmTbn = getTangentFrame(-vViewPosition, csm_FragNormal, vNormalMapUv);
+    vec3 csmMapN = nrm * 2.0 - 1.0;
+    csmMapN.xy *= normalScale;
+    csm_FragNormal = normalize(csmTbn * csmMapN);
+  #endif
 
-    // Shared uniforms + a helper that samples the biome splat by world XZ. The
-    // chunk overrides below (albedo / normal / roughness) all blend by it.
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <common>',
-      `#include <common>
-       varying vec2 vWorldXZ;
-       uniform sampler2D uMap2;
-       uniform float uMixFactor;
-       uniform sampler2D uSplatMap;
-       uniform sampler2D uLayer0;
-       uniform sampler2D uLayer1;
-       uniform sampler2D uLayer2;
-       uniform sampler2D uLayer3;
-       uniform sampler2D uNRBase;
-       uniform sampler2D uNR0;
-       uniform sampler2D uNR1;
-       uniform sampler2D uNR2;
-       uniform sampler2D uNR3;
-       uniform float uLayerCount;
-       uniform vec2 uSplatMin;
-       uniform vec2 uSplatInvSize;
-       uniform sampler2D uSandAlbedo;
-       uniform sampler2D uSandNR;
-       uniform float uSandScale;
-       uniform float uSandBlend;
-       uniform int uLakeCount;
-       uniform vec4 uLakes[${MAX_LAKES}];
-       uniform vec4 uRiverSegs[${MAX_RIVER_SEGS}];
-       uniform vec2 uRiverDims[${MAX_RIVER_SEGS}];
-       uniform int uRiverSegCount;
-       vec4 biomeSplat() {
-         return texture2D(uSplatMap, (vWorldXZ - uSplatMin) * uSplatInvSize);
-       }
-       // GLSL port of shapeRadius() — must stay in sync with water/carve.ts.
-       const float SHORE_SHAPE_AMP = 0.28;
-       float lakeShapeRadius(float angle, float seedX, float seedZ) {
-         float phi1 = (seedX * 12.9898 + seedZ * 78.233) * 0.1;
-         float phi2 = (seedX * 4.1764 - seedZ * 29.113) * 0.1;
-         float n = sin(angle * 2.0 + phi1) * 0.6
-                 + sin(angle * 3.0 - phi2) * 0.3
-                 + sin(angle * 5.0 + phi1 * 1.7) * 0.1;
-         return 1.0 + n * SHORE_SHAPE_AMP;
-       }
-       float lakeMask() {
-         float m = 0.0;
-         for (int i = 0; i < ${MAX_LAKES}; i++) {
-           if (i >= uLakeCount) break;
-           float r = uLakes[i].z;
-           float shoreR = uLakes[i].w;
-           vec2 rel = vWorldXZ - uLakes[i].xy;
-           float d = length(rel);
-           float angle = atan(rel.y, rel.x);
-           // Organic shoreline: shape both the beach ring radii by the same
-           // perturbation the bowl/water use, so the sand outline matches.
-           float s = lakeShapeRadius(angle, uLakes[i].x, uLakes[i].y);
-           float beach = 1.0 - smoothstep(shoreR * s, max(r * s, shoreR * s + 0.001), d);
-           m = max(m, beach);
-         }
-         return m;
-       }
-       // Sand band along river channels: full sand inside the waterline
-       // (dims.x), fading out at the outer beach edge (dims.y) — the polyline
-       // analogue of the lake's shoreR→r ring.
-       float riverMask() {
-         float m = 0.0;
-         for (int i = 0; i < ${MAX_RIVER_SEGS}; i++) {
-           if (i >= uRiverSegCount) break;
-           vec2 a = uRiverSegs[i].xy;
-           vec2 b = uRiverSegs[i].zw;
-           vec2 ab = b - a;
-           float lenSq = max(dot(ab, ab), 1e-6);
-           float t = clamp(dot(vWorldXZ - a, ab) / lenSq, 0.0, 1.0);
-           float d = length(vWorldXZ - (a + ab * t));
-           float band = 1.0 - smoothstep(uRiverDims[i].x, max(uRiverDims[i].y, uRiverDims[i].x + 0.001), d);
-           m = max(m, band);
-         }
-         return m;
-       }
-       float sandMask() {
-         return clamp(max(lakeMask(), riverMask()), 0.0, 1.0) * uSandBlend;
-       }`
-    );
+  // Roughness: blend the packed alpha (= 1 − smoothness) per biome, then sand.
+  float rgh = texture2D(uNRBase, vMapUv).a;
+  if (uLayerCount > 0.5) {
+    vec4 splat = biomeSplat();
+    rgh = mix(rgh, texture2D(uNR0, vMapUv).a, splat.r);
+    if (uLayerCount > 1.5) rgh = mix(rgh, texture2D(uNR1, vMapUv).a, splat.g);
+    if (uLayerCount > 2.5) rgh = mix(rgh, texture2D(uNR2, vMapUv).a, splat.b);
+    if (uLayerCount > 3.5) rgh = mix(rgh, texture2D(uNR3, vMapUv).a, splat.a);
+  }
+  float sandR = sandMask();
+  if (sandR > 0.001)
+    rgh = mix(rgh, texture2D(uSandNR, vWorldXZ * uSandScale).a, sandR);
+  csm_Roughness = roughness * rgh;
+}
+`;
+}
 
-    // Albedo: base ↔ uMap2 legacy crossfade, then biome layers by splat.
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <map_fragment>',
-      `#ifdef USE_MAP
-         vec4 t1 = texture2D(map, vMapUv);
-         vec4 t2 = texture2D(uMap2, vMapUv);
-         vec4 groundCol = mix(t1, t2, uMixFactor);
-         if (uLayerCount > 0.5) {
-           vec4 splat = biomeSplat();
-           groundCol = mix(groundCol, texture2D(uLayer0, vMapUv), splat.r);
-           if (uLayerCount > 1.5)
-             groundCol = mix(groundCol, texture2D(uLayer1, vMapUv), splat.g);
-           if (uLayerCount > 2.5)
-             groundCol = mix(groundCol, texture2D(uLayer2, vMapUv), splat.b);
-         if (uLayerCount > 3.5)
-              groundCol = mix(groundCol, texture2D(uLayer3, vMapUv), splat.a);
-          }
-          float sand = sandMask();
-          if (sand > 0.001) {
-            vec2 sandUv = vWorldXZ * uSandScale;
-            groundCol = mix(groundCol, texture2D(uSandAlbedo, sandUv), sand);
-          }
-          diffuseColor *= groundCol;
-        #endif`
-    );
+/**
+ * Build the terrain biome-blend material (replaces the old `onBeforeCompile`
+ * injection). `matOpts` are forwarded to the underlying `MeshStandardMaterial`
+ * (color/roughness/metalness/wireframe/map/normalMap/normalScale all stay
+ * real, readable properties — the "should rebuild?" check at the call site
+ * relies on this).
+ */
+function buildTerrainMaterial(
+  matOpts: THREE.MeshStandardMaterialParameters,
+  baseNR: THREE.Texture
+): TerrainMaterial {
+  const lakeVecs: THREE.Vector4[] = [];
+  for (let i = 0; i < MAX_LAKES; i++) lakeVecs.push(new THREE.Vector4());
+  const riverSegs: THREE.Vector4[] = [];
+  const riverDims: THREE.Vector2[] = [];
+  for (let i = 0; i < MAX_RIVER_SEGS; i++) {
+    riverSegs.push(new THREE.Vector4());
+    riverDims.push(new THREE.Vector2());
+  }
 
-    // Tangent-space normal: blend the base + biome packed normals (RGB), then
-    // transform by the TBN that three already computed (USE_NORMALMAP).
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <normal_fragment_maps>',
-      `#ifdef USE_NORMALMAP_TANGENTSPACE
-         vec3 nrm = texture2D(uNRBase, vMapUv).xyz;
-         if (uLayerCount > 0.5) {
-           vec4 splat = biomeSplat();
-           nrm = mix(nrm, texture2D(uNR0, vMapUv).xyz, splat.r);
-           if (uLayerCount > 1.5)
-             nrm = mix(nrm, texture2D(uNR1, vMapUv).xyz, splat.g);
-           if (uLayerCount > 2.5)
-             nrm = mix(nrm, texture2D(uNR2, vMapUv).xyz, splat.b);
-            if (uLayerCount > 3.5)
-              nrm = mix(nrm, texture2D(uNR3, vMapUv).xyz, splat.a);
-          }
-          float sandN = sandMask();
-          if (sandN > 0.001)
-            nrm = mix(nrm, texture2D(uSandNR, vWorldXZ * uSandScale).xyz, sandN);
-           vec3 mapN = nrm * 2.0 - 1.0;
-          mapN.xy *= normalScale;
-          normal = normalize( tbn * mapN );
-         #endif`
-    );
-
-    // Roughness: blend the packed alpha (= 1 − smoothness) per biome, then sand.
-    shader.fragmentShader = shader.fragmentShader.replace(
-      '#include <roughnessmap_fragment>',
-      `float roughnessFactor = roughness;
-       float rgh = texture2D(uNRBase, vMapUv).a;
-       if (uLayerCount > 0.5) {
-         vec4 splat = biomeSplat();
-         rgh = mix(rgh, texture2D(uNR0, vMapUv).a, splat.r);
-         if (uLayerCount > 1.5) rgh = mix(rgh, texture2D(uNR1, vMapUv).a, splat.g);
-         if (uLayerCount > 2.5) rgh = mix(rgh, texture2D(uNR2, vMapUv).a, splat.b);
-         if (uLayerCount > 3.5) rgh = mix(rgh, texture2D(uNR3, vMapUv).a, splat.a);
-       }
-       float sandR = sandMask();
-       if (sandR > 0.001)
-         rgh = mix(rgh, texture2D(uSandNR, vWorldXZ * uSandScale).a, sandR);
-       roughnessFactor *= rgh;`
-    );
-
-    (mat as any)._shaderRefs.push(shader);
-  };
+  return new CustomShaderMaterial({
+    baseMaterial: THREE.MeshStandardMaterial,
+    ...matOpts,
+    vertexShader: TERRAIN_VERTEX_SHADER,
+    fragmentShader: terrainFragmentShader(),
+    uniforms: {
+      uMap2: { value: _emptyTexture },
+      uMixFactor: { value: 0 },
+      uSplatMap: { value: _emptyTexture },
+      uLayer0: { value: _emptyTexture },
+      uLayer1: { value: _emptyTexture },
+      uLayer2: { value: _emptyTexture },
+      uLayer3: { value: _emptyTexture },
+      // Packed normal (RGB) + roughness (A) per layer; base + 4 biome layers.
+      uNRBase: { value: baseNR },
+      uNR0: { value: _flatNRTexture },
+      uNR1: { value: _flatNRTexture },
+      uNR2: { value: _flatNRTexture },
+      uNR3: { value: _flatNRTexture },
+      uLayerCount: { value: 0 },
+      uSplatMin: { value: new THREE.Vector2(0, 0) },
+      uSplatInvSize: { value: new THREE.Vector2(0, 0) },
+      // Lake-bed sand blend: independent of the 4-channel splat budget (which
+      // is already full), masked in-shader by world-XZ distance to each
+      // registered lake. Pure uniform push — no material rebuild (applyLakeSand).
+      uSandAlbedo: { value: _getSandAlbedo() },
+      uSandNR: { value: _sandNRTexture },
+      uSandScale: { value: SAND_UV_SCALE },
+      uSandBlend: { value: 0 },
+      uLakeCount: { value: 0 },
+      // Per-lake: xy = world centre, z = bowl radius, w = shore radius (waterline).
+      uLakes: { value: lakeVecs },
+      // Per river segment: xyzw = (ax, az, bx, bz) world endpoints; dims per
+      // segment: x = shore half-width (waterline), y = outer sand half-width.
+      uRiverSegs: { value: riverSegs },
+      uRiverDims: { value: riverDims },
+      uRiverSegCount: { value: 0 },
+    },
+  }) as unknown as TerrainMaterial;
 }
 
 /** Tracks the splat version last pushed to each field's material uniforms. */
 const _appliedSplatVersion = new WeakMap<State, Map<number, number>>();
 
 /**
- * Push the per-field biome splat (if any) into the material shader uniforms.
- * Idempotent: only re-applies when the splat version changed or the shader was
- * (re)compiled. Layer textures are loaded through the shared cache so they tile
- * identically to the base map.
+ * Push the per-field biome splat (if any) into the material's (live) shader
+ * uniforms. Idempotent: only re-applies when the splat version changed.
+ * Layer textures are loaded through the shared cache so they tile identically
+ * to the base map.
  */
 function applyTerrainSplat(state: State, field: number): void {
   const cfg = getTerrainSplat(state, field);
   if (!cfg) return;
   const mat = getSharedTerrainMaterials(state).get(field);
-  const refs = (mat as any)?._shaderRefs as { uniforms: any }[] | undefined;
-  if (!mat || !refs || refs.length === 0) return;
+  if (!mat) return;
 
   let perState = _appliedSplatVersion.get(state);
   if (!perState) {
@@ -532,43 +553,41 @@ function applyTerrainSplat(state: State, field: number): void {
     .map((u) => (u ? _loadPackedNR(u) : _flatNRTexture));
   while (nrs.length < 4) nrs.push(_flatNRTexture);
 
-  for (const sh of refs) {
-    sh.uniforms.uSplatMap.value = cfg.splatTexture;
-    sh.uniforms.uLayer0.value = layers[0];
-    sh.uniforms.uLayer1.value = layers[1];
-    sh.uniforms.uLayer2.value = layers[2];
-    sh.uniforms.uLayer3.value = layers[3];
-    sh.uniforms.uNR0.value = nrs[0];
-    sh.uniforms.uNR1.value = nrs[1];
-    sh.uniforms.uNR2.value = nrs[2];
-    sh.uniforms.uNR3.value = nrs[3];
-    sh.uniforms.uLayerCount.value = Math.min(4, cfg.layerUrls.length);
-    sh.uniforms.uSplatMin.value.set(cfg.worldMinX, cfg.worldMinZ);
-    sh.uniforms.uSplatInvSize.value.set(
-      cfg.worldSizeX > 0 ? 1 / cfg.worldSizeX : 0,
-      cfg.worldSizeZ > 0 ? 1 / cfg.worldSizeZ : 0
-    );
-  }
+  const u = mat.uniforms;
+  u.uSplatMap.value = cfg.splatTexture;
+  u.uLayer0.value = layers[0];
+  u.uLayer1.value = layers[1];
+  u.uLayer2.value = layers[2];
+  u.uLayer3.value = layers[3];
+  u.uNR0.value = nrs[0];
+  u.uNR1.value = nrs[1];
+  u.uNR2.value = nrs[2];
+  u.uNR3.value = nrs[3];
+  u.uLayerCount.value = Math.min(4, cfg.layerUrls.length);
+  (u.uSplatMin.value as THREE.Vector2).set(cfg.worldMinX, cfg.worldMinZ);
+  (u.uSplatInvSize.value as THREE.Vector2).set(
+    cfg.worldSizeX > 0 ? 1 / cfg.worldSizeX : 0,
+    cfg.worldSizeZ > 0 ? 1 / cfg.worldSizeZ : 0
+  );
   perState.set(field, cfg.version);
 }
 
-/** Last (refs-compiled : lake-count) signature pushed per field — re-push only
- *  on first compile (refs 0→N) or when the lake set changes. */
+/** Last lake-count signature pushed per field — re-push only when the lake
+ *  set changes. */
 const _appliedLakeSig = new WeakMap<State, Map<number, string>>();
 
 /**
- * Push the lake-bed sand blend into the material uniforms: lake centres/radii
- * (world XZ) + master on/off. Idempotent like {@link applyTerrainSplat}: the
- * carve (water LakeApplySystem, group 'setup') registers WaterBodies before
- * this runs (group 'draw'), so the basin reads sandy on the first post-carve
- * frame without any geometry or material rebuild.
+ * Push the lake-bed sand blend into the material's (live) shader uniforms:
+ * lake centres/radii (world XZ) + master on/off. Idempotent like
+ * {@link applyTerrainSplat}: the carve (water LakeApplySystem, group 'setup')
+ * registers WaterBodies before this runs (group 'draw'), so the basin reads
+ * sandy on the first post-carve frame without any geometry or material rebuild.
  */
 function applyLakeSand(state: State, field: number): void {
   const mat = getSharedTerrainMaterials(state).get(field);
-  const refs = (mat as any)?._shaderRefs as { uniforms: any }[] | undefined;
-  if (!mat || !refs || refs.length === 0) return;
+  if (!mat) return;
   const bodies = getWaterBodies(state);
-  const sig = `${refs.length}:${bodies.length}`;
+  const sig = `${bodies.length}`;
   let perState = _appliedLakeSig.get(state);
   if (!perState) {
     perState = new Map();
@@ -624,27 +643,25 @@ function applyLakeSand(state: State, field: number): void {
     }
   }
 
-  for (const sh of refs) {
-    const lakes = sh.uniforms.uLakes.value as THREE.Vector4[];
-    for (let i = 0; i < count; i++) {
-      const b = lakeBodies[i]!;
-      // Guard for legacy bodies without shoreRadius: fall back to 0.7·radius so
-      // the mask degrades gracefully rather than sanding the whole bowl.
-      const shoreR = b.shoreRadius ?? b.radius * 0.7;
-      lakes[i].set(b.x, b.z, b.radius, shoreR);
-    }
-    sh.uniforms.uLakeCount.value = count;
-    const riverSegs = sh.uniforms.uRiverSegs.value as THREE.Vector4[];
-    const riverDims = sh.uniforms.uRiverDims.value as THREE.Vector2[];
-    for (let i = 0; i < segs.length; i++) {
-      const s = segs[i]!;
-      riverSegs[i].set(s.ax, s.az, s.bx, s.bz);
-      riverDims[i].set(s.shoreHalf, s.outerHalf);
-    }
-    sh.uniforms.uRiverSegCount.value = segs.length;
-    sh.uniforms.uSandBlend.value =
-      count > 0 || segs.length > 0 ? SAND_BLEND_MAX : 0;
+  const u = mat.uniforms;
+  const lakes = u.uLakes.value as THREE.Vector4[];
+  for (let i = 0; i < count; i++) {
+    const b = lakeBodies[i]!;
+    // Guard for legacy bodies without shoreRadius: fall back to 0.7·radius so
+    // the mask degrades gracefully rather than sanding the whole bowl.
+    const shoreR = b.shoreRadius ?? b.radius * 0.7;
+    lakes[i].set(b.x, b.z, b.radius, shoreR);
   }
+  u.uLakeCount.value = count;
+  const riverSegs = u.uRiverSegs.value as THREE.Vector4[];
+  const riverDims = u.uRiverDims.value as THREE.Vector2[];
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i]!;
+    riverSegs[i].set(s.ax, s.az, s.bx, s.bz);
+    riverDims[i].set(s.shoreHalf, s.outerHalf);
+  }
+  u.uRiverSegCount.value = segs.length;
+  u.uSandBlend.value = count > 0 || segs.length > 0 ? SAND_BLEND_MAX : 0;
   perState.set(field, sig);
 }
 
@@ -661,12 +678,10 @@ let _heightmapRetryFrame = 0;
 /** Shared materials per terrain field — avoids N duplicate Material instances for N chunks. */
 const _sharedTerrainMaterialsByState = new WeakMap<
   State,
-  Map<number, THREE.MeshStandardMaterial>
+  Map<number, TerrainMaterial>
 >();
 
-function getSharedTerrainMaterials(
-  state: State
-): Map<number, THREE.MeshStandardMaterial> {
+function getSharedTerrainMaterials(state: State): Map<number, TerrainMaterial> {
   let map = _sharedTerrainMaterialsByState.get(state);
   if (!map) {
     map = new Map();
@@ -886,9 +901,7 @@ export const TerrainLodSelectSystem: System = {
             bs.toTex = newTex;
             bs.mix = 0;
             bs.active = true;
-            for (const sh of (mat as any)._shaderRefs || []) {
-              sh.uniforms.uMap2.value = newTex;
-            }
+            mat.uniforms.uMap2.value = newTex;
           } else if (mat) {
             mat.map = newTex;
             mat.needsUpdate = true;
@@ -903,18 +916,14 @@ export const TerrainLodSelectSystem: System = {
         const dt = state.time.deltaTime;
         bs.mix = Math.min(1, bs.mix + dt / 2.0);
         const mat = getSharedTerrainMaterials(state).get(fieldEntity);
-        for (const sh of (mat as any)?._shaderRefs || []) {
-          sh.uniforms.uMixFactor.value = bs.mix;
-        }
+        if (mat) mat.uniforms.uMixFactor.value = bs.mix;
         if (bs.mix >= 1) {
           bs.active = false;
           if (mat && bs.toTex) {
             mat.map = bs.toTex;
             mat.needsUpdate = true;
             bs.fromTex = bs.toTex;
-            for (const sh of (mat as any)._shaderRefs || []) {
-              sh.uniforms.uMixFactor.value = 0;
-            }
+            mat.uniforms.uMixFactor.value = 0;
           }
         }
       }
@@ -1100,8 +1109,7 @@ export const TerrainMeshSystem: System = {
             baseNR = _loadPackedNR(texUrl);
             matOpts.roughnessMap = baseNR;
           }
-          material = new THREE.MeshStandardMaterial(matOpts);
-          _setupBlendShader(material, baseNR);
+          material = buildTerrainMaterial(matOpts, baseNR);
           const bs = _getBlendState(state, field);
           bs.fromTex = matOpts.map as THREE.Texture | null;
           bs.toTex = matOpts.map as THREE.Texture | null;
