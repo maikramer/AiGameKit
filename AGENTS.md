@@ -19,7 +19,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Texture2D/` | Python | `texture2d` | Seamless 2D textures (HF API) |
 | `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (HF API) |
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
-| `Rigging3D/` | Python | `rigging3d` | Auto-rigging (UniRig, Python 3.13) |
+| `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
 | `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `GameDevLab/` | Python | `gamedev-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
@@ -348,7 +348,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 ## Important Notes
 
 - Pre-commit (ruff + mypy) does **not** run VibeGame ESLint/Prettier; use `make lint-vibegame` / `make fmt-check-vibegame` locally or rely on the **vibegame** CI job.
-- Do NOT modify vendored code in `Paint3D/src/paint3d/hy3dpaint/`, `Paint3D/src/paint3d/hunyuan3d-2.1/`, or `Rigging3D/src/rigging3d/unirig/` — these are excluded from lint.
+- Do NOT modify vendored code in `Paint3D/src/paint3d/hy3dpaint/`, `Paint3D/src/paint3d/hunyuan3d-2.1/`, or `Rigging3D/src/rigging3d/skintokens/` — these are excluded from lint.
 - Shared must be installed before any other package: `cd Shared && pip install -e .`
 - Each package may have its own `.venv/` — tests should use the package-local venv.
 - Environment variables are the primary configuration mechanism (see README.md "Environment variables" section).
