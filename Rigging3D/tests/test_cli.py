@@ -5,72 +5,10 @@ from __future__ import annotations
 import json
 import struct
 from pathlib import Path
-from unittest.mock import patch
 
-import pytest
 from click.testing import CliRunner
 from rigging3d import __version__
 from rigging3d.cli import cli
-
-
-def _mock_tree(p: Path) -> None:
-    (p / "configs").mkdir(parents=True)
-    (p / "src").mkdir()
-    # Config files needed when hw-auto auto-enables low_vram on small GPUs.
-    model_dir = p / "configs" / "model"
-    model_dir.mkdir(parents=True, exist_ok=True)
-    (model_dir / "unirig_skin.yaml").write_text("num_train_vertex: 512\n")
-    task_dir = p / "configs" / "task"
-    task_dir.mkdir(parents=True, exist_ok=True)
-    (task_dir / "quick_inference_unirig_skin.yaml").write_text("components:\n  model: unirig_skin\n")
-
-
-def _bash_write_output_fbx(
-    root: Path,
-    script: str,
-    args: list[str],
-    *,
-    python_bin: str | None = None,
-    propagate_profile: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> int:
-    """Simula generate_skeleton / generate_skin: escreve o ficheiro indicado em --output (GLB/FBX)."""
-    if "--output" in args:
-        i = args.index("--output")
-        out = Path(args[i + 1])
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b"mockfbx")
-    return 0
-
-
-def _module_write_glb(root: Path, py: str, module: str, args: list[str], **_kwargs) -> int:
-    """Simula merge: cria o GLB em --output=."""
-    for a in args:
-        if a.startswith("--output="):
-            p = Path(a.split("=", 1)[1])
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_bytes(b"mockglb")
-            return 0
-    return 1
-
-
-def _skeleton_inprocess_mock(root: Path, **kwargs) -> None:
-    """Simula run_skeleton_inprocess: escreve o ficheiro indicado em output_path."""
-    output_path = kwargs.get("output_path")
-    if output_path:
-        p = Path(output_path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"mockfbx")
-
-
-def _skin_inprocess_mock(root: Path, **kwargs) -> None:
-    """Simula run_skin_inprocess: escreve o ficheiro indicado em output_path."""
-    output_path = kwargs.get("output_path")
-    if output_path:
-        p = Path(output_path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b"mockfbx")
-
 
 # ── Help / version ─────────────────────────────────────────────────────
 
@@ -86,396 +24,79 @@ class TestHelp:
         assert result.exit_code == 0
         assert __version__ in result.output
 
-    def test_skeleton_help(self) -> None:
-        result = CliRunner().invoke(cli, ["skeleton", "--help"])
+    def test_pipeline_help(self) -> None:
+        result = CliRunner().invoke(cli, ["pipeline", "--help"])
         assert result.exit_code == 0
         assert "--input" in result.output
         assert "--output" in result.output
+        assert "--num-beams" in result.output
 
-    def test_skin_help(self) -> None:
-        result = CliRunner().invoke(cli, ["skin", "--help"])
-        assert result.exit_code == 0
-        assert "--data-name" in result.output
-
-    def test_merge_help(self) -> None:
-        result = CliRunner().invoke(cli, ["merge", "--help"])
+    def test_transfer_weights_help(self) -> None:
+        result = CliRunner().invoke(cli, ["transfer-weights", "--help"])
         assert result.exit_code == 0
         assert "--source" in result.output
         assert "--target" in result.output
 
-    def test_pipeline_help(self) -> None:
-        result = CliRunner().invoke(cli, ["pipeline", "--help"])
-        assert result.exit_code == 0
-        assert "--keep-temp" in result.output
 
-
-# ── skeleton ───────────────────────────────────────────────────────────
-
-
-class TestSkeleton:
-    def test_requires_bash(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with patch("rigging3d.cli._find_bash", return_value=None):
-            result = CliRunner().invoke(
-                cli,
-                ["skeleton", "-i", "mesh.glb", "-o", "skel.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code != 0
-        assert "bash" in result.output.lower()
-
-    def test_requires_io(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with patch("rigging3d.cli._find_bash", return_value="/bin/bash"):
-            result = CliRunner().invoke(cli, ["skeleton"], catch_exceptions=False)
-        assert result.exit_code != 0
-        assert "--input" in result.output
-
-    def test_mock_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", return_value=0),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["skeleton", "-i", "mesh.glb", "-o", "skel.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code == 0
-        assert "concluído" in result.output.lower()
-
-    def test_nonzero_exit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", return_value=1),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["skeleton", "-i", "mesh.glb", "-o", "skel.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code != 0
-        assert "código 1" in result.output
-
-
-# ── skin ───────────────────────────────────────────────────────────────
-
-
-class TestSkin:
-    def test_mock_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", return_value=0),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["skin", "-i", "skel.glb", "-o", "skin.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code == 0
-        assert "skinning concluído" in result.output.lower()
-
-    def test_nonzero_exit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", return_value=2),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["skin", "-i", "skel.glb", "-o", "skin.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code != 0
-
-    def test_custom_data_name(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        captured_args: list[str] = []
-
-        def fake_run_bash(
-            _root: Path,
-            _script: str,
-            args: list[str],
-            *,
-            python_bin: str | None = None,
-            **_kwargs: object,
-        ) -> int:
-            captured_args.extend(args)
-            return 0
-
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", side_effect=fake_run_bash),
-        ):
-            CliRunner().invoke(
-                cli,
-                ["skin", "-i", "skel.glb", "-o", "skin.glb", "--data-name", "custom.npz"],
-                catch_exceptions=False,
-            )
-        assert "custom.npz" in captured_args
-
-
-# ── merge ──────────────────────────────────────────────────────────────
-
-
-class TestMerge:
-    def test_mock_success(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with patch("rigging3d.cli._run_module", return_value=0):
-            result = CliRunner().invoke(
-                cli,
-                ["merge", "-s", "skin.glb", "-t", "mesh.glb", "-o", "out.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code == 0
-        assert "merge concluído" in result.output.lower()
-
-    def test_nonzero_exit(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        with patch("rigging3d.cli._run_module", return_value=3):
-            result = CliRunner().invoke(
-                cli,
-                ["merge", "-s", "skin.glb", "-t", "mesh.glb", "-o", "out.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code != 0
-
-    def test_calls_src_inference_merge(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        captured: list[str] = []
-
-        def fake_run_module(_root: Path, _py: str, module: str, _args: list[str], **_kw) -> int:
-            captured.append(module)
-            return 0
-
-        with patch("rigging3d.cli._run_module", side_effect=fake_run_module):
-            CliRunner().invoke(
-                cli,
-                ["merge", "-s", "skin.glb", "-t", "mesh.glb", "-o", "out.glb"],
-                catch_exceptions=False,
-            )
-        assert captured == ["src.inference.merge"]
-
-    def test_missing_required_args(self) -> None:
-        result = CliRunner().invoke(cli, ["merge"])
-        assert result.exit_code != 0
-
-
-# ── pipeline ───────────────────────────────────────────────────────────
+# ── pipeline ────────────────────────────────────────────────────────────
 
 
 class TestPipeline:
-    def _setup(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        monkeypatch.setenv("RIGGING3D_ROOT", str(ur))
-        mesh = tmp_path / "m.glb"
-        mesh.write_bytes(b"x")
-        return ur, mesh
-
-    def test_no_bash_required_for_pipeline(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-        out = tmp_path / "o.glb"
-        with (
-            patch("rigging3d.cli._find_bash", return_value=None),
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
-            patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(out)],
-                catch_exceptions=False,
-            )
-        assert result.exit_code == 0
-
-    def test_full_mock(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-        out = tmp_path / "o.glb"
-        with (
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
-            patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(out)],
-                catch_exceptions=False,
-            )
-        assert result.exit_code == 0
-        assert "concluído" in result.output.lower()
-
-    def test_skeleton_failure_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-
-        def _skeleton_fail(root: Path, **kwargs) -> None:
-            raise RuntimeError("skeleton mock failure")
-
-        with patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_fail):
-            result = CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb")],
-                catch_exceptions=False,
-            )
+    def test_requires_input(self) -> None:
+        result = CliRunner().invoke(cli, ["pipeline"], catch_exceptions=False)
         assert result.exit_code != 0
-        assert "skeleton falhou" in result.output.lower()
 
-    def test_skin_failure_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-
-        def _skin_fail(root: Path, **kwargs) -> None:
-            raise RuntimeError("skin mock failure")
-
-        with (
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_fail),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb")],
-                catch_exceptions=False,
-            )
-        assert result.exit_code != 0
-        assert "skin falhou" in result.output.lower()
-
-    def test_merge_failure_aborts(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-        with (
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
-            patch("rigging3d.cli._run_module", return_value=1),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb")],
-                catch_exceptions=False,
-            )
-        assert result.exit_code != 0
-        assert "merge falhou" in result.output.lower()
-
-    def test_work_dir_created(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-        wd = tmp_path / "work"
-        with (
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
-            patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
-        ):
-            CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb"), "--work-dir", str(wd)],
-                catch_exceptions=False,
-            )
-        assert wd.is_dir()
-
-    def test_keep_temp(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-        import tempfile
-
-        created_dirs: list[Path] = []
-        orig_mkdtemp = tempfile.mkdtemp
-
-        def tracking_mkdtemp(**kwargs):
-            d = orig_mkdtemp(**kwargs)
-            created_dirs.append(Path(d))
-            return d
-
-        with (
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
-            patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
-            patch("tempfile.mkdtemp", side_effect=tracking_mkdtemp),
-        ):
-            CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb"), "--keep-temp"],
-                catch_exceptions=False,
-            )
-        assert len(created_dirs) == 1
-        assert created_dirs[0].is_dir()
-
-    def test_temp_cleaned_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        _ur, mesh = self._setup(tmp_path, monkeypatch)
-        import tempfile
-
-        created_dirs: list[Path] = []
-        orig_mkdtemp = tempfile.mkdtemp
-
-        def tracking_mkdtemp(**kwargs):
-            d = orig_mkdtemp(**kwargs)
-            created_dirs.append(Path(d))
-            return d
-
-        with (
-            patch("rigging3d.oneshot.run_skeleton_inprocess", side_effect=_skeleton_inprocess_mock),
-            patch("rigging3d.oneshot.run_skin_inprocess", side_effect=_skin_inprocess_mock),
-            patch("rigging3d.cli._run_module", side_effect=_module_write_glb),
-            patch("tempfile.mkdtemp", side_effect=tracking_mkdtemp),
-        ):
-            CliRunner().invoke(
-                cli,
-                ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "o.glb")],
-                catch_exceptions=False,
-            )
-        assert len(created_dirs) == 1
-        assert not created_dirs[0].exists()
-
-
-# ── root option ────────────────────────────────────────────────────────
-
-
-class TestRootOption:
-    def test_bad_root_errors(self, tmp_path: Path) -> None:
-        bad = tmp_path / "nope"
-        bad.mkdir()
+    def test_requires_existing_input(self, tmp_path: Path) -> None:
         result = CliRunner().invoke(
             cli,
-            ["--root", str(bad), "skeleton", "--help"],
+            ["pipeline", "-i", str(tmp_path / "missing.glb"), "-o", str(tmp_path / "out.glb")],
             catch_exceptions=False,
         )
-        assert result.exit_code == 0
+        assert result.exit_code != 0
 
-    def test_explicit_root_used(self, tmp_path: Path) -> None:
-        ur = tmp_path / "r"
-        _mock_tree(ur)
-        with (
-            patch("rigging3d.cli._find_bash", return_value="/bin/bash"),
-            patch("rigging3d.cli._run_bash", return_value=0),
-        ):
-            result = CliRunner().invoke(
-                cli,
-                ["--root", str(ur), "skeleton", "-i", "mesh.glb", "-o", "skel.glb"],
-                catch_exceptions=False,
-            )
-        assert result.exit_code == 0
+    def test_rejects_bad_quality(self, tmp_path: Path) -> None:
+        mesh = tmp_path / "in.glb"
+        mesh.write_bytes(b"x")
+        result = CliRunner().invoke(
+            cli,
+            ["pipeline", "-i", str(mesh), "-o", str(tmp_path / "out.glb"), "--quality", "ultra-mega"],
+            catch_exceptions=False,
+        )
+        assert result.exit_code != 0
 
 
-# ── _rename_generic_bones ──────────────────────────────────────────────
+# ── transfer-weights ─────────────────────────────────────────────────────
 
-# NPZ parents for a 28-bone humanoid (model output with cls_none).
+
+class TestTransferWeights:
+    def test_requires_source_and_target(self) -> None:
+        result = CliRunner().invoke(cli, ["transfer-weights"], catch_exceptions=False)
+        assert result.exit_code != 0
+
+    def test_output_count_must_match_targets(self, tmp_path: Path) -> None:
+        source = tmp_path / "source.glb"
+        target = tmp_path / "target.glb"
+        source.write_bytes(b"x")
+        target.write_bytes(b"x")
+        result = CliRunner().invoke(
+            cli,
+            [
+                "transfer-weights",
+                "-s",
+                str(source),
+                "-t",
+                str(target),
+                "-o",
+                str(tmp_path / "a.glb"),
+                "-o",
+                str(tmp_path / "b.glb"),
+            ],
+        )
+        assert result.exit_code != 0
+
+
+# ── _rename_generic_bones (classificação topológica) ────────────────────
+
 _HUMANOID_PARENTS = [
     None,
     0,
