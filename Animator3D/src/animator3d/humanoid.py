@@ -171,13 +171,21 @@ class HumanoidRig:
                     out.extend(bag.fcurves)
         return out
 
-    def finish_action(self, action: Any, *, cyclic: bool) -> None:
-        """Bezier auto-clamped em todas as curvas (easing natural)."""
+    def finish_action(self, action: Any, *, cyclic: bool, impact_frames: set[int] | None = None) -> None:
+        """Bezier em todas as curvas. Impact keys (strike/launch/land) ficam com
+        handles livres (``AUTO``) para permitir overshoot/follow-through natural;
+        restantes keys usam ``AUTO_CLAMPED`` (evita oscilação indesejada).
+        """
         for fc in self._action_fcurves(action):
             for kp in fc.keyframe_points:
                 kp.interpolation = "BEZIER"
-                kp.handle_left_type = "AUTO_CLAMPED"
-                kp.handle_right_type = "AUTO_CLAMPED"
+                # Unclamp nos frames de impacto → BEZIER pode overshoot.
+                if impact_frames and int(round(kp.co.x)) in impact_frames:
+                    kp.handle_left_type = "AUTO"
+                    kp.handle_right_type = "AUTO"
+                else:
+                    kp.handle_left_type = "AUTO_CLAMPED"
+                    kp.handle_right_type = "AUTO_CLAMPED"
             fc.update()
 
 
@@ -273,12 +281,17 @@ def _gait_phase_pose(rig: HumanoidRig, phi: float, p: dict[str, float]) -> Pose:
     phi=0: contacto do calcanhar da perna "r". Pernas em anti-fase; braços
     contralaterais. Construída a partir das 4 poses-chave clássicas
     (contact / down / passing / up) com perfis contínuos.
+
+    Usa ``shaped_cos`` (cosseno que desacelera nos picos) para weight shift
+    natural, e quebra a simetria L/R (±3%) para movimento menos robótico.
     """
+    from ._motion import shaped_cos
+
     two_pi = math.tau
 
-    def leg_channels(ph: float) -> tuple[float, float, float]:
+    def leg_channels(ph: float, hip_amp_mult: float = 1.0) -> tuple[float, float, float]:
         """(hip_fwd, knee, foot) para uma perna na fase ph do seu ciclo."""
-        hip = p["hip"] * math.cos(ph * two_pi)
+        hip = p["hip"] * hip_amp_mult * shaped_cos(ph)
         if ph < 0.1:  # contacto: calcanhar, joelho quase esticado
             w = ph / 0.1
             knee = p["knee_stance"] * w
@@ -301,13 +314,15 @@ def _gait_phase_pose(rig: HumanoidRig, phi: float, p: dict[str, float]) -> Pose:
             foot = -p["heel"] * w
         return hip, knee, foot
 
-    hip_r, knee_r, foot_r = leg_channels(phi % 1.0)
-    hip_l, knee_l, foot_l = leg_channels((phi + 0.5) % 1.0)
+    # Assimetria L/R: perna esquerda com 3% menos amplitude (natural).
+    hip_r, knee_r, foot_r = leg_channels(phi % 1.0, hip_amp_mult=1.0)
+    hip_l, knee_l, foot_l = leg_channels((phi + 0.5) % 1.0, hip_amp_mult=0.97)
 
-    arm_r = -p["arm"] * math.cos(phi * two_pi)  # contralateral à perna r
+    # Braços: phase lag subtil (+0.03) — seguem as pernas (overlapping action).
+    arm_r = -p["arm"] * shaped_cos((phi + 0.03) % 1.0)
     arm_l = -arm_r
 
-    pelvis_yaw = -p["pelvis_yaw"] * math.cos(phi * two_pi)
+    pelvis_yaw = -p["pelvis_yaw"] * shaped_cos(phi)
     pelvis_roll = p["pelvis_roll"] * math.sin(phi * two_pi)
     bob = -p["bob"] * math.cos(phi * 2.0 * two_pi)
 
@@ -377,50 +392,49 @@ def gait_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, cycles: flo
 
 
 def idle_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, cycles: float, breath_amp: float) -> None:
+    """Idle com respiração orgânica: sin³ (segura no pico), micro-noise na
+    spine/neck (corpo nunca perfeitamente imóvel) e assimetria L/R."""
+    from ._motion import fbm, shaped_sin
+
     total = frame_end - frame_start
     base = base_pose(rig)
     n_keys = max(int(round(cycles)) * 4, 4)
     for i in range(n_keys + 1):
         t = i / n_keys
         frame = frame_start + round(t * total)
-        breath = math.sin(t * math.tau * cycles)
-        shift = math.sin(t * math.tau)  # transferência de peso lenta, 1 ciclo
+        # sin³ em vez de sin puro: respira "segura" no topo da inspiração.
+        breath = shaped_sin(t, freq=cycles)
+        shift = shaped_sin(t, freq=1.0)  # transferência de peso lenta, 1 ciclo
+        # Micro-noise orgânico (±0.004 rad) — o corpo nunca está perfeitamente imóvel.
+        spine_noise = 0.004 * fbm(t * cycles, seed=1)
+        hip_noise = 0.003 * fbm(t * cycles, seed=2)
         pose = merge(
             base,
-            _spine_pose(rig, lean=breath_amp * breath, sway=0.012 * shift),
-            _hips_pose(rig, yaw=0.025 * shift, roll=-0.015 * shift, up=-0.004 * max(breath, 0.0)),
+            _spine_pose(rig, lean=breath_amp * breath + spine_noise, sway=0.012 * shift),
+            _hips_pose(rig, yaw=0.025 * shift + hip_noise, roll=-0.015 * shift, up=-0.004 * max(breath, 0.0)),
         )
-        # ombros sobem ligeiramente na inspiração; braços acompanham
+        # ombros sobem ligeiramente na inspiração; braços acompanham.
+        # Assimetria L/R: ombro esquerdo com micro-noise independente.
         for side, s in (("r", 1.0), ("l", -1.0)):
             ab = rig.arm_bones(side)
+            shoulder_noise = 0.003 * fbm(t * cycles, seed=3 if side == "r" else 4)
             if "shoulder" in ab:
-                pose = merge(pose, {ab["shoulder"]: {"roll": s * 0.02 * breath}})
+                pose = merge(pose, {ab["shoulder"]: {"roll": s * (0.02 * breath + shoulder_noise)}})
             if ab:
                 pose = merge(pose, {ab["upper"]: {"pitch": 0.018 * breath}})
-        # Weapon (right) arm holds a ready stance: forearm flexed up and hand
-        # drawn slightly inward so a held sword rests in front of the belt
-        # instead of hanging stiff against the thigh.
-        abr = rig.arm_bones("r")
-        if abr:
-            pose = merge(
-                pose,
-                {
-                    abr["upper"]: {"pitch": 0.22, "roll": 0.14},
-                    abr["fore"]: {"pitch": -0.62, "yaw": 0.10},
-                },
-            )
-            if "hand" in abr:
-                pose = merge(pose, {abr["hand"]: {"pitch": -0.12}})
-        # Off (left) hand hangs relaxed and low against the side.
-        abl = rig.arm_bones("l")
-        if abl:
-            pose = merge(
-                pose,
-                {
-                    abl["upper"]: {"roll": -0.20},
-                    abl["fore"]: {"pitch": 0.10},
-                },
-            )
+        # Idle neutro: braços relaxados simétricos ao longo do corpo, sem pose
+        # de guarda de arma. Antes o braço direito era forçado em stance de
+        # espada (pitch=0.22, roll=0.14, forearm flexed -0.62), o que ficava
+        # errado para um humanoid sem arma. As poses de combate vivem agora
+        # só nos clips de attack/sword/chop/axe (que têm a sua própria guard).
+        for side, s in (("r", 1.0), ("l", -1.0)):
+            ab = rig.arm_bones(side)
+            if ab:
+                # Rotação subtil para os braços ficarem ligeiramente afastados
+                # do corpo (não colados à coxa) — adução natural de repouso.
+                pose = merge(pose, {ab["upper"]: {"roll": s * 0.08}})
+                if "fore" in ab:
+                    pose = merge(pose, {ab["fore"]: {"pitch": 0.05}})
         rig.key_pose(frame, pose)
 
 
@@ -430,6 +444,16 @@ def idle_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, cycles: flo
 
 
 def attack_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, strikes: int) -> None:
+    """Golpe amplo à altura do peito/ombro (maos-livres/arma leve).
+
+    Biomecânica: windup ergue o braço para trás/cima até perto do ombro (roll
+    externo forte + pitch elevado), strike é um arco largo que atravessa a
+    partir dessa altura até à frente do peito (nunca cai para a cintura),
+    follow-through onde o braço continua através do alvo e estabiliza.
+    Tronco roda (yaw) para gerar potência; pernas acompanham o peso.
+    """
+    from ._motion import fbm
+
     total = frame_end - frame_start
     strikes = max(1, strikes)
     seg = total / strikes
@@ -437,44 +461,51 @@ def attack_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, strikes: 
     ab = rig.arm_bones("r")
     guard = rig.arm_bones("l")
 
-    def windup() -> Pose:
+    def windup(k: int) -> Pose:
+        # Micro-variação por strike (±3%) para ataques não-idênticos.
+        n = 1.0 + 0.03 * fbm(float(k), seed=1)
         pose = merge(
             base,
-            _hips_pose(rig, yaw=-0.12, up=-0.01),
-            _spine_pose(rig, lean=-0.06, yaw=-0.30, head_counter=False),
-            _leg_pose(rig, "r", hip_fwd=-0.10, knee=0.15),
-            _leg_pose(rig, "l", hip_fwd=0.12, knee=0.10),
+            _hips_pose(rig, yaw=-0.14, up=-0.01),
+            _spine_pose(rig, lean=-0.05, yaw=-0.35 * n, head_counter=False),
+            _leg_pose(rig, "r", hip_fwd=-0.12, knee=0.18),
+            _leg_pose(rig, "l", hip_fwd=0.14, knee=0.12),
         )
         if ab:
+            # Braço recua para trás/cima até perto do ombro: roll externo forte
+            # + pitch elevado (não fica preso à cintura).
             pose = merge(
                 pose,
-                {ab["upper"]: {"pitch": 0.85, "roll": -0.35}},
-                {ab["fore"]: {"pitch": -1.25}},
+                {ab["upper"]: {"pitch": 0.80, "roll": -0.90 * n}},
+                {ab["fore"]: {"pitch": -1.10}},
             )
             if "hand" in ab:
-                pose = merge(pose, {ab["hand"]: {"pitch": -0.25}})
+                pose = merge(pose, {ab["hand"]: {"pitch": -0.20}})
         if guard:
-            pose = merge(pose, {guard["upper"]: {"pitch": -0.35}})
+            pose = merge(pose, {guard["upper"]: {"pitch": -0.35, "roll": 0.25}})
         return pose
 
-    def strike() -> Pose:
+    def strike(k: int) -> Pose:
+        n = 1.0 + 0.03 * fbm(float(k), seed=2)
+        # Strike em arco largo até à altura do peito: braço estendido para a
+        # frente/cima, cotovelo quase esticado — nunca cai para a cintura.
         pose = merge(
             base,
-            _hips_pose(rig, yaw=0.18, pitch=0.10, up=-0.025),
-            _spine_pose(rig, lean=0.32, yaw=0.35, head_counter=False),
-            _leg_pose(rig, "r", hip_fwd=0.18, knee=0.30),
-            _leg_pose(rig, "l", hip_fwd=-0.15, knee=0.20),
+            _hips_pose(rig, yaw=0.20 * n, pitch=0.08, up=-0.02),
+            _spine_pose(rig, lean=0.18, yaw=0.40 * n, head_counter=False),
+            _leg_pose(rig, "r", hip_fwd=0.22, knee=0.28),
+            _leg_pose(rig, "l", hip_fwd=-0.16, knee=0.22),
         )
         if ab:
             pose = merge(
                 pose,
-                {ab["upper"]: {"pitch": -1.15, "roll": -0.10}},
-                {ab["fore"]: {"pitch": -0.20}},
+                {ab["upper"]: {"pitch": -0.30, "roll": 0.80 * n}},
+                {ab["fore"]: {"pitch": -0.15}},
             )
             if "hand" in ab:
-                pose = merge(pose, {ab["hand"]: {"pitch": -0.35}})
+                pose = merge(pose, {ab["hand"]: {"pitch": -0.15}})
         if guard:
-            pose = merge(pose, {guard["upper"]: {"pitch": 0.40}})
+            pose = merge(pose, {guard["upper"]: {"pitch": 0.40, "roll": -0.30}})
         return pose
 
     for k in range(strikes):
@@ -484,9 +515,11 @@ def attack_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int, strikes: 
             return f0 + round(t * seg)
 
         rig.key_pose(at(0.0), base)
-        rig.key_pose(at(0.30), windup())  # antecipação lenta
-        rig.key_pose(at(0.48), strike())  # golpe rápido (snap)
-        rig.key_pose(at(0.58), mix(strike(), base, 0.12))  # follow-through segura
+        rig.key_pose(at(0.30), windup(k))
+        rig.key_pose(at(0.46), strike(k))  # snap rápido
+        # Overshoot: braço continua ~10% além do strike (follow-through).
+        rig.key_pose(at(0.52), mix(strike(k), base, -0.10))
+        rig.key_pose(at(0.64), mix(strike(k), base, 0.15))  # settle
         rig.key_pose(frame_start + round((k + 1) * seg) if k < strikes - 1 else frame_end, base)
 
 
@@ -517,91 +550,142 @@ def _one_arm(rig: HumanoidRig, side: str, *, upper: float, fore: float, roll: fl
 
 
 def mine_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
-    """Pickaxe: two-handed overhead raise then a hard slam down into the ground."""
+    """Picaretada: golpe por cima do ombro com as duas mãos.
+
+    Biomecânica: windup ergue a picareta atrás/cima da cabeça (braços para
+    cima e para trás, tronco inclina-se ligeiramente para trás, Joelhos
+    estendem para carregar); strike é um slam descendente potente (tronco
+    inclina-se para a frente, braços estendem para baixo); follow-through
+    com joelhos que dobram para amorteceem o impacto.
+    """
     total = frame_end - frame_start
     base = base_pose(rig)
 
     def at(t: float) -> int:
         return frame_start + round(t * total)
 
+    # Windup: picareta erguida atrás/cima da cabeça, tronco recua, joelhos estendem.
     raise_ = merge(
         base,
-        _both_arms(rig, upper=1.5, fore=-0.55),
-        _spine_pose(rig, lean=-0.18),
-        _hips_pose(rig, up=0.02),
+        _both_arms(rig, upper=1.85, fore=-0.40),  # braços bem para cima/trás
+        _spine_pose(rig, lean=-0.22),
+        _hips_pose(rig, pitch=-0.12, up=0.03),
+        _leg_pose(rig, "r", knee=0.15),  # pernas quase esticadas (carregar)
+        _leg_pose(rig, "l", knee=0.12),
     )
+    # Strike: slam descendente — braços estendem para baixo, tronco vai à frente.
     slam = merge(
         base,
-        _both_arms(rig, upper=-1.35, fore=-0.15),
-        _spine_pose(rig, lean=0.55),
-        _hips_pose(rig, pitch=0.22, up=-0.04),
-        _leg_pose(rig, "r", knee=0.35),
-        _leg_pose(rig, "l", knee=0.35),
+        _both_arms(rig, upper=-0.45, fore=-0.05),  # braços estendidos para baixo
+        _spine_pose(rig, lean=0.62),  # tronco inclina-se muito para a frente
+        _hips_pose(rig, pitch=0.28, up=-0.05),
+        _leg_pose(rig, "r", knee=0.45),  # joelhos dobram para amorteceem
+        _leg_pose(rig, "l", knee=0.45),
     )
     rig.key_pose(at(0.0), base)
-    rig.key_pose(at(0.35), raise_)
-    rig.key_pose(at(0.52), slam)
-    rig.key_pose(at(0.66), mix(slam, base, 0.2))
+    rig.key_pose(at(0.38), raise_)  # windup longo (carga)
+    rig.key_pose(at(0.52), slam)  # snap rápido
+    rig.key_pose(at(0.60), mix(slam, base, -0.08))  # overshoot
+    rig.key_pose(at(0.72), mix(slam, base, 0.25))  # recover com joelhos
     rig.key_pose(frame_end, base)
 
 
 def chop_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
-    """Axe felling a tree: two-handed diagonal overhead chop across the body."""
+    """Lenhador: golpe diagonal overhead com machado de duas mãos.
+
+    Biomecânica: windup ergue o machado sobre o ombro direito (braços para
+    cima/cima-direita, tronco roda para a direita); strike corta diagonalmente
+    para baixo-esquerda (tronco roda potente para a esquerda, braços estendem).
+    """
     total = frame_end - frame_start
     base = base_pose(rig)
 
     def at(t: float) -> int:
         return frame_start + round(t * total)
 
+    # Windup: machado sobre ombro direito — braços para cima/direita, roda direita.
     raise_ = merge(
         base,
-        _both_arms(rig, upper=1.25, fore=-0.5, roll=0.4),
-        _spine_pose(rig, lean=-0.1, yaw=-0.42),
+        _both_arms(rig, upper=1.45, fore=-0.55, roll=0.55),  # cima + afasta
+        _spine_pose(rig, lean=-0.08, yaw=-0.50),  # roda direita
+        _hips_pose(rig, yaw=-0.18),
+        _leg_pose(rig, "r", hip_fwd=0.10, knee=0.15),
     )
+    # Strike: corta diagonal para baixo-esquerda — roda potente esquerda.
     strike = merge(
         base,
-        _both_arms(rig, upper=-1.0, fore=-0.2, roll=-0.2),
-        _spine_pose(rig, lean=0.35, yaw=0.45),
-        _hips_pose(rig, yaw=0.15),
+        _both_arms(rig, upper=-0.35, fore=-0.10, roll=-0.35),  # baixo + cruzado
+        _spine_pose(rig, lean=0.42, yaw=0.52),  # roda esquerda forte
+        _hips_pose(rig, yaw=0.22, pitch=0.15),
+        _leg_pose(rig, "l", hip_fwd=-0.14, knee=0.30),
     )
     rig.key_pose(at(0.0), base)
-    rig.key_pose(at(0.35), raise_)
-    rig.key_pose(at(0.52), strike)
-    rig.key_pose(at(0.64), mix(strike, base, 0.2))
+    rig.key_pose(at(0.36), raise_)
+    rig.key_pose(at(0.52), strike)  # snap
+    rig.key_pose(at(0.60), mix(strike, base, -0.08))  # overshoot
+    rig.key_pose(at(0.70), mix(strike, base, 0.20))  # recover
     rig.key_pose(frame_end, base)
 
 
 def spear_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
-    """Spear: cock both hands back, then a fast straight thrust + retract."""
+    """Lança: thrust reto com as duas mãos.
+
+    Biomecânica: guarda com a lança segura ao peito (ambas as mãos à frente);
+    recuar (cock) recolhe a lança junto ao corpo, tronco roda para trás, peso
+    na perna de trás; thrust estende ambos os braços em linha recta para a
+    frente, perna de trás empurra, tronco avança; retrair rápido.
+    """
     total = frame_end - frame_start
     base = base_pose(rig)
 
     def at(t: float) -> int:
         return frame_start + round(t * total)
 
+    # Guarda: lança ao peito, ambas as mãos à frente, postura de combate.
+    guard = merge(
+        base,
+        _both_arms(rig, upper=0.15, fore=-0.85),  # mãos ao peito
+        _spine_pose(rig, lean=0.05, yaw=-0.10),
+        _leg_pose(rig, "r", hip_fwd=0.08, knee=0.20),  # guarda
+        _leg_pose(rig, "l", hip_fwd=-0.08, knee=0.18),
+    )
+    # Cock: recuar lança — braços encolhem, tronco roda para trás.
     cock = merge(
         base,
-        _both_arms(rig, upper=0.4, fore=-1.3),
-        _spine_pose(rig, lean=-0.08, yaw=-0.1),
-        _leg_pose(rig, "l", hip_fwd=0.12, knee=0.1),
-        _leg_pose(rig, "r", hip_fwd=-0.1, knee=0.15),
+        _both_arms(rig, upper=0.55, fore=-1.55),  # lança recolhida
+        _spine_pose(rig, lean=-0.05, yaw=-0.25),
+        _hips_pose(rig, yaw=-0.12),
+        _leg_pose(rig, "l", hip_fwd=0.14, knee=0.12),  # peso trás
+        _leg_pose(rig, "r", hip_fwd=-0.10, knee=0.22),
     )
+    # Thrust: estende braços em linha recta, perna de trás empurra.
     thrust = merge(
         base,
-        _both_arms(rig, upper=-0.95, fore=-0.1),
-        _spine_pose(rig, lean=0.28),
-        _leg_pose(rig, "r", hip_fwd=0.25, knee=0.3),
-        _leg_pose(rig, "l", hip_fwd=-0.12),
+        _both_arms(rig, upper=-1.10, fore=-0.05),  # braços estendidos frente
+        _spine_pose(rig, lean=0.25, yaw=0.15),
+        _hips_pose(rig, yaw=0.18, pitch=0.10),
+        _leg_pose(rig, "r", hip_fwd=0.30, knee=0.10),  # perna frente estica
+        _leg_pose(rig, "l", hip_fwd=-0.18, knee=0.35),  # perna trás empurra
     )
-    rig.key_pose(at(0.0), base)
-    rig.key_pose(at(0.32), cock)
-    rig.key_pose(at(0.46), thrust)
-    rig.key_pose(at(0.58), mix(thrust, base, 0.15))
-    rig.key_pose(frame_end, base)
+    rig.key_pose(at(0.0), guard)
+    rig.key_pose(at(0.30), cock)  # recuar
+    rig.key_pose(at(0.46), thrust)  # thrust rápido
+    rig.key_pose(at(0.54), mix(thrust, base, -0.06))  # overshoot subtil
+    rig.key_pose(at(0.66), mix(thrust, base, 0.20))  # retrair
+    rig.key_pose(frame_end, guard)
 
 
 def axe_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
-    """One-handed axe: a heavy, wide horizontal swing (slower wind-up)."""
+    """Machadada lateral à altura do peito (uma mão) — não overhead.
+
+    Biomecânica: golpe de machado de uma mão é um swing LATERAL (arco
+    horizontal), não um corte diagonal overhead — isso fica para o
+    ``chop_clip`` de duas mãos. Windup recua o machado para trás/lateral e
+    ergue-o até à altura do peito (roll externo forte + pitch elevado — não
+    fica preso à cintura), tronco roda para trás para gerar torque; strike é
+    um swing horizontal largo que atravessa a essa mesma altura de trás para
+    a frente (cotovelo estende), tronco roda potente para a frente.
+    """
     total = frame_end - frame_start
     base = base_pose(rig)
     guard = rig.arm_bones("l")
@@ -609,28 +693,44 @@ def axe_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
     def at(t: float) -> int:
         return frame_start + round(t * total)
 
+    # Windup: machado recuado para trás/lateral, cotovelo alto (cocked).
     windup = merge(
         base,
-        _one_arm(rig, "r", upper=0.7, fore=-0.6, roll=-0.7),
-        _spine_pose(rig, yaw=-0.35),
+        _one_arm(rig, "r", upper=0.45, fore=-0.60, roll=-1.15),  # recua lateral + eleva cotovelo
+        _spine_pose(rig, lean=-0.05, yaw=-0.48),  # roda para trás
+        _hips_pose(rig, yaw=-0.20),
+        _leg_pose(rig, "r", hip_fwd=-0.10, knee=0.20),
     )
+    # Strike: swing horizontal largo à altura do peito — braço sobe e estende
+    # para a frente (pitch negativo é o que levanta o braço; roll dá o alcance
+    # lateral), nunca cai de volta à cintura como no golpe antigo.
     strike = merge(
         base,
-        _one_arm(rig, "r", upper=-0.9, fore=-0.15, roll=0.25),
-        _spine_pose(rig, lean=0.3, yaw=0.42),
+        _one_arm(rig, "r", upper=-0.55, fore=-0.20, roll=1.05),  # sobe + estende frente
+        _spine_pose(rig, lean=0.22, yaw=0.52),  # roda potente para a frente
+        _hips_pose(rig, yaw=0.26, pitch=0.08),
+        _leg_pose(rig, "r", hip_fwd=0.20, knee=0.30),
+        _leg_pose(rig, "l", hip_fwd=-0.15, knee=0.22),
     )
     if guard:
-        windup = merge(windup, {guard["upper"]: {"pitch": -0.3}})
-        strike = merge(strike, {guard["upper"]: {"pitch": 0.4}})
+        windup = merge(windup, {guard["upper"]: {"pitch": -0.32, "roll": 0.22}})
+        strike = merge(strike, {guard["upper"]: {"pitch": 0.38, "roll": -0.26}})
     rig.key_pose(at(0.0), base)
-    rig.key_pose(at(0.40), windup)
-    rig.key_pose(at(0.56), strike)
-    rig.key_pose(at(0.68), mix(strike, base, 0.15))
+    rig.key_pose(at(0.40), windup)  # windup longo (machado é pesado)
+    rig.key_pose(at(0.56), strike)  # swing
+    rig.key_pose(at(0.64), mix(strike, base, -0.12))  # overshoot (inércia)
+    rig.key_pose(at(0.74), mix(strike, base, 0.18))  # recover
     rig.key_pose(frame_end, base)
 
 
 def sword_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
-    """One-handed sword: a crisp overhead diagonal slash."""
+    """Espada: slash diagonal cortante (uma mão).
+
+    Biomecânica: windup recua a espada sobre o ombro (cima/trás), tronco roda
+    para trás; strike é um slash descendente-diagonal rápido (corte cortante,
+    não impacto — a lâmina atravessa), tronco roda para a frente; follow-through
+    onde a espada continua através do alvo até à cintura oposta.
+    """
     total = frame_end - frame_start
     base = base_pose(rig)
     guard = rig.arm_bones("l")
@@ -638,44 +738,73 @@ def sword_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
     def at(t: float) -> int:
         return frame_start + round(t * total)
 
+    # Windup: espada bem alta sobre o ombro — cima/trás, roda direita. (pitch
+    # positivo grande é o que ergue o braço sobre o ombro; roll fica perto do
+    # neutro para não cancelar a elevação — mesma lógica do ``chop_clip``.)
     windup = merge(
         base,
-        _one_arm(rig, "r", upper=0.95, fore=-0.9, roll=-0.6),
-        _spine_pose(rig, lean=-0.05, yaw=-0.5),
+        _one_arm(rig, "r", upper=1.45, fore=-0.55, roll=0.55),  # bem alto sobre o ombro
+        _spine_pose(rig, lean=-0.08, yaw=-0.55),  # roda direita
+        _hips_pose(rig, yaw=-0.18),
+        _leg_pose(rig, "r", hip_fwd=-0.12, knee=0.18),
     )
+    # Strike: slash descendente-diagonal amplo — pitch negativo levanta e projecta
+    # o braço para a frente enquanto desce/cruza, lâmina atravessa até à anca
+    # esquerda sem o braço cair de volta à cintura.
     strike = merge(
         base,
-        _one_arm(rig, "r", upper=-1.2, fore=-0.2, roll=0.55),
-        _spine_pose(rig, lean=0.3, yaw=0.5),
+        _one_arm(rig, "r", upper=-0.45, fore=-0.10, roll=-0.35),  # desce/cruza, mantém altura
+        _spine_pose(rig, lean=0.28, yaw=0.48),  # roda esquerda forte
+        _hips_pose(rig, yaw=0.22, pitch=0.12),
+        _leg_pose(rig, "r", hip_fwd=0.24, knee=0.26),
+        _leg_pose(rig, "l", hip_fwd=-0.16, knee=0.24),
     )
     if guard:
-        strike = merge(strike, {guard["upper"]: {"pitch": 0.3}})
+        windup = merge(windup, {guard["upper"]: {"pitch": -0.30, "roll": 0.20}})
+        strike = merge(strike, {guard["upper"]: {"pitch": 0.32, "roll": -0.28}})
     rig.key_pose(at(0.0), base)
-    rig.key_pose(at(0.30), windup)
-    rig.key_pose(at(0.46), strike)
-    rig.key_pose(at(0.58), mix(strike, base, 0.12))
+    rig.key_pose(at(0.28), windup)
+    rig.key_pose(at(0.42), strike)  # slash rápido (snap)
+    rig.key_pose(at(0.50), mix(strike, base, -0.12))  # overshoot (inércia do corte)
+    rig.key_pose(at(0.62), mix(strike, base, 0.18))  # recover
     rig.key_pose(frame_end, base)
 
 
 def gather_clip(rig: HumanoidRig, *, frame_start: int, frame_end: int) -> None:
-    """Bare-hand gather: crouch and reach down to pick something off the ground."""
+    """Apanhar do chão: agachar, alcançar com ambas as mãos, levantar.
+
+    Biomecânica: agachar com as duas pernas, tronco inclina-se para a frente;
+    braços estendem para baixo para apanhar; recuperar com as pernas a estender
+    e o tronco a endireitar, mãos sobem ao peito.
+    """
     total = frame_end - frame_start
     base = base_pose(rig)
 
     def at(t: float) -> int:
         return frame_start + round(t * total)
 
+    # Crouch + reach: agachar, inclinar à frente, alcançar com ambas as mãos.
     reach = merge(
         base,
-        _hips_pose(rig, pitch=0.45, up=-0.16),
-        _spine_pose(rig, lean=0.55),
-        _leg_pose(rig, "r", knee=0.55, hip_fwd=0.1),
-        _leg_pose(rig, "l", knee=0.55, hip_fwd=0.1),
-        _one_arm(rig, "r", upper=-1.0, fore=-0.35),
+        _hips_pose(rig, pitch=0.50, up=-0.18),
+        _spine_pose(rig, lean=0.60),
+        _leg_pose(rig, "r", knee=0.60, hip_fwd=0.12),
+        _leg_pose(rig, "l", knee=0.60, hip_fwd=0.12),
+        _both_arms(rig, upper=-0.85, fore=-0.30),  # ambas as mãos para baixo
+    )
+    # Lift: levantar — pernas estendem, tronco endireita, mãos ao peito.
+    lift = merge(
+        base,
+        _hips_pose(rig, up=0.01),
+        _spine_pose(rig, lean=0.05),
+        _leg_pose(rig, "r", knee=0.15),
+        _leg_pose(rig, "l", knee=0.15),
+        _both_arms(rig, upper=0.25, fore=-0.90),  # mãos sobem ao peito
     )
     rig.key_pose(at(0.0), base)
-    rig.key_pose(at(0.40), reach)
-    rig.key_pose(at(0.62), reach)
+    rig.key_pose(at(0.35), reach)
+    rig.key_pose(at(0.55), reach)  # segurar a apanhar
+    rig.key_pose(at(0.75), lift)  # levantar
     rig.key_pose(frame_end, base)
 
 
@@ -926,6 +1055,22 @@ def try_humanoid_clip(
     elif kind == "gather":
         gather_clip(rig, frame_start=frame_start, frame_end=frame_end)
 
-    rig.finish_action(action, cyclic=cyclic)
+    # Frames de impacto (strike/launch/land) para unclamp → overshoot natural.
+    # Conforme o tipo de clip, calcular os frames onde o movimento atinge o pico.
+    impact_frames: set[int] = set()
+    total = frame_end - frame_start
+    if kind in {"attack", "mine", "chop", "spear", "axe", "sword"}:
+        # Strike frame: ~meio do clip (pico do golpe).
+        impact_frames.add(frame_start + round(total * 0.50))
+    elif kind == "jump":
+        # Launch (crouch → vôo) e land (impacto do pouso).
+        impact_frames.add(frame_start + round(total * 0.25))  # launch
+        impact_frames.add(frame_start + round(total * 0.75))  # peak
+        impact_frames.add(frame_start + round(total * 0.85))  # land
+    elif kind == "fall":
+        # Impacto no final (preparação de aterragem).
+        impact_frames.add(frame_start + round(total * 0.85))
+
+    rig.finish_action(action, cyclic=cyclic, impact_frames=impact_frames)
     bpy_ops.finalize_current_action_to_nla(armature_name)
     return True
