@@ -49,9 +49,7 @@ profiles:
       face_ratio: 0.25
       texture_size: 1024
     rigging3d:
-      smooth_iterations: 1
       groups_per_vertex: 4
-      low_vram: true
     terrain3d:
       size: 512
       world_size: 256.0
@@ -112,7 +110,6 @@ profiles:
       face_ratio: 0.5
       texture_size: 1024
     rigging3d:
-      smooth_iterations: 2
       groups_per_vertex: 4
     terrain3d:
       size: 1024
@@ -174,7 +171,6 @@ profiles:
       face_ratio: 1.0
       texture_size: 2048
     rigging3d:
-      smooth_iterations: 3
       groups_per_vertex: 8
     terrain3d:
       size: 2048
@@ -236,7 +232,6 @@ profiles:
       face_ratio: 2.0
       texture_size: 2048
     rigging3d:
-      smooth_iterations: 5
       groups_per_vertex: 12
     terrain3d:
       size: 4096
@@ -298,7 +293,6 @@ profiles:
       face_ratio: 0.0
       texture_size: 4096
     rigging3d:
-      smooth_iterations: 8
       groups_per_vertex: 16
     terrain3d:
       size: 4096
