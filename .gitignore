@@ -135,6 +135,11 @@ VibeGame/screenshot*.png
 # Stray root debug screenshots (scale tests, manual browser captures, etc.)
 /scale-*.jpeg
 /user-view.jpeg
+/point-shadow-check.png
+/terrain-qa-*.png
+
+# OpenCode agent workspace (local state, plans, evidence, notepads)
+.omo/
 
 # Backup de assets regenerados (ex.: bgm_*.orig.ogg antes do seamless-loop)
 *.orig.ogg
