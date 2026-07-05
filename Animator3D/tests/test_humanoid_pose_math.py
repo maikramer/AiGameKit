@@ -394,7 +394,12 @@ class TestGaitPhasePose:
         assert _poses_approx_equal(p0, p1)
 
     def test_half_cycle_mirrors_legs(self) -> None:
-        """phi=0 e phi=0.5 trocam os valores de pitch das pernas direita/esquerda."""
+        """phi=0 e phi=0.5 trocam os valores de pitch das pernas direita/esquerda.
+
+        Desde a introdução de assimetria L/R orgânica (±3%), o espelho não é
+        perfeito — a perna esquerda tem ~3% menos amplitude. Validamos que o
+        espelho é aproximado (within 5%) em vez de exato.
+        """
         rig = _make_rig(MIXAMO_CHAINS)
         right_upper = MIXAMO_CHAINS["leg_r"][0]
         left_upper = MIXAMO_CHAINS["leg_l"][0]
@@ -407,10 +412,9 @@ class TestGaitPhasePose:
         right_at_half = _channel(p_half, right_upper, "pitch")
         left_at_half = _channel(p_half, left_upper, "pitch")
 
-        # perna direita em phi=0 == perna esquerda em phi=0.5 (espelho)
-        assert right_at_0 == pytest.approx(left_at_half)
-        # perna esquerda em phi=0 == perna direita em phi=0.5 (espelho)
-        assert left_at_0 == pytest.approx(right_at_half)
+        # Espelho aproximado (within 5% — assimetria L/R orgânica).
+        assert right_at_0 == pytest.approx(left_at_half, rel=0.05)
+        assert left_at_0 == pytest.approx(right_at_half, rel=0.05)
 
     def test_arms_contralateral_to_legs(self) -> None:
         """Braço direito balança em anti-fase com a perna direita no contacto."""

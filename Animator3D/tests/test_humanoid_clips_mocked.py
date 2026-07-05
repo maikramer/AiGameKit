@@ -165,6 +165,23 @@ class TestIdleClip:
         humanoid.idle_clip(rig, frame_start=5, frame_end=40, cycles=1.0, breath_amp=0.02)
         assert rig.keyframes[0][0] == 5
 
+    def test_idle_is_neutral_no_weapon_pose(self) -> None:
+        """Idle não deve forçar o braço direito em pose de guarda de arma.
+
+        Regressão: antes o idle hardcoded pitch=0.22/roll=0.14 no RightArm e
+        pitch=-0.62 no RightForeArm (guarda de espada). Agora deve ser neutro.
+        """
+        rig = _make_rig()
+        humanoid.idle_clip(rig, frame_start=1, frame_end=72, cycles=2.0, breath_amp=0.035)
+        ab = rig.arm_bones("r")
+        for _frame, pose in rig.keyframes:
+            upper = pose.get(ab["upper"], {})
+            # Idle neutro: pitch do braço deve ser ~0 (respiração subtil), não 0.22.
+            assert abs(upper.get("pitch", 0.0)) < 0.1, f"RightArm pitch={upper.get('pitch')} — idle não é neutro"
+            fore = pose.get(ab["fore"], {})
+            # Forearm não deve estar flexionado em guarda (-0.62).
+            assert abs(fore.get("pitch", 0.0)) < 0.3, f"RightForeArm pitch={fore.get('pitch')} — pose de arma"
+
 
 # ---------------------------------------------------------------------------
 # jump_clip
@@ -226,20 +243,21 @@ class TestAttackClip:
         _assert_frames_in_range(rig, 1, 24)
 
     def test_single_strike_keyframe_count(self) -> None:
-        # base, windup, strike, follow-through, end = 5
+        # base, windup, strike, overshoot, settle, end = 6 (desde a revisão
+        # biomecânica que adicionou overshoot + settle como keys separadas).
         rig = _make_rig()
         humanoid.attack_clip(rig, frame_start=1, frame_end=24, strikes=1)
-        assert len(rig.keyframes) == 5
+        assert len(rig.keyframes) == 6
 
     def test_two_strikes_doubles_keys(self) -> None:
         rig = _make_rig()
         humanoid.attack_clip(rig, frame_start=1, frame_end=48, strikes=2)
-        assert len(rig.keyframes) == 10
+        assert len(rig.keyframes) == 12
 
     def test_zero_strikes_clamped_to_one(self) -> None:
         rig = _make_rig()
         humanoid.attack_clip(rig, frame_start=1, frame_end=24, strikes=0)
-        assert len(rig.keyframes) == 5
+        assert len(rig.keyframes) == 6
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +367,8 @@ class TestTryHumanoidClipDispatch:
             strikes=2,
         )
         assert result is True
-        assert len(rig.keyframes) == 10
+        # 6 keys/strike (base, windup, strike, overshoot, settle, end) × 2 = 12.
+        assert len(rig.keyframes) == 12
 
     @pytest.mark.parametrize("kind", ["mine", "chop", "spear", "axe", "sword", "gather", "turn"])
     def test_tool_clips_dispatch(self, kind: str, monkeypatch: MonkeyPatch) -> None:
