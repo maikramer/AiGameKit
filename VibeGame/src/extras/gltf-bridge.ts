@@ -12,7 +12,11 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { clone as cloneSkinnedObject } from 'three/examples/jsm/utils/SkeletonUtils.js';
 
 import type { State } from '../core';
-import { getRenderingContext, getScene } from '../plugins/rendering';
+import {
+  getRenderingContext,
+  getScene,
+  setupCsmMaterials,
+} from '../plugins/rendering';
 import { getSceneGeneration } from './scene-generation';
 import { GltfAnimator } from './gltf-animator';
 
@@ -383,6 +387,7 @@ export function loadGltfLodToSceneForEntity(
         getSceneGeneration(state) !== gen;
       if (!orphaned) {
         scene.add(root);
+        setupCsmMaterials(state, root);
       }
       return root;
     })
@@ -420,6 +425,7 @@ export function loadGltfToSceneForEntity(
         getSceneGeneration(state) !== gen;
       if (!orphaned) {
         scene.add(clone);
+        setupCsmMaterials(state, clone);
       }
       return clone;
     })
@@ -464,6 +470,7 @@ export function loadGltfAnimatedForEntity(
         disposeObject3DResources(gltf.scene);
       } else {
         scene.add(gltf.scene);
+        setupCsmMaterials(state, gltf.scene);
       }
       return gltf;
     })
@@ -534,6 +541,7 @@ export function loadGltfToSceneWithAnimatorForEntity(
             return;
           }
           scene.add(gltf.scene);
+          setupCsmMaterials(state, gltf.scene);
           const animator =
             gltf.animations.length > 0
               ? new GltfAnimator(gltf, {

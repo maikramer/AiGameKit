@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import type { State, System } from '../../core';
-import { getScene } from '../rendering';
+import { getScene, setupCsmMaterial } from '../rendering';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import { spawnParticleBurst } from '../particles/utils';
 
@@ -565,6 +565,7 @@ export function startRockShatter(
     metalness: 0,
     flatShading: true,
   });
+  setupCsmMaterial(state, material);
 
   const pieces: ShatterPiece[] = [];
   for (let i = 0; i < SHATTER_PIECES; i++) {
