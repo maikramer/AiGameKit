@@ -22,6 +22,10 @@ const _color = new THREE.Color();
 const _zeroMatrix = new THREE.Matrix4();
 _zeroMatrix.makeScale(0, 0, 0);
 
+// Not CSM-patched (setupCsmMaterial): CSM's shader patch conflicts with
+// THREE.InstancedMesh's own instancing attributes (GL_INVALID_OPERATION
+// vertex-attribute-type mismatch at draw time) — these pooled debug
+// primitives (Box/Sphere) just don't get cascaded shadows while CSM is on.
 export function getOrCreateMesh(
   context: RenderingContext,
   shapeId: number,

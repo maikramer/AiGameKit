@@ -1,5 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
+import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import type { State } from '../../core';
 import { defineQuery, type System } from '../../core';
 import { WorldTransform } from '../transforms';
@@ -18,6 +19,7 @@ import { getOrCreateMesh, hideInstance, updateInstance } from './operations';
 import { getGltfRootGroup } from '../gltf-xml/group-registry';
 import {
   applyNeutralEnvironment,
+  clearCsmMaterialPatch,
   createRenderer,
   createThreeCamera,
   deleteCanvasElement,
@@ -134,12 +136,14 @@ interface PointLightCache {
   intensity: number;
   distance: number;
   decay: number;
+  castShadow: number;
 }
 interface SpotLightCache {
   color: number;
   intensity: number;
   distance: number;
   decay: number;
+  castShadow: number;
   angle: number;
   penumbra: number;
 }
@@ -155,10 +159,16 @@ const pointLightCache = new WeakMap<THREE.PointLight, PointLightCache>();
 const spotLightCache = new WeakMap<THREE.SpotLight, SpotLightCache>();
 
 // Soft budget guard, not a shader-uniform limit (three recompiles per light
-// count). Point lights here don't cast shadows, so they're cheap; 12 comfortably
-// covers a lit village (torches, hearths, beacons) on desktop GPUs.
+// count). 12 comfortably covers a lit village (torches, hearths, beacons) on
+// desktop GPUs. Shadow casting is opt-in per light (`cast-shadow="1"`) — most
+// of the 12 are expected to just light, not cast, since a cube-map shadow
+// pass per caster adds up fast (see POINT_SHADOW_MAP_SIZE below).
 const MAX_POINT_LIGHTS = 12;
 const MAX_SPOT_LIGHTS = 2;
+/** Small on purpose — point-light shadows render 6 faces per caster per
+ * frame, so this is the per-face size, not a single 2D map like the sun. */
+const POINT_SHADOW_MAP_SIZE = 512;
+const SPOT_SHADOW_MAP_SIZE = 1024;
 
 function resolveShadowCenter(state: State): THREE.Vector3 {
   _shadowCenter.copy(SHADOW_CONFIG.FIXED_FRUSTUM_CENTER);
@@ -304,6 +314,108 @@ export const DistanceCullSystem: System = {
   },
 };
 
+interface CsmCache {
+  cascades: number;
+  maxFar: number;
+  shadowMapSize: number;
+  color: number;
+}
+const csmCacheByState = new WeakMap<State, CsmCache>();
+
+function disposeCsm(state: State, scene: THREE.Scene): void {
+  const context = getRenderingContext(state);
+  if (!context.csm) return;
+  // Un-patch so a later CSM instance (recreated with different settings, or
+  // re-enabled after being turned off) re-runs setupMaterial instead of
+  // silently staying in the disposed (non-CSM) shader state csm.dispose()
+  // below leaves them in.
+  // @types/three's `shaders: Map<unknown, string>` doesn't match the actual
+  // `Map<Material, object|null>` from the JS source — cast to the real type.
+  for (const mat of context.csm.shaders.keys() as IterableIterator<THREE.Material>) {
+    clearCsmMaterialPatch(mat);
+  }
+  for (const light of context.csm.lights) {
+    scene.remove(light.target);
+    scene.remove(light);
+  }
+  context.csm.dispose();
+  context.csm = null;
+  csmCacheByState.delete(state);
+}
+
+/**
+ * Cascaded shadow maps for one `DirectionalLight` entity opted in via
+ * `directional-light="csm: 1"`. CSM owns its own internal directional lights
+ * (one per cascade) — this entity never gets a plain `THREE.DirectionalLight`
+ * while csm is active. Cascade count / max distance / map size can't change
+ * on a live `CSM` instance, so those trigger a full dispose + recreate;
+ * color/intensity/direction update in place every frame.
+ */
+function updateCsmDirectionalLight(
+  state: State,
+  scene: THREE.Scene,
+  entity: number
+): void {
+  const context = getRenderingContext(state);
+  const camEntities = mainCameraQuery(state.world);
+  const camera =
+    camEntities.length > 0 ? threeCameras.get(camEntities[0]!) : undefined;
+  if (!camera) return;
+
+  const cascades = Math.max(1, DirectionalLight.csmCascades[entity]);
+  const maxFar = DirectionalLight.csmMaxFar[entity];
+  const shadowMapSize = DirectionalLight.shadowMapSize[entity];
+  const color = DirectionalLight.color[entity];
+  const intensity = DirectionalLight.intensity[entity];
+
+  let cache = csmCacheByState.get(state);
+  if (
+    !context.csm ||
+    !cache ||
+    cache.cascades !== cascades ||
+    cache.maxFar !== maxFar ||
+    cache.shadowMapSize !== shadowMapSize
+  ) {
+    disposeCsm(state, scene);
+    context.csm = new CSM({
+      camera,
+      parent: scene,
+      cascades,
+      maxFar,
+      shadowMapSize,
+      lightIntensity: intensity,
+    });
+    cache = { cascades, maxFar, shadowMapSize, color: NaN };
+    csmCacheByState.set(state, cache);
+  }
+
+  const csm = context.csm;
+
+  // CSM's lightDirection is the direction light TRAVELS (light → scene);
+  // our directionX/Y/Z is the direction TOWARD the light source (scene →
+  // light, same convention the plain-light path uses to place the light
+  // behind the shadow-camera target) — negate to convert between them.
+  _lightDir
+    .set(
+      DirectionalLight.directionX[entity],
+      DirectionalLight.directionY[entity],
+      DirectionalLight.directionZ[entity]
+    )
+    .normalize()
+    .negate();
+  csm.lightDirection.copy(_lightDir);
+
+  csm.lightIntensity = intensity;
+  if (cache.color !== color) {
+    for (const light of csm.lights) light.color.setHex(color);
+    cache.color = color;
+  }
+  for (const light of csm.lights) light.intensity = intensity;
+
+  csm.updateFrustums();
+  csm.update();
+}
+
 export const LightSyncSystem: System = {
   group: 'draw',
   update(state: State) {
@@ -374,7 +486,13 @@ export const LightSyncSystem: System = {
     }
 
     const directionals = directionalQuery(state.world);
+    let csmActive = false;
     for (const entity of directionals) {
+      if (DirectionalLight.csm[entity] === 1) {
+        csmActive = true;
+        updateCsmDirectionalLight(state, scene, entity);
+        continue;
+      }
       let light = entityToDirectionalLight.get(entity);
       if (!light) {
         // Adopt the bootstrap directional light (already in the scene with its
@@ -511,6 +629,10 @@ export const LightSyncSystem: System = {
         light.castShadow = false;
       }
     }
+    // No entity currently wants CSM this frame — release it (it owns its own
+    // internal directional lights, so leaving it around would keep shadowing
+    // the scene with a sun no `DirectionalLight` entity asked for anymore).
+    if (!csmActive) disposeCsm(state, scene);
   },
 };
 
@@ -566,9 +688,16 @@ export const PointSpotLightSyncSystem: System = {
       const intensity = PointLight.intensity[eid];
       const distance = PointLight.distance[eid];
       const decay = PointLight.decay[eid];
+      const castShadow = PointLight.castShadow[eid];
       let cache = pointLightCache.get(light);
       if (cache === undefined) {
-        cache = { color: NaN, intensity: NaN, distance: NaN, decay: NaN };
+        cache = {
+          color: NaN,
+          intensity: NaN,
+          distance: NaN,
+          decay: NaN,
+          castShadow: NaN,
+        };
         pointLightCache.set(light, cache);
       }
       if (cache.color !== color) {
@@ -586,6 +715,26 @@ export const PointSpotLightSyncSystem: System = {
       if (cache.decay !== decay) {
         light.decay = decay;
         cache.decay = decay;
+      }
+      if (cache.castShadow !== castShadow) {
+        light.castShadow = castShadow === 1;
+        if (light.castShadow) {
+          // Cube-map shadow (6 faces) — a torch/lantern is a small local
+          // light, so a modest map keeps the per-light cost sane even with
+          // several casters active at once (each author opts in per-light
+          // via `cast-shadow="1"`, there's no automatic global cap here).
+          light.shadow.mapSize.set(
+            POINT_SHADOW_MAP_SIZE,
+            POINT_SHADOW_MAP_SIZE
+          );
+          light.shadow.camera.near = 0.1;
+          // `distance` 0 means "no falloff cutoff" in three's PointLight, not
+          // "no range" — fall back to a torch-scale far plane in that case.
+          light.shadow.camera.far = distance > 0 ? distance : 20;
+          light.shadow.bias = -0.001;
+          light.shadow.needsUpdate = true;
+        }
+        cache.castShadow = castShadow;
       }
 
       _lightPosition.set(
@@ -627,6 +776,7 @@ export const PointSpotLightSyncSystem: System = {
       const decay = SpotLight.decay[eid];
       const angle = SpotLight.angle[eid];
       const penumbra = SpotLight.penumbra[eid];
+      const castShadow = SpotLight.castShadow[eid];
       let cache = spotLightCache.get(light);
       if (cache === undefined) {
         cache = {
@@ -634,6 +784,7 @@ export const PointSpotLightSyncSystem: System = {
           intensity: NaN,
           distance: NaN,
           decay: NaN,
+          castShadow: NaN,
           angle: NaN,
           penumbra: NaN,
         };
@@ -662,6 +813,19 @@ export const PointSpotLightSyncSystem: System = {
       if (cache.penumbra !== penumbra) {
         light.penumbra = penumbra;
         cache.penumbra = penumbra;
+      }
+      if (cache.castShadow !== castShadow) {
+        light.castShadow = castShadow === 1;
+        if (light.castShadow) {
+          // Perspective shadow camera (not a cube map) — spot lights are
+          // capped at MAX_SPOT_LIGHTS=2, so a sharper map is affordable.
+          light.shadow.mapSize.set(SPOT_SHADOW_MAP_SIZE, SPOT_SHADOW_MAP_SIZE);
+          light.shadow.camera.near = 0.1;
+          light.shadow.camera.far = distance > 0 ? distance : 30;
+          light.shadow.bias = -0.001;
+          light.shadow.needsUpdate = true;
+        }
+        cache.castShadow = castShadow;
       }
 
       _lightPosition.set(

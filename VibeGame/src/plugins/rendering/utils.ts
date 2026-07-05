@@ -266,6 +266,74 @@ export interface RenderingContext {
   hasShownPerformanceWarning: boolean;
   /** Populated asynchronously by `detectGpuTier` once the renderer exists. */
   gpuTier?: import('detect-gpu').TierResult | null;
+  /** Owns cascaded shadow maps when `directional-light="csm: 1"` is set —
+   * see `LightSyncSystem` (systems.ts). Mesh creation sites call
+   * `setupCsmMaterial`/`setupCsmMaterials` below (alongside setting
+   * `receiveShadow`) so the material picks up the CSM shader patch. */
+  csm?: import('three/examples/jsm/csm/CSM.js').CSM | null;
+}
+
+export function getCsm(
+  state: State
+): import('three/examples/jsm/csm/CSM.js').CSM | null {
+  return stateToRenderingContext.get(state)?.csm ?? null;
+}
+
+/** Materials patched via {@link setupCsmMaterial} so far, so re-loading the
+ * same shared/instanced material doesn't re-run `csm.setupMaterial` (cheap
+ * but not idempotent-free — it reassigns `onBeforeCompile`/`defines` each
+ * call). Cleared per-material when CSM is disposed/recreated (see
+ * `disposeCsm` in systems.ts), since a stale entry would skip re-patching
+ * against the new CSM instance. */
+const csmPatchedMaterials = new WeakSet<THREE.Material>();
+
+export function isCsmMaterialPatched(material: THREE.Material): boolean {
+  return csmPatchedMaterials.has(material);
+}
+
+export function clearCsmMaterialPatch(material: THREE.Material): void {
+  csmPatchedMaterials.delete(material);
+}
+
+/**
+ * Patches one material so its lighting is gated per-cascade instead of
+ * getting the full contribution of *every* cascade's internal directional
+ * light (CSM has no distance falloff to stop that on its own — an unpatched
+ * material would render far too bright with more than one cascade active).
+ * No-op when CSM isn't active for `state`, the material was already patched,
+ * or it's a `CustomShaderMaterial` (water/terrain): that library also owns
+ * `onBeforeCompile` for its own shader injection, and CSM's setupMaterial()
+ * would clobber it — breaking the custom shader, not just its shadows. Its
+ * `__csm` internal field (an unrelated naming coincidence with *this*
+ * cascaded-shadow-maps CSM) is the only reliable way to tell it apart from a
+ * real `MeshStandardMaterial`.
+ */
+export function setupCsmMaterial(
+  state: State,
+  material: THREE.Material | null | undefined
+): void {
+  if (!material) return;
+  const csm = getCsm(state);
+  if (!csm || csmPatchedMaterials.has(material)) return;
+  if ('__csm' in material) return;
+  const standard = material as THREE.MeshStandardMaterial;
+  if (standard.isMeshStandardMaterial !== true) return;
+  csm.setupMaterial(standard);
+  csmPatchedMaterials.add(material);
+}
+
+/** {@link setupCsmMaterial} for every mesh material under `root` — call once
+ * right after adding a newly loaded/created subtree to the scene. */
+export function setupCsmMaterials(state: State, root: THREE.Object3D): void {
+  if (!getCsm(state)) return;
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh !== true) return;
+    const materials = Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material];
+    for (const mat of materials) setupCsmMaterial(state, mat);
+  });
 }
 
 const stateToRenderingContext = new WeakMap<State, RenderingContext>();
@@ -422,9 +490,14 @@ export async function createRenderer(
   renderer.localClippingEnabled = true;
 
   renderer.shadowMap.enabled = true;
-  // PCFSoftShadowMap is deprecated in modern three (silently falls back to
-  // hard PCFShadowMap); VSMShadowMap is the maintained soft-shadow path.
-  renderer.shadowMap.type = THREE.VSMShadowMap;
+  // VSMShadowMap gives the softest edges but only supports directional/spot
+  // shadow maps — WebGL logs a warning per frame per light and silently
+  // fails for PointLight cube shadows (torches/lanterns). PCFShadowMap works
+  // uniformly across every light type; `shadow.radius` still gives a (less
+  // precise) soft-edge multi-tap blur under PCF, so directional shadows stay
+  // reasonably soft despite the switch. PCFSoftShadowMap is deprecated
+  // upstream (silently falls back to this same PCFShadowMap anyway).
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);

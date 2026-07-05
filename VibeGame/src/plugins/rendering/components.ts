@@ -36,6 +36,14 @@ export const DirectionalLight = {
   directionY: new Float32Array(MAX_ENTITIES),
   directionZ: new Float32Array(MAX_ENTITIES),
   distance: new Float32Array(MAX_ENTITIES),
+  /** Cascaded shadow maps (three/addons/csm/CSM.js) instead of the single
+   * tight frustum that follows the player — covers near AND far casters at
+   * once, at the cost of `csmCascades` extra shadow passes. Opt-in: when 1,
+   * this entity's light is fully owned by a CSM instance (its own internal
+   * directional lights), the plain-light sync path below is skipped. */
+  csm: new Uint8Array(MAX_ENTITIES),
+  csmCascades: new Uint8Array(MAX_ENTITIES),
+  csmMaxFar: new Float32Array(MAX_ENTITIES),
 } as const;
 
 export const PointLight = {
@@ -54,13 +62,6 @@ export const SpotLight = {
   angle: new Float32Array(MAX_ENTITIES),
   penumbra: new Float32Array(MAX_ENTITIES),
   castShadow: new Uint8Array(MAX_ENTITIES),
-} as const;
-
-export const CsmConfig = {
-  cascades: new Uint8Array(MAX_ENTITIES),
-  maxFar: new Float32Array(MAX_ENTITIES),
-  shadowMapSize: new Uint16Array(MAX_ENTITIES),
-  enabled: new Uint8Array(MAX_ENTITIES),
 } as const;
 
 export const DistanceCull = {
