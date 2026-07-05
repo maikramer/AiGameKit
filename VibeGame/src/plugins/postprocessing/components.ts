@@ -27,4 +27,8 @@ export const Postprocessing = {
   fogHeight: new Float32Array(MAX_ENTITIES),
   fogFalloff: new Float32Array(MAX_ENTITIES),
   fogNoise: new Float32Array(MAX_ENTITIES),
+  colorGrading: new Uint8Array(MAX_ENTITIES),
+  saturation: new Float32Array(MAX_ENTITIES),
+  contrast: new Float32Array(MAX_ENTITIES),
+  brightness: new Float32Array(MAX_ENTITIES),
 } as const;

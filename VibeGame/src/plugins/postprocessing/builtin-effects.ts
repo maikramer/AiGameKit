@@ -1,10 +1,12 @@
 import { Vector2, type Camera, type Scene, type WebGLRenderer } from 'three';
 import {
   BloomEffect,
+  BrightnessContrastEffect,
   ChromaticAberrationEffect,
   DepthOfFieldEffect,
   EffectPass,
   FXAAEffect,
+  HueSaturationEffect,
   SMAAEffect,
   SMAAPreset,
   ToneMappingEffect,
@@ -48,6 +50,17 @@ function wrap(camera: Camera, effect: Effect): Pass {
 
 function effectOf(pass: Pass): Effect | undefined {
   return effectByPass.get(pass);
+}
+
+/** Same idea as {@link effectByPass} but for passes wrapping more than one
+ * effect (color grading combines hue/saturation + brightness/contrast in a
+ * single EffectPass so they share one shader compile). */
+const multiEffectByPass = new WeakMap<Pass, Effect[]>();
+
+function wrapMulti(camera: Camera, effects: Effect[]): Pass {
+  const pass = new EffectPass(camera, ...effects);
+  multiEffectByPass.set(pass, effects);
+  return pass;
 }
 
 /** Maps a `detect-gpu` tier (0-3, undefined = unresolved yet) to n8ao's sample-count preset. */
@@ -117,9 +130,9 @@ registerEffect({
     if (!bloom) return;
     bloom.intensity = (state.bloomStrength as Float32Array)[entity];
     bloom.mipmapBlurPass.radius = (state.bloomRadius as Float32Array)[entity];
-    bloom.luminanceMaterial.threshold = (
-      state.bloomThreshold as Float32Array
-    )[entity];
+    bloom.luminanceMaterial.threshold = (state.bloomThreshold as Float32Array)[
+      entity
+    ];
   },
 });
 
@@ -258,6 +271,38 @@ registerEffect({
     if (!ca) return;
     const strength = (state.caStrength as Float32Array)[entity];
     ca.offset.set(strength, strength);
+  },
+});
+
+registerEffect({
+  key: 'colorGrading',
+  position: 'last',
+  create(
+    _state: CS,
+    entity: number,
+    _renderer: WebGLRenderer,
+    _scene: Scene,
+    camera: Camera
+  ): Pass | null {
+    const cs = Postprocessing as unknown as CS;
+    if (!(cs.colorGrading as Uint8Array)[entity]) return null;
+    const hueSaturation = new HueSaturationEffect({
+      saturation: (cs.saturation as Float32Array)[entity],
+    });
+    const brightnessContrast = new BrightnessContrastEffect({
+      brightness: (cs.brightness as Float32Array)[entity],
+      contrast: (cs.contrast as Float32Array)[entity],
+    });
+    return wrapMulti(camera, [hueSaturation, brightnessContrast]);
+  },
+  update(state: CS, entity: number, pass: Pass): void {
+    const effects = multiEffectByPass.get(pass);
+    if (!effects) return;
+    const hueSaturation = effects[0] as HueSaturationEffect;
+    const brightnessContrast = effects[1] as BrightnessContrastEffect;
+    hueSaturation.saturation = (state.saturation as Float32Array)[entity];
+    brightnessContrast.brightness = (state.brightness as Float32Array)[entity];
+    brightnessContrast.contrast = (state.contrast as Float32Array)[entity];
   },
 });
 
