@@ -3,6 +3,7 @@ import { Transform } from '../transforms/components';
 import { Lake, River, setRiverPath } from './components';
 import { LakeApplySystem, RiverApplySystem, WaterAnimSystem } from './systems';
 import { WaterInteractionSystem, WaterRippleFxSystem } from './effects';
+import { WaterReflectionSystem } from './reflection';
 
 /**
  * `<Lake at="70 46" radius="6" depth="1.5" color="#2f7a9a">` — sculpted
@@ -124,6 +125,7 @@ export const WaterPlugin: Plugin = {
     WaterAnimSystem,
     WaterInteractionSystem,
     WaterRippleFxSystem,
+    WaterReflectionSystem,
   ],
   recipes: [lakeRecipe, riverRecipe],
   components: {

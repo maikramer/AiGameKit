@@ -18,6 +18,23 @@ import {
 
 const lakeQuery = defineQuery([Lake, Transform]);
 
+/** 1×1 transparent placeholder for `uReflectionMap` until `WaterReflectionSystem`
+ * (reflection.ts) assigns a real render target to the nearest lake. Exported
+ * so that system can point a body's `uReflectionMap` back here the moment it
+ * stops being the reflected body — leaving it pointed at the shared render
+ * target would make WebGL flag a framebuffer/texture feedback loop as soon as
+ * that (now-unhidden) mesh is rendered while the target is bound for writing. */
+export const waterEmptyReflectionTexture = (() => {
+  const t = new THREE.DataTexture(
+    new Uint8Array([0, 0, 0, 0]),
+    1,
+    1,
+    THREE.RGBAFormat
+  );
+  t.needsUpdate = true;
+  return t;
+})();
+
 /**
  * Shared sidecar map for all water surfaces (lakes + rivers). `applyWaterShape`
  * writes here; `WaterAnimSystem` reads it to advance `uTime`. Lives here (not in
@@ -55,6 +72,7 @@ uniform float uTime;
 uniform float uRipple;
 uniform float uWaveHeight;
 uniform float uWaveSpeed;
+uniform mat4 uReflectionMatrix;
 attribute float aWaterT;
 attribute float aGroundDepth;
 attribute float aFoamExtra;
@@ -63,6 +81,7 @@ varying float vGroundDepth;
 varying float vFoamExtra;
 varying vec2 vWaveXZ;
 varying vec3 vViewDir;
+varying vec4 vReflectUv;
 
 void main() {
   vWaterT = aWaterT;
@@ -72,6 +91,7 @@ void main() {
   vec3 pos = position;
   vec4 wPos = modelMatrix * vec4(pos, 1.0);
   vWaveXZ = wPos.xz;
+  vReflectUv = uReflectionMatrix * wPos;
   float wt = uTime * uWaveSpeed;
   // Two crossing waves plus a slow diagonal swell — reads as gentle open-water
   // motion instead of a single repeating sine.
@@ -98,11 +118,14 @@ uniform vec3 uSkyTint;
 uniform vec2 uDepthRamp;
 uniform float uFresnelStrength;
 uniform float uSparkleStrength;
+uniform sampler2D uReflectionMap;
+uniform float uHasReflection;
 varying float vWaterT;
 varying float vGroundDepth;
 varying float vFoamExtra;
 varying vec2 vWaveXZ;
 varying vec3 vViewDir;
+varying vec4 vReflectUv;
 
 // Shape-agnostic depth/alpha: the geometry bakes t into aWaterT (0 at
 // centre/axis, 1 at margin/bank) so these no longer depend on a radial
@@ -168,7 +191,14 @@ void main() {
   float banded = floor(depthNorm * 3.0 + 0.5) / 3.0;
   csm_DiffuseColor.rgb = mix(uShallowColor, uDeepColor, mix(depthNorm, banded, 0.55));
   float fres = lakeFresnel();
-  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, uSkyTint, clamp(fres * uFresnelStrength, 0.0, 0.5));
+  // Real mirrored scene when a reflection camera has rendered this lake this
+  // frame (nearest lake to the player only, see reflection.ts); otherwise
+  // fall back to the flat sky tint exactly as before.
+  vec3 reflected = uSkyTint;
+  if (uHasReflection > 0.5) {
+    reflected = texture2DProj(uReflectionMap, vReflectUv).rgb;
+  }
+  csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb, reflected, clamp(fres * uFresnelStrength, 0.0, 0.5));
   // Low-frequency drift — high frequencies read as a checker pattern on the
   // flat disc instead of water.
   float st = uTime * uWaveSpeed;
@@ -215,6 +245,9 @@ function makeWaterMaterial(cfg: WaterMaterialConfig): WaterMaterial {
       },
       uFresnelStrength: { value: cfg.fresnelStrength ?? 0.5 },
       uSparkleStrength: { value: cfg.sparkleStrength ?? 0.3 },
+      uReflectionMap: { value: waterEmptyReflectionTexture },
+      uReflectionMatrix: { value: new THREE.Matrix4() },
+      uHasReflection: { value: 0 },
     },
   }) as unknown as WaterMaterial;
 }

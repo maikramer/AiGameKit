@@ -90,6 +90,7 @@ export function spawnProjectile(
   });
 
   state.addComponent(eid, Rigidbody);
+  Rigidbody.rotW[eid] = 1;
   Rigidbody.gravityScale[eid] = 0;
   Rigidbody.velX[eid] = dx * speed;
   Rigidbody.velY[eid] = dy * speed;

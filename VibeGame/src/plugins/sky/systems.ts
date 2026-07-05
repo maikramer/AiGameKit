@@ -10,11 +10,18 @@ const inFlight = new Set<number>();
 
 const _loader = new THREE.TextureLoader();
 
+/** Previous sky PMREM render target, disposed on the next sky swap (or plugin
+ * dispose) to avoid leaking a GPU render target + texture per reload. */
+let currentSkyRT: THREE.WebGLRenderTarget | null = null;
+
 /**
- * Loads an equirectangular sky texture and applies it as scene background
- * while preserving the PMREM environment for IBL/PBR lighting.
+ * Loads an equirectangular sky texture, applies it as scene background, and
+ * PMREM-filters it into `scene.environment` so reflective/metallic PBR
+ * materials actually mirror the sky's colors and sun position instead of the
+ * generic neutral room set by {@link applyNeutralEnvironment}.
  */
 async function applyEquirectSky(
+  renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   url: string,
   setBackground: boolean
@@ -23,7 +30,7 @@ async function applyEquirectSky(
   texture.mapping = THREE.EquirectangularReflectionMapping;
   texture.colorSpace = THREE.SRGBColorSpace;
 
-  // Background only — keep the PMREM RoomEnvironment for IBL/PBR.
+  // Background: the sharp raw equirect, not the blurred PMREM version.
   if (setBackground) {
     const prev = scene.background;
     scene.background = texture;
@@ -33,15 +40,32 @@ async function applyEquirectSky(
     }
   }
 
-  // Keep the PMREM environment subtle — the scene is already lit by the
-  // hemisphere + directional lights; a full-strength IBL washes everything out.
+  // Reflections: a prefiltered (blurred, mip-chained) copy of the same sky so
+  // glossy/metallic surfaces reflect real sky colors instead of a flat room.
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const rt = pmrem.fromEquirectangular(texture);
+  pmrem.dispose();
+  if (!setBackground) texture.dispose();
+
+  if (currentSkyRT && currentSkyRT !== rt) {
+    currentSkyRT.dispose();
+  }
+  currentSkyRT = rt;
+
+  if (scene.environment && scene.environment !== rt.texture) {
+    scene.environment.dispose();
+  }
+  scene.environment = rt.texture;
+  // Keep it subtle — the scene is already lit by the hemisphere + directional
+  // lights; a full-strength IBL washes everything out.
   scene.environmentIntensity = 0.45;
 }
 
 /**
  * Loads the equirectangular sky once the renderer exists (texture upload needs
- * a live renderer). Applies it as `scene.background` (visual sky dome) while
- * preserving the PMREM `RoomEnvironment` for IBL.
+ * a live renderer). Applies it as `scene.background` (visual sky dome) and
+ * PMREM-filters it into `scene.environment` for sky-accurate IBL reflections.
  */
 export const EquirectSkyLoadSystem: System = {
   group: 'simulation',
@@ -61,7 +85,12 @@ export const EquirectSkyLoadSystem: System = {
       }
 
       inFlight.add(eid);
-      applyEquirectSky(ctx.scene, url, EquirectSky.setBackground[eid] !== 0)
+      applyEquirectSky(
+        ctx.renderer,
+        ctx.scene,
+        url,
+        EquirectSky.setBackground[eid] !== 0
+      )
         .then(() => {
           EquirectSky.applied[eid] = 1;
         })
@@ -82,6 +111,13 @@ export const EquirectSkyLoadSystem: System = {
         (bg as THREE.Texture).dispose();
         ctx.scene.background = null;
       }
+      if (currentSkyRT && ctx.scene.environment === currentSkyRT.texture) {
+        ctx.scene.environment = null;
+      }
+    }
+    if (currentSkyRT) {
+      currentSkyRT.dispose();
+      currentSkyRT = null;
     }
     inFlight.clear();
     for (const eid of equirectSkyQuery(state.world)) {

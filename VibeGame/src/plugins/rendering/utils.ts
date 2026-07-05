@@ -422,7 +422,9 @@ export async function createRenderer(
   renderer.localClippingEnabled = true;
 
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  // PCFSoftShadowMap is deprecated in modern three (silently falls back to
+  // hard PCFShadowMap); VSMShadowMap is the maintained soft-shadow path.
+  renderer.shadowMap.type = THREE.VSMShadowMap;
 
   if (clearColor !== 0) {
     renderer.setClearColor(clearColor);
@@ -504,10 +506,11 @@ export const SHADOW_CONFIG = {
    * A frustum SEGUE o alvo da câmara (ver `resolveShadowCenter`), por isso só
    * precisa de cobrir a distância de visão à volta do jogador — não o mapa todo.
    * 140 (=280 m) era exagerado: desperdiça resolução do shadow map e mete
-   * centenas de casters distantes no shadow pass. 90 (=180 m) cobre a vista com
-   * folga, dá sombras mais nítidas (mesmo 2048 sobre menos área) e um shadow
-   * pass mais barato. */
-  CAMERA_RADIUS: 90,
+   * centenas de casters distantes no shadow pass. 90 (=180 m) cobria a vista
+   * com folga mas a 2048px isso é só ~11 texels/m — sombra de personagem/árvore
+   * (~1m) vira ruído invisível. 32 (=64 m) dá ~32 texels/m — sombra nítida perto
+   * do jogador — à custa de objetos bem distantes perderem sombra mais cedo. */
+  CAMERA_RADIUS: 32,
   NEAR_PLANE: 0.5,
   FAR_PLANE: 250,
   /**
