@@ -934,7 +934,19 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     "creature": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),
         ("walk_cycle_keyframes", {"frame_end": 48, "action_name": "Animator3D_Walk"}),
+        ("run_cycle_keyframes", {"frame_end": 36, "action_name": "Animator3D_Run"}),
+        ("jump_keyframes", {"frame_end": 36, "action_name": "Animator3D_Jump"}),
         ("attack_keyframes", {"frame_end": 48, "action_name": "Animator3D_Attack"}),
+        ("turn_in_place_keyframes", {"frame_end": 32, "direction": 1.0, "action_name": "Animator3D_TurnLeft"}),
+        ("turn_in_place_keyframes", {"frame_end": 32, "direction": -1.0, "action_name": "Animator3D_TurnRight"}),
+        # Fallback procedural (ativos desde a Fase 2.1): criaturas já não ficam
+        # sem estes clips. Variações de attack_keyframes por tipo de gesto.
+        ("mine_keyframes", {"frame_end": 40, "action_name": "Animator3D_Mine"}),
+        ("chop_keyframes", {"frame_end": 40, "action_name": "Animator3D_Chop"}),
+        ("spear_keyframes", {"frame_end": 34, "action_name": "Animator3D_Spear"}),
+        ("axe_keyframes", {"frame_end": 40, "action_name": "Animator3D_AxeAttack"}),
+        ("sword_keyframes", {"frame_end": 32, "action_name": "Animator3D_SwordAttack"}),
+        ("gather_keyframes", {"frame_end": 40, "action_name": "Animator3D_Gather"}),
         ("victory_roar_keyframes", {"frame_end": 60, "action_name": "Animator3D_Roar"}),
     ],
     "flying": [
@@ -965,12 +977,20 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     type=str,
     help="Lista de clips separada por vírgulas (ex: idle,walk,run). Filtra o preset.",
 )
+@click.option(
+    "--force-preset",
+    "force_preset",
+    is_flag=True,
+    default=False,
+    help="Desativa a auto-deteção de tipo de rig (humanoid vs creature).",
+)
 def cmd_game_pack(
     input_path: Path,
     output_path: Path,
     preset: str,
     clip_filter: str | None,
     draco: bool,
+    force_preset: bool,
 ) -> None:
     """Gera todas as animações de um preset num único comando."""
     item_id = input_path.stem
@@ -1001,6 +1021,23 @@ def cmd_game_pack(
     bpy_ops.rename_bones_from_chains(arm_name)
 
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=100)
+
+    # Auto-deteção de tipo de rig: se o preset é humanoid (default) mas o rig
+    # não é humanoid (criatura), muda automaticamente para preset creature com
+    # aviso visível. --force-preset desativa (preserva comportamento antigo).
+    if not force_preset and preset.lower() == "humanoid":
+        from .humanoid import HumanoidRig
+
+        detected_chains = bpy_ops._classify_bone_chains(arm_name)
+        if not HumanoidRig.is_humanoid(detected_chains):
+            console.print(
+                "[yellow]Auto-deteção:[/yellow] rig não-humanoidize detectado "
+                f"({len(detected_chains.get('leg_r', []))} pernas dir, "
+                f"{len(detected_chains.get('arm_r', []))} braços dir) — "
+                "mudando para preset [cyan]creature[/cyan]. "
+                "Use --force-preset para manter humanoid."
+            )
+            preset = "creature"
 
     steps = _PRESETS[preset.lower()]
 
