@@ -121,6 +121,7 @@ interface DirectionalLightCache {
   mapSize: number;
   bias: number;
   normalBias: number;
+  shadowRadius: number;
   frustumLeft: number;
   frustumRight: number;
   frustumTop: number;
@@ -401,6 +402,7 @@ export const LightSyncSystem: System = {
           mapSize: NaN,
           bias: NaN,
           normalBias: NaN,
+          shadowRadius: NaN,
           frustumLeft: NaN,
           frustumRight: NaN,
           frustumTop: NaN,
@@ -434,6 +436,8 @@ export const LightSyncSystem: System = {
         const mapSize = DirectionalLight.shadowMapSize[entity];
         const bias = -0.0001;
         const normalBias = 0.02;
+        // Blur radius for VSMShadowMap soft edges (texel-space, not world units).
+        const shadowRadius = 1.5;
         const radius = SHADOW_CONFIG.CAMERA_RADIUS;
         const near = SHADOW_CONFIG.NEAR_PLANE;
         const far = SHADOW_CONFIG.FAR_PLANE;
@@ -455,6 +459,11 @@ export const LightSyncSystem: System = {
         if (cache.normalBias !== normalBias) {
           light.shadow.normalBias = normalBias;
           cache.normalBias = normalBias;
+          shadowChanged = true;
+        }
+        if (cache.shadowRadius !== shadowRadius) {
+          light.shadow.radius = shadowRadius;
+          cache.shadowRadius = shadowRadius;
           shadowChanged = true;
         }
         const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
