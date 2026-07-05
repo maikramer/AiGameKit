@@ -6,7 +6,7 @@ import {
   getRapierWorld,
   PhysicsInitializationSystem,
 } from '../physics/systems';
-import { getScene } from '../rendering';
+import { getScene, setupCsmMaterials } from '../rendering';
 import { TransformHierarchySystem } from '../transforms';
 import { Transform, WorldTransform } from '../transforms/components';
 import { CompositionPending } from './components';
@@ -65,6 +65,7 @@ export const CompositionSetupSystem: System = {
       }
       syncGroupPose(group, eid, state);
       scene.add(group);
+      setupCsmMaterials(state, group);
       registerCompositionGroup(state, eid, group);
       CompositionPending.meshBuilt[eid] = 1;
     }
