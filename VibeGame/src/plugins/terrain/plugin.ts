@@ -11,6 +11,7 @@ import { TerrainPadApplySystem, terrainPadParser } from './pad-systems';
 import {
   TerrainDebugSystem,
   TerrainFieldBootstrapSystem,
+  TerrainHeightColorSyncSystem,
   TerrainLodSelectSystem,
   TerrainMeshSystem,
   TerrainChunkColliderSystem,
@@ -32,6 +33,7 @@ export const TerrainPlugin: Plugin = {
     TerrainChunkColliderSystem,
     TerrainLodSelectSystem,
     TerrainMeshSystem,
+    TerrainHeightColorSyncSystem,
     TerrainDebugSystem,
     TerrainReadyGateSystem,
   ],
@@ -77,6 +79,11 @@ export const TerrainPlugin: Plugin = {
         colorRock: 0x808080,
         slopeThreshold: 0.55,
         slopeSoftness: 0.1,
+        // 0.35 keeps the texture albedo dominant; the height/slope tint is a
+        // subtle ambient layer (cumes mais frias, vales mais quentes, rocha em
+        // encostas) rather than overriding biome colours.
+        heightBlendStrength: 0.35,
+        aoStrength: 0.85,
       },
     },
     adapters: {

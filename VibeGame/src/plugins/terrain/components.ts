@@ -26,6 +26,12 @@ export const Terrain = {
   colorRock: new Uint32Array(MAX_ENTITIES),
   slopeThreshold: new Float32Array(MAX_ENTITIES),
   slopeSoftness: new Float32Array(MAX_ENTITIES),
+  /** 0 = height/slope colour tint disabled, 1 = full tint override. The tint
+   *  is mixed onto the texture albedo by world-space height (snow caps →
+   *  valleys) and geometric slope (rock on steep faces). */
+  heightBlendStrength: new Float32Array(MAX_ENTITIES),
+  /** 0 = AO map ignored, 1 = full AO multiply. Gates the NAR blue channel. */
+  aoStrength: new Float32Array(MAX_ENTITIES),
 } as const;
 
 /**

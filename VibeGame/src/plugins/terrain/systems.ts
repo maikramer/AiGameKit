@@ -101,9 +101,10 @@ function _loadNormalTex(url: string): THREE.Texture {
   return tex;
 }
 
-/** Flat default for the packed normal+roughness map: RGB = (0.5,0.5,1) flat
- * tangent normal, A = 1 (fully rough). Used until a biome's real map loads. */
-const _flatNRTexture = (() => {
+/** Flat default for the packed NAR map: R,G = (128,128) flat tangent normal
+ *  X,Y; B = 255 (full AO, no darkening); A = 255 (fully rough). Used until a
+ *  biome's real map loads. The shader reconstructs Z from X²+Y². */
+const _flatNARTexture = (() => {
   const t = new THREE.DataTexture(
     new Uint8Array([128, 128, 255, 255]),
     1,
@@ -146,7 +147,7 @@ function _clamp255(v: number): number {
  *  subtle underwater tint on the carved lake bed, so a low-amplitude value
  *  noise over a warm base reads as wet lakeshore sand through the water
  *  surface. Two octaves (low-freq swell + fine grain) avoid flat static.
- *  Lazy like _loadPackedNR: built on first browser use, so importing the
+ *  Lazy like _loadPackedNAR: built on first browser use, so importing the
  *  module in a DOM-less test environment does not touch `document`. */
 let _sandAlbedoTexture: THREE.CanvasTexture | null = null;
 function _getSandAlbedo(): THREE.Texture {
@@ -184,9 +185,10 @@ function _getSandAlbedo(): THREE.Texture {
   return tex;
 }
 
-/** Packed sand normal(RGB)+roughness(A): flat tangent normal + roughness ~0.92.
- *  Under opaque-to-half water, crisp sand normals add nothing — a near-flat,
- *  rough surface reads correctly and keeps the sampler budget unchanged. */
+/** Packed sand NAR: flat tangent normal X,Y (128,128) + full AO (255) +
+ *  roughness ~0.92 (235). Under opaque-to-half water, crisp sand normals add
+ *  nothing — a near-flat, rough surface reads correctly and keeps the sampler
+ *  budget unchanged. Layout matches {@link _loadPackedNAR}. */
 const _sandNRTexture = (() => {
   const t = new THREE.DataTexture(
     new Uint8Array([128, 128, 255, 235]),
@@ -200,17 +202,27 @@ const _sandNRTexture = (() => {
   return t;
 })();
 
-const _packedNRCache = new Map<string, THREE.Texture>();
+const _packedNARCache = new Map<string, THREE.Texture>();
 
 /**
- * Build a packed surface texture for a terrain layer from its PBR maps:
- * RGB = tangent-space normal, A = roughness (= 1 − smoothness). One texture per
- * layer keeps the shader inside the fragment-sampler budget while still driving
- * per-biome normals AND roughness. `albedoUrl` is the layer's colour map
- * (`/assets/textures/<name>.png`); the PBR maps live in `pbr_<name>/`.
+ * Build a packed surface texture for a terrain layer from its PBR maps using
+ * the **NAR** (normal-XY + AO + roughness) layout, which fits three PBR channels
+ * into a single RGBA sampler so the per-biome surface data stays inside the
+ * WebGL2 fragment-sampler budget (14→14, no growth):
+ *
+ *   R = tangent-space normal.X      (from `*_normal.png` channel R)
+ *   G = tangent-space normal.Y      (from `*_normal.png` channel G)
+ *   B = ambient occlusion           (from `*_ao.png` channel R; 255 if absent)
+ *   A = roughness = 1 − smoothness  (from `*_smoothness.png` channel R)
+ *
+ * Normal.Z is dropped and reconstructed in the fragment shader via
+ * `sqrt(max(1 − X² − Y², 0))` — the standard "two-channel compressed normal"
+ * trick, lossless for unit-length tangent-space normals. `albedoUrl` is the
+ * layer's colour map (`/assets/textures/<name>.png`); the PBR maps live in
+ * `pbr_<name>/`.
  */
-function _loadPackedNR(albedoUrl: string): THREE.Texture {
-  const cached = _packedNRCache.get(albedoUrl);
+function _loadPackedNAR(albedoUrl: string): THREE.Texture {
+  const cached = _packedNARCache.get(albedoUrl);
   if (cached) return cached;
 
   const dir = albedoUrl.replace(/\/[^/]+$/, '');
@@ -219,6 +231,7 @@ function _loadPackedNR(albedoUrl: string): THREE.Texture {
     .pop()!
     .replace(/\.[^.]+$/, '');
   const normalUrl = `${dir}/pbr_${name}/${name}_normal.png`;
+  const aoUrl = `${dir}/pbr_${name}/${name}_ao.png`;
   const smoothUrl = `${dir}/pbr_${name}/${name}_smoothness.png`;
 
   const size = 512;
@@ -226,9 +239,10 @@ function _loadPackedNR(albedoUrl: string): THREE.Texture {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  // Flat tangent normal (128,128,255) + full alpha. NOTE: css rgba() takes
-  // alpha in 0–1 — 'rgba(...,255)' is invalid and silently leaves the canvas
-  // black (normal (-1,-1,-1), roughness 0 → shiny) until the maps load.
+  // Flat tangent normal XY (128,128) + full AO (255) + full rough (255) so the
+  // texture reads correctly before any map loads. NOTE: css rgba() takes alpha
+  // in 0–1 — 'rgba(...,255)' is invalid and silently leaves the canvas black
+  // (normal (-1,-1), AO 0, roughness 0 → shiny) until the maps load.
   ctx.fillStyle = 'rgb(128,128,255)';
   ctx.fillRect(0, 0, size, size);
 
@@ -237,40 +251,82 @@ function _loadPackedNR(albedoUrl: string): THREE.Texture {
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(1, 1);
   tex.colorSpace = THREE.NoColorSpace;
-  _packedNRCache.set(albedoUrl, tex);
+  _packedNARCache.set(albedoUrl, tex);
 
   const nImg = new Image();
+  const aImg = new Image();
   const sImg = new Image();
   let nReady = false;
+  let aReady = false;
   let sReady = false;
+
+  // Reusable scratch canvases so we don't allocate per combine() call.
+  const nTmp = document.createElement('canvas');
+  nTmp.width = size;
+  nTmp.height = size;
+  const nCtx = nTmp.getContext('2d')!;
+  const aTmp = document.createElement('canvas');
+  aTmp.width = size;
+  aTmp.height = size;
+  const aCtx = aTmp.getContext('2d')!;
+  const sTmp = document.createElement('canvas');
+  sTmp.width = size;
+  sTmp.height = size;
+  const sCtx = sTmp.getContext('2d')!;
+
   const combine = (): void => {
     if (!nReady) return;
-    ctx.drawImage(nImg, 0, 0, size, size);
-    if (sReady) {
-      const tmp = document.createElement('canvas');
-      tmp.width = size;
-      tmp.height = size;
-      const tctx = tmp.getContext('2d')!;
-      tctx.drawImage(sImg, 0, 0, size, size);
-      const nrm = ctx.getImageData(0, 0, size, size);
-      const smo = tctx.getImageData(0, 0, size, size);
+    // Start from the normal map's RGB (carries X/Y in R/G; B is dropped below).
+    nCtx.clearRect(0, 0, size, size);
+    nCtx.drawImage(nImg, 0, 0, size, size);
+    const out = nCtx.getImageData(0, 0, size, size);
+
+    if (aReady) {
+      aCtx.clearRect(0, 0, size, size);
+      aCtx.drawImage(aImg, 0, 0, size, size);
+      const ao = aCtx.getImageData(0, 0, size, size);
       for (let i = 0; i < size * size; i++) {
-        // roughness = 1 − smoothness (use the smoothness map's red channel).
-        nrm.data[i * 4 + 3] = 255 - smo.data[i * 4];
+        // B = AO (red channel of the AO map).
+        out.data[i * 4 + 2] = ao.data[i * 4];
       }
-      ctx.putImageData(nrm, 0, 0);
+    } else {
+      // No AO map → full bright (no darkening).
+      for (let i = 0; i < size * size; i++) out.data[i * 4 + 2] = 255;
     }
+
+    if (sReady) {
+      sCtx.clearRect(0, 0, size, size);
+      sCtx.drawImage(sImg, 0, 0, size, size);
+      const smo = sCtx.getImageData(0, 0, size, size);
+      for (let i = 0; i < size * size; i++) {
+        // A = roughness = 1 − smoothness (red channel of the smoothness map).
+        out.data[i * 4 + 3] = 255 - smo.data[i * 4];
+      }
+    } else {
+      // No smoothness map → fully rough.
+      for (let i = 0; i < size * size; i++) out.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(out, 0, 0);
     tex.needsUpdate = true;
   };
+
   nImg.onload = () => {
     nReady = true;
+    combine();
+  };
+  aImg.onload = () => {
+    aReady = true;
     combine();
   };
   sImg.onload = () => {
     sReady = true;
     combine();
   };
+  // AO/smoothness are optional — 404 leaves the flag false and the channel
+  // falls back to its neutral default.
   nImg.src = normalUrl;
+  aImg.src = aoUrl;
   sImg.src = smoothUrl;
   return tex;
 }
@@ -286,8 +342,17 @@ export type TerrainMaterial = THREE.MeshStandardMaterial & {
 
 const TERRAIN_VERTEX_SHADER = `
 varying vec2 vWorldXZ;
+varying float vWorldY;
+varying vec3 vGeomNormal;
 void main() {
-  vWorldXZ = (modelMatrix * vec4(position, 1.0)).xz;
+  vec4 worldPos = modelMatrix * vec4(position, 1.0);
+  vWorldXZ = worldPos.xz;
+  vWorldY = worldPos.y;
+  // Geometric (face) normal in world space — used for slope-based rock tint
+  // and triplanar blend weights. This is the unsmoothed triangle normal, so
+  // low-potency LOD chunks get a slightly harder slope edge; acceptable for
+  // a colour tint that fades in at heightBlendStrength.
+  vGeomNormal = normalize(mat3(modelMatrix) * normal);
 }
 `;
 
@@ -328,7 +393,24 @@ uniform vec4 uLakes[${MAX_LAKES}];
 uniform vec4 uRiverSegs[${MAX_RIVER_SEGS}];
 uniform vec2 uRiverDims[${MAX_RIVER_SEGS}];
 uniform int uRiverSegCount;
+// AO strength: 0 = AO map ignored (no darkening), 1 = full multiply. Packed
+// into the NAR blue channel, so this just gates how strongly it applies.
+uniform float uAoStrength;
+// Height/slope colour tint: world-altitude band (low/mid/high) + rock on steep
+// faces. Driven by Terrain component fields colourLow/Mid/High/Rock +
+// snowHeight/slopeThreshold. heightBlendStrength gates the overall effect.
+uniform vec3 uColorLow;
+uniform vec3 uColorMid;
+uniform vec3 uColorHigh;
+uniform vec3 uColorRock;
+uniform float uSnowHeight;   // normalised 0..1 of uMaxHeight where snow starts
+uniform float uMaxHeight;    // terrain.maxHeight — converts vWorldY to 0..1
+uniform float uSlopeThreshold;
+uniform float uSlopeSoftness;
+uniform float uHeightBlendStrength;
 varying vec2 vWorldXZ;
+varying float vWorldY;
+varying vec3 vGeomNormal;
 
 vec4 biomeSplat() {
   return texture2D(uSplatMap, (vWorldXZ - uSplatMin) * uSplatInvSize);
@@ -383,6 +465,26 @@ float sandMask() {
 }
 
 void main() {
+  // Triplanar weight: on steep faces the top-down UV stretches the texture
+  // along the slope, so we blend toward a side projection along the dominant
+  // horizontal axis (X or Z). Only the dominant side axis is sampled (2× fetch
+  // total: top + 1 side), not all three planes — keeps the per-fragment cost
+  // bounded while still killing the stretched-texture look on cliffs. The
+  // weight is zero on flat ground so plains pay nothing.
+  float flatness = clamp(vGeomNormal.y, 0.0, 1.0);
+  float triWeight = 1.0 - smoothstep(uSlopeThreshold - uSlopeSoftness,
+                                     uSlopeThreshold + uSlopeSoftness, flatness);
+  // Dominant side axis: pick X or Z from the geometric normal's horizontal
+  // components. The side UV is the world plane perpendicular to that axis.
+  vec2 triSideUv = vWorldXZ;
+  if (abs(vGeomNormal.x) >= abs(vGeomNormal.z)) {
+    // X-facing slope → project on the ZY plane (world .zy).
+    triSideUv = vec2(vWorldXZ.y, vWorldY);
+  } else {
+    // Z-facing slope → project on the XY plane (world .xy).
+    triSideUv = vec2(vWorldXZ.x, vWorldY);
+  }
+
   // Albedo: base ↔ uMap2 legacy crossfade, then biome layers by splat, then
   // sand. Mirrors the original diffuseColor *= groundCol (diffuseColor starts
   // as vec4(diffuse, opacity) — csm_DiffuseColor's own default already folds
@@ -392,6 +494,15 @@ void main() {
     vec4 t1 = texture2D(map, vMapUv);
     vec4 t2 = texture2D(uMap2, vMapUv);
     vec4 groundCol = mix(t1, t2, uMixFactor);
+    // Triplanar: pull the side-axis sample of the base albedo and blend by the
+    // slope weight so cliffs show the texture projected face-on instead of
+    // stretched along the grade.
+    if (triWeight > 0.001) {
+      vec4 t1side = texture2D(map, triSideUv);
+      vec4 t2side = texture2D(uMap2, triSideUv);
+      vec4 sideCol = mix(t1side, t2side, uMixFactor);
+      groundCol = mix(groundCol, sideCol, triWeight);
+    }
     if (uLayerCount > 0.5) {
       vec4 splat = biomeSplat();
       groundCol = mix(groundCol, texture2D(uLayer0, vMapUv), splat.r);
@@ -419,43 +530,75 @@ void main() {
   // (normalize(vNormal), optionally face-flipped) is exactly what "normal"
   // holds at the same stage in the original chunk-based code, so it's the
   // correct surf_norm input.
+  // Packed NAR (normal-XY + AO + roughness): one fetch per layer carries the
+  // tangent-space normal X/Y (R/G), ambient occlusion (B), and roughness (A).
+  // Normal.Z is reconstructed as sqrt(1 - X² - Y²) — lossless for unit normals
+  // and frees the blue channel for AO without spending another sampler.
+  vec4 nar = texture2D(uNRBase, vMapUv);
+  // Triplanar on the surface data too, so cliff normals/AO/roughness come from
+  // the face-on projection rather than the stretched top-down UV.
+  if (triWeight > 0.001) {
+    vec4 narSide = texture2D(uNRBase, triSideUv);
+    nar = mix(nar, narSide, triWeight);
+  }
+  if (uLayerCount > 0.5) {
+    vec4 splat = biomeSplat();
+    nar = mix(nar, texture2D(uNR0, vMapUv), splat.r);
+    if (uLayerCount > 1.5) nar = mix(nar, texture2D(uNR1, vMapUv), splat.g);
+    if (uLayerCount > 2.5) nar = mix(nar, texture2D(uNR2, vMapUv), splat.b);
+    if (uLayerCount > 3.5) nar = mix(nar, texture2D(uNR3, vMapUv), splat.a);
+  }
+  float sandN = sandMask();
+  if (sandN > 0.001)
+    nar = mix(nar, texture2D(uSandNR, vWorldXZ * uSandScale), sandN);
+
   #ifdef USE_NORMALMAP_TANGENTSPACE
-    vec3 nrm = texture2D(uNRBase, vMapUv).xyz;
-    if (uLayerCount > 0.5) {
-      vec4 splat = biomeSplat();
-      nrm = mix(nrm, texture2D(uNR0, vMapUv).xyz, splat.r);
-      if (uLayerCount > 1.5)
-        nrm = mix(nrm, texture2D(uNR1, vMapUv).xyz, splat.g);
-      if (uLayerCount > 2.5)
-        nrm = mix(nrm, texture2D(uNR2, vMapUv).xyz, splat.b);
-      if (uLayerCount > 3.5)
-        nrm = mix(nrm, texture2D(uNR3, vMapUv).xyz, splat.a);
-    }
-    float sandN = sandMask();
-    if (sandN > 0.001)
-      nrm = mix(nrm, texture2D(uSandNR, vWorldXZ * uSandScale).xyz, sandN);
+    // Reconstruct tangent-space normal from X/Y (two-channel compressed form).
+    vec2 nrmXY = nar.rg * 2.0 - 1.0;
+    float nrmZ = sqrt(max(1.0 - dot(nrmXY, nrmXY), 0.0));
+    vec3 nrm = vec3(nrmXY, nrmZ);
     // Named csmTbn/csmMapN (not tbn/mapN) to avoid colliding with the locals
     // three's own normal_fragment_begin/_maps chunks declare later in this
     // same function body (this hook runs before them, in the same GLSL scope
     // — reusing those names is a "redefinition" compile error).
     mat3 csmTbn = getTangentFrame(-vViewPosition, csm_FragNormal, vNormalMapUv);
-    vec3 csmMapN = nrm * 2.0 - 1.0;
+    vec3 csmMapN = nrm;
     csmMapN.xy *= normalScale;
     csm_FragNormal = normalize(csmTbn * csmMapN);
   #endif
 
-  // Roughness: blend the packed alpha (= 1 − smoothness) per biome, then sand.
-  float rgh = texture2D(uNRBase, vMapUv).a;
-  if (uLayerCount > 0.5) {
-    vec4 splat = biomeSplat();
-    rgh = mix(rgh, texture2D(uNR0, vMapUv).a, splat.r);
-    if (uLayerCount > 1.5) rgh = mix(rgh, texture2D(uNR1, vMapUv).a, splat.g);
-    if (uLayerCount > 2.5) rgh = mix(rgh, texture2D(uNR2, vMapUv).a, splat.b);
-    if (uLayerCount > 3.5) rgh = mix(rgh, texture2D(uNR3, vMapUv).a, splat.a);
+  // AO (blue channel of the packed NAR) — blend per biome via the same nar vec.
+  // Multiply diffuse by the AO term so cavities/cracks darken naturally.
+  float ao = nar.b;
+  csm_DiffuseColor.rgb *= mix(1.0, ao, uAoStrength);
+
+  // Height + slope colour tint. The texture albedo stays dominant; this adds a
+  // subtle ambient gradient: cool white at the snow line, warm green in the
+  // mid-band, darker valley greens low down, and neutral rock on steep faces.
+  // heightBlendStrength=0 disables the whole pass.
+  if (uHeightBlendStrength > 0.001) {
+    float h = uMaxHeight > 0.0 ? clamp(vWorldY / uMaxHeight, 0.0, 1.0) : 0.0;
+    // Three-band altitude blend: low → mid → high, softstepped at the knots.
+    float midBand = smoothstep(0.0, 0.45, h);
+    float highBand = smoothstep(max(uSnowHeight - 0.18, 0.0), min(uSnowHeight + 0.18, 1.0), h);
+    vec3 altTint = mix(uColorLow, uColorMid, midBand);
+    altTint = mix(altTint, uColorHigh, highBand);
+    // Slope: 1.0 flat up, 0.0 vertical. Steep faces get rock regardless of
+    // altitude (a cliff at snow-line shouldn't read as pure white).
+    float flatness = clamp(vGeomNormal.y, 0.0, 1.0);
+    float rockBand = 1.0 - smoothstep(uSlopeThreshold - uSlopeSoftness,
+                                       uSlopeThreshold + uSlopeSoftness, flatness);
+    vec3 tint = mix(altTint, uColorRock, rockBand);
+    // Re-normalise the tint to unit luminance so it shifts hue/saturation
+    // without darkening the albedo (tints are treated as 1.0-luminance anchors).
+    tint /= max(dot(tint, vec3(0.299, 0.587, 0.114)), 1e-3);
+    csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb,
+                               csm_DiffuseColor.rgb * tint,
+                               uHeightBlendStrength);
   }
-  float sandR = sandMask();
-  if (sandR > 0.001)
-    rgh = mix(rgh, texture2D(uSandNR, vWorldXZ * uSandScale).a, sandR);
+
+  // Roughness (alpha of the packed NAR = 1 − smoothness).
+  float rgh = nar.a;
   csm_Roughness = roughness * rgh;
 }
 `;
@@ -494,12 +637,12 @@ function buildTerrainMaterial(
       uLayer1: { value: _emptyTexture },
       uLayer2: { value: _emptyTexture },
       uLayer3: { value: _emptyTexture },
-      // Packed normal (RGB) + roughness (A) per layer; base + 4 biome layers.
+      // Packed NAR (normal.XY + AO + roughness) per layer; base + 4 biomes.
       uNRBase: { value: baseNR },
-      uNR0: { value: _flatNRTexture },
-      uNR1: { value: _flatNRTexture },
-      uNR2: { value: _flatNRTexture },
-      uNR3: { value: _flatNRTexture },
+      uNR0: { value: _flatNARTexture },
+      uNR1: { value: _flatNARTexture },
+      uNR2: { value: _flatNARTexture },
+      uNR3: { value: _flatNARTexture },
       uLayerCount: { value: 0 },
       uSplatMin: { value: new THREE.Vector2(0, 0) },
       uSplatInvSize: { value: new THREE.Vector2(0, 0) },
@@ -518,6 +661,19 @@ function buildTerrainMaterial(
       uRiverSegs: { value: riverSegs },
       uRiverDims: { value: riverDims },
       uRiverSegCount: { value: 0 },
+      // AO strength gate for the packed NAR blue channel.
+      uAoStrength: { value: 0.85 },
+      // Height/slope colour tint uniforms (synced from the Terrain component
+      // by TerrainHeightColorSyncSystem).
+      uColorLow: { value: new THREE.Color(0x4a6a2a) },
+      uColorMid: { value: new THREE.Color(0x7a9a4a) },
+      uColorHigh: { value: new THREE.Color(0xffffff) },
+      uColorRock: { value: new THREE.Color(0x808080) },
+      uSnowHeight: { value: 0.75 },
+      uMaxHeight: { value: 50 },
+      uSlopeThreshold: { value: 0.55 },
+      uSlopeSoftness: { value: 0.1 },
+      uHeightBlendStrength: { value: 0.35 },
     },
   }) as unknown as TerrainMaterial;
 }
@@ -550,8 +706,8 @@ function applyTerrainSplat(state: State, field: number): void {
   while (layers.length < 4) layers.push(_emptyTexture);
   const nrs = cfg.layerUrls
     .slice(0, 4)
-    .map((u) => (u ? _loadPackedNR(u) : _flatNRTexture));
-  while (nrs.length < 4) nrs.push(_flatNRTexture);
+    .map((u) => (u ? _loadPackedNAR(u) : _flatNARTexture));
+  while (nrs.length < 4) nrs.push(_flatNARTexture);
 
   const u = mat.uniforms;
   u.uSplatMap.value = cfg.splatTexture;
@@ -1090,7 +1246,7 @@ export const TerrainMeshSystem: System = {
             wireframe: Terrain.wireframe[field] === 1,
             side: THREE.DoubleSide,
           };
-          let baseNR: THREE.Texture = _flatNRTexture;
+          let baseNR: THREE.Texture = _flatNARTexture;
           if (texUrl) {
             matOpts.map = _loadTex(texUrl);
             const baseName = texUrl.replace(/\/[^/]+$/, '');
@@ -1106,7 +1262,7 @@ export const TerrainMeshSystem: System = {
             // Packed normal+roughness for the base layer. Assigned as the
             // roughnessMap purely to switch on USE_ROUGHNESSMAP (the shader
             // override re-samples it); the real per-biome blend uses uNR*.
-            baseNR = _loadPackedNR(texUrl);
+            baseNR = _loadPackedNAR(texUrl);
             matOpts.roughnessMap = baseNR;
           }
           material = buildTerrainMaterial(matOpts, baseNR);
@@ -1368,6 +1524,113 @@ export const TerrainChunkColliderSystem: System = {
         data.physicsCollider = null;
       }
       removeChunkColliders(rapierWorld, data);
+    }
+  },
+};
+
+/**
+ * Sync the height/slope colour-tint uniforms from each `Terrain` entity's
+ * component fields into its shared material. Runs once the material exists
+ * (after `TerrainMeshSystem` builds it) and re-pushes whenever a field changes
+ * (dirty-gated per field). This is what finally wires up the long-dormant
+ * `colorHigh/Mid/Low/Rock`, `snowHeight`, `slopeThreshold`, `slopeSoftness`
+ * component fields into the live shader.
+ */
+interface TintCache {
+  colorLow: number;
+  colorMid: number;
+  colorHigh: number;
+  colorRock: number;
+  snowHeight: number;
+  maxHeight: number;
+  slopeThreshold: number;
+  slopeSoftness: number;
+  heightBlendStrength: number;
+  aoStrength: number;
+}
+const _tintCacheByField = new WeakMap<THREE.Material, TintCache>();
+
+export const TerrainHeightColorSyncSystem: System = {
+  group: 'draw',
+  after: [TerrainMeshSystem],
+  update(state: State) {
+    if (state.headless) return;
+    const materials = getSharedTerrainMaterials(state);
+    if (materials.size === 0) return;
+
+    for (const entity of terrainQuery(state.world)) {
+      const mat = materials.get(entity);
+      if (!mat) continue;
+
+      const colorLow = Terrain.colorLow[entity];
+      const colorMid = Terrain.colorMid[entity];
+      const colorHigh = Terrain.colorHigh[entity];
+      const colorRock = Terrain.colorRock[entity];
+      const snowHeight = Terrain.snowHeight[entity];
+      const maxHeight = Terrain.maxHeight[entity];
+      const slopeThreshold = Terrain.slopeThreshold[entity];
+      const slopeSoftness = Terrain.slopeSoftness[entity];
+      const heightBlendStrength = Terrain.heightBlendStrength[entity];
+      const aoStrength = Terrain.aoStrength[entity];
+
+      let cache = _tintCacheByField.get(mat);
+      if (!cache) {
+        cache = {
+          colorLow: NaN,
+          colorMid: NaN,
+          colorHigh: NaN,
+          colorRock: NaN,
+          snowHeight: NaN,
+          maxHeight: NaN,
+          slopeThreshold: NaN,
+          slopeSoftness: NaN,
+          heightBlendStrength: NaN,
+          aoStrength: NaN,
+        };
+        _tintCacheByField.set(mat, cache);
+      }
+
+      const u = mat.uniforms;
+      if (cache.colorLow !== colorLow) {
+        (u.uColorLow.value as THREE.Color).set(colorLow);
+        cache.colorLow = colorLow;
+      }
+      if (cache.colorMid !== colorMid) {
+        (u.uColorMid.value as THREE.Color).set(colorMid);
+        cache.colorMid = colorMid;
+      }
+      if (cache.colorHigh !== colorHigh) {
+        (u.uColorHigh.value as THREE.Color).set(colorHigh);
+        cache.colorHigh = colorHigh;
+      }
+      if (cache.colorRock !== colorRock) {
+        (u.uColorRock.value as THREE.Color).set(colorRock);
+        cache.colorRock = colorRock;
+      }
+      if (cache.snowHeight !== snowHeight) {
+        u.uSnowHeight.value = snowHeight;
+        cache.snowHeight = snowHeight;
+      }
+      if (cache.maxHeight !== maxHeight) {
+        u.uMaxHeight.value = maxHeight;
+        cache.maxHeight = maxHeight;
+      }
+      if (cache.slopeThreshold !== slopeThreshold) {
+        u.uSlopeThreshold.value = slopeThreshold;
+        cache.slopeThreshold = slopeThreshold;
+      }
+      if (cache.slopeSoftness !== slopeSoftness) {
+        u.uSlopeSoftness.value = slopeSoftness;
+        cache.slopeSoftness = slopeSoftness;
+      }
+      if (cache.heightBlendStrength !== heightBlendStrength) {
+        u.uHeightBlendStrength.value = heightBlendStrength;
+        cache.heightBlendStrength = heightBlendStrength;
+      }
+      if (cache.aoStrength !== aoStrength) {
+        u.uAoStrength.value = aoStrength;
+        cache.aoStrength = aoStrength;
+      }
     }
   },
 };
