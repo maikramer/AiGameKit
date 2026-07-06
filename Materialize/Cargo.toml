@@ -11,7 +11,7 @@ keywords = ["pbr", "texture", "normal-map", "gpu", "wgpu"]
 categories = ["graphics", "command-line-utilities"]
 
 [dependencies]
-wgpu = "29"
+wgpu = "30"
 tokio = { version = "1.52", features = ["full"] }
 pollster = "0.4"
 futures = "0.3"
