@@ -86,6 +86,49 @@ const instancedLodUrlsByState = new WeakMap<
   Map<number, [string | undefined, string | undefined]>
 >();
 
+/**
+ * Per-entity LOD threshold overrides for the instanced path (mirrors the
+ * lod-threshold-near/mid adapters on the non-instanced GltfLod component).
+ * The first entity to spawn a given URL seeds the shared pool's near/mid; a
+ * pool already built keeps its initial thresholds (the library bakes them into
+ * per-primitive LOD ranges at attach time).
+ */
+const instancedLodThresholdsByState = new WeakMap<
+  State,
+  Map<number, { near?: number; mid?: number }>
+>();
+
+export function setInstancedLodThreshold(
+  state: State,
+  entity: number,
+  level: 1 | 2,
+  value: number
+): void {
+  let m = instancedLodThresholdsByState.get(state);
+  if (!m) {
+    m = new Map();
+    instancedLodThresholdsByState.set(state, m);
+  }
+  let entry = m.get(entity);
+  if (!entry) {
+    entry = {};
+    m.set(entity, entry);
+  }
+  if (level === 1) entry.near = value;
+  else entry.mid = value;
+}
+
+function consumeInstancedLodThresholds(
+  state: State,
+  entity: number
+): { near: number; mid: number } {
+  const entry = instancedLodThresholdsByState.get(state)?.get(entity);
+  return {
+    near: entry?.near ?? LOD1_DIST,
+    mid: entry?.mid ?? LOD2_DIST,
+  };
+}
+
 const INITIAL_CAPACITY = 16;
 
 export function markGltfInstanced(state: State, entity: number): void {
@@ -453,6 +496,11 @@ export function addInstancedGltf(
   const pools = getPools(state);
   let pool = pools.get(url);
   if (!pool) {
+    // Seed the pool's LOD thresholds from this entity's overrides (if any);
+    // fall back to the engine defaults. Only the first entity to spawn a URL
+    // contributes — the pool is shared and LOD thresholds are baked into the
+    // primitives at attach time.
+    const thresholds = consumeInstancedLodThresholds(state, entity);
     pool = {
       url,
       lodUrls: [url, lod1, lod2],
@@ -463,8 +511,8 @@ export function addInstancedGltf(
       pendingAdds: [],
       loadKicked: false,
       boundsDirty: false,
-      near: LOD1_DIST,
-      mid: LOD2_DIST,
+      near: thresholds.near,
+      mid: thresholds.mid,
     };
     pools.set(url, pool);
   }

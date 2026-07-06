@@ -28,6 +28,8 @@ import {
   getRenderingContext,
   getScene,
   handleWindowResize,
+  instanceBoundsDirty,
+  recomputeInstanceBounds,
   SHADOW_CONFIG,
   syncCameraSettings,
   threeCameras,
@@ -314,8 +316,27 @@ export const MeshInstanceSystem: System = {
 
       mesh = updateInstance(mesh, entity, context, state, unlit);
     }
+
+    // Recompute dirty instance-pool bounds (throttled). computeBoundingSphere
+    // is O(instances), so we don't run it per frame — only when a pool was
+    // marked dirty (instance added/removed) AND enough frames have passed.
+    // Once recomputed, frustum culling is re-enabled so a pool fully outside
+    // the view frustum is skipped by Three.js's default cull.
+    if (state.time.frameCount % INSTANCE_BOUNDS_RECOMPUTE_INTERVAL === 0) {
+      for (const mesh of context.meshPools.values()) {
+        if (instanceBoundsDirty(mesh)) recomputeInstanceBounds(mesh);
+      }
+      for (const mesh of context.unlitMeshPools.values()) {
+        if (instanceBoundsDirty(mesh)) recomputeInstanceBounds(mesh);
+      }
+    }
   },
 };
+
+/** How many frames between instance-bounds recomputes. Balances cull accuracy
+ *  against the O(instances) cost of computeBoundingSphere. Every ~0.25s at
+ *  60fps is responsive enough that a pool's cull state tracks spawn/despawn. */
+const INSTANCE_BOUNDS_RECOMPUTE_INTERVAL = 15;
 
 export const DistanceCullSystem: System = {
   group: 'draw',

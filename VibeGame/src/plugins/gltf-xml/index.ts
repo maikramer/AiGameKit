@@ -10,6 +10,7 @@ export {
   addInstancedGltf,
   isGltfInstanced,
   markGltfInstanced,
+  setInstancedLodThreshold,
 } from './auto-instance';
 export {
   getGltfLocalAABB,

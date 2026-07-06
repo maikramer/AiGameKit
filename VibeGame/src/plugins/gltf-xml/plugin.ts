@@ -2,6 +2,7 @@ import type { Adapter, Plugin } from '../../core';
 import {
   GltfAutoInstanceSystem,
   markGltfInstanced,
+  setInstancedLodThreshold,
   setInstancedLodUrl,
 } from './auto-instance';
 import { GltfLod, GltfPending, GltfPhysicsPending } from './components';
@@ -70,6 +71,9 @@ export const GltfXmlPlugin: Plugin = {
           } else {
             setPendingLodThresholdNear(state, entity, v);
           }
+          // Also seed the instanced pool's lod0→1 threshold (the first entity
+          // to spawn a URL wins; the library bakes LOD distances at attach).
+          setInstancedLodThreshold(state, entity, 1, v);
         }) as Adapter,
         'lod-threshold-mid': ((entity, value, state) => {
           const v = parseFloat(String(value));
@@ -79,6 +83,8 @@ export const GltfXmlPlugin: Plugin = {
           } else {
             setPendingLodThresholdMid(state, entity, v);
           }
+          // Also seed the instanced pool's lod1→2 threshold.
+          setInstancedLodThreshold(state, entity, 2, v);
         }) as Adapter,
         // LOD urls for an instanced GLTFLoader: recorded so the auto-instance
         // pool can build the extra LOD levels. Harmless on non-instanced loads.
