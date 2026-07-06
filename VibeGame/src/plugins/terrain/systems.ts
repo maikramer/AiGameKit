@@ -458,7 +458,14 @@ float lakeMask() {
     float r = uLakes[i].z;
     float shoreR = uLakes[i].w;
     vec2 rel = vWorldXZ - uLakes[i].xy;
+    // Cheap distance test FIRST. lakeShapeRadius perturbs the shoreline by at
+    // most SHORE_SHAPE_AMP (0.28), so any fragment farther than the perturbed
+    // outer radius (r * 1.28) can never contribute sand — skip the expensive
+    // atan/sin/smoothstep entirely. This keeps the trig cost confined to the
+    // thin shore ring instead of the whole screen.
     float d = length(rel);
+    float outerR = r * (1.0 + SHORE_SHAPE_AMP);
+    if (d > outerR) continue;
     float angle = atan(rel.y, rel.x);
     // Organic shoreline: shape both the beach ring radii by the same
     // perturbation the bowl/water use, so the sand outline matches.
@@ -480,8 +487,15 @@ float riverMask() {
     vec2 ab = b - a;
     float lenSq = max(dot(ab, ab), 1e-6);
     float t = clamp(dot(vWorldXZ - a, ab) / lenSq, 0.0, 1.0);
-    float d = length(vWorldXZ - (a + ab * t));
-    float band = 1.0 - smoothstep(uRiverDims[i].x, max(uRiverDims[i].y, uRiverDims[i].x + 0.001), d);
+    vec2 closest = a + ab * t;
+    vec2 toFrag = vWorldXZ - closest;
+    // Early-out: if the fragment is farther than the outer sand half-width
+    // (plus a small epsilon) this segment can't contribute — skip the
+    // smoothstep. Confining the band math to the channel neighbourhood.
+    float outerHalf = uRiverDims[i].y;
+    if (dot(toFrag, toFrag) > outerHalf * outerHalf * 1.04) continue;
+    float d = length(toFrag);
+    float band = 1.0 - smoothstep(uRiverDims[i].x, max(outerHalf, uRiverDims[i].x + 0.001), d);
     m = max(m, band);
   }
   return m;
