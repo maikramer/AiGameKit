@@ -92,23 +92,35 @@
     >
       <!-- ============================================================
            §0 CÉU, LUZ, PÓS-PROCESSAMENTO E ÁUDIO
-           Valores de bloom/fog/SSAO já calibrados para jogabilidade —
-           intensidade moderada de propósito.
+           Pipeline de realismo pesado (cinematic stylized): sombras PCSS
+           com penumbra real, god rays volumétricos através das árvores,
+           DoF cinematográfico no herói, grão de filme + color grading
+           quente, IBL reforçado. SSR (engine) existe e é seletivo — só
+           meshes shiny (metalness>=0.5+roughness<=0.4, roughness<=0.15
+           ou userData.ssrReflective) refletem — mas fica OFF aqui: neste
+           mapa só as águas qualificam e o ganho visual não paga o custo
+           (re-render da cena em 3 passes internos do SSRPass).
+           Trade-off: performance (esperado <60 FPS em GPU média).
            ============================================================ -->
-      <EquirectSky url="/assets/sky/sky.png"></EquirectSky>
+      <EquirectSky
+        url="/assets/sky/sky.png"
+        environment-intensity="0.45"
+        background-intensity="1.4"
+      ></EquirectSky>
 
       <!-- Sol mais baixo (~50° em vez de ~80°) + ambient reduzido = sombras
-           realmente visíveis e contraste 3D, sem voltar ao ângulo raso que
-           enterrava o terreno. SSAO mais forte para profundidade de contato.
-           CSM (directional-light="csm: 1") existe no engine mas fica OFF
-           aqui: o shader do CSM.js conflita com InstancedMesh/InstancedMesh2
-           (auto-instancer de vegetação/props que este mapa usa muito) —
-           GL_INVALID_OPERATION nos meshes instanciados. Frustum único
-           apertado (CAMERA_RADIUS=32) já dá sombra nítida perto do jogador. -->
+           realmente visíveis e contraste 3D. PCSS liga penumbra variável
+           (duro no contacto, suave longe) no frustum único de 4096.
+           CSM fica OFF neste mapa: o CSM.js precisa de patch por material
+           para clipar cascatas, e o terreno/água usam CustomShaderMaterial
+           (não patchável — setupCsmMaterial pula de propósito). Com 4
+           cascatas o chão recebia 4x a luz (wash-out) e ficava SEM sombra.
+           Frustum único + PCSS dá a penumbra cinemática sem quebrar a
+           iluminação. -->
       <GameObject
-        ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 1.3"
-        directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 2.2; direction-z: -0.75; cast-shadow: 1; shadow-map-size: 2048; distance: 120"
-        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.15; bloom-radius: 0.4; bloom-threshold: 0.9; chromatic-aberration: 0; ca-strength: 0; vignette: 1; vignette-offset: 0.22; vignette-darkness: 0.62; aa: smaa; tone-mapping: neutral; tone-mapping-exposure: 1.0; ssao: 1; ssao-intensity: 0.7; ssao-radius: 1.0; height-fog: 1; fog-color: 0xcfd8e0; fog-density: 0.012; fog-height: 30; fog-falloff: 0.12"
+        ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 0.85"
+        directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 1.2; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 4096; distance: 120; pcss: 1"
+        postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.25; bloom-radius: 0.5; bloom-threshold: 0.85; chromatic-aberration: 1; ca-strength: 0.0006; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.55; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.15; ssao: 1; ssao-intensity: 1.2; ssao-radius: 1.5; depth-of-field: 1; dof-focus-distance: 0.02; dof-focus-range: 0.3; dof-bokeh-scale: 2.2; god-rays: 1; god-rays-density: 0.96; god-rays-decay: 0.92; god-rays-weight: 0.35; god-rays-exposure: 0.6; film-grain: 1; film-grain-opacity: 0.06; color-grading: 1; saturation: 0.12; contrast: 0.10; brightness: 0.02; height-fog: 1; fog-color: 0xc8d0d8; fog-density: 0.012; fog-height: 40; fog-falloff: 0.10"
       >
       </GameObject>
 
@@ -155,7 +167,7 @@
         polygon="[-28,28;28,28;240,240;-240,240]"
         tint="#1a3320"
         fog-color="#16241c"
-        fog-density="0.012"
+        fog-density="0.020"
         ambient="#3a4a55"
         bgm-layer="1"
         pp-exposure="0.8"
@@ -169,11 +181,11 @@
         polygon="[28,-28;28,28;240,240;240,-240]"
         tint="#c2a878"
         fog-color="#d8c89a"
-        fog-density="0.004"
+        fog-density="0.010"
         ambient="#5a4a3a"
         bgm-layer="1"
         pp-exposure="1.12"
-        pp-bloom-strength="0.22"
+        pp-bloom-strength="0.35"
         terrain-texture="/assets/textures/desert_sand.png"
       ></BiomeRegion>
       <!-- SUL: Pântano -->
@@ -183,7 +195,7 @@
         polygon="[-28,-28;28,-28;240,-240;-240,-240]"
         tint="#3a4a30"
         fog-color="#16241a"
-        fog-density="0.014"
+        fog-density="0.028"
         ambient="#2a3a30"
         bgm-layer="1"
         rain="0.55"
@@ -197,7 +209,7 @@
         polygon="[-28,-28;-28,28;-240,240;-240,-240]"
         tint="#cdd9e6"
         fog-color="#dfe8f2"
-        fog-density="0.008"
+        fog-density="0.012"
         ambient="#aeb9c8"
         bgm-layer="1"
         pp-exposure="1.05"
@@ -222,11 +234,20 @@
         height-smoothing-spread="1.25"
         heightmap="/assets/terrain/heightmap.png"
         skirt-width="0.015625"
-        roughness="0.78"
+        roughness="0.82"
         metalness="0"
-        normal-strength="3.0"
+        normal-strength="2.6"
         base-color="#8cb866"
         texture="/assets/textures/vale_grass.png"
+        ao-strength="0.9"
+        height-blend-strength="0.40"
+        snow-height="0.82"
+        slope-threshold="0.58"
+        slope-softness="0.14"
+        color-low="#3a5a2a"
+        color-mid="#8cb866"
+        color-high="#e8f0ff"
+        color-rock="#6a6660"
       ></Terrain>
 
       <NavMesh></NavMesh>
