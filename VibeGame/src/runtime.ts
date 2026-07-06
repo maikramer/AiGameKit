@@ -210,8 +210,20 @@ export class GameRuntime {
         if (!renderingCtx.renderer) {
           const clearColor =
             RenderContext.clearColor[rendererEntity] ?? 0x000000;
+          // MSAA on the default framebuffer is redundant when the composer is
+          // active (it runs its own SMAA/FXAA pass). The composer is built
+          // lazily later, but the `postprocessing=` attribute lives in the
+          // scene's innerHTML which is already available here — scan for it so
+          // we can skip allocating the multisampled default buffer. MSAA can't
+          // be toggled after context creation, so this is the only chance.
+          const sceneHtml = element.innerHTML;
+          const composerActive =
+            /\bpostprocessing\s*=/.test(sceneHtml) &&
+            !/\bpostprocessing\s*=\s*"[^"]*enabled\s*:\s*0/.test(sceneHtml);
           try {
-            const renderer = await createRenderer(canvas, clearColor);
+            const renderer = await createRenderer(canvas, clearColor, {
+              antialias: !composerActive,
+            });
             renderingCtx.renderer = renderer;
             renderingCtx.canvas = canvas;
             applyNeutralEnvironment(renderer, renderingCtx.scene);
