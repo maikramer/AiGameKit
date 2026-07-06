@@ -85,12 +85,16 @@ dist
 Text3D/testdata/baseline_meshes_raw/*
 !Text3D/testdata/baseline_meshes_raw/README.txt
 
-# Screenshots / QA locais na raiz do monorepo (não versionar)
-/qa-*.png
-/f3-game-loaded.png
-/melee-*.jpeg
-/melee-*.png
-/w4-*.png
+# Screenshots / QA / capturas de debug na raiz do monorepo.
+# Regra genérica: QUALQUER imagem solta na raiz é ignorada — screenshots de
+# QA nunca pertencem ao repo. Assets legítimos vivem em subdirs (assets/,
+# public/, examples/, etc.). Adicionar exceções aqui só se for mesmo necessário.
+/*.png
+/*.jpeg
+/*.jpg
+/*.gif
+/*.webp
+/*.bmp
 
 # Agent tool artifacts
 .sisyphus/
@@ -122,24 +126,15 @@ VibeGame/examples/simple-rpg/public/libs/
 VibeGame/*test*.png
 VibeGame/screenshot*.png
 
-# Visual iteration screenshots (grip tuning, weapon rotation tests, etc.)
-/grip-*.jpeg
-/grip-*.png
-/sw-*.jpeg
-/sword-*.png
-/tune-*.jpeg
-/v-*.jpeg
-/simple-rpg-initial.png
-/simple-rpg-loaded.png
-
-# Stray root debug screenshots (scale tests, manual browser captures, etc.)
-/scale-*.jpeg
-/user-view.jpeg
-/point-shadow-check.png
-/terrain-qa-*.png
-
 # OpenCode agent workspace (local state, plans, evidence, notepads)
 .omo/
+
+# GameAssets debug_minimal — assets gerados localmente por `gameassets batch`.
+# Os .yaml de configuração estão versionados como fixtures; os outputs (PNGs,
+# JSONs de metadados, heightmaps) regeneram-se e não pertencem ao repo.
+GameAssets/debug_minimal/images/
+GameAssets/debug_minimal/sky/
+GameAssets/debug_minimal/terrain/
 
 # Backup de assets regenerados (ex.: bgm_*.orig.ogg antes do seamless-loop)
 *.orig.ogg
