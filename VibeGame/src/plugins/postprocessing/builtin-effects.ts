@@ -2,7 +2,6 @@ import {
   DirectionalLight,
   Mesh,
   MeshBasicMaterial,
-  Object3D,
   SphereGeometry,
   Vector2,
   Vector3,
@@ -388,18 +387,47 @@ function getOrCreateSunMesh(scene: Scene): Mesh {
  * `GodRaysEffect` projects this world position into screen space each frame to
  * drive the radial blur, so the mesh follows the active light automatically.
  */
-function syncSunSource(scene: Scene, camera: Camera): void {
-  if (!sharedSunMesh) return;
-  // Find the first directional light in the scene to derive the sun direction.
-  // The closure narrows `dir` to `never` under TS control-flow analysis, so we
-  // keep it as `Object3D | null` and cast on use.
-  let dir: Object3D | null = null;
+// Cache the directional-light reference per scene so we don't traverse the
+// whole graph every frame. The cache invalidates only when the directional-light
+// count in the scene changes (a light was added/removed) — directional light
+// properties (position/target) are read live from the cached reference.
+const dirLightCache = new WeakMap<
+  Scene,
+  { light: DirectionalLight | null; count: number }
+>();
+
+function findFirstDirectionalLight(scene: Scene): DirectionalLight | null {
+  let cached = dirLightCache.get(scene);
+  // Cheap live count: DirectionalLights are direct children of the scene root
+  // (the LightSyncSystem adds them there). Counting root children with the
+  // isDirectionalLight flag is O(children-of-root), not a full traverse.
+  let rootDirCount = 0;
+  for (const child of scene.children) {
+    if ((child as DirectionalLight).isDirectionalLight) rootDirCount++;
+  }
+  if (
+    cached &&
+    cached.count === rootDirCount &&
+    cached.light &&
+    scene === cached.light.parent
+  ) {
+    return cached.light;
+  }
+  // Cache miss (first call, count changed, or light reparented/removed): do one
+  // full traverse to (re)resolve, then stamp the count.
+  let resolved: DirectionalLight | null = null;
   scene.traverse((obj) => {
-    if (dir === null && (obj as DirectionalLight).isDirectionalLight) {
-      dir = obj;
+    if (resolved === null && (obj as DirectionalLight).isDirectionalLight) {
+      resolved = obj as DirectionalLight;
     }
   });
-  const light = dir as DirectionalLight | null;
+  dirLightCache.set(scene, { light: resolved, count: rootDirCount });
+  return resolved;
+}
+
+function syncSunSource(scene: Scene, camera: Camera): void {
+  if (!sharedSunMesh) return;
+  const light = findFirstDirectionalLight(scene);
   if (!light) return;
   // Light direction (scene → light) is opposite to the direction light travels.
   // The sun source sits along the scene→light vector, far from the camera.
