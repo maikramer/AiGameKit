@@ -138,6 +138,27 @@ fn local_luma_variance_3x3(center: vec2<i32>, dims: vec2<u32>) -> f32 {
     return clamp((sum_sq / n) - mean * mean, 0.0, 0.25);
 }
 
+// Fraction of the 9×9 neighbourhood (5×5 taps, stride 2) that is saturated
+// green — i.e. vegetation. Dry blades and shadow gaps inside grass are
+// desaturated gray per-pixel and slip past detect_metallic's achromatic
+// branch, but their surroundings are unmistakably green. There is no green
+// metal (weathered-copper patina is a roughness story, not a metallic one),
+// so a green context always vetoes metal.
+fn green_neighbourhood_fraction(center: vec2<i32>, dims: vec2<u32>) -> f32 {
+    var green = 0.0;
+    let n = 25.0;
+    for (var dy = -4; dy <= 4; dy += 2) {
+        for (var dx = -4; dx <= 4; dx += 2) {
+            let c = sample_coord(center + vec2<i32>(dx, dy), dims);
+            let hsl = rgb_to_hsl(textureLoad(input_texture, c, 0).rgb);
+            if (hsl.x > 0.17 && hsl.x < 0.46 && hsl.y > 0.15) {
+                green += 1.0;
+            }
+        }
+    }
+    return green / n;
+}
+
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let dims = textureDimensions(input_texture);
@@ -154,7 +175,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let variance_factor = params.metallic_local_variance_factor;
     let damping = 1.0 - variance_factor * clamp(variance * 4.0, 0.0, 1.0);
 
-    let metallic = clamp(raw * params.metallic_scale * damping, 0.0, 1.0);
+    // Vegetation veto: gray pixels embedded in a green neighbourhood are dry
+    // blades/shadow gaps inside foliage, never metal. Ramps in from 30% green
+    // context and fully vetoes at 60%.
+    let green_frac = green_neighbourhood_fraction(coords, dims);
+    let vegetation_veto = 1.0 - smooth_step(0.30, 0.60, green_frac);
+
+    let metallic = clamp(raw * params.metallic_scale * damping * vegetation_veto, 0.0, 1.0);
 
     textureStore(output_texture, coords, vec4<f32>(metallic, 0.0, 0.0, 1.0));
 }
