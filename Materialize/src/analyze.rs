@@ -287,9 +287,36 @@ pub fn classify(f: &ImageFeatures) -> Classification {
     // Confidence helpers: distance from threshold normalised to the threshold.
     let conf = |v: f32, t: f32| ((t - v).max(0.0) / t).clamp(0.0, 1.0);
 
-    let (preset, confidence) = if sat_low && luma_bright && gray_dominant && f.luma_mean < 0.92 {
-        // Pure white (luma ~1.0) is NOT metal; cap below 0.92 to avoid false positives
-        // on white backgrounds/textures.
+    // Natural-material rules run BEFORE the metal rules: per-pixel colour alone
+    // cannot separate golden sand from brushed gold or bright snow from silver,
+    // but the global statistics can — and a grass/sand/snow texture classified
+    // as metal poisons the whole PBR set (metallic_scale 1.5 + smoothness
+    // boost). Real metals still reach their rules because they miss these
+    // gates: polished metal has strong specular streaks (high luma_std) and
+    // low edge density; organic surfaces are the opposite.
+    let (preset, confidence) = if f.luma_mean > 0.70 && f.sat_mean < 0.18 && f.luma_mean < 0.97 {
+        // Bright + desaturated = snow/ice field, not silver. Pure white
+        // (luma ~1.0, e.g. blank background) stays Default via the 0.97 cap.
+        (Preset::Snow, 0.7)
+    } else if f.sat_mean > 0.15 && (0.17..=0.45).contains(&chroma_peak) {
+        // Green-dominant = vegetation. Band starts at 0.17 (yellow-green
+        // grass peaks near 0.21) and runs to cyan-green.
+        (Preset::Foliage, 0.7)
+    } else if f.sat_mean > 0.30
+        && (0.06..0.17).contains(&chroma_peak)
+        && f.luma_std < 0.12
+        && f.luma_mean > 0.45
+    {
+        // Warm gold-band hue with a FLAT luminance histogram is sand/clay.
+        // Actual gold/brass shows specular highlights (luma_std well above
+        // 0.12), so it falls through to the chromatic-metal rule below.
+        (Preset::Sand, 0.7)
+    } else if sat_low && luma_bright && gray_dominant && f.luma_mean < 0.92 && f.edge_density < 0.30
+    {
+        // Achromatic metal (steel/silver/aluminum). Pure white (luma ~1.0) is
+        // NOT metal; cap below 0.92 to avoid false positives on white
+        // backgrounds/textures. Granular gray surfaces (stone/concrete) have
+        // high edge density and are excluded — polished metal reads smooth.
         (Preset::Metal, conf(f.sat_mean, 0.15).max(0.6))
     } else if f.sat_mean > 0.30 && chroma_peak > 0.06 && chroma_peak < 0.17 && f.luma_mean > 0.30 {
         (Preset::Metal, 0.7)
@@ -305,10 +332,10 @@ pub fn classify(f: &ImageFeatures) -> Classification {
         && (0.06..=0.13).contains(&chroma_peak)
     {
         (Preset::Wood, 0.7)
-    } else if f.edge_density > 0.25 && f.sat_mean < 0.18 && f.luma_mean < 0.45 {
+    } else if f.edge_density > 0.25 && f.sat_mean < 0.18 && f.luma_mean < 0.55 {
+        // luma cap 0.55 (was 0.45): light-gray granular rock that the metal
+        // rule's new edge-density veto rejects should land here, not Default.
         (Preset::Stone, 0.7)
-    } else if f.sat_mean > 0.18 && (0.22..=0.40).contains(&chroma_peak) {
-        (Preset::Foliage, 0.7)
     } else if f.tile_mse < 0.005 && f.local_contrast_variance > 0.015 {
         (Preset::Floor, 0.65)
     } else {
@@ -418,6 +445,92 @@ mod tests {
         let f = analyze(&img);
         let c = classify(&f);
         assert!(matches!(c.preset, Preset::Metal | Preset::Default));
+    }
+
+    /// Deterministic tiny hash for reproducible pseudo-noise in tests.
+    fn hash01(x: u32, y: u32) -> f32 {
+        let mut v = x.wrapping_mul(374761393) ^ y.wrapping_mul(668265263);
+        v = (v ^ (v >> 13)).wrapping_mul(1274126177);
+        ((v ^ (v >> 16)) & 0xffff) as f32 / 65535.0
+    }
+
+    #[test]
+    fn test_classify_grass_is_foliage_not_metal() {
+        // Green noise with desaturated gray specks (dry blades) — the specks
+        // must not drag the classification to Metal.
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let n = hash01(x, y);
+                let p = if n > 0.9 {
+                    Rgba([120, 125, 118, 255]) // gray speck
+                } else {
+                    let g = 120 + (n * 60.0) as u8;
+                    Rgba([60, g, 40, 255])
+                };
+                img.put_pixel(x, y, p);
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        let c = classify(&f);
+        assert_eq!(c.preset, Preset::Foliage, "features: {f:?}");
+    }
+
+    #[test]
+    fn test_classify_sand_not_gold() {
+        // Warm tan with a flat luminance histogram (no specular streaks).
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let n = (hash01(x, y) * 20.0) as u8;
+                img.put_pixel(x, y, Rgba([210 - n, 170 - n, 110 - n, 255]));
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        let c = classify(&f);
+        assert_eq!(c.preset, Preset::Sand, "features: {f:?}");
+    }
+
+    #[test]
+    fn test_classify_snow_not_silver() {
+        // Bright, desaturated, slightly noisy — snow field, not metal.
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let n = (hash01(x, y) * 25.0) as u8;
+                img.put_pixel(x, y, Rgba([230 - n, 232 - n, 238 - n, 255]));
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        let c = classify(&f);
+        assert_eq!(c.preset, Preset::Snow, "features: {f:?}");
+    }
+
+    #[test]
+    fn test_classify_gold_with_speculars_is_metal() {
+        // Same warm hue as sand but with strong specular streaks (high
+        // luma_std): brushed gold must STILL classify as metal.
+        let mut img = RgbaImage::new(64, 64);
+        for y in 0..64 {
+            for x in 0..64 {
+                let streak = ((x / 8) % 2) as f32; // alternating bright bands
+                let base = 90.0 + streak * 140.0;
+                let n = hash01(x, y) * 15.0;
+                img.put_pixel(
+                    x,
+                    y,
+                    Rgba([
+                        (base + n).min(255.0) as u8,
+                        (base * 0.78 + n).min(255.0) as u8,
+                        (base * 0.30).min(255.0) as u8,
+                        255,
+                    ]),
+                );
+            }
+        }
+        let f = analyze(&DynamicImage::ImageRgba8(img));
+        let c = classify(&f);
+        assert_eq!(c.preset, Preset::Metal, "features: {f:?}");
     }
 
     #[test]
