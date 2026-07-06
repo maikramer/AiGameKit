@@ -105,6 +105,25 @@ export { createThreeCamera, getCanvasAspect, syncCameraSettings };
 
 const instanceFreeLists = new WeakMap<THREE.InstancedMesh, number[]>();
 
+/**
+ * Pools whose instance bounds need a recompute before the next frustum-cull
+ * check. Marked dirty when an instance is added or removed (the events that
+ * actually change the world-space extent of the pool). Moves are not marked —
+ * recomputing on every move would dwarf the savings; instead a recompute is
+ * throttled in MeshInstanceSystem (a few times per second). When dirty, the
+ * pool's frustum culling is temporarily disabled so no pool "vanishes" between
+ * the dirty mark and the recompute (the safe default is "always draw").
+ */
+const boundsDirtyPools = new WeakSet<THREE.InstancedMesh>();
+
+export function markInstanceBoundsDirty(mesh: THREE.InstancedMesh): void {
+  boundsDirtyPools.add(mesh);
+  // Until the bounds are recomputed we can't trust the sphere, so opt out of
+  // frustum culling for this pool (draw everything). The recompute flips it
+  // back on. This matches the historical safe behaviour.
+  mesh.frustumCulled = false;
+}
+
 export function releaseInstanceSlot(
   mesh: THREE.InstancedMesh,
   index: number
@@ -113,6 +132,8 @@ export function releaseInstanceSlot(
   if (freeList) {
     freeList.push(index);
   }
+  // A removed instance may shrink the pool's extent — recompute on next tick.
+  markInstanceBoundsDirty(mesh);
 }
 
 export function findAvailableInstanceSlot(
@@ -121,9 +142,30 @@ export function findAvailableInstanceSlot(
 ): number | null {
   const freeList = instanceFreeLists.get(mesh);
   if (freeList && freeList.length > 0) {
+    // A newly-activated slot extends the pool's extent — recompute on next tick.
+    markInstanceBoundsDirty(mesh);
     return freeList.pop()!;
   }
   return null;
+}
+
+/**
+ * Recompute the bounding sphere of an instanced pool from its live instance
+ * matrices and re-enable frustum culling. Called periodically (throttled) by
+ * the render system, NOT per frame — `computeBoundingSphere` is O(instances).
+ * Returns true if the bounds were actually recomputed this call.
+ */
+export function recomputeInstanceBounds(mesh: THREE.InstancedMesh): boolean {
+  mesh.computeBoundingSphere();
+  mesh.computeBoundingBox();
+  mesh.frustumCulled = true;
+  boundsDirtyPools.delete(mesh);
+  return true;
+}
+
+/** True when the pool's bounds are stale and should be recomputed. */
+export function instanceBoundsDirty(mesh: THREE.InstancedMesh): boolean {
+  return boundsDirtyPools.has(mesh);
 }
 
 export function initializeInstancedMesh(
