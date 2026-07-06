@@ -467,11 +467,19 @@ export function setRenderingCanvas(
 
 export async function createRenderer(
   canvas: HTMLCanvasElement,
-  clearColor: number
+  clearColor: number,
+  options?: { antialias?: boolean }
 ): Promise<THREE.WebGLRenderer> {
+  // MSAA on the default framebuffer is wasted GPU when the post-processing
+  // composer is active: it renders into HalfFloat FBOs and runs its own AA pass
+  // (SMAA preset HIGH by default, see PostprocessingPlugin config `aa: 2`).
+  // Callers that detect a `postprocessing="..."` attribute in the scene pass
+  // `antialias: false` here so the multisampled default buffer is never
+  // allocated. Defaults to `true` so non-composer scenes still get hardware AA.
+  const antialias = options?.antialias ?? true;
   const renderer = new THREE.WebGLRenderer({
     canvas,
-    antialias: true,
+    antialias,
     powerPreference: 'high-performance',
     alpha: false,
     premultipliedAlpha: false,
