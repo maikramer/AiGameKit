@@ -27,6 +27,7 @@ import { FloatingTextPlugin } from './floating-text/plugin';
 import { DestructiblePlugin } from './destructible/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
+import { AdaptiveQualityPlugin } from './adaptive-quality/plugin';
 import { QuestsPlugin } from './quests/plugin';
 import { BiomesPlugin } from './biomes/plugin';
 import { WaterPlugin } from './water/plugin';
@@ -44,6 +45,7 @@ export const DefaultPlugins: Plugin[] = [
   AiSteeringPlugin,
   RenderingPlugin,
   PostprocessingPlugin,
+  AdaptiveQualityPlugin,
   HudPlugin,
   PlayerControllerPlugin,
   OrbitCameraPlugin,

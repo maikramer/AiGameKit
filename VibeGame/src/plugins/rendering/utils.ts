@@ -540,6 +540,50 @@ export function applyNeutralEnvironment(
   }
 }
 
+/**
+ * Resolve the effective pixel ratio given the renderer's cap and the active
+ * Adaptive Quality tier (if any). When adaptive quality is inactive or at the
+ * Max tier, this returns `cap` unchanged. At higher tiers it scales `cap` down
+ * by the tier's preset factor, clamped to the user-configured floor.
+ *
+ * Kept here (next to the resize handler) so both the initial `createRenderer`
+ * path and every resize consult the same source of truth — a resize must never
+ * silently reset an active downscale.
+ */
+function computeAdaptivePixelRatio(state: State, cap: number): number {
+  // Look up the Adaptive Quality component directly (avoids a hard import cycle
+  // into the adaptive-quality plugin). If the plugin isn't registered, behave
+  // as if the tier is Max (no scaling).
+  const aq = state.getComponent('adaptive-quality') as
+    | {
+        enabled: Uint8Array;
+        minPixelRatio: Float32Array;
+        maxPixelRatio: Float32Array;
+        currentTier: Uint8Array;
+      }
+    | undefined;
+  if (!aq) return cap;
+  // Find the active AdaptiveQuality entity (at most one per scene).
+  let tier = 0;
+  let floor = 0.5;
+  let ceiling = cap;
+  let found = false;
+  for (let i = 0; i < aq.enabled.length; i++) {
+    if (aq.enabled[i]) {
+      tier = aq.currentTier[i];
+      floor = aq.minPixelRatio[i] || 0.5;
+      ceiling = aq.maxPixelRatio[i] || cap;
+      found = true;
+      break;
+    }
+  }
+  if (!found) return cap;
+  // Tier scale table mirrors TIER_PRESETS.pixelRatioScale in adaptive-quality.
+  const scale = [1.0, 1.0, 0.9, 0.8][tier] ?? 1.0;
+  const effectiveCap = Math.min(cap, ceiling);
+  return Math.max(floor, Math.min(effectiveCap, effectiveCap * scale));
+}
+
 export function handleWindowResize(
   state: State,
   renderer: THREE.WebGLRenderer
@@ -551,12 +595,16 @@ export function handleWindowResize(
   const height = canvas?.clientHeight || window.innerHeight;
   const aspect = width / height;
 
-  renderer.setPixelRatio(
-    Math.min(
-      window.devicePixelRatio,
-      /Mobi|Android/i.test(navigator.userAgent) ? 1.25 : 1.5
-    )
+  // Pixel-ratio cap (the renderer's ceiling). The Adaptive Quality scaler may
+  // reduce the effective ratio below this cap; honor the current applied ratio
+  // so a window resize doesn't clobber an active downscale. If adaptive
+  // quality is inactive, this equals the cap (no change in behavior).
+  const cap = Math.min(
+    window.devicePixelRatio,
+    /Mobi|Android/i.test(navigator.userAgent) ? 1.25 : 1.5
   );
+  const appliedRatio = computeAdaptivePixelRatio(state, cap);
+  renderer.setPixelRatio(appliedRatio);
   renderer.setSize(width, height, false);
 
   if (

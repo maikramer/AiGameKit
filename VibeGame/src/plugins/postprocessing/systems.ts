@@ -18,6 +18,12 @@ import {
 } from './builtin-effects';
 import { type EffectDefinition, getEffectDefinitions } from './effect-registry';
 import { buildComposer } from './composer';
+import { N8AOPostPass } from 'n8ao';
+import {
+  getAdaptiveQualityTier,
+  TIER_PRESETS,
+} from '../adaptive-quality/quality-tiers';
+import type { GodRaysEffect, DepthOfFieldEffect } from 'postprocessing';
 
 const postprocessingQuery = defineQuery([Postprocessing]);
 const mainCameraQuery = defineQuery([MainCamera]);
@@ -180,6 +186,13 @@ export const PostprocessingEffectUpdateSystem: System = {
       }
     }
 
+    // Adaptive Quality levers — apply per-tier presets to the effect passes.
+    // The scaler measures frame time elsewhere and writes the tier; here we
+    // honor it by downgrading expensive effect parameters. At tier 0 (Max)
+    // every lever is at its full setting (no-op vs. the effect defaults), so
+    // when the GPU has headroom nothing is degraded.
+    applyAdaptiveEffectLevers(state);
+
     // Sync `toneMappingExposure` to the renderer. The composer's
     // ToneMappingEffect pass reads the renderer's exposure each frame, so XML
     // exposure overrides (`tone-mapping-exposure="1.15"`) reach the final
@@ -198,6 +211,93 @@ export const PostprocessingEffectUpdateSystem: System = {
     }
   },
 };
+
+/**
+ * Apply Adaptive Quality tier presets to the live effect passes. Each lever is
+ * a cheap property write gated on a tier change, so at steady state (no tier
+ * transition) this is a handful of comparisons per frame.
+ *
+ * Levers applied:
+ *  - SSAO: `configuration.halfRes` (half-resolution AO at tier ≥ 1)
+ *  - God rays: `godRaysMaterial.samples` (80 → 40 → 24)
+ *  - DoF: `bokehScale` scaled by the tier factor (0 at tier 3 effectively
+ *    disables the blur cost)
+ *
+ * Pixel-ratio scaling is handled directly by the Adaptive Quality apply system
+ * (it owns the renderer). Point-shadow throttling is handled by the light sync
+ * system. Water-mirror gating is handled by the water plugin.
+ */
+function applyAdaptiveEffectLevers(state: State): void {
+  if (activeEffectInstances.length === 0) return;
+  const tier = getAdaptiveQualityTier(state);
+  const preset = TIER_PRESETS[tier] ?? TIER_PRESETS[0];
+
+  for (const { def, pass } of activeEffectInstances) {
+    try {
+      switch (def.key) {
+        case 'ssao': {
+          const n8ao = pass as unknown as N8AOPostPass;
+          // halfRes is a configuration flag that triggers a render-target
+          // realloc on change; N8AO guards this internally. Only write when it
+          // actually differs to avoid per-frame reallocs.
+          if (n8ao?.configuration?.halfRes !== preset.ssaoHalfResolution) {
+            n8ao.configuration.halfRes = preset.ssaoHalfResolution;
+          }
+          break;
+        }
+        case 'godRays': {
+          const gr = effectOfPass(pass) as GodRaysEffect | undefined;
+          if (
+            gr?.godRaysMaterial &&
+            gr.godRaysMaterial.samples !== preset.godRaysSamples
+          ) {
+            gr.godRaysMaterial.samples = preset.godRaysSamples;
+          }
+          break;
+        }
+        case 'depthOfField': {
+          const dof = effectOfPass(pass) as DepthOfFieldEffect | undefined;
+          if (dof) {
+            // bokehScale is derived from the user's configured value × the tier
+            // factor. We can't read the user's "intended" value back from the
+            // effect reliably after scaling, so scale relative to the
+            // component field each frame.
+            const entity = activeEffectInstances.find(
+              (i) => i.def.key === 'depthOfField'
+            )?.entity;
+            if (entity !== undefined) {
+              const base = Postprocessing.dofBokehScale[entity];
+              dof.bokehScale = Math.max(0, base * preset.dofBokehScaleScale);
+            }
+          }
+          break;
+        }
+      }
+    } catch {
+      // An effect pass may have been disposed mid-frame; skip silently.
+    }
+  }
+}
+
+/** Resolve the underlying Effect wrapped by an EffectPass (mirrors the
+ *  builtin-effects `effectOf` helper, kept local to avoid a cross-module
+ *  export). Falls back to the pass itself for non-wrapped passes. */
+const effectByPass = new WeakMap<Pass, unknown>();
+function effectOfPass(pass: Pass): unknown {
+  // The pmndrs EffectPass stores its effects privately; the builtin-effects
+  // module keeps its own WeakMap. For god-rays/DoF the create() wraps via
+  // `wrap()`, so the pass is an EffectPass. We attempt the public `effects`
+  // getter if present, else return the pass (N8AO is not wrapped).
+  const cached = effectByPass.get(pass);
+  if (cached) return cached;
+  const maybeEffects = (pass as unknown as { effects?: unknown[] }).effects;
+  const resolved =
+    Array.isArray(maybeEffects) && maybeEffects.length > 0
+      ? maybeEffects[0]
+      : pass;
+  effectByPass.set(pass, resolved);
+  return resolved;
+}
 
 /**
  * Applies the `Postprocessing` height-fog fields (`fogColor` / `fogDensity`) to

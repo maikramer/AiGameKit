@@ -8,6 +8,10 @@ import {
   threeCameras,
 } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
+import {
+  getAdaptiveQualityTier,
+  TIER_PRESETS,
+} from '../adaptive-quality/quality-tiers';
 import { distanceToPath } from './path-utils';
 import { bodySurfaceYAt } from './registry';
 import { waterEmptyReflectionTexture, waterSideCars } from './systems';
@@ -213,6 +217,18 @@ export const WaterReflectionSystem: System = {
 
     const tier = getGpuTier(state);
     if (tier && tier.tier < MIN_GPU_TIER) {
+      clearActiveReflection(cars);
+      return;
+    }
+
+    // Adaptive Quality: the planar mirror is a full extra scene render per
+    // frame. At Medium tier (2) and below the scaler has decided the GPU is
+    // under sustained pressure, so drop the mirror — the water shader still
+    // has its sky-tint flat fallback (see water/systems.ts). The mirror
+    // resumes automatically when headroom returns and the tier drops back.
+    const qualityTier = getAdaptiveQualityTier(state);
+    const mirrorAllowed = TIER_PRESETS[qualityTier]?.waterMirror ?? true;
+    if (!mirrorAllowed) {
       clearActiveReflection(cars);
       return;
     }
