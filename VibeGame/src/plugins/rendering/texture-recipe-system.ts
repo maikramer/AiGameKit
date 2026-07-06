@@ -37,6 +37,73 @@ const textureAssets = new Map<number, THREE.Texture>();
 // Cache de texturas invertidas (smoothness → roughness)
 const invertedCache = new Map<number, THREE.CanvasTexture>();
 
+/**
+ * Decode cache keyed by URL: the decoded image (PNG/JPG/KTX2) is shared across
+ * every entity that references the same URL, so the GPU upload + image decode
+ * happens once. Each consumer clones the decoded texture so it can apply its
+ * own wrap/repeat/anisotropy/colorSpace without affecting siblings — `clone()`
+ * shares the underlying `image` (one GPU texture), only duplicating metadata.
+ */
+const decodedTextureByUrl = new Map<string, Promise<THREE.Texture>>();
+
+/** Ref-counts decoded textures so they are freed when the last consumer drops. */
+const decodedTextureRefcount = new Map<string, number>();
+
+function rememberDecodedTexture(url: string): Promise<THREE.Texture> {
+  const existing = decodedTextureByUrl.get(url);
+  if (existing) {
+    decodedTextureRefcount.set(url, (decodedTextureRefcount.get(url) ?? 0) + 1);
+    return existing;
+  }
+  // The first consumer drives the decode; later consumers await the same promise.
+  const promise = Promise.resolve().then(async () => {
+    const loader = new THREE.TextureLoader();
+    if (!isKTX2Url(url)) return loader.loadAsync(url);
+    const renderer = getRendererForTextureLoad();
+    if (!renderer) return loader.loadAsync(url);
+    const ktx2 = tryInitKTX2(renderer);
+    if (!ktx2) return loader.loadAsync(url);
+    try {
+      return await ktx2.loadAsync(url);
+    } catch {
+      return loader.loadAsync(url);
+    }
+  });
+  decodedTextureByUrl.set(url, promise);
+  decodedTextureRefcount.set(url, 1);
+  return promise;
+}
+
+function releaseDecodedTexture(url: string): void {
+  const rc = decodedTextureRefcount.get(url);
+  if (rc === undefined) return;
+  if (rc > 1) {
+    decodedTextureRefcount.set(url, rc - 1);
+    return;
+  }
+  // Last consumer gone: drop the cached decode so the image/GPU texture can be
+  // freed. We can't synchronously dispose the source here because clones may
+  // still reference the image — clones own their own GPU upload, so disposing
+  // the master only invalidates the master's GPU handle. Resolve + dispose.
+  decodedTextureRefcount.delete(url);
+  const promise = decodedTextureByUrl.get(url);
+  decodedTextureByUrl.delete(url);
+  if (promise) {
+    void promise.then((tex) => {
+      try {
+        tex.dispose();
+      } catch {
+        // Already disposed.
+      }
+    });
+  }
+}
+
+// Lazily-resolved renderer accessor. TextureRecipeLoadSystem runs in the
+// `setup` group; the renderer may not exist yet on the very first tick, so we
+// resolve it at load time (inside rememberDecodedTexture) rather than capture.
+let getRendererForTextureLoad: () => THREE.WebGLRenderer | null = () => null;
+
 // Materialize outputs smoothness maps; Three.js roughnessMap expects roughness (inverse).
 // Auto-detected by filename containing "smoothness".
 function invertSmoothnessTexture(
@@ -84,7 +151,10 @@ const CHANNEL_MAP = [
 export const TextureRecipeLoadSystem: System = {
   group: 'setup',
   update: (state) => {
-    const loader = new THREE.TextureLoader();
+    // Resolve the renderer lazily so the decode cache can pick KTX2 when the
+    // GPU is ready. Captured fresh each tick (cheap; WeakMap lookup).
+    const { renderer } = getRenderingContext(state);
+    getRendererForTextureLoad = () => renderer ?? null;
 
     for (const eid of textureRecipeQuery(state.world)) {
       if (TextureRecipe.pending[eid] === 0) continue;
@@ -95,24 +165,14 @@ export const TextureRecipeLoadSystem: System = {
         continue;
       }
 
-      const loadTexture = async (texUrl: string): Promise<THREE.Texture> => {
-        if (!isKTX2Url(texUrl)) return loader.loadAsync(texUrl);
+      void rememberDecodedTexture(url)
+        .then((decoded) => {
+          // Clone so this entity can apply its own wrap/repeat/anisotropy/
+          // colorSpace without affecting siblings sharing the same decode.
+          // `clone()` shares the underlying `image` → one GPU upload per URL.
+          const texture = decoded.clone();
+          texture.needsUpdate = true;
 
-        const { renderer } = getRenderingContext(state);
-        if (!renderer) return loader.loadAsync(texUrl);
-
-        const ktx2 = tryInitKTX2(renderer);
-        if (!ktx2) return loader.loadAsync(texUrl);
-
-        try {
-          return await ktx2.loadAsync(texUrl);
-        } catch {
-          return loader.loadAsync(texUrl);
-        }
-      };
-
-      void loadTexture(url)
-        .then((texture) => {
           // Configura wrapping
           const repeatX = TextureRecipe.repeatX[eid] || 1;
           const repeatY = TextureRecipe.repeatY[eid] || 1;
@@ -129,11 +189,16 @@ export const TextureRecipeLoadSystem: System = {
           // flipX not available on THREE.Texture; skip
           if (TextureRecipe.flipY[eid]) texture.flipY = true;
 
-          // Anisotropia — 8 is a safe minimum for all modern GPUs
-          const maxAniso = 8;
+          // Anisotropy — use the hardware maximum (typically 16 on desktop).
+          // Sharper grazing-angle textures (terrain/floor) at ~zero cost.
           const aniso = TextureRecipe.anisotropy[eid];
-          texture.anisotropy =
-            aniso === 0 ? maxAniso : Math.min(aniso, maxAniso);
+          if (aniso > 0) {
+            texture.anisotropy = aniso;
+          } else if (renderer) {
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+          } else {
+            texture.anisotropy = 8;
+          }
 
           const channel = TextureRecipe.channel[eid] || 0;
           texture.colorSpace =
@@ -153,6 +218,8 @@ export const TextureRecipeLoadSystem: System = {
         })
         .catch((err: unknown) => {
           logger.error('[texture-recipe] Falha ao carregar textura:', err);
+          // Release the ref we took on failure so the cache slot isn't leaked.
+          releaseDecodedTexture(url);
         })
         .finally(() => {
           TextureRecipe.pending[eid] = 0;
@@ -176,6 +243,10 @@ export const TextureRecipeLoadSystem: System = {
       }
     }
     invertedCache.clear();
+    // Drop decode-cache refs for every URL we were tracking.
+    for (const url of textureUrls.values()) {
+      releaseDecodedTexture(url);
+    }
     textureUrls.clear();
     // KTX2Loader.dispose() terminates its worker pool.
     if (_ktx2Loader && typeof _ktx2Loader.dispose === 'function') {
@@ -196,7 +267,9 @@ export const TextureRecipeCleanupSystem: System = {
       if (!state.exists(eid) || !state.hasComponent(eid, TextureRecipe)) {
         texture.dispose();
         textureAssets.delete(eid);
+        const url = textureUrls.get(eid);
         textureUrls.delete(eid);
+        if (url) releaseDecodedTexture(url);
         const inverted = invertedCache.get(eid);
         if (inverted) {
           inverted.dispose();

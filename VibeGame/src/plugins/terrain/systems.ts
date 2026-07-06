@@ -70,33 +70,59 @@ function _getBlendState(state: State, entity: number): BlendState {
   return s;
 }
 
-function _loadTex(url: string): THREE.Texture {
+/** Cached hardware anisotropy max. Terrain floor textures benefit most from
+ *  anisotropic filtering (near-grazing view angles cover the whole screen). */
+let _maxAniso: number | null = null;
+function maxAnisotropy(state: State): number {
+  if (_maxAniso !== null) return _maxAniso;
+  // Resolve lazily — textures load after the renderer exists. Fallback to 8
+  // (safe desktop minimum) if the context isn't available yet.
+  try {
+    const ctx = getRenderingContext(state);
+    if (ctx.renderer) {
+      _maxAniso = ctx.renderer.capabilities.getMaxAnisotropy();
+      return _maxAniso;
+    }
+  } catch {
+    // Renderer not ready yet.
+  }
+  _maxAniso = 8;
+  return _maxAniso;
+}
+
+function _loadTex(url: string, state: State): THREE.Texture {
   let tex = _terrainTextureCache.get(url);
   if (tex) return tex;
+  const aniso = maxAnisotropy(state);
   tex = _textureLoader.load(url, (t) => {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(1, 1);
     t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = aniso;
   });
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(1, 1);
+  tex.anisotropy = aniso;
   _terrainTextureCache.set(url, tex);
   return tex;
 }
 
-function _loadNormalTex(url: string): THREE.Texture {
+function _loadNormalTex(url: string, state: State): THREE.Texture {
   let tex = _terrainTextureCache.get(url);
   if (tex) return tex;
+  const aniso = maxAnisotropy(state);
   tex = _textureLoader.load(url, (t) => {
     t.wrapS = THREE.RepeatWrapping;
     t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(1, 1);
+    t.anisotropy = aniso;
   });
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(1, 1);
+  tex.anisotropy = aniso;
   _terrainTextureCache.set(url, tex);
   return tex;
 }
@@ -702,7 +728,7 @@ function applyTerrainSplat(state: State, field: number): void {
 
   const layers = cfg.layerUrls
     .slice(0, 4)
-    .map((u) => (u ? _loadTex(u) : _emptyTexture));
+    .map((u) => (u ? _loadTex(u, state) : _emptyTexture));
   while (layers.length < 4) layers.push(_emptyTexture);
   const nrs = cfg.layerUrls
     .slice(0, 4)
@@ -1050,7 +1076,7 @@ export const TerrainLodSelectSystem: System = {
         const oldUrl = data.textureUrl;
         data.textureUrl = currentTexUrl;
         if (currentTexUrl) {
-          const newTex = _loadTex(currentTexUrl);
+          const newTex = _loadTex(currentTexUrl, state);
           const bs = _getBlendState(state, fieldEntity);
           const mat = getSharedTerrainMaterials(state).get(fieldEntity);
           if (mat && bs.fromTex && oldUrl) {
@@ -1248,11 +1274,11 @@ export const TerrainMeshSystem: System = {
           };
           let baseNR: THREE.Texture = _flatNARTexture;
           if (texUrl) {
-            matOpts.map = _loadTex(texUrl);
+            matOpts.map = _loadTex(texUrl, state);
             const baseName = texUrl.replace(/\/[^/]+$/, '');
             const texName = texUrl.split('/').pop()!.replace('.png', '');
             const normalUrl = `${baseName}/pbr_${texName}/${texName}_normal.png`;
-            matOpts.normalMap = _loadNormalTex(normalUrl);
+            matOpts.normalMap = _loadNormalTex(normalUrl, state);
             // `normal-strength` XML attr (Terrain.normalStrength); the blend
             // shader multiplies the packed uNR* normals by this normalScale.
             matOpts.normalScale = new THREE.Vector2(
