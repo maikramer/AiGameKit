@@ -124,6 +124,14 @@
       >
       </GameObject>
 
+      <!-- Adaptive Quality auto-scaler: mede o frame time e só degrada efeitos
+           (pixel ratio, SSAO half-res, point-shadow cadence, god-ray samples,
+           water mirror) quando o FPS cai abaixo de 55 de forma sustentada.
+           Enquanto há headroom GPU, mantém TODA a fidelidade (tier 0 = Max).
+           Colocado aqui para que o scaler proteja a configuração pesada de
+           realismo acima em hardware que não a aguente. -->
+      <AdaptiveQuality target-fps="55" min-pixel-ratio="1.0"></AdaptiveQuality>
+
       <!-- Mixer + música em camadas (engine AudioPlugin). A camada explore
            toca por omissão; os biomas fazem crossfade via bgm-layer. -->
       <AudioMixer master="1" music="0.7" sfx="0.8"></AudioMixer>
