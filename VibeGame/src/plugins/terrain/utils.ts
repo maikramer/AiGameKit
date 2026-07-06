@@ -26,6 +26,17 @@ export interface TerrainEntityData {
   // mesh resolution so the collider surface matches what the player sees. Keyed
   // by chunk entity id; created/removed as LOD chunks come and go.
   chunkColliders: Map<number, import('@dimforge/rapier3d-compat').RigidBody>;
+  /**
+   * Pool of recycled fixed RigidBodies for chunk heightfields. As chunks leave
+   * the physics ring their body is returned here (colliders removed) instead of
+   * being destroyed; entering chunks take a body from the pool and attach a
+   * fresh heightfield collider. This eliminates the create/destroy churn
+   * (broadphase insertion/removal) that fired on every LOD reselect (≤6 m of
+   * player movement). The collider itself can't be reused because its heights
+   * array differs per chunk, but reusing the body is the bigger win — the body
+   * owns the broadphase entry.
+   */
+  chunkBodyPool?: import('@dimforge/rapier3d-compat').RigidBody[];
 }
 
 const stateToTerrainContext = new WeakMap<

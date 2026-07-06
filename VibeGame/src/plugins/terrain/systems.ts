@@ -906,6 +906,34 @@ function removeChunkColliders(
     }
   }
   data.chunkColliders.clear();
+  // Final teardown — drain the body pool too so nothing leaks on dispose /
+  // entity destroy. The pool only holds parked (collider-less) bodies.
+  if (data.chunkBodyPool && rapierWorld) {
+    for (const body of data.chunkBodyPool) {
+      rapierWorld.removeRigidBody(body);
+    }
+    data.chunkBodyPool.length = 0;
+  }
+}
+
+/**
+ * Recycle a field's chunk bodies into the pool instead of destroying them.
+ * Used on heightmap (re)load: the colliders are stale (new heights) but the
+ * bodies will be needed again immediately for the rebuilt chunks, so returning
+ * them to the pool avoids a destroy+create burst that would otherwise hit the
+ * broadphase on every reload.
+ */
+function recycleChunkColliders(
+  rapierWorld: RAPIER.World | null,
+  data: import('./utils').TerrainEntityData
+): void {
+  if (!data.chunkBodyPool) data.chunkBodyPool = [];
+  if (rapierWorld) {
+    for (const body of data.chunkColliders.values()) {
+      recycleChunkBody(rapierWorld, body, data.chunkBodyPool);
+    }
+  }
+  data.chunkColliders.clear();
 }
 
 /**
@@ -968,7 +996,9 @@ function applyLoadedSampler(
     data.physicsBody = null;
     data.physicsCollider = null;
   }
-  removeChunkColliders(rapierWorld, data);
+  // Recycle chunk bodies into the pool (they'll be reused immediately as the
+  // rebuilt chunks enter the ring), instead of destroy+create on reload.
+  recycleChunkColliders(rapierWorld, data);
   data.collisionReady = false;
   fireHeightmapReloadCallbacks(state);
 }
@@ -1389,7 +1419,8 @@ function createChunkCollider(
   originX: number,
   originZ: number,
   size: number,
-  resolution: number
+  resolution: number,
+  pool?: RAPIER.RigidBody[]
 ): RAPIER.RigidBody {
   const { heights, nrows, ncols } = buildChunkHeightfield(
     sampler,
@@ -1399,13 +1430,30 @@ function createChunkCollider(
     resolution
   );
 
-  const body = rapierWorld.createRigidBody(
-    RAPIER.RigidBodyDesc.fixed().setTranslation(
-      offset.x + originX,
-      offset.y,
-      offset.z + originZ
-    )
-  );
+  // Reuse a pooled body when available: the body (and its broadphase entry)
+  // is the expensive part to create/destroy in Rapier. We only need to
+  // reposition it and attach a fresh heightfield collider (the collider's
+  // heights array differs per chunk, so the collider itself can't be reused).
+  let body: RAPIER.RigidBody;
+  if (pool && pool.length > 0) {
+    body = pool.pop()!;
+    body.setTranslation(
+      {
+        x: offset.x + originX,
+        y: offset.y,
+        z: offset.z + originZ,
+      },
+      true
+    );
+  } else {
+    body = rapierWorld.createRigidBody(
+      RAPIER.RigidBodyDesc.fixed().setTranslation(
+        offset.x + originX,
+        offset.y,
+        offset.z + originZ
+      )
+    );
+  }
 
   const colliderDesc = RAPIER.ColliderDesc.heightfield(nrows, ncols, heights, {
     x: size,
@@ -1417,6 +1465,32 @@ function createChunkCollider(
 
   rapierWorld.createCollider(colliderDesc, body);
   return body;
+}
+
+/**
+ * Return a chunk's body to the pool for reuse. Removes the attached colliders
+ * (heightfield data differs per chunk and can't be reused) but keeps the body
+ * alive in the world with its broadphase entry intact, parked far below the
+ * terrain so it can't interfere with anything while idle.
+ */
+const POOL_PARK_Y = -100000;
+function recycleChunkBody(
+  rapierWorld: RAPIER.World,
+  body: RAPIER.RigidBody,
+  pool: RAPIER.RigidBody[]
+): void {
+  // Detach every collider on this body (a recycled body carries a stale
+  // heightfield otherwise). Iterate by index — Rapier shifts indices on
+  // removal, so detach from the end (last index stays valid until popped).
+  const n = body.numColliders();
+  for (let i = n - 1; i >= 0; i--) {
+    rapierWorld.removeCollider(body.collider(i), true);
+  }
+  // Park the body far outside the play area. It stays registered in the
+  // broadphase but with no colliders, so it costs ~nothing to keep around
+  // and is ready for immediate reuse.
+  body.setTranslation({ x: 0, y: POOL_PARK_Y, z: 0 }, true);
+  pool.push(body);
 }
 
 /**
@@ -1510,6 +1584,9 @@ export const TerrainChunkColliderSystem: System = {
         );
       };
 
+      if (!data.chunkBodyPool) data.chunkBodyPool = [];
+      const pool = data.chunkBodyPool;
+
       for (const chunk of data.chunks) {
         if (
           data.chunkColliders.has(chunk) ||
@@ -1524,7 +1601,8 @@ export const TerrainChunkColliderSystem: System = {
           TerrainChunk.originX[chunk],
           TerrainChunk.originZ[chunk],
           TerrainChunk.size[chunk],
-          TerrainChunk.resolution[chunk]
+          TerrainChunk.resolution[chunk],
+          pool
         );
         data.chunkColliders.set(chunk, body);
       }
@@ -1532,7 +1610,9 @@ export const TerrainChunkColliderSystem: System = {
       for (const [chunk, body] of data.chunkColliders) {
         if (data.chunks.has(chunk) && state.exists(chunk) && inRange(chunk))
           continue;
-        rapierWorld.removeRigidBody(body);
+        // Recycle the body (detach colliders, park below the world) instead of
+        // destroying it — the next chunk entering the ring reuses it.
+        recycleChunkBody(rapierWorld, body, pool);
         data.chunkColliders.delete(chunk);
       }
 
