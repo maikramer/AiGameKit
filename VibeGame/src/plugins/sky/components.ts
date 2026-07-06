@@ -9,6 +9,10 @@ export const EquirectSky = {
   rotationDeg: new Float32Array(MAX_ENTITIES),
   setBackground: new Uint8Array(MAX_ENTITIES),
   applied: new Uint8Array(MAX_ENTITIES),
+  /** IBL intensity applied to `scene.environmentIntensity`. 0 = use fallback. */
+  environmentIntensity: new Float32Array(MAX_ENTITIES),
+  /** Sky background intensity applied to `scene.backgroundIntensity`. 0 = use fallback. */
+  backgroundIntensity: new Float32Array(MAX_ENTITIES),
 } as const;
 
 const equirectSkyUrls = new Map<number, string>();

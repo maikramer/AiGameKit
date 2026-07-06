@@ -1,6 +1,6 @@
 export { Postprocessing } from './components';
 export { PostprocessingPlugin } from './plugin';
-export { PostprocessingBuildSystem } from './systems';
+export { PostprocessingBuildSystem, FogSyncSystem } from './systems';
 export {
   registerEffect,
   getEffectDefinitions,

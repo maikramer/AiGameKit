@@ -31,4 +31,25 @@ export const Postprocessing = {
   saturation: new Float32Array(MAX_ENTITIES),
   contrast: new Float32Array(MAX_ENTITIES),
   brightness: new Float32Array(MAX_ENTITIES),
+  // Film grain (NoiseEffect): subtle animated noise for cinematic texture.
+  filmGrain: new Uint8Array(MAX_ENTITIES),
+  filmGrainOpacity: new Float32Array(MAX_ENTITIES),
+  // LUT color grading (LUT3DEffect): PNG strip/tile or .cube lookup table.
+  // URL is resolved via the recipe's `lut-url` attribute → side-map.
+  lut: new Uint8Array(MAX_ENTITIES),
+  lutIntensity: new Float32Array(MAX_ENTITIES),
+  // God rays (volumetric light scattering). The sun source follows the active
+  // directional light's direction; density/decay tune the radial blur.
+  godRays: new Uint8Array(MAX_ENTITIES),
+  godRaysDensity: new Float32Array(MAX_ENTITIES),
+  godRaysDecay: new Float32Array(MAX_ENTITIES),
+  godRaysWeight: new Float32Array(MAX_ENTITIES),
+  godRaysExposure: new Float32Array(MAX_ENTITIES),
+  // Screen-space reflections (SSRPass adapter wrapping three's addon).
+  // Resolution scale < 1 trades reflection sharpness for perf.
+  ssr: new Uint8Array(MAX_ENTITIES),
+  ssrResolutionScale: new Float32Array(MAX_ENTITIES),
+  ssrOpacity: new Float32Array(MAX_ENTITIES),
+  ssrMaxDistance: new Float32Array(MAX_ENTITIES),
+  ssrThickness: new Float32Array(MAX_ENTITIES),
 } as const;

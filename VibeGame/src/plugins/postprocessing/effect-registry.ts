@@ -18,6 +18,10 @@ export interface EffectDefinition {
     pass: Pass
   ): void;
   readonly position?: 'first' | 'last';
+  /** Sort key within the same `position` bucket (lower runs earlier;
+   * default 0, ties keep registration order). Lets a scene-re-rendering pass
+   * like SSR run before the AA passes that share `position: 'first'`. */
+  readonly order?: number;
 }
 
 const effects: EffectDefinition[] = [];

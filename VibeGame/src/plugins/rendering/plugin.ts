@@ -69,6 +69,7 @@ export const RenderingPlugin: Plugin = {
         csm: 0,
         csmCascades: 3,
         csmMaxFar: 100,
+        pcss: 0,
       },
       meshRenderer: {
         visible: 1,

@@ -1,12 +1,17 @@
 import type { Plugin } from '../../core';
 import { Postprocessing } from './components';
 import {
+  FogSyncSystem,
   PostprocessingBuildSystem,
   PostprocessingEffectUpdateSystem,
 } from './systems';
 
 export const PostprocessingPlugin: Plugin = {
-  systems: [PostprocessingBuildSystem, PostprocessingEffectUpdateSystem],
+  systems: [
+    PostprocessingBuildSystem,
+    PostprocessingEffectUpdateSystem,
+    FogSyncSystem,
+  ],
   components: { postprocessing: Postprocessing },
   config: {
     defaults: {
@@ -41,6 +46,20 @@ export const PostprocessingPlugin: Plugin = {
         saturation: 0.08,
         contrast: 0.06,
         brightness: 0.0,
+        filmGrain: 0,
+        filmGrainOpacity: 0.05,
+        lut: 0,
+        lutIntensity: 1.0,
+        godRays: 0,
+        godRaysDensity: 0.96,
+        godRaysDecay: 0.92,
+        godRaysWeight: 0.3,
+        godRaysExposure: 0.54,
+        ssr: 0,
+        ssrResolutionScale: 0.5,
+        ssrOpacity: 0.5,
+        ssrMaxDistance: 180,
+        ssrThickness: 0.018,
       },
     },
     enums: {

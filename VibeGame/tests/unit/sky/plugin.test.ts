@@ -33,12 +33,14 @@ function makeElement(
 describe('EquirectSky componente', () => {
   const comp = getSkyComponent();
 
-  it('tem rotationDeg, setBackground e applied', () => {
+  it('tem rotationDeg, setBackground, applied, environmentIntensity e backgroundIntensity', () => {
     const keys = Object.keys(comp);
     expect(keys).toContain('rotationDeg');
     expect(keys).toContain('setBackground');
     expect(keys).toContain('applied');
-    expect(keys).toHaveLength(3);
+    expect(keys).toContain('environmentIntensity');
+    expect(keys).toContain('backgroundIntensity');
+    expect(keys).toHaveLength(5);
   });
 
   it('rotationDeg é Float32Array', () => {

@@ -44,6 +44,11 @@ export const DirectionalLight = {
   csm: new Uint8Array(MAX_ENTITIES),
   csmCascades: new Uint8Array(MAX_ENTITIES),
   csmMaxFar: new Float32Array(MAX_ENTITIES),
+  /** Percentage-Closer Soft Shadows for this directional light (variable
+   * penumbra via blocker search). Opt-in per-light; only affects directional
+   * shadow sampling, point/spot lights keep stock PCF. Applied globally to
+   * the shader chunk when the first opted-in light is created. */
+  pcss: new Uint8Array(MAX_ENTITIES),
 } as const;
 
 export const PointLight = {
