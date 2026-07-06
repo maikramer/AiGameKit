@@ -24,7 +24,9 @@ async function applyEquirectSky(
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
   url: string,
-  setBackground: boolean
+  setBackground: boolean,
+  envIntensity: number,
+  bgIntensity: number
 ): Promise<void> {
   const texture = await _loader.loadAsync(url);
   texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -34,7 +36,8 @@ async function applyEquirectSky(
   if (setBackground) {
     const prev = scene.background;
     scene.background = texture;
-    scene.backgroundIntensity = 1.2;
+    // 0 on the component means "use the loader default".
+    scene.backgroundIntensity = bgIntensity > 0 ? bgIntensity : 1.2;
     if (prev && (prev as THREE.Texture).isTexture && prev !== texture) {
       (prev as THREE.Texture).dispose();
     }
@@ -57,9 +60,10 @@ async function applyEquirectSky(
     scene.environment.dispose();
   }
   scene.environment = rt.texture;
-  // Keep it subtle — the scene is already lit by the hemisphere + directional
-  // lights; a full-strength IBL washes everything out.
-  scene.environmentIntensity = 0.45;
+  // Keep it subtle by default — the scene is already lit by the hemisphere +
+  // directional lights; a full-strength IBL washes everything out. A positive
+  // component value overrides per-scene (e.g. crank for stronger PBR reflections).
+  scene.environmentIntensity = envIntensity > 0 ? envIntensity : 0.45;
 }
 
 /**
@@ -89,7 +93,9 @@ export const EquirectSkyLoadSystem: System = {
         ctx.renderer,
         ctx.scene,
         url,
-        EquirectSky.setBackground[eid] !== 0
+        EquirectSky.setBackground[eid] !== 0,
+        EquirectSky.environmentIntensity[eid],
+        EquirectSky.backgroundIntensity[eid]
       )
         .then(() => {
           EquirectSky.applied[eid] = 1;

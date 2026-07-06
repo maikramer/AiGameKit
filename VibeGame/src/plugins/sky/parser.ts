@@ -35,5 +35,14 @@ export const equirectSkyParser: Parser = ({ entity, element }) => {
   )
     ? 1
     : 0;
+  // 0 = "use loader default" (keeps backward compat). Positive overrides.
+  EquirectSky.environmentIntensity[entity] = toNumber(
+    element.attributes['environment-intensity'],
+    0
+  );
+  EquirectSky.backgroundIntensity[entity] = toNumber(
+    element.attributes['background-intensity'],
+    0
+  );
   EquirectSky.applied[entity] = 0;
 };

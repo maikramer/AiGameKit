@@ -5,7 +5,7 @@ import type { State, System } from '../../core';
 import { defineQuery } from '../../core';
 import { loadGltfMaster } from '../../extras/gltf-bridge';
 import { getSceneGeneration } from '../../extras/scene-generation';
-import { getScene } from '../rendering';
+import { getScene, setupCsmMaterial } from '../rendering';
 import { MainCamera } from '../rendering/components';
 import { DistanceCull } from '../rendering/components';
 import { Transform, WorldTransform } from '../transforms/components';
@@ -336,6 +336,16 @@ function buildLevelPrimitives(
   master.traverse((obj) => {
     const mesh = obj as THREE.Mesh;
     if (mesh.isMesh !== true) return;
+    // Must patch *before* handing the material to InstancedMesh2: it saves
+    // whatever `onBeforeCompile` is currently on the material and wraps it
+    // every frame (onBeforeRender/onAfterRender) to inject its own
+    // instancing uniforms — patching CSM in afterward would race that
+    // per-frame save/restore and get silently discarded.
+    for (const mat of Array.isArray(mesh.material)
+      ? mesh.material
+      : [mesh.material]) {
+      setupCsmMaterial(state, mat);
+    }
     const instanced = new InstancedMesh2(mesh.geometry, mesh.material, {
       capacity: INITIAL_CAPACITY,
     });
@@ -351,6 +361,7 @@ function buildLevelPrimitives(
 }
 
 function attachLodLevel(
+  state: State,
   pool: GltfInstancePool,
   level: 1 | 2,
   group: THREE.Group
@@ -373,6 +384,14 @@ function attachLodLevel(
   const distance = level === 1 ? pool.near : pool.mid;
   const count = Math.min(meshes.length, pool.primitives.length);
   for (let i = 0; i < count; i++) {
+    // Same ordering requirement as buildLevelPrimitives: patch before this
+    // material is ever handed to InstancedMesh2's per-frame onBeforeCompile
+    // wrapping (addLOD stores it exactly the same way as the constructor).
+    for (const mat of Array.isArray(meshes[i].material)
+      ? (meshes[i].material as THREE.Material[])
+      : [meshes[i].material as THREE.Material]) {
+      setupCsmMaterial(state, mat);
+    }
     pool.primitives[i].mesh.addLOD(
       meshes[i].geometry,
       meshes[i].material,
@@ -405,7 +424,7 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
         void loadGltfMaster(state, lodUrl)
           .then((gltfLod) => {
             if (getSceneGeneration(state) !== gen) return;
-            attachLodLevel(pool, level, gltfLod.scene);
+            attachLodLevel(state, pool, level, gltfLod.scene);
           })
           .catch((err: unknown) => {
             const msg = err instanceof Error ? err.message : String(err);

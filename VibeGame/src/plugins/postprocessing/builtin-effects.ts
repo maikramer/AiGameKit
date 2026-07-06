@@ -1,4 +1,15 @@
-import { Vector2, type Camera, type Scene, type WebGLRenderer } from 'three';
+import {
+  DirectionalLight,
+  Mesh,
+  MeshBasicMaterial,
+  Object3D,
+  SphereGeometry,
+  Vector2,
+  Vector3,
+  type Camera,
+  type Scene,
+  type WebGLRenderer,
+} from 'three';
 import {
   BloomEffect,
   BrightnessContrastEffect,
@@ -6,7 +17,10 @@ import {
   DepthOfFieldEffect,
   EffectPass,
   FXAAEffect,
+  GodRaysEffect,
   HueSaturationEffect,
+  KernelSize,
+  NoiseEffect,
   SMAAEffect,
   SMAAPreset,
   ToneMappingEffect,
@@ -19,6 +33,7 @@ import { N8AOPostPass } from 'n8ao';
 import { getGpuTierForRenderer } from '../rendering/utils';
 import { Postprocessing } from './components';
 import { registerEffect } from './effect-registry';
+import { SSRPassAdapter } from './ssr-adapter';
 
 type CS = Record<string, Float32Array | Uint8Array>;
 
@@ -306,4 +321,274 @@ registerEffect({
   },
 });
 
+registerEffect({
+  key: 'filmGrain',
+  create(
+    _state: CS,
+    entity: number,
+    _renderer: WebGLRenderer,
+    _scene: Scene,
+    camera: Camera
+  ): Pass | null {
+    const cs = Postprocessing as unknown as CS;
+    if (!(cs.filmGrain as Uint8Array)[entity]) return null;
+    // NoiseEffect has no `opacity` of its own — control the grain strength via
+    // the base Effect's blendMode opacity (SCREEN blend keeps it from crushing
+    // blacks). premultiply keeps colours from blowing out at higher opacity.
+    const noise = new NoiseEffect({ premultiply: true });
+    noise.blendMode.opacity.value = (cs.filmGrainOpacity as Float32Array)[
+      entity
+    ];
+    return wrap(camera, noise);
+  },
+  update(state: CS, entity: number, pass: Pass): void {
+    const noise = effectOf(pass) as NoiseEffect | undefined;
+    if (!noise) return;
+    noise.blendMode.opacity.value = (state.filmGrainOpacity as Float32Array)[
+      entity
+    ];
+  },
+});
+
+/**
+ * Sun source mesh shared by `GodRaysEffect`. A small emissive sphere that the
+ * effect samples as the centre of the radial blur — it does NOT need to be
+ * visible to the player (it's occluded by the god-ray pass), it just has to be
+ * positioned where the directional light comes from so the rays converge there.
+ */
+let sharedSunMesh: Mesh<SphereGeometry, MeshBasicMaterial> | null = null;
+const _sunPosition = new Vector3();
+const _lightDir = new Vector3();
+
+function getOrCreateSunMesh(scene: Scene): Mesh {
+  if (!sharedSunMesh) {
+    const geo = new SphereGeometry(8, 16, 16);
+    // GodRaysEffect requires: light source must NOT write depth and must be
+    // flagged transparent. colorWrite=false keeps the sun sphere from showing
+    // up as a visible ball in the main render pass — only the god-ray blur
+    // samples its screen position.
+    const mat = new MeshBasicMaterial({
+      color: 0xfff4e0,
+      transparent: true,
+      depthWrite: false,
+      colorWrite: false,
+    });
+    sharedSunMesh = new Mesh(geo, mat);
+    sharedSunMesh.frustumCulled = false;
+    scene.add(sharedSunMesh);
+  } else if (sharedSunMesh.parent !== scene) {
+    scene.add(sharedSunMesh);
+  }
+  return sharedSunMesh;
+}
+
+/**
+ * Position the sun source far from the player along the inverse of the first
+ * directional light's direction (i.e. where the sun appears in the sky). The
+ * `GodRaysEffect` projects this world position into screen space each frame to
+ * drive the radial blur, so the mesh follows the active light automatically.
+ */
+function syncSunSource(scene: Scene, camera: Camera): void {
+  if (!sharedSunMesh) return;
+  // Find the first directional light in the scene to derive the sun direction.
+  // The closure narrows `dir` to `never` under TS control-flow analysis, so we
+  // keep it as `Object3D | null` and cast on use.
+  let dir: Object3D | null = null;
+  scene.traverse((obj) => {
+    if (dir === null && (obj as DirectionalLight).isDirectionalLight) {
+      dir = obj;
+    }
+  });
+  const light = dir as DirectionalLight | null;
+  if (!light) return;
+  // Light direction (scene → light) is opposite to the direction light travels.
+  // The sun source sits along the scene→light vector, far from the camera.
+  _lightDir.copy(light.position).sub(light.target.position).normalize();
+  _sunPosition.copy(camera.position).addScaledVector(_lightDir, 400);
+  sharedSunMesh.position.copy(_sunPosition);
+}
+
+/** Per-pass handles for the god rays effect: the wrapped effect plus the
+ * scene/camera refs needed to reposition the sun source each frame (the camera
+ * moves, so the sun mesh has to track it). */
+interface GodRaysHandles {
+  scene: Scene;
+  camera: Camera;
+}
+const godRaysHandlesByPass = new WeakMap<Pass, GodRaysHandles>();
+
+registerEffect({
+  key: 'godRays',
+  create(
+    _state: CS,
+    entity: number,
+    _renderer: WebGLRenderer,
+    scene: Scene,
+    camera: Camera
+  ): Pass | null {
+    const cs = Postprocessing as unknown as CS;
+    if (!(cs.godRays as Uint8Array)[entity]) return null;
+    const sun = getOrCreateSunMesh(scene);
+    syncSunSource(scene, camera);
+    const godRays = new GodRaysEffect(camera, sun, {
+      kernelSize: KernelSize.LARGE,
+      density: (cs.godRaysDensity as Float32Array)[entity],
+      decay: (cs.godRaysDecay as Float32Array)[entity],
+      weight: (cs.godRaysWeight as Float32Array)[entity],
+      exposure: (cs.godRaysExposure as Float32Array)[entity],
+      samples: 80,
+      clampMax: 1.0,
+    });
+    const pass = wrap(camera, godRays);
+    godRaysHandlesByPass.set(pass, { scene, camera });
+    return pass;
+  },
+  update(state: CS, entity: number, pass: Pass): void {
+    const godRays = effectOf(pass) as GodRaysEffect | undefined;
+    if (!godRays) return;
+    // GodRaysEffect doesn't expose density/decay/weight/exposure setters
+    // directly — they live on the internal GodRaysMaterial.
+    const mat = godRays.godRaysMaterial;
+    mat.density = (state.godRaysDensity as Float32Array)[entity];
+    mat.decay = (state.godRaysDecay as Float32Array)[entity];
+    mat.weight = (state.godRaysWeight as Float32Array)[entity];
+    mat.exposure = (state.godRaysExposure as Float32Array)[entity];
+    // Keep the sun source aligned with the active directional light + camera so
+    // the radial blur converges on the visible sun disc as the player moves.
+    const handles = godRaysHandlesByPass.get(pass);
+    if (handles) syncSunSource(handles.scene, handles.camera);
+  },
+});
+
+/**
+ * SSR reflects ONLY on selected meshes (SSRPass renders them into its
+ * metalness mask). Selection is automatic and physically motivated: a surface
+ * reflects when its material is shiny — metal (`metalness >= 0.5 &&
+ * roughness <= 0.4`) or a highly polished dielectric (`roughness <= 0.15`:
+ * water, crystal, marble). `mesh.userData.ssrReflective = true/false`
+ * force-includes/-excludes a mesh regardless of its material. Reflecting the
+ * whole scene (selects = null) mirrors grass onto rough walls/terrain and
+ * reads as a wet-world bug, so it is deliberately not offered.
+ */
+const SSR_AUTO_METALNESS_MIN = 0.5;
+const SSR_AUTO_ROUGHNESS_MAX = 0.4;
+const SSR_AUTO_GLOSS_ROUGHNESS_MAX = 0.15;
+/** Scene rescan cadence for the selects list. Meshes stream in as chunks and
+ * GLTFs load, so the list must refresh — but a full traverse per frame is
+ * wasteful. ~0.5 s at 60 fps. */
+const SSR_SELECTS_REFRESH_FRAMES = 30;
+
+interface SsrHandles {
+  scene: Scene;
+  selects: Mesh[];
+  framesUntilRefresh: number;
+}
+const ssrHandlesByPass = new WeakMap<Pass, SsrHandles>();
+
+function isSsrReflective(mesh: Mesh): boolean {
+  const flag = mesh.userData.ssrReflective as boolean | undefined;
+  if (flag === false) return false;
+  if (flag === true) return true;
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  for (const mat of mats) {
+    const std = mat as { metalness?: number; roughness?: number };
+    if (
+      typeof std.metalness !== 'number' ||
+      typeof std.roughness !== 'number'
+    ) {
+      continue;
+    }
+    const shinyMetal =
+      std.metalness >= SSR_AUTO_METALNESS_MIN &&
+      std.roughness <= SSR_AUTO_ROUGHNESS_MAX;
+    const polishedDielectric = std.roughness <= SSR_AUTO_GLOSS_ROUGHNESS_MAX;
+    if (shinyMetal || polishedDielectric) return true;
+  }
+  return false;
+}
+
+function refreshSsrSelects(scene: Scene, selects: Mesh[]): void {
+  selects.length = 0;
+  scene.traverse((obj) => {
+    const mesh = obj as Mesh;
+    if (mesh.isMesh !== true) return;
+    if (isSsrReflective(mesh)) selects.push(mesh);
+  });
+}
+
+registerEffect({
+  key: 'ssr',
+  // Right after the scene render: SSRPass re-renders the scene itself and
+  // outputs beauty+reflections — placed mid-chain it would overwrite the
+  // earlier effects' work (which read as a milky veil over the whole frame).
+  // First in the chain, every other effect composes on top of its output.
+  // order -10: before the AA passes that also claim 'first', or the SSR
+  // re-render would discard their antialiasing.
+  position: 'first',
+  order: -10,
+  create(
+    _state: CS,
+    entity: number,
+    renderer: WebGLRenderer,
+    scene: Scene,
+    camera: Camera
+  ): Pass | null {
+    const cs = Postprocessing as unknown as CS;
+    if (!(cs.ssr as Uint8Array)[entity]) return null;
+    const size = renderer.getDrawingBufferSize(new Vector2());
+    const selects: Mesh[] = [];
+    refreshSsrSelects(scene, selects);
+    const adapter = new SSRPassAdapter({
+      renderer,
+      scene,
+      camera,
+      width: size.x,
+      height: size.y,
+      selects,
+    });
+    const wrapped = adapter.wrapped;
+    if (wrapped) {
+      wrapped.opacity = (cs.ssrOpacity as Float32Array)[entity];
+      wrapped.maxDistance = (cs.ssrMaxDistance as Float32Array)[entity];
+      wrapped.thickness = (cs.ssrThickness as Float32Array)[entity];
+      const scale = (cs.ssrResolutionScale as Float32Array)[entity];
+      if (scale > 0 && scale < 1) {
+        wrapped.resolutionScale = scale;
+        wrapped.setSize(size.x, size.y);
+      }
+    }
+    const pass = adapter as unknown as Pass;
+    ssrHandlesByPass.set(pass, {
+      scene,
+      selects,
+      framesUntilRefresh: SSR_SELECTS_REFRESH_FRAMES,
+    });
+    return pass;
+  },
+  update(state: CS, entity: number, pass: Pass): void {
+    const adapter = pass as unknown as SSRPassAdapter;
+    const wrapped = adapter.wrapped;
+    if (!wrapped) return;
+    wrapped.opacity = (state.ssrOpacity as Float32Array)[entity];
+    wrapped.maxDistance = (state.ssrMaxDistance as Float32Array)[entity];
+    wrapped.thickness = (state.ssrThickness as Float32Array)[entity];
+    const handles = ssrHandlesByPass.get(pass);
+    if (handles && --handles.framesUntilRefresh <= 0) {
+      handles.framesUntilRefresh = SSR_SELECTS_REFRESH_FRAMES;
+      refreshSsrSelects(handles.scene, handles.selects);
+    }
+  },
+});
+
 export function registerBuiltinEffects(): void {}
+
+// Re-exported for the postprocessing plugin to call on dispose so the sun mesh
+// doesn't leak across scene reloads.
+export function disposeSharedSunMesh(): void {
+  if (sharedSunMesh) {
+    if (sharedSunMesh.parent) sharedSunMesh.parent.remove(sharedSunMesh);
+    sharedSunMesh.geometry.dispose();
+    sharedSunMesh.material.dispose();
+    sharedSunMesh = null;
+  }
+}

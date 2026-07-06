@@ -32,6 +32,7 @@ import {
   syncCameraSettings,
   threeCameras,
 } from './utils';
+import { applyPcssShadowPatch } from './pcss-shadow';
 
 const rendererQuery = defineQuery([MeshRenderer]);
 const distanceCullQuery = defineQuery([DistanceCull, WorldTransform]);
@@ -341,6 +342,11 @@ function disposeCsm(state: State, scene: THREE.Scene): void {
   context.csm.dispose();
   context.csm = null;
   csmCacheByState.delete(state);
+  // Restore the bootstrap light CSM borrowed the scene from — the plain-light
+  // path's "adopt the bootstrap light" logic (below) picks it back up the
+  // next time an entity wants a normal (non-CSM) directional light.
+  const boot = context.lights.directional;
+  if (boot && boot.parent !== scene) scene.add(boot);
 }
 
 /**
@@ -377,6 +383,13 @@ function updateCsmDirectionalLight(
     cache.shadowMapSize !== shadowMapSize
   ) {
     disposeCsm(state, scene);
+    // The bootstrap directional light (initializeContext) is always in the
+    // scene, normally "adopted" as the plain-light path's THREE object. CSM
+    // brings its own `cascades` lights instead — leaving the bootstrap one
+    // in the scene on top of those makes three see one MORE directional
+    // light than CSM_cascades has slots for (NUM_DIR_LIGHTS mismatch), which
+    // fails fragment shader compilation with an out-of-range array index.
+    scene.remove(context.lights.directional);
     context.csm = new CSM({
       camera,
       parent: scene,
@@ -385,6 +398,10 @@ function updateCsmDirectionalLight(
       shadowMapSize,
       lightIntensity: intensity,
     });
+    // CSM.js leaves shadow.normalBias at three's default (0) — fine on flat
+    // ground, but curved/rounded meshes (the hero, props) self-shadow into
+    // banding artifacts without it. Match the plain-light path's value.
+    for (const light of context.csm.lights) light.shadow.normalBias = 0.02;
     cache = { cascades, maxFar, shadowMapSize, color: NaN };
     csmCacheByState.set(state, cache);
   }
@@ -488,6 +505,14 @@ export const LightSyncSystem: System = {
     const directionals = directionalQuery(state.world);
     let csmActive = false;
     for (const entity of directionals) {
+      // PCSS is a global shader-chunk patch — apply it lazily the first time
+      // any directional light opts in, then it stays on for the renderer's
+      // lifetime (existing materials recompile on next shadow render). Must
+      // run before the CSM branch below: `csm: 1; pcss: 1` on the same light
+      // patches the chunk the CSM cascade lights sample through.
+      if (DirectionalLight.pcss[entity] === 1) {
+        applyPcssShadowPatch();
+      }
       if (DirectionalLight.csm[entity] === 1) {
         csmActive = true;
         updateCsmDirectionalLight(state, scene, entity);
