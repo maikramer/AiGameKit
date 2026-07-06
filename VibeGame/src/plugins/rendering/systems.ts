@@ -33,6 +33,10 @@ import {
   threeCameras,
 } from './utils';
 import { applyPcssShadowPatch } from './pcss-shadow';
+import {
+  getAdaptiveQualityTier,
+  TIER_PRESETS,
+} from '../adaptive-quality/quality-tiers';
 
 const rendererQuery = defineQuery([MeshRenderer]);
 const distanceCullQuery = defineQuery([DistanceCull, WorldTransform]);
@@ -187,6 +191,48 @@ function resolveShadowCenter(state: State): THREE.Vector3 {
   }
 
   return _shadowCenter;
+}
+
+/**
+ * Adaptive Quality point-light shadow throttle. Each shadow-casting PointLight
+ * renders a 6-face cube shadow map per frame when `shadow.autoUpdate` is on.
+ * At higher quality tiers (sustained GPU pressure) we switch to manual updates:
+ * autoUpdate off, `needsUpdate` fired every Nth frame. Static torches produce
+ * identical shadows so this is visually lossless; moving lights are still
+ * captured because their world position is written every frame and the
+ * periodic refresh re-renders the cube map from the new position.
+ *
+ * `refreshFrames === 1` (tier 0 / Max, or no adaptive quality) restores the
+ * default per-frame autoUpdate behaviour.
+ */
+function applyPointShadowThrottle(
+  state: State,
+  entityToPointLight: Map<number, THREE.PointLight>
+): void {
+  const tier = getAdaptiveQualityTier(state);
+  const preset = TIER_PRESETS[tier] ?? TIER_PRESETS[0];
+  const refreshFrames = preset.pointShadowRefreshFrames;
+  if (refreshFrames === 1) {
+    // Max tier: ensure autoUpdate is on (restores full quality immediately
+    // when the scaler upgrades back to tier 0).
+    for (const light of entityToPointLight.values()) {
+      if (light.castShadow && light.shadow.autoUpdate === false) {
+        light.shadow.autoUpdate = true;
+      }
+    }
+    return;
+  }
+  // Throttled: autoUpdate off; refresh the cube map every Nth frame. Use the
+  // global frame counter so all lights refresh on the same cadence (avoids
+  // staggering 6-face renders across frames, which would spread the cost but
+  // also keep more lights "live" at once).
+  const frame = state.time.frameCount;
+  const refreshThisFrame = frame % refreshFrames === 0;
+  for (const light of entityToPointLight.values()) {
+    if (!light.castShadow) continue;
+    if (light.shadow.autoUpdate) light.shadow.autoUpdate = false;
+    if (refreshThisFrame) light.shadow.needsUpdate = true;
+  }
 }
 
 /** Dispose every geometry/material/texture reachable from `root`, dedup-guarded. */
@@ -777,6 +823,16 @@ export const PointSpotLightSyncSystem: System = {
       );
       light.quaternion.copy(_lightQuaternion);
     }
+
+    // Adaptive Quality point-light shadow throttle. Each shadow-casting
+    // PointLight renders a 6-face cube map every frame when autoUpdate is on
+    // (12 extra scene renders/frame with 2 casters). Static torches/lanterns
+    // produce identical shadows across frames, so at higher quality tiers we
+    // switch to manual updates: autoUpdate off, and `needsUpdate` fired only
+    // every Nth frame. Moving lights (torches attached to entities that move)
+    // are still captured because their position is written above every frame
+    // and the periodic refresh re-renders the cube map.
+    applyPointShadowThrottle(state, entityToPointLight);
 
     const spotEntities = spotLightQuery(state.world);
     for (const eid of spotEntities) {
