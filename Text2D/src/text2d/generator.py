@@ -1,7 +1,7 @@
 """
 Text2D — Geração de imagens com FLUX.2 Klein (SDNQ / Disty0).
 
-Default: 9B SDNQ (high-VRAM), 4B SDNQ (--low-vram).
+Default: 9B SDNQ (high-VRAM), 4B SDNQ (memory-efficient mode).
 Requer `sdnq` instalado para registar quantização no diffusers/transformers.
 """
 
@@ -43,10 +43,10 @@ def model_footprint(model_id: str) -> Any:
     return ModelFootprint(fp16_weights_gib=26.0, activation_gib=1.5, largest_module_gib=9.0)
 
 
-def _model_id(low_vram: bool = False) -> str:
+def _model_id(memory_efficient: bool = False) -> str:
     if os.environ.get("TEXT2D_MODEL_ID"):
         return os.environ["TEXT2D_MODEL_ID"]
-    return LOW_VRAM_MODEL_ID if low_vram else HIGH_VRAM_MODEL_ID
+    return LOW_VRAM_MODEL_ID if memory_efficient else HIGH_VRAM_MODEL_ID
 
 
 def default_model_id() -> str:
@@ -65,32 +65,13 @@ def _torch_dtype_for(device: str) -> torch.dtype:
     return torch.float32
 
 
-def _register_sdnq() -> tuple[Any, Any]:
-    """Importa SDNQ e devolve (triton_is_available, apply_sdnq_options_to_model)."""
-    try:
-        from sdnq import SDNQConfig  # noqa: F401 — registo diffusers/transformers
-        from sdnq.common import use_torch_compile as triton_is_available
-        from sdnq.loader import apply_sdnq_options_to_model
-
-        return triton_is_available, apply_sdnq_options_to_model
-    except ImportError as e:
-        raise ImportError("O pacote 'sdnq' é necessário para o modelo SDNQ. Instale com: pip install sdnq") from e
-
-
-def _maybe_apply_quantized_matmul(pipe: Any, triton_is_available: Any) -> None:
-    """Apply SDNQ quantized matmul to pipeline sub-modules (via shared helper)."""
-    from gamedev_shared.sdnq import apply_quantized_matmul
-
-    apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
-
-
 class KleinFluxGenerator:
     """Carrega Flux2KleinPipeline com pesos SDNQ (Disty0)."""
 
     def __init__(
         self,
         device: str | None = None,
-        low_vram: bool = False,
+        memory_efficient: bool = False,
         verbose: bool = False,
         model_id: str | None = None,
         cache_dir: str | None = None,
@@ -98,8 +79,8 @@ class KleinFluxGenerator:
         quant_preset: str | None = None,
     ):
         self.verbose = verbose
-        self.low_vram = low_vram
-        self.model_id = model_id or _model_id(low_vram=self.low_vram)
+        self.memory_efficient = memory_efficient
+        self.model_id = model_id or _model_id(memory_efficient=self.memory_efficient)
         self.cache_dir = cache_dir
         self.gpu_ids = gpu_ids
         # Preset SDNQ explícito (override); None = o planner decide por VRAM em runtime.
@@ -154,7 +135,9 @@ class KleinFluxGenerator:
 
         set_memory_optimization_env()
 
-        triton_is_available, _ = _register_sdnq()
+        from gamedev_shared.sdnq import apply_quantized_matmul, register_sdnq
+
+        triton_is_available = register_sdnq()
 
         from diffusers import Flux2KleinPipeline
 
@@ -184,7 +167,7 @@ class KleinFluxGenerator:
             self._runtime_quantize(pipe, preset)
 
         self._status("Passo 3/4 — SDNQ (matmul quantizado opcional via Triton)")
-        _maybe_apply_quantized_matmul(pipe, triton_is_available)
+        apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
 
         self._status(f"Passo 4/4 — colocação: {plan.summary()}")
         self._clear_cache()
@@ -199,8 +182,8 @@ class KleinFluxGenerator:
             pipe.to("cpu")
         elif plan.multi_gpu_ids and self._try_multi_gpu(pipe):
             self._status("Modelo carregado — split multi-GPU (accelerate)")
-        elif plan.low_vram or self.low_vram:
-            self._apply_offload(pipe, plan, forced=self.low_vram)
+        elif plan.memory_efficient or self.memory_efficient:
+            self._apply_offload(pipe, plan, forced=self.memory_efficient)
             did_offload = True
         else:
             # Full-GPU é a estimativa do planner; se a colocação real estourar a VRAM
@@ -306,7 +289,7 @@ class KleinFluxGenerator:
     def _apply_offload(self, pipe: Any, plan: Any, *, forced: bool) -> None:
         """Aplica offload + VAE/attn slicing via planner partilhado.
 
-        Se ``forced`` (utilizador pediu ``--low-vram``) e o plano não traz offload,
+        Se ``forced`` (memory-efficient mode) e o plano não traz offload,
         promove a ``model_cpu`` para honrar a intenção. O planner pode já trazer
         ``sequential`` quando nem ``model_cpu`` cabe.
         """

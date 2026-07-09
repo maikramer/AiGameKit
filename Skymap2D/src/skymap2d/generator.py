@@ -82,27 +82,6 @@ def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
     return f"{preset_neg}, {user_neg}"
 
 
-def _register_sdnq() -> tuple[Any, Any]:
-    try:
-        from sdnq import SDNQConfig  # noqa: F401
-        from sdnq.common import use_torch_compile as triton_is_available
-        from sdnq.loader import apply_sdnq_options_to_model
-
-        from gamedev_shared.sdnq import patch_lora_shape_calculation
-
-        patch_lora_shape_calculation()
-
-        return triton_is_available, apply_sdnq_options_to_model
-    except ImportError as e:
-        raise ImportError("O pacote 'sdnq' é necessário. Instale com: pip install sdnq") from e
-
-
-def _maybe_apply_quantized_matmul(pipe: Any, triton_is_available: Any) -> None:
-    from gamedev_shared.sdnq import apply_quantized_matmul
-
-    apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
-
-
 def _fix_equirect_latitude(image: Image.Image) -> Image.Image:
     """Corrige panoramas Flux-LoRA-Equirectangular que saem com o nadir ao centro vertical.
 
@@ -131,14 +110,14 @@ class SkymapGenerator:
     def __init__(
         self,
         device: str | None = None,
-        low_vram: bool = False,
+        memory_efficient: bool = False,
         verbose: bool = False,
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
     ) -> None:
         self.verbose = verbose
-        self.low_vram = low_vram
+        self.memory_efficient = memory_efficient
         self.model_id = model_id or default_model_id()
         self.base_model_id = default_base_model_id()
         self.cache_dir = cache_dir
@@ -199,7 +178,9 @@ class SkymapGenerator:
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
-        triton_is_available, _ = _register_sdnq()
+        from gamedev_shared.sdnq import apply_quantized_matmul, register_sdnq
+
+        triton_is_available = register_sdnq(patch_lora=True)
 
         from diffusers import FluxPipeline
 
@@ -216,7 +197,7 @@ class SkymapGenerator:
         pipe = FluxPipeline.from_pretrained(self.base_model_id, **kwargs)
 
         self._status("Passo 2/4 — SDNQ quantized matmul")
-        _maybe_apply_quantized_matmul(pipe, triton_is_available)
+        apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
 
         self._status("Passo 3/4 — Carregando LoRA equirectangular...")
         self._log(f"Carregando LoRA {self.model_id}...")
@@ -234,7 +215,7 @@ class SkymapGenerator:
             pipe.to("cpu")
         elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
             self._status("Modelo carregado — split multi-GPU")
-        elif self.low_vram:
+        elif self.memory_efficient:
             pipe.enable_model_cpu_offload()
         else:
             # Rede de segurança always-fit: se a colocação direta estourar a VRAM, cai
@@ -245,10 +226,10 @@ class SkymapGenerator:
                 self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para model_cpu offload")
                 self._clear_cache()
                 pipe.enable_model_cpu_offload()
-                self.low_vram = True
+                self.memory_efficient = True
 
         self._status("Modelo carregado — pronto")
-        if torch.cuda.is_available() and self.device == "cuda" and not self.low_vram:
+        if torch.cuda.is_available() and self.device == "cuda" and not self.memory_efficient:
             if self._multi_gpu:
                 gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
                 parts = []

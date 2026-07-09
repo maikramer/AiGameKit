@@ -70,9 +70,19 @@ def _apply_rotation_bpy(obj: Any) -> Any:
 
 
 def _apply_origin_bpy(obj: Any, mode: str) -> Any:
-    """Reposiciona a malha para uma origem consistente **após** rotação Y-up.
+    """Reposiciona a malha para uma origem consistente (espaço mundo Blender).
 
-    - ``feet``: base da AABB em Y=0, centro em X e Z.
+    O export glTF (``export_yup=True``) converte Blender Z-up → glTF Y-up via
+    rotação -90° em X: glTF Y (altura) = Blender Z, glTF Z = -Blender Y, glTF X = Blender X.
+    Por isso a "altura" do mesh (eixo onde a base/pés devem ficar em 0) é o **Z** em
+    Blender, não o Y. ``get_bounds`` devolve bounds em espaço mundo (matrix_world),
+    pelo que este mapeamento é válido quer haja ou não rotação prévia do objeto.
+
+    A translação é **aplicada à geometria** (via ``transform_apply``), não deixada
+    apenas em ``matrix_world`` — caso contrário o glTF exporter exporta a geometria
+    original e a origem perde-se nos POSITION accessors.
+
+    - ``feet``: base da AABB em glTF Y=0 (Blender Z=0), centro em glTF X e Z.
     - ``center``: centro da AABB em (0, 0, 0).
     - ``none``: sem translação.
     """
@@ -82,9 +92,11 @@ def _apply_origin_bpy(obj: Any, mode: str) -> Any:
 
     (bx0, by0, bz0), (bx1, by1, bz1) = get_bounds(obj)
     if mode == "feet":
+        # glTF X centrado (Blender X), glTF Z centrado (Blender Y),
+        # glTF Y base em 0 (Blender Z min em 0).
         tx = -(bx0 + bx1) * 0.5
-        ty = -by0
-        tz = -(bz0 + bz1) * 0.5
+        ty = -(by0 + by1) * 0.5
+        tz = -bz0
     elif mode == "center":
         tx = -(bx0 + bx1) * 0.5
         ty = -(by0 + by1) * 0.5
@@ -92,10 +104,19 @@ def _apply_origin_bpy(obj: Any, mode: str) -> Any:
     else:
         raise ValueError(f"Modo de origem desconhecido: {mode!r}")
     _require_bpy()
+    bpy = _require_bpy()
     import mathutils
 
+    # Aplicar a translação à geometria (bake), não apenas ao matrix_world.
+    # Usamos matrix_world (que acumula sobre transforms existentes) seguido de
+    # transform_apply para fazer bake na geometria. Isto garante que os POSITION
+    # accessors do glTF final contêm a origem correta mesmo quando o GLB de
+    # entrada já tinha uma translação no nó root.
     translate = mathutils.Matrix.Translation((tx, ty, tz))
     obj.matrix_world = translate @ obj.matrix_world
+    obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
+    bpy.ops.object.transform_apply(location=True, rotation=False, scale=False)
     return obj
 
 

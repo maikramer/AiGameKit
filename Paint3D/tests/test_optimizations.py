@@ -38,17 +38,17 @@ class TestOptimizationConfig:
         monkeypatch.delenv("PAINT3D_DINO_DEVICE", raising=False)
         monkeypatch.delenv("PAINT3D_ESRGAN_DEVICE", raising=False)
         config = _FakeConfig()
-        _apply_optimization_config(config, low_vram=True, gpu_ids=None)
+        _apply_optimization_config(config, memory_efficient=True, gpu_ids=None)
         assert config.cfg_batch_chunking is True
         assert config.offload_ref_unet is True
         assert config.dino_device == "cpu"
-        assert config.realesrgan_tile == _defaults.ESRGAN_TILE_LOW_VRAM
+        assert config.realesrgan_tile == _defaults.ESRGAN_TILE_MEMORY_EFFICIENT
 
     def test_full_profile_disables_chunking(self, monkeypatch):
         monkeypatch.delenv("PAINT3D_CFG_CHUNKING", raising=False)
         monkeypatch.delenv("PAINT3D_OFFLOAD_REF_UNET", raising=False)
         config = _FakeConfig()
-        _apply_optimization_config(config, low_vram=False, gpu_ids=None)
+        _apply_optimization_config(config, memory_efficient=False, gpu_ids=None)
         assert config.cfg_batch_chunking is False
         assert config.offload_ref_unet is False
         assert config.realesrgan_tile == _defaults.ESRGAN_TILE
@@ -57,7 +57,7 @@ class TestOptimizationConfig:
         monkeypatch.setenv("PAINT3D_CFG_CHUNKING", "0")
         monkeypatch.setenv("PAINT3D_OFFLOAD_REF_UNET", "0")
         config = _FakeConfig()
-        _apply_optimization_config(config, low_vram=True, gpu_ids=None)
+        _apply_optimization_config(config, memory_efficient=True, gpu_ids=None)
         assert config.cfg_batch_chunking is False
         assert config.offload_ref_unet is False
 
@@ -65,7 +65,7 @@ class TestOptimizationConfig:
         monkeypatch.setenv("PAINT3D_DINO_DEVICE", "cuda:1")
         monkeypatch.setenv("PAINT3D_ESRGAN_DEVICE", "cpu")
         config = _FakeConfig()
-        _apply_optimization_config(config, low_vram=True, gpu_ids=None)
+        _apply_optimization_config(config, memory_efficient=True, gpu_ids=None)
         assert config.dino_device == "cuda:1"
         assert config.realesrgan_device == "cpu"
 

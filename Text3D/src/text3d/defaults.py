@@ -95,17 +95,17 @@ DEFAULT_REMOVE_BG = True
 DEFAULT_MAX_FACES = 40000
 
 # --- Perfil "balanced" (~6 GB): usado pelo preset balanced e hw-auto ---
-LOW_VRAM_OCTREE = 256
-LOW_VRAM_NUM_CHUNKS = 8000
-LOW_VRAM_STEPS = 24
+MEMORY_EFFICIENT_OCTREE = 256
+MEMORY_EFFICIENT_NUM_CHUNKS = 8000
+MEMORY_EFFICIENT_STEPS = 24
 
 # Perfis CLI `--preset`: fast=baixo VRAM, balanced=~6GB, hq=padrão actual.
 PRESET_HUNYUAN = {
     "fast": {"steps": 18, "octree": 128, "chunks": 4096},
     "balanced": {
-        "steps": LOW_VRAM_STEPS,
-        "octree": LOW_VRAM_OCTREE,
-        "chunks": LOW_VRAM_NUM_CHUNKS,
+        "steps": MEMORY_EFFICIENT_STEPS,
+        "octree": MEMORY_EFFICIENT_OCTREE,
+        "chunks": MEMORY_EFFICIENT_NUM_CHUNKS,
     },
     "hq": {"steps": DEFAULT_HY_STEPS, "octree": DEFAULT_OCTREE_RESOLUTION, "chunks": DEFAULT_NUM_CHUNKS},
 }

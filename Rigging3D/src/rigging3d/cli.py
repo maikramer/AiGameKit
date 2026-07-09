@@ -267,7 +267,7 @@ def _rename_creature_bones(
         kids = children_of_bone.get(cur, [])
         cur = kids[0] if len(kids) == 1 else None
     for i, bi in enumerate(spine):
-        assignments[bi] = f"Spine{i+1}" if i > 0 else "Spine"
+        assignments[bi] = f"Spine{i + 1}" if i > 0 else "Spine"
 
     # Recolher hubs ao longo do spine: cada hub é um bone do spine com ≥2 filhos.
     # Os hubs classificam patas dianteiras (quadrúpedes) e asas.
@@ -616,7 +616,7 @@ def cli(
             if gpu_ids is None and hwp.gpu_ids is not None:
                 gpu_ids = hwp.gpu_ids
                 click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
-            elif hwp.low_vram_warning and hwp.device == "cuda":
+            elif hwp.low_memory_warning and hwp.device == "cuda":
                 click.echo(f"Hardware (auto): {hwp.summary()}", err=True)
     ctx.obj["GPU_IDS"] = gpu_ids
     if profiler_flag:

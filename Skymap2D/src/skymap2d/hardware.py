@@ -1,7 +1,7 @@
 """Detecção automática de hardware → perfil de inferência FLUX.1-dev + equirect LoRA.
 
 Soft resolution no CLI: só preenche o que o utilizador não definiu (flags
-explícitas, ``--low-vram``/``--cpu`` ganham). Desligável com ``--no-hw-auto``
+explícitas, ``--cpu`` ganha). Desligável com ``--no-hw-auto``
 ou ``SKYMAP2D_HW_AUTO=0``.
 
 O modelo base é sempre FLUX.1-dev (bf16 + SDNQ); o perfil decide apenas CPU
@@ -37,7 +37,7 @@ def hw_auto_enabled() -> bool:
 class Skymap2DHardwareProfile:
     name: str
     device: str  # "cuda" | "cpu"
-    low_vram: bool  # True = enable_model_cpu_offload
+    memory_efficient: bool  # True = enable_model_cpu_offload
     max_width: int | None  # None = sem clamp; int = clamp se utilizador não explicitou
     max_height: int | None
     gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
@@ -45,7 +45,7 @@ class Skymap2DHardwareProfile:
 
     def summary(self) -> str:
         parts = [self.name]
-        if self.low_vram:
+        if self.memory_efficient:
             parts.append("cpu-offload")
         if self.max_width is not None:
             parts.append(f"clamp={self.max_width}x{self.max_height}")
@@ -60,7 +60,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
         return Skymap2DHardwareProfile(
             name="cpu",
             device="cpu",
-            low_vram=True,
+            memory_efficient=True,
             max_width=1024,
             max_height=512,
             gpu_ids=None,
@@ -78,7 +78,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
         return Skymap2DHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=False,
+            memory_efficient=False,
             max_width=None,
             max_height=None,
             gpu_ids=gpu_ids,
@@ -90,7 +90,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
         return Skymap2DHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=True,
+            memory_efficient=True,
             max_width=2048,
             max_height=1024,
             gpu_ids=gpu_ids,
@@ -102,7 +102,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Skymap2DHardwareProfile:
     return Skymap2DHardwareProfile(
         name=name,
         device="cuda",
-        low_vram=True,
+        memory_efficient=True,
         max_width=1024,
         max_height=512,
         gpu_ids=gpu_ids,

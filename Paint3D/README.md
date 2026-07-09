@@ -19,7 +19,7 @@ Paint3D is part of the [GameDev](../README.md) monorepo and sits in the asset ge
 - Vertex color → PBR pipeline with [Materialize](../Materialize) integration
 - Quality presets (`fast` / `low` / `medium` / `high` / `highest`)
 - Multi-GPU support via `--gpu-ids`
-- Low-VRAM mode for 6 GB GPUs (`--low-vram-mode`)
+- Memory-efficient mode for 6 GB GPUs (hw-auto automático)
 
 ## Installation
 
@@ -73,8 +73,8 @@ paint3d texture mesh.glb -i ref.png --upscale --upscale-factor 2
 # Multi-GPU: split model weights across GPUs 0 and 1
 paint3d texture mesh.glb -i ref.png --gpu-ids 0,1
 
-# Low VRAM mode (6 GB GPUs)
-paint3d texture mesh.glb -i ref.png --low-vram-mode
+# Low VRAM (6 GB GPUs): hw-auto memory-efficient mode is on by default
+paint3d texture mesh.glb -i ref.png
 
 # Quality preset
 paint3d texture mesh.glb -i ref.png --quality high
@@ -86,15 +86,14 @@ paint3d texture mesh.glb -i ref.png --quality high
 | `-o, --output` | path | `<mesh>_textured.glb` | Output GLB path |
 | `--upscale/--no-upscale` | flag | `false` | AI upscale texture via Real-ESRGAN (requires `spandrel`) |
 | `--upscale-factor` | int | `4` | Upscale factor (`2` or `4`) |
-| `--max-views` | int | `6` (default) / `4` (low-vram) | Max rendering views |
-| `--view-resolution` | int | `640` (default) / `384` (low-vram) | View rendering resolution (px) |
-| `--render-size` | int | `2048` (default) / `1024` (low-vram) | Back-projection rasterization resolution |
-| `--texture-size` | int | `4096` (default) / `2048` (low-vram) | UV atlas resolution |
+| `--max-views` | int | `6` (default) / `4` (memory-efficient) | Max rendering views |
+| `--view-resolution` | int | `640` (default) / `384` (memory-efficient) | View rendering resolution (px) |
+| `--render-size` | int | `2048` (default) / `1024` (memory-efficient) | Back-projection rasterization resolution |
+| `--texture-size` | int | `4096` (default) / `2048` (memory-efficient) | UV atlas resolution |
 | `--bake-exp` | int | `6` | Bake blending exponent (higher = sharper seams, less ghosting) |
 | `--smooth/--no-smooth` | flag | `true` | Bilateral texture smoothing (removes bake artifacts) |
 | `--smooth-passes` | int | `1` | Number of bilateral filter passes |
-| `--low-vram-mode` | flag | `false` | SDNQ uint8 + sequential CFG chunking + ref-UNet CPU offload (with hw-auto: 6 views @ 512px, render 1536, texture 3072; without: 4 views @ 384px) |
-| `--hw-auto/--no-hw-auto` | flag | `true` | Hardware auto-detection: enables low-VRAM mode on GPUs <10 GB; FP16 kept on big/multi-GPU rigs. Explicit flags win. Env kill-switch: `PAINT3D_HW_AUTO=0` |
+| `--hw-auto/--no-hw-auto` | flag | `true` | Hardware auto-detection: enables memory-efficient mode (SDNQ uint8 + sequential CFG chunking + ref-UNet CPU offload) on GPUs <10 GB; on small GPUs uses 6 views @ 512px, render 1536, texture 3072; FP16 kept on big/multi-GPU rigs. Explicit flags win. Env kill-switch: `PAINT3D_HW_AUTO=0` |
 | `--sage-attn` | flag | `false` | SageAttention (INT8 attention, Ampere+; requires `pip install sageattention`). Falls back to SDPA when unavailable |
 | `--preserve-origin` | flag | `true` | Rebase mesh to AABB base at Y=0, XZ centered |
 | `--allow-shared-gpu` | flag | `false` | Allow GPU with other processes |

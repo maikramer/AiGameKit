@@ -21,7 +21,7 @@ def test_no_gpu_cpu_profile() -> None:
     p = profile_from_specs([])
     assert p.device == "cpu"
     assert p.gpu_ids is None
-    assert p.low_vram_warning is True
+    assert p.low_memory_warning is True
 
 
 def test_single_6gb_no_pin_no_warn() -> None:
@@ -29,20 +29,20 @@ def test_single_6gb_no_pin_no_warn() -> None:
     Fase 0 da migração SkinTokens (pico real ~3.9GB mesmo em meshes densas)."""
     p = profile_from_specs([(0, _gib(5.5), _gib(6))])
     assert p.gpu_ids is None
-    assert p.low_vram_warning is False
+    assert p.low_memory_warning is False
 
 
 def test_single_3gb_warns_no_pin() -> None:
     """GPU muito pequena (<4GB): ainda emite aviso."""
     p = profile_from_specs([(0, _gib(2.5), _gib(3))])
     assert p.gpu_ids is None
-    assert p.low_vram_warning is True
+    assert p.low_memory_warning is True
 
 
 def test_single_12gb_no_warn() -> None:
     p = profile_from_specs([(0, _gib(11), _gib(12))])
     assert p.gpu_ids is None
-    assert p.low_vram_warning is False
+    assert p.low_memory_warning is False
 
 
 def test_dual_3060_pins_freest_gpu() -> None:
@@ -50,7 +50,7 @@ def test_dual_3060_pins_freest_gpu() -> None:
     p = profile_from_specs([(0, _gib(8), _gib(12)), (1, _gib(11.5), _gib(12))])
     assert p.gpu_ids == [1]
     assert p.free_gib == 11.5
-    assert p.low_vram_warning is False
+    assert p.low_memory_warning is False
 
 
 def test_dual_pins_gpu0_when_freest() -> None:

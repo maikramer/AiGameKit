@@ -96,13 +96,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 )
 @click.option("--seed", type=int, default=None, help="Seed para reprodutibilidade")
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--model",
     "-m",
     "model_id",
     default=None,
-    help="ID Hugging Face (default: 9B SDNQ, 4B com --low-vram, ou TEXT2D_MODEL_ID)",
+    help="ID Hugging Face (default: 9B SDNQ, 4B em modo memory-efficient (hw-auto), ou TEXT2D_MODEL_ID)",
 )
 @click.option(
     "--verbose",
@@ -151,7 +150,6 @@ def generate_cmd(
     guidance_scale: float,
     seed: int | None,
     cpu: bool,
-    low_vram: bool,
     model_id: str | None,
     verbose_flag: bool,
     profile: bool,
@@ -192,16 +190,16 @@ def generate_cmd(
     # Hardware auto-detection (soft): flags explícitas ganham sempre.
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
-    hwp = None
+    mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
 
-    low = low_vram or cpu
-    if low and width == 2048 and height == 2048:
+    mem_eff = mem_eff or cpu
+    if mem_eff and width == 2048 and height == 2048:
         width, height = 1024, 1024
-    resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(low_vram=low))
+    resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(memory_efficient=mem_eff))
     quant_preset = hwp.quant_preset if hwp is not None else None
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
@@ -236,7 +234,7 @@ def generate_cmd(
         ) as prof:
             gen = KleinFluxGenerator(
                 device=device,
-                low_vram=low,
+                memory_efficient=mem_eff,
                 verbose=verbose,
                 model_id=resolved_model,
                 gpu_ids=gpu_ids,
@@ -372,7 +370,6 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     help="Guidance scale (recomendado 1.0 para SDNQ)",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--model",
     "-m",
@@ -412,7 +409,6 @@ def generate_batch_cmd(
     steps: int,
     guidance_scale: float,
     cpu: bool,
-    low_vram: bool,
     model_id: str | None,
     gpu_ids_str: str | None,
     force: bool,
@@ -462,14 +458,14 @@ def generate_batch_cmd(
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
-    hwp = None
+    mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
 
-    low = low_vram or cpu
-    resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(low_vram=low))
+    mem_eff = mem_eff or cpu
+    resolved_model = model_id or (hwp.model_id if hwp is not None else _model_id(memory_efficient=mem_eff))
     quant_preset = hwp.quant_preset if hwp is not None else None
     parsed_gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if parsed_gpu_ids is None and hwp is not None and hwp.gpu_ids:
@@ -480,7 +476,7 @@ def generate_batch_cmd(
     try:
         gen = KleinFluxGenerator(
             device="cpu" if cpu else None,
-            low_vram=low,
+            memory_efficient=mem_eff,
             verbose=batch_verbose,
             model_id=resolved_model,
             gpu_ids=parsed_gpu_ids,
@@ -641,7 +637,7 @@ def models_cmd() -> None:
     )
     t.add_row(
         "Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic",
-        "Padrão com --low-vram, SDNQ 4-bit, 4B parâmetros",
+        "Padrão memory-efficient (hw-auto): SDNQ 4-bit, 4B parâmetros",
     )
     t.add_row(
         "black-forest-labs/FLUX.2-klein-4B",

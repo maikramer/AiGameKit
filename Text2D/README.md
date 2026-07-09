@@ -1,6 +1,6 @@
 # Text2D — AI Text-to-Image Generation
 
-> Fast, local text-to-image generation using [FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) with SDNQ quantization. Designed for modest GPUs (6 GB VRAM with `--low-vram`).
+> Fast, local text-to-image generation using [FLUX.2 Klein](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) with SDNQ quantization. Designed for modest GPUs (6 GB VRAM; hw-auto engata o modo memory-efficient automaticamente).
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
@@ -16,7 +16,7 @@ Text2D is a CLI tool that generates images from text prompts using the FLUX.2 Kl
 |--------|----------|-------|
 | Python | 3.10+    | Tested on 3.10–3.13 |
 | GPU    | Optional | NVIDIA + CUDA recommended for reasonable inference |
-| VRAM   | ~6 GB+   | With `--low-vram` and 512² resolution; multi-GPU via `--gpu-ids` |
+| VRAM   | ~6 GB+   | With hw-auto memory-efficient mode (on by default) and 512² resolution; multi-GPU via `--gpu-ids` |
 | Disk   | ~8 GB    | HF cache + SDNQ weights (~2.5 GB on disk) |
 
 > **First run** downloads several GB from Hugging Face and may take many minutes. Subsequent runs with cached weights finish in seconds to ~1 minute depending on hardware.
@@ -82,8 +82,8 @@ text2d generate "sunset landscape" -W 768 -H 768 -s 4 -g 1.0 -o sunset.png
 # Reproducible output with seed
 text2d generate "portrait" --seed 42 -o portrait.png
 
-# Low VRAM mode (4B model instead of 9B)
-text2d generate "dragon" --low-vram
+# Low VRAM (4B model auto-selected by hw-auto)
+text2d generate "dragon"
 
 # Multi-GPU: split model across GPUs 0 and 1
 text2d generate "epic scene" --gpu-ids 0,1
@@ -101,7 +101,6 @@ text2d generate "character design" --quality high
 | `-g, --guidance` | float | 1.0 | Guidance scale (1.0 recommended for SDNQ) |
 | `--seed` | int | — | Reproducible generation seed |
 | `--cpu` | flag | off | Force CPU inference |
-| `--low-vram` | flag | off | CPU offload mode (4B model, ~6 GB VRAM) |
 | `-m, --model` | str | auto | Model ID override (see `text2d models`) |
 | `--profile` | flag | off | Measure timing, CPU, RAM, and VRAM |
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split (e.g. `0,1`) |
@@ -149,7 +148,6 @@ Each item requires `id`, `prompt`, and `output`. Optional per-item overrides: `w
 | `-s, --steps` | int | 4 | Default inference steps |
 | `-g, --guidance` | float | 1.0 | Default guidance scale |
 | `--cpu` | flag | off | Force CPU inference |
-| `--low-vram` | flag | off | CPU offload mode |
 | `-m, --model` | str | auto | Model ID override |
 | `--gpu-ids` | str | auto | GPU IDs for multi-GPU split |
 | `--hw-auto/--no-hw-auto` | flag | on | Hardware auto-detection (offload/model/multi-GPU); `TEXT2D_HW_AUTO=0` disables |
@@ -185,7 +183,7 @@ Output:
 | ID | Notes |
 |----|-------|
 | `Disty0/FLUX.2-klein-9B-SDNQ-4bit-dynamic-svd-r32` | Default (high VRAM), SDNQ 4-bit, 9B params |
-| `Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic` | Default with `--low-vram`, SDNQ 4-bit, 4B params |
+| `Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic` | Auto-selected by hw-auto on small GPUs (<7.5 GB), SDNQ 4-bit, 4B params |
 | `black-forest-labs/FLUX.2-klein-4B` | Alternative: full BF16, more VRAM (via `TEXT2D_MODEL_ID`) |
 
 > GGUF weights target ComfyUI-GGUF workflows, not this CLI.

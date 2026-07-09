@@ -4,7 +4,7 @@ Valores por defeito do Part3D.
 **Perfil padrão:** FP16 em alta VRAM (≥10 GB CUDA).
 Todos os componentes permanecem na GPU; sem quantização.
 
-Para GPUs com ~6 GB VRAM, usar ``--low-vram-mode`` que activa
+Para GPUs com ~6 GB VRAM, usar memory-efficient mode que activa
 CPU offloading sequencial + quantização automática.
 
 Tamanhos dos pesos (FP16):
@@ -32,7 +32,7 @@ DEFAULT_POSTPROCESS_THRESHOLD = 0.95
 
 DEFAULT_DTYPE = "float16"
 DEFAULT_CPU_OFFLOAD = False
-DEFAULT_LOW_VRAM_MODE = False
+DEFAULT_MEMORY_EFFICIENT = False
 DEFAULT_HW_AUTO = True
 
 DEFAULT_QUANTIZATION_MODE = "auto"

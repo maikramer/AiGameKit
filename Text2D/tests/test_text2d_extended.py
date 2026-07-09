@@ -76,7 +76,7 @@ def test_klein_init_forces_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
     from text2d.generator import KleinFluxGenerator
 
     monkeypatch.setattr(torch, "cuda", MagicMock(is_available=lambda: True))
-    g = KleinFluxGenerator(device="cpu", low_vram=False, verbose=False)
+    g = KleinFluxGenerator(device="cpu", memory_efficient=False, verbose=False)
     assert g.device == "cpu"
 
 

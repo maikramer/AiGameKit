@@ -2,7 +2,7 @@
 Detecção automática de hardware → perfil de inferência FLUX.2 Klein.
 
 Soft resolution no CLI: só preenche o que o utilizador não definiu (flags
-explícitas, ``-m``/``TEXT2D_MODEL_ID``, ``--low-vram``/``--cpu`` ganham).
+explícitas, ``-m``/``TEXT2D_MODEL_ID``, ``--cpu`` ganham).
 Desligável com ``--no-hw-auto`` ou ``TEXT2D_HW_AUTO=0``.
 
 Perfis para os hardwares de referência:
@@ -33,7 +33,7 @@ class Text2DHardwareProfile:
     name: str
     device: str  # "cuda" | "cpu"
     model_id: str  # modelo BASE sugerido (não sobrepõe -m / TEXT2D_MODEL_ID)
-    low_vram: bool  # True = CPU offload na colocação
+    memory_efficient: bool  # True = CPU offload na colocação
     gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
     total_vram_gib: float
     quant_preset: str  # preset SDNQ runtime ("none" | "sdnq-uint8" | ... ) por VRAM
@@ -43,7 +43,7 @@ class Text2DHardwareProfile:
         parts = [self.name, f"base={model_tag}"]
         if self.quant_preset != "none":
             parts.append(f"quant={self.quant_preset}")
-        if self.low_vram:
+        if self.memory_efficient:
             parts.append("cpu-offload")
         if self.gpu_ids:
             parts.append(f"gpus={self.gpu_ids}")
@@ -61,7 +61,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
             name="cpu",
             device="cpu",
             model_id=LOW_VRAM_MODEL_ID,
-            low_vram=True,
+            memory_efficient=True,
             gpu_ids=None,
             total_vram_gib=0.0,
             quant_preset="none",
@@ -79,7 +79,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
             name=name,
             device="cuda",
             model_id=HIGH_VRAM_MODEL_ID,
-            low_vram=False,
+            memory_efficient=False,
             gpu_ids=[idx for idx, _ in gpus],
             total_vram_gib=round(total_gib, 1),
             quant_preset=plan.quant_mode,
@@ -92,7 +92,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2DHardwareProfile:
         name=name,
         device="cuda",
         model_id=model_id,
-        low_vram=plan.low_vram,
+        memory_efficient=plan.memory_efficient,
         gpu_ids=None,
         total_vram_gib=round(total_gib, 1),
         quant_preset=plan.quant_mode,

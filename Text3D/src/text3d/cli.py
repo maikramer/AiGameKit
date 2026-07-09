@@ -229,7 +229,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=_defaults.DEFAULT_HY_STEPS,
     show_default=True,
     type=int,
-    help=f"Passos Hunyuan3D (perfil balanced: {_defaults.LOW_VRAM_STEPS})",
+    help=f"Passos Hunyuan3D (perfil balanced: {_defaults.MEMORY_EFFICIENT_STEPS})",
 )
 @click.option(
     "--guidance",
@@ -244,14 +244,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=_defaults.DEFAULT_OCTREE_RESOLUTION,
     show_default=True,
     type=int,
-    help=(f"Octree Hunyuan (VRAM no decode). Perfil balanced: {_defaults.LOW_VRAM_OCTREE}"),
+    help=(f"Octree Hunyuan (VRAM no decode). Perfil balanced: {_defaults.MEMORY_EFFICIENT_OCTREE}"),
 )
 @click.option(
     "--num-chunks",
     default=_defaults.DEFAULT_NUM_CHUNKS,
     show_default=True,
     type=int,
-    help=(f"Chunks extração de superfície. Perfil balanced: {_defaults.LOW_VRAM_NUM_CHUNKS}"),
+    help=(f"Chunks extração de superfície. Perfil balanced: {_defaults.MEMORY_EFFICIENT_NUM_CHUNKS}"),
 )
 @click.option(
     "--preset",
@@ -571,7 +571,13 @@ def generate(
         sdnq_preset = "none"
 
     if not from_image and not (prompt and str(prompt).strip()):
-        raise click.UsageError("Indica um PROMPT em texto ou --from-image /path/to.png")
+        raise click.UsageError("Indica um PROMPT em texto ou --from-image /path/to/png")
+
+    # Pedir aos model servers ativos para descarregar (libertar VRAM) antes de ocupar a GPU.
+    if not cpu:
+        from gamedev_shared.model_server import ensure_vram_available
+
+        ensure_vram_available(needed_mib=5000, tool="text3d")
 
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
@@ -1306,7 +1312,9 @@ def gpu_processes_cmd() -> None:
     "--meshopt/--no-meshopt",
     default=False,
     show_default=True,
-    help="Aplica EXT_meshopt_compression (quantização) aos LODs.",
+    help="[DEPRECATED] Era EXT_meshopt_compression (quantização). Agora é no-op — "
+    "a quantização foi removida por causar POSITION SHORT sem KHR_mesh_quantization "
+    "(GLB inválido) e dessincronizar origem do armature em meshes rigged.",
 )
 def lod_cmd(
     input_mesh: Path,
@@ -1336,6 +1344,13 @@ def lod_cmd(
     de fechar buracos pequenos; evita-se ``clean()`` do PyTMesh que destrói LODs decimados.
     """
     stem = basename_opt if basename_opt else input_mesh.stem
+    # Quantização (EXT_meshopt_compression) removida: causava POSITION SHORT sem
+    # KHR_mesh_quantization (GLB inválido) e dessincronizava a origem do armature
+    # em meshes rigged. --meshopt é agora um no-op (deprecated).
+    if meshopt:
+        console.print(
+            "[yellow]Aviso:[/yellow] --meshopt é deprecated (no-op). A quantização foi removida; os LODs saem em FLOAT."
+        )
     try:
         if painted_mesh:
             from text3d.utils.mesh_lod import generate_lod_textured_glb_triplet
@@ -1351,7 +1366,7 @@ def lod_cmd(
                 target_faces=target_faces,
                 apply_finish=finish,
                 finish_lod0=finish_lod0,
-                apply_meshopt=meshopt,
+                apply_meshopt=False,
             )
         else:
             paths = generate_lod_glb_triplet(
@@ -1744,6 +1759,11 @@ def generate_batch(
         base_octree = _defaults.DEFAULT_OCTREE_RESOLUTION
     if base_chunks is None:
         base_chunks = _defaults.DEFAULT_NUM_CHUNKS
+
+    # Pedir aos model servers ativos para descarregar antes de ocupar a GPU.
+    from gamedev_shared.model_server import ensure_vram_available
+
+    ensure_vram_available(needed_mib=5000, tool="text3d")
 
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))

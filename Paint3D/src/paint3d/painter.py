@@ -61,13 +61,13 @@ def _env_flag(name: str, default: bool) -> bool:
     return default
 
 
-def _auto_dino_device(low_vram: bool, gpu_ids: list[int] | None) -> str:
+def _auto_dino_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
     """DINO-giant (~2.2 GB fp16): GPU só quando há folga de VRAM.
 
     Em CPU corre fp32 (fp16 em CPU não tem kernels nativos). Multi-GPU →
     device secundário (junto do VAE). Single-GPU precisa de >= DINO_GPU_MIN_GIB.
     """
-    if low_vram or not torch.cuda.is_available():
+    if memory_efficient or not torch.cuda.is_available():
         return "cpu"
     if gpu_ids and len(gpu_ids) >= 2:
         return f"cuda:{gpu_ids[1]}"
@@ -77,12 +77,12 @@ def _auto_dino_device(low_vram: bool, gpu_ids: list[int] | None) -> str:
     return "cuda" if largest / GIB >= _defaults.DINO_GPU_MIN_GIB else "cpu"
 
 
-def _auto_esrgan_device(low_vram: bool, gpu_ids: list[int] | None) -> str:
+def _auto_esrgan_device(memory_efficient: bool, gpu_ids: list[int] | None) -> str:
     """Real-ESRGAN (~64 MB): GPU sempre que houver CUDA — tiling limita o pico
     de VRAM e o imageSuperNet cai para CPU automaticamente em OOM."""
     if not torch.cuda.is_available():
         return "cpu"
-    if gpu_ids and len(gpu_ids) >= 2 and not low_vram:
+    if gpu_ids and len(gpu_ids) >= 2 and not memory_efficient:
         return f"cuda:{gpu_ids[1]}"
     return "cuda"
 
@@ -107,25 +107,27 @@ def _preflight_paint_model(model_repo: str, subfolder: str, *, verbose: bool = F
             _logger.info(f"preflight paint falhou ({exc}); pipeline baixa on-demand")
 
 
-def _apply_optimization_config(config: Any, *, low_vram: bool, gpu_ids: list[int] | None) -> None:
+def _apply_optimization_config(config: Any, *, memory_efficient: bool, gpu_ids: list[int] | None) -> None:
     """Anexa knobs de otimização ao Hunyuan3DPaintConfig.
 
     - cfg_batch_chunking: CFG uncond/ref/full em 3 forwards sequenciais B=1
-      (pico de ativações ÷3, matemática idêntica). Default: ligado em low-VRAM.
+      (pico de ativações ÷3, matemática idêntica). Default: ligado em modo memory-efficient.
       Env: PAINT3D_CFG_CHUNKING.
     - offload_ref_unet: ref-UNet (dual stream) → CPU após o 1º step de cada
-      pintura (liberta ~1.7 GB fp16). Default: ligado em low-VRAM.
+      pintura (liberta ~1.7 GB fp16). Default: ligado em modo memory-efficient.
       Env: PAINT3D_OFFLOAD_REF_UNET.
     - dino_device / realesrgan_device: colocação automática por VRAM.
       Env: PAINT3D_DINO_DEVICE / PAINT3D_ESRGAN_DEVICE.
     """
-    config.cfg_batch_chunking = _env_flag("PAINT3D_CFG_CHUNKING", low_vram)
-    config.offload_ref_unet = _env_flag("PAINT3D_OFFLOAD_REF_UNET", low_vram)
-    config.dino_device = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or _auto_dino_device(low_vram, gpu_ids)
-    config.realesrgan_device = os.environ.get("PAINT3D_ESRGAN_DEVICE", "").strip() or _auto_esrgan_device(
-        low_vram, gpu_ids
+    config.cfg_batch_chunking = _env_flag("PAINT3D_CFG_CHUNKING", memory_efficient)
+    config.offload_ref_unet = _env_flag("PAINT3D_OFFLOAD_REF_UNET", memory_efficient)
+    config.dino_device = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or _auto_dino_device(
+        memory_efficient, gpu_ids
     )
-    config.realesrgan_tile = _defaults.ESRGAN_TILE_LOW_VRAM if low_vram else _defaults.ESRGAN_TILE
+    config.realesrgan_device = os.environ.get("PAINT3D_ESRGAN_DEVICE", "").strip() or _auto_esrgan_device(
+        memory_efficient, gpu_ids
+    )
+    config.realesrgan_tile = _defaults.ESRGAN_TILE_MEMORY_EFFICIENT if memory_efficient else _defaults.ESRGAN_TILE
 
 
 def _log_optimization_config(config: Any, prefix: str = "") -> None:
@@ -153,9 +155,40 @@ def _ensure_custom_rasterizer_shim() -> None:
     sys.modules["custom_rasterizer"] = custom_rasterizer_shim  # type: ignore[assignment]
 
 
+def _ensure_trust_remote_code_compat() -> None:
+    """Wrap ``DiffusionPipeline.from_pretrained`` para injetar ``trust_remote_code=True``.
+
+    O Hunyuan3D-Paint (código vendored em ``hy3dpaint/``) carrega um pipeline custom
+    via ``DiffusionPipeline.from_pretrained(..., custom_pipeline=...)``. A partir do
+    diffusers 0.38, este caminho exige ``trust_remote_code=True`` explícito (antes era
+    implícito). Em vez de alterar o código vendored, fazemos wrap do método uma única
+    vez para que o default seja ``True`` quando o caller não o especifica — preservando
+    o comportamento que o vendored assumia em versões anteriores do diffusers.
+    """
+    try:
+        from diffusers import DiffusionPipeline as _DP
+    except ImportError:
+        return
+
+    # Idempotência: marca guardada no atributo de classe (não no método bound).
+    if getattr(_DP, "_paint3d_trust_remote_wrap", False):
+        return
+
+    # from_pretrained é um classmethod; acedemos à função subjacente via __func__.
+    _orig_func = _DP.from_pretrained.__func__
+
+    def _patched_from_pretrained(cls, *args: Any, **kwargs: Any) -> Any:  # type: ignore[no-redef]
+        kwargs.setdefault("trust_remote_code", True)
+        return _orig_func(cls, *args, **kwargs)
+
+    _DP.from_pretrained = classmethod(_patched_from_pretrained)  # type: ignore[assignment]
+    _DP._paint3d_trust_remote_wrap = True  # type: ignore[attr-defined]
+
+
 def check_paint_rasterizer_available() -> None:
     """Garante que ``custom_rasterizer`` está disponível (shim nvdiffrast ou extensão nativa)."""
     _ensure_custom_rasterizer_shim()
+    _ensure_trust_remote_code_compat()
     try:
         import custom_rasterizer  # noqa: F401
     except (ImportError, ModuleNotFoundError, OSError) as e:
@@ -371,14 +404,14 @@ def apply_hunyuan_paint(
     enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
     vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
     preserve_origin: bool = True,
-    low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
+    memory_efficient: bool = _defaults.DEFAULT_MEMORY_EFFICIENT,
     gpu_ids: list[int] | None = None,
 ) -> Any:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
 
     Por defeito corre em alta precisão (FP16, sem quantização, render 2048, texture 4096).
-    Com ``low_vram=True`` ativa quantização SDNQ uint8 e resoluções reduzidas (1024/2048).
+    Com ``memory_efficient=True`` ativa quantização SDNQ uint8 e resoluções reduzidas (1024/2048).
 
     Com ``preserve_origin=True`` (padrão), a mesh texturizada preserva a posição
     original: o centroide do AABB da saída é alinhado ao do input, corrigindo qualquer
@@ -444,15 +477,15 @@ def apply_hunyuan_paint(
 
             if render_size is not None:
                 config.render_size = render_size
-            elif low_vram:
-                config.render_size = _defaults.LOW_VRAM_RENDER_SIZE
+            elif memory_efficient:
+                config.render_size = _defaults.MEMORY_EFFICIENT_RENDER_SIZE
             else:
                 config.render_size = _defaults.DEFAULT_PAINT_RENDER_SIZE
 
             if texture_size is not None:
                 config.texture_size = texture_size
-            elif low_vram:
-                config.texture_size = _defaults.LOW_VRAM_TEXTURE_SIZE
+            elif memory_efficient:
+                config.texture_size = _defaults.MEMORY_EFFICIENT_TEXTURE_SIZE
             else:
                 config.texture_size = _defaults.DEFAULT_PAINT_TEXTURE_SIZE
 
@@ -462,10 +495,10 @@ def apply_hunyuan_paint(
 
             config.bake_exp = bake_exp
 
-            if not low_vram:
+            if not memory_efficient:
                 config.quantization_config = {"type": "none"}
 
-            _apply_optimization_config(config, low_vram=low_vram, gpu_ids=gpu_ids)
+            _apply_optimization_config(config, memory_efficient=memory_efficient, gpu_ids=gpu_ids)
             if verbose:
                 _log_optimization_config(config)
 
@@ -475,15 +508,15 @@ def apply_hunyuan_paint(
 
         with profile_span("paint_optimize_pipeline"):
             try:
-                if low_vram and _sdnq_available() and pipe.unet is not None:
+                if memory_efficient and _sdnq_available() and pipe.unet is not None:
                     from gamedev_shared.sdnq import quantize_model
 
                     if verbose:
-                        _logger.info("Modo low-VRAM: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                        _logger.info("Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
                 elif verbose:
-                    if low_vram:
-                        _logger.warn("Modo low-VRAM: SDNQ indisponível — UNet em FP16/qint8")
+                    if memory_efficient:
+                        _logger.warn("Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
                     else:
                         _logger.info("Modo alta VRAM — UNet em FP16 (sem quantização)")
                 if pipe.vae is not None:
@@ -509,9 +542,9 @@ def apply_hunyuan_paint(
                     if gpu_ids is None and torch.cuda.device_count() >= 2:
                         gpu_ids = [0, 1]
 
-                if gpu_ids and len(gpu_ids) >= 2 and not low_vram:
+                if gpu_ids and len(gpu_ids) >= 2 and not memory_efficient:
                     _apply_paint_multi_gpu(pipe, gpu_ids, verbose=verbose)
-                elif torch.cuda.device_count() >= 2 and not low_vram and verbose:
+                elif torch.cuda.device_count() >= 2 and not memory_efficient and verbose:
                     gpu0_name = torch.cuda.get_device_name(0)
                     gpu1_name = torch.cuda.get_device_name(1)
                     _logger.info(
@@ -568,18 +601,20 @@ def paint_file_to_file(
     enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
     vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
     preserve_origin: bool = True,
-    low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
+    memory_efficient: bool = _defaults.DEFAULT_MEMORY_EFFICIENT,
     gpu_ids: list[int] | None = None,
 ) -> Path:
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
     sub = subfolder or _defaults.DEFAULT_PAINT_SUBFOLDER
     if max_num_view is None:
-        nviews = _defaults.LOW_VRAM_MAX_VIEWS if low_vram else _defaults.DEFAULT_PAINT_MAX_VIEWS
+        nviews = _defaults.MEMORY_EFFICIENT_MAX_VIEWS if memory_efficient else _defaults.DEFAULT_PAINT_MAX_VIEWS
     else:
         nviews = max_num_view
     if view_resolution is None:
-        vres = _defaults.LOW_VRAM_VIEW_RESOLUTION if low_vram else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+        vres = (
+            _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION if memory_efficient else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+        )
     else:
         vres = view_resolution
     bexp = _defaults.DEFAULT_PAINT_BAKE_EXP if bake_exp is None else bake_exp
@@ -605,7 +640,7 @@ def paint_file_to_file(
         vae_tile_size=vae_tile_size,
         # Preservação feita em glTF sobre o ficheiro final (frame correto), não em bpy.
         preserve_origin=False,
-        low_vram=low_vram,
+        memory_efficient=memory_efficient,
         gpu_ids=gpu_ids,
     )
 
@@ -647,7 +682,7 @@ class PaintBatchProcessor:
         enable_vae_tiling: bool = _defaults.DEFAULT_ENABLE_VAE_TILING,
         vae_tile_size: int = _defaults.DEFAULT_VAE_TILE_SIZE,
         preserve_origin: bool = True,
-        low_vram: bool = _defaults.DEFAULT_LOW_VRAM,
+        memory_efficient: bool = _defaults.DEFAULT_MEMORY_EFFICIENT,
         gpu_ids: list[int] | None = None,
     ):
         self._model_repo = model_repo
@@ -663,7 +698,7 @@ class PaintBatchProcessor:
         self._enable_vae_tiling = enable_vae_tiling
         self._vae_tile_size = vae_tile_size
         self._preserve_origin = preserve_origin
-        self._low_vram = low_vram
+        self._memory_efficient = memory_efficient
         self._gpu_ids = gpu_ids
         self._pipe: Any = None
         self._config: Any = None
@@ -707,15 +742,15 @@ class PaintBatchProcessor:
 
             if self._render_size is not None:
                 config.render_size = self._render_size
-            elif self._low_vram:
-                config.render_size = _defaults.LOW_VRAM_RENDER_SIZE
+            elif self._memory_efficient:
+                config.render_size = _defaults.MEMORY_EFFICIENT_RENDER_SIZE
             else:
                 config.render_size = _defaults.DEFAULT_PAINT_RENDER_SIZE
 
             if self._texture_size is not None:
                 config.texture_size = self._texture_size
-            elif self._low_vram:
-                config.texture_size = _defaults.LOW_VRAM_TEXTURE_SIZE
+            elif self._memory_efficient:
+                config.texture_size = _defaults.MEMORY_EFFICIENT_TEXTURE_SIZE
             else:
                 config.texture_size = _defaults.DEFAULT_PAINT_TEXTURE_SIZE
 
@@ -725,10 +760,10 @@ class PaintBatchProcessor:
 
             config.bake_exp = self._bake_exp
 
-            if not self._low_vram:
+            if not self._memory_efficient:
                 config.quantization_config = {"type": "none"}
 
-            _apply_optimization_config(config, low_vram=self._low_vram, gpu_ids=self._gpu_ids)
+            _apply_optimization_config(config, memory_efficient=self._memory_efficient, gpu_ids=self._gpu_ids)
             if self._verbose:
                 _log_optimization_config(config, prefix="[batch] ")
 
@@ -738,15 +773,17 @@ class PaintBatchProcessor:
 
         with profile_span("paint_optimize_pipeline"):
             try:
-                if self._low_vram and _sdnq_available() and pipe.unet is not None:
+                if self._memory_efficient and _sdnq_available() and pipe.unet is not None:
                     from gamedev_shared.sdnq import quantize_model
 
                     if self._verbose:
-                        _logger.info("[batch] Modo low-VRAM: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)...")
+                        _logger.info(
+                            "[batch] Modo memory-efficient: aplicando SDNQ uint8 ao UNet (dequantize_fp32=False)..."
+                        )
                     pipe.unet = quantize_model(pipe.unet, preset="sdnq-uint8", dequantize_fp32=False)
                 elif self._verbose:
-                    if self._low_vram:
-                        _logger.warn("[batch] Modo low-VRAM: SDNQ indisponível — UNet em FP16/qint8")
+                    if self._memory_efficient:
+                        _logger.warn("[batch] Modo memory-efficient: SDNQ indisponível — UNet em FP16/qint8")
                     else:
                         _logger.info("[batch] Modo alta VRAM — UNet em FP16 (sem quantização)")
                 if pipe.vae is not None:
@@ -759,9 +796,9 @@ class PaintBatchProcessor:
                     if self._verbose and self._enable_vae_tiling:
                         _logger.info(f"[batch] VAE tiling ativo (tile_size={self._vae_tile_size})")
 
-                if self._gpu_ids and len(self._gpu_ids) >= 2 and not self._low_vram:
+                if self._gpu_ids and len(self._gpu_ids) >= 2 and not self._memory_efficient:
                     _apply_paint_multi_gpu(pipe, self._gpu_ids, verbose=self._verbose)
-                elif torch.cuda.device_count() >= 2 and not self._low_vram and self._verbose:
+                elif torch.cuda.device_count() >= 2 and not self._memory_efficient and self._verbose:
                     gpu0_name = torch.cuda.get_device_name(0)
                     gpu1_name = torch.cuda.get_device_name(1)
                     _logger.info(

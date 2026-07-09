@@ -2,7 +2,7 @@
 Detecção automática de hardware → perfil Hunyuan3D-Paint 2.1.
 
 Soft resolution: só preenche parâmetros quando o utilizador não pediu nada
-explícito; ``--low-vram-mode``, ``--gpu-ids``, ``--quality`` e flags de
+explícito; ``--gpu-ids``, ``--quality`` e flags de
 resolução ganham sempre. Desligável com ``--no-hw-auto`` ou ``PAINT3D_HW_AUTO=0``.
 
 Perfis por tier de VRAM:
@@ -21,7 +21,7 @@ ver ``painter._apply_optimization_config`` para os knobs/env overrides.
 Hardware de referência:
 - 2x RTX 3060 12GB → FP16, split multi-GPU (painter já auto-detecta ≥2 GPUs).
 - RTX 4060 8GB → FP16, mid-tier resolutions.
-- RTX 4050 6GB → low-VRAM (SDNQ uint8, 6 views @ 512px, render 1536, tex 3072).
+- RTX 4050 6GB → modo memory-efficient (SDNQ uint8, 6 views @ 512px, render 1536, tex 3072).
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def hw_auto_enabled() -> bool:
 class Paint3DHardwareProfile:
     name: str
     device: str  # "cuda" | "cpu"
-    low_vram: bool  # True = SDNQ uint8 (backward compat)
+    memory_efficient: bool  # True = SDNQ uint8 + CFG chunking + ref-UNet offload
     gpu_ids: list[int] | None  # informativo; painter auto-split com ≥2 GPUs
     total_vram_gib: float
     max_views: int | None = None  # None = don't override (use CLI default)
@@ -59,7 +59,7 @@ class Paint3DHardwareProfile:
     texture_size: int | None = None
 
     def summary(self) -> str:
-        parts = [self.name, "low-vram (SDNQ uint8)" if self.low_vram else "FP16"]
+        parts = [self.name, "memory-efficient (SDNQ uint8)" if self.memory_efficient else "FP16"]
         if self.max_views is not None:
             parts.append(f"views={self.max_views}@{self.view_resolution}px")
         if self.render_size is not None:
@@ -78,7 +78,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
         return Paint3DHardwareProfile(
             name="cpu",
             device="cpu",
-            low_vram=True,
+            memory_efficient=True,
             gpu_ids=None,
             total_vram_gib=0.0,
             max_views=4,
@@ -102,7 +102,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
         return Paint3DHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=False,
+            memory_efficient=False,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
         )
@@ -112,7 +112,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
         return Paint3DHardwareProfile(
             name=name,
             device="cuda",
-            low_vram=False,
+            memory_efficient=False,
             gpu_ids=None,
             total_vram_gib=round(total_gib, 1),
             max_views=6,
@@ -126,7 +126,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Paint3DHardwareProfile:
     return Paint3DHardwareProfile(
         name=name,
         device="cuda",
-        low_vram=True,
+        memory_efficient=True,
         gpu_ids=None,
         total_vram_gib=round(total_gib, 1),
         max_views=6,
