@@ -381,20 +381,18 @@
 
       <!-- §4.3 Praça central: poço, fogueira comunitária e mastro com a
            bandeira da cidade. O herói nasce no centro. -->
-      <!-- Poço (sólido) com balde e telhadinho -->
-      <Composition
+      <!-- Poço medieval (GLB painted) — substitui as primitivas -->
+      <GameObject
+        transform="scale: 2.0"
         place="at: -7 6; align-to-terrain: 0"
-        body="fixed"
-        collider="auto"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/medieval_well_lod0.glb; mesh-anchor: base"
       >
-        <Cylinder pos="0 0.45 0" size="1.3 1.3 0.9" color="#9a958c"></Cylinder>
-        <Cylinder pos="0 0.55 0" size="1.0 1.0 0.1" color="#2f6fb0"></Cylinder>
-        <Box pos="-1.15 1.0 0" size="0.16 1.7 0.16" color="#5a3a20"></Box>
-        <Box pos="1.15 1.0 0" size="0.16 1.7 0.16" color="#5a3a20"></Box>
-        <Box pos="0 1.85 0" size="2.6 0.12 0.12" color="#4a2f18"></Box>
-        <Cylinder pos="0 2.4 0" size="0.05 1.5 0.95" color="#7a3b28"></Cylinder>
-        <Box pos="0 1.45 0" size="0.5 0.5 0.5" color="#6b4a2b"></Box>
-      </Composition>
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/medieval_well_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
       <!-- Fogueira comunitária -->
       <Composition
         place="at: 7 -6; align-to-terrain: 0"
@@ -436,31 +434,29 @@
         <Box pos="0.5 3.2 0" size="0.06 1.0 0.8" color="#b03b3b"></Box>
         <Box pos="0.5 3.65 0" size="0.06 0.12 0.84" color="#d4b84a"></Box>
       </Composition>
-      <!-- Bancos de pedra virados para a fogueira -->
-      <Composition
+      <!-- Bancos de madeira virados para a fogueira (GLB painted) -->
+      <GameObject
+        transform="scale: 0.9; rotation: 0 0.6 0"
         place="at: 4.5 -3.5; align-to-terrain: 0"
-        body="fixed"
-        collider="auto"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_bench_lod0.glb; mesh-anchor: base"
       >
-        <Box
-          pos="0 0.3 0"
-          size="1.8 0.3 0.55"
-          rotation="0 0.6 0"
-          color="#9a958c"
-        ></Box>
-      </Composition>
-      <Composition
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_bench_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        transform="scale: 0.9; rotation: 0 -0.6 0"
         place="at: 9.5 -3.5; align-to-terrain: 0"
-        body="fixed"
-        collider="auto"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_bench_lod0.glb; mesh-anchor: base"
       >
-        <Box
-          pos="0 0.3 0"
-          size="1.8 0.3 0.55"
-          rotation="0 -0.6 0"
-          color="#9a958c"
-        ></Box>
-      </Composition>
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_bench_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
 
       <!-- §4.4 Casas nos cantos diagonais (deixam os corredores cardeais
            livres). Cada casa = 1 entidade com corpo fixo e colisores
@@ -471,23 +467,27 @@
         body="fixed"
         collider="auto"
       >
-        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
-        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#d8c7a0"></Box>
-        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
-        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#cdb88f"></Box>
-        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
-        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#d8c7a0"></Box>
+        <Box pos="0 0.1 0" size="5 0.2 5" texture-url="/assets/textures/wood_planks.png" texture-repeat="4 4" normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"></Box>
+        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="2.4 1.4 0" size="0.3 2.6 5" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
         <Box
           pos="-1.3 3.05 0"
           size="3.1 0.2 5.4"
           rotation="0 0 0.62"
-          color="#7a3b28"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="3 4"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
         <Box
           pos="1.3 3.05 0"
           size="3.1 0.2 5.4"
           rotation="0 0 -0.62"
-          color="#7a3b28"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="3 4"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
         <PointLight
           pos="0 1.5 -0.5"
@@ -500,23 +500,27 @@
         body="fixed"
         collider="auto"
       >
-        <Box pos="0 0.1 0" size="4.4 0.2 4.4" color="#6b4a2b"></Box>
-        <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" color="#c9b48a"></Box>
-        <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
-        <Box pos="2.1 1.3 0" size="0.3 2.4 4.4" color="#bfa97e"></Box>
-        <Box pos="-1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
-        <Box pos="1.5 1.3 2.1" size="1.4 2.4 0.3" color="#c9b48a"></Box>
+        <Box pos="0 0.1 0" size="4.4 0.2 4.4" texture-url="/assets/textures/wood_planks.png" texture-repeat="4 4" normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"></Box>
+        <Box pos="0 1.3 -2.1" size="4.4 2.4 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-2.1 1.3 0" size="0.3 2.4 4.4" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="2.1 1.3 0" size="0.3 2.4 4.4" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-1.5 1.3 2.1" size="1.4 2.4 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="1.5 1.3 2.1" size="1.4 2.4 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
         <Box
           pos="-1.15 2.8 0"
           size="2.8 0.2 4.8"
           rotation="0 0 0.6"
-          color="#6e4b2a"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="3 4"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
         <Box
           pos="1.15 2.8 0"
           size="2.8 0.2 4.8"
           rotation="0 0 -0.6"
-          color="#6e4b2a"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="3 4"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
       </Composition>
       <!-- Horta da casa NW: canteiro + legumes -->
@@ -539,22 +543,28 @@
         body="fixed"
         collider="auto"
       >
-        <Box pos="0 0.1 0" size="5 0.2 5" color="#6b4a2b"></Box>
-        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" color="#cfc3b0"></Box>
-        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
-        <Box pos="2.4 1.4 0" size="0.3 2.6 5" color="#c4b8a4"></Box>
-        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
-        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" color="#cfc3b0"></Box>
+        <Box pos="0 0.1 0" size="5 0.2 5" texture-url="/assets/textures/wood_planks.png" texture-repeat="4 4" normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"></Box>
+        <Box pos="0 1.4 -2.4" size="5 2.6 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-2.4 1.4 0" size="0.3 2.6 5" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="2.4 1.4 0" size="0.3 2.6 5" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-1.7 1.4 2.4" size="1.6 2.6 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="1.7 1.4 2.4" size="1.6 2.6 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="2 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
         <Box
           pos="-1.3 3.05 0"
           size="3.1 0.2 5.4"
           rotation="0 0 0.62"
-          color="#55402a"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="3 4"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
         <Box
           pos="1.3 3.05 0"
           size="3.1 0.2 5.4"
           rotation="0 0 -0.62"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="3 4"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
+        ></Box>
           color="#55402a"
         ></Box>
         <PointLight
@@ -568,25 +578,29 @@
         body="fixed"
         collider="auto"
       >
-        <Box pos="0 0.1 0" size="7 0.2 5" color="#6b4a2b"></Box>
-        <Box pos="0 1.6 -2.4" size="7 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="-3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
-        <Box pos="3.4 1.6 0" size="0.3 3.0 5" color="#c8b896"></Box>
-        <Box pos="-2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
-        <Box pos="2.7 1.6 2.4" size="1.5 3.0 0.3" color="#d2c1a0"></Box>
+        <Box pos="0 0.1 0" size="7 0.2 5" texture-url="/assets/textures/wood_planks.png" texture-repeat="6 4" normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"></Box>
+        <Box pos="0 1.6 -2.4" size="7 3.0 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-3.4 1.6 0" size="0.3 3.0 5" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="3.4 1.6 0" size="0.3 3.0 5" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="-2.7 1.6 2.4" size="1.5 3.0 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+        <Box pos="2.7 1.6 2.4" size="1.5 3.0 0.3" texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 1" normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
         <Box
           pos="-1.9 3.4 0"
           size="4.0 0.22 5.4"
           rotation="0 0 0.6"
-          color="#7a3b28"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="4 5"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
         <Box
           pos="1.9 3.4 0"
           size="4.0 0.22 5.4"
           rotation="0 0 -0.6"
-          color="#7a3b28"
+          texture-url="/assets/textures/roof_tiles.png"
+          texture-repeat="4 5"
+          normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"
         ></Box>
-        <Box pos="0 4.35 0" size="0.5 0.5 5.4" color="#5a3a20"></Box>
+        <Box pos="0 4.35 0" size="0.5 0.5 5.4" texture-url="/assets/textures/wood_planks.png" texture-repeat="2 2"></Box>
       </Composition>
       <!-- Boneco de treino em frente à longhouse (contexto para o melee) -->
       <Composition
@@ -600,75 +614,66 @@
         <Box pos="0 1.05 0" size="0.5 0.7 0.3" color="#b8934a"></Box>
       </Composition>
 
-      <!-- §4.5 Mercado (lado oeste da praça): duas bancas, barris e
-           caixas de mercadoria. O comerciante fica ao lado leste. -->
-      <Composition
+      <!-- §4.5 Mercado (lado oeste da praça): duas bancas (GLB painted),
+           barris (GLB painted) e caixas de mercadoria. Comerciante a leste. -->
+      <!-- Banca de mercado 1 (toldo vermelho) -->
+      <GameObject
+        transform="scale: 1.7"
         place="at: -10 0; align-to-terrain: 0"
-        body="fixed"
-        collider="none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
       >
-        <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
-        <Box
-          pos="-0.6 2.1 0"
-          size="1.2 0.08 2.2"
-          rotation="-0.5 0 0"
-          color="#b03b3b"
-        ></Box>
-        <Box
-          pos="0.6 2.1 0"
-          size="1.2 0.08 2.2"
-          rotation="-0.5 0 0"
-          color="#e8ddc8"
-        ></Box>
-        <Sphere pos="-0.6 1.4 0" size="0.13" color="#cc3322"></Sphere>
-        <Sphere pos="0.6 1.16 0.2" size="0.16" color="#e2a02a"></Sphere>
-      </Composition>
-      <Composition
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/market_stall_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <!-- Banca de mercado 2 (toldo azul) -->
+      <GameObject
+        transform="scale: 1.7; rotation: 0 0.5 0"
         place="at: -10 -4; align-to-terrain: 0"
-        body="fixed"
-        collider="none"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
       >
-        <Box pos="-1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="1.1 1.15 -0.7" size="0.1 2.3 0.1" color="#5a3a20"></Box>
-        <Box pos="0 0.95 0" size="2.4 0.18 1.6" color="#8a5a30"></Box>
-        <Box
-          pos="-0.6 2.1 0"
-          size="1.2 0.08 2.2"
-          rotation="-0.5 0 0"
-          color="#3a6a8a"
-        ></Box>
-        <Box
-          pos="0.6 2.1 0"
-          size="1.2 0.08 2.2"
-          rotation="-0.5 0 0"
-          color="#e8ddc8"
-        ></Box>
-        <Cylinder pos="-0.5 1.2 0.1" size="0.14 0.14 0.3" color="#8a3a6a">
-        </Cylinder>
-        <Cylinder pos="0.55 1.2 -0.1" size="0.14 0.14 0.3" color="#3a8a5a">
-        </Cylinder>
-      </Composition>
-      <!-- Barris atrás das bancas -->
-      <Composition
-        place="at: -12.5 -2; align-to-terrain: 0"
-        body="fixed"
-        collider="auto"
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/market_stall_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <!-- Barris de madeira atrás das bancas (3 unidades, GLB painted) -->
+      <GameObject
+        transform="scale: 0.7"
+        place="at: -12.5 -2.2; align-to-terrain: 0"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
       >
-        <Cylinder pos="0 0.55 0" size="0.45 0.5 1.1" color="#7a5230"></Cylinder>
-        <Cylinder
-          pos="1.05 0.55 0.3"
-          size="0.45 0.5 1.1"
-          color="#6b4a2b"
-        ></Cylinder>
-        <Cylinder
-          pos="0.5 1.55 0.1"
-          size="0.45 0.5 1.1"
-          rotation="0 0 1.5708"
-          color="#7a5230"
-        ></Cylinder>
-      </Composition>
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_barrel_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        transform="scale: 0.7"
+        place="at: -11.4 -1.8; align-to-terrain: 0"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_barrel_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
+      <GameObject
+        transform="scale: 0.7"
+        place="at: -13.4 -2.6; align-to-terrain: 0"
+        rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+        collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
+      >
+        <GLTFLoader
+          role="visual"
+          url="/assets/meshes/wooden_barrel_lod0.glb"
+        ></GLTFLoader>
+      </GameObject>
       <!-- Pilha de caixas de mercadoria (asset wooden_crate) -->
       <GameObject
         transform="scale: 0.55"
@@ -2237,21 +2242,21 @@
 
       <!-- HUD: camada declarativa screen-space + widgets (engine HudPlugin). -->
       <HudScreenLayer></HudScreenLayer>
-      <HealthBar target-entity="hero" icon="❤"></HealthBar>
+      <HealthBar target-entity="hero" icon="/assets/icons/hud_health.png"></HealthBar>
       <XpBar target-entity="hero"></XpBar>
       <ResourceChip
         resource="gold"
-        icon="🪙"
+        icon="/assets/icons/hud_gold.png"
         target-entity="hero"
       ></ResourceChip>
       <ResourceChip
         resource="wood"
-        icon="🪵"
+        icon="/assets/icons/hud_wood.png"
         target-entity="hero"
       ></ResourceChip>
       <ResourceChip
         resource="stone"
-        icon="🪨"
+        icon="/assets/icons/hud_stone.png"
         target-entity="hero"
       ></ResourceChip>
       <Minimap range="60"></Minimap>

@@ -941,21 +941,21 @@ async function bootstrap(): Promise<void> {
   // item's stack at 1, so bought bombs never accumulated. Stack them high.
   const itemReg = getDataRegistry(state);
   for (const [id, name, icon] of [
-    ['bomb', 'Bomb', '💣'],
-    ['wood', 'Wood', '🪵'],
-    ['stone', 'Stone', '🪨'],
-    ['potion', 'Potion', '🧪'],
-    ['antidote', 'Antidote', '🟣'],
+    ['bomb', 'Bomb', '/assets/icons/item_bomb.png'],
+    ['wood', 'Wood', '/assets/icons/hud_wood.png'],
+    ['stone', 'Stone', '/assets/icons/hud_stone.png'],
+    ['potion', 'Potion', '/assets/icons/potion_health.png'],
+    ['antidote', 'Antidote', '/assets/icons/item_antidote.png'],
     // Quest reward items — registered so the grant actually stacks in the bag
     // (an unregistered item silently caps at maxStack 1).
-    ['wolf_pelt', 'Wolf Pelt', '🐺'],
-    ['cactus_fiber', 'Cactus Fiber', '🌵'],
-    ['silk_cloth', 'Silk Cloth', '🧵'],
-    ['ancient_relic', 'Ancient Relic', '🏺'],
-    ['moss_potion', 'Moss Potion', '🟢'],
-    ['iron_axe', 'Iron Axe', '🪓'],
-    ['blessed_rod', 'Blessed Rod', '🎣'],
-    ['nature_amulet', 'Nature Amulet', '🔮'],
+    ['wolf_pelt', 'Wolf Pelt', '/assets/icons/wolf_pelt.png'],
+    ['cactus_fiber', 'Cactus Fiber', '/assets/icons/cactus_fiber.png'],
+    ['silk_cloth', 'Silk Cloth', '/assets/icons/silk_cloth.png'],
+    ['ancient_relic', 'Ancient Relic', '/assets/icons/ancient_relic.png'],
+    ['moss_potion', 'Moss Potion', '/assets/icons/moss_potion.png'],
+    ['iron_axe', 'Iron Axe', '/assets/icons/iron_axe.png'],
+    ['blessed_rod', 'Blessed Rod', '/assets/icons/blessed_rod.png'],
+    ['nature_amulet', 'Nature Amulet', '/assets/icons/nature_amulet.png'],
   ] as const) {
     itemReg.register('item', id, { id, name, icon, maxStack: 99, tags: [] });
   }
@@ -1194,3 +1194,4 @@ if (import.meta.hot) {
     }
   });
 }
+
