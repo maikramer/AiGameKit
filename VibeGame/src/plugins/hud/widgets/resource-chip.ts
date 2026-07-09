@@ -47,7 +47,7 @@ export function createResourceChipWidget(
         document.createElement('div'),
         icon,
         'hud-resource-icon',
-        'width:16px;height:16px;object-fit:contain;'
+        'width:24px;height:24px;object-fit:contain;flex-shrink:0;'
       );
 
       const value = document.createElement('span');

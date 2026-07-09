@@ -40,7 +40,7 @@ export function createHealthBarWidget(
         document.createElement('div'),
         icon,
         'hud-health-icon',
-        'width:18px;height:18px;object-fit:contain;'
+        'width:28px;height:28px;object-fit:contain;flex-shrink:0;'
       );
 
       const track = document.createElement('div');
