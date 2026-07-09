@@ -34,6 +34,17 @@ class TestCLISmoke:
         assert "--steps" in result.output
         assert "--cfg-scale" in result.output
         assert "--profile" in result.output
+        # New generation + DSP flags
+        assert "--negative" in result.output
+        assert "--no-negative" in result.output
+        assert "--lufs" in result.output
+        assert "--no-loudness" in result.output
+        assert "--high-pass" in result.output
+        assert "--compressor" in result.output
+        assert "--compressor-preset" in result.output
+        assert "--true-peak" in result.output
+        assert "--bit-depth" in result.output
+        assert "--enhance" in result.output
 
     def test_batch_help(self, runner):
         result = runner.invoke(cli, ["batch", "--help"])
@@ -109,3 +120,34 @@ class TestGenerateValidation:
             ],
         )
         assert "Configuração" in result.output
+
+
+class TestGenerateDSPValidation:
+    """Validation of the new DSP/negative-prompt flags (no model load)."""
+
+    def test_lufs_out_of_range(self, runner):
+        result = runner.invoke(cli, ["generate", "test", "--lufs", "5.0"])
+        assert result.exit_code != 0
+
+    def test_lufs_valid_accepted_at_parse(self, runner):
+        # -5 is within range; will fail later at model load but parsing is fine.
+        result = runner.invoke(cli, ["generate", "test", "--lufs", "-5", "--duration", "100"])
+        # Duration error proves we got past LUFS parsing.
+        assert result.exit_code != 0
+        assert "dura" in result.output.lower() or "duration" in result.output.lower()
+
+    def test_high_pass_out_of_range(self, runner):
+        result = runner.invoke(cli, ["generate", "test", "--high-pass", "500"])
+        assert result.exit_code != 0
+
+    def test_bit_depth_invalid(self, runner):
+        result = runner.invoke(cli, ["generate", "test", "--bit-depth", "20"])
+        assert result.exit_code != 0
+
+    def test_compressor_preset_invalid(self, runner):
+        result = runner.invoke(cli, ["generate", "test", "--compressor-preset", "bogus"])
+        assert result.exit_code != 0
+
+    def test_true_peak_out_of_range(self, runner):
+        result = runner.invoke(cli, ["generate", "test", "--true-peak", "1.0"])
+        assert result.exit_code != 0

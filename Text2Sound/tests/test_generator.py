@@ -172,6 +172,61 @@ class TestAudioGenerator:
 
     @patch("text2sound.generator.generate_diffusion_cond")
     @patch("text2sound.generator.get_pretrained_model")
+    def test_generate_with_negative_prompt(self, mock_get, mock_gen_diff):
+        """A negative_prompt is passed through as negative_conditioning."""
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+        mock_gen_diff.return_value = torch.randn(1, 2, 44100)
+
+        gen = AudioGenerator(device="cpu", auto_clear=False)
+        result = gen.generate(prompt="explosion", duration=1.0, steps=10, negative_prompt="music, reverb")
+
+        # negative_conditioning kwarg is forwarded to generate_diffusion_cond.
+        kwargs = mock_gen_diff.call_args.kwargs
+        assert "negative_conditioning" in kwargs
+        neg = kwargs["negative_conditioning"]
+        assert isinstance(neg, list) and len(neg) == 1
+        assert neg[0]["prompt"] == "music, reverb"
+        # And the result echoes the effective negative prompt back.
+        assert result.negative_prompt == "music, reverb"
+
+    @patch("text2sound.generator.generate_diffusion_cond")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_generate_without_negative_prompt_omits_kwarg(self, mock_get, mock_gen_diff):
+        """With no negative prompt, negative_conditioning is NOT forwarded (classic path)."""
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+        mock_gen_diff.return_value = torch.randn(1, 2, 44100)
+
+        gen = AudioGenerator(device="cpu", auto_clear=False)
+        result = gen.generate(prompt="test", duration=1.0, steps=10)
+
+        kwargs = mock_gen_diff.call_args.kwargs
+        assert "negative_conditioning" not in kwargs
+        assert result.negative_prompt is None
+
+    @patch("text2sound.generator.generate_diffusion_cond")
+    @patch("text2sound.generator.get_pretrained_model")
+    def test_generate_empty_negative_prompt_omits_kwarg(self, mock_get, mock_gen_diff):
+        """An empty/whitespace negative prompt is treated as 'no negative'."""
+        mock_model = MagicMock()
+        mock_model.to.return_value = mock_model
+        mock_model.pretransform = None
+        mock_get.return_value = (mock_model, {"sample_rate": 44100, "sample_size": 65536})
+        mock_gen_diff.return_value = torch.randn(1, 2, 44100)
+
+        gen = AudioGenerator(device="cpu", auto_clear=False)
+        gen.generate(prompt="test", duration=1.0, steps=10, negative_prompt="   ")
+
+        kwargs = mock_gen_diff.call_args.kwargs
+        assert "negative_conditioning" not in kwargs
+
+    @patch("text2sound.generator.generate_diffusion_cond")
+    @patch("text2sound.generator.get_pretrained_model")
     def test_generate_decodes_latents_via_pretransform(self, mock_get, mock_gen_diff):
         """Com pretransform, pede latents e decodifica fora do sampler (fallback OOM)."""
 
