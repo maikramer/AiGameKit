@@ -8,6 +8,13 @@ Single source of truth for SDNQ quantization across all packages:
 
 Default preset: ``sdnq-uint8`` — best tested across all models and GPUs.
 
+Backend coverage (SDNQ >=0.2.1):
+    SDNQ is pure PyTorch. On CUDA/ROCm/XPU it uses the Inductor backend via Triton
+    (quantized matmul is auto-enabled when ``use_torch_compile`` is truthy). On CPU
+    and MPS (Apple Mac) it falls back to PyTorch eager mode — quantization works but
+    quantized matmul is disabled (no Triton). SDNQ can also compile to OpenVINO via
+    ``torch.compile → Inductor → OpenVINO`` for Intel CPU/GPU inference.
+
 References:
     - SDNQ library: https://github.com/Disty0/sdnq
     - Pre-quantized models: https://huggingface.co/collections/Disty0/sdnq
@@ -75,6 +82,16 @@ PRESETS: dict[str, SDNQPreset] = {
         dequantize_fp32=True,
         description="SDNQ INT4 — maximum compression for low VRAM GPUs",
     ),
+    "sdnq-uint4": SDNQPreset(
+        name="sdnq-uint4",
+        weights_dtype="uint4",
+        group_size=32,
+        use_svd=True,
+        svd_rank=32,
+        svd_steps=8,
+        dequantize_fp32=True,
+        description="SDNQ UINT4 — matches Disty0 pre-quantized checkpoints (uint4-svd-r32)",
+    ),
     "sdnq-fp8": SDNQPreset(
         name="sdnq-fp8",
         weights_dtype="fp8",
@@ -103,6 +120,60 @@ def is_available() -> bool:
         return True
     except ImportError:
         return False
+
+
+def detect_compute_backend() -> str:
+    """Detect the active compute backend for SDNQ.
+
+    SDNQ is pure PyTorch: on CUDA/ROCm/XPU it uses the Inductor backend (via Triton,
+    enabling quantized matmul); on CPU and MPS it falls back to PyTorch eager mode
+    (quantization works but quantized matmul is disabled). SDNQ can also compile to
+    OpenVINO via ``torch.compile → Inductor → OpenVINO`` for Intel devices.
+
+    Returns:
+        One of ``"cuda"``, ``"xpu"``, ``"mps"``, ``"cpu"``.
+    """
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return "cuda"
+        if bool(getattr(torch, "xpu", None)) and torch.xpu.is_available():
+            return "xpu"
+        if bool(getattr(torch, "mps", None)) and torch.mps.is_available():
+            return "mps"
+    except ImportError:
+        pass
+    return "cpu"
+
+
+def register_sdnq(*, patch_lora: bool = False) -> bool:
+    """Import ``sdnq`` to register it with diffusers/transformers.
+
+    Importing ``SDNQConfig`` registers SDNQ as a backend so ``from_pretrained`` can
+    load pre-quantized checkpoints. Consolidates the duplicated ``_register_sdnq``
+    pattern that existed across Text2D, Text2Icon, Skymap2D, and Texture2D.
+
+    Args:
+        patch_lora: When ``True``, also apply :func:`patch_lora_shape_calculation`
+            (needed by pipelines that load LoRA weights on top of SDNQ checkpoints,
+            e.g. Skymap2D/Texture2D with the equirect LoRA).
+
+    Returns:
+        Whether Triton (and thus quantized matmul) is available on this backend.
+
+    Raises:
+        ImportError: If ``sdnq`` is not installed.
+    """
+    try:
+        from sdnq import SDNQConfig  # noqa: F401 — registration side-effect
+        from sdnq.common import use_torch_compile
+
+        if patch_lora:
+            patch_lora_shape_calculation()
+        return bool(use_torch_compile)
+    except ImportError as e:
+        raise ImportError("O pacote 'sdnq' é necessário. Instale com: pip install sdnq") from e
 
 
 def patch_lora_shape_calculation() -> None:
@@ -178,12 +249,24 @@ def create_config(
     """Create an ``SDNQConfig`` from a named preset with optional overrides.
 
     Args:
-        preset: Preset name (``"sdnq-uint8"``, ``"sdnq-int8"``, ``"sdnq-int4"``, ``"sdnq-fp8"``).
-        quantization_device: Device for quantization (default: ``"cuda"`` if available).
+        preset: Preset name (``"sdnq-uint8"``, ``"sdnq-int8"``, ``"sdnq-int4"``,
+            ``"sdnq-uint4"``, ``"sdnq-fp8"``).
+        quantization_device: Device for quantization (default: ``"cuda"`` if available,
+            else ``"cpu"``). On CPU, quantization runs in PyTorch eager mode.
         return_device: Device after quantization (default: same as ``quantization_device``).
-        use_quantized_matmul: Enable Triton/CUDA quantized matmul (default: auto-detect).
+        use_quantized_matmul: Enable Triton/CUDA quantized matmul (default: auto-detect
+            via ``use_torch_compile``). Disabled on CPU (no Triton).
         modules_to_not_convert: Module names to skip during quantization.
         **overrides: Additional keyword args forwarded to ``SDNQConfig``.
+            Notable SDNQ >=0.2.0 options:
+
+            - ``use_dynamic_quantization`` (bool): dynamically select a per-layer
+              quantization type based on ``dynamic_loss_threshold``;
+              ``weights_dtype`` becomes the minimum allowed type.
+            - ``use_hadamard`` (bool) + ``hadamard_group_size``: Hadamard rotations
+              on quantized weights (improves accuracy at low bit-widths).
+            - ``offload_buffers`` (bool): basic CPU offload of optimizer/weight
+              buffers — useful for the 6 GB VRAM target.
 
     Returns:
         ``SDNQConfig`` instance.
@@ -261,15 +344,24 @@ def quantize_model(
     return sdnq_post_load_quant(model, **config_vars)
 
 
-def apply_quantized_matmul(pipe: Any, *, enabled: bool = True) -> None:
+def apply_quantized_matmul(
+    pipe: Any,
+    *,
+    enabled: bool = True,
+    module_names: tuple[str, ...] = ("transformer", "text_encoder", "text_encoder_2"),
+) -> None:
     """Apply quantized matmul acceleration to pipeline sub-modules in-place.
 
     For diffusers pipelines (e.g., FLUX), enables Triton/CUDA quantized
-    matmul on transformer, text_encoder, and text_encoder_2.
+    matmul on the requested sub-modules. Sub-modules that are missing or lack a
+    ``quantization_config`` are silently skipped.
 
     Args:
         pipe: Diffusion pipeline with sub-modules to accelerate.
         enabled: Whether to enable (default: ``True``).
+        module_names: Sub-module attribute names to target. Defaults to the FLUX
+            pipeline layout (``transformer``, ``text_encoder``, ``text_encoder_2``);
+            pass e.g. ``("unet",)`` for UNet-based pipelines.
     """
     if not enabled:
         return
@@ -281,7 +373,7 @@ def apply_quantized_matmul(pipe: Any, *, enabled: bool = True) -> None:
         xpu_ok = bool(getattr(torch, "xpu", None)) and torch.xpu.is_available()
         if not (cuda_ok or xpu_ok):
             return
-        for name in ("transformer", "text_encoder", "text_encoder_2"):
+        for name in module_names:
             mod = getattr(pipe, name, None)
             if mod is None:
                 continue
@@ -368,6 +460,7 @@ _COMPRESSION_FACTORS: dict[str, float] = {
     "uint8": 0.5,
     "int8": 0.5,
     "int4": 0.25,
+    "uint4": 0.25,
 }
 
 

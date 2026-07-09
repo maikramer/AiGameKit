@@ -28,7 +28,7 @@ class TestNoGpu:
         plan = plan_offload([], FLUX_9B)
         assert plan.device == "cpu"
         assert plan.offload == OFFLOAD_NONE
-        assert not plan.low_vram
+        assert not plan.memory_efficient
 
 
 class TestHighVram:
@@ -54,7 +54,7 @@ class TestSixGbTarget:
         assert plan.offload == OFFLOAD_MODEL
         assert plan.vae_tiling and plan.attention_slicing
         assert plan.est_peak_gib <= plan.usable_vram_gib
-        assert plan.low_vram
+        assert plan.memory_efficient
 
     def test_small_model_fits_6gb_full_gpu(self) -> None:
         # 8 GiB fp16 → sdnq-int4 ≈ 2.56 + 1.5 = 4.06 ≤ 5.4 → full GPU.

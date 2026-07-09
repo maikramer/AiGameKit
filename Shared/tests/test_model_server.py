@@ -1,0 +1,240 @@
+"""Tests for gamedev_shared.model_server — shared model server + VRAM coordination."""
+
+from __future__ import annotations
+
+import threading
+import time
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from gamedev_shared.model_server import (
+    ModelServer,
+    discover_active_sockets,
+    discover_server_pids,
+    ensure_vram_available,
+    get_server_pid,
+    get_server_status,
+    is_server_running,
+    request_release,
+    send_request,
+    server_socket_path,
+    stop_server,
+)
+
+# ---------------------------------------------------------------------------
+# Socket path resolution
+# ---------------------------------------------------------------------------
+
+
+class TestSocketPath:
+    def test_text2icon_socket_path(self) -> None:
+        path = server_socket_path("text2icon")
+        assert path.name == "text2icon-server.sock"
+        assert "gamedev" in str(path)
+
+    def test_text2d_socket_path(self) -> None:
+        path = server_socket_path("text2d")
+        assert path.name == "text2d-server.sock"
+
+    def test_env_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GAMEDEV_MODEL_SERVER_SOCKET", "/tmp/custom.sock")
+        path = server_socket_path("text2icon")
+        assert path == Path("/tmp/custom.sock")
+
+
+# ---------------------------------------------------------------------------
+# Liveness (sem server real)
+# ---------------------------------------------------------------------------
+
+
+class TestLiveness:
+    def test_not_running_when_no_pid_file(self, tmp_path: Path) -> None:
+        sock = tmp_path / "test.sock"
+        assert not is_server_running(sock)
+
+    def test_not_running_when_pid_dead(self, tmp_path: Path) -> None:
+        sock = tmp_path / "test.sock"
+        pid_file = sock.with_suffix(".pid")
+        pid_file.write_text("999999")  # PID que não existe
+        assert not is_server_running(sock)
+
+    def test_get_server_pid_none_when_no_file(self, tmp_path: Path) -> None:
+        sock = tmp_path / "test.sock"
+        assert get_server_pid(sock) is None
+
+    def test_discover_empty_when_no_dir(self, tmp_path: Path) -> None:
+        with patch("gamedev_shared.model_server.DEFAULT_SERVER_DIR", tmp_path / "nonexistent"):
+            assert discover_server_pids() == set()
+            assert discover_active_sockets() == []
+
+
+# ---------------------------------------------------------------------------
+# Client: send_request retorna None quando server down
+# ---------------------------------------------------------------------------
+
+
+class TestClient:
+    def test_send_request_none_when_no_socket(self, tmp_path: Path) -> None:
+        result = send_request({"cmd": "status"}, tmp_path / "missing.sock", timeout_sec=1.0)
+        assert result is None
+
+    def test_request_release_false_when_no_socket(self, tmp_path: Path) -> None:
+        assert request_release(tmp_path / "missing.sock") is False
+
+    def test_stop_server_false_when_no_socket(self, tmp_path: Path) -> None:
+        assert stop_server(tmp_path / "missing.sock") is False
+
+    def test_get_status_none_when_no_socket(self, tmp_path: Path) -> None:
+        assert get_server_status(tmp_path / "missing.sock") is None
+
+
+# ---------------------------------------------------------------------------
+# ModelServer com loader/generator mock (server real num socket temporário)
+# ---------------------------------------------------------------------------
+
+
+def _mock_loader():
+    """Loader que devolve um objeto mock com warmup/generate/unload."""
+
+    class _MockGen:
+        def __init__(self) -> None:
+            self.loaded = True
+            self.unloaded = False
+
+        def warmup(self) -> None:
+            pass
+
+        def generate(self, **kwargs):
+            return None, {"seed": kwargs.get("seed", 0)}
+
+        def unload(self) -> None:
+            self.loaded = False
+            self.unloaded = True
+
+    return _MockGen()
+
+
+def _mock_generator(gen, request):
+    return {"status": "ok", "output": "/tmp/mock.png", "seconds": 0.1, "seed": 42}
+
+
+class TestModelServer:
+    @pytest.fixture()
+    def running_server(self, tmp_path: Path):
+        """Arranca um ModelServer mock num thread e devolve o socket path."""
+        sock_path = tmp_path / "test-server.sock"
+        server = ModelServer(
+            socket_path=sock_path,
+            loader=_mock_loader,
+            generator=_mock_generator,
+            idle_timeout_min=60,
+            verbose=False,
+            tool_name="test",
+        )
+        # Override DEFAULT_SERVER_DIR para que discover_* encontre este server
+        with patch("gamedev_shared.model_server.DEFAULT_SERVER_DIR", tmp_path):
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+
+            # Esperar que o socket fique disponível
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                if sock_path.exists():
+                    break
+                time.sleep(0.05)
+
+            yield sock_path
+
+            # Cleanup
+            server._running = False
+            with patch("gamedev_shared.model_server.DEFAULT_SERVER_DIR", tmp_path):
+                server._cleanup()
+
+    def test_is_running_after_start(self, running_server: Path) -> None:
+        assert is_server_running(running_server)
+
+    def test_get_pid(self, running_server: Path) -> None:
+        pid = get_server_pid(running_server)
+        assert pid is not None
+        assert pid > 0
+
+    def test_status_command(self, running_server: Path) -> None:
+        status = get_server_status(running_server)
+        assert status is not None
+        assert status["status"] == "status"
+        assert status["tool"] == "test"
+        assert "pid" in status
+
+    def test_generate_command(self, running_server: Path) -> None:
+        request = {"cmd": "generate", "prompt": "test", "output": "/tmp/x.png"}
+        result = send_request(request, running_server, timeout_sec=5.0)
+        assert result is not None
+        assert result["status"] == "ok"
+        assert result["output"] == "/tmp/mock.png"
+
+    def test_release_command(self, running_server: Path) -> None:
+        ok = request_release(running_server)
+        assert ok is True
+        # Após release, model_loaded deve ser False
+        status = get_server_status(running_server)
+        assert status is not None
+        assert status["model_loaded"] is False
+
+    def test_shutdown_command(self, running_server: Path) -> None:
+        ok = stop_server(running_server)
+        assert ok is True
+        # Esperar que o processo termine completamente (socket + PID file removidos)
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            if not running_server.exists():
+                break
+            time.sleep(0.1)
+        assert not is_server_running(running_server)
+
+    def test_discover_finds_server(self, running_server: Path) -> None:
+        pids = discover_server_pids()
+        assert len(pids) >= 1
+
+    def test_discover_finds_socket(self, running_server: Path) -> None:
+        sockets = discover_active_sockets()
+        assert running_server in sockets
+
+
+# ---------------------------------------------------------------------------
+# ensure_vram_available (com nvidia-smi mockado)
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureVram:
+    def test_returns_true_when_enough_vram(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", lambda: 8000)
+        assert ensure_vram_available(5000) is True
+
+    def test_requests_release_when_low_vram(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        # Simular VRAM baixa
+        call_count = {"release": 0}
+
+        def _mock_query_free():
+            # Depois do release, simular que há VRAM
+            if call_count["release"] > 0:
+                return 8000
+            return 1000
+
+        def _mock_request_release(sock):
+            call_count["release"] += 1
+            return True
+
+        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", _mock_query_free)
+        monkeypatch.setattr("gamedev_shared.model_server.request_release", _mock_request_release)
+        monkeypatch.setattr("gamedev_shared.model_server.discover_active_sockets", lambda: [tmp_path / "fake.sock"])
+
+        result = ensure_vram_available(5000, timeout_sec=5.0)
+        assert result is True
+        assert call_count["release"] >= 1
+
+    def test_returns_true_when_cannot_check(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("gamedev_shared.gpu.query_gpu_free_mib", lambda: None)
+        monkeypatch.setattr("gamedev_shared.model_server.discover_active_sockets", lambda: [])
+        assert ensure_vram_available(5000) is True

@@ -49,6 +49,10 @@ class QualityResolution:
     prompt_hints: list[str] = field(default_factory=list)
     """Hints to inject into the generation prompt (per audio_kind)."""
 
+    negative_prompt_hints: list[str] = field(default_factory=list)
+    """Negative-prompt fragments to steer generation away from (per audio_kind).
+    Joined into a single negative-conditioning prompt by the caller."""
+
     source: str = "quality_profile"
     """Where the winning value was resolved:
     "explicit" | "category" | "quality_profile" | "default".
@@ -122,6 +126,7 @@ class QualityEngine:
         audio_kind: str | None = None
         model_id: str | None = None
         prompt_hints: list[str] = []
+        negative_prompt_hints: list[str] = []
 
         if tool == "text2sound":
             audio_kind = self._resolve_audio_kind(category)
@@ -138,6 +143,10 @@ class QualityEngine:
                     prompt_hints.append(kind_data.get("prompt_hint", "seamless loop"))
                 elif kind_data.get("prompt_hint"):
                     prompt_hints.append(kind_data["prompt_hint"])
+                # Negative prompt fragment (anti-guidance). Independent of the
+                # positive hint: a kind may have both, either, or neither.
+                if kind_data.get("negative_prompt_hint"):
+                    negative_prompt_hints.append(kind_data["negative_prompt_hint"])
 
         return QualityResolution(
             params=params,
@@ -145,6 +154,7 @@ class QualityEngine:
             audio_kind=audio_kind,
             model_id=model_id,
             prompt_hints=prompt_hints,
+            negative_prompt_hints=negative_prompt_hints,
             source=dominant,
         )
 

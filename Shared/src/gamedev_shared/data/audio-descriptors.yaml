@@ -1,0 +1,363 @@
+# Prompt enhancement library for text2sound.
+#
+# Deterministic, local (no LLM) prompt enrichment. A user's short prompt is
+# matched against `keywords` to detect the sound type, then `descriptors` for
+# that type are appended. `negative_descriptors` augment the negative prompt.
+# `weak_terms` flag low-quality prompts that get heavier enrichment.
+#
+# Vocabulary is curated from the 60 game-dev presets in presets.py — these are
+# the descriptors Stable Audio Open responds well to (verified by the presets).
+#
+# Usage (Python):
+#   data = load_descriptor_data()
+#   stype = detect_sound_type("big explosion", audio_kind="sfx_impact", data=data)
+#   enh   = enhance_prompt("big explosion", audio_kind="sfx_impact", data=data)
+
+# Keyword → sound_type detector. Matching is case-insensitive substring on the
+# user prompt. Order within a list doesn't matter; the FIRST type (iteration
+# order is map order, which is insertion order) whose keyword matches wins.
+# More specific types are listed first so e.g. "sword clash" → weapon (not impact).
+keywords:
+  weapon:
+    - sword
+    - blade
+    - gun
+    - gunshot
+    - firearm
+    - shoot
+    - bow
+    - bowstring
+    - arrow
+    - reload
+    - unsheath
+    - scabbard
+  magic:
+    - magic
+    - spell
+    - enchant
+    - enchantment
+    - arcane
+    - heal
+    - healing
+    - teleport
+    - teleportation
+    - ward
+    - mystical
+  impact:
+    - explosion
+    - blast
+    - impact
+    - crash
+    - smash
+    - hit
+    - punch
+    - thud
+    - collision
+    - detonation
+  destruction:
+    - glass break
+    - glass shatter
+    - wood break
+    - splinter
+    - stone crumble
+    - crumbling
+    - shattering
+    - collapse
+    - debris
+  creature:
+    - creature
+    - monster
+    - growl
+    - roar
+    - beast
+    - dragon
+    - demon
+  vocal:
+    - grunt
+    - shout
+    - scream
+    - yell
+    - cry
+    - vocal
+    - voice
+    - vocalization
+  movement:
+    - footstep
+    - footsteps
+    - walking
+    - running
+    - step
+    - whoosh
+    - swipe
+    - wading
+  ui:
+    - ui
+    - button
+    - click
+    - hover
+    - interface
+    - notification
+    - confirm
+    - cancel
+    - menu
+  mechanical:
+    - door
+    - lever
+    - gear
+    - clockwork
+    - mechanism
+    - mechanical
+    - hinge
+    - latch
+  elemental:
+    - fire
+    - flame
+    - water splash
+    - electricity
+    - lightning
+    - thunder
+    - ice
+    - wind gust
+  collectible:
+    - coin
+    - pickup
+    - gem
+    - treasure
+    - collect
+    - reward
+    - chime
+    - sparkle
+  alarm:
+    - alarm
+    - siren
+    - klaxon
+    - bell toll
+    - warning
+    - alert
+  ambient_loop:
+    - ambient
+    - atmosphere
+    - forest
+    - ocean
+    - waves
+    - rain
+    - wind
+    - cave
+    - dungeon
+    - tavern
+    - city
+    - desert
+    - space
+    - underwater
+    - weather
+  music_loop:
+    - music
+    - soundtrack
+    - melody
+    - orchestral
+    - battle theme
+    - menu music
+    - fanfare
+
+# Per-type positive descriptors, grouped by role:
+#   texture  — timbre / material qualities
+#   dynamics — temporal behaviour / envelope
+#   context  — environment / genre / recording style
+# At enhancement time we pick a few from each group (skipping any already
+# present in the prompt) and append them, comma-joined.
+descriptors:
+  impact:
+    texture:
+      - "deep bass impact"
+      - "sharp transient"
+      - "powerful low end"
+    dynamics:
+      - "immediate attack"
+      - "explosive decay"
+      - "heavy body"
+    context:
+      - "cinematic"
+      - "dry recording"
+  weapon:
+    texture:
+      - "sharp metallic ring"
+      - "clean edge"
+      - "resonant steel"
+    dynamics:
+      - "fast transient"
+      - "precise strike"
+    context:
+      - "combat"
+      - "close-range"
+  magic:
+    texture:
+      - "shimmering energy"
+      - "crystalline sparkle"
+      - "ethereal resonance"
+    dynamics:
+      - "rising tone"
+      - "sustained swell"
+    context:
+      - "fantasy"
+      - "mystical"
+  destruction:
+    texture:
+      - "sharp fragments"
+      - "brittle snap"
+      - "heavy debris"
+    dynamics:
+      - "sudden break"
+      - "scattering decay"
+    context:
+      - "physical"
+      - "dry recording"
+  creature:
+    texture:
+      - "guttural rumble"
+      - "deep bass growl"
+      - "menacing tone"
+    dynamics:
+      - "sustained threat"
+      - "rising intensity"
+    context:
+      - "monster"
+      - "cinematic"
+  vocal:
+    texture:
+      - "human voice"
+      - "raw emotion"
+      - "clear articulation"
+    dynamics:
+      - "dynamic delivery"
+      - "expressive"
+    context:
+      - "close-mic"
+      - "performance"
+  movement:
+    texture:
+      - "rhythmic texture"
+      - "surface detail"
+      - "natural cadence"
+    dynamics:
+      - "steady pace"
+      - "consistent rhythm"
+    context:
+      - "physical"
+      - "realistic"
+  ui:
+    texture:
+      - "clean digital tone"
+      - "crisp interface sound"
+      - "minimal"
+    dynamics:
+      - "short"
+      - "punchy"
+    context:
+      - "interface"
+      - "no reverb"
+  mechanical:
+    texture:
+      - "metallic gears"
+      - "mechanical detail"
+      - "weighted mechanism"
+    dynamics:
+      - "deliberate motion"
+      - "articulated"
+    context:
+      - "industrial"
+      - "physical"
+  elemental:
+    texture:
+      - "elemental energy"
+      - "natural texture"
+      - "raw force"
+    dynamics:
+      - "dynamic swell"
+      - "evolving"
+    context:
+      - "nature"
+      - "immersive"
+  collectible:
+    texture:
+      - "bright crystalline sparkle"
+      - "rewarding chime"
+      - "clean tone"
+    dynamics:
+      - "short shimmer"
+      - "pleasing decay"
+    context:
+      - "game feedback"
+      - "magical"
+  alarm:
+    texture:
+      - "urgent tone"
+      - "piercing signal"
+      - "resonant horn"
+    dynamics:
+      - "repeating pulse"
+      - "sustained warning"
+    context:
+      - "emergency"
+      - "loud"
+  ambient_loop:
+    texture:
+      - "soft atmosphere"
+      - "gentle layering"
+      - "rich environmental detail"
+    dynamics:
+      - "consistent volume"
+      - "slow evolution"
+    context:
+      - "immersive"
+      - "seamless loop"
+  music_loop:
+    texture:
+      - "rich orchestration"
+      - "warm instrumentation"
+      - "melodic layering"
+    dynamics:
+      - "driving rhythm"
+      - "consistent energy"
+    context:
+      - "game soundtrack"
+      - "seamless loop"
+  generic:
+    texture:
+      - "high quality"
+      - "detailed"
+      - "clear"
+    dynamics:
+      - "well-defined"
+    context:
+      - "professional recording"
+
+# Negative descriptors appended to the negative prompt when enhancement is on.
+# These apply regardless of sound type and combine with the audio_kind's own
+# negative_prompt_hint (they don't replace it). Curated to steer Stable Audio
+# away from common artifacts.
+negative_descriptors:
+  - "low quality"
+  - "distortion"
+  - "clipping"
+  - "artifacts"
+  - "noise floor"
+  - "muddy"
+  - "harsh"
+  - "metallic ringing"
+  - "phase issues"
+
+# Weak / generic terms that signal a low-effort prompt. When detected the
+# prompt is considered "weak" and enhancement is more aggressive (adds more
+# descriptors, treats it closer to a fallback). These are matched as
+# case-insensitive substrings.
+weak_terms:
+  - "good sound"
+  - "nice audio"
+  - "cool effect"
+  - "some sound"
+  - "a sound"
+  - "sound effect" # alone is too generic
+  - "nice sound"
+  - "cool sound"
+  - "best sound"
+  - "audio clip"

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from gamedev_shared.env import (
     TOOL_BINS,
-    detect_low_vram,
+    detect_low_memory,
     ensure_pytorch_cuda_alloc_conf,
     get_tool_bin,
     subprocess_gpu_env,
@@ -86,7 +86,7 @@ class TestDetectLowVram:
             "run",
             MagicMock(side_effect=FileNotFoundError("nvidia-smi not found")),
         )
-        assert detect_low_vram() is False
+        assert detect_low_memory() is False
 
     def test_returns_true_below_threshold(self, monkeypatch):
         monkeypatch.setattr(
@@ -94,7 +94,7 @@ class TestDetectLowVram:
             "run",
             MagicMock(return_value=MagicMock(stdout="4096\n", stderr="")),
         )
-        assert detect_low_vram(threshold_mb=8192) is True
+        assert detect_low_memory(threshold_mb=8192) is True
 
     def test_returns_false_above_threshold(self, monkeypatch):
         monkeypatch.setattr(
@@ -102,7 +102,7 @@ class TestDetectLowVram:
             "run",
             MagicMock(return_value=MagicMock(stdout="12288\n", stderr="")),
         )
-        assert detect_low_vram(threshold_mb=8192) is False
+        assert detect_low_memory(threshold_mb=8192) is False
 
     def test_returns_false_on_parse_error(self, monkeypatch):
         monkeypatch.setattr(
@@ -110,7 +110,7 @@ class TestDetectLowVram:
             "run",
             MagicMock(return_value=MagicMock(stdout="not_a_number\n", stderr="")),
         )
-        assert detect_low_vram() is False
+        assert detect_low_memory() is False
 
 
 class TestToolBins:

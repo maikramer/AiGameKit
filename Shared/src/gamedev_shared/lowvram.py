@@ -95,7 +95,7 @@ class OffloadPlan:
     notes: tuple[str, ...] = field(default_factory=tuple)
 
     @property
-    def low_vram(self) -> bool:
+    def memory_efficient(self) -> bool:
         return self.offload != OFFLOAD_NONE
 
     def summary(self) -> str:
