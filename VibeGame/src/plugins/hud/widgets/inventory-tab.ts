@@ -63,8 +63,17 @@ export function createInventoryTab(
         slot.style.cssText = SLOT_BASE + SLOT_FILLED;
         slot.title = `${def?.name ?? stack.itemId} ×${stack.qty}`;
         const icon = document.createElement('div');
-        icon.textContent = def?.icon ?? '◆';
-        icon.style.cssText = 'font-size:26px;line-height:1;';
+        const iconStr = def?.icon ?? '◆';
+        if (/\.(png|jpe?g|webp|svg|gif)$/i.test(iconStr) && iconStr.includes('/')) {
+          const img = document.createElement('img');
+          img.src = iconStr;
+          img.alt = def?.name ?? '';
+          img.style.cssText = 'width:32px;height:32px;object-fit:contain;';
+          icon.append(img);
+        } else {
+          icon.textContent = iconStr;
+          icon.style.cssText = 'font-size:26px;line-height:1;';
+        }
         const qty = document.createElement('div');
         qty.className = 'hud-modal-inv-qty';
         qty.textContent = String(stack.qty);

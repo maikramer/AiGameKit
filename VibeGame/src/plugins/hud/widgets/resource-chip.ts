@@ -7,7 +7,7 @@ import type {
   WidgetHandle,
 } from '../screen-layer';
 import css from '../styles/resource-chip.css?raw';
-import { injectWidgetCss, readAttr, resolveTargetEntity } from './shared';
+import { injectWidgetCss, readAttr, resolveTargetEntity, setWidgetIcon } from './shared';
 
 const WIDGET_TAG = 'resource';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];
@@ -43,9 +43,12 @@ export function createResourceChipWidget(
       root.className = `hud-resource hud-resource-${kind}`;
       root.title = t(state, i18nKeyFor(kind));
 
-      const iconEl = document.createElement('span');
-      iconEl.className = 'hud-resource-icon';
-      iconEl.textContent = icon;
+      const iconEl = setWidgetIcon(
+        document.createElement('div'),
+        icon,
+        'hud-resource-icon',
+        'width:16px;height:16px;object-fit:contain;'
+      );
 
       const value = document.createElement('span');
       value.className = 'hud-resource-value';

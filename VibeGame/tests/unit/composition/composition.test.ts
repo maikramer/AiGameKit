@@ -5,12 +5,18 @@ import {
   buildPrimitiveMesh,
   compositionRecipe,
   isPrimitiveTag,
+  parsePrimitiveSpec,
   type PrimitiveSpec,
 } from 'vibegame/composition';
 
 type StandardMat = {
   color: { r: number; g: number; b: number };
   side: number;
+  roughness: number;
+  metalness: number;
+  map: unknown;
+  normalMap: unknown;
+  roughnessMap: unknown;
 };
 
 const FRONT_SIDE = 0;
@@ -31,6 +37,14 @@ function makeSpec(overrides: Partial<PrimitiveSpec> = {}): PrimitiveSpec {
     colorR: 0.8,
     colorG: 0.8,
     colorB: 0.8,
+    textureUrl: null,
+    textureRepeatX: 1,
+    textureRepeatY: 1,
+    textureRotation: 0,
+    normalMapUrl: null,
+    roughnessMapUrl: null,
+    roughness: 1,
+    metalness: 0,
     ...overrides,
   };
 }
@@ -162,5 +176,76 @@ describe('composition: buildPrimitiveMesh', () => {
     expect(boxGeo.type).toBe('BoxGeometry');
     expect(sphereGeo.type).toBe('SphereGeometry');
     expect(planeGeo.type).toBe('PlaneGeometry');
+  });
+});
+
+describe('composition: parsePrimitiveSpec (texturas)', () => {
+  it('sem atributos de textura devolve textureUrl null e defaults PBR', () => {
+    const spec = parsePrimitiveSpec('box', { pos: '0 0 0', size: '1 1 1' });
+    expect(spec.textureUrl).toBeNull();
+    expect(spec.normalMapUrl).toBeNull();
+    expect(spec.roughnessMapUrl).toBeNull();
+    expect(spec.textureRepeatX).toBe(1);
+    expect(spec.textureRepeatY).toBe(1);
+    expect(spec.textureRotation).toBe(0);
+    expect(spec.roughness).toBe(1);
+    expect(spec.metalness).toBe(0);
+  });
+
+  it('parseia texture-url e texture-repeat "2 1"', () => {
+    const spec = parsePrimitiveSpec('box', {
+      'texture-url': '/assets/textures/wall.png',
+      'texture-repeat': '2 1',
+    });
+    expect(spec.textureUrl).toBe('/assets/textures/wall.png');
+    expect(spec.textureRepeatX).toBe(2);
+    expect(spec.textureRepeatY).toBe(1);
+  });
+
+  it('aceita alias map-url e repeat numérico único', () => {
+    const spec = parsePrimitiveSpec('plane', {
+      'map-url': '/assets/textures/wood.png',
+      'texture-repeat': '3',
+    });
+    expect(spec.textureUrl).toBe('/assets/textures/wood.png');
+    expect(spec.textureRepeatX).toBe(3);
+    expect(spec.textureRepeatY).toBe(3);
+  });
+
+  it('parseia normal-map-url e roughness-map-url', () => {
+    const spec = parsePrimitiveSpec('box', {
+      'normal-map-url': '/assets/textures/wall_normal.png',
+      'roughness-map-url': '/assets/textures/wall_rough.png',
+    });
+    expect(spec.normalMapUrl).toBe('/assets/textures/wall_normal.png');
+    expect(spec.roughnessMapUrl).toBe('/assets/textures/wall_rough.png');
+  });
+
+  it('clampa roughness e metalness a [0,1]', () => {
+    const spec = parsePrimitiveSpec('box', {
+      roughness: '1.5',
+      metalness: '-0.2',
+    });
+    expect(spec.roughness).toBe(1);
+    expect(spec.metalness).toBe(0);
+  });
+});
+
+describe('composition: buildPrimitiveMesh (texturas)', () => {
+  it('sem textureUrl mantém material sem map (retrocompatibilidade)', () => {
+    const mesh = buildPrimitiveMesh(makeSpec());
+    const mat = mesh.material as unknown as StandardMat;
+    expect(mat.map).toBeNull();
+    expect(mat.normalMap).toBeNull();
+    expect(mat.roughnessMap).toBeNull();
+  });
+
+  it('respeita roughness e metalness do spec', () => {
+    const mesh = buildPrimitiveMesh(
+      makeSpec({ roughness: 0.3, metalness: 0.8 })
+    );
+    const mat = mesh.material as unknown as StandardMat;
+    expect(mat.roughness).toBeCloseTo(0.3);
+    expect(mat.metalness).toBeCloseTo(0.8);
   });
 });

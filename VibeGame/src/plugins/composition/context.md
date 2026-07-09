@@ -29,12 +29,34 @@ para estruturas semânticas (cabanas, muros, plataformas).
 
 ### Atributos das primitivas (`<Box>` etc.)
 
-| Atributo   | Formato                | Notas                                           |
-| ---------- | ---------------------- | ----------------------------------------------- |
-| `pos`      | `x y z`                | Posição **local** relativa ao Composition.      |
-| `rotation` | `rx ry rz`             | **Radianos** (convenção do motor).              |
-| `size`     | ver abaixo             | Dimensões da primitiva.                         |
-| `color`    | `#rrggbb` / `#rgb`     | Cor do `MeshStandardMaterial`.                  |
+| Atributo              | Formato                | Notas                                                        |
+| --------------------- | ---------------------- | ------------------------------------------------------------ |
+| `pos`                 | `x y z`                | Posição **local** relativa ao Composition.                   |
+| `rotation`            | `rx ry rz`             | **Radianos** (convenção do motor).                           |
+| `size`                | ver abaixo             | Dimensões da primitiva.                                      |
+| `color`               | `#rrggbb` / `#rgb`     | Cor do `MeshStandardMaterial` (usada se não houver textura). |
+| `texture-url`         | caminho URL            | Textura albedo/seamless (sRGB). Alias: `map-url`, `texture`. |
+| `texture-repeat`      | `rx ry` ou `r`         | Repetição UV (default `1 1`). `2 1` repete 2x em X.          |
+| `texture-rotation`    | radianos               | Rotação UV (default `0`).                                    |
+| `normal-map-url`      | caminho URL            | Normal map PBR (espaço linear). Alias: `normal-url`.         |
+| `roughness-map-url`   | caminho URL            | Roughness map PBR (espaço linear). Alias: `roughness-url`.   |
+| `roughness`           | `0..1`                 | Roughness fixa (default `1`). Ignorado se houver roughness-map. |
+| `metalness`           | `0..1`                 | Metalness fixa (default `0`).                                |
+
+As texturas são carregadas via `TextureLoader` com cache partilhado por URL;
+cada primitiva pode ter `texture-repeat`/`texture-rotation` independente (a
+imagem GPU é partilhada via `texture.clone()`). Se a URL falhar, cai para cor
+flat. Exemplo de parede texturizada com relevo:
+
+```html
+<Box
+  pos="0 1.4 -2.4"
+  size="5 2.6 0.3"
+  texture-url="/assets/textures/wall_plaster.png"
+  texture-repeat="2 1"
+  normal-map-url="/assets/textures/wall_plaster_normal.png"
+></Box>
+```
 
 Semântica de `size` por tipo:
 

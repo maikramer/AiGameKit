@@ -7,7 +7,7 @@ import type {
   WidgetHandle,
 } from '../screen-layer';
 import css from '../styles/health-bar.css?raw';
-import { injectWidgetCss, readAttr, resolveTargetEntity } from './shared';
+import { injectWidgetCss, readAttr, resolveTargetEntity, setWidgetIcon } from './shared';
 
 const WIDGET_TAG = 'health-bar';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];
@@ -36,9 +36,12 @@ export function createHealthBarWidget(
       root.className = 'hud-health';
       root.title = t(state, 'hud.health');
 
-      const iconEl = document.createElement('span');
-      iconEl.className = 'hud-health-icon';
-      iconEl.textContent = icon;
+      const iconEl = setWidgetIcon(
+        document.createElement('div'),
+        icon,
+        'hud-health-icon',
+        'width:18px;height:18px;object-fit:contain;'
+      );
 
       const track = document.createElement('div');
       track.className = 'hud-health-track';

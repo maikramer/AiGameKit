@@ -18,6 +18,20 @@ export interface PrimitiveSpec {
   readonly colorR: number;
   readonly colorG: number;
   readonly colorB: number;
+  // Textura opcional (URL site-root, ex.: "/assets/textures/foo.png").
+  // Quando ausente, a primitiva usa cor flat (colorR/G/B).
+  readonly textureUrl: string | null;
+  // Repetição da textura (UV repeat em X/Y). Default 1 1.
+  readonly textureRepeatX: number;
+  readonly textureRepeatY: number;
+  // Rotação da textura em radianos (UV rotation). Default 0.
+  readonly textureRotation: number;
+  // Normal/roughness/AO maps opcionais (PBR), mesmas UVs do map.
+  readonly normalMapUrl: string | null;
+  readonly roughnessMapUrl: string | null;
+  // Roughness/metalness fixos (defaults conservadores para materiais têxteis).
+  readonly roughness: number;
+  readonly metalness: number;
 }
 
 export type ColliderMode = 'auto' | 'none';
@@ -137,6 +151,22 @@ export function parseColorHex(
 
 const ZERO_VEC: [number, number, number] = [0, 0, 0];
 
+function parseTextureRepeat(value: XMLValue | undefined): [number, number] {
+  if (value === undefined || value === null) return [1, 1];
+  if (typeof value === 'number') return [value, value];
+  const parts = String(value)
+    .trim()
+    .split(/\s+/)
+    .map((p) => parseFloat(p));
+  if (parts.length >= 2 && parts.every((n) => !Number.isNaN(n))) {
+    return [parts[0]!, parts[1]!];
+  }
+  if (parts.length === 1 && !Number.isNaN(parts[0])) {
+    return [parts[0]!, parts[0]!];
+  }
+  return [1, 1];
+}
+
 export function parsePrimitiveSpec(
   tagName: string,
   attributes: Record<string, XMLValue>
@@ -146,6 +176,32 @@ export function parsePrimitiveSpec(
   const [rotX, rotY, rotZ] = parseVec3(attributes.rotation, ZERO_VEC);
   const [sizeX, sizeY, sizeZ] = parseVec3(attributes.size, [1, 1, 1]);
   const [colorR, colorG, colorB] = parseColorHex(attributes.color);
+  // Textura opcional: aceitar tanto texture-url como map-url (alias).
+  const textureUrlRaw =
+    attributes['texture-url'] ?? attributes['map-url'] ?? attributes.texture;
+  const textureUrl =
+    typeof textureUrlRaw === 'string' && textureUrlRaw.trim() !== ''
+      ? textureUrlRaw.trim()
+      : null;
+  const [textureRepeatX, textureRepeatY] = parseTextureRepeat(
+    attributes['texture-repeat']
+  );
+  const textureRotation = toFloat(attributes['texture-rotation'], 0);
+  const normalMapUrlRaw =
+    attributes['normal-map-url'] ?? attributes['normal-url'];
+  const normalMapUrl =
+    typeof normalMapUrlRaw === 'string' && normalMapUrlRaw.trim() !== ''
+      ? normalMapUrlRaw.trim()
+      : null;
+  const roughnessMapUrlRaw =
+    attributes['roughness-map-url'] ?? attributes['roughness-url'];
+  const roughnessMapUrl =
+    typeof roughnessMapUrlRaw === 'string' && roughnessMapUrlRaw.trim() !== ''
+      ? roughnessMapUrlRaw.trim()
+      : null;
+  // Roughness/metalness ajustáveis (defaults conservadores).
+  const roughness = Math.max(0, Math.min(1, toFloat(attributes.roughness, 1)));
+  const metalness = Math.max(0, Math.min(1, toFloat(attributes.metalness, 0)));
   return {
     kind,
     posX,
@@ -160,6 +216,14 @@ export function parsePrimitiveSpec(
     colorR,
     colorG,
     colorB,
+    textureUrl,
+    textureRepeatX,
+    textureRepeatY,
+    textureRotation,
+    normalMapUrl,
+    roughnessMapUrl,
+    roughness,
+    metalness,
   };
 }
 
@@ -187,13 +251,91 @@ function primitiveGeometry(spec: PrimitiveSpec): THREE.BufferGeometry {
   }
 }
 
+// Cache de texturas partilhado por todas as composições (mesmo padrão do
+// terrain/sky: module-level TextureLoader reutilizado, cache por URL).
+// Cada URL é carregado uma única vez; a repetição/rotação UV é aplicada por
+// material via texture.clone() quando uma primitiva precisa de UVs diferentes.
+const _compositionTextureLoader = new THREE.TextureLoader();
+const _compositionTextureCache = new Map<string, THREE.Texture>();
+
+function loadCompositionTexture(url: string): THREE.Texture {
+  const cached = _compositionTextureCache.get(url);
+  if (cached) return cached;
+  const tex = _compositionTextureLoader.load(url);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  _compositionTextureCache.set(url, tex);
+  return tex;
+}
+
+function loadCompositionDataTexture(url: string): THREE.Texture {
+  // Texturas de dados (normal/roughness/AO) vivem em espaço linear.
+  const cached = _compositionTextureCache.get(url);
+  if (cached) return cached;
+  const tex = _compositionTextureLoader.load(url);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.LinearSRGBColorSpace;
+  tex.anisotropy = 8;
+  tex.needsUpdate = true;
+  _compositionTextureCache.set(url, tex);
+  return tex;
+}
+
 export function buildPrimitiveMesh(spec: PrimitiveSpec): THREE.Mesh {
   const material = new THREE.MeshStandardMaterial({
     color: new THREE.Color(spec.colorR, spec.colorG, spec.colorB),
-    roughness: 1,
-    metalness: 0,
+    roughness: spec.roughness,
+    metalness: spec.metalness,
     side: spec.kind === 'plane' ? THREE.DoubleSide : THREE.FrontSide,
   });
+
+  // Aplicar textura albedo (map) quando definida. Usamos clone() para que cada
+  // primitiva possa ter repeat/rotation UV independente sem afetar as irmãs
+  // que partilham o mesmo URL (a imagem GPU é partilhada pelo cache).
+  if (spec.textureUrl) {
+    try {
+      const baseTex = loadCompositionTexture(spec.textureUrl);
+      const tex = baseTex.clone();
+      tex.repeat.set(spec.textureRepeatX, spec.textureRepeatY);
+      tex.rotation = spec.textureRotation;
+      tex.center.set(0.5, 0.5);
+      tex.needsUpdate = true;
+      material.map = tex;
+    } catch {
+      // Se a textura falhar a carregar (URL inválido), cai para cor flat.
+    }
+  }
+  if (spec.normalMapUrl) {
+    try {
+      const baseTex = loadCompositionDataTexture(spec.normalMapUrl);
+      const tex = baseTex.clone();
+      tex.repeat.set(spec.textureRepeatX, spec.textureRepeatY);
+      tex.rotation = spec.textureRotation;
+      tex.center.set(0.5, 0.5);
+      tex.needsUpdate = true;
+      material.normalMap = tex;
+    } catch {
+      // ignore
+    }
+  }
+  if (spec.roughnessMapUrl) {
+    try {
+      const baseTex = loadCompositionDataTexture(spec.roughnessMapUrl);
+      const tex = baseTex.clone();
+      tex.repeat.set(spec.textureRepeatX, spec.textureRepeatY);
+      tex.rotation = spec.textureRotation;
+      tex.center.set(0.5, 0.5);
+      tex.needsUpdate = true;
+      material.roughnessMap = tex;
+    } catch {
+      // ignore
+    }
+  }
+
   const mesh = new THREE.Mesh(primitiveGeometry(spec), material);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
