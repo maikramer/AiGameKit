@@ -12,6 +12,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 |-----------|----------|--------------|-------------|
 | `Shared/` | Python | `gamedev-shared` | Shared lib (logging, GPU, subprocess, installers, CLI) |
 | `Text2D/` | Python | `text2d` | Text-to-image (FLUX SDNQ) |
+| `Text2Icon/` | Python | `text2icon` | Text-to-icon (Sana Sprint 0.6B, NVlabs/Sana); transparent BG via rembg |
 | `Text3D/` | Python | `text3d` | Text-to-3D (Hunyuan3D-2.1 SDNQ) |
 | `Paint3D/` | Python | `paint3d` | 3D texturing (Hunyuan3D-Paint 2.1, bilateral smooth, bake_exp=6) |
 | `Part3D/` | Python | `part3d` | Semantic 3D parts |
@@ -322,6 +323,34 @@ Requires `animator3d` on PATH or `ANIMATOR3D_BIN` set (delegates rendering to An
 
 See `GameDevLab/README.md` for full documentation.
 
+## Model Server (VRAM Coordination)
+
+The monorepo has a **shared model server** system (`gamedev_shared.model_server`) that keeps AI models loaded in memory between invocations, reducing cold-start latency from ~20s to ~7s per generation.
+
+**Architecture:** Each tool can run a long-lived server (Unix domain socket) that holds the model in VRAM. Client invocations detect the server and delegate automatically; if the server is down, they fall back to in-process loading. Source: `Shared/src/gamedev_shared/model_server.py`.
+
+**Protocolo de coordenação de VRAM:** When a heavy tool (text3d, paint3d) needs GPU VRAM, it calls `ensure_vram_available(needed_mib)` before loading — this asks all active servers to gracefully release their models (the servers stay running but unload the pipeline). The `kill_gpu_compute_processes_aggressive` function automatically protects server PIDs (`protect_model_servers=True`, default).
+
+**Commands (text2icon — first tool to use the system):**
+```bash
+text2icon server              # Start server (foreground; models load on first request)
+text2icon server --verbose    # With logging
+text2icon server-status       # Show PID, model_loaded, requests_served
+text2icon server-stop         # Graceful shutdown
+text2icon generate "icon" -o out.png   # Auto-delegates to server if running (~7s vs ~20s)
+```
+
+**Key APIs in `gamedev_shared.model_server`:**
+| Function | Purpose |
+|----------|---------|
+| `ModelServer(socket, loader, generator)` | Generic server; tools register their loader/generator |
+| `ensure_vram_available(needed_mib)` | Ask servers to release VRAM; called by text3d/paint3d before GPU load |
+| `discover_server_pids()` | List active server PIDs (used by `kill_gpu_compute_processes_aggressive` to protect them) |
+| `request_release(socket)` | Ask one server to unload its model but keep running |
+| `is_server_running(socket)` | Liveness check via PID file + socket connect |
+
+**Env vars:** `GAMEDEV_MODEL_SERVER_SOCKET` (override socket path), `TEXT2ICON_SERVER` (text2icon-specific).
+
 ## Commit Conventions
 
 Use Conventional Commits:
@@ -353,6 +382,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Each package may have its own `.venv/` — tests should use the package-local venv.
 - Environment variables are the primary configuration mechanism (see README.md "Environment variables" section).
 - Run `make check` before considering work complete.
+- **Git workflow: trabalha sempre diretamente no `main` — NÃO criar branches.** Não usar `git checkout -b`, `git switch -c`, `git worktree`, nem qualquer fluxo de feature-branch. Todas as alterações (commits, edits) são feitas sobre `main`. O utilizador gere merges/integração manualmente; o agente não deve criar ramos paralelos. Exceção só se o utilizador pedir explicitamente um branch numa tarefa específica.
 - **Game asset master pipeline (Text3D `bake-master`)** depends on Node.js + `npx`
   para correr `@gltf-transform/cli` (KTX2/UASTC + EXT_meshopt_compression). Verifica
   com `text3d doctor`. Se ausente, `bake-master` faz fallback gracioso (LOD0 sem
@@ -364,6 +394,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 ## Learned User Preferences
 
 - Prefere explicações e pedidos de funcionalidade em português ao trabalhar neste repositório.
+- **Git: NÃO criar branches — trabalhar sempre no `main`.** O utilizador quer commits diretos sobre `main`; gere merges/integração de trabalhos paralelos manualmente. O agente nunca deve abrir feature-branches (`git checkout -b`, etc.) a menos que o utilizador peça explicitamente.
 - Para `vibegame run`: instalação no **app** deve poder ser opcional quando `node_modules` já está completo; na **engine**, o CLI pode correr `bun install` automaticamente se faltarem dependências declaradas no `package.json` (evita falhas de build por módulos em falta); usar `--skip-engine-install` ou `--skip-install` para pular esse passo quando o ambiente já está sincronizado.
 - Spawner e conteúdo declarativo no VibeGame: manter o mesmo estilo de recipes/parsers/XML em `index.html` já usado no projeto.
 - Spawner: diferenciar objetos estáticos (árvores, props) de dinâmicos (caixas empurráveis, inimigos em movimento, etc.) e usar perfis que definam defaults automáticos por tipo de objeto.

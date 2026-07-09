@@ -1,11 +1,11 @@
 # GameDev monorepo — common tasks for Python packages (ruff, pytest, mypy), Rust (Materialize), and VibeGame (Bun).
 # Requires GNU Make; on Windows, use Git Bash / MSYS2 / WSL so shell recipes and `find` work as expected.
 
-PYTHON_PROJECTS := Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text2Sound GameDevLab Terrain3D Rocks3D
+PYTHON_PROJECTS := Shared Text2D Text2Icon Text3D Paint3D Part3D GameAssets Texture2D Text2Sound GameDevLab Terrain3D Rocks3D
 
 .DEFAULT_GOAL := help
 
-.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
+.PHONY: help lint fmt fmt-check test test-shared test-text2d test-text2icon test-text3d test-paint3d test-part3d test-gameassets test-texture2d test-text2sound test-gamedevlab test-terrain3d test-rocks3d test-materialize test-rust test-vibegame check-vibegame lint-vibegame fmt-vibegame fmt-check-vibegame build-vibegame clean typecheck check install-hooks
 
 # Prefer .venv only if pytest is installed there; else python3, then python.
 define run-pytest
@@ -50,6 +50,9 @@ test-shared: ## pytest only in Shared/
 
 test-text2d: ## pytest only in Text2D/
 	$(call run-pytest,Text2D)
+
+test-text2icon: ## pytest only in Text2Icon/
+	$(call run-pytest,Text2Icon)
 
 test-text3d: ## pytest only in Text3D/
 	$(call run-pytest,Text3D)

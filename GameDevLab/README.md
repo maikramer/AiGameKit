@@ -493,6 +493,34 @@ gamedev-lab mesh diff original.glb remeshed.glb --json-out topo_diff.json
 - **SDNQ in Paint3D**: The custom UNet `UNet2p5DConditionModel` may behave differently with SDNQ applied.
 - **Part3D with SDNQ**: Works correctly with `sdnq-uint8`.
 
+### Backend Coverage (SDNQ >=0.2.1)
+
+SDNQ is pure PyTorch and runs on every backend:
+
+| Backend | Quantized matmul | Notes |
+|---------|-----------------|-------|
+| **CUDA** (Nvidia) | ✅ via Triton/Inductor | Default for GPU inference |
+| **ROCm** (AMD) | ✅ via Triton/Inductor | |
+| **XPU** (Intel) | ✅ via Triton/Inductor | |
+| **CPU** | ❌ (no Triton) | Quantization works (PyTorch eager); matmul is FP dequant |
+| **MPS** (Apple) | ❌ (no Triton) | Quantization works (PyTorch eager) |
+| **OpenVINO** (Intel) | ❌ | Via `torch.compile → Inductor → OpenVINO`; quantization works |
+
+On CPU/MPS, quantization still reduces memory (weights are stored quantized and
+dequantized per-forward in eager mode) but there is no accelerated quantized matmul.
+Use `detect_compute_backend()` from `gamedev_shared.sdnq` to log which backend is
+active.
+
+### Available SDNQ Presets (`gamedev_shared.sdnq.PRESETS`)
+
+| Preset | dtype | group_size | SVD | Use case |
+|--------|-------|-----------|-----|----------|
+| `sdnq-uint8` | uint8 | 0 | No | **Default** — best tested, all models |
+| `sdnq-int8` | int8 | 0 | No | Signed alternative to uint8 |
+| `sdnq-int4` | int4 | 32 | Yes (r=32) | Maximum compression for low VRAM |
+| `sdnq-uint4` | uint4 | 32 | Yes (r=32) | Matches Disty0 `uint4-svd-r32` checkpoints |
+| `sdnq-fp8` | fp8 | 0 | No | RTX 40 series (Ada Lovelace+) |
+
 ### Optimization Techniques
 
 - **TinyVAE (TAESD)**: Reduces VAE VRAM by ~70% (incompatible with HunyuanPaintPBR).
