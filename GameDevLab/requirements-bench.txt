@@ -9,7 +9,7 @@ torchaudio>=2.11.0
 # Quantização
 optimum-quanto>=0.2.0
 bitsandbytes>=0.45.0
-sdnq>=0.1.0
+sdnq>=0.2.1
 
 # Diffusers e Transformers
 diffusers>=0.30.0

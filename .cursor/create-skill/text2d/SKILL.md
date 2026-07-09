@@ -1,6 +1,6 @@
 ---
 name: text2d
-description: Gera imagens 2D a partir de texto com FLUX.2 Klein (SDNQ via Disty0). Use quando o utilizador pedir text-to-image, FLUX, imagens por prompt, TEXT2D_MODEL_ID, HF_HOME, low-vram, ou integração com GameAssets/Text3D.
+description: Gera imagens 2D a partir de texto com FLUX.2 Klein (SDNQ via Disty0). Use quando o utilizador pedir text-to-image, FLUX, imagens por prompt, TEXT2D_MODEL_ID, HF_HOME, memory-efficient mode, ou integração com GameAssets/Text3D.
 ---
 
 # Text2D — text-to-image (FLUX.2 Klein)
@@ -13,7 +13,7 @@ description: Gera imagens 2D a partir de texto com FLUX.2 Klein (SDNQ via Disty0
 
 ## O que é
 
-CLI **text-to-2D** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** ([Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic)), pensado para GPUs modestas (**CPU offload**, `--low-vram`).
+CLI **text-to-2D** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) em quantização **SDNQ** ([Disty0](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic)), pensado para GPUs modestas (**CPU offload** via hw-auto / modo memory-efficient).
 
 ## Pré-requisitos
 
@@ -29,14 +29,14 @@ CLI **text-to-2D** com [FLUX.2 Klein 4B](https://huggingface.co/black-forest-lab
 | `text2d models` | Modelos suportados / notas |
 | `text2d skill install` | Instala esta skill em `.cursor/skills/text2d/` do projeto alvo |
 
-**Opções frequentes em `generate`:** `--width` / `--height`, `--steps`, `--guidance` (SDNQ tipicamente **~1.0**), `--seed`, `--cpu`, `--low-vram`, `--model` / `TEXT2D_MODEL_ID`, `-v` (verbose).
+**Opções frequentes em `generate`:** `--width` / `--height`, `--steps`, `--guidance` (SDNQ tipicamente **~1.0**), `--seed`, `--cpu`, `--model` / `TEXT2D_MODEL_ID`, `-v` (verbose). Em GPUs pequenas, o **hw-auto** (modo memory-efficient, ativo por defeito) seleciona o modelo 4B + CPU offload automaticamente.
 
 ## Exemplos
 
 ```bash
 text2d generate "um gato com um cartaz" -o saida.png
 text2d generate "paisagem" --width 768 --height 768 --steps 4 --guidance 1.0
-text2d generate "retrato" --low-vram --seed 42 -o retrato.png
+text2d generate "retrato" --seed 42 -o retrato.png
 text2d -v generate "teste"
 ```
 

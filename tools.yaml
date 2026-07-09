@@ -23,6 +23,18 @@ tools:
     install_order: -2
     post_install: clified.hooks:pip_check
 
+  text2icon:
+    name: "Text2Icon"
+    kind: python
+    folder: Text2Icon
+    cli_name: text2icon
+    python_module: text2icon
+    description: "CLI text-to-icon com Sana Sprint 0.6B (NVlabs/Sana)"
+    min_python: [3, 13]
+    extra_aliases: [text2icon-generate]
+    needs_pytorch: true
+    post_install: clified.hooks:pip_check
+
   text3d:
     name: "Text3D"
     kind: python

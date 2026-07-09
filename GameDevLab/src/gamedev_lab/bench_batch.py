@@ -27,7 +27,6 @@ class BatchBenchConfig:
     part3d_quantization: str
     part3d_steps: int
     part3d_octree: int
-    text3d_low_vram: bool = False
     text3d_phased: bool = True
 
 
@@ -98,13 +97,11 @@ image_source: text2d
 seed_base: 20260330
 
 text2d:
-  low_vram: true
   width: 512
   height: 512
 
 text3d:
   preset: fast
-  low_vram: {str(config.text3d_low_vram).lower()}
   texture: true
   phased_batch: {str(config.text3d_phased).lower()}
   gpu_kill_others: true
@@ -130,7 +127,6 @@ part3d:
   quantization: {config.part3d_quantization}
   torch_compile: false
   no_attention_slicing: false
-  low_vram_mode: false
   parts_suffix: "_parts"
   segmented_suffix: "_segmented"
 """

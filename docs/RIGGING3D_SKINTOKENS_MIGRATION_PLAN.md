@@ -196,7 +196,7 @@ Mapeamento proposto:
 | `rigging3d merge -s skin.glb -t mesh.glb -o out.glb` | módulo bpy próprio, Laplacian smoothing | equivalente a `use_transfer=True`; reimplementar in-process (não via `bpy_server` HTTP, ver risco #4) reaproveitando `Asset.vertices_with_pose`/exportação, ou simplesmente adaptar a lógica de transferência de `demo.py::run_rig` para chamar `bpy` diretamente |
 | `rigging3d pipeline -i mesh.glb -o out.glb` | encadeia skeleton→skin→merge (3 chamadas) | colapsa para **uma única chamada** `run_rig(..., use_skeleton=False, use_transfer=True)` — pipeline fica mais simples e mais rápido (elimina 2 dos 3 estágios) |
 | `rigging3d transfer-weights` (stage 8, LOD0→LOD1/2) | `bpy.ops.object.data_transfer` puro, sem depender do backend de geração | **sem alteração** — já é independente do UniRig/SkinTokens, continua igual |
-| `--low-vram`, `--gpu-ids`, `--hw-auto` | reduz `num_train_vertex` via YAML; pina GPU por `CUDA_VISIBLE_DEVICES` | `--gpu-ids`/`--hw-auto` continuam válidos (mesmo princípio, `CUDA_VISIBLE_DEVICES` por subprocesso ou por `.to(device)` in-process); `--low-vram` precisa de nova implementação (não há `num_train_vertex` no SkinTokens — ver risco #1, provavelmente vira "quantização do Qwen3 + `num_beams` reduzido") |
+| `--gpu-ids`, `--hw-auto` | pina GPU por `CUDA_VISIBLE_DEVICES`; hw-auto liga perfil low-memory | `--gpu-ids`/`--hw-auto` continuam válidos (mesmo princípio, `CUDA_VISIBLE_DEVICES` por subprocesso ou por `.to(device)` in-process). **Nota:** `--low-vram` foi removido de todo o monorepo — Rigging3D passa a usar hw-auto + `--gpu-ids` e o advisory `low_memory_warning` (reduzir `--num-beams`); não há `num_train_vertex` no SkinTokens (ver risco #1) |
 
 ## 5. Plano de fases
 
@@ -268,10 +268,11 @@ bloqueantes (ou se houver mitigação clara: quantização, venv separada, etc).
   `_rename_generic_bones` pode ser removido; `_validate_and_fix_origin`
   (checagem de convenção "feet" do Text3D) continua relevante independente
   do backend.
-- `--low-vram`/`hardware.py`: redesenhar `Rigging3DHardwareProfile` — o
-  conceito de "reduzir `num_train_vertex`" não existe mais; substituir por
-  algo como reduzir `num_beams`/ativar quantização do Qwen3 quando
-  `low_vram=True` (depende do resultado da Fase 0, risco #1).
+- `hardware.py`: redesenhar `Rigging3DHardwareProfile` — o
+  conceito de "reduzir `num_train_vertex`" não existe mais; `--low-vram`
+  foi removido de todo o monorepo (hw-auto é agora o único mecanismo de
+  afinação por VRAM, e o advisory `low_memory_warning` sugere reduzir
+  `--num-beams` — depende do resultado da Fase 0, risco #1).
 - `transfer-weights` (stage 8) **não muda**.
 
 ### Fase 4 — Testes
