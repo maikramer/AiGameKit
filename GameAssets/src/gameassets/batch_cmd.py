@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
+from gamedev_shared.path_utils import safe_filename as _safe_slug
 from gamedev_shared.profiler.session import ProfilerSession
 from gamedev_shared.subprocess_utils import run_cmd_streaming
 
@@ -27,6 +28,7 @@ from .helpers import (
     _append_skymap2d_profile_args,
     _append_terrain3d_profile_args,
     _append_text2d_profile_args,
+    _append_text2icon_profile_args,
     _append_texture2d_profile_args,
     _audio_path_for_row_manifest,
     _build_context,
@@ -37,6 +39,7 @@ from .helpers import (
     _resolve_materialize_bin_texture2d,
     _resolve_skymap2d_bin,
     _resolve_terrain3d_bin,
+    _resolve_text2icon_bin,
     _row_uses_texture2d,
     _row_wants_animate,
     _row_wants_audio,
@@ -46,6 +49,7 @@ from .helpers import (
     _seed_for_row,
     _skymap2d_profile_effective,
     _terrain3d_profile_effective,
+    _text2icon_profile_effective,
     _text2sound_args_for_row,
     _text2sound_profile_effective,
     _texture2d_material_maps_path,
@@ -210,6 +214,12 @@ console = Console()
     help="Skip skymap generation even if skymap2d is configured in game.yaml.",
 )
 @click.option(
+    "--no-icons",
+    is_flag=True,
+    default=False,
+    help="Skip UI icon generation even if text2icon is configured in game.yaml.",
+)
+@click.option(
     "--profile-tools",
     is_flag=True,
     help="Activar profiling (CPU/RAM/GPU) em paint3d e part3d via GAMEDEV_PROFILE.",
@@ -220,11 +230,6 @@ console = Console()
     type=click.Path(dir_okay=False, path_type=Path),
     default=None,
     help="JSONL para spans (defeito: gameassets_profile.jsonl na pasta do manifest).",
-)
-@click.option(
-    "--low-vram",
-    is_flag=True,
-    help="Deprecated no-op: os sub-tools agora auto-detetam VRAM via hw-auto.",
 )
 @click.option(
     "--force",
@@ -278,9 +283,9 @@ def batch_cmd(
     no_collision: bool,
     no_terrain: bool,
     no_skymap: bool,
+    no_icons: bool,
     profile_tools: bool,
     profile_tools_log: Path | None,
-    low_vram: bool,
     force: bool,
     gpu_ids_str: str | None,
     no_dashboard: bool,
@@ -415,6 +420,18 @@ def batch_cmd(
             else:
                 raise click.ClickException("skymap2d não encontrado (defina SKYMAP2D_BIN)") from None
 
+    # text2icon (scene-level ícones de UI via Sana Sprint)
+    with_icons = not no_icons and profile.text2icon is not None and bool(_text2icon_profile_effective(profile).prompts)
+    text2icon_bin: str | None = None
+    if with_icons:
+        try:
+            text2icon_bin = _resolve_text2icon_bin()
+        except FileNotFoundError:
+            if dry_run:
+                text2icon_bin = "text2icon"
+            else:
+                raise click.ClickException("text2icon não encontrado (defina TEXT2ICON_BIN)") from None
+
     meta = Table(show_header=False, box=box.SIMPLE, title="[bold]Batch[/bold]")
     meta.add_row("Perfil", str(profile_path.resolve()))
     meta.add_row("Manifest", str(manifest_path.resolve()))
@@ -449,6 +466,7 @@ def batch_cmd(
     meta.add_row("part3d", part3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("terrain3d", terrain3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("skymap2d", skymap2d_bin or "[dim](desligado)[/dim]")
+    meta.add_row("text2icon", text2icon_bin or "[dim](desligado)[/dim]")
     meta.add_row("Modo", "[cyan]dry-run[/cyan]" if dry_run else "execução")
     if gpu_ids:
         meta.add_row("GPUs", ",".join(str(g) for g in gpu_ids))
@@ -461,6 +479,8 @@ def batch_cmd(
         _ord_prefix.append("Terrain3D")
     if with_skymap:
         _ord_prefix.append("Skymap2D")
+    if with_icons:
+        _ord_prefix.append("Text2Icon")
     if skip_text2d:
         ord_skip: list[str] = [*_ord_prefix, "Geração 2D omitida"]
         if any_audio_row and not skip_audio:
@@ -545,6 +565,14 @@ def batch_cmd(
             sky_argv = [skymap2d_bin, "generate", sky_eff.prompt or "", "-o", str(sky_out_dir / "sky.png")]
             _append_skymap2d_profile_args(sky_eff, sky_argv, quality=profile.generation)
             _dry_run_emit(dry_plan, phase="Skymap2D", row_id=None, argv=sky_argv)
+        if with_icons and text2icon_bin:
+            icon_eff = _text2icon_profile_effective(profile)
+            icon_out_dir = Path(profile.output_dir) / "icons"
+            for icon_prompt in icon_eff.prompts:
+                icon_slug = _safe_slug(icon_prompt)
+                icon_argv = [text2icon_bin, "generate", icon_prompt, "-o", str(icon_out_dir / f"{icon_slug}.png")]
+                _append_text2icon_profile_args(icon_eff, icon_argv, quality=profile.generation)
+                _dry_run_emit(dry_plan, phase="Text2Icon", row_id=icon_slug, argv=icon_argv)
         if not skip_text2d:
             if any_texture2d_row and any_text2d_row:
                 p1_title = "--- Fase 1: Text2D / Texture2D (por linha) ---"
@@ -999,6 +1027,31 @@ def batch_cmd(
                                 raise click.Abort()
                         else:
                             dash.update_asset("skymap", "ok", str(sky_out_dir / "sky.png"))
+
+                    # --- Pre-phase: Text2Icon (scene-level, UI icons) ---
+                    if with_icons and text2icon_bin:
+                        icon_eff = _text2icon_profile_effective(profile)
+                        icon_out_dir = Path(profile.output_dir) / "icons"
+                        icon_out_dir.mkdir(parents=True, exist_ok=True)
+                        dash.set_phase("Text2Icon", len(icon_eff.prompts))
+                        for _icon_idx, _icon_prompt in enumerate(icon_eff.prompts):
+                            _icon_slug = _safe_slug(_icon_prompt)
+                            _icon_out = icon_out_dir / f"{_icon_slug}.png"
+                            _icon_label = f"ícone {_icon_idx + 1}/{len(icon_eff.prompts)}"
+                            dash.update_asset(f"icon-{_icon_slug}", "running", f"A gerar {_icon_label}...")
+                            _icon_argv = [text2icon_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
+                            _append_text2icon_profile_args(icon_eff, _icon_argv, quality=profile.generation)
+                            _t_icon = time.perf_counter()
+                            _r_icon = run_cmd(_icon_argv, extra_env=child_env, cwd=manifest_dir)
+                            _timing_append({"id": f"icon-{_icon_slug}"}, "text2icon_sec", time.perf_counter() - _t_icon)
+                            if _r_icon.returncode != 0:
+                                _icon_err = merge_subprocess_output(_r_icon) or "text2icon falhou"
+                                dash.update_asset(f"icon-{_icon_slug}", "error", _icon_err)
+                                failures += 1
+                                if not continue_on_error:
+                                    raise click.Abort()
+                            else:
+                                dash.update_asset(f"icon-{_icon_slug}", "ok", str(_icon_out))
 
                     # --- Phase 1: 2D images ---
                     if skip_text2d:
@@ -1932,6 +1985,31 @@ def batch_cmd(
                         else:
                             _sky_out = sky_out_dir / "sky.png"
                             progress.console.print(f"[green]Skymap2D[/green] OK ({_t_sky_s:.1f}s) → {_sky_out}")
+
+                    # --- Pre-phase: Text2Icon (scene-level, UI icons) ---
+                    if with_icons and text2icon_bin:
+                        icon_eff = _text2icon_profile_effective(profile)
+                        icon_out_dir = Path(profile.output_dir) / "icons"
+                        icon_out_dir.mkdir(parents=True, exist_ok=True)
+                        progress.console.print(f"[cyan]Text2Icon[/cyan] — a gerar {len(icon_eff.prompts)} ícone(s)...")
+                        for _icon_prompt in icon_eff.prompts:
+                            _icon_slug = _safe_slug(_icon_prompt)
+                            _icon_out = icon_out_dir / f"{_icon_slug}.png"
+                            _icon_argv = [text2icon_bin, "generate", _icon_prompt, "-o", str(_icon_out)]
+                            _append_text2icon_profile_args(icon_eff, _icon_argv, quality=profile.generation)
+                            _t_icon = time.perf_counter()
+                            _r_icon = run_cmd(_icon_argv, extra_env=child_env, cwd=manifest_dir)
+                            _t_icon_s = time.perf_counter() - _t_icon
+                            if _r_icon.returncode != 0:
+                                failures += 1
+                                _icon_err = merge_subprocess_output(_r_icon) or ""
+                                progress.console.print(f"[red]Text2Icon falhou[/red] ({_icon_slug}): {_icon_err}")
+                                if not continue_on_error:
+                                    raise click.Abort()
+                            else:
+                                progress.console.print(
+                                    f"  [green]✓[/green] {_icon_slug} ({_t_icon_s:.1f}s) → {_icon_out}"
+                                )
 
                     f1_label = "[cyan]Fase 1: PNGs existentes[/cyan]"
                     if not skip_text2d:

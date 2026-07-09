@@ -14,6 +14,11 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
         "tone": {"type": "string"},
         "style_preset": {"type": "string"},
         "sky_prompt": {"type": "string"},
+        "icon_prompts": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "UI icons to generate (e.g. health, mana, sword, shield, settings). One prompt each.",
+        },
         "negative_keywords": {"type": "array", "items": {"type": "string"}},
         "assets": {
             "type": "array",
@@ -125,6 +130,9 @@ SCENE_RULES = """\
 - Props are small objects; environments are large surfaces or backdrops.
 - Keep total assets <= max_assets to avoid excessive GPU time.
 - sky_prompt should describe a 360-degree equirectangular panoramic sky.
+- icon_prompts (optional): list of short UI icon descriptions for the game (e.g. "red health potion",
+  "blue mana potion", "iron sword", "wooden shield", "golden coin", "settings gear"). Add 3-8 icons
+  for games with a HUD/inventory. Each becomes one icon image. Skip for abstract/ambient games.
 - Provide varied, creative ideas for each asset — avoid generic descriptions.
 - All string values in the JSON must be valid JSON (escaped quotes if needed).
 - Characters with generate_rig=true must use `<PlayerGLTF>` instead of `<GLTFLoader>` in the scene XML.

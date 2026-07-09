@@ -30,7 +30,6 @@ class Paint3DProfile:
     bake_exp: int | None = None
     smooth: bool = True
     smooth_passes: int | None = None
-    low_vram_mode: bool = False  # Deprecated no-op: paint3d hw-auto covers small GPUs
     # Quick paint (solid / perlin)
     solid_color: str = "#888888"
     perlin_tint: str = "#7a7268"
@@ -62,7 +61,6 @@ class Text3DProfile:
 class Text2DProfile:
     """Opções passadas ao CLI text2d generate (subconjunto)."""
 
-    low_vram: bool = False  # Deprecated no-op: GameAssets no longer propagates this; text2d hw-auto covers small GPUs
     cpu: bool = False
     width: int | None = None
     height: int | None = None
@@ -151,9 +149,9 @@ class Part3DProfile:
     torch_compile: bool = False
     # Desabilitar attention slicing
     no_attention_slicing: bool = False
-    # Nota: low_vram_mode / no_cpu_offload / quantization foram removidos — o
-    # part3d agora auto-deteta via hw-auto (PART3D_HW_AUTO). Chaves YAML
-    # obsoletas com esses nomes são ignoradas silenciosamente em from_dict.
+    # Nota: no_cpu_offload / quantization foram removidos — o part3d agora
+    # auto-deteta via hw-auto (PART3D_HW_AUTO). Chaves YAML obsoletas com
+    # esses nomes são ignoradas silenciosamente em from_dict.
 
 
 @dataclass
@@ -188,6 +186,23 @@ class Skymap2DProfile:
     preset: str | None = None
     cfg_scale: float | None = None
     lora_strength: float | None = None
+    model_id: str | None = None
+
+
+@dataclass
+class Text2IconProfile:
+    """Opções passadas ao CLI text2icon generate (Sana Sprint 0.6B — ícones de UI).
+
+    Scene-level: ``prompts`` é uma lista de descrições de ícones (não por linha
+    do manifest, como o skymap2d). Cada prompt gera um PNG em ``<out>/icons/``.
+    """
+
+    prompts: list[str] = field(default_factory=list)
+    width: int | None = None
+    height: int | None = None
+    steps: int | None = None
+    guidance_scale: float | None = None
+    transparent: bool = False
     model_id: str | None = None
 
 
@@ -236,6 +251,7 @@ class GameProfile:
     text2d: Text2DProfile | None = None
     texture2d: Texture2DProfile | None = None
     skymap2d: Skymap2DProfile | None = None
+    text2icon: Text2IconProfile | None = None
     text3d: Text3DProfile | None = None
     paint3d: Paint3DProfile | None = None
     text2sound: Text2SoundProfile | None = None
@@ -298,7 +314,6 @@ class GameProfile:
             except (TypeError, ValueError) as e:
                 raise ValueError("text2d.width, height, steps e guidance_scale devem ser números válidos") from e
             t2 = Text2DProfile(
-                low_vram=bool(raw_t2.get("low_vram", False)),
                 cpu=bool(raw_t2.get("cpu", False)),
                 width=wi,
                 height=he,
@@ -401,6 +416,36 @@ class GameProfile:
                 cfg_scale=cfg_s,
                 lora_strength=lr_s,
                 model_id=mid_ss,
+            )
+        # text2icon (scene-level ícones de UI via Sana Sprint 0.6B)
+        icon2: Text2IconProfile | None = None
+        raw_icon2 = data.get("text2icon")
+        if isinstance(raw_icon2, dict):
+            raw_prompts = raw_icon2.get("prompts")
+            icon_prompts: list[str] = []
+            if isinstance(raw_prompts, list):
+                icon_prompts = [str(p).strip() for p in raw_prompts if str(p).strip()]
+            iw = raw_icon2.get("width")
+            ih = raw_icon2.get("height")
+            ist = raw_icon2.get("steps")
+            igs = raw_icon2.get("guidance_scale")
+            try:
+                iw_s = int(iw) if iw is not None else None
+                ih_s = int(ih) if ih is not None else None
+                ist_s = int(ist) if ist is not None else None
+                igs_s = float(igs) if igs is not None else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("text2icon.width, height, steps e guidance_scale devem ser números válidos") from e
+            imid = raw_icon2.get("model_id")
+            imid_s = str(imid).strip() if imid not in (None, "") else None
+            icon2 = Text2IconProfile(
+                prompts=icon_prompts,
+                width=iw_s,
+                height=ih_s,
+                steps=ist_s,
+                guidance_scale=igs_s,
+                transparent=bool(raw_icon2.get("transparent", False)),
+                model_id=imid_s,
             )
         ts2: Text2SoundProfile | None = None
         raw_ts2 = data.get("text2sound")
@@ -571,7 +616,6 @@ class GameProfile:
                 bake_exp=pbe_i,
                 smooth=paint_smooth,
                 smooth_passes=psp_i,
-                low_vram_mode=bool(raw_p3d.get("low_vram_mode", False)),
                 solid_color=psc_s,
                 perlin_tint=ptint_s,
                 perlin_frequency=pf,
@@ -620,8 +664,8 @@ class GameProfile:
             ss = raw_p3.get("segmented_suffix")
             ps_s = str(ps).strip() if ps not in (None, "") else "_parts"
             ss_s = str(ss).strip() if ss not in (None, "") else "_segmented"
-            # Chaves obsoletas (low_vram_mode, no_cpu_offload, quantization) são
-            # ignoradas: o part3d auto-deteta via hw-auto.
+            # Chaves obsoletas (no_cpu_offload, quantization) são ignoradas:
+            # o part3d auto-deteta via hw-auto.
             p3 = Part3DProfile(
                 octree_resolution=oc_i,
                 steps=st_i,
@@ -765,6 +809,7 @@ class GameProfile:
             text2d=t2,
             texture2d=tex2,
             skymap2d=sky2,
+            text2icon=icon2,
             text3d=t3,
             paint3d=p3d,
             text2sound=ts2,
@@ -806,7 +851,6 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
 
     t2 = profile.text2d or Text2DProfile()
     t2 = Text2DProfile(
-        low_vram=t2.low_vram,
         cpu=t2.cpu,
         width=t2.width if t2.width is not None else gp.text2d_width,
         height=t2.height if t2.height is not None else gp.text2d_height,
@@ -843,7 +887,6 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         bake_exp=p3d.bake_exp if p3d.bake_exp is not None else gp.paint_bake_exp,
         smooth=p3d.smooth if p3d.smooth else gp.paint_smooth,
         smooth_passes=p3d.smooth_passes if p3d.smooth_passes is not None else gp.paint_smooth_passes,
-        low_vram_mode=p3d.low_vram_mode,
         solid_color=p3d.solid_color,
         perlin_tint=p3d.perlin_tint,
         perlin_frequency=p3d.perlin_frequency,

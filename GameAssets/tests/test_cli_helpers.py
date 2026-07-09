@@ -186,7 +186,7 @@ def test_text3d_argv_explicit_hunyuan_skips_preset() -> None:
 
 
 def test_paint3d_texture_argv_gpu_flags() -> None:
-    p3 = Paint3DProfile(preserve_origin=True, low_vram_mode=True)
+    p3 = Paint3DProfile(preserve_origin=True)
     argv = _paint3d_texture_argv(
         "/bin/paint3d",
         p3,

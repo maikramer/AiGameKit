@@ -130,7 +130,6 @@ def test_from_dict_text3d_hunyuan_explicit() -> None:
                 "preset": "balanced",
                 "steps": 26,
                 "octree_resolution": 160,
-                "low_vram": False,
             },
             "paint3d": {"preserve_origin": True},
         }

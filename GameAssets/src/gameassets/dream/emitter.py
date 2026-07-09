@@ -58,6 +58,14 @@ def emit_game_yaml(plan: DreamPlan, *, with_audio: bool = True) -> str:
             "audio_format": "wav",
         }
 
+    if plan.icon_prompts:
+        doc["text2icon"] = {
+            "prompts": plan.icon_prompts,
+            "transparent": True,
+            "width": 256,
+            "height": 256,
+        }
+
     return yaml.dump(doc, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
