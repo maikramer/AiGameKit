@@ -130,7 +130,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Logs detalhados",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
@@ -179,7 +178,6 @@ def generate_cmd(
     model_id: str | None,
     verbose_flag: bool,
     cpu: bool,
-    low_vram: bool,
     gpu_ids_str: str | None,
     image_format: str,
     exr_scale: float,
@@ -217,16 +215,18 @@ def generate_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
+    mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
         # Clamp resolution only if user didn't set it explicitly.
         if not _user_set_width and hwp.max_width is not None:
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
             height = min(height, hwp.max_height)
 
+    mem_eff = mem_eff or cpu
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
     if gpu_ids is None and hwp is not None and hwp.gpu_ids:
@@ -252,7 +252,7 @@ def generate_cmd(
     try:
         gen = SkymapGenerator(
             device=device,
-            low_vram=low_vram or cpu,
+            memory_efficient=mem_eff,
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
@@ -371,7 +371,6 @@ def presets_cmd() -> None:
     help="Quality tier (fast / low / medium / high / highest).",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
@@ -412,7 +411,6 @@ def batch_cmd(
     model_id: str | None,
     quality: str,
     cpu: bool,
-    low_vram: bool,
     gpu_ids_str: str | None,
     image_format: str,
     exr_scale: float,
@@ -448,14 +446,16 @@ def batch_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
+    mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
         if not _user_set_width and hwp.max_width is not None:
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
             height = min(height, hwp.max_height)
+    mem_eff = mem_eff or cpu
     if hwp is not None:
         Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
@@ -480,7 +480,7 @@ def batch_cmd(
 
     gen = SkymapGenerator(
         device=device,
-        low_vram=low_vram or cpu,
+        memory_efficient=mem_eff,
         model_id=model_id,
         gpu_ids=gpu_ids,
     )

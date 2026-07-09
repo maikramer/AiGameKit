@@ -177,7 +177,7 @@ def gltf_transform_finish(
     apply_dedup: bool = True,
     apply_prune: bool = True,
     apply_uastc: bool = True,
-    apply_meshopt: bool = True,
+    apply_meshopt: bool = False,
     uastc_level: int = 2,
     uastc_rdo: float = 1.0,
     meshopt_level: str = "high",
@@ -187,7 +187,19 @@ def gltf_transform_finish(
     Ordem fixa: tangents → dedup → prune → uastc → meshopt. Cada passo é
     opcional. Quando ``glb_in == glb_out``, escreve in-place após pipeline
     em tempdir.
+
+    Nota: ``apply_meshopt`` é **ignorado** (no-op). A quantização
+    (EXT_meshopt_compression) foi removida porque produzia POSITION SHORT sem
+    ``KHR_mesh_quantization`` (GLB inválido que o Blender não consegue importar)
+    e dessincronizava a origem do armature em meshes rigged. O parâmetro mantém-se
+    na assinatura para compatibilidade retroativa mas não tem efeito.
     """
+    if apply_meshopt:
+        log.warning(
+            "gltf_transform_finish: apply_meshopt=True ignorado (quantização removida). "
+            "Os LODs saem em FLOAT; sem EXT_meshopt_compression."
+        )
+        apply_meshopt = False
     glb_in = Path(glb_in).resolve()
     glb_out = Path(glb_out).resolve()
     glb_out.parent.mkdir(parents=True, exist_ok=True)

@@ -349,19 +349,19 @@ class HunyuanTextTo3DGenerator:
                 self._log(f"Prompt otimizado: {prompt[:120]}...")
 
         if self.device == "cpu":
-            low_t2d = True
+            mem_eff_t2d = True
         elif t2d_full_gpu:
-            low_t2d = False
+            mem_eff_t2d = False
         else:
-            low_t2d = _defaults.DEFAULT_T2D_CPU_OFFLOAD
+            mem_eff_t2d = _defaults.DEFAULT_T2D_CPU_OFFLOAD
 
         self._log("Fase 1: Text2D (texto → imagem)")
-        if low_t2d and self.device == "cuda":
+        if mem_eff_t2d and self.device == "cuda":
             self._log("Text2D com CPU offload (defeito para ~6GB VRAM).")
 
         t2d = KleinFluxGenerator(
             device=self.device,
-            low_vram=low_t2d,
+            memory_efficient=mem_eff_t2d,
             verbose=self.verbose,
             model_id=text2d_model_id,
             cache_dir=self.cache_dir,

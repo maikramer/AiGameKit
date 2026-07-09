@@ -5,7 +5,7 @@ Constantes de configuração para Hunyuan3D-Paint 2.1 e upscale IA.
 
 Defaults alinhados com o clone demo (6 views @ 640px, bake_exp=6).
 Para GPUs com >=20 GB (A100): usar ``--max-views 8 --view-resolution 768``.
-Para GPUs com menos VRAM, usar ``--low-vram-mode`` no CLI ou ``low_vram=True`` na API.
+Para GPUs com menos VRAM, ativar o modo memory-efficient no CLI ou ``memory_efficient=True`` na API.
 
 Configuracao por defeito (6 views @ 640px, single GPU 12GB):
 - UNet: FP16 puro (sem quantizacao SDNQ/qint8)
@@ -15,7 +15,7 @@ Configuracao por defeito (6 views @ 640px, single GPU 12GB):
   do ``UNet2p5DConditionModel``.
 - torch.compile: desabilitado via TORCHDYNAMO_DISABLE=1
 
-Modo low-VRAM (``--low-vram-mode``):
+Modo memory-efficient (``memory_efficient=True``):
 - UNet: SDNQ uint8 (pos-load) via gamedev_shared.sdnq
 - render_size=1024, texture_size=2048, max_views=4, view_resolution=384
 - CFG chunking: forwards uncond/ref/full sequenciais (pico de ativações /3,
@@ -47,19 +47,19 @@ DEFAULT_PAINT_SUBFOLDER = "hunyuan3d-paintpbr-v2-1"
 
 DEFAULT_PAINT_RENDER_SIZE = 2048
 DEFAULT_PAINT_TEXTURE_SIZE = 4096
-DEFAULT_LOW_VRAM = False
+DEFAULT_MEMORY_EFFICIENT = False
 
-LOW_VRAM_RENDER_SIZE = 1024
-LOW_VRAM_TEXTURE_SIZE = 2048
+MEMORY_EFFICIENT_RENDER_SIZE = 1024
+MEMORY_EFFICIENT_TEXTURE_SIZE = 2048
 
 DEFAULT_PAINT_MAX_VIEWS = 6
 DEFAULT_PAINT_VIEW_RESOLUTION = 640
 
-# Low-VRAM (fallback conservador para --low-vram-mode com --no-hw-auto e CPU;
+# Memory-efficient (fallback conservador para modo memory-efficient com --no-hw-auto e CPU;
 # com hw-auto, GPUs <8 GiB recebem 6v@512 + render 1536/tex 3072 do perfil,
 # viabilizado por CFG chunking + ref-UNet offload).
-LOW_VRAM_MAX_VIEWS = 4
-LOW_VRAM_VIEW_RESOLUTION = 384
+MEMORY_EFFICIENT_MAX_VIEWS = 4
+MEMORY_EFFICIENT_VIEW_RESOLUTION = 384
 
 DEFAULT_PAINT_BAKE_EXP = 6
 
@@ -84,4 +84,4 @@ DINO_GPU_MIN_GIB = 10.0
 
 # Real-ESRGAN: tamanho do tile em GPU (limita pico de VRAM no enhance).
 ESRGAN_TILE = 512
-ESRGAN_TILE_LOW_VRAM = 256
+ESRGAN_TILE_MEMORY_EFFICIENT = 256

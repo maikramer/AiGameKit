@@ -73,8 +73,8 @@ skymap2d generate "clear blue sky" --format exr -o sky_clear.exr
 # High quality with explicit seed
 skymap2d generate "nebula" --quality high --seed 42 -o sky_nebula.png
 
-# Low VRAM mode
-skymap2d generate "alien planet" --low-vram -o sky_alien.png
+# Low VRAM: hw-auto handles small GPUs automatically (on by default)
+skymap2d generate "alien planet" -o sky_alien.png
 ```
 
 | Flag | Type | Default | Description |
@@ -91,7 +91,6 @@ skymap2d generate "alien planet" --low-vram -o sky_alien.png
 | `--lora-strength` | float | `1.0` | LoRA strength (0.0–2.0) |
 | `-m, --model` | str | None | LoRA model ID override (default: `Flux-LoRA-Equirectangular-v3`) |
 | `--cpu` | flag | false | Run on CPU only |
-| `--low-vram` | flag | false | Low VRAM mode (CPU offload) |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `0,1`) |
 | `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
 | `--format` | str | `png` | Output format: `png` (8-bit sRGB) or `exr` (RGB float linear) |
@@ -113,7 +112,7 @@ Generate multiple skymaps from a text file (one prompt per line, `#` comments ig
 skymap2d batch prompts.txt --output-dir skies/ --quality high
 ```
 
-Supports all generation flags (`--width`, `--height`, `--steps`, `--guidance-scale`, `--preset`, `--quality`, `--format`, `--exr-scale`, `--cpu`, `--low-vram`, `--gpu-ids`).
+Supports all generation flags (`--width`, `--height`, `--steps`, `--guidance-scale`, `--preset`, `--quality`, `--format`, `--exr-scale`, `--cpu`, `--gpu-ids`).
 
 ### `skymap2d info`
 

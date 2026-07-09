@@ -6,7 +6,7 @@ Comportamento esperado **durante a maior parte do primeiro arranque**:
 
 1. **`from_pretrained`** — rede + disco + desserialização em CPU; a GPU pode ficar quase idle.
 2. Só **depois** os tensores passam para CUDA (`pipe.to("cuda")`) ou offload.
-3. Com **`--low-vram`**, o modelo **não** fica todo na VRAM; o uso pode parecer baixo.
+3. Com **hw-auto** (modo memory-efficient, on por defeito), o modelo **não** fica todo na VRAM; o uso pode parecer baixo.
 
 O CLI mostra **1/2 — download + carregamento** e **2/2 — inferência**, e no stderr **Passo 1/3 … Passo 3/3**.
 
@@ -35,7 +35,7 @@ pip install -U diffusers
 
 ## VRAM insuficiente (ex.: 6 GB)
 
-- `--low-vram`
+- O `hw-auto` (modo memory-efficient, ativo por defeito) seleciona o modelo 4B e CPU offload automaticamente em GPUs pequenas (<7.5 GB); se necessário, desativar com `TEXT2D_HW_AUTO=0` só agrava o problema.
 - Reduzir `--width` e `--height` (ex. 512)
 - Outro modelo via `TEXT2D_MODEL_ID` (se compatível)
 

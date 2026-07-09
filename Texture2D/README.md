@@ -17,7 +17,7 @@ In the [GameDev](../README.md) monorepo, the package depends on [**gamedev-share
 - **Batch generation** — multiple textures from a prompt file
 - **Multi-GPU** — `--gpu-ids 0,1` splits weights across GPUs via accelerate
 - **JSON metadata** — each texture has a `.json` sidecar with seed, final prompt, and parameters
-- **Low VRAM mode** — CPU offloading to fit smaller GPUs
+- **Memory-efficient mode** — hw-auto CPU offloading to fit smaller GPUs
 
 ## Installation
 
@@ -64,8 +64,8 @@ texture2d generate "weathered surface" --preset Stone -o wall.png
 # High quality with a fixed seed
 texture2d generate "mossy cobblestone" --quality high --seed 42 -o cobble.png
 
-# Low VRAM mode
-texture2d generate "dark marble floor" --low-vram -o marble.png
+# Low VRAM: hw-auto handles small GPUs automatically (on by default)
+texture2d generate "dark marble floor" -o marble.png
 ```
 
 | Flag | Type | Default | Description |
@@ -82,7 +82,6 @@ texture2d generate "dark marble floor" --low-vram -o marble.png
 | `--lora-strength` | float | 1.0 | LoRA strength (0.0–2.0) |
 | `-m, --model` | str | None | HF LoRA model ID override |
 | `--cpu` | flag | `false` | Force CPU inference |
-| `--low-vram` | flag | `false` | CPU offload (lower VRAM usage) |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
 | `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
 
@@ -113,7 +112,6 @@ texture2d batch prompts.txt -d textures/ --quality high
 | `-s, --steps` | int | 28 | Inference steps |
 | `-g, --guidance` | float | 3.5 | Guidance scale |
 | `-m, --model` | str | None | HF LoRA model ID override |
-| `--low-vram` | flag | `false` | CPU offload (lower VRAM usage) |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
 | `--quality` | str | `medium` | Quality tier |
 

@@ -31,7 +31,7 @@ HW_AUTO_ENV = "RIGGING3D_HW_AUTO"
 
 # Abaixo disto (VRAM total da placa escolhida) avisar — margem de segurança,
 # não um limiar de OOM conhecido (ver nota acima).
-LOW_VRAM_WARN_GIB = 4.0
+LOW_MEMORY_WARN_GIB = 4.0
 
 
 def hw_auto_enabled() -> bool:
@@ -45,14 +45,14 @@ class Rigging3DHardwareProfile:
     device: str  # "cuda" | "cpu"
     gpu_ids: list[int] | None  # GPU escolhida p/ CUDA_VISIBLE_DEVICES (1 elem)
     free_gib: float  # VRAM livre da GPU escolhida
-    low_vram_warning: bool
+    low_memory_warning: bool
 
     def summary(self) -> str:
         parts = [self.name]
         if self.gpu_ids is not None:
             parts.append(f"gpu={self.gpu_ids[0]} ({self.free_gib:.1f}GiB livre)")
-        if self.low_vram_warning:
-            parts.append(f"aviso: <{LOW_VRAM_WARN_GIB}GiB — considera --num-beams menor")
+        if self.low_memory_warning:
+            parts.append(f"aviso: <{LOW_MEMORY_WARN_GIB}GiB — considera --num-beams menor")
         return " | ".join(parts)
 
 
@@ -64,7 +64,7 @@ def profile_from_specs(gpus: list[tuple[int, int, int]]) -> Rigging3DHardwarePro
             device="cpu",
             gpu_ids=None,
             free_gib=0.0,
-            low_vram_warning=True,
+            low_memory_warning=True,
         )
 
     largest_total = max(total for _, _, total in gpus) / GIB
@@ -78,7 +78,7 @@ def profile_from_specs(gpus: list[tuple[int, int, int]]) -> Rigging3DHardwarePro
         # Só pina em multi-GPU; single-GPU não precisa de CUDA_VISIBLE_DEVICES.
         gpu_ids=[best_idx] if multi else None,
         free_gib=round(best_free / GIB, 1),
-        low_vram_warning=(best_total / GIB) < LOW_VRAM_WARN_GIB,
+        low_memory_warning=(best_total / GIB) < LOW_MEMORY_WARN_GIB,
     )
 
 

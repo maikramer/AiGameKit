@@ -64,28 +64,6 @@ def _torch_dtype_for(device: str) -> torch.dtype:
     return torch.float32
 
 
-def _register_sdnq() -> tuple[Any, Any]:
-    try:
-        from sdnq import SDNQConfig  # noqa: F401
-        from sdnq.common import use_torch_compile as triton_is_available
-        from sdnq.loader import apply_sdnq_options_to_model
-
-        from gamedev_shared.sdnq import patch_lora_shape_calculation
-
-        patch_lora_shape_calculation()
-
-        return triton_is_available, apply_sdnq_options_to_model
-    except ImportError as e:
-        raise ImportError("O pacote 'sdnq' é necessário. Instale com: pip install sdnq") from e
-
-
-def _maybe_apply_quantized_matmul(pipe: Any, triton_is_available: Any) -> None:
-    """Apply SDNQ quantized matmul to pipeline sub-modules (via shared helper)."""
-    from gamedev_shared.sdnq import apply_quantized_matmul
-
-    apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
-
-
 def augment_prompt_for_seamless(prompt: str) -> str:
     """Acrescenta instruções de textura seamless/tileable automaticamente.
 
@@ -124,18 +102,26 @@ class TextureGenerator:
     def __init__(
         self,
         device: str | None = None,
-        low_vram: bool = False,
+        memory_efficient: bool = False,
         verbose: bool = False,
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
+        sequential_offload: bool = False,
+        vae_slicing: bool = False,
     ) -> None:
         self.verbose = verbose
-        self.low_vram = low_vram
+        self.memory_efficient = memory_efficient
         self.model_id = model_id or _lora_model_id()
         self.base_model_id = _base_model_id()
         self.cache_dir = cache_dir
         self.gpu_ids = gpu_ids
+        # Otimizações de memória para GPUs pequenas (<8 GiB). ``sequential_offload``
+        # migra cada sub-módulo individualmente (mais lento que ``enable_model_cpu_offload``
+        # mas o único que estavelmente cabe em ~6 GiB). Combinado com ``vae_slicing``
+        # reduz o pico de VRAM durante a decodificação do VAE.
+        self.sequential_offload = sequential_offload
+        self.vae_slicing = vae_slicing
 
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -148,8 +134,16 @@ class TextureGenerator:
         self._multi_gpu: bool = False
 
         if self.verbose:
+            opts = []
+            if self.sequential_offload:
+                opts.append("sequential_offload")
+            if self.vae_slicing:
+                opts.append("vae_slicing")
+            if self.memory_efficient:
+                opts.append("model_cpu_offload")
             _logger.info(
-                f"device={self.device} dtype={self.torch_dtype} base={self.base_model_id} lora={self.model_id}"
+                f"device={self.device} dtype={self.torch_dtype} base={self.base_model_id} "
+                f"lora={self.model_id} opts={opts or 'none'}"
             )
 
     def set_status_callback(self, fn: Callable[[str], None] | None) -> None:
@@ -181,7 +175,9 @@ class TextureGenerator:
 
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
 
-        triton_is_available, _ = _register_sdnq()
+        from gamedev_shared.sdnq import apply_quantized_matmul, register_sdnq
+
+        triton_is_available = register_sdnq(patch_lora=True)
 
         from diffusers import FluxPipeline
 
@@ -196,7 +192,7 @@ class TextureGenerator:
         pipe = FluxPipeline.from_pretrained(self.base_model_id, **kwargs)
 
         self._status("Passo 2/4 — SDNQ quantized matmul")
-        _maybe_apply_quantized_matmul(pipe, triton_is_available)
+        apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
 
         self._status("Passo 3/4 — LoRA weights")
         self._log(f"Carregando LoRA {self.model_id}...")
@@ -204,7 +200,9 @@ class TextureGenerator:
 
         if self.device == "cpu":
             mode_label = "cpu"
-        elif self.low_vram:
+        elif self.sequential_offload:
+            mode_label = f"{self.device} (sequential_cpu_offload — cada sub-módulo migra)"
+        elif self.memory_efficient:
             mode_label = f"{self.device} (cpu_offload — módulos migram 1 a 1)"
         else:
             mode_label = self.device
@@ -217,16 +215,39 @@ class TextureGenerator:
                 if gid < torch.cuda.device_count():
                     torch.cuda.reset_peak_memory_stats(gid)
 
+        # VAE slicing reduz o pico de VRAM na decodificação; compatível com todos
+        # os modos de offload e barato (sem cópias extra em inferência batch=1).
+        # ``pipe.enable_vae_slicing()`` está deprecado em diffusers recentes; usar
+        # ``pipe.vae.enable_slicing()`` quando disponível, com fallback gracioso.
+        if self.vae_slicing and self.device != "cpu":
+            try:
+                if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
+                    pipe.vae.enable_slicing()
+                elif hasattr(pipe, "enable_vae_slicing"):
+                    pipe.enable_vae_slicing()
+            except Exception as e:
+                self._log(f"enable_vae_slicing indisponível: {e}")
+
         if self.device == "cpu":
             pipe.to("cpu")
         elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
             self._status("Modelo carregado — split multi-GPU")
-        elif self.low_vram:
+        elif self.sequential_offload:
+            # Mais conservador que enable_model_cpu_offload: migra cada sub-módulo
+            # individualmente. Essencial em GPUs <8 GiB onde o transformer + VAE
+            # não cabem em simultâneo. Mutuamente exclusivo com model_cpu_offload.
+            pipe.enable_sequential_cpu_offload()
+        elif self.memory_efficient:
             pipe.enable_model_cpu_offload()
         else:
             pipe.to(self.device)
 
-        if torch.cuda.is_available() and self.device == "cuda" and not self.low_vram:
+        if (
+            torch.cuda.is_available()
+            and self.device == "cuda"
+            and not self.memory_efficient
+            and not self.sequential_offload
+        ):
             if self._multi_gpu:
                 gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
                 parts = []

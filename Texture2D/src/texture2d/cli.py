@@ -124,7 +124,6 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Logs detalhados",
 )
 @click.option("--cpu", is_flag=True, help="Forçar CPU")
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
@@ -165,7 +164,6 @@ def generate_cmd(
     model_id: str | None,
     verbose_flag: bool,
     cpu: bool,
-    low_vram: bool,
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
@@ -202,15 +200,25 @@ def generate_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
+    sequential_offload = False
+    vae_slicing = False
+    mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
+        # Otimizações de memória para GPUs pequenas (<8 GiB): detetadas
+        # automaticamente pelo hw-auto (único mecanismo).
+        if hwp.sequential_offload:
+            sequential_offload = True
+        if hwp.vae_slicing:
+            vae_slicing = True
         # Clamp resolution only if user didn't set it explicitly.
         if not _user_set_width and hwp.max_width is not None:
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
             height = min(height, hwp.max_height)
+    mem_eff = mem_eff or cpu
 
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
@@ -235,10 +243,12 @@ def generate_cmd(
     try:
         gen = TextureGenerator(
             device=device,
-            low_vram=low_vram or cpu,
+            memory_efficient=mem_eff,
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
+            sequential_offload=sequential_offload,
+            vae_slicing=vae_slicing,
         )
 
         with console.status(
@@ -333,7 +343,6 @@ def presets_cmd() -> None:
 @click.option("--steps", "-s", default=28, type=int)
 @click.option("--guidance", "-g", "guidance_scale", default=3.5, type=float)
 @click.option("--model", "-m", "model_id", default=None)
-@click.option("--low-vram", is_flag=True, help="CPU offload (menos VRAM)")
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
@@ -365,7 +374,6 @@ def batch_cmd(
     steps: int,
     guidance_scale: float,
     model_id: str | None,
-    low_vram: bool,
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
@@ -395,10 +403,17 @@ def batch_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
+    sequential_offload = False
+    vae_slicing = False
+    mem_eff = False
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if not low_vram and hwp.low_vram and hwp.device == "cuda":
-            low_vram = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
+        if hwp.sequential_offload:
+            sequential_offload = True
+        if hwp.vae_slicing:
+            vae_slicing = True
         if not _user_set_width and hwp.max_width is not None:
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
@@ -425,10 +440,12 @@ def batch_cmd(
     out.mkdir(parents=True, exist_ok=True)
 
     gen = TextureGenerator(
-        low_vram=low_vram,
+        memory_efficient=mem_eff,
         verbose=bool(ctx.obj.get("VERBOSE")),
         model_id=model_id,
         gpu_ids=gpu_ids,
+        sequential_offload=sequential_offload,
+        vae_slicing=vae_slicing,
     )
     base_params = {
         "guidance_scale": guidance_scale,

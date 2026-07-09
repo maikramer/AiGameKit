@@ -27,7 +27,7 @@ def _gib(n: float) -> int:
 def test_no_gpu_cpu_profile() -> None:
     p = profile_from_specs([])
     assert p.device == "cpu"
-    assert p.low_vram is True
+    assert p.memory_efficient is True
     assert p.max_width == 1024
     assert p.max_height == 512
 
@@ -35,7 +35,7 @@ def test_no_gpu_cpu_profile() -> None:
 def test_16gb_full_gpu_no_offload() -> None:
     p = profile_from_specs([(0, _gib(16))])
     assert p.device == "cuda"
-    assert p.low_vram is False
+    assert p.memory_efficient is False
     assert p.max_width is None
     assert p.max_height is None
 
@@ -43,7 +43,7 @@ def test_16gb_full_gpu_no_offload() -> None:
 def test_12gb_full_gpu_no_offload() -> None:
     p = profile_from_specs([(0, _gib(12))])
     assert p.device == "cuda"
-    assert p.low_vram is False
+    assert p.memory_efficient is False
     assert p.max_width is None
     assert p.max_height is None
 
@@ -51,7 +51,7 @@ def test_12gb_full_gpu_no_offload() -> None:
 def test_8gb_offload_clamp_2048x1024() -> None:
     p = profile_from_specs([(0, _gib(8))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.memory_efficient is True
     assert p.max_width == 2048
     assert p.max_height == 1024
 
@@ -59,7 +59,7 @@ def test_8gb_offload_clamp_2048x1024() -> None:
 def test_7gb_offload_clamp_1024x512() -> None:
     p = profile_from_specs([(0, _gib(7))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.memory_efficient is True
     assert p.max_width == 1024
     assert p.max_height == 512
 
@@ -67,7 +67,7 @@ def test_7gb_offload_clamp_1024x512() -> None:
 def test_6gb_offload_clamp_1024x512() -> None:
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.memory_efficient is True
     assert p.max_width == 1024
     assert p.max_height == 512
 
@@ -75,7 +75,7 @@ def test_6gb_offload_clamp_1024x512() -> None:
 def test_4gb_offload_clamp_1024x512() -> None:
     p = profile_from_specs([(0, _gib(4))])
     assert p.device == "cuda"
-    assert p.low_vram is True
+    assert p.memory_efficient is True
     assert p.max_width == 1024
     assert p.max_height == 512
 
@@ -83,14 +83,14 @@ def test_4gb_offload_clamp_1024x512() -> None:
 def test_dual_gpu_sets_gpu_ids() -> None:
     p = profile_from_specs([(0, _gib(12)), (1, _gib(12))])
     assert p.device == "cuda"
-    assert p.low_vram is False
+    assert p.memory_efficient is False
     assert p.gpu_ids == [0, 1]
     assert p.total_vram_gib == 24.0
 
 
 def test_dual_small_gpu_clamp_and_ids() -> None:
     p = profile_from_specs([(0, _gib(6)), (1, _gib(6))])
-    assert p.low_vram is True
+    assert p.memory_efficient is True
     assert p.max_width == 1024
     assert p.max_height == 512
     assert p.gpu_ids == [0, 1]
@@ -134,7 +134,7 @@ def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPa
     fake_profile = Skymap2DHardwareProfile(
         name="cuda-1x6g",
         device="cuda",
-        low_vram=True,
+        memory_efficient=True,
         max_width=1024,
         max_height=512,
         gpu_ids=None,

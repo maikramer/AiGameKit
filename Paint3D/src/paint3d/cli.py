@@ -79,8 +79,12 @@ def _enable_sage_attention(requested: bool) -> bool:
     return True
 
 
-def _prepare_gpu(allow_shared: bool, kill_others: bool, low_vram: bool = False) -> None:
+def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool = False) -> None:
     from gamedev_shared.gpu import warn_if_vram_occupied
+    from gamedev_shared.model_server import ensure_vram_available
+
+    # Pedir aos model servers ativos para descarregar (libertar VRAM) antes de ocupar a GPU.
+    ensure_vram_available(needed_mib=4000, tool="paint3d")
 
     kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
     allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
@@ -179,14 +183,6 @@ def cli(ctx, verbose):
 )
 @click.option("-v", "--verbose", "texture_verbose", is_flag=True, help="Logs detalhados.")
 @click.option(
-    "--low-vram-mode",
-    is_flag=True,
-    help=(
-        "Modo baixa VRAM: SDNQ uint8 + CFG chunking + ref-UNet offload "
-        "(com hw-auto: 6v@512, render 1536, tex 3072; sem: 4v@384)."
-    ),
-)
-@click.option(
     "--preserve-origin/--no-preserve-origin",
     default=True,
     show_default=True,
@@ -224,7 +220,7 @@ def cli(ctx, verbose):
     default=True,
     show_default=True,
     help=(
-        "Auto-detecção de hardware: liga low-VRAM (SDNQ uint8, 6v@512) em GPUs "
+        "Auto-detecção de hardware: liga o modo memory-efficient (SDNQ uint8, 6v@512) em GPUs "
         "<10GB; FP16 nas grandes/multi-GPU. Flags explícitas ganham. "
         "Env: PAINT3D_HW_AUTO=0."
     ),
@@ -252,7 +248,6 @@ def texture(
     smooth,
     smooth_passes,
     texture_verbose,
-    low_vram_mode,
     preserve_origin,
     allow_shared_gpu,
     gpu_kill_others,
@@ -298,14 +293,15 @@ def texture(
     if not _user_set_smooth_passes and "smooth_passes" in _qresolved.params:
         smooth_passes = _qresolved.params["smooth_passes"]
 
-    # Hardware auto-detection (soft): --low-vram-mode explícito ganha sempre.
+    # Hardware auto-detection (soft): hw-auto decide o modo memory-efficient.
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
+    mem_eff = False
     hwp = None
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
-            low_vram_mode = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
         # Apply hw-auto overrides (soft — only when user didn't explicitly set)
         if hwp is not None:
             if not _user_set_views and hwp.max_views is not None:
@@ -329,20 +325,20 @@ def texture(
 
     # Resolve defaults BEFORE building the config panel (avoids "None vistas @ Nonepx")
     if max_views is None:
-        max_views = _defaults.LOW_VRAM_MAX_VIEWS if low_vram_mode else _defaults.DEFAULT_PAINT_MAX_VIEWS
+        max_views = _defaults.MEMORY_EFFICIENT_MAX_VIEWS if mem_eff else _defaults.DEFAULT_PAINT_MAX_VIEWS
     if view_resolution is None:
         view_resolution = (
-            _defaults.LOW_VRAM_VIEW_RESOLUTION if low_vram_mode else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+            _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION if mem_eff else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
         )
 
-    rs_label = render_size or ("1024 (low-vram)" if low_vram_mode else "2048")
-    ts_label = texture_size or ("2048 (low-vram)" if low_vram_mode else "4096")
+    rs_label = render_size or ("1024 (memory-efficient)" if mem_eff else "2048")
+    ts_label = texture_size or ("2048 (memory-efficient)" if mem_eff else "4096")
 
     info_table = Table(show_header=False, box=box.SIMPLE)
     info_table.add_row("[bold]Mesh[/bold]", f"[cyan]{mesh_path}[/cyan]")
     info_table.add_row("[bold]Imagem[/bold]", f"[cyan]{image_file}[/cyan]")
     info_table.add_row("[bold]Saída[/bold]", f"[cyan]{output}[/cyan]")
-    quant_label = "SDNQ uint8 (low-vram)" if low_vram_mode else "FP16 (sem quantização)"
+    quant_label = "SDNQ uint8 (memory-efficient)" if mem_eff else "FP16 (sem quantização)"
     attn_label = " · sage-attn" if sage_attention else ""
     info_table.add_row(
         "[bold]Config[/bold]",
@@ -360,7 +356,7 @@ def texture(
         info_table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(info_table, title="[bold green]Hunyuan3D-Paint 2.1", border_style="green"))
 
-    _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
+    _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
 
     parsed_gpu_ids = None
     if gpu_ids is not None:
@@ -392,7 +388,7 @@ def texture(
                     bake_exp=bake_exp,
                     verbose=verbose,
                     preserve_origin=preserve_origin,
-                    low_vram=low_vram_mode,
+                    memory_efficient=mem_eff,
                     gpu_ids=parsed_gpu_ids,
                 )
             emit_progress(item_id, TOOL_PAINT3D, phase="multiview_render", percent=100)
@@ -460,7 +456,6 @@ def texture(
 @click.option("--bake-exp", default=_defaults.DEFAULT_PAINT_BAKE_EXP, type=int)
 @click.option("--smooth/--no-smooth", default=_defaults.DEFAULT_SMOOTH)
 @click.option("--smooth-passes", default=_defaults.DEFAULT_SMOOTH_PASSES, type=int)
-@click.option("--low-vram-mode", is_flag=True)
 @click.option("--preserve-origin/--no-preserve-origin", default=True)
 @click.option("--allow-shared-gpu", is_flag=True)
 @click.option("--gpu-kill-others/--no-gpu-kill-others", default=False)
@@ -471,7 +466,7 @@ def texture(
     "hw_auto",
     default=True,
     show_default=True,
-    help="Auto-detecção de hardware (low-VRAM em GPUs <10GB). Env: PAINT3D_HW_AUTO=0.",
+    help="Auto-detecção de hardware (modo memory-efficient em GPUs <10GB). Env: PAINT3D_HW_AUTO=0.",
 )
 @click.option(
     "--sage-attn",
@@ -506,7 +501,6 @@ def texture_batch(
     bake_exp,
     smooth,
     smooth_passes,
-    low_vram_mode,
     preserve_origin,
     allow_shared_gpu,
     gpu_kill_others,
@@ -557,10 +551,11 @@ def texture_batch(
         smooth_passes = _qresolved.params["smooth_passes"]
 
     hwp = None
+    mem_eff = False
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
-            low_vram_mode = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
         if hwp is not None:
             if not _user_set_views and hwp.max_views is not None:
                 max_views = hwp.max_views
@@ -579,13 +574,13 @@ def texture_batch(
     os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
     if max_views is None:
-        max_views = _defaults.LOW_VRAM_MAX_VIEWS if low_vram_mode else _defaults.DEFAULT_PAINT_MAX_VIEWS
+        max_views = _defaults.MEMORY_EFFICIENT_MAX_VIEWS if mem_eff else _defaults.DEFAULT_PAINT_MAX_VIEWS
     if view_resolution is None:
         view_resolution = (
-            _defaults.LOW_VRAM_VIEW_RESOLUTION if low_vram_mode else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+            _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION if mem_eff else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
         )
 
-    _prepare_gpu(allow_shared_gpu, gpu_kill_others, low_vram=low_vram_mode)
+    _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
 
     parsed_gpu_ids = None
     if gpu_ids is not None:
@@ -641,7 +636,7 @@ def texture_batch(
                 # Preservação feita em glTF sobre o ficheiro final (frame correto); o
                 # preserve por bpy do processor era frágil/em frame errado.
                 preserve_origin=False,
-                low_vram=low_vram_mode,
+                memory_efficient=mem_eff,
                 gpu_ids=parsed_gpu_ids,
             )
             _batch_proc.__enter__()

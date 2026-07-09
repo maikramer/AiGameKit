@@ -93,11 +93,6 @@ def main() -> None:
     help="Desactivar attention slicing.",
 )
 @click.option(
-    "--low-vram-mode",
-    is_flag=True,
-    help="Activar modo baixa VRAM: quantização automática + CPU offload.",
-)
-@click.option(
     "--profile",
     is_flag=True,
     help="Medir tempos, CPU, RAM e VRAM.",
@@ -112,7 +107,7 @@ def main() -> None:
     "--hw-auto/--no-hw-auto",
     default=_d.DEFAULT_HW_AUTO,
     show_default=True,
-    help="Hardware auto-detection: activa --low-vram-mode em GPUs <6 GB (CPU offload + "
+    help="Hardware auto-detection: activa o modo memory-efficient em GPUs <6 GB (CPU offload + "
     "quantização auto). Flags explícitas ganham sempre. Env kill-switch: PART3D_HW_AUTO=0",
 )
 @click.pass_context
@@ -136,7 +131,6 @@ def decompose(
     no_quantize_dit: bool,
     torch_compile: bool,
     no_attention_slicing: bool,
-    low_vram_mode: bool,
     profile: bool,
     gpu_ids: str | None,
     hw_auto: bool,
@@ -174,21 +168,15 @@ def decompose(
         get_quantization_config,
     )
 
-    # --low-vram-mode overrides: activar quantização + CPU offload
-    if low_vram_mode:
-        quantization = "auto"
-        no_quantize_dit = False
-        no_cpu_offload = False
-        no_attention_slicing = False
-
-    # Hardware auto-detection (soft): --low-vram-mode explícito ganha sempre.
+    # Hardware auto-detection (soft): activa o modo memory-efficient em GPUs <6 GB.
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
+    mem_eff = False
     hwp = None
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if not low_vram_mode and hwp.low_vram and hwp.device == "cuda":
-            low_vram_mode = True
+        if hwp.memory_efficient and hwp.device == "cuda":
+            mem_eff = True
             quantization = "auto"
             no_quantize_dit = False
             no_cpu_offload = False
@@ -297,7 +285,7 @@ def decompose(
             quantize_dit=not no_quantize_dit,
             enable_torch_compile=torch_compile,
             enable_attention_slicing=not no_attention_slicing,
-            low_vram=low_vram_mode,
+            memory_efficient=mem_eff,
             gpu_ids=parsed_gpu_ids,
         ) as pipe,
     ):
