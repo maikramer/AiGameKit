@@ -16,3 +16,13 @@ def require_audio_stack() -> None:
         import stable_audio_tools  # noqa: F401
     except (ImportError, OSError) as exc:
         pytest.skip(f"stable_audio_tools not available: {exc}", allow_module_level=True)
+
+
+def require_mastering_stack() -> None:
+    """Skip if the DSP mastering deps (pedalboard + pyloudnorm) are unavailable.
+
+    These are needed for the advanced mastering-chain tests; the core
+    audio_processor tests only need torch + soundfile.
+    """
+    pytest.importorskip("pedalboard")
+    pytest.importorskip("pyloudnorm")

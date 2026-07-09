@@ -52,6 +52,7 @@ class GenerationResult:
     sigma_min: float
     sigma_max: float
     device: str
+    negative_prompt: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -328,6 +329,7 @@ class AudioGenerator:
         sigma_max: float = DEFAULT_SIGMA_MAX,
         sampler_type: str = DEFAULT_SAMPLER,
         prompt_hints: list[str] | None = None,
+        negative_prompt: str | None = None,
     ) -> GenerationResult:
         """Gera áudio estéreo a partir de um prompt de texto.
 
@@ -341,6 +343,9 @@ class AudioGenerator:
             sigma_max: Máximo do noise schedule.
             sampler_type: Tipo de sampler (dpmpp-3m-sde, etc.).
             prompt_hints: Hints adicionais para enriquecer o prompt (ex.: "seamless loop").
+            negative_prompt: Negative prompt (anti-guidance). Steering away from
+                described concepts via batch CFG. None/empty = sem negative prompt
+                (comportamento clássico do modelo).
 
         Returns:
             GenerationResult com tensor de áudio raw (float32, 2 canais).
@@ -364,14 +369,28 @@ class AudioGenerator:
             }
         ]
 
+        # Negative conditioning: same dict shape as the positive one. Passed
+        # straight to generate_diffusion_cond which applies batch CFG. Omit
+        # entirely when there's no negative prompt to preserve the classic path.
+        negative_conditioning: list[dict[str, Any]] | None = None
+        effective_negative: str | None = None
+        if negative_prompt and negative_prompt.strip():
+            effective_negative = negative_prompt.strip()
+            negative_conditioning = [
+                {
+                    "prompt": effective_negative,
+                    "seconds_start": 0,
+                    "seconds_total": duration,
+                }
+            ]
+
         with self._generation_context():
             gen_device = f"cuda:{self._gpu_ids[0]}" if self._multi_gpu and self._gpu_ids else self._device
             rf_sampler = sampler_type
             if getattr(self._model, "diffusion_objective", "") == "rectified_flow":
                 rf_sampler = _RF_SAMPLER_MAP.get(sampler_type, "euler")
             has_pretransform = getattr(self._model, "pretransform", None) is not None
-            output = generate_diffusion_cond(
-                self._model,
+            gen_kwargs: dict[str, Any] = dict(
                 steps=steps,
                 cfg_scale=cfg_scale,
                 conditioning=conditioning,
@@ -385,6 +404,9 @@ class AudioGenerator:
                 # em CPU sem repetir a difusão inteira.
                 return_latents=has_pretransform,
             )
+            if negative_conditioning is not None:
+                gen_kwargs["negative_conditioning"] = negative_conditioning
+            output = generate_diffusion_cond(self._model, **gen_kwargs)
             if has_pretransform:
                 output = self._decode_latents(output)
 
@@ -402,4 +424,5 @@ class AudioGenerator:
             sigma_min=sigma_min,
             sigma_max=sigma_max,
             device=self._device,
+            negative_prompt=effective_negative,
         )

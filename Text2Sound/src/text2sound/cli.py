@@ -11,6 +11,7 @@ import time
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 try:
     from importlib.metadata import version as _pkg_version
@@ -354,6 +355,77 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="Força decode do VAE em chunks (auto: ligado em GPUs < 8.5 GB).",
 )
+# --- Negative prompt ---
+@click.option(
+    "--negative",
+    "negative_prompt",
+    default=None,
+    help="Negative prompt explícito (anti-guidance). Override do default do audio_kind.",
+)
+@click.option(
+    "--no-negative",
+    "disable_negative",
+    is_flag=True,
+    default=False,
+    help="Desliga o negative prompt default do audio_kind (geração positiva pura).",
+)
+# --- DSP mastering chain (pedalboard) ---
+@click.option(
+    "--lufs",
+    "lufs_target",
+    type=click.FloatRange(min=-40.0, max=0.0),
+    default=None,
+    help="Target LUFS integrated (EBU R128). Ativa mastering chain; substitui peak-normalize.",
+)
+@click.option(
+    "--no-loudness",
+    "disable_loudness",
+    is_flag=True,
+    default=False,
+    help="Desliga LUFS normalization do quality tier (volta a peak-normalize legacy).",
+)
+@click.option(
+    "--high-pass",
+    "high_pass_hz",
+    type=click.FloatRange(min=0.0, max=300.0),
+    default=None,
+    help="Filtro high-pass em Hz (0 = desligado). Remove DC offset e rumble.",
+)
+@click.option(
+    "--compressor/--no-compressor",
+    "compressor_override",
+    default=None,
+    help="Força compressor on/off. Default: deferred para quality tier / audio_kind.",
+)
+@click.option(
+    "--compressor-preset",
+    "compressor_preset_override",
+    type=click.Choice(["punch", "glue", "master_glue", "transparent"], case_sensitive=False),
+    default=None,
+    help="Preset de compressor. Default: do audio_kind (punch/glue/...).",
+)
+@click.option(
+    "--true-peak",
+    "true_peak_db",
+    type=click.FloatRange(min=-6.0, max=0.0),
+    default=None,
+    help="Teto do limiter true-peak em dB (ex.: -1.0). Protege contra clipping.",
+)
+@click.option(
+    "--bit-depth",
+    "bit_depth",
+    type=click.IntRange(16, 24),
+    default=16,
+    show_default=True,
+    help="Bit depth WAV/FLAC (16 ou 24). Sem efeito em OGG.",
+)
+@click.option(
+    "--enhance/--no-enhance",
+    "enhance_override",
+    default=None,
+    help="Enriquecimento determinístico de prompt (descritores + correção). "
+    "Default: do quality tier (fast OFF, medium+ ON).",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -384,6 +456,16 @@ def generate_cmd(
     loop_edge_trim_s: float,
     hw_auto: bool,
     chunked_vae: bool | None,
+    negative_prompt: str | None,
+    disable_negative: bool,
+    lufs_target: float | None,
+    disable_loudness: bool,
+    high_pass_hz: float | None,
+    compressor_override: bool | None,
+    compressor_preset_override: str | None,
+    true_peak_db: float | None,
+    bit_depth: int,
+    enhance_override: bool | None,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -434,12 +516,21 @@ def generate_cmd(
 
     # QualityEngine resolution: merge quality + category params (CLI always wins)
     resolved_hints: list[str] = []
+    resolved_negative_hints: list[str] = []
     trim_buffer_ms: int = 200  # default buffer
     trim_threshold_db: float = -60.0  # default threshold
     quality_audio_kind: str | None = None
     # Category-resolved seamless-loop defaults (overridden by explicit --seamless-loop below)
     category_seamless: bool = False
     category_crossfade_ms: float = 500.0
+    # DSP mastering params resolved from quality tier (overridden by explicit CLI flags)
+    resolved_lufs: float | None = None
+    resolved_high_pass: float | None = None
+    resolved_compressor: bool | None = None
+    resolved_true_peak: float | None = None
+    resolved_ogg_quality: float | None = None
+    resolved_enhance: bool | None = None
+    kind_compressor_preset: str | None = None
 
     try:
         from gamedev_shared.quality import QualityEngine
@@ -459,19 +550,38 @@ def generate_cmd(
         if ctx.get_parameter_source("sampler") == ParameterSource.DEFAULT and "sampler" in resolved.params:
             sampler = str(resolved.params["sampler"])
 
+        # DSP mastering params from the quality tier (soft — CLI flags override)
+        if ctx.get_parameter_source("lufs_target") == ParameterSource.DEFAULT and "lufs_target" in resolved.params:
+            resolved_lufs = float(resolved.params["lufs_target"])
+        if ctx.get_parameter_source("high_pass_hz") == ParameterSource.DEFAULT and "high_pass_hz" in resolved.params:
+            resolved_high_pass = float(resolved.params["high_pass_hz"])
+        if (
+            ctx.get_parameter_source("compressor_override") == ParameterSource.DEFAULT
+            and "compressor" in resolved.params
+        ):
+            resolved_compressor = bool(resolved.params["compressor"])
+        if ctx.get_parameter_source("true_peak_db") == ParameterSource.DEFAULT and "true_peak_db" in resolved.params:
+            resolved_true_peak = float(resolved.params["true_peak_db"])
+        if "ogg_quality" in resolved.params:
+            resolved_ogg_quality = float(resolved.params["ogg_quality"])
+        if ctx.get_parameter_source("enhance_override") == ParameterSource.DEFAULT and "enhance" in resolved.params:
+            resolved_enhance = bool(resolved.params["enhance"])
+
         resolved_hints = resolved.prompt_hints
+        resolved_negative_hints = resolved.negative_prompt_hints
         quality_audio_kind = resolved.audio_kind
 
         # Auto-select model from quality resolution (if set and CLI didn't override)
         if resolved.model_id is not None and ctx.get_parameter_source("model_id") == ParameterSource.DEFAULT:
             model_id = resolved.model_id
 
-            # Determine trim buffer from audio_kind_info
+            # Determine trim buffer + compressor preset from audio_kind_info
             if quality_audio_kind:
                 try:
                     kind_info = qe.audio_kind_info(quality_audio_kind)
                     trim_buffer_ms = int(kind_info.get("trim_buffer_ms", 200))
                     trim_threshold_db = float(kind_info.get("trim_threshold_db", -60.0))
+                    kind_compressor_preset = kind_info.get("compressor_preset")
                     # Seamless loop from audio_kind (overridden later by --seamless-loop if given)
                     if kind_info.get("loop_hint"):
                         category_seamless = True
@@ -493,6 +603,53 @@ def generate_cmd(
         category_seamless=category_seamless,
         category_crossfade_ms=category_crossfade_ms,
     )
+
+    # --- DSP mastering: final precedence (explicit flag > resolved tier > None) ---
+    # LUFS: --no-loudness wins over everything; otherwise explicit --lufs > tier.
+    if disable_loudness:
+        final_lufs: float | None = None
+    else:
+        final_lufs = lufs_target if lufs_target is not None else resolved_lufs
+    # High-pass: explicit > tier.
+    final_high_pass = high_pass_hz if high_pass_hz is not None else resolved_high_pass
+    # True-peak: explicit > tier (only meaningful when mastering is active).
+    final_true_peak = true_peak_db if true_peak_db is not None else resolved_true_peak
+    # Compressor on/off: explicit override > tier (only when a preset is available).
+    final_compressor = compressor_override if compressor_override is not None else resolved_compressor
+    # Compressor preset: explicit override > audio_kind default.
+    final_compressor_preset = compressor_preset_override or kind_compressor_preset
+    # When the tier disabled compressor (fast), don't force it on just because
+    # a kind preset exists — the tier's intent wins unless the user overrides.
+    if resolved_compressor is False and compressor_override is None:
+        final_compressor_enabled: bool | None = False
+    else:
+        final_compressor_enabled = final_compressor
+    # OGG quality only applies to OGG output.
+    final_ogg_quality = resolved_ogg_quality if fmt == "ogg" else None
+
+    # --- Negative prompt: explicit --negative > audio_kind hint; --no-negative disables ---
+    if disable_negative:
+        effective_negative: str | None = None
+    elif negative_prompt:
+        effective_negative = negative_prompt
+    elif resolved_negative_hints:
+        effective_negative = ", ".join(resolved_negative_hints)
+    else:
+        effective_negative = None
+
+    # --- Prompt enhancement: explicit --enhance > quality tier; deterministic local ---
+    final_enhance = enhance_override if enhance_override is not None else resolved_enhance
+    enhancement_meta: dict[str, Any] | None = None
+    if final_enhance:
+        try:
+            from .prompt_enhancer import enhance_negative, enhance_prompt
+
+            prompt, enhancement_meta = enhance_prompt(prompt, audio_kind=quality_audio_kind)
+            if effective_negative:
+                effective_negative = enhance_negative(effective_negative)
+        except Exception:
+            # Enhancement é best-effort: nunca deve partir a geração.
+            enhancement_meta = None
 
     try:
         resolved_model_id = resolve_model_from_profile(profile, model_id)
@@ -544,6 +701,27 @@ def generate_cmd(
         table.add_row("[bold]Audio Kind[/bold]", quality_audio_kind)
     if seamless_loop:
         table.add_row("[bold]Seamless Loop[/bold]", f"[green]ON[/green] ({crossfade_ms:.0f}ms crossfade)")
+    if effective_negative:
+        table.add_row("[bold]Negative[/bold]", f"[dim]{effective_negative}[/dim]")
+    if enhancement_meta:
+        enh_label = enhancement_meta.get("sound_type", "?")
+        enh_n = len(enhancement_meta.get("descriptors_added", []))
+        table.add_row("[bold]Enhance[/bold]", f"[green]ON[/green] ({enh_label}, +{enh_n} descritores)")
+    if final_lufs is not None or final_compressor_enabled or final_high_pass or final_true_peak is not None:
+        dsp_parts: list[str] = []
+        if final_lufs is not None:
+            dsp_parts.append(f"LUFS={final_lufs:.0f}")
+        if final_compressor_enabled and final_compressor_preset:
+            dsp_parts.append(f"comp={final_compressor_preset}")
+        elif final_compressor_enabled:
+            dsp_parts.append("comp=on")
+        if final_high_pass:
+            dsp_parts.append(f"HP={final_high_pass:.0f}Hz")
+        if final_true_peak is not None:
+            dsp_parts.append(f"TP={final_true_peak:.1f}dB")
+        if bit_depth != 16:
+            dsp_parts.append(f"{bit_depth}-bit")
+        table.add_row("[bold]Mastering[/bold]", " ".join(dsp_parts) or "[dim]off[/dim]")
     if hw_profile is not None:
         table.add_row("[bold]HW Auto[/bold]", hw_profile.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
@@ -559,6 +737,8 @@ def generate_cmd(
         "trim": trim,
         "seamless_loop": seamless_loop,
         "crossfade_ms": crossfade_ms,
+        "negative_prompt": effective_negative,
+        "lufs_target": final_lufs,
     }
     item_id = Path(output).stem if output else prompt[:40].replace(" ", "_")
     start = time.time()
@@ -608,6 +788,7 @@ def generate_cmd(
                         sigma_max=sigma_max,
                         sampler_type=sampler,
                         prompt_hints=resolved_hints or None,
+                        negative_prompt=effective_negative,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="diffusion", percent=100)
@@ -644,6 +825,10 @@ def generate_cmd(
                     metadata["category"] = category
                 if quality_audio_kind:
                     metadata["audio_kind"] = quality_audio_kind
+                if effective_negative:
+                    metadata["negative_prompt"] = effective_negative
+                if enhancement_meta:
+                    metadata["prompt_enhancement"] = enhancement_meta
 
                 with profile_span("save"):
                     saved = save_audio(
@@ -660,6 +845,13 @@ def generate_cmd(
                         loop_edge_trim_s=loop_edge_trim_s,
                         crop_seconds=duration if crop else None,
                         fade_out_seconds=fade_out,
+                        lufs_target=final_lufs,
+                        high_pass_hz=final_high_pass,
+                        compressor_preset=final_compressor_preset if final_compressor_enabled else None,
+                        compressor_enabled=final_compressor_enabled,
+                        true_peak_db=final_true_peak,
+                        bit_depth=bit_depth,
+                        ogg_quality=final_ogg_quality,
                     )
 
                 emit_progress(item_id, TOOL_TEXT2SOUND, phase="save", percent=100)

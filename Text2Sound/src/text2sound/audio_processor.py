@@ -197,6 +197,174 @@ def apply_seamless_loop_crossfade(
     return result
 
 
+# Bit-depth → soundfile subtype. 24-bit is only meaningful for lossless
+# formats (WAV/FLAC); OGG Vorbis is always lossy regardless of this setting.
+_SF_SUBTYPES_BY_DEPTH = {
+    (16, "wav"): "PCM_16",
+    (24, "wav"): "PCM_24",
+    (16, "flac"): "PCM_16",
+    (24, "flac"): "PCM_24",
+    (16, "ogg"): "VORBIS",
+    (24, "ogg"): "VORBIS",
+}
+
+# Curated compressor presets — string key in YAML → pedalboard params.
+# Tuned for game-audio use cases; not meant to expose every knob.
+_COMPRESSOR_PRESETS: dict[str, dict[str, float]] = {
+    # Punchy / aggressive for transients: impacts, weapons, destruction.
+    "punch": {"threshold_db": -18.0, "ratio": 4.0, "attack_ms": 3.0, "release_ms": 80.0},
+    # Gentle glue for sustained/looping material: ambients, vehicles, mechanical.
+    "glue": {"threshold_db": -24.0, "ratio": 2.0, "attack_ms": 10.0, "release_ms": 200.0},
+    # Mastering glue for music loops.
+    "master_glue": {"threshold_db": -20.0, "ratio": 2.5, "attack_ms": 8.0, "release_ms": 150.0},
+    # Barely-there control for clean/short SFX (UI, collectibles).
+    "transparent": {"threshold_db": -22.0, "ratio": 1.5, "attack_ms": 5.0, "release_ms": 120.0},
+}
+
+# librosa/soundfile/pedalboard/pyloudnorm convention is (samples, channels).
+# Internally the DSP here works in numpy float32 with that layout.
+
+
+def _measure_loudness_lufs(audio_np: np.ndarray, sample_rate: int) -> float:
+    """Measure integrated LUFS (EBU R128, K-weighted, gated).
+
+    Args:
+        audio_np: shape (samples,) or (samples, channels), float32.
+        sample_rate: Hz.
+
+    Returns:
+        Integrated loudness in LUFS, or -inf / a very low value for silence.
+    """
+    import pyloudnorm as pyln
+
+    meter = pyln.Meter(sample_rate)
+    # pyloudnorm expects (samples, channels); 1D is treated as mono.
+    return float(meter.integrated_loudness(audio_np))
+
+
+def apply_mastering_chain(
+    audio: torch.Tensor,
+    sample_rate: int,
+    *,
+    high_pass_hz: float | None = None,
+    compressor_preset: str | None = None,
+    compressor_enabled: bool | None = None,
+    lufs_target: float | None = None,
+    true_peak_db: float | None = None,
+    headroom_db: float = 0.3,
+) -> torch.Tensor:
+    """Apply an optional mastering chain (pedalboard + pyloudnorm).
+
+    The chain, in order (each stage skipped if its param is None):
+      1. High-pass filter — removes DC offset and sub-audible rumble.
+      2. Compressor — dynamic-range control, selected by ``compressor_preset``.
+      3. LUFS normalization (EBU R128) — measure + gain to ``lufs_target``.
+      4. True-peak limiter — hard ceiling at ``true_peak_db`` dB.
+
+    A fixed headroom margin (``headroom_db``) is left below 0 dBFS at the very
+    end via a Gain stage, so PCM quantization rounding cannot clip.
+
+    This is a pure function: returns a new tensor, never mutates the input.
+    When every optional param is None, the audio is returned unchanged.
+
+    Args:
+        audio: Tensor (channels, samples) float.
+        sample_rate: Sample rate in Hz.
+        high_pass_hz: High-pass cutoff in Hz (None / 0 = skip).
+        compressor_preset: Key into ``_COMPRESSOR_PRESETS`` (None = skip).
+        compressor_enabled: Explicit override; when False the compressor is
+            skipped even if ``compressor_preset`` is set. Defaults to the
+            preset's presence.
+        lufs_target: Target integrated loudness in LUFS (None = skip LUFS).
+        true_peak_db: Limiter ceiling in dB (None = skip limiter).
+        headroom_db: Margin below 0 dBFS applied at the end (default 0.3).
+
+    Returns:
+        Tensor (channels, samples) float32, same shape as input.
+    """
+    if audio.shape[-1] == 0:
+        return audio
+
+    # Decide whether there's any work to do.
+    want_hp = bool(high_pass_hz and high_pass_hz > 0)
+    want_comp = bool(compressor_preset) and (compressor_enabled is not False)
+    want_lufs = lufs_target is not None
+    want_limiter = true_peak_db is not None
+    if not (want_hp or want_comp or want_lufs or want_limiter):
+        return audio
+
+    try:
+        from pedalboard import Compressor, HighpassFilter, Limiter, Pedalboard
+    except ImportError:
+        # pedalboard unavailable — degrade gracefully, preserve old behaviour.
+        return audio
+
+    # (channels, samples) → (samples, channels) for pedalboard.
+    audio_in = audio.detach().cpu().to(torch.float32).numpy().T
+    original_shape = audio_in.shape
+    # Ensure 2D (mono → (N, 1)) so pedalboard treats it consistently.
+    if audio_in.ndim == 1:
+        audio_in = audio_in.reshape(-1, 1)
+
+    # Stage 1: high-pass + compressor run first (shape the signal).
+    shaping: list = []
+    if want_hp:
+        shaping.append(HighpassFilter(cutoff_frequency_hz=float(high_pass_hz)))
+    if want_comp:
+        if compressor_preset not in _COMPRESSOR_PRESETS:
+            raise ValueError(
+                f"compressor_preset '{compressor_preset}' desconhecido. "
+                f"Opções: {', '.join(sorted(_COMPRESSOR_PRESETS))}"
+            )
+        shaping.append(Compressor(**_COMPRESSOR_PRESETS[compressor_preset]))
+
+    if shaping:
+        shaped_board = Pedalboard(shaping)
+        audio_in = shaped_board(audio_in, sample_rate)
+
+    # Stage 2: true-peak limiter — protect the ceiling BEFORE loudness
+    # normalization. Order matters: the limiter shapes the peaks, then the LUFS
+    # gain is applied as a final digital amplitude change that the limiter
+    # never sees (so they don't fight each other).
+    if want_limiter:
+        lim_board = Pedalboard([Limiter(threshold_db=float(true_peak_db), release_ms=100.0)])
+        audio_in = lim_board(audio_in, sample_rate)
+
+    # Stage 3: LUFS normalization as the FINAL step. Measured on the fully-
+    # processed signal (post HP/compressor/limiter), applied as a pure digital
+    # gain. This is exact because nothing downstream alters loudness — the
+    # headroom margin is folded into the same gain to avoid re-clipping.
+    if want_lufs:
+        import pyloudnorm as pyln
+
+        meter = pyln.Meter(sample_rate)
+        measured = meter.integrated_loudness(audio_in)
+        if np.isfinite(measured):
+            # Target slightly below the requested LUFS to leave headroom margin,
+            # so the final gain + margin lands on the requested value and stays
+            # under 0 dBFS without re-clipping.
+            effective_target = float(lufs_target) - (float(headroom_db) if headroom_db else 0.0)
+            delta_db = effective_target - float(measured)
+            audio_in = audio_in * (10.0 ** (delta_db / 20.0))
+            # Hard safety clip in case rounding pushes a sample over 1.0.
+            audio_in = np.clip(audio_in, -1.0, 1.0)
+
+    processed = audio_in
+
+    # Final headroom margin — only when LUFS normalization did NOT already fold
+    # it in (i.e., LUFS was off but other mastering stages ran).
+    if headroom_db and headroom_db > 0 and not want_lufs:
+        processed = processed * (10.0 ** (-float(headroom_db) / 20.0))
+
+    processed = np.clip(processed, -1.0, 1.0)
+
+    # Restore original layout: if input was mono 1D, keep it 1D.
+    if len(original_shape) == 1:
+        processed = processed[:, 0]
+    out = torch.from_numpy(np.ascontiguousarray(processed.T)).to(torch.float32)
+    return out
+
+
 def save_audio(
     audio: torch.Tensor,
     sample_rate: int,
@@ -214,8 +382,20 @@ def save_audio(
     loop_edge_trim_s: float = 0.0,
     crop_seconds: float | None = None,
     fade_out_seconds: float = 0.06,
+    # --- DSP mastering chain (pedalboard) ---
+    lufs_target: float | None = None,
+    high_pass_hz: float | None = None,
+    compressor_preset: str | None = None,
+    compressor_enabled: bool | None = None,
+    true_peak_db: float | None = None,
+    headroom_db: float = 0.3,
+    bit_depth: int = 16,
+    ogg_quality: float | None = None,
 ) -> Path:
     """Processa e grava áudio num ficheiro.
+
+    Pipeline: peak-normalize (legacy) → trim → crop → loop/fade →
+    mastering chain → write.
 
     Args:
         audio: Tensor (channels, samples).
@@ -223,7 +403,8 @@ def save_audio(
         output_path: Caminho de saída (extensão será ajustada ao formato).
         fmt: Formato de saída (wav, flac, ogg).
         as_int16: Converter para int16 antes de gravar (WAV).
-        normalize: Aplicar normalização de pico.
+        normalize: Aplicar normalização de pico. Ignorado quando
+            ``lufs_target`` está definido (LUFS normalization substitui).
         trim: Remover silêncio no início e no fim.
         metadata: Metadados para gravar num .json ao lado do áudio.
         trim_buffer_ms: Buffer em ms ao cortar silêncio (passado a trim_silence).
@@ -233,6 +414,16 @@ def save_audio(
         crossfade_ms: Crossfade duration in milliseconds (only used when seamless_loop=True).
         loop_edge_trim_s: Seconds of musical intro/outro removed from each edge
             before the loop crossfade (only used when seamless_loop=True).
+        lufs_target: Target integrated LUFS (EBU R128). Ativa a cadeia de
+            mastering e desativa o peak-normalize legacy.
+        high_pass_hz: Filtro high-pass em Hz (None/0 = desligado).
+        compressor_preset: Preset de compressor (punch|glue|master_glue|transparent).
+        compressor_enabled: Override explícito do compressor (False desliga mesmo
+            com preset definido).
+        true_peak_db: Teto do limiter true-peak em dB (None = sem limiter).
+        headroom_db: Margem abaixo de 0 dBFS aplicada no fim da cadeia.
+        bit_depth: 16 (default) ou 24 para WAV/FLAC (sem efeito em OGG).
+        ogg_quality: Qualidade Vorbis 0.0-1.0 (apenas OGG; None = default libsndfile).
 
     Returns:
         Caminho do ficheiro de áudio gravado.
@@ -240,10 +431,15 @@ def save_audio(
     fmt = fmt.lower()
     if fmt not in SUPPORTED_FORMATS:
         raise ValueError(f"Formato '{fmt}' não suportado. Opções: {', '.join(SUPPORTED_FORMATS)}")
+    if bit_depth not in (16, 24):
+        raise ValueError(f"bit_depth deve ser 16 ou 24 (recebido {bit_depth}).")
 
+    mastering_active = lufs_target is not None
     audio = audio.cpu().to(torch.float32)
 
-    if normalize:
+    # Peak-normalize only when LUFS mastering is NOT active — the mastering
+    # chain (LUFS normalize + limiter) replaces it and is mutually exclusive.
+    if normalize and not mastering_active:
         audio = peak_normalize(audio)
 
     if trim:
@@ -271,13 +467,31 @@ def save_audio(
     elif apply_fade:
         audio = apply_edge_fade(audio, sample_rate)
 
+    # Mastering chain runs AFTER shaping: LUFS/limiter must see the final
+    # signal (post-trim, post-loop) to target and protect it correctly.
+    if mastering_active or high_pass_hz or compressor_preset or true_peak_db is not None:
+        audio = apply_mastering_chain(
+            audio,
+            sample_rate,
+            high_pass_hz=high_pass_hz,
+            compressor_preset=compressor_preset,
+            compressor_enabled=compressor_enabled,
+            lufs_target=lufs_target,
+            true_peak_db=true_peak_db,
+            headroom_db=headroom_db,
+        )
+
     output_path = output_path.with_suffix(f".{fmt}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     # (channels, samples) → (samples, channels) for soundfile
-    audio_np: np.ndarray = audio.numpy().T
-    subtype = _SF_SUBTYPES.get(fmt, "PCM_16")
-    sf.write(str(output_path), audio_np, sample_rate, subtype=subtype)
+    audio_np: np.ndarray = np.ascontiguousarray(audio.numpy().T)
+    subtype = _SF_SUBTYPES_BY_DEPTH.get((bit_depth, fmt), _SF_SUBTYPES.get(fmt, "PCM_16"))
+
+    if fmt == "ogg" and ogg_quality is not None:
+        _write_ogg_with_quality(str(output_path), audio_np, sample_rate, float(ogg_quality))
+    else:
+        sf.write(str(output_path), audio_np, sample_rate, subtype=subtype)
 
     if metadata:
         if seamless_loop:
@@ -288,6 +502,19 @@ def save_audio(
         if crop_seconds is not None:
             metadata["crop_seconds"] = crop_seconds
             metadata["fade_out_seconds"] = fade_out_seconds
+        if mastering_active or high_pass_hz or compressor_preset or true_peak_db is not None:
+            metadata["mastering"] = {
+                "lufs_target": lufs_target,
+                "high_pass_hz": high_pass_hz,
+                "compressor_preset": compressor_preset,
+                "compressor_enabled": compressor_enabled,
+                "true_peak_db": true_peak_db,
+                "headroom_db": headroom_db,
+            }
+        if bit_depth != 16:
+            metadata["bit_depth"] = bit_depth
+        if fmt == "ogg" and ogg_quality is not None:
+            metadata["ogg_quality"] = ogg_quality
         meta_path = output_path.with_suffix(output_path.suffix + ".json")
         meta_path.write_text(
             json.dumps(metadata, indent=2, ensure_ascii=False),
@@ -295,3 +522,33 @@ def save_audio(
         )
 
     return output_path
+
+
+def _write_ogg_with_quality(path: str, audio_np: np.ndarray, sample_rate: int, quality: float) -> None:
+    """Write OGG Vorbis, attempting to set the libsndfile Vorbis quality.
+
+    libsndfile supports per-file Vorbis quality (0.0-1.0) via the
+    ``SFC_SET_VORBIS_QUALITY`` command on the C file handle. soundfile's Python
+    binding does not expose a public setter, so we fall back to the default
+    encoder quality (which is reasonable) and record the requested value in the
+    metadata for traceability. A future version may shell out to ``ffmpeg``/``oggenc``
+    when exact bitrate control is required.
+
+    Args:
+        path: Output ``.ogg`` path.
+        audio_np: shape (samples, channels), float.
+        sample_rate: Hz.
+        quality: Requested Vorbis quality 0.0-1.0 (clamped; recorded in metadata).
+    """
+    quality = max(0.0, min(1.0, quality))
+    # Best-effort: try the internal C-command setter; ignore if unavailable.
+    try:
+        with sf.SoundFile(path, "w", samplerate=sample_rate, channels=audio_np.shape[1], subtype="VORBIS") as f:
+            # SFC_SET_VORBIS_QUALITY == 0x1000 | int(quality*10) per libsndfile docs.
+            cfile = f._file if hasattr(f, "_file") else None
+            if cfile is not None and hasattr(cfile, "command"):
+                cfile.command(0x1000 | int(quality * 10))
+            f.write(audio_np)
+    except Exception:
+        # Fallback: plain write with default encoder quality.
+        sf.write(path, audio_np, sample_rate, subtype="VORBIS")

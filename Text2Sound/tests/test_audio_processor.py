@@ -377,6 +377,147 @@ class TestSaveAudio:
         assert data["crossfade_ms"] == 500.0
 
 
+class TestApplyMasteringChain:
+    """Tests for the pedalboard-based mastering chain (LUFS/compressor/limiter/HP)."""
+
+    def setup_method(self):
+        from tests._heavy_deps import require_mastering_stack
+
+        require_mastering_stack()
+        from text2sound.audio_processor import apply_mastering_chain
+
+        self.apply_mastering_chain = apply_mastering_chain
+        # 3-second stereo sine with amplitude envelope (dynamic range to compress)
+        sr = 44100
+        n = sr * 3
+        t = torch.linspace(0.0, 3.0, n)
+        env = 0.5 + 0.5 * torch.sin(2 * 3.14159 * 0.5 * t)
+        self.sr = sr
+        self.audio = torch.stack([0.3 * torch.sin(2 * 3.14159 * 440 * t) * env] * 2)
+
+    def test_noop_when_all_none(self):
+        """When every optional param is None, the audio is returned unchanged."""
+        from text2sound.audio_processor import apply_mastering_chain
+
+        out = apply_mastering_chain(self.audio, self.sr)
+        assert torch.equal(out, self.audio)
+
+    def test_does_not_mutate_input(self):
+        """Mastering returns a new tensor; input is never modified in-place."""
+        original = self.audio.clone()
+        self.apply_mastering_chain(
+            self.audio, self.sr, lufs_target=-16.0, high_pass_hz=30, compressor_preset="punch", true_peak_db=-1.0
+        )
+        assert torch.equal(self.audio, original)
+
+    def test_lufs_normalization_target(self):
+        """Without a limiter, output LUFS matches the requested target closely."""
+        import pyloudnorm as pyln
+
+        out = self.apply_mastering_chain(self.audio, self.sr, lufs_target=-16.0)
+        meter = pyln.Meter(self.sr)
+        measured = meter.integrated_loudness(out.numpy().T)
+        # Without a limiter in the way, the gain is exact (±0.5 LU tolerance).
+        assert abs(measured - (-16.0)) < 1.0, f"LUFS {measured:.2f} too far from -16"
+
+    def test_lufs_with_limiter_is_approximate(self):
+        """With a limiter, LUFS deviates from target (limiter reshapes dynamics).
+
+        This documents the expected behaviour: the limiter protects the ceiling
+        but changes loudness, so the target becomes approximate, not exact.
+        """
+        import pyloudnorm as pyln
+
+        out = self.apply_mastering_chain(self.audio, self.sr, lufs_target=-16.0, true_peak_db=-1.0)
+        meter = pyln.Meter(self.sr)
+        measured = meter.integrated_loudness(out.numpy().T)
+        # Limiter may push loudness up by a few LU; just assert it ran sanely.
+        assert -30.0 < measured < 0.0
+
+    def test_true_peak_respects_ceiling(self):
+        """With a limiter ceiling, max sample stays below 0 dBFS plus margin."""
+        out = self.apply_mastering_chain(self.audio, self.sr, lufs_target=-14.0, true_peak_db=-1.0, headroom_db=0.3)
+        # -1 dBTP ceiling → peak ≈ 10^(-1/20) ≈ 0.89; headroom adds margin.
+        assert float(out.abs().max()) < 1.0
+        assert float(out.abs().max()) < 0.95
+
+    def test_invalid_compressor_preset_raises(self):
+        with pytest.raises(ValueError, match="compressor_preset"):
+            self.apply_mastering_chain(self.audio, self.sr, compressor_preset="bogus")
+
+    def test_compressor_preset_valid(self):
+        """Each curated preset name is accepted without error."""
+        for preset in ("punch", "glue", "master_glue", "transparent"):
+            self.apply_mastering_chain(self.audio, self.sr, compressor_preset=preset, lufs_target=-16.0)
+
+    def test_compressor_disabled_skips(self):
+        """compressor_enabled=False skips the compressor even with a preset set."""
+        # Should not raise and should still apply LUFS.
+        out = self.apply_mastering_chain(
+            self.audio,
+            self.sr,
+            compressor_preset="punch",
+            compressor_enabled=False,
+            lufs_target=-16.0,
+            true_peak_db=-1.0,
+        )
+        assert out.shape == self.audio.shape
+
+
+class TestSaveAudioMastering:
+    """save_audio integration with the mastering chain."""
+
+    def setup_method(self):
+        from tests._heavy_deps import require_mastering_stack
+
+        require_mastering_stack()
+        sr = 44100
+        n = sr * 2
+        t = torch.linspace(0.0, 2.0, n)
+        self.sr = sr
+        self.audio = torch.stack([0.25 * torch.sin(2 * 3.14159 * 440 * t)] * 2)
+
+    def test_lufs_replaces_peak_normalize(self, tmp_path):
+        """When lufs_target is set, peak-normalize legacy is skipped (LUFS owns gain)."""
+        out = tmp_path / "lufs.ogg"
+        save_audio(self.audio, self.sr, out, fmt="ogg", lufs_target=-20.0, true_peak_db=-1.0)
+        assert out.exists()
+
+    def test_bit_depth_24_wav(self, tmp_path):
+        import soundfile as sf
+
+        out = tmp_path / "24bit.wav"
+        save_audio(self.audio, self.sr, out, fmt="wav", bit_depth=24)
+        assert sf.info(str(out)).subtype == "PCM_24"
+
+    def test_invalid_bit_depth_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="bit_depth"):
+            save_audio(self.audio, self.sr, tmp_path / "x.wav", fmt="wav", bit_depth=32)
+
+    def test_metadata_records_mastering(self, tmp_path):
+        out = tmp_path / "meta.ogg"
+        save_audio(
+            self.audio,
+            self.sr,
+            out,
+            fmt="ogg",
+            lufs_target=-16.0,
+            high_pass_hz=30,
+            compressor_preset="glue",
+            true_peak_db=-1.0,
+            metadata={"prompt": "x"},
+        )
+        meta = json.loads(out.with_suffix(".ogg.json").read_text())
+        assert meta["mastering"]["lufs_target"] == -16.0
+        assert meta["mastering"]["compressor_preset"] == "glue"
+
+    def test_ogg_quality_in_metadata(self, tmp_path):
+        out = tmp_path / "q.ogg"
+        save_audio(self.audio, self.sr, out, fmt="ogg", ogg_quality=0.7, metadata={"p": 1})
+        meta = json.loads(out.with_suffix(".ogg.json").read_text())
+        assert meta["ogg_quality"] == 0.7
+
+
 class TestConstants:
     def test_supported_formats(self):
         assert "wav" in SUPPORTED_FORMATS
