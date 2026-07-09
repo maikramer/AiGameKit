@@ -55,6 +55,38 @@ export function makeWidgetParser(factory: HudWidgetFactory): Parser {
   };
 }
 
+/**
+ * Detecta se uma string de ícone é um caminho de imagem (ex: "/assets/icons/x.png")
+ * vs um emoji/glyph de texto. Convenção: contém "/" e termina em .png/.jpg/.webp/.svg.
+ */
+export function isIconImagePath(icon: string): boolean {
+  return /\.(png|jpe?g|webp|svg|gif)$/i.test(icon) && icon.includes('/');
+}
+
+/**
+ * Define o ícone de um elemento do HUD. Se for um path de imagem, cria um <img>;
+ * caso contrário, usa textContent (emoji/glyph). Retorna o elemento criado.
+ */
+export function setWidgetIcon(
+  container: HTMLElement,
+  icon: string,
+  cssClass: string,
+  imgStyle: string
+): HTMLElement {
+  if (isIconImagePath(icon)) {
+    const img = document.createElement('img');
+    img.className = cssClass;
+    img.src = icon;
+    img.alt = '';
+    img.style.cssText = imgStyle;
+    return img;
+  }
+  const span = document.createElement('span');
+  span.className = cssClass;
+  span.textContent = icon;
+  return span;
+}
+
 export function formatTime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const m = Math.floor(s / 60);

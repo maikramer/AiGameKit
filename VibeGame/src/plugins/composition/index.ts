@@ -16,6 +16,7 @@ export {
   buildPrimitiveMesh,
   getCompositionData,
   isPrimitiveTag,
+  parsePrimitiveSpec,
   type ColliderMode,
   type CompositionData,
   type PrimitiveKind,
