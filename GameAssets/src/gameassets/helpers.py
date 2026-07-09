@@ -14,6 +14,7 @@ from .profile import (
     Rocks3DProfile,
     Skymap2DProfile,
     Terrain3DProfile,
+    Text2IconProfile,
     Text2SoundProfile,
     Texture2DProfile,
     load_profile,
@@ -306,6 +307,33 @@ def _append_skymap2d_profile_args(sky: Skymap2DProfile, argv: list[str], *, qual
         argv.extend(["--lora-strength", str(sky.lora_strength)])
     if sky.model_id:
         argv.extend(["-m", sky.model_id])
+
+
+def _text2icon_profile_effective(profile: GameProfile) -> Text2IconProfile:
+    """Opções Text2Icon do perfil ou defaults."""
+    return profile.text2icon or Text2IconProfile()
+
+
+def _resolve_text2icon_bin(icon: Text2IconProfile | None = None) -> str:
+    """Resolve text2icon binary (TEXT2ICON_BIN env var or PATH fallback)."""
+    return resolve_binary("TEXT2ICON_BIN", "text2icon")
+
+
+def _append_text2icon_profile_args(icon: Text2IconProfile, argv: list[str], *, quality: str | None = None) -> None:
+    """Extensões do perfil para `text2icon generate`."""
+    argv.extend(["--quality", quality or "medium"])
+    if icon.width is not None:
+        argv.extend(["-W", str(icon.width)])
+    if icon.height is not None:
+        argv.extend(["-H", str(icon.height)])
+    if icon.steps is not None:
+        argv.extend(["-s", str(icon.steps)])
+    if icon.guidance_scale is not None:
+        argv.extend(["-g", str(icon.guidance_scale)])
+    if icon.transparent:
+        argv.append("--transparent")
+    if icon.model_id:
+        argv.extend(["-m", icon.model_id])
 
 
 def _materialize_diffuse_argv(

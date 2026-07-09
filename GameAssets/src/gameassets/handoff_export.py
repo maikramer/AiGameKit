@@ -82,6 +82,7 @@ def run_handoff(
     models_dir = assets_root / "models"
     audio_dir = assets_root / "audio"
     textures_dir = assets_root / "textures"
+    icons_dir = assets_root / "icons"
     out: dict[str, Any] = {
         "version": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -227,6 +228,21 @@ def run_handoff(
                     entry["pbr_textures"] = pbr_urls
 
         out["rows"].append(entry)
+
+    # --- Scene-level UI icons (text2icon) ---
+    # Ícones gerados pelo text2icon em <output_dir>/icons/*.png → public/assets/icons/.
+    icons_entries: list[dict[str, str]] = []
+    src_icons_dir = Path(profile.output_dir) / "icons"
+    if src_icons_dir.is_dir():
+        for icon_file in sorted(src_icons_dir.glob("*.png")):
+            dst_icon = icons_dir / icon_file.name
+            rel_icon = f"/assets/icons/{icon_file.name}"
+            icons_entries.append({"source": str(icon_file), "url": rel_icon, "dest": str(dst_icon)})
+            if not dry_run:
+                icons_dir.mkdir(parents=True, exist_ok=True)
+                _install_file(icon_file, dst_icon, copy=copy)
+    if icons_entries:
+        out["icons"] = icons_entries
 
     manifest_path = assets_root / "gameassets_handoff.json"
     out["manifest_path"] = str(manifest_path)

@@ -68,7 +68,6 @@ def run_dream(
     with_audio: bool = True,
     dry_run: bool = False,
     fail_fast: bool = True,
-    low_vram: bool = False,
 ) -> dict[str, Any]:
     """Executa o pipeline completo ou dry-run (só ficheiros, sem GPU)."""
     output_dir = output_dir.resolve()
@@ -196,6 +195,51 @@ def run_dream(
             _step("skymap2d generate", ok=rc_sky == 0, detail=f"exit {rc_sky}")
         else:
             _step("skymap2d generate", ok=False, detail="skymap2d not found; sky skipped")
+
+    # --- 4b. text2icon generate (UI icons, se icon_prompts) ---
+    if plan.icon_prompts:
+        icon_dir = public_dir / "assets" / "icons"
+        icon_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            from ..runner import resolve_binary
+
+            text2icon_bin = resolve_binary("TEXT2ICON_BIN", "text2icon")
+        except FileNotFoundError:
+            text2icon_bin = None
+
+        if text2icon_bin:
+            from gamedev_shared.path_utils import safe_filename as _icon_slug
+
+            try:
+                from ..helpers import _append_text2icon_profile_args, _text2icon_profile_effective
+                from ..profile import load_profile
+
+                emitted_profile = load_profile(batch_dir / "game.yaml")
+                icon_eff = _text2icon_profile_effective(emitted_profile)
+                _icon_quality = emitted_profile.generation
+            except Exception as exc:
+                console.print(f"[dim]text2icon profile args skipped: {exc}[/dim]")
+                icon_eff = None
+                _icon_quality = "medium"
+
+            ok_icons = 0
+            for _ip in plan.icon_prompts:
+                _slug = _icon_slug(_ip)
+                _icon_out = icon_dir / f"{_slug}.png"
+                _icon_argv = [text2icon_bin, "generate", _ip, "-o", str(_icon_out)]
+                if icon_eff is not None:
+                    _append_text2icon_profile_args(icon_eff, _icon_argv, quality=_icon_quality)
+                console.print(f"[dim]$ {' '.join(_icon_argv)}[/dim]")
+                rc_icon = subprocess.call(_icon_argv)
+                if rc_icon == 0:
+                    ok_icons += 1
+            _step(
+                "text2icon generate",
+                ok=ok_icons == len(plan.icon_prompts),
+                detail=f"{ok_icons}/{len(plan.icon_prompts)} icons",
+            )
+        else:
+            _step("text2icon generate", ok=False, detail="text2icon not found; icons skipped")
 
     # --- 5. gameassets handoff ---
     public_dir.mkdir(parents=True, exist_ok=True)

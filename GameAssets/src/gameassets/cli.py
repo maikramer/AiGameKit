@@ -212,6 +212,7 @@ def info_cmd() -> None:
     row("text2d", "TEXT2D_BIN", "text2d")
     row("texture2d", "TEXTURE2D_BIN", "texture2d")
     row("skymap2d", "SKYMAP2D_BIN", "skymap2d")
+    row("text2icon", "TEXT2ICON_BIN", "text2icon")
     row("text2sound", "TEXT2SOUND_BIN", "text2sound")
     row("text3d", "TEXT3D_BIN", "text3d")
     row("paint3d", "PAINT3D_BIN", "paint3d")
@@ -855,11 +856,6 @@ def validate_cmd(
 @click.option("--presets-local", type=Path, default=None, help="Ficheiro de presets local.")
 @click.option("--dry-run", is_flag=True, default=False, help="Gerar ficheiros sem executar batch/sky (sem GPU).")
 @click.option("--plan-json", type=Path, default=None, help="Exportar dream_plan.json para este caminho.")
-@click.option(
-    "--low-vram",
-    is_flag=True,
-    help="Deprecated no-op: os sub-tools agora auto-detetam VRAM via hw-auto.",
-)
 def dream_cmd(
     description: str,
     output_dir: Path,
@@ -879,7 +875,6 @@ def dream_cmd(
     presets_local: Path | None,
     dry_run: bool,
     plan_json: Path | None,
-    low_vram: bool,
 ) -> None:
     """Da ideia ao jogo: gera assets, cena e projecto Vite com IA.
 
@@ -928,7 +923,6 @@ def dream_cmd(
         with_sky=with_sky,
         with_audio=with_audio,
         dry_run=dry_run,
-        low_vram=low_vram,
     )
 
     if plan_json:

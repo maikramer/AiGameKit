@@ -66,6 +66,7 @@ class DreamPlan:
     sky_prompt: str = ""
     negative_keywords: list[str] = field(default_factory=list)
     terrain: TerrainPlan | None = None
+    icon_prompts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         result: dict[str, Any] = {
@@ -74,6 +75,7 @@ class DreamPlan:
             "tone": self.tone,
             "style_preset": self.style_preset,
             "sky_prompt": self.sky_prompt,
+            "icon_prompts": self.icon_prompts,
             "negative_keywords": self.negative_keywords,
             "assets": [
                 {
@@ -156,6 +158,7 @@ class DreamPlan:
             style_preset=d.get("style_preset", "lowpoly"),
             sky_prompt=d.get("sky_prompt", ""),
             negative_keywords=d.get("negative_keywords", []),
+            icon_prompts=[str(x) for x in d.get("icon_prompts", []) if str(x).strip()],
             assets=assets,
             scene=SceneLayout(
                 sky_color=sc.get("sky_color", "#87CEEB"),

@@ -339,8 +339,8 @@ def _part3d_decompose_argv(
     if p3.verbose:
         args.append("-v")
     # --- Otimizações de VRAM ---
-    # Nota: low_vram_mode / no_cpu_offload / quantization não são propagados —
-    # o part3d auto-deteta via hw-auto (PART3D_HW_AUTO).
+    # Nota: no_cpu_offload / quantization não são propagados — o part3d
+    # auto-deteta via hw-auto (PART3D_HW_AUTO).
     if p3.no_quantize_dit:
         args.append("--no-quantize-dit")
     if p3.torch_compile:
