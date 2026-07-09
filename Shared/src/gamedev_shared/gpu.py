@@ -114,7 +114,8 @@ def check_gpu_compatibility(min_vram_gb: float = 6.0) -> tuple[bool, str]:
         max_vram = max(g["total_memory"] for g in gpus) / (1024**3)
         return (
             False,
-            f"VRAM pode ser insuficiente (máx. {max_vram:.1f} GB). Use --low-vram.",
+            f"VRAM pode ser insuficiente (máx. {max_vram:.1f} GB). "
+            "O hw-auto engatará o modo memory-efficient automaticamente.",
         )
 
     return False, "Nenhuma GPU detectada."
@@ -383,6 +384,8 @@ def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
 def kill_gpu_compute_processes_aggressive(
     *,
     exclude_pid: int,
+    extra_exclude_pids: set[int] | None = None,
+    protect_model_servers: bool = True,
     term_wait_seconds: float = 2.0,
 ) -> list[str]:
     """SIGTERM + SIGKILL em processos GPU do utilizador actual (excluindo PID actual e protegidos).
@@ -390,14 +393,42 @@ def kill_gpu_compute_processes_aggressive(
     Only targets processes owned by the **current user** — system / root /
     other-user processes are never touched.
 
+    Args:
+        exclude_pid: PID do processo caller (nunca é morto).
+        extra_exclude_pids: PIDs adicionais a proteger (além do caller).
+        protect_model_servers: Se ``True`` (default), descobre e protege
+            automaticamente os PIDs de todos os model servers ativos
+            (``gamedev_shared.model_server.discover_server_pids``).
+            Isto evita que o text3d/paint3d matem um model server que está
+            a segurar VRAM para outras ferramentas.
+        term_wait_seconds: Tempo entre SIGTERM e SIGKILL.
+
     Returns:
         Linhas de log legíveis.
     """
     logs: list[str] = []
+
+    # Construir set de PIDs a proteger
+    protected_pids = {exclude_pid}
+    if extra_exclude_pids:
+        protected_pids |= set(extra_exclude_pids)
+    if protect_model_servers:
+        try:
+            from .model_server import discover_server_pids
+
+            server_pids = discover_server_pids()
+            if server_pids:
+                logs.append(f"[protegido] {len(server_pids)} model server(s): {sorted(server_pids)}")
+                protected_pids |= server_pids
+        except Exception:
+            pass  # model_server indisponível; continuar sem proteção extra
+
     apps = list_nvidia_compute_apps()
     targets: list[tuple[int, str]] = []
     for pid, name, mib in apps:
-        if pid == exclude_pid:
+        if pid in protected_pids:
+            extra = f" ~{mib} MiB" if mib is not None else ""
+            logs.append(f"[ignorado] PID {pid} ({name}){extra} — protegido (caller/server)")
             continue
         if _is_protected_gpu_process(name):
             logs.append(f"[ignorado] PID {pid} ({name}) — protegido")

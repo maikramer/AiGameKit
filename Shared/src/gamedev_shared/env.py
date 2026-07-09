@@ -10,6 +10,7 @@ import subprocess
 # ---------------------------------------------------------------------------
 
 TEXT2D_BIN = "TEXT2D_BIN"
+TEXT2ICON_BIN = "TEXT2ICON_BIN"
 TEXT3D_BIN = "TEXT3D_BIN"
 TEXT2SOUND_BIN = "TEXT2SOUND_BIN"
 TEXTURE2D_BIN = "TEXTURE2D_BIN"
@@ -26,9 +27,11 @@ ROCKS3D_BIN = "ROCKS3D_BIN"
 VIBEGAME_BIN = "VIBEGAME_BIN"
 HF_HOME = "HF_HOME"
 PYTORCH_CUDA_ALLOC_CONF = "PYTORCH_CUDA_ALLOC_CONF"
+GAMEDEV_MODEL_SERVER_SOCKET = "GAMEDEV_MODEL_SERVER_SOCKET"
 
 TOOL_BINS = {
     "text2d": TEXT2D_BIN,
+    "text2icon": TEXT2ICON_BIN,
     "text3d": TEXT3D_BIN,
     "text2sound": TEXT2SOUND_BIN,
     "texture2d": TEXTURE2D_BIN,
@@ -91,6 +94,25 @@ def subprocess_gpu_env(
         env[PYTORCH_CUDA_ALLOC_CONF] = "expandable_segments:True"
     if gpu_ids:
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
+
+    # Se houver model servers ativos, propagar o socket path aos children e
+    # desligar o kill-others para não matarem o server. As tools pesadas usam
+    # ``ensure_vram_available`` (pede release gracioso) antes de precisar disto,
+    # mas esta é a rede de segurança para children que chamam kill_gpu_compute.
+    try:
+        from .model_server import discover_active_sockets
+
+        if discover_active_sockets():
+            # Propagar o socket path (se definido via env)
+            sock = os.environ.get(GAMEDEV_MODEL_SERVER_SOCKET, "").strip()
+            if sock:
+                env.setdefault(GAMEDEV_MODEL_SERVER_SOCKET, sock)
+            # Desligar kill-others nos children para não matarem o server
+            env.setdefault("TEXT3D_GPU_KILL_OTHERS", "0")
+            env.setdefault("PAINT3D_GPU_KILL_OTHERS", "0")
+    except Exception:
+        pass  # model_server indisponível; continuar sem proteção
+
     if extra:
         env.update(extra)
     return env
@@ -108,15 +130,16 @@ def get_tool_bin(tool_name: str) -> str | None:
     return os.environ.get(env_name, "").strip() or None
 
 
-def detect_low_vram(threshold_mb: int = 8192) -> bool:
+def detect_low_memory(threshold_mb: int = 8192) -> bool:
     """Detect if the primary GPU has less than *threshold_mb* MiB of total VRAM.
 
     Uses ``nvidia-smi`` to query total memory.  Returns ``False`` if
     ``nvidia-smi`` is not available or parsing fails (conservative: assume
-    not low-VRAM when detection fails).
+    sufficient memory when detection fails).
 
     Args:
-        threshold_mb: VRAM threshold in MiB.  GPUs below this are "low VRAM".
+        threshold_mb: VRAM threshold in MiB.  GPUs below this are considered
+            memory-constrained.
 
     Returns:
         ``True`` if the primary GPU has less than *threshold_mb* MiB total VRAM.

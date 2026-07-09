@@ -18,7 +18,7 @@ dependencies = [
     "bitsandbytes>=0.45.0",
     "torchao>=0.10.0",
     "optimum-quanto>=0.2.0",
-    "sdnq>=0.1.0",
+    "sdnq>=0.2.1",
     "xformers>=0.0.28; sys_platform != 'darwin'",
     "psutil>=5.9.0",
     "bpy>=5.1.0",

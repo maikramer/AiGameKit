@@ -75,6 +75,59 @@ class TestResolveText2Sound:
         assert "seamless loop" in r.prompt_hints[0]
 
 
+class TestResolveText2SoundDSP:
+    """Tests for the DSP mastering params and negative_prompt_hints."""
+
+    def test_dsp_params_present_per_tier(self, engine: QualityEngine) -> None:
+        """Every quality tier exposes the DSP mastering params for text2sound."""
+        for q in ("fast", "low", "medium", "high", "highest"):
+            r = engine.resolve("text2sound", quality=q)
+            assert "lufs_target" in r.params, f"{q} missing lufs_target"
+            assert "high_pass_hz" in r.params, f"{q} missing high_pass_hz"
+            assert "compressor" in r.params, f"{q} missing compressor"
+            assert "true_peak_db" in r.params, f"{q} missing true_peak_db"
+            assert "ogg_quality" in r.params, f"{q} missing ogg_quality"
+            assert "enhance" in r.params, f"{q} missing enhance"
+
+    def test_enhance_off_on_fast_on(self, engine: QualityEngine) -> None:
+        """fast tier disables prompt enhancement; higher tiers enable it."""
+        assert engine.resolve("text2sound", quality="fast").params["enhance"] is False
+        for q in ("low", "medium", "high", "highest"):
+            assert engine.resolve("text2sound", quality=q).params["enhance"] is True
+
+    def test_dsp_lufs_increases_with_quality(self, engine: QualityEngine) -> None:
+        """Higher tiers target louder LUFS (less headroom for the mix)."""
+        fast = engine.resolve("text2sound", quality="fast").params["lufs_target"]
+        highest = engine.resolve("text2sound", quality="highest").params["lufs_target"]
+        assert highest > fast
+
+    def test_negative_prompt_hint_from_kind(self, engine: QualityEngine) -> None:
+        """A kind with negative_prompt_hint surfaces it on negative_prompt_hints."""
+        r = engine.resolve("text2sound", quality="high", category="weapon")
+        assert r.audio_kind == "sfx_impact"
+        assert len(r.negative_prompt_hints) == 1
+        assert "music" in r.negative_prompt_hints[0]
+
+    def test_negative_prompt_hint_loop_kind(self, engine: QualityEngine) -> None:
+        """Loop kinds also carry a negative_prompt_hint."""
+        r = engine.resolve("text2sound", quality="medium", category="humanoid")
+        assert r.audio_kind == "music_loop"
+        assert len(r.negative_prompt_hints) == 1
+        assert "tempo" in r.negative_prompt_hints[0] or "stops" in r.negative_prompt_hints[0]
+
+    def test_compressor_preset_in_kind_info(self, engine: QualityEngine) -> None:
+        """compressor_preset is accessible via audio_kind_info (not in params)."""
+        r = engine.resolve("text2sound", quality="high", category="weapon")
+        ki = engine.audio_kind_info(r.audio_kind)
+        assert ki["compressor_preset"] == "punch"
+
+    def test_no_negative_hint_without_category(self, engine: QualityEngine) -> None:
+        """Without a category there is no audio_kind, so no negative hint."""
+        r = engine.resolve("text2sound", quality="medium")
+        assert r.audio_kind is None
+        assert r.negative_prompt_hints == []
+
+
 class TestResolveText3D:
     def test_resolve_text3d_medium_humanoid(self, engine: QualityEngine) -> None:
         """Humanoid + medium → preset=balanced, octree=192, chunks=6000."""

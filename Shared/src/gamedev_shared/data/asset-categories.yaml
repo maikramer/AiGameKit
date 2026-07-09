@@ -195,6 +195,8 @@ audio_kinds:
     loop_hint: true
     crossfade_ms: 500
     prompt_hint: "seamless loop, consistent volume throughout"
+    negative_prompt_hint: "sudden stops, tempo changes, volume drops, silence, clicks, pops, distortion"
+    compressor_preset: master_glue
 
   ambient_loop:
     label: "Ambient Loop"
@@ -206,6 +208,8 @@ audio_kinds:
     loop_hint: true
     crossfade_ms: 500
     prompt_hint: "seamless loop, immersive atmosphere"
+    negative_prompt_hint: "sudden transients, clicks, harsh noise, abrupt volume changes, pops"
+    compressor_preset: glue
 
   ambient_one_shot:
     label: "Ambient One-Shot"
@@ -215,6 +219,8 @@ audio_kinds:
     trim_default: true
     trim_buffer_ms: 400
     loop_hint: false
+    negative_prompt_hint: "percussion, drums, sharp transients, clicks, digital artifacts"
+    compressor_preset: glue
 
   sfx_impact:
     label: "SFX Impact"
@@ -226,6 +232,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "immediate attack, no silence at start, powerful transient"
+    negative_prompt_hint: "music, melody, background music, long reverb tail, echo, ambient pad"
+    compressor_preset: punch
 
   sfx_short:
     label: "SFX Short"
@@ -236,6 +244,8 @@ audio_kinds:
     trim_buffer_ms: 10
     trim_threshold_db: -40.0
     loop_hint: false
+    negative_prompt_hint: "music, melody, long decay, reverb, ambient, background noise"
+    compressor_preset: punch
 
   sfx_ui:
     label: "SFX UI"
@@ -247,6 +257,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "clean, short, digital, no reverb tail"
+    negative_prompt_hint: "music, long tail, reverb, ambient, environmental noise, organic texture"
+    compressor_preset: transparent
 
   sfx_movement:
     label: "SFX Movement"
@@ -257,6 +269,8 @@ audio_kinds:
     trim_buffer_ms: 20
     trim_threshold_db: -40.0
     loop_hint: false
+    negative_prompt_hint: "music, melody, reverb tail, ambient background, steady tone"
+    compressor_preset: punch
 
   sfx_creature:
     label: "SFX Creature"
@@ -267,6 +281,8 @@ audio_kinds:
     trim_buffer_ms: 15
     trim_threshold_db: -40.0
     loop_hint: false
+    negative_prompt_hint: "music, melody, mechanical, synthetic, clean tone, reverb"
+    compressor_preset: punch
 
   sfx_magic:
     label: "SFX Magic"
@@ -277,6 +293,8 @@ audio_kinds:
     trim_buffer_ms: 20
     trim_threshold_db: -40.0
     loop_hint: false
+    negative_prompt_hint: "music, melody, drums, percussion, voice, organic texture"
+    compressor_preset: glue
 
   sfx_vehicle:
     label: "SFX Vehicle"
@@ -287,6 +305,8 @@ audio_kinds:
     trim_buffer_ms: 30
     trim_threshold_db: -40.0
     loop_hint: false
+    negative_prompt_hint: "music, melody, voice, clean tone, reverb tail"
+    compressor_preset: glue
 
   sfx_interact:
     label: "SFX Interact"
@@ -297,6 +317,8 @@ audio_kinds:
     trim_buffer_ms: 10
     trim_threshold_db: -40.0
     loop_hint: false
+    negative_prompt_hint: "music, melody, long decay, ambient, background noise, reverb"
+    compressor_preset: punch
 
   sfx_destruction:
     label: "SFX Destruction"
@@ -308,6 +330,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "sharp break, debris, impact, powerful transient"
+    negative_prompt_hint: "music, melody, clean tone, sustained note, ambient pad"
+    compressor_preset: punch
 
   sfx_weapon:
     label: "SFX Weapon"
@@ -319,6 +343,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "metallic, sharp, clean transient, weapon handling"
+    negative_prompt_hint: "music, ambient, wind, long decay, reverb, melodic tone"
+    compressor_preset: punch
 
   sfx_mechanical:
     label: "SFX Mechanical"
@@ -330,6 +356,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "mechanical, gears, metal, machinery"
+    negative_prompt_hint: "music, melody, voice, organic texture, reverb tail, ambient pad"
+    compressor_preset: glue
 
   sfx_elemental:
     label: "SFX Elemental"
@@ -341,6 +369,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "elemental energy, fire, water, electricity, nature force"
+    negative_prompt_hint: "music, melody, drums, voice, clean synthetic tone"
+    compressor_preset: glue
 
   sfx_vocal:
     label: "SFX Vocal"
@@ -352,6 +382,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "human voice, shout, grunt, vocalization, effort"
+    negative_prompt_hint: "music, melody, instruments, reverb tail, ambient background"
+    compressor_preset: punch
 
   sfx_collectible:
     label: "SFX Collectible"
@@ -363,6 +395,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "short, magical sparkle, pickup, rewarding chime"
+    negative_prompt_hint: "music, long decay, reverb, ambient, organic texture, noise"
+    compressor_preset: transparent
 
   sfx_alarm:
     label: "SFX Alarm"
@@ -374,6 +408,8 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "loud, urgent, siren, alarm, warning signal"
+    negative_prompt_hint: "music, melody, voice, organic texture, ambient pad"
+    compressor_preset: punch
 
   sfx_ambient_sfx:
     label: "SFX Ambient Spot"
@@ -385,3 +421,5 @@ audio_kinds:
     trim_threshold_db: -40.0
     loop_hint: false
     prompt_hint: "environmental spot effect, weather, nature transient"
+    negative_prompt_hint: "music, melody, voice, clean tone, synthetic pad"
+    compressor_preset: glue

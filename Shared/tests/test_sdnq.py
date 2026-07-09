@@ -23,7 +23,7 @@ class TestPresets:
     def test_all_presets_have_required_fields(self):
         for name, preset in PRESETS.items():
             assert preset.name == name
-            assert preset.weights_dtype in ("uint8", "int8", "int4", "fp8")
+            assert preset.weights_dtype in ("uint8", "int8", "int4", "uint4", "fp8")
             assert preset.group_size >= 0
             assert isinstance(preset.use_svd, bool)
             assert preset.dequantize_fp32 is True
@@ -57,6 +57,13 @@ class TestPresets:
         assert p.use_svd is False
         assert p.group_size == 0
 
+    def test_uint4_preset_exists(self):
+        p = PRESETS["sdnq-uint4"]
+        assert p.weights_dtype == "uint4"
+        assert p.use_svd is True
+        assert p.group_size > 0
+        assert p.svd_rank == 32
+
 
 class TestIsAvailable:
     def test_returns_false_when_sdnq_not_installed(self):
@@ -68,6 +75,67 @@ class TestIsAvailable:
         fake_sdnq.SDNQConfig = MagicMock()  # type: ignore[attr-defined]
         with patch.dict(sys.modules, {"sdnq": fake_sdnq}):
             assert is_available() is True
+
+
+class TestRegisterSdnq:
+    def _setup_modules(self) -> tuple[types.ModuleType, types.ModuleType]:
+        fake_sdnq = types.ModuleType("sdnq")
+        fake_sdnq.SDNQConfig = MagicMock()  # type: ignore[attr-defined]
+        fake_common = types.ModuleType("sdnq.common")
+        fake_common.use_torch_compile = True  # type: ignore[attr-defined]
+        fake_sdnq.common = fake_common  # type: ignore[attr-defined]
+        return fake_sdnq, fake_common
+
+    def test_returns_bool(self):
+        from gamedev_shared.sdnq import register_sdnq
+
+        fake_sdnq, fake_common = self._setup_modules()
+        with patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}):
+            result = register_sdnq()
+        assert isinstance(result, bool)
+        assert result is True
+
+    def test_raises_when_not_installed(self):
+        from gamedev_shared.sdnq import register_sdnq
+
+        with patch.dict(sys.modules, {"sdnq": None}), pytest.raises(ImportError, match="sdnq"):
+            register_sdnq()
+
+    def test_patch_lora_called_when_requested(self):
+        from gamedev_shared.sdnq import register_sdnq
+
+        fake_sdnq, fake_common = self._setup_modules()
+        with (
+            patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}),
+            patch("gamedev_shared.sdnq.patch_lora_shape_calculation") as mock_patch,
+        ):
+            register_sdnq(patch_lora=True)
+        mock_patch.assert_called_once()
+
+    def test_patch_lora_not_called_by_default(self):
+        from gamedev_shared.sdnq import register_sdnq
+
+        fake_sdnq, fake_common = self._setup_modules()
+        with (
+            patch.dict(sys.modules, {"sdnq": fake_sdnq, "sdnq.common": fake_common}),
+            patch("gamedev_shared.sdnq.patch_lora_shape_calculation") as mock_patch,
+        ):
+            register_sdnq()
+        mock_patch.assert_not_called()
+
+
+class TestDetectComputeBackend:
+    def test_returns_string(self):
+        from gamedev_shared.sdnq import detect_compute_backend
+
+        backend = detect_compute_backend()
+        assert backend in ("cuda", "xpu", "mps", "cpu")
+
+    def test_cpu_when_no_torch(self):
+        from gamedev_shared.sdnq import detect_compute_backend
+
+        with patch.dict(sys.modules, {"torch": None}):
+            assert detect_compute_backend() == "cpu"
 
 
 class TestCreateConfig:
@@ -161,6 +229,30 @@ class TestApplyQuantizedMatmul:
 
         assert pipe.transformer is tr
         assert pipe.text_encoder is te
+
+    def test_module_names_param_targets_unet(self):
+        from gamedev_shared.sdnq import apply_quantized_matmul
+
+        unet = MagicMock()
+        unet.quantization_config = {"test": True}
+
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = MagicMock()  # type: ignore[attr-defined]
+        fake_torch.cuda.is_available = MagicMock(return_value=True)  # type: ignore[attr-defined]
+        fake_torch.xpu = MagicMock()  # type: ignore[attr-defined]
+        fake_torch.xpu.is_available = MagicMock(return_value=False)  # type: ignore[attr-defined]
+
+        fake_loader = types.ModuleType("sdnq.loader")
+        fake_loader.apply_sdnq_options_to_model = MagicMock(return_value=unet)  # type: ignore[attr-defined]
+
+        pipe = MagicMock()
+        pipe.unet = unet
+        pipe.transformer = None
+
+        with patch.dict(sys.modules, {"torch": fake_torch, "sdnq.loader": fake_loader}):
+            apply_quantized_matmul(pipe, enabled=True, module_names=("unet",))
+
+        fake_loader.apply_sdnq_options_to_model.assert_called_once_with(unet, use_quantized_matmul=True)
 
 
 class TestEstimateVramMb:

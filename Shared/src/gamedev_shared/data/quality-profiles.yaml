@@ -13,6 +13,11 @@ profiles:
       height: 512
       steps: 4
       guidance: 1.0
+    text2icon:
+      width: 512
+      height: 512
+      steps: 8
+      guidance: 4.0
     text3d:
       preset: fast
       guidance: 5.0
@@ -45,6 +50,14 @@ profiles:
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
       crossfade_ms: 300
+      # DSP mastering chain (pedalboard)
+      lufs_target: -18       # quieter target for fast previews
+      high_pass_hz: 40
+      compressor: false      # skip compressor to save CPU on fast tier
+      true_peak_db: -1.0
+      headroom_db: 0.3
+      ogg_quality: 0.5
+      enhance: false         # skip prompt enhancement on fast tier
     simplify:
       face_ratio: 0.25
       texture_size: 1024
@@ -74,6 +87,11 @@ profiles:
       height: 768
       steps: 4
       guidance: 1.0
+    text2icon:
+      width: 512
+      height: 512
+      steps: 12
+      guidance: 4.5
     text3d:
       preset: fast
       guidance: 5.0
@@ -106,6 +124,14 @@ profiles:
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
       crossfade_ms: 400
+      # DSP mastering chain (pedalboard)
+      lufs_target: -17
+      high_pass_hz: 30
+      compressor: true
+      true_peak_db: -1.0
+      headroom_db: 0.3
+      ogg_quality: 0.6
+      enhance: true
     simplify:
       face_ratio: 0.5
       texture_size: 1024
@@ -135,6 +161,11 @@ profiles:
       height: 1024
       steps: 4
       guidance: 1.0
+    text2icon:
+      width: 512
+      height: 512
+      steps: 20
+      guidance: 4.5
     text3d:
       preset: balanced
       guidance: 5.0
@@ -167,6 +198,14 @@ profiles:
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
       crossfade_ms: 500
+      # DSP mastering chain (pedalboard)
+      lufs_target: -16
+      high_pass_hz: 30
+      compressor: true
+      true_peak_db: -1.0
+      headroom_db: 0.3
+      ogg_quality: 0.7
+      enhance: true
     simplify:
       face_ratio: 1.0
       texture_size: 2048
@@ -196,6 +235,11 @@ profiles:
       height: 1024
       steps: 8
       guidance: 1.0
+    text2icon:
+      width: 512
+      height: 512
+      steps: 25
+      guidance: 5.0
     text3d:
       preset: hq
       guidance: 5.0
@@ -228,6 +272,14 @@ profiles:
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
       crossfade_ms: 600
+      # DSP mastering chain (pedalboard)
+      lufs_target: -15
+      high_pass_hz: 25
+      compressor: true
+      true_peak_db: -0.5
+      headroom_db: 0.3
+      ogg_quality: 0.8
+      enhance: true
     simplify:
       face_ratio: 2.0
       texture_size: 2048
@@ -257,6 +309,11 @@ profiles:
       height: 1024
       steps: 12
       guidance: 1.5
+    text2icon:
+      width: 512
+      height: 512
+      steps: 30
+      guidance: 5.0
     text3d:
       preset: hq
       guidance: 5.0
@@ -289,6 +346,14 @@ profiles:
       sigma_max: 500.0
       sampler: dpmpp-3m-sde
       crossfade_ms: 800
+      # DSP mastering chain (pedalboard)
+      lufs_target: -14
+      high_pass_hz: 25
+      compressor: true
+      true_peak_db: -0.1
+      headroom_db: 0.3
+      ogg_quality: 0.85
+      enhance: true
     simplify:
       face_ratio: 0.0
       texture_size: 4096
