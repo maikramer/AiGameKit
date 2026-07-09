@@ -43,17 +43,17 @@ const ANTIDOTE_HEAL = 35;
 const RING_PRICE = 80; // one-time permanent +15% move speed (applied by HeroStatsSystem)
 const BOMB_PRICE = 20;
 
-const ICON_BASE = '/assets/images/';
-/** Shop button → 2D icon file (in public/assets/images). */
+const ICON_BASE = '/assets/icons/';
+/** Shop button → 2D icon file (in public/assets/icons). */
 const ICONS: Record<string, string> = {
   potion: 'potion_health.png',
-  sword: 'sword_hero.png',
-  antidote: 'potion_antidote.png',
+  sword: 'sword.png',
+  antidote: 'item_antidote.png',
   ring: 'ring_magic.png',
-  bomb: 'bomb.png',
-  stone1: 'rock_mossy.png',
-  stone5: 'rock_mossy.png',
-  wood1: 'tree_oak.png',
+  bomb: 'item_bomb.png',
+  stone1: 'hud_stone.png',
+  stone5: 'hud_stone.png',
+  wood1: 'hud_wood.png',
 };
 
 const playerQuery = defineQuery([PlayerController]);

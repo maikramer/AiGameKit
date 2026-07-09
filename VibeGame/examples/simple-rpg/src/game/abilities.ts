@@ -40,7 +40,7 @@ const ABILITIES: readonly Ability[] = [
     id: 'dash',
     key: 'C',
     keyCode: 'KeyC',
-    icon: '💨',
+    icon: '/assets/icons/ability_dash.png',
     label: 'Dash — burst forward',
     color: '#5ad0ff',
     cooldown: 3,
@@ -49,7 +49,7 @@ const ABILITIES: readonly Ability[] = [
     id: 'heal',
     key: 'E',
     keyCode: 'KeyE',
-    icon: '✚',
+    icon: '/assets/icons/ability_heal.png',
     label: 'Heal — restore HP',
     color: '#6ef07a',
     cooldown: 12,
@@ -58,7 +58,7 @@ const ABILITIES: readonly Ability[] = [
     id: 'power',
     key: 'R',
     keyCode: 'KeyR',
-    icon: '💥',
+    icon: '/assets/icons/ability_power.png',
     label: 'Power Strike — radial damage',
     color: '#ffb24a',
     cooldown: 8,
@@ -99,7 +99,16 @@ function buildBar(): void {
       `border:1px solid ${a.color}66;` +
       'background:linear-gradient(135deg,rgba(14,18,34,0.78),rgba(10,14,26,0.66));' +
       'backdrop-filter:blur(10px);box-shadow:0 5px 18px rgba(0,0,0,0.3);pointer-events:auto;';
-    root.textContent = a.icon;
+    // Renderizar ícone como <img> (path PNG) ou emoji (texto)
+    if (a.icon.includes('/')) {
+      const img = document.createElement('img');
+      img.src = a.icon;
+      img.alt = a.label;
+      img.style.cssText = 'width:30px;height:30px;object-fit:contain;';
+      root.appendChild(img);
+    } else {
+      root.textContent = a.icon;
+    }
     root.title = `[${a.key}] ${a.label} (cooldown ${a.cooldown}s)`;
 
     const keyBadge = document.createElement('span');

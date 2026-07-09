@@ -1,0 +1,18 @@
+{
+  "timestamp": 1783556113.960777,
+  "prompt": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, red heart health symbol, fantasy RPG game UI",
+  "params": {
+    "seed": 201,
+    "prompt_final": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, red heart health symbol, fantasy RPG game UI",
+    "model": "clark-labs/clark-air-sana-1.6b-1.58bit",
+    "remove_background": true,
+    "prompt": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, red heart health symbol, fantasy RPG game UI",
+    "negative_prompt": "",
+    "guidance_scale": 4.5,
+    "num_inference_steps": 20,
+    "width": 256,
+    "height": 256
+  },
+  "image_path": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/icons/hud_health.png",
+  "filename": "hud_health.png"
+}

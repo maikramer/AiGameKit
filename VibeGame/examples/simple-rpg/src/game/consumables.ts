@@ -35,7 +35,7 @@ const SLOTS: readonly Slot[] = [
     id: 'potion',
     key: '1',
     keyCode: 'Digit1',
-    icon: '🧪',
+    icon: '/assets/icons/potion_health.png',
     color: '#7ad27a',
     label: 'Potion — restore HP',
   },
@@ -43,7 +43,7 @@ const SLOTS: readonly Slot[] = [
     id: 'antidote',
     key: '2',
     keyCode: 'Digit2',
-    icon: '🟣',
+    icon: '/assets/icons/item_antidote.png',
     color: '#c08af0',
     label: 'Antidote — cure + heal',
   },
@@ -51,7 +51,7 @@ const SLOTS: readonly Slot[] = [
     id: 'bomb',
     key: 'B',
     keyCode: 'KeyB',
-    icon: '💣',
+    icon: '/assets/icons/item_bomb.png',
     color: '#ff8a6a',
     label: 'Bomb — hold [B] to throw',
   },
@@ -83,7 +83,16 @@ function buildHotbar(): void {
       'background:linear-gradient(135deg,rgba(14,18,34,0.78),rgba(10,14,26,0.66));' +
       'backdrop-filter:blur(10px);box-shadow:0 5px 18px rgba(0,0,0,0.3);transition:transform 0.08s,border-color 0.12s;' +
       'pointer-events:auto;';
-    root.textContent = s.icon;
+    // Renderizar ícone como <img> (path PNG) ou emoji (texto)
+    if (s.icon.includes('/')) {
+      const img = document.createElement('img');
+      img.src = s.icon;
+      img.alt = s.label;
+      img.style.cssText = 'width:34px;height:34px;object-fit:contain;';
+      root.appendChild(img);
+    } else {
+      root.textContent = s.icon;
+    }
     root.title = `[${s.key}] ${s.label}`;
 
     const keyBadge = document.createElement('span');
