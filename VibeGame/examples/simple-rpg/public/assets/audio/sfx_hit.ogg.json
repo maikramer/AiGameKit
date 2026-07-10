@@ -1,21 +1,45 @@
 {
-  "prompt": "sharp metal sword clash, bright metallic ring, short combat hit impact, Metal sword clash and parry, sharp metallic impact of blades, weapon combat sound effect with ring",
+  "prompt": "Sharp metal sword clash, bright metallic ring, short combat hit impact, immediate attack, explosive decay, cinematic, dry recording",
   "profile": "effects",
   "model_id": "stabilityai/stable-audio-open-small",
-  "duration": 2,
+  "duration": 2.0,
   "steps": 32,
   "cfg_scale": 6.0,
   "seed": 201,
   "seed_effective": 201,
-  "sampler": "dpmpp-3m-sde",
+  "sampler": "euler",
   "sigma_min": 0.3,
   "sigma_max": 500.0,
   "trim": true,
-  "half_precision": null,
+  "half_precision": true,
   "half_precision_effective": true,
   "format": "ogg",
   "sample_rate": 44100,
   "device": "cuda",
   "text2sound_version": "0.1.0",
-  "preset": "sword-clash"
+  "hw_profile": "cuda-1x6g | half=on | vae=chunked",
+  "quality": "high",
+  "category": "weapon",
+  "audio_kind": "sfx_impact",
+  "negative_prompt": "music, melody, background music, long reverb tail, echo, ambient pad, low quality, distortion, clipping, artifacts, noise floor, muddy, harsh, metallic ringing, phase issues",
+  "prompt_enhancement": {
+    "sound_type": "impact",
+    "descriptors_added": [
+      "immediate attack",
+      "explosive decay",
+      "cinematic",
+      "dry recording"
+    ],
+    "corrections": [],
+    "original_prompt": "sharp metal sword clash, bright metallic ring, short combat hit impact"
+  },
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "punch",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
 }

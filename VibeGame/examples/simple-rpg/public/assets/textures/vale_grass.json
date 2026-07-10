@@ -1,18 +1,18 @@
 {
-  "timestamp": 1782525753.966029,
-  "prompt": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling, bright green grass meadow with small flowers",
+  "timestamp": 1783566634.836919,
+  "prompt": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, flat top-down orthographic view of a grassy ground surface seen straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture covering a large area, distant aerial scale, not macro, not close-up. lush green grass meadow, fine uniform grass cover, small flowers scattered, natural subtle variation in tone, game terrain ground texture",
   "params": {
     "seed": 161501651,
-    "prompt_final": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling, bright green grass meadow with small flowers",
-    "prompt": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling, bright green grass meadow with small flowers",
-    "negative_prompt": "brown, dead, mud, artificial",
-    "guidance_scale": 7.5,
-    "num_inference_steps": 50,
-    "width": 512,
-    "height": 512,
-    "cfg_scale": 7.5,
+    "prompt_final": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, flat top-down orthographic view of a grassy ground surface seen straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture covering a large area, distant aerial scale, not macro, not close-up. lush green grass meadow, fine uniform grass cover, small flowers scattered, natural subtle variation in tone, game terrain ground texture",
+    "prompt": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, flat top-down orthographic view of a grassy ground surface seen straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture covering a large area, distant aerial scale, not macro, not close-up. lush green grass meadow, fine uniform grass cover, small flowers scattered, natural subtle variation in tone, game terrain ground texture",
+    "negative_prompt": "macro, close-up, individual blades, extreme detail, 3d relief, strong directional shadows, depth, isometric, perspective, angled, side view, oblique, baked shadows, ambient occlusion, high contrast, brown, dead, mud, artificial, 3d, pbr",
+    "guidance_scale": 4.0,
+    "num_inference_steps": 32,
+    "width": 1024,
+    "height": 1024,
+    "cfg_scale": 4.0,
     "lora_strength": 1.0
   },
-  "image_path": "vale_grass.png",
-  "filename": "vale_grass.png"
+  "image_path": "/tmp/textures_v2/grass_v2.png",
+  "filename": "grass_v2.png"
 }

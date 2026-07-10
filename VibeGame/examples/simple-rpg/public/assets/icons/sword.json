@@ -1,17 +1,18 @@
 {
-  "timestamp": 1783556175.390602,
-  "prompt": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, steel sword weapon blade, fantasy RPG game item",
+  "timestamp": 1783569918.9643235,
+  "prompt": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, no duplicate objects, steel sword weapon blade, fantasy RPG game UI",
   "params": {
     "seed": 401,
-    "prompt_final": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, steel sword weapon blade, fantasy RPG game item",
-    "model": "clark-labs/clark-air-sana-1.6b-1.58bit",
+    "prompt_final": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, no duplicate objects, steel sword weapon blade, fantasy RPG game UI",
+    "model": "Efficient-Large-Model/Sana_600M_512px_diffusers",
+    "transformer_quant_preset": "sdnq-int4",
+    "encoder_quant_preset": "sdnq-int4",
     "remove_background": true,
-    "prompt": "app icon, simple, centered, bold, clean background, high contrast, flat design, crisp edges, single subject, readable at small size, steel sword weapon blade, fantasy RPG game item",
-    "negative_prompt": "",
+    "negative_prompt": "blurry, watermark, text, duplicate, multiple objects, extra limbs, distorted, low quality, realistic photo, cropped",
     "guidance_scale": 4.5,
     "num_inference_steps": 20,
-    "width": 256,
-    "height": 256
+    "width": 512,
+    "height": 512
   },
   "image_path": "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/icons/sword.png",
   "filename": "sword.png"

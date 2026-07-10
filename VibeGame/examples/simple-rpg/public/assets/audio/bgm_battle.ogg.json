@@ -1,5 +1,5 @@
 {
-  "prompt": "intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm, Intense orchestral battle music with epic drums, brass fanfare, driving percussion and heroic strings, cinematic game combat soundtrack",
+  "prompt": "Intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm, rich orchestration, warm instrumentation, consistent energy, game soundtrack, seamless loop",
   "profile": "music",
   "model_id": "stabilityai/stable-audio-open-1.0",
   "duration": 47.0,
@@ -18,8 +18,32 @@
   "device": "cuda",
   "text2sound_version": "0.1.0",
   "hw_profile": "cuda-1x6g | half=on | vae=chunked",
-  "preset": "battle",
+  "quality": "high",
+  "category": "humanoid",
+  "audio_kind": "music_loop",
+  "negative_prompt": "sudden stops, tempo changes, volume drops, silence, clicks, pops, distortion, low quality, clipping, artifacts, noise floor, muddy, harsh, metallic ringing, phase issues",
+  "prompt_enhancement": {
+    "sound_type": "music_loop",
+    "descriptors_added": [
+      "rich orchestration",
+      "warm instrumentation",
+      "consistent energy",
+      "game soundtrack",
+      "seamless loop"
+    ],
+    "corrections": [],
+    "original_prompt": "intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm"
+  },
   "seamless_loop": true,
   "crossfade_ms": 2000.0,
-  "loop_edge_trim_s": 8.0
+  "loop_edge_trim_s": 8.0,
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "master_glue",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
 }
