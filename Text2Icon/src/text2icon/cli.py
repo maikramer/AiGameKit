@@ -104,7 +104,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-m",
     "model_id",
     default=None,
-    help="ID do transformer HF (default: clark-labs/clark-air-sana-1.6b-1.58bit)",
+    help="ID do transformer HF (default: hw_auto escolhe standard 512px ou ternário 1.58-bit em hardware modesto)",
 )
 @click.option(
     "--transparent/--no-transparent",
@@ -137,6 +137,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Quantização SDNQ do Gemma text encoder (auto = ativa em <8GB; sdnq-int4 poupa ~2.5GB).",
 )
 @click.option(
+    "--quant-transformer",
+    "transformer_quant_preset",
+    type=click.Choice(["auto", "sdnq-int4", "sdnq-uint4", "sdnq-int8", "sdnq-uint8", "sdnq-fp8", "none"]),
+    default="auto",
+    show_default=True,
+    help=(
+        "Quantização SDNQ do transformer principal (só standard; ignorado no "
+        "ternário). auto = hw_auto escolhe 4/8/16-bit por VRAM."
+    ),
+)
+@click.option(
     "--quality",
     type=click.Choice(list(VALID_QUALITIES)),
     default="medium",
@@ -149,8 +160,9 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=True,
     show_default=True,
     help=(
-        "Auto-detecção de hardware: liga CPU offload e clamp de resolução em "
-        "GPUs pequenas. Flags explícitas ganham. Env: TEXT2ICON_HW_AUTO=0."
+        "Auto-detecção de hardware: escolhe transformer (standard/ternário), "
+        "quantização SDNQ, CPU offload e clamp de resolução por VRAM. Flags "
+        "explícitas ganham. Env: TEXT2ICON_HW_AUTO=0."
     ),
 )
 @click.pass_context
@@ -171,6 +183,7 @@ def generate_cmd(
     low_vram: bool,
     gpu_ids_str: str | None,
     quant_preset: str,
+    transformer_quant_preset: str,
     quality: str,
     hw_auto: bool,
 ) -> None:
@@ -185,6 +198,8 @@ def generate_cmd(
     _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
+    _user_set_model = ctx.get_parameter_source("model_id") not in (_src.DEFAULT,)
+    _user_set_quant_transformer = ctx.get_parameter_source("transformer_quant_preset") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -215,6 +230,10 @@ def generate_cmd(
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
             height = min(height, hwp.max_height)
+        if not _user_set_model:
+            model_id = hwp.transformer_id
+        if not _user_set_quant_transformer:
+            transformer_quant_preset = hwp.transformer_sdnq_preset or "none"
 
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
@@ -229,6 +248,7 @@ def generate_cmd(
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
     table.add_row("[bold]Transparente[/bold]", "sim (rembg)" if transparent else "não")
     table.add_row("[bold]Modelo[/bold]", resolved_model)
+    table.add_row("[bold]Quant. transformer[/bold]", transformer_quant_preset)
     if hwp is not None:
         table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
@@ -277,6 +297,7 @@ def generate_cmd(
             model_id=model_id,
             gpu_ids=gpu_ids,
             quant_preset=quant_preset,
+            transformer_quant_preset=transformer_quant_preset,
         )
 
         with console.status(
@@ -298,7 +319,7 @@ def generate_cmd(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("[cyan]2/2 — Inferência Clark Air Sana...", total=None)
+            task = progress.add_task("[cyan]2/2 — Inferência Sana...", total=None)
             image, metadata = gen.generate(
                 prompt=prompt,
                 negative_prompt=negative_prompt,
@@ -364,6 +385,14 @@ def generate_cmd(
     help="IDs das GPUs para split multi-GPU (ex: '0,1')",
 )
 @click.option(
+    "--quant-transformer",
+    "transformer_quant_preset",
+    type=click.Choice(["auto", "sdnq-int4", "sdnq-uint4", "sdnq-int8", "sdnq-uint8", "sdnq-fp8", "none"]),
+    default="auto",
+    show_default=True,
+    help="Quantização SDNQ do transformer principal (auto = hw_auto escolhe 4/8/16-bit por VRAM).",
+)
+@click.option(
     "--quality",
     type=click.Choice(list(VALID_QUALITIES)),
     default="medium",
@@ -375,7 +404,7 @@ def generate_cmd(
     "hw_auto",
     default=True,
     show_default=True,
-    help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: TEXT2ICON_HW_AUTO=0.",
+    help="Auto-detecção de hardware (transformer/SDNQ/offload/clamp/multi-GPU). Env: TEXT2ICON_HW_AUTO=0.",
 )
 @click.pass_context
 def batch_cmd(
@@ -390,6 +419,7 @@ def batch_cmd(
     transparent: bool,
     low_vram: bool,
     gpu_ids_str: str | None,
+    transformer_quant_preset: str,
     quality: str,
     hw_auto: bool,
 ) -> None:
@@ -400,6 +430,8 @@ def batch_cmd(
     _user_set_height = ctx.get_parameter_source("height") not in (_src.DEFAULT,)
     _user_set_steps = ctx.get_parameter_source("steps") not in (_src.DEFAULT,)
     _user_set_guidance = ctx.get_parameter_source("guidance_scale") not in (_src.DEFAULT,)
+    _user_set_model = ctx.get_parameter_source("model_id") not in (_src.DEFAULT,)
+    _user_set_quant_transformer = ctx.get_parameter_source("transformer_quant_preset") not in (_src.DEFAULT,)
 
     from gamedev_shared.quality import QualityEngine
 
@@ -426,6 +458,10 @@ def batch_cmd(
             width = min(width, hwp.max_width)
         if not _user_set_height and hwp.max_height is not None:
             height = min(height, hwp.max_height)
+        if not _user_set_model:
+            model_id = hwp.transformer_id
+        if not _user_set_quant_transformer:
+            transformer_quant_preset = hwp.transformer_sdnq_preset or "none"
     if hwp is not None:
         Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
@@ -452,6 +488,7 @@ def batch_cmd(
         verbose=bool(ctx.obj.get("VERBOSE")),
         model_id=model_id,
         gpu_ids=gpu_ids,
+        transformer_quant_preset=transformer_quant_preset,
     )
     base_params = {
         "guidance_scale": guidance_scale,
@@ -507,7 +544,7 @@ def info_cmd() -> None:
     t.add_column("Valor", style="green")
 
     t.add_row("Modelo (default)", default_model_id())
-    t.add_row("Variante standard (20 passos)", "Efficient-Large-Model/Sana_600M_1024px_diffusers")
+    t.add_row("Fallback hardware modesto (≤4GB)", "clark-labs/clark-air-sana-1.6b-1.58bit")
     t.add_row("Python", data.get("python_version", "N/A"))
     t.add_row("PyTorch", data.get("torch_version", "N/A"))
     t.add_row("CUDA", str(data.get("cuda_available", False)))
@@ -554,11 +591,20 @@ def info_cmd() -> None:
     show_default=True,
     help="Quantização SDNQ do Gemma text encoder.",
 )
+@click.option(
+    "--quant-transformer",
+    "transformer_quant_preset",
+    type=click.Choice(["auto", "sdnq-int4", "sdnq-uint4", "sdnq-int8", "sdnq-uint8", "sdnq-fp8", "none"]),
+    default="auto",
+    show_default=True,
+    help="Quantização SDNQ do transformer principal (auto = hw_auto escolhe 4/8/16-bit por VRAM).",
+)
 def server_cmd(
     socket_path: str | None,
     idle_timeout_min: int,
     verbose: bool,
     quant_preset: str,
+    transformer_quant_preset: str,
 ) -> None:
     """Arranca o model server (mantém o pipeline carregado; gerações subsequentes ~3s)."""
     from gamedev_shared.model_server import server_socket_path
@@ -583,6 +629,8 @@ def server_cmd(
     gen_kwargs: dict[str, Any] = {}
     if quant_preset != "auto":
         gen_kwargs["quant_preset"] = None if quant_preset == "none" else quant_preset
+    if transformer_quant_preset != "auto":
+        gen_kwargs["transformer_quant_preset"] = None if transformer_quant_preset == "none" else transformer_quant_preset
 
     try:
         server.start_server(

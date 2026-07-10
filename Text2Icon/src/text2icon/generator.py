@@ -1,16 +1,28 @@
-"""Text2Icon — gerador de ícones via Clark Air Sana 1.6B (1.58-bit ternário).
+"""Text2Icon — gerador de ícones via pipeline Sana (diffusers).
 
-O transformer Sana 1.6B é comprimido a ternário (~1.85 bits/weight) pelo Clark
-Labs — 8.6x mais pequeno que fp16, com qualidade quase fp16. Carrega como
-drop-in no ``diffusers`` (sem SDNQ nem quantização runtime):
+Dois transformers suportados, escolhidos por ``hw_auto`` (ver ``hardware.py``)
+conforme a VRAM disponível:
 
-    1. ``SanaTransformer2DModel`` de ``clark-labs/clark-air-sana-1.6b-1.58bit``
+    - **Standard** (default, >4 GB VRAM): ``STANDARD_TRANSFORMER_ID``
+      (``Efficient-Large-Model/Sana_600M_512px_diffusers``), fp16/bf16 nativo,
+      opcionalmente comprimido em runtime via SDNQ (int4/uint8) sobre o
+      transformer — ``transformer_quant_preset``.
+    - **Ternário** (fallback, hardware modesto ≤4 GB VRAM):
+      ``TERNARY_TRANSFORMER_ID`` (``clark-labs/clark-air-sana-1.6b-1.58bit``),
+      comprimido a ~1.85 bits/weight pelo Clark Labs — 8.6x mais pequeno que
+      fp16. Já vem pré-comprimido no checkpoint; não faz sentido empilhar SDNQ
+      por cima.
+
+Ambos carregam como drop-in no ``diffusers``:
+
+    1. ``SanaTransformer2DModel`` de ``self.transformer_id``.
     2. ``SanaPipeline`` de ``Efficient-Large-Model/Sana_1600M_512px_diffusers``
-       com o transformer custom injetado.
+       (VAE + Gemma text encoder + scheduler, partilhado entre variantes) com
+       o transformer injetado.
 
-Pipeline nativo 512px, 20 passos, guidance 4.5. Total ~6 GB fp16 (transformer
-3.2 GB + Gemma text encoder ~2.5 GB + VAE ~0.5 GB) → ``model_cpu`` offload em
-GPUs modestas.
+Pipeline nativo 512px, 20 passos, guidance 4.5. O Gemma text encoder (~4.9 GB
+fp16, o componente mais pesado) pode também ser quantizado via SDNQ
+(``quant_preset``) — decisivo em GPUs de 6-8 GB.
 
 Para ícones transparentes (RGBA), o gerador pode aplicar ``rembg`` (U2Net) após
 a inferência, ativado por ``remove_background=True``.
@@ -33,12 +45,18 @@ from .utils import generate_seed, validate_params, validate_prompt
 
 _logger = Logger()
 
-# Transformer Clark Air (ternário 1.58-bit, descompactado bf16, drop-in diffusers).
-DEFAULT_TRANSFORMER_ID = "clark-labs/clark-air-sana-1.6b-1.58bit"
-# Pipeline base (VAE + Gemma text encoder + scheduler) — Sana 1.6B 512px.
+# Transformer standard (fp16/bf16 nativo, 512px) — default para hardware normal.
+STANDARD_TRANSFORMER_ID = "Efficient-Large-Model/Sana_600M_512px_diffusers"
+# Transformer Clark Air (ternário 1.58-bit, descompactado bf16, drop-in diffusers)
+# — fallback para hardware modesto (≤4 GB VRAM), decidido por hw_auto.
+TERNARY_TRANSFORMER_ID = "clark-labs/clark-air-sana-1.6b-1.58bit"
+# Pipeline base (VAE + Gemma text encoder + scheduler) — Sana 1.6B 512px,
+# partilhado por ambos os transformers (só o transformer é trocado).
 DEFAULT_PIPELINE_ID = "Efficient-Large-Model/Sana_1600M_512px_diffusers"
 
-# Alias compat: o "modelo" do text2icon é o transformer Clark Air.
+DEFAULT_TRANSFORMER_ID = STANDARD_TRANSFORMER_ID
+
+# Alias compat: o "modelo" do text2icon é o transformer.
 DEFAULT_MODEL_ID = DEFAULT_TRANSFORMER_ID
 
 BASE_ICON_INSTRUCTIONS = (
@@ -111,6 +129,7 @@ class SanaIconGenerator:
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
         quant_preset: str | None = None,
+        transformer_quant_preset: str | None = None,
     ) -> None:
         self.verbose = verbose
         self.low_vram = low_vram
@@ -148,6 +167,33 @@ class SanaIconGenerator:
             self.quant_preset = None
         else:
             self.quant_preset = quant_preset
+
+        # Auto-quantização do transformer principal (só faz sentido no standard —
+        # o ternário já vem pré-comprimido a ~1.85 bits/weight no checkpoint).
+        is_ternary = self.transformer_id == TERNARY_TRANSFORMER_ID
+        if transformer_quant_preset in (None, "auto") and self.device != "cpu" and not is_ternary:
+            from gamedev_shared.gpu import gpu_total_mib
+
+            try:
+                vram_mib = gpu_total_mib(0)
+                if vram_mib and vram_mib < 6144:
+                    self.transformer_quant_preset = "sdnq-int4"
+                elif vram_mib and vram_mib < 10240:
+                    self.transformer_quant_preset = "sdnq-uint8"
+                else:
+                    self.transformer_quant_preset = None
+                if self.verbose and self.transformer_quant_preset:
+                    _logger.info(
+                        f"auto-quant transformer {self.transformer_quant_preset} (VRAM {vram_mib} MiB)"
+                    )
+            except Exception:
+                self.transformer_quant_preset = (
+                    transformer_quant_preset if transformer_quant_preset != "auto" else None
+                )
+        elif transformer_quant_preset == "none" or is_ternary:
+            self.transformer_quant_preset = None
+        else:
+            self.transformer_quant_preset = transformer_quant_preset
 
         if self.verbose:
             _logger.info(f"device={self.device} dtype={self.torch_dtype} transformer={self.transformer_id}")
@@ -204,6 +250,35 @@ class SanaIconGenerator:
             self._log(f"quantização do text_encoder falhou ({exc}); fica em fp16")
         self._clear_cache()
 
+    def _maybe_quantize_transformer(self, pipe: Any, preset: str) -> None:
+        """Quantiza o transformer principal via SDNQ em runtime (só no standard).
+
+        Não é chamado para o transformer ternário (já pré-comprimido) — ver
+        guarda em ``__init__``.
+        """
+        try:
+            from gamedev_shared.sdnq import is_available, quantize_model
+        except ImportError:
+            self._log("gamedev_shared.sdnq indisponível; transformer fica em fp16/bf16")
+            return
+
+        if not is_available():
+            self._log("SDNQ indisponível; transformer fica em fp16/bf16")
+            return
+
+        transformer = getattr(pipe, "transformer", None)
+        if transformer is None:
+            return
+
+        self._status(f"Quantização SDNQ {preset} do transformer")
+        quant_device = "cuda" if torch.cuda.is_available() else "cpu"
+        try:
+            pipe.transformer = quantize_model(transformer, preset, quantization_device=quant_device, return_device="cpu")
+            self._log(f"SDNQ {preset} aplicado ao transformer")
+        except Exception as exc:
+            self._log(f"quantização do transformer falhou ({exc}); fica em fp16/bf16")
+        self._clear_cache()
+
     def _preflight_download(self, repo_id: str) -> None:
         """Garante o checkpoint em disco antes do load (download com resume/progresso)."""
         try:
@@ -229,9 +304,9 @@ class SanaIconGenerator:
         self._preflight_download(self.transformer_id)
         self._preflight_download(self.pipeline_id)
 
-        # Passo 1: transformer Clark Air (ternário, bf16 drop-in).
-        # O repo do transformer é privado → precisa de HF_TOKEN (lido via gamedev_shared).
-        self._status(f"Passo 1/3 — transformer Clark Air 1.58-bit ({self.transformer_id})")
+        # Passo 1: transformer (standard fp16/bf16 ou ternário Clark Air, drop-in).
+        # O repo do transformer ternário é privado → precisa de HF_TOKEN (gamedev_shared).
+        self._status(f"Passo 1/3 — transformer ({self.transformer_id})")
         self._log(f"Carregando transformer {self.transformer_id}...")
         try:
             from gamedev_shared.hf import get_hf_token
@@ -264,6 +339,11 @@ class SanaIconGenerator:
             pipe.vae.enable_tiling()
         except Exception:
             self._log("VAE tiling indisponível, a ignorar.")
+
+        # Quantização opcional do transformer principal via SDNQ (só standard;
+        # o ternário já vem pré-comprimido — ver guarda em __init__).
+        if self.transformer_quant_preset and self.device != "cpu":
+            self._maybe_quantize_transformer(pipe, self.transformer_quant_preset)
 
         # Quantização opcional do text encoder (Gemma 2B) via SDNQ.
         # Reduz a VRAM do encoder de ~4.9 GB (fp16) para ~2.4 GB (int4) — decisivo
@@ -463,7 +543,7 @@ class SanaIconGenerator:
         if negative_prompt:
             pipe_kwargs["negative_prompt"] = negative_prompt
 
-        self._log("Inferência Clark Air Sana...")
+        self._log("Inferência Sana...")
         out = pipe(**pipe_kwargs)
         image = out.images[0]
 
@@ -481,6 +561,8 @@ class SanaIconGenerator:
             "seed": seed,
             "prompt_final": prompt,
             "model": self.transformer_id,
+            "transformer_quant_preset": self.transformer_quant_preset,
+            "encoder_quant_preset": self.quant_preset,
             "remove_background": remove_background,
             **params,
         }
