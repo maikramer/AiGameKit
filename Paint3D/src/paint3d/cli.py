@@ -84,7 +84,7 @@ def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool =
     from gamedev_shared.model_server import ensure_vram_available
 
     # Pedir aos model servers ativos para descarregar (libertar VRAM) antes de ocupar a GPU.
-    ensure_vram_available(needed_mib=4000, tool="paint3d")
+    ensure_vram_available(needed_mib=4000)
 
     kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
     allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
