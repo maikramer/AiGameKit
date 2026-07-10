@@ -40,8 +40,12 @@ export const ENGINE_DEFAULT_EN_DICTIONARY: Readonly<Record<string, string>> =
     'modal.tab.skills': 'Skills',
     'modal.tab.inventory': 'Inventory',
     'modal.tab.options': 'Options',
+    'modal.tab.quests': 'Quests',
     'modal.skillPoints': '{n} skill points',
     'modal.inventoryEmpty': 'Bag is empty',
+    'quests.active': 'Active',
+    'quests.completed': 'Completed',
+    'quests.failed': 'Failed',
     'options.on': 'On',
     'options.off': 'Off',
   });

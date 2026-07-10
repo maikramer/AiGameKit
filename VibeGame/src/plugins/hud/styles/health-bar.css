@@ -2,7 +2,7 @@
   position: absolute;
   top: 14px;
   left: 14px;
-  width: 248px;
+  width: min(248px, calc(100vw - 28px));
   z-index: 12;
   display: flex;
   align-items: center;

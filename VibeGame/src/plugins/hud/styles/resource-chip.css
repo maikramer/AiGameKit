@@ -1,6 +1,6 @@
 .hud-resource {
   position: absolute;
-  top: 108px;
+  top: 154px;
   z-index: 12;
   min-width: 76px;
   justify-content: center;
@@ -42,13 +42,13 @@
 }
 
 .hud-resource-wood {
-  left: 104px;
+  left: 128px;
   color: #d4a76a;
   border: 1px solid rgba(190, 140, 80, 0.3);
 }
 
 .hud-resource-stone {
-  left: 194px;
+  left: 242px;
   color: #d4c9a8;
   border: 1px solid rgba(170, 165, 150, 0.3);
 }

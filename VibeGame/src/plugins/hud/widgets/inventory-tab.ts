@@ -68,7 +68,7 @@ export function createInventoryTab(
           const img = document.createElement('img');
           img.src = iconStr;
           img.alt = def?.name ?? '';
-          img.style.cssText = 'width:32px;height:32px;object-fit:contain;';
+          img.style.cssText = 'width:48px;height:48px;object-fit:contain;';
           icon.append(img);
         } else {
           icon.textContent = iconStr;
