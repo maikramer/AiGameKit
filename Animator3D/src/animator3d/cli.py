@@ -1313,5 +1313,267 @@ def cmd_inspect_rig(
     sys.stdout.write(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
 
 
+# ---------------------------------------------------------------------------
+# retarget — aplicar animações de um rig source (ex.: pack CC0 Quaternius)
+#            sobre um rig target (humanoides do simple-rpg). Ver retarget.py.
+# ---------------------------------------------------------------------------
+
+
+@main.command("retarget")
+@_draco_option
+@click.argument("target_path", type=click.Path(path_type=Path, exists=True))
+@click.argument("source_path", type=click.Path(path_type=Path, exists=True))
+@click.argument("output_path", type=click.Path(path_type=Path))
+@click.option(
+    "--profile",
+    "profile_name",
+    default="quaternius",
+    show_default=True,
+    help="Perfil de retarget (em data/retarget/ ou path YAML).",
+)
+@click.option("--source-track", required=True, help="Nome da action/track no source a retargetizar (ex.: Idle_Loop).")
+@click.option("--clip-name", required=True, help="Nome limpo do clip de saída (ex.: idle).")
+@click.option("--replace", is_flag=True, help="Limpar clips existentes no target antes de retargetizar.")
+def cmd_retarget(
+    target_path: Path,
+    source_path: Path,
+    output_path: Path,
+    profile_name: str,
+    source_track: str,
+    clip_name: str,
+    replace: bool,
+    draco: bool,
+) -> None:
+    """Retargetiza UMA animação de um rig source para o target.
+
+    Ex.: animator3d retarget hero_rigged.glb UAL1_Standard.glb out.glb \\
+        --source-track Walk_Loop --clip-name walk
+    """
+    _require_bpy()
+    from . import bpy_ops
+    from . import retarget as rt
+
+    profile = rt.load_profile(profile_name)
+    item_id = target_path.stem
+    t0 = time.monotonic()
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
+
+    bpy_ops.clear_scene()
+    bpy_ops.import_asset(target_path)
+    target_arm = bpy_ops.list_armatures()[0]
+    target_arm.name = "Target"
+
+    bpy_ops.import_asset(source_path)
+    source_arm = next(a for a in bpy_ops.list_armatures() if a.name != "Target")
+    source_arm.name = "Source"
+    # Descartar meshes do source (mannequin) — só queremos o armature + actions.
+    bpy = bpy_ops._bpy()
+    for obj in list(bpy.data.objects):
+        if obj.type == "MESH" and obj.name not in {o.name for o in target_arm.children if o.type == "MESH"}:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    if replace:
+        rt._clear_nla_tracks("Target")
+
+    res = rt.retarget_animation("Target", "Source", profile.bone_map, source_track, clip_name)
+    console.print(
+        f"  [dim]✓[/dim] {clip_name} <- {source_track} · {res['bones_mapped']} bones · "
+        f"frames {res['frames'][0]}-{res['frames'][1]}"
+    )
+    if res.get("skipped_bones"):
+        console.print(f"  [yellow]bones não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
+
+    # Limpar armature source e actions orfanizados antes do export.
+    bpy.data.objects.remove(source_arm, do_unlink=True)
+    for act in list(bpy.data.actions):
+        used = any(
+            s.action == act
+            for arm in bpy_ops.list_armatures()
+            if arm.animation_data
+            for t in arm.animation_data.nla_tracks
+            for s in t.strips
+        )
+        if not used:
+            bpy.data.actions.remove(act)
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
+    bpy_ops.export_glb(output_path, draco=draco)
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=100)
+
+    elapsed = time.monotonic() - t0
+    console.print(f"[green]retarget[/green] {clip_name!r} · {res['bones_mapped']} bones → {output_path.resolve()}")
+    emit_result(item_id, TOOL_ANIMATOR3D, STATUS_OK, output=str(output_path.resolve()), seconds=elapsed)
+
+
+@main.command("retarget-batch")
+@_draco_option
+@click.argument("target_path", type=click.Path(path_type=Path, exists=True))
+@click.argument("output_path", type=click.Path(path_type=Path))
+@click.option("--profile", "profile_name", default="quaternius", show_default=True, help="Perfil de retarget.")
+@click.option(
+    "--source",
+    "source_path",
+    type=click.Path(path_type=Path),
+    default=None,
+    help="Ficheiro source (FBX/GLB do pack). Default: pack Quaternius em cache (auto-download).",
+)
+@click.option(
+    "--clips",
+    "clip_filter",
+    default=None,
+    help="Subconjunto de nomes limpos separados por vírgula (ex: idle,walk,run).",
+)
+@click.option(
+    "--replace", is_flag=True, default=True, show_default=True, help="Limpar clips existentes no target (default: on)."
+)
+@click.option("--no-replace", "replace", flag_value=False, help="Preservar clips existentes (append).")
+@click.option("--no-fetch", is_flag=True, help="Não fazer auto-download do pack Quaternius (usa --source).")
+def cmd_retarget_batch(
+    target_path: Path,
+    output_path: Path,
+    profile_name: str,
+    source_path: Path | None,
+    clip_filter: str | None,
+    replace: bool,
+    no_fetch: bool,
+    draco: bool,
+) -> None:
+    """Retargetiza TODOS os clips de um perfil num único comando.
+
+    Ex.: animator3d retarget-batch hero_rigged.glb out.glb --profile quaternius
+    """
+    _require_bpy()
+    from . import bpy_ops
+    from . import retarget as rt
+
+    profile = rt.load_profile(profile_name)
+
+    # Resolver source: path explícito > profile.source_path > auto-download Quaternius.
+    if source_path is None:
+        source_path = profile.source_path
+    if source_path is None and not no_fetch:
+        if profile.name == "quaternius":
+            from gamedev_shared.quaternius_fetch import fetch_quaternius_pack
+
+            console.print("[cyan]Pack Quaternius:[/cyan] a garantir o cache...")
+            pack = fetch_quaternius_pack(on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))
+            source_path = pack.glb
+        else:
+            raise click.ClickException(
+                f"Sem --source e o perfil {profile.name!r} não define source_path. Indica --source <pack.fbx/glb>."
+            )
+    if source_path is None or not Path(source_path).is_file():
+        raise click.ClickException(f"Ficheiro source não encontrado: {source_path}")
+
+    only_clips = [s.strip() for s in clip_filter.split(",")] if clip_filter else None
+    if only_clips:
+        missing = [c for c in only_clips if c not in profile.clip_map]
+        if missing:
+            raise click.ClickException(f"Clips não definidos no perfil {profile.name!r}: {missing}")
+
+    item_id = target_path.stem
+    t0 = time.monotonic()
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
+
+    bpy_ops.clear_scene()
+    bpy_ops.import_asset(target_path)
+    target_arm = bpy_ops.list_armatures()[0]
+    target_arm.name = "Target"
+
+    bpy_ops.import_asset(Path(source_path))
+    source_arm = next(a for a in bpy_ops.list_armatures() if a.name != "Target")
+    source_arm.name = "Source"
+    bpy = bpy_ops._bpy()
+    target_mesh_names = {o.name for o in target_arm.children if o.type == "MESH"}
+    for obj in list(bpy.data.objects):
+        if obj.type == "MESH" and obj.name not in target_mesh_names:
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    total = len(profile.clip_map)
+    results = rt.retarget_batch("Target", "Source", profile, only_clips=only_clips, replace=replace)
+    for i, res in enumerate(results):
+        pct = round(((i + 1) / total) * 100) if total else 100
+        emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=pct, clip=res.get("clip"))
+        if "error" in res:
+            console.print(f"  [yellow]✗[/yellow] {res['clip']} <- {res.get('source_track', '?')}: {res['error']}")
+        else:
+            console.print(
+                f"  [dim]✓[/dim] {res['clip']} <- {res['source_track']} · {res['bones_mapped']} bones · "
+                f"frames {res['frames'][0]}-{res['frames'][1]}"
+            )
+            if res.get("skipped_bones"):
+                console.print(f"     [yellow]não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
+
+    bpy.data.objects.remove(source_arm, do_unlink=True)
+    for act in list(bpy.data.actions):
+        used = any(
+            s.action == act
+            for arm in bpy_ops.list_armatures()
+            if arm.animation_data
+            for t in arm.animation_data.nla_tracks
+            for s in t.strips
+        )
+        if not used:
+            bpy.data.actions.remove(act)
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
+    bpy_ops.export_glb(output_path, draco=draco)
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=100)
+
+    nclips = bpy_ops.count_nla_tracks("Target")
+    elapsed = time.monotonic() - t0
+    console.print(
+        f"[green]retarget-batch[/green] profile={profile.name!r} · {nclips} clip(s) → {output_path.resolve()}"
+    )
+    emit_result(item_id, TOOL_ANIMATOR3D, STATUS_OK, output=str(output_path.resolve()), seconds=elapsed)
+
+
+@main.command("rename-clips")
+@click.argument("input_path", type=click.Path(path_type=Path, exists=True))
+@click.argument("output_path", type=click.Path(path_type=Path))
+@click.option(
+    "--map",
+    "map_str",
+    required=True,
+    help="Mapeamento old:new separado por vírgulas (ex: Animator3D_BreatheIdle:idle,Animator3D_Walk:walk).",
+)
+@_draco_option
+def cmd_rename_clips(input_path: Path, output_path: Path, map_str: str, draco: bool) -> None:
+    """Renomeia clips (NLA tracks) já existentes num GLB — sem retarget.
+
+    Útil para alinhar nomes em rigs que mantêm animação procedural (ex.: scorpion,
+    mosquito) aos nomes limpos esperados pelo jogo.
+    """
+    _require_bpy()
+    from . import bpy_ops
+    from . import retarget as rt
+
+    rename_map: dict[str, str] = {}
+    for pair in map_str.split(","):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
+            continue
+        old, new = pair.split(":", 1)
+        rename_map[old.strip()] = new.strip()
+    if not rename_map:
+        raise click.ClickException("--map vazio ou inválido. Formato: old1:new1,old2:new2")
+
+    bpy_ops.clear_scene()
+    bpy_ops.import_asset(input_path)
+    arms = bpy_ops.list_armatures()
+    if not arms:
+        raise click.ClickException("Nenhum armature encontrado.")
+    arm_name = arms[0].name
+
+    done = rt.rename_existing_clips(arm_name, rename_map)
+    for d in done:
+        console.print(f"  [dim]✓[/dim] {d['old']} -> {d['new']}")
+    if not done:
+        console.print("[yellow]Nenhum clip correspondeu ao mapeamento fornecido.[/yellow]")
+
+    bpy_ops.export_glb(output_path, draco=draco)
+    console.print(f"[green]rename-clips[/green] · {len(done)} renomeado(s) → {output_path.resolve()}")
+
+
 if __name__ == "__main__":
     main()
