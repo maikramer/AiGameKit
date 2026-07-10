@@ -37,10 +37,9 @@ export function createHealthBarWidget(
       root.title = t(state, 'hud.health');
 
       const iconEl = setWidgetIcon(
-        document.createElement('div'),
         icon,
         'hud-health-icon',
-        'width:28px;height:28px;object-fit:contain;flex-shrink:0;'
+        'width:40px;height:40px;object-fit:contain;flex-shrink:0;'
       );
 
       const track = document.createElement('div');

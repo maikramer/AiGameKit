@@ -1,13 +1,23 @@
 .hud-xp {
   position: absolute;
-  top: 66px;
+  top: 92px;
   left: 14px;
-  width: 248px;
+  width: min(248px, calc(100vw - 28px));
   z-index: 12;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 12px;
   pointer-events: auto;
+  background: linear-gradient(
+    135deg,
+    rgba(14, 18, 34, 0.72),
+    rgba(10, 14, 26, 0.6)
+  );
+  border: 1px solid rgba(120, 150, 220, 0.2);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
   font-family:
     system-ui,
     Segoe UI,
@@ -16,13 +26,13 @@
 
 .hud-xp-level {
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 14px;
+  font-size: 13px;
   color: #2a1c06;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, #ffe7a0, #ffc24a 60%, #d99320);

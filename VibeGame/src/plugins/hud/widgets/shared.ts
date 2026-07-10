@@ -68,7 +68,6 @@ export function isIconImagePath(icon: string): boolean {
  * caso contrário, usa textContent (emoji/glyph). Retorna o elemento criado.
  */
 export function setWidgetIcon(
-  container: HTMLElement,
   icon: string,
   cssClass: string,
   imgStyle: string

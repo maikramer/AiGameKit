@@ -1,4 +1,5 @@
 import type { State } from '../../../core';
+import { t } from '../../i18n/utils';
 import { injectWidgetCss } from '../../hud/widgets/shared';
 import type { TabContent } from '../../hud/widgets/tabbed-modal-shared';
 import { QuestState } from '../components';
@@ -45,9 +46,9 @@ export function createQuestsTab(
   const root = document.createElement('div');
   root.className = 'hud-modal-quests';
 
-  const activeSection = buildSection('Ativas', []);
-  const completedSection = buildSection('Completas', []);
-  const failedSection = buildSection('Falhadas', []);
+  const activeSection = buildSection(t(state, 'quests.active'), []);
+  const completedSection = buildSection(t(state, 'quests.completed'), []);
+  const failedSection = buildSection(t(state, 'quests.failed'), []);
   root.append(activeSection, completedSection, failedSection);
 
   function refresh(s: State): void {
@@ -84,13 +85,13 @@ export function createQuestsTab(
     }
 
     activeSection.replaceChildren(
-      ...buildSection('Ativas', activeRows).children
+      ...buildSection(t(s, 'quests.active'), activeRows).children
     );
     completedSection.replaceChildren(
-      ...buildSection('Completas', completedRows).children
+      ...buildSection(t(s, 'quests.completed'), completedRows).children
     );
     failedSection.replaceChildren(
-      ...buildSection('Falhadas', failedRows).children
+      ...buildSection(t(s, 'quests.failed'), failedRows).children
     );
   }
 
