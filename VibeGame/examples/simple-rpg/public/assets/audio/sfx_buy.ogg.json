@@ -1,0 +1,48 @@
+{
+  "prompt": "Satisfying purchase confirmation, coin transaction chime, merchant deal struck, bright purchase success tone, crisp interface sound, short, punchy, interface, no reverb",
+  "profile": "effects",
+  "model_id": "stabilityai/stable-audio-open-small",
+  "duration": 1.0,
+  "steps": 16,
+  "cfg_scale": 1.0,
+  "seed": 507,
+  "seed_effective": 507,
+  "sampler": "euler",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": true,
+  "half_precision_effective": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0",
+  "hw_profile": "cuda-1x6g | half=on | vae=chunked",
+  "quality": "high",
+  "category": "ui",
+  "audio_kind": "sfx_ui",
+  "negative_prompt": "music, long tail, reverb, ambient, environmental noise, organic texture, low quality, distortion, clipping, artifacts, muddy, harsh, metallic ringing, phase issues",
+  "prompt_enhancement": {
+    "sound_type": "ui",
+    "descriptors_added": [
+      "crisp interface sound",
+      "short",
+      "punchy",
+      "interface",
+      "no reverb"
+    ],
+    "corrections": [],
+    "original_prompt": "satisfying purchase confirmation, coin transaction chime, merchant deal struck, bright purchase success tone"
+  },
+  "crop_seconds": 1.0,
+  "fade_out_seconds": 0.06,
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "transparent",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
+}

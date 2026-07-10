@@ -1,0 +1,46 @@
+{
+  "prompt": "Massive boss monster roar, deep terrifying beast bellow, giant creature threatening growl, powerful boss entrance, guttural rumble, rising intensity, cinematic",
+  "profile": "effects",
+  "model_id": "stabilityai/stable-audio-open-small",
+  "duration": 3.0,
+  "steps": 20,
+  "cfg_scale": 3.0,
+  "seed": 504,
+  "seed_effective": 504,
+  "sampler": "euler",
+  "sigma_min": 0.3,
+  "sigma_max": 500.0,
+  "trim": true,
+  "half_precision": true,
+  "half_precision_effective": true,
+  "format": "ogg",
+  "sample_rate": 44100,
+  "device": "cuda",
+  "text2sound_version": "0.1.0",
+  "hw_profile": "cuda-1x6g | half=on | vae=chunked",
+  "quality": "high",
+  "category": "creature",
+  "audio_kind": "sfx_creature",
+  "negative_prompt": "music, melody, mechanical, synthetic, clean tone, reverb, low quality, distortion, clipping, artifacts, noise floor, muddy, harsh, metallic ringing, phase issues",
+  "prompt_enhancement": {
+    "sound_type": "creature",
+    "descriptors_added": [
+      "guttural rumble",
+      "rising intensity",
+      "cinematic"
+    ],
+    "corrections": [],
+    "original_prompt": "massive boss monster roar, deep terrifying beast bellow, giant creature threatening growl, powerful boss entrance"
+  },
+  "crop_seconds": 3.0,
+  "fade_out_seconds": 0.06,
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "punch",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
+}

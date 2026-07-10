@@ -1,5 +1,5 @@
 {
-  "prompt": "whoosh sword swing through air, quick blade swish, fast weapon swing",
+  "prompt": "Whoosh sword swing through air, quick blade swish, fast weapon swing, deep bass impact, sharp transient, immediate attack, explosive decay, cinematic, dry recording",
   "profile": "effects",
   "model_id": "stabilityai/stable-audio-open-small",
   "duration": 0.5,
@@ -11,12 +11,39 @@
   "sigma_min": 0.3,
   "sigma_max": 500.0,
   "trim": true,
-  "half_precision": null,
+  "half_precision": true,
   "half_precision_effective": true,
   "format": "ogg",
   "sample_rate": 44100,
   "device": "cuda",
   "text2sound_version": "0.1.0",
+  "hw_profile": "cuda-1x6g | half=on | vae=chunked",
+  "quality": "high",
+  "category": "weapon",
+  "audio_kind": "sfx_impact",
+  "negative_prompt": "music, melody, background music, long reverb tail, echo, ambient pad, low quality, distortion, clipping, artifacts, noise floor, muddy, harsh, metallic ringing, phase issues",
+  "prompt_enhancement": {
+    "sound_type": "impact",
+    "descriptors_added": [
+      "deep bass impact",
+      "sharp transient",
+      "immediate attack",
+      "explosive decay",
+      "cinematic",
+      "dry recording"
+    ],
+    "corrections": [],
+    "original_prompt": "whoosh sword swing through air, quick blade swish, fast weapon swing"
+  },
   "crop_seconds": 0.5,
-  "fade_out_seconds": 0.06
+  "fade_out_seconds": 0.06,
+  "mastering": {
+    "lufs_target": -15.0,
+    "high_pass_hz": 25.0,
+    "compressor_preset": "punch",
+    "compressor_enabled": true,
+    "true_peak_db": -0.5,
+    "headroom_db": 0.3
+  },
+  "ogg_quality": 0.8
 }
