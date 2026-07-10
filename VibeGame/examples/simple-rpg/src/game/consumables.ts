@@ -88,7 +88,7 @@ function buildHotbar(): void {
       const img = document.createElement('img');
       img.src = s.icon;
       img.alt = s.label;
-      img.style.cssText = 'width:34px;height:34px;object-fit:contain;';
+      img.style.cssText = 'width:42px;height:42px;object-fit:contain;';
       root.appendChild(img);
     } else {
       root.textContent = s.icon;

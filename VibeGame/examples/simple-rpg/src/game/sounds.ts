@@ -1,4 +1,4 @@
-import { addClipSound, defineSoundBank } from 'vibegame';
+import { addClipSound, defineSoundBank, playSound } from 'vibegame';
 
 /**
  * Single source of truth for every sound in the game.
@@ -46,8 +46,27 @@ export function registerGameSounds(): void {
   });
 
   // Example of an animation-pinned sound: the attack whoosh fires from the
-  // swing clip itself rather than from input-handling code. (Kept commented
+  // attack clip itself rather than from input-handling code. (Kept commented
   // because the current swing SFX is driven by the input edge in main.ts.)
-  // addClipSound('Animator3D_Attack', { at: 0.25, sound: 'swing' });
+  // addClipSound('attack', { at: 0.25, sound: 'swing' });
   void addClipSound;
+}
+
+/**
+ * Preload every sound in the bank so the first in-game play has no fetch/decode
+ * latency. Howler only creates a Howl on first playSound(); calling it here with
+ * volume 0 + immediate stop forces the network fetch + decode up front.
+ */
+export function preloadGameSounds(): void {
+  const keys = [
+    'save', 'load', 'bomb-drop', 'heal', 'enemy-hurt', 'enemy-death',
+    'boss-roar', 'shop-open', 'buy', 'error', 'player-hurt', 'coin',
+    'item-drop', 'mine-hit', 'chop-hit', 'mine-break', 'chop-break',
+    'levelup', 'swing',
+  ];
+  for (const key of keys) {
+    const handle = playSound(key, { volume: 0 });
+    // Howler stop() cancels playback but the audio data is already fetched.
+    if (handle && typeof handle.stop === 'function') handle.stop();
+  }
 }
