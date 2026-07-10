@@ -180,8 +180,8 @@ profiles:
     texture2d:
       width: 512
       height: 512
-      steps: 50
-      guidance: 7.5
+      steps: 30
+      guidance: 5.0
     skymap2d:
       width: 2048
       height: 1024

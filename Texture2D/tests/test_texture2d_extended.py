@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from texture2d.generator import (
-    BASE_TEXTURE_INSTRUCTIONS,
+    LORA_TRIGGER_WORD,
     augment_prompt_for_seamless,
     default_model_id,
     merge_negative_prompt,
@@ -34,25 +34,35 @@ def test_augment_empty_returns_empty() -> None:
     assert augment_prompt_for_seamless("   ") == ""
 
 
-def test_augment_skips_when_seamless_mentioned() -> None:
+def test_augment_skips_english_wording_but_adds_trigger() -> None:
+    # Palavras "seamless/tileable/repeatable" já cobertas pelo utilizador não são
+    # duplicadas, mas o trigger word da LoRA é sempre injetado (é o que ativa o
+    # comportamento de tiling aprendido — sem ele o score_tileability é ~0).
     p = "A seamless stone wall"
-    assert augment_prompt_for_seamless(p) == p
+    out = augment_prompt_for_seamless(p)
+    assert out == f"{LORA_TRIGGER_WORD}, {p}"
 
 
 def test_augment_skips_tileable() -> None:
     p = "Tileable wood pattern"
-    assert augment_prompt_for_seamless(p) == p
+    out = augment_prompt_for_seamless(p)
+    assert out == f"{LORA_TRIGGER_WORD}, {p}"
 
 
 def test_augment_skips_repeatable() -> None:
     p = "Repeatable fabric"
+    out = augment_prompt_for_seamless(p)
+    assert out == f"{LORA_TRIGGER_WORD}, {p}"
+
+
+def test_augment_already_has_trigger_word_not_duplicated() -> None:
+    p = f"{LORA_TRIGGER_WORD}, rust metal, seamless texture"
     assert augment_prompt_for_seamless(p) == p
 
 
-def test_augment_adds_base_instructions() -> None:
+def test_augment_adds_trigger_and_seamless_suffix() -> None:
     out = augment_prompt_for_seamless("rust metal")
-    assert BASE_TEXTURE_INSTRUCTIONS.split(",")[0].strip() in out
-    assert "rust metal" in out
+    assert out == f"{LORA_TRIGGER_WORD}, rust metal, seamless texture"
 
 
 def test_merge_negative_preset_only() -> None:
