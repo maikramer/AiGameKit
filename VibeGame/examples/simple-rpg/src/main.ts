@@ -104,7 +104,7 @@ import {
 
 setKTX2TranscoderPath('/libs/basis/');
 
-import { registerGameSounds } from './game/sounds';
+import { registerGameSounds, preloadGameSounds } from './game/sounds';
 import { registerGameSkills, heroStats, RING_SPEED_MULT } from './game/skills';
 import { updateConsumables, clearHotbar } from './game/consumables';
 import { updateAbilities, clearAbilityBar } from './game/abilities';
@@ -123,6 +123,7 @@ import { bindEngine } from './game/engine-bridge';
 import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
+import { anyCreatureAggro } from './scripts/creature';
 
 import darkForestQuestsData from './data/quests/dark_forest_quests.json';
 import desertQuestsData from './data/quests/desert_quests.json';
@@ -498,6 +499,7 @@ const dictEN: Record<string, string> = {
   'modal.tab.skills': 'Skills',
   'modal.tab.inventory': 'Inventory',
   'modal.tab.options': 'Options',
+  'modal.tab.quests': 'Quests',
   'options.music': 'Music',
   'options.sfx': 'Sound FX',
   'options.save': '💾 Save Game',
@@ -520,6 +522,12 @@ const dictPT: Record<string, string> = {
   'modal.tab.skills': 'Habilidades',
   'modal.tab.inventory': 'Inventário',
   'modal.tab.options': 'Opções',
+  'modal.tab.quests': 'Missões',
+  'modal.skillPoints': '{n} pontos de habilidade',
+  'modal.inventoryEmpty': 'Mochila vazia',
+  'quests.active': 'Ativas',
+  'quests.completed': 'Completas',
+  'quests.failed': 'Falhadas',
   'options.music': 'Música',
   'options.sfx': 'Efeitos',
   'options.save': '💾 Salvar Jogo',
@@ -831,6 +839,59 @@ const BombAimSpineSystem: System = {
   },
 };
 
+// ── BGM: explore music on boot, switch to battle when creatures aggro.
+//    Uses Howler playSound (not the engine MusicLayer system) so it routes
+//    through the same 'music' bus as the volume slider.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let bgmCurrentLayer: 'explore' | 'battle' | null = null;
+let bgmStarted = false;
+let bgmLastSwitch = 0;
+
+function switchBgm(layer: 'explore' | 'battle'): void {
+  // Stop every Howl whose source is a BGM track, then start the new layer.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const howler = (window as any).Howler;
+  if (howler?._howls) {
+    for (const h of howler._howls) {
+      if (typeof h._src === 'string' && h._src.includes('bgm_')) {
+        h.stop();
+        h.unload();
+      }
+    }
+  }
+  playSound(`bgm-${layer}`);
+  bgmCurrentLayer = layer;
+}
+
+const BgmSystem: System = {
+  group: 'simulation',
+  update(_state: State) {
+    // Wait for the AudioContext to be running (unlocked by the user gesture)
+    // before starting BGM — Howler queues plays on a suspended context but
+    // they may not resume reliably.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ctxRunning = (window as any).Howler?.ctx?.state === 'running';
+    if (!bgmStarted) {
+      if (!ctxRunning) return; // keep waiting for the user gesture
+      bgmStarted = true;
+      switchBgm('explore');
+      return;
+    }
+    // Only switch if the layer actually changed AND at least 1s passed since
+    // the last switch (prevents rapid oscillation from aggro flapping).
+    const inCombat = anyCreatureAggro();
+    const now = performance.now();
+    if (now - bgmLastSwitch < 1000) return;
+    if (inCombat && bgmCurrentLayer !== 'battle') {
+      switchBgm('battle');
+      bgmLastSwitch = now;
+    } else if (!inCombat && bgmCurrentLayer === 'battle') {
+      switchBgm('explore');
+      bgmLastSwitch = now;
+    }
+  },
+};
+
 // Must register quests before runtime.start() so the scene parser can resolve
 // each <DialogueNPC dialogue-id> to its quest index. JSON import widens
 // objective.type to `string`, so bridge to the literal union via double assert.
@@ -848,6 +909,7 @@ async function bootstrap(): Promise<void> {
   });
 
   registerGameSounds();
+  preloadGameSounds();
   addInputMapping('primaryAction', 'KeyJ');
 
   withPlugin(LoadingPlugin);
@@ -875,6 +937,7 @@ async function bootstrap(): Promise<void> {
   withSystem(AttackContextSystem);
   withSystem(BombSystem);
   withSystem(BombAimSpineSystem);
+  withSystem(BgmSystem);
 
   configure({ canvas: '#game-canvas' });
 

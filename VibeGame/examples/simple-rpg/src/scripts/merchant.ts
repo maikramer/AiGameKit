@@ -23,7 +23,7 @@ const TURN_SPEED = 6;
 const TERRAIN_LAYER = 0x0001;
 const HUT_FLOOR_TOP = 0.2;
 const MODEL_URL = '/assets/meshes/npc_merchant_rigged_animated.glb';
-const IDLE_CLIP = 'Animator3D_BreatheIdle';
+const IDLE_CLIP = 'idle';
 
 // Compared squared against dx*dx + dz*dz to avoid sqrt per frame.
 const TALK_RANGE_SQ = 4.5 * 4.5;

@@ -37,7 +37,7 @@ animator3d:
 audio_subdir: audio
 text2sound:
   quality: medium
-  audio_format: wav
+  audio_format: ogg
 
 # ============================================================
 # BIOME PROFILES (Round 3 — simple-rpg biomas + quests)

@@ -117,91 +117,181 @@ assets:
     category: prop
     pipeline: [3d, paint, lod, collision]
 
-  # --- Audio ---
+  # --- Audio (synchronized with src/game/sounds.ts — 22 files) ---
+  # Source of truth: public/assets/audio/*. The ids below map to the actual
+  # filenames. Categories match QualityEngine asset-categories (weapon, creature,
+  # ui, effects, humanoid, item, prop) so audio_kind + negative_prompt + DSP
+  # mastering are applied automatically by gameassets batch / text2sound.
 
-  - id: bgm_field
-    idea: 'calm cheerful cartoon RPG exploration background music, bouncy orchestral strings and playful flute melody, bright fantasy adventure, happy green fields, loopable, light percussion, cute whimsical game'
-    kind: prop
-    category: environment
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: exploration
-
-  - id: sfx_collect
-    idea: 'magical crystal collect sparkle chime, bright ascending notes, short cheerful jingle, cartoon game pickup'
-    kind: prop
-    category: item
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: coin-pickup
-
-  - id: sfx_jump
-    idea: 'short bouncy cartoon jump boing whoosh, playful spring sound, game character leap'
+  - id: bgm_battle
+    idea: 'intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm'
     kind: prop
     category: humanoid
     pipeline: [audio]
-    generation: medium
+    generation: high
+    audio:
+      audio_preset: battle
 
-  - id: sfx_save
-    idea: 'soft positive save confirm chime, gentle bell ding success, warm UI feedback'
+  - id: bgm_explore
+    idea: 'peaceful fantasy village exploration music, gentle acoustic guitar and flute, warm ambient adventure melody, calm countryside'
+    kind: prop
+    category: humanoid
+    pipeline: [audio]
+    generation: high
+    audio:
+      audio_preset: exploration
+
+  - id: sfx_hit
+    idea: 'sharp metal sword clash, bright metallic ring, short combat hit impact'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+    audio:
+      audio_preset: sword-clash
+
+  - id: sfx_swing
+    idea: 'whoosh sword swing through air, quick blade swish, fast weapon swing'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_chop_hit
+    idea: 'sharp axe chop into wood tree trunk, heavy blade impact on timber'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_chop_break
+    idea: 'large tree falling crashing down, timber cracking and splintering'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_mine_hit
+    idea: 'pickaxe striking stone rock, hard mineral impact, mining chisel hit on ore, sharp crack'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_mine_break
+    idea: 'rock crumbling apart, stone debris falling, boulder breaking into fragments'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_levelup
+    idea: 'triumphant level up fanfare, bright ascending victory chime, cheerful RPG success jingle'
+    kind: prop
+    category: item
+    pipeline: [audio]
+    generation: high
+    audio:
+      audio_preset: victory
+
+  - id: sfx_player_hurt
+    idea: 'painful grunt, male warrior taking damage, sharp exhale of pain, short hurt vocalization'
+    kind: prop
+    category: humanoid
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_enemy_hurt
+    idea: 'creature taking damage yelp, short monster pain cry, wounded beast whimper'
+    kind: prop
+    category: creature
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_enemy_death
+    idea: 'creature death wail, fading monster cry, dying beast collapse, long final groan'
+    kind: prop
+    category: creature
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_boss_roar
+    idea: 'massive boss monster roar, deep terrifying beast bellow, giant creature threatening growl, powerful boss entrance'
+    kind: prop
+    category: creature
+    pipeline: [audio]
+    generation: high
+    audio:
+      audio_preset: creature-roar
+
+  - id: sfx_heal
+    idea: 'warm healing magic spell, gentle restoration chime, soft glowing energy swell, soothing recovery aura'
+    kind: prop
+    category: effects
+    pipeline: [audio]
+    generation: high
+    audio:
+      audio_preset: heal
+
+  - id: sfx_shop_open
+    idea: 'friendly shop door opening chime, welcoming merchant bell, cozy tavern door creak, warm marketplace greeting'
     kind: prop
     category: ui
     pipeline: [audio]
-    generation: medium
+    generation: high
+
+  - id: sfx_buy
+    idea: 'satisfying purchase confirmation, coin transaction chime, merchant deal struck, bright purchase success tone'
+    kind: prop
+    category: ui
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_error
+    idea: 'negative error buzz, declining tone, low rejected action sound, descending failure blip, interface denial'
+    kind: prop
+    category: ui
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_coin
+    idea: 'sparkling coin pickup chime, bright golden coin collect, rewarding currency jingle, short treasure acquire'
+    kind: prop
+    category: item
+    pipeline: [audio]
+    generation: high
+    audio:
+      audio_preset: coin-pickup
+
+  - id: sfx_item_drop
+    idea: 'item dropping on ground, object landing on stone floor, dull thud with bounce, inventory item fall'
+    kind: prop
+    category: weapon
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_bomb_drop
+    idea: 'bomb fuse igniting, sizzling explosive timer, crackling fuse burn, tense countdown hiss'
+    kind: prop
+    category: prop
+    pipeline: [audio]
+    generation: high
+
+  - id: sfx_save
+    idea: 'quick save confirmation chime, short success blip, game saved jingle, bright digital confirm'
+    kind: prop
+    category: ui
+    pipeline: [audio]
+    generation: high
     audio:
       audio_preset: ui-confirm
 
   - id: sfx_load
-    idea: 'brief magical shimmer sparkle, fantasy game load restore, soft ascending tones'
+    idea: 'game load whoosh, data loading shimmer, short magical loading sparkle, transition swirl'
     kind: prop
-    category: effects
+    category: ui
     pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: magic-spell
-
-  - id: sfx_potion
-    idea: 'bubbly cartoon potion drinking glug, magical liquid swallowing, cheerful healing sound'
-    kind: prop
-    category: item
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_chest_open
-    idea: 'old wooden chest creaking open followed by magical treasure reveal shimmer, fantasy loot discovery'
-    kind: prop
-    category: chest
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_sword_swing
-    idea: 'quick cartoon sword swoosh swing, bright metallic whoosh, playful combat slash'
-    kind: prop
-    category: weapon
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: sword-clash
-
-  - id: sfx_coin
-    idea: 'bright golden coin pickup jingle, cheerful monetary reward, short shiny ding'
-    kind: prop
-    category: item
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: coin-pickup
-
-  - id: sfx_step
-    idea: 'soft cartoon grass footstep, light outdoor terrain walk, single gentle crunch'
-    kind: prop
-    category: vegetation
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: footsteps-grass
+    generation: high
 
   # --- Dark Forest biome (Round 3) ---
 
@@ -352,81 +442,8 @@ assets:
     generation: high
 
   # --- Biome audio (Round 3) ---
-
-  - id: bgm_dark_forest
-    idea: 'mysterious dark forest background music, haunting woodwinds and low strings, eerie magical ambient, fantasy exploration, loopable, slightly tense cartoon game'
-    kind: prop
-    category: environment
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: exploration
-
-  - id: bgm_desert
-    idea: 'vast desert winds background music, sparse dulcimer and warm drone, lonely arid atmosphere, fantasy exploration, loopable, cartoon game'
-    kind: prop
-    category: environment
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: exploration
-
-  - id: bgm_swamp
-    idea: 'murky swamp background music, low bass drone with dripping water percussion, eerie bullfrog croaks, dense fantasy atmosphere, loopable, cartoon game'
-    kind: prop
-    category: environment
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: exploration
-
-  - id: sfx_wolf_howl
-    idea: 'single cartoon wolf howl, mournful distant canine call, fantasy forest creature sound'
-    kind: prop
-    category: creature
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_scorpion_hiss
-    idea: 'aggressive cartoon scorpion hiss, sharp insect threat sound, desert creature signal'
-    kind: prop
-    category: creature
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_bogling_jump
-    idea: 'wet cartoon bogling jump splash, sticky amphibian leap sound, swamp creature movement'
-    kind: prop
-    category: creature
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_quest_complete
-    idea: 'cheerful fantasy quest complete fanfare, triumphant short brass and strings chord, RPG accomplishment sound'
-    kind: prop
-    category: ui
-    pipeline: [audio]
-    generation: medium
-    audio:
-      audio_preset: ui-confirm
-
-  - id: sfx_npc_speak_low
-    idea: 'low pitched cartoon character voice murmur, generic NPC dialogue sound, fantasy villager hum'
-    kind: prop
-    category: ui
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_npc_speak_mid
-    idea: 'mid pitched cartoon character voice murmur, generic NPC dialogue sound, fantasy traveler hum'
-    kind: prop
-    category: ui
-    pipeline: [audio]
-    generation: medium
-
-  - id: sfx_npc_speak_high
-    idea: 'high pitched cartoon character voice murmur, generic NPC dialogue sound, fantasy child or small creature hum'
-    kind: prop
-    category: ui
-    pipeline: [audio]
-    generation: medium
+  # NOTE: Biome-specific BGM/SFX (bgm_dark_forest, bgm_desert, bgm_swamp,
+  # sfx_wolf_howl, etc.) were planned but never generated. Removed to keep the
+  # manifest in sync with public/assets/audio/ (source of truth: sounds.ts).
+  # The game uses bgm_explore/bgm_battle for all biomes. Add biome-specific
+  # audio here only when the assets are actually generated.

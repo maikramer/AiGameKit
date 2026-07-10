@@ -104,7 +104,7 @@ function buildBar(): void {
       const img = document.createElement('img');
       img.src = a.icon;
       img.alt = a.label;
-      img.style.cssText = 'width:30px;height:30px;object-fit:contain;';
+      img.style.cssText = 'width:38px;height:38px;object-fit:contain;';
       root.appendChild(img);
     } else {
       root.textContent = a.icon;
