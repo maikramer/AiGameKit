@@ -322,41 +322,50 @@ def apply_mastering_chain(
         shaped_board = Pedalboard(shaping)
         audio_in = shaped_board(audio_in, sample_rate)
 
-    # Stage 2: true-peak limiter — protect the ceiling BEFORE loudness
-    # normalization. Order matters: the limiter shapes the peaks, then the LUFS
-    # gain is applied as a final digital amplitude change that the limiter
-    # never sees (so they don't fight each other).
-    if want_limiter:
-        lim_board = Pedalboard([Limiter(threshold_db=float(true_peak_db), release_ms=100.0)])
-        audio_in = lim_board(audio_in, sample_rate)
-
-    # Stage 3: LUFS normalization as the FINAL step. Measured on the fully-
-    # processed signal (post HP/compressor/limiter), applied as a pure digital
-    # gain. This is exact because nothing downstream alters loudness — the
-    # headroom margin is folded into the same gain to avoid re-clipping.
+    # Stage 2: LUFS normalization — measure loudness on the shaped signal (post
+    # HP/compressor) and apply a digital gain to hit the target. This runs
+    # BEFORE the limiter so the limiter can clamp any peaks the gain pushes up.
     if want_lufs:
         import pyloudnorm as pyln
 
-        meter = pyln.Meter(sample_rate)
-        measured = meter.integrated_loudness(audio_in)
-        if np.isfinite(measured):
-            # Target slightly below the requested LUFS to leave headroom margin,
-            # so the final gain + margin lands on the requested value and stays
-            # under 0 dBFS without re-clipping.
-            effective_target = float(lufs_target) - (float(headroom_db) if headroom_db else 0.0)
-            delta_db = effective_target - float(measured)
-            audio_in = audio_in * (10.0 ** (delta_db / 20.0))
-            # Hard safety clip in case rounding pushes a sample over 1.0.
-            audio_in = np.clip(audio_in, -1.0, 1.0)
+        # pyloudnorm's integrated loudness needs >= 1 block (0.4s default) of
+        # audio. Very short SFX (e.g. 0.5s after crop) can fall below this and
+        # raise "Audio must have length greater than the block size". In that
+        # case fall back to peak normalization (still respects the headroom).
+        n_samples = audio_in.shape[0]
+        min_lufs_samples = int(0.45 * sample_rate)  # 0.4s block + small margin
+        if n_samples >= min_lufs_samples:
+            meter = pyln.Meter(sample_rate)
+            measured = meter.integrated_loudness(audio_in)
+            if np.isfinite(measured):
+                delta_db = float(lufs_target) - float(measured)
+                audio_in = audio_in * (10.0 ** (delta_db / 20.0))
+        else:
+            # Audio too short for LUFS measurement — fall back to peak
+            # normalization to a safe level.
+            peak = float(np.max(np.abs(audio_in)))
+            if peak > 1e-6:
+                target_peak = 10.0 ** (-(1.0 + (headroom_db or 0.0)) / 20.0)
+                audio_in = audio_in * (target_peak / peak)
 
-    processed = audio_in
+    # Stage 3: true-peak limiter — runs AFTER LUFS gain to clamp any peaks the
+    # gain pushed above the ceiling. This is correct mastering order: shape →
+    # normalize loudness → limit. The limiter is the last line of defense.
+    if want_limiter:
+        lim_board = Pedalboard([Limiter(threshold_db=float(true_peak_db), release_ms=100.0)])
+        audio_in = lim_board(audio_in, sample_rate)
+        # Hard-clip at the ceiling as an absolute guarantee. Pedalboard's Limiter
+        # (like analog limiters) permits inter-sample overshoot; the hard clip
+        # ensures no sample exceeds the threshold. Industry-standard "brickwall".
+        ceiling_linear = 10.0 ** (float(true_peak_db) / 20.0)
+        audio_in = np.clip(audio_in, -ceiling_linear, ceiling_linear)
 
-    # Final headroom margin — only when LUFS normalization did NOT already fold
-    # it in (i.e., LUFS was off but other mastering stages ran).
-    if headroom_db and headroom_db > 0 and not want_lufs:
-        processed = processed * (10.0 ** (-float(headroom_db) / 20.0))
+    # Final headroom margin — digital attenuation below 0 dBFS so PCM/OGG
+    # quantization rounding cannot clip.
+    if headroom_db and headroom_db > 0:
+        audio_in = audio_in * (10.0 ** (-float(headroom_db) / 20.0))
 
-    processed = np.clip(processed, -1.0, 1.0)
+    processed = np.clip(audio_in, -1.0, 1.0)
 
     # Restore original layout: if input was mono 1D, keep it 1D.
     if len(original_shape) == 1:
@@ -486,6 +495,18 @@ def save_audio(
 
     # (channels, samples) → (samples, channels) for soundfile
     audio_np: np.ndarray = np.ascontiguousarray(audio.numpy().T)
+
+    # OGG Vorbis is lossy and can introduce inter-sample overshoot during
+    # quantization — a signal peaking at 0.94 can decode back at 1.1+ on sharp
+    # transients. Pull the peak down to a safe ceiling before lossy encoding so
+    # the decoded result stays under 0 dBFS. WAV/FLAC are lossless and need no
+    # extra margin.
+    if fmt == "ogg":
+        ogg_safety_peak = 0.70  # ≈ -3.1 dBFS, absorbs worst-case Vorbis overshoot
+        current_peak = float(np.max(np.abs(audio_np)))
+        if current_peak > ogg_safety_peak and current_peak > 1e-6:
+            audio_np = audio_np * (ogg_safety_peak / current_peak)
+
     subtype = _SF_SUBTYPES_BY_DEPTH.get((bit_depth, fmt), _SF_SUBTYPES.get(fmt, "PCM_16"))
 
     if fmt == "ogg" and ogg_quality is not None:
