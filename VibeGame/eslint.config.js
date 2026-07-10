@@ -243,6 +243,10 @@ export default [
         URL: 'readonly',
         window: 'readonly',
         document: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
       },
     },
     rules: {

@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Animation Viewer — VibeGame</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #1a1a1f;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #e0e0e8;
+      }
+      #sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 300px;
+        height: 100vh;
+        background: rgba(22, 22, 28, 0.96);
+        border-right: 1px solid #3a3a44;
+        overflow-y: auto;
+        z-index: 10;
+        padding: 14px;
+      }
+      #sidebar h1 {
+        margin: 0 0 4px;
+        font-size: 16px;
+        color: #6bf;
+        font-weight: 600;
+      }
+      #sidebar .subtitle {
+        font-size: 11px;
+        color: #777;
+        margin-bottom: 14px;
+      }
+      #sidebar h2 {
+        margin: 16px 0 6px;
+        font-size: 11px;
+        color: #999;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        font-weight: 600;
+      }
+      #sidebar label {
+        font-size: 12px;
+        color: #bbb;
+        display: block;
+        margin-bottom: 4px;
+      }
+      #assetDir {
+        width: 100%;
+        padding: 5px 7px;
+        background: #2a2a32;
+        color: #ddd;
+        border: 1px solid #444;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: monospace;
+      }
+      #modelInput {
+        width: 100%;
+        padding: 5px 7px;
+        background: #2a2a32;
+        color: #ddd;
+        border: 1px solid #444;
+        border-radius: 4px;
+        font-size: 12px;
+        font-family: monospace;
+      }
+      #loadBtn {
+        margin-top: 6px;
+        padding: 5px 14px;
+        background: #2a6;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      #loadBtn:hover {
+        background: #3b7;
+      }
+      #clipButtons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+      }
+      #clipButtons button {
+        padding: 4px 10px;
+        background: #33333c;
+        color: #ccc;
+        border: 1px solid #48484e;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      #clipButtons button:hover {
+        background: #42424e;
+      }
+      #clipButtons button.active {
+        background: #2a6;
+        border-color: #3b7;
+        color: #fff;
+      }
+      #controls {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      #controls button {
+        padding: 5px 10px;
+        background: #33333c;
+        color: #ccc;
+        border: 1px solid #48484e;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        text-align: left;
+      }
+      #controls button:hover {
+        background: #42424e;
+      }
+      #speedRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      #speed {
+        width: 120px;
+      }
+      #info {
+        margin-top: 14px;
+        padding: 8px;
+        background: #222229;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #888;
+        line-height: 1.6;
+        word-break: break-all;
+      }
+      #info .ok {
+        color: #6b6;
+      }
+      #info .err {
+        color: #f66;
+      }
+      #canvasArea {
+        margin-left: 300px;
+        width: calc(100vw - 300px);
+        height: 100vh;
+      }
+      #loading {
+        position: fixed;
+        top: 50%;
+        left: calc(50% + 150px);
+        transform: translate(-50%, -50%);
+        font-size: 16px;
+        color: #6bf;
+        z-index: 20;
+        display: none;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 12px 20px;
+        border-radius: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="sidebar">
+      <h1>🎬 Animation Viewer</h1>
+      <div class="subtitle">VibeGame — inspect rigged GLB clips</div>
+
+      <h2>Asset Directory</h2>
+      <label for="assetDir">Path to meshes (served by dev server)</label>
+      <input id="assetDir" value="/assets/meshes" />
+
+      <h2>Model</h2>
+      <label for="modelInput">Model name (without _rigged_animated.glb)</label>
+      <input id="modelInput" value="hero" placeholder="hero, goblin, wolf..." />
+      <br />
+      <button id="loadBtn">Load Model</button>
+
+      <h2>Clips</h2>
+      <div id="clipButtons"><span style="color: #666; font-size: 12px">Load a model to see clips</span></div>
+
+      <h2>Playback</h2>
+      <div id="speedRow">
+        <label for="speed" style="margin: 0">Speed:</label>
+        <input id="speed" type="range" min="0" max="2" step="0.1" value="1" />
+        <span id="speedVal">1.0×</span>
+      </div>
+
+      <h2>View</h2>
+      <div id="controls">
+        <button id="resetCam">📷 Reset Camera</button>
+        <button id="toggleGrid">▦ Toggle Grid</button>
+        <button id="toggleSkeleton">🦴 Toggle Skeleton</button>
+        <button id="toggleAutoRotate">🔄 Auto-Rotate</button>
+      </div>
+
+      <div id="info">Ready.</div>
+    </div>
+
+    <div id="loading">Loading…</div>
+    <div id="canvasArea"></div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x26262e);
+
+      const grid = new THREE.GridHelper(20, 20, 0x555, 0x3a3a3a);
+      scene.add(grid);
+
+      const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+      camera.position.set(3, 2.5, 4);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(devicePixelRatio);
+      renderer.shadowMap.enabled = true;
+      document.getElementById("canvasArea").appendChild(renderer.domElement);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 1, 0);
+      controls.enableDamping = true;
+
+      scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.2));
+      const keyLight = new THREE.DirectionalLight(0xffffff, 2.0);
+      keyLight.position.set(5, 10, 5);
+      scene.add(keyLight);
+      const fillLight = new THREE.DirectionalLight(0x8899ff, 0.6);
+      fillLight.position.set(-5, 5, -5);
+      scene.add(fillLight);
+
+      const loader = new GLTFLoader();
+      let currentModel = null;
+      let mixer = null;
+      let clips = [];
+      let currentAction = null;
+      let skeletonHelper = null;
+      let autoRotate = false;
+
+      function resize() {
+        const area = document.getElementById("canvasArea");
+        camera.aspect = area.clientWidth / area.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(area.clientWidth, area.clientHeight);
+      }
+      window.addEventListener("resize", resize);
+      resize();
+
+      function setInfo(html) {
+        document.getElementById("info").innerHTML = html;
+      }
+
+      function loadModel() {
+        const dir = document.getElementById("assetDir").value.replace(/\/$/, "");
+        const name = document.getElementById("modelInput").value.trim();
+        if (!name) return;
+        const url = `${dir}/${name}_rigged_animated.glb`;
+        document.getElementById("loading").style.display = "block";
+        setInfo(`Loading <b>${url}</b>…`);
+
+        loader.load(
+          url,
+          (gltf) => {
+            if (currentModel) {
+              scene.remove(currentModel);
+              currentModel.traverse((o) => {
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) {
+                  if (Array.isArray(o.material)) o.material.forEach((m) => m.dispose());
+                  else o.material.dispose();
+                }
+              });
+            }
+            if (skeletonHelper) {
+              scene.remove(skeletonHelper);
+              skeletonHelper = null;
+            }
+
+            currentModel = gltf.scene;
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const h = box.max.y - box.min.y;
+            if (h > 0) {
+              const s = 2 / h;
+              currentModel.scale.setScalar(s);
+              currentModel.position.y = -box.min.y * s;
+            }
+            scene.add(currentModel);
+
+            mixer = new THREE.AnimationMixer(currentModel);
+            clips = gltf.animations;
+            buildClipButtons();
+
+            document.getElementById("loading").style.display = "none";
+            setInfo(
+              `<span class="ok">✓ ${name}</span> — ${clips.length} clips<br>${clips.map((c) => c.name).join(", ")}`
+            );
+            if (clips.length > 0) playClip(clips[0].name);
+          },
+          (progress) => {
+            if (progress.total) {
+              const pct = Math.round((progress.loaded / progress.total) * 100);
+              document.getElementById("loading").textContent = `Loading… ${pct}%`;
+            }
+          },
+          (err) => {
+            document.getElementById("loading").style.display = "none";
+            setInfo(`<span class="err">✗ Failed to load ${url}</span><br>${err.message || err}`);
+          }
+        );
+      }
+
+      function buildClipButtons() {
+        const div = document.getElementById("clipButtons");
+        div.innerHTML = "";
+        clips.forEach((clip) => {
+          const b = document.createElement("button");
+          b.textContent = clip.name;
+          b.onclick = () => {
+            playClip(clip.name);
+            [...div.children].forEach((c) => c.classList.remove("active"));
+            b.classList.add("active");
+          };
+          div.appendChild(b);
+        });
+      }
+
+      function playClip(name) {
+        const clip = clips.find((c) => c.name === name);
+        if (!clip || !mixer) return;
+        if (currentAction) currentAction.fadeOut(0.15);
+        currentAction = mixer.clipAction(clip);
+        currentAction.reset().setEffectiveWeight(1).fadeIn(0.15).play();
+        currentAction.timeScale = parseFloat(document.getElementById("speed").value);
+      }
+
+      // Wire up controls
+      document.getElementById("loadBtn").onclick = loadModel;
+      document.getElementById("modelInput").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") loadModel();
+      });
+      document.getElementById("assetDir").addEventListener("keydown", (e) => {
+        if (e.key === "Enter") loadModel();
+      });
+
+      document.getElementById("speed").oninput = (e) => {
+        const v = parseFloat(e.target.value);
+        document.getElementById("speedVal").textContent = v.toFixed(1) + "×";
+        if (currentAction) currentAction.timeScale = v;
+      };
+
+      document.getElementById("resetCam").onclick = () => {
+        camera.position.set(3, 2.5, 4);
+        controls.target.set(0, 1, 0);
+      };
+      document.getElementById("toggleGrid").onclick = () => {
+        grid.visible = !grid.visible;
+      };
+      document.getElementById("toggleSkeleton").onclick = () => {
+        if (!currentModel) return;
+        if (skeletonHelper) {
+          scene.remove(skeletonHelper);
+          skeletonHelper = null;
+        } else {
+          skeletonHelper = new THREE.SkeletonHelper(currentModel);
+          skeletonHelper.material.linewidth = 2;
+          scene.add(skeletonHelper);
+        }
+      };
+      document.getElementById("toggleAutoRotate").onclick = (e) => {
+        autoRotate = !autoRotate;
+        controls.autoRotate = autoRotate;
+        controls.autoRotateSpeed = 2;
+        e.target.style.opacity = autoRotate ? "1" : "0.6";
+      };
+
+      // Pre-fill model from URL param ?model=goblin
+      const params = new URLSearchParams(location.search);
+      if (params.get("model")) {
+        document.getElementById("modelInput").value = params.get("model");
+      }
+      if (params.get("dir")) {
+        document.getElementById("assetDir").value = params.get("dir");
+      }
+
+      const clock = new THREE.Clock();
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = clock.getDelta();
+        if (mixer) mixer.update(dt);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+      animate();
+
+      // Auto-load on start
+      loadModel();
+    </script>
+  </body>
+</html>

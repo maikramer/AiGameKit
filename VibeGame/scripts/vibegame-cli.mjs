@@ -6,7 +6,7 @@
  * mesmo com node_modules completo. `--skip-engine-install` pula esse passo. Em apps, instala deps em
  * falta (bun, com fallback npm).
  */
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, normalize, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -406,6 +406,9 @@ function help() {
   console.log(
     '  vibegame run [opts] [-- …]  Build da engine + dev (bun install na engine se faltar deps)'
   );
+  console.log(
+    '  vibegame anim-viewer [opts]  Launch rigged-GLB animation inspector (alias: av)'
+  );
   console.log('  vibegame playwright …    Run Playwright CLI (alias: pw)');
   console.log('  vibegame --version       Show version');
   console.log('  vibegame help            This message');
@@ -518,6 +521,135 @@ function runPlaywright(pwArgs) {
   process.exit(1);
 }
 
+/**
+ * Procura um directório com assets/meshes/ a partir de `fromDir`.
+ * Tenta: fromDir/assets/meshes, fromDir/public/assets/meshes, e subindo até engine root.
+ * @param {string} fromDir
+ * @returns {string | null} path do assetsRoot (pai de /assets) ou null
+ */
+function findAssetsRoot(fromDir) {
+  const candidates = [
+    join(fromDir, 'public'),
+    fromDir,
+    join(fromDir, 'assets', '..'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, 'assets', 'meshes'))) return c;
+  }
+  return null;
+}
+
+/**
+ * Inicia o Animation Viewer — serve o viewer HTML da engine + os assets do projecto alvo.
+ *
+ * @param {string[]} args argumentos após `vibegame anim-viewer`
+ * @returns {never}
+ */
+function runAnimViewer(args) {
+  const viewerHtml = join(root, 'tools', 'anim-viewer', 'index.html');
+  const serverScript = join(root, 'scripts', 'anim-viewer-server.mjs');
+  if (!existsSync(viewerHtml) || !existsSync(serverScript)) {
+    console.error(
+      '[vibegame anim-viewer] Viewer ou servidor em falta na engine.'
+    );
+    console.error(`  Viewer:  ${viewerHtml}`);
+    console.error(`  Server:  ${serverScript}`);
+    process.exit(1);
+  }
+
+  // Parse: [--dir <path>] [--port <n>] [--model <name>]
+  let dir = null;
+  let port = '5175';
+  let model = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if ((a === '--dir' || a === '-d') && args[i + 1]) {
+      dir = resolve(args[++i]);
+    } else if ((a === '--port' || a === '-p') && args[i + 1]) {
+      port = args[++i];
+    } else if (a === '--model' && args[i + 1]) {
+      model = args[++i];
+    } else if (a === '--' && args[i + 1]) {
+      // vibegame anim-viewer -- model=goblin
+      const kv = args[++i];
+      if (kv.startsWith('model=')) model = kv.slice(6);
+    } else if (!a.startsWith('-')) {
+      // Primeiro arg posicional = directório
+      if (!dir) dir = resolve(a);
+    }
+  }
+
+  // Resolver assetsRoot: --dir explícito > cwd > exemplos da engine
+  const cwd = process.cwd();
+  const searchDirs = dir ? [dir] : [cwd, join(root, 'examples', 'simple-rpg')];
+  let assetsRoot = null;
+  for (const d of searchDirs) {
+    if (existsSync(d)) {
+      assetsRoot = findAssetsRoot(d);
+      if (assetsRoot) break;
+    }
+  }
+  if (!assetsRoot) {
+    console.error(
+      '[vibegame anim-viewer] Não encontrei assets/meshes/ no directório actual.'
+    );
+    console.error(`  Cwd:    ${cwd}`);
+    console.error(
+      '  Use: vibegame anim-viewer --dir <path-para-pasta-com-assets/meshes>'
+    );
+    console.error(
+      '  Ou corra a partir da raiz de um exemplo VibeGame (ex: examples/simple-rpg).'
+    );
+    process.exit(1);
+  }
+
+  const meshesDir = join(assetsRoot, 'assets', 'meshes');
+  console.log('[vibegame anim-viewer]');
+  console.log(`  Assets root: ${assetsRoot}`);
+  console.log(`  Meshes:      ${meshesDir}`);
+  if (model) console.log(`  Model:       ${model}`);
+
+  // Iniciar o servidor estático
+  const child = spawn(
+    process.execPath,
+    [serverScript, viewerHtml, assetsRoot, port],
+    {
+      stdio: 'inherit',
+      env: process.env,
+    }
+  );
+
+  // Abrir o browser após o server iniciar
+  setTimeout(() => {
+    const url = `http://localhost:${port}/${model ? `?model=${model}` : ''}`;
+    openBrowser(url);
+  }, 800);
+
+  child.on('exit', (code) => process.exit(code ?? 0));
+}
+
+/**
+ * Abre o URL no browser predefinido do sistema (best-effort, não-fatal).
+ * @param {string} url
+ */
+function openBrowser(url) {
+  const cmds =
+    process.platform === 'darwin'
+      ? ['open']
+      : process.platform === 'win32'
+        ? ['cmd', '/c', 'start']
+        : ['xdg-open'];
+  try {
+    spawn(cmds[0], cmds.slice(1).concat(url), {
+      stdio: 'ignore',
+      detached: true,
+      shell: cmds.length > 1,
+    }).unref();
+  } catch {
+    /* não-fatal — o utilizador abre manualmente */
+  }
+}
+
 const argv = process.argv.slice(2);
 const first = argv[0];
 
@@ -549,6 +681,10 @@ if (first === 'run' || first === 'r') {
     process.exit(1);
   }
   runVibegameRun(engineRoot, opts);
+}
+
+if (first === 'anim-viewer' || first === 'av') {
+  runAnimViewer(argv.slice(1));
 }
 
 if (first === '--version' || first === '-v') {
