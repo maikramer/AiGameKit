@@ -6,6 +6,7 @@ from PIL import Image
 
 from texture2d.generator import (
     DEFAULT_MODEL_ID,
+    LORA_TRIGGER_WORD,
     augment_prompt_for_seamless,
     default_model_id,
     merge_negative_prompt,
@@ -19,14 +20,16 @@ class TestAugmentPrompt:
         assert "stone wall" in result
 
     def test_skips_if_already_seamless(self):
+        # A palavra "seamless" não é duplicada, mas o trigger word da LoRA
+        # (smlstxtr) é sempre injetado — é o que ativa o tiling aprendido.
         original = "seamless brick texture"
         result = augment_prompt_for_seamless(original)
-        assert result == original
+        assert result == f"{LORA_TRIGGER_WORD}, {original}"
 
     def test_skips_if_tileable(self):
         original = "tileable marble floor"
         result = augment_prompt_for_seamless(original)
-        assert result == original
+        assert result == f"{LORA_TRIGGER_WORD}, {original}"
 
     def test_empty_prompt(self):
         assert augment_prompt_for_seamless("") == ""

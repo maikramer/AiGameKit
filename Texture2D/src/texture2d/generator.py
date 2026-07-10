@@ -14,6 +14,11 @@ from PIL import Image
 from gamedev_shared.logging import Logger
 
 from .presets import get_preset_params, get_preset_prompt
+from .prompt_enhancer import (
+    enhance_ground_negative,
+    enhance_ground_prompt,
+    looks_like_ground,
+)
 from .utils import generate_seed, validate_params, validate_prompt
 
 _logger = Logger()
@@ -23,10 +28,14 @@ DEFAULT_BASE_MODEL_ID = "Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32"
 # Alias compat: o "modelo" do Texture2D é a LoRA seamless aplicada sobre o FLUX base.
 DEFAULT_MODEL_ID = DEFAULT_LORA_MODEL_ID
 
-BASE_TEXTURE_INSTRUCTIONS = (
-    "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, "
-    "no visible seams, no borders, no frame, no text, no watermark"
-)
+# Trigger word da LoRA gokaygokay/Flux-Seamless-Texture-LoRA (treinada via FAL Fast
+# LoRA Trainer). O model card pede o formato exato "smlstxtr, <prompt>, seamless
+# texture" — sem o trigger, a LoRA carrega mas o comportamento de tiling aprendido
+# não é ativado de forma fiável (validado empiricamente: score_tileability médio
+# ~0.0-0.1 sem o trigger vs melhoria mensurável com ele). Isto sozinho não garante
+# costuras perfeitas — para isso ver ``tileability.make_seamless`` (post-process
+# determinístico aplicado por defeito em ``TextureGenerator.generate``).
+LORA_TRIGGER_WORD = "smlstxtr"
 
 DEFAULT_PARAMS: dict[str, Any] = {
     "guidance_scale": 3.5,
@@ -65,20 +74,23 @@ def _torch_dtype_for(device: str) -> torch.dtype:
 
 
 def augment_prompt_for_seamless(prompt: str) -> str:
-    """Acrescenta instruções de textura seamless/tileable automaticamente.
+    """Acrescenta trigger word + instruções de textura seamless/tileable.
 
-    Se o utilizador já menciona seamless/tileable/repeatable, não duplica.
+    Formato do model card da LoRA: ``"smlstxtr, <prompt>, seamless texture"``.
+    Não duplica se o utilizador já incluiu o trigger word ou termos seamless/tileable.
     """
     p = (prompt or "").strip()
     if not p:
+        return p
+    if re.search(rf"\b{LORA_TRIGGER_WORD}\b", p, flags=re.IGNORECASE):
         return p
     if re.search(
         r"\b(seamless|tileable|tiling|repeatable|repeating|repeat)\b",
         p,
         flags=re.IGNORECASE,
     ):
-        return p
-    return f"{BASE_TEXTURE_INSTRUCTIONS}, {p}"
+        return f"{LORA_TRIGGER_WORD}, {p}"
+    return f"{LORA_TRIGGER_WORD}, {p}, seamless texture"
 
 
 def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
@@ -228,6 +240,17 @@ class TextureGenerator:
             except Exception as e:
                 self._log(f"enable_vae_slicing indisponível: {e}")
 
+        # VAE tiling: decodifica o VAE em mosaicos sobrepostos em vez de uma só
+        # passagem. Complementar ao slicing — reduz o pico de VRAM na decodificação
+        # do latent → RGB, permitindo resoluções maiores em GPUs pequenas. Sem custo
+        # de qualidade visível (a sobreposição dos mosaicos esconde as costuras).
+        if self.vae_slicing and self.device != "cpu":
+            try:
+                if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
+                    pipe.vae.enable_tiling()
+            except Exception as e:
+                self._log(f"enable_vae_tiling indisponível: {e}")
+
         if self.device == "cpu":
             pipe.to("cpu")
         elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
@@ -341,8 +364,18 @@ class TextureGenerator:
         cfg_scale: float | None = None,
         lora_strength: float = 1.0,
         preset: str | None = None,
+        ground: str = "auto",
+        seamless_fix: bool = True,
     ) -> tuple[Image.Image, dict[str, Any]]:
         """Gera uma textura seamless.
+
+        Args:
+            ground: Modo de chão top-down — ``"auto"`` deteta chão/terreno e aplica
+                modificadores de viewpoint/iluminação/escala; ``"on"`` força;
+                ``"off"`` desliga. Ver :mod:`texture2d.prompt_enhancer`.
+            seamless_fix: Aplica :func:`texture2d.tileability.make_seamless` à saída
+                (post-process determinístico; a LoRA sozinha não garante bordas
+                idênticas — ver validação empírica no docstring de ``LORA_TRIGGER_WORD``).
 
         Returns:
             Tuple (imagem PIL, metadata dict).
@@ -368,6 +401,13 @@ class TextureGenerator:
 
         # Augment seamless
         prompt = augment_prompt_for_seamless(prompt)
+
+        # Ground enhancer (top-down viewpoint / flat lighting / medium scale).
+        # Resolve "auto" por heurística de keywords; "on"/"off" é explícito.
+        ground_active = ground == "on" or (ground == "auto" and looks_like_ground(prompt))
+        if ground_active:
+            prompt = enhance_ground_prompt(prompt)
+            negative_prompt = enhance_ground_negative(negative_prompt)
 
         is_valid, error = validate_prompt(prompt, max_length=1200)
         if not is_valid:
@@ -429,9 +469,15 @@ class TextureGenerator:
 
         image = image.convert("RGB")
 
+        if seamless_fix:
+            from .tileability import make_seamless
+
+            image = make_seamless(image)
+
         metadata = {
             "seed": seed,
             "prompt_final": prompt,
+            "seamless_fix": seamless_fix,
             **params,
         }
 

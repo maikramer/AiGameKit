@@ -147,6 +147,17 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "GPUs pequenas. Flags explícitas ganham. Env: TEXTURE2D_HW_AUTO=0."
     ),
 )
+@click.option(
+    "--ground",
+    type=click.Choice(["auto", "on", "off"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help=(
+        "Modo chão top-down: 'auto' deteta chão/terreno e aplica modificadores "
+        "de viewpoint/iluminação/escala (corrige grama isométrica, zoom macro e "
+        "relevo 3D); 'on' força; 'off' desliga."
+    ),
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -167,6 +178,7 @@ def generate_cmd(
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
+    ground: str,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -240,6 +252,45 @@ def generate_cmd(
 
     t_start = time.time()
 
+    # Delega ao model server se estiver ativo (gerações subsequentes ~3-5s vs ~250s
+    # de cold start numa GPU pequena com sequential offload). Só quando há output
+    # explícito — o server precisa de um caminho onde gravar.
+    if not cpu and output is not None:
+        from . import client
+
+        if client.is_available():
+            console.print("[dim]A delegar ao model server ativo...[/dim]")
+            result = client.send_generate_request(
+                prompt=prompt,
+                output=output,
+                width=width,
+                height=height,
+                steps=steps,
+                guidance=guidance_scale,
+                seed=seed,
+                negative_prompt=negative_prompt,
+                cfg_scale=cfg_scale,
+                lora_strength=lora_strength,
+                preset=preset,
+                ground=ground,
+            )
+            if result and result.get("status") == "ok":
+                elapsed = time.time() - t_start
+                try:
+                    sz = format_bytes(Path(result["output"]).stat().st_size)
+                except OSError:
+                    sz = "?"
+                console.print(Rule("[bold green]Resultado (via server)", style="green"))
+                console.print(
+                    f"[bold green]\u2713[/bold green] Textura: [cyan]{result['output']}[/cyan] [dim]({sz})[/dim]"
+                )
+                console.print(f"[dim]Seed: {result.get('seed', '?')}[/dim]")
+                console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+                return
+            elif result and result.get("status") == "error":
+                console.print(f"[yellow]Server erro: {result.get('error', '?')} — fallback in-process[/yellow]")
+            # Se None (server não respondeu), continua para fallback in-process
+
     try:
         gen = TextureGenerator(
             device=device,
@@ -282,6 +333,7 @@ def generate_cmd(
                 cfg_scale=cfg_scale,
                 lora_strength=lora_strength,
                 preset=preset,
+                ground=ground,
             )
             progress.update(task, description="[green]Concluído")
 
@@ -363,6 +415,13 @@ def presets_cmd() -> None:
     show_default=True,
     help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: TEXTURE2D_HW_AUTO=0.",
 )
+@click.option(
+    "--ground",
+    type=click.Choice(["auto", "on", "off"], case_sensitive=False),
+    default="auto",
+    show_default=True,
+    help="Modo chão top-down (auto deteta chão/terreno; on força; off desliga).",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -377,6 +436,7 @@ def batch_cmd(
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
+    ground: str,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -452,6 +512,7 @@ def batch_cmd(
         "num_inference_steps": steps,
         "width": width,
         "height": height,
+        "ground": ground,
     }
     if preset and preset != "None":
         base_params["preset"] = preset
@@ -484,6 +545,112 @@ def batch_cmd(
             border_style="green",
         )
     )
+
+
+# ---------------------------------------------------------------------------
+# Model server — mantém o pipeline FLUX + LoRA seamless carregado na VRAM.
+# Gerações subsequentes delegam automaticamente (~3-5s vs ~250s de cold start).
+# ---------------------------------------------------------------------------
+
+
+@cli.command("server")
+@click.option(
+    "--socket",
+    "socket_path",
+    type=click.Path(),
+    default=None,
+    help="Path do Unix socket (default: ~/.cache/gamedev/texture2d-server.sock)",
+)
+@click.option(
+    "--idle-timeout",
+    "idle_timeout_min",
+    default=30,
+    show_default=True,
+    type=int,
+    help="Minutos de idle antes de encerrar (liberta VRAM).",
+)
+@click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
+def server_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> None:
+    """Arranca o model server (mantém o pipeline carregado; gerações subsequentes ~3-5s)."""
+    from gamedev_shared.model_server import server_socket_path
+
+    from . import server
+
+    _default_sock = server_socket_path("texture2d")
+    if server.is_server_running(socket_path or _default_sock):
+        console.print("[yellow]Server já está ativo neste socket.[/yellow]")
+        sys.exit(1)
+
+    console.print(
+        Panel.fit(
+            f"[bold]Texture2D Model Server[/bold]\n"
+            f"Socket: [cyan]{socket_path or _default_sock}[/cyan]\n"
+            f"Idle timeout: [green]{idle_timeout_min} min[/green]\n\n"
+            f"[dim]O pipeline carrega no 1.º pedido (cold start). Depois, "
+            f"``texture2d generate`` delega automaticamente.[/dim]",
+            border_style="blue",
+        )
+    )
+
+    try:
+        server.start_server(
+            socket_path=socket_path,
+            idle_timeout_min=idle_timeout_min,
+            verbose=verbose,
+        )
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Server interrompido.[/yellow]")
+    except Exception as e:
+        console.print(f"\n[bold red]\u2717 Erro no server:[/bold red] {e}")
+        if verbose:
+            console.print_exception()
+        sys.exit(1)
+
+
+@cli.command("server-status")
+def server_status_cmd() -> None:
+    """Mostra o estado do model server."""
+    from gamedev_shared.model_server import server_socket_path
+
+    from . import server
+
+    status = server.get_server_status(server_socket_path("texture2d"))
+    if status is None:
+        console.print("[yellow]Model server não está ativo.[/yellow]")
+        console.print("[dim]Arranca com: texture2d server[/dim]")
+        sys.exit(1)
+
+    t = Table(title="[bold blue]Model Server", box=box.ROUNDED)
+    t.add_column("Campo", style="cyan", no_wrap=True)
+    t.add_column("Valor", style="green")
+    t.add_row("PID", str(status.get("pid", "?")))
+    t.add_row("Socket", str(status.get("socket", "?")))
+    t.add_row("Modelo carregado", "✓ sim" if status.get("model_loaded") else "✗ não (cold start pendente)")
+    t.add_row("Pedidos servidos", str(status.get("requests_served", 0)))
+    t.add_row("Tool", str(status.get("tool", "?")))
+    console.print(t)
+
+
+@cli.command("server-stop")
+def server_stop_cmd() -> None:
+    """Para o model server (graceful shutdown)."""
+    from gamedev_shared.model_server import _pid_path, server_socket_path
+
+    from . import server
+
+    _default_sock = server_socket_path("texture2d")
+    if not server.is_server_running(_default_sock):
+        console.print("[yellow]Server não está ativo.[/yellow]")
+        _default_sock.unlink(missing_ok=True)
+        _pid_path(_default_sock).unlink(missing_ok=True)
+        sys.exit(0)
+
+    console.print("[dim]A enviar comando de shutdown...[/dim]")
+    if server.stop_server(_default_sock):
+        console.print("[bold green]\u2713 Server parado.[/bold green]")
+    else:
+        console.print("[bold red]\u2717 Não foi possível parar o server.[/bold red]")
+        sys.exit(1)
 
 
 @cli.command("info")

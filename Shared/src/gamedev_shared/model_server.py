@@ -46,6 +46,7 @@ DEFAULT_SERVER_DIR = Path.home() / ".cache" / "gamedev"
 _SOCKET_FOR_TOOL: dict[str, str] = {
     "text2icon": "text2icon-server.sock",
     "text2d": "text2d-server.sock",
+    "texture2d": "texture2d-server.sock",
 }
 
 DEFAULT_IDLE_TIMEOUT_MIN = 30
