@@ -1,0 +1,20 @@
+{
+  "version": "v1-standard",
+  "name": "Universal Animation Library [Standard]",
+  "author": "Quaternius",
+  "license": "CC0 1.0",
+  "homepage": "https://quaternius.itch.io/universal-animation-library",
+  "game_slug": "universal-animation-library",
+  "game_id": 3408034,
+  "upload_id": 17958403,
+  "upload_filename": "Universal Animation Library[Standard].zip",
+  "expected_sha256": "cc73fc4e495b82958207316596317a3f40b9fa38065bde1027937452da537724",
+  "expected_size": 15904933,
+  "inner_dir": "Universal Animation Library[Standard]",
+  "files": {
+    "glb": "Unreal-Godot/UAL1_Standard.glb",
+    "glb_root_motion": "Unreal-Godot/UAL1_Standard_RM.glb",
+    "fbx": "Unity/UAL1_Standard.fbx",
+    "fbx_root_motion": "Unity/UAL1_Standard_RM.fbx"
+  }
+}
