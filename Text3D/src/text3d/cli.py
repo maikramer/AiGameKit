@@ -577,7 +577,7 @@ def generate(
     if not cpu:
         from gamedev_shared.model_server import ensure_vram_available
 
-        ensure_vram_available(needed_mib=5000, tool="text3d")
+        ensure_vram_available(needed_mib=5000)
 
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
@@ -1763,7 +1763,7 @@ def generate_batch(
     # Pedir aos model servers ativos para descarregar antes de ocupar a GPU.
     from gamedev_shared.model_server import ensure_vram_available
 
-    ensure_vram_available(needed_mib=5000, tool="text3d")
+    ensure_vram_available(needed_mib=5000)
 
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
