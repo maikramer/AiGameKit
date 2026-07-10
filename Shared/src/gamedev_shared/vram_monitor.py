@@ -21,8 +21,6 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-import torch
-
 
 @dataclass
 class VRAMSnapshot:
@@ -73,6 +71,11 @@ class VRAMMonitor:
 
     def _get_snapshot(self) -> VRAMSnapshot | None:
         """Captura estado atual da VRAM."""
+        try:
+            import torch
+        except ImportError:
+            return None
+
         if not torch.cuda.is_available():
             return None
 
@@ -177,6 +180,11 @@ def find_quantization_sweet_spot(
     """
     results: dict[str, VRAMStats | None] = {}
 
+    try:
+        import torch
+    except ImportError:
+        torch = None  # type: ignore[assignment]
+
     print("=" * 70)
     print("BUSCANDO SWEET SPOT DE QUANTIZAÇÃO")
     print(f"Target VRAM: {target_vram_mb:.0f} MB")
@@ -190,7 +198,7 @@ def find_quantization_sweet_spot(
 
         try:
             # Limpar VRAM antes do teste
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 torch.cuda.synchronize()
 
@@ -209,7 +217,7 @@ def find_quantization_sweet_spot(
 
             # Limpar
             del model
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
         except RuntimeError as e:
@@ -221,7 +229,7 @@ def find_quantization_sweet_spot(
                 print(f"  ❌ Erro: {e}")
                 results[mode] = None
 
-            if torch.cuda.is_available():
+            if torch is not None and torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
     # Resumo final

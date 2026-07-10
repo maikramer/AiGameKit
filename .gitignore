@@ -139,3 +139,9 @@ GameAssets/debug_minimal/terrain/
 # Backup de assets regenerados (ex.: bgm_*.orig.ogg antes do seamless-loop)
 *.orig.ogg
 *.orig.*
+
+# Graphify knowledge graph (artefacto local de análise de codebase)
+graphify-out/
+
+# ZCode agent workspace (estado local da sessão)
+.zcode/

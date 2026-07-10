@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from unittest.mock import patch
 
 from gamedev_shared.vram_monitor import VRAMMonitor, VRAMSnapshot, VRAMStats
+
+_HAS_TORCH = True
+try:
+    import torch  # noqa: F401
+except ImportError:
+    _HAS_TORCH = False
+
+
+def _no_cuda():
+    """Context that forces "no CUDA". When torch is absent the module already
+    short-circuits to None, so no patch is needed (and patching would raise
+    ModuleNotFoundError on the torch target)."""
+    if _HAS_TORCH:
+        return patch("torch.cuda.is_available", return_value=False)
+    return nullcontext()
 
 
 def _snapshot(allocated: float, reserved: float, free: float, total: float = 8192.0) -> VRAMSnapshot:
@@ -75,12 +91,12 @@ class TestVRAMStatsAggregation:
 class TestVRAMMonitorNoCuda:
     def test_get_current_no_cuda_returns_none(self):
         monitor = VRAMMonitor()
-        with patch("torch.cuda.is_available", return_value=False):
+        with _no_cuda():
             assert monitor.get_current() is None
 
     def test_start_stop_without_cuda(self):
         monitor = VRAMMonitor(interval_sec=0.01)
-        with patch("torch.cuda.is_available", return_value=False):
+        with _no_cuda():
             monitor.start()
             stats = monitor.stop()
         assert isinstance(stats, VRAMStats)
@@ -94,7 +110,7 @@ class TestVRAMMonitorNoCuda:
 
     def test_double_start_is_noop(self):
         monitor = VRAMMonitor(interval_sec=0.01)
-        with patch("torch.cuda.is_available", return_value=False):
+        with _no_cuda():
             monitor.start()
             monitor.start()
             stats = monitor.stop()
