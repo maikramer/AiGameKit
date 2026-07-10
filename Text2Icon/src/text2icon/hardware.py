@@ -1,17 +1,18 @@
-"""Detecção automática de hardware → perfil de inferência Clark Air Sana 1.6B.
+"""Detecção automática de hardware → perfil de inferência Sana (Text2Icon).
 
 Soft resolution no CLI: só preenche o que o utilizador não definiu (flags
-explícitas, ``--low-vram``/``--cpu`` ganham). Desligível com ``--no-hw-auto``
-ou ``TEXT2ICON_HW_AUTO=0``.
+explícitas, ``--low-vram``/``--cpu``/``--model``/``--quant-transformer``
+ganham). Desligível com ``--no-hw-auto`` ou ``TEXT2ICON_HW_AUTO=0``.
 
-Clark Air Sana 1.6B (transformer ternário 1.58-bit descompactado para bf16
-drop-in): transformer ~3.2 GB + Gemma text encoder ~2.5 GB + VAE ~0.5 GB ≈
-~6 GB fp16. GPUs de 6-7 GB ficam no limite → ``model_cpu`` offload para garantir
-que o VAE decode tem espaço.
-    >= 10 GiB  full GPU, sem offload, resolução livre (default 512x512)
-    >=  8 GiB  full GPU, sem offload, resolução livre
-    >=  6 GiB  enable_model_cpu_offload, resolução livre (VAE precisa de espaço)
-    <   6 GiB  offload + clamp a 512x512
+Além de offload/clamp de resolução, o planner escolhe **transformer** e
+**preset SDNQ do transformer** por tier de VRAM — "4 / 8 / 16 bit":
+    >= 10 GiB  standard, sem SDNQ (bf16/fp16 nativo — "16-bit")
+    >=  8 GiB  standard, SDNQ uint8 ("8-bit")
+    >=  6 GiB  standard, SDNQ uint8, offload (VAE decode precisa de espaço)
+    >=  4 GiB  standard, SDNQ int4 ("4-bit"), offload + clamp 512x512
+    <   4 GiB  ternário Clark Air 1.58-bit (já pré-comprimido, sem SDNQ),
+               offload + clamp 512x512 — hardware modesto
+    sem GPU    ternário Clark Air 1.58-bit, CPU, clamp 512x512
 """
 
 from __future__ import annotations
@@ -21,9 +22,11 @@ from dataclasses import dataclass
 from gamedev_shared.hardware import GIB, cuda_gpu_specs
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
+from .generator import STANDARD_TRANSFORMER_ID, TERNARY_TRANSFORMER_ID
+
 HW_AUTO_ENV = "TEXT2ICON_HW_AUTO"
 
-# Resolução nativa do Sana 1.6B 512px (Clark Air).
+# Resolução nativa do pipeline Sana 512px.
 DEFAULT_WIDTH = 512
 DEFAULT_HEIGHT = 512
 
@@ -42,6 +45,8 @@ class Text2IconHardwareProfile:
     max_height: int | None
     gpu_ids: list[int] | None  # >1 GPU: split multi-GPU; senão None
     total_vram_gib: float
+    transformer_id: str  # standard ou ternário (ver módulo)
+    transformer_sdnq_preset: str | None  # None = sem SDNQ no transformer ("16-bit")
 
     def summary(self) -> str:
         parts = [self.name]
@@ -51,6 +56,8 @@ class Text2IconHardwareProfile:
             parts.append(f"clamp={self.max_width}x{self.max_height}")
         if self.gpu_ids:
             parts.append(f"gpus={self.gpu_ids}")
+        parts.append("ternário-1.58b" if self.transformer_id == TERNARY_TRANSFORMER_ID else "standard-600M")
+        parts.append(f"sdnq={self.transformer_sdnq_preset}" if self.transformer_sdnq_preset else "sdnq=none(16b)")
         return " | ".join(parts)
 
 
@@ -65,6 +72,8 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
             max_height=512,
             gpu_ids=None,
             total_vram_gib=0.0,
+            transformer_id=TERNARY_TRANSFORMER_ID,
+            transformer_sdnq_preset=None,
         )
 
     total_gib = sum(mem for _, mem in gpus) / GIB
@@ -73,8 +82,23 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
 
     gpu_ids = [idx for idx, _ in gpus] if len(gpus) > 1 else None
 
-    if largest_gib >= 8.0:
-        # ~6 GB fp16 cabe folgado em 8 GiB. Full GPU, sem offload.
+    # < 4 GiB: hardware modesto — ternário Clark Air (já ~1.85 bits/weight no
+    # checkpoint, cabe folgado, não vale a pena empilhar SDNQ por cima).
+    if largest_gib < 4.0:
+        return Text2IconHardwareProfile(
+            name=name,
+            device="cuda",
+            low_vram=True,
+            max_width=512,
+            max_height=512,
+            gpu_ids=gpu_ids,
+            total_vram_gib=round(total_gib, 1),
+            transformer_id=TERNARY_TRANSFORMER_ID,
+            transformer_sdnq_preset=None,
+        )
+
+    if largest_gib >= 10.0:
+        # Standard fp16/bf16 nativo, sem SDNQ no transformer ("16-bit"), sem offload.
         return Text2IconHardwareProfile(
             name=name,
             device="cuda",
@@ -83,6 +107,22 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
             max_height=None,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
+            transformer_id=STANDARD_TRANSFORMER_ID,
+            transformer_sdnq_preset=None,
+        )
+
+    if largest_gib >= 8.0:
+        # Cabe folgado, mas SDNQ uint8 ("8-bit") reduz o pico e deixa margem ao Gemma.
+        return Text2IconHardwareProfile(
+            name=name,
+            device="cuda",
+            low_vram=False,
+            max_width=None,
+            max_height=None,
+            gpu_ids=gpu_ids,
+            total_vram_gib=round(total_gib, 1),
+            transformer_id=STANDARD_TRANSFORMER_ID,
+            transformer_sdnq_preset="sdnq-uint8",
         )
 
     if largest_gib >= 6.0:
@@ -95,9 +135,11 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
             max_height=None,
             gpu_ids=gpu_ids,
             total_vram_gib=round(total_gib, 1),
+            transformer_id=STANDARD_TRANSFORMER_ID,
+            transformer_sdnq_preset="sdnq-uint8",
         )
 
-    # < 6 GiB: offload + clamp a 512 (resolução nativa do modelo).
+    # 4-6 GiB: offload + clamp a 512 + SDNQ int4 ("4-bit") no transformer.
     return Text2IconHardwareProfile(
         name=name,
         device="cuda",
@@ -106,6 +148,8 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> Text2IconHardwareProfile:
         max_height=512,
         gpu_ids=gpu_ids,
         total_vram_gib=round(total_gib, 1),
+        transformer_id=STANDARD_TRANSFORMER_ID,
+        transformer_sdnq_preset="sdnq-int4",
     )
 
 

@@ -1,6 +1,6 @@
 # Text2Icon
 
-CLI text-to-icon com **Sana Sprint 0.6B** ([NVlabs/Sana](https://github.com/NVlabs/Sana)) — gera ícones de UI para jogos em 1–4 passos (~<1s por imagem em GPU moderna). Suporta fundo transparente (RGBA via `rembg`).
+CLI text-to-icon com **Sana** ([NVlabs/Sana](https://github.com/NVlabs/Sana)) — gera ícones de UI para jogos (20 passos, pipeline 512px). `hw_auto` escolhe automaticamente o transformer e a quantização SDNQ conforme a VRAM disponível (ver [Modelos](#modelos)). Suporta fundo transparente (RGBA via `rembg`).
 
 Parte do monorepo **GameDev**. Veja [`../AGENTS.md`](../AGENTS.md) para o guia geral.
 
@@ -27,8 +27,11 @@ text2icon generate "sword icon, medieval RPG" -o sword.png --transparent
 # Batch (um prompt por linha)
 text2icon batch icons.txt -d icons/ --transparent --quality medium
 
-# Variante standard (20 passos, maior qualidade, ~10x mais lento)
-text2icon generate "shield emblem" -m Efficient-Large-Model/Sana_600M_1024px_diffusers
+# Forçar o fallback ternário (hardware modesto, ≤4 GB VRAM)
+text2icon generate "shield emblem" -m clark-labs/clark-air-sana-1.6b-1.58bit
+
+# Escolher manualmente a quantização do transformer (em vez de hw_auto)
+text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 ```
 
 ## Opções
@@ -43,17 +46,28 @@ text2icon generate "shield emblem" -m Efficient-Large-Model/Sana_600M_1024px_dif
 | `--seed` | aleatório | Seed reprodutível |
 | `-n/--negative-prompt` | `""` | Prompt negativo |
 | `--transparent/--no-transparent` | off | Remover fundo (rembg/U2Net) |
-| `-m/--model` | Sana_Sprint_0.6B | ID do modelo HF |
+| `-m/--model` | hw_auto | ID do transformer HF (ver Modelos) |
+| `--quant-encoder` | `auto` | SDNQ do Gemma text encoder (auto/sdnq-int4/sdnq-int8/none) |
+| `--quant-transformer` | `auto` | SDNQ do transformer principal (auto/sdnq-int4/sdnq-uint4/sdnq-int8/sdnq-uint8/sdnq-fp8/none) |
 | `--cpu` | off | Forçar CPU |
 | `--low-vram` | auto | CPU offload |
 | `--gpu-ids` | auto | Split multi-GPU (ex: `0,1`) |
 | `--quality` | `medium` | Tier de qualidade (fast/low/medium/high/highest) |
-| `--hw-auto/--no-hw-auto` | on | Auto-detecção de hardware |
+| `--hw-auto/--no-hw-auto` | on | Auto-detecção de hardware (transformer + SDNQ + offload + clamp) |
 
 ## Modelos
 
-- **Default**: `Efficient-Large-Model/Sana_Sprint_0.6B_1024px_diffusers` (1–4 passos)
-- **Standard**: `Efficient-Large-Model/Sana_600M_1024px_diffusers` (20 passos, qualidade superior)
+`hw_auto` escolhe o transformer e a quantização SDNQ por VRAM (maior GPU disponível):
+
+| VRAM | Transformer | SDNQ transformer | Offload/clamp |
+|------|-------------|-------------------|----------------|
+| ≥ 10 GiB | `Efficient-Large-Model/Sana_600M_512px_diffusers` (standard) | nenhuma (bf16/fp16, "16-bit") | não |
+| ≥ 8 GiB | standard | `sdnq-uint8` ("8-bit") | não |
+| ≥ 6 GiB | standard | `sdnq-uint8` | offload |
+| ≥ 4 GiB | standard | `sdnq-int4` ("4-bit") | offload + clamp 512×512 |
+| < 4 GiB (ou CPU) | `clark-labs/clark-air-sana-1.6b-1.58bit` (ternário) | nenhuma (já ~1.85 bits/weight no checkpoint) | offload + clamp 512×512 |
+
+O transformer ternário é um fallback dedicado a hardware modesto; o SDNQ não se aplica a ele (já vem pré-comprimido). `--quant-encoder`/`--quant-transformer` e `-m` explícitos sempre ganham a `hw_auto`.
 
 ## Integração com GameAssets
 
