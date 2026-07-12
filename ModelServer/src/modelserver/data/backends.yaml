@@ -1,0 +1,61 @@
+# Registry declarativo de backends do Unified Model Server.
+#
+# Cada backend é uma ferramenta GPU do monorepo. O adapter normaliza a API
+# heterogénea de cada tool (warmup()/load()/_load_*/context-managed) num contrato
+# canónico (load/generate/unload) que o BackendManager invoca.
+#
+# vram_mib: estimativa do footprint em VRAM quando carregado (MiB). Valores
+#   derivados de profiling/números de modelo — afinar com medição real.
+# priority: prioridade de evicção. Valores MAIORES = mais pesado/urgente de MANTER
+#   carregado (menos provável de ser evicted). Backends leves (priority baixa)
+#   são evicted primeiro quando a VRAM escasseia. Tie-break: LRU.
+# adapter: módulo Python (dotted path) que exporta uma classe BackendAdapter.
+#   Import lazy: só é importado quando o backend é efetivamente pedido.
+#   Assim, não é preciso ter todas as deps (torch/diffusers/stable-audio)
+#   instaladas para arrancar o UMS — só para o backend usado.
+
+backends:
+  - name: text2icon
+    adapter: modelserver.adapters.text2icon
+    vram_mib: 3000
+    priority: 20
+
+  - name: texture2d
+    adapter: modelserver.adapters.texture2d
+    vram_mib: 7000
+    priority: 20
+
+  - name: text2d
+    adapter: modelserver.adapters.text2d
+    vram_mib: 4500
+    priority: 25
+
+  - name: skymap2d
+    adapter: modelserver.adapters.skymap2d
+    vram_mib: 7000
+    priority: 25
+
+  - name: text3d
+    adapter: modelserver.adapters.text3d
+    vram_mib: 8000
+    priority: 40
+
+  - name: paint3d
+    adapter: modelserver.adapters.paint3d
+    vram_mib: 4000
+    priority: 40
+
+  - name: part3d
+    adapter: modelserver.adapters.part3d
+    vram_mib: 4500
+    priority: 35
+
+  - name: text2sound
+    adapter: modelserver.adapters.text2sound
+    vram_mib: 5000
+    priority: 30
+
+  - name: terrain3d
+    adapter: modelserver.adapters.terrain3d
+    vram_mib: 6000
+    priority: 40
