@@ -37,7 +37,7 @@ def _is_humanoid_topology(
 ) -> bool:
     """Gate topológico: a hierarquia de bones tem forma humanoide?
 
-    Evita impor nomes Mixamo (Hips/LeftArm/RightUpLeg...) a criaturas
+    Evita impor nomes humanoides (pelvis/upperarm_l/thigh_r...) a criaturas
     articuladas (mosquito com 6 patas + asas, scorpion com 8 patas +
     pinças) onde são semanticamente errados e atrapalham o retarget.
     Critério puramente topológico (forma da árvore parent-child):
@@ -334,7 +334,9 @@ def _rename_generic_bones(glb_path: Path, root: Path | None = None) -> int:  # n
     (ex.: ``cls="articulation"``, o caso comum aqui — ver
     ``docs/RIGGING3D_SKINTOKENS_MIGRATION_PLAN.md`` §0, risco #5). Este
     pós-processo analisa a **hierarquia de bones** no GLB e atribui nomes
-    Mixamo-style (Hips, Spine, LeftArm, RightUpLeg, …) por papel estrutural.
+    Quaternius/UE5-style (pelvis, spine_01, upperarm_l, thigh_r, …) por papel
+    estrutural — o naming canónico do pipeline, compatível 1:1 com o pack de
+    animações Quaternius (``animator3d game-pack`` retargetiza sem remapear).
 
     Classificação é puramente topológica (forma da árvore parent-child), não
     posicional — funciona independentemente de transforms dos bones. Bones
@@ -354,12 +356,12 @@ def _rename_generic_bones(glb_path: Path, root: Path | None = None) -> int:  # n
         Número de bones renomeados (0 se nada a fazer ou se a topologia
         não for humanoid).
     """
-    _SPINE_NAMES = ["Hips", "Spine", "Chest", "UpperChest", "UpperChest2", "UpperChest3"]
-    _NECK_NAMES = ["Neck", "Head", "Neck1", "Neck2"]
-    _ARM_L = ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand"]
-    _ARM_R = ["RightShoulder", "RightArm", "RightForeArm", "RightHand"]
-    _LEG_L = ["LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase"]
-    _LEG_R = ["RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"]
+    _SPINE_NAMES = ["pelvis", "spine_01", "spine_02", "spine_03", "spine_04", "spine_05"]
+    _NECK_NAMES = ["neck_01", "Head", "neck_02", "neck_03"]
+    _ARM_L = ["clavicle_l", "upperarm_l", "lowerarm_l", "hand_l"]
+    _ARM_R = ["clavicle_r", "upperarm_r", "lowerarm_r", "hand_r"]
+    _LEG_L = ["thigh_l", "calf_l", "foot_l", "ball_l"]
+    _LEG_R = ["thigh_r", "calf_r", "foot_r", "ball_r"]
 
     try:
         if glb_path.stat().st_size < 20:
@@ -400,7 +402,8 @@ def _rename_generic_bones(glb_path: Path, root: Path | None = None) -> int:  # n
         for c in node.get("children", []):
             parent_map[c] = ni
 
-    # Gate topológico: só impor nomes Mixamo se o esqueleto for humanoid-like.
+    # Gate topológico: só impor nomes humanoides (Quaternius) se o esqueleto
+    # for humanoid-like.
     # Criaturas articuladas (mosquito, scorpion): o gate humanoid falha, mas
     # ainda classificamos por papel estrutural (Spine/Wings/Legs/Tail) para
     # alinhar com o retarget do animator3d. Humanoides seguem o camário abaixo.
@@ -459,7 +462,7 @@ def _rename_generic_bones(glb_path: Path, root: Path | None = None) -> int:  # n
     # (alguns modelos SkinTokens inserem um bone pelvis entre raiz e pernas).
     if len(leg_starts) == 1 and len(children_of_bone.get(leg_starts[0], [])) == 2:
         pelvis = leg_starts[0]
-        assignments[pelvis] = "Pelvis"
+        assignments[pelvis] = "pelvis_helper"
         leg_starts = children_of_bone[pelvis]
     elif len(leg_starts) > 2:
         # Filtrar artefactos do SkinTokens (bones isolados/curtos na raiz).
@@ -562,6 +565,32 @@ def _validate_and_fix_origin(glb_path: Path, tolerance: float = 0.1) -> bool:
         return True
     except Exception:
         return False
+
+
+def _fix_bone_orientation_or_warn(glb_path: Path) -> None:
+    """Corrige a tail dos bones (defeito sistemático do SkinTokens — ver
+    ``bone_repair.py``) direto no output do pipeline, em-lugar.
+
+    Passo automático por defeito: sem isto, GLBs saídos de ``pipeline`` não
+    são directamente compatíveis com retargeting de animação externa (ex.:
+    ``animator3d retarget``) — a tail de bones como coxa/braço fica solta da
+    posição do filho, o que corrompe o eixo de rotação usado para reproduzir
+    animações de outro rig. Não falha o pipeline se der erro (best-effort,
+    tal como ``_validate_and_fix_origin``); a malha em bind pose nunca é
+    afectada (inverse bind matrix cancela sempre a rest pose).
+    """
+    try:
+        from .bone_repair import fix_bone_orientation
+
+        result = fix_bone_orientation(glb_path, glb_path)
+    except Exception as exc:  # noqa: BLE001
+        console.print(f"[yellow]⚠ fix-bone-orientation falhou (não fatal): {exc}[/yellow]")
+        return
+    if result.bones_fixed:
+        console.print(
+            f"[green]Bone orientation:[/green] {len(result.bones_fixed)} bone(s) corrigidos "
+            f"({', '.join(result.bones_fixed)}) — pronto para retarget."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -770,6 +799,7 @@ def pipeline_cmd(
             if renamed:
                 console.print(f"[green]Renomeados {renamed} ossos para nomes semânticos (humanoid).[/green]")
             _validate_and_fix_origin(out)
+            _fix_bone_orientation_or_warn(out)
     finally:
         if _old_cuda is not None:
             os.environ["CUDA_VISIBLE_DEVICES"] = _old_cuda
@@ -875,6 +905,45 @@ def transfer_weights_cmd(
             f"[bold green]✓[/bold green] transfer-weights → "
             f"[cyan]{r.target_out}[/cyan] [dim]({sz_str}, "
             f"{r.bones} bones, {r.vertex_groups} vgroups)[/dim]"
+        )
+
+
+@cli.command("fix-bone-orientation")
+@click.argument("input_glb", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.argument("output_glb", type=click.Path(dir_okay=False, path_type=Path), required=False)
+@click.option(
+    "--min-gap",
+    type=float,
+    default=0.01,
+    show_default=True,
+    help="Gap mínimo (m, espaço de armature) entre tail e head do filho para considerar defeituoso.",
+)
+def fix_bone_orientation_cmd(input_glb: Path, output_glb: Path | None, min_gap: float) -> None:
+    """Corrige bones cuja ``tail`` não aponta para o filho real (defeito do
+    SkinTokens observado em coxas/braços — ex.: coxa a apontar para o lado em
+    vez de para baixo). Não mexe na malha em bind pose (inverse bind matrix
+    cancela sempre a rest pose) nem nos pesos — só corrige a direção usada
+    por retargeting de animação. Sem OUTPUT_GLB, sobrescreve o input.
+
+    Ex.: rigging3d fix-bone-orientation hero_rigged.glb
+    """
+    from .bone_repair import fix_bone_orientation
+
+    out = output_glb if output_glb is not None else input_glb
+    try:
+        result = fix_bone_orientation(input_glb, out, min_gap=min_gap)
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if result.bones_fixed:
+        console.print(
+            f"[bold green]✓[/bold green] fix-bone-orientation → [cyan]{result.output_path}[/cyan] "
+            f"[dim]({len(result.bones_fixed)}/{result.bones_total} bones corrigidos: "
+            f"{', '.join(result.bones_fixed)})[/dim]"
+        )
+    else:
+        console.print(
+            f"[dim]fix-bone-orientation → {result.output_path} (0/{result.bones_total} bones — já correcto)[/dim]"
         )
 
 
