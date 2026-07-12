@@ -719,15 +719,18 @@ def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
     if not chains:
         return {}
 
+    # Naming canónico humanoide = Quaternius/UE5 (igual ao Rigging3D), para o
+    # retarget do pack Quaternius mapear 1:1. Cadeias de criatura (tail/wing)
+    # mantêm nomes descritivos próprios.
     _CHAIN_NAMES: dict[str, list[str]] = {
-        "body": ["Hips"],
-        "spine": ["Spine", "Spine1", "Spine2", "Spine3", "Spine4"],
-        "neck": ["Neck", "Neck1", "Neck2"],
+        "body": ["pelvis"],
+        "spine": ["spine_01", "spine_02", "spine_03", "spine_04", "spine_05"],
+        "neck": ["neck_01", "neck_02", "neck_03"],
         "head": ["Head"],
-        "leg_r": ["RightUpLeg", "RightLeg", "RightFoot", "RightToeBase"],
-        "leg_l": ["LeftUpLeg", "LeftLeg", "LeftFoot", "LeftToeBase"],
-        "arm_r": ["RightShoulder", "RightArm", "RightForeArm", "RightHand"],
-        "arm_l": ["LeftShoulder", "LeftArm", "LeftForeArm", "LeftHand"],
+        "leg_r": ["thigh_r", "calf_r", "foot_r", "ball_r"],
+        "leg_l": ["thigh_l", "calf_l", "foot_l", "ball_l"],
+        "arm_r": ["clavicle_r", "upperarm_r", "lowerarm_r", "hand_r"],
+        "arm_l": ["clavicle_l", "upperarm_l", "lowerarm_l", "hand_l"],
         "tail": ["Tail", "Tail1", "Tail2", "Tail3", "Tail4", "Tail5", "Tail6", "Tail7"],
         "wing_r": ["RightWing", "RightWing1", "RightWing2", "RightWing3"],
         "wing_l": ["LeftWing", "LeftWing1", "LeftWing2", "LeftWing3"],
@@ -766,9 +769,7 @@ def rename_bones_from_chains(armature_name: str) -> dict[str, list[str]]:
             # legs_r/legs_l são listas de listas (multi-leg); o rename opera
             # sobre bone names, não sub-listas. Preservar a estrutura.
             if chain_key in ("legs_r", "legs_l"):
-                updated_chains[chain_key] = [
-                    [renamed.get(b, b) for b in leg] for leg in bone_names
-                ]
+                updated_chains[chain_key] = [[renamed.get(b, b) for b in leg] for leg in bone_names]
             else:
                 updated_chains[chain_key] = [renamed.get(b, b) for b in bone_names]
         return updated_chains
@@ -1717,9 +1718,7 @@ def _humanoid_action_keyframes(
         "sword": (2, 0.22, 0.40, 1.45, 0.55),
         "gather": (1, 0.18, 0.30, 0.80, 0.35),
     }
-    strikes, body_amp, spine_amp, arm_amp, neck_amp = _CREATURE_PROFILES.get(
-        kind, (1, 0.25, 0.40, 1.30, 0.45)
-    )
+    strikes, body_amp, spine_amp, arm_amp, neck_amp = _CREATURE_PROFILES.get(kind, (1, 0.25, 0.40, 1.30, 0.45))
     attack_keyframes(
         armature_name,
         frame_start=frame_start,
@@ -2972,7 +2971,9 @@ def fall_keyframes(
                         continue
                     s = max(0.3, 1.0 - ci * 0.1)
                     _key_humanoid_bone(
-                        pb, ax, bpy.context.scene.frame_current,
+                        pb,
+                        ax,
+                        bpy.context.scene.frame_current,
                         swing=(leg_val * 0.5 + wind_l) * s,
                         bend=(leg_val + tuck) * s,
                     )
@@ -2985,7 +2986,9 @@ def fall_keyframes(
                         continue
                     s = max(0.3, 1.0 - ci * 0.1)
                     _key_humanoid_bone(
-                        pb, ax, bpy.context.scene.frame_current,
+                        pb,
+                        ax,
+                        bpy.context.scene.frame_current,
                         swing=(leg_val * 0.5 - wind_l) * s,
                         bend=(leg_val + tuck) * s,
                     )
