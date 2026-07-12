@@ -130,7 +130,7 @@ class TestRenameGenericBonesExtra:
             c_len, _ = struct.unpack("<II", f.read(8))
             data = json.loads(f.read(c_len))
         names = {n["name"] for n in data["nodes"]}
-        assert "Hips" in names  # root becomes Hips
+        assert "pelvis" in names  # root becomes pelvis (naming Quaternius)
         assert not any(n.startswith("bone_") for n in names)
 
     def test_branching_fingers_renamed(self, tmp_path: Path) -> None:
@@ -193,7 +193,7 @@ class TestRenameGenericBonesExtra:
             {"name": "bone_11"},  # accessory2 tip
         ]
         glb = _write_glb(tmp_path, "hat.glb", nodes)
-        count = _rename_generic_bones(glb, tmp_path)
+        _rename_generic_bones(glb, tmp_path)
         with open(glb, "rb") as f:
             f.read(12)
             c_len, _ = struct.unpack("<II", f.read(8))
@@ -203,10 +203,10 @@ class TestRenameGenericBonesExtra:
         assert any(n.startswith("HeadAccessory") for n in names)
 
     def test_pelvis_intermediate_pattern(self, tmp_path: Path) -> None:
-        """legs==1 at root that branches into 2 → Pelvis intermediate bone.
+        """legs==1 at root that branches into 2 → pelvis_helper intermediate bone.
 
         Some SkinTokens rigs insert a pelvis bone between root and the 2 legs.
-        The gate accepts this; the rename names the intermediate 'Pelvis'.
+        The gate accepts this; the rename names the intermediate 'pelvis_helper'.
         """
         # 0=root 1=spine→2=chest→(3=armL,4=armR,5=neck) 6=pelvis→(7=legL,8=legR)
         nodes = [
@@ -232,6 +232,6 @@ class TestRenameGenericBonesExtra:
             c_len, _ = struct.unpack("<II", f.read(8))
             data = json.loads(f.read(c_len))
         names = {n["name"] for n in data["nodes"]}
-        assert "Pelvis" in names
-        assert "LeftUpLeg" in names
-        assert "RightUpLeg" in names
+        assert "pelvis_helper" in names
+        assert "thigh_l" in names
+        assert "thigh_r" in names

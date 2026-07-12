@@ -37,6 +37,11 @@ class TestHelp:
         assert "--source" in result.output
         assert "--target" in result.output
 
+    def test_fix_bone_orientation_help(self) -> None:
+        result = CliRunner().invoke(cli, ["fix-bone-orientation", "--help"])
+        assert result.exit_code == 0
+        assert "--min-gap" in result.output
+
 
 # ── pipeline ────────────────────────────────────────────────────────────
 
@@ -201,31 +206,31 @@ class TestRenameGenericBones:
         # All 28 bones should be renamed (body + finger chains)
         assert count == 28
 
-        # Verify key bone names
+        # Verify key bone names — naming canónico Quaternius/UE5.
         bone_names = {n for n in names if not n.startswith("_")}
         expected = {
-            "Hips",
-            "Spine",
-            "Chest",
-            "UpperChest",
-            "Neck",
+            "pelvis",
+            "spine_01",
+            "spine_02",
+            "spine_03",
+            "neck_01",
             "Head",
-            "LeftShoulder",
-            "LeftArm",
-            "LeftForeArm",
-            "LeftHand",
-            "RightShoulder",
-            "RightArm",
-            "RightForeArm",
-            "RightHand",
-            "LeftUpLeg",
-            "LeftLeg",
-            "LeftFoot",
-            "LeftToeBase",
-            "RightUpLeg",
-            "RightLeg",
-            "RightFoot",
-            "RightToeBase",
+            "clavicle_l",
+            "upperarm_l",
+            "lowerarm_l",
+            "hand_l",
+            "clavicle_r",
+            "upperarm_r",
+            "lowerarm_r",
+            "hand_r",
+            "thigh_l",
+            "calf_l",
+            "foot_l",
+            "ball_l",
+            "thigh_r",
+            "calf_r",
+            "foot_r",
+            "ball_r",
             # Finger bones (3 per hand, beyond the 4-arm template)
             "LeftHandFinger1",
             "LeftHandFinger2",
