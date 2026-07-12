@@ -968,14 +968,14 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     type=click.Choice(list(_PRESETS.keys()), case_sensitive=False),
     default="humanoid",
     show_default=True,
-    help="Conjunto de animações a gerar.",
+    help="Conjunto de animações a gerar (caminho procedural).",
 )
 @click.option(
     "--clips",
     "clip_filter",
     default=None,
     type=str,
-    help="Lista de clips separada por vírgulas (ex: idle,walk,run). Filtra o preset.",
+    help="Lista de clips separada por vírgulas (ex: idle,walk,run). Filtra o preset/perfil.",
 )
 @click.option(
     "--force-preset",
@@ -984,6 +984,12 @@ _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     default=False,
     help="Desativa a auto-deteção de tipo de rig (humanoid vs creature).",
 )
+@click.option(
+    "--procedural",
+    is_flag=True,
+    default=False,
+    help="Força clips procedurais mesmo em humanoides (sem retarget Quaternius).",
+)
 def cmd_game_pack(
     input_path: Path,
     output_path: Path,
@@ -991,8 +997,15 @@ def cmd_game_pack(
     clip_filter: str | None,
     draco: bool,
     force_preset: bool,
+    procedural: bool,
 ) -> None:
-    """Gera todas as animações de um preset num único comando."""
+    """Gera todas as animações de um rig num único comando.
+
+    Humanoides: retarget do pack Quaternius (CC0) por defeito — o naming
+    canónico dos rigs do pipeline é o do Quaternius, logo o mapeamento é
+    directo. Criaturas (aranha, mosquito, ...) e rigs sem cobertura caem
+    automaticamente no caminho procedural (presets).
+    """
     item_id = input_path.stem
     t0 = time.monotonic()
 
@@ -1018,8 +1031,6 @@ def cmd_game_pack(
         raise click.ClickException("Nenhum armature encontrado no ficheiro.")
     arm_name = arms[0].name
 
-    bpy_ops.rename_bones_from_chains(arm_name)
-
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="loading_bpy", percent=100)
 
     # Auto-deteção de tipo de rig: se o preset é humanoid (default) mas o rig
@@ -1038,6 +1049,18 @@ def cmd_game_pack(
                 "Use --force-preset para manter humanoid."
             )
             preset = "creature"
+
+    # Caminho primário (humanoides): retarget do pack Quaternius.
+    if preset.lower() == "humanoid" and not procedural:
+        done = _game_pack_quaternius_retarget(
+            item_id, arm_name, output_path, clip_filter=clip_filter, draco=draco, t0=t0
+        )
+        if done:
+            return
+        console.print("[yellow]Fallback:[/yellow] a gerar clips procedurais.")
+
+    # Caminho procedural (criaturas / fallback): renomear chains e aplicar preset.
+    bpy_ops.rename_bones_from_chains(arm_name)
 
     steps = _PRESETS[preset.lower()]
 
@@ -1318,6 +1341,146 @@ def cmd_inspect_rig(
 #            sobre um rig target (humanoides do simple-rpg). Ver retarget.py.
 # ---------------------------------------------------------------------------
 
+# Bones source cujo mapeamento tem de existir no rig para o retarget Quaternius
+# fazer sentido (tronco + braços + pernas).
+_QUATERNIUS_CORE_BONES = ("pelvis", "upperarm_l", "upperarm_r", "thigh_l", "thigh_r")
+
+
+def _quaternius_core_missing(arm_name: str, profile) -> list[str]:
+    """Bones core do perfil sem candidato presente no rig target."""
+    from . import bpy_ops
+
+    bpy = bpy_ops._bpy()
+    bones = {b.name for b in bpy.data.objects[arm_name].data.bones}
+    return [src for src in _QUATERNIUS_CORE_BONES if not any(c in bones for c in profile.bone_map.get(src, []))]
+
+
+def _fetch_quaternius_source() -> Path:
+    """Garante o pack Quaternius em cache e devolve o path do GLB."""
+    from gamedev_shared.quaternius_fetch import fetch_quaternius_pack
+
+    console.print("[cyan]Pack Quaternius:[/cyan] a garantir o cache...")
+    pack = fetch_quaternius_pack(on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))
+    return Path(pack.glb)
+
+
+def _import_retarget_source(source_path: Path, target_arm_name: str):
+    """Importa o pack source na cena e descarta as suas meshes (mannequin)."""
+    from . import bpy_ops
+
+    bpy = bpy_ops._bpy()
+    existing_arms = {a.name for a in bpy_ops.list_armatures()}
+    target_arm = bpy.data.objects[target_arm_name]
+    target_mesh_names = {o.name for o in target_arm.children if o.type == "MESH"}
+
+    bpy_ops.import_asset(source_path)
+    source_arm = next(a for a in bpy_ops.list_armatures() if a.name not in existing_arms)
+    source_arm.name = "Source"
+    for obj in list(bpy.data.objects):
+        if obj.type == "MESH" and obj.name not in target_mesh_names:
+            bpy.data.objects.remove(obj, do_unlink=True)
+    return source_arm
+
+
+def _cleanup_retarget_source(source_arm) -> None:
+    """Remove o armature source e actions órfãs antes do export."""
+    from . import bpy_ops
+
+    bpy = bpy_ops._bpy()
+    bpy.data.objects.remove(source_arm, do_unlink=True)
+    for act in list(bpy.data.actions):
+        used = any(
+            s.action == act
+            for arm in bpy_ops.list_armatures()
+            if arm.animation_data
+            for t in arm.animation_data.nla_tracks
+            for s in t.strips
+        )
+        if not used:
+            bpy.data.actions.remove(act)
+
+
+def _print_retarget_result(res: dict) -> None:
+    if "error" in res:
+        console.print(f"  [yellow]✗[/yellow] {res['clip']} <- {res.get('source_track', '?')}: {res['error']}")
+        return
+    console.print(
+        f"  [dim]✓[/dim] {res['clip']} <- {res['source_track']} · {res['bones_mapped']} bones · "
+        f"frames {res['frames'][0]}-{res['frames'][1]}"
+    )
+    if res.get("skipped_bones"):
+        console.print(f"     [yellow]não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
+
+
+def _game_pack_quaternius_retarget(
+    item_id: str,
+    arm_name: str,
+    output_path: Path,
+    *,
+    clip_filter: str | None,
+    draco: bool,
+    t0: float,
+) -> bool:
+    """Caminho primário do game-pack: retarget do pack Quaternius.
+
+    Returns:
+        True se exportou o GLB (fluxo terminado); False para cair no
+        caminho procedural (rig sem cobertura, pack indisponível, etc.).
+    """
+    from . import bpy_ops
+    from . import retarget as rt
+
+    profile = rt.load_profile("quaternius")
+    missing = _quaternius_core_missing(arm_name, profile)
+    if missing:
+        console.print(
+            f"[yellow]Retarget Quaternius indisponível:[/yellow] bones core sem candidato no rig: {', '.join(missing)}"
+        )
+        return False
+
+    only_clips: list[str] | None = None
+    if clip_filter:
+        wanted = [s.strip() for s in clip_filter.split(",") if s.strip()]
+        only_clips = [c for c in wanted if c in profile.clip_map]
+        if not only_clips:
+            console.print(f"[yellow]Nenhum clip do filtro existe no perfil quaternius:[/yellow] {clip_filter}")
+            return False
+
+    try:
+        source_path = _fetch_quaternius_source()
+    except Exception as e:
+        console.print(f"[yellow]Pack Quaternius indisponível:[/yellow] {e}")
+        return False
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="retarget", percent=0)
+    source_arm = _import_retarget_source(source_path, arm_name)
+    results = rt.retarget_batch(arm_name, source_arm.name, profile, only_clips=only_clips, replace=True)
+    total = len(only_clips) if only_clips else len(profile.clip_map)
+    ok = 0
+    for i, res in enumerate(results):
+        pct = round(((i + 1) / total) * 100) if total else 100
+        emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=pct, clip=res.get("clip"))
+        if "error" not in res:
+            ok += 1
+        _print_retarget_result(res)
+    _cleanup_retarget_source(source_arm)
+    if ok == 0:
+        console.print("[yellow]Retarget não produziu clips.[/yellow]")
+        return False
+
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
+    bpy_ops.export_auto(output_path, draco=draco)
+    emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=100)
+
+    nclips = bpy_ops.count_nla_tracks(arm_name)
+    elapsed = time.monotonic() - t0
+    console.print(
+        f"[green]game-pack[/green] retarget=quaternius armature={arm_name!r} "
+        f"· {nclips} clip(s) no GLB → {output_path.resolve()}"
+    )
+    emit_result(item_id, TOOL_ANIMATOR3D, STATUS_OK, output=str(output_path.resolve()), seconds=elapsed)
+    return True
+
 
 @main.command("retarget")
 @_draco_option
@@ -1363,38 +1526,15 @@ def cmd_retarget(
     target_arm = bpy_ops.list_armatures()[0]
     target_arm.name = "Target"
 
-    bpy_ops.import_asset(source_path)
-    source_arm = next(a for a in bpy_ops.list_armatures() if a.name != "Target")
-    source_arm.name = "Source"
-    # Descartar meshes do source (mannequin) — só queremos o armature + actions.
-    bpy = bpy_ops._bpy()
-    for obj in list(bpy.data.objects):
-        if obj.type == "MESH" and obj.name not in {o.name for o in target_arm.children if o.type == "MESH"}:
-            bpy.data.objects.remove(obj, do_unlink=True)
+    source_arm = _import_retarget_source(source_path, "Target")
 
     if replace:
         rt._clear_nla_tracks("Target")
 
-    res = rt.retarget_animation("Target", "Source", profile.bone_map, source_track, clip_name)
-    console.print(
-        f"  [dim]✓[/dim] {clip_name} <- {source_track} · {res['bones_mapped']} bones · "
-        f"frames {res['frames'][0]}-{res['frames'][1]}"
-    )
-    if res.get("skipped_bones"):
-        console.print(f"  [yellow]bones não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
+    res = rt.retarget_animation("Target", source_arm.name, profile.bone_map, source_track, clip_name)
+    _print_retarget_result(res)
 
-    # Limpar armature source e actions orfanizados antes do export.
-    bpy.data.objects.remove(source_arm, do_unlink=True)
-    for act in list(bpy.data.actions):
-        used = any(
-            s.action == act
-            for arm in bpy_ops.list_armatures()
-            if arm.animation_data
-            for t in arm.animation_data.nla_tracks
-            for s in t.strips
-        )
-        if not used:
-            bpy.data.actions.remove(act)
+    _cleanup_retarget_source(source_arm)
 
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
     bpy_ops.export_glb(output_path, draco=draco)
@@ -1453,11 +1593,7 @@ def cmd_retarget_batch(
         source_path = profile.source_path
     if source_path is None and not no_fetch:
         if profile.name == "quaternius":
-            from gamedev_shared.quaternius_fetch import fetch_quaternius_pack
-
-            console.print("[cyan]Pack Quaternius:[/cyan] a garantir o cache...")
-            pack = fetch_quaternius_pack(on_status=lambda m: console.print(f"  [dim]{m}[/dim]"))
-            source_path = pack.glb
+            source_path = _fetch_quaternius_source()
         else:
             raise click.ClickException(
                 f"Sem --source e o perfil {profile.name!r} não define source_path. Indica --source <pack.fbx/glb>."
@@ -1480,41 +1616,16 @@ def cmd_retarget_batch(
     target_arm = bpy_ops.list_armatures()[0]
     target_arm.name = "Target"
 
-    bpy_ops.import_asset(Path(source_path))
-    source_arm = next(a for a in bpy_ops.list_armatures() if a.name != "Target")
-    source_arm.name = "Source"
-    bpy = bpy_ops._bpy()
-    target_mesh_names = {o.name for o in target_arm.children if o.type == "MESH"}
-    for obj in list(bpy.data.objects):
-        if obj.type == "MESH" and obj.name not in target_mesh_names:
-            bpy.data.objects.remove(obj, do_unlink=True)
+    source_arm = _import_retarget_source(Path(source_path), "Target")
 
     total = len(profile.clip_map)
-    results = rt.retarget_batch("Target", "Source", profile, only_clips=only_clips, replace=replace)
+    results = rt.retarget_batch("Target", source_arm.name, profile, only_clips=only_clips, replace=replace)
     for i, res in enumerate(results):
         pct = round(((i + 1) / total) * 100) if total else 100
         emit_progress(item_id, TOOL_ANIMATOR3D, phase="clips", percent=pct, clip=res.get("clip"))
-        if "error" in res:
-            console.print(f"  [yellow]✗[/yellow] {res['clip']} <- {res.get('source_track', '?')}: {res['error']}")
-        else:
-            console.print(
-                f"  [dim]✓[/dim] {res['clip']} <- {res['source_track']} · {res['bones_mapped']} bones · "
-                f"frames {res['frames'][0]}-{res['frames'][1]}"
-            )
-            if res.get("skipped_bones"):
-                console.print(f"     [yellow]não mapeados:[/yellow] {', '.join(res['skipped_bones'])}")
+        _print_retarget_result(res)
 
-    bpy.data.objects.remove(source_arm, do_unlink=True)
-    for act in list(bpy.data.actions):
-        used = any(
-            s.action == act
-            for arm in bpy_ops.list_armatures()
-            if arm.animation_data
-            for t in arm.animation_data.nla_tracks
-            for s in t.strips
-        )
-        if not used:
-            bpy.data.actions.remove(act)
+    _cleanup_retarget_source(source_arm)
 
     emit_progress(item_id, TOOL_ANIMATOR3D, phase="export", percent=0)
     bpy_ops.export_glb(output_path, draco=draco)

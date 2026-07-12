@@ -2,41 +2,45 @@
 #
 # Pack: https://quaternius.itch.io/universal-animation-library
 # Rig source: UE5 Mannequin naming (pelvis, spine_01, upperarm_l, thigh_r, ...).
-# O rig alvo (simple-rpg / Rigging3D) usa naming Mixamo sem prefixo
-# (Hips, Spine, LeftArm, LeftUpLeg, ...).
+# O rig alvo (Rigging3D) usa o MESMO naming por convenção — mapeamento
+# identidade. Rigs antigos com naming Mixamo sem prefixo (Hips, Spine,
+# LeftArm, ...) são cobertos por aliases.
 #
-# Método de retarget: cópia do matrix_basis (rotação local pura, delta vs rest).
-# Funciona porque ambos os rigs são humanoides em pé com naming 1:1 — o matrix_basis
-# é relativo ao rest de cada osso, absorvendo a diferença T-pose vs A-pose.
+# Método de retarget: o target adopta a pose global absoluta do Quaternius por
+# osso. A correção fixa remove o swing entre as direções de rest (T-pose vs
+# A-pose) para que a diferença de rest não seja re-aplicada como delta.
 
 profile: quaternius
 
-# Mapeamento de bones: source (Quaternius) -> target (rig alvo, Mixamo-like).
+# Mapeamento de bones: source (Quaternius) -> target. O naming canónico dos
+# rigs do pipeline (Rigging3D) É o naming Quaternius/UE5, logo o mapeamento é
+# identidade; os aliases seguintes (Mixamo-like) cobrem rigs antigos. O valor
+# pode ser string ou lista de candidatos — o primeiro que existir no rig ganha.
 # Osso do source não mapeado -> ignorado. Osso do target sem correspondência
 # -> fica estático (mantém rest pose).
 bone_map:
-  pelvis: Hips
-  spine_01: Spine
-  spine_02: Chest
-  spine_03: UpperChest
-  neck_01: Neck
-  Head: Head
-  clavicle_l: LeftShoulder
-  upperarm_l: LeftArm
-  lowerarm_l: LeftForeArm
-  hand_l: LeftHand
-  clavicle_r: RightShoulder
-  upperarm_r: RightArm
-  lowerarm_r: RightForeArm
-  hand_r: RightHand
-  thigh_l: LeftUpLeg
-  calf_l: LeftLeg
-  foot_l: LeftFoot
-  ball_l: LeftToeBase
-  thigh_r: RightUpLeg
-  calf_r: RightLeg
-  foot_r: RightFoot
-  ball_r: RightToeBase
+  pelvis: [pelvis, Hips]
+  spine_01: [spine_01, Spine]
+  spine_02: [spine_02, Chest]
+  spine_03: [spine_03, UpperChest]
+  neck_01: [neck_01, Neck]
+  Head: [Head]
+  clavicle_l: [clavicle_l, LeftShoulder]
+  upperarm_l: [upperarm_l, LeftArm]
+  lowerarm_l: [lowerarm_l, LeftForeArm]
+  hand_l: [hand_l, LeftHand]
+  clavicle_r: [clavicle_r, RightShoulder]
+  upperarm_r: [upperarm_r, RightArm]
+  lowerarm_r: [lowerarm_r, RightForeArm]
+  hand_r: [hand_r, RightHand]
+  thigh_l: [thigh_l, LeftUpLeg]
+  calf_l: [calf_l, LeftLeg]
+  foot_l: [foot_l, LeftFoot]
+  ball_l: [ball_l, LeftToeBase]
+  thigh_r: [thigh_r, RightUpLeg]
+  calf_r: [calf_r, RightLeg]
+  foot_r: [foot_r, RightFoot]
+  ball_r: [ball_r, RightToeBase]
 
 # Mapeamento de clips: nome limpo de saída -> nome da action/track no pack source.
 # Apenas os clips listados são retargetizados; outros no pack são ignorados.

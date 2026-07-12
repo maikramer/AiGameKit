@@ -1,0 +1,67 @@
+# Perfil de retarget: Quaternius — variant HERO com clips de arma/ferramenta.
+#
+# O simple-rpg usa fuzzy matching por substring para seleccionar clips de arma e
+# ferramenta (findClipFuzzy em gltf-systems.ts). As keywords não têm aliases —
+# o nome do clip no GLB tem de conter literalmente 'sword', 'axe', 'spear',
+# 'chop', 'mine', 'gather' (case-insensitive). Este perfil garante que o hero
+# tem um clip para cada keyword, reusing o catálogo Quaternius:
+#
+#   sword  ← Sword_Attack (swing horizontal)
+#   axe    ← Sword_Attack (sem axe dedicado no pack; swing genérico de arma branca)
+#   spear  ← Sword_Attack (sem spear dedicado; thrust da espada)
+#   chop   ← Sword_Attack (swing descendente para cortar madeira)
+#   mine   ← Fixing_Kneeling (agachado a bater — perfeito para mineração)
+#   gather ← Interact (gesto de interagir / apanhar)
+#
+# Os inimigos continuam a usar o perfil quaternius.yaml standard (12 clips).
+
+profile: quaternius-hero
+
+bone_map:
+  pelvis: [pelvis, Hips]
+  spine_01: [spine_01, Spine]
+  spine_02: [spine_02, Chest]
+  spine_03: [spine_03, UpperChest]
+  neck_01: [neck_01, Neck]
+  Head: [Head]
+  clavicle_l: [clavicle_l, LeftShoulder]
+  upperarm_l: [upperarm_l, LeftArm]
+  lowerarm_l: [lowerarm_l, LeftForeArm]
+  hand_l: [hand_l, LeftHand]
+  clavicle_r: [clavicle_r, RightShoulder]
+  upperarm_r: [upperarm_r, RightArm]
+  lowerarm_r: [lowerarm_r, RightForeArm]
+  hand_r: [hand_r, RightHand]
+  thigh_l: [thigh_l, LeftUpLeg]
+  calf_l: [calf_l, LeftLeg]
+  foot_l: [foot_l, LeftFoot]
+  ball_l: [ball_l, LeftToeBase]
+  thigh_r: [thigh_r, RightUpLeg]
+  calf_r: [calf_r, RightLeg]
+  foot_r: [foot_r, RightFoot]
+  ball_r: [ball_r, RightToeBase]
+
+clip_map:
+  # Locomoção
+  idle: Idle_Loop
+  walk: Walk_Loop
+  run: Jog_Fwd_Loop
+  sprint: Sprint_Loop
+  jump: Jump_Start
+  death: Death01
+  # Ataque genérico + porrada
+  attack: Sword_Attack
+  punch: Punch_Cross
+  hit: Hit_Chest
+  # Armas (V cycle) — fuzzy matching por substring
+  sword: Sword_Attack
+  axe: Sword_Attack
+  spear: Sword_Attack
+  chop: Sword_Attack
+  # Ferramentas de coleta
+  mine: Fixing_Kneeling
+  gather: Interact
+  interact: Interact
+  # Extras
+  roar: Dance_Loop
+  roll: Roll
