@@ -545,7 +545,7 @@ function findAssetsRoot(fromDir) {
  * @param {string[]} args argumentos após `vibegame anim-viewer`
  * @returns {never}
  */
-function runAnimViewer(args) {
+async function runAnimViewer(args) {
   const viewerHtml = join(root, 'tools', 'anim-viewer', 'index.html');
   const serverScript = join(root, 'scripts', 'anim-viewer-server.mjs');
   if (!existsSync(viewerHtml) || !existsSync(serverScript)) {
@@ -609,7 +609,8 @@ function runAnimViewer(args) {
   console.log(`  Meshes:      ${meshesDir}`);
   if (model) console.log(`  Model:       ${model}`);
 
-  // Iniciar o servidor estático
+  const url = `http://localhost:${port}/${model ? `?model=${model}` : ''}`;
+
   const child = spawn(
     process.execPath,
     [serverScript, viewerHtml, assetsRoot, port],
@@ -618,36 +619,58 @@ function runAnimViewer(args) {
       env: process.env,
     }
   );
-
-  // Abrir o browser após o server iniciar
-  setTimeout(() => {
-    const url = `http://localhost:${port}/${model ? `?model=${model}` : ''}`;
-    openBrowser(url);
-  }, 800);
-
-  child.on('exit', (code) => process.exit(code ?? 0));
+  setTimeout(() => openBrowser(url), 800);
+  const status = await new Promise((resolveStatus) => {
+    child.once('error', (error) => {
+      console.error(`[vibegame anim-viewer] ${error.message}`);
+      resolveStatus(1);
+    });
+    child.once('exit', (code) => resolveStatus(code ?? 0));
+  });
+  process.exit(status);
 }
 
 /**
  * Abre o URL no browser predefinido do sistema (best-effort, não-fatal).
+ * Tenta vários openers em Linux porque xdg-open pode falhar em ambientes minimal.
  * @param {string} url
  */
 function openBrowser(url) {
-  const cmds =
+  const candidates =
     process.platform === 'darwin'
-      ? ['open']
+      ? [['open', [url]]]
       : process.platform === 'win32'
-        ? ['cmd', '/c', 'start']
-        : ['xdg-open'];
-  try {
-    spawn(cmds[0], cmds.slice(1).concat(url), {
-      stdio: 'ignore',
-      detached: true,
-      shell: cmds.length > 1,
-    }).unref();
-  } catch {
-    /* não-fatal — o utilizador abre manualmente */
+        ? [['cmd', ['/c', 'start', url]]]
+        : [
+            ['xdg-open', [url]],
+            ['sensible-browser', [url]],
+            ['x-www-browser', [url]],
+            ['google-chrome', [url]],
+            ['chromium', [url]],
+            ['firefox', [url]],
+          ];
+
+  for (const [bin, binArgs] of candidates) {
+    const which = spawnSync('which', [bin], {
+      stdio: 'pipe',
+      encoding: 'utf8',
+      shell: false,
+    });
+    if (which.error || which.status !== 0) continue;
+    try {
+      spawn(/** @type {string} */ (bin), binArgs, {
+        stdio: 'ignore',
+        detached: true,
+        shell: false,
+      }).unref();
+      console.log(`  Browser:    ${bin} → ${url}`);
+      return;
+    } catch {
+      /* try next */
+    }
   }
+  console.log(`\n  ⚠ Não consegui abrir o browser automaticamente.`);
+  console.log(`    Abra manualmente: ${url}`);
 }
 
 const argv = process.argv.slice(2);
@@ -684,7 +707,7 @@ if (first === 'run' || first === 'r') {
 }
 
 if (first === 'anim-viewer' || first === 'av') {
-  runAnimViewer(argv.slice(1));
+  await runAnimViewer(argv.slice(1));
 }
 
 if (first === '--version' || first === '-v') {
@@ -699,7 +722,7 @@ if (
   first === undefined
 ) {
   help();
-  process.exit(first === undefined ? 0 : 0);
+  process.exit(0);
 }
 
 console.error(`Unknown command: ${first}`);
