@@ -27,12 +27,16 @@ class BackendDescriptor:
         vram_mib: Estimativa do footprint em VRAM (MiB) quando carregado.
         priority: Prioridade de evicção — valores MAIORES = menos provável de ser
             evicted (backends "pesados" que compensa manter quentes). Tie-break: LRU.
+        footprint_key: Chave do registry ``gamedev_shared.lowvram.FOOTPRINTS`` (ex:
+            ``"flux-klein-9b"``). Se definida, o ``vram_mib`` é derivado do footprint
+            (mais preciso que o valor estático). Opcional.
     """
 
     name: str
     adapter: str
     vram_mib: int
     priority: int
+    footprint_key: str | None = None
 
 
 def _default_yaml_path() -> str:
@@ -72,6 +76,7 @@ def load_descriptors(yaml_path: str | None = None) -> dict[str, BackendDescripto
             adapter=entry["adapter"],
             vram_mib=int(entry["vram_mib"]),
             priority=int(entry.get("priority", 0)),
+            footprint_key=entry.get("footprint_key"),
         )
     return descriptors
 
