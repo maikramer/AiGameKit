@@ -140,8 +140,10 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             pipe, model_footprint(self.model_id), quant_mode=plan.quant_mode, model_attr="transformer"
         )
 
-        # torch.compile do transformer (só em full-GPU; 4-step Klein amortiza rápido).
+        # Otimizações de speed (só em full-GPU): compile + step cache + attention.
         self._maybe_compile_transformer(pipe, placement_plan)
+        self._maybe_apply_step_cache(pipe, placement_plan)
+        self._maybe_select_attention_backend(pipe, placement_plan)
 
         self._pipe = pipe
         return pipe

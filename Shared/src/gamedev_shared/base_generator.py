@@ -350,6 +350,33 @@ class DiffusionGeneratorBase(ABC):
             pipe.transformer = compiled
             self._log("torch.compile (default) aplicado ao transformer")
 
+    def _maybe_apply_step_cache(self, pipe: Any, plan: Any) -> None:
+        """Aplica step caching (FirstBlockCache/TaylorSeer) quando seguro.
+
+        Só activa quando o plano é ``OFFLOAD_NONE`` (modelo cabe sem offload) —
+        step caching é speed, não VRAM. Controlado por ``GAMEDEV_STEP_CACHE`` env.
+        """
+        if plan.offload != "none" or self.device == "cpu":
+            return
+        from .step_cache import apply_step_cache, get_step_cache_mode
+
+        mode = get_step_cache_mode()
+        if mode == "off":
+            return
+        apply_step_cache(pipe, method=mode, log_fn=self._log)
+
+    def _maybe_select_attention_backend(self, pipe: Any, plan: Any) -> None:
+        """Selecciona attention backend optimizado (Sage/Flash) quando disponível.
+
+        Aplica só ao transformer (NÃO ao VAE — Sage pode causar stuck decode).
+        Controlado por ``GAMEDEV_ATTENTION_BACKEND`` env (default "auto").
+        """
+        if self.device == "cpu":
+            return
+        from .attention import select_attention_backend
+
+        select_attention_backend(pipe, backend="auto", log_fn=self._log)
+
     # ------------------------------------------------------------------
     # Batch generation
     # ------------------------------------------------------------------
