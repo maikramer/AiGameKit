@@ -157,10 +157,17 @@ export function resolutionForLevel(
  * Effective mesh resolution for a chunk, layering a spatial density boost on
  * top of the camera-LOD resolution. boost=0 (no featured region) reproduces
  * {@link resolutionForLevel} exactly — the retrocompat contract. boost=255
- * doubles the LOD resolution, capped at `baseResolution` so a boosted chunk
- * never exceeds the finest mesh the LOD system would ever produce.
+ * multiplies the LOD resolution by 8, capped at `baseResolution`.
  *
- * Intermediate boost scales linearly: factor = 1 + boost/255.
+ * Why ×8: the uniform lattice spacing is `worldSize/baseResolution` (~15 m in
+ * simple-rpg) at EVERY level (size and resolution halve together). Carved
+ * features narrower than the lattice — river channels+banks (~2 m features),
+ * road corridors (~10 m) — live in the sampler but the mesh never sampled
+ * them: rivers rendered with no depth or banks, roads looked buried. The old
+ * ×2 ceiling still left a 7.8 m lattice. ×8 → ~2 m over boosted tiles only,
+ * which is what banks/corridor shoulders need to actually show up.
+ *
+ * Intermediate boost scales linearly: factor = 1 + 7·boost/255.
  *
  * @param baseResolution Terrain.resolution (e.g. 64)
  * @param level          LOD quadtree depth (0 = root)
@@ -173,7 +180,7 @@ export function effectiveResolution(
 ): number {
   const lodRes = resolutionForLevel(baseResolution, level);
   if (densityBoost <= 0) return lodRes;
-  const factor = 1 + Math.min(densityBoost, 255) / 255;
+  const factor = 1 + (Math.min(densityBoost, 255) / 255) * 7;
   const boosted = Math.round(lodRes * factor);
   return Math.min(baseResolution, Math.max(lodRes, boosted));
 }

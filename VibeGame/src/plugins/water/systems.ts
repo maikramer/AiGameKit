@@ -5,6 +5,7 @@ import type { State, System } from '../../core';
 import { Transform } from '../transforms/components';
 import { getTerrainContext } from '../terrain/utils';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
+import { smoothPath } from '../road/geometry';
 import { Lake, River, getRiverPath } from './components';
 import { shapeRadius } from './carve';
 import { LakeBowl } from './lake-bowl';
@@ -426,8 +427,12 @@ export const RiverApplySystem: System = {
     const cars = waterSideCars(state);
     for (const eid of riverQuery(state.world)) {
       if (River.applied[eid] === 1) continue;
-      const path = getRiverPath(state, eid);
-      if (path.length < 4) continue; // need ≥ 2 points
+      const rawPath = getRiverPath(state, eid);
+      if (rawPath.length < 4) continue; // need ≥ 2 points
+      // Chaikin: sem isto, os nós autorados criam vincos duros (zigzag) na
+      // ribbon da água E no canal esculpido — as estradas suavizam da mesma
+      // forma; o rio herda a curva no carve, na ribbon e no registry.
+      const path = smoothPath(rawPath, 2);
       const channel = new RiverChannel({
         path,
         width: River.width[eid] || 6,
