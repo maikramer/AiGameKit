@@ -101,6 +101,8 @@ The simple-rpg rigs (hero, goblin, wolf, ogre...) use Mixamo naming WITHOUT the
 
 ## Clip selection for simple-rpg (mapping clean names → Quaternius tracks)
 
+### Perfil standard (12 humanoides + inimigos): `quaternius.yaml`
+
 Core clips needed by the game (`idle/walk/run/jump/attack/death/roar`):
 
 | Clean name (target) | Quaternius track | Used for |
@@ -115,10 +117,32 @@ Core clips needed by the game (`idle/walk/run/jump/attack/death/roar`):
 | `hit` | `Hit_Chest` | damage reaction |
 | `death` | `Death01` | death (replaces `Fall`) |
 | `roar` | `Dance_Loop` | boss victory (closest "emote"; Death01 alt) |
+| `roll` | `Roll` | dodge / roll |
+| `interact` | `Interact` | interact gesture |
 
-Extra clips worth including for richness (emotes, situational):
-`Crouch_Idle_Loop`, `Roll`, `Interact`, `Spell_Simple_Shoot`, `Idle_Talking_Loop`,
-`Idle_Torch_Loop`, `Push_Loop`, `Fixing_Kneeling`.
+### Perfil hero (18 clips com armas/ferramentas): `quaternius-hero.yaml`
+
+O hero usa fuzzy matching por substring (`findClipFuzzy` em `gltf-systems.ts`) para
+seleccionar clips de arma/ferramenta. As keywords **não têm aliases** — o nome do
+clip no GLB tem de conter literalmente a keyword. Clips extra do hero:
+
+| Clean name | Quaternius track | Keyword do jogo | Quando |
+|---|---|---|---|
+| `sword` | `Sword_Attack` | `sword` | combate c/ espada (V) |
+| `axe` | `Sword_Attack` | `axe` | combate c/ machado (V) |
+| `spear` | `Sword_Attack` | `spear` | combate c/ lança (V) |
+| `chop` | `Sword_Attack` | `chop` | cortar madeira (J perto de árvore) |
+| `mine` | `Fixing_Kneeling` | `mine` | minerar pedra (J perto de pedra) |
+| `gather` | `Interact` | `gather` | interagir (F) |
+
+O Quaternius não tem `axe`/`spear`/`chop` dedicados — `Sword_Attack` serve como
+swing genérico de arma branca. `Fixing_Kneeling` (agachado a bater) é perfeito
+para mineração.
+
+Extra clips available (ainda não mapeados, oportunidades futuras):
+`Crouch_Idle_Loop`, `Crouch_Fwd_Loop`, `Swim_Idle_Loop`, `Swim_Fwd_Loop`,
+`Spell_Simple_Shoot`, `Idle_Talking_Loop`, `Idle_Torch_Loop`, `Push_Loop`,
+`Pistol_*`, `Sitting_*`, `Driving_Loop`, `PickUp_Table`.
 
 ## Notes
 
@@ -127,6 +151,56 @@ Extra clips worth including for richness (emotes, situational):
   AI-driven movement (creatures translate via Transform, not root motion).
 - The GLB includes a mesh (the yellow mannequin) — we import it only to get the
   armature + animation tracks; the mesh is discarded (we bake onto the target rig).
-- Retarget strategy: **Copy Rotation** constraint (LOCAL owner/target space) per
-  mapped bone + visual-keying bake. This preserves the target's rest pose and is
-  robust to orientation differences (UE5 Mannequin vs Mixamo bone rolls differ).
+
+## Retarget strategy — axis correction com swing removal
+
+**Ficheiro:** `Animator3D/src/animator3d/retarget.py`
+
+O retarget transfere a **pose global (armature-space)** do source para o target,
+osso a osso, com uma correcção fixa por osso que compensa diferenças de rest pose.
+
+### O problema: T-pose vs A-pose
+
+O rig do Quaternius usa **T-pose** (braços horizontais); os rigs do simple-rpg
+(Rigging3D/SkinTokens) usam **A-pose** (braços a ~45° para baixo). Copiar o
+`matrix_basis` (rotação local) directamente transfere o mesmo delta — mas aplicado
+sobre rests diferentes produz o dobro do movimento. Resultado: no idle, os braços
+do hero cruzavam o tronco em V.
+
+### A solução: axis correction + swing removal
+
+Para cada osso mapeado, pré-computa-se uma correcção fixa (uma vez, do rest pose):
+
+```
+swing = src_dir.rotation_difference(tgt_dir)   # arco mínimo entre direções de rest
+correction = src_rest⁻¹ @ swing⁻¹ @ tgt_rest
+```
+
+- `src_dir`/`tgt_dir`: direção do osso (tail − head) no rest, em armature space
+- `swing`: rotação que alinha a direção de rest do source com a do target
+- Remover o swing (`swing⁻¹`) garante que a diferença T-pose/A-pose **não** é
+  re-aplicada como delta — só o movimento real da animação é transferido
+
+### Propagação analítica por frame
+
+A pose global do target é propagada por frame num dict, **pais antes de filhos**
+(ordenação topológica DFS). Isto evita ler `pose.bone.matrix` a meio do frame
+(que seria stale — o depsgraph só re-avalia em `view_layer.update()`).
+
+```
+desired_pose = source_pose @ correction
+target_basis = (parent_pose @ parent_rest⁻¹ @ target_rest)⁻¹ @ desired_pose
+```
+
+### Continuidade de quaternion
+
+`make_compatible(prev)` é chamado frame a frame para evitar interpolação pelo
+caminho longo (180° flip) — sem isto, o viewer mostra um "trambolhão" entre frames.
+
+### Porquê não constraints?
+
+Prototipámos `Copy Rotation` LOCAL (braços torcidos), `Copy Rotation` WORLD via
+constraint + bake visual (funciona mas é lento — re-avalia depsgraph por frame),
+delta em armature-space com parent desejado ("bola de carne"), e conjugação
+(body deitado). A axis correction com swing removal é a única que produz resultado
+correcto **e** é rápida (cálculo fixo por osso, não por frame).

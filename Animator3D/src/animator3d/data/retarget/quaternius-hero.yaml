@@ -49,19 +49,30 @@ clip_map:
   sprint: Sprint_Loop
   jump: Jump_Start
   death: Death01
-  # Ataque genérico + porrada
+  # Ataque genérico
   attack: Sword_Attack
-  punch: Punch_Cross
   hit: Hit_Chest
-  # Armas (V cycle) — fuzzy matching por substring
+  # Armas (V cycle) — o pack Quaternius só tem Sword_Attack como animação de arma.
+  # Todas as armas usam o mesmo swing (é o melhor disponível); Punch_* pareciam
+  # socos nus. Quando houver um pack com axe/spear dedicados, substituir aqui.
   sword: Sword_Attack
   axe: Sword_Attack
   spear: Sword_Attack
   chop: Sword_Attack
+  # Sword_Idle — pose de guarda de combate com espada (usada como idle quando
+  # o hero tem arma em mão). O pack não tem axe/spear idle; reusa-se.
+  swordidle: Sword_Idle
+  axeidle: Sword_Idle
+  spearidle: Sword_Idle
+  chopidle: Sword_Idle
   # Ferramentas de coleta
-  mine: Fixing_Kneeling
-  gather: Interact
-  interact: Interact
+  # mine:.swing de espada (mesmo ataque — não há pickaxe no pack)
+  # gather/interact: ajoelhar e pegar no chão (Fixing_Kneeling) — ideal para
+  #   recolher cogumelos, cristais, loot; o Interact era genérico demais.
+  mine: Sword_Attack
+  gather: Fixing_Kneeling
+  interact: Fixing_Kneeling
   # Extras
+  punch: Punch_Cross
   roar: Dance_Loop
   roll: Roll
