@@ -96,6 +96,12 @@ function applyMergedRecipeIntoParent(
       `[parser] Internal: merge expected for <${childElement.tagName}>`
     );
   }
+  warnIfMergeOverwritesParentTransform(
+    parentEntity,
+    childElement,
+    recipe.name,
+    state
+  );
   installRecipeComponents(parentEntity, recipe, state, true);
   applyRecipeOverrides(parentEntity, recipe, state);
   applyAttributesFromRecipe(
@@ -109,6 +115,47 @@ function applyMergedRecipeIntoParent(
   if (parser) {
     parser({ entity: parentEntity, element: childElement, state, context });
   }
+}
+
+/**
+ * Detect a common footgun: a `merge` recipe child carrying `pos` (or scale/
+ * rotation) merges onto the parent entity and silently overwrites its
+ * transform — e.g. `<PlayerGLTF pos="0 40 0">` nested in a `<Group pos="0 0 0">`
+ * would lift the Group (and anything that reads its WorldTransform, such as a
+ * merged `<Terrain>`) to Y=40. Warn so the author hears about it at parse time
+ * instead of as a floating scene at runtime.
+ */
+function warnIfMergeOverwritesParentTransform(
+  parentEntity: number,
+  childElement: ParsedElement,
+  childRecipeName: string,
+  state: State
+): void {
+  const hasTransformAttr =
+    'pos' in childElement.attributes ||
+    'scale' in childElement.attributes ||
+    'rotation' in childElement.attributes ||
+    'rot' in childElement.attributes;
+  if (!hasTransformAttr) return;
+  const Transform = state.getComponent('transform');
+  if (!Transform) return;
+  const alreadyPositioned =
+    (Transform as ComponentWithFields).posY?.[parentEntity] !== 0 ||
+    (Transform as ComponentWithFields).posX?.[parentEntity] !== 0 ||
+    (Transform as ComponentWithFields).posZ?.[parentEntity] !== 0;
+  if (!alreadyPositioned) return;
+  logger.warn(
+    `[parser] <${childRecipeName}> is a merge recipe with a transform attribute ` +
+      `(${Object.keys(childElement.attributes)
+        .filter((k) => ['pos', 'scale', 'rotation', 'rot'].includes(k))
+        .join(', ')}), nested inside a parent that is already positioned.\n` +
+      `  The child's transform will OVERWRITE the parent's (merge recipes apply ` +
+      `onto the parent entity, they do not create their own).\n` +
+      `  If the parent is a <Group> or hosts a merged <Terrain>/<PlayerGLTF>/etc., ` +
+      `this shifts the whole subtree — e.g. a terrain field reads its worldOffset ` +
+      `from this entity's WorldTransform and would be lifted.\n` +
+      `  Fix: move <${childRecipeName}> out of the parent so it becomes its own entity.`
+  );
 }
 
 export function createEntityFromRecipe(
