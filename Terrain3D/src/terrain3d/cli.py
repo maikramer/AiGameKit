@@ -210,6 +210,29 @@ def generate_cmd(
         elevation_contrast=elevation_contrast,
     )
 
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    from gamedev_shared.model_server import delegate_to_ums
+
+    ums_result = delegate_to_ums(
+        "terrain3d",
+        {
+            "output": output,
+            "metadata_path": metadata_path,
+            "seed": seed,
+            "size": size,
+            "world_size": world_size,
+            "max_height": max_height,
+            "mode": mode,
+        },
+    )
+    if ums_result and ums_result.get("status") == "ok":
+        print(ums_result["output"])
+        if metadata_path:
+            print(metadata_path)
+        return
+    elif ums_result and ums_result.get("status") == "error":
+        print(f"UMS erro: {ums_result.get('error', '?')} — fallback in-process", file=sys.stderr)
+
     if quiet:
         result = generate_terrain(config)
         hmap_path = export_heightmap(result.heightmap, output, size)

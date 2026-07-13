@@ -371,6 +371,34 @@ def texture(
     log_p = env_profile_log_path()
     prof_log = Path(log_p) if log_p else None
 
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    from gamedev_shared.model_server import delegate_to_ums
+
+    ums_result = delegate_to_ums(
+        "paint3d",
+        {
+            "mesh_path": str(mesh_path),
+            "image_path": str(image_file),
+            "output": str(output),
+            "max_num_view": max_views,
+            "view_resolution": view_resolution,
+            "render_size": render_size,
+            "texture_size": texture_size,
+            "bake_exp": bake_exp,
+            "verbose": verbose,
+            "preserve_origin": preserve_origin,
+            "memory_efficient": mem_eff,
+            "gpu_ids": parsed_gpu_ids,
+        },
+    )
+    if ums_result and ums_result.get("status") == "ok":
+        console.print(
+            f"[bold green]\u2713[/bold green] Mesh texturizado (via UMS): [cyan]{ums_result['output']}[/cyan]"
+        )
+        sys.exit(0)
+    elif ums_result and ums_result.get("status") == "error":
+        console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+
     try:
         start = time.time()
         item_id = mesh_path.stem

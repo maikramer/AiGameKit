@@ -220,6 +220,36 @@ def generate_cmd(
     prof_log = Path(log_p) if log_p else None
     t_start = time.time()
 
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    if not cpu and output is not None:
+        from gamedev_shared.model_server import delegate_to_ums
+
+        ums_result = delegate_to_ums(
+            "text2d",
+            {
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+            },
+        )
+        if ums_result and ums_result.get("status") == "ok":
+            elapsed = time.time() - t_start
+            try:
+                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
+            except OSError:
+                sz = "?"
+            console.print(
+                f"[bold green]\u2713[/bold green] Imagem: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
+            )
+            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+            return
+        elif ums_result and ums_result.get("status") == "error":
+            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+
     safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
     item_id = safe or "single"
 
@@ -267,7 +297,7 @@ def generate_cmd(
                 ) as progress,
             ):
                 task = progress.add_task("[cyan]2/2 — Inferência na GPU...", total=None)
-                image = gen.generate(
+                image, _metadata = gen.generate(
                     prompt=prompt,
                     height=height,
                     width=width,
@@ -514,7 +544,7 @@ def generate_batch_cmd(
 
             try:
                 emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=0)
-                image = gen.generate(
+                image, _metadata = gen.generate(
                     prompt=prompt,
                     height=item_h,
                     width=item_w,
