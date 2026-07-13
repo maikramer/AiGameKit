@@ -1,4 +1,4 @@
-"""Adapter do Texture2D — FLUX.1-dev SDNQ + LoRA seamless para texturas 2D.
+"""Adapter do Texture2D — Stable Diffusion v1.5 + circular padding para texturas 2D.
 
 Normaliza a API do ``TextureGenerator`` (warmup/generate/unload) no contrato
 canónico. Retorna tuple (Image, metadata); o adapter trata o save.
@@ -13,19 +13,25 @@ from .base import BackendAdapter
 
 
 class Adapter(BackendAdapter):
-    """Adapter do texture2d (TextureGenerator)."""
+    """Adapter do texture2d (TextureGenerator — SD1.5 + circular padding)."""
 
     name = "texture2d"
 
     def load(self, **kwargs: Any) -> Any:
         from texture2d.generator import TextureGenerator
 
-        gen = TextureGenerator(verbose=kwargs.get("verbose", False), **kwargs)
+        # SD1.5 fp16 (~2.5 GB) cabe em qualquer GPU CUDA — sem offload/clamp.
+        load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        skip = {"verbose", "group_offload", "sequential_offload", "memory_efficient"}
+        load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
+        gen = TextureGenerator(**load_kwargs)
         gen.warmup()
         return gen
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         import time
+
+        from texture2d.generator import DEFAULT_GUIDANCE, DEFAULT_RESOLUTION, DEFAULT_STEPS
 
         prompt = request.get("prompt", "")
         output = request.get("output")
@@ -36,13 +42,11 @@ class Adapter(BackendAdapter):
         image, metadata = model.generate(
             prompt=prompt,
             negative_prompt=request.get("negative_prompt", ""),
-            guidance_scale=float(request.get("guidance", 3.5)),
-            num_inference_steps=int(request.get("steps", 28)),
+            guidance_scale=float(request.get("guidance", DEFAULT_GUIDANCE)),
+            num_inference_steps=int(request.get("steps", DEFAULT_STEPS)),
             seed=request.get("seed"),
-            width=int(request.get("width", 1024)),
-            height=int(request.get("height", 1024)),
-            cfg_scale=request.get("cfg_scale"),
-            lora_strength=float(request.get("lora_strength", 1.0)),
+            width=int(request.get("width", DEFAULT_RESOLUTION)),
+            height=int(request.get("height", DEFAULT_RESOLUTION)),
             preset=request.get("preset"),
             ground=request.get("ground", "auto"),
         )

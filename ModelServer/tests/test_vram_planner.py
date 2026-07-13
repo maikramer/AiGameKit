@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from modelserver.vram_planner import LoadedBackend, plan_eviction
 
 
