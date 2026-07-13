@@ -230,32 +230,39 @@ class AudioGenerator:
             and hasattr(self._model.pretransform, "chunked")
         ):
             self._model.pretransform.chunked = True
-        self._model = self._model.to(self._device)
 
-        if self._gpu_ids and len(self._gpu_ids) >= 2 and self._device == "cuda":
-            self._try_multi_gpu()
+        # Colocação unificada via planner: decide multi-GPU (accelerate) / group
+        # offload / full-GPU conforme VRAM livre. Footprint do registry centralizado.
+        # (Antes o modelo ia para .to(device) primeiro — OOM prematuro em GPUs pequenas.)
+        if self._device == "cuda":
+            from gamedev_shared.hardware import cuda_gpu_free_specs
+            from gamedev_shared.lowvram import get_footprint, place_pipeline
+
+            specs = cuda_gpu_free_specs()
+            if self._gpu_ids:
+                keep = set(self._gpu_ids)
+                specs = [s for s in specs if s[0] in keep]
+            allow_multi = self._gpu_ids is None or len(self._gpu_ids) >= 2
+            plan = place_pipeline(
+                self._model,
+                get_footprint("stable-audio-open"),
+                specs,
+                allow_quant=("none",),
+                allow_multi_gpu=allow_multi,
+                no_split_classes=["DiTBlock", "AudioDiTBlock"],
+            )
+            if plan.multi_gpu_ids is not None:
+                primary = plan.primary_gpu or 0
+                self._device = f"cuda:{primary}"
+                self._multi_gpu = True
+        else:
+            self._model = self._model.to(self._device)
 
         self._loaded = True
 
     def _try_multi_gpu(self) -> None:
-        """Tenta dispatch multi-GPU via accelerate (MultiGPUPlanner)."""
-        try:
-            from gamedev_shared.multi_gpu import MultiGPUPlanner
-
-            planner = (
-                MultiGPUPlanner()
-                .for_model(self._model)
-                .with_gpus(self._gpu_ids)  # type: ignore[arg-type]
-                .no_split(["DiTBlock", "AudioDiTBlock"])
-            )
-            plan = planner.plan()
-            if plan.status == "multi_gpu":
-                self._model = planner.apply()
-                primary = plan.primary_device
-                self._device = f"cuda:{primary}" if isinstance(primary, int) else primary
-                self._multi_gpu = True
-        except Exception:
-            pass
+        """Descontinuado — multi-GPU agora tratado por place_pipeline no load()."""
+        pass
 
     def _decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
         """Decodifica latents → áudio com escada de fallback de memória.
