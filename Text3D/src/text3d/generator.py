@@ -207,29 +207,53 @@ class HunyuanTextTo3DGenerator:
                 wants_quant = False
                 self._log("SDNQ não disponível — a correr sem quantização (VRAM elevada).")
 
-        if self._gpu_ids is not None and hunyuan_device == "cuda":
-            from gamedev_shared.multi_gpu import MultiGPUPlanner
+        if hunyuan_device == "cuda":
+            _clear_cuda_cache()
+            # Colocação unificada via planner: decide multi-GPU (accelerate) vs
+            # group offload + streams vs full-GPU, com cascade fallback.
+            # Footprint do registry centralizado; model_attr="model" (DiT Hunyuan3D).
+            from gamedev_shared.hardware import cuda_gpu_free_specs
+            from gamedev_shared.lowvram import get_footprint, place_pipeline
 
-            planner = (
-                MultiGPUPlanner().for_model(pipe).model_attr("model").with_gpus(self._gpu_ids).architecture("hunyuan3d")
+            specs = cuda_gpu_free_specs()
+            if self._gpu_ids:
+                keep = set(self._gpu_ids)
+                specs = [s for s in specs if s[0] in keep]
+            allow_multi = self._gpu_ids is None or len(self._gpu_ids) >= 2
+            # Footprint: se SDNQ foi aplicado (wants_quant), o modelo já está quantizado
+            # (~2 GiB int4); usar esse tamanho real para o planner decidir correctamente.
+            # Sem SDNQ, o modelo fica em fp16 (~6.5 GiB).
+            if wants_quant:
+                from gamedev_shared.lowvram import ModelFootprint
+
+                footprint = ModelFootprint(
+                    fp16_weights_gib=2.1, activation_gib=1.5, largest_module_gib=1.6, architecture="hunyuan3d"
+                )
+            else:
+                footprint = get_footprint("hunyuan3d-2.1-dit")
+
+            offload_plan = place_pipeline(
+                pipe,
+                footprint,
+                specs,
+                allow_quant=("none",),
+                allow_multi_gpu=allow_multi,
+                model_attr="model",
+                # Hunyuan3D pipeline é vendored/custom: não compatível com group offload
+                # do diffusers (lógica cat_recursive/scheduler assume mesmo device).
+                # Usar model_cpu offload nativo (que já funcionava antes da unificação).
+                allow_group_offload=False,
+                on_status=lambda m: self._log(m),
             )
-            plan = planner.plan()
-            if plan.status == "multi_gpu":
-                pipe = planner.apply()
-                primary = plan.primary_device
-                primary_dev = f"cuda:{primary}" if isinstance(primary, int) else primary
+
+            if offload_plan.multi_gpu_ids is not None:
+                # Multi-GPU aplicado pelo accelerate: colocar conditioner+vae na primária.
+                primary = offload_plan.primary_gpu or 0
+                primary_dev = f"cuda:{primary}"
                 pipe.conditioner.to(primary_dev)
                 pipe.vae.to(primary_dev)
                 pipe.device = torch.device(primary_dev)
-                self._log(f"Multi-GPU dispatch: GPUs {self._gpu_ids}, primary={primary_dev}")
-                self._configure_acceleration(pipe)
-                self._hunyuan_pipeline = pipe
-                return pipe
-            self._log(f"Multi-GPU plan: {plan.status} — a usar colocação simples.")
 
-        if hunyuan_device == "cuda":
-            _clear_cuda_cache()
-            self._place_on_cuda(pipe)
             if torch.cuda.is_available():
                 alloc = torch.cuda.memory_allocated() / (1024**3)
                 self._log(f"Shape na VRAM: {alloc:.2f} GB")
@@ -255,25 +279,6 @@ class HunyuanTextTo3DGenerator:
             )
         except Exception as exc:
             self._log(f"preflight Hunyuan falhou ({exc}); a deixar from_pretrained tratar")
-
-    def _place_on_cuda(self, pipe: Any) -> None:
-        """Coloca o pipeline Hunyuan na GPU: offload em VRAM baixa, senão ``to(cuda)``.
-
-        Rede de segurança always-fit: se a colocação direta estourar a VRAM, cai para
-        ``enable_model_cpu_offload`` (seq conditioner->model->vae) — o caminho que faz o
-        Hunyuan caber em 6GB.
-        """
-        if self.offload:
-            self._log("VRAM baixa: enable_model_cpu_offload (conditioner->model->vae)")
-            pipe.enable_model_cpu_offload(device=self.device)
-            return
-        try:
-            pipe.to(self.device)
-        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-            self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para model_cpu offload")
-            _clear_cuda_cache()
-            pipe.enable_model_cpu_offload(device=self.device)
-            self.offload = True
 
     def _configure_acceleration(self, pipe: Any) -> None:
         """Liga decoder volumétrico esparso, extractor GPU e torch.compile no pipeline.

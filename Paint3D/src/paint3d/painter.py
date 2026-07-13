@@ -210,6 +210,100 @@ def check_hunyuan3d21_environment() -> tuple[bool, str]:
     return True, str(root)
 
 
+def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
+    """Aplica group offload com CUDA streams ao pipeline Hunyuan-Paint (best-effort).
+
+    O pipeline Hunyuan-Paint é custom (não diffusers ModelMixin standard): os módulos
+    pesados vivem em ``pipe.models["multiview_model"].pipeline`` (unet, vae, text_encoder).
+    Aplicamos group offload a esses inner modules via ``try_group_offloading`` com
+    ``modules=`` custom. Resolve o setup (leaf_level vs block_level) via fórmula
+    ``plan_group_offload`` baseada na VRAM livre.
+
+    **Desactivado por defeito**: o fluxo dual-stream do wrapper UNet2p5DConditionModel
+    (reference attention: ``unet`` popula ``condition_embed_dict`` que ``unet_dual``
+    consome) conflitua com o group offload — os hooks do diffusers interferem com essa
+    partilha de estado, causando ``KeyError`` no forward. Para activar experimentalmente:
+    ``PAINT3D_GROUP_OFFLOAD=1``. O pipeline já tem SDNQ uint8 + offload_ref_unet +
+    VAE tiling como mecanismos de poupança de VRAM.
+
+    Best-effort: se falhar (attrs inesperados, diffusers sem suporte, conflito com
+    o offload_ref_unet custom), retorna False silenciosamente — o pipeline segue com
+    a colocação já feita pelo constructor (pipeline.to(device)).
+    """
+    # OPT-IN: o group offload conflitua com o fluxo dual-stream do UNet2p5D (reference
+    # attention). Só activar se PAINT3D_GROUP_OFFLOAD=1 explicitamente.
+    import os
+
+    from gamedev_shared.group_offload import (
+        plan_group_offload,
+        try_group_offloading,
+    )
+    from gamedev_shared.hardware import cuda_gpu_specs
+    from gamedev_shared.lowvram import GIB, get_footprint
+
+    if os.environ.get("PAINT3D_GROUP_OFFLOAD", "0").strip().lower() not in ("1", "true", "yes", "on"):
+        return False
+
+    # Aceder ao inner diffusers pipeline (HunyuanPaintPipeline).
+    inner_mv = getattr(pipe, "models", {}).get("multiview_model") if hasattr(pipe, "models") else None
+    if inner_mv is None or not hasattr(inner_mv, "pipeline"):
+        return False
+    diff_pipe = inner_mv.pipeline
+
+    # Footprint do Hunyuan3D-Paint — registry centralizado.
+    specs = cuda_gpu_specs()
+    if not specs:
+        return False
+    usable_gib = (max(m for _, m in specs) / GIB) * 0.9
+    footprint = get_footprint("hunyuan-paint")
+    cfg = plan_group_offload(usable_gib, footprint, quant_mode="none")
+    if cfg is None:
+        return False  # modelo cabe na GPU — sem offload
+
+    # Aplicar aos inner modules do pipeline Hunyuan-Paint.
+    # NOTA: o wrapper UNet2p5DConditionModel tem forward dual-stream com offload_ref_unet
+    # custom; aplicamos group offload aos inner UNets (ModelMixin) e VAE, evitando o
+    # wrapper para não interferir com essa lógica.
+    applied_unet = False
+    inner_unet = getattr(diff_pipe, "unet", None)
+    if inner_unet is not None:
+        # O wrapper expõe .unet (UNet2DConditionModel real) e opcionalmente .unet_dual.
+        for attr in ("unet", "unet_dual"):
+            sub = getattr(inner_unet, attr, None)
+            if sub is not None and hasattr(sub, "enable_group_offload"):
+                try:
+                    sub.enable_group_offload(
+                        onload_device=torch.device("cuda"),
+                        offload_device=torch.device("cpu"),
+                        offload_type=cfg.offload_type,
+                        use_stream=cfg.use_stream,
+                        num_blocks_per_group=cfg.num_blocks_per_group,
+                        record_stream=cfg.record_stream,
+                        non_blocking=cfg.non_blocking,
+                    )
+                    applied_unet = True
+                    if verbose:
+                        _logger.info(f"Group offload ({cfg.summary()}) aplicado a unet.{attr}")
+                except Exception as e:
+                    if verbose:
+                        _logger.warn(f"Group offload falhou em unet.{attr}: {e}")
+
+    # VAE + text_encoder via try_group_offloading (modules= custom no diff_pipe).
+    applied_rest = try_group_offloading(
+        diff_pipe,
+        config=cfg,
+        modules=("vae", "text_encoder"),
+        log=verbose,
+        log_fn=_logger.info,
+    )
+
+    if applied_unet or applied_rest:
+        if verbose:
+            _logger.info(f"Paint3D group offload ativo ({cfg.summary()})")
+        return True
+    return False
+
+
 def _apply_paint_multi_gpu(
     pipe: Any,
     gpu_ids: list[int],
@@ -554,6 +648,13 @@ def apply_hunyuan_paint(
             except Exception as e:
                 if verbose:
                     _logger.warn(f"Aviso: otimizações opcionais falharam: {e}")
+
+        # --- Group offload com CUDA streams (memory_efficient + GPUs pequenas) ---
+        # Aplicado após SDNQ/VAE opts e antes da inferência. O pipeline Hunyuan-Paint
+        # é custom (não diffusers ModelMixin standard), pelo que usamos try_group_offloading
+        # com modules= custom. Best-effort: se falhar, segue com a colocação atual.
+        if memory_efficient:
+            _try_paint_group_offload(pipe, verbose=verbose)
 
         with profile_span("paint_inference", sync_cuda=True):
             try:

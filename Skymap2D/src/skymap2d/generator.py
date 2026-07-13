@@ -1,26 +1,46 @@
-"""Skymap2D — gerador de skymaps equirectangular 360° com FLUX.1-dev + LoRA local."""
+"""Skymap2D — gerador de skymaps equirectangular 360° com FLUX.1-dev + LoRA local.
+
+Herda infraestrutura de ``DiffusionGeneratorBase`` (lifecycle, logging, cache,
+multi-GPU, save_image, batch generation). Mantém apenas a lógica única:
+``_load_pipeline`` (FLUX base + equirect LoRA), ``generate`` (cfg_scale,
+lora_strength, preset, correção de latitude equirectangular), e o preflight
+download.
+"""
 
 from __future__ import annotations
 
-import gc
 import os
 import re
-from collections.abc import Callable, Generator
 from typing import Any
 
-import torch
 from PIL import Image
 
+from gamedev_shared.base_generator import DiffusionGeneratorBase
+
+# Re-export para backward compat (testes antigos podem importar de skymap2d.generator).
+from gamedev_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
 from gamedev_shared.logging import Logger
 
 from .presets import get_preset_params, get_preset_prompt
-from .utils import generate_seed, validate_params, validate_prompt
+from .utils import validate_params, validate_prompt
 
 _logger = Logger()
 
 DEFAULT_LORA_MODEL_ID = "MultiTrickFox/Flux-LoRA-Equirectangular-v3"
 DEFAULT_BASE_MODEL_ID = "Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32"
 DEFAULT_MODEL_ID = DEFAULT_LORA_MODEL_ID
+
+
+def _flux_dev_uint4_footprint() -> Any:
+    """Pegada do FLUX.1-dev pré-quantizado uint4 — consulta o registry centralizado.
+
+    Como o checkpoint já vem uint4 do hub, usamos ``allow_quant=("none",)`` na
+    chamada ao planner para evitar quantização extra.
+    """
+    from gamedev_shared.lowvram import get_footprint
+
+    return get_footprint("flux-dev-uint4")
+
 
 BASE_EQUIRECTANGULAR_INSTRUCTIONS = (
     "equirectangular 360 degree panorama, hdri environment map, "
@@ -104,8 +124,12 @@ def _fix_equirect_latitude(image: Image.Image) -> Image.Image:
     return corrected
 
 
-class SkymapGenerator:
-    """Gerador de skymaps equirectangular 360° com FLUX.1-dev + LoRA local."""
+class SkymapGenerator(DiffusionGeneratorBase):
+    """Gerador de skymaps equirectangular 360° com FLUX.1-dev + LoRA local.
+
+    Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
+    _status, _try_multi_gpu, _patch_cross_device, save_image, generate_batch.
+    """
 
     def __init__(
         self,
@@ -116,47 +140,19 @@ class SkymapGenerator:
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
     ) -> None:
-        self.verbose = verbose
-        self.memory_efficient = memory_efficient
-        self.model_id = model_id or default_model_id()
+        super().__init__(
+            device=device,
+            verbose=verbose,
+            model_id=model_id or default_model_id(),
+            cache_dir=cache_dir,
+            gpu_ids=gpu_ids,
+            memory_efficient=memory_efficient,
+        )
+        # Modelo base FLUX.1-dev (distinto do LoRA equirectangular em ``self.model_id``).
         self.base_model_id = default_base_model_id()
-        self.cache_dir = cache_dir
-        self.gpu_ids = gpu_ids
-
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
-
-        self._pipe: Any = None
-        self._on_status: Callable[[str], None] | None = None
-        self._multi_gpu: bool = False
 
         if self.verbose:
             _logger.info(f"device={self.device} base_model={self.base_model_id} lora={self.model_id}")
-
-    def set_status_callback(self, fn: Callable[[str], None] | None) -> None:
-        """Callback opcional (ex. Rich) para mensagens de fase durante o load."""
-        self._on_status = fn
-
-    def _log(self, msg: str) -> None:
-        if self.verbose:
-            _logger.info(msg)
-
-    def _clear_cache(self) -> None:
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    def _status(self, msg: str) -> None:
-        if self._on_status:
-            self._on_status(msg)
-        else:
-            _logger.step(msg)
-
-    def warmup(self) -> None:
-        """Carrega o pipeline (download HF + pesos). Idempotente."""
-        self._load_pipeline()
 
     def _preflight_download(self) -> None:
         """Garante o base SDNQ + a LoRA equirectangular em disco antes do load.
@@ -185,7 +181,7 @@ class SkymapGenerator:
         from diffusers import FluxPipeline
 
         kwargs: dict[str, Any] = {
-            "torch_dtype": torch.bfloat16,
+            "torch_dtype": self.torch_dtype,
         }
         if self.cache_dir:
             kwargs["cache_dir"] = self.cache_dir
@@ -205,110 +201,18 @@ class SkymapGenerator:
 
         self._status("Passo 4/4 — Configurando dispositivo...")
         self._clear_cache()
+        self._reset_peak_mem_stats()
 
-        if torch.cuda.is_available() and self.device == "cuda":
-            for gid in self.gpu_ids or range(torch.cuda.device_count()):
-                if gid < torch.cuda.device_count():
-                    torch.cuda.reset_peak_memory_stats(gid)
-
-        if self.device == "cpu":
-            pipe.to("cpu")
-        elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
-            self._status("Modelo carregado — split multi-GPU")
-        elif self.memory_efficient:
-            pipe.enable_model_cpu_offload()
-        else:
-            # Rede de segurança always-fit: se a colocação direta estourar a VRAM, cai
-            # para CPU offload em vez de abortar (decisivo no limiar de 6GB).
-            try:
-                pipe.to(self.device)
-            except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-                self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para model_cpu offload")
-                self._clear_cache()
-                pipe.enable_model_cpu_offload()
-                self.memory_efficient = True
+        # Colocação unificada via planner: full-GPU / group+stream / multi-GPU / CPU.
+        # O base é FLUX.1-dev pré-quantizado uint4 (~7 GiB pesos); allow_quant=("none",)
+        # porque o checkpoint já vem quantizado do hub (não há SDNQ runtime aqui).
+        # model_attr="transformer" para multi-GPU accelerate (FLUX split transformer).
+        self._place_with_planner(pipe, _flux_dev_uint4_footprint(), allow_quant=("none",), model_attr="transformer")
 
         self._status("Modelo carregado — pronto")
-        if torch.cuda.is_available() and self.device == "cuda" and not self.memory_efficient:
-            if self._multi_gpu:
-                gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
-                parts = []
-                for gid in gpu_ids:
-                    torch.cuda.synchronize(gid)
-                    alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-                    peak = torch.cuda.max_memory_allocated(gid) / (1024**3)
-                    parts.append(f"cuda:{gid} ~{alloc:.2f} GB (pico ~{peak:.2f} GB)")
-                self._status("Modelo carregado — " + ", ".join(parts))
-            else:
-                torch.cuda.synchronize()
-                alloc = torch.cuda.memory_allocated(0) / (1024**3)
-                peak = torch.cuda.max_memory_allocated(0) / (1024**3)
-                self._status(f"Modelo carregado — VRAM ~{alloc:.2f} GB (pico após load ~{peak:.2f} GB)")
 
         self._pipe = pipe
         return pipe
-
-    def _try_multi_gpu(self, pipe: Any) -> bool:
-        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
-            return False
-
-        gpu_ids = self.gpu_ids
-        if not gpu_ids or len(gpu_ids) < 2:
-            gpu_ids = list(range(torch.cuda.device_count()))
-
-        primary, secondary = gpu_ids[0], gpu_ids[1]
-
-        try:
-            pipe.transformer.to(f"cuda:{primary}")
-            pipe.vae.to(f"cuda:{primary}")
-            pipe.text_encoder.to(f"cuda:{secondary}")
-            if hasattr(pipe, "text_encoder_2") and pipe.text_encoder_2 is not None:
-                pipe.text_encoder_2.to(f"cuda:{secondary}")
-        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-            self._log(f"Multi-GPU placement falhou ({exc})")
-            return False
-
-        self._patch_cross_device(pipe, primary, secondary)
-
-        for gid in gpu_ids:
-            alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-            self._log(f"  cuda:{gid} — {alloc:.2f} GB alocados")
-
-        self._multi_gpu = True
-        return True
-
-    def _patch_cross_device(self, pipe: Any, primary: int, secondary: int) -> None:
-        primary_dev = f"cuda:{primary}"
-        secondary_dev = f"cuda:{secondary}"
-
-        pipe._skymap2d_primary_device = torch.device(primary_dev)
-
-        if not hasattr(pipe, "_orig_encode_prompt"):
-            pipe._orig_encode_prompt = pipe.encode_prompt
-
-        def _patched_encode_prompt(*args: Any, **kwargs: Any) -> Any:
-            kwargs["device"] = secondary_dev
-            result = pipe._orig_encode_prompt(*args, **kwargs)
-            if isinstance(result, torch.Tensor):
-                return result.to(primary_dev)
-            if isinstance(result, (tuple, list)):
-                return type(result)(r.to(primary_dev) if isinstance(r, torch.Tensor) else r for r in result)
-            return result
-
-        pipe.encode_prompt = _patched_encode_prompt
-
-        @property  # type: ignore[misc]
-        def _patched_execution_device(self: Any) -> torch.device:
-            return self._skymap2d_primary_device
-
-        pipe.__class__._execution_device = _patched_execution_device
-
-    def unload(self) -> None:
-        if self._pipe is None:
-            return
-        del self._pipe
-        self._pipe = None
-        self._clear_cache()
 
     def generate(
         self,
@@ -355,8 +259,7 @@ class SkymapGenerator:
         if cfg_scale is None:
             cfg_scale = guidance_scale
 
-        if seed is None or seed < 0:
-            seed = generate_seed()
+        resolved_seed = self._resolve_seed(seed)
 
         ratio = width / height if height > 0 else 0
         if abs(ratio - 2.0) > 0.1:
@@ -371,7 +274,7 @@ class SkymapGenerator:
             "negative_prompt": negative_prompt,
             "guidance_scale": guidance_scale,
             "num_inference_steps": num_inference_steps,
-            "seed": seed,
+            "seed": resolved_seed,
             "width": width,
             "height": height,
             "cfg_scale": cfg_scale,
@@ -382,15 +285,7 @@ class SkymapGenerator:
         if not is_valid:
             raise ValueError(f"Parâmetros inválidos: {error}")
 
-        if self._multi_gpu and self.gpu_ids:
-            gen_device = f"cuda:{self.gpu_ids[0]}"
-        elif self.device != "cpu":
-            gen_device = "cuda"
-        else:
-            gen_device = "cpu"
-        generator = torch.Generator(device=gen_device)
-        if seed is not None:
-            generator.manual_seed(seed)
+        generator = self._build_generator(resolved_seed)
 
         self._clear_cache()
 
@@ -422,37 +317,9 @@ class SkymapGenerator:
         image = _fix_equirect_latitude(image)
 
         metadata = {
-            "seed": seed,
+            "seed": resolved_seed,
             "prompt_final": prompt,
             **params,
         }
 
         return image, metadata
-
-    def generate_batch(
-        self,
-        prompts: list[str],
-        base_params: dict[str, Any] | None = None,
-    ) -> Generator[tuple[Image.Image | None, dict[str, Any], int], None, None]:
-        """Gera múltiplos skymaps em batch.
-
-        Yields:
-            Tuple (imagem | None, metadata, index).
-        """
-        if base_params is None:
-            base_params = {}
-
-        total = len(prompts)
-        _logger.info(f"Batch: {total} skymaps")
-
-        for idx, prompt in enumerate(prompts):
-            try:
-                merged = {**DEFAULT_PARAMS, **base_params}
-                merged.pop("seed", None)
-                merged.pop("prompt", None)
-
-                image, metadata = self.generate(prompt=prompt, **merged)
-                yield image, metadata, idx
-            except Exception as e:
-                _logger.error(f"Erro no skymap {idx + 1}/{total}: {e}")
-                yield None, {"error": str(e), "index": idx}, idx
