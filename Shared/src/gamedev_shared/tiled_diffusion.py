@@ -278,3 +278,84 @@ def enable_tiled_diffusion(
 def get_tiled_callback(pipe: Any) -> Any | None:
     """Recupera o callback de tiled diffusion instalado, se existir."""
     return getattr(pipe, "_tiled_diffusion_callback", None)
+
+
+def latent_upscale_generate(
+    pipe: Any,
+    prompt: str,
+    target_width: int,
+    target_height: int,
+    *,
+    native_width: int | None = None,
+    native_height: int | None = None,
+    refine_steps: int = 4,
+    guidance_scale: float = 1.0,
+    generator: Any | None = None,
+    log_fn: Any | None = None,
+) -> Any:
+    """Gera a resolução nativa e upscales via latent space + refine curto.
+
+    Reduz o pico de VRAM do denoise pesado: a maioria dos steps corre à resolução
+    nativa (attention O(native^2)), só um refine curto corre à resolução-alvo.
+    Para um target 2048x1024 com native 1024x512: ~4x menos attention no denoise.
+
+    Args:
+        pipe: pipeline diffusers (FluxPipeline, SanaPipeline, etc.).
+        prompt: prompt de texto.
+        target_width/height: resolução final desejada.
+        native_width/height: resolução de difusão principal (default: metade do target).
+        refine_steps: steps de refine à resolução-alvo (default 4 — curto).
+        guidance_scale: guidance scale.
+        generator: torch.Generator.
+        log_fn: callback de logging.
+
+    Returns:
+        Output do pipeline (com .images).
+    """
+    def _log(msg: str) -> None:
+        if log_fn:
+            log_fn(msg)
+
+    if native_width is None:
+        native_width = max(target_width // 2, 512)
+    if native_height is None:
+        native_height = max(target_height // 2, 512)
+
+    _log(f"Latent upscale: {native_width}x{native_height} → {target_width}x{target_height} "
+         f"({refine_steps} refine steps)")
+
+    import torch
+
+    # Passo 1: difusão completa à resolução nativa.
+    out = pipe(
+        prompt=prompt,
+        width=native_width,
+        height=native_height,
+        guidance_scale=guidance_scale,
+        num_inference_steps=max(refine_steps, 8),  # passos completos na native
+        generator=generator,
+        output_type="latent",  # manter no latent space para upscale
+    )
+    latents = out.images  # latent tensor (não imagem PIL)
+
+    # Passo 2: upscale do latent (bilinear).
+    vae_scale = getattr(pipe.vae.config, "spatial_compression_ratio", 8) if hasattr(pipe, "vae") else 8
+    target_latent_h = target_height // vae_scale
+    target_latent_w = target_width // vae_scale
+    latents = torch.nn.functional.interpolate(
+        latents, size=(target_latent_h, target_latent_w), mode="bilinear", align_corners=False
+    )
+
+    # Passo 3: refine curto à resolução-alvo (poucos steps para detalhar).
+    _log(f"Refine a {target_width}x{target_height} ({refine_steps} steps)")
+    out = pipe(
+        prompt=prompt,
+        latents=latents,
+        width=target_width,
+        height=target_height,
+        guidance_scale=guidance_scale,
+        num_inference_steps=refine_steps,
+        generator=generator,
+    )
+    return out
+
