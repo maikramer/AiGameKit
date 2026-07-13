@@ -907,6 +907,16 @@ export {
 export type { WaterBody } from './plugins/water';
 
 export {
+  RoadPlugin,
+  Road,
+  getRoadData,
+  makeRoadGeometry,
+  smoothPath,
+  resampleRoadPath,
+} from './plugins/road';
+export type { RoadData, RoadGeometryOptions } from './plugins/road';
+
+export {
   WeatherPlugin,
   getWeather,
   setWeather,

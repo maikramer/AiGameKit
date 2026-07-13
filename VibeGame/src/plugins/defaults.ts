@@ -30,6 +30,7 @@ import { PostprocessingPlugin } from './postprocessing/plugin';
 import { AdaptiveQualityPlugin } from './adaptive-quality/plugin';
 import { QuestsPlugin } from './quests/plugin';
 import { BiomesPlugin } from './biomes/plugin';
+import { RoadPlugin } from './road/plugin';
 import { WaterPlugin } from './water/plugin';
 import { WeatherPlugin } from './weather/plugin';
 
@@ -60,6 +61,7 @@ export const DefaultPlugins: Plugin[] = [
   EquirectSkyPlugin,
   BiomesPlugin,
   WaterPlugin,
+  RoadPlugin,
   WeatherPlugin,
   ParticlesPlugin,
   FloatingTextPlugin,

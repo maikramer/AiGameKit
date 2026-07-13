@@ -458,13 +458,12 @@
         ></GLTFLoader>
       </GameObject>
 
-      <!-- §4.3b Vias empedradas: praça central + 4 estradas cardeais até
-           os portões. Puramente decorativo (collider=none) — organiza
-           visualmente a cidade sem interferir com a navegação/NavMesh.
-           Primitiva <Pad> da engine: decal de chão com alphaMap procedural
-           (SDF rounded-rect) — edge-feather desvanece a borda em metros,
-           corner-radius arredonda os cantos e edge-noise corrói a orla com
-           ruído orgânico (calçada gasta), tudo seamless com a relva. -->
+      <!-- §4.3b Vias empedradas: praça central (<Pad>) + 4 estradas <Road>
+           que nascem ENTERRADAS no núcleo opaco da praça (end-feather-start
+           0 → junção sólida em pedra) e continuam além dos portões com
+           curvas suaves — o ribbon segue a spline e a textura orienta-se e
+           curva com a estrada (UV por arc-length), com bordas orgânicas.
+           Tudo decorativo: sem colisores, não interfere com o NavMesh. -->
       <Composition
         place="at: 0 0; align-to-terrain: 0"
         body="fixed"
@@ -472,19 +471,59 @@
       >
         <!-- Praça central: cantos arredondados + fade largo -->
         <Pad pos="0 0.03 0" size="16 16" corner-radius="5" edge-feather="2.2" edge-noise="0.55" texture-url="/assets/textures/cobblestone_road.png" texture-scale="16" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
-
-        <!-- Estrada SUL (para portão sul + ponte) -->
-        <Pad pos="0 0.025 14" size="5.4 20" edge-feather="1.1 1.1 0 1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-scale="16" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
-
-        <!-- Estrada NORTE -->
-        <Pad pos="0 0.025 -14" size="5.4 20" edge-feather="1.1 1.1 1.1 0" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-scale="16" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
-
-        <!-- Estrada ESTE -->
-        <Pad pos="14 0.025 0" size="20 5.4" edge-feather="0 1.1 1.1 1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-scale="16" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
-
-        <!-- Estrada OESTE -->
-        <Pad pos="-14 0.025 0" size="20 5.4" edge-feather="1.1 0 1.1 1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-scale="16" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
       </Composition>
+
+      <!-- Estrada SUL (portão sul → ponte; curva a acompanhar o vale) -->
+      <Road
+        path="0 3  0 26  -2.5 38  -1.5 52"
+        width="5.4"
+        texture-scale="16"
+        edge-feather="1.1"
+        edge-noise="0.45"
+        end-feather-start="2"
+        end-feather-end="4"
+        texture-url="/assets/textures/cobblestone_road.png"
+        normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+      ></Road>
+
+      <!-- Estrada NORTE -->
+      <Road
+        path="0 -3  0 -26  3 -38  2 -50"
+        width="5.4"
+        texture-scale="16"
+        edge-feather="1.1"
+        edge-noise="0.45"
+        end-feather-start="2"
+        end-feather-end="4"
+        texture-url="/assets/textures/cobblestone_road.png"
+        normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+      ></Road>
+
+      <!-- Estrada ESTE -->
+      <Road
+        path="3 0  26 0  38 3  50 1"
+        width="5.4"
+        texture-scale="16"
+        edge-feather="1.1"
+        edge-noise="0.45"
+        end-feather-start="2"
+        end-feather-end="4"
+        texture-url="/assets/textures/cobblestone_road.png"
+        normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+      ></Road>
+
+      <!-- Estrada OESTE -->
+      <Road
+        path="-3 0  -26 0  -38 -3  -50 -2"
+        width="5.4"
+        texture-scale="16"
+        edge-feather="1.1"
+        edge-noise="0.45"
+        end-feather-start="2"
+        end-feather-end="4"
+        texture-url="/assets/textures/cobblestone_road.png"
+        normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+      ></Road>
 
       <!-- §4.4 Casas nos cantos diagonais (deixam os corredores cardeais
            livres). Cada casa = 1 entidade com corpo fixo e colisores
