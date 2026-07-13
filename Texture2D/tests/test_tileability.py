@@ -6,7 +6,7 @@ import numpy
 import pytest
 from PIL import Image
 
-from texture2d.tileability import TileabilityReport, make_seamless, score_tileability
+from texture2d.tileability import TileabilityReport, score_tileability
 
 
 def _make_wrapped_pattern(size: int = 256) -> Image.Image:
@@ -114,38 +114,6 @@ class TestInputTypes:
         arr = numpy.zeros((1, 1, 3), dtype=numpy.uint8)
         with pytest.raises(ValueError):
             score_tileability(Image.fromarray(arr, "RGB"))
-
-
-class TestMakeSeamless:
-    def test_seamed_gradient_becomes_tileable(self):
-        # O gradiente horizontal falha feio (score < 0.5); make_seamless deve
-        # forçar as bordas a coincidir sem precisar de regenerar nada.
-        fixed = make_seamless(_make_seamed(size=128))
-        report = score_tileability(fixed)
-        assert report.score >= 0.85
-
-    def test_random_noise_becomes_tileable(self):
-        fixed = make_seamless(_make_random_noise(size=256))
-        report = score_tileability(fixed)
-        assert report.score >= 0.85
-
-    def test_already_seamless_stays_seamless(self):
-        fixed = make_seamless(_make_wrapped_pattern(size=256))
-        report = score_tileability(fixed)
-        assert report.score >= 0.85
-
-    def test_preserves_size_and_mode(self):
-        src = _make_seamed(size=128)
-        fixed = make_seamless(src)
-        assert fixed.size == src.size
-        assert fixed.mode == "RGB"
-
-    def test_accepts_path(self, tmp_path):
-        p = tmp_path / "seamed.png"
-        _make_seamed(size=128).save(p)
-        fixed = make_seamless(p)
-        assert isinstance(fixed, Image.Image)
-        assert score_tileability(fixed).score >= 0.85
 
 
 class TestSummaryAndDict:

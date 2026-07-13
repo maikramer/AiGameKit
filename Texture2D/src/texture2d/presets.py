@@ -51,36 +51,36 @@ TEXTURE_PRESETS: dict[str, dict[str, Any]] = {
         "guidance_scale": 8.0,
         "num_inference_steps": 60,
     },
-    # Game-dev extras
+    # Game-dev extras (terrain/chão) — guidance 7.0 (CFG real do SD1.5).
     "Grass": {
-        "prompt": "seamless grass texture, lush green lawn, natural blades, game ground texture, tiling",
+        "prompt": "seamless grass texture, short dense mowed turf seen from directly above, uniform green carpet",
         "negative_prompt": "brown, dead, mud, artificial",
-        "guidance_scale": 7.5,
-        "num_inference_steps": 50,
+        "guidance_scale": 7.0,
+        "num_inference_steps": 30,
     },
     "Sand": {
-        "prompt": "seamless sand texture, fine desert sand, natural dunes detail, game terrain, tiling",
+        "prompt": "seamless sand texture, fine desert sand surface from directly above, subtle ripples",
         "negative_prompt": "rocks, grass, water, artificial",
-        "guidance_scale": 7.5,
-        "num_inference_steps": 50,
+        "guidance_scale": 7.0,
+        "num_inference_steps": 30,
     },
     "Dirt": {
-        "prompt": "seamless dirt texture, brown earth soil, natural ground, game terrain, tiling",
+        "prompt": "seamless dirt texture, packed brown earth soil surface from directly above",
         "negative_prompt": "grass, clean, polished, artificial",
-        "guidance_scale": 7.5,
-        "num_inference_steps": 50,
+        "guidance_scale": 7.0,
+        "num_inference_steps": 30,
     },
     "Gravel": {
-        "prompt": "seamless gravel texture, small stones, rocky ground path, game terrain, tiling",
+        "prompt": "seamless gravel texture, small embedded pebbles seen from directly above, flat compact path",
         "negative_prompt": "smooth, polished, grass, artificial",
-        "guidance_scale": 7.5,
-        "num_inference_steps": 50,
+        "guidance_scale": 7.0,
+        "num_inference_steps": 30,
     },
     "Tile Floor": {
         "prompt": "seamless ceramic tile floor texture, clean grid pattern, game interior, tiling",
         "negative_prompt": "broken, dirty, outdoor, natural",
-        "guidance_scale": 7.5,
-        "num_inference_steps": 50,
+        "guidance_scale": 7.0,
+        "num_inference_steps": 30,
     },
 }
 

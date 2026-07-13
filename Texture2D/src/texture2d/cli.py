@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Texture2D — CLI principal (texturas 2D seamless)."""
+"""Texture2D — CLI principal (texturas 2D seamless via SD1.5 + circular padding)."""
 
 from __future__ import annotations
 
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -21,7 +22,7 @@ from gamedev_shared.quality import VALID_QUALITIES
 
 from ._validate_cli import validate_tileable_cmd
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click antes dos comandos
-from .generator import TextureGenerator, default_model_id
+from .generator import DEFAULT_GUIDANCE, DEFAULT_RESOLUTION, DEFAULT_STEPS, TextureGenerator, default_model_id
 from .presets import TEXTURE_PRESETS, list_presets
 from .utils import format_bytes
 
@@ -40,7 +41,7 @@ def ensure_dirs() -> None:
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool) -> None:
-    """Texture2D — texturas 2D seamless (FLUX.1-dev + LoRA local)."""
+    """Texture2D — texturas 2D seamless (Stable Diffusion v1.5 + circular padding)."""
     ctx.ensure_object(dict)
     ctx.obj["VERBOSE"] = verbose
 
@@ -81,16 +82,16 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @cli.command("generate")
 @click.argument("prompt")
 @click.option("--output", "-o", type=click.Path(), help="Ficheiro de saída (.png)")
-@click.option("--width", "-W", default=1024, show_default=True, type=int)
-@click.option("--height", "-H", default=1024, show_default=True, type=int)
-@click.option("--steps", "-s", default=28, show_default=True, help="Passos de inferência")
+@click.option("--width", "-W", default=DEFAULT_RESOLUTION, show_default=True, type=int)
+@click.option("--height", "-H", default=DEFAULT_RESOLUTION, show_default=True, type=int)
+@click.option("--steps", "-s", default=DEFAULT_STEPS, show_default=True, help="Passos de inferência")
 @click.option(
     "--guidance",
     "-g",
     "guidance_scale",
-    default=3.5,
+    default=DEFAULT_GUIDANCE,
     show_default=True,
-    help="Guidance scale",
+    help="Guidance scale (CFG)",
 )
 @click.option("--seed", type=int, default=None, help="Seed (None = aleatório)")
 @click.option(
@@ -98,7 +99,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "-n",
     "negative_prompt",
     default="",
-    help="Prompt negativo",
+    help="Prompt negativo (CFG nativo do SD1.5)",
 )
 @click.option(
     "--preset",
@@ -107,14 +108,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     type=click.Choice(["None", *list_presets()], case_sensitive=False),
     help="Preset de material",
 )
-@click.option("--cfg-scale", default=None, type=float, help="CFG scale (default = guidance)")
-@click.option("--lora-strength", default=1.0, show_default=True, type=float, help="Força do LoRA")
 @click.option(
     "--model",
     "-m",
     "model_id",
     default=None,
-    help="ID do modelo LoRA HF (default: Flux-Seamless-Texture-LoRA)",
+    help="ID do modelo HF (default: stable-diffusion-v1-5/stable-diffusion-v1-5)",
 )
 @click.option(
     "--verbose",
@@ -128,7 +127,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
-    help="IDs das GPUs para split multi-GPU (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
+    help="IDs das GPUs (ex: '0,1'). Auto-deteta se omitido com ≥2 GPUs.",
 )
 @click.option(
     "--quality",
@@ -143,8 +142,8 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=True,
     show_default=True,
     help=(
-        "Auto-detecção de hardware: liga CPU offload e clamp de resolução em "
-        "GPUs pequenas. Flags explícitas ganham. Env: TEXTURE2D_HW_AUTO=0."
+        "Auto-detecção de hardware (device + multi-GPU). Sem efeito de offload/clamp "
+        "(SD1.5 cabe em qualquer GPU CUDA). Env: TEXTURE2D_HW_AUTO=0."
     ),
 )
 @click.option(
@@ -170,8 +169,6 @@ def generate_cmd(
     seed: int | None,
     negative_prompt: str,
     preset: str | None,
-    cfg_scale: float | None,
-    lora_strength: float,
     model_id: str | None,
     verbose_flag: bool,
     cpu: bool,
@@ -180,7 +177,7 @@ def generate_cmd(
     hw_auto: bool,
     ground: str,
 ) -> None:
-    """Gera uma textura seamless a partir do PROMPT."""
+    """Gera uma textura seamless a partir do PROMPT (SD1.5 + circular padding)."""
     from gamedev_shared.gpu import warn_if_vram_occupied
 
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -208,29 +205,13 @@ def generate_cmd(
     if not cpu:
         warn_if_vram_occupied()
 
-    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    # Hardware auto-detection (soft): SD1.5 cabe em qualquer GPU — só detetamos
+    # device/multi-GPU para display. Sem offload/clamp.
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
-    sequential_offload = False
-    vae_slicing = False
-    mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
-        if hwp.memory_efficient and hwp.device == "cuda":
-            mem_eff = True
-        # Otimizações de memória para GPUs pequenas (<8 GiB): detetadas
-        # automaticamente pelo hw-auto (único mecanismo).
-        if hwp.sequential_offload:
-            sequential_offload = True
-        if hwp.vae_slicing:
-            vae_slicing = True
-        # Clamp resolution only if user didn't set it explicitly.
-        if not _user_set_width and hwp.max_width is not None:
-            width = min(width, hwp.max_width)
-        if not _user_set_height and hwp.max_height is not None:
-            height = min(height, hwp.max_height)
-    mem_eff = mem_eff or cpu
 
     device = "cpu" if cpu else None
     gpu_ids = [int(x.strip()) for x in gpu_ids_str.split(",")] if gpu_ids_str else None
@@ -240,21 +221,55 @@ def generate_cmd(
 
     table = Table(show_header=False, box=box.SIMPLE)
     table.add_row("[bold]Prompt[/bold]", f"[cyan]{prompt}[/cyan]")
+    table.add_row("[bold]Backend[/bold]", "Stable Diffusion v1.5 (circular padding)")
     table.add_row("[bold]Resolução[/bold]", f"{width}x{height}")
     table.add_row("[bold]Passos[/bold]", str(steps))
     table.add_row("[bold]Guidance[/bold]", str(guidance_scale))
     if preset and preset != "None":
         table.add_row("[bold]Preset[/bold]", preset)
-    table.add_row("[bold]Modelo LoRA[/bold]", resolved_model)
+    table.add_row("[bold]Modelo[/bold]", resolved_model)
     if hwp is not None:
         table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     t_start = time.time()
 
-    # Delega ao model server se estiver ativo (gerações subsequentes ~3-5s vs ~250s
-    # de cold start numa GPU pequena com sequential offload). Só quando há output
-    # explícito — o server precisa de um caminho onde gravar.
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    if not cpu and output is not None:
+        from gamedev_shared.model_server import delegate_to_ums
+
+        ums_result = delegate_to_ums(
+            "texture2d",
+            {
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "negative_prompt": negative_prompt,
+                "preset": preset,
+                "ground": ground,
+            },
+        )
+        if ums_result and ums_result.get("status") == "ok":
+            elapsed = time.time() - t_start
+            try:
+                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
+            except OSError:
+                sz = "?"
+            console.print(Rule("[bold green]Resultado (via UMS)", style="green"))
+            console.print(
+                f"[bold green]\u2713[/bold green] Textura: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
+            )
+            console.print(f"[dim]Seed: {ums_result.get('seed', '?')}[/dim]")
+            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+            return
+        elif ums_result and ums_result.get("status") == "error":
+            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — a tentar legacy/in-process[/yellow]")
+
+    # Fallback: per-tool legacy server (se ainda ativo).
     if not cpu and output is not None:
         from . import client
 
@@ -269,8 +284,6 @@ def generate_cmd(
                 guidance=guidance_scale,
                 seed=seed,
                 negative_prompt=negative_prompt,
-                cfg_scale=cfg_scale,
-                lora_strength=lora_strength,
                 preset=preset,
                 ground=ground,
             )
@@ -292,19 +305,16 @@ def generate_cmd(
             # Se None (server não respondeu), continua para fallback in-process
 
     try:
-        gen = TextureGenerator(
+        gen: Any = TextureGenerator(
             device=device,
-            memory_efficient=mem_eff,
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
-            sequential_offload=sequential_offload,
-            vae_slicing=vae_slicing,
         )
 
         with console.status(
             "[bold yellow]1/2 — Download HF + carregamento de pesos "
-            "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 3/3)",
+            "(1ª vez: ~2 GB/minutos; GPU pode mostrar 0% até ao passo 3/3)",
             spinner="dots",
         ):
             gen.warmup()
@@ -330,8 +340,6 @@ def generate_cmd(
                 seed=seed,
                 width=width,
                 height=height,
-                cfg_scale=cfg_scale,
-                lora_strength=lora_strength,
                 preset=preset,
                 ground=ground,
             )
@@ -380,8 +388,8 @@ def presets_cmd() -> None:
         t.add_row(
             name,
             preset["prompt"][:60] + "..." if len(preset["prompt"]) > 60 else preset["prompt"],
-            str(preset.get("num_inference_steps", 28)),
-            str(preset.get("guidance_scale", 3.5)),
+            str(preset.get("num_inference_steps", DEFAULT_STEPS)),
+            str(preset.get("guidance_scale", DEFAULT_GUIDANCE)),
         )
     console.print(t)
 
@@ -390,16 +398,16 @@ def presets_cmd() -> None:
 @click.argument("file", type=click.Path(exists=True, path_type=Path))
 @click.option("--output-dir", "-d", type=click.Path(path_type=Path), default=None)
 @click.option("--preset", "-p", default=None, help="Preset aplicado a todos os prompts")
-@click.option("--width", "-W", default=1024, type=int)
-@click.option("--height", "-H", default=1024, type=int)
-@click.option("--steps", "-s", default=28, type=int)
-@click.option("--guidance", "-g", "guidance_scale", default=3.5, type=float)
+@click.option("--width", "-W", default=DEFAULT_RESOLUTION, type=int)
+@click.option("--height", "-H", default=DEFAULT_RESOLUTION, type=int)
+@click.option("--steps", "-s", default=DEFAULT_STEPS, type=int)
+@click.option("--guidance", "-g", "guidance_scale", default=DEFAULT_GUIDANCE, type=float)
 @click.option("--model", "-m", "model_id", default=None)
 @click.option(
     "--gpu-ids",
     "gpu_ids_str",
     default=None,
-    help="IDs das GPUs para split multi-GPU (ex: '0,1')",
+    help="IDs das GPUs (ex: '0,1')",
 )
 @click.option(
     "--quality",
@@ -413,7 +421,7 @@ def presets_cmd() -> None:
     "hw_auto",
     default=True,
     show_default=True,
-    help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: TEXTURE2D_HW_AUTO=0.",
+    help="Auto-detecção de hardware (device + multi-GPU). Env: TEXTURE2D_HW_AUTO=0.",
 )
 @click.option(
     "--ground",
@@ -459,25 +467,12 @@ def batch_cmd(
     if not _user_set_guidance and "guidance" in _qresolved.params:
         guidance_scale = _qresolved.params["guidance"]
 
-    # Hardware auto-detection (soft): flags explícitas ganham sempre.
+    # Hardware auto-detection (soft): SD1.5 cabe em qualquer GPU — sem offload/clamp.
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     hwp = None
-    sequential_offload = False
-    vae_slicing = False
-    mem_eff = False
     if hw_auto and hw_auto_enabled():
         hwp = detect_hardware_profile()
-        if hwp.memory_efficient and hwp.device == "cuda":
-            mem_eff = True
-        if hwp.sequential_offload:
-            sequential_offload = True
-        if hwp.vae_slicing:
-            vae_slicing = True
-        if not _user_set_width and hwp.max_width is not None:
-            width = min(width, hwp.max_width)
-        if not _user_set_height and hwp.max_height is not None:
-            height = min(height, hwp.max_height)
     if hwp is not None:
         Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
 
@@ -499,15 +494,12 @@ def batch_cmd(
     out = output_dir or DEFAULT_TEXTURE_DIR
     out.mkdir(parents=True, exist_ok=True)
 
-    gen = TextureGenerator(
-        memory_efficient=mem_eff,
+    gen: Any = TextureGenerator(
         verbose=bool(ctx.obj.get("VERBOSE")),
         model_id=model_id,
         gpu_ids=gpu_ids,
-        sequential_offload=sequential_offload,
-        vae_slicing=vae_slicing,
     )
-    base_params = {
+    base_params: dict[str, Any] = {
         "guidance_scale": guidance_scale,
         "num_inference_steps": steps,
         "width": width,
@@ -520,7 +512,7 @@ def batch_cmd(
     from .image_processor import save_image
 
     ok_count = 0
-    for image, metadata, idx in gen.generate_batch(prompts, base_params):
+    for image, metadata, idx in gen.generate_batch(prompts, **base_params):
         if image is None:
             console.print(f"  [red]\u2717[/red] {idx + 1}/{len(prompts)}: {metadata.get('error', '?')}")
             continue
@@ -548,8 +540,8 @@ def batch_cmd(
 
 
 # ---------------------------------------------------------------------------
-# Model server — mantém o pipeline FLUX + LoRA seamless carregado na VRAM.
-# Gerações subsequentes delegam automaticamente (~3-5s vs ~250s de cold start).
+# Model server — mantém o pipeline SD1.5 + circular padding carregado na VRAM.
+# Gerações subsequentes delegam automaticamente (~3-5s vs cold start).
 # ---------------------------------------------------------------------------
 
 
@@ -668,8 +660,8 @@ def info_cmd() -> None:
     t.add_column("Componente", style="cyan", no_wrap=True)
     t.add_column("Valor", style="green")
 
-    t.add_row("Modelo LoRA (default)", default_model_id())
-    t.add_row("Modelo base", "black-forest-labs/FLUX.1-dev")
+    t.add_row("Modelo (default)", default_model_id())
+    t.add_row("Backend", "Stable Diffusion v1.5 + circular padding")
     t.add_row("Python", data.get("python_version", "N/A"))
     t.add_row("PyTorch", data.get("torch_version", "N/A"))
     t.add_row("CUDA", str(data.get("cuda_available", False)))

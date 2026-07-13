@@ -1,9 +1,8 @@
-"""Model server do Texture2D — mantém o pipeline FLUX + LoRA seamless carregado.
+"""Model server do Texture2D — mantém o pipeline SD1.5 + circular padding carregado.
 
 Réplica do padrão do text2icon: um servidor long-lived (Unix socket) que segura o
 ``TextureGenerator`` na VRAM. Invocações subsequentes do CLI detetam o servidor e
-delegam automaticamente (~3-5s vs ~250s de cold start numa GPU de 6 GiB com
-sequential offload).
+delegam automaticamente (~3-5s vs cold start).
 
 Protocolo: JSON sobre Unix socket (uma linha de pedido, uma linha de resposta).
 Comandos: ``generate``, ``release``, ``status``, ``shutdown``.
@@ -69,6 +68,8 @@ def _generator(gen: Any, request: dict[str, Any]) -> dict[str, Any]:
     """Generator: chama ``gen.generate`` e guarda a imagem em disco."""
     import time
 
+    from .generator import DEFAULT_GUIDANCE, DEFAULT_RESOLUTION, DEFAULT_STEPS
+
     prompt = request.get("prompt", "")
     output = request.get("output")
     if not prompt or not output:
@@ -78,13 +79,11 @@ def _generator(gen: Any, request: dict[str, Any]) -> dict[str, Any]:
     image, metadata = gen.generate(
         prompt=prompt,
         negative_prompt=request.get("negative_prompt", ""),
-        guidance_scale=float(request.get("guidance", 3.5)),
-        num_inference_steps=int(request.get("steps", 28)),
+        guidance_scale=float(request.get("guidance", DEFAULT_GUIDANCE)),
+        num_inference_steps=int(request.get("steps", DEFAULT_STEPS)),
         seed=request.get("seed"),
-        width=int(request.get("width", 1024)),
-        height=int(request.get("height", 1024)),
-        cfg_scale=request.get("cfg_scale"),
-        lora_strength=float(request.get("lora_strength", 1.0)),
+        width=int(request.get("width", DEFAULT_RESOLUTION)),
+        height=int(request.get("height", DEFAULT_RESOLUTION)),
         preset=request.get("preset"),
         ground=request.get("ground", "auto"),
     )
@@ -140,14 +139,12 @@ def send_generate_request(
     prompt: str,
     output: str,
     *,
-    width: int = 1024,
-    height: int = 1024,
-    steps: int = 28,
-    guidance: float = 3.5,
+    width: int = 512,
+    height: int = 512,
+    steps: int = 30,
+    guidance: float = 7.0,
     seed: int | None = None,
     negative_prompt: str = "",
-    cfg_scale: float | None = None,
-    lora_strength: float = 1.0,
     preset: str | None = None,
     ground: str = "auto",
 ) -> dict[str, Any] | None:
@@ -166,8 +163,6 @@ def send_generate_request(
         "steps": steps,
         "guidance": guidance,
         "negative_prompt": negative_prompt,
-        "cfg_scale": cfg_scale,
-        "lora_strength": lora_strength,
         "preset": preset,
         "ground": ground,
     }

@@ -1,6 +1,8 @@
 # Texture2D — Agent Skill
 
-Ferramenta CLI para geração de texturas 2D seamless (tileable) via HF Inference API.
+Ferramenta CLI para geração de texturas 2D seamless (tileable) via Stable Diffusion v1.5 + circular padding, executando localmente na GPU.
+
+O tiling é por construção: todas as camadas `Conv2d` do UNet e VAE usam `padding_mode="circular"`, pelo que a saída ladrilha sem costuras — sem LoRA nem pós-processamento. Cabe em ~2,5 GB de VRAM (uma GPU de 6 GiB chega).
 
 ## Quando usar
 
@@ -35,21 +37,24 @@ Wood, Fabric, Metal, Stone, Brick, Leather, Concrete, Marble, Grass, Sand, Dirt,
 
 | Parâmetro | Default | Descrição |
 |-----------|---------|-----------|
-| `--width/-W` | 1024 | Largura |
-| `--height/-H` | 1024 | Altura |
-| `--steps/-s` | 50 | Passos de inferência |
-| `--guidance/-g` | 7.5 | Guidance scale |
+| `--width/-W` | 512 | Largura |
+| `--height/-H` | 512 | Altura |
+| `--steps/-s` | 30 | Passos de inferência |
+| `--guidance/-g` | 7.0 | Guidance scale (CFG real) |
 | `--seed` | aleatório | Seed para reprodutibilidade |
 | `--preset/-p` | None | Preset de material |
-| `--negative-prompt/-n` | "" | Prompt negativo |
-| `--lora-strength` | 1.0 | Força do LoRA |
-| `--model/-m` | Flux-Seamless-Texture-LoRA | Modelo HF |
+| `--negative-prompt/-n` | "" | Prompt negativo (CFG nativo do SD1.5) |
+| `--quality` | medium | Quality tier (`fast`/`low`/`medium`/`high`/`highest`) |
+| `--model/-m` | stable-diffusion-v1-5/stable-diffusion-v1-5 | Modelo HF |
+| `--ground` | auto | Modo chão top-down (modificadores de viewpoint/iluminação/escala) |
+| `--cpu` | false | Forçar CPU |
+
+> Nota: `--negative-prompt` funciona nativamente com o CFG real do SD1.5 (sem o custo 2x do true-cfg do FLUX distilled). O override do modelo via `--model/-m` ou a variável `TEXTURE2D_MODEL_ID`.
 
 ## Requisitos
 
-- Python 3.10+
-- Token HF (env `HF_TOKEN` ou `HUGGINGFACEHUB_API_TOKEN`) — recomendado para modelos gated
-- Sem GPU local necessária (geração via API cloud)
+- Python 3.13+
+- GPU CUDA recomendada (cabe em ~2,5 GB de VRAM; uma GPU de 6 GiB é suficiente). `--cpu` força CPU (lento).
 
 ## Integração com Materialize
 
