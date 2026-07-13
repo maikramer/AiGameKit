@@ -40,6 +40,7 @@ FREE_SAFETY_FRACTION = 0.95
 QUANT_WEIGHT_FACTOR: dict[str, float] = {
     "none": 1.0,
     "fp8": 0.55,
+    "fp8-layerwise": 0.55,  # diffusers.hooks layerwise casting (storage fp8, compute bf16)
     "sdnq-fp8": 0.55,
     "int8": 0.55,
     "sdnq-uint8": 0.55,
@@ -49,8 +50,9 @@ QUANT_WEIGHT_FACTOR: dict[str, float] = {
 }
 
 # Ordem de preferência (qualidade desce, poupança sobe). "none" primeiro; int4 por
-# último. SDNQ-first: uint8 é o preset mais testado; int4 só quando é preciso caber.
-_QUANT_LADDER: tuple[str, ...] = ("none", "sdnq-uint8", "sdnq-int8", "sdnq-int4")
+# último. fp8-layerwise antes de SDNQ (melhor qualidade, sem needing Triton/kernels);
+# SDNQ-first para int8/int4 (uint8 é o preset mais testado; int4 só quando é preciso caber).
+_QUANT_LADDER: tuple[str, ...] = ("none", "fp8-layerwise", "sdnq-uint8", "sdnq-int8", "sdnq-int4")
 
 # Offload por ordem de agressividade. "none" = tudo na GPU.
 OFFLOAD_NONE = "none"
@@ -573,3 +575,32 @@ def place_pipeline(
 
     apply_offload_plan(pipe, plan, offload_modules=offload_modules)
     return plan
+
+
+def apply_quant_mode(pipe: Any, quant_mode: str, *, log_fn: Any | None = None) -> bool:
+    """Aplica o modo de quantização recomendado pelo planner ao pipeline.
+
+    O planner recomenda ``plan.quant_mode``; a tool chama isto para aplicar a
+    técnica correspondente antes do placement. Por agora suporta:
+      - ``"fp8-layerwise"``: diffusers.hooks layerwise casting (fp8 storage).
+      - Modos SDNQ (``sdnq-*``): continuam a cargo de cada tool (aplica antes do load).
+
+    Args:
+        pipe: pipeline diffusers.
+        quant_mode: modo recomendado pelo planner.
+        log_fn: callback de logging.
+
+    Returns:
+        True se aplicou uma técnica; False se o modo é "none" ou não suportado.
+    """
+    if quant_mode == "none":
+        return False
+
+    if quant_mode == "fp8-layerwise":
+        from .group_offload import try_layerwise_casting
+
+        return try_layerwise_casting(pipe, log_fn=log_fn)
+
+    # SDNQ et al. são aplicados pela tool (quantização runtime layer-by-layer
+    # durante o from_pretrained), não aqui. Retornar False = não aplicado neste helper.
+    return False

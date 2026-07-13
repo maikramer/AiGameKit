@@ -271,3 +271,72 @@ def try_group_offloading(
         return False
 
     return applied_any
+
+
+def try_layerwise_casting(
+    pipe: Any,
+    *,
+    storage_dtype_name: str = "float8_e4m3fn",
+    compute_dtype_name: str = "bfloat16",
+    modules: tuple[str, ...] = ("transformer", "text_encoder", "text_encoder_2"),
+    non_blocking: bool = True,
+    log: bool = True,
+    log_fn: Any = None,
+) -> bool:
+    """Aplica layerwise casting (fp8 storage, bf16 compute) aos módulos pesados.
+
+    Usa ``diffusers.hooks.apply_layerwise_casting``: armazena pesos em fp8
+    (~50% de redução de VRAM de pesos) e faz cast para bf16 apenas durante o
+    forward. Skipa norm/embed/proj por defeito (camadas sensíveis à precisão).
+
+    Args:
+        pipe: pipeline diffusers.
+        storage_dtype_name: dtype de armazenamento (default ``"float8_e4m3fn"``).
+            Alternativas: ``"float8_e5m2"``. Deve ser uma string (resolvida para
+            ``torch.dtype`` lazy).
+        compute_dtype_name: dtype de compute (default ``"bfloat16"``).
+        modules: nomes dos attrs a aplicar (transformer, text encoders).
+        non_blocking: cast non-blocking (sobrepor com compute).
+        log: se True, loga mensagens.
+        log_fn: função de logging.
+
+    Returns:
+        True se aplicado a pelo menos 1 módulo; False se diffusers não suportar.
+    """
+    import torch
+
+    def _log(msg: str) -> None:
+        if log:
+            (log_fn or _logger.info)(msg)
+
+    try:
+        from diffusers.hooks import apply_layerwise_casting
+    except ImportError as e:
+        _log(f"Layerwise casting indisponível (diffusers hooks: {e})")
+        return False
+
+    storage_dtype = getattr(torch, storage_dtype_name, None)
+    compute_dtype = getattr(torch, compute_dtype_name, None)
+    if storage_dtype is None or compute_dtype is None:
+        _log(f"Layerwise casting: dtype inválido ({storage_dtype_name}/{compute_dtype_name})")
+        return False
+
+    applied_any = False
+    try:
+        for name in modules:
+            mod = getattr(pipe, name, None)
+            if mod is None:
+                continue
+            apply_layerwise_casting(
+                mod,
+                storage_dtype=storage_dtype,
+                compute_dtype=compute_dtype,
+                non_blocking=non_blocking,
+            )
+            applied_any = True
+            _log(f"Layerwise casting aplicado a {name} ({storage_dtype_name} storage, {compute_dtype_name} compute)")
+    except Exception as e:
+        _log(f"Layerwise casting falhou ({e})")
+        return False
+
+    return applied_any

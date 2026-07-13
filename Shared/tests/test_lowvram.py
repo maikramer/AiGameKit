@@ -51,6 +51,15 @@ class TestHighVram:
         assert plan.quant_mode == "sdnq-int4"
         assert plan.est_peak_gib <= plan.usable_vram_gib
 
+    def test_fp8_layerwise_preferred_over_sdnq_when_fits(self) -> None:
+        """fp8-layerwise (fator 0.55) é tentado antes de SDNQ; se cabe, é preferido
+        (melhor qualidade, sem needing Triton/kernels)."""
+        # Modelo 10 GiB fp16; fp8-layerwise: 10*0.55=5.5 + 1.5 = 7.0 ≤ 9.0 (10GB*0.9).
+        medium = ModelFootprint(fp16_weights_gib=10.0, activation_gib=1.5)
+        plan = plan_offload([_gpu(10)], medium)
+        assert plan.offload == OFFLOAD_NONE
+        assert plan.quant_mode == "fp8-layerwise"
+
 
 class TestSixGbTarget:
     def test_big_model_6gb_uses_group_stream(self) -> None:
