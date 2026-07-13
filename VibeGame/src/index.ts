@@ -46,6 +46,7 @@ export {
   PlayerGltfConfig,
   playerGltfRecipe,
   setPlayerAttackClip,
+  setPlayerIdleClip,
   setPlayerHeldItem,
   setPlayerFaceTarget,
 } from './plugins/player';
