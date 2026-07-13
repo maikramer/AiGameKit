@@ -48,6 +48,7 @@ function makeSpec(overrides: Partial<PrimitiveSpec> = {}): PrimitiveSpec {
     metalness: 0,
     opacity: 1,
     edgeFeather: 0,
+    edgeFeathers: null,
     cornerRadius: 0,
     edgeNoise: 0,
     ...overrides,
@@ -207,6 +208,34 @@ describe('composition: parsePrimitiveSpec (texturas)', () => {
     expect(spec.textureRepeatY).toBe(1);
   });
 
+  it('aceita texture-repeat já convertido pelo XMLValueParser ({x, y})', () => {
+    const spec = parsePrimitiveSpec('box', {
+      'texture-url': '/assets/textures/wall.png',
+      'texture-repeat': { x: 2, y: 1 } as unknown as string,
+    });
+    expect(spec.textureRepeatX).toBe(2);
+    expect(spec.textureRepeatY).toBe(1);
+  });
+
+  it('texture-scale deriva o repeat do tamanho do pad (m por tile)', () => {
+    const spec = parsePrimitiveSpec('pad', {
+      size: '16 8',
+      'texture-scale': '4',
+    });
+    expect(spec.textureRepeatX).toBeCloseTo(4); // 16/4
+    expect(spec.textureRepeatY).toBeCloseTo(2); // 8/4
+  });
+
+  it('texture-scale tem precedência sobre texture-repeat', () => {
+    const spec = parsePrimitiveSpec('pad', {
+      size: '10 10',
+      'texture-scale': '5',
+      'texture-repeat': '99 99',
+    });
+    expect(spec.textureRepeatX).toBeCloseTo(2);
+    expect(spec.textureRepeatY).toBeCloseTo(2);
+  });
+
   it('aceita alias map-url e repeat numérico único', () => {
     const spec = parsePrimitiveSpec('plane', {
       'map-url': '/assets/textures/wood.png',
@@ -338,6 +367,42 @@ describe('composition: primitiva pad (decal de chão)', () => {
     const corner = data[6 * w + 6]!; // x≈-4.0, z≈-4.0 → cortado pelo raio
     expect(edgeMid).toBeGreaterThan(200);
     expect(corner).toBeLessThan(edgeMid);
+  });
+
+  it('edge-feather com 4 valores ({x,y,z,w} do XML) vira edgeFeathers [w,e,n,s]', () => {
+    const spec = parsePrimitiveSpec('pad', {
+      'edge-feather': { x: 1.1, y: 1.1, z: 0, w: 1.1 } as unknown as string,
+    });
+    expect(spec.edgeFeathers).toEqual([1.1, 1.1, 0, 1.1]);
+    expect(spec.edgeFeather).toBeCloseTo(1.1); // max dos lados
+  });
+
+  it('edge-feather com 2 valores aplica fx aos lados X e fz aos lados Z', () => {
+    const spec = parsePrimitiveSpec('pad', {
+      'edge-feather': { x: 2, y: 0.5 } as unknown as string,
+    });
+    expect(spec.edgeFeathers).toEqual([2, 2, 0.5, 0.5]);
+  });
+
+  it('per-side: lado com feather 0 fica sólido até à orla, lado oposto desvanece', () => {
+    const spec = makeSpec({
+      kind: 'pad',
+      sizeX: 6,
+      sizeZ: 12,
+      edgeFeather: 1.1,
+      edgeFeathers: [1.1, 1.1, 0, 1.1], // norte (-z) sólido
+      edgeNoise: 0.5,
+    });
+    const w = 32;
+    const h = 64;
+    const data = computePadAlphaData(spec, w, h);
+    // Orla norte (j=0), coluna central: sólida (junção enterrada na praça)
+    expect(data[0 * w + w / 2]!).toBe(255);
+    // Orla sul (j=h-1), coluna central: transparente
+    expect(data[(h - 1) * w + w / 2]!).toBeLessThan(30);
+    // Orlas laterais na linha central: transparentes
+    expect(data[(h / 2) * w]!).toBeLessThan(30);
+    expect(data[(h / 2) * w + w - 1]!).toBeLessThan(30);
   });
 
   it('computePadAlphaData é determinístico para o mesmo spec', () => {

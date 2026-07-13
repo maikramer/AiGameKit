@@ -38,6 +38,12 @@ export interface PrimitiveSpec {
   // --- Campos específicos do kind 'pad' (decal de chão) ---
   // Largura em metros do fade de alpha da borda para dentro (0 = borda dura).
   readonly edgeFeather: number;
+  // Feather por lado [oeste(-x), este(+x), norte(-z), sul(+z)] quando o XML
+  // declara edge-feather com 2 ("fx fz") ou 4 ("w e s n") valores; null =
+  // uniforme (edgeFeather). Lados com 0 ficam sólidos até à orla — usado para
+  // enterrar a ponta de uma estrada sob o núcleo opaco de uma praça sem
+  // costura semi-transparente na junção.
+  readonly edgeFeathers: readonly [number, number, number, number] | null;
   // Raio dos cantos arredondados em metros (0 = cantos retos).
   readonly cornerRadius: number;
   // Amplitude em metros de ruído orgânico que corrói a borda para dentro
@@ -171,6 +177,16 @@ const ZERO_VEC: [number, number, number] = [0, 0, 0];
 function parseTextureRepeat(value: XMLValue | undefined): [number, number] {
   if (value === undefined || value === null) return [1, 1];
   if (typeof value === 'number') return [value, value];
+  // O XMLValueParser converte "2 1" em {x:2, y:1} antes de chegarmos aqui —
+  // sem este ramo, qualquer repeat de 2 componentes vindo do XML caía no
+  // fallback [1,1] (String({x,y}) = "[object Object]").
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    const v = value as Record<string, unknown>;
+    const x = Number(v.x);
+    const y = Number(v.y);
+    if (!Number.isNaN(x) && !Number.isNaN(y)) return [x, y];
+    return [1, 1];
+  }
   const parts = String(value)
     .trim()
     .split(/\s+/)
@@ -228,9 +244,19 @@ export function parsePrimitiveSpec(
     typeof textureUrlRaw === 'string' && textureUrlRaw.trim() !== ''
       ? textureUrlRaw.trim()
       : null;
-  const [textureRepeatX, textureRepeatY] = parseTextureRepeat(
+  let [textureRepeatX, textureRepeatY] = parseTextureRepeat(
     attributes['texture-repeat']
   );
+  // texture-scale: metros de mundo por tile de textura. Deriva o repeat do
+  // tamanho real da primitiva — pads/planos vizinhos de tamanhos diferentes
+  // ficam com densidade idêntica sem contas manuais nem textura espremida.
+  // Tem precedência sobre texture-repeat quando ambos são declarados.
+  const textureScale = toFloat(attributes['texture-scale'], 0);
+  if (textureScale > 0 && (kind === 'pad' || kind === 'plane')) {
+    const spanY = kind === 'pad' ? sizeZ : sizeY;
+    textureRepeatX = Math.max(sizeX, 1e-4) / textureScale;
+    textureRepeatY = Math.max(spanY, 1e-4) / textureScale;
+  }
   const textureRotation = toFloat(attributes['texture-rotation'], 0);
   const normalMapUrlRaw =
     attributes['normal-map-url'] ?? attributes['normal-url'];
@@ -250,13 +276,30 @@ export function parsePrimitiveSpec(
   const opacity = Math.max(0, Math.min(1, toFloat(attributes.opacity, 1)));
   // Bordas suaves do pad: feather default 0.8 m (o ponto do pad é ser
   // seamless com o terreno); explicitar edge-feather="0" devolve borda dura.
-  const edgeFeather = Math.max(
-    0,
-    toFloat(
-      attributes['edge-feather'] ?? attributes.feather,
-      kind === 'pad' ? 0.8 : 0
-    )
-  );
+  // Aceita 1 valor (uniforme), 2 ("fx fz" — lados X e lados Z) ou 4
+  // ("w e n s" — por lado). O XMLValueParser entrega 2/4 valores como
+  // objetos {x,y}/{x,y,z,w}.
+  const featherRaw = attributes['edge-feather'] ?? attributes.feather;
+  let edgeFeathers: [number, number, number, number] | null = null;
+  if (
+    featherRaw &&
+    typeof featherRaw === 'object' &&
+    !Array.isArray(featherRaw)
+  ) {
+    const v = featherRaw as Record<string, unknown>;
+    const fx = Math.max(0, toFloat(v.x as XMLValue, 0));
+    const fy = Math.max(0, toFloat(v.y as XMLValue, 0));
+    if (v.z !== undefined && v.w !== undefined) {
+      const fz = Math.max(0, toFloat(v.z as XMLValue, 0));
+      const fw = Math.max(0, toFloat(v.w as XMLValue, 0));
+      edgeFeathers = [fx, fy, fz, fw]; // w e n s
+    } else {
+      edgeFeathers = [fx, fx, fy, fy]; // fx nos lados X, fy nos lados Z
+    }
+  }
+  const edgeFeather = edgeFeathers
+    ? Math.max(...edgeFeathers)
+    : Math.max(0, toFloat(featherRaw, kind === 'pad' ? 0.8 : 0));
   const cornerRadius = Math.max(0, toFloat(attributes['corner-radius'], 0));
   const edgeNoise = Math.max(0, toFloat(attributes['edge-noise'], 0));
   return {
@@ -283,6 +326,7 @@ export function parsePrimitiveSpec(
     metalness,
     opacity,
     edgeFeather,
+    edgeFeathers,
     cornerRadius,
     edgeNoise,
   };
@@ -357,6 +401,11 @@ const PAD_ALPHA_MAX_PX = 512;
  * metros seguindo um SDF de retângulo com cantos `cornerRadius`; `edgeNoise`
  * corrói a borda para DENTRO (nunca para fora — o alpha na orla da geometria
  * é sempre 0, sem cortes duros).
+ *
+ * Com `edgeFeathers` (por lado, [w,e,n,s]) o alpha é o mínimo dos 4 fades
+ * axiais; lados com feather 0 ficam sólidos até à orla e sem ruído — é assim
+ * que a ponta de uma estrada mergulha sob uma praça sem costura translúcida.
+ * Per-side ignora `cornerRadius` (usar um ou outro).
  */
 export function computePadAlphaData(
   spec: PrimitiveSpec,
@@ -366,13 +415,54 @@ export function computePadAlphaData(
   const data = new Uint8Array(width * height);
   const sizeX = Math.max(spec.sizeX, 1e-4);
   const sizeZ = Math.max(spec.sizeZ, 1e-4);
+  const noiseAmp = spec.edgeNoise;
+  const seed = spec.posX * 13.13 + spec.posZ * 7.77;
+  const perSide = spec.edgeFeathers;
+
+  const noiseAt = (px: number, pz: number): number => {
+    if (noiseAmp <= 0) return 0;
+    return (
+      noiseAmp *
+      (0.65 * valueNoise2(px / 1.6, pz / 1.6, seed) +
+        0.35 * valueNoise2(px / 0.55, pz / 0.55, seed + 91.3))
+    );
+  };
+
+  const hermite = (a: number): number => a * a * (3 - 2 * a);
+
+  // Fade axial de um lado: dist = distância (m) da orla desse lado para
+  // dentro; feather 0 ⇒ degrau sólido na orla, sem erosão de ruído.
+  const sideAlpha = (dist: number, feather: number, noise: number): number => {
+    if (feather <= 0) return dist >= 0 ? 1 : 0;
+    return hermite(Math.min(Math.max((dist - noise) / feather, 0), 1));
+  };
+
+  if (perSide) {
+    const [fW, fE, fN, fS] = perSide;
+    const hx = sizeX / 2;
+    const hz = sizeZ / 2;
+    for (let j = 0; j < height; j++) {
+      const pz = ((j + 0.5) / height - 0.5) * sizeZ;
+      for (let i = 0; i < width; i++) {
+        const px = ((i + 0.5) / width - 0.5) * sizeX;
+        const noise = noiseAt(px, pz);
+        const a = Math.min(
+          sideAlpha(px + hx, fW, noise),
+          sideAlpha(hx - px, fE, noise),
+          sideAlpha(pz + hz, fN, noise),
+          sideAlpha(hz - pz, fS, noise)
+        );
+        data[j * width + i] = Math.round(a * 255);
+      }
+    }
+    return data;
+  }
+
   const maxRadius = Math.min(sizeX, sizeZ) / 2;
   const radius = Math.min(spec.cornerRadius, maxRadius);
   const halfX = sizeX / 2 - radius;
   const halfZ = sizeZ / 2 - radius;
   const feather = spec.edgeFeather;
-  const noiseAmp = spec.edgeNoise;
-  const seed = spec.posX * 13.13 + spec.posZ * 7.77;
 
   for (let j = 0; j < height; j++) {
     const v = (j + 0.5) / height;
@@ -393,17 +483,11 @@ export function computePadAlphaData(
 
       // Ruído só corrói para dentro (n∈[0,1] ⇒ d cresce), garantindo alpha 0
       // na orla da geometria mesmo com amplitudes grandes.
-      if (noiseAmp > 0) {
-        const n =
-          0.65 * valueNoise2(px / 1.6, pz / 1.6, seed) +
-          0.35 * valueNoise2(px / 0.55, pz / 0.55, seed + 91.3);
-        d += noiseAmp * n;
-      }
+      d += noiseAt(px, pz);
 
       let a: number;
       if (feather > 0) {
-        a = Math.min(Math.max(-d / feather, 0), 1);
-        a = a * a * (3 - 2 * a); // hermite — sem banda visível no início/fim
+        a = hermite(Math.min(Math.max(-d / feather, 0), 1));
       } else {
         a = d < 0 ? 1 : 0;
       }

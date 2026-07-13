@@ -75,9 +75,10 @@ desvanece a borda para o terreno sem degraus retangulares.
 
 | Atributo        | Default | Descrição                                                        |
 | --------------- | ------- | ---------------------------------------------------------------- |
-| `edge-feather`  | `0.8`   | Metros de fade de alpha da borda para dentro (`0` = borda dura). |
+| `edge-feather`  | `0.8`   | Metros de fade de alpha da borda para dentro (`0` = borda dura). Aceita 1 valor (uniforme), 2 (`"fx fz"`) ou 4 (`"w e n s"` = −x +x −z +z) — lados com `0` ficam sólidos até à orla (junções). Per-side ignora `corner-radius`. |
 | `corner-radius` | `0`     | Raio em metros dos cantos arredondados.                          |
 | `edge-noise`    | `0`     | Amplitude em metros de ruído que corrói a borda para DENTRO (calçada gasta). Determinístico (seed = posição). |
+| `texture-scale` | —       | Metros de mundo por tile de textura; deriva `texture-repeat` do tamanho do pad (precedência sobre `texture-repeat`). Também suportado em `Plane`. |
 
 ```html
 <!-- Praça com cantos redondos + estrada, seamless com a relva -->
@@ -91,13 +92,19 @@ desvanece a borda para o terreno sem degraus retangulares.
 
 Notas:
 
-- **Coerência de escala**: `texture-repeat` não acompanha o `size` — manter a
-  densidade (tiles/metro) igual entre pads vizinhos (ex.: `0.75/m` ⇒ pad de
-  16 m usa repeat 12, estrada de 5.4 m usa 4), senão as pedras mudam de tamanho
-  entre a praça e a estrada.
+- **Coerência de escala**: usar `texture-scale` (m/tile) em pads vizinhos em
+  vez de `texture-repeat` manual — a densidade fica idêntica automaticamente e
+  a textura nunca é espremida por pads estreitos.
+- **Junções sólidas**: para ligar uma estrada a uma praça sem costura
+  translúcida, estende-se o pad da estrada até DENTRO do núcleo opaco da praça
+  e zera-se o feather desse lado (`edge-feather="1.1 1.1 0 1.1"`).
 - O feather consome largura útil dos dois lados: núcleo opaco =
   `largura − 2×(edge-feather + ~edge-noise/2)`. Estradas estreitas precisam de
   feather menor.
+- **Trap XML**: o XMLValueParser converte `"a b"`/`"a b c d"` em objetos
+  `{x,y}`/`{x,y,z,w}` ANTES do parser da primitiva — qualquer atributo
+  multi-valor novo tem de aceitar essa forma (foi o bug que deixava
+  `texture-repeat` sempre em `[1,1]` via XML).
 - O alphaMap é gerado por `computePadAlphaData` (puro, testável sem GPU) e não
   usa `onBeforeCompile` — sobrevive ao patch de CSM (`setupCsmMaterial`).
 - Pad não projeta sombra (`castShadow=false`), recebe sombra, usa
