@@ -1,3 +1,4 @@
+import { applyHeightBrush, minEffectiveFalloff } from '../terrain/height-brush';
 import type { HeightSampler } from '../terrain/height-sampler';
 import { sampleHeightAt } from '../terrain/height-sampler';
 
@@ -76,19 +77,18 @@ export function carveRoadCorridor(
   sampler: HeightSampler,
   opts: RoadCorridorOpts
 ): boolean {
-  const { data, width: texW, height: texH, worldSize, maxHeight } = sampler;
-  if (!data || texW < 2 || texH < 2 || maxHeight <= 0) return false;
   const path = opts.path;
   if (path.length < 4) return false;
 
   const halfWidth = Math.max(opts.width, 0.1) / 2;
-  const fall = Math.max(opts.falloff, 0.01);
+  // Falloff clamped à resolução do sampler — pincéis mais estreitos que o
+  // texel alias-am até não escrever nada (o "carve que não ocorre").
+  const fall = minEffectiveFalloff(sampler, Math.max(opts.falloff, 0.01));
   const reach = halfWidth + fall;
 
   const { arcs, heights } = stationProfile(sampler, path);
   const profile = smoothProfile(arcs, heights, opts.window);
 
-  // AABB do path (+reach) em texels.
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
@@ -99,21 +99,14 @@ export function carveRoadCorridor(
     minZ = Math.min(minZ, path[i + 1]!);
     maxZ = Math.max(maxZ, path[i + 1]!);
   }
-  const half = worldSize / 2;
-  const stepX = worldSize / (texW - 1);
-  const stepZ = worldSize / (texH - 1);
-  const x0 = Math.max(0, Math.floor((minX - reach + half) / stepX));
-  const x1 = Math.min(texW - 1, Math.ceil((maxX + reach + half) / stepX));
-  const z0 = Math.max(0, Math.floor((minZ - reach + half) / stepZ));
-  const z1 = Math.min(texH - 1, Math.ceil((maxZ + reach + half) / stepZ));
 
   const segCount = path.length / 2 - 1;
-  let changed = false;
-  for (let zi = z0; zi <= z1; zi++) {
-    const wz = zi * stepZ - half;
-    for (let xi = x0; xi <= x1; xi++) {
-      const wx = xi * stepX - half;
-
+  return applyHeightBrush(sampler, {
+    minX: minX - reach,
+    maxX: maxX + reach,
+    minZ: minZ - reach,
+    maxZ: maxZ + reach,
+    evalAt(wx, wz) {
       // Ponto mais próximo no path: distância lateral + segmento interpolado.
       let bestD = Infinity;
       let bestSeg = 0;
@@ -137,27 +130,20 @@ export function carveRoadCorridor(
           bestT = t;
         }
       }
-      if (bestD >= reach) continue;
+      if (bestD >= reach) return null;
 
       // Alvo: perfil suavizado interpolado no arco do ponto mais próximo.
       const p0 = profile[bestSeg]!;
       const p1 = profile[bestSeg + 1]!;
       const targetY = p0 + (p1 - p0) * bestT;
-      const target = Math.min(1, Math.max(0, targetY / maxHeight));
 
       // Peso: 1 dentro da faixa, smoothstep até 0 no fim do falloff.
-      let w = 1;
+      let weight = 1;
       if (bestD > halfWidth) {
         const t = (bestD - halfWidth) / fall;
-        w = 1 - t * t * (3 - 2 * t);
+        weight = 1 - t * t * (3 - 2 * t);
       }
-      const i = zi * texW + xi;
-      const next = data[i]! + (target - data[i]!) * w;
-      if (next !== data[i]!) {
-        data[i] = next;
-        changed = true;
-      }
-    }
-  }
-  return changed;
+      return { targetY, weight };
+    },
+  });
 }

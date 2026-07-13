@@ -37,9 +37,9 @@ espremida, seja qual for a largura ou o traçado.
 | `y-offset`          | `0.12`  | Elevação acima da superfície (m).                                |
 | `station-spacing`   | `1.5`   | Espaçamento das estações do ribbon (m).                          |
 | `smoothing`         | `2`     | Iterações Chaikin (0 = cantos vivos).                            |
-| `flatten`           | `false` | `true`/`1` = aplaina um corredor no terreno (corte+aterro) ao longo do path. |
-| `flatten-falloff`   | `2`     | Blend lateral do corredor de volta ao relevo natural (m).        |
-| `flatten-window`    | `8`     | Janela da média móvel do perfil longitudinal do corredor (m).    |
+| `flatten`           | `true`  | Aplaina um corredor no terreno (corte+aterro) ao longo do path; `flatten="0"` desliga. |
+| `flatten-falloff`   | `6`     | Blend lateral do corredor de volta ao relevo natural (m).        |
+| `flatten-window`    | `24`    | Janela da média móvel do perfil longitudinal (m). Tem de ser ≥ ao lattice do mesh base (worldSize/resolution) para as cordas dos LODs coincidirem com o perfil. |
 | `opacity`           | `1`     | Opacidade global.                                                |
 | `roughness`/`metalness` | `1`/`0` | PBR do material.                                           |
 | `texture-url` / `normal-map-url` / `roughness-map-url` | — | Texturas (cache por URL). |
@@ -87,12 +87,24 @@ fonte: o corredor fica nivelado no sampler, todos os LODs renderizam a
 estrada plana.
 
 - **Perfil longitudinal**: média móvel triangular das alturas originais ao
-  longo do arco do path, com janela `flatten-window` (default 8 m). Suaviza
+  longo do arco do path, com janela `flatten-window` (default 24 m). Suaviza
   cristas/depressões pontuais sem achatar todo o relevo.
 - **Falloff lateral**: dentro da `width` o terreno fica ao nível do perfil;
   entre `width` e `width + 2×flatten-falloff` há um smoothstep de volta ao
   relevo natural — transição sem degrau.
-- Opt-in: `flatten` é `0` por defeito. Sem `flatten`, a estrada é um decal
+- **Density boost obrigatório**: o carve sozinho é INVISÍVEL — os vértices do
+  mesh base distam `worldSize/resolution` (~15 m no simple-rpg) e um corredor
+  de ~10 m cai entre eles. O sistema aplica boost 255 no DensityMap por
+  segmento do path + `refreshChunkResolutions` (mesmo mecanismo dos
+  lagos/rios); com o corredor esculpido os chunks próximos convergem para a
+  superfície analítica do sampler.
+- **Amostragem do ribbon**: com `flatten`, o ribbon amostra a superfície
+  ANALÍTICA (`sampleHeightAt` + base Y), não o lattice base — é para o
+  analítico que os chunks boosted convergem. Validação: clearance analítico
+  ≥ +0.10 m em todas as estradas do simple-rpg, 0 vértices enterrados;
+  segmentos distantes sob LOD grosseiro podem mergulhar temporariamente até
+  o chunk refinar (mesmo trade-off da água).
+- `flatten` é `1` (ON) por defeito. Com `flatten="0"`, a estrada é um decal
   puro sobre a superfície original (comportamento anterior).
 - Mesmo contrato dos `<Pad>`/lagos/rios: muta o `sampler.data` in place,
   marca `TerrainChunk.meshDirty`, remove `chunkColliders`, invalida o BVH.

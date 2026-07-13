@@ -2,9 +2,7 @@ import * as THREE from 'three';
 import type { HeightSampler } from '../terrain/height-sampler';
 import type { WorldAabb } from '../terrain/density-map';
 import { getTerrainContext } from '../terrain/utils';
-import { TerrainChunk } from '../terrain/components';
-import { invalidateTerrainBvh } from '../bvh';
-import { getRapierWorld } from '../physics';
+import { rebuildTerrainDerivatives } from '../terrain/height-brush';
 import { getRenderingContext } from '../rendering';
 import { applyOverride } from '../terrain/density-map';
 import { refreshChunkResolutions } from '../terrain/systems';
@@ -137,15 +135,8 @@ export function applyWaterShape(
   }
   const worldWaterY = data.worldOffset.y + result.waterY;
 
-  // 3. Mark terrain derivatives dirty.
-  for (const chunk of data.chunks) TerrainChunk.meshDirty[chunk] = 1;
-  const world = getRapierWorld(state);
-  if (world) {
-    for (const body of data.chunkColliders.values())
-      world.removeRigidBody(body);
-    data.chunkColliders.clear();
-  }
-  invalidateTerrainBvh(state, field.entity);
+  // 3. Mark terrain derivatives dirty (helper partilhado com pads/estradas).
+  rebuildTerrainDerivatives(state, field.entity, data);
 
   // 4. Spawn surface mesh with the shape-agnostic material.
   const scene = getRenderingContext(state).scene;

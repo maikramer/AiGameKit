@@ -74,9 +74,11 @@ export const RoadPlugin: Plugin = {
         opacity: 1,
         roughness: 1,
         metalness: 0,
-        flatten: 0,
-        flattenFalloff: 2,
-        flattenWindow: 8,
+        // Default ON: estradas sobre terreno precisam do corredor esculpido
+        // (+ density boost) para o mesh LOD acompanhar; flatten="0" desliga.
+        flatten: 1,
+        flattenFalloff: 6,
+        flattenWindow: 24,
         applied: 0,
       },
     },

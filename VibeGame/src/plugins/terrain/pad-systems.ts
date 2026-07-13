@@ -1,10 +1,9 @@
 import { defineQuery } from '../../core';
 import type { Parser, State, System } from '../../core';
 import { Transform } from '../transforms/components';
-import { getRapierWorld } from '../physics';
-import { invalidateTerrainBvh } from '../bvh';
-import { TerrainChunk, TerrainPad } from './components';
+import { TerrainPad } from './components';
 import { flattenRect } from './flatten';
+import { rebuildTerrainDerivatives } from './height-brush';
 import { sampleHeightAt } from './height-sampler';
 import { getTerrainContext } from './utils';
 import { logger } from '../../core/utils/logger';
@@ -64,17 +63,7 @@ export const TerrainPadApplySystem: System = {
         falloff,
         cornerRadius,
       });
-      if (changed) {
-        // Rebuild terrain derivatives, mirroring the water carve flow.
-        for (const chunk of data.chunks) TerrainChunk.meshDirty[chunk] = 1;
-        const world = getRapierWorld(state);
-        if (world) {
-          for (const body of data.chunkColliders.values())
-            world.removeRigidBody(body);
-          data.chunkColliders.clear();
-        }
-        invalidateTerrainBvh(state, field.entity);
-      }
+      if (changed) rebuildTerrainDerivatives(state, field.entity, data);
 
       TerrainPad.applied[eid] = 1;
       logger.info(
