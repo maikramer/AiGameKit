@@ -206,8 +206,17 @@ class SkymapGenerator(DiffusionGeneratorBase):
         # Colocação unificada via planner: full-GPU / group+stream / multi-GPU / CPU.
         # O base é FLUX.1-dev pré-quantizado uint4 (~7 GiB pesos); allow_quant=("none",)
         # porque o checkpoint já vem quantizado do hub (não há SDNQ runtime aqui).
-        # model_attr="transformer" para multi-GPU accelerate (FLUX split transformer).
-        self._place_with_planner(pipe, _flux_dev_uint4_footprint(), allow_quant=("none",), model_attr="transformer")
+        # target_resolution=2048 activa VAE tiling + attention slicing (high-res).
+        placement_plan = self._place_with_planner(
+            pipe,
+            _flux_dev_uint4_footprint(),
+            allow_quant=("none",),
+            model_attr="transformer",
+            target_resolution=2048,
+        )
+
+        # torch.compile do transformer (28-step FLUX a 2MP beneficia muito).
+        self._maybe_compile_transformer(pipe, placement_plan)
 
         self._status("Modelo carregado — pronto")
 

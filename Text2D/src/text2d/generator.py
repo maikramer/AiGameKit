@@ -136,9 +136,12 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
 
         # Colocação unificada: _place_with_planner resolve specs (VRAM livre), aplica
         # multi-GPU (accelerate) / group offload + streams / full-GPU conforme planner.
-        self._place_with_planner(
+        placement_plan = self._place_with_planner(
             pipe, model_footprint(self.model_id), quant_mode=plan.quant_mode, model_attr="transformer"
         )
+
+        # torch.compile do transformer (só em full-GPU; 4-step Klein amortiza rápido).
+        self._maybe_compile_transformer(pipe, placement_plan)
 
         self._pipe = pipe
         return pipe

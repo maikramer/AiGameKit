@@ -252,6 +252,7 @@ class DiffusionGeneratorBase(ABC):
         no_split_classes: list[str] | None = None,
         offload_modules: tuple[str, ...] | None = None,
         allow_group_offload: bool = True,
+        target_resolution: int | None = None,
     ) -> Any:
         """**Entry point unificado** para colocar o pipeline na GPU.
 
@@ -306,6 +307,7 @@ class DiffusionGeneratorBase(ABC):
             no_split_classes=no_split_classes,
             offload_modules=offload_modules,
             allow_group_offload=allow_group_offload,
+            target_resolution=target_resolution,
             on_status=self._status,
         )
 
@@ -316,6 +318,37 @@ class DiffusionGeneratorBase(ABC):
 
         self._log(f"offload: {plan.summary()}")
         return plan
+
+    def _maybe_compile_transformer(self, pipe: Any, plan: Any) -> None:
+        """Compila o transformer via torch.compile quando seguro (full-GPU only).
+
+        Só compila quando o plano é ``OFFLOAD_NONE`` (modelo cabe na GPU sem offload)
+        — CUDA graphs do ``reduce-overhead``/``max-autotune`` conflituam com group
+        offload. Usa ``mode="default"`` (10-40% speedup, sem overhead de graphs).
+
+        Tenta ``compile_repeated_blocks`` (regional compile — cold start mais rápido)
+        quando disponível no diffusers; fallback para ``torch.compile`` standard.
+        """
+        if plan.offload != "none" or self.device == "cpu":
+            return  # offload ativo: CUDA graphs + offload = OOM
+        transformer = getattr(pipe, "transformer", None)
+        if transformer is None:
+            return
+        from gamedev_shared.quantization import apply_torch_compile
+
+        # Regional compile (compile_repeated_blocks) se disponível — cold start mais
+        # rápido que full torch.compile. Fallback para compile standard.
+        if hasattr(transformer, "compile_repeated_blocks"):
+            try:
+                transformer.compile_repeated_blocks()
+                self._log("torch.compile (regional) aplicado ao transformer")
+                return
+            except Exception as exc:
+                self._log(f"compile_repeated_blocks falhou ({exc}); fallback para torch.compile")
+        compiled = apply_torch_compile(transformer, mode="default")
+        if compiled is not transformer:
+            pipe.transformer = compiled
+            self._log("torch.compile (default) aplicado ao transformer")
 
     # ------------------------------------------------------------------
     # Batch generation

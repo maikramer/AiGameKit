@@ -117,10 +117,15 @@ class HunyuanTextTo3DGenerator:
                 )
 
     def _setup_sage_attention(self, requested: bool) -> bool:
-        """Activa SageAttention (attention INT8) via env CA_USE_SAGEATTN.
+        """Activa SageAttention (attention INT8) via env vars.
 
         O binding acontece no import dos módulos hy3dshape — tem de correr antes
         do primeiro ``_load_hunyuan`` do processo. Devolve o estado efectivo.
+
+        Nota: diferentes módulos do Hunyuan3D lêem env vars diferentes:
+        - VAE cross-attn processor lê ``CA_USE_SAGEATTN``
+        - DiT denoiser e VAE attention blocks lêem ``USE_SAGEATTN`` (sem prefixo)
+        Ambas são setadas para garantir cobertura total.
         """
         if not requested:
             return False
@@ -129,13 +134,13 @@ class HunyuanTextTo3DGenerator:
         except ImportError:
             _logger.warn("sageattention não instalado — a continuar com SDPA (pip install sageattention).")
             return False
-        if (
-            "text3d.hy3dshape.models.denoisers.hunyuan3ddit" in sys.modules
-            and os.environ.get("CA_USE_SAGEATTN", "0") != "1"
-        ):
+        already_active = os.environ.get("CA_USE_SAGEATTN", "0") == "1"
+        if "text3d.hy3dshape.models.denoisers.hunyuan3ddit" in sys.modules and not already_active:
             _logger.warn("hy3dshape já importado sem SageAttention — flag sem efeito neste processo.")
             return False
+        # Setar ambas as env vars: diferentes módulos lêem nomes diferentes.
         os.environ["CA_USE_SAGEATTN"] = "1"
+        os.environ["USE_SAGEATTN"] = "1"
         return True
 
     def _log(self, msg: str) -> None:

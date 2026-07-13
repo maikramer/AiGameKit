@@ -328,20 +328,36 @@ def enable_model_cpu_offload_optimized(
 
 def apply_torch_compile(
     model: Any,
-    mode: str = "reduce-overhead",
+    mode: str = "default",
     fullgraph: bool = False,
+    *,
+    group_offload_active: bool = False,
 ) -> Any:
-    """
-    Aplica torch.compile a um modelo se disponível.
+    """Aplica torch.compile a um modelo se disponível.
 
     Args:
-        model: Modelo PyTorch
-        mode: Modo de compilação ("default", "reduce-overhead", "max-autotune")
-        fullgraph: Forçar graph completo (sem breaks)
+        model: Modelo PyTorch.
+        mode: Modo de compilação. ``"default"`` (recomendado para difusão) — 10-40%
+            speedup sem overhead de CUDA graphs. **Evitar ``"reduce-overhead"`` e
+            ``"max-autotune"``**: usam CUDA graphs que reservam pools de memória
+            que o group offload não consegue reclamar → OOM/leak.
+        fullgraph: Forçar graph completo (sem breaks).
+        group_offload_active: Se ``True`` (group offload activo no pipeline), recusa
+            modos que usam CUDA graphs (``reduce-overhead``, ``max-autotune``) e cai
+            para ``"default"`` automaticamente.
 
     Returns:
-        Modelo compilado ou original se torch.compile não disponível
+        Modelo compilado ou original se torch.compile não disponível.
     """
+    # Guard: CUDA graphs (reduce-overhead/max-autotune) conflituam com group offload.
+    if group_offload_active and mode in ("reduce-overhead", "max-autotune"):
+        import logging
+
+        logging.getLogger("gamedev_shared.quantization").warning(
+            "torch.compile mode='%s' incompatível com group offload — a usar 'default'.", mode
+        )
+        mode = "default"
+
     try:
         import torch
 

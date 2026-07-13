@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 
 # ---------------------------------------------------------------------------
 # Nomes canónicos das variáveis de ambiente
@@ -66,9 +67,19 @@ def ensure_pytorch_cuda_alloc_conf(
 ) -> None:
     """Define ``PYTORCH_CUDA_ALLOC_CONF`` se ainda não estiver definido.
 
-    Reduz fragmentação de VRAM em GPUs com pouca memória.
+    Reduz fragmentação de VRAM em GPUs com pouca memória (frequentemente a diferença
+    entre OOM e fit em GPUs pequenas).
+
+    Guards:
+      - **Windows**: ``expandable_segments`` tem causado OOMs/erros em alguns setups
+        com certas versões do PyTorch — é skipado em Windows a menos que o utilizador
+        o defina explicitamente.
+      - Se já definido pelo utilizador, respeita o valor.
     """
     if os.environ.get(PYTORCH_CUDA_ALLOC_CONF):
+        return  # utilizador já definiu — respeitar
+    # Guard Windows: expandable_segments pode causar OOM em alguns drivers Windows.
+    if sys.platform == "win32" and "expandable_segments" in value:
         return
     os.environ[PYTORCH_CUDA_ALLOC_CONF] = value
 
