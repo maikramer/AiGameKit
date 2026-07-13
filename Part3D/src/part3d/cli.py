@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from gamedev_shared.quality import VALID_QUALITIES
 
@@ -253,6 +254,32 @@ def decompose(
     parsed_gpu_ids = [int(x.strip()) for x in gpu_ids.split(",")] if gpu_ids else None
 
     t_start = time.time()
+
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    from gamedev_shared.model_server import delegate_to_ums
+
+    _ums_request: dict[str, Any] = {
+        "mesh_path": str(mesh_path),
+        "output": str(output_path),
+        "seed": seed,
+    }
+    if octree_resolution:
+        _ums_request["octree_resolution"] = octree_resolution
+    if steps:
+        _ums_request["num_inference_steps"] = steps
+    if num_chunks:
+        _ums_request["num_chunks"] = num_chunks
+
+    ums_result = delegate_to_ums("part3d", _ums_request)
+    if ums_result and ums_result.get("status") == "ok":
+        console.print(
+            f"[bold green]\u2713[/bold green] Partes decompostas (via UMS): [cyan]{ums_result['output']}[/cyan]"
+        )
+        elapsed = time.time() - t_start
+        console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+        sys.exit(0)
+    elif ums_result and ums_result.get("status") == "error":
+        console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
     log_p = env_profile_log_path()
     prof_log = Path(log_p) if log_p else None
 

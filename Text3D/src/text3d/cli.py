@@ -13,6 +13,7 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -704,6 +705,43 @@ def generate(
                     output = Path(output)
 
                 start_time = time.time()
+
+                # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+                from gamedev_shared.model_server import delegate_to_ums
+
+                _ums_request: dict[str, Any] = {
+                    "output": str(output.resolve()) if hasattr(output, "resolve") else str(output),
+                    "steps": steps,
+                    "guidance": guidance,
+                    "octree_resolution": octree_resolution,
+                    "num_chunks": num_chunks,
+                    "seed": seed,
+                    "mc_level": mc_level,
+                    "remove_bg": not no_remove_bg,
+                    "optimize_prompt": not no_prompt_optimize,
+                }
+                if from_image:
+                    _ums_request["from_image"] = from_image
+                else:
+                    _ums_request["prompt"] = prompt
+                    _ums_request["t2d_width"] = image_width
+                    _ums_request["t2d_height"] = image_height
+                    _ums_request["t2d_steps"] = t2d_steps
+                    _ums_request["t2d_guidance"] = t2d_guidance
+                    if text2d_model_id:
+                        _ums_request["text2d_model_id"] = text2d_model_id
+                    _ums_request["t2d_full_gpu"] = t2d_full_gpu
+
+                ums_result = delegate_to_ums("text3d", _ums_request)
+                if ums_result and ums_result.get("status") == "ok":
+                    elapsed = time.time() - start_time
+                    console.print(
+                        f"[bold green]\u2713[/bold green] Mesh (via UMS): [cyan]{ums_result['output']}[/cyan]"
+                    )
+                    console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+                    sys.exit(0)
+                elif ums_result and ums_result.get("status") == "error":
+                    console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
                 item_id = output.stem if output else "text3d_single"
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)

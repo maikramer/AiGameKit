@@ -255,7 +255,41 @@ def generate_cmd(
 
     t_start = time.time()
 
-    # Delegate ao model server se estiver ativo (gerações subsequentes ~3s vs ~20s)
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    if not cpu and output is not None:
+        from gamedev_shared.model_server import delegate_to_ums
+
+        ums_result = delegate_to_ums(
+            "text2icon",
+            {
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "transparent": transparent,
+                "negative_prompt": negative_prompt,
+            },
+        )
+        if ums_result and ums_result.get("status") == "ok":
+            elapsed = time.time() - t_start
+            try:
+                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
+            except OSError:
+                sz = "?"
+            console.print(Rule("[bold green]Resultado (via UMS)", style="green"))
+            console.print(
+                f"[bold green]\u2713[/bold green] Ícone: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
+            )
+            console.print(f"[dim]Seed: {ums_result.get('seed', '?')}[/dim]")
+            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+            return
+        elif ums_result and ums_result.get("status") == "error":
+            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — a tentar legacy/in-process[/yellow]")
+
+    # Fallback: per-tool legacy server (se ainda ativo).
     if not cpu and output is not None:
         from . import client
 
@@ -498,12 +532,19 @@ def batch_cmd(
         "remove_background": transparent,
     }
 
+    from .generator import DEFAULT_PARAMS
     from .image_processor import save_image
 
+    total = len(prompts)
     ok_count = 0
-    for image, metadata, idx in gen.generate_batch(prompts, base_params):
-        if image is None:
-            console.print(f"  [red]\u2717[/red] {idx + 1}/{len(prompts)}: {metadata.get('error', '?')}")
+    for idx, prompt in enumerate(prompts):
+        merged = {**DEFAULT_PARAMS, **base_params}
+        merged.pop("seed", None)
+        merged.pop("prompt", None)
+        try:
+            image, metadata = gen.generate(prompt=prompt, **merged)
+        except Exception as exc:
+            console.print(f"  [red]\u2717[/red] {idx + 1}/{total}: {exc}")
             continue
 
         ts = int(time.time())
@@ -517,7 +558,7 @@ def batch_cmd(
             filename=fname,
         )
         ok_count += 1
-        console.print(f"  [green]\u2713[/green] {idx + 1}/{len(prompts)}: [cyan]{saved.name}[/cyan]")
+        console.print(f"  [green]\u2713[/green] {idx + 1}/{total}: [cyan]{saved.name}[/cyan]")
 
     console.print(
         Panel(

@@ -278,6 +278,42 @@ def generate_cmd(
 
         start = time.time()
 
+        # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+        if not cpu:
+            from gamedev_shared.model_server import delegate_to_ums
+
+            ums_result = delegate_to_ums(
+                "skymap2d",
+                {
+                    "prompt": prompt,
+                    "output": str(Path(output).resolve()),
+                    "width": width,
+                    "height": height,
+                    "steps": steps,
+                    "guidance": guidance_scale,
+                    "seed": seed,
+                    "negative_prompt": negative_prompt,
+                    "cfg_scale": cfg_scale,
+                    "lora_strength": lora_strength,
+                    "preset": preset,
+                    "exr_scale": exr_scale,
+                },
+            )
+            if ums_result and ums_result.get("status") == "ok":
+                elapsed = time.time() - start
+                try:
+                    sz = format_bytes(Path(ums_result["output"]).stat().st_size)
+                except OSError:
+                    sz = "?"
+                console.print(
+                    f"[bold green]\u2713[/bold green] Skymap: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
+                )
+                console.print(f"[dim]Seed: {ums_result.get('seed', '?')}[/dim]")
+                console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+                return
+            elif ums_result and ums_result.get("status") == "error":
+                console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+
         with console.status(
             "[bold yellow]1/2 — Download HF + carregamento de pesos "
             "(1ª vez: vários GB/minutos; GPU pode mostrar 0% até ao passo 4/4)",

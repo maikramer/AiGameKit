@@ -26,24 +26,27 @@ fp16, o componente mais pesado) pode também ser quantizado via SDNQ
 
 Para ícones transparentes (RGBA), o gerador pode aplicar ``rembg`` (U2Net) após
 a inferência, ativado por ``remove_background=True``.
+
+Herda infraestrutura de ``DiffusionGeneratorBase`` (lifecycle, logging, cache,
+multi-GPU, save_image, batch). Mantém apenas a lógica única: arquitetura
+two-model (transformer + pipeline), quantização SDNQ runtime do encoder Gemma
+e do transformer standard, e o pós-processamento de remoção de fundo via rembg.
 """
 
 from __future__ import annotations
 
-import gc
 import os
 import re
-from collections.abc import Callable, Generator
 from typing import Any
 
-import torch
 from PIL import Image
 
-from gamedev_shared.logging import Logger
+from gamedev_shared.base_generator import DiffusionGeneratorBase
 
-from .utils import generate_seed, validate_params, validate_prompt
+# Re-export para backward compat (testes/módulos antigos importam de text2icon.generator).
+from gamedev_shared.base_generator import torch_dtype_for as _torch_dtype_for  # noqa: F401
 
-_logger = Logger()
+from .utils import validate_params, validate_prompt
 
 # Transformer standard (fp16/bf16 nativo, 512px) — default para hardware normal.
 STANDARD_TRANSFORMER_ID = "Efficient-Large-Model/Sana_600M_512px_diffusers"
@@ -84,22 +87,6 @@ def default_model_id() -> str:
     return _transformer_id()
 
 
-def _torch_dtype_for(device: str) -> torch.dtype:
-    """Resolve o dtype torch para o dispositivo pedido.
-
-    Clark Air Sana usa bf16 (formato de exportação); fp32 em CPU.
-    """
-    d = device.lower()
-    if d.startswith("cpu"):
-        return torch.float32
-    if d.startswith("cuda") and torch.cuda.is_available():
-        # Clark Air exportado em bf16 — preferir bf16 quando suportado.
-        if getattr(torch.cuda, "is_bf16_supported", lambda: False)():
-            return torch.bfloat16
-        return torch.float16
-    return torch.float32
-
-
 def augment_prompt_for_icon(prompt: str) -> str:
     """Acrescenta instruções de ícone app-icon automaticamente.
 
@@ -117,8 +104,12 @@ def augment_prompt_for_icon(prompt: str) -> str:
     return f"{BASE_ICON_INSTRUCTIONS}, {p}"
 
 
-class SanaIconGenerator:
-    """Gerador de ícones via Clark Air Sana 1.6B 1.58-bit (drop-in diffusers)."""
+class SanaIconGenerator(DiffusionGeneratorBase):
+    """Gerador de ícones via pipeline Sana (two-model: transformer + pipeline).
+
+    Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
+    _status, _try_multi_gpu, _patch_cross_device, save_image, generate_batch.
+    """
 
     def __init__(
         self,
@@ -131,22 +122,21 @@ class SanaIconGenerator:
         quant_preset: str | None = None,
         transformer_quant_preset: str | None = None,
     ) -> None:
-        self.verbose = verbose
+        super().__init__(
+            device=device,
+            verbose=verbose,
+            model_id=model_id or _transformer_id(),
+            cache_dir=cache_dir,
+            gpu_ids=gpu_ids,
+            memory_efficient=low_vram,
+        )
+        # Text2Icon usa ``low_vram`` (vs ``memory_efficient`` nas outras tools).
         self.low_vram = low_vram
-        self.transformer_id = model_id or _transformer_id()
+
+        # Two-model: o transformer é swappable; o pipeline (VAE + Gemma + scheduler)
+        # é partilhado. ``self.model_id`` (do base) fica = transformer_id para compat.
+        self.transformer_id = self.model_id
         self.pipeline_id = DEFAULT_PIPELINE_ID
-        self.cache_dir = cache_dir
-        self.gpu_ids = gpu_ids
-
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
-
-        self.torch_dtype = _torch_dtype_for(self.device)
-        self._pipe: Any = None
-        self._on_status: Callable[[str], None] | None = None
-        self._multi_gpu: bool = False
 
         # Auto-quantização do Gemma encoder em GPUs modestas (< 8 GB).
         # ``quant_preset`` explícito ganha; ``"none"`` desliga; ``None`` = auto.
@@ -158,7 +148,7 @@ class SanaIconGenerator:
                 if vram_mib and vram_mib < 8192:  # < 8 GB → quantizar encoder
                     self.quant_preset = "sdnq-int4"
                     if self.verbose:
-                        _logger.info(f"auto-quant encoder int4 (VRAM {vram_mib} MiB < 8192)")
+                        self._log(f"auto-quant encoder int4 (VRAM {vram_mib} MiB < 8192)")
                 else:
                     self.quant_preset = None
             except Exception:
@@ -183,7 +173,7 @@ class SanaIconGenerator:
                 else:
                     self.transformer_quant_preset = None
                 if self.verbose and self.transformer_quant_preset:
-                    _logger.info(
+                    self._log(
                         f"auto-quant transformer {self.transformer_quant_preset} (VRAM {vram_mib} MiB)"
                     )
             except Exception:
@@ -196,30 +186,7 @@ class SanaIconGenerator:
             self.transformer_quant_preset = transformer_quant_preset
 
         if self.verbose:
-            _logger.info(f"device={self.device} dtype={self.torch_dtype} transformer={self.transformer_id}")
-
-    def set_status_callback(self, fn: Callable[[str], None] | None) -> None:
-        """Callback opcional (ex. Rich) para mensagens de fase durante o load."""
-        self._on_status = fn
-
-    def _log(self, msg: str) -> None:
-        if self.verbose:
-            _logger.info(msg)
-
-    def _clear_cache(self) -> None:
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    def _status(self, msg: str) -> None:
-        if self._on_status:
-            self._on_status(msg)
-        else:
-            _logger.step(msg)
-
-    def warmup(self) -> None:
-        """Carrega o pipeline (download HF + pesos). Idempotente."""
-        self._load_pipeline()
+            self._log(f"device={self.device} dtype={self.torch_dtype} transformer={self.transformer_id}")
 
     def _maybe_quantize_encoder(self, pipe: Any, preset: str) -> None:
         """Quantiza o text encoder (Gemma 2B) via SDNQ em runtime.
@@ -242,7 +209,7 @@ class SanaIconGenerator:
             return
 
         self._status(f"Quantização SDNQ {preset} do Gemma text encoder (poupa ~2.5 GB)")
-        quant_device = "cuda" if torch.cuda.is_available() else "cpu"
+        quant_device = "cuda" if self.device != "cpu" else "cpu"
         try:
             pipe.text_encoder = quantize_model(encoder, preset, quantization_device=quant_device, return_device="cpu")
             self._log(f"SDNQ {preset} aplicado ao text_encoder")
@@ -271,7 +238,7 @@ class SanaIconGenerator:
             return
 
         self._status(f"Quantização SDNQ {preset} do transformer")
-        quant_device = "cuda" if torch.cuda.is_available() else "cpu"
+        quant_device = "cuda" if self.device != "cpu" else "cpu"
         try:
             pipe.transformer = quantize_model(transformer, preset, quantization_device=quant_device, return_device="cpu")
             self._log(f"SDNQ {preset} aplicado ao transformer")
@@ -332,6 +299,8 @@ class SanaIconGenerator:
 
         # VAE em float32 para estabilidade de decode (referência: app.py Clark Air).
         # O VAE do Sana produz artefactos em bf16/fp16; fp32 garante decode limpo.
+        import torch
+
         pipe.vae.to(torch.float32)
 
         # VAE tiling reduz o pico de VRAM no decode (importante em GPUs modestas).
@@ -353,10 +322,7 @@ class SanaIconGenerator:
 
         # Passo 3: colocação.
         self._clear_cache()
-        if torch.cuda.is_available() and self.device == "cuda":
-            for gid in self.gpu_ids or range(torch.cuda.device_count()):
-                if gid < torch.cuda.device_count():
-                    torch.cuda.reset_peak_memory_stats(gid)
+        self._reset_peak_mem_stats()
 
         if self.device == "cpu":
             mode_label = "cpu"
@@ -384,86 +350,11 @@ class SanaIconGenerator:
                 pipe.enable_model_cpu_offload()
                 did_offload = True
 
-        if torch.cuda.is_available() and self.device == "cuda" and not did_offload:
-            if self._multi_gpu:
-                gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
-                parts = []
-                for gid in gpu_ids:
-                    torch.cuda.synchronize(gid)
-                    alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-                    peak = torch.cuda.max_memory_allocated(gid) / (1024**3)
-                    parts.append(f"cuda:{gid} ~{alloc:.2f} GB (pico ~{peak:.2f} GB)")
-                self._status("Modelo carregado — " + ", ".join(parts))
-            else:
-                torch.cuda.synchronize()
-                alloc = torch.cuda.memory_allocated(0) / (1024**3)
-                peak = torch.cuda.max_memory_allocated(0) / (1024**3)
-                self._status(f"Modelo carregado — VRAM ~{alloc:.2f} GB (pico após load ~{peak:.2f} GB)")
+        if not did_offload:
+            self._report_vram()
 
         self._pipe = pipe
         return pipe
-
-    def _try_multi_gpu(self, pipe: Any) -> bool:
-        """Split ad-hoc: transformer+vae → GPU0, text_encoder → GPU1."""
-        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
-            return False
-
-        gpu_ids = self.gpu_ids
-        if not gpu_ids or len(gpu_ids) < 2:
-            gpu_ids = list(range(torch.cuda.device_count()))
-
-        primary, secondary = gpu_ids[0], gpu_ids[1]
-
-        try:
-            pipe.transformer.to(f"cuda:{primary}")
-            pipe.vae.to(f"cuda:{primary}")
-            pipe.text_encoder.to(f"cuda:{secondary}")
-        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-            self._log(f"Multi-GPU placement falhou ({exc})")
-            return False
-
-        self._patch_cross_device(pipe, primary, secondary)
-
-        for gid in gpu_ids:
-            alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-            self._log(f"  cuda:{gid} — {alloc:.2f} GB alocados")
-
-        self._multi_gpu = True
-        return True
-
-    def _patch_cross_device(self, pipe: Any, primary: int, secondary: int) -> None:
-        primary_dev = f"cuda:{primary}"
-        secondary_dev = f"cuda:{secondary}"
-
-        pipe._text2icon_primary_device = torch.device(primary_dev)
-
-        if not hasattr(pipe, "_orig_encode_prompt"):
-            pipe._orig_encode_prompt = pipe.encode_prompt
-
-        def _patched_encode_prompt(*args: Any, **kwargs: Any) -> Any:
-            kwargs["device"] = secondary_dev
-            result = pipe._orig_encode_prompt(*args, **kwargs)
-            if isinstance(result, torch.Tensor):
-                return result.to(primary_dev)
-            if isinstance(result, (tuple, list)):
-                return type(result)(r.to(primary_dev) if isinstance(r, torch.Tensor) else r for r in result)
-            return result
-
-        pipe.encode_prompt = _patched_encode_prompt
-
-        @property  # type: ignore[misc]
-        def _patched_execution_device(self: Any) -> torch.device:
-            return self._text2icon_primary_device
-
-        pipe.__class__._execution_device = _patched_execution_device
-
-    def unload(self) -> None:
-        """Descarrega o pipeline e liberta VRAM."""
-        if self._pipe is None:
-            return
-        del self._pipe
-        self._pipe = None
-        self._clear_cache()
 
     def generate(
         self,
@@ -500,15 +391,14 @@ class SanaIconGenerator:
         if not is_valid:
             prompt = prompt[:1000]
 
-        if seed is None or seed < 0:
-            seed = generate_seed()
+        resolved_seed = self._resolve_seed(seed)
 
         params = {
             "prompt": prompt,
             "negative_prompt": negative_prompt,
             "guidance_scale": guidance_scale,
             "num_inference_steps": num_inference_steps,
-            "seed": seed,
+            "seed": resolved_seed,
             "width": width,
             "height": height,
             "remove_background": remove_background,
@@ -518,16 +408,7 @@ class SanaIconGenerator:
         if not is_valid:
             raise ValueError(f"Parâmetros inválidos: {error}")
 
-        # Generator
-        if self._multi_gpu and self.gpu_ids:
-            gen_device = f"cuda:{self.gpu_ids[0]}"
-        elif self.device != "cpu":
-            gen_device = "cuda"
-        else:
-            gen_device = "cpu"
-        generator = torch.Generator(device=gen_device)
-        if seed is not None:
-            generator.manual_seed(seed)
+        generator = self._build_generator(resolved_seed)
 
         self._clear_cache()
 
@@ -558,7 +439,7 @@ class SanaIconGenerator:
             image = _rbg(image)
 
         metadata = {
-            "seed": seed,
+            "seed": resolved_seed,
             "prompt_final": prompt,
             "model": self.transformer_id,
             "transformer_quant_preset": self.transformer_quant_preset,
@@ -568,41 +449,3 @@ class SanaIconGenerator:
         }
 
         return image, metadata
-
-    def generate_batch(
-        self,
-        prompts: list[str],
-        base_params: dict[str, Any] | None = None,
-    ) -> Generator[tuple[Image.Image | None, dict[str, Any], int], None, None]:
-        """Gera múltiplos ícones em batch.
-
-        Yields:
-            Tuple (imagem | None, metadata, index).
-        """
-        if base_params is None:
-            base_params = {}
-
-        total = len(prompts)
-        _logger.info(f"Batch: {total} ícones")
-
-        for idx, prompt in enumerate(prompts):
-            try:
-                merged = {**DEFAULT_PARAMS, **base_params}
-                merged.pop("seed", None)
-                merged.pop("prompt", None)
-
-                image, metadata = self.generate(prompt=prompt, **merged)
-                yield image, metadata, idx
-            except Exception as e:
-                _logger.error(f"Erro no ícone {idx + 1}/{total}: {e}")
-                yield None, {"error": str(e), "index": idx}, idx
-
-    @staticmethod
-    def save_image(image: Image.Image, path: Any, image_format: str | None = None) -> Any:
-        """Grava imagem em disco (compatibilidade)."""
-        from pathlib import Path
-
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        image.save(path, format=image_format)
-        return path

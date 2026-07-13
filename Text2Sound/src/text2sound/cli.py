@@ -743,6 +743,39 @@ def generate_cmd(
     item_id = Path(output).stem if output else prompt[:40].replace(" ", "_")
     start = time.time()
 
+    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
+    if output is not None:
+        from gamedev_shared.model_server import delegate_to_ums
+
+        ums_result = delegate_to_ums(
+            "text2sound",
+            {
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "duration": duration,
+                "steps": steps,
+                "cfg_scale": cfg_scale,
+                "seed": effective_seed,
+                "sigma_min": sigma_min,
+                "sigma_max": sigma_max,
+                "sampler_type": sampler,
+                "negative_prompt": effective_negative,
+            },
+        )
+        if ums_result and ums_result.get("status") == "ok":
+            elapsed = time.time() - start
+            try:
+                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
+            except OSError:
+                sz = "?"
+            console.print(
+                f"[bold green]\u2713[/bold green] Áudio: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
+            )
+            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+            return
+        elif ums_result and ums_result.get("status") == "error":
+            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+
     with ProfilerSession(
         "text2sound",
         cli_profile=profiler_flag,
