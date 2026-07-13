@@ -1,3 +1,4 @@
+import { applyHeightBrush, minEffectiveFalloff } from './height-brush';
 import type { HeightSampler } from './height-sampler';
 
 export interface FlattenRectOpts {
@@ -36,51 +37,35 @@ export function flattenRect(
   sampler: HeightSampler,
   opts: FlattenRectOpts
 ): boolean {
-  const { data, width, height, worldSize, maxHeight } = sampler;
-  if (!data || width < 2 || height < 2 || maxHeight <= 0) return false;
-
-  const { centerX, centerZ, targetY, falloff } = opts;
+  const { centerX, centerZ, targetY } = opts;
   const cr = Math.max(0, Math.min(opts.cornerRadius, opts.halfX, opts.halfZ));
   const coreX = Math.max(0.01, opts.halfX - cr);
   const coreZ = Math.max(0.01, opts.halfZ - cr);
-  const fall = Math.max(0.01, falloff);
-
-  const half = worldSize / 2;
-  const stepX = worldSize / (width - 1);
-  const stepZ = worldSize / (height - 1);
+  // Falloff clamped à resolução do sampler (ver height-brush): pads com
+  // falloff menor que o texel produziam degraus/cantos sem blend.
+  const fall = minEffectiveFalloff(sampler, Math.max(0.01, opts.falloff));
 
   const reachX = opts.halfX + fall;
   const reachZ = opts.halfZ + fall;
-  const x0 = Math.max(0, Math.floor((centerX - reachX + half) / stepX));
-  const x1 = Math.min(width - 1, Math.ceil((centerX + reachX + half) / stepX));
-  const z0 = Math.max(0, Math.floor((centerZ - reachZ + half) / stepZ));
-  const z1 = Math.min(height - 1, Math.ceil((centerZ + reachZ + half) / stepZ));
 
-  const target = Math.min(1, Math.max(0, targetY / maxHeight));
-
-  let changed = false;
-  for (let zi = z0; zi <= z1; zi++) {
-    const wz = zi * stepZ - half;
-    for (let xi = x0; xi <= x1; xi++) {
-      const wx = xi * stepX - half;
+  return applyHeightBrush(sampler, {
+    minX: centerX - reachX,
+    maxX: centerX + reachX,
+    minZ: centerZ - reachZ,
+    maxZ: centerZ + reachZ,
+    evalAt(wx, wz) {
       // Signed distance to the rounded-rect core: ≤ 0 inside, grows outward.
       const dx = Math.max(Math.abs(wx - centerX) - coreX, 0);
       const dz = Math.max(Math.abs(wz - centerZ) - coreZ, 0);
       const d = Math.sqrt(dx * dx + dz * dz) - cr;
-      if (d >= fall) continue;
+      if (d >= fall) return null;
       // Blend weight: 1 in the core, smoothstep down to 0 at the falloff edge.
-      let w = 1;
+      let weight = 1;
       if (d > 0) {
         const t = d / fall;
-        w = 1 - t * t * (3 - 2 * t);
+        weight = 1 - t * t * (3 - 2 * t);
       }
-      const i = zi * width + xi;
-      const next = data[i]! + (target - data[i]!) * w;
-      if (next !== data[i]!) {
-        data[i] = next;
-        changed = true;
-      }
-    }
-  }
-  return changed;
+      return { targetY, weight };
+    },
+  });
 }

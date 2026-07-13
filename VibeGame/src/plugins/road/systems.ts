@@ -1,19 +1,30 @@
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { getRapierWorld } from '../physics';
-import { invalidateTerrainBvh } from '../bvh';
 import { getScene, setupCsmMaterials } from '../rendering';
 import { sampleTerrainSurface } from '../spawner/surface';
-import { Terrain, TerrainChunk } from '../terrain/components';
+import { Terrain } from '../terrain/components';
+import { applyOverride } from '../terrain/density-map';
+import { rebuildTerrainDerivatives } from '../terrain/height-brush';
+import { sampleHeightAt } from '../terrain/height-sampler';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
+import { refreshChunkResolutions } from '../terrain/systems';
 import { getTerrainContext } from '../terrain/utils';
+import { Transform, WorldTransform } from '../transforms/components';
 import { carveRoadCorridor } from './carve';
 import { deleteRoadData, getRoadData, Road } from './components';
 import { makeRoadGeometry, resampleRoadPath, smoothPath } from './geometry';
 
 const roadQuery = defineQuery([Road]);
 const terrainQuery = defineQuery([Terrain]);
+
+// Y base do field do terreno (igual ao helper privado do spawner/surface).
+function terrainBaseY(state: State, terrainEntity: number): number {
+  if (state.hasComponent(terrainEntity, WorldTransform)) {
+    return WorldTransform.posY[terrainEntity];
+  }
+  return Transform.posY[terrainEntity];
+}
 
 // Cache de texturas partilhado por URL (mesmo padrão da composition).
 const _loader = new THREE.TextureLoader();
@@ -142,19 +153,40 @@ export const RoadApplySystem: System = {
           const changed = carveRoadCorridor(fd.sampler, {
             path: localPath,
             width,
-            falloff: Road.flattenFalloff[eid] || 2,
-            window: Road.flattenWindow[eid] || 8,
+            falloff: Road.flattenFalloff[eid] || 6,
+            window: Road.flattenWindow[eid] || 24,
           });
-          if (changed) {
-            for (const chunk of fd.chunks) TerrainChunk.meshDirty[chunk] = 1;
-            const world = getRapierWorld(state);
-            if (world) {
-              for (const body of fd.chunkColliders.values())
-                world.removeRigidBody(body);
-              fd.chunkColliders.clear();
+          // Com o corredor esculpido + density boost, os chunks perto do
+          // jogador convergem para a superfície ANALÍTICA do sampler — o
+          // ribbon tem de amostrar essa (não o lattice base, que faz corda
+          // sobre o corredor e desalinha lateralmente em encostas).
+          const baseY = terrainBaseY(state, fe);
+          const ox = fd.worldOffset.x;
+          const oz = fd.worldOffset.z;
+          heightAt = (x, z) =>
+            baseY + sampleHeightAt(fd.sampler, x - ox, z - oz);
+          // Density boost por segmento: SEM isto o carve fica invisível — os
+          // vértices do mesh base distam worldSize/resolution (~15 m) e um
+          // corredor de ~10 m cai ENTRE eles, por isso o mesh renderizado nem
+          // amostrava o corredor esculpido (a estrada aparecia enterrada
+          // apesar do sampler estar correto). Mesmo mecanismo dos lagos/rios.
+          if (fd.density) {
+            const reach = width / 2 + (Road.flattenFalloff[eid] || 6);
+            for (let i = 0; i + 3 < localPath.length; i += 2) {
+              applyOverride(
+                fd.density,
+                {
+                  minX: Math.min(localPath[i]!, localPath[i + 2]!) - reach,
+                  maxX: Math.max(localPath[i]!, localPath[i + 2]!) + reach,
+                  minZ: Math.min(localPath[i + 1]!, localPath[i + 3]!) - reach,
+                  maxZ: Math.max(localPath[i + 1]!, localPath[i + 3]!) + reach,
+                },
+                255
+              );
             }
-            invalidateTerrainBvh(state, fe);
+            refreshChunkResolutions(state, fe, fd);
           }
+          if (changed) rebuildTerrainDerivatives(state, fe, fd);
           break; // só o primeiro field ready (mesmo limite dos pads)
         }
       }

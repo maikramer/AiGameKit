@@ -1,3 +1,4 @@
+import { applyHeightBrush } from '../terrain/height-brush';
 import type { HeightSampler } from '../terrain/height-sampler';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import { pathAabb } from './path-utils';
@@ -120,27 +121,21 @@ export function carveBowl(
   depth: number,
   carveMargin: number = 1.0
 ): boolean {
-  const { data, width, height, worldSize, maxHeight } = sampler;
-  if (!data || width < 2 || height < 2 || maxHeight <= 0) return false;
-
   // The carve can extend past the water disc by `carveMargin` so a beach/margin
   // of exposed basin floor shows between the waterline and the natural terrain.
   const carveR = radius * carveMargin;
+  // O contorno orgânico pode exceder o raio médio em SHORE_SHAPE_AMPLITUDE —
+  // o AABB tem de cobrir o overshoot ou os "cantos" do contorno ficam sem
+  // carve (o clamp antigo cortava exatamente aqui).
+  const reach = carveR * (1 + SHORE_SHAPE_AMPLITUDE);
 
-  const half = worldSize / 2;
-  const stepX = worldSize / (width - 1);
-  const stepZ = worldSize / (height - 1);
-
-  const x0 = Math.max(0, Math.floor((localX - carveR + half) / stepX));
-  const x1 = Math.min(width - 1, Math.ceil((localX + carveR + half) / stepX));
-  const z0 = Math.max(0, Math.floor((localZ - carveR + half) / stepZ));
-  const z1 = Math.min(height - 1, Math.ceil((localZ + carveR + half) / stepZ));
-
-  let changed = false;
-  for (let zi = z0; zi <= z1; zi++) {
-    const wz = zi * stepZ - half;
-    for (let xi = x0; xi <= x1; xi++) {
-      const wx = xi * stepX - half;
+  return applyHeightBrush(sampler, {
+    minX: localX - reach,
+    maxX: localX + reach,
+    minZ: localZ - reach,
+    maxZ: localZ + reach,
+    mode: 'lower',
+    evalAt(wx, wz) {
       const dx = wx - localX;
       const dz = wz - localZ;
       const dist = Math.sqrt(dx * dx + dz * dz);
@@ -149,17 +144,11 @@ export function carveBowl(
       const angle = Math.atan2(dz, dx);
       const effR = carveR * shapeRadius(angle, localX, localZ);
       const t2 = (dist * dist) / (effR * effR);
-      if (t2 >= 1) continue;
+      if (t2 >= 1) return null;
       const bowlY = rimY - depth * Math.pow(1 - t2, BOWL_PROFILE_EXPONENT);
-      const target = Math.min(1, Math.max(0, bowlY / maxHeight));
-      const i = zi * width + xi;
-      if (data[i]! > target) {
-        data[i] = target;
-        changed = true;
-      }
-    }
-  }
-  return changed;
+      return { targetY: bowlY, weight: 1 };
+    },
+  });
 }
 
 /**
@@ -195,30 +184,19 @@ export function carveChannel(
   axisHeights: number[] = [],
   carveMargin: number = 1.0
 ): boolean {
-  const { data, width: gw, height: gh, worldSize, maxHeight } = sampler;
-  if (!data || gw < 2 || gh < 2 || maxHeight <= 0) return false;
-
   // The carve can extend past the water ribbon by `carveMargin` so a bank/margin
   // of exposed channel floor shows between the waterline and the natural terrain.
-  const carveWidth = width * carveMargin;
-
-  const half = worldSize / 2;
-  const stepX = worldSize / (gw - 1);
-  const stepZ = worldSize / (gh - 1);
-  const halfWidth = carveWidth / 2;
+  const halfWidth = (width * carveMargin) / 2;
   const useAxis = axisHeights.length >= path.length / 2;
-
   const aabb = pathAabb(path, halfWidth);
-  const x0 = Math.max(0, Math.floor((aabb.minX + half) / stepX));
-  const x1 = Math.min(gw - 1, Math.ceil((aabb.maxX + half) / stepX));
-  const z0 = Math.max(0, Math.floor((aabb.minZ + half) / stepZ));
-  const z1 = Math.min(gh - 1, Math.ceil((aabb.maxZ + half) / stepZ));
 
-  let changed = false;
-  for (let zi = z0; zi <= z1; zi++) {
-    const wz = zi * stepZ - half;
-    for (let xi = x0; xi <= x1; xi++) {
-      const wx = xi * stepX - half;
+  return applyHeightBrush(sampler, {
+    minX: aabb.minX,
+    maxX: aabb.maxX,
+    minZ: aabb.minZ,
+    maxZ: aabb.maxZ,
+    mode: 'lower',
+    evalAt(wx, wz) {
       // nearest segment: track distance AND the parametric `t` (for axis lookup).
       let best = Infinity;
       let bestSeg = 0;
@@ -243,7 +221,7 @@ export function carveChannel(
         }
       }
       const tLat = best / halfWidth;
-      if (tLat >= 1) continue;
+      if (tLat >= 1) return null;
       // Axis height: interpolate between the two nodes of the nearest segment
       // using the pre-sampled (stable) axis heights, or fall back to the rim.
       const nodeIdx = bestSeg / 2;
@@ -253,15 +231,9 @@ export function carveChannel(
         : _rimY;
       const floorY =
         axisY - depth * Math.pow(1 - tLat * tLat, BOWL_PROFILE_EXPONENT);
-      const target = Math.min(1, Math.max(0, floorY / maxHeight));
-      const idx = zi * gw + xi;
-      if (data[idx]! > target) {
-        data[idx] = target;
-        changed = true;
-      }
-    }
-  }
-  return changed;
+      return { targetY: floorY, weight: 1 };
+    },
+  });
 }
 
 export interface RiverCarveOpts {
