@@ -90,10 +90,21 @@ const prevInteract = new Map<number, number>();
 // matching clip, falling back to a generic 'attack' swing.
 let attackClipHint: string | null = null;
 
+// Context hint for the idle clip: when the hero has a weapon/tool equipped, the
+// game sets a keyword (e.g. 'swordidle', 'axeidle') to use a combat-guard idle
+// instead of the default relaxed idle. null = use default idle.
+let idleClipHint: string | null = null;
+
 /** Choose which attack animation the player plays next (by keyword). Pass null
  * to fall back to the generic attack/swing clip. */
 export function setPlayerAttackClip(hint: string | null): void {
   attackClipHint = hint;
+}
+
+/** Override the idle clip (e.g. 'swordidle' for a combat-guard stance when a
+ * weapon is equipped). Pass null to revert to the default idle. */
+export function setPlayerIdleClip(hint: string | null): void {
+  idleClipHint = hint;
 }
 
 // ── Held item (weapon/tool in the hand) ──────────────────────────────────────
@@ -567,8 +578,14 @@ export const PlayerGltfAnimStateSystem: System = {
         let clip = run ? loco.run : loco.walk;
         if (moveY < 0 && loco.back) clip = loco.back; // walking backward
         if (clip && animator.activeClipName !== clip) animator.play(clip);
-      } else if (loco.idle && animator.activeClipName !== loco.idle) {
-        animator.play(loco.idle);
+      } else {
+        // Idle — use a combat-guard idle when a weapon is equipped (idleClipHint),
+        // falling back to the default relaxed idle.
+        const idleClip =
+          (idleClipHint && findClip(animator, idleClipHint)) || loco.idle;
+        if (idleClip && animator.activeClipName !== idleClip) {
+          animator.play(idleClip);
+        }
       }
 
       // Match gait cadence to the actual horizontal speed: the walk/run clips

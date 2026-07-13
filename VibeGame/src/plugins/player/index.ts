@@ -4,6 +4,7 @@ export { PlayerPlugin } from './plugin';
 export { playerGltfRecipe, playerRecipe } from './recipes';
 export {
   setPlayerAttackClip,
+  setPlayerIdleClip,
   setPlayerHeldItem,
   setPlayerFaceTarget,
 } from './gltf-systems';
