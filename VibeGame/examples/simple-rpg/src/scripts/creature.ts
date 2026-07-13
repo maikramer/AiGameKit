@@ -65,6 +65,10 @@ export interface CreatureClips {
   death: string;
   /** Optional intro roar clip (boss). */
   roar?: string;
+  /** Optional hit reaction clip (played when taking damage). */
+  hit?: string;
+  /** Optional attack clip (played during the attack swing between lunges). */
+  attack?: string;
 }
 
 export interface CreatureConfig {
@@ -132,6 +136,8 @@ interface PresentationState {
   healthBarFill: THREE.Mesh | null;
   deathHandled: boolean;
   deathTimer: number;
+  /** Hit-reaction countdown: plays the hit clip, then returns to AI clip. */
+  hitTimer: number;
   /** Gate: false while dormant (boss waiting), true once activated. */
   activated: boolean;
   /** Intro-roar countdown (holds still, plays roar clip). */
@@ -357,11 +363,11 @@ export function createCreatureBehaviours(
 
   function pickClip(mode: number, moving: boolean): string {
     // Only the actual lunge burst plays the lunge clip; while waiting between
-    // swings (ATTACK) we hold idle so the rig doesn't freeze on the lunge's
-    // clamped last frame (the "stuck head-down" pose).
+    // swings (ATTACK) we play the attack clip if available (windup/recover),
+    // otherwise idle so the rig doesn't freeze on the lunge's clamped last frame.
     if (mode === AI_MODE_LUNGE) return cfg.clips.lunge;
     if (mode === AI_MODE_CHASE) return cfg.clips.run;
-    if (mode === AI_MODE_ATTACK) return cfg.clips.idle;
+    if (mode === AI_MODE_ATTACK) return cfg.clips.attack ?? cfg.clips.idle;
     return moving ? cfg.clips.walk : cfg.clips.idle;
   }
 
@@ -384,6 +390,7 @@ export function createCreatureBehaviours(
         healthBarFill: null,
         deathHandled: false,
         deathTimer: 0,
+        hitTimer: 0,
         activated: !cfg.gateUntil,
         roarTimer: 0,
       };
@@ -490,16 +497,23 @@ export function createCreatureBehaviours(
         s.ready = true;
       }
 
-      // Hit flash on HP drop (damage numbers/SFX come from main.ts watcher).
+      // Hit flash + hit-reaction clip on HP drop (damage numbers/SFX come from main.ts watcher).
       if (s.flashTimer > 0) {
         s.flashTimer -= dt;
         if (s.flashTimer <= 0) applyFlash(s, false);
       }
+      if (s.hitTimer > 0) s.hitTimer -= dt;
       const hp = Health.current[eid];
       if (s.lastHp > hp) {
         collectFlashMats(s);
         s.flashTimer = 0.11;
         applyFlash(s, true);
+        // Play hit-reaction clip if available (brief stagger, then AI resumes).
+        if (cfg.clips.hit && s.animator && mode !== AI_MODE_DEAD) {
+          s.hitTimer = 0.35;
+          s.animator.play(cfg.clips.hit, { loop: false });
+          s.playing = cfg.clips.hit;
+        }
         spawnParticleBurst(ctx.state, {
           x: Transform.posX[eid],
           y: Transform.posY[eid] + 1.0,
@@ -550,11 +564,20 @@ export function createCreatureBehaviours(
       if (inCombat) aggroEntities.add(eid);
       else aggroEntities.delete(eid);
 
-      const clip = pickClip(mode, moveSpeed > 0.3);
+      // Clip selection: hit-reaction takes priority (brief stagger).
+      // Then AI mode picks the locomotion/combat clip.
+      let clip: string;
+      if (s.hitTimer > 0 && cfg.clips.hit) {
+        clip = cfg.clips.hit;
+      } else {
+        clip = pickClip(mode, moveSpeed > 0.3);
+      }
       if (s.animator && s.playing !== clip) {
         s.animator.play(
           clip,
-          clip === cfg.clips.lunge ? { loop: false } : undefined
+          clip === cfg.clips.lunge || clip === cfg.clips.hit
+            ? { loop: false }
+            : undefined
         );
         s.playing = clip;
       }

@@ -44,6 +44,7 @@ import {
   addInputMapping,
   isKeyDown,
   setPlayerAttackClip,
+  setPlayerIdleClip,
   setPlayerHeldItem,
   setPlayerFaceTarget,
   attachHeldItem,
@@ -613,6 +614,10 @@ const AttackContextSystem: System = {
           : 'mine'
         : WEAPON_CLIPS[weaponIdx];
     setPlayerAttackClip(clip);
+    // Combat-guard idle: when a weapon/tool is equipped, use the matching guard
+    // stance (swordidle/axeidle/…) instead of the default relaxed idle. Reverts
+    // to the default idle when no weapon is equipped (e.g. bomb-only).
+    setPlayerIdleClip(clip ? `${clip}idle` : null);
     // Show the matching model in hand (unless the bomb-aim owns the hand).
     if (!bombAiming) {
       const url = HELD_MODEL[clip] ?? null;
@@ -1257,4 +1262,3 @@ if (import.meta.hot) {
     }
   });
 }
-
