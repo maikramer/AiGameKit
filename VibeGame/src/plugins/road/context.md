@@ -34,9 +34,12 @@ espremida, seja qual for a largura ou o traçado.
 | `edge-noise`        | `0.45`  | Ruído que corrói a borda para dentro (m). Determinístico.        |
 | `end-feather-start` | `2`     | Fade na ponta inicial (m). `0` = sólida (enterrar sob uma praça).|
 | `end-feather-end`   | `2`     | Fade na ponta final (m).                                         |
-| `y-offset`          | `0.06`  | Elevação acima da superfície (m).                                |
+| `y-offset`          | `0.12`  | Elevação acima da superfície (m).                                |
 | `station-spacing`   | `1.5`   | Espaçamento das estações do ribbon (m).                          |
 | `smoothing`         | `2`     | Iterações Chaikin (0 = cantos vivos).                            |
+| `flatten`           | `false` | `true`/`1` = aplaina um corredor no terreno (corte+aterro) ao longo do path. |
+| `flatten-falloff`   | `2`     | Blend lateral do corredor de volta ao relevo natural (m).        |
+| `flatten-window`    | `8`     | Janela da média móvel do perfil longitudinal do corredor (m).    |
 | `opacity`           | `1`     | Opacidade global.                                                |
 | `roughness`/`metalness` | `1`/`0` | PBR do material.                                           |
 | `texture-url` / `normal-map-url` / `roughness-map-url` | — | Texturas (cache por URL). |
@@ -51,16 +54,48 @@ espremida, seja qual for a largura ou o traçado.
   `[0,1,1,0]` no atributo `color` RGBA (vertex alpha nativo do three — **sem
   onBeforeCompile**, sobrevive ao patch de CSM). `edge-noise` corrói a borda
   para dentro com value-noise 1D ao longo do arco, lados independentes.
-- **Terreno**: constrói depois de `TerrainPadApplySystem`, quando
-  `sampleTerrainSurface` responde (heightmap decodificado + pads/carves
-  aplicados) — cada vértice amostra a superfície LOD renderizada
-  (`sampleMeshSurfaceHeight`), não a analítica, para não flutuar (ver memória
-  spawn-lod-anchor). Sem `<Terrain>` no mundo, constrói plano a y=0.
+- **Terreno**: constrói depois de `TerrainPadApplySystem`, quando o heightmap
+  está decodificado (`initialized && sampler.data` — antes disso o sampler é
+  flat e a estrada ficaria enterrada) — cada vértice amostra a superfície LOD
+  renderizada (`sampleMeshSurfaceHeight`), não a analítica. A altura por
+  vértice é o **máximo** de uma vizinhança de meio-passo: o ribbon é plano
+  entre estações e os triângulos do terreno têm ~15 m — sem isto, cristas
+  convexas ("morrinhos") entre estações cortavam a estrada por cima
+  (descontinuidade). Sem `<Terrain>` no mundo, constrói plano a y=0.
 - **Junções**: `end-feather-*="0"` deixa a ponta sólida — estender o path até
   DENTRO do núcleo opaco de uma praça/`<Pad>` liga os dois sem costura
   translúcida.
 - Decal puro: sem colisor, `castShadow=false`, `depthWrite=false`,
   `polygonOffset`. Cleanup por sidecar + `state.onDestroy` (eids reciclados).
+
+## Carve (corredor)
+
+`flatten="true"` aplaina um corredor no terreno ao longo do path, em ambas
+as direções (corta morros e aterra vales), como estradas reais — corte e
+aterro. O carve corre **dentro** do `RoadApplySystem`, **antes** do ribbon
+amostrar a superfície: muta o `HeightSampler` do terreno (a fonte analítica
+que todos consomem) e reconstrói as derivadas (chunks dirty, colliders,
+BVH). O ribbon já amostra as alturas pós-carve no mesmo frame, porque
+`sampleTerrainSurface` lê o sampler diretamente (não o mesh remeshed — o
+remesh acontece no grupo `'draw'`, mais tarde no frame, mas é irrelevante
+porque ninguém nesta cadeia lê o mesh, só o sampler).
+
+Sem o carve, os chunks LOD grosseiros do terreno (~15 m por triângulo) fazem
+"corda" por cima das depressões e nenhum offset fixo do ribbon cobre todos
+os LODs — o "morrinho" que corta a estrada por cima. O carve resolve na
+fonte: o corredor fica nivelado no sampler, todos os LODs renderizam a
+estrada plana.
+
+- **Perfil longitudinal**: média móvel triangular das alturas originais ao
+  longo do arco do path, com janela `flatten-window` (default 8 m). Suaviza
+  cristas/depressões pontuais sem achatar todo o relevo.
+- **Falloff lateral**: dentro da `width` o terreno fica ao nível do perfil;
+  entre `width` e `width + 2×flatten-falloff` há um smoothstep de volta ao
+  relevo natural — transição sem degrau.
+- Opt-in: `flatten` é `0` por defeito. Sem `flatten`, a estrada é um decal
+  puro sobre a superfície original (comportamento anterior).
+- Mesmo contrato dos `<Pad>`/lagos/rios: muta o `sampler.data` in place,
+  marca `TerrainChunk.meshDirty`, remove `chunkColliders`, invalida o BVH.
 
 ## Gotchas
 
