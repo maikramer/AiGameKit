@@ -14,6 +14,7 @@ export {
 } from './group-registry';
 export {
   buildPrimitiveMesh,
+  computePadAlphaData,
   getCompositionData,
   isPrimitiveTag,
   parsePrimitiveSpec,

@@ -460,17 +460,30 @@
 
       <!-- §4.3b Vias empedradas: praça central + 4 estradas cardeais até
            os portões. Puramente decorativo (collider=none) — organiza
-           visualmente a cidade sem interferir com a navegação/NavMesh. -->
+           visualmente a cidade sem interferir com a navegação/NavMesh.
+           Primitiva <Pad> da engine: decal de chão com alphaMap procedural
+           (SDF rounded-rect) — edge-feather desvanece a borda em metros,
+           corner-radius arredonda os cantos e edge-noise corrói a orla com
+           ruído orgânico (calçada gasta), tudo seamless com a relva. -->
       <Composition
         place="at: 0 0; align-to-terrain: 0"
         body="fixed"
         collider="none"
       >
-        <Box pos="0 0.025 0" size="13 0.05 13" texture-url="/assets/textures/mountain_stone.png" texture-repeat="10 10" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
-        <Box pos="0 0.03 14.25" size="3 0.06 15.5" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 16" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
-        <Box pos="0 0.03 -14.25" size="3 0.06 15.5" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 16" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
-        <Box pos="14.25 0.03 0" size="15.5 0.06 3" texture-url="/assets/textures/mountain_stone.png" texture-repeat="16 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
-        <Box pos="-14.25 0.03 0" size="15.5 0.06 3" texture-url="/assets/textures/mountain_stone.png" texture-repeat="16 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+        <!-- Praça central: cantos arredondados + fade largo -->
+        <Pad pos="0 0.03 0" size="16 16" corner-radius="5" edge-feather="2.2" edge-noise="0.55" texture-url="/assets/textures/cobblestone_road.png" texture-repeat="12 12" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
+
+        <!-- Estrada SUL (para portão sul + ponte) -->
+        <Pad pos="0 0.025 15" size="5.4 18" edge-feather="1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-repeat="4 13.5" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
+
+        <!-- Estrada NORTE -->
+        <Pad pos="0 0.025 -15" size="5.4 18" edge-feather="1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-repeat="4 13.5" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
+
+        <!-- Estrada ESTE -->
+        <Pad pos="15 0.025 0" size="18 5.4" edge-feather="1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-repeat="13.5 4" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
+
+        <!-- Estrada OESTE -->
+        <Pad pos="-15 0.025 0" size="18 5.4" edge-feather="1.1" edge-noise="0.45" texture-url="/assets/textures/cobblestone_road.png" texture-repeat="13.5 4" normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"></Pad>
       </Composition>
 
       <!-- §4.4 Casas nos cantos diagonais (deixam os corredores cardeais

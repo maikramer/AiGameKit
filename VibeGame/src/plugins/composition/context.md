@@ -1,7 +1,7 @@
 # Composition
 
 Plugin que permite compor **uma única entidade ECS** a partir de múltiplas
-primitivas (Box/Sphere/Cylinder/Plane) aninhadas como filhos XML — produzindo
+primitivas (Box/Sphere/Cylinder/Plane/Pad) aninhadas como filhos XML — produzindo
 1 entidade + 1 `THREE.Group` + N meshes + 1 `RigidBody` Rapier com **N colisores
 compostos** (um por primitiva). Substitui o padrão de N `<GameObject>` separados
 para estruturas semânticas (cabanas, muros, plataformas).
@@ -64,6 +64,45 @@ Semântica de `size` por tipo:
 - **Sphere**: `raio` (1 valor) ou `raio raio raio` (usa o primeiro como raio)
 - **Cylinder**: `raioTopo raioBase altura`
 - **Plane**: `largura altura` (double-sided; colisor = slab fino)
+- **Pad**: `largura profundidade` (2 valores, plano X×Z) ou `largura _ profundidade`
+
+## Pad — decal de chão com bordas seamless
+
+`<Pad>` é um plano deitado no XZ (normal +Y) pensado para calçadas, praças e
+estradas sobre terreno: em vez de empilhar Boxes com `opacity` crescente, o
+material recebe um **alphaMap procedural** (SDF de retângulo arredondado) que
+desvanece a borda para o terreno sem degraus retangulares.
+
+| Atributo        | Default | Descrição                                                        |
+| --------------- | ------- | ---------------------------------------------------------------- |
+| `edge-feather`  | `0.8`   | Metros de fade de alpha da borda para dentro (`0` = borda dura). |
+| `corner-radius` | `0`     | Raio em metros dos cantos arredondados.                          |
+| `edge-noise`    | `0`     | Amplitude em metros de ruído que corrói a borda para DENTRO (calçada gasta). Determinístico (seed = posição). |
+
+```html
+<!-- Praça com cantos redondos + estrada, seamless com a relva -->
+<Composition place="at: 0 0" body="fixed" collider="none">
+  <Pad pos="0 0.03 0" size="16 16" corner-radius="5" edge-feather="2.2" edge-noise="0.55"
+       texture-url="/assets/textures/cobblestone.png" texture-repeat="12 12"></Pad>
+  <Pad pos="0 0.025 15" size="5.4 18" edge-feather="1.1" edge-noise="0.45"
+       texture-url="/assets/textures/cobblestone.png" texture-repeat="4 13.5"></Pad>
+</Composition>
+```
+
+Notas:
+
+- **Coerência de escala**: `texture-repeat` não acompanha o `size` — manter a
+  densidade (tiles/metro) igual entre pads vizinhos (ex.: `0.75/m` ⇒ pad de
+  16 m usa repeat 12, estrada de 5.4 m usa 4), senão as pedras mudam de tamanho
+  entre a praça e a estrada.
+- O feather consome largura útil dos dois lados: núcleo opaco =
+  `largura − 2×(edge-feather + ~edge-noise/2)`. Estradas estreitas precisam de
+  feather menor.
+- O alphaMap é gerado por `computePadAlphaData` (puro, testável sem GPU) e não
+  usa `onBeforeCompile` — sobrevive ao patch de CSM (`setupCsmMaterial`).
+- Pad não projeta sombra (`castShadow=false`), recebe sombra, usa
+  `polygonOffset` e `depthWrite=false`; com `edge-feather="0"` e sem
+  noise/radius fica opaco (sem alphaMap).
 
 ## Filhos não-primitivos
 
