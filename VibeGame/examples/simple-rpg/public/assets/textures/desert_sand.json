@@ -1,18 +1,10 @@
 {
-  "timestamp": 1783571010.341331,
-  "prompt": "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture, large area coverage, not macro, not close-up. seamless tileable texture, golden desert sand with small rocks and cracks",
-  "params": {
-    "seed": 544012412,
-    "prompt_final": "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture, large area coverage, not macro, not close-up. seamless tileable texture, golden desert sand with small rocks and cracks",
-    "prompt": "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture, large area coverage, not macro, not close-up. seamless tileable texture, golden desert sand with small rocks and cracks",
-    "negative_prompt": "rocks, grass, water, artificial, macro, close-up, individual blades, extreme detail, 3d relief, strong directional shadows, depth, isometric, perspective, angled, side view, oblique, baked shadows, ambient occlusion, high contrast, 3d, pbr",
-    "guidance_scale": 4.0,
-    "num_inference_steps": 32,
-    "width": 1024,
-    "height": 1024,
-    "cfg_scale": 4.0,
-    "lora_strength": 1.0
-  },
-  "image_path": "/tmp/textures_v2/desert_sand.png",
-  "filename": "desert_sand.png"
+  "prompt": "seamless tileable texture, golden desert sand with small rocks and cracks, wind-rippled dune sand, dry arid ground, top-down flat view, game asset",
+  "negative_prompt": "rocks, grass, water, snow, seams, borders",
+  "width": 1024,
+  "height": 1024,
+  "steps": 28,
+  "guidance": 3.5,
+  "seed": 3144367777,
+  "regenerated_at": "2026-07-12 01:55:42"
 }

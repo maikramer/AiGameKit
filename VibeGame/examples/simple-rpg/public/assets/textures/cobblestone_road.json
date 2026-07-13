@@ -1,0 +1,10 @@
+{
+  "prompt": "seamless tileable texture, medieval cobblestone road, grey rounded paving stones, packed earth between stones, weathered surface, worn footsteps path, flat top-down view, high detail game asset",
+  "negative_prompt": "grass, modern, asphalt, bricks pattern too uniform, seams, borders, frame, blurry",
+  "width": 1024,
+  "height": 1024,
+  "steps": 28,
+  "guidance": 3.5,
+  "seed": 3870906584,
+  "regenerated_at": "2026-07-12 22:22:55"
+}
