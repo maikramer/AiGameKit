@@ -178,7 +178,7 @@
     "howler": "^2.2.4",
     "maath": "^0.10.8",
     "msgpackr": "^2.0.4",
-    "n8ao": "^1.10.2",
+    "n8ao": "^2.0.0",
     "postprocessing": "6.39.2",
     "recast-navigation": "^0.43.1",
     "simplex-noise": "^4.0.3",
