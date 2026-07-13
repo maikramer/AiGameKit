@@ -108,7 +108,7 @@ class SanaIconGenerator(DiffusionGeneratorBase):
     """Gerador de ícones via pipeline Sana (two-model: transformer + pipeline).
 
     Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
-    _status, _try_multi_gpu, _patch_cross_device, save_image, generate_batch.
+    _status, _place_with_planner, save_image, generate_batch.
     """
 
     def __init__(
@@ -173,13 +173,9 @@ class SanaIconGenerator(DiffusionGeneratorBase):
                 else:
                     self.transformer_quant_preset = None
                 if self.verbose and self.transformer_quant_preset:
-                    self._log(
-                        f"auto-quant transformer {self.transformer_quant_preset} (VRAM {vram_mib} MiB)"
-                    )
+                    self._log(f"auto-quant transformer {self.transformer_quant_preset} (VRAM {vram_mib} MiB)")
             except Exception:
-                self.transformer_quant_preset = (
-                    transformer_quant_preset if transformer_quant_preset != "auto" else None
-                )
+                self.transformer_quant_preset = transformer_quant_preset if transformer_quant_preset != "auto" else None
         elif transformer_quant_preset == "none" or is_ternary:
             self.transformer_quant_preset = None
         else:
@@ -240,7 +236,9 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         self._status(f"Quantização SDNQ {preset} do transformer")
         quant_device = "cuda" if self.device != "cpu" else "cpu"
         try:
-            pipe.transformer = quantize_model(transformer, preset, quantization_device=quant_device, return_device="cpu")
+            pipe.transformer = quantize_model(
+                transformer, preset, quantization_device=quant_device, return_device="cpu"
+            )
             self._log(f"SDNQ {preset} aplicado ao transformer")
         except Exception as exc:
             self._log(f"quantização do transformer falhou ({exc}); fica em fp16/bf16")
@@ -320,38 +318,34 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         if self.quant_preset and self.device != "cpu":
             self._maybe_quantize_encoder(pipe, self.quant_preset)
 
-        # Passo 3: colocação.
+        # Passo 3: colocação unificada via planner (multi-GPU / group offload / full-GPU).
         self._clear_cache()
         self._reset_peak_mem_stats()
+        self._status("Passo 3/3 — colocação via planner")
 
-        if self.device == "cpu":
-            mode_label = "cpu"
-        elif self.low_vram:
-            mode_label = f"{self.device} (cpu_offload — módulos migram 1 a 1)"
-        else:
-            mode_label = self.device
-        self._status(f"Passo 3/3 — a mover o pipeline para {mode_label}")
+        from gamedev_shared.lowvram import get_footprint
 
-        did_offload = False
-        if self.device == "cpu":
-            pipe.to("cpu")
-        elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
-            self._status("Modelo carregado — split multi-GPU")
-        elif self.low_vram:
-            pipe.enable_model_cpu_offload()
-            did_offload = True
-        else:
-            # Tentar full-GPU; se estourar VRAM, cair para CPU offload (rede de segurança).
-            try:
-                pipe.to(self.device)
-            except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-                self._log(f"pipe.to({self.device}) OOM ({exc}); fallback para CPU offload")
-                self._clear_cache()
-                pipe.enable_model_cpu_offload()
-                did_offload = True
+        # Footprint: se SDNQ foi aplicado (quant_preset/transformer_quant_preset),
+        # o modelo é menor. Usar allow_quant=("none",) para não duplicar redução.
+        quantized = bool(self.quant_preset or self.transformer_quant_preset)
+        footprint = get_footprint("sana-sprint-600m")
+        if quantized:
+            # Modelo já quantizado (int4/uint8) — footprint real é menor.
+            from gamedev_shared.lowvram import ModelFootprint
 
-        if not did_offload:
-            self._report_vram()
+            footprint = ModelFootprint(
+                fp16_weights_gib=footprint.weights_gib("sdnq-int4"),
+                activation_gib=1.5,
+                largest_module_gib=footprint.largest_gib("sdnq-int4"),
+                architecture="sana",
+            )
+
+        self._place_with_planner(
+            pipe,
+            footprint,
+            allow_quant=("none",),
+            model_attr="transformer",
+        )
 
         self._pipe = pipe
         return pipe

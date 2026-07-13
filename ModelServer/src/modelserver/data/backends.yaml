@@ -6,6 +6,9 @@
 #
 # vram_mib: estimativa do footprint em VRAM quando carregado (MiB). Valores
 #   derivados de profiling/números de modelo — afinar com medição real.
+# footprint_key: chave do registry gamedev_shared.lowvram.FOOTPRINTS (ex:
+#   "flux-klein-9b"). Se definida, o vram_mib do snapshot é derivado do footprint
+#   (mais preciso que o valor estático, reflecte quantização/offload real).
 # priority: prioridade de evicção. Valores MAIORES = mais pesado/urgente de MANTER
 #   carregado (menos provável de ser evicted). Backends leves (priority baixa)
 #   são evicted primeiro quando a VRAM escasseia. Tie-break: LRU.
@@ -18,6 +21,7 @@ backends:
   - name: text2icon
     adapter: modelserver.adapters.text2icon
     vram_mib: 3000
+    footprint_key: sana-sprint-600m
     priority: 20
 
   - name: texture2d
@@ -28,21 +32,25 @@ backends:
   - name: text2d
     adapter: modelserver.adapters.text2d
     vram_mib: 4500
+    footprint_key: flux-klein-9b
     priority: 25
 
   - name: skymap2d
     adapter: modelserver.adapters.skymap2d
     vram_mib: 7000
+    footprint_key: flux-dev-uint4
     priority: 25
 
   - name: text3d
     adapter: modelserver.adapters.text3d
     vram_mib: 8000
+    footprint_key: hunyuan3d-2.1-dit
     priority: 40
 
   - name: paint3d
     adapter: modelserver.adapters.paint3d
     vram_mib: 4000
+    footprint_key: hunyuan-paint
     priority: 40
 
   - name: part3d
@@ -53,6 +61,7 @@ backends:
   - name: text2sound
     adapter: modelserver.adapters.text2sound
     vram_mib: 5000
+    footprint_key: stable-audio-open
     priority: 30
 
   - name: terrain3d

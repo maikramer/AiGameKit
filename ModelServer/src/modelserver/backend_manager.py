@@ -107,13 +107,31 @@ class BackendManager:
         if state is None or state.model is None:
             return None
         desc = self._registry.descriptor(name)
+        # Se o backend tem footprint_key, derivar vram_mib do footprint (mais preciso
+        # que o valor estático do YAML — reflecte quantização/offload real).
+        vram_mib = desc.vram_mib
+        if desc.footprint_key:
+            vram_mib = self._footprint_vram_mib(desc.footprint_key, desc.vram_mib)
         return LoadedBackend(
             name=name,
-            vram_mib=desc.vram_mib,
+            vram_mib=vram_mib,
             priority=desc.priority,
             ref_count=state.ref_count,
             last_used=state.last_used,
         )
+
+    @staticmethod
+    def _footprint_vram_mib(footprint_key: str, fallback_mib: int) -> int:
+        """Deriva o VRAM (MiB) do footprint registry; fallback se indisponível."""
+        try:
+            from gamedev_shared.lowvram import get_footprint
+
+            fp = get_footprint(footprint_key)
+            # Pico ≈ pesos fp16 + ativação (sem quantização/offload — caso worst-case
+            # para eviction: liberta o máximo possível). Converte GiB → MiB.
+            return int((fp.fp16_weights_gib + fp.activation_gib) * 1024)
+        except Exception:
+            return fallback_mib
 
     def _all_snapshots(self) -> list[LoadedBackend]:
         snaps: list[LoadedBackend] = []

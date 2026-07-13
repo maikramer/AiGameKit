@@ -207,82 +207,10 @@ class DiffusionGeneratorBase(ABC):
     # ------------------------------------------------------------------
     # Multi-GPU placement
     # ------------------------------------------------------------------
-
-    def _try_multi_gpu(self, pipe: Any) -> bool:
-        """Tenta colocar o pipeline split entre 2 GPUs (transformer+vae / encoders).
-
-        .. deprecated::
-            Substituído por :func:`~gamedev_shared.lowvram.apply_multi_gpu` (accelerate
-            dispatch), chamado automaticamente por :meth:`_place_with_planner` quando o
-            planner recomenda multi-GPU. Mantido para compatibilidade (Text2Icon ainda
-            chama diretamente). Novo código deve usar ``_place_with_planner``.
-
-        Retorna ``True`` se conseguiu, ``False`` se falhou (OOM ou <2 GPUs).
-        Lida com pipelines que têm ``text_encoder_2`` opcional (FLUX).
-        """
-        torch = _torch()
-        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
-            return False
-
-        gpu_ids = self.gpu_ids
-        if not gpu_ids or len(gpu_ids) < 2:
-            gpu_ids = list(range(torch.cuda.device_count()))
-
-        primary, secondary = gpu_ids[0], gpu_ids[1]
-
-        try:
-            pipe.transformer.to(f"cuda:{primary}")
-            pipe.vae.to(f"cuda:{primary}")
-            pipe.text_encoder.to(f"cuda:{secondary}")
-            # FLUX tem text_encoder_2; Sana/Klein não. hasattr evita AttributeError.
-            if hasattr(pipe, "text_encoder_2") and pipe.text_encoder_2 is not None:
-                pipe.text_encoder_2.to(f"cuda:{secondary}")
-        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-            self._log(f"Multi-GPU placement falhou ({exc})")
-            return False
-
-        self._patch_cross_device(pipe, primary, secondary)
-
-        for gid in gpu_ids:
-            alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-            self._log(f"  cuda:{gid} — {alloc:.2f} GB alocados")
-
-        self._multi_gpu = True
-        return True
-
-    def _patch_cross_device(self, pipe: Any, primary: int, secondary: int) -> None:
-        """Patches o pipeline para que encode_prompt corra na GPU secundária.
-
-        Necessário porque o diffusers não suporta nativamente pipelines split
-        entre GPUs para o encode_prompt. O patch redireciona a chamada para a
-        GPU secundária e traz o resultado de volta para a primária.
-        """
-        torch = _torch()
-        primary_dev = f"cuda:{primary}"
-        secondary_dev = f"cuda:{secondary}"
-
-        # Attr unificado (antes cada tool tinha o seu: _text2d_, _texture2d_, etc.)
-        pipe._primary_device = torch.device(primary_dev)
-
-        if not hasattr(pipe, "_orig_encode_prompt"):
-            pipe._orig_encode_prompt = pipe.encode_prompt
-
-        def _patched_encode_prompt(*args: Any, **kwargs: Any) -> Any:
-            kwargs["device"] = secondary_dev
-            result = pipe._orig_encode_prompt(*args, **kwargs)
-            if isinstance(result, torch.Tensor):
-                return result.to(primary_dev)
-            if isinstance(result, (tuple, list)):
-                return type(result)(r.to(primary_dev) if isinstance(r, torch.Tensor) else r for r in result)
-            return result
-
-        pipe.encode_prompt = _patched_encode_prompt
-
-        @property  # type: ignore[misc]
-        def _patched_execution_device(self: Any) -> Any:
-            return self._primary_device
-
-        pipe.__class__._execution_device = _patched_execution_device
+    # NOTA: O split multi-GPU manual (_try_multi_gpu + _patch_cross_device) foi
+    # removido. Agora é tratado pelo planner unificado via accelerate
+    # (apply_multi_gpu em lowvram.py), chamado automaticamente por
+    # _place_with_planner quando o plano recomenda multi-GPU.
 
     # ------------------------------------------------------------------
     # Group Offloading com CUDA Streams

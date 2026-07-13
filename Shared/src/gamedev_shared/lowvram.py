@@ -99,6 +99,8 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "hunyuan3d-2.1-dit": ModelFootprint(6.5, 1.5, 5.0, architecture="hunyuan3d"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
     "stable-audio-open": ModelFootprint(3.5, 1.5, 2.0, architecture="stable-audio"),
+    # Sana Sprint 600M transformer + Gemma 2B encoder (~7.3 GiB fp16 total).
+    "sana-sprint-600m": ModelFootprint(7.3, 1.5, 3.0, architecture="sana"),
 }
 
 # Footprint genérico de fallback (modelo médio ~8 GiB) quando a chave é desconhecida.

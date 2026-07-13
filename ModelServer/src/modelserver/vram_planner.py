@@ -45,6 +45,13 @@ def plan_eviction(
 ) -> list[str]:
     """Planear quais backends evictar para libertar ``needed_mib`` MiB.
 
+    Footprint-aware: cada backend sabe quanto VRAM liberta (``vram_mib``, derivado
+    do footprint registry quando disponível). A seleção minimiza a "prioridade
+    perdida" ordenando por **efficiency** = ``vram_mib / max(priority, 1)`` — i.e.
+    evicta primeiro os backends que libertam mais VRAM por unidade de prioridade.
+    Tie-break: LRU (``last_used`` ascendente). Backends ativos (ref_count > 0)
+    nunca são evicted.
+
     Args:
         loaded: Snapshots dos backends atualmente carregados.
         needed_mib: VRAM adicional necessária (MiB).
@@ -63,8 +70,9 @@ def plan_eviction(
 
     # Só evictáveis: idle (ref_count == 0).
     evictable = [b for b in loaded if b.ref_count <= 0]
-    # Ordenar: priority ascendente (leves primeiro), depois last_used ascendente (LRU).
-    evictable.sort(key=lambda b: (b.priority, b.last_used))
+    # Efficiency: mais VRAM libertada por unidade de prioridade perdida = evictar
+    # primeiro. Guarda prioridade para tie-break LRU quando efficiency é igual.
+    evictable.sort(key=lambda b: (-b.vram_mib / max(b.priority, 1), b.priority, b.last_used))
 
     to_evict: list[str] = []
     freed = 0
