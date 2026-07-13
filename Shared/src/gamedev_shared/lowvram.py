@@ -190,6 +190,7 @@ def plan_offload(
     allow_quant: tuple[str, ...] | None = None,
     allow_multi_gpu: bool = True,
     allow_group_offload: bool = True,
+    target_resolution: int | None = None,
     usable_fraction: float = USABLE_VRAM_FRACTION,
 ) -> OffloadPlan:
     """Resolve um :class:`OffloadPlan` por escada determinística.
@@ -249,6 +250,10 @@ def plan_offload(
     total_budget = sum(b for _, b in budgets)
     act = footprint.activation_gib
 
+    # Resolução alta (≥1024px): VAE tiling + attention slicing reduzem o pico de
+    # ativação mesmo em full-GPU (attention é O(n²); VAE decode é caro a 2MP+).
+    high_res = target_resolution is not None and target_resolution >= 1024
+
     # --- Multi-GPU: split dos pesos por todas as GPUs (accelerate device_map) ---
     if allow_multi_gpu and len(budgets) > 1:
         for quant in ladder:
@@ -275,18 +280,20 @@ def plan_offload(
         peak = footprint.weights_gib(quant) + act
         if peak <= primary_budget:
             note = "full-GPU" if quant == "none" else f"full-GPU + {quant}"
+            # Em resolução alta, activar VAE tiling + attention slicing mesmo em
+            # full-GPU — reduzem o pico de ativação sem custo de offload.
             return OffloadPlan(
                 device="cuda",
                 quant_mode=quant,
                 offload=OFFLOAD_NONE,
-                vae_slicing=False,
-                vae_tiling=False,
-                attention_slicing=False,
+                vae_slicing=high_res,
+                vae_tiling=high_res,
+                attention_slicing=high_res,
                 multi_gpu_ids=None,
                 primary_gpu=primary,
                 usable_vram_gib=round(primary_budget, 2),
                 est_peak_gib=round(peak, 2),
-                notes=(note,),
+                notes=(note + (" + vae-tiling/attn-slice (high-res)" if high_res else ""),),
             )
 
     # Passo 3: group offload com CUDA streams (preferido a model_cpu/sequential).
@@ -493,6 +500,7 @@ def place_pipeline(
     allow_quant: tuple[str, ...] | None = None,
     allow_multi_gpu: bool = True,
     allow_group_offload: bool = True,
+    target_resolution: int | None = None,
     model_attr: str | None = None,
     no_split_classes: list[str] | None = None,
     offload_modules: tuple[str, ...] | None = None,
@@ -541,6 +549,7 @@ def place_pipeline(
         allow_quant=allow_quant,
         allow_multi_gpu=allow_multi_gpu,
         allow_group_offload=allow_group_offload,
+        target_resolution=target_resolution,
     )
 
     if on_status:
@@ -557,6 +566,7 @@ def place_pipeline(
             allow_quant=allow_quant,
             allow_multi_gpu=False,
             allow_group_offload=allow_group_offload,
+            target_resolution=target_resolution,
         )
         if on_status:
             on_status(f"Cascade para offload: {plan.summary()}")

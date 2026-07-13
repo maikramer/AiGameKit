@@ -340,12 +340,15 @@ class SanaIconGenerator(DiffusionGeneratorBase):
                 architecture="sana",
             )
 
-        self._place_with_planner(
+        placement_plan = self._place_with_planner(
             pipe,
             footprint,
             allow_quant=("none",),
             model_attr="transformer",
         )
+
+        # torch.compile do transformer (20-step Sana beneficia muito).
+        self._maybe_compile_transformer(pipe, placement_plan)
 
         self._pipe = pipe
         return pipe
