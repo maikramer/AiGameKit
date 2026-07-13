@@ -101,6 +101,10 @@ export class RiverChannel implements WaterShape {
     return pathAabb(this.opts.path, this.carveHalfWidth());
   }
 
+  densityPath(): { path: number[]; reach: number } {
+    return { path: this.opts.path, reach: this.carveHalfWidth() };
+  }
+
   carve(sampler: HeightSampler): WaterShapeResult {
     const { path, width, depth, waterOffset } = this.opts;
     // Densify the authored polyline into ~3 m stations, then sample the

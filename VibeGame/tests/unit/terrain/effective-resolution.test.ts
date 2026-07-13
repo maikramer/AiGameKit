@@ -23,10 +23,12 @@ describe('effectiveResolution', () => {
     }
   });
 
-  it('doubles LOD resolution at max boost (255), capped at baseResolution', () => {
-    // LOD level 5: lodRes = max(4, 64 >> 5) = 4 → factor 2 → 8.
-    expect(effectiveResolution(base, 5, 255)).toBe(8);
-    // LOD level 0: lodRes = 64 → boosted would be 128, capped at base 64.
+  it('multiplica a resolução LOD por 8 no boost máximo (255), capped em base', () => {
+    // LOD level 5: lodRes = max(4, 64 >> 5) = 4 → factor 8 → 32. O teto ×8
+    // existe porque o lattice uniforme (~worldSize/base) escondia features
+    // esculpidas estreitas (canais/margens de rio, corredores de estrada).
+    expect(effectiveResolution(base, 5, 255)).toBe(32);
+    // LOD level 0: lodRes = 64 → boosted 512, capped at base 64.
     expect(effectiveResolution(base, 0, 255)).toBe(64);
   });
 
@@ -37,8 +39,8 @@ describe('effectiveResolution', () => {
   });
 
   it('scales linearly for intermediate boost', () => {
-    // lodRes at level 5 = 4. boost 128 → factor 1 + 128/255 ≈ 1.502 → round(4*1.502) = 6.
-    expect(effectiveResolution(base, 5, 128)).toBe(6);
+    // lodRes at level 5 = 4. boost 128 → factor 1 + 7·128/255 ≈ 4.514 → round(4*4.514) = 18.
+    expect(effectiveResolution(base, 5, 128)).toBe(18);
   });
 
   it('never exceeds baseResolution', () => {

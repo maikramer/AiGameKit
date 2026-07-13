@@ -33,6 +33,14 @@ export interface WaterShapeResult {
 export interface WaterShape {
   /** AABB in field-local coords (X/Z), for density boost + chunk invalidation. */
   computeAabb(): WorldAabb;
+  /**
+   * Optional polyline footprint for the density boost. When present, the
+   * boost is stamped per segment (AABB of each segment ± reach) instead of
+   * the shape's global AABB — a map-length diagonal river's global AABB
+   * covers a huge rectangle, and with the ×8 boost ceiling that would
+   * upres half the map. Lakes (small AABBs) can skip this.
+   */
+  densityPath?(): { path: number[]; reach: number } | null;
   /** Carve the shape into the sampler in place (heights only go down). */
   carve(sampler: HeightSampler): WaterShapeResult;
   /** Surface mesh geometry. Must set the `aWaterT` attribute (0=center, 1=margin). */
@@ -119,9 +127,26 @@ export function applyWaterShape(
   if (!field) return false;
   const { data } = field;
 
-  // 1. Density boost + refresh chunk resolutions.
+  // 1. Density boost + refresh chunk resolutions. Shapes com path (rios)
+  // marcam por segmento; shapes compactos (lagos) usam o AABB global.
   if (data.density) {
-    applyOverride(data.density, shape.computeAabb(), shape.densityBoost());
+    const seg = shape.densityPath?.();
+    if (seg && seg.path.length >= 4) {
+      for (let i = 0; i + 3 < seg.path.length; i += 2) {
+        applyOverride(
+          data.density,
+          {
+            minX: Math.min(seg.path[i]!, seg.path[i + 2]!) - seg.reach,
+            maxX: Math.max(seg.path[i]!, seg.path[i + 2]!) + seg.reach,
+            minZ: Math.min(seg.path[i + 1]!, seg.path[i + 3]!) - seg.reach,
+            maxZ: Math.max(seg.path[i + 1]!, seg.path[i + 3]!) + seg.reach,
+          },
+          shape.densityBoost()
+        );
+      }
+    } else {
+      applyOverride(data.density, shape.computeAabb(), shape.densityBoost());
+    }
     refreshChunkResolutions(state, field.entity, data);
   }
 
