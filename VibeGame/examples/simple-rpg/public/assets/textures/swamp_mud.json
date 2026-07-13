@@ -1,18 +1,10 @@
 {
-  "timestamp": 1783571509.633383,
-  "prompt": "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture, large area coverage, not macro, not close-up. seamless tileable texture, murky dark swamp mud with algae patches",
-  "params": {
-    "seed": 3678688334,
-    "prompt_final": "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture, large area coverage, not macro, not close-up. seamless tileable texture, murky dark swamp mud with algae patches",
-    "prompt": "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle. even flat diffuse lighting, low relief, minimal height variation, no strong shadows. medium-scale texture, large area coverage, not macro, not close-up. seamless tileable texture, murky dark swamp mud with algae patches",
-    "negative_prompt": "grass, clean, polished, artificial, macro, close-up, individual blades, extreme detail, 3d relief, strong directional shadows, depth, isometric, perspective, angled, side view, oblique, baked shadows, ambient occlusion, high contrast, 3d, pbr",
-    "guidance_scale": 4.0,
-    "num_inference_steps": 32,
-    "width": 1024,
-    "height": 1024,
-    "cfg_scale": 4.0,
-    "lora_strength": 1.0
-  },
-  "image_path": "/tmp/textures_v2/swamp_mud.png",
-  "filename": "swamp_mud.png"
+  "prompt": "seamless tileable texture, murky green-brown swamp mud with bright green algae patches, wet reflective surface, muddy water puddles, reeds, earthy brown tones with green highlights, top-down flat view, high detail game asset",
+  "negative_prompt": "black, dark, shadow, night, monotone, grayscale, pure black, seams, borders",
+  "width": 1024,
+  "height": 1024,
+  "steps": 28,
+  "guidance": 3.5,
+  "seed": 1538658502,
+  "regenerated_at": "2026-07-12 22:11:04"
 }

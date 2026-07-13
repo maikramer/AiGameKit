@@ -1,18 +1,10 @@
 {
-  "timestamp": 1783364837.367834,
-  "prompt": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, rough white plaster wall medieval cottage weathered stucco",
-  "params": {
-    "seed": 1337,
-    "prompt_final": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, rough white plaster wall medieval cottage weathered stucco",
-    "prompt": "seamless, tileable, repeatable, repeating pattern, perfectly looping texture, no visible seams, no borders, no frame, no text, no watermark, rough white plaster wall medieval cottage weathered stucco",
-    "negative_prompt": "",
-    "guidance_scale": 7.5,
-    "num_inference_steps": 30,
-    "width": 512,
-    "height": 512,
-    "cfg_scale": 7.5,
-    "lora_strength": 1.0
-  },
-  "image_path": "/home/maikeu/GitClones/GameDev/VibeGame/examples/simple-rpg/public/assets/textures/wall_plaster.png",
-  "filename": "wall_plaster.png"
+  "prompt": "seamless tileable texture, rough white plaster wall, medieval cottage weathered stucco, cracked whitewash, old painted surface, top-down flat view, game asset",
+  "negative_prompt": "wood, metal, modern, clean, seams, borders",
+  "width": 1024,
+  "height": 1024,
+  "steps": 28,
+  "guidance": 3.5,
+  "seed": 1444809812,
+  "regenerated_at": "2026-07-12 02:10:36"
 }
