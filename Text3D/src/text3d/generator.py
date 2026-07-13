@@ -372,7 +372,8 @@ class HunyuanTextTo3DGenerator:
             cache_dir=self.cache_dir,
         )
         try:
-            pil_image = t2d.generate(
+            # t2d.generate() devolve (image, metadata) desde 7718ed64c.
+            pil_image, _t2d_metadata = t2d.generate(
                 prompt=prompt,
                 height=t2d_height,
                 width=t2d_width,

@@ -59,7 +59,7 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
     """Carrega Flux2KleinPipeline com pesos SDNQ (Disty0).
 
     Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
-    _status, _try_multi_gpu, _patch_cross_device, save_image, generate_batch.
+    _status, _place_with_planner, save_image, generate_batch.
     """
 
     def __init__(
