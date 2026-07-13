@@ -1,17 +1,17 @@
-"""Testes da auto-detecção de hardware do Texture2D (FLUX.1-dev + seamless LoRA)."""
+"""Testes da auto-detecção de hardware do Texture2D (SD1.5 + circular padding).
+
+SD1.5 fp16 (~2.5 GB) cabe em qualquer GPU CUDA moderna — não há offloads, vae
+slicing, group offload nem clamp de resolução. O perfil deteta apenas device,
+multi-GPU (para display) e VRAM total.
+"""
 
 from __future__ import annotations
-
-from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 from click.testing import CliRunner
 
 from texture2d.cli import cli
 from texture2d.hardware import (
-    DEFAULT_HEIGHT,
-    DEFAULT_WIDTH,
     GIB,
     Texture2DHardwareProfile,
     detect_hardware_profile,
@@ -27,80 +27,45 @@ def _gib(n: float) -> int:
 def test_no_gpu_cpu_profile() -> None:
     p = profile_from_specs([])
     assert p.device == "cpu"
-    assert p.memory_efficient is True
-    assert p.max_width == 768
-    assert p.max_height == 768
+    assert p.gpu_ids is None
+    assert p.total_vram_gib == 0.0
 
 
-def test_16gb_full_gpu_no_offload() -> None:
-    p = profile_from_specs([(0, _gib(16))])
-    assert p.device == "cuda"
-    assert p.memory_efficient is False
-    assert p.max_width is None
-    assert p.max_height is None
-
-
-def test_12gb_full_gpu_no_offload() -> None:
-    p = profile_from_specs([(0, _gib(12))])
-    assert p.device == "cuda"
-    assert p.memory_efficient is False
-    assert p.max_width is None
-    assert p.max_height is None
-
-
-def test_8gb_offload_keep_resolution() -> None:
-    p = profile_from_specs([(0, _gib(8))])
-    assert p.device == "cuda"
-    assert p.memory_efficient is True
-    assert p.max_width is None
-    assert p.max_height is None
-
-
-def test_7gb_offload_clamp_1024() -> None:
-    p = profile_from_specs([(0, _gib(7))])
-    assert p.device == "cuda"
-    # <8 GiB usa sequential offload + vae slicing (mais conservador que model_cpu_offload).
-    assert p.memory_efficient is False
-    assert p.sequential_offload is True
-    assert p.vae_slicing is True
-    assert p.max_width == 1024
-    assert p.max_height == 1024
-
-
-def test_6gb_offload_clamp_1024() -> None:
-    p = profile_from_specs([(0, _gib(6))])
-    assert p.device == "cuda"
-    assert p.memory_efficient is False
-    assert p.sequential_offload is True
-    assert p.vae_slicing is True
-    assert p.max_width == 1024
-    assert p.max_height == 1024
-
-
-def test_4gb_offload_clamp_768() -> None:
+def test_single_gpu_cuda_no_clamp() -> None:
+    """SD1.5 cabe em qualquer GPU — sem clamp de resolução."""
     p = profile_from_specs([(0, _gib(4))])
     assert p.device == "cuda"
-    assert p.memory_efficient is False
-    assert p.sequential_offload is True
-    assert p.vae_slicing is True
-    assert p.max_width == 768
-    assert p.max_height == 768
+    assert p.max_width is None
+    assert p.max_height is None
+
+
+def test_8gb_cuda_no_offload() -> None:
+    p = profile_from_specs([(0, _gib(8))])
+    assert p.device == "cuda"
+    assert p.max_width is None
+    assert p.max_height is None
+
+
+def test_12gb_cuda_no_offload() -> None:
+    p = profile_from_specs([(0, _gib(12))])
+    assert p.device == "cuda"
+    assert p.max_width is None
+    assert p.max_height is None
 
 
 def test_dual_gpu_sets_gpu_ids() -> None:
     p = profile_from_specs([(0, _gib(12)), (1, _gib(12))])
     assert p.device == "cuda"
-    assert p.memory_efficient is False
     assert p.gpu_ids == [0, 1]
     assert p.total_vram_gib == 24.0
 
 
-def test_dual_small_gpu_clamp_and_ids() -> None:
-    p = profile_from_specs([(0, _gib(6)), (1, _gib(6))])
-    assert p.memory_efficient is False
-    assert p.sequential_offload is True
-    assert p.max_width == 1024
-    assert p.max_height == 1024
+def test_dual_small_gpu_no_clamp() -> None:
+    """Mesmo GPUs pequenas não precisam de clamp (SD1.5 cabe em 4 GiB)."""
+    p = profile_from_specs([(0, _gib(4)), (1, _gib(4))])
+    assert p.device == "cuda"
+    assert p.max_width is None
+    assert p.max_height is None
     assert p.gpu_ids == [0, 1]
 
 
@@ -126,38 +91,3 @@ def test_cli_exposes_hw_auto_flag(command: str) -> None:
     r = runner.invoke(cli, [command, "--help"])
     assert r.exit_code == 0
     assert "--hw-auto" in r.output
-
-
-def test_hw_auto_clamps_higher_resolution() -> None:
-    """hw-auto must clamp resolution down to max_width/max_height on small GPUs."""
-    p = profile_from_specs([(0, _gib(6))])
-    assert p.max_width is not None
-    assert p.max_width <= DEFAULT_WIDTH
-    assert p.max_height is not None
-    assert p.max_height <= DEFAULT_HEIGHT
-
-
-def test_hw_auto_does_not_clamp_explicit_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
-    """When user explicitly sets -W, hw-auto must NOT clamp."""
-    fake_profile = Texture2DHardwareProfile(
-        name="cuda-1x6g",
-        device="cuda",
-        memory_efficient=True,
-        max_width=1024,
-        max_height=1024,
-        gpu_ids=None,
-        total_vram_gib=6.0,
-    )
-    monkeypatch.setattr("texture2d.hardware.detect_hardware_profile", lambda: fake_profile)
-    monkeypatch.setattr("gamedev_shared.gpu.warn_if_vram_occupied", lambda: None)
-
-    mock_gen = MagicMock()
-    mock_gen.generate.return_value = (MagicMock(), {"seed": 42, "prompt_final": "test"})
-    monkeypatch.setattr("texture2d.cli.TextureGenerator", lambda **kw: mock_gen)
-    monkeypatch.setattr("texture2d.image_processor.save_image", lambda *a, **kw: Path("/tmp/fake.png"))
-
-    runner = CliRunner()
-    r = runner.invoke(cli, ["generate", "test", "-W", "2048", "--hw-auto", "-o", "/tmp/out.png"])
-    assert r.exit_code == 0, r.output
-    _, kwargs = mock_gen.generate.call_args
-    assert kwargs.get("width") == 2048

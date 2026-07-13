@@ -1,16 +1,23 @@
-"""Texture2D — gerador de texturas seamless via FLUX.1-dev + LoRA local."""
+"""Texture2D — gerador de texturas seamless via Stable Diffusion + circular padding.
+
+Backend único: um UNet convolucional (SD1.5) permite o truque clássico de trocar o
+``padding_mode`` de todas as ``Conv2d`` (UNet + VAE) para ``"circular"`` — o campo
+recetivo dá a volta na imagem e a saída ladrilha **por construção**, sem
+pós-processamento. O negative prompt funciona nativamente (CFG real, sem o custo
+2x do true-CFG do FLUX distilled) e SD1.5 fp16 cabe inteiro numa GPU de 6 GiB.
+
+Herda a infraestrutura partilhada de ``DiffusionGeneratorBase`` (lifecycle, logging,
+cache, device resolution, multi-GPU, save_image, batch generation).
+"""
 
 from __future__ import annotations
 
-import gc
 import os
-import re
-from collections.abc import Callable, Generator
 from typing import Any
 
-import torch
 from PIL import Image
 
+from gamedev_shared.base_generator import DiffusionGeneratorBase
 from gamedev_shared.logging import Logger
 
 from .presets import get_preset_params, get_preset_prompt
@@ -19,78 +26,58 @@ from .prompt_enhancer import (
     enhance_ground_prompt,
     looks_like_ground,
 )
-from .utils import generate_seed, validate_params, validate_prompt
+from .utils import validate_params, validate_prompt
 
 _logger = Logger()
 
-DEFAULT_LORA_MODEL_ID = "gokaygokay/Flux-Seamless-Texture-LoRA"
-DEFAULT_BASE_MODEL_ID = "Disty0/FLUX.1-dev-SDNQ-uint4-svd-r32"
-# Alias compat: o "modelo" do Texture2D é a LoRA seamless aplicada sobre o FLUX base.
-DEFAULT_MODEL_ID = DEFAULT_LORA_MODEL_ID
+# Modelo por defeito: Stable Diffusion v1.5 (runwaymlblab/stable-diffusion-v1-5 é o
+# mirror canónico; o repo "stable-diffusion-v1-5/stable-diffusion-v1-5" também serve).
+DEFAULT_MODEL_ID = "stable-diffusion-v1-5/stable-diffusion-v1-5"
 
-# Trigger word da LoRA gokaygokay/Flux-Seamless-Texture-LoRA (treinada via FAL Fast
-# LoRA Trainer). O model card pede o formato exato "smlstxtr, <prompt>, seamless
-# texture" — sem o trigger, a LoRA carrega mas o comportamento de tiling aprendido
-# não é ativado de forma fiável (validado empiricamente: score_tileability médio
-# ~0.0-0.1 sem o trigger vs melhoria mensurável com ele). Isto sozinho não garante
-# costuras perfeitas — para isso ver ``tileability.make_seamless`` (post-process
-# determinístico aplicado por defeito em ``TextureGenerator.generate``).
-LORA_TRIGGER_WORD = "smlstxtr"
+# Defaults afinados para SD1.5 + circular padding.
+DEFAULT_GUIDANCE = 7.0  # CFG real (o FLUX distilled usava 3.5 — baixo demais p/ SD).
+DEFAULT_STEPS = 30
+DEFAULT_RESOLUTION = 512  # Resolução nativa do SD1.5.
+
+# Negative base para qualidade de textura (SD1.5 beneficia sempre de um negative).
+SD_BASE_NEGATIVE = "blurry, low quality, watermark, text, signature, frame, border"
 
 DEFAULT_PARAMS: dict[str, Any] = {
-    "guidance_scale": 3.5,
-    "num_inference_steps": 28,
+    "guidance_scale": DEFAULT_GUIDANCE,
+    "num_inference_steps": DEFAULT_STEPS,
     "seed": None,
-    "width": 1024,
-    "height": 1024,
-    "cfg_scale": 3.5,
+    "width": DEFAULT_RESOLUTION,
+    "height": DEFAULT_RESOLUTION,
     "negative_prompt": "",
-    "lora_strength": 1.0,
 }
 
 
-def _base_model_id() -> str:
-    return os.environ.get("TEXTURE2D_BASE_MODEL_ID", DEFAULT_BASE_MODEL_ID)
-
-
-def _lora_model_id() -> str:
-    return os.environ.get("TEXTURE2D_MODEL_ID", DEFAULT_LORA_MODEL_ID)
+def _default_model_id() -> str:
+    return os.environ.get("TEXTURE2D_MODEL_ID", DEFAULT_MODEL_ID)
 
 
 def default_model_id() -> str:
-    """Modelo LoRA por defeito (ou TEXTURE2D_MODEL_ID)."""
-    return _lora_model_id()
+    """Modelo SD por defeito (ou ``TEXTURE2D_MODEL_ID``)."""
+    return _default_model_id()
 
 
-def _torch_dtype_for(device: str) -> torch.dtype:
-    d = device.lower()
-    if d.startswith("cpu"):
-        return torch.float32
-    if d.startswith("cuda") and torch.cuda.is_available():
-        if getattr(torch.cuda, "is_bf16_supported", lambda: False)():
-            return torch.bfloat16
-        return torch.float16
-    return torch.float32
+def patch_conv2d_circular(module: Any) -> int:
+    """Troca o padding de todas as ``Conv2d`` para circular (wrap).
 
+    Aplicado ao UNet e ao VAE, faz a convolução "dar a volta" nas bordas — a
+    imagem gerada é tileable por construção em ambos os eixos.
 
-def augment_prompt_for_seamless(prompt: str) -> str:
-    """Acrescenta trigger word + instruções de textura seamless/tileable.
-
-    Formato do model card da LoRA: ``"smlstxtr, <prompt>, seamless texture"``.
-    Não duplica se o utilizador já incluiu o trigger word ou termos seamless/tileable.
+    Returns:
+        Número de camadas ``Conv2d`` alteradas.
     """
-    p = (prompt or "").strip()
-    if not p:
-        return p
-    if re.search(rf"\b{LORA_TRIGGER_WORD}\b", p, flags=re.IGNORECASE):
-        return p
-    if re.search(
-        r"\b(seamless|tileable|tiling|repeatable|repeating|repeat)\b",
-        p,
-        flags=re.IGNORECASE,
-    ):
-        return f"{LORA_TRIGGER_WORD}, {p}"
-    return f"{LORA_TRIGGER_WORD}, {p}, seamless texture"
+    import torch
+
+    patched = 0
+    for m in module.modules():
+        if isinstance(m, torch.nn.Conv2d):
+            m.padding_mode = "circular"
+            patched += 1
+    return patched
 
 
 def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
@@ -108,8 +95,12 @@ def merge_negative_prompt(preset_neg: str, user_neg: str) -> str:
     return f"{preset_neg}, {user_neg}"
 
 
-class TextureGenerator:
-    """Gerador de texturas seamless via FLUX.1-dev + LoRA (inferência local)."""
+class TextureGenerator(DiffusionGeneratorBase):
+    """Gerador de texturas seamless via Stable Diffusion + circular padding.
+
+    Herda de ``DiffusionGeneratorBase``: warmup, unload, _log, _clear_cache,
+    _resolve_seed, _build_generator, _report_vram, generate_batch, save_image.
+    """
 
     def __init__(
         self,
@@ -119,275 +110,110 @@ class TextureGenerator:
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
-        sequential_offload: bool = False,
-        vae_slicing: bool = False,
+        group_offload: bool = False,
     ) -> None:
-        self.verbose = verbose
-        self.memory_efficient = memory_efficient
-        self.model_id = model_id or _lora_model_id()
-        self.base_model_id = _base_model_id()
-        self.cache_dir = cache_dir
-        self.gpu_ids = gpu_ids
-        # Otimizações de memória para GPUs pequenas (<8 GiB). ``sequential_offload``
-        # migra cada sub-módulo individualmente (mais lento que ``enable_model_cpu_offload``
-        # mas o único que estavelmente cabe em ~6 GiB). Combinado com ``vae_slicing``
-        # reduz o pico de VRAM durante a decodificação do VAE.
-        self.sequential_offload = sequential_offload
-        self.vae_slicing = vae_slicing
+        super().__init__(
+            device=device,
+            verbose=verbose,
+            model_id=model_id or _default_model_id(),
+            cache_dir=cache_dir,
+            gpu_ids=gpu_ids,
+            memory_efficient=memory_efficient,
+            group_offload=group_offload,
+        )
+        # SD1.5 é treinado em fp16/float32. A base resolve bfloat16 em CUDA (formato
+        # nativo dos FLUX/Sana), mas o UNet do SD1.5 em bf16 produz NaNs em algumas
+        # camadas — forçar float16.
+        import torch
 
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
-
-        self.torch_dtype = _torch_dtype_for(self.device)
-        self._pipe: Any = None
-        self._on_status: Callable[[str], None] | None = None
-        self._multi_gpu: bool = False
+        self.torch_dtype = torch.float16 if self.device.startswith("cuda") else torch.float32
 
         if self.verbose:
-            opts = []
-            if self.sequential_offload:
-                opts.append("sequential_offload")
-            if self.vae_slicing:
-                opts.append("vae_slicing")
-            if self.memory_efficient:
-                opts.append("model_cpu_offload")
-            _logger.info(
-                f"device={self.device} dtype={self.torch_dtype} base={self.base_model_id} "
-                f"lora={self.model_id} opts={opts or 'none'}"
-            )
-
-    def set_status_callback(self, fn: Callable[[str], None] | None) -> None:
-        """Callback opcional (ex. Rich) para mensagens de fase durante o load."""
-        self._on_status = fn
-
-    def _log(self, msg: str) -> None:
-        if self.verbose:
-            _logger.info(msg)
-
-    def _clear_cache(self) -> None:
-        gc.collect()
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-    def _status(self, msg: str) -> None:
-        if self._on_status:
-            self._on_status(msg)
-        else:
-            _logger.step(msg)
-
-    def warmup(self) -> None:
-        """Carrega o pipeline (download HF + pesos). Idempotente."""
-        self._load_pipeline()
+            _logger.info(f"device={self.device} dtype={self.torch_dtype} model={self.model_id}")
 
     def _load_pipeline(self) -> Any:
         if self._pipe is not None:
             return self._pipe
 
-        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
-
-        from gamedev_shared.sdnq import apply_quantized_matmul, register_sdnq
-
-        triton_is_available = register_sdnq(patch_lora=True)
-
-        from diffusers import FluxPipeline
+        from diffusers import DPMSolverMultistepScheduler, StableDiffusionPipeline
 
         kwargs: dict[str, Any] = {
             "torch_dtype": self.torch_dtype,
+            "safety_checker": None,
+            "requires_safety_checker": False,
         }
         if self.cache_dir:
             kwargs["cache_dir"] = self.cache_dir
 
-        self._status("Passo 1/4 — from_pretrained (SDNQ uint4, ~7 GB)")
-        self._log(f"Carregando {self.base_model_id}...")
-        pipe = FluxPipeline.from_pretrained(self.base_model_id, **kwargs)
-
-        self._status("Passo 2/4 — SDNQ quantized matmul")
-        apply_quantized_matmul(pipe, enabled=bool(triton_is_available))
-
-        self._status("Passo 3/4 — LoRA weights")
-        self._log(f"Carregando LoRA {self.model_id}...")
-        pipe.load_lora_weights(self.model_id)
-
-        if self.device == "cpu":
-            mode_label = "cpu"
-        elif self.sequential_offload:
-            mode_label = f"{self.device} (sequential_cpu_offload — cada sub-módulo migra)"
-        elif self.memory_efficient:
-            mode_label = f"{self.device} (cpu_offload — módulos migram 1 a 1)"
+        self._status("Passo 1/3 — from_pretrained (SD1.5)")
+        self._log(f"Carregando {self.model_id} (SD + circular padding)...")
+        # Preferir a variante fp16 (metade do download/disco); nem todos os
+        # repos a publicam (ex. fine-tunes) — fallback para os pesos default.
+        if self.torch_dtype is not None and "float16" in str(self.torch_dtype):
+            try:
+                pipe = StableDiffusionPipeline.from_pretrained(self.model_id, variant="fp16", **kwargs)
+            except (OSError, ValueError):
+                pipe = StableDiffusionPipeline.from_pretrained(self.model_id, **kwargs)
         else:
-            mode_label = self.device
-        self._status(f"Passo 4/4 — a mover o pipeline para {mode_label}")
+            pipe = StableDiffusionPipeline.from_pretrained(self.model_id, **kwargs)
 
+        self._status("Passo 2/3 — scheduler + circular padding")
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(pipe.scheduler.config, use_karras_sigmas=True)
+        n_unet = patch_conv2d_circular(pipe.unet)
+        n_vae = patch_conv2d_circular(pipe.vae)
+        self._log(f"Circular padding: {n_unet} convs no UNet, {n_vae} no VAE")
+
+        self._status("Passo 3/3 — mover pipeline para device")
         self._clear_cache()
-
-        if torch.cuda.is_available() and self.device == "cuda":
-            for gid in self.gpu_ids or range(torch.cuda.device_count()):
-                if gid < torch.cuda.device_count():
-                    torch.cuda.reset_peak_memory_stats(gid)
-
-        # VAE slicing reduz o pico de VRAM na decodificação; compatível com todos
-        # os modos de offload e barato (sem cópias extra em inferência batch=1).
-        # ``pipe.enable_vae_slicing()`` está deprecado em diffusers recentes; usar
-        # ``pipe.vae.enable_slicing()`` quando disponível, com fallback gracioso.
-        if self.vae_slicing and self.device != "cpu":
-            try:
-                if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_slicing"):
-                    pipe.vae.enable_slicing()
-                elif hasattr(pipe, "enable_vae_slicing"):
-                    pipe.enable_vae_slicing()
-            except Exception as e:
-                self._log(f"enable_vae_slicing indisponível: {e}")
-
-        # VAE tiling: decodifica o VAE em mosaicos sobrepostos em vez de uma só
-        # passagem. Complementar ao slicing — reduz o pico de VRAM na decodificação
-        # do latent → RGB, permitindo resoluções maiores em GPUs pequenas. Sem custo
-        # de qualidade visível (a sobreposição dos mosaicos esconde as costuras).
-        if self.vae_slicing and self.device != "cpu":
-            try:
-                if hasattr(pipe, "vae") and hasattr(pipe.vae, "enable_tiling"):
-                    pipe.vae.enable_tiling()
-            except Exception as e:
-                self._log(f"enable_vae_tiling indisponível: {e}")
-
-        if self.device == "cpu":
-            pipe.to("cpu")
-        elif self.gpu_ids and len(self.gpu_ids) >= 2 and self._try_multi_gpu(pipe):
-            self._status("Modelo carregado — split multi-GPU")
-        elif self.sequential_offload:
-            # Mais conservador que enable_model_cpu_offload: migra cada sub-módulo
-            # individualmente. Essencial em GPUs <8 GiB onde o transformer + VAE
-            # não cabem em simultâneo. Mutuamente exclusivo com model_cpu_offload.
-            pipe.enable_sequential_cpu_offload()
-        elif self.memory_efficient:
-            pipe.enable_model_cpu_offload()
-        else:
-            pipe.to(self.device)
-
-        if (
-            torch.cuda.is_available()
-            and self.device == "cuda"
-            and not self.memory_efficient
-            and not self.sequential_offload
-        ):
-            if self._multi_gpu:
-                gpu_ids = self.gpu_ids or list(range(torch.cuda.device_count()))
-                parts = []
-                for gid in gpu_ids:
-                    torch.cuda.synchronize(gid)
-                    alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-                    peak = torch.cuda.max_memory_allocated(gid) / (1024**3)
-                    parts.append(f"cuda:{gid} ~{alloc:.2f} GB (pico ~{peak:.2f} GB)")
-                self._status("Modelo carregado — " + ", ".join(parts))
-            else:
-                torch.cuda.synchronize()
-                alloc = torch.cuda.memory_allocated(0) / (1024**3)
-                peak = torch.cuda.max_memory_allocated(0) / (1024**3)
-                self._status(f"Modelo carregado — VRAM ~{alloc:.2f} GB (pico após load ~{peak:.2f} GB)")
+        self._reset_peak_mem_stats()
+        pipe.to(self.device)
+        if self.device.startswith("cuda"):
+            self._report_vram()
 
         self._pipe = pipe
         return pipe
-
-    def _try_multi_gpu(self, pipe: Any) -> bool:
-        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
-            return False
-
-        gpu_ids = self.gpu_ids
-        if not gpu_ids or len(gpu_ids) < 2:
-            gpu_ids = list(range(torch.cuda.device_count()))
-
-        primary, secondary = gpu_ids[0], gpu_ids[1]
-
-        try:
-            pipe.transformer.to(f"cuda:{primary}")
-            pipe.vae.to(f"cuda:{primary}")
-            pipe.text_encoder.to(f"cuda:{secondary}")
-            if hasattr(pipe, "text_encoder_2") and pipe.text_encoder_2 is not None:
-                pipe.text_encoder_2.to(f"cuda:{secondary}")
-        except (torch.cuda.OutOfMemoryError, RuntimeError) as exc:
-            self._log(f"Multi-GPU placement falhou ({exc})")
-            return False
-
-        self._patch_cross_device(pipe, primary, secondary)
-
-        for gid in gpu_ids:
-            alloc = torch.cuda.memory_allocated(gid) / (1024**3)
-            self._log(f"  cuda:{gid} — {alloc:.2f} GB alocados")
-
-        self._multi_gpu = True
-        return True
-
-    def _patch_cross_device(self, pipe: Any, primary: int, secondary: int) -> None:
-        primary_dev = f"cuda:{primary}"
-        secondary_dev = f"cuda:{secondary}"
-
-        pipe._texture2d_primary_device = torch.device(primary_dev)
-
-        if not hasattr(pipe, "_orig_encode_prompt"):
-            pipe._orig_encode_prompt = pipe.encode_prompt
-
-        def _patched_encode_prompt(*args: Any, **kwargs: Any) -> Any:
-            kwargs["device"] = secondary_dev
-            result = pipe._orig_encode_prompt(*args, **kwargs)
-            if isinstance(result, torch.Tensor):
-                return result.to(primary_dev)
-            if isinstance(result, (tuple, list)):
-                return type(result)(r.to(primary_dev) if isinstance(r, torch.Tensor) else r for r in result)
-            return result
-
-        pipe.encode_prompt = _patched_encode_prompt
-
-        @property  # type: ignore[misc]
-        def _patched_execution_device(self: Any) -> torch.device:
-            return self._texture2d_primary_device
-
-        pipe.__class__._execution_device = _patched_execution_device
-
-    def unload(self) -> None:
-        """Descarrega o pipeline e liberta VRAM."""
-        if self._pipe is None:
-            return
-        del self._pipe
-        self._pipe = None
-        self._clear_cache()
 
     def generate(
         self,
         prompt: str,
         negative_prompt: str = "",
-        guidance_scale: float = 3.5,
-        num_inference_steps: int = 28,
+        guidance_scale: float = DEFAULT_GUIDANCE,
+        num_inference_steps: int = DEFAULT_STEPS,
         seed: int | None = None,
-        width: int = 1024,
-        height: int = 1024,
-        cfg_scale: float | None = None,
-        lora_strength: float = 1.0,
+        width: int = DEFAULT_RESOLUTION,
+        height: int = DEFAULT_RESOLUTION,
         preset: str | None = None,
         ground: str = "auto",
-        seamless_fix: bool = True,
+        **_ignored: Any,
     ) -> tuple[Image.Image, dict[str, Any]]:
-        """Gera uma textura seamless.
+        """Gera uma textura seamless (tileable por construção via circular padding).
 
         Args:
-            ground: Modo de chão top-down — ``"auto"`` deteta chão/terreno e aplica
-                modificadores de viewpoint/iluminação/escala; ``"on"`` força;
-                ``"off"`` desliga. Ver :mod:`texture2d.prompt_enhancer`.
-            seamless_fix: Aplica :func:`texture2d.tileability.make_seamless` à saída
-                (post-process determinístico; a LoRA sozinha não garante bordas
-                idênticas — ver validação empírica no docstring de ``LORA_TRIGGER_WORD``).
+            prompt: Prompt do utilizador.
+            negative_prompt: Prompt negativo (CFG nativo do SD1.5).
+            guidance_scale: CFG scale (default 7.0).
+            num_inference_steps: Passos de inferência (default 30).
+            seed: Seed determinística; ``None`` = aleatória.
+            width: Largura em pixéis (default 512, nativo do SD1.5).
+            height: Altura em pixéis (default 512).
+            preset: Nome de preset de material (ver ``presets.TEXTURE_PRESETS``).
+            ground: Modo chão top-down — ``"auto"`` deteta chão/terreno; ``"on"``
+                força; ``"off"`` desliga. Ver :mod:`texture2d.prompt_enhancer`.
+            **_ignored: Parâmetros legacy aceites e ignorados (compat de chamada).
 
         Returns:
             Tuple (imagem PIL, metadata dict).
         """
         pipe = self._load_pipeline()
+        p = (prompt or "").strip()
 
-        # Merge preset
+        # Merge preset — o preset pode definir prompt base, guidance/steps/resolução
+        # e negative prompt. O prompt do utilizador é sempre prefixado ao do preset.
         if preset and preset != "None":
             preset_prompt = get_preset_prompt(preset)
             preset_params = get_preset_params(preset)
             if preset_prompt:
-                prompt = f"{preset_prompt}, {prompt}" if prompt else preset_prompt
+                p = f"{preset_prompt}, {p}" if p else preset_prompt
             if preset_params:
                 guidance_scale = float(preset_params.get("guidance_scale", guidance_scale))
                 num_inference_steps = int(preset_params.get("num_inference_steps", num_inference_steps))
@@ -399,124 +225,64 @@ class TextureGenerator:
                         negative_prompt,
                     )
 
-        # Augment seamless
-        prompt = augment_prompt_for_seamless(prompt)
-
-        # Ground enhancer (top-down viewpoint / flat lighting / medium scale).
-        # Resolve "auto" por heurística de keywords; "on"/"off" é explícito.
-        ground_active = ground == "on" or (ground == "auto" and looks_like_ground(prompt))
+        # Ground enhancer (top-down viewpoint / flat lighting / superfície próxima).
+        # "auto" resolve por heurística de keywords; "on"/"off" é explícito.
+        ground_active = ground == "on" or (ground == "auto" and looks_like_ground(p))
         if ground_active:
-            prompt = enhance_ground_prompt(prompt)
+            p = enhance_ground_prompt(p)
             negative_prompt = enhance_ground_negative(negative_prompt)
+        elif "texture" not in p.lower():
+            p = f"{p}, seamless texture"
+        negative_prompt = f"{negative_prompt}, {SD_BASE_NEGATIVE}" if negative_prompt.strip() else SD_BASE_NEGATIVE
 
-        is_valid, error = validate_prompt(prompt, max_length=1200)
+        is_valid, error = validate_prompt(p, max_length=1200)
         if not is_valid:
-            prompt = prompt[:1200]
+            p = p[:1200]
 
-        if cfg_scale is None:
-            cfg_scale = guidance_scale
-
-        if seed is None or seed < 0:
-            seed = generate_seed()
+        resolved_seed = self._resolve_seed(seed)
 
         params = {
-            "prompt": prompt,
+            "prompt": p,
             "negative_prompt": negative_prompt,
             "guidance_scale": guidance_scale,
             "num_inference_steps": num_inference_steps,
-            "seed": seed,
+            "seed": resolved_seed,
             "width": width,
             "height": height,
-            "cfg_scale": cfg_scale,
-            "lora_strength": lora_strength,
         }
 
         is_valid, error = validate_params(params)
         if not is_valid:
             raise ValueError(f"Parâmetros inválidos: {error}")
 
-        # Generator
-        if self._multi_gpu and self.gpu_ids:
-            gen_device = f"cuda:{self.gpu_ids[0]}"
-        elif self.device != "cpu":
-            gen_device = "cuda"
-        else:
-            gen_device = "cpu"
-        generator = torch.Generator(device=gen_device)
-        if seed is not None:
-            generator.manual_seed(seed)
+        generator = self._build_generator(resolved_seed)
 
         self._clear_cache()
-
-        # Pipeline kwargs — LoRA strength via joint_attention_kwargs
-        pipe_kwargs: dict[str, Any] = {
-            "prompt": prompt,
-            "height": height,
-            "width": width,
-            "guidance_scale": guidance_scale,
-            "num_inference_steps": num_inference_steps,
-            "generator": generator,
-        }
-        if lora_strength != 1.0:
-            pipe_kwargs["joint_attention_kwargs"] = {"scale": lora_strength}
-
-        self._log("Inferência...")
-        out = pipe(**pipe_kwargs)
+        self._log("Inferência (SD circular)...")
+        out = pipe(
+            prompt=p,
+            negative_prompt=negative_prompt,
+            guidance_scale=guidance_scale,
+            num_inference_steps=num_inference_steps,
+            width=width,
+            height=height,
+            generator=generator,
+        )
         image = out.images[0]
-
         if image is None:
             raise RuntimeError("Nenhuma imagem devolvida pelo pipeline")
 
         image = image.convert("RGB")
-
-        if seamless_fix:
-            from .tileability import make_seamless
-
-            image = make_seamless(image)
-
         metadata = {
-            "seed": seed,
-            "prompt_final": prompt,
-            "seamless_fix": seamless_fix,
-            **params,
+            "backend": "sd-circular",
+            "model_id": self.model_id,
+            "seed": resolved_seed,
+            "prompt_final": p,
+            "prompt": p,
+            "negative_prompt": negative_prompt,
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": num_inference_steps,
+            "width": width,
+            "height": height,
         }
-
         return image, metadata
-
-    def generate_batch(
-        self,
-        prompts: list[str],
-        base_params: dict[str, Any] | None = None,
-    ) -> Generator[tuple[Image.Image | None, dict[str, Any], int], None, None]:
-        """Gera múltiplas texturas em batch.
-
-        Yields:
-            Tuple (imagem | None, metadata, index).
-        """
-        if base_params is None:
-            base_params = {}
-
-        total = len(prompts)
-        _logger.info(f"Batch: {total} imagens")
-
-        for idx, prompt in enumerate(prompts):
-            try:
-                merged = {**DEFAULT_PARAMS, **base_params}
-                merged.pop("seed", None)
-                merged.pop("prompt", None)
-
-                image, metadata = self.generate(prompt=prompt, **merged)
-                yield image, metadata, idx
-            except Exception as e:
-                _logger.error(f"Erro na imagem {idx + 1}/{total}: {e}")
-                yield None, {"error": str(e), "index": idx}, idx
-
-    @staticmethod
-    def save_image(image: Image.Image, path: Any, image_format: str | None = None) -> Any:
-        """Grava imagem em disco (compatibilidade)."""
-        from pathlib import Path
-
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        image.save(path, format=image_format)
-        return path

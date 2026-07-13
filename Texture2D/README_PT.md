@@ -1,36 +1,25 @@
-# Texture2D
+# Texture2D — Geração de Texturas 2D Seamless
 
-**Documentação:** [English (`README.md`)](README.md) · Português (esta página)
+**Idioma:** [English (`README.md`)](README.md) · Português (esta página)
 
-CLI para geração de texturas 2D seamless (tileable) via HF Inference API.
+CLI para **texturas 2D seamless (tileable)** usando **Stable Diffusion v1.5 + circular padding**, executando localmente na GPU.
 
-Usa o modelo [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) para gerar texturas que repetem sem costuras visíveis — ideal para chão, rochas, paredes, e materiais de game dev.
+O tiling é conseguido **por construção**: todas as camadas `Conv2d` do UNet e do VAE são patcheadas para `padding_mode="circular"`, pelo que o campo recetivo dá a volta nas bordas da imagem e a saída ladrilha sem costuras em ambos os eixos — sem LoRA, sem pós-processamento, sem palavra-trigger. Usa [`stable-diffusion-v1-5/stable-diffusion-v1-5`](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) para gerar texturas que repetem sem costuras visíveis — ideal para chão, rochas, paredes e materiais de game dev.
 
-No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**](../Shared/) (`gamedev_shared`): CLI Rich, instalação de skills Cursor e utilitários alinhados com Text2D/Text3D/GameAssets.
+No monorepo [GameDev](../README_PT.md), o pacote depende de [**gamedev-shared**](../Shared/) (`gamedev_shared`): presets de qualidade, CLI Rich, helpers de GPU e convenções partilhadas alinhadas com Text2D, Text3D e GameAssets.
 
 ## Características
 
-- **Sem GPU local** — geração 100% cloud via HF Inference API
+- **Inferência local na GPU** — Stable Diffusion v1.5 + circular padding, sem API cloud; cabe em ~2,5 GB de VRAM (uma GPU de 6 GiB chega)
+- **Tiling por construção** — circular padding em todas as convoluções, sem LoRA nem pós-processamento
+- **CFG real** — o negative prompt funciona nativamente (`--negative-prompt`), sem o custo 2x do true-cfg
 - **Prompt seamless automático** — acrescenta instruções tileable/seamless automaticamente
-- **13 presets de materiais** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, etc.
+- **13 presets de materiais** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, Fabric, Leather, Concrete, Marble, Gravel, Tile Floor
+- **Quality tiers** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
 - **Batch** — gera múltiplas texturas a partir de um ficheiro de prompts
-- **Metadata JSON** — cada textura acompanha ficheiro `.json` com seed, prompt final, parâmetros
-
-## Arranque rápido
-
-```bash
-# 1. Setup (venv + deps)
-./scripts/setup.sh
-
-# 2. Ativar
-source .venv/bin/activate
-
-# 3. Gerar
-texture2d generate "rough stone wall surface, medieval castle" -o stone.png
-
-# 4. Usar preset
-texture2d generate "weathered surface" --preset Stone -o wall.png
-```
+- **Multi-GPU** — `--gpu-ids 0,1` divide os pesos entre GPUs via accelerate
+- **Metadata JSON** — cada textura acompanha um ficheiro `.json` com seed, prompt final e parâmetros
+- **Auto-detecção de hardware** — `--hw-auto` deteta o device e a disposição multi-GPU (ligado por defeito)
 
 ## Instalação
 
@@ -39,119 +28,269 @@ texture2d generate "weathered surface" --preset Stone -o wall.png
 Na **raiz** do repositório GameDev:
 
 ```bash
-cd /caminho/para/GameDev
 ./install.sh texture2d
-# Windows: .\install.ps1 texture2d
 ```
 
-O instalador **cria** `Texture2D/.venv` se não existir, instala em modo editável e gera wrappers em `~/.local/bin`. Lista de ferramentas: `./install.sh --list`. Guia geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md)
+O instalador cria `Texture2D/.venv`, instala o pacote em modo editável e coloca um wrapper em `~/.local/bin`. Guia geral: [docs/INSTALLING_PT.md](../docs/INSTALLING_PT.md) · [EN](../docs/INSTALLING.md).
 
 ### Manual / desenvolvimento
 
 ```bash
-./scripts/setup.sh
-source .venv/bin/activate
+cd Shared && pip install -e .
+cd Texture2D && pip install -e .
 ```
 
-O `setup.sh` instala `gamedev-shared` a partir de `../Shared` e o pacote `texture2d` em modo editável (conveniência dev; não substitui o fluxo oficial acima).
-
-### Atalho local
-
-```bash
-python3 scripts/installer.py --prefix ~/.local
-# ou: ./scripts/run_installer.sh / ./scripts/install.sh
-python3 scripts/installer.py --use-venv
-```
-
-Sem PyTorch local — apenas `config/requirements.txt` e `gamedev-shared`.
+Requer uma **GPU CUDA** (PyTorch, diffusers, transformers e accelerate são dependências de runtime).
 
 ## Comandos
 
 | Comando | Descrição |
 |---------|-----------|
 | `texture2d generate PROMPT` | Gera uma textura seamless |
-| `texture2d presets` | Lista presets de materiais |
-| `texture2d batch FILE` | Batch a partir de ficheiro (um prompt por linha) |
-| `texture2d info` | Configuração e ambiente |
-| `texture2d skill install` | Instala Agent Skill Cursor |
+| `texture2d presets` | Lista presets de materiais disponíveis |
+| `texture2d batch FILE` | Batch a partir de um ficheiro de prompts (um por linha) |
+| `texture2d server` | Arranca o model server (mantém o pipeline carregado) |
+| `texture2d server-status` | Mostra o estado do model server |
+| `texture2d server-stop` | Para o model server (graceful shutdown) |
+| `texture2d info` | Configuração, sistema e ambiente |
+| `texture2d skill install` | Instala a Agent Skill do Cursor |
+| `texture2d validate-tileable` | Valida a tileability de uma textura |
 
-## Parâmetros de `generate`
+### `texture2d generate PROMPT`
 
-| Parâmetro | Default | Descrição |
-|-----------|---------|-----------|
-| `--output/-o` | auto | Ficheiro de saída (.png) |
-| `--width/-W` | 1024 | Largura (256–2048, múltiplo de 8) |
-| `--height/-H` | 1024 | Altura |
-| `--steps/-s` | 50 | Passos de inferência (10–100) |
-| `--guidance/-g` | 7.5 | Guidance scale (1.0–20.0) |
-| `--seed` | aleatório | Seed para reprodutibilidade |
-| `--negative-prompt/-n` | "" | Prompt negativo |
-| `--preset/-p` | None | Preset de material |
-| `--cfg-scale` | guidance | CFG scale |
-| `--lora-strength` | 1.0 | Força do LoRA (0.0–2.0) |
-| `--model/-m` | Flux-Seamless-Texture-LoRA | Modelo HF |
+Gera uma textura seamless (tileable) a partir de um prompt de texto.
 
-## Configuração
+```bash
+# Uso básico
+texture2d generate "rough stone wall surface, medieval castle" -o stone.png
+
+# Com um preset de material
+texture2d generate "weathered surface" --preset Stone -o wall.png
+
+# Alta qualidade com seed fixa
+texture2d generate "mossy cobblestone" --quality high --seed 42 -o cobble.png
+
+# Negative prompt (CFG nativo do SD1.5, sem custo extra)
+texture2d generate "dark marble floor" -n "blurry, watermark" -o marble.png
+```
+
+| Parâmetro | Tipo | Default | Descrição |
+|-----------|------|---------|-----------|
+| `-o, --output` | path | auto (`outputs/textures/`) | Ficheiro de saída (`.png`) |
+| `-W, --width` | int | 512 | Largura (múltiplo de 8) |
+| `-H, --height` | int | 512 | Altura (múltiplo de 8) |
+| `-s, --steps` | int | 30 | Passos de inferência |
+| `-g, --guidance` | float | 7.0 | Guidance scale (CFG real) |
+| `--seed` | int | None | Seed para reprodutibilidade |
+| `-n, --negative-prompt` | str | `""` | Prompt negativo (funciona nativamente com o CFG do SD1.5) |
+| `-p, --preset` | str | None | Preset de material (ver Presets abaixo) |
+| `-m, --model` | str | None | Override do ID do modelo HF (default: `stable-diffusion-v1-5/stable-diffusion-v1-5`) |
+| `--cpu` | flag | `false` | Forçar inferência em CPU |
+| `--gpu-ids` | str | None | IDs das GPUs para divisão multi-GPU (ex: `"0,1"`) |
+| `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
+| `--hw-auto/--no-hw-auto` | flag | `on` | Auto-detecção de hardware (device + multi-GPU). Sem offload/clamp (SD1.5 cabe em qualquer GPU CUDA) |
+| `--ground` | str | `auto` | Modo chão top-down: aplica modificadores de viewpoint/iluminação/escala |
+| `-v, --verbose` | flag | `false` | Logs detalhados |
+
+> **Nota:** quando `--quality` é definido, resolução e passos são preenchidos a partir do perfil de qualidade **apenas se** o utilizador não passou explicitamente `-W`, `-H`, `-s` ou `-g`. Flags explícitas têm sempre prioridade (resolução soft via `QualityEngine`).
+
+### `texture2d presets`
+
+Lista todos os presets de materiais disponíveis com os respetivos prompts e parâmetros recomendados.
+
+```bash
+texture2d presets
+```
+
+### `texture2d batch FILE`
+
+Gera texturas em batch a partir de um ficheiro de prompts (um prompt por linha, `#` para comentários).
+
+```bash
+texture2d batch prompts.txt -d textures/ --quality high
+```
+
+| Parâmetro | Tipo | Default | Descrição |
+|-----------|------|---------|-----------|
+| `-d, --output-dir` | path | `outputs/textures/` | Diretório de saída |
+| `-p, --preset` | str | None | Preset por defeito aplicado a todos os prompts |
+| `-W, --width` | int | 512 | Largura |
+| `-H, --height` | int | 512 | Altura |
+| `-s, --steps` | int | 30 | Passos de inferência |
+| `-g, --guidance` | float | 7.0 | Guidance scale |
+| `-m, --model` | str | None | Override do ID do modelo HF |
+| `--gpu-ids` | str | None | IDs das GPUs para divisão multi-GPU (ex: `"0,1"`) |
+| `--quality` | str | `medium` | Quality tier |
+| `--hw-auto/--no-hw-auto` | flag | `on` | Auto-detecção de hardware |
+| `--ground` | str | `auto` | Modo chão top-down |
+
+### `texture2d info`
+
+Mostra configuração, informações de sistema (Python, PyTorch, CUDA, GPUs), localização da cache HF e caminho de saída por defeito.
+
+```bash
+texture2d info
+```
+
+### `texture2d skill install`
+
+Instala a Agent Skill do Cursor (`SKILL.md`) no diretório `.cursor/skills/texture2d/` de um projeto de jogo.
+
+| Parâmetro | Tipo | Default | Descrição |
+|-----------|------|---------|-----------|
+| `-t, --target` | path | `.` | Raiz do projeto do jogo |
+| `--force` | flag | `false` | Sobrescrever skill existente |
+
+```bash
+texture2d skill install -t /caminho/do/meu-jogo --force
+```
+
+### Model server
+
+O model server mantém o pipeline SD1.5 + circular padding carregado na VRAM, pelo que as gerações subsequentes saltam o cold start (~3–5 s vs. carregamento inicial). O `texture2d generate` delega automaticamente quando o server está ativo.
+
+```bash
+texture2d server                  # arrancar (idle timeout 30 min)
+texture2d server-status           # estado (PID, modelo carregado, pedidos servidos)
+texture2d server-stop             # graceful shutdown
+```
+
+| Parâmetro | Tipo | Default | Descrição |
+|-----------|------|---------|-----------|
+| `--socket` | path | `~/.cache/gamedev/texture2d-server.sock` | Path do Unix socket |
+| `--idle-timeout` | int | 30 | Minutos de idle antes de encerrar (liberta VRAM) |
+| `-v, --verbose` | flag | `false` | Logs detalhados |
+
+## Quality Presets
+
+A flag `--quality` seleciona um perfil de parâmetros pré-configurado. Os perfis apenas preenchem defaults — flags fornecidas explicitamente (`-W`, `-H`, `-s`, `-g`) têm sempre prioridade.
+
+| Perfil | Resolução | Passos | Guidance | Descrição |
+|--------|-----------|--------|----------|-----------|
+| `fast` | 512×512 | 16 | 7.0 | Preview rápido, qualidade mínima viável |
+| `low` | 512×512 | 24 | 7.0 | Qualidade básica, geração mais rápida |
+| `medium` | 512×512 | 28 | 7.0 | Qualidade padrão (**default**) |
+| `high` | 768×768 | 32 | 7.0 | Alta qualidade, geração mais lenta |
+| `highest` | 1024×1024 | 40 | 7.0 | Qualidade máxima, geração mais longa |
+
+### Presets de Materiais
+
+Cada preset de material sobrescreve passos e guidance com valores curados:
+
+| Preset | Passos | Guidance | Categoria |
+|--------|--------|----------|-----------|
+| Wood | 50 | 7.5 | Natural |
+| Fabric | 50 | 7.5 | Natural |
+| Metal | 60 | 8.0 | Industrial |
+| Stone | 50 | 7.5 | Natural |
+| Brick | 50 | 7.5 | Arquitetural |
+| Leather | 50 | 7.5 | Natural |
+| Concrete | 50 | 7.5 | Industrial |
+| Marble | 60 | 8.0 | Arquitetural |
+| Grass | 30 | 7.0 | Terreno |
+| Sand | 30 | 7.0 | Terreno |
+| Dirt | 30 | 7.0 | Terreno |
+| Gravel | 30 | 7.0 | Terreno |
+| Tile Floor | 30 | 7.0 | Arquitetural |
+
+```bash
+# Usar um preset com resolução do quality tier
+texture2d generate "scratched surface" --preset Metal --quality high -o metal.png
+```
+
+## Variáveis de Ambiente
 
 | Variável | Descrição |
 |----------|-----------|
-| `HF_TOKEN` | Token Hugging Face (ou `HUGGINGFACEHUB_API_TOKEN`) |
-| `TEXTURE2D_MODEL_ID` | Override do modelo (default: `gokaygokay/Flux-Seamless-Texture-LoRA`) |
+| `TEXTURE2D_MODEL_ID` | Override do ID do modelo SD (`stable-diffusion-v1-5/stable-diffusion-v1-5`) |
+| `TEXTURE2D_HW_AUTO` | Definir como `0` para desativar a auto-detecção de hardware |
+| `TEXTURE2D_BIN` | Override do caminho do binário `texture2d` (usado pelo GameAssets) |
 
-> **Nota:** a geração usa a HF Inference API (cloud). O tempo de resposta depende da carga dos servidores. Não há consumo de GPU local. A API pode ter rate limits — consulta a [documentação da HF Inference API](https://huggingface.co/docs/api-inference/) para detalhes.
+## Estrutura de Saída
 
-## Integração com Materialize
+```
+outputs/
+└── textures/
+    ├── rough_stone_wall_surface_medieval_castle_1715000000.png
+    └── rough_stone_wall_surface_medieval_castle_1715000000.json
+```
 
-Gere a textura diffuse e use o Materialize para mapas PBR:
+- **PNG** — imagem da textura seamless gerada.
+- **JSON** — metadata sidecar com `seed`, `prompt_final`, parâmetros de geração e info do modelo.
+- Saída por defeito: `outputs/textures/`. Override com `-o` (generate) ou `-d` (batch).
+
+## Integração no Pipeline
+
+### Materialize (mapas PBR)
+
+Gere uma textura diffuse e usa o [Materialize](../Materialize/) para criar mapas PBR (normal, height, metallic, roughness, ambient occlusion):
 
 ```bash
 texture2d generate "mossy stone" -o diffuse.png
 materialize diffuse.png --output-dir pbr/
 ```
 
-## Integração com GameAssets
+### Batch no GameAssets
 
 O [GameAssets](../GameAssets/) pode usar `texture2d` como fonte de imagem:
 
-- No `game.yaml`, definir `image_source: texture2d` (global) ou por linha no CSV com coluna `image_source`.
+- No `game.yaml`, definir `image_source: texture2d` (global) ou por linha no CSV.
 - Com `texture2d.materialize: true` no perfil, o GameAssets gera mapas PBR automaticamente via Materialize.
 
 ```bash
 gameassets batch --profile game.yaml --manifest manifest.csv
 ```
 
-Variável `TEXTURE2D_BIN` se o comando não estiver no `PATH`.
+Usa `TEXTURE2D_BIN` se o comando `texture2d` não estiver no `PATH`.
 
-## Estrutura
+## Desenvolvimento
+
+```bash
+cd Texture2D
+
+# Instalar em modo editável com dependências de dev
+pip install -e ".[dev]"
+
+# Correr testes
+pytest tests/ -v
+
+# Lint
+ruff check .
+
+# Formatar
+ruff format .
+```
+
+## Estrutura do Projeto
 
 ```
 Texture2D/
 ├── src/texture2d/
-│   ├── cli.py             # CLI Click (generate, batch, presets, info)
-│   ├── generator.py       # Cliente HF Inference API
-│   ├── presets.py         # 13 presets de materiais
-│   ├── image_processor.py # Processamento de imagem
-│   └── utils.py           # Utilitários
+│   ├── __init__.py
+│   ├── __main__.py            # python -m texture2d
+│   ├── _validate_cli.py       # comando validate-tileable
+│   ├── cli.py                 # CLI Click (generate, batch, presets, server, info, skill)
+│   ├── cli_rich.py            # Integração rich-click
+│   ├── client.py              # Cliente do model server
+│   ├── cursor_skill/
+│   │   └── SKILL.md           # Agent Skill do Cursor
+│   ├── generator.py           # Inferência SD1.5 + circular padding
+│   ├── hardware.py            # Perfil de auto-detecção de hardware
+│   ├── image_processor.py     # Gravação de imagem + metadata
+│   ├── presets.py             # 13 presets de materiais
+│   ├── prompt_enhancer.py     # Enhancers de prompt chão/top-down
+│   ├── server.py              # Model server (mantém o pipeline carregado)
+│   ├── tileability.py         # Helpers de tileability
+│   └── utils.py               # Helpers (validação, seeds, formatação)
 ├── config/
-│   ├── requirements.txt
-│   └── requirements-dev.txt
+│   └── requirements-dev.txt   # Dependências de desenvolvimento
 ├── scripts/
-│   ├── setup.sh           # Setup do venv + deps
-│   ├── run_installer.sh   # Chama installer.py
-│   ├── install.sh         # Delega para run_installer.sh
-│   └── installer.py       # Lógica partilhada com gamedev-install
+│   └── installer.py           # Instalador system-wide
 └── tests/
-```
-
-## Testes
-
-```bash
-pip install -e ".[dev]"
-pytest tests/ -v
 ```
 
 ## Licença
 
 - **Código:** MIT — [LICENSE](LICENSE).
-- **Pesos (default):** [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) — metadata HF indica Apache 2.0; cumpre também os termos do **modelo base** (FLUX) e da [HF Inference API](https://huggingface.co/docs/api-inference/).
-- **Tabela completa:** [GameDev/README_PT.md](../README_PT.md) (secção Licenças).
+- **Pesos (default):** [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) — licença CreativeML Open RAIL-M; cumpre as restrições de uso do modelo.
+- **Tabela completa de licenças:** [GameDev/README_PT.md](../README_PT.md) (secção Licenças).

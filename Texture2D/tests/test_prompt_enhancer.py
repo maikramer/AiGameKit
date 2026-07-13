@@ -1,12 +1,10 @@
-"""Testes para o prompt enhancer de chão top-down."""
+"""Testes para o prompt enhancer de chão top-down (SD1.5)."""
 
 from __future__ import annotations
 
 from texture2d.prompt_enhancer import (
     GROUND_DEFAULT_NEGATIVE,
-    GROUND_LIGHTING,
-    GROUND_SCALE,
-    GROUND_VIEWPOINT,
+    GROUND_SUFFIX,
     enhance_ground_negative,
     enhance_ground_prompt,
     looks_like_ground,
@@ -35,36 +33,31 @@ class TestLooksLikeGround:
 
 
 class TestEnhanceGroundPrompt:
-    def test_adds_all_modifiers(self) -> None:
+    def test_appends_suffix(self) -> None:
         out = enhance_ground_prompt("grass meadow")
-        assert "top-down orthographic" in out
-        assert "flat diffuse lighting" in out
-        assert "medium-scale" in out
         assert "grass meadow" in out
+        assert GROUND_SUFFIX in out
 
-    def test_viewpoint_prefix_comes_first(self) -> None:
-        # Os modificadores de composição devem vir antes do sujeito para entrar
-        # na janela de 77 tokens do CLIP.
+    def test_subject_comes_before_suffix(self) -> None:
+        """O sujeito deve vir antes do sufixo (janela CLIP de 77 tokens)."""
         out = enhance_ground_prompt("lush grass")
-        vp_pos = out.find("flat top-down")
         subject_pos = out.find("lush grass")
-        assert vp_pos < subject_pos
+        suffix_pos = out.find("top-down close-up")
+        assert 0 <= subject_pos < suffix_pos
 
-    def test_skips_viewpoint_if_present(self) -> None:
-        out = enhance_ground_prompt("top-down view of grass", viewpoint=True, lighting=False, scale=False)
-        # Já tem "top-down" — não duplica o viewpoint
-        assert out.count("top-down") == 1
+    def test_positive_language_only(self) -> None:
+        # Negação no prompt positivo injeta o conceito indesejado no embedding.
+        out = enhance_ground_prompt("grass meadow")
+        assert "no " not in out.lower()
+        assert "not " not in out.lower()
 
-    def test_skips_lighting_if_present(self) -> None:
-        out = enhance_ground_prompt("grass, flat lighting", viewpoint=False, lighting=True, scale=False)
-        assert out.count("flat diffuse lighting") == 0  # já tem flat lighting
-        assert "grass" in out
-
-    def test_selective_flags(self) -> None:
-        out = enhance_ground_prompt("grass", viewpoint=True, lighting=False, scale=False)
+    def test_skips_if_already_covered(self) -> None:
+        """Se o utilizador já incluiu viewpoint+iluminação+escala, não duplica."""
+        p = "top-down close-up grass, flat diffuse lighting, seamless tileable"
+        out = enhance_ground_prompt(p)
+        # O sufixo não é adicionado — o prompt fica inalterado (após truncate).
+        assert GROUND_SUFFIX not in out
         assert "top-down" in out
-        assert "diffuse lighting" not in out
-        assert "medium-scale" not in out
 
     def test_empty_prompt(self) -> None:
         assert enhance_ground_prompt("") == ""
@@ -73,18 +66,11 @@ class TestEnhanceGroundPrompt:
     def test_respects_word_budget(self) -> None:
         long_subject = " ".join(["detail"] * 100)
         out = enhance_ground_prompt(long_subject)
-        # Não deve exceder o orçamento brando (55 palavras) + uma margem pequena.
         assert len(out.split()) <= 60
 
-    def test_no_modifiers_needed_returns_truncated(self) -> None:
-        # Se todos os modificadores já estão presentes, só trunca.
-        p = f"top-down overhead view, flat lighting, low relief, medium-scale, not macro. {'grass ' * 30}"
-        out = enhance_ground_prompt(p)
-        assert len(out.split()) <= 60
-
-    def test_preserves_subject_at_end(self) -> None:
+    def test_preserves_subject(self) -> None:
         out = enhance_ground_prompt("desert sand")
-        assert out.endswith("desert sand")
+        assert "desert sand" in out
 
 
 class TestEnhanceGroundNegative:
@@ -98,20 +84,20 @@ class TestEnhanceGroundNegative:
         assert "low quality" in out
         assert "macro" in out  # do default
 
-    def test_dedup_macro(self) -> None:
-        out = enhance_ground_negative("macro, close-up")
-        # Não duplica "macro"
-        assert out.count("macro") == 1
-        assert out.count("close-up") == 1
+    def test_dedup_macros(self) -> None:
+        out = enhance_ground_negative("macro photography, extreme close-up")
+        # Não duplica termos já presentes no negative do utilizador
+        assert out.count("macro photography") == 1
+        assert out.count("extreme close-up") == 1
 
     def test_default_content_present(self) -> None:
         out = enhance_ground_negative("")
-        for term in ["isometric", "perspective", "angled", "3d relief", "ambient occlusion"]:
+        for term in ["isometric", "perspective", "oblique angle", "deep relief", "ambient occlusion"]:
             assert term in out
 
 
 def test_ground_constants_nonempty() -> None:
-    assert len(GROUND_VIEWPOINT) > 20
-    assert len(GROUND_LIGHTING) > 20
-    assert len(GROUND_SCALE) > 20
+    assert len(GROUND_SUFFIX) > 20
+    assert "top-down" in GROUND_SUFFIX
     assert "macro" in GROUND_DEFAULT_NEGATIVE
+    assert "aerial" in GROUND_DEFAULT_NEGATIVE

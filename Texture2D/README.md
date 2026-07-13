@@ -2,22 +2,24 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-CLI for **seamless (tileable) 2D textures** using FLUX.1-dev + LoRA, running locally on GPU.
+CLI for **seamless (tileable) 2D textures** using **Stable Diffusion v1.5 + circular padding**, running locally on GPU.
 
-Uses the [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) model to generate textures that repeat without visible seams — ideal for floors, rocks, walls, and game-dev materials.
+Tiling is achieved **by construction**: every `Conv2d` layer in the UNet and VAE is patched to `padding_mode="circular"`, so the receptive field wraps around the image borders and the output tiles seamlessly in both axes — no LoRA, no post-processing, no trigger word. Uses [`stable-diffusion-v1-5/stable-diffusion-v1-5`](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) to generate textures that repeat without visible seams — ideal for floors, rocks, walls, and game-dev materials.
 
 In the [GameDev](../README.md) monorepo, the package depends on [**gamedev-shared**](../Shared/) (`gamedev_shared`): quality presets, Rich CLI, GPU helpers, and shared conventions aligned with Text2D, Text3D, and GameAssets.
 
 ## Overview
 
-- **Local GPU inference** — FLUX.1-dev base + seamless LoRA, no cloud API needed
+- **Local GPU inference** — Stable Diffusion v1.5 + circular padding, no cloud API needed; fits in ~2.5 GB VRAM (a 6 GiB GPU is plenty)
+- **Tiling by construction** — circular padding on all convolutions, no LoRA or post-processing
+- **Real CFG** — negative prompts work natively (`--negative-prompt`), no `true-cfg` 2x cost
 - **Automatic seamless prompting** — appends tileable/seamless instructions automatically
 - **13 material presets** — Wood, Stone, Grass, Sand, Dirt, Metal, Brick, Fabric, Leather, Concrete, Marble, Gravel, Tile Floor
 - **Quality tiers** — `fast`, `low`, `medium` (default), `high`, `highest` via `--quality`
 - **Batch generation** — multiple textures from a prompt file
 - **Multi-GPU** — `--gpu-ids 0,1` splits weights across GPUs via accelerate
 - **JSON metadata** — each texture has a `.json` sidecar with seed, final prompt, and parameters
-- **Memory-efficient mode** — hw-auto CPU offloading to fit smaller GPUs
+- **Hardware auto-detection** — `--hw-auto` detects device and multi-GPU layout (on by default)
 
 ## Installation
 
@@ -47,8 +49,12 @@ Requires a **CUDA GPU** (PyTorch, diffusers, transformers, accelerate are runtim
 | `texture2d generate PROMPT` | Generate a seamless texture |
 | `texture2d presets` | List available material presets |
 | `texture2d batch FILE` | Batch generate from a prompt file (one per line) |
+| `texture2d server` | Start the model server (keeps the pipeline warm) |
+| `texture2d server-status` | Show model server status |
+| `texture2d server-stop` | Stop the model server (graceful shutdown) |
 | `texture2d info` | Config, system, and environment info |
 | `texture2d skill install` | Install Cursor Agent Skill |
+| `texture2d validate-tileable` | Validate a texture's tileability |
 
 ### `texture2d generate PROMPT`
 
@@ -64,26 +70,27 @@ texture2d generate "weathered surface" --preset Stone -o wall.png
 # High quality with a fixed seed
 texture2d generate "mossy cobblestone" --quality high --seed 42 -o cobble.png
 
-# Low VRAM: hw-auto handles small GPUs automatically (on by default)
-texture2d generate "dark marble floor" -o marble.png
+# Native negative prompt (real CFG, no true-cfg cost)
+texture2d generate "dark marble floor" -n "blurry, watermark" -o marble.png
 ```
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `-o, --output` | path | auto (`outputs/textures/`) | Output file path (`.png`) |
-| `-W, --width` | int | 1024 | Image width (multiple of 8) |
-| `-H, --height` | int | 1024 | Image height (multiple of 8) |
-| `-s, --steps` | int | 28 | Inference steps |
-| `-g, --guidance` | float | 3.5 | Guidance scale |
+| `-W, --width` | int | 512 | Image width (multiple of 8) |
+| `-H, --height` | int | 512 | Image height (multiple of 8) |
+| `-s, --steps` | int | 30 | Inference steps |
+| `-g, --guidance` | float | 7.0 | Guidance scale (real CFG) |
 | `--seed` | int | None | Random seed for reproducibility |
-| `-n, --negative-prompt` | str | `""` | Negative prompt |
+| `-n, --negative-prompt` | str | `""` | Negative prompt (works natively with SD1.5 CFG) |
 | `-p, --preset` | str | None | Material preset (see Presets below) |
-| `--cfg-scale` | float | None | CFG scale override (defaults to guidance) |
-| `--lora-strength` | float | 1.0 | LoRA strength (0.0–2.0) |
-| `-m, --model` | str | None | HF LoRA model ID override |
+| `-m, --model` | str | None | HF model ID override (default: `stable-diffusion-v1-5/stable-diffusion-v1-5`) |
 | `--cpu` | flag | `false` | Force CPU inference |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
 | `--quality` | str | `medium` | Quality tier: `fast`, `low`, `medium`, `high`, `highest` |
+| `--hw-auto/--no-hw-auto` | flag | `on` | Hardware auto-detection (device + multi-GPU). No offload/clamp (SD1.5 fits any CUDA GPU) |
+| `--ground` | str | `auto` | Top-down ground mode: applies viewpoint/lighting/scale prompt modifiers |
+| `-v, --verbose` | flag | `false` | Verbose logging |
 
 > **Note:** When `--quality` is set, resolution and steps are auto-filled from the quality profile **only if** the user didn't explicitly pass `-W`, `-H`, `-s`, or `-g`. Explicit flags always win (soft resolution via `QualityEngine`).
 
@@ -107,13 +114,15 @@ texture2d batch prompts.txt -d textures/ --quality high
 |------|------|---------|-------------|
 | `-d, --output-dir` | path | `outputs/textures/` | Output directory |
 | `-p, --preset` | str | None | Default preset applied to all prompts |
-| `-W, --width` | int | 1024 | Image width |
-| `-H, --height` | int | 1024 | Image height |
-| `-s, --steps` | int | 28 | Inference steps |
-| `-g, --guidance` | float | 3.5 | Guidance scale |
-| `-m, --model` | str | None | HF LoRA model ID override |
+| `-W, --width` | int | 512 | Image width |
+| `-H, --height` | int | 512 | Image height |
+| `-s, --steps` | int | 30 | Inference steps |
+| `-g, --guidance` | float | 7.0 | Guidance scale |
+| `-m, --model` | str | None | HF model ID override |
 | `--gpu-ids` | str | None | GPU IDs for multi-GPU split (e.g. `"0,1"`) |
 | `--quality` | str | `medium` | Quality tier |
+| `--hw-auto/--no-hw-auto` | flag | `on` | Hardware auto-detection |
+| `--ground` | str | `auto` | Top-down ground mode |
 
 ### `texture2d info`
 
@@ -136,17 +145,33 @@ Install the Cursor Agent Skill (`SKILL.md`) into a game project's `.cursor/skill
 texture2d skill install -t /path/to/my-game --force
 ```
 
+### Model server
+
+The model server keeps the SD1.5 + circular padding pipeline loaded in VRAM so subsequent generations skip the cold start (~3–5 s vs. the initial load). `texture2d generate` delegates automatically when the server is running.
+
+```bash
+texture2d server                  # start (idle timeout 30 min)
+texture2d server-status           # status (PID, model loaded, requests served)
+texture2d server-stop             # graceful shutdown
+```
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--socket` | path | `~/.cache/gamedev/texture2d-server.sock` | Unix socket path |
+| `--idle-timeout` | int | 30 | Minutes idle before shutdown (frees VRAM) |
+| `-v, --verbose` | flag | `false` | Verbose logging |
+
 ## Quality Presets
 
 The `--quality` flag selects a preconfigured parameter profile. Profiles only fill defaults — explicitly provided flags (`-W`, `-H`, `-s`, `-g`) always take precedence.
 
 | Profile | Resolution | Steps | Guidance | Description |
 |---------|-----------|-------|----------|-------------|
-| `fast` | 512×512 | 14 | 3.0 | Quick preview, minimum viable quality |
-| `low` | 768×768 | 20 | 3.5 | Basic quality, faster generation |
-| `medium` | 1024×1024 | 28 | 3.5 | Standard quality (**default**) |
-| `high` | 1024×1024 | 40 | 4.0 | High quality, slower generation |
-| `highest` | 2048×2048 | 50 | 4.5 | Maximum quality, longest generation |
+| `fast` | 512×512 | 16 | 7.0 | Quick preview, minimum viable quality |
+| `low` | 512×512 | 24 | 7.0 | Basic quality, faster generation |
+| `medium` | 512×512 | 28 | 7.0 | Standard quality (**default**) |
+| `high` | 768×768 | 32 | 7.0 | High quality, slower generation |
+| `highest` | 1024×1024 | 40 | 7.0 | Maximum quality, longest generation |
 
 ### Material Presets
 
@@ -162,11 +187,11 @@ Each material preset overrides steps and guidance with curated values:
 | Leather | 50 | 7.5 | Natural |
 | Concrete | 50 | 7.5 | Industrial |
 | Marble | 60 | 8.0 | Architectural |
-| Grass | 50 | 7.5 | Terrain |
-| Sand | 50 | 7.5 | Terrain |
-| Dirt | 50 | 7.5 | Terrain |
-| Gravel | 50 | 7.5 | Terrain |
-| Tile Floor | 50 | 7.5 | Architectural |
+| Grass | 30 | 7.0 | Terrain |
+| Sand | 30 | 7.0 | Terrain |
+| Dirt | 30 | 7.0 | Terrain |
+| Gravel | 30 | 7.0 | Terrain |
+| Tile Floor | 30 | 7.0 | Architectural |
 
 ```bash
 # Use a preset with quality-tier resolution
@@ -177,8 +202,8 @@ texture2d generate "scratched surface" --preset Metal --quality high -o metal.pn
 
 | Variable | Description |
 |----------|-------------|
-| `HF_TOKEN` | Hugging Face API token (or `HUGGINGFACEHUB_API_TOKEN`) |
-| `TEXTURE2D_MODEL_ID` | Override default LoRA model ID (`gokaygokay/Flux-Seamless-Texture-LoRA`) |
+| `TEXTURE2D_MODEL_ID` | Override default SD model ID (`stable-diffusion-v1-5/stable-diffusion-v1-5`) |
+| `TEXTURE2D_HW_AUTO` | Set to `0` to disable hardware auto-detection |
 | `TEXTURE2D_BIN` | Override `texture2d` binary path (used by GameAssets) |
 
 ## Output Layout
@@ -242,26 +267,30 @@ ruff format .
 Texture2D/
 ├── src/texture2d/
 │   ├── __init__.py
-│   ├── __main__.py        # python -m texture2d
-│   ├── cli.py             # Click CLI (generate, batch, presets, info, skill)
-│   ├── cli_rich.py        # Rich-click integration
-│   ├── generator.py       # FLUX.1-dev + LoRA inference
-│   ├── presets.py         # 13 material presets
-│   ├── image_processor.py # Image saving + metadata
-│   └── utils.py           # Helpers
+│   ├── __main__.py            # python -m texture2d
+│   ├── _validate_cli.py       # validate-tileable command
+│   ├── cli.py                 # Click CLI (generate, batch, presets, server, info, skill)
+│   ├── cli_rich.py            # Rich-click integration
+│   ├── client.py              # Model server client
+│   ├── cursor_skill/
+│   │   └── SKILL.md           # Cursor Agent Skill
+│   ├── generator.py           # SD1.5 + circular padding inference
+│   ├── hardware.py            # Hardware auto-detection profile
+│   ├── image_processor.py     # Image saving + metadata
+│   ├── presets.py             # 13 material presets
+│   ├── prompt_enhancer.py     # Ground/top-down prompt enhancers
+│   ├── server.py              # Model server (keeps pipeline warm)
+│   ├── tileability.py         # Tileability helpers
+│   └── utils.py               # Helpers (validation, seeds, formatting)
 ├── config/
-│   ├── requirements.txt
-│   └── requirements-dev.txt
+│   └── requirements-dev.txt   # Development dependencies
 ├── scripts/
-│   ├── setup.sh
-│   ├── installer.py
-│   ├── install.sh
-│   └── run_installer.sh
+│   └── installer.py           # System-wide installer
 └── tests/
 ```
 
 ## License
 
 - **Code:** MIT — [LICENSE](LICENSE).
-- **Weights (default):** [Flux-Seamless-Texture-LoRA](https://huggingface.co/gokaygokay/Flux-Seamless-Texture-LoRA) — HF metadata indicates Apache 2.0; also comply with the **base model** (FLUX.1-dev) and Hugging Face terms of service.
+- **Weights (default):** [stable-diffusion-v1-5/stable-diffusion-v1-5](https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5) — CreativeML Open RAIL-M license; comply with the model's use restrictions.
 - **Full license table:** [GameDev/README.md](../README.md) (Licenses section).

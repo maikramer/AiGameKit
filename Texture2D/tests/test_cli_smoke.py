@@ -1,4 +1,4 @@
-"""Smoke tests do CLI Texture2D (sem chamar HF Inference API)."""
+"""Smoke tests do CLI Texture2D (sem carregar o pipeline SD1.5)."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def test_info() -> None:
     runner = CliRunner()
     r = runner.invoke(cli, ["info"])
     assert r.exit_code == 0
-    assert "Modelo" in r.output or "HF" in r.output
+    assert "stable" in r.output.lower() or "SD" in r.output or "Modelo" in r.output
 
 
 def test_batch_requires_file() -> None:

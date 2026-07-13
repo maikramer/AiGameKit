@@ -6,47 +6,53 @@ Resolve três problemas recorrentes em texturas de chão geradas por difusão:
   2. **Zoom macro** — termos como "natural blades" induzem close-ups de detalhe.
   3. **Relevo 3D excessivo** — "lush lawn" gera lâminas com volume e sombra forte.
 
-O enhancer aplica modificadores de viewpoint/iluminação/escala e é **token-aware**:
-o FLUX usa T5 (janela larga) + CLIP (77 tokens para o pooled embedding). Manter o
-sujeito + viewpoint **no início** do prompt garante que entram na janela do CLIP,
-que é o que mais influencia a composição geral. O sufixo é aparado se exceder um
-orçamento de palavras.
+O backend Stable Diffusion (UNet convolucional + circular padding) tem uma janela
+CLIP de 77 tokens: o material/descritor deve vir **antes** dos modificadores de
+viewpoint para entrar na composição. Ao contrário do FLUX (T5 wide), vocabulário
+como "aerial photograph / nadir view / spanning several meters" faz o SD1.5 gerar
+**imagem de satélite** (árvores, lagos vistos de avião) — os sufixos abaixo usam
+linguagem de superfície próxima (top-down close-up, flat ground).
 """
 
 from __future__ import annotations
 
 import re
 
-# Modificadores por vetor (ordem = prioridade; os primeiros entram no CLIP).
-GROUND_VIEWPOINT = (
-    "flat top-down orthographic view, straight from above, perpendicular to ground, no perspective, no angle"
+# Sufixo positivo para ground textures (SD1.5). Linguagem de superfície próxima:
+# "top-down close-up photograph of flat ground surface" descreve o que queremos
+# sem acionar o prior de "vista aérea de paisagem" (árvores/lagos/horizonte).
+GROUND_SUFFIX = (
+    "top-down close-up photograph of flat ground surface, seamless tileable game texture, "
+    "albedo material, even diffuse lighting, uniform fine detail"
 )
-GROUND_LIGHTING = "even flat diffuse lighting, low relief, minimal height variation, no strong shadows"
-GROUND_SCALE = "medium-scale texture, large area coverage, not macro, not close-up"
 
-# Negative prompt por defeito para ground textures — bloqueia os 3 problemas.
+# Negative prompt por defeito para ground textures — bloqueia os 3 problemas e os
+# artefactos de "vista aérea" típicos do SD1.5 (satélite/drone/paisagem).
 GROUND_DEFAULT_NEGATIVE = (
-    "macro, close-up, individual blades, extreme detail, 3d relief, strong directional shadows, "
-    "depth, isometric, perspective, angled, side view, oblique, baked shadows, ambient occlusion, "
-    "high contrast, 3d, pbr"
+    "aerial view, satellite image, drone shot, landscape, horizon, sky, trees, bushes, "
+    "buildings, roads, water, isometric view, oblique angle, perspective, tilted camera, "
+    "side view, macro photography, extreme close-up, individual grass blades leaning sideways, "
+    "3d render, depth of field, bokeh, strong directional shadows, deep relief, "
+    "ambient occlusion, high contrast, dramatic lighting"
 )
 
-# Orçamento brando em palavras (~55 ≈ 70-75 tokens CLIP). O T5 leva o prompt
-# completo, mas aparar o excesso evita desperdiçar a janela do CLIP com sufixo.
+# Orçamento brando em palavras (~55 ≈ 70-75 tokens CLIP). O SD1.5 trunca a 77
+# tokens; aparar o excesso evita que o sujeito do utilizador seja cortado.
 _SOFT_WORD_BUDGET = 55
 
-# Marcadores que indicam que o utilizador já especificou o viewpoint.
+# Marcadores que indicam que o utilizador já especificou o viewpoint top-down.
 _VIEWPOINT_MARKERS = re.compile(
     r"\b(top.?down|straight from above|perpendicular to ground|overhead|bird.?s? eye|"
-    r"from above|orthographic|flat view|top view)\b",
+    r"from above|orthographic|flat view|top view|nadir|close.?up)\b",
     flags=re.IGNORECASE,
 )
 _LIGHTING_MARKERS = re.compile(
-    r"\b(flat (?:diffuse )?lighting|even lighting|no (?:strong )?shadows|low relief)\b",
+    r"\b(flat (?:diffuse )?lighting|even lighting|diffuse overcast|albedo|no (?:strong )?shadows|low relief)\b",
     flags=re.IGNORECASE,
 )
 _SCALE_MARKERS = re.compile(
-    r"\b(medium.?scale|not macro|not close.?up|large area|aerial scale|far view)\b",
+    r"\b(medium.?scale|not macro|not close.?up|large area|wide ground area|flat ground surface|"
+    r"seamless tileable)\b",
     flags=re.IGNORECASE,
 )
 
@@ -91,18 +97,18 @@ def enhance_ground_prompt(
     lighting: bool = True,
     scale: bool = True,
 ) -> str:
-    """Aplica modificadores de chão top-down a um prompt.
+    """Aplica o sufixo de chão top-down (SD1.5) a um prompt.
 
-    Acrescenta apenas os vetores que ainda não estão presentes no prompt
-    (deteção por regex, case-insensitive). O sujeito do utilizador fica
-    **depois** do viewpoint/iluminação para que os modificadores de composição
-    entrem primeiro na janela de 77 tokens do CLIP.
+    O sujeito do utilizador fica **antes** do sufixo ``GROUND_SUFFIX`` para entrar
+    primeiro na janela de 77 tokens do CLIP (é o que mais influencia o material).
+    Se o utilizador já incluiu marcadores de viewpoint/iluminação/escala, o sufixo
+    não é duplicado.
 
     Args:
         prompt: Prompt do utilizador (já pode incluir tileability).
-        viewpoint: Aplicar modificador de câmara top-down.
-        lighting: Aplicar modificador de iluminação plana / baixo relevo.
-        scale: Aplicar modificador de escala média.
+        viewpoint: Reservado (mantido para compat de assinatura).
+        lighting: Reservado (mantido para compat de assinatura).
+        scale: Reservado (mantido para compat de assinatura).
 
     Returns:
         Prompt melhorado, aparado ao orçamento brando de palavras.
@@ -111,19 +117,12 @@ def enhance_ground_prompt(
     if not p:
         return p
 
-    prefix_parts: list[str] = []
-    if viewpoint and not _VIEWPOINT_MARKERS.search(p):
-        prefix_parts.append(GROUND_VIEWPOINT)
-    if lighting and not _LIGHTING_MARKERS.search(p):
-        prefix_parts.append(GROUND_LIGHTING)
-    if scale and not _SCALE_MARKERS.search(p):
-        prefix_parts.append(GROUND_SCALE)
-
-    if not prefix_parts:
+    # Se o utilizador já cobriu os 3 vetores, não adiciona o sufixo.
+    already_covered = _VIEWPOINT_MARKERS.search(p) and _LIGHTING_MARKERS.search(p) and _SCALE_MARKERS.search(p)
+    if already_covered:
         return _truncate_to_budget(p)
 
-    prefix = ". ".join(prefix_parts) + ". "
-    return _truncate_to_budget(prefix + p)
+    return _truncate_to_budget(f"{p}, {GROUND_SUFFIX}")
 
 
 def enhance_ground_negative(negative_prompt: str) -> str:
