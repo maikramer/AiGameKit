@@ -36,6 +36,7 @@
       "vibegame/startup": ["./src/plugins/startup/index.ts"],
       "vibegame/transforms": ["./src/plugins/transforms/index.ts"],
       "vibegame/composition": ["./src/plugins/composition/index.ts"],
+      "vibegame/group": ["./src/plugins/group/index.ts"],
       "vibegame/road": ["./src/plugins/road/index.ts"],
       "vibegame/tweening": ["./src/plugins/tweening/index.ts"],
       "vibegame/line": ["./src/plugins/line/index.ts"],

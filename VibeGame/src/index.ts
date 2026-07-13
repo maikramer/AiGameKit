@@ -913,8 +913,15 @@ export {
   makeRoadGeometry,
   smoothPath,
   resampleRoadPath,
+  carveRoadCorridor,
 } from './plugins/road';
-export type { RoadData, RoadGeometryOptions } from './plugins/road';
+export type {
+  RoadData,
+  RoadGeometryOptions,
+  RoadCorridorOpts,
+} from './plugins/road';
+
+export { GroupPlugin, groupRecipe } from './plugins/group';
 
 export {
   WeatherPlugin,
