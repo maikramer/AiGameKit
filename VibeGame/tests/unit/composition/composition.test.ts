@@ -4,6 +4,7 @@ import {
   CompositionPlugin,
   buildPrimitiveMesh,
   compositionRecipe,
+  computePadAlphaData,
   isPrimitiveTag,
   parsePrimitiveSpec,
   type PrimitiveSpec,
@@ -45,6 +46,10 @@ function makeSpec(overrides: Partial<PrimitiveSpec> = {}): PrimitiveSpec {
     roughnessMapUrl: null,
     roughness: 1,
     metalness: 0,
+    opacity: 1,
+    edgeFeather: 0,
+    cornerRadius: 0,
+    edgeNoise: 0,
     ...overrides,
   };
 }
@@ -228,6 +233,143 @@ describe('composition: parsePrimitiveSpec (texturas)', () => {
     });
     expect(spec.roughness).toBe(1);
     expect(spec.metalness).toBe(0);
+  });
+});
+
+describe('composition: primitiva pad (decal de chão)', () => {
+  it('isPrimitiveTag reconhece pad', () => {
+    expect(isPrimitiveTag('pad')).toBe(true);
+    expect(isPrimitiveTag('Pad')).toBe(true);
+  });
+
+  it('parseia size="W D" (2 componentes) como largura X × profundidade Z', () => {
+    const spec = parsePrimitiveSpec('pad', { size: '16 12' });
+    expect(spec.sizeX).toBe(16);
+    expect(spec.sizeZ).toBe(12);
+  });
+
+  it('aceita size 2D já convertido pelo XMLValueParser ({x, y})', () => {
+    const spec = parsePrimitiveSpec('pad', {
+      size: { x: 16, y: 12 } as unknown as string,
+    });
+    expect(spec.sizeX).toBe(16);
+    expect(spec.sizeZ).toBe(12);
+  });
+
+  it('pad tem edge-feather default 0.8; box default 0', () => {
+    const pad = parsePrimitiveSpec('pad', {});
+    expect(pad.edgeFeather).toBeCloseTo(0.8);
+    const box = parsePrimitiveSpec('box', {});
+    expect(box.edgeFeather).toBe(0);
+  });
+
+  it('parseia edge-feather, corner-radius e edge-noise', () => {
+    const spec = parsePrimitiveSpec('pad', {
+      'edge-feather': '1.5',
+      'corner-radius': '3',
+      'edge-noise': '0.4',
+    });
+    expect(spec.edgeFeather).toBeCloseTo(1.5);
+    expect(spec.cornerRadius).toBeCloseTo(3);
+    expect(spec.edgeNoise).toBeCloseTo(0.4);
+  });
+
+  it('mesh do pad: geometria plana, sem castShadow, material blendável', () => {
+    const mesh = buildPrimitiveMesh(
+      makeSpec({ kind: 'pad', sizeX: 8, sizeZ: 8, edgeFeather: 1 })
+    );
+    expect(mesh.geometry.type).toBe('PlaneGeometry');
+    expect(mesh.castShadow).toBe(false);
+    expect(mesh.receiveShadow).toBe(true);
+    const mat = mesh.material as unknown as {
+      transparent: boolean;
+      depthWrite: boolean;
+      alphaMap: unknown;
+      polygonOffset: boolean;
+    };
+    expect(mat.transparent).toBe(true);
+    expect(mat.depthWrite).toBe(false);
+    expect(mat.alphaMap).not.toBeNull();
+    expect(mat.polygonOffset).toBe(true);
+  });
+
+  it('pad com edge-feather=0 e sem noise/radius fica opaco (sem alphaMap)', () => {
+    const mesh = buildPrimitiveMesh(makeSpec({ kind: 'pad' }));
+    const mat = mesh.material as unknown as {
+      transparent: boolean;
+      alphaMap: unknown;
+    };
+    expect(mat.transparent).toBe(false);
+    expect(mat.alphaMap).toBeNull();
+  });
+
+  it('computePadAlphaData: centro opaco, orla transparente', () => {
+    const spec = makeSpec({
+      kind: 'pad',
+      sizeX: 10,
+      sizeZ: 10,
+      edgeFeather: 1.5,
+    });
+    const w = 64;
+    const h = 64;
+    const data = computePadAlphaData(spec, w, h);
+    const center = data[(h / 2) * w + w / 2]!;
+    expect(center).toBe(255);
+    // 4 orlas: alpha ~0 (primeiro/último texel dentro da banda de feather)
+    expect(data[0]!).toBeLessThan(30);
+    expect(data[w - 1]!).toBeLessThan(30);
+    expect(data[(h - 1) * w]!).toBeLessThan(30);
+    expect(data[h * w - 1]!).toBeLessThan(30);
+  });
+
+  it('computePadAlphaData: corner-radius esvazia os cantos mais que os lados', () => {
+    const spec = makeSpec({
+      kind: 'pad',
+      sizeX: 10,
+      sizeZ: 10,
+      edgeFeather: 1,
+      cornerRadius: 3,
+    });
+    const w = 64;
+    const h = 64;
+    const data = computePadAlphaData(spec, w, h);
+    // Ponto a ~1 m da orla no meio do lado (dentro do núcleo) vs canto
+    const edgeMid = data[(h / 2) * w + 6]!; // x≈-4.0, z=0 → dentro
+    const corner = data[6 * w + 6]!; // x≈-4.0, z≈-4.0 → cortado pelo raio
+    expect(edgeMid).toBeGreaterThan(200);
+    expect(corner).toBeLessThan(edgeMid);
+  });
+
+  it('computePadAlphaData é determinístico para o mesmo spec', () => {
+    const spec = makeSpec({
+      kind: 'pad',
+      sizeX: 6,
+      sizeZ: 6,
+      edgeFeather: 1,
+      edgeNoise: 0.5,
+      posX: 3,
+      posZ: -7,
+    });
+    const a = computePadAlphaData(spec, 32, 32);
+    const b = computePadAlphaData(spec, 32, 32);
+    expect(Array.from(a)).toEqual(Array.from(b));
+  });
+
+  it('edge-noise nunca torna a orla da geometria visível (alpha 0 mantém-se)', () => {
+    const spec = makeSpec({
+      kind: 'pad',
+      sizeX: 8,
+      sizeZ: 8,
+      edgeFeather: 0.6,
+      edgeNoise: 1.2,
+    });
+    const w = 48;
+    const h = 48;
+    const data = computePadAlphaData(spec, w, h);
+    for (let i = 0; i < w; i++) {
+      expect(data[i]!).toBeLessThan(40); // primeira linha
+      expect(data[(h - 1) * w + i]!).toBeLessThan(40); // última linha
+    }
   });
 });
 

@@ -108,7 +108,7 @@ export const compositionParser: Parser = ({ entity, element, state }) => {
 
     logger.warn(
       `[Composition] Ignoring unknown child <${child.tagName}>. ` +
-        'Use Box/Sphere/Cylinder/Plane or a registered recipe (e.g. PointLight).'
+        'Use Box/Sphere/Cylinder/Plane/Pad or a registered recipe (e.g. PointLight).'
     );
   }
 
