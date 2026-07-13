@@ -11,6 +11,8 @@ const behaviours = createCreatureBehaviours({
     run: 'run',
     lunge: 'jump',
     death: 'death',
+    hit: 'attack',
+    attack: 'attack',
   },
   hp: 45,
   chaseSpeed: 1.5,
