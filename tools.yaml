@@ -10,6 +10,17 @@ workspace:
     src_subpath: src
 
 tools:
+  modelserver:
+    name: "ModelServer"
+    kind: python
+    folder: ModelServer
+    cli_name: gamedev-model-server
+    python_module: modelserver
+    description: "Unified Model Server — supervisor único de VRAM para todas as ferramentas GPU"
+    min_python: [3, 13]
+    install_order: -3
+    install_before: [text2d, text2icon, text3d, paint3d, part3d, texture2d, skymap2d, text2sound, terrain3d]
+
   text2d:
     name: "Text2D"
     kind: python

@@ -98,7 +98,6 @@ class Texture2DProfile:
     guidance_scale: float | None = None
     negative_prompt: str | None = None
     preset: str | None = None
-    cfg_scale: float | None = None
     lora_strength: float | None = None
     model_id: str | None = None
     # PBR a partir do PNG difuso (CLI materialize, não text3d)
@@ -327,7 +326,6 @@ class GameProfile:
             h = raw_tex2.get("height")
             st = raw_tex2.get("steps")
             gs = raw_tex2.get("guidance_scale")
-            cfg = raw_tex2.get("cfg_scale")
             lr = raw_tex2.get("lora_strength")
             mq = raw_tex2.get("materialize_quality")
             try:
@@ -335,12 +333,11 @@ class GameProfile:
                 he_t = int(h) if h is not None else None
                 st_i = int(st) if st is not None else None
                 gs_f = float(gs) if gs is not None else None
-                cfg_f = float(cfg) if cfg is not None else None
                 lr_f = float(lr) if lr is not None else None
                 mq_i = int(mq) if mq is not None else None
             except (TypeError, ValueError) as e:
                 raise ValueError(
-                    "texture2d.width, height, steps, guidance_scale, cfg_scale, "
+                    "texture2d.width, height, steps, guidance_scale, "
                     "lora_strength e materialize_quality devem ser números válidos"
                 ) from e
             neg_prompt = raw_tex2.get("negative_prompt")
@@ -367,7 +364,6 @@ class GameProfile:
                 guidance_scale=gs_f,
                 negative_prompt=neg_s,
                 preset=pr_s,
-                cfg_scale=cfg_f,
                 lora_strength=lr_f,
                 model_id=mid_s,
                 materialize=bool(raw_tex2.get("materialize", False)),
