@@ -3,6 +3,7 @@ import { AiSteeringPlugin } from './ai-steering/plugin';
 import { AnimationPlugin } from './animation/plugin';
 import { BvhPlugin } from './bvh/plugin';
 import { CompositionPlugin } from './composition/plugin';
+import { GroupPlugin } from './group/plugin';
 import { PlayerControllerPlugin } from './player-controller/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
 import { EntityScriptPlugin } from './entity-script/plugin';
@@ -36,6 +37,7 @@ import { WeatherPlugin } from './weather/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
+  GroupPlugin,
   GltfXmlPlugin,
   EntityScriptPlugin,
   GltfAnimPlugin,
