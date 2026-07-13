@@ -167,8 +167,8 @@ def ensure_rgb(image: Image.Image) -> Image.Image:
 def safe_filename(text: str, max_length: int = 80) -> str:
     """Sanitize *text* into a filesystem-safe filename.
 
-    Replaces characters that are problematic on common filesystems with
-    underscores and truncates to *max_length*.
+    Delega a ``gamedev_shared.path_utils.safe_filename`` com ``separator="_"``
+    (underscores, para consistência com metadata sidecars existentes).
 
     Args:
         text: Raw text to sanitize.
@@ -177,8 +177,6 @@ def safe_filename(text: str, max_length: int = 80) -> str:
     Returns:
         A sanitized, lowercased filename stem (no extension).
     """
-    import re
+    from .path_utils import safe_filename as _safe
 
-    safe = re.sub(r"[^\w\s-]", "_", text).strip().lower()
-    safe = re.sub(r"[\s_]+", "_", safe)
-    return safe[:max_length]
+    return _safe(text, max_len=max_length, separator="_")

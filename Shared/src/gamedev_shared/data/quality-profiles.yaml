@@ -32,7 +32,7 @@ profiles:
     texture2d:
       width: 512
       height: 512
-      steps: 20
+      steps: 16
       guidance: 7.0
     skymap2d:
       width: 1024
@@ -106,8 +106,8 @@ profiles:
     texture2d:
       width: 512
       height: 512
-      steps: 30
-      guidance: 7.5
+      steps: 24
+      guidance: 7.0
     skymap2d:
       width: 1536
       height: 768
@@ -180,8 +180,8 @@ profiles:
     texture2d:
       width: 512
       height: 512
-      steps: 30
-      guidance: 5.0
+      steps: 28
+      guidance: 7.0
     skymap2d:
       width: 2048
       height: 1024
@@ -254,8 +254,8 @@ profiles:
     texture2d:
       width: 768
       height: 768
-      steps: 50
-      guidance: 7.5
+      steps: 32
+      guidance: 7.0
     skymap2d:
       width: 2048
       height: 1024
@@ -328,8 +328,8 @@ profiles:
     texture2d:
       width: 1024
       height: 1024
-      steps: 75
-      guidance: 7.5
+      steps: 40
+      guidance: 7.0
     skymap2d:
       width: 4096
       height: 2048

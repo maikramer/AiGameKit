@@ -42,11 +42,18 @@ _logger = Logger()
 # Paths canónicos.
 DEFAULT_SERVER_DIR = Path.home() / ".cache" / "gamedev"
 
+# Socket canónico do Unified Model Server (UMS) — supervisor único de VRAM.
+# Quando o UMS está ativo, todas as ferramentas delegam nele; este socket é o
+# ponto de entrada para geração (cmd "generate" com "backend") e coordenação
+# de VRAM (cmd "ensure-vram"). Ver ModelServer/ no monorepo.
+UMS_SOCKET = DEFAULT_SERVER_DIR / "model-server.sock"
+
 # Um socket por tool — evita misturar modelos diferentes.
 _SOCKET_FOR_TOOL: dict[str, str] = {
     "text2icon": "text2icon-server.sock",
     "text2d": "text2d-server.sock",
     "texture2d": "texture2d-server.sock",
+    "modelserver": "model-server.sock",
 }
 
 DEFAULT_IDLE_TIMEOUT_MIN = 30
@@ -209,6 +216,122 @@ def stop_server(socket_path: Path | str | None = None) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Unified Model Server (UMS)
+# ---------------------------------------------------------------------------
+
+
+def is_ums_running() -> bool:
+    """Verifica se o Unified Model Server está ativo no socket canónico."""
+    return is_server_running(UMS_SOCKET)
+
+
+def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) -> bool:
+    """Garante que o UMS está ativo. Arranca-o automaticamente se necessário.
+
+    Quando uma tool chama ``delegate_to_ums``, esta função assegura que o UMS
+    está a correr. Se não estiver, tenta arrancá-lo em background via
+    ``gamedev-model-server start`` e espera até o socket ficar pronto.
+
+    O auto-start pode ser desativado com a env var ``GAMEDEV_UMS_AUTO_START=0``.
+
+    Args:
+        timeout_sec: Tempo máximo de espera pelo arranque do UMS.
+        auto_start: Se ``False``, não arranca o UMS (só verifica se está ativo).
+
+    Returns:
+        ``True`` se o UMS está ativo e pronto a receber pedidos.
+    """
+    if is_ums_running():
+        return True
+
+    if not auto_start:
+        return False
+
+    # Kill-switch via env var.
+    if os.environ.get("GAMEDEV_UMS_AUTO_START", "1") == "0":
+        return False
+
+    # Tentar arrancar o UMS em background.
+    import shutil
+    import subprocess
+    import sys
+
+    # Resolver o binário: env var MODELSERVER_BIN → PATH → python -m modelserver.
+    bin_path = os.environ.get("MODELSERVER_BIN", "").strip()
+    if bin_path and Path(bin_path).exists():
+        cmd = [bin_path, "start"]
+    elif shutil.which("gamedev-model-server"):
+        cmd = ["gamedev-model-server", "start"]
+    else:
+        # Fallback: python -m modelserver (requer modelserver instalado no venv).
+        cmd = [sys.executable, "-m", "modelserver", "start"]
+
+    _logger.info(f"[UMS] Auto-start: {' '.join(cmd)}")
+    try:
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,  # detach: sobrevive ao processo chamador
+        )
+    except OSError as e:
+        _logger.warn(f"[UMS] Auto-start falhou: {e}")
+        return False
+
+    # Esperar que o socket fique pronto.
+    import time
+
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        if is_ums_running():
+            _logger.info("[UMS] Auto-start: UMS ativo e pronto.")
+            return True
+
+    _logger.warn(f"[UMS] Auto-start: timeout após {timeout_sec:.0f}s à espera do socket.")
+    return False
+
+
+def send_to_ums(request: dict[str, Any], *, timeout_sec: float = 300.0) -> dict[str, Any] | None:
+    """Envia um pedido ao UMS. Arranca o UMS automaticamente se necessário."""
+    if not ensure_ums_running():
+        return None
+    return send_request(request, UMS_SOCKET, timeout_sec=timeout_sec)
+
+
+def delegate_to_ums(
+    backend: str,
+    request: dict[str, Any],
+    *,
+    timeout_sec: float = 600.0,
+) -> dict[str, Any] | None:
+    """Delega um pedido de geração ao UMS, arrancando-o automaticamente se necessário.
+
+    Helper para CLIs das tools: no início do comando ``generate``, chamar esta
+    função. Se retornar um dict com ``status == "ok"``, a geração foi feita pelo
+    UMS (usar ``result["output"]``). Se retornar ``None``, o UMS não está ativo —
+    fazer fallback in-process.
+
+    Se o UMS não estiver ativo, ``ensure_ums_running`` arranca-o automaticamente
+    em background (a menos que ``GAMEDEV_UMS_AUTO_START=0``).
+
+    Args:
+        backend: Nome do backend (ex: ``text2icon``).
+        request: Parâmetros do pedido (prompt, output, steps, ...).
+        timeout_sec: Timeout para o pedido de geração.
+
+    Returns:
+        Dict de resposta (``{"status": "ok", "output": ...}``) ou ``None`` se o
+        UMS não estiver ativo (nem pôde ser arrancado).
+    """
+    if not ensure_ums_running():
+        return None
+    req = {"cmd": "generate", "backend": backend, **request}
+    return send_to_ums(req, timeout_sec=timeout_sec)
+
+
+# ---------------------------------------------------------------------------
 # Coordenação de VRAM
 # ---------------------------------------------------------------------------
 
@@ -219,6 +342,10 @@ def ensure_vram_available(needed_mib: int, *, timeout_sec: float = 30.0) -> bool
     Chamaado por ferramentas pesadas (text3d, paint3d) antes de ocupar a GPU.
     Se houver servers ativos a segurar VRAM, pede-lhes ``release`` gracioso e
     espera até haver espaço (ou timeout).
+
+    Preferência: se o **Unified Model Server** (UMS) estiver ativo, envia
+    ``ensure-vram`` para evicção inteligente peso+LRU. Caso contrário, cai no
+    comportamento legacy (descobrir per-tool sockets, ``release`` cego).
 
     Args:
         needed_mib: VRAM necessária em MiB.
@@ -233,7 +360,18 @@ def ensure_vram_available(needed_mib: int, *, timeout_sec: float = 30.0) -> bool
     if free is not None and free >= needed_mib:
         return True  # já há espaço, não incomodar ninguém
 
-    # Pedir a todos os servers ativos para fazer release
+    # Preferir o UMS se ativo (evicção inteligente peso+LRU).
+    if is_ums_running():
+        _logger.info(f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}) — a pedir evicção ao UMS")
+        resp = send_to_ums({"cmd": "ensure-vram", "needed_mib": needed_mib}, timeout_sec=timeout_sec)
+        if resp is not None:
+            ok = resp.get("status") == "ok"
+            if not ok:
+                _logger.warn(f"UMS respondeu {resp.get('status')} ao ensure-vram")
+            return ok
+        # UMS estava running mas não respondeu — cair para legacy.
+
+    # Legacy: pedir a todos os per-tool servers ativos para fazer release.
     active = discover_active_sockets()
     if active:
         msg = f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}) — a pedir release a {len(active)} server(s)"

@@ -25,6 +25,7 @@ PART3D_BIN = "PART3D_BIN"
 TERRAIN3D_BIN = "TERRAIN3D_BIN"
 ROCKS3D_BIN = "ROCKS3D_BIN"
 VIBEGAME_BIN = "VIBEGAME_BIN"
+MODELSERVER_BIN = "MODELSERVER_BIN"
 HF_HOME = "HF_HOME"
 PYTORCH_CUDA_ALLOC_CONF = "PYTORCH_CUDA_ALLOC_CONF"
 GAMEDEV_MODEL_SERVER_SOCKET = "GAMEDEV_MODEL_SERVER_SOCKET"
@@ -46,6 +47,7 @@ TOOL_BINS = {
     "rocks3d": ROCKS3D_BIN,
     "materialize": MATERIALIZE_BIN,
     "vibegame": VIBEGAME_BIN,
+    "modelserver": MODELSERVER_BIN,
 }
 """Mapeamento tool_name → nome da variável de ambiente do binário.
 
@@ -92,6 +94,11 @@ def subprocess_gpu_env(
     env = os.environ.copy()
     if not env.get(PYTORCH_CUDA_ALLOC_CONF):
         env[PYTORCH_CUDA_ALLOC_CONF] = "expandable_segments:True"
+
+    # Downloads HF acelerados via hf_transfer (Rust) — 5-10x mais rápido.
+    # Ativar para subprocessos mesmo se o pai ainda não chamou enable_hf_transfer().
+    env.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+
     if gpu_ids:
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
 
