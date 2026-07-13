@@ -10,7 +10,6 @@ Output: GLB das partes (``save_scene_geometries``) + GLB segmented (opcional).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from .base import BackendAdapter

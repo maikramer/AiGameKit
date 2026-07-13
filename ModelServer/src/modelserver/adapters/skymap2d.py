@@ -1,6 +1,6 @@
 """Adapter do Skymap2D — FLUX.1-dev SDNQ + LoRA equirectangular para skymaps 360°.
 
-Como o Texture2D mas sem ``ground``/``seamless_fix``. Default 2048×1024 (panorama
+Como o Texture2D mas sem ``ground``/``seamless_fix``. Default 2048x1024 (panorama
 equirect 2:1). Suporta PNG e EXR.
 """
 
@@ -20,7 +20,11 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from skymap2d.generator import SkymapGenerator
 
-        gen = SkymapGenerator(verbose=kwargs.get("verbose", False), **kwargs)
+        load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        if self.should_use_low_vram_mode():
+            load_kwargs["memory_efficient"] = kwargs.get("memory_efficient", True)
+        load_kwargs.update({k: v for k, v in kwargs.items() if k not in ("verbose", "memory_efficient")})
+        gen = SkymapGenerator(**load_kwargs)
         gen.warmup()
         return gen
 

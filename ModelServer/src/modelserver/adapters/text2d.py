@@ -20,7 +20,11 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from text2d.generator import KleinFluxGenerator
 
-        gen = KleinFluxGenerator(verbose=kwargs.get("verbose", False), **kwargs)
+        load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        if self.should_use_low_vram_mode():
+            load_kwargs["memory_efficient"] = kwargs.get("memory_efficient", True)
+        load_kwargs.update({k: v for k, v in kwargs.items() if k not in ("verbose", "memory_efficient")})
+        gen = KleinFluxGenerator(**load_kwargs)
         gen.warmup()
         return gen
 
@@ -33,7 +37,7 @@ class Adapter(BackendAdapter):
             return {"status": "error", "error": "prompt e output são obrigatórios"}
 
         t_start = time.perf_counter()
-        image = model.generate(
+        image, _metadata = model.generate(
             prompt=prompt,
             height=int(request.get("height", 1024)),
             width=int(request.get("width", 1024)),

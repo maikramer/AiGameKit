@@ -83,7 +83,9 @@ class Registry:
     ``BackendAdapter`` de cada backend sob procura (lazy import do módulo da tool).
     """
 
-    def __init__(self, descriptors: dict[str, BackendDescriptor] | None = None, *, yaml_path: str | None = None) -> None:
+    def __init__(
+        self, descriptors: dict[str, BackendDescriptor] | None = None, *, yaml_path: str | None = None
+    ) -> None:
         self._descriptors = descriptors if descriptors is not None else load_descriptors(yaml_path)
         self._adapter_instances: dict[str, object] = {}
 

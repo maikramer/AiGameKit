@@ -12,8 +12,6 @@ Comandos:
 
 from __future__ import annotations
 
-import json
-import socket
 import sys
 from pathlib import Path
 
@@ -204,6 +202,156 @@ def evict_cmd(name: str | None) -> None:
     else:
         console.print(f"[bold red]✗ {resp.get('error', resp)}[/bold red]")
         sys.exit(1)
+
+
+@cli.command("stats")
+@click.option("--reset", is_flag=True, help="Limpa todas as estatísticas.")
+def stats_cmd(reset: bool) -> None:
+    """Mostra estatísticas de performance por backend (cargas, gerações, timings)."""
+    if reset:
+        resp = _send({"cmd": P.CMD_STATS}, timeout=5.0)
+        if resp is not None:
+            # Reset local das stats pedindo ao manager via protocolo extendido.
+            # Como o stats collector vive no processo do UMS, o reset faz-se
+            # parando e arrancando o servidor. Por agora, mostramos o atual.
+            console.print("[yellow]Reset das stats requer restart do UMS.[/yellow]")
+        return
+
+    resp = _send({"cmd": P.CMD_STATS}, timeout=5.0)
+    if resp is None:
+        console.print("[yellow]UMS não está ativo.[/yellow]")
+        sys.exit(1)
+
+    console.print(
+        Panel.fit(
+            f"[bold]UMS Stats[/bold] — PID {resp.get('pid', '?')}, "
+            f"{resp.get('requests_served', 0)} pedidos servidos, "
+            f"idle evict após {resp.get('idle_evict_timeout_sec', '?')}s",
+            border_style="blue",
+        )
+    )
+
+    backends = resp.get("backends", {})
+    if not backends:
+        console.print("[dim]Sem atividade registada (nenhum backend usado ainda).[/dim]")
+        return
+
+    t = Table(title="[bold blue]Estatísticas por Backend", box=box.SIMPLE)
+    t.add_column("Backend", style="cyan")
+    t.add_column("Loads", justify="right")
+    t.add_column("Gens", justify="right")
+    t.add_column("Evicts", justify="right")
+    t.add_column("Errors", justify="right")
+    t.add_column("Avg Load", justify="right")
+    t.add_column("Avg Gen", justify="right")
+    t.add_column("Idle (s)", justify="right")
+
+    for name in sorted(backends):
+        s = backends[name]
+        t.add_row(
+            name,
+            str(s.get("load_count", 0)),
+            str(s.get("generate_count", 0)),
+            str(s.get("evict_count", 0)),
+            str(s.get("error_count", 0)),
+            f"{s.get('avg_load_time_sec', 0):.1f}s",
+            f"{s.get('avg_generate_time_sec', 0):.1f}s",
+            str(s.get("idle_sec", "—")),
+        )
+    console.print(t)
+
+
+@cli.command("doctor")
+def doctor_cmd() -> None:
+    """Diagnostica: deps de backends, GPU, socket, cache HF."""
+    import importlib
+    import shutil
+
+    from rich.panel import Panel
+
+    console.print(Panel.fit("[bold]UMS Doctor[/bold] — diagnóstico de ambiente", border_style="blue"))
+
+    checks: list[tuple[str, bool, str]] = []
+
+    # 1. Socket do UMS ativo?
+    from gamedev_shared.model_server import is_ums_running
+
+    ums_up = is_ums_running()
+    checks.append(
+        ("UMS ativo", ums_up, "Socket presente e respondendo" if ums_up else "Arrancar: gamedev-model-server start")
+    )
+
+    # 2. GPU disponível?
+    gpu_ok = shutil.which("nvidia-smi") is not None
+    gpu_detail = ""
+    if gpu_ok:
+        import subprocess
+
+        try:
+            r = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if r.returncode == 0:
+                parts = r.stdout.strip().split(", ")
+                gpu_detail = f"{parts[0]} — {parts[1]} MiB total, {parts[2]} MiB livres"
+        except Exception:
+            gpu_detail = "nvidia-smi presente mas erro a ler"
+    checks.append(("GPU NVIDIA", gpu_ok, gpu_detail or "nvidia-smi não encontrado"))
+
+    # 3. hf_transfer instalado?
+    try:
+        importlib.import_module("hf_transfer")
+        checks.append(("hf_transfer", True, "Downloads HF acelerados (5-10x)"))
+    except ImportError:
+        checks.append(("hf_transfer", False, "pip install hf_transfer — downloads 5-10x mais rápidos"))
+
+    # 4. Deps de cada backend (verificar se o módulo da tool importa).
+    from .registry import Registry
+
+    registry = Registry()
+    tool_modules = {
+        "text2icon": "text2icon.generator",
+        "texture2d": "texture2d.generator",
+        "text2d": "text2d.generator",
+        "skymap2d": "skymap2d.generator",
+        "text3d": "text3d.generator",
+        "paint3d": "paint3d.painter",
+        "part3d": "part3d.pipeline",
+        "text2sound": "text2sound.generator",
+        "terrain3d": "terrain3d.generator",
+    }
+    for backend_name in sorted(registry.names):
+        mod_path = tool_modules.get(backend_name)
+        if mod_path is None:
+            checks.append((f"Backend {backend_name}", False, "mapping em falta"))
+            continue
+        try:
+            importlib.import_module(mod_path)
+            checks.append((f"Backend {backend_name}", True, "deps OK"))
+        except ImportError as e:
+            checks.append((f"Backend {backend_name}", False, f"ImportError: {e.name or e}"))
+
+    # Renderizar tabela.
+    t = Table(title="[bold blue]Diagnóstico", box=box.ROUNDED)
+    t.add_column("Check", style="cyan", no_wrap=True)
+    t.add_column("Estado")
+    t.add_column("Detalhe", style="dim")
+
+    all_ok = True
+    for name, passed, detail in checks:
+        status = "[green]✓ OK[/green]" if passed else "[red]✗ FALHA[/red]"
+        if not passed:
+            all_ok = False
+        t.add_row(name, status, detail)
+
+    console.print(t)
+    if all_ok:
+        console.print("[bold green]✓ Todos os checks passaram.[/bold green]")
+    else:
+        console.print("[yellow]Alguns checks falharam — ver detalhes acima.[/yellow]")
 
 
 def main() -> None:

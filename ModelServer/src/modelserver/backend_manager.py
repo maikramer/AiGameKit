@@ -24,6 +24,7 @@ from typing import Any
 from gamedev_shared.logging import Logger
 
 from .registry import Registry
+from .stats import StatsCollector
 from .vram_planner import LoadedBackend, plan_eviction
 
 _logger = Logger()
@@ -62,6 +63,7 @@ class BackendManager:
         self._struct_lock = threading.RLock()  # reentrant: callbacks injetados (query_free_mib) podem chamar is_loaded
         self._query_free_mib = query_free_mib
         self._clear_vram = clear_vram
+        self.stats = StatsCollector()
 
     # ------------------------------------------------------------------
     # Helpers de injeção de GPU (lazy para evitar import torch no arranque)
@@ -82,7 +84,7 @@ class BackendManager:
             from gamedev_shared.gpu import clear_cuda_memory
 
             clear_cuda_memory()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             _logger.warn(f"Falha ao limpar cache CUDA após evicção: {e}")
 
     # ------------------------------------------------------------------
@@ -167,10 +169,13 @@ class BackendManager:
                 state.last_used = time.monotonic()
                 return state.model
             _logger.info(f"[UMS] A carregar backend {name!r} ({desc.vram_mib} MiB)...")
+            t0 = time.perf_counter()
             model = adapter.load(**load_kwargs)
+            load_time = time.perf_counter() - t0
             state.model = model
             state.last_used = time.monotonic()
-            _logger.info(f"[UMS] Backend {name!r} carregado e pronto.")
+            self.stats.record_load(name, load_time)
+            _logger.info(f"[UMS] Backend {name!r} carregado em {load_time:.1f}s.")
             return model
 
     # ------------------------------------------------------------------
@@ -191,12 +196,16 @@ class BackendManager:
             state.ref_count += 1
         try:
             with state.gen_lock:
+                t0 = time.perf_counter()
                 response = self._registry.adapter(name).generate(model, request)
+                gen_time = time.perf_counter() - t0
                 state.last_used = time.monotonic()
+                self.stats.record_generate(name, gen_time)
                 return response
         except Exception as e:
             # OOM / erro — descarregar para próxima tentativa recarregar.
             _logger.warn(f"[UMS] Erro no backend {name!r}: {e} — a descarregar para recovery.")
+            self.stats.record_error(name, str(e))
             # Libertar a ref ANTES de evictar (senão _evict_unlocked recusa por ref>0).
             with self._struct_lock:
                 state.ref_count = max(0, state.ref_count - 1)
@@ -262,6 +271,7 @@ class BackendManager:
             adapter.unload(state.model)
         state.model = None
         state.last_used = 0.0
+        self.stats.record_evict(name)
         _logger.info(f"[UMS] Backend {name!r} evicted (VRAM liberta).")
         return True
 

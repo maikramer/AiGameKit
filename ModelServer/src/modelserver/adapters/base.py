@@ -63,3 +63,25 @@ class BackendAdapter(ABC):
         Chamado pelo BackendManager ao evictar. Não deve levantar — se falhar,
         o BackendManager faz fallback para ``clear_cuda_memory``.
         """
+
+    # ------------------------------------------------------------------
+    # Helpers partilhados (usados por adapters concretos)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def should_use_low_vram_mode(threshold_mib: int = 7000) -> bool:
+        """Deteta se a GPU tem pouca VRAM e deve ativar offload/sequential.
+
+        Verifica VRAM total via ``gamedev_shared.gpu.gpu_total_mib``. Se a GPU
+        tem menos de ``threshold_mib`` (default 7000 = ~7 GiB), retorna ``True``
+        para que o adapter ative ``memory_efficient``/``sequential_offload``.
+
+        Em GPUs de 6 GiB (RTX 4050), todos os modelos FLUX precisam de offload.
+        """
+        try:
+            from gamedev_shared.gpu import gpu_total_mib
+
+            total = gpu_total_mib()
+            return total is not None and total < threshold_mib
+        except Exception:
+            return False  # conservador: se não dá para verificar, não forçar

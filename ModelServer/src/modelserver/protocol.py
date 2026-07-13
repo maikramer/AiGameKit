@@ -45,13 +45,14 @@ CMD_GENERATE = "generate"
 CMD_RELEASE = "release"
 CMD_STATUS = "status"
 CMD_SHUTDOWN = "shutdown"
+CMD_STATS = "stats"
 CMD_LIST_BACKENDS = "list-backends"
 CMD_PRELOAD = "preload"
 CMD_ENSURE_VRAM = "ensure-vram"
 
 # Comandos válidos (para validação no servidor).
 KNOWN_COMMANDS = frozenset(
-    {CMD_GENERATE, CMD_RELEASE, CMD_STATUS, CMD_SHUTDOWN, CMD_LIST_BACKENDS, CMD_PRELOAD, CMD_ENSURE_VRAM}
+    {CMD_GENERATE, CMD_RELEASE, CMD_STATUS, CMD_SHUTDOWN, CMD_LIST_BACKENDS, CMD_PRELOAD, CMD_ENSURE_VRAM, CMD_STATS}
 )
 
 # Valores de "status" nas respostas.
@@ -65,5 +66,6 @@ DEFAULT_CMD = CMD_GENERATE
 # Timeout default para pedidos de geração (segundos).
 DEFAULT_GENERATE_TIMEOUT_SEC = 600.0
 
-# Minutos de idle antes de self-shutdown do UMS.
-DEFAULT_IDLE_TIMEOUT_MIN = 30
+# Minutos de idle antes de self-shutdown do UMS (0 = desativado; o IdleEvictor
+# trata de libertar VRAM de backends individuais sem matar o servidor).
+DEFAULT_IDLE_TIMEOUT_MIN = 0

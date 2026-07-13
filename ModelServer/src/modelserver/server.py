@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from gamedev_shared.logging import Logger
-from gamedev_shared.model_server import DEFAULT_SERVER_DIR, _pid_path, _ensure_server_dir, is_server_running
+from gamedev_shared.model_server import _ensure_server_dir, _pid_path, is_server_running
 
 from . import protocol as P
 from .backend_manager import BackendManager
@@ -50,6 +50,7 @@ class UnifiedModelServer:
         *,
         socket_path: Path | str | None = None,
         idle_timeout_min: int = P.DEFAULT_IDLE_TIMEOUT_MIN,
+        idle_evict_sec: float = 600.0,
         verbose: bool = False,
     ) -> None:
         self.registry = registry if registry is not None else Registry()
@@ -58,6 +59,12 @@ class UnifiedModelServer:
         self.ppid_path = _pid_path(self.socket_path)
         self.idle_timeout_sec = idle_timeout_min * 60
         self.verbose = verbose
+
+        # IdleEvictor: descarrega backends individuais idle há > idle_evict_sec.
+        # Mais granular que o idle_timeout do servidor inteiro (que encerra o processo).
+        from .idle_evictor import IdleEvictor
+
+        self.idle_evictor = IdleEvictor(self.manager, idle_timeout_sec=idle_evict_sec)
 
         self._server_sock: socket.socket | None = None
         self._running = False
@@ -125,6 +132,16 @@ class UnifiedModelServer:
                 ],
             }
 
+        if cmd == P.CMD_STATS:
+            stats = self.manager.stats.get_all()
+            return {
+                "status": P.STATUS_OK,
+                "pid": self._pid,
+                "requests_served": self._requests_served,
+                "idle_evict_timeout_sec": self.idle_evictor.idle_timeout_sec,
+                "backends": stats,
+            }
+
         if cmd == P.CMD_RELEASE:
             backend = request.get("backend")
             if backend:
@@ -147,7 +164,7 @@ class UnifiedModelServer:
                 load_kwargs = {k: v for k, v in request.items() if k in ("verbose",)}
                 self.manager.ensure_loaded(name, **load_kwargs)
                 return {"status": P.STATUS_OK, "message": f"backend {name} pré-carregado"}
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 return {"status": P.STATUS_ERROR, "error": f"falha ao pré-carregar {name}: {e}"}
 
         if cmd == P.CMD_ENSURE_VRAM:
@@ -162,8 +179,7 @@ class UnifiedModelServer:
             if backend is None:
                 loaded = self.manager.loaded_names()
                 hint = (
-                    f"backends carregados: {loaded}. "
-                    "Especifica 'backend' no request ou pré-carrega exatamente um."
+                    f"backends carregados: {loaded}. Especifica 'backend' no request ou pré-carrega exatamente um."
                     if loaded
                     else "Nenhum backend carregado. Especifica 'backend' no request."
                 )
@@ -205,7 +221,7 @@ class UnifiedModelServer:
         except json.JSONDecodeError as e:
             with contextlib.suppress(OSError):
                 conn.sendall((json.dumps({"status": P.STATUS_ERROR, "error": f"JSON inválido: {e}"}) + "\n").encode())
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             self._log(f"Erro ao processar cliente: {e}")
             with contextlib.suppress(OSError):
                 conn.sendall((json.dumps({"status": P.STATUS_ERROR, "error": str(e)}) + "\n").encode())
@@ -219,6 +235,8 @@ class UnifiedModelServer:
 
     def _cleanup(self) -> None:
         self._log("Cleanup...")
+        with contextlib.suppress(Exception):
+            self.idle_evictor.stop()
         with contextlib.suppress(Exception):
             self.manager.evict_all()
         with contextlib.suppress(OSError):
@@ -263,11 +281,15 @@ class UnifiedModelServer:
         _logger.info(f"Unified Model Server ativo em {self.socket_path} (PID {self._pid})")
         _logger.info(f"Backends registados: {', '.join(self.registry.names)}")
         _logger.info(f"Idle timeout: {self.idle_timeout_sec / 60:.0f} min")
+        _logger.info(f"Idle evictor: backends descarregados após {self.idle_evictor.idle_timeout_sec:.0f}s sem uso")
+
+        # Arrancar IdleEvictor (thread de background para evicção proativa).
+        self.idle_evictor.start()
 
         try:
             while self._running:
                 idle = time.monotonic() - self._last_activity
-                if self._requests_served > 0 and idle > self.idle_timeout_sec:
+                if self.idle_timeout_sec > 0 and self._requests_served > 0 and idle > self.idle_timeout_sec:
                     _logger.info(f"Idle {idle / 60:.0f}min > timeout — a encerrar.")
                     break
                 try:

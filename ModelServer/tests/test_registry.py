@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 import yaml
-
 from modelserver.registry import BackendDescriptor, Registry, load_descriptors
 
 
@@ -16,7 +15,17 @@ class TestLoadDescriptors:
     def test_loads_default_yaml_has_9_backends(self) -> None:
         """O YAML empacotado tem exatamente os 9 backends GPU esperados."""
         descs = load_descriptors()
-        expected = {"text2icon", "texture2d", "text2d", "skymap2d", "text3d", "paint3d", "part3d", "text2sound", "terrain3d"}
+        expected = {
+            "text2icon",
+            "texture2d",
+            "text2d",
+            "skymap2d",
+            "text3d",
+            "paint3d",
+            "part3d",
+            "text2sound",
+            "terrain3d",
+        }
         assert set(descs) == expected
 
     def test_descriptors_have_required_fields(self) -> None:
@@ -80,7 +89,9 @@ class TestRegistry:
 
     def test_adapter_lazy_import_unknown_module(self) -> None:
         """Adapter resolution deve falhar graciosamente se o módulo não existe."""
-        registry = Registry(descriptors={"x": BackendDescriptor(name="x", adapter="nonexistent.pkg.mod", vram_mib=100, priority=1)})
+        registry = Registry(
+            descriptors={"x": BackendDescriptor(name="x", adapter="nonexistent.pkg.mod", vram_mib=100, priority=1)}
+        )
         with pytest.raises(ImportError):
             registry.adapter("x")
 

@@ -21,7 +21,11 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from text2icon.generator import SanaIconGenerator
 
-        gen = SanaIconGenerator(verbose=kwargs.get("verbose", False), **kwargs)
+        load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        if self.should_use_low_vram_mode():
+            load_kwargs["low_vram"] = kwargs.get("low_vram", True)
+        load_kwargs.update({k: v for k, v in kwargs.items() if k not in ("verbose", "low_vram")})
+        gen = SanaIconGenerator(**load_kwargs)
         gen.warmup()
         return gen
 

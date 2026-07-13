@@ -13,7 +13,6 @@ Output: GLB via ``save_mesh`` (com ``prepare_mesh_topology`` opcional).
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from .base import BackendAdapter
@@ -80,8 +79,8 @@ class Adapter(BackendAdapter):
             mesh = result if not isinstance(result, tuple) else result[0]
 
         # Topology repair + save (alinha com o CLI generate).
-        from text3d.utils.mesh_lod import prepare_mesh_topology
         from text3d.utils.export import save_mesh
+        from text3d.utils.mesh_lod import prepare_mesh_topology
 
         mesh = prepare_mesh_topology(mesh)
         origin_mode = request.get("origin_mode")

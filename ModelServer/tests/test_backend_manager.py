@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
-
 from modelserver.backend_manager import BackendManager
 from modelserver.registry import BackendDescriptor, Registry
 
@@ -15,7 +12,9 @@ from .conftest_helpers import MockAdapter
 def _make_registry() -> Registry:
     """Registry com 3 adapters mock controlados."""
     specs = {"alpha": (1000, 10), "beta": (3000, 30), "gamma": (5000, 50)}
-    descriptors = {n: BackendDescriptor(name=n, adapter=f"_mock_{n}", vram_mib=v, priority=p) for n, (v, p) in specs.items()}
+    descriptors = {
+        n: BackendDescriptor(name=n, adapter=f"_mock_{n}", vram_mib=v, priority=p) for n, (v, p) in specs.items()
+    }
     registry = Registry(descriptors=descriptors)
     for n in specs:
         registry._adapter_instances[n] = MockAdapter(name=n)
@@ -101,6 +100,7 @@ class TestEviction:
 
     def test_ensure_vram_evicts_until_free(self) -> None:
         registry = _make_registry()
+
         # Mock dinâmico: free = base - soma de vram_mib dos backends carregados.
         def _free_mib() -> int:
             loaded = sum(d.vram_mib for d in registry if mgr.is_loaded(d.name))

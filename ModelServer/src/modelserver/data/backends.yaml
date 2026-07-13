@@ -22,7 +22,7 @@ backends:
 
   - name: texture2d
     adapter: modelserver.adapters.texture2d
-    vram_mib: 7000
+    vram_mib: 2500
     priority: 20
 
   - name: text2d

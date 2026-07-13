@@ -72,7 +72,9 @@ def make_mock_registry(
     entries = [{"name": n, "adapter": f"_mock_{n}", "vram_mib": v, "priority": p} for n, (v, p) in specs.items()]
     Path(yaml_path).write_text(_yaml.safe_dump({"backends": entries}))
 
-    descriptors = {n: BackendDescriptor(name=n, adapter=f"_mock_{n}", vram_mib=v, priority=p) for n, (v, p) in specs.items()}
+    descriptors = {
+        n: BackendDescriptor(name=n, adapter=f"_mock_{n}", vram_mib=v, priority=p) for n, (v, p) in specs.items()
+    }
     registry = Registry(descriptors=descriptors)
     # Injetar adapters mock no cache do registry (chave = backend name, não adapter path).
     for n in specs:
