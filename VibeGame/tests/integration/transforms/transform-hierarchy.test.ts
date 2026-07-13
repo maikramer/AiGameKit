@@ -291,4 +291,32 @@ describe('Transform Hierarchy System', () => {
     expect(WorldTransform.posY[entity]).toBe(25);
     expect(WorldTransform.posZ[entity]).toBe(30);
   });
+
+  it('should cascade dirty flag through multi-level hierarchies when root moves', () => {
+    // Regression: moving a root must recompute every descendant, not just the
+    // immediate child. grandfather -> parent -> child, all start settled.
+    const grandfather = state.createEntity();
+    const parent = state.createEntity();
+    const child = state.createEntity();
+
+    state.addComponent(grandfather, Transform, { posX: 10, rotW: 1, scaleX: 1, scaleY: 1, scaleZ: 1 });
+    state.addComponent(parent, Transform, { posX: 5, rotW: 1, scaleX: 1, scaleY: 1, scaleZ: 1 });
+    state.addComponent(parent, Parent);
+    Parent.entity[parent] = grandfather;
+    state.addComponent(child, Transform, { posX: 2, rotW: 1, scaleX: 1, scaleY: 1, scaleZ: 1 });
+    state.addComponent(child, Parent);
+    Parent.entity[child] = parent;
+
+    state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
+    expect(WorldTransform.posX[child]).toBe(17); // 10 + 5 + 2
+
+    // Move only the root; immediate parent and child are NOT marked dirty.
+    Transform.posX[grandfather] = 100;
+    Transform.dirty[grandfather] = 1;
+
+    state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
+
+    expect(WorldTransform.posX[parent]).toBe(105); // 100 + 5
+    expect(WorldTransform.posX[child]).toBe(107); // 100 + 5 + 2
+  });
 });

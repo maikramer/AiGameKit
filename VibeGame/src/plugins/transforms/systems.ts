@@ -19,10 +19,18 @@ const scale = new THREE.Vector3();
 
 const transformQuery = defineQuery([Transform]);
 
-function parentIsDirty(state: State, entity: number): boolean {
-  if (!state.hasComponent(entity, Parent)) return false;
-  const parent = Parent.entity[entity];
-  return Transform.dirty[parent] === 1;
+function ancestorIsDirty(state: State, entity: number): boolean {
+  // Walk up the Parent chain: if any ancestor is dirty this frame, the entity's
+  // WorldTransform must be recomposed. Checking only the immediate parent would
+  // miss deep hierarchies (e.g. moving a root Group must cascade to its
+  // grandchildren), and the dirty flag is kept set until the deferred clear
+  // below so descendants processed later still observe it.
+  let current = entity;
+  while (state.hasComponent(current, Parent)) {
+    current = Parent.entity[current];
+    if (Transform.dirty[current] === 1) return true;
+  }
+  return false;
 }
 
 export const TransformHierarchySystem: System = {
@@ -45,7 +53,7 @@ export const TransformHierarchySystem: System = {
     //     deferred to the second loop below.
     for (const entity of entities) {
       const isDirty = Transform.dirty[entity] === 1;
-      if (!isDirty && !parentIsDirty(state, entity)) continue;
+      if (!isDirty && !ancestorIsDirty(state, entity)) continue;
 
       syncQuaternionFromEuler(Transform, entity);
 
