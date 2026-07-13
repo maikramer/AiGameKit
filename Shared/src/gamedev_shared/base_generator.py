@@ -322,15 +322,22 @@ class DiffusionGeneratorBase(ABC):
     def _maybe_compile_transformer(self, pipe: Any, plan: Any) -> None:
         """Compila o transformer via torch.compile quando seguro (full-GPU only).
 
+        **Opt-in** via ``GAMEDEV_TORCH_COMPILE=1``: o cold-start do compile
+        (28-90s para um transformer) só compensa em server mode (múltiplas gerações
+        reutilizam o modelo compilado). Em invocações CLI one-shot, o tempo de
+        compile excede a poupança de inferência.
+
         Só compila quando o plano é ``OFFLOAD_NONE`` (modelo cabe na GPU sem offload)
         — CUDA graphs do ``reduce-overhead``/``max-autotune`` conflituam com group
         offload. Usa ``mode="default"`` (10-40% speedup, sem overhead de graphs).
-
-        Tenta ``compile_repeated_blocks`` (regional compile — cold start mais rápido)
-        quando disponível no diffusers; fallback para ``torch.compile`` standard.
         """
         if plan.offload != "none" or self.device == "cpu":
             return  # offload ativo: CUDA graphs + offload = OOM
+        # Opt-in: default off (cold-start só compensa em server mode).
+        import os
+
+        if os.environ.get("GAMEDEV_TORCH_COMPILE", "0").strip().lower() not in ("1", "true", "yes", "on"):
+            return
         transformer = getattr(pipe, "transformer", None)
         if transformer is None:
             return
