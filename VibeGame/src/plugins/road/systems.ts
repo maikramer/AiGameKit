@@ -1,11 +1,14 @@
 import * as THREE from 'three';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
+import { getRapierWorld } from '../physics';
+import { invalidateTerrainBvh } from '../bvh';
 import { getScene, setupCsmMaterials } from '../rendering';
 import { sampleTerrainSurface } from '../spawner/surface';
-import { Terrain } from '../terrain/components';
+import { Terrain, TerrainChunk } from '../terrain/components';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
 import { getTerrainContext } from '../terrain/utils';
+import { carveRoadCorridor } from './carve';
 import { deleteRoadData, getRoadData, Road } from './components';
 import { makeRoadGeometry, resampleRoadPath, smoothPath } from './geometry';
 
@@ -92,20 +95,69 @@ export const RoadApplySystem: System = {
           break;
         }
       }
+      const width = Road.width[eid] || 5;
+      const spacing = Road.stationSpacing[eid] || 1.5;
+
       let heightAt: (x: number, z: number) => number;
       if (samplerReady) {
-        heightAt = (x, z) =>
+        const surfaceY = (x: number, z: number) =>
           sampleTerrainSurface(state, x, z, 0.5)?.worldY ?? 0;
+        // O ribbon é plano entre vértices; a superfície do terreno é
+        // piecewise-planar com triângulos muito maiores (worldSize/res,
+        // ~15 m). Num cume convexo entre estações a interpolação linear do
+        // ribbon atalha POR BAIXO da crista e a estrada some dentro do
+        // morro. Amostrar a vizinhança (meio-passo em cada eixo) e ficar
+        // com o MÁXIMO assenta a estrada sobre cristas — flutuar uns cm
+        // nas bordas (que já têm feather) é invisível; enterrar não é.
+        const reach = Math.max(spacing, width / 3) / 2;
+        heightAt = (x, z) =>
+          Math.max(
+            surfaceY(x, z),
+            surfaceY(x + reach, z),
+            surfaceY(x - reach, z),
+            surfaceY(x, z + reach),
+            surfaceY(x, z - reach)
+          );
       } else {
         const terrainExists = terrainQuery(state.world).length > 0;
         if (terrainExists || state.time.elapsed < 2) continue;
         heightAt = () => 0;
       }
-
-      const width = Road.width[eid] || 5;
-      const spacing = Road.stationSpacing[eid] || 1.5;
       const iterations = Road.smoothing[eid];
       const path = resampleRoadPath(smoothPath(data.path, iterations), spacing);
+
+      // Carve opcional: aplaina um corredor no terreno ao longo do path (corte
+      // + aterro) ANTES de o ribbon amostrar a superfície — assim o ribbon
+      // assenta no perfil nivelado e nenhum "morrinho" do LOD grosseiro corta
+      // a estrada por cima. Mutar o sampler mantém chunks/física/BVH/spawners
+      // coerentes (mesmo contrato dos TerrainPads). Opt-in via flatten="1".
+      if (Road.flatten[eid] === 1) {
+        for (const [fe, fd] of getTerrainContext(state)) {
+          if (!fd.initialized || !fd.sampler.data) continue;
+          const localPath: number[] = new Array(path.length);
+          for (let i = 0; i < path.length; i += 2) {
+            localPath[i] = path[i]! - fd.worldOffset.x;
+            localPath[i + 1] = path[i + 1]! - fd.worldOffset.z;
+          }
+          const changed = carveRoadCorridor(fd.sampler, {
+            path: localPath,
+            width,
+            falloff: Road.flattenFalloff[eid] || 2,
+            window: Road.flattenWindow[eid] || 8,
+          });
+          if (changed) {
+            for (const chunk of fd.chunks) TerrainChunk.meshDirty[chunk] = 1;
+            const world = getRapierWorld(state);
+            if (world) {
+              for (const body of fd.chunkColliders.values())
+                world.removeRigidBody(body);
+              fd.chunkColliders.clear();
+            }
+            invalidateTerrainBvh(state, fe);
+          }
+          break; // só o primeiro field ready (mesmo limite dos pads)
+        }
+      }
 
       const geometry = makeRoadGeometry(path, {
         width,
@@ -115,7 +167,7 @@ export const RoadApplySystem: System = {
         endFeatherStart: Road.endFeatherStart[eid],
         endFeatherEnd: Road.endFeatherEnd[eid],
         heightAt,
-        yOffset: Road.yOffset[eid] || 0.06,
+        yOffset: Road.yOffset[eid] || 0.12,
       });
 
       const material = new THREE.MeshStandardMaterial({

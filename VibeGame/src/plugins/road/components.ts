@@ -6,7 +6,8 @@ import type { State } from '../../core';
  * city-builder: a faixa é um ribbon que segue a spline suavizada do path, a
  * textura orienta-se e curva com a estrada (UV por arc-length) e as bordas
  * desvanecem para o terreno com feather + ruído orgânico (vertex alpha).
- * Decal puro: sem colisor, sem carve — a estrada assenta na superfície.
+ * Decal puro: sem colisor; carve opcional (`flatten`) aplaina um corredor no
+ * terreno (corte+aterro) antes do ribbon assentar — evita "morrinhos" do LOD.
  */
 export const Road = {
   /** Largura total da faixa (m). */
@@ -25,6 +26,12 @@ export const Road = {
   yOffset: new Float32Array(MAX_ENTITIES),
   /** Espaçamento entre estações do ribbon (m; menor = curvas mais suaves). */
   stationSpacing: new Float32Array(MAX_ENTITIES),
+  /** 1 = aplaina um corredor no terreno ao longo do path (corte e aterro). */
+  flatten: new Uint8Array(MAX_ENTITIES),
+  /** Blend lateral do corredor de volta ao relevo natural (m). */
+  flattenFalloff: new Float32Array(MAX_ENTITIES),
+  /** Janela da média móvel do perfil longitudinal do corredor (m). */
+  flattenWindow: new Float32Array(MAX_ENTITIES),
   /** Iterações de suavização Chaikin do path (0 = cantos vivos). */
   smoothing: new Uint8Array(MAX_ENTITIES),
   /** Opacidade global 0..1. */
