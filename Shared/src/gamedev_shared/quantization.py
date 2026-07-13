@@ -392,13 +392,17 @@ def get_torch_compile_recommendation(model_name: str = "") -> dict[str, Any]:
 def set_memory_optimization_env(
     enable_expandable_segments: bool = True,
     enable_cudnn_benchmark: bool = True,
+    enable_hf_transfer: bool = True,
 ) -> None:
     """
-    Configura variáveis de ambiente para otimização de memória.
+    Configura variáveis de ambiente para otimização de memória e downloads.
 
     Args:
         enable_expandable_segments: Habilita expandable segments no allocator CUDA
         enable_cudnn_benchmark: Habilita cudnn.benchmark para convoluções
+        enable_hf_transfer: Habilita ``hf_transfer`` (Rust) para downloads HF — 5-10x
+            mais rápido. Ativado por defeito pois todos os generators fazem
+            ``from_pretrained`` que pode desencadear downloads.
     """
     if enable_expandable_segments:
         current = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
@@ -410,6 +414,11 @@ def set_memory_optimization_env(
 
     if enable_cudnn_benchmark:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+
+    if enable_hf_transfer:
+        from .model_download import enable_hf_transfer as _enable_hf_transfer
+
+        _enable_hf_transfer()
 
 
 def suggest_environment_variables(vram_gb: float) -> dict[str, str]:

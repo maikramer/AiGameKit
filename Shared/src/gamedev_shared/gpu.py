@@ -487,14 +487,20 @@ def kill_gpu_compute_processes_aggressive(
 # ---------------------------------------------------------------------------
 
 
-def query_gpu_free_mib() -> int | None:
-    """VRAM livre na GPU 0 (MiB), ou ``None`` se nvidia-smi não existir / falhar."""
+def query_gpu_free_mib(device: int = 0) -> int | None:
+    """VRAM livre numa GPU (MiB), ou ``None`` se nvidia-smi não existir / falhar.
+
+    Args:
+        device: Índice da GPU (0 por omissão). Em rigs multi-GPU, especificar o
+            dispositivo alvo para que a coordenação de VRAM mire o correto.
+    """
     if not shutil.which("nvidia-smi"):
         return None
     try:
         r = subprocess.run(
             [
                 "nvidia-smi",
+                f"--id={device}",
                 "--query-gpu=memory.free",
                 "--format=csv,noheader,nounits",
             ],
