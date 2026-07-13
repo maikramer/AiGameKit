@@ -344,14 +344,14 @@ const HeroStatsSystem: System = {
 // ── Respawn: on death, after a delay, return the hero to the nearest checkpoint
 //    — the city centre or just outside whichever cardinal gate is closest to
 //    where they fell. Beats always trekking back from the city centre after
-//    dying deep in a biome. Each point is just outside the wall (z/x ±28),
+//    dying deep in a biome. Each point is just outside the wall (z/x ±39),
 //    short of the biome enemy bands (~45+), so respawns aren't instant re-deaths.
 const RESPAWN_POINTS: ReadonlyArray<readonly [number, number]> = [
   [0, 0], // city plaza
-  [0, 28], // north gate (forest)
-  [0, -28], // south gate (swamp)
-  [28, 0], // east gate (desert)
-  [-28, 0], // west gate (peaks)
+  [0, 39], // north gate (forest)
+  [0, -39], // south gate (swamp)
+  [39, 0], // east gate (desert)
+  [-39, 0], // west gate (peaks)
 ];
 let deathShown = false;
 let respawnAtTime = 0;
