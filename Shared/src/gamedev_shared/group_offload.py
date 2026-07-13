@@ -168,10 +168,15 @@ def try_group_offloading(
 ) -> bool:
     """Aplica group offloading com CUDA streams a um pipeline diffusers.
 
-    Percorre os módulos pesados do pipeline (transformer, vae, text_encoder,
-    text_encoder_2) e aplica group offloading. ModelMixin (transformer, vae) usa
+    Percorre os módulos pesados do pipeline (transformer, text_encoder,
+    text_encoder_2) e aplica group offloading. ModelMixin (transformer) usa
     o método nativo ``enable_group_offload``; text encoders (transformers) usam a
     função utilitária ``apply_group_offloading`` do ``diffusers.hooks``.
+
+    **VAE é excluído por defeito**: o group offload em autoencoders conflitua com
+    VAE tiling/slicing (o diffusers avisa: "may not work as expected if the first
+    forward pass is executed with tiling enabled") e causa erros de device mismatch
+    no decode. O VAE é gerido pelo path model_cpu/sequential do planner.
 
     Args:
         pipe: Objeto pipeline diffusers (FluxPipeline, SanaPipeline, etc.).
@@ -187,8 +192,9 @@ def try_group_offloading(
             salvo em ``block_level``.
         record_stream: Marca tensores como usados pela stream (mais rápido, +VRAM).
         non_blocking: Transferências non-blocking.
-        modules: Tupla de nomes de atributos a aplicar (default: transformer, vae,
-            text_encoder, text_encoder_2). Útil para pipelines custom (Paint3D).
+        modules: Tupla de nomes de atributos a aplicar. Default: transformer,
+            text_encoder, text_encoder_2 (**sem vae** — conflitua com tiling/decode).
+            Útil para pipelines custom (Paint3D, Hunyuan3D com "model"/"conditioner").
         log: Se ``True``, loga mensagens de sucesso/falha.
         log_fn: Função de logging (default: ``Logger().info`` / ``Logger().warn``).
 
@@ -208,7 +214,8 @@ def try_group_offloading(
         if log:
             (log_fn or _logger.info)(msg)
 
-    target_modules = modules or ("transformer", "vae", "text_encoder", "text_encoder_2")
+    # Default: transformer + text encoders. VAE excluído (conflitua com tiling/decode).
+    target_modules = modules or ("transformer", "text_encoder", "text_encoder_2")
 
     # diffusers.hooks é a API canónica; ModelMixin.enable_group_offload delega nela.
     # Importado antes do torch: assim o check de "diffusers indisponível" funciona

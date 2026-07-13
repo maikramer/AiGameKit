@@ -68,8 +68,8 @@ class TestTryGroupOffloading:
             result = try_group_offloading(pipe, log=False)
         assert result is False
 
-    def test_applies_to_transformer_and_vae(self) -> None:
-        """ModelMixin modules usam enable_group_offload nativo."""
+    def test_applies_to_transformer_not_vae(self) -> None:
+        """Transformer recebe group offload; VAE é excluído por defeito (conflita com tiling)."""
         transformer = MagicMock()
         vae = MagicMock()
         pipe = MagicMock()
@@ -91,7 +91,7 @@ class TestTryGroupOffloading:
 
         assert result is True
         transformer.enable_group_offload.assert_called_once()
-        vae.enable_group_offload.assert_called_once()
+        vae.enable_group_offload.assert_not_called()  # VAE excluído por defeito
 
     def test_use_stream_true_by_default(self) -> None:
         """use_stream=True é o default — a otimização-chave de performance."""
