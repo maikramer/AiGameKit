@@ -211,6 +211,12 @@ class DiffusionGeneratorBase(ABC):
     def _try_multi_gpu(self, pipe: Any) -> bool:
         """Tenta colocar o pipeline split entre 2 GPUs (transformer+vae / encoders).
 
+        .. deprecated::
+            Substituído por :func:`~gamedev_shared.lowvram.apply_multi_gpu` (accelerate
+            dispatch), chamado automaticamente por :meth:`_place_with_planner` quando o
+            planner recomenda multi-GPU. Mantido para compatibilidade (Text2Icon ainda
+            chama diretamente). Novo código deve usar ``_place_with_planner``.
+
         Retorna ``True`` se conseguiu, ``False`` se falhou (OOM ou <2 GPUs).
         Lida com pipelines que têm ``text_encoder_2`` opcional (FLUX).
         """
@@ -306,6 +312,82 @@ class DiffusionGeneratorBase(ABC):
             return False
 
         return try_group_offloading(pipe, config=config, log=True, log_fn=self._log)
+
+    def _place_with_planner(
+        self,
+        pipe: Any,
+        footprint: Any,
+        *,
+        quant_mode: str = "none",
+        allow_quant: tuple[str, ...] | None = None,
+        model_attr: str | None = None,
+        no_split_classes: list[str] | None = None,
+        offload_modules: tuple[str, ...] | None = None,
+        allow_group_offload: bool = True,
+    ) -> Any:
+        """**Entry point unificado** para colocar o pipeline na GPU.
+
+        Resolve specs CUDA (com **VRAM livre**), delega a
+        :func:`~gamedev_shared.lowvram.place_pipeline` — que decide multi-GPU vs
+        offload vs full-GPU e **aplica** (multi-GPU via accelerate, offload via
+        diffusers hooks, com cascade fallback).
+
+        Subclasses 2D (Text2D, Skymap2D, Text2Icon, Texture2D) chamam isto em vez
+        de duplicar a lógica de offload. Cada uma fornece só o ``footprint``.
+
+        Args:
+            pipe: pipeline diffusers.
+            footprint: :class:`~gamedev_shared.lowvram.ModelFootprint`. Se tem
+                ``architecture``, resolve ``no_split_classes`` do registry.
+            quant_mode: quantização em uso (para ajustar a pegada no planner).
+            allow_quant: subconjunto de modos permitidos. ``("none",)`` quando o
+                checkpoint já vem pré-quantizado do hub (ex: Skymap2D uint4).
+            model_attr: attr do ``nn.Module`` pesado para multi-GPU accelerate
+                (ex: ``"transformer"`` no FLUX). Default ``None`` = dispatch do pipe.
+            no_split_classes: override das classes no-split para multi-GPU.
+
+        Returns:
+            :class:`~gamedev_shared.lowvram.OffloadPlan` resolvido e aplicado.
+        """
+        from .hardware import cuda_gpu_free_specs
+        from .lowvram import place_pipeline
+
+        if self.device == "cpu":
+            from .lowvram import _cpu_plan
+
+            plan = _cpu_plan(("device CPU",))
+            if hasattr(pipe, "to"):
+                pipe.to("cpu")
+            return plan
+
+        # VRAM livre (3-tuple) — respeita GPUs ocupadas por outros processos.
+        specs = cuda_gpu_free_specs()
+        if self.gpu_ids:
+            keep = set(self.gpu_ids)
+            specs = [s for s in specs if s[0] in keep]
+        allow_multi = self.gpu_ids is None or len(self.gpu_ids) >= 2
+
+        plan = place_pipeline(
+            pipe,
+            footprint,
+            specs,
+            quant_mode=quant_mode,
+            allow_multi_gpu=allow_multi,
+            allow_quant=allow_quant,
+            model_attr=model_attr,
+            no_split_classes=no_split_classes,
+            offload_modules=offload_modules,
+            allow_group_offload=allow_group_offload,
+            on_status=self._status,
+        )
+
+        if plan.offload == "none" and plan.multi_gpu_ids is None:
+            self._report_vram()
+        elif plan.multi_gpu_ids is not None:
+            self._multi_gpu = True
+
+        self._log(f"offload: {plan.summary()}")
+        return plan
 
     # ------------------------------------------------------------------
     # Batch generation

@@ -55,6 +55,8 @@ class ModelArchitectureRegistry:
         "flux": ["FluxSingleTransformerBlock", "FluxTransformerBlock"],
         "dit": ["DiTBlock"],
         "unet": ["BasicTransformerBlock", "UNetMidBlock2D"],
+        "sana": ["SanaBlock"],
+        "stable-audio": ["DiTBlock", "AudioDiTBlock"],
     }
 
     def __init__(self) -> None:
