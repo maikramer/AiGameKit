@@ -1,2 +1,6 @@
 [test]
 preload = ["./tests/test-preload.ts"]
+# Playwright specs live under tests/playwright/ and must run via `playwright test`
+# (they call test.use() from @playwright/test, which is incompatible with bun:test).
+# Exclude them so a bare `bun test` doesn't try to load them.
+exclude = ["tests/playwright/**/*"]
