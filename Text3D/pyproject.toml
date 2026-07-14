@@ -35,7 +35,7 @@ dependencies = [
     "opencv-python>=4.8.0",
     "scikit-image>=0.22.0",
     "kornia>=0.7.0",
-    "bpy>=5.1.0",
+    "bpy>=5.2.0",
     "gamedev-shared @ file:../Shared",
     "text2d @ file:../Text2D",
     "pymeshfix>=0.18.0",

@@ -15,8 +15,8 @@ dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
     "rich-click>=1.8.0",
-    # bpy 5.1+ requer Python 3.13
-    "bpy>=5.1.0",
+    # bpy 5.2 LTS requer Python 3.13 (meshopt nativo no exporter GLTF)
+    "bpy>=5.2.0",
 ]
 
 [project.optional-dependencies]

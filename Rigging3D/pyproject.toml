@@ -7,7 +7,7 @@ name = "rigging3d"
 version = "0.6.0"
 description = "CLI de auto-rigging 3D"
 readme = "README.md"
-# Animator3D e Rigging3D usam bpy 5.1+ (Python 3.13).
+# Animator3D e Rigging3D usam bpy 5.2 LTS+ (Python 3.13).
 requires-python = ">=3.13,<3.14"
 license = "MIT"
 authors = [{ name = "Rigging3D Project" }]
@@ -30,7 +30,7 @@ dependencies = [
     "lightning",
     "addict",
     "fast-simplification",
-    "bpy>=5.1.0",
+    "bpy>=5.2.0",
     "trimesh",
     "huggingface_hub",
 ]

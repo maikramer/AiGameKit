@@ -21,7 +21,7 @@ dependencies = [
     "sdnq>=0.2.1",
     "xformers>=0.0.28; sys_platform != 'darwin'",
     "psutil>=5.9.0",
-    "bpy>=5.1.0",
+    "bpy>=5.2.0",
     "hf_transfer>=0.1.6",
     "huggingface-hub>=0.20.0",
     "Pillow>=10.0.0",

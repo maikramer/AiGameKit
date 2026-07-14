@@ -36,7 +36,7 @@ dependencies = [
     "xformers>=0.0.28; sys_platform == 'linux'",
     "sdnq>=0.2.1",       # Quantização moderna SDNQ
     "einops>=0.8.0",     # Tensor rearrange (pipeline vendored)
-    "bpy>=5.1.0",
+    "bpy>=5.2.0",
     # Hunyuan3D-2.1: código vendored em paint3d/hy3dpaint/ (de Tencent-Hunyuan/Hunyuan3D-2.1)
     # Real-ESRGAN (RRDBNet + RealESRGANer): vendored — evita basicsr (pip falha no Python 3.13)
     # nvdiffrast: instalar separadamente com --no-build-isolation (requer PyTorch pré-instalado)

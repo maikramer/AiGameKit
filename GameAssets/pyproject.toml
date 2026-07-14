@@ -18,7 +18,7 @@ dependencies = [
     "textual>=3.0",
     "Pillow>=10.0",
     "gamedev-shared @ file:../Shared",
-    "bpy>=5.1.0",
+    "bpy>=5.2.0",
 ]
 
 classifiers = [
