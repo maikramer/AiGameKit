@@ -21,6 +21,9 @@ import {
   parseOptionDef,
   registerOptionDef,
 } from './options-tab';
+import { createWikiTab, parseWikiPageChild } from './wiki-tab';
+import type { WikiTabConfig } from './wiki-tab';
+import type { WikiPageDef } from '../../rpg-core/types';
 
 export const WIDGET_TYPE = 'tabbed-modal';
 export const TABBED_MODAL_TAG = 'TabbedModal';
@@ -31,26 +34,32 @@ export {
   createInventoryTab,
   createOptionsTab,
   createQuestsTab,
+  createWikiTab,
   registerOptionDef,
 };
 
-export type { SkillsTabConfig, InventoryTabConfig, QuestsTabConfig };
+export type {
+  SkillsTabConfig,
+  InventoryTabConfig,
+  QuestsTabConfig,
+  WikiTabConfig,
+};
 
 const MODAL_CSS = `
-.hud-modal-overlay{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:rgba(4,6,14,0.55);backdrop-filter:blur(7px);pointer-events:auto;font-family:system-ui,Segoe UI,sans-serif;}
+.hud-modal-overlay{position:fixed;inset:0;z-index:100;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 40%,rgba(18,24,48,0.72),rgba(4,6,14,0.82));backdrop-filter:blur(9px);pointer-events:auto;font-family:"Segoe UI",system-ui,sans-serif;}
 .hud-modal-overlay[data-open="true"]{display:flex;}
-.hud-modal-panel{width:min(520px,92vw);max-height:88vh;overflow:hidden;display:flex;flex-direction:column;background:linear-gradient(160deg,rgba(20,26,44,0.96),rgba(12,16,28,0.96));border:1px solid rgba(130,160,230,0.25);border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,0.6),inset 0 1px 0 rgba(255,255,255,0.06);}
-.hud-modal-header{display:flex;align-items:center;gap:12px;padding:18px 22px 14px;border-bottom:1px solid rgba(130,160,230,0.14);}
-.hud-modal-title{font-size:22px;font-weight:800;letter-spacing:0.5px;color:#eef3ff;flex:1;}
-.hud-modal-level{font:800 13px system-ui,Segoe UI,sans-serif;color:#2a1c06;padding:4px 12px;border-radius:20px;background:radial-gradient(circle at 35% 30%,#ffe7a0,#ffc24a 60%,#d99320);border:1px solid rgba(255,225,150,0.85);}
-.hud-modal-tabs{display:flex;gap:6px;padding:12px 18px 0;}
-.hud-modal-tab{background:transparent;border:none;border-bottom:2px solid transparent;color:#8a9ab8;font:700 14px system-ui,Segoe UI,sans-serif;padding:8px 12px;cursor:pointer;pointer-events:auto;border-radius:8px 8px 0 0;}
-.hud-modal-tab[data-active="true"]{color:#eef3ff;border-bottom-color:#8fb0ff;background:rgba(130,160,230,0.22);}
-.hud-modal-content{padding:16px 22px 6px;overflow-y:auto;}
+.hud-modal-panel{width:min(720px,94vw);max-height:88vh;overflow:hidden;display:flex;flex-direction:column;background:linear-gradient(165deg,rgba(24,30,48,0.97),rgba(10,14,24,0.98));border:1px solid rgba(201,176,122,0.28);border-radius:20px;box-shadow:0 28px 80px rgba(0,0,0,0.65),inset 0 1px 0 rgba(255,255,255,0.07),0 0 0 1px rgba(80,100,160,0.15);}
+.hud-modal-header{display:flex;align-items:center;gap:12px;padding:18px 24px 14px;border-bottom:1px solid rgba(201,176,122,0.16);background:linear-gradient(180deg,rgba(40,48,72,0.35),transparent);}
+.hud-modal-title{font-size:22px;font-weight:800;letter-spacing:0.6px;color:#f2f5ff;flex:1;text-shadow:0 1px 0 rgba(0,0,0,0.35);}
+.hud-modal-level{font:800 12px "Segoe UI",system-ui,sans-serif;color:#2a1c06;padding:4px 12px;border-radius:20px;background:radial-gradient(circle at 35% 30%,#ffe7a0,#ffc24a 60%,#d99320);border:1px solid rgba(255,225,150,0.85);box-shadow:0 2px 8px rgba(0,0,0,0.35);}
+.hud-modal-tabs{display:flex;gap:4px;padding:12px 18px 0;flex-wrap:wrap;border-bottom:1px solid rgba(130,160,230,0.1);}
+.hud-modal-tab{background:transparent;border:none;border-bottom:2px solid transparent;color:#8a9ab8;font:700 13px "Segoe UI",system-ui,sans-serif;padding:9px 12px;cursor:pointer;pointer-events:auto;border-radius:8px 8px 0 0;letter-spacing:0.2px;}
+.hud-modal-tab[data-active="true"]{color:#f3e7c4;border-bottom-color:#c9b07a;background:rgba(201,176,122,0.12);}
+.hud-modal-content{padding:16px 22px 8px;overflow-y:auto;}
 .hud-modal-pane{display:none;flex-direction:column;gap:9px;}
 .hud-modal-pane[data-active="true"]{display:flex;}
-.hud-modal-footer{padding:10px 22px 16px;color:#7c8aa8;font:600 11px system-ui,Segoe UI,sans-serif;text-align:center;}
-.hud-modal-btn{padding:11px 16px;border-radius:10px;font:700 14px system-ui,Segoe UI,sans-serif;cursor:pointer;pointer-events:auto;width:100%;text-align:left;letter-spacing:0.3px;box-shadow:0 4px 14px rgba(0,0,0,0.3);transition:transform 0.1s ease,filter 0.1s ease;}
+.hud-modal-footer{padding:10px 22px 16px;color:#7c8aa8;font:600 11px "Segoe UI",system-ui,sans-serif;text-align:center;border-top:1px solid rgba(130,160,230,0.08);}
+.hud-modal-btn{padding:11px 16px;border-radius:10px;font:700 14px "Segoe UI",system-ui,sans-serif;cursor:pointer;pointer-events:auto;width:100%;text-align:left;letter-spacing:0.3px;box-shadow:0 4px 14px rgba(0,0,0,0.3);transition:transform 0.1s ease,filter 0.1s ease;}
 .hud-modal-btn:hover{transform:translateY(-1px);filter:brightness(1.15);}
 .hud-modal-btn-primary{background:linear-gradient(180deg,rgba(150,110,40,0.55),rgba(95,68,20,0.55));color:#ffe08a;border:1px solid rgba(255,210,120,0.5);}
 .hud-modal-btn-secondary{background:linear-gradient(180deg,rgba(30,38,60,0.8),rgba(18,24,40,0.8));color:#dbe5f5;border:1px solid rgba(120,150,220,0.28);}
@@ -320,7 +329,15 @@ export function createTabbedModalWidget(
       return {
         root: overlay,
         update(_s: State): void {
-          if (open) refreshLabels();
+          if (!open) return;
+          // Only refresh the level chip while open — full refreshLabels() used
+          // to wipe+rebuild the active tab DOM (inventory slots) every frame.
+          const lvl = config?.level?.() ?? 0;
+          const nextLevel =
+            lvl > 0 ? `${t(mountState, 'modal.level')} ${lvl}` : '';
+          if (levelEl.textContent !== nextLevel) {
+            levelEl.textContent = nextLevel;
+          }
         },
         unmount(): void {
           if (open && pauseOnOpen) popModal(mountState, modalId);
@@ -396,6 +413,20 @@ export function buildTabsFromChildren(
         id: tabId,
         labelKey,
         build: (s) => createOptionsTab(s, defs),
+      });
+    } else if (tag === 'wikitab') {
+      const pages: WikiPageDef[] = [];
+      for (const c of child.children as readonly {
+        tagName: string;
+        attributes: Record<string, XMLValue>;
+      }[]) {
+        const page = parseWikiPageChild(c);
+        if (page) pages.push(page);
+      }
+      tabs.push({
+        id: tabId,
+        labelKey,
+        build: (s) => createWikiTab(s, pages.length > 0 ? { pages } : {}),
       });
     } else {
       tabs.push({

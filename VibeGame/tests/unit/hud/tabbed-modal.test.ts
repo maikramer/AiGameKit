@@ -212,7 +212,7 @@ describe('TabbedModal — skills tab', () => {
       'Vitality'
     );
     expect(tab.root.querySelector('.hud-modal-skill-rank')!.textContent).toBe(
-      '0'
+      '0/5'
     );
     expect(
       tab.root.querySelector('.hud-modal-skill-points')!.textContent
@@ -227,7 +227,7 @@ describe('TabbedModal — skills tab', () => {
     expect(plus.disabled).toBe(false);
     plus.click();
     expect(tab.root.querySelector('.hud-modal-skill-rank')!.textContent).toBe(
-      '1'
+      '1/5'
     );
     expect(
       tab.root.querySelector('.hud-modal-skill-points')!.textContent
@@ -273,12 +273,31 @@ describe('TabbedModal — inventory tab', () => {
     addItem(state, hero, 'potion', 3);
     const tab = createInventoryTab(state, { targetEntity: hero });
     const slots = tab.root.querySelectorAll<HTMLElement>(
-      '.hud-modal-inventory > div > div'
+      '.hud-modal-inv-grid > div'
     );
     expect(slots.length).toBe(10);
     const first = slots[0];
     expect(first.title).toContain('Potion ×3');
     expect(first.querySelector('.hud-modal-inv-qty')!.textContent).toBe('3');
+  });
+
+  it('shows item detail for the selected stack', () => {
+    getDataRegistry(state).register('item', 'potion', {
+      id: 'potion',
+      name: 'Potion',
+      icon: '🧪',
+      description: 'Restores health.',
+      maxStack: 99,
+      tags: ['consumable'],
+    });
+    addItem(state, hero, 'potion', 2);
+    const tab = createInventoryTab(state, { targetEntity: hero });
+    expect(
+      tab.root.querySelector('.hud-modal-inv-detail-title')!.textContent
+    ).toBe('Potion');
+    expect(
+      tab.root.querySelector('.hud-modal-inv-detail-desc')!.textContent
+    ).toBe('Restores health.');
   });
 });
 
@@ -458,6 +477,33 @@ describe('TabbedModal — buildTabsFromChildren (XML)', () => {
     const overlay =
       getHudScreenLayer(state).querySelector<HTMLElement>('.hud-modal-overlay');
     expect(overlay).not.toBeNull();
+  });
+
+  it('builds WikiTab from child elements and registry pages', () => {
+    getDataRegistry(state).register('wiki', 'controls', {
+      id: 'controls',
+      title: 'Controls',
+      body: 'WASD to move',
+      category: 'Basics',
+      order: 1,
+    });
+    const children = [
+      {
+        tagName: 'WikiTab',
+        attributes: { 'label-key': 'modal.tab.wiki' },
+        children: [],
+      },
+    ];
+    const tabs = buildTabsFromChildren(state, 'pause', children as never, hero);
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0].id).toBe('wikitab');
+    const content = tabs[0].build(state);
+    expect(
+      content.root.querySelector('.hud-modal-wiki-title')!.textContent
+    ).toContain('Controls');
+    expect(
+      content.root.querySelector('.hud-modal-wiki-body')!.textContent
+    ).toBe('WASD to move');
   });
 });
 

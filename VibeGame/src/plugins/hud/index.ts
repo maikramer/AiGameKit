@@ -1,4 +1,5 @@
 export { HudPanel } from './components';
+export { HudRpgPlugin } from './rpg-plugin';
 export { getStringAt, internString } from './context';
 export {
   HudPlugin,
@@ -146,4 +147,6 @@ export { createSkillsTab } from './widgets/skills-tab';
 export type { SkillsTabConfig } from './widgets/skills-tab';
 export { createInventoryTab } from './widgets/inventory-tab';
 export type { InventoryTabConfig } from './widgets/inventory-tab';
+export { createWikiTab, parseWikiPage } from './widgets/wiki-tab';
+export type { WikiTabConfig } from './widgets/wiki-tab';
 export type { TabContent, TabDescriptor } from './widgets/tabbed-modal-shared';

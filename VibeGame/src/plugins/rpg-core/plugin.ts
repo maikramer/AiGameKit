@@ -1,6 +1,7 @@
 import { logger } from '../../core/utils/logger';
 import type { Plugin, Recipe, State } from '../../core';
 import { EventBusCleanupSystem, getEventBus } from './events';
+import { wireMusicMixerEvents } from './music-mixer-bridge';
 import { getDataRegistry } from './registry';
 
 type NodeFsLike = {
@@ -118,5 +119,6 @@ export const RpgCorePlugin: Plugin = {
   initialize(state) {
     getDataRegistry(state);
     getEventBus(state);
+    wireMusicMixerEvents(state);
   },
 };

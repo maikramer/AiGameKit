@@ -10,6 +10,7 @@ export {
   getXpToNextLevel,
   levelUp,
   setProgressionConfig,
+  skillPrereqsMet,
   spendSkillPoint,
 } from './components';
 export type { ProgressionEntitySnapshot } from './components';

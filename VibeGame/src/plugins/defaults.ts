@@ -4,7 +4,7 @@ import { AnimationPlugin } from './animation/plugin';
 import { BvhPlugin } from './bvh/plugin';
 import { CompositionPlugin } from './composition/plugin';
 import { GroupPlugin } from './group/plugin';
-import { PlayerControllerPlugin } from './player-controller/plugin';
+import { ThirdPersonCameraPlugin } from './player-controller/plugin';
 import { GltfAnimPlugin } from './gltf-anim/plugin';
 import { EntityScriptPlugin } from './entity-script/plugin';
 import { GltfXmlPlugin } from './gltf-xml/plugin';
@@ -29,11 +29,11 @@ import { DestructiblePlugin } from './destructible/plugin';
 import { TweeningPlugin } from './tweening/plugin';
 import { PostprocessingPlugin } from './postprocessing/plugin';
 import { AdaptiveQualityPlugin } from './adaptive-quality/plugin';
-import { QuestsPlugin } from './quests/plugin';
 import { BiomesPlugin } from './biomes/plugin';
 import { RoadPlugin } from './road/plugin';
 import { WaterPlugin } from './water/plugin';
 import { WeatherPlugin } from './weather/plugin';
+import { VegetationPlugin } from './vegetation/plugin';
 
 export const DefaultPlugins: Plugin[] = [
   TransformsPlugin,
@@ -50,7 +50,7 @@ export const DefaultPlugins: Plugin[] = [
   PostprocessingPlugin,
   AdaptiveQualityPlugin,
   HudPlugin,
-  PlayerControllerPlugin,
+  ThirdPersonCameraPlugin,
   OrbitCameraPlugin,
   PlayerPlugin,
   StartupPlugin,
@@ -65,9 +65,9 @@ export const DefaultPlugins: Plugin[] = [
   WaterPlugin,
   RoadPlugin,
   WeatherPlugin,
+  VegetationPlugin,
   ParticlesPlugin,
   FloatingTextPlugin,
   DestructiblePlugin,
   TweeningPlugin,
-  QuestsPlugin,
 ];

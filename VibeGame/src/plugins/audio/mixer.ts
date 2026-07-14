@@ -1,7 +1,6 @@
 import { logger } from '../../core/utils/logger';
 import { defineQuery } from '../../core';
 import type { Adapter, Parser, Recipe, State, System } from '../../core';
-import { onEvent } from '../rpg-core/events';
 import { setMasterVolume as bank_setMasterVolume, setBusVolume } from './bank';
 import { AudioSource, MusicLayerComponent } from './components';
 
@@ -125,24 +124,10 @@ export function crossfadeMusicLayers(
   mix.fadeDuration = Math.max(0.0001, duration);
 }
 
-const wired = new WeakSet<State>();
-
-export function wireMusicMixerEvents(state: State): void {
-  if (wired.has(state)) return;
-  wired.add(state);
-  onEvent(state, MUSIC_ENTER_BATTLE, () => {
-    getAudioMix(state).activeLayer = MUSIC_LAYER_BATTLE;
-  });
-  onEvent(state, MUSIC_EXIT_BATTLE, () => {
-    getAudioMix(state).activeLayer = MUSIC_LAYER_EXPLORE;
-  });
-}
-
 export const MusicMixerSystem: System = {
   group: 'simulation',
   update(state: State): void {
     if (state.headless) return;
-    wireMusicMixerEvents(state);
 
     const mix = getAudioMix(state);
     const dt = state.time.deltaTime;

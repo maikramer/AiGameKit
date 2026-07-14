@@ -55,6 +55,5 @@ export {
   setMasterVolume,
   setMusicVolume,
   setSfxVolume,
-  wireMusicMixerEvents,
 } from './mixer';
 export type { AudioMix } from './mixer';

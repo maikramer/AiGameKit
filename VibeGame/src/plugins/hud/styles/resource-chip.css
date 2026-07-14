@@ -1,54 +1,66 @@
 .hud-resource {
   position: absolute;
-  top: 154px;
+  top: 132px;
   z-index: 12;
-  min-width: 76px;
+  width: 84px;
   justify-content: center;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 13px;
-  border-radius: 10px;
+  gap: 6px;
+  padding: 6px 10px;
   pointer-events: auto;
   cursor: default;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  font-family:
-    system-ui,
-    Segoe UI,
-    sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
   background: linear-gradient(
-    135deg,
-    rgba(14, 18, 34, 0.72),
-    rgba(10, 14, 26, 0.6)
+    145deg,
+    rgba(18, 16, 22, 0.88),
+    rgba(10, 12, 16, 0.78)
   );
-  backdrop-filter: blur(10px);
-  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.28);
+  border-top: 1px solid rgba(196, 148, 72, 0.28);
+  border-bottom: 1px solid rgba(196, 148, 72, 0.28);
 }
 
 .hud-resource-icon {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .hud-resource-value {
   font-variant-numeric: tabular-nums;
+  min-width: 1.2em;
+  text-align: right;
 }
 
 .hud-resource-gold {
-  left: 14px;
+  left: 12px;
   color: #ffd24a;
-  border: 1px solid rgba(255, 210, 60, 0.3);
+  border-left: 1px solid rgba(232, 190, 110, 0.45);
+  border-right: 1px solid rgba(196, 148, 72, 0.18);
+  border-radius: 12px 0 0 12px;
 }
 
 .hud-resource-wood {
-  left: 128px;
+  left: 96px;
   color: #d4a76a;
-  border: 1px solid rgba(190, 140, 80, 0.3);
+  border-left: 1px solid rgba(196, 148, 72, 0.12);
+  border-right: 1px solid rgba(196, 148, 72, 0.12);
+  border-radius: 0;
 }
 
 .hud-resource-stone {
-  left: 242px;
+  left: 180px;
   color: #d4c9a8;
-  border: 1px solid rgba(170, 165, 150, 0.3);
+  border-left: 1px solid rgba(196, 148, 72, 0.18);
+  border-right: 1px solid rgba(232, 190, 110, 0.45);
+  border-radius: 0 12px 12px 0;
 }

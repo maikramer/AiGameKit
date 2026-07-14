@@ -34,19 +34,19 @@ const CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'] as const;
 const MAJOR_CARDINALS = new Set<string>(['N', 'E', 'S', 'W']);
 
 const COMPASS_STYLE_CSS = `
-.vibe-compass{position:absolute;top:14px;left:50%;transform:translateX(-50%);
-width:min(300px,70vw);height:30px;overflow:hidden;z-index:11;pointer-events:none;
-background:rgba(8,12,28,0.6);border-radius:8px;
-border:1px solid rgba(120,150,220,0.22);backdrop-filter:blur(8px);
-box-shadow:0 5px 18px rgba(0,0,0,0.28);
--webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);
-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);}
-.vibe-compass-mark{position:absolute;top:0;left:50%;height:30px;min-width:24px;
+.vibe-compass{position:absolute;top:12px;left:50%;transform:translateX(-50%);
+width:min(280px,68vw);height:28px;overflow:hidden;z-index:11;pointer-events:none;
+background:linear-gradient(145deg,rgba(18,16,22,0.88),rgba(10,12,16,0.75));
+border-radius:10px;border:1px solid rgba(196,148,72,0.32);
+backdrop-filter:blur(12px);box-shadow:0 5px 18px rgba(0,0,0,0.32),inset 0 1px 0 rgba(255,220,160,0.1);
+-webkit-mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);
+mask-image:linear-gradient(90deg,transparent,#000 16%,#000 84%,transparent);}
+.vibe-compass-mark{position:absolute;top:0;left:50%;height:28px;min-width:24px;
 display:flex;align-items:center;justify-content:center;text-align:center;
 will-change:transform,opacity;transform:translateX(-50%);opacity:0;}
-.vibe-compass-mark.major{font:700 14px system-ui,sans-serif;}
-.vibe-compass-mark.minor{font:700 10px system-ui,sans-serif;}
-.vibe-compass-tick{position:absolute;top:0;left:50%;width:2px;height:30px;
+.vibe-compass-mark.major{font:700 13px 'Trebuchet MS',system-ui,sans-serif;letter-spacing:0.04em;}
+.vibe-compass-mark.minor{font:700 10px 'Trebuchet MS',system-ui,sans-serif;}
+.vibe-compass-tick{position:absolute;top:0;left:50%;width:2px;height:28px;
 margin-left:-1px;background:linear-gradient(${COMPASS_TICK_COLOR},rgba(255,210,74,0));
 pointer-events:none;}
 `.trim();

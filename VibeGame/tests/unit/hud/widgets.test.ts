@@ -8,6 +8,7 @@ import {
   damageHealth,
   Health,
   HudPlugin,
+  HudRpgPlugin,
   I18nPlugin,
   ProgressionComponent,
   ProgressionPlugin,
@@ -67,6 +68,7 @@ async function newState(): Promise<State> {
   state.registerPlugin(ProgressionPlugin);
   state.registerPlugin(I18nPlugin);
   state.registerPlugin(HudPlugin);
+  state.registerPlugin(HudRpgPlugin);
   bindCombatState(state);
   await state.initializePlugins();
   loadEngineDefaultDictionary(state);
@@ -86,26 +88,36 @@ function makeHero(state: State): number {
 }
 
 describe('HudPlugin widget wiring', () => {
-  it('HudPlugin exposes the 7 widget recipes', () => {
+  it('HudPlugin exposes the 3 core widget recipes', () => {
     const names = (HudPlugin.recipes ?? []).map((r) => r.name);
+    expect(names).toContain(MISSION_TAG);
+    expect(names).toContain(TIMER_TAG);
+    expect(names).toContain(CONTROLS_BAR_TAG);
+    expect(names).not.toContain(HEALTH_BAR_TAG);
+  });
+
+  it('HudRpgPlugin exposes RPG widget recipes', () => {
+    const names = (HudRpgPlugin.recipes ?? []).map((r) => r.name);
     expect(names).toContain(HEALTH_BAR_TAG);
     expect(names).toContain(XP_BAR_TAG);
     expect(names).toContain(RESOURCE_CHIP_TAG);
-    expect(names).toContain(MISSION_TAG);
-    expect(names).toContain(TIMER_TAG);
     expect(names).toContain(BOSS_BAR_TAG);
-    expect(names).toContain(CONTROLS_BAR_TAG);
   });
 
-  it('HudPlugin exposes a parser for each widget tag', () => {
+  it('HudPlugin exposes parsers for core widget tags', () => {
     const parsers = HudPlugin.config?.parsers ?? {};
+    expect(parsers[MISSION_TAG]).toBeDefined();
+    expect(parsers[TIMER_TAG]).toBeDefined();
+    expect(parsers[CONTROLS_BAR_TAG]).toBeDefined();
+    expect(parsers[HEALTH_BAR_TAG]).toBeUndefined();
+  });
+
+  it('HudRpgPlugin exposes parsers for RPG widget tags', () => {
+    const parsers = HudRpgPlugin.config?.parsers ?? {};
     expect(parsers[HEALTH_BAR_TAG]).toBeDefined();
     expect(parsers[XP_BAR_TAG]).toBeDefined();
     expect(parsers[RESOURCE_CHIP_TAG]).toBeDefined();
-    expect(parsers[MISSION_TAG]).toBeDefined();
-    expect(parsers[TIMER_TAG]).toBeDefined();
     expect(parsers[BOSS_BAR_TAG]).toBeDefined();
-    expect(parsers[CONTROLS_BAR_TAG]).toBeDefined();
   });
 
   it('widgetRecipes and widgetParsers cover the same tag set', () => {
@@ -160,6 +172,31 @@ describe('HealthBarWidget', () => {
     state.step(0.016);
     const text = layer.querySelector('.hud-health-text')!.textContent;
     expect(text).toBe('70/100');
+  });
+
+  it('fill width matches health ratio and stays within 100%', () => {
+    const hero = makeHero(state);
+    const widget = createHealthBarWidget({ 'target-entity': 'hero' }, state);
+    registerHudWidget(state, widget);
+    Health.current[hero] = 88;
+    state.step(0.016);
+    const fill = layer.querySelector('.hud-health-fill') as HTMLElement;
+    expect(fill.style.width).toMatch(/^88(\.0)?%$/);
+    expect(layer.querySelector('.hud-health-text')!.textContent).toBe('88/100');
+    expect(
+      layer.querySelector('.hud-health')!.classList.contains('hud-health--low')
+    ).toBe(false);
+  });
+
+  it('applies low-health class at or below 30%', () => {
+    const hero = makeHero(state);
+    const widget = createHealthBarWidget({ 'target-entity': 'hero' }, state);
+    registerHudWidget(state, widget);
+    Health.current[hero] = 25;
+    state.step(0.016);
+    expect(
+      layer.querySelector('.hud-health')!.classList.contains('hud-health--low')
+    ).toBe(true);
   });
 
   it('unmount removes the root from the layer', () => {

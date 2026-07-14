@@ -43,6 +43,22 @@ export interface SkillDef {
   maxRank: number;
   cost: number | number[];
   effect: SkillEffect;
+  /** Skill ids that must be at rank ≥ 1 before this skill can be bought. */
+  requires?: readonly string[];
+  /** Tree row (0 = roots). Used by SkillsTab layout. */
+  tier?: number;
+  /** Optional column hint within a tier (lower = left). */
+  column?: number;
+}
+
+/** Lore / help pages shown by the HUD WikiTab (registry kind `wiki`). */
+export interface WikiPageDef {
+  id: string;
+  title: string;
+  body: string;
+  category?: string;
+  icon?: string;
+  order?: number;
 }
 
 export interface LootEntry {

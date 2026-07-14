@@ -26,10 +26,10 @@ import {
   registerMinimapWidgetFactory,
 } from './widgets/minimap';
 import {
-  registerHudWidgetFactories,
-  widgetParsers,
-  widgetRecipes,
-} from './widgets';
+  coreWidgetParsers,
+  coreWidgetRecipes,
+  registerCoreHudWidgetFactories,
+} from './widgets/core-widgets';
 
 const minimapRecipe: Recipe = {
   name: 'Minimap',
@@ -76,13 +76,13 @@ export const HudPlugin: Plugin = {
     interactionPromptRecipe,
     tabbedModalRecipe,
     minimapRecipe,
-    ...widgetRecipes,
+    ...coreWidgetRecipes,
   ],
   components: {
     hudPanel: HudPanel,
   },
   initialize(state: State): void {
-    registerHudWidgetFactories();
+    registerCoreHudWidgetFactories();
     if (state.headless) return;
     if (typeof document === 'undefined') return;
     createHudScreenLayer(state);
@@ -114,7 +114,7 @@ export const HudPlugin: Plugin = {
       Minimap: minimapParser,
       InteractionPrompt: interactionPromptParser,
       TabbedModal: tabbedModalParser,
-      ...widgetParsers,
+      ...coreWidgetParsers,
     },
   },
 };

@@ -7,7 +7,12 @@ import type {
   WidgetHandle,
 } from '../screen-layer';
 import css from '../styles/health-bar.css?raw';
-import { injectWidgetCss, readAttr, resolveTargetEntity, setWidgetIcon } from './shared';
+import {
+  injectWidgetCss,
+  readAttr,
+  resolveTargetEntity,
+  setWidgetIcon,
+} from './shared';
 
 const WIDGET_TAG = 'health-bar';
 const DEFAULT_TARGET_NAMES = ['hero', 'player'];
@@ -63,13 +68,16 @@ export function createHealthBarWidget(
         if (eid < 0 || !state.hasComponent(eid, Health)) {
           fill.style.width = '0%';
           text.textContent = `0/0`;
+          root.classList.remove('hud-health--low');
           return;
         }
         const max = Health.max[eid];
         const cur = Health.current[eid];
         const ratio = max > 0 ? Math.max(0, Math.min(1, cur / max)) : 0;
+        // Width is relative to the track (min-width:0); never set beyond 100%.
         fill.style.width = `${(ratio * 100).toFixed(1)}%`;
         text.textContent = `${Math.round(cur)}/${Math.round(max)}`;
+        root.classList.toggle('hud-health--low', ratio > 0 && ratio <= 0.3);
       };
 
       update();

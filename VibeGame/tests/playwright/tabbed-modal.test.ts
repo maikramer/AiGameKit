@@ -64,10 +64,10 @@ test.describe('TabbedModal — pause menu', () => {
 
     await overlay.locator('.hud-modal-tab', { hasText: /skills/i }).click();
     const rank = overlay.locator('.hud-modal-skill-rank').first();
-    await expect(rank).toHaveText('0');
+    await expect(rank).toHaveText('0/5');
 
     await overlay.locator('.hud-modal-skill-plus').first().click();
-    await expect(rank).toHaveText('1');
+    await expect(rank).toHaveText('1/5');
     await expect(overlay.locator('.hud-modal-skill-points')).toContainText('2');
 
     await page.screenshot({

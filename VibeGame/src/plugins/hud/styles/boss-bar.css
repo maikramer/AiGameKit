@@ -1,38 +1,53 @@
 .hud-boss {
   position: absolute;
-  top: 54px;
+  top: 52px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 12;
   min-width: 320px;
   padding: 10px 16px;
-  border-radius: 10px;
+  border-radius: 12px;
   pointer-events: auto;
-  background: rgba(8, 12, 28, 0.7);
-  border: 1px solid rgba(200, 40, 40, 0.35);
-  backdrop-filter: blur(8px);
-  font-family:
-    system-ui,
-    Segoe UI,
-    sans-serif;
+  background: linear-gradient(
+    145deg,
+    rgba(22, 12, 14, 0.9),
+    rgba(10, 8, 12, 0.82)
+  );
+  border: 1px solid rgba(200, 60, 50, 0.4);
+  border-top-color: rgba(255, 120, 90, 0.45);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 8px 28px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 160, 120, 0.1);
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
 }
 
 .hud-boss-track {
   position: relative;
   width: 300px;
-  height: 20px;
+  height: 18px;
   margin: 0 auto;
+  padding: 2px;
+  box-sizing: border-box;
   overflow: hidden;
-  border-radius: 4px;
-  background: rgba(60, 12, 12, 0.7);
+  border-radius: 6px;
+  background: linear-gradient(
+    180deg,
+    rgba(40, 8, 10, 0.95),
+    rgba(20, 6, 8, 0.9)
+  );
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.6);
 }
 
 .hud-boss-fill {
-  width: 100%;
+  width: 0%;
+  max-width: 100%;
   height: 100%;
   border-radius: 4px;
   transition: width 0.2s ease-out;
-  background: linear-gradient(90deg, #b22222, #ff4444);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, transparent 45%),
+    linear-gradient(90deg, #8a1515, #e03030 60%, #ff6a4a);
 }
 
 .hud-boss-text {

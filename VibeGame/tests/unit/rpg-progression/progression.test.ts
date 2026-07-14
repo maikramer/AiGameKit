@@ -153,6 +153,37 @@ describe('Progression plugin (XP / level / skills / stat modifiers)', () => {
       expect(spendSkillPoint(state, eid, 'vitality')).toBe(false);
     });
 
+    it('blocks skills until requires prereqs are ranked', () => {
+      getDataRegistry(state).register<SkillDef>('skill', 'vitality', {
+        id: 'vitality',
+        name: 'Vitality',
+        maxRank: 5,
+        cost: 1,
+        effect: {
+          kind: 'stat-modifier',
+          payload: { stat: 'maxHp', magnitude: 12, stackMode: 'stack' },
+        },
+      });
+      getDataRegistry(state).register<SkillDef>('skill', 'fortitude', {
+        id: 'fortitude',
+        name: 'Fortitude',
+        maxRank: 3,
+        cost: 1,
+        requires: ['vitality'],
+        effect: {
+          kind: 'stat-modifier',
+          payload: { stat: 'maxHp', magnitude: 18, stackMode: 'stack' },
+        },
+      });
+      const eid = state.createFromRecipe('Progression');
+      ProgressionComponent.unspentPoints[eid] = 5;
+
+      expect(spendSkillPoint(state, eid, 'fortitude')).toBe(false);
+      expect(spendSkillPoint(state, eid, 'vitality')).toBe(true);
+      expect(spendSkillPoint(state, eid, 'fortitude')).toBe(true);
+      expect(getSkillRank(state, eid, 'fortitude')).toBe(1);
+    });
+
     it('emits PROGRESSION_SKILL_PURCHASED via the bridge system', () => {
       registerVitality(state);
       const eid = state.createFromRecipe('Progression');

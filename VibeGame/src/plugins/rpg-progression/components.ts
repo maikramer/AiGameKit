@@ -208,6 +208,19 @@ function applySkillEffect(
   }
 }
 
+export function skillPrereqsMet(
+  state: State,
+  eid: number,
+  def: SkillDef
+): boolean {
+  if (!def.requires || def.requires.length === 0) return true;
+  const ranks = getSkillRanks(state, eid);
+  for (const req of def.requires) {
+    if ((ranks.get(req) ?? 0) < 1) return false;
+  }
+  return true;
+}
+
 export function spendSkillPoint(
   state: State,
   eid: number,
@@ -219,6 +232,7 @@ export function spendSkillPoint(
   const ranks = getSkillRanks(state, eid);
   const currentRank = ranks.get(skillId) ?? 0;
   if (currentRank >= def.maxRank) return false;
+  if (!skillPrereqsMet(state, eid, def)) return false;
   const cost = computeSkillCost(def, currentRank);
   if (ProgressionComponent.unspentPoints[eid] < cost) return false;
 

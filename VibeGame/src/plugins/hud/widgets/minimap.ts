@@ -370,7 +370,9 @@ function wrapperStyle(anchor: MinimapAnchor): string {
   const base =
     'position:absolute;z-index:11;pointer-events:none;' +
     'box-shadow:0 6px 20px rgba(0,0,0,0.35);' +
-    'border:1px solid rgba(120,150,220,0.22);';
+    'border:1px solid rgba(196,148,72,0.35);' +
+    'border-radius:50%;' +
+    'background:rgba(10,12,16,0.55);';
   const gap = '18px';
   switch (anchor) {
     case 'top-left':
