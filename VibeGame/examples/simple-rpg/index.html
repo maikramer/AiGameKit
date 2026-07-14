@@ -315,7 +315,7 @@
            Praça 16×16 no centro; vias cardeais + anel interno.
            SpawnExclusion impede vegetação; DynamicSpawners ≥45 do centro.
            ============================================================ -->
-        <SpawnExclusion at="0 0" radius="42"></SpawnExclusion>
+        <SpawnExclusion at="0 0" radius="44"></SpawnExclusion>
 
         <!-- Pad de assentamento: núcleo plano TEM de cobrir muralha ±32 e
            casamatas ±28. half=52 (size 104) − corner 8 → eixo plano ≥44;
@@ -2329,36 +2329,39 @@
            da muralha, dentro de ~±45): carvalhos (madeira) + pedras
            (pedra). A SpawnExclusion mantém tudo fora da cidade.
            ============================================================ -->
-        <!-- Vegetação rasteira (Kenney Nature Kit, CC0) — carpete instanced
-           fora da cidade (SpawnExclusion r=42). Density ~90k/km² no anel
-           ±90 ≈ 2–3k clumps. Wind sway via VegetationPlugin. -->
+        <!-- Vegetação rasteira (Kenney ≈0.25 m nativo → scale 1–3 = 0.25–0.75 m).
+           Clusters densos; SpawnExclusion da cidade sempre honrado. -->
         <Vegetation
           meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb"
-          density-per-km2="90000"
+          density-per-km2="110000"
           seed="41"
           region-min="-90 0 -90"
           region-max="90 0 90"
-          scale-min="0.65"
-          scale-max="1.35"
-          max-slope-deg="32"
+          scale-min="1.0"
+          scale-max="3.0"
+          max-slope-deg="35"
           avoid-water="1"
           avoid-overlaps="0"
-          max-distance="85"
+          max-distance="110"
+          cluster-count="55"
+          cluster-radius="3.5"
           wind="1"
         ></Vegetation>
         <!-- Flores / plantas junto ao laguinho NW. -->
         <Vegetation
           meshes="/assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/plant_flatTall.glb"
-          density-per-km2="45000"
+          density-per-km2="70000"
           seed="77"
           region-min="-55 0 42"
           region-max="-28 0 68"
-          scale-min="0.8"
-          scale-max="1.5"
-          max-slope-deg="28"
+          scale-min="1.0"
+          scale-max="2.8"
+          max-slope-deg="32"
           avoid-water="1"
           avoid-overlaps="0"
-          max-distance="70"
+          max-distance="90"
+          cluster-count="12"
+          cluster-radius="2.8"
           wind="1"
         ></Vegetation>
         <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha
@@ -3976,6 +3979,7 @@
         ></ResourceChip>
         <Minimap range="60"></Minimap>
         <Compass></Compass>
+        <TargetBar></TargetBar>
         <BossBar target-entity="boss"></BossBar>
         <InteractionPrompt
           key="F"

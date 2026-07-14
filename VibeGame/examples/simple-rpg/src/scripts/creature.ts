@@ -15,7 +15,6 @@ import {
   Health,
   isDead,
   spawnParticleBurst,
-  threeCameras,
   // Engine melee-AI FSM (the brain): perception, state machine, navmesh
   // steering + attack. This script is the *presentation* layer on top of it.
   runMeleeAiFrame,
@@ -30,11 +29,14 @@ import {
   removeAgent,
 } from 'vibegame';
 import type { MeleeAiConfig } from 'vibegame';
-import { registerEnemy, unregisterEnemy } from './enemy-registry';
+import {
+  registerEnemy,
+  setEnemyLabel,
+  unregisterEnemy,
+} from './enemy-registry';
 
 const TERRAIN_LAYER = 0x0001;
 const WATER_LEVEL = 1.25;
-const HEALTH_BAR_WIDTH = 1.4;
 
 // AI tuning not expressed in CreatureConfig — defaults from the original
 // creature prototype, fed into the engine MeleeAiConfig.
@@ -132,8 +134,6 @@ interface PresentationState {
   flashTimer: number;
   flashMats:
     { mat: THREE.MeshStandardMaterial; emHex: number; emInt: number }[] | null;
-  healthBarBg: THREE.Mesh | null;
-  healthBarFill: THREE.Mesh | null;
   deathHandled: boolean;
   deathTimer: number;
   /** Hit-reaction countdown: plays the hit clip, then returns to AI clip. */
@@ -172,52 +172,6 @@ function groundHeight(
   // keeping the model flush with what is shown.
   const h = sampleTerrainHeight(ctx.state, x, z);
   return Number.isFinite(h) ? h : 0;
-}
-
-function ensureHealthBar(s: PresentationState): void {
-  if (s.healthBarBg || !s.group) return;
-  const bg = new THREE.Mesh(
-    new THREE.PlaneGeometry(1.5, 0.22),
-    new THREE.MeshBasicMaterial({
-      color: 0x111111,
-      depthTest: false,
-      transparent: true,
-      opacity: 0.85,
-    })
-  );
-  bg.position.set(0, 2.0, 0);
-  bg.renderOrder = 998;
-  bg.visible = false;
-  s.group.add(bg);
-
-  const fill = new THREE.Mesh(
-    new THREE.PlaneGeometry(HEALTH_BAR_WIDTH, 0.14),
-    new THREE.MeshBasicMaterial({
-      color: 0x44ddff,
-      depthTest: false,
-      transparent: true,
-    })
-  );
-  fill.position.set(0, 2.0, 0.01);
-  fill.renderOrder = 999;
-  fill.visible = false;
-  s.group.add(fill);
-
-  s.healthBarBg = bg;
-  s.healthBarFill = fill;
-}
-
-function disposeHealthBar(s: PresentationState): void {
-  for (const mesh of [s.healthBarBg, s.healthBarFill]) {
-    if (!mesh) continue;
-    mesh.removeFromParent();
-    mesh.geometry.dispose();
-    const mat = mesh.material;
-    if (Array.isArray(mat)) mat.forEach((m) => m.dispose());
-    else mat?.dispose();
-  }
-  s.healthBarBg = null;
-  s.healthBarFill = null;
 }
 
 function collectFlashMats(s: PresentationState): void {
@@ -310,8 +264,6 @@ export function createCreatureBehaviours(
     s.deathTimer = 2.0;
     aggroEntities.delete(eid);
     unregisterEnemy(eid);
-    if (s.healthBarBg) s.healthBarBg.visible = false;
-    if (s.healthBarFill) s.healthBarFill.visible = false;
 
     // Diagnostic: legit death has hp<=0; hp>0 means a stale DEAD mode slipped through.
     if (Health.current[eid] > 0) {
@@ -356,8 +308,8 @@ export function createCreatureBehaviours(
       duration: 0.8,
     });
     if (s.animator && s.playing !== cfg.clips.death) {
-      s.animator.play(cfg.clips.death, { loop: false });
-      s.playing = cfg.clips.death;
+      const acted = s.animator.play(cfg.clips.death, { loop: false });
+      if (acted) s.playing = cfg.clips.death;
     }
   }
 
@@ -369,6 +321,28 @@ export function createCreatureBehaviours(
     if (mode === AI_MODE_CHASE) return cfg.clips.run;
     if (mode === AI_MODE_ATTACK) return cfg.clips.attack ?? cfg.clips.idle;
     return moving ? cfg.clips.walk : cfg.clips.idle;
+  }
+
+  /** Play clip; only stamp ``playing`` on success. Fall back to idle on miss
+   * so flying packs (Hover/Soar, no Walk) never sticky-T-pose. */
+  function playClip(
+    s: PresentationState,
+    clip: string,
+    opts?: { loop?: boolean }
+  ): boolean {
+    if (!s.animator) return false;
+    const acted = s.animator.play(clip, opts);
+    if (acted) {
+      s.playing = clip;
+      return true;
+    }
+    if (clip !== cfg.clips.idle) {
+      const idle = s.animator.play(cfg.clips.idle);
+      if (idle) {
+        s.playing = cfg.clips.idle;
+      }
+    }
+    return false;
   }
 
   return {
@@ -386,8 +360,6 @@ export function createCreatureBehaviours(
         lastHp: cfg.hp,
         flashTimer: 0,
         flashMats: null,
-        healthBarBg: null,
-        healthBarFill: null,
         deathHandled: false,
         deathTimer: 0,
         hitTimer: 0,
@@ -400,6 +372,11 @@ export function createCreatureBehaviours(
         ctx.state.addComponent(eid, Health);
       Health.current[eid] = cfg.hp;
       Health.max[eid] = cfg.hp;
+      if (cfg.enemyType) {
+        const label =
+          cfg.enemyType.charAt(0).toUpperCase() + cfg.enemyType.slice(1);
+        setEnemyLabel(eid, label);
+      }
       // AiStateComponent is a raw global array never cleared on eid recycle —
       // reset it so a fresh creature can't inherit a stale DEAD slot.
       AiStateComponent.mode[eid] = AI_MODE_IDLE;
@@ -451,8 +428,7 @@ export function createCreatureBehaviours(
         s.roarTimer -= ctx.deltaTime;
         s.animator?.update(ctx.deltaTime);
         if (cfg.clips.roar && s.playing !== cfg.clips.roar) {
-          s.animator?.play(cfg.clips.roar, { loop: false });
-          s.playing = cfg.clips.roar;
+          playClip(s, cfg.clips.roar, { loop: false });
         }
         const rx = Transform.posX[eid];
         const rz = Transform.posZ[eid];
@@ -468,8 +444,7 @@ export function createCreatureBehaviours(
       const inst = getOrCreateAiInstanceState(ctx.state, eid);
       runMeleeAiFrame(ctx.state, eid, meleeConfig, inst);
 
-      // ── Presentation (this script): visuals, clips, terrain-Y, health bar,
-      //    hit-flash, death FX + loot.
+      // Presentation: visuals, clips, terrain-Y, hit-flash, death FX + loot.
       if (!s.group) return;
       s.animator?.update(ctx.deltaTime);
       const dt = ctx.deltaTime;
@@ -479,7 +454,6 @@ export function createCreatureBehaviours(
         handleDeath(ctx, s, eid);
         s.deathTimer -= dt;
         if (s.deathTimer <= 0) {
-          disposeHealthBar(s);
           s.group.removeFromParent();
           s.group = null;
         }
@@ -510,9 +484,9 @@ export function createCreatureBehaviours(
         applyFlash(s, true);
         // Play hit-reaction clip if available (brief stagger, then AI resumes).
         if (cfg.clips.hit && s.animator && mode !== AI_MODE_DEAD) {
-          s.hitTimer = 0.35;
-          s.animator.play(cfg.clips.hit, { loop: false });
-          s.playing = cfg.clips.hit;
+          if (playClip(s, cfg.clips.hit, { loop: false })) {
+            s.hitTimer = 0.35;
+          }
         }
         spawnParticleBurst(ctx.state, {
           x: Transform.posX[eid],
@@ -573,48 +547,22 @@ export function createCreatureBehaviours(
         clip = pickClip(mode, moveSpeed > 0.3);
       }
       if (s.animator && s.playing !== clip) {
-        s.animator.play(
+        playClip(
+          s,
           clip,
           clip === cfg.clips.lunge || clip === cfg.clips.hit
             ? { loop: false }
             : undefined
         );
-        s.playing = clip;
       }
       if (s.animator && cfg.runTimeScale !== undefined) {
         s.animator.setTimeScale(mode === AI_MODE_CHASE ? cfg.runTimeScale : 1);
-      }
-
-      // Health bar billboard (combat only).
-      ensureHealthBar(s);
-      if (s.healthBarBg) s.healthBarBg.visible = inCombat;
-      if (s.healthBarFill) {
-        s.healthBarFill.visible = inCombat;
-        if (inCombat) {
-          const ratio = Math.max(
-            0,
-            Math.min(1, hp / (Health.max[eid] || cfg.hp))
-          );
-          s.healthBarFill.scale.x = ratio;
-          s.healthBarFill.position.x = -(HEALTH_BAR_WIDTH / 2) * (1 - ratio);
-          (s.healthBarFill.material as THREE.MeshBasicMaterial).color.setHex(
-            ratio > 0.5 ? 0x22cc22 : ratio > 0.25 ? 0xeecc22 : 0xee2222
-          );
-        }
-      }
-      if (inCombat && s.healthBarBg && s.healthBarFill) {
-        const cam = threeCameras.values().next().value;
-        if (cam) {
-          s.healthBarBg.lookAt(cam.position);
-          s.healthBarFill.lookAt(cam.position);
-        }
       }
     },
 
     onDestroy(ctx: MonoBehaviourContext): void {
       const s = stateMap.get(ctx.entity);
       if (s) {
-        disposeHealthBar(s);
         s.group?.removeFromParent();
       }
       removeAgent(ctx.state, ctx.entity);

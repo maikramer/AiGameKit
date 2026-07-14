@@ -29,8 +29,23 @@ export function registerEnemy(eid: number, x: number, z: number): void {
   spawnedAny = true;
 }
 
+const labels = new Map<number, string>();
+
+/** Display name for TargetBar / combat soft-lock (not a unique entity name). */
+export function setEnemyLabel(eid: number, label: string): void {
+  labels.set(eid, label);
+}
+
+export function getEnemyLabel(eid: number): string | undefined {
+  return labels.get(eid);
+}
+
 export function unregisterEnemy(eid: number): void {
-  if (!alive.delete(eid)) return;
+  if (!alive.delete(eid)) {
+    labels.delete(eid);
+    return;
+  }
+  labels.delete(eid);
   const b = biomeOf.get(eid);
   if (b) {
     biomeOf.delete(eid);

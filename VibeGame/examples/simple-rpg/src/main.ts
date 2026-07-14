@@ -63,6 +63,9 @@ import {
   onEvent,
   MODAL_OPTION_CHANGED,
   spawnFloatingText,
+  spawnDamageNumber,
+  setCombatTarget,
+  tickCombatTarget,
   Destructible,
   onDestructibleDestroyed,
   saveToLocalStorage,
@@ -118,6 +121,7 @@ import { isWoodEntity } from './scripts/tree';
 import { addStone } from './scripts/inventory';
 import { addWood } from './scripts/wood';
 import { anyCreatureAggro } from './scripts/creature';
+import { getEnemyLabel } from './scripts/enemy-registry';
 
 import darkForestQuestsData from './data/quests/dark_forest_quests.json';
 import desertQuestsData from './data/quests/desert_quests.json';
@@ -437,6 +441,7 @@ const CombatFeedbackSystem: System = {
   group: 'simulation',
   update(state: State) {
     const hero = state.getEntityByName('hero');
+    tickCombatTarget(state, state.time.deltaTime);
 
     for (const e of healthFxQuery(state.world)) {
       const cur = Health.current[e];
@@ -447,23 +452,44 @@ const CombatFeedbackSystem: System = {
       if (dmg <= 0) continue;
       const isHero = e === hero;
       const big = !isHero && dmg >= 22;
-      spawnFloatingText(
-        state,
-        isHero ? `-${dmg}` : big ? `${dmg}!` : `${dmg}`,
-        {
-          x: Transform.posX[e],
-          y: Transform.posY[e] + (isHero ? 1.7 : 2.1),
-          z: Transform.posZ[e],
-          color: isHero ? '#ff5a5a' : big ? '#ff8a2a' : '#fff0a0',
-          size: isHero ? 0.5 : big ? 0.7 : 0.46,
-          duration: big ? 1.3 : 1.0,
-          // Stack repeated hits on the same enemy so they don't overlap.
-          stackKey: `dmg@${e}`,
-          stackBaseY: Transform.posY[e] + (isHero ? 1.7 : 2.1),
-          stackGap: 0.45,
-        }
-      );
+      spawnDamageNumber(state, {
+        x: Transform.posX[e],
+        y: Transform.posY[e] + (isHero ? 1.7 : 2.1),
+        z: Transform.posZ[e],
+        amount: dmg,
+        onHero: isHero,
+        crit: big,
+        stackKey: `dmg@${e}`,
+      });
       playSound(isHero ? 'player-hurt' : 'enemy-hurt');
+      if (!isHero) {
+        setCombatTarget(e, {
+          label: getEnemyLabel(e) || state.getEntityName(e) || 'Enemy',
+        });
+      } else if (hero !== null) {
+        // When the hero is hit, soft-lock the nearest living foe for the TargetBar.
+        let best = -1;
+        let bestD2 = Infinity;
+        const hx = Transform.posX[hero];
+        const hz = Transform.posZ[hero];
+        const merchant = state.getEntityByName('merchant');
+        for (const foe of healthFxQuery(state.world)) {
+          if (foe === hero || foe === merchant || Health.current[foe] <= 0)
+            continue;
+          const dx = Transform.posX[foe] - hx;
+          const dz = Transform.posZ[foe] - hz;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < bestD2 && d2 < 400) {
+            bestD2 = d2;
+            best = foe;
+          }
+        }
+        if (best >= 0) {
+          setCombatTarget(best, {
+            label: getEnemyLabel(best) || state.getEntityName(best) || 'Enemy',
+          });
+        }
+      }
       // Award XP to the hero on the blow that kills a creature.
       if (!isHero && cur <= 0 && prev > 0 && hero !== null) {
         addXp(state, hero, Math.max(2, Math.round((Health.max[e] || 30) / 12)));
