@@ -13,9 +13,60 @@ from rich.console import Console
 from rich.panel import Panel
 
 from .manifest import ManifestRow
+from .paths import (
+    _animator3d_output_path,
+    _base_stem,
+    _lod_animated_path,
+    _lod_path,
+    _rigging3d_output_path,
+)
 from .profile import GameProfile
 
 console = Console()
+
+
+def resolve_handoff_mesh(
+    mesh_path: Path,
+    row: ManifestRow,
+    *,
+    prefer_animated: bool,
+    prefer_rigged: bool,
+    rig_suffix: str = "_rigged",
+) -> tuple[Path | None, str]:
+    """Escolhe o GLB entregável para handoff (animated > rigged > lod0 > base).
+
+    Master pipeline promove animate→``id_lod0.glb`` e publica alias
+    ``id_rigged_animated.glb``. Handoff antigo só olhava para
+    ``{stem}_animated.glb`` (nome legacy errado) e falhava mesmo com LOD0
+    animado no disco.
+    """
+    stem = _base_stem(mesh_path.stem)
+    parent = mesh_path.parent
+    lod0 = _lod_path(mesh_path, 0)
+    rigged_animated = _animator3d_output_path(mesh_path)
+    lod0_animated = _lod_animated_path(mesh_path, 0)
+    legacy_animated = parent / f"{stem}_animated.glb"
+    rig_out = _rigging3d_output_path(mesh_path, rig_suffix)
+    lod0_rigged = parent / f"{stem}_lod0_rigged.glb"
+
+    if prefer_animated:
+        for cand in (rigged_animated, lod0_animated, legacy_animated):
+            if cand.is_file():
+                return cand, "animated"
+        # LOD0 promovido (tem clips) — só preferir quando a row pediu animate.
+        if row.generate_animate and lod0.is_file():
+            return lod0, "animated"
+
+    if prefer_rigged:
+        for cand in (rig_out, lod0_rigged):
+            if cand.is_file():
+                return cand, "rigged"
+
+    if lod0.is_file():
+        return lod0, "lod0"
+    if mesh_path.is_file():
+        return mesh_path, "base"
+    return None, "missing"
 
 
 def _convert_audio(src: Path, dst: Path, *, sample_rate: int, dry_run: bool) -> bool:
@@ -68,7 +119,6 @@ def run_handoff(
     from .cli import (
         _audio_path_for_row_manifest,
         _paths_for_row_manifest,
-        _rigging3d_output_path,
         _texture2d_material_maps_path_manifest,
         _texture2d_profile_effective,
     )
@@ -96,21 +146,15 @@ def run_handoff(
             _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
             rg = profile.rigging3d
             sfx = rg.output_suffix if rg else "_rigged"
-            rig_out = _rigging3d_output_path(mesh_path, sfx or "_rigged")
-            anim_out = mesh_path.with_name(f"{mesh_path.stem}_animated.glb")
+            chosen, chosen_kind = resolve_handoff_mesh(
+                mesh_path,
+                row,
+                prefer_animated=prefer_animated,
+                prefer_rigged=prefer_rigged,
+                rig_suffix=sfx or "_rigged",
+            )
 
-            chosen: Path | None = None
-            chosen_kind = "base"
-            if prefer_animated and anim_out.is_file():
-                chosen = anim_out
-                chosen_kind = "animated"
-            elif prefer_rigged and rig_out.is_file():
-                chosen = rig_out
-                chosen_kind = "rigged"
-            elif mesh_path.is_file():
-                chosen = mesh_path
-                chosen_kind = "base"
-            else:
+            if chosen is None:
                 entry["model_error"] = "GLB não encontrado no output_dir (corre batch antes do handoff)"
                 out["rows"].append(entry)
                 continue

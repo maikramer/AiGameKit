@@ -367,7 +367,7 @@ def prompts_cmd(
     "--prefer-animated/--no-prefer-animated",
     "prefer_animated",
     default=True,
-    help="Preferir *_animated.glb se existir no disco (prioridade sobre rigado/parts/base)",
+    help="Preferir id_rigged_animated.glb / lod0 promovido (master) se existir (prioridade sobre rigado/base)",
 )
 @click.option(
     "--prefer-rigged/--no-prefer-rigged",

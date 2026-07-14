@@ -38,6 +38,12 @@ class ManifestRow:
     audio_steps: int | None = None
     audio_cfg_scale: float | None = None
     generation: str | None = None
+    # Per-row animation overrides (from YAML ``animate:`` sub-dict).
+    # When None, fall back to the global ``animator3d:`` profile settings.
+    animate_clips: str | None = None
+    animate_preset: str | None = None  # humanoid | creature | flying
+    animate_procedural: bool | None = None
+    animate_force_preset: bool | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -62,6 +68,10 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
         if not isinstance(audio_cfg, dict):
             audio_cfg = {}
 
+        animate_cfg = entry.get("animate") or {}
+        if not isinstance(animate_cfg, dict):
+            animate_cfg = {}
+
         rows.append(
             ManifestRow(
                 id=entry["id"],
@@ -84,6 +94,10 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 audio_steps=audio_cfg.get("steps"),
                 audio_cfg_scale=audio_cfg.get("cfg_scale"),
                 generation=entry.get("generation"),
+                animate_clips=animate_cfg.get("clips"),
+                animate_preset=animate_cfg.get("preset"),
+                animate_procedural=animate_cfg.get("procedural"),
+                animate_force_preset=animate_cfg.get("force_preset"),
             )
         )
     if not rows:

@@ -755,8 +755,23 @@ def resume_cmd(
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "rigging3d", "progress", phase="rigging", percent=0)
-                    # Legacy rig removed — master pipeline handles rigging.
-                    rig_failed = False
+                    rig_failed = _post_text3d_mesh_extras(
+                        profile,
+                        row,
+                        it["mesh_final"],
+                        rec,
+                        manifest_dir,
+                        child_env,
+                        rigging3d_bin,
+                        with_rig=True,
+                        with_animate=bool(it["wants_animate"]),
+                        animator3d_bin=animator3d_bin,
+                        has_rigging_profile=has_rigging_profile,
+                        gpu_ids=gpu_ids,
+                        with_lod=bool(row.generate_lod),
+                        with_collision=bool(row.generate_collision),
+                        on_progress_line=dash.feed_line,
+                    )
                     if rig_failed:
                         failures += 1
                         dash.feed_event(
@@ -770,11 +785,13 @@ def resume_cmd(
                             raise click.Abort()
                     else:
                         dash.feed_event(row.id, "rigging3d", "ok", phase="rigging")
-                        it["state"] = _ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE
+                        it["state"] = _ROW_DONE
                         append_log(rec)
                     dash.advance_phase()
 
             # --- Fase 5: Animation ---
+            # Animate já corre dentro do master (fase 4) quando wants_animate;
+            # este bucket só apanha leftovers classificados como need_animate_lod.
             need_anim = [it for it in items if it["state"] == _ROW_NEED_ANIMATE]
             if need_anim and animator3d_bin:
                 dash.set_phase("Animation", len(need_anim))
@@ -782,8 +799,23 @@ def resume_cmd(
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "animator3d", "progress", phase="animation", percent=0)
-                    # Legacy animate removed — master pipeline handles animation.
-                    anim_failed = False
+                    anim_failed = _post_text3d_mesh_extras(
+                        profile,
+                        row,
+                        it["mesh_final"],
+                        rec,
+                        manifest_dir,
+                        child_env,
+                        rigging3d_bin,
+                        with_rig=True,
+                        with_animate=True,
+                        animator3d_bin=animator3d_bin,
+                        has_rigging_profile=has_rigging_profile,
+                        gpu_ids=gpu_ids,
+                        with_lod=bool(row.generate_lod),
+                        with_collision=bool(row.generate_collision),
+                        on_progress_line=dash.feed_line,
+                    )
                     if anim_failed:
                         failures += 1
                         dash.feed_event(
@@ -1198,16 +1230,30 @@ def resume_cmd(
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · rigging")
                     rec: dict[str, Any] = {"id": row.id}
-                    # Legacy rig removed — master pipeline handles rigging.
-                    rig_failed = False
+                    rig_failed = _post_text3d_mesh_extras(
+                        profile,
+                        row,
+                        it["mesh_final"],
+                        rec,
+                        manifest_dir,
+                        child_env,
+                        rigging3d_bin,
+                        with_rig=True,
+                        with_animate=bool(it["wants_animate"]),
+                        animator3d_bin=animator3d_bin,
+                        has_rigging_profile=has_rigging_profile,
+                        gpu_ids=gpu_ids,
+                        with_lod=bool(row.generate_lod),
+                        with_collision=bool(row.generate_collision),
+                    )
                     if rig_failed:
                         failures += 1
-                        console.print(f"  [red]FAIL[/red] {row.id}")
+                        console.print(f"  [red]FAIL[/red] {row.id}: {rec.get('error', '')[:120]}")
                         append_log(rec)
                         if not continue_on_error:
                             break
                     else:
-                        it["state"] = _ROW_NEED_ANIMATE if it["wants_animate"] else _ROW_DONE
+                        it["state"] = _ROW_DONE
                         console.print(f"  [green]OK[/green] {row.id}")
                         append_log(rec)
                     progress.advance(task)
@@ -1229,11 +1275,25 @@ def resume_cmd(
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · animation")
                     rec: dict[str, Any] = {"id": row.id}
-                    # Legacy animate removed — master pipeline handles animation.
-                    anim_failed = False
+                    anim_failed = _post_text3d_mesh_extras(
+                        profile,
+                        row,
+                        it["mesh_final"],
+                        rec,
+                        manifest_dir,
+                        child_env,
+                        rigging3d_bin,
+                        with_rig=True,
+                        with_animate=True,
+                        animator3d_bin=animator3d_bin,
+                        has_rigging_profile=has_rigging_profile,
+                        gpu_ids=gpu_ids,
+                        with_lod=bool(row.generate_lod),
+                        with_collision=bool(row.generate_collision),
+                    )
                     if anim_failed:
                         failures += 1
-                        console.print(f"  [red]FAIL[/red] {row.id}")
+                        console.print(f"  [red]FAIL[/red] {row.id}: {rec.get('error', '')[:120]}")
                         append_log(rec)
                         if not continue_on_error:
                             break

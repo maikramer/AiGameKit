@@ -28,6 +28,79 @@ _ROW_NEED_ANIMATE_LOD = "need_animate_lod"  # tem _lodN_rigged, faltam _lodN_ani
 _ROW_NEED_VALIDATE = "need_validate"  # tudo gerado, falta validação
 
 
+def _glb_has_base_color(path: Path) -> bool:
+    """True se o GLB tem material com ``baseColorTexture`` (paint presente)."""
+    try:
+        import json
+        import struct
+
+        with open(path, "rb") as f:
+            if f.read(4) != b"glTF":
+                return False
+            f.read(8)
+            json_len = struct.unpack("<I", f.read(4))[0]
+            f.read(4)
+            j = json.loads(f.read(json_len))
+        for m in j.get("materials") or []:
+            pbr = m.get("pbrMetallicRoughness") or {}
+            if "baseColorTexture" in pbr:
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _glb_json(path: Path) -> dict | None:
+    try:
+        import json
+        import struct
+
+        with open(path, "rb") as f:
+            if f.read(4) != b"glTF":
+                return None
+            f.read(8)
+            json_len = struct.unpack("<I", f.read(4))[0]
+            f.read(4)
+            return json.loads(f.read(json_len))
+    except Exception:
+        return None
+
+
+def _glb_is_promoted_animated(path: Path) -> bool:
+    """True se ``lod0`` já é o entregável animado (skin+clips+paint).
+
+    Após Stage 9.5, ``*_lod*_rigged`` / ``*_lod*_animated`` vão para
+    ``_intermediate/`` — o classificador não pode exigir esses ficheiros
+    em ``meshes/`` ou resume fica preso em ``need_transfer`` para sempre.
+    """
+    j = _glb_json(path)
+    if not j:
+        return False
+    if not (j.get("skins") and j.get("animations")):
+        return False
+    if not any("skin" in n for n in (j.get("nodes") or [])):
+        return False
+    for m in j.get("materials") or []:
+        pbr = m.get("pbrMetallicRoughness") or {}
+        if "baseColorTexture" in pbr:
+            return True
+    return False
+
+
+def _glb_is_promoted_rigged(path: Path) -> bool:
+    """True se ``lod0`` já é o entregável rigged (skin+paint, sem exigir clips)."""
+    j = _glb_json(path)
+    if not j:
+        return False
+    if not (j.get("skins") and any("skin" in n for n in (j.get("nodes") or []))):
+        return False
+    for m in j.get("materials") or []:
+        pbr = m.get("pbrMetallicRoughness") or {}
+        if "baseColorTexture" in pbr:
+            return True
+    return False
+
+
 def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
     root = Path(profile.output_dir)
     ext = profile.image_ext
@@ -87,6 +160,52 @@ def _animator3d_output_path(base_output: Path) -> Path:
     """ex.: ``hero_rigged.glb`` → ``hero_rigged_animated.glb``."""
     stem = _base_stem(base_output.stem)
     return base_output.with_name(f"{stem}_rigged_animated.glb")
+
+
+def publish_rigged_animated_alias(mesh_final: Path, lod0: Path) -> Path | None:
+    """Após promote animated→``lod0``, publica alias de runtime ``id_rigged_animated.glb``.
+
+    O master pipeline promove o GLB animado para ``id_lod0.glb`` (entregável
+    canónico). O VibeGame / exemplos ainda pedem ``id_rigged_animated.glb``.
+    Sem este alias, scripts e ``index.html`` acabam a carregar
+    ``id_lod0_rigged.glb`` (sem clips) ou 404.
+
+    Returns:
+        Path do alias escrito, ou ``None`` se ``lod0`` não existir.
+    """
+    import os
+    import shutil
+
+    if not lod0.is_file():
+        return None
+    alias = _animator3d_output_path(mesh_final)
+    try:
+        if alias.exists() or alias.is_symlink():
+            if alias.resolve() == lod0.resolve():
+                return alias
+            alias.unlink()
+    except OSError:
+        pass
+    try:
+        os.link(lod0, alias)
+    except OSError:
+        shutil.copy2(lod0, alias)
+    return alias
+
+
+def archive_leftover_lod_rigged(mesh_final: Path) -> list[Path]:
+    """Move ``id_lod*_rigged.glb`` órfãos em ``meshes/`` para ``_intermediate/``.
+
+    Depois do promote animated, estes ficheiros não devem ficar no runtime
+    (confundem handoff e aliases). Resume/re-rig parcial pode deixá-los sem
+    skin — arquivar evita o jogo apontar para um rig morto.
+    """
+    base = _base_stem(mesh_final.stem)
+    moved: list[Path] = []
+    for leftover in sorted(mesh_final.parent.glob(f"{base}_lod*_rigged{mesh_final.suffix}")):
+        if leftover.is_file():
+            moved.append(move_to_intermediate(leftover, mesh_final))
+    return moved
 
 
 def _intermediate_dir(mesh_final: Path) -> Path:
@@ -310,10 +429,20 @@ def _classify_row_state_master(
         return _ROW_NEED_PAINT
     if not _valid_file(lod0):
         return _ROW_NEED_BAKE_MASTER
+    # lod0 animado/branco sem baseColorTexture enquanto painted existe →
+    # re-transfer (não marcar DONE; senão resume ignora meshes brancos).
+    if wants_animate and painted_any is not None and _valid_file(lod0) and not _glb_has_base_color(lod0):
+        return _ROW_NEED_TRANSFER
     if wants_lod and (not _valid_file(lod1) or not _valid_file(lod2)):
         return _ROW_NEED_LOD_GEN
     if wants_rig and rigged_hi_any is None:
         return _ROW_NEED_RIG_HI
+    # Entregável já promovido em lod0 → DONE (rigged/animated intermediários
+    # foram arquivados; não pedir de novo).
+    if wants_animate and _glb_is_promoted_animated(lod0):
+        return _ROW_DONE
+    if wants_rig and not wants_animate and _glb_is_promoted_rigged(lod0):
+        return _ROW_DONE
     if wants_rig:
         # checa transfers
         targets = [lod0]

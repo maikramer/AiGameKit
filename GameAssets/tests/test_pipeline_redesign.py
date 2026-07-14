@@ -10,7 +10,32 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_intermediate_dir_layout(tmp_path: Path) -> None:
+def test_publish_rigged_animated_alias_and_archive(tmp_path: Path) -> None:
+    """After animate→lod0 promote, alias + archive leftover lod*_rigged."""
+    from gameassets.paths import (
+        _animator3d_output_path,
+        archive_leftover_lod_rigged,
+        publish_rigged_animated_alias,
+    )
+
+    meshes = tmp_path / "meshes"
+    meshes.mkdir()
+    mesh_final = meshes / "hero.glb"
+    lod0 = meshes / "hero_lod0.glb"
+    rigged = meshes / "hero_lod0_rigged.glb"
+    lod0.write_bytes(b"animated-content")
+    rigged.write_bytes(b"stale-rig")
+
+    alias = publish_rigged_animated_alias(mesh_final, lod0)
+    assert alias == _animator3d_output_path(mesh_final)
+    assert alias is not None and alias.is_file()
+    assert alias.read_bytes() == b"animated-content"
+
+    moved = archive_leftover_lod_rigged(mesh_final)
+    assert len(moved) == 1
+    assert not rigged.is_file()
+    assert (meshes / "_intermediate" / "hero_lod0_rigged.glb").is_file()
+
     from gameassets.paths import (
         _clean_path,
         _intermediate_dir,

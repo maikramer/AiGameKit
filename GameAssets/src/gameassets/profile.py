@@ -111,9 +111,19 @@ class Texture2DProfile:
 
 @dataclass
 class Animator3DProfile:
-    """Opções para ``animator3d game-pack`` após Rigging3D (GLB rigado → GLB com clips)."""
+    """Opções para ``animator3d game-pack`` após Rigging3D (GLB rigado → GLB com clips).
+
+    Campos mapeiam 1:1 para flags do CLI ``animator3d game-pack``:
+    - ``preset``: humanoid | creature | flying (caminho procedural).
+    - ``clips``: filtro CSV (ex: ``"idle,walk,run"``); None = todos os clips do preset/retarget.
+    - ``procedural``: força clips procedurais mesmo em humanoides (sem retarget Quaternius mocap).
+    - ``force_preset``: desativa auto-deteção humanoid vs creature.
+    """
 
     preset: str = "humanoid"
+    clips: str | None = None
+    procedural: bool = False
+    force_preset: bool = False
 
 
 @dataclass
@@ -614,7 +624,17 @@ class GameProfile:
             valid_presets = ("humanoid", "creature", "flying")
             if pr_as not in valid_presets:
                 raise ValueError(f"animator3d.preset deve ser um de: {', '.join(valid_presets)}")
-            anim3 = Animator3DProfile(preset=pr_as)
+            # Clips filter (CSV string, ex: "idle,walk,run"); None = all clips.
+            clips_raw = raw_anim.get("clips")
+            clips_s = str(clips_raw).strip() if clips_raw not in (None, "") else None
+            procedural = bool(raw_anim.get("procedural", False))
+            force_preset = bool(raw_anim.get("force_preset", False))
+            anim3 = Animator3DProfile(
+                preset=pr_as,
+                clips=clips_s,
+                procedural=procedural,
+                force_preset=force_preset,
+            )
         lod: LODProfile | None = None
         raw_lod = data.get("lod")
         if isinstance(raw_lod, dict):
