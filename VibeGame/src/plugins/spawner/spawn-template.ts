@@ -24,6 +24,7 @@ import { Rigidbody } from '../physics/components';
 import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
 import { TerrainSpawned } from './components';
+import { setAabbPendingUrl } from './bounds-context';
 
 const upNormal = new THREE.Vector3(0, 1, 0);
 
@@ -173,6 +174,10 @@ export function spawnTemplateAtTerrain(
 
   const foot = new THREE.Vector3();
   foot.set(0, 0, 0);
+  // True when ground-align="aabb" wanted a lift but the GLB bounds weren't
+  // cached yet (prefetch still in flight). The catch-up system reapplies the
+  // lift in Y once the bounds arrive, so the prop doesn't stay floating.
+  let needsBoundsCatchUp = false;
   if (spec.groundAlign === 'aabb' && url) {
     const b = getGltfLocalYBounds(url);
     if (b) {
@@ -182,8 +187,16 @@ export function spawnTemplateAtTerrain(
       } else {
         foot.set(0, lift, 0);
       }
-    } else if (!isGltfBoundsPrefetchInflight(url)) {
-      warnMissingGltfBoundsOnce(url);
+    } else {
+      // Bounds pending: the AABB lift is skipped for now. If the prefetch is
+      // still in flight, the catch-up system will fix Y once they arrive; if
+      // there's no URL fetcher at all, warn once so the missing <gltf-load>
+      // is visible.
+      if (isGltfBoundsPrefetchInflight(url)) {
+        needsBoundsCatchUp = true;
+      } else {
+        warnMissingGltfBoundsOnce(url);
+      }
     }
   }
 
@@ -209,9 +222,12 @@ export function spawnTemplateAtTerrain(
       DistanceCull.maxDistance[eid] = spec.maxDistance;
     }
     mirrorPoseToRigidbody(state, eid);
-    state.addComponent(eid, TerrainSpawned);
-    TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
-    TerrainSpawned.surfaceEpsilon[eid] = spec.surfaceEpsilon;
+    registerTerrainSpawned(state, eid, wy, spec.surfaceEpsilon, {
+      needsBoundsCatchUp,
+      url,
+      scaleY,
+      normalY: effectiveNormal.y,
+    });
     return;
   }
 
@@ -221,7 +237,38 @@ export function spawnTemplateAtTerrain(
     DistanceCull.maxDistance[eid] = spec.maxDistance;
   }
   mirrorPoseToRigidbody(state, eid);
+  registerTerrainSpawned(state, eid, wy, spec.surfaceEpsilon, {
+    needsBoundsCatchUp,
+    url,
+    scaleY,
+    normalY: effectiveNormal.y,
+  });
+}
+
+/**
+ * Attach `TerrainSpawned` with the hot-reload offset plus, when the AABB lift
+ * was skipped because the GLB bounds hadn't cached yet, the data the catch-up
+ * system needs to reapply that lift in Y once the bounds arrive.
+ */
+function registerTerrainSpawned(
+  state: State,
+  eid: number,
+  surfaceWorldY: number,
+  surfaceEpsilon: number,
+  aabb: {
+    needsBoundsCatchUp: boolean;
+    url: string;
+    scaleY: number;
+    normalY: number;
+  }
+): void {
   state.addComponent(eid, TerrainSpawned);
-  TerrainSpawned.yOffset[eid] = Transform.posY[eid] - wy;
-  TerrainSpawned.surfaceEpsilon[eid] = spec.surfaceEpsilon;
+  TerrainSpawned.yOffset[eid] = Transform.posY[eid] - surfaceWorldY;
+  TerrainSpawned.surfaceEpsilon[eid] = surfaceEpsilon;
+  if (aabb.needsBoundsCatchUp && aabb.url) {
+    TerrainSpawned.aabbPending[eid] = 1;
+    TerrainSpawned.scaleY[eid] = aabb.scaleY;
+    TerrainSpawned.normalY[eid] = aabb.normalY;
+    setAabbPendingUrl(state, eid, aabb.url);
+  }
 }

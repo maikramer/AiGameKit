@@ -1,9 +1,34 @@
 ﻿import * as THREE from 'three';
-import type { State } from '../../core';
-import { Terrain } from '../terrain/components';
+import { defineQuery, type State } from '../../core';
+import { Terrain, TerrainPad } from '../terrain/components';
 import { sampleHeightAt, type HeightSampler } from '../terrain/height-sampler';
 import { getTerrainContext } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
+import { Lake, River } from '../water/components';
+
+const padPendingQuery = defineQuery([TerrainPad]);
+const lakePendingQuery = defineQuery([Lake]);
+const riverPendingQuery = defineQuery([River]);
+
+/**
+ * Any ground mutation (<TerrainPad>, <Lake>, <River> carve) still waiting to
+ * stamp into the height sampler. Spawning/placing before they apply races the
+ * mutation: an entity sampled on pre-pad ground ends up buried (or floating)
+ * once the pad flattens / the carve digs. Callers pair this with a bounded
+ * defer budget so a mutation that can never apply doesn't wedge spawning.
+ */
+export function isGroundMutationPending(state: State): boolean {
+  for (const eid of padPendingQuery(state.world)) {
+    if (TerrainPad.applied[eid] !== 1) return true;
+  }
+  for (const eid of lakePendingQuery(state.world)) {
+    if (Lake.applied[eid] !== 1) return true;
+  }
+  for (const eid of riverPendingQuery(state.world)) {
+    if (River.applied[eid] !== 1) return true;
+  }
+  return false;
+}
 
 /**
  * Elevation of the *rendered* terrain surface (the LOD mesh) at a field-local

@@ -4,7 +4,7 @@ export { entitySpawnerRecipe, spawnGroupRecipe } from './recipes';
 export { spawnGroupParser } from './parser';
 export { entityParser } from './entity-parser';
 export { TerrainPlaceSystem } from './place-system';
-export { TerrainSpawnSystem } from './systems';
+export { TerrainSpawnBoundsCatchUpSystem, TerrainSpawnSystem } from './systems';
 export { spawnTemplateAtTerrain } from './spawn-template';
 export {
   SpawnExclusion,
