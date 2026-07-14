@@ -11,6 +11,7 @@ export const ENGINE_DEFAULT_EN_DICTIONARY: Readonly<Record<string, string>> =
     'hud.wood': 'Wood',
     'hud.stone': 'Stone',
     'hud.boss': 'Boss',
+    'hud.target': 'Enemy',
     'hud.timer': 'Time',
     'hud.controls': 'Controls',
     'hud.controls.text': 'WASD move · Space jump · Q save · E load',

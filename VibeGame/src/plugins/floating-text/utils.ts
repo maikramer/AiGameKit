@@ -1,7 +1,11 @@
+import { Vector3 } from 'three';
 import type { State } from '../../core';
+import { threeCameras } from '../rendering/utils';
 import { Transform, WorldTransform } from '../transforms/components';
 import { FloatingText } from './components';
 import { claimStackSlot } from './stacking';
+
+const _proj = new Vector3();
 
 const textByState = new WeakMap<State, Map<number, string>>();
 
@@ -222,5 +226,77 @@ export function spawnFloatingTextScreen(
     driftX: options.driftX,
     crit: options.crit,
     space: 'screen',
+  });
+}
+
+export interface DamageNumberOptions {
+  /** World position of the hit (usually entity chest). */
+  x: number;
+  y: number;
+  z: number;
+  /** Rounded damage amount shown as text. */
+  amount: number;
+  /** True when the hit is on the hero (red "−N"); false = enemy hit. */
+  onHero?: boolean;
+  /** Crit / big-hit styling (bigger + hotter). */
+  crit?: boolean;
+  /** Stack key so multi-hits on the same target don't overlap. */
+  stackKey?: string;
+}
+
+/**
+ * Action-RPG damage popup: project world → screen and spawn a DOM float.
+ * Falls back to world-space troika text when no camera / DOM is available.
+ */
+export function spawnDamageNumber(
+  state: State,
+  options: DamageNumberOptions
+): number {
+  const amount = Math.max(0, Math.round(options.amount));
+  const onHero = options.onHero === true;
+  const crit = options.crit === true && !onHero;
+  const text = onHero ? `−${amount}` : crit ? `${amount}!` : `${amount}`;
+  const color = onHero ? '#ff5a5a' : crit ? '#ff8a2a' : '#fff4b0';
+
+  const cam = threeCameras.values().next().value as
+    { project: (v: Vector3) => Vector3 } | undefined;
+  const hasDom =
+    typeof document !== 'undefined' &&
+    typeof window !== 'undefined' &&
+    window.innerWidth > 0;
+
+  if (cam && typeof cam.project === 'function' && hasDom) {
+    const v = _proj.set(options.x, options.y, options.z);
+    cam.project(v);
+    if (v.z < 1) {
+      const sx = (v.x * 0.5 + 0.5) * window.innerWidth;
+      const sy = (-v.y * 0.5 + 0.5) * window.innerHeight;
+      return spawnFloatingText(state, text, {
+        x: sx + (Math.random() * 18 - 9),
+        y: sy - 28,
+        color,
+        duration: crit ? 1.25 : 1.0,
+        riseSpeed: crit ? 70 : 55,
+        fontSizePx: onHero ? 22 : crit ? 34 : 26,
+        driftX: Math.random() * 40 - 20,
+        crit,
+        space: 'screen',
+        stackKey: options.stackKey,
+        stackBaseY: sy - 28,
+        stackGap: 0.22,
+      });
+    }
+  }
+
+  return spawnFloatingText(state, text, {
+    x: options.x,
+    y: options.y,
+    z: options.z,
+    color,
+    size: onHero ? 0.5 : crit ? 0.72 : 0.52,
+    duration: crit ? 1.3 : 1.0,
+    stackKey: options.stackKey,
+    stackBaseY: options.y,
+    stackGap: 0.45,
   });
 }

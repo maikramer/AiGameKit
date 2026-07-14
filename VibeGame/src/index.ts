@@ -180,8 +180,10 @@ export {
   getScreenFloatPool,
   spawnFloatingText,
   spawnFloatingTextScreen,
+  spawnDamageNumber,
 } from './plugins/floating-text';
 export type {
+  DamageNumberOptions,
   FloatingTextOptions,
   FloatingTextSpace,
   ScreenFloatingTextOptions,
@@ -352,12 +354,14 @@ export {
   createHealthBarWidget,
   createMissionWidget,
   createResourceChipWidget,
+  createTargetBarWidget,
   createTimerWidget,
   createXpBarWidget,
   healthBarFactory,
   missionFactory,
   registerHudWidgetFactories,
   resourceChipFactory,
+  targetBarFactory,
   timerFactory,
   widgetParsers,
   widgetRecipes,
@@ -682,10 +686,13 @@ export type { PriceEntry, PriceKind } from './plugins/rpg-economy';
  */
 export {
   bindCombatState,
+  clearCombatTarget,
   CombatDeathCleanupSystem,
   CombatPlugin,
   FACTION_TAG_NAMES,
   FactionComponent,
+  getCombatTarget,
+  getCombatTargetLabel,
   getFaction,
   Health,
   isHostile,
@@ -695,15 +702,18 @@ export {
   damageHealth,
   healHealth,
   isDead,
+  setCombatTarget,
   setFaction,
   spawnProjectile,
   spawnProjectileFromTemplate,
+  tickCombatTarget,
 } from './plugins/combat';
 export type {
   FactionHostilityMatrix,
   ProjectileSpawnConfig,
   ProjectileTarget,
   ProjectileTemplate,
+  SetCombatTargetOptions,
 } from './plugins/combat';
 
 /**

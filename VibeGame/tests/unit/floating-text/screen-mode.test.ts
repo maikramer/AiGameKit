@@ -241,7 +241,7 @@ describe('ScreenFloatPool — DOM recycling inside HudScreenLayer', () => {
     const entry = pool.getEntry(eid);
     expect(entry).toBeDefined();
     expect(entry!.el.textContent).toBe('CRIT');
-    expect(entry!.el.style.color).toBe('rgb(255, 107, 61)');
+    expect(entry!.el.style.color).toBe('rgb(255, 138, 42)');
   });
 
   it('releases the span back when the entity duration elapses (updateEntity)', () => {

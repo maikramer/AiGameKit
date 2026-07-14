@@ -12,8 +12,13 @@ export {
 } from './systems';
 export { claimStackSlot, clearFloatingTextStacks } from './stacking';
 export type { StackEntry, StackSlot } from './stacking';
-export { spawnFloatingText, spawnFloatingTextScreen } from './utils';
+export {
+  spawnFloatingText,
+  spawnFloatingTextScreen,
+  spawnDamageNumber,
+} from './utils';
 export type {
+  DamageNumberOptions,
   FloatingTextOptions,
   FloatingTextSpace,
   ScreenFloatingTextOptions,

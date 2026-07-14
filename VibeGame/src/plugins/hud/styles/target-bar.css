@@ -1,0 +1,89 @@
+.hud-target {
+  position: absolute;
+  top: 48px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  min-width: 260px;
+  max-width: min(360px, 86vw);
+  padding: 8px 14px 10px;
+  border-radius: 10px;
+  pointer-events: none;
+  background: linear-gradient(
+    145deg,
+    rgba(16, 18, 24, 0.9),
+    rgba(10, 12, 16, 0.82)
+  );
+  border: 1px solid rgba(196, 148, 72, 0.35);
+  border-top-color: rgba(255, 200, 120, 0.4);
+  backdrop-filter: blur(12px);
+  box-shadow:
+    0 6px 22px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 220, 160, 0.1);
+  font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
+}
+
+.hud-target-name {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f0d8a8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.65);
+  text-align: center;
+}
+
+.hud-target-track {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  padding: 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 5px;
+  background: linear-gradient(
+    180deg,
+    rgba(28, 12, 14, 0.95),
+    rgba(14, 8, 10, 0.9)
+  );
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+.hud-target-fill {
+  width: 0%;
+  max-width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  transition:
+    width 0.15s ease-out,
+    background 0.2s ease;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 45%),
+    linear-gradient(90deg, #1a6b2a, #3dcc4a 55%, #8dff6a);
+}
+
+.hud-target-fill.mid {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 45%),
+    linear-gradient(90deg, #8a6a10, #e0b020 55%, #ffe066);
+}
+
+.hud-target-fill.low {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.2) 0%, transparent 45%),
+    linear-gradient(90deg, #8a1515, #e03030 55%, #ff6a4a);
+}
+
+.hud-target-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.75);
+}

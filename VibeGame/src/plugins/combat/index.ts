@@ -20,6 +20,14 @@ export {
 } from './components';
 export type { FactionHostilityMatrix } from './components';
 export {
+  clearCombatTarget,
+  getCombatTarget,
+  getCombatTargetLabel,
+  setCombatTarget,
+  tickCombatTarget,
+} from './combat-target';
+export type { SetCombatTargetOptions } from './combat-target';
+export {
   PROJECTILE_TEMPLATE_KIND,
   spawnProjectile,
   spawnProjectileFromTemplate,

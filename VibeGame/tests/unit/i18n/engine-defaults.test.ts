@@ -24,6 +24,7 @@ describe('I18n Engine Defaults', () => {
 
     it('includes HUD meta keys', () => {
       expect(ENGINE_DEFAULT_EN_DICTIONARY['hud.boss']).toBe('Boss');
+      expect(ENGINE_DEFAULT_EN_DICTIONARY['hud.target']).toBe('Enemy');
       expect(ENGINE_DEFAULT_EN_DICTIONARY['hud.timer']).toBe('Time');
       expect(ENGINE_DEFAULT_EN_DICTIONARY['hud.controls']).toBe('Controls');
     });

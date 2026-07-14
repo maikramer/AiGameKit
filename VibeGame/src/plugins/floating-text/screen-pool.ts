@@ -128,7 +128,8 @@ export class ScreenFloatPool {
     const b = FloatingText.colorB[entity];
     el.textContent = text;
     el.style.fontSize = `${baseSize}px`;
-    el.style.color = crit ? '#ff6b3d' : rgbToHex(r, g, b);
+    el.style.color = crit ? '#ff8a2a' : rgbToHex(r, g, b);
+    el.style.letterSpacing = crit ? '0.04em' : '0';
     el.style.opacity = '0';
     el.style.transform = 'translate(-50%,-50%) translate(-9999px,-9999px)';
   }
