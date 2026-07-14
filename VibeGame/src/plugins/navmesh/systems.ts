@@ -15,8 +15,10 @@ import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
 import { isLoadingEnforced, registerReadyGate } from '../../core/loading-gate';
 import { Transform } from '../transforms/components';
-import { Terrain } from '../terrain/components';
-import { getTerrainContext } from '../terrain/utils';
+import { Terrain, TerrainPad } from '../terrain/components';
+import { getTerrainContext, isTerrainDynamicsBlocking } from '../terrain/utils';
+import { Road } from '../road/components';
+import { Lake, River } from '../water/components';
 import { NavMeshAgent, NavMeshSurface } from './components';
 import { collectNavmeshGeometry, navmeshObstaclesLoaded } from './geometry';
 
@@ -141,6 +143,44 @@ export function getNavMeshRuntime(state: State): NavMeshRuntime {
 
 const surfaceQuery = defineQuery([NavMeshSurface]);
 const agentQuery = defineQuery([NavMeshAgent]);
+const padQuery = defineQuery([TerrainPad]);
+const roadQuery = defineQuery([Road]);
+const lakeQuery = defineQuery([Lake]);
+const riverQuery = defineQuery([River]);
+
+/**
+ * Whether every system that mutates the terrain sampler before navmesh bake
+ * has finished. The navmesh reads terrain heights from the shared sampler via
+ * `buildTerrainGeometry`; if it bakes before the city pads, road corridors,
+ * lakes and rivers carve their modifications into `sampler.data`, the baked
+ * surface reflects the un-modified heightmap and agents sink below the final
+ * terrain at those locations (e.g. at the city edge, over roads/rivers).
+ *
+ * Each apply system (TerrainPadApply / RoadApply / LakeApply / RiverApply)
+ * latches `applied = 1` after mutating the sampler. Waiting on all of them
+ * guarantees the navmesh samples the same surface the player walks on.
+ */
+function terrainCarversReady(state: State): boolean {
+  // The sampler must be decoded (real heightmap, not the flat placeholder)
+  // and collision-ready, matching the gate the apply systems use internally.
+  if (isTerrainDynamicsBlocking(state)) return false;
+  for (const [, data] of getTerrainContext(state)) {
+    if (data.heightmapUrl && data.sampler.data === null) return false;
+  }
+  for (const eid of padQuery(state.world)) {
+    if (TerrainPad.applied[eid] !== 1) return false;
+  }
+  for (const eid of roadQuery(state.world)) {
+    if (Road.applied[eid] !== 1) return false;
+  }
+  for (const eid of lakeQuery(state.world)) {
+    if (Lake.applied[eid] !== 1) return false;
+  }
+  for (const eid of riverQuery(state.world)) {
+    if (River.applied[eid] !== 1) return false;
+  }
+  return true;
+}
 
 export const NavMeshInitSystem: System = {
   group: 'setup',
@@ -160,17 +200,19 @@ export const NavMeshInitSystem: System = {
 
     const loading = isLoadingEnforced(state);
 
-    const terrainCtx = getTerrainContext(state);
-    let terrainReady = false;
+    // Read the terrain field for worldSize, but gate generation on the full
+    // carver pipeline (heightmap decoded + collision ready + every pad/road/
+    // lake/river applied). Baking before the carvers mutate the sampler bakes
+    // the un-modified heightmap — agents then sink below the final terrain at
+    // flattened city pads, road corridors, lakes and rivers.
     let worldSize = 200;
-    for (const [eid, data] of terrainCtx) {
+    for (const [eid, data] of getTerrainContext(state)) {
       if (data.initialized) {
-        terrainReady = true;
         worldSize = Terrain.worldSize[eid];
         break;
       }
     }
-    if (!terrainReady) return;
+    if (!terrainCarversReady(state)) return;
 
     rt.graceFrames++;
     if (rt.graceFrames < TERRAIN_GRACE_FRAMES) return;

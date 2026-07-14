@@ -1,4 +1,5 @@
 import { logger } from '../../core/utils/logger';
+import { createGLTFLoader } from '../../extras/gltf-bridge';
 import * as THREE from 'three';
 import type { State } from '../../core';
 
@@ -6,10 +7,12 @@ import type { State } from '../../core';
  * Collision-mesh colliders (`collider="shape: trimesh; mesh-url: …"`).
  *
  * Loads a GLB and extracts node-transformed POSITION + index data for
- * Rapier's trimesh/convexHull descriptors. Parses the GLB manually (JSON +
- * BIN chunks) instead of going through THREE.GLTFLoader so it stays usable
- * headless and never touches the scene graph — collision GLBs are tiny,
- * untextured low-poly hulls.
+ * Rapier's trimesh/convexHull descriptors.
+ *
+ * GLBs with `EXT_meshopt_compression` (the default for LODs from `text3d lod
+ * --meshopt`) are decoded via THREE.GLTFLoader + MeshoptDecoder. Plain GLBs
+ * (including the tiny dedicated `*_collision.glb` hulls) take a fast manual
+ * path that avoids constructing a scene graph.
  */
 
 export interface ColliderMeshData {
@@ -66,7 +69,10 @@ export function requestColliderMesh(url: string): ColliderMeshData | null {
   void fetch(url)
     .then(async (res) => {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = parseGlbCollisionMesh(await res.arrayBuffer());
+      const buf = await res.arrayBuffer();
+      const data = hasMeshoptExtension(buf)
+        ? await parseGlbCollisionMeshViaLoader(buf, url)
+        : parseGlbCollisionMesh(buf);
       meshCache.set(url, { status: 'ready', data });
     })
     .catch((err: unknown) => {
@@ -119,7 +125,89 @@ export function buildMeshColliderGeometry(
   return { vertices, indices: data.indices.slice() };
 }
 
-// --- minimal GLB parsing ---------------------------------------------------
+// --- meshopt detection + GLTFLoader path ----------------------------------
+
+/**
+ * Peek at the GLB JSON chunk to check whether `EXT_meshopt_compression` is
+ * declared. The manual parser cannot decode compressed bufferViews, so such
+ * GLBs must go through THREE.GLTFLoader + MeshoptDecoder.
+ */
+function hasMeshoptExtension(buffer: ArrayBuffer): boolean {
+  try {
+    const view = new DataView(buffer);
+    if (view.getUint32(0, true) !== 0x46546c67) return false;
+    let offset = 12;
+    while (offset < buffer.byteLength) {
+      const chunkLength = view.getUint32(offset, true);
+      const chunkType = view.getUint32(offset + 4, true);
+      if (chunkType === 0x4e4f534a) {
+        const text = new TextDecoder().decode(
+          new Uint8Array(buffer, offset + 8, chunkLength)
+        );
+        const json = JSON.parse(text) as { extensionsUsed?: string[] };
+        return (json.extensionsUsed ?? []).includes('EXT_meshopt_compression');
+      }
+      offset = offset + 8 + chunkLength;
+    }
+  } catch {
+    // malformed — let the manual parser emit the real error
+  }
+  return false;
+}
+
+/**
+ * Decode a meshopt-compressed GLB via THREE.GLTFLoader (configured with
+ * MeshoptDecoder by createGLTFLoader), then extract world-space POSITION +
+ * index data without adding anything to the live scene.
+ */
+async function parseGlbCollisionMeshViaLoader(
+  buffer: ArrayBuffer,
+  url: string
+): Promise<ColliderMeshData> {
+  const loader = createGLTFLoader();
+  const gltf = await loader.parseAsync(buffer, url);
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const vert = new THREE.Vector3();
+
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((obj) => {
+    if ((obj as THREE.Mesh).isMesh !== true) return;
+    const mesh = obj as THREE.Mesh;
+    mesh.updateMatrixWorld(true);
+    const geom = mesh.geometry;
+    const posAttr = geom.getAttribute('position');
+    if (!posAttr) return;
+    const base = positions.length / 3;
+    for (let i = 0; i < posAttr.count; i++) {
+      vert.fromBufferAttribute(posAttr, i).applyMatrix4(mesh.matrixWorld);
+      positions.push(vert.x, vert.y, vert.z);
+    }
+    const idxAttr = geom.index;
+    if (idxAttr) {
+      for (let i = 0; i < idxAttr.count; i++) indices.push(base + idxAttr.getX(i));
+    } else {
+      for (let i = 0; i < posAttr.count; i++) indices.push(base + i);
+    }
+  });
+
+  // Free GPU/CPU resources held by the transient loader result.
+  gltf.scene.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh) mesh.geometry?.dispose();
+  });
+
+  if (positions.length === 0) {
+    throw new Error('GLB contains no triangle geometry');
+  }
+  return {
+    vertices: new Float32Array(positions),
+    indices: new Uint32Array(indices),
+  };
+}
+
+// --- minimal GLB parsing (fast path for uncompressed collision hulls) ------
 
 interface GltfJson {
   scenes?: Array<{ nodes?: number[] }>;
