@@ -67,6 +67,33 @@ export function fireHeightmapReloadCallbacks(state: State): void {
   }
 }
 
+/**
+ * Fired after any sampler carve/flatten ({@link rebuildTerrainDerivatives}):
+ * pads, lakes, rivers, roads. Spawners register here to re-snap already-placed
+ * props onto the new surface (avoids floating/buried trees when a carve lands
+ * after the first spawn batch).
+ */
+const groundMutationCallbacks = new WeakMap<State, (() => void)[]>();
+
+export function registerGroundMutationCallback(
+  state: State,
+  cb: () => void
+): void {
+  let arr = groundMutationCallbacks.get(state);
+  if (!arr) {
+    arr = [];
+    groundMutationCallbacks.set(state, arr);
+  }
+  arr.push(cb);
+}
+
+export function fireGroundMutationCallbacks(state: State): void {
+  const arr = groundMutationCallbacks.get(state);
+  if (arr) {
+    for (const cb of arr) cb();
+  }
+}
+
 export function getTerrainContext(
   state: State
 ): Map<number, TerrainEntityData> {

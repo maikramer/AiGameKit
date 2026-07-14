@@ -4,6 +4,7 @@ import { invalidateTerrainBvh } from '../bvh';
 import { TerrainChunk } from './components';
 import type { HeightSampler } from './height-sampler';
 import type { TerrainEntityData } from './utils';
+import { fireGroundMutationCallbacks } from './utils';
 
 /**
  * Núcleo reutilizável de carving/flatten do terreno. Todos os "pincéis" que
@@ -133,4 +134,5 @@ export function rebuildTerrainDerivatives(
     data.chunkColliders.clear();
   }
   invalidateTerrainBvh(state, fieldEntity);
+  fireGroundMutationCallbacks(state);
 }

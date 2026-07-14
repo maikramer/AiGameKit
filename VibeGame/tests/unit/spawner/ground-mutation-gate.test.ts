@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'bun:test';
 import { State } from 'vibegame';
 import { TerrainPad } from '../../../src/plugins/terrain/components';
 import { Lake, River } from '../../../src/plugins/water/components';
+import { Road } from '../../../src/plugins/road/components';
 import { isGroundMutationPending } from '../../../src/plugins/spawner/surface';
 
 describe('isGroundMutationPending', () => {
@@ -12,6 +13,7 @@ describe('isGroundMutationPending', () => {
     state.registerComponent('terrainPad', TerrainPad);
     state.registerComponent('lake', Lake);
     state.registerComponent('river', River);
+    state.registerComponent('road', Road);
   });
 
   it('false num mundo sem pads nem carves', () => {
@@ -45,6 +47,25 @@ describe('isGroundMutationPending', () => {
     expect(isGroundMutationPending(state)).toBe(true);
 
     River.applied[eid] = 1;
+    expect(isGroundMutationPending(state)).toBe(false);
+  });
+
+  it('true enquanto um Road com flatten não aplicou; false depois', () => {
+    const eid = state.createEntity();
+    state.addComponent(eid, Road);
+    Road.flatten[eid] = 1;
+    Road.applied[eid] = 0;
+    expect(isGroundMutationPending(state)).toBe(true);
+
+    Road.applied[eid] = 1;
+    expect(isGroundMutationPending(state)).toBe(false);
+  });
+
+  it('Road sem flatten não bloqueia spawn', () => {
+    const eid = state.createEntity();
+    state.addComponent(eid, Road);
+    Road.flatten[eid] = 0;
+    Road.applied[eid] = 0;
     expect(isGroundMutationPending(state)).toBe(false);
   });
 

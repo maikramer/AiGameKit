@@ -8,6 +8,11 @@ import { MAX_ENTITIES } from '../../core/ecs/constants';
  * rejects candidates whose disc overlaps a registered one, so rocks don't
  * spawn inside trees, trees don't spawn inside the hut, etc.
  *
+ * `SpawnExclusion` zones are always registered and always checked — even when
+ * a spawn group sets `avoid-overlaps=0` (dense vegetation still stays out of
+ * the city). `avoid-overlaps` only controls whether the group registers its
+ * own instance discs.
+ *
  * Order-independent by construction: whoever spawns later avoids whoever
  * registered earlier — both spawn paths register and check.
  */

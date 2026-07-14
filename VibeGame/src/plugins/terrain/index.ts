@@ -11,6 +11,8 @@ export {
   getTerrainContext,
   getTerrainHeightmapUrl,
   registerHeightmapReloadCallback,
+  registerGroundMutationCallback,
+  fireGroundMutationCallbacks,
   setTerrainHeightmapUrl,
   getTerrainTextureUrl,
   setTerrainTextureUrl,

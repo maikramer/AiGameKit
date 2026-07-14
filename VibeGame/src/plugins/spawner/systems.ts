@@ -1,6 +1,10 @@
 import { logger } from '../../core/utils/logger';
 import { defineQuery, type State, type System } from '../../core';
-import { getTerrainContext, registerHeightmapReloadCallback } from '../terrain';
+import {
+  getTerrainContext,
+  registerHeightmapReloadCallback,
+  registerGroundMutationCallback,
+} from '../terrain';
 import { Transform } from '../transforms/components';
 import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { getSpawnGroupSpecs } from './context';
@@ -12,7 +16,6 @@ import {
   type TerrainSurfaceSample,
 } from './surface';
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
-import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
 import {
   getGltfLocalAABB,
@@ -25,6 +28,9 @@ import {
   isSpawnAreaFree,
   registerSpawnFootprint,
 } from './occupancy';
+import { LakeApplySystem, RiverApplySystem } from '../water/systems';
+import { RoadApplySystem } from '../road/systems';
+import { TerrainPadApplySystem } from '../terrain/pad-systems';
 
 const spawnerQuery = defineQuery([SpawnerPending]);
 const terrainSpawnedQuery = defineQuery([TerrainSpawned]);
@@ -151,9 +157,35 @@ function resolveSpawnInstanceCount(
   }
 }
 
+function resyncTerrainSpawnedHeights(state: State): void {
+  for (const eid of terrainSpawnedQuery(state.world)) {
+    const x = state.hasComponent(eid, WorldTransform)
+      ? WorldTransform.posX[eid]
+      : Transform.posX[eid];
+    const z = state.hasComponent(eid, WorldTransform)
+      ? WorldTransform.posZ[eid]
+      : Transform.posZ[eid];
+    const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
+    const s = sampleTerrainSurface(state, x, z, eps);
+    if (s) {
+      Transform.posY[eid] = s.worldY + TerrainSpawned.yOffset[eid];
+      Transform.dirty[eid] = 1;
+    }
+  }
+}
+
 export const TerrainSpawnSystem: System = {
-  group: 'simulation',
-  after: [TransformHierarchySystem],
+  // Same 'setup' bucket as pads/water/roads, strictly AFTER they stamp — so the
+  // first spawn batch samples post-carve heights in the same frame the
+  // heightmap lands (simulation would also work via the pending gate, but a
+  // late Road flatten used to slip past the gate and bury/float trees).
+  group: 'setup',
+  after: [
+    TerrainPadApplySystem,
+    LakeApplySystem,
+    RiverApplySystem,
+    RoadApplySystem,
+  ],
   update(state) {
     if (state.headless) return;
 
@@ -175,29 +207,21 @@ export const TerrainSpawnSystem: System = {
     if (!spawnerState.callbackRegistered) {
       spawnerState.callbackRegistered = true;
       registerHeightmapReloadCallback(state, () => {
-        for (const eid of terrainSpawnedQuery(state.world)) {
-          const x = state.hasComponent(eid, WorldTransform)
-            ? WorldTransform.posX[eid]
-            : Transform.posX[eid];
-          const z = state.hasComponent(eid, WorldTransform)
-            ? WorldTransform.posZ[eid]
-            : Transform.posZ[eid];
-          const eps = TerrainSpawned.surfaceEpsilon[eid] || 0.75;
-          const s = sampleTerrainSurface(state, x, z, eps);
-          if (s) {
-            Transform.posY[eid] = s.worldY + TerrainSpawned.yOffset[eid];
-            Transform.dirty[eid] = 1;
-          }
-        }
+        resyncTerrainSpawnedHeights(state);
+      });
+      // Pads / lakes / rivers / road flatten also mutate the sampler after
+      // some props may already be planted — snap them onto the new surface.
+      registerGroundMutationCallback(state, () => {
+        resyncTerrainSpawnedHeights(state);
       });
     }
 
     const specs = getSpawnGroupSpecs(state);
     if (specs.size === 0) return;
 
-    // Defer spawning until the terrain heightmap has decoded and pads/water
-    // carves have stamped, otherwise entities get placed on the stale surface
-    // and end up buried (or floating) when the real ground settles.
+    // Defer spawning until the terrain heightmap has decoded and pads/water/
+    // road carves have stamped, otherwise entities get placed on the stale
+    // surface and end up buried (or floating) when the real ground settles.
     if (isTerrainHeightmapPending(state) || isGroundMutationPending(state)) {
       if (
         spawnerState.spawnHeightmapDeferFrames <
@@ -283,6 +307,24 @@ export const TerrainSpawnSystem: System = {
 
       const templateRadiusBase = footprintBaseRadius(spec, templateUrls(spec));
 
+      // Cluster centres (optional): dense patches instead of a uniform carpet.
+      const clusterCenters: Array<[number, number]> = [];
+      if (spec.clusterCount > 0 && spec.clusterRadius > 0) {
+        const cAttempts = Math.max(spec.clusterCount * 8, 32);
+        for (
+          let c = 0;
+          c < cAttempts && clusterCenters.length < spec.clusterCount;
+          c++
+        ) {
+          const cx0 = minX + rand() * (maxX - minX);
+          const cz0 = minZ + rand() * (maxZ - minZ);
+          // Keep cluster hubs out of exclusions / earlier props.
+          if (!isSpawnAreaFree(state, cx0, cz0, 0.5)) continue;
+          if (spec.avoidWater && isPointNearWater(state, cx0, cz0)) continue;
+          clusterCenters.push([cx0, cz0]);
+        }
+      }
+
       for (let i = 0; i < instanceCount; i++) {
         let wx = minX;
         let wz = minZ;
@@ -291,8 +333,21 @@ export const TerrainSpawnSystem: System = {
         let waterSurfaceY: number | null = null;
         const attempts = Math.max(1, spec.maxSlopePlacementAttempts);
         for (let attempt = 0; attempt < attempts; attempt++) {
-          wx = minX + rand() * (maxX - minX);
-          wz = minZ + rand() * (maxZ - minZ);
+          if (clusterCenters.length > 0) {
+            const hub =
+              clusterCenters[Math.floor(rand() * clusterCenters.length)]!;
+            // Uniform disc around hub (sqrt for area-uniform).
+            const ang = rand() * Math.PI * 2;
+            const rad = Math.sqrt(rand()) * spec.clusterRadius;
+            wx = hub[0] + Math.cos(ang) * rad;
+            wz = hub[1] + Math.sin(ang) * rad;
+            // Soft clamp into region so edge clusters don't spill far out.
+            wx = Math.min(maxX, Math.max(minX, wx));
+            wz = Math.min(maxZ, Math.max(minZ, wz));
+          } else {
+            wx = minX + rand() * (maxX - minX);
+            wz = minZ + rand() * (maxZ - minZ);
+          }
 
           // `in-water`: the instance floats on a lake surface — accept only
           // points inside the waterline (the [shoreRadius, radius] ring is
@@ -310,7 +365,6 @@ export const TerrainSpawnSystem: System = {
             const dz = wz - body.z;
             if (Math.hypot(dx, dz) > body.shoreRadius * 0.72) continue;
             if (
-              spec.avoidOverlaps &&
               !isSpawnAreaFree(
                 state,
                 wx,
@@ -339,8 +393,9 @@ export const TerrainSpawnSystem: System = {
           // banks/beach), not just the wet surface — otherwise props land on
           // the bank slope with their trunks leaning into the channel.
           if (spec.avoidWater && isPointNearWater(state, wx, wz)) continue;
+          // Always honour SpawnExclusion (+ footprints from earlier groups).
+          // `avoidOverlaps` only controls whether THIS group registers discs.
           if (
-            spec.avoidOverlaps &&
             !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
           ) {
             continue;
@@ -360,7 +415,6 @@ export const TerrainSpawnSystem: System = {
           }
           if (
             !foundValidSlope &&
-            spec.avoidOverlaps &&
             !isSpawnAreaFree(state, wx, wz, templateRadiusBase * spec.scaleMax)
           ) {
             continue;
@@ -411,7 +465,8 @@ export const TerrainSpawnSystem: System = {
  */
 export const TerrainSpawnBoundsCatchUpSystem: System = {
   group: 'simulation',
-  after: [TerrainSpawnSystem],
+  // Spawn now runs in setup; catch-up still follows in simulation so GLB
+  // bounds that arrive mid-frame get a Y lift before physics/draw.
   update(state) {
     if (state.headless) return;
     const urls = getAabbPendingUrls(state);

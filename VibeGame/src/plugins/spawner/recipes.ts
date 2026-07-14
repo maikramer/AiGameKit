@@ -31,6 +31,8 @@ const SPAWNER_PARSER_ATTRIBUTES = [
   'footprint-radius',
   'max-distance',
   'instanced',
+  'cluster-count',
+  'cluster-radius',
 ];
 
 /** `<SpawnGroup>` — back-compat alias, behaves as a static spawner. */

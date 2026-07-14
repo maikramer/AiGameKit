@@ -84,7 +84,7 @@ export interface SpawnGroupSpec {
    * sampling is skipped for these instances.
    */
   inWater: boolean;
-  /** Re-sample XZ when the instance footprint overlaps a registered one (trees, hut colliders, other instances, SpawnExclusion zones). */
+  /** Re-sample XZ when the instance footprint overlaps a registered one (trees, hut colliders, other instances). SpawnExclusion zones are ALWAYS honoured, even when this is false. */
   avoidOverlaps: boolean;
   /** Per-instance XZ footprint radius before scale. 0 = auto (GLB AABB half-width, fallback 0.8). */
   footprintRadius: number;
@@ -92,5 +92,12 @@ export interface SpawnGroupSpec {
   maxDistance: number;
   /** Render the group as a single GPU-instanced mesh (per LOD) instead of one entity per instance. Trades per-instance physics/scripts for draw-call efficiency on dense static vegetation. */
   instanced: boolean;
+  /**
+   * When > 0, instances gather around this many cluster centres instead of
+   * uniform XZ sampling — dense patches with gaps between (vegetation tufts).
+   */
+  clusterCount: number;
+  /** Max radius (m) of each cluster around its centre. Ignored when clusterCount=0. */
+  clusterRadius: number;
   templates: SpawnTemplateSpec[];
 }

@@ -326,6 +326,14 @@ export const spawnGroupParser: Parser = ({ entity, element, state }) => {
     footprintRadius: resolvedSpawn.footprintRadius,
     maxDistance: resolvedSpawn.maxDistance,
     instanced: toBool(element.attributes['instanced']),
+    clusterCount: Math.max(
+      0,
+      Math.floor(toNumber(element.attributes['cluster-count'], 0))
+    ),
+    clusterRadius: Math.max(
+      0,
+      toNumber(element.attributes['cluster-radius'], 0)
+    ),
     templates,
   };
 

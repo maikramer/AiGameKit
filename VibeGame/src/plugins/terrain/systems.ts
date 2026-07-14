@@ -2,7 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import * as THREE from 'three';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
-import { defineQuery } from '../../core';
+import { defineQuery, isPhysicsHeld } from '../../core';
 import type { State, System } from '../../core';
 import { CameraSyncSystem } from '../rendering/systems';
 import { getRenderingContext, MainCamera } from '../rendering';
@@ -191,7 +191,7 @@ function _getSandAlbedo(): THREE.Texture {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   ctx.fillStyle = '#e6c98a';
   ctx.fillRect(0, 0, size, size);
   const img = ctx.getImageData(0, 0, size, size);
@@ -273,7 +273,7 @@ function _loadPackedNAR(albedoUrl: string): THREE.Texture {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   // Flat tangent normal XY (128,128) + full AO (255) + full rough (255) so the
   // texture reads correctly before any map loads. NOTE: css rgba() takes alpha
   // in 0–1 — 'rgba(...,255)' is invalid and silently leaves the canvas black
@@ -299,15 +299,15 @@ function _loadPackedNAR(albedoUrl: string): THREE.Texture {
   const nTmp = document.createElement('canvas');
   nTmp.width = size;
   nTmp.height = size;
-  const nCtx = nTmp.getContext('2d')!;
+  const nCtx = nTmp.getContext('2d', { willReadFrequently: true })!;
   const aTmp = document.createElement('canvas');
   aTmp.width = size;
   aTmp.height = size;
-  const aCtx = aTmp.getContext('2d')!;
+  const aCtx = aTmp.getContext('2d', { willReadFrequently: true })!;
   const sTmp = document.createElement('canvas');
   sTmp.width = size;
   sTmp.height = size;
-  const sCtx = sTmp.getContext('2d')!;
+  const sCtx = sTmp.getContext('2d', { willReadFrequently: true })!;
 
   const combine = (): void => {
     if (!nReady) return;
@@ -888,6 +888,9 @@ const PHYSICS_COLLIDER_RADIUS = 192;
  * this far — LOD boundaries are tens of metres apart, so per-frame reselection
  * is wasted work while standing or moving slowly. */
 const LOD_RESELECT_DISTANCE = 6;
+/** After the loading hold lifts, rebuild at most this many dirty chunk meshes
+ *  per frame so a camera orbit that triggers a LOD reselect doesn't hitch. */
+const MAX_CHUNK_MESH_BUILDS_PER_FRAME = 4;
 const _lastLodCam = new Map<number, { x: number; z: number }>();
 const _desiredKeysScratch = new Map<string, ChunkDesc>();
 const _existingKeysScratch = new Map<string, number>();
@@ -1281,8 +1284,17 @@ export const TerrainMeshSystem: System = {
       registry.delete(chunk);
     }
 
+    // During loading, build every dirty chunk immediately so the spawn ring is
+    // complete before the overlay drops. Afterwards, budget rebuilds so a
+    // first-look LOD reselect cannot stall a frame with dozens of geometries.
+    const meshBudget = isPhysicsHeld(state)
+      ? Number.POSITIVE_INFINITY
+      : MAX_CHUNK_MESH_BUILDS_PER_FRAME;
+    let meshesBuilt = 0;
+
     for (const chunk of chunkQuery(state.world)) {
       if (TerrainChunk.meshDirty[chunk] !== 1) continue;
+      if (meshesBuilt >= meshBudget) break;
 
       const field = TerrainChunk.field[chunk];
       const data = context.get(field);
@@ -1382,6 +1394,7 @@ export const TerrainMeshSystem: System = {
       );
 
       TerrainChunk.meshDirty[chunk] = 0;
+      meshesBuilt++;
     }
 
     // Push any pending biome splat into the shared materials (version-gated, so
