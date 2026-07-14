@@ -106,6 +106,13 @@ Text3D/testdata/baseline_meshes_raw/*
 # Cursor — estado local dos hooks (não versionar)
 .cursor/hooks/
 
+# Experiments — meshes de teste não pertencem ao repo
+experiments/
+
+# Estado local de schedulers de agentes
+*.scheduled_tasks.lock
+**/.claude/scheduled_tasks.lock
+
 # VibeGame simple-rpg — assets binários distribuídos via GitHub Release
 # (scripts/fetch-assets.mjs + assets.lock.json). Não versionar para manter
 # o histórico leve; restaurar localmente com: node scripts/fetch-assets.mjs
