@@ -13,7 +13,6 @@ class AssetCategory:
     hint_2d: str
     hint_3d: str
     hint_rig: str
-    hint_parts: str
     hint_texture: str
     extra_negatives: tuple[str, ...] = ()
 
@@ -38,10 +37,6 @@ CATEGORIES: dict[str, AssetCategory] = {
             "all limbs fully visible and clearly separated from torso, "
             "no crossed limbs, no bent elbows or knees, no clenched fists, "
             "no self-occlusion between arms and torso"
-        ),
-        hint_parts=(
-            "designed with clear separable segments at joints, "
-            "head removable at neck, limbs separable at shoulders and hips"
         ),
         hint_texture="smlstxtr, human skin fabric texture, seamless texture",
         extra_negatives=(
@@ -68,10 +63,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="creature concept art, side view, clear silhouette on white background",
         hint_3d="single creature model, no rider or accessories, clean organic mesh",
         hint_rig="standing in neutral pose with legs apart, arms or forelimbs extended, symmetrical stance",
-        hint_parts=(
-            "designed with clear separable segments, "
-            "head removable at neck, limbs separable at joints, tail as separate piece"
-        ),
         hint_texture="smlstxtr, creature scales skin pattern, seamless texture",
         extra_negatives=(
             "rider",
@@ -90,7 +81,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game chest or treasure box, front view, clear lid visible on white background",
         hint_3d="isolated chest or container, no hands or characters, clean geometry with visible lid seam",
         hint_rig="",
-        hint_parts="chest with clearly separate lid, visible hinge line, distinct top and bottom halves",
         hint_texture="smlstxtr, wood metal chest surface, seamless texture",
         extra_negatives=(
             "scattered coins",
@@ -109,7 +99,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game weapon, side view, clean silhouette on white background",
         hint_3d="single clean weapon, no hands or characters holding it, isolated tool",
         hint_rig="",
-        hint_parts="weapon with separable blade and handle, clear join line between grip and striking surface",
         hint_texture="smlstxtr, metal blade wood handle material, seamless texture",
         extra_negatives=(
             "hand holding",
@@ -128,7 +117,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game-ready tree, full view, trunk and canopy visible on white background",
         hint_3d="stylized game tree, clean trunk and canopy separation",
         hint_rig="",
-        hint_parts="tree with separable trunk, branches, and foliage canopy layers",
         hint_texture="smlstxtr, tree bark leaf foliage, seamless texture",
     ),
     "rock": AssetCategory(
@@ -138,7 +126,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game-ready rock formation, single isolated boulder, white background",
         hint_3d="simple rock or boulder, low-poly friendly, no attached ground plane",
         hint_rig="",
-        hint_parts="",
         hint_texture="smlstxtr, rock stone surface detail, seamless texture",
     ),
     "mineral": AssetCategory(
@@ -148,7 +135,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="crystal or mineral cluster, front view, faceted surfaces on white background",
         hint_3d="crystal formation with distinct facets, clean geometry, no ground attachment",
         hint_rig="",
-        hint_parts="mineral with separable crystal shards, each crystal removable from cluster base",
         hint_texture="smlstxtr, crystal gem mineral surface, seamless texture",
     ),
     "building": AssetCategory(
@@ -158,7 +144,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game building or structure, front view, architectural detail on white background",
         hint_3d="isolated building model, no terrain or ground plane, clean structural geometry",
         hint_rig="",
-        hint_parts="building with separable roof, walls, door, and window sections",
         hint_texture="smlstxtr, stone brick wall surface, seamless texture",
     ),
     "furniture": AssetCategory(
@@ -168,7 +153,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game furniture piece, front view, clean proportions on white background",
         hint_3d="isolated furniture item, no room or floor, clean geometry with visible part lines",
         hint_rig="",
-        hint_parts="furniture with clearly separate seat, backrest, legs, and armrests",
         hint_texture="smlstxtr, wood furniture surface grain, seamless texture",
     ),
     "vegetation": AssetCategory(
@@ -178,7 +162,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game vegetation or plant, full view, leaf detail visible on white background",
         hint_3d="vegetation cluster, clean stem and leaf separation, no ground plane",
         hint_rig="",
-        hint_parts="vegetation with separable leaves, stems, and flower or fruit sections",
         hint_texture="smlstxtr, green leaf grass vegetation, seamless texture",
     ),
     "vehicle": AssetCategory(
@@ -188,7 +171,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game vehicle, side view, mechanical detail on white background",
         hint_3d="isolated vehicle model, no driver or terrain, clean mechanical geometry",
         hint_rig="",
-        hint_parts="vehicle with separable wheels or treads, body shell, and internal components",
         hint_texture="smlstxtr, metal vehicle paint surface, seamless texture",
     ),
     "armor": AssetCategory(
@@ -198,7 +180,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game armor piece, front view, clean surfaces on white background",
         hint_3d="isolated armor piece, no body or character inside, clean plate geometry",
         hint_rig="laid flat or in T-pose arrangement, armor open and unfolded",
-        hint_parts="armor with separable plates, straps, and padding layers",
         hint_texture="smlstxtr, metal armor plate leather, seamless texture",
     ),
     "food": AssetCategory(
@@ -208,7 +189,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game food item, top-down or front view, simple organic shape on white background",
         hint_3d="isolated food item, no plate or table, clean simple organic geometry",
         hint_rig="",
-        hint_parts="food with separable layers or sections where applicable",
         hint_texture="smlstxtr, food surface detail organic, seamless texture",
     ),
     "tool": AssetCategory(
@@ -218,7 +198,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="game tool or implement, side view, clean handle and head on white background",
         hint_3d="single clean tool, no hands or characters, clean silhouette with handle and head",
         hint_rig="",
-        hint_parts="tool with separable handle and working head or tip",
         hint_texture="smlstxtr, wood metal tool surface, seamless texture",
     ),
     "terrain": AssetCategory(
@@ -228,7 +207,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="terrain tile or ground chunk, top-down view, surface detail on white background",
         hint_3d="ground chunk or terrain tile, flat bottom surface, no full landscape",
         hint_rig="",
-        hint_parts="terrain with separable surface layers, ground, grass, and stone overlays",
         hint_texture="smlstxtr, ground dirt grass terrain, seamless texture",
     ),
     "effects": AssetCategory(
@@ -238,7 +216,6 @@ CATEGORIES: dict[str, AssetCategory] = {
         hint_2d="visual effect element, abstract shape, simple form on white background",
         hint_3d="abstract effect mesh, very low complexity, single element",
         hint_rig="",
-        hint_parts="",
         hint_texture="smlstxtr, glowing energy particle surface, seamless texture",
     ),
 }

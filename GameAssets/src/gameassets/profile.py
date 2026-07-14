@@ -129,31 +129,6 @@ class Rigging3DProfile:
 
 
 @dataclass
-class Part3DProfile:
-    """Opções para ``part3d decompose`` após Text3D (GLB → partes semânticas + mesh segmentada)."""
-
-    octree_resolution: int | None = None
-    steps: int | None = None
-    num_chunks: int | None = None
-    # True: só P3-SAM (mesh com cores por parte); não gera GLB multi-parte X-Part
-    segment_only: bool = False
-    verbose: bool = False
-    # hero.glb → hero_parts.glb e hero_segmented.glb (sufixos antes de .glb)
-    parts_suffix: str = "_parts"
-    segmented_suffix: str = "_segmented"
-    # --- Otimizações de VRAM ---
-    # Não quantizar o DiT mesmo quando disponível
-    no_quantize_dit: bool = False
-    # Habilitar torch.compile para acelerar inferência
-    torch_compile: bool = False
-    # Desabilitar attention slicing
-    no_attention_slicing: bool = False
-    # Nota: no_cpu_offload / quantization foram removidos — o part3d agora
-    # auto-deteta via hw-auto (PART3D_HW_AUTO). Chaves YAML obsoletas com
-    # esses nomes são ignoradas silenciosamente em from_dict.
-
-
-@dataclass
 class LODProfile:
     """LOD triplet generation via ``text3d lod``."""
 
@@ -256,19 +231,15 @@ class GameProfile:
     text2sound: Text2SoundProfile | None = None
     rigging3d: Rigging3DProfile | None = None
     animator3d: Animator3DProfile | None = None
-    part3d: Part3DProfile | None = None
     lod: LODProfile | None = None
     collision: CollisionProfile | None = None
     terrain3d: Terrain3DProfile | None = None
     rocks3d: Rocks3DProfile | None = None
     generation: str | None = None
     # Stage 4 — bake-master pipeline (LOD0 master, transfer-weights, validate).
-    # Defeito False (legacy); ativar via game.yaml ``master_pipeline: true`` ou
-    # CLI ``--master-pipeline`` em ``gameassets batch``.
-    # Round 2: master pipeline é o default. DAG completo (topology-fix →
+    # Master pipeline é o único caminho. DAG completo (topology-fix →
     # bake-master → LOD → collision → rigging → transfer-weights → animate →
-    # promote → validate). Para forçar o caminho legacy use
-    # ``master_pipeline: false`` em game.yaml ou ``--legacy-pipeline`` no batch.
+    # promote → validate). Mantido como campo para retro-compat de game.yaml.
     master_pipeline: bool = True
     master_validate: bool = True
     master_bake_normals: bool = False
@@ -644,36 +615,6 @@ class GameProfile:
             if pr_as not in valid_presets:
                 raise ValueError(f"animator3d.preset deve ser um de: {', '.join(valid_presets)}")
             anim3 = Animator3DProfile(preset=pr_as)
-        p3: Part3DProfile | None = None
-        raw_p3 = data.get("part3d")
-        if isinstance(raw_p3, dict):
-            oc = raw_p3.get("octree_resolution")
-            st = raw_p3.get("steps")
-            nc = raw_p3.get("num_chunks")
-            try:
-                oc_i = int(oc) if oc is not None else None
-                st_i = int(st) if st is not None else None
-                nc_i = int(nc) if nc is not None else None
-            except (TypeError, ValueError) as e:
-                raise ValueError("part3d.octree_resolution, steps e num_chunks devem ser inteiros válidos") from e
-            ps = raw_p3.get("parts_suffix")
-            ss = raw_p3.get("segmented_suffix")
-            ps_s = str(ps).strip() if ps not in (None, "") else "_parts"
-            ss_s = str(ss).strip() if ss not in (None, "") else "_segmented"
-            # Chaves obsoletas (no_cpu_offload, quantization) são ignoradas:
-            # o part3d auto-deteta via hw-auto.
-            p3 = Part3DProfile(
-                octree_resolution=oc_i,
-                steps=st_i,
-                num_chunks=nc_i,
-                segment_only=bool(raw_p3.get("segment_only", False)),
-                verbose=bool(raw_p3.get("verbose", False)),
-                parts_suffix=ps_s,
-                segmented_suffix=ss_s,
-                no_quantize_dit=bool(raw_p3.get("no_quantize_dit", False)),
-                torch_compile=bool(raw_p3.get("torch_compile", False)),
-                no_attention_slicing=bool(raw_p3.get("no_attention_slicing", False)),
-            )
         lod: LODProfile | None = None
         raw_lod = data.get("lod")
         if isinstance(raw_lod, dict):
@@ -811,7 +752,6 @@ class GameProfile:
             text2sound=ts2,
             rigging3d=rg3,
             animator3d=anim3,
-            part3d=p3,
             lod=lod,
             collision=coll,
             terrain3d=ter,

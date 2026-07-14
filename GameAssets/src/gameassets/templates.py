@@ -75,12 +75,11 @@ text3d:
 paint3d:
   preserve_origin: true
 
-# Round 2 — master pipeline (default ON). DAG completo:
+# Round 2 — master pipeline (único caminho). DAG completo:
 #   topology-fix → bake-master → LOD → collision → rigging → transfer-weights
 #   → animate → promote (lod0=animated/rigged/painted) → validate.
 # Outputs em meshes/ ficam todos finalizados (KTX2+meshopt+tangents);
 # intermediários (shape/painted/clean/rigged_hi) movidos para meshes/_intermediate/.
-# Use master_pipeline: false (ou --legacy-pipeline no batch) para o caminho antigo.
 master_pipeline: true
 master_validate: true
 # bake_normals resolvido por categoria (humanoid/creature/armor/weapon/chest/tool
@@ -91,14 +90,6 @@ master_bake_normals: false
 # rigging3d:
 #   output_suffix: "_rigged"
 
-# Part3D (Hunyuan3D-Part) após Text3D: --with-parts + coluna generate_parts=true. Requer PART3D_BIN ou part3d no PATH.
-# part3d:
-#   steps: 50
-#   octree_resolution: 256
-#   segment_only: false
-#   parts_suffix: "_parts"
-#   segmented_suffix: "_segmented"
-
 # LOD (3 níveis de detalhe via text3d lod): pipeline "lod" no manifest.
 # lod:
 #   lod1_ratio: 0.42
@@ -108,7 +99,7 @@ master_bake_normals: false
 """
 
 MANIFEST_YAML = """# Manifest — assets do jogo (gameassets batch)
-# pipeline: combinações de [3d, paint, audio, rig, animate, parts, lod, collision]
+# pipeline: combinações de [3d, paint, audio, rig, animate, lod, collision]
 
 assets:
   - id: chest_01

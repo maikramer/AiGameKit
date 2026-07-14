@@ -23,8 +23,6 @@ class ManifestRow:
     generate_rig: bool = False
     # Animator3D game-pack após rig; requer --with-animate e GLB rigado (ou só --with-rig+generate_rig)
     generate_animate: bool = False
-    # Decomposição semântica (Part3D) após Text3D; requer --with-parts e generate_3d=true
-    generate_parts: bool = False
     generate_lod: bool = False
     generate_collision: bool = False
     # Textura 3D (paint3d quick ou Hunyuan) após shape; requer paint no pipeline e opções em paint3d no perfil
@@ -32,10 +30,6 @@ class ManifestRow:
     lod_levels: int = 3
     # Asset category (e.g. humanoid, chest, weapon) — drives prompt hints and generation params
     category: str = ""
-    # Part3D por linha: sobrepõe part3d.{steps,octree_resolution,segment_only} do perfil
-    part3d_steps: int | None = None
-    part3d_octree_resolution: int | None = None
-    part3d_segment_only: bool | None = None
     # Per-row audio config (from YAML only; CSV falls back to profile global)
     audio_duration: float | None = None
     audio_profile: str | None = None  # "music" or "effects"
@@ -54,7 +48,7 @@ def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
 
 
 def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
-    """Lê YAML: assets com pipeline, audio, part3d sub-configs."""
+    """Lê YAML: assets com pipeline e audio sub-configs."""
     import yaml
 
     doc = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -68,10 +62,6 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
         if not isinstance(audio_cfg, dict):
             audio_cfg = {}
 
-        part3d_cfg = entry.get("part3d") or {}
-        if not isinstance(part3d_cfg, dict):
-            part3d_cfg = {}
-
         rows.append(
             ManifestRow(
                 id=entry["id"],
@@ -81,16 +71,12 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 generate_audio="audio" in pipeline_items,
                 generate_rig="rig" in pipeline_items,
                 generate_animate="animate" in pipeline_items,
-                generate_parts="parts" in pipeline_items,
                 generate_lod="lod" in pipeline_items,
                 generate_collision="collision" in pipeline_items,
                 generate_paint="paint" in pipeline_items,
                 lod_levels=int(entry.get("lod_levels", 3)),
                 image_source=entry.get("image_source"),
                 category=(entry.get("category") or "").lower(),
-                part3d_steps=part3d_cfg.get("steps"),
-                part3d_octree_resolution=part3d_cfg.get("octree_resolution"),
-                part3d_segment_only=part3d_cfg.get("segment_only"),
                 audio_duration=audio_cfg.get("duration"),
                 audio_profile=audio_cfg.get("profile"),
                 audio_trim=audio_cfg.get("trim"),

@@ -32,8 +32,6 @@ from .mesh_reorigin import collect_glb_paths, filter_excluded_paths, reorigin_gl
 from .paths import _paths_for_row, _paths_for_row_manifest, _rigging3d_output_path  # noqa: F401
 from .pipeline import (  # noqa: F401
     _paint3d_texture_argv,
-    _part3d_output_paths,
-    _part3d_profile_effective,
     _rigging3d_pipeline_argv,
     _text3d_argv,
     _texture_subprocess_argv,
@@ -59,8 +57,7 @@ Preset só num ficheiro teu (ex.: galaxy_orbital em presets-local.yaml):
   gameassets batch --profile game.yaml --manifest manifest.yaml --with-3d \\
     --presets-local presets-local.yaml --log run.jsonl
 
-Define TEXT2D_BIN / TEXT3D_BIN / PAINT3D_BIN (se ``text3d.texture``) / RIGGING3D_BIN / ANIMATOR3D_BIN /
-PART3D_BIN.
+Define TEXT2D_BIN / TEXT3D_BIN / PAINT3D_BIN (se ``text3d.texture``) / RIGGING3D_BIN / ANIMATOR3D_BIN.
 Text3D gera só geometria; textura e PBR no GLB vêm do ``paint3d`` (Hunyuan3D-Paint 2.1).
 Com image_source: texture2d: TEXTURE2D_BIN e, se texture2d.materialize,
 MATERIALIZE_BIN (ou texture2d.materialize_bin) — só para mapas PBR a partir da imagem difusa.
@@ -216,7 +213,6 @@ def info_cmd() -> None:
     row("text2sound", "TEXT2SOUND_BIN", "text2sound")
     row("text3d", "TEXT3D_BIN", "text3d")
     row("paint3d", "PAINT3D_BIN", "paint3d")
-    row("part3d", "PART3D_BIN", "part3d")
     row("rigging3d", "RIGGING3D_BIN", "rigging3d")
     row("animator3d", "ANIMATOR3D_BIN", "animator3d")
     row("materialize", "MATERIALIZE_BIN", "materialize")
@@ -380,12 +376,6 @@ def prompts_cmd(
     help="Preferir GLB rigado se existir no disco",
 )
 @click.option(
-    "--prefer-parts/--no-prefer-parts",
-    "prefer_parts",
-    default=False,
-    help="Preferir *_parts.glb (ordem: animado > rigado > parts > base)",
-)
-@click.option(
     "--with-textures/--no-with-textures",
     "with_textures",
     default=False,
@@ -412,7 +402,6 @@ def handoff_cmd(
     use_copy: bool,
     prefer_animated: bool,
     prefer_rigged: bool,
-    prefer_parts: bool,
     with_textures: bool,
     audio_format: str,
     sfx_sample_rate: int,
@@ -434,7 +423,6 @@ def handoff_cmd(
         copy=use_copy,
         prefer_animated=prefer_animated,
         prefer_rigged=prefer_rigged,
-        prefer_parts=prefer_parts,
         with_textures=with_textures,
         audio_format=audio_format,
         sfx_sample_rate=sfx_sample_rate,

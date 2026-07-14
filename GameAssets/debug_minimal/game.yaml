@@ -48,10 +48,6 @@ rigging3d:
 animator3d:
   preset: humanoid
 
-part3d:
-  segment_only: true
-  quantization: none
-
 lod:
   lod1_ratio: 0.42
   lod2_ratio: 0.14

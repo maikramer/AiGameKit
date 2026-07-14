@@ -43,7 +43,6 @@ from .helpers import (
     _row_uses_texture2d,
     _row_wants_animate,
     _row_wants_audio,
-    _row_wants_parts,
     _row_wants_rig,
     _safe_row_dirname,
     _seed_for_row,
@@ -78,9 +77,6 @@ from .paths import (
 )
 from .pipeline import (
     _animator3d_game_pack_argv,
-    _part3d_decompose_argv,
-    _part3d_output_paths,
-    _part3d_profile_effective,
     _post_text3d_mesh_extras,
     _resolve_animator3d_bin,
     _rigging3d_pipeline_argv,
@@ -178,12 +174,6 @@ console = Console()
     help="Skip rigging even if rigging3d is configured.",
 )
 @click.option(
-    "--no-parts",
-    is_flag=True,
-    default=False,
-    help="Skip part decomposition even if part3d is configured.",
-)
-@click.option(
     "--no-animate",
     is_flag=True,
     default=False,
@@ -222,7 +212,7 @@ console = Console()
 @click.option(
     "--profile-tools",
     is_flag=True,
-    help="Activar profiling (CPU/RAM/GPU) em paint3d e part3d via GAMEDEV_PROFILE.",
+    help="Activar profiling (CPU/RAM/GPU) em paint3d via GAMEDEV_PROFILE.",
 )
 @click.option(
     "--profile-log",
@@ -267,7 +257,6 @@ def batch_cmd(
     skip_text2d: bool,
     skip_audio: bool,
     no_rig: bool,
-    no_parts: bool,
     no_animate: bool,
     no_lod: bool,
     no_collision: bool,
@@ -292,12 +281,10 @@ def batch_cmd(
 
     with_3d = not no_3d and any(r.generate_3d for r in rows)
     with_rig = not no_rig and with_3d and any(r.generate_rig for r in rows)
-    with_parts = not no_parts and with_3d and any(r.generate_parts for r in rows)
     with_animate = not no_animate and with_rig and any(r.generate_animate for r in rows)
     with_lod = not no_lod and with_3d and any(r.generate_lod for r in rows)
     with_collision = not no_collision and with_3d and any(r.generate_collision for r in rows)
     has_rigging_profile = False
-    has_parts_profile = False
     has_audio_profile = False
 
     any_row_wants_paint = any(r.generate_3d and r.generate_paint for r in rows)
@@ -362,9 +349,7 @@ def batch_cmd(
         rigging3d_bin = _resolve_bin("RIGGING3D_BIN", "rigging3d")
 
     animator3d_bin: str | None = None
-    if (with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows)) or (
-        with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows)
-    ):
+    if with_animate and any(r.generate_3d and _row_wants_animate(r, with_rig, has_rigging_profile) for r in rows):
         animator3d_bin = _resolve_animator3d_bin()
         if not animator3d_bin:
             if dry_run:
@@ -373,10 +358,6 @@ def batch_cmd(
                 raise click.ClickException(
                     "Comando não encontrado: 'animator3d'. Instala Animator3D ou define ANIMATOR3D_BIN."
                 ) from None
-
-    part3d_bin: str | None = None
-    if with_parts and any(_row_wants_parts(r, has_parts_profile) for r in rows):
-        part3d_bin = _resolve_bin("PART3D_BIN", "part3d")
 
     any_audio_row = any(_row_wants_audio(r, has_audio_profile) for r in rows)
     text2sound_bin: str | None = None
@@ -449,7 +430,6 @@ def batch_cmd(
             meta.add_row("paint3d", "[dim](nenhuma linha com paint no pipeline)[/dim]")
     meta.add_row("rigging3d", rigging3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("animator3d", animator3d_bin or "[dim](desligado)[/dim]")
-    meta.add_row("part3d", part3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("terrain3d", terrain3d_bin or "[dim](desligado)[/dim]")
     meta.add_row("skymap2d", skymap2d_bin or "[dim](desligado)[/dim]")
     meta.add_row("text2icon", text2icon_bin or "[dim](desligado)[/dim]")
@@ -473,8 +453,6 @@ def batch_cmd(
             ord_skip.append("Text2Sound (linhas generate_audio)")
         if with_3d:
             ord_skip.append("Text3D (só generate_3d, PNG no output_dir)")
-            if with_parts:
-                ord_skip.append("Part3D (generate_parts)")
             if with_rig:
                 ord_skip.append("Rigging3D (generate_rig)")
             if with_animate:
@@ -493,8 +471,6 @@ def batch_cmd(
             ord_parts.append("Text2Sound (linhas generate_audio)")
         if with_3d:
             ord_parts.append("Text3D (só generate_3d)")
-            if with_parts:
-                ord_parts.append("Part3D (generate_parts)")
             if with_rig:
                 ord_parts.append("Rigging3D (generate_rig)")
             if with_animate:
@@ -506,8 +482,6 @@ def batch_cmd(
             ord_tail += " → Text2Sound (linhas generate_audio)"
         if with_3d:
             ord_tail += " → Text3D (só generate_3d, imagens já gravadas)"
-            if with_parts:
-                ord_tail += " → Part3D (generate_parts)"
             if with_rig:
                 ord_tail += " → Rigging3D (generate_rig)"
             if with_animate:
@@ -755,24 +729,10 @@ def batch_cmd(
                         row_id=row.id,
                         argv=t3d_args,
                     )
-        if with_parts and part3d_bin and any(r.generate_3d and _row_wants_parts(r, has_parts_profile) for r in rows):
-            _dry_run_header(
-                dry_plan,
-                "--- Part3D (após GLB Text3D; generate_parts=true ou part3d profile) ---",
-            )
-            for row in rows:
-                if not row.generate_3d or not _row_wants_parts(row, has_parts_profile):
-                    continue
-                _img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
-                p3 = _part3d_profile_effective(profile, row)
-                out_p, out_s = _part3d_output_paths(mesh_path, p3)
-                seed = _seed_for_row(profile, f"{row.id}:part3d")
-                pa = _part3d_decompose_argv(part3d_bin, mesh_path, out_p, out_s, p3, seed, gpu_ids=gpu_ids)
-                _dry_run_emit(dry_plan, phase="part3d", row_id=row.id, argv=pa)
         if with_rig and rigging3d_bin and any(r.generate_3d and _row_wants_rig(r, has_rigging_profile) for r in rows):
             _dry_run_header(
                 dry_plan,
-                "--- Rigging3D (entrada: *_parts.glb se parts+rig; senão GLB base) ---",
+                "--- Rigging3D (entrada: GLB base) ---",
             )
             for row in rows:
                 if not row.generate_3d or not _row_wants_rig(row, has_rigging_profile):
@@ -782,10 +742,6 @@ def batch_cmd(
                 rg = profile.rigging3d
                 sfx = rg.output_suffix if rg else "_rigged"
                 rig_in = mesh_path
-                p3_row = _part3d_profile_effective(profile, row)
-                if with_parts and _row_wants_parts(row, has_parts_profile) and not p3_row.segment_only:
-                    out_p, _ = _part3d_output_paths(mesh_path, p3_row)
-                    rig_in = out_p
                 rig_out = _rigging3d_output_path(rig_in, sfx)
                 rg_args = _rigging3d_pipeline_argv(
                     rigging3d_bin,
@@ -812,10 +768,6 @@ def batch_cmd(
                 rg = profile.rigging3d
                 sfx = rg.output_suffix if rg else "_rigged"
                 rig_in = mesh_path
-                p3_row = _part3d_profile_effective(profile, row)
-                if with_parts and _row_wants_parts(row, has_parts_profile) and not p3_row.segment_only:
-                    out_p, _ = _part3d_output_paths(mesh_path, p3_row)
-                    rig_in = out_p
                 rig_out = _rigging3d_output_path(rig_in, sfx)
                 anim_out = _animator3d_output_path(rig_out)
                 anim_prof = profile.animator3d or Animator3DProfile()
@@ -831,7 +783,6 @@ def batch_cmd(
                 "options": {
                     "with_3d": with_3d,
                     "with_rig": with_rig,
-                    "with_parts": with_parts,
                     "with_animate": with_animate,
                     "skip_text2d": skip_text2d,
                     "skip_audio": skip_audio,
@@ -886,7 +837,6 @@ def batch_cmd(
         "rows": len(rows),
         "with_3d": with_3d,
         "with_rig": with_rig,
-        "with_parts": with_parts,
         "with_animate": with_animate,
         "skip_text2d": skip_text2d,
         "skip_audio": skip_audio,
@@ -922,8 +872,6 @@ def batch_cmd(
                     _pipeline_stages.append("Text3D")
                 if with_3d and any_row_wants_paint:
                     _pipeline_stages.append("Paint3D")
-                if with_parts:
-                    _pipeline_stages.append("Part3D")
                 if with_rig:
                     _pipeline_stages.append("Rigging3D")
                 if with_animate:
@@ -1894,8 +1842,6 @@ def batch_cmd(
                             stages.append("Paint3D quick" if p3_style in ("solid", "perlin") else "Paint3D texture")
                         else:
                             stages.append("Text3D")
-                        if with_parts and _row_wants_parts(row, has_parts_profile):
-                            stages.append("Part3D")
                         if with_rig and _row_wants_rig(row, has_rigging_profile):
                             stages.append("Rigging3D")
                         if with_animate and _row_wants_animate(row, with_rig, has_rigging_profile):

@@ -362,11 +362,6 @@ def _row_wants_rig(row: ManifestRow, has_rigging_profile: bool) -> bool:
     return bool(row.generate_rig)
 
 
-def _row_wants_parts(row: ManifestRow, has_parts_profile: bool) -> bool:
-    """Parts eligibility: explicit column only. Manifest controls what is generated."""
-    return bool(row.generate_parts)
-
-
 def _row_wants_audio(row: ManifestRow, has_audio_profile: bool) -> bool:
     """Audio eligibility: explicit column only. Manifest controls what is generated."""
     return bool(row.generate_audio)

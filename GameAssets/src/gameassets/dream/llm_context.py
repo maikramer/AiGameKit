@@ -32,7 +32,6 @@ DREAM_PLAN_SCHEMA: dict[str, Any] = {
                     "generate_3d": {"type": "boolean"},
                     "generate_audio": {"type": "boolean"},
                     "generate_rig": {"type": "boolean"},
-                    "generate_parts": {"type": "boolean"},
                 },
             },
         },

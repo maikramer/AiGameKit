@@ -58,7 +58,6 @@ def run_handoff(
     copy: bool,
     prefer_animated: bool,
     prefer_rigged: bool,
-    prefer_parts: bool,
     with_textures: bool,
     audio_format: str = "copy",
     sfx_sample_rate: int = 22050,
@@ -68,8 +67,6 @@ def run_handoff(
     """Resolve meshes/áudio, copia ou symlink, devolve manifest dict."""
     from .cli import (
         _audio_path_for_row_manifest,
-        _part3d_output_paths,
-        _part3d_profile_effective,
         _paths_for_row_manifest,
         _rigging3d_output_path,
         _texture2d_material_maps_path_manifest,
@@ -100,8 +97,6 @@ def run_handoff(
             rg = profile.rigging3d
             sfx = rg.output_suffix if rg else "_rigged"
             rig_out = _rigging3d_output_path(mesh_path, sfx or "_rigged")
-            p3_row = _part3d_profile_effective(profile, row)
-            out_p, _ = _part3d_output_paths(mesh_path, p3_row)
             anim_out = mesh_path.with_name(f"{mesh_path.stem}_animated.glb")
 
             chosen: Path | None = None
@@ -112,9 +107,6 @@ def run_handoff(
             elif prefer_rigged and rig_out.is_file():
                 chosen = rig_out
                 chosen_kind = "rigged"
-            elif prefer_parts and out_p.is_file():
-                chosen = out_p
-                chosen_kind = "parts"
             elif mesh_path.is_file():
                 chosen = mesh_path
                 chosen_kind = "base"
@@ -262,7 +254,6 @@ def handoff_command_impl(
     copy: bool,
     prefer_animated: bool,
     prefer_rigged: bool,
-    prefer_parts: bool,
     with_textures: bool,
     audio_format: str = "copy",
     sfx_sample_rate: int = 22050,
@@ -281,7 +272,6 @@ def handoff_command_impl(
         copy=copy,
         prefer_animated=prefer_animated,
         prefer_rigged=prefer_rigged,
-        prefer_parts=prefer_parts,
         with_textures=with_textures,
         audio_format=audio_format,
         sfx_sample_rate=sfx_sample_rate,

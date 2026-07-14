@@ -87,7 +87,6 @@ def enhance_prompt_for_pipeline(
     category: str = "",
     generate_3d: bool = False,
     generate_rig: bool = False,
-    generate_parts: bool = False,
     image_source: str = "text2d",
     for_3d: bool = False,
 ) -> str:
@@ -102,8 +101,6 @@ def enhance_prompt_for_pipeline(
         prompt = _append_if_new(prompt, cat.hint_2d)
     if generate_rig:
         prompt = _append_if_new(prompt, cat.hint_rig)
-    if generate_parts:
-        prompt = _append_if_new(prompt, cat.hint_parts)
     if cat.extra_negatives:
         lower_prompt = prompt.lower()
         new_negs = [n for n in cat.extra_negatives if n.lower() not in lower_prompt]
@@ -118,8 +115,6 @@ def enhance_prompt_for_pipeline(
         prompt = _append_if_new(prompt, cat.hint_2d)
     if generate_rig:
         prompt = _append_if_new(prompt, cat.hint_rig)
-    if generate_parts:
-        prompt = _append_if_new(prompt, cat.hint_parts)
     # Cross-contamination negatives: prevent accessory leakage between asset types
     if cat.extra_negatives:
         existing_lower = prompt.lower()
@@ -189,7 +184,6 @@ def build_prompt(
             category=row.category,
             generate_3d=row.generate_3d,
             generate_rig=row.generate_rig,
-            generate_parts=row.generate_parts,
             for_3d=for_3d,
         )
 

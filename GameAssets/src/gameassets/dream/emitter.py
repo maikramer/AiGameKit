@@ -82,8 +82,6 @@ def emit_manifest_yaml(plan: DreamPlan) -> str:
             pipeline.append("rig")
         if a.generate_animate:
             pipeline.append("animate")
-        if a.generate_parts:
-            pipeline.append("parts")
         entry: dict[str, Any] = {
             "id": a.id,
             "idea": a.idea,

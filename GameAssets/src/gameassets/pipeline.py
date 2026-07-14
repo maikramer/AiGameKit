@@ -36,7 +36,6 @@ from .categories import (
 from .helpers import (
     _resolve_rocks3d_bin,
     _row_wants_animate,
-    _row_wants_parts,
     _row_wants_rig,
     _seed_for_row,
     _timing_append,
@@ -49,7 +48,6 @@ from .param_optimizer import (
     should_optimize_text3d,
 )
 from .paths import (
-    _animator3d_output_path,
     _clean_existing,
     _clean_path,
     _intermediate_dir,
@@ -61,13 +59,12 @@ from .paths import (
     _path_for_log,
     _rigged_hi_existing,
     _rigged_hi_path,
-    _rigging3d_output_path,
     _shape_existing,
     _shape_path,
     _shell_path,
     move_to_intermediate,
 )
-from .profile import Animator3DProfile, GameProfile, Paint3DProfile, Part3DProfile, Rigging3DProfile, Rocks3DProfile
+from .profile import GameProfile, Paint3DProfile, Rigging3DProfile, Rocks3DProfile
 from .runner import merge_subprocess_output, resolve_binary, run_cmd
 
 try:
@@ -137,61 +134,6 @@ def _rigging3d_pipeline_argv(
     return args
 
 
-def _rigging3d_pipeline_failed(
-    profile: GameProfile,
-    row: ManifestRow,
-    mesh_final: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    child_env: dict[str, str],
-    rigging3d_bin: str | None,
-    with_rig: bool,
-    has_rigging_profile: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> bool:
-    """Corre ``rigging3d pipeline`` após Text3D (GLB base ou ``*_parts.glb`` se parts+rig). Devolve True se falhou."""
-    if not with_rig or not _row_wants_rig(row, has_rigging_profile) or not rigging3d_bin:
-        return False
-    if not row.generate_3d:
-        return False
-    if not mesh_final.is_file():
-        return False
-    rg = profile.rigging3d
-    sfx = rg.output_suffix if rg else "_rigged"
-    rig_out = _rigging3d_output_path(mesh_final, sfx)
-    seed = _seed_for_row(profile, row.id)
-    argv = _rigging3d_pipeline_argv(
-        rigging3d_bin,
-        mesh_final,
-        rig_out,
-        seed=seed,
-        rig_profile=rg,
-        gpu_ids=gpu_ids,
-        hw_auto=profile.hw_auto,
-    )
-    console.print(f"[cyan]⏳ Rigging[/cyan] {row.id} ...")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "rigging3d", elapsed)
-    if r.returncode == 0:
-        console.print(f"[green]✓ Rigging[/green] {row.id} ({elapsed:.1f}s)")
-    if r.returncode != 0:
-        err = merge_subprocess_output(r) or "rigging3d falhou"
-        rec["status"] = "error"
-        rec["error"] = err
-        preview = merge_subprocess_output(r, max_chars=4000) or err
-        console.print(f"[red]rigging3d falhou[/red] {row.id}: {preview}")
-        return True
-    if not rig_out.is_file():
-        rec["status"] = "error"
-        rec["error"] = "rigging3d não produziu GLB rigado"
-        console.print(f"[red]rigging3d sem GLB[/red] {row.id}")
-        return True
-    rec["rig_mesh_path"] = _path_for_log(rig_out, manifest_dir)
-    return False
-
-
 def _animator3d_game_pack_argv(
     animator3d_bin: str,
     rig_out: Path,
@@ -209,232 +151,10 @@ def _animator3d_game_pack_argv(
     ]
 
 
-def _animator3d_game_pack_failed(
-    profile: GameProfile,
-    row: ManifestRow,
-    rigged_glb: Path,
-    animated_glb: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    child_env: dict[str, str],
-    with_animate: bool,
-    with_rig: bool,
-    has_rigging_profile: bool = False,
-    preset: str = "humanoid",
-) -> bool:
-    """Corre ``animator3d game-pack`` no GLB rigado. Devolve True se falhou."""
-    if not with_animate or not _row_wants_animate(row, with_rig, has_rigging_profile):
-        return False
-    if not row.generate_3d:
-        return False
-    if not rigged_glb.is_file():
-        return False
-    abin = _resolve_animator3d_bin()
-    if not abin:
-        rec["status"] = "error"
-        rec["error"] = "animator3d não encontrado (ANIMATOR3D_BIN ou PATH)"
-        console.print(f"[red]animator3d em falta[/red] {row.id}")
-        return True
-    anim_prof = profile.animator3d or Animator3DProfile()
-    preset_eff = (anim_prof.preset or preset).strip().lower()
-    argv = _animator3d_game_pack_argv(abin, rigged_glb, animated_glb, preset=preset_eff)
-    console.print(f"[cyan]⏳ Animation[/cyan] {row.id} (preset={preset_eff}) ...")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "animator3d", elapsed)
-    if r.returncode == 0:
-        console.print(f"[green]✓ Animation[/green] {row.id} ({elapsed:.1f}s)")
-    if r.returncode != 0:
-        err = merge_subprocess_output(r) or "animator3d game-pack falhou"
-        rec["status"] = "error"
-        rec["error"] = err
-        preview = merge_subprocess_output(r, max_chars=4000) or err
-        console.print(f"[red]animator3d game-pack falhou[/red] {row.id}: {preview}")
-        return True
-    if not animated_glb.is_file():
-        rec["status"] = "error"
-        rec["error"] = "animator3d não produziu GLB animado"
-        console.print(f"[red]animator3d sem GLB animado[/red] {row.id}")
-        return True
-    rec["animated_mesh_path"] = _path_for_log(animated_glb, manifest_dir)
-    return False
-
-
-def _part3d_profile_effective(profile: GameProfile, row: ManifestRow | None = None) -> Part3DProfile:
-    """Profile Part3D com possíveis overrides por linha do manifest."""
-    base = profile.part3d or Part3DProfile()
-    if row is None:
-        return base
-    steps = row.part3d_steps if row.part3d_steps is not None else base.steps
-    octree = row.part3d_octree_resolution if row.part3d_octree_resolution is not None else base.octree_resolution
-    seg_only = row.part3d_segment_only if row.part3d_segment_only is not None else base.segment_only
-    return Part3DProfile(
-        octree_resolution=octree,
-        steps=steps,
-        num_chunks=base.num_chunks,
-        segment_only=seg_only,
-        verbose=base.verbose,
-        parts_suffix=base.parts_suffix,
-        segmented_suffix=base.segmented_suffix,
-        no_quantize_dit=base.no_quantize_dit,
-        torch_compile=base.torch_compile,
-        no_attention_slicing=base.no_attention_slicing,
-    )
-
-
-def _part3d_stem_suffix(raw: str | None, default: str) -> str:
-    s = (raw or "").strip()
-    if not s:
-        s = default
-    return s if s.startswith("_") else f"_{s}"
-
-
-def _part3d_output_paths(mesh_final: Path, p3: Part3DProfile) -> tuple[Path, Path]:
-    from .paths import _base_stem
-
-    ps = _part3d_stem_suffix(p3.parts_suffix, "_parts")
-    ss = _part3d_stem_suffix(p3.segmented_suffix, "_segmented")
-    stem = _base_stem(mesh_final.stem)
-    parts = mesh_final.with_name(f"{stem}{ps}.glb")
-    segmented = mesh_final.with_name(f"{stem}{ss}.glb")
-    return parts, segmented
-
-
-def _part3d_decompose_argv(
-    part3d_bin: str,
-    mesh_in: Path,
-    out_parts: Path,
-    out_seg: Path,
-    p3: Part3DProfile,
-    seed: int | None,
-    gpu_ids: list[int] | None = None,
-    *,
-    quality: str | None = None,
-    category: str | None = None,
-) -> list[str]:
-    args = [
-        part3d_bin,
-        "decompose",
-        str(mesh_in),
-        "-o",
-        str(out_parts),
-        "--output-segmented",
-        str(out_seg),
-    ]
-    if quality:
-        args.extend(["--quality", quality])
-    if category:
-        args.extend(["--category", category])
-    if p3.octree_resolution is not None:
-        args.extend(["--octree-resolution", str(p3.octree_resolution)])
-    if p3.steps is not None:
-        args.extend(["--steps", str(p3.steps)])
-    if p3.num_chunks is not None:
-        args.extend(["--num-chunks", str(p3.num_chunks)])
-    if seed is not None:
-        args.extend(["--seed", str(seed)])
-    if p3.segment_only:
-        args.append("--segment-only")
-    if p3.verbose:
-        args.append("-v")
-    # --- Otimizações de VRAM ---
-    # Nota: no_cpu_offload / quantization não são propagados — o part3d
-    # auto-deteta via hw-auto (PART3D_HW_AUTO).
-    if p3.no_quantize_dit:
-        args.append("--no-quantize-dit")
-    if p3.torch_compile:
-        args.append("--torch-compile")
-    if p3.no_attention_slicing:
-        args.append("--no-attention-slicing")
-    if gpu_ids:
-        args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
-    return args
-
-
 def _lod_output_paths(mesh_path: Path, basename: str, num_levels: int = 3) -> list[Path]:
     """Espera-se: {mesh_dir}/{basename}_lod0.glb … _lod{N-1}.glb."""
     d = mesh_path.parent
     return [d / f"{basename}_lod{i}.glb" for i in range(num_levels)]
-
-
-def _lod_pipeline_failed(
-    profile: GameProfile,
-    row: ManifestRow,
-    mesh_final: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    child_env: dict[str, str],
-    with_lod: bool = False,
-    text3d_bin: str | None = None,
-) -> bool:
-    """Gera triplet LOD via ``text3d lod`` subprocess (static + rigged).
-    static usam ``text3d lod``. Devolve True se falhou."""
-    if not with_lod or not row.generate_lod or not row.generate_3d:
-        return False
-    if not mesh_final.is_file():
-        return False
-    from .profile import LODProfile
-
-    lod_prof = profile.lod
-    if lod_prof is None:
-        lod_prof = LODProfile()
-
-    # --- Unified path: text3d lod subprocess (handles static + rigged) ---
-    text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
-    basename = row.id.replace("/", "_")
-
-    # Derive base stem and shape/painted paths from mesh_final
-    base_stem = mesh_final.stem
-    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented", "_collision"):
-        if base_stem.endswith(sfx):
-            base_stem = base_stem[: -len(sfx)]
-            break
-    shape_input = (mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}").resolve()
-    painted_input = (mesh_final.parent / f"{base_stem}_painted{mesh_final.suffix}").resolve()
-    lod_input = shape_input if shape_input.is_file() else mesh_final.resolve()
-    out_dir = mesh_final.parent.resolve()
-    has_painted = painted_input.is_file()
-
-    argv = [
-        text3d_bin,
-        "lod",
-        str(lod_input),
-        "-o",
-        str(out_dir),
-        "--basename",
-        base_stem,
-    ]
-
-    if has_painted and row.category:
-        fr = effective_face_ratio(profile, row)
-        target = get_target_faces(row.category, face_ratio=fr)
-        argv.extend(["--painted-mesh", str(painted_input), "--target-faces", str(target)])
-    else:
-        argv.extend(["--lod1-ratio", str(lod_prof.lod1_ratio), "--lod2-ratio", str(lod_prof.lod2_ratio)])
-
-    argv.extend(["--min-faces-lod1", str(lod_prof.min_faces_lod1), "--min-faces-lod2", str(lod_prof.min_faces_lod2)])
-    if lod_prof.meshfix:
-        argv.append("--meshfix")
-    # NOTE: --gpu-ids is not valid for text3d lod (CPU-only), omitted here
-    console.print(f"[cyan]⏳ LOD[/cyan] {row.id} ...")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "lod", elapsed)
-    if r.returncode == 0:
-        console.print(f"[green]✓ LOD[/green] {row.id} ({elapsed:.1f}s)")
-    if r.returncode != 0:
-        err = merge_subprocess_output(r) or "text3d lod falhou"
-        rec["status"] = "error"
-        rec["error"] = err
-        console.print(f"[red]LOD falhou[/red] {row.id}: {err[:200]}")
-        return True
-    num_levels = max(1, min(3, row.lod_levels))  # static LOD supports 1-3 levels
-    paths = _lod_output_paths(mesh_final, basename, num_levels)
-    rec["lod_paths"] = [_path_for_log(p, manifest_dir) for p in paths if p.is_file()]
-
-    return False
 
 
 def _collision_output_path(mesh_path: Path) -> Path:
@@ -447,161 +167,6 @@ def _collision_output_path(mesh_path: Path) -> Path:
     return mesh_path.parent / f"{stem}_collision{mesh_path.suffix}"
 
 
-def _collision_pipeline_failed(
-    profile: GameProfile,
-    row: ManifestRow,
-    mesh_final: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    child_env: dict[str, str],
-    with_collision: bool,
-    gpu_ids: list[int] | None = None,
-) -> bool:
-    """Corre ``text3d collision`` para gerar mesh de colisão. Devolve True se falhou."""
-    if not with_collision or not row.generate_collision or not row.generate_3d:
-        return False
-    if not mesh_final.is_file():
-        return False
-    from .profile import CollisionProfile
-
-    coll_prof = profile.collision
-    if coll_prof is None:
-        coll_prof = CollisionProfile()
-    text3d_bin = resolve_binary("TEXT3D_BIN", "text3d")
-    coll_out = _collision_output_path(mesh_final)
-    base_stem = mesh_final.stem
-    for sfx in ("_painted", "_shape", "_rigged_animated", "_rigged", "_segmented", "_collision"):
-        if base_stem.endswith(sfx):
-            base_stem = base_stem[: -len(sfx)]
-            break
-    coll_input = (mesh_final.parent / f"{base_stem}_shape{mesh_final.suffix}").resolve()
-    if not coll_input.is_file():
-        coll_input = mesh_final.resolve()
-    coll_out = coll_out.resolve()
-    argv = [
-        text3d_bin,
-        "collision",
-        str(coll_input),
-        "-o",
-        str(coll_out),
-        "--max-faces",
-        str(coll_prof.max_faces),
-    ]
-    if not coll_prof.convex_hull:
-        argv.append("--no-convex-hull")
-    console.print(f"[cyan]⏳ Collision[/cyan] {row.id} ...")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "collision", elapsed)
-    if r.returncode == 0:
-        console.print(f"[green]✓ Collision[/green] {row.id} ({elapsed:.1f}s)")
-    if r.returncode != 0:
-        err = merge_subprocess_output(r) or "text3d collision falhou"
-        rec["status"] = "error"
-        rec["error"] = err
-        console.print(f"[red]Collision falhou[/red] {row.id}: {err[:200]}")
-        return True
-    rec["collision_path"] = _path_for_log(coll_out, manifest_dir)
-    return False
-
-
-def _part3d_pipeline_failed(
-    profile: GameProfile,
-    row: ManifestRow,
-    mesh_final: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    child_env: dict[str, str],
-    part3d_bin: str | None,
-    with_parts: bool,
-    has_parts_profile: bool = False,
-    gpu_ids: list[int] | None = None,
-) -> bool:
-    """Corre ``part3d decompose`` após GLB do Text3D. Devolve True se falhou."""
-    if not with_parts or not _row_wants_parts(row, has_parts_profile) or not part3d_bin:
-        return False
-    if not row.generate_3d:
-        return False
-    if not mesh_final.is_file():
-        return False
-    p3 = _part3d_profile_effective(profile, row)  # ← Usa overrides por linha
-    out_parts, out_seg = _part3d_output_paths(mesh_final, p3)
-    seed = _seed_for_row(profile, f"{row.id}:part3d")
-    argv = _part3d_decompose_argv(
-        part3d_bin,
-        mesh_final,
-        out_parts,
-        out_seg,
-        p3,
-        seed,
-        gpu_ids=gpu_ids,
-        quality=profile.generation,
-        category=row.category,
-    )
-    console.print(f"[cyan]⏳ Part3D[/cyan] {row.id} ...")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "part3d", elapsed)
-    if r.returncode == 0:
-        console.print(f"[green]✓ Part3D[/green] {row.id} ({elapsed:.1f}s)")
-    if r.returncode != 0:
-        err = merge_subprocess_output(r) or "part3d falhou"
-        rec["status"] = "error"
-        rec["error"] = err
-        preview = merge_subprocess_output(r, max_chars=4000) or err
-        console.print(f"[red]part3d falhou[/red] {row.id}: {preview}")
-        return True
-    if p3.segment_only:
-        if not out_seg.is_file():
-            rec["status"] = "error"
-            rec["error"] = "part3d não produziu mesh segmentada"
-            console.print(f"[red]part3d sem mesh segmentada[/red] {row.id}")
-            return True
-        rec["segmented_mesh_path"] = _path_for_log(out_seg, manifest_dir)
-        return False
-    if not out_parts.is_file():
-        rec["status"] = "error"
-        rec["error"] = "part3d não produziu GLB de partes"
-        console.print(f"[red]part3d sem GLB de partes[/red] {row.id}")
-        return True
-    rec["parts_mesh_path"] = _path_for_log(out_parts, manifest_dir)
-    if out_seg.is_file():
-        rec["segmented_mesh_path"] = _path_for_log(out_seg, manifest_dir)
-    return False
-
-
-def _texture_project_pipeline_failed(
-    animator3d_bin: str,
-    mesh_final: Path,
-    out_parts: Path,
-    rec: dict[str, Any],
-    manifest_dir: Path,
-    child_env: dict[str, str],
-    gpu_ids: list[int] | None = None,
-) -> bool:
-    """Projeta textura do modelo original nas partes via ``animator3d texture-project``."""
-    out_textured = out_parts.with_name(f"{out_parts.stem}_textured{out_parts.suffix}")
-    if out_textured.is_file():
-        rec["parts_textured_mesh_path"] = _path_for_log(out_textured, manifest_dir)
-        return False
-    argv = [animator3d_bin, "texture-project", str(mesh_final), str(out_parts), "-o", str(out_textured)]
-    console.print("[cyan]⏳ Texture-project[/cyan] partes ...")
-    t0 = time.perf_counter()
-    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
-    elapsed = time.perf_counter() - t0
-    _timing_append(rec, "texture_project", elapsed)
-    if r.returncode == 0:
-        console.print(f"[green]✓ Texture-project[/green] ({elapsed:.1f}s)")
-    if r.returncode != 0:
-        err = merge_subprocess_output(r) or "texture-project falhou"
-        console.print(f"[yellow]texture-project falhou[/yellow] {rec.get('id', '?')}: {err[:200]}")
-        return True
-    rec["parts_textured_mesh_path"] = _path_for_log(out_textured, manifest_dir)
-    return False
-
-
 def _post_text3d_mesh_extras(
     profile: GameProfile,
     row: ManifestRow,
@@ -609,161 +174,64 @@ def _post_text3d_mesh_extras(
     rec: dict[str, Any],
     manifest_dir: Path,
     child_env: dict[str, str],
-    part3d_bin: str | None,
-    with_parts: bool,
     rigging3d_bin: str | None,
     with_rig: bool,
     with_animate: bool,
     animator3d_bin: str | None = None,
     has_rigging_profile: bool = False,
-    has_parts_profile: bool = False,
     gpu_ids: list[int] | None = None,
     with_lod: bool = False,
     with_collision: bool = False,
-    use_master_pipeline: bool | None = None,
     with_validate: bool | None = None,
     bake_normals: bool | None = None,
     on_progress_line: Any = None,
 ) -> bool:
-    """Define mesh_path, part3d, rigging3d, animator3d. Devolve True se algum passo falhou.
+    """Define mesh_path e corre o master pipeline (LOD0 master, transfer-weights, validate).
 
-    Quando ``use_master_pipeline=True`` corre o novo DAG (LOD0 master,
-    transfer-weights, validate). O caminho legacy (linha-a-linha de
-    text3d lod / rigging3d / animator3d) é mantido para retro-compat.
+    Devolve True se algum passo falhou. O master pipeline é agora o único
+    caminho — o antigo fluxo linha-a-linha (text3d lod / rigging3d /
+    animator3d) foi removido.
     """
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
 
-    if use_master_pipeline is None:
-        use_master_pipeline = bool(getattr(profile, "master_pipeline", False))
     if with_validate is None:
         with_validate = bool(getattr(profile, "master_validate", True))
     if bake_normals is None:
         bake_normals = bool(getattr(profile, "master_bake_normals", False))
 
-    if use_master_pipeline:
-        # Filtragem por-row: respeita ``manifest.pipeline`` (ex.: ``wooden_crate``
-        # com ``pipeline: [3d, paint, lod, collision]`` não deve correr rig).
-        # O caminho legacy fazia isto dentro de ``_rigging3d_pipeline_failed``
-        # via ``_row_wants_rig``; o master pipeline tem de o aplicar aqui.
-        row_wants_rig = _row_wants_rig(row, has_rigging_profile)
-        row_wants_animate = _row_wants_animate(row, with_rig, has_rigging_profile)
-        effective_with_rig = with_rig and row_wants_rig and (rigging3d_bin is not None)
-        effective_with_animate = with_animate and row_wants_animate and (animator3d_bin is not None)
-        mres = run_master_pipeline(
-            profile,
-            row,
-            mesh_final,
-            manifest_dir=manifest_dir,
-            child_env=child_env,
-            with_lod=with_lod,
-            with_collision=with_collision,
-            with_rig=effective_with_rig,
-            with_animate=effective_with_animate,
-            with_validate=with_validate,
-            bake_normals=bake_normals,
-            on_progress_line=on_progress_line,
-            gpu_ids=gpu_ids,
-        )
-        aggregate_master_results(mres.stages, rec)
-        if mres.lod0_path and mres.lod0_path.is_file():
-            rec["lod0_path"] = _path_for_log(mres.lod0_path, manifest_dir)
-        if mres.intermediates_dir is not None:
-            rec["intermediates_dir"] = _path_for_log(mres.intermediates_dir, manifest_dir)
-        if not mres.ok:
-            errors = [s.error for s in mres.stages if not s.ok and s.error]
-            rec["status"] = "error"
-            rec["error"] = "; ".join(errors[:3]) or "master pipeline falhou"
-            console.print(f"[red]master pipeline falhou[/red] {row.id}: {rec['error'][:200]}")
-            return True
-        return False
-
-    _lod_pipeline_failed(
+    # Filtragem por-row: respeita ``manifest.pipeline`` (ex.: ``wooden_crate``
+    # com ``pipeline: [3d, paint, lod, collision]`` não deve correr rig).
+    row_wants_rig = _row_wants_rig(row, has_rigging_profile)
+    row_wants_animate = _row_wants_animate(row, with_rig, has_rigging_profile)
+    effective_with_rig = with_rig and row_wants_rig and (rigging3d_bin is not None)
+    effective_with_animate = with_animate and row_wants_animate and (animator3d_bin is not None)
+    mres = run_master_pipeline(
         profile,
         row,
         mesh_final,
-        rec,
-        manifest_dir,
-        child_env,
+        manifest_dir=manifest_dir,
+        child_env=child_env,
         with_lod=with_lod,
-    )
-    _collision_pipeline_failed(
-        profile,
-        row,
-        mesh_final,
-        rec,
-        manifest_dir,
-        child_env,
         with_collision=with_collision,
+        with_rig=effective_with_rig,
+        with_animate=effective_with_animate,
+        with_validate=with_validate,
+        bake_normals=bake_normals,
+        on_progress_line=on_progress_line,
         gpu_ids=gpu_ids,
     )
-    part3d_fail = _part3d_pipeline_failed(
-        profile,
-        row,
-        mesh_final,
-        rec,
-        manifest_dir,
-        child_env,
-        part3d_bin,
-        with_parts,
-        has_parts_profile=has_parts_profile,
-        gpu_ids=gpu_ids,
-    )
-    if (
-        not part3d_fail
-        and with_parts
-        and _row_wants_parts(row, has_parts_profile)
-        and animator3d_bin
-        and mesh_final.is_file()
-    ):
-        p3 = _part3d_profile_effective(profile, row)
-        out_parts, _out_seg = _part3d_output_paths(mesh_final, p3)
-        if out_parts.is_file():
-            tp_fail = _texture_project_pipeline_failed(
-                animator3d_bin,
-                mesh_final,
-                out_parts,
-                rec,
-                manifest_dir,
-                child_env,
-                gpu_ids=gpu_ids,
-            )
-            if tp_fail:
-                console.print(f"[yellow]texture-project falhou (não bloqueante)[/yellow] {row.id}")
-    rig_mesh_in = mesh_final
-    rec["rig_input_path"] = _path_for_log(rig_mesh_in, manifest_dir)
-    rig_fail = _rigging3d_pipeline_failed(
-        profile,
-        row,
-        rig_mesh_in,
-        rec,
-        manifest_dir,
-        child_env,
-        rigging3d_bin,
-        with_rig,
-        has_rigging_profile=has_rigging_profile,
-        gpu_ids=gpu_ids,
-    )
-    if rig_fail:
+    aggregate_master_results(mres.stages, rec)
+    if mres.lod0_path and mres.lod0_path.is_file():
+        rec["lod0_path"] = _path_for_log(mres.lod0_path, manifest_dir)
+    if mres.intermediates_dir is not None:
+        rec["intermediates_dir"] = _path_for_log(mres.intermediates_dir, manifest_dir)
+    if not mres.ok:
+        errors = [s.error for s in mres.stages if not s.ok and s.error]
+        rec["status"] = "error"
+        rec["error"] = "; ".join(errors[:3]) or "master pipeline falhou"
+        console.print(f"[red]master pipeline falhou[/red] {row.id}: {rec['error'][:200]}")
         return True
-    # LOD, Collision, and Part3D failures are non-blocking — they already log warnings internally
-    rg = profile.rigging3d
-    sfx = rg.output_suffix if rg else "_rigged"
-    rig_out = _rigging3d_output_path(rig_mesh_in, sfx)
-    anim_out = _animator3d_output_path(rig_out)
-    anim_fail = _animator3d_game_pack_failed(
-        profile,
-        row,
-        rig_out,
-        anim_out,
-        rec,
-        manifest_dir,
-        child_env,
-        with_animate,
-        with_rig,
-        has_rigging_profile=has_rigging_profile,
-        gpu_ids=gpu_ids,
-    )
-    return anim_fail
+    return False
 
 
 def _try_paint3d_bin() -> str | None:
