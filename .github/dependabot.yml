@@ -44,12 +44,6 @@ updates:
     open-pull-requests-limit: 2
 
   - package-ecosystem: "pip"
-    directory: "/Part3D"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 2
-
-  - package-ecosystem: "pip"
     directory: "/Text2Sound"
     schedule:
       interval: "weekly"

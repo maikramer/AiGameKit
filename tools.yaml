@@ -19,7 +19,7 @@ tools:
     description: "Unified Model Server — supervisor único de VRAM para todas as ferramentas GPU"
     min_python: [3, 13]
     install_order: -3
-    install_before: [text2d, text2icon, text3d, paint3d, part3d, texture2d, skymap2d, text2sound, terrain3d]
+    install_before: [text2d, text2icon, text3d, paint3d, texture2d, skymap2d, text2sound, terrain3d]
 
   text2d:
     name: "Text2D"
@@ -151,18 +151,6 @@ tools:
     python_module: animator3d
     description: "Animação 3D com bpy (Blender Python) — complementa Rigging3D"
     min_python: [3, 13]
-
-  part3d:
-    name: "Part3D"
-    kind: python
-    folder: Part3D
-    cli_name: part3d
-    python_module: part3d
-    description: "Decomposição semântica de meshes 3D via Hunyuan3D-Part"
-    min_python: [3, 13]
-    extra_aliases: [part3d-decompose]
-    needs_pytorch: true
-    post_install: gamedev_shared.installer.clified_hooks:part3d_post_install
 
   paint3d:
     name: "Paint3D"

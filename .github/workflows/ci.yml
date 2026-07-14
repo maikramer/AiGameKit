@@ -54,8 +54,6 @@ jobs:
           - package: Rigging3D
             python-version: "3.13"
           # Torch on CPU
-          - package: Part3D
-            python-version: "3.13"
           - package: Text2Sound
             python-version: "3.13"
           # GameDevLab

@@ -7,7 +7,6 @@ from .base import (
 )
 from .clified_hooks import (
     paint3d_post_install,
-    part3d_post_install,
     rigging3d_post_install,
     text2sound_custom_install,
     text3d_post_install,
@@ -24,7 +23,6 @@ __all__ = [
     "list_available_tools",
     "main",
     "paint3d_post_install",
-    "part3d_post_install",
     "path_env_contains_dir",
     "rigging3d_post_install",
     "text2sound_custom_install",

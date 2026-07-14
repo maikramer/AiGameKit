@@ -319,7 +319,6 @@ def doctor_cmd() -> None:
         "skymap2d": "skymap2d.generator",
         "text3d": "text3d.generator",
         "paint3d": "paint3d.painter",
-        "part3d": "part3d.pipeline",
         "text2sound": "text2sound.generator",
         "terrain3d": "terrain3d.generator",
     }
