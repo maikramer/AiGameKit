@@ -29,6 +29,7 @@ import {
   StatusEffectsPlugin,
   RpgAiPlugin,
   SpawnGatePlugin,
+  ParticlesPlugin,
   // HUD / loading
   mountLoadingScreen,
   // i18n
@@ -929,6 +930,7 @@ async function bootstrap(): Promise<void> {
   withPlugin(StatusEffectsPlugin);
   withPlugin(RpgAiPlugin);
   withPlugin(SpawnGatePlugin);
+  withPlugin(ParticlesPlugin);
   withPlugin(NavMeshPlugin);
   withPlugin(SaveLoadPlugin);
   withPlugin(I18nPlugin);

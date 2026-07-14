@@ -1,0 +1,179 @@
+assets:
+- id: npc_merchant
+  idea: friendly cartoon merchant NPC wearing brown apron over green tunic, round
+    belly, warm smile, short chubby proportions, fantasy shopkeeper
+  kind: character
+  category: humanoid
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: slime
+  idea: cute round blue cartoon slime monster with big expressive eyes, happy bubbly
+    shape, translucent jelly body, small sparkle highlights
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 2
+- id: wolf
+  idea: cartoon dark forest wolf with grey-black fur, yellow glowing eyes, snarling
+    fangs, lean muscular body, fantasy predator creature, quadruped
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: shade
+  idea: cartoon shadow shade creature, floating dark ghostly wraith with glowing purple
+    eyes, tattered cloak, ethereal smoky body, fantasy undead spirit
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: witch_boss
+  idea: menacing cartoon witch boss with long hooked nose, pointed black hat, tattered
+    dark purple robe, glowing green hands, sinister grin, dark fantasy forest witch,
+    standing upright, game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  generation: high
+- id: scorpion
+  idea: cartoon desert scorpion with segmented tan-orange tail ending in glowing red
+    stinger, large pincers, eight legs, armored carapace, fantasy desert predator
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: bandit
+  idea: cartoon desert bandit with tan hood and face mask, leather armor scraps, curved
+    scimitar on belt, dark eyes visible, fantasy rogue enemy, standing upright
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: sand_wyrm_boss
+  idea: massive cartoon sand wyrm boss emerging from desert dune, segmented worm body
+    with circular toothy maw, small eyes, armored sand-colored plates, intimidating
+    fantasy desert boss, game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  generation: high
+- id: bogling
+  idea: small cartoon swamp bogling creature with round green-brown body, big yellow
+    eyes, webbed feet, dripping moss on back, mischievous fantasy amphibian monster
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: mosquito
+  idea: cartoon giant swamp mosquito with thin legs, narrow body, long needle nose,
+    small transparent wings, fantasy swamp flying pest insect
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+- id: bog_warden_boss
+  idea: large cartoon bog warden elemental boss made of swamp mud, vines, and glowing
+    green eyes, mossy stone core, dripping water, intimidating fantasy swamp boss,
+    game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 1
+  generation: high
+- id: boss_ogre
+  idea: menacing large fantasy RPG boss monster, muscular green ogre troll with sharp
+    teeth and small tusks, hunched powerful build, crude stone club in one hand, thick
+    dark armor scraps, intimidating stance, cartoon stylized but bigger and scarier
+    than a goblin, standing upright, game asset
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 2
+  generation: fast
+- id: goblin
+  idea: small green cartoon goblin with big pointy ears, mischievous grin, wearing
+    ragged purple vest, hunched posture, fantasy enemy creature
+  kind: character
+  category: creature
+  pipeline:
+  - 3d
+  - paint
+  - rig
+  - animate
+  - lod
+  - collision
+  lod_levels: 2

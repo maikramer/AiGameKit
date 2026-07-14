@@ -9,12 +9,17 @@
     "prebuild": "node scripts/fetch-assets.mjs",
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "optimize-glbs": "node scripts/compress-glbs.mjs"
   },
   "dependencies": {
     "three": "^0.185.0"
   },
   "devDependencies": {
+    "@gltf-transform/core": "^4.4.1",
+    "@gltf-transform/extensions": "^4.4.1",
+    "@gltf-transform/functions": "^4.4.1",
+    "meshoptimizer": "^1.2.0",
     "typescript": "^6.0.3",
     "vite": "^8.1.0"
   }
