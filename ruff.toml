@@ -6,7 +6,6 @@ src = [
     "Text2Icon/src",
     "Text3D/src",
     "Paint3D/src",
-    "Part3D/src",
     "GameAssets/src",
     "Texture2D/src",
     "Text2Sound/src",

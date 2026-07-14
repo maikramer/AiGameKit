@@ -3,7 +3,7 @@
 As tools do monorepo têm APIs heterogéneas para carregar/usar/libertar modelos:
 
   - Text2D/Text2Icon/Texture2D/Skymap2D: ``warmup()`` / ``generate()`` / ``unload()``
-  - Part3D/Text2Sound: ``load()`` / ``generate()`` / ``unload()``
+  - Text2Sound: ``load()`` / ``generate()`` / ``unload()``
   - Text3D: ``_load_hunyuan()`` / ``generate()`` / ``unload_hunyuan()``
   - Paint3D: context-managed (``__enter__`` / ``__exit__``)
   - Terrain3D: função procedural ``generate_terrain()``
