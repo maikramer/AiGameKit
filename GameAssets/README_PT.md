@@ -14,7 +14,6 @@ CLI para **batches de prompts e assets** alinhados ao estilo e à ideia do teu j
   - `PAINT3D_BIN` — executável `paint3d` ([Paint3D](../Paint3D)) quando no `game.yaml` tiveres **`text3d.texture: true`** (o batch chama `paint3d texture` após o shape; o GLB já sai PBR do Paint 2.1)
   - `TEXT2SOUND_BIN` — executável `text2sound` ([Text2Sound](../Text2Sound)) quando há linhas com **`generate_audio=true`** no manifest (e não usas `--skip-audio`)
   - `MATERIALIZE_BIN` — opcional; **mapas PBR a partir da difusa** com Texture2D + `texture2d.materialize` (ver [Materialize](../Materialize) e [Text3D/docs/PBR_MATERIALIZE.md](../Text3D/docs/PBR_MATERIALIZE.md))
-  - `PART3D_BIN` — executável `part3d` ([Part3D](../Part3D)) quando Part3D está activo via bloco `part3d` no perfil ou campo **`generate_parts=true`** no manifest
   - `ANIMATOR3D_BIN` — executável `animator3d` ([Animator3D](../Animator3D)) após rig com sucesso (`animator3d game-pack`; auto-detetado quando o bloco `rigging3d` existe no perfil — ver secção do batch abaixo)
 
 ## Debug / laboratório
@@ -131,17 +130,16 @@ gameassets batch --profile game.yaml --manifest manifest.yaml \
 gameassets batch --profile game.yaml --manifest manifest.yaml --gpu-ids 0,1
 ```
 
-- As etapas do pipeline (3D, rig, parts, animate) são **auto-detetadas** a partir dos campos do manifest YAML (`generate_3d`, `generate_rig`, `generate_parts`, `generate_animate`) e dos blocos de perfil em `game.yaml` (`rigging3d`, `part3d`, `animator3d`). Usa **`--no-3d`**, **`--no-rig`**, **`--no-parts`**, **`--no-animate`** para desativar explicitamente uma etapa. Por exemplo, um bloco `rigging3d: {}` em `game.yaml` activa o rig para personagens mesmo sem `generate_rig=true` no manifest.
+- As etapas do pipeline (3D, rig, animate) são **auto-detetadas** a partir dos campos do manifest YAML (`generate_3d`, `generate_rig`, `generate_animate`) e dos blocos de perfil em `game.yaml` (`rigging3d`, `animator3d`). Usa **`--no-3d`**, **`--no-rig`**, **`--no-animate`** para desativar explicitamente uma etapa. Por exemplo, um bloco `rigging3d: {}` em `game.yaml` activa o rig para personagens mesmo sem `generate_rig=true` no manifest.
 - Com 3D activo e um bloco **`rigging3d`** no perfil (ou `generate_rig=true`), linhas elegíveis para rig chamam o **Rigging3D**; o GLB rigado aparece no log em **`rig_mesh_path`** (sufixo configurável em `rigging3d.output_suffix` no `game.yaml`). Personagens (`kind: character`) são auto-rigadas quando o perfil tem um bloco `rigging3d`. Requer **`RIGGING3D_BIN`** ou `rigging3d` no `PATH`.
 - Após rig com sucesso, o batch corre **`animator3d game-pack`** para linhas elegíveis para animação: **`generate_animate=true`** explícito, ou linhas rigadas quando o perfil tem o bloco **`animator3d`** (preset por defeito `humanoid`). Requer **`ANIMATOR3D_BIN`** ou `animator3d` no `PATH`. Ver [Animator3D após rig](../docs/ANIMATOR3D_AFTER_RIG.md).
-- Com 3D activo e um bloco **`part3d`** no perfil (ou `generate_parts=true`), linhas elegíveis chamam o **Part3D** (`part3d decompose`) sobre o GLB do Text3D **antes** do rig: saídas **`parts_mesh_path`** (cena multi-parte) e **`segmented_mesh_path`** (malha com cores por parte), junto ao GLB principal; opções em **`part3d`** no `game.yaml`. Requer **`PART3D_BIN`** ou `part3d` no `PATH`.
 - `--dry-run` mostra os comandos sem executar.
 - `--fail-fast` para no primeiro erro (defeito: continua).
 - `--log batch-log.jsonl` acrescenta um JSON por linha processada, incluindo **`timings_sec`** (segundos, tempos de parede por subprocesso quando aplicável), por exemplo: `image_text2d` ou `image_texture2d`, `materialize_diffuse`, `text2sound` (quando `generate_audio`), `text3d` (passo único), ou `text3d_shape` / `paint3d_texture` (com `phased_batch` e `text3d.texture`). Registos incluem **`audio_path`** / **`audio_error`** quando aplicável. Linhas **Texture2D** incluem **`texture2d_api`: true** (custo da API Hugging Face não é calculado pelo GameAssets).
 - **Lock exclusivo:** na pasta do manifest é criado `.gameassets_batch.lock` (ficheiro `fcntl`) para **impedir dois batches na mesma pasta** — evita disputa de VRAM entre `text2d`/`text3d` em paralelo. Se o PID no lock já não existir, o lock é recuperado. `--skip-batch-lock` desliga (avançado).
 - **VRAM:** antes da execução, se `nvidia-smi` existir e a VRAM livre for inferior a ~1,8 GiB, mostra-se um aviso. `--skip-gpu-preflight` desliga o aviso.
 - **CUDA:** os subprocessos `text2d`/`text3d` recebem `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` se a variável ainda não estiver definida no ambiente (reduz falhas por fragmentação).
-- **Multi-GPU:** `--gpu-ids 0,1` auto-deteta as GPUs disponíveis via `nvidia-smi` (ou aceita IDs explícitos separados por vírgula) e propaga `CUDA_VISIBLE_DEVICES` e `--gpu-ids` a todos os sub-tools (text2d, text3d, paint3d, part3d, rigging3d, animator3d).
+- **Multi-GPU:** `--gpu-ids 0,1` auto-deteta as GPUs disponíveis via `nvidia-smi` (ou aceita IDs explícitos separados por vírgula) e propaga `CUDA_VISIBLE_DEVICES` e `--gpu-ids` a todos os sub-tools (text2d, text3d, paint3d, rigging3d, animator3d).
 
 ### Text2Sound (`generate_audio`)
 
@@ -222,7 +220,6 @@ Campos principais:
 | `text3d` | Bloco opcional: `preset`, `texture` (omitido = **`true`**), `steps` / `octree_resolution` / `num_chunks` (alternativa mútua a `preset`), `mc_level`, `phased_batch`, `allow_shared_gpu`, `gpu_kill_others`, `full_gpu`, `model_subfolder`. **Tuning Paint3D:** `paint_max_views`, `paint_view_resolution`, `paint_render_size`, `paint_texture_size`, `paint_bake_exp` (defeito 6 — costuras mais nítidas) |
 | `rigging3d` | Bloco opcional (rig após Text3D): `output_suffix` (ex. `_rigged`), `root` (código do pacote Rigging3D), `python` (interprete). Presença activa rig para personagens; combina com `generate_rig=true` no manifest para linhas não-personagem |
 | `animator3d` | Bloco opcional (**Animator3D** após rig): `preset` (`humanoid` \| `creature` \| `flying`, …). Presença activa animação automática após rig com sucesso. Requer `animator3d` no `PATH` ou `ANIMATOR3D_BIN` |
-| `part3d` | Bloco opcional (Part3D após Text3D, antes do rig): `steps`, `octree_resolution`, `num_chunks`, `segment_only`, `no_cpu_offload`, `verbose`, `parts_suffix`, `segmented_suffix`. Presença activa parts para linhas 3D; combina com `generate_parts=true` no manifest para controlo explícito por linha |
 
 Todos os sub-tools também aceitam `--gpu-ids` propagado pelo comando batch.
 
@@ -239,7 +236,7 @@ Podes criar `presets.local.yaml` ao lado do perfil e passar `--presets-local pre
 
 ## Manifest (`manifest.yaml`)
 
-Cabeçalhos: **`id`**, **`idea`** (obrigatórios); opcionais: **`kind`** (`prop`, `character`, `environment`), **`generate_3d`**, **`generate_audio`**, **`generate_rig`** (`true`/`false`/… — rig do GLB após Text3D; auto-activado para personagens quando o bloco `rigging3d` existe no perfil), **`generate_animate`** (`true`/`false`/… — correr **Animator3D** após rig; auto-activado para linhas rigadas quando o bloco `animator3d` existe no perfil), **`generate_parts`** (`true`/`false`/… — decomposição Part3D após Text3D; auto-activado quando o bloco `part3d` existe no perfil), **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`) para sobrepor o `image_source` do `game.yaml` nessa linha. Com `path_layout: flat`, usa `id` com barra, por exemplo `Crystals/shard_blue`, para gravar ficheiros dentro de `Crystals/`.
+Cabeçalhos: **`id`**, **`idea`** (obrigatórios); opcionais: **`kind`** (`prop`, `character`, `environment`), **`generate_3d`**, **`generate_audio`**, **`generate_rig`** (`true`/`false`/… — rig do GLB após Text3D; auto-activado para personagens quando o bloco `rigging3d` existe no perfil), **`generate_animate`** (`true`/`false`/… — correr **Animator3D** após rig; auto-activado para linhas rigadas quando o bloco `animator3d` existe no perfil), **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`) para sobrepor o `image_source` do `game.yaml` nessa linha. Com `path_layout: flat`, usa `id` com barra, por exemplo `Crystals/shard_blue`, para gravar ficheiros dentro de `Crystals/`.
 
 ## Estrutura
 
@@ -275,10 +272,9 @@ GameAssets/
 | `MATERIALIZE_BIN` | Caminho para o binário `materialize` (só com Texture2D + `texture2d.materialize`) |
 | `RIGGING3D_BIN` | Caminho para `rigging3d` (ou `python -m rigging3d`) quando o rig está activo |
 | `ANIMATOR3D_BIN` | Caminho para `animator3d` quando a animação está activa |
-| `PART3D_BIN` | Caminho para `part3d` (ou `python -m part3d`) quando as partes estão activas |
 | `PYTORCH_CUDA_ALLOC_CONF` | Auto-definida como `expandable_segments:True` se vazia (reduz fragmentação CUDA) |
 
 ## Licença
 
 - **Código:** MIT (alinhado ao resto do monorepo).
-- **Modelos invocados** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `part3d`, `rigging3d`): cada ferramenta descarrega ou usa pesos com licenças próprias (FLUX, Tencent Hunyuan, Stability Audio, UniRig, etc.). **Não** confundir a MIT do `gameassets` com a licença dos checkpoints. Tabela e notas: [README do monorepo — Licenças](../README_PT.md).
+- **Modelos invocados** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `rigging3d`): cada ferramenta descarrega ou usa pesos com licenças próprias (FLUX, Tencent Hunyuan, Stability Audio, UniRig, etc.). **Não** confundir a MIT do `gameassets` com a licença dos checkpoints. Tabela e notas: [README do monorepo — Licenças](../README_PT.md).

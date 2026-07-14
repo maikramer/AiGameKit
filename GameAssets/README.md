@@ -309,14 +309,13 @@ Copy GLBs, audio, textures, and PBR maps from `output_dir` to a Vite `public/` d
 | `--copy / --symlink` | Copy files (default) or create symlinks |
 | `--prefer-animated / --no-prefer-animated` | Prefer animated GLB (default: on) |
 | `--prefer-rigged / --no-prefer-rigged` | Prefer rigged GLB (default: on) |
-| `--prefer-parts / --no-prefer-parts` | Prefer parts GLB (default: off) |
 | `--with-textures / --no-with-textures` | Also copy 2D PNGs |
 | `--audio-format` | `copy` (default), `wav`, `ogg` |
 | `--sfx-sample-rate` | OGG sample rate for SFX (default: 22050) |
 | `--bgm-sample-rate` | OGG sample rate for BGM (default: 44100) |
 | `--dry-run` | Show manifest JSON without writing files |
 
-**Mesh selection priority:** `animated` > `rigged` > `parts` > `base`
+**Mesh selection priority:** `animated` > `rigged` > `base`
 
 **Output layout:**
 
@@ -435,7 +434,7 @@ assets:
   - id: chest_01                        # REQUIRED — unique identifier
     idea: "wooden chest with gold locks" # REQUIRED — description
     kind: prop                          # prop | character | environment
-    pipeline: [3d, audio, rig, animate, parts, lod, collision]
+    pipeline: [3d, audio, rig, animate, lod, collision]
     image_source: texture2d             # text2d | texture2d | skymap2d
     category: humanoid                  # Asset category (drives hints/params)
     lod_levels: 3                       # Number of LOD levels (default: 3)
@@ -449,12 +448,6 @@ assets:
       preset: null
       steps: null
       cfg_scale: null
-
-    # Per-row Part3D config
-    part3d:
-      steps: 50
-      octree_resolution: 256
-      segment_only: false
 ```
 
 ### ManifestRow Fields
@@ -464,7 +457,7 @@ assets:
 | `id` | `str` | **required** | Unique asset identifier (may include subpaths, e.g., `Props/crate_01`) |
 | `idea` | `str` | **required** | Natural language description |
 | `kind` | `str` | `None` | `prop`, `character`, `environment` |
-| `pipeline` | `list[str]` | `[]` | Pipeline keywords: `3d`, `audio`, `rig`, `animate`, `parts`, `lod`, `collision` |
+| `pipeline` | `list[str]` | `[]` | Pipeline keywords: `3d`, `audio`, `rig`, `animate`, `lod`, `collision` |
 | `image_source` | `str` | `None` | Override profile `image_source` for this row (`text2d` / `texture2d` / `skymap2d`) |
 | `category` | `str` | `""` | Asset category (e.g., `humanoid`, `chest`, `weapon`) |
 | `lod_levels` | `int` | `3` | Number of LOD levels to generate |
@@ -475,9 +468,6 @@ assets:
 | `audio.preset` | `str` | `None` | Text2Sound preset |
 | `audio.steps` | `int` | `None` | Inference steps |
 | `audio.cfg_scale` | `float` | `None` | CFG scale |
-| `part3d.steps` | `int` | `None` | Part3D inference steps |
-| `part3d.octree_resolution` | `int` | `None` | Part3D octree resolution |
-| `part3d.segment_only` | `bool` | `None` | Only P3-SAM (no X-Part multi-part GLB) |
 
 ### Pipeline Keywords
 
@@ -487,7 +477,6 @@ assets:
 | `audio` | Audio generation | Text2Sound |
 | `rig` | Auto-rigging | Rigging3D |
 | `animate` | Animation clips | Animator3D |
-| `parts` | Semantic decomposition | Part3D |
 | `lod` | Level of detail | Text3D `lod` |
 | `collision` | Collision mesh | Text3D `collision` |
 
@@ -659,25 +648,6 @@ Options for Animator3D `game-pack` after rigging.
 
 > **Presence** of an `animator3d` block enables auto-animation after successful rig.
 
-#### `part3d` — Part3DProfile
-
-Options for Part3D semantic decomposition after Text3D, before rigging.
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `octree_resolution` | `int` | `None` | Octree resolution |
-| `steps` | `int` | `None` | Inference steps |
-| `num_chunks` | `int` | `None` | Number of chunks |
-| `segment_only` | `bool` | `false` | Only P3-SAM (mesh with per-part colors, no X-Part) |
-| `verbose` | `bool` | `false` | Verbose output |
-| `parts_suffix` | `str` | `"_parts"` | Multi-part GLB suffix |
-| `segmented_suffix` | `str` | `"_segmented"` | Segmented mesh suffix |
-| `no_quantize_dit` | `bool` | `false` | Never quantize the DiT |
-| `torch_compile` | `bool` | `false` | Enable torch.compile |
-| `no_attention_slicing` | `bool` | `false` | Disable attention slicing |
-
-> **VRAM note:** `low_vram_mode`, `no_cpu_offload` and `quantization` are deprecated no-ops — Part3D auto-detects via hw-auto (`PART3D_HW_AUTO`). Existing `game.yaml` entries with these keys are silently ignored.
-
 #### `lod` — LODProfile
 
 Level-of-detail triplet generation via `text3d lod`.
@@ -781,7 +751,6 @@ Pass via `--presets-local presets-local.yaml`. Local presets merge with (and ove
 | `TEXT3D_BIN` | Text3D | Path to `text3d` executable |
 | `PAINT3D_BIN` | Paint3D | Path to `paint3d` executable (when `paint3d` block configured) |
 | `TEXT2SOUND_BIN` | Text2Sound | Path to `text2sound` executable |
-| `PART3D_BIN` | Part3D | Path to `part3d` executable |
 | `RIGGING3D_BIN` | Rigging3D | Path to `rigging3d` executable |
 | `RIGGING3D_ROOT` | Rigging3D | UniRig package root directory |
 | `RIGGING3D_PYTHON` | Rigging3D | Python interpreter for rigging |
@@ -806,8 +775,6 @@ output_dir/
 │   └── tree_01.png
 ├── meshes/
 │   ├── chest_01.glb              # Final painted mesh
-│   ├── chest_01_parts.glb        # Semantic parts (if enabled)
-│   ├── chest_01_segmented.glb    # Per-part colors (if enabled)
 │   ├── chest_01_rigged.glb       # Rigged mesh (if enabled)
 │   ├── chest_01_animated.glb     # Animated mesh (if enabled)
 │   ├── chest_01_lod0.glb         # LOD levels (if enabled)
@@ -987,4 +954,4 @@ GameAssets/
 ## License
 
 - **Code:** MIT (aligned with the rest of the monorepo).
-- **Invoked models** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `part3d`, `rigging3d`): each tool downloads or uses weights under its own license (FLUX, Tencent Hunyuan, Stability Audio, UniRig, etc.). **Do not** confuse the MIT `gameassets` code with checkpoint licenses. See [monorepo README — Licenses](../README.md).
+- **Invoked models** (`text2d`, `texture2d`, `skymap2d`, `text2sound`, `text3d`, `rigging3d`): each tool downloads or uses weights under its own license (FLUX, Tencent Hunyuan, Stability Audio, UniRig, etc.). **Do not** confuse the MIT `gameassets` code with checkpoint licenses. See [monorepo README — Licenses](../README.md).

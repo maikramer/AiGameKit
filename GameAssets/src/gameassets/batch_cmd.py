@@ -825,6 +825,18 @@ def batch_cmd(
                 )
             )
 
+    # Garantir que o UMS (Unified Model Server) está a correr — as subprocess
+    # invocations das tools (text2d, text3d, paint3d, rigging3d) delegam para o
+    # UMS se estiver activo, reutilizando modelos quentes (~7s vs ~20s cold-start).
+    # Graceful: se falhar, continuar sem UMS (cada subprocess carrega do zero).
+    if not skip_gpu_preflight:
+        try:
+            from gamedev_shared.model_server import ensure_ums_running
+
+            ensure_ums_running()
+        except Exception:
+            pass  # sem UMS — continuar com subprocess cold-start
+
     child_env = subprocess_gpu_env(gpu_ids=gpu_ids)
     if profile_tools:
         child_env = dict(child_env)
