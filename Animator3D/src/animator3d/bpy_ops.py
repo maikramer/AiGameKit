@@ -20,10 +20,19 @@ def clear_scene() -> None:
 
 
 def _decompress_meshopt_glb(src: Path) -> Path:
-    """Se ``src`` é GLB com EXT_meshopt_compression (que bpy não importa),
-    descompressa via ``gltf-transform copy`` para um tmpfile e devolve o path
-    novo. Caso contrário, devolve ``src``.
+    """Legacy helper: decompress EXT_meshopt for bpy < 5.2.
+
+    bpy 5.2+ imports meshopt natively — returns ``src`` unchanged.
+    Older bpy: ``gltf-transform copy`` to a tmpfile when ``npx`` is available.
     """
+    try:
+        from gamedev_shared.bpy_mesh import gltf_import_supports_meshopt
+
+        if gltf_import_supports_meshopt():
+            return src
+    except ImportError:
+        pass
+
     import shutil as _sh
     import subprocess as _sp
     import tempfile as _tf
@@ -58,8 +67,7 @@ def import_asset(path: Path) -> list[str]:
     before = {o.name for o in bpy.context.scene.objects}
 
     if suffix in {".glb", ".gltf"}:
-        # bpy GLTF importer não suporta EXT_meshopt_compression; descompressa
-        # silenciosamente quando preciso (no-op se já descompresso).
+        # bpy < 5.2: decompress meshopt via gltf-transform. 5.2+: native import.
         path = _decompress_meshopt_glb(path)
         bpy.ops.import_scene.gltf(filepath=str(path))
     elif suffix == ".fbx":
@@ -3026,30 +3034,43 @@ def _weld_scene_meshes() -> None:
         bpy.ops.object.mode_set(mode="OBJECT")
 
 
-def export_glb(path: Path, *, draco: bool = False) -> None:
+def export_glb(path: Path, *, draco: bool = False, meshopt: bool = False) -> None:
     bpy = _bpy()
     path = path.expanduser().resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(Exception):
         _weld_scene_meshes()
-    # ACTIONS: no Blender 5.1 preserva melhor clips múltiplos do que NLA_TRACKS
-    # quando as animações são reimportadas/empilhadas via NLA.
-    bpy.ops.export_scene.gltf(
-        filepath=str(path),
-        export_format="GLB",
-        use_selection=False,
-        export_animations=True,
-        export_animation_mode="ACTIONS",
-        export_draco_mesh_compression_enable=draco,
-        export_draco_mesh_compression_level=6 if draco else 0,
-        export_all_influences=False,
-        export_normals=True,
+    # ACTIONS: preserva melhor clips múltiplos do que NLA_TRACKS quando as
+    # animações são reimportadas/empilhadas via NLA.
+    export_kwargs: dict[str, Any] = {
+        "filepath": str(path),
+        "export_format": "GLB",
+        "use_selection": False,
+        "export_animations": True,
+        "export_animation_mode": "ACTIONS",
+        "export_skins": True,
+        "export_materials": "EXPORT",
+        "export_draco_mesh_compression_enable": draco,
+        "export_draco_mesh_compression_level": 6 if draco else 0,
+        "export_all_influences": False,
+        "export_normals": True,
         # Tangents keep the hero's normal map seam-free, including while the
         # skinned mesh deforms during animation.
-        export_tangents=True,
-        export_image_format="JPEG",
-        export_keep_originals=False,
-    )
+        "export_tangents": True,
+        "export_image_format": "AUTO",
+        "export_keep_originals": False,
+    }
+    with contextlib.suppress(Exception):
+        props = bpy.ops.export_scene.gltf.get_rna_type().properties
+        if "export_optimize_disable_viewport" in props:
+            export_kwargs["export_optimize_disable_viewport"] = True
+    if meshopt:
+        with contextlib.suppress(Exception):
+            from gamedev_shared.bpy_mesh import gltf_meshopt_export_kwargs, meshopt_runtime_available
+
+            if meshopt_runtime_available():
+                export_kwargs.update(gltf_meshopt_export_kwargs(enable=True))
+    bpy.ops.export_scene.gltf(**export_kwargs)
 
 
 def export_fbx(path: Path) -> None:
@@ -3194,6 +3215,8 @@ def project_texture_to_parts(
         export_all_influences=False,
         export_normals=True,
         export_tangents=True,
-        export_image_format="JPEG",
+        export_skins=True,
+        export_materials="EXPORT",
+        export_image_format="AUTO",
         export_keep_originals=False,
     )
