@@ -1,0 +1,10 @@
+*.jsonl
+manifest_full.csv
+.gameassets_batch.lock
+
+# Saída do batch (game.yaml output_dir → ../public/assets). Nada de binários nesta pasta.
+/meshes/
+/images/
+/audio/
+*.glb
+*.png

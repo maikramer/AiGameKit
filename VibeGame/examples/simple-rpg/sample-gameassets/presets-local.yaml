@@ -1,0 +1,7 @@
+cartoon_fantasy:
+  label: 'Cartoon fantasy RPG (stylized, vibrant)'
+  prompt_prefix: 'cartoon fantasy game asset, vibrant colors, bold outlines, stylized proportions, cel-shaded look, soft rounded shapes, Pixar-meets-Zelda aesthetic, single object centered, clean white background'
+  negative_suffix: 'blurry, photorealistic, scary, dark, gritty, noisy, realistic textures'
+  hint_2d: 'clear readable silhouette, front-facing concept art, bright saturated palette'
+  hint_3d: 'smooth mesh, soft edges, stylized proportions, game-ready'
+  hint_audio: 'cartoon game sound, playful and expressive'

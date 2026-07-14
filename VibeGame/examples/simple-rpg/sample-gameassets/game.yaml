@@ -1,0 +1,107 @@
+title: Simple RPG Demo
+genre: cartoon fantasy RPG
+tone: bright cheerful adventure, vibrant colors, playful cartoon world
+style_preset: painterly
+output_dir: ../public/assets
+path_layout: split
+images_subdir: images
+meshes_subdir: meshes
+image_ext: png
+seed_base: 7777
+generation: medium
+
+# Round 2 — master pipeline (default ON desde Round 2).
+# DAG: topology-fix → bake-master → LOD → collision → rigging →
+# transfer-weights → animate → promote (lod0=animated/rigged/painted) → validate.
+# Para forçar legacy: master_pipeline: false (ou --legacy-pipeline no batch).
+master_validate: true
+master_bake_normals: false # smart-defaults por categoria (humanoid/creature/...)
+negative_keywords:
+  - gore
+  - realistic
+  - photorealistic
+  - dark gritty
+  - scary
+text2d:
+  low_vram: true
+  width: 768
+  height: 768
+text3d:
+  export_origin: feet
+paint3d:
+  preserve_origin: true
+rigging3d:
+  output_suffix: _rigged
+animator3d:
+  preset: humanoid
+audio_subdir: audio
+text2sound:
+  quality: medium
+  audio_format: ogg
+
+# ============================================================
+# BIOME PROFILES (Round 3 — simple-rpg biomas + quests)
+# Cada bioma gera para o seu subdir próprio em meshes/<biome>/
+# para isolar assets e facilitar handoff/regen seletiva.
+# Correr com: gameassets batch --profile game.yaml --manifest manifest.<biome>
+# ============================================================
+biome_profiles:
+  dark_forest:
+    output_dir: ../public/assets/meshes/dark_forest
+    category: creature
+    generation: medium
+    negative_keywords_extra:
+      - bright
+      - sunny
+      - desert
+    text3d:
+      export_origin: feet
+  desert:
+    output_dir: ../public/assets/meshes/desert
+    category: creature
+    generation: medium
+    negative_keywords_extra:
+      - snow
+      - swamp
+      - dark forest
+    text3d:
+      export_origin: feet
+  swamp:
+    output_dir: ../public/assets/meshes/swamp
+    category: creature
+    generation: medium
+    negative_keywords_extra:
+      - clean
+      - bright
+      - desert
+    text3d:
+      export_origin: feet
+
+# Audio extra por bioma (BGM + SFX). text2sound presets custom via
+# presets-local.yaml biome_audio se necessário; default usa exploration.
+biome_audio:
+  dark_forest:
+    bgm_preset: mysterious_forest
+    sfx_extra: [sfx_wolf_howl, sfx_shade_moan]
+  desert:
+    bgm_preset: desert_winds
+    sfx_extra: [sfx_scorpion_hiss, sfx_sand_drift]
+  swamp:
+    bgm_preset: murky_swamp
+    sfx_extra: [sfx_bogling_jump, sfx_mosquito_buzz]
+
+# Portraits NPC (Text2D 2D, gerado separadamente do batch 3D).
+# Correr com: text2d generate "<prompt>" -o ../public/assets/ui/<id>.png
+portraits:
+  output_dir: ../public/assets/ui
+  style: 'cartoon fantasy RPG character portrait, painterly, square 512x512, front-facing, clean background'
+  ids:
+    - portrait_hunter
+    - portrait_witch_npc
+    - portrait_lumberjack
+    - portrait_nomad
+    - portrait_merchant_d
+    - portrait_archaeologist
+    - portrait_hermit
+    - portrait_fisherman
+    - portrait_druid
