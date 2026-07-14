@@ -1177,7 +1177,7 @@ def cmd_texture_project(
     margin: int,
     draco: bool,
 ) -> None:
-    """Projeta textura do modelo original nas partes (Part3D)."""
+    """Projeta textura do modelo original nas partes."""
     _require_bpy()
     from . import bpy_ops
 

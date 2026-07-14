@@ -39,10 +39,6 @@ profiles:
       height: 512
       steps: 14
       guidance: 3.0
-    part3d:
-      steps: 12
-      octree: 128
-      chunks: 4096
     text2sound:
       steps: 12
       cfg_scale: 4.0
@@ -113,10 +109,6 @@ profiles:
       height: 768
       steps: 20
       guidance: 3.5
-    part3d:
-      steps: 18
-      octree: 192
-      chunks: 6000
     text2sound:
       steps: 20
       cfg_scale: 5.0
@@ -187,10 +179,6 @@ profiles:
       height: 1024
       steps: 28
       guidance: 3.5
-    part3d:
-      steps: 25
-      octree: 256
-      chunks: 8000
     text2sound:
       steps: 32
       cfg_scale: 6.0
@@ -261,10 +249,6 @@ profiles:
       height: 1024
       steps: 40
       guidance: 4.0
-    part3d:
-      steps: 30
-      octree: 384
-      chunks: 20000
     text2sound:
       steps: 50
       cfg_scale: 7.0
@@ -335,10 +319,6 @@ profiles:
       height: 2048
       steps: 50
       guidance: 4.5
-    part3d:
-      steps: 40
-      octree: 512
-      chunks: 30000
     text2sound:
       steps: 100
       cfg_scale: 7.0

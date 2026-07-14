@@ -30,7 +30,7 @@ class ProfilerSession:
 
     Uso::
 
-        with ProfilerSession("part3d", log_path=Path("run.jsonl")) as s:
+        with ProfilerSession("paint3d", log_path=Path("run.jsonl")) as s:
             with s.span("load"):
                 ...
     """

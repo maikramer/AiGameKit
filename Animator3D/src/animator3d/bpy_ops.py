@@ -3083,7 +3083,7 @@ def project_texture_to_parts(
     *,
     draco: bool = False,
 ) -> None:
-    """Project textures from an original textured mesh onto Part3D part meshes via Cycles bake."""
+    """Project textures from an original textured mesh onto part meshes via Cycles bake."""
     import math
 
     bpy = _bpy()

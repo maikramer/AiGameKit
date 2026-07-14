@@ -1,7 +1,7 @@
 """Centralized SDNQ (SD.Next Quantization) module for the GameDev monorepo.
 
 Single source of truth for SDNQ quantization across all packages:
-- Tested preset configurations (based on benchmarks across Text2D, Part3D, Paint3D)
+- Tested preset configurations (based on benchmarks across Text2D, Paint3D)
 - Pre-quantization of models at install time
 - Runtime quantization application (post-load)
 - Quantized matmul acceleration for pipelines
@@ -37,7 +37,7 @@ class SDNQPreset:
     """Tested SDNQ quantization preset with all parameters for ``SDNQConfig``.
 
     These presets encode the best-tested configurations from benchmark sweeps
-    across Text2D (FLUX Klein), Part3D (Hunyuan3D-Part DiT), and Paint3D
+    across Text2D (FLUX Klein), Paint3D
     (Hunyuan3D-Paint UNet).
     """
 
