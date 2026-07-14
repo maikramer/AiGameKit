@@ -911,6 +911,26 @@ def doctor():
     import shutil as _sh
     import subprocess
 
+    try:
+        import bpy as _bpy
+
+        from gamedev_shared.bpy_mesh import meshopt_runtime_available
+
+        extra.add_row("bpy", f"OK ({_bpy.app.version_string})")
+        if meshopt_runtime_available():
+            extra.add_row(
+                "meshopt (bpy)",
+                "OK — export_meshopt_compression_enable + libmeshoptimizer",
+            )
+        else:
+            extra.add_row(
+                "meshopt (bpy)",
+                "[yellow]RNA OK mas libmeshoptimizer.so ausente — "
+                "instale libmeshoptimizer-dev (Debian/Ubuntu); fallback gltf-transform[/yellow]",
+            )
+    except Exception as exc:
+        extra.add_row("bpy / meshopt", f"[yellow]erro: {exc}[/yellow]")
+
     npx_path = _sh.which("npx")
     if npx_path:
         extra.add_row("npx", f"OK ({npx_path})")
@@ -924,18 +944,18 @@ def doctor():
             )
             if r.returncode == 0:
                 ver = (r.stdout or "").strip().splitlines()[0] if r.stdout else "?"
-                extra.add_row("@gltf-transform/cli", f"OK ({ver})")
+                extra.add_row("@gltf-transform/cli", f"OK ({ver}) — KTX2/UASTC + fallback meshopt")
             else:
                 extra.add_row(
-                    "@gltf-transform/cli", "[yellow]falhou — bake-master fará fallback sem KTX2/meshopt[/yellow]"
+                    "@gltf-transform/cli",
+                    "[yellow]falhou — bake-master sem KTX2; meshopt via bpy se disponível[/yellow]",
                 )
         except Exception as exc:
             extra.add_row("@gltf-transform/cli", f"[yellow]erro: {exc}[/yellow]")
     else:
         extra.add_row(
             "npx",
-            "[yellow]não encontrado — instale Node.js (https://nodejs.org) "
-            "para usar text3d bake-master com KTX2/meshopt[/yellow]",
+            "[yellow]não encontrado — KTX2/UASTC precisa Node.js; meshopt pode usar bpy 5.2+ nativo[/yellow]",
         )
 
     console.print(extra)

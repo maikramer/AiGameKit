@@ -6,8 +6,14 @@ plus conversion functions for trimesh compatibility at package boundaries.
 
 from __future__ import annotations
 
+import ctypes
 from pathlib import Path
 from typing import Any
+
+# Blender 5.2 LTS introduced native EXT/KHR_meshopt_compression in the glTF
+# exporter and a matching decoder in the importer. Older bpy needs an external
+# decompress step (gltf-transform) before import.
+_MESHOPT_BPY_MIN = (5, 2, 0)
 
 
 def _require_bpy() -> Any:
@@ -17,6 +23,73 @@ def _require_bpy() -> Any:
         return bpy
     except ImportError:
         raise ImportError("bpy is required but not installed. Install with: pip install bpy") from None
+
+
+def bpy_version_tuple() -> tuple[int, int, int] | None:
+    """Return ``(major, minor, patch)`` for the installed bpy, or ``None``."""
+    try:
+        import bpy
+
+        v = bpy.app.version
+        return (int(v[0]), int(v[1]), int(v[2]) if len(v) > 2 else 0)
+    except Exception:
+        return None
+
+
+def gltf_export_supports_meshopt() -> bool:
+    """True when ``bpy.ops.export_scene.gltf`` exposes meshopt compression flags."""
+    try:
+        bpy = _require_bpy()
+        props = bpy.ops.export_scene.gltf.get_rna_type().properties
+        return "export_meshopt_compression_enable" in props
+    except Exception:
+        return False
+
+
+def gltf_import_supports_meshopt() -> bool:
+    """True when this bpy can import ``EXT_meshopt_compression`` GLBs natively.
+
+    Blender 5.2+ ships a meshopt decoder in ``io_scene_gltf2``. Earlier
+    releases require decompressing via ``gltf-transform copy`` first.
+    """
+    ver = bpy_version_tuple()
+    return ver is not None and ver >= _MESHOPT_BPY_MIN
+
+
+def meshopt_runtime_available() -> bool:
+    """True when the MeshOptimizer shared library can be loaded.
+
+    The bpy wheel ships ``libbf_intern_meshopt_bridge.so`` but links against
+    system ``libmeshoptimizer.so``. On Debian/Ubuntu that comes from
+    ``libmeshoptimizer-dev`` (provides the unversioned ``.so`` symlink).
+    """
+    if not gltf_export_supports_meshopt():
+        return False
+    for name in ("libmeshoptimizer.so", "libmeshoptimizer.so.2d"):
+        try:
+            ctypes.CDLL(name)
+            return True
+        except OSError:
+            continue
+    return False
+
+
+def gltf_meshopt_export_kwargs(
+    *,
+    enable: bool = True,
+    extension: str = "EXT_meshopt_compression",
+) -> dict[str, Any]:
+    """Kwargs for ``bpy.ops.export_scene.gltf`` enabling native meshopt.
+
+    Returns an empty dict when the installed bpy lacks the RNA properties
+    (caller should fall back to ``@gltf-transform/cli meshopt``).
+    """
+    if not enable or not gltf_export_supports_meshopt():
+        return {}
+    return {
+        "export_meshopt_compression_enable": True,
+        "export_meshopt_extension": extension,
+    }
 
 
 def load_glb(path: str | Path) -> list:
@@ -141,7 +214,17 @@ def save_glb(objects: Any, path: str | Path, **kwargs: Any) -> None:
         "export_all_influences": False,
         "use_selection": use_selection,
     }
+    # Blender 5.2+: faster animated exports by skipping viewport updates.
+    with contextlib.suppress(Exception):
+        props = bpy.ops.export_scene.gltf.get_rna_type().properties
+        if "export_optimize_disable_viewport" in props:
+            export_kwargs["export_optimize_disable_viewport"] = True
+
+    meshopt = bool(kwargs.pop("meshopt", False))
+    meshopt_ext = str(kwargs.pop("meshopt_extension", "EXT_meshopt_compression"))
     export_kwargs.update(kwargs)
+    if meshopt:
+        export_kwargs.update(gltf_meshopt_export_kwargs(enable=True, extension=meshopt_ext))
 
     # Tangents are only needed to render a tangent-space *normal map*, and
     # exporting them splits vertices at UV seams. So enable them only when a

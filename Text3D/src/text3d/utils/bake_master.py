@@ -168,20 +168,27 @@ def _bake_master_bpy_session(
     bpy.context.view_layer.objects.active = arm_objs[0] if arm_objs else low
 
     output_glb.parent.mkdir(parents=True, exist_ok=True)
+    export_kwargs: dict = {
+        "filepath": str(output_glb),
+        "export_format": "GLB",
+        "use_selection": True,
+        "export_apply": True,
+        "export_normals": True,
+        "export_tangents": True,
+        "export_texcoords": True,
+        "export_materials": "EXPORT",
+        "export_image_format": "AUTO",
+        "export_animations": bool(arm_objs),
+        "export_skins": bool(arm_objs),
+    }
     try:
-        bpy.ops.export_scene.gltf(
-            filepath=str(output_glb),
-            export_format="GLB",
-            use_selection=True,
-            export_apply=True,
-            export_normals=True,
-            export_tangents=True,
-            export_texcoords=True,
-            export_materials="EXPORT",
-            export_image_format="AUTO",
-            export_animations=bool(arm_objs),
-            export_skins=bool(arm_objs),
-        )
+        props = bpy.ops.export_scene.gltf.get_rna_type().properties
+        if "export_optimize_disable_viewport" in props:
+            export_kwargs["export_optimize_disable_viewport"] = True
+    except Exception:
+        pass
+    try:
+        bpy.ops.export_scene.gltf(**export_kwargs)
     except Exception as exc:
         log.warning("bake-master: export bpy falhou: %s", exc)
         if decimated_glb != output_glb:

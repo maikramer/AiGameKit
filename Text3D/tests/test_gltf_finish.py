@@ -23,12 +23,21 @@ def test_finish_result_has_all_flags() -> None:
     assert r.prune_applied is False
     assert r.ktx2_applied is False
     assert r.meshopt_applied is False
+    assert r.meshopt_backend == ""
     assert r.fully_optimized() is False
     r.dedup_applied = True
     r.prune_applied = True
     r.ktx2_applied = True
     r.meshopt_applied = True
+    r.meshopt_backend = "bpy"
     assert r.fully_optimized() is True
+
+
+def test_meshopt_bpy_helpers_importable() -> None:
+    from text3d.utils.gltf_finish import _apply_meshopt_bpy, _glb_has_meshopt
+
+    assert callable(_apply_meshopt_bpy)
+    assert callable(_glb_has_meshopt)
 
 
 def test_finish_graceful_when_input_missing(tmp_path: Path) -> None:
