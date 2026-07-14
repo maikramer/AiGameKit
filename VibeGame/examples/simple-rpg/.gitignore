@@ -11,3 +11,7 @@ public/assets/meshes/_city_gen/
 public/assets/meshes/*.bak
 public/assets/meshes/*.pre_leftmul.bak
 public/assets/meshes/*.orig
+
+# Screenshots de debug / relatórios de build (não versionar)
+*.jpeg
+compress-report.json
