@@ -11,7 +11,7 @@ import {
 import { spawnGroupParser } from './parser';
 import { SpawnExclusion } from './occupancy';
 import { TerrainPlaceSystem } from './place-system';
-import { TerrainSpawnSystem } from './systems';
+import { TerrainSpawnBoundsCatchUpSystem, TerrainSpawnSystem } from './systems';
 import { SpawnReadyGateSystem } from './ready-gate';
 
 export const SpawnerPlugin: Plugin = {
@@ -22,7 +22,12 @@ export const SpawnerPlugin: Plugin = {
     entitySpawnerRecipe,
     spawnExclusionRecipe,
   ],
-  systems: [TerrainSpawnSystem, TerrainPlaceSystem, SpawnReadyGateSystem],
+  systems: [
+    TerrainSpawnSystem,
+    TerrainSpawnBoundsCatchUpSystem,
+    TerrainPlaceSystem,
+    SpawnReadyGateSystem,
+  ],
   components: {
     spawnerPending: SpawnerPending,
     placePending: PlacePending,
@@ -46,6 +51,9 @@ export const SpawnerPlugin: Plugin = {
       terrainSpawned: {
         yOffset: 0,
         surfaceEpsilon: 0.75,
+        aabbPending: 0,
+        scaleY: 1,
+        normalY: 1,
       },
       'spawn-exclusion': {
         x: 0,

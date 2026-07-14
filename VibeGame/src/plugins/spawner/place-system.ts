@@ -8,7 +8,11 @@ import { TerrainSpawned } from './components';
 import type { GroupSpawnDefaults } from './profiles';
 import { getPlacementSpecs } from './place-context';
 import { spawnTemplateAtTerrain } from './spawn-template';
-import { isNormalWithinSlopeLimit, sampleTerrainSurface } from './surface';
+import {
+  isGroundMutationPending,
+  isNormalWithinSlopeLimit,
+  sampleTerrainSurface,
+} from './surface';
 import { composeSpawnRotation } from './transform-merge';
 import { Transform, WorldTransform } from '../transforms/components';
 import { Collider, ColliderShape, Rigidbody } from '../physics/components';
@@ -32,6 +36,7 @@ function isTerrainHeightmapPending(state: State): boolean {
   }
   return false;
 }
+
 
 function anchorOffset(
   state: State,
@@ -63,12 +68,14 @@ function applyRootPlacement(
   wz: number,
   normal: THREE.Vector3
 ): void {
-  const euler = composeSpawnRotation(
-    normal,
-    spawn.alignToTerrain,
-    0,
-    [0, 0, 0]
-  );
+  // Authored rotation (transform="rotation: …", degrees) composes with the
+  // terrain alignment instead of being discarded — a placed house rotated to
+  // face the plaza must keep its yaw.
+  const euler = composeSpawnRotation(normal, spawn.alignToTerrain, 0, [
+    Transform.eulerX[eid],
+    Transform.eulerY[eid],
+    Transform.eulerZ[eid],
+  ]);
   Transform.posX[eid] = wx;
   Transform.posY[eid] = wy + spawn.baseYOffset;
   Transform.posZ[eid] = wz;
@@ -152,9 +159,10 @@ export const TerrainPlaceSystem: System = {
     const specs = getPlacementSpecs(state);
     if (specs.size === 0) return;
 
-    // Wait for the heightmap to decode before placing, else entities land on the
-    // flat placeholder surface and get buried once the real terrain rises.
-    if (isTerrainHeightmapPending(state)) {
+    // Wait for the heightmap to decode AND for pads/water carves to stamp
+    // before placing, else entities land on the stale surface and get buried
+    // (or float) once the real ground settles.
+    if (isTerrainHeightmapPending(state) || isGroundMutationPending(state)) {
       const deferred = _placeDeferByState.get(state) ?? 0;
       if (deferred < MAX_PLACE_HEIGHTMAP_DEFER_FRAMES) {
         _placeDeferByState.set(state, deferred + 1);

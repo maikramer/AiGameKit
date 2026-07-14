@@ -6,6 +6,7 @@ import { PlacePending, SpawnerPending, TerrainSpawned } from './components';
 import { getSpawnGroupSpecs } from './context';
 import { spawnTemplateAtTerrain } from './spawn-template';
 import {
+  isGroundMutationPending,
   isNormalWithinSlopeLimit,
   sampleTerrainSurface,
   type TerrainSurfaceSample,
@@ -13,7 +14,11 @@ import {
 import type { SpawnGroupSpec, SpawnTemplateSpec } from './types';
 import { TransformHierarchySystem } from '../transforms';
 import { WorldTransform } from '../transforms/components';
-import { getGltfLocalAABB } from '../gltf-xml/gltf-bounds-cache';
+import {
+  getGltfLocalAABB,
+  getGltfLocalYBounds,
+} from '../gltf-xml/gltf-bounds-cache';
+import { getAabbPendingUrls } from './bounds-context';
 import { isPointNearWater, waterBodyAt } from '../water/registry';
 import {
   SpawnExclusion,
@@ -190,9 +195,10 @@ export const TerrainSpawnSystem: System = {
     const specs = getSpawnGroupSpecs(state);
     if (specs.size === 0) return;
 
-    // Defer spawning until the terrain heightmap has decoded, otherwise entities
-    // get placed on the flat placeholder and end up buried when terrain rises.
-    if (isTerrainHeightmapPending(state)) {
+    // Defer spawning until the terrain heightmap has decoded and pads/water
+    // carves have stamped, otherwise entities get placed on the stale surface
+    // and end up buried (or floating) when the real ground settles.
+    if (isTerrainHeightmapPending(state) || isGroundMutationPending(state)) {
       if (
         spawnerState.spawnHeightmapDeferFrames <
         MAX_SPAWN_HEIGHTMAP_DEFER_FRAMES
@@ -385,6 +391,58 @@ export const TerrainSpawnSystem: System = {
       }
 
       SpawnerPending.spawned[eid] = 1;
+    }
+  },
+};
+
+/**
+ * Applies the deferred AABB base lift for props spawned with
+ * `ground-align="aabb"` before their GLB bounds had cached.
+ *
+ * `spawnTemplateAtTerrain` writes `aabbPending=1` + the template URL on the
+ * entity when the bounds weren't ready. Each frame this system re-checks the
+ * bounds cache: once present it rewrites `Transform.posY` to add the missing
+ * `normalY * (-minY * scaleY)` lift (matching what the spawn would have done)
+ * and clears the flag, so the prop stops floating without a scene reload.
+ *
+ * Only `Transform.posY` is touched — static props don't run a character
+ * controller, and the initial `mirrorPoseToRigidbody` already placed any
+ * Fixed body. Rewriting a sleeping body's Y here would desync it.
+ */
+export const TerrainSpawnBoundsCatchUpSystem: System = {
+  group: 'simulation',
+  after: [TerrainSpawnSystem],
+  update(state) {
+    if (state.headless) return;
+    const urls = getAabbPendingUrls(state);
+    if (urls.size === 0) return;
+
+    for (const eid of terrainSpawnedQuery(state.world)) {
+      if (TerrainSpawned.aabbPending[eid] !== 1) continue;
+      const url = urls.get(eid);
+      if (!url) {
+        TerrainSpawned.aabbPending[eid] = 0;
+        continue;
+      }
+      const b = getGltfLocalYBounds(url);
+      if (!b) continue; // still in flight; try again next frame
+
+      const scaleY = TerrainSpawned.scaleY[eid] || 1;
+      const normalY = TerrainSpawned.normalY[eid] || 1;
+      const lift = normalY * (-b.minY * scaleY);
+      Transform.posY[eid] += lift;
+      Transform.dirty[eid] = 1;
+
+      TerrainSpawned.aabbPending[eid] = 0;
+      urls.delete(eid);
+    }
+
+    // Drop any orphaned URL entries whose entity lost TerrainSpawned.
+    if (urls.size > 0) {
+      const alive = new Set(terrainSpawnedQuery(state.world));
+      for (const key of urls.keys()) {
+        if (!alive.has(key)) urls.delete(key);
+      }
     }
   },
 };
