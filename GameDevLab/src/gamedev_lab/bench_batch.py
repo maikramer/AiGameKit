@@ -24,9 +24,6 @@ class BatchBenchConfig:
     paint_tiny_vae: bool
     paint_vae_tiling: bool
     paint_vae_tile_size: int
-    part3d_quantization: str
-    part3d_steps: int
-    part3d_octree: int
     text3d_phased: bool = True
 
 
@@ -39,9 +36,6 @@ BATCH_TEST_CONFIGS: list[BatchBenchConfig] = [
         paint_tiny_vae=True,
         paint_vae_tiling=True,
         paint_vae_tile_size=128,
-        part3d_quantization="sdnq-uint8",
-        part3d_steps=50,
-        part3d_octree=256,
     ),
     BatchBenchConfig(
         name="quanto-int8-4views-512",
@@ -51,9 +45,6 @@ BATCH_TEST_CONFIGS: list[BatchBenchConfig] = [
         paint_tiny_vae=True,
         paint_vae_tiling=True,
         paint_vae_tile_size=128,
-        part3d_quantization="quanto-int8",
-        part3d_steps=50,
-        part3d_octree=256,
     ),
     BatchBenchConfig(
         name="sdnq-int4-6views-512",
@@ -63,9 +54,6 @@ BATCH_TEST_CONFIGS: list[BatchBenchConfig] = [
         paint_tiny_vae=True,
         paint_vae_tiling=True,
         paint_vae_tile_size=128,
-        part3d_quantization="sdnq-int4",
-        part3d_steps=50,
-        part3d_octree=256,
     ),
 ]
 
@@ -117,18 +105,6 @@ text3d:
 
 rigging3d:
   output_suffix: "_rigged"
-
-part3d:
-  steps: {config.part3d_steps}
-  octree_resolution: {config.part3d_octree}
-  num_chunks: 10000
-  segment_only: true
-  no_cpu_offload: false
-  quantization: {config.part3d_quantization}
-  torch_compile: false
-  no_attention_slicing: false
-  parts_suffix: "_parts"
-  segmented_suffix: "_segmented"
 """
     output_path.write_text(yaml_content, encoding="utf-8")
 
@@ -175,7 +151,6 @@ def run_batch_test(
         "--manifest",
         str(manifest_dst),
         "--with-3d",
-        "--with-parts",
         "--with-rig",
         "--skip-audio",
         "--skip-text2d",

@@ -24,9 +24,7 @@ console_err = Console(file=sys.stderr)
 EPILOG = """
 Exemplos:
   gamedev-lab debug bundle modelo.glb -o ./out_bundle
-  gamedev-lab bench part3d --mesh meshes/foo.glb --modo sdnq-uint8 --project-dir .
   gamedev-lab bench sdnq-sweep --mesh modelo.glb --image ref.png --target-vram-mb 5500
-  gamedev-lab bench pipeline-opt --mesh input.glb --image ref.png --target-vram-mb 6000
   gamedev-lab profile cprofile -o out.prof meu_script.py -- --arg 1
   gamedev-lab perf list --tool text2d --limit 10
   gamedev-lab perf recommend text2d --vram 8000
@@ -560,53 +558,7 @@ def debug_compare(
 
 @main.group("bench")
 def bench_group() -> None:
-    """Bancadas Part3D, Paint/VRAM, pré-quantização SDNQ e batch GameAssets."""
-
-
-@bench_group.command("part3d")
-@click.option(
-    "--mesh",
-    type=click.Path(path_type=Path, exists=True),
-    default=None,
-    help="Ficheiro GLB (relativo ao --project-dir se não for absoluto).",
-)
-@click.option(
-    "--modo",
-    type=str,
-    default="baseline-fp16",
-    help="Nome da config ou 'sweep' para todos.",
-)
-@click.option(
-    "--output-dir",
-    "-o",
-    type=click.Path(path_type=Path),
-    default="test_part3d_results",
-    help="Diretório de resultados.",
-)
-@click.option(
-    "--project-dir",
-    type=click.Path(path_type=Path, file_okay=False),
-    default=".",
-    help="Diretório base para resolver caminhos relativos.",
-)
-def bench_part3d_cmd(
-    mesh: Path | None,
-    modo: str,
-    output_dir: Path,
-    project_dir: Path,
-) -> None:
-    """Testes Part3D com VRAM (quantização none / quanto / SDNQ)."""
-    pd = project_dir.resolve()
-    out = (pd / output_dir).resolve() if not output_dir.is_absolute() else output_dir.resolve()
-    m = mesh
-    if m is None:
-        m = pd / "meshes" / "boa_mesa" / "tigela_ceramica.glb"
-    elif not m.is_absolute():
-        m = (pd / m).resolve()
-
-    from gamedev_lab.bench_part3d import run_bench_cli
-
-    sys.exit(run_bench_cli(m, modo, out))
+    """Bancadas Paint/VRAM, pré-quantização SDNQ e batch GameAssets."""
 
 
 @bench_group.command("paint-vram")
@@ -654,12 +606,12 @@ def bench_paint_vram_cmd(
 @bench_group.command("pre-quantize")
 @click.option(
     "--modelo",
-    type=click.Choice(["part3d", "paint3d", "todos"]),
+    type=click.Choice(["paint3d", "todos"]),
     default="todos",
 )
 @click.option("--dry-run", is_flag=True, help="Só verificar SDNQ, sem quantizar.")
 def bench_pre_quantize_cmd(modelo: str, dry_run: bool) -> None:
-    """Pré-quantização SDNQ (DiT Part3D / UNet Paint3D)."""
+    """Pré-quantização SDNQ (UNet Paint3D)."""
     from gamedev_lab.pre_quantize import run_pre_quantize_cli
 
     sys.exit(run_pre_quantize_cli(modelo, dry_run))
@@ -719,86 +671,6 @@ def bench_sdnq_sweep_cmd(
             image=img,
             output_dir=out,
             target_vram_mb=target_vram_mb,
-        )
-    )
-
-
-@bench_group.command("pipeline-opt")
-@click.option(
-    "--mesh",
-    type=click.Path(path_type=Path, exists=True),
-    required=True,
-    help="Mesh GLB de entrada.",
-)
-@click.option(
-    "--image",
-    type=click.Path(path_type=Path, exists=True),
-    required=True,
-    help="Imagem de referência para texturização.",
-)
-@click.option(
-    "--output-dir",
-    "-o",
-    type=click.Path(path_type=Path),
-    default="pipeline_opt_results",
-    help="Diretório de saída.",
-)
-@click.option(
-    "--target-vram-mb",
-    type=float,
-    default=5500.0,
-    show_default=True,
-    help="Meta de VRAM máxima em MB.",
-)
-@click.option(
-    "--steps",
-    type=int,
-    default=50,
-    show_default=True,
-    help="Steps para Part3D decompose.",
-)
-@click.option(
-    "--octree",
-    type=int,
-    default=256,
-    show_default=True,
-    help="Resolução octree para Part3D.",
-)
-@click.option(
-    "--project-dir",
-    type=click.Path(path_type=Path, file_okay=False),
-    default=".",
-    help="Diretório base para caminhos relativos.",
-)
-def bench_pipeline_opt_cmd(
-    mesh: Path,
-    image: Path,
-    output_dir: Path,
-    target_vram_mb: float,
-    steps: int,
-    octree: int,
-    project_dir: Path,
-) -> None:
-    """
-    Otimiza pipeline completo Part3D+Paint3D iterando configs SDNQ.
-
-    Encontra a melhor combinação de quantização que funciona sem OOM.
-    """
-    pd = project_dir.resolve()
-    out = (pd / output_dir).resolve() if not output_dir.is_absolute() else output_dir.resolve()
-    m = mesh.resolve() if mesh.is_absolute() else (pd / mesh).resolve()
-    img = image.resolve() if image.is_absolute() else (pd / image).resolve()
-
-    from gamedev_lab.pipeline_optimizer import run_pipeline_optimization_cli
-
-    sys.exit(
-        run_pipeline_optimization_cli(
-            mesh=m,
-            image=img,
-            output_dir=out,
-            target_vram_mb=target_vram_mb,
-            steps=steps,
-            octree=octree,
         )
     )
 

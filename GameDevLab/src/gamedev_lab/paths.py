@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def gamedev_repo_root() -> Path:
-    """Diretório raiz do monorepo (pasta que contém GameDevLab, Part3D, …)."""
+    """Diretório raiz do monorepo (pasta que contém GameDevLab, Text3D, …)."""
     env = os.environ.get("GAMEDEV_ROOT", "").strip()
     if env:
         return Path(env).resolve()

@@ -8,7 +8,7 @@ GameDevLab is the unified debugging and quality-assurance tool for the entire Ga
 
 - **`check`** — Declarative GLB validation against YAML/JSON rules (CI-ready, exit 0/1)
 - **`debug`** — Visual debugging: multi-angle screenshots, metadata inspection, side-by-side comparison, agent bundles, and rig inspection
-- **`bench`** — GPU benchmarks for Part3D, Paint3D quantization, SDNQ sweeps, full pipeline optimization, and batch sweeps
+- **`bench`** — GPU benchmarks for Paint3D quantization, SDNQ sweeps, full pipeline optimization, and batch sweeps
 - **`perf`** — Performance analytics over an SQLite database (runs, VRAM analysis, config recommendations)
 - **`profile`** — CPU profiling via cProfile
 - **`mesh`** — Mesh quality inspection (topology, geometry, artifacts), visual QA, and topological diff
@@ -24,7 +24,7 @@ cd Shared && pip install -e .
 cd GameDevLab && pip install -e .
 ```
 
-For GPU benchmarks (Part3D, Paint3D, SDNQ, Quanto):
+For GPU benchmarks (Paint3D, SDNQ, Quanto):
 
 ```bash
 cd GameDevLab && pip install -e ".[bench]"
@@ -162,22 +162,6 @@ Output: side-by-side PNGs per view (`compare_{view}.png`) + `diff_report.json` w
 
 GPU benchmarks require the `[bench]` extra: `pip install -e ".[bench]"`.
 
-#### `bench part3d`
-
-Part3D decomposition benchmarks with VRAM monitoring (quantization modes: none / quanto / SDNQ).
-
-```bash
-gamedev-lab bench part3d --mesh meshes/foo.glb --modo sdnq-uint8 --project-dir ./myproject
-gamedev-lab bench part3d --modo sweep   # run all configs
-```
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--mesh` | path | `meshes/boa_mesa/tigela_ceramica.glb` | GLB file (relative to `--project-dir`) |
-| `--modo` | str | `baseline-fp16` | Config name or `sweep` for all |
-| `-o, --output-dir` | path | `test_part3d_results` | Results directory |
-| `--project-dir` | path | `.` | Base directory for relative paths |
-
 #### `bench paint-vram`
 
 Paint3D quantization sweet-spot search with VRAM monitoring.
@@ -195,7 +179,7 @@ gamedev-lab bench paint-vram --image reference.png --target-vram-mb 5500
 
 #### `bench pre-quantize`
 
-Pre-quantize SDNQ DiT (Part3D) and/or UNet (Paint3D) models.
+Pre-quantize SDNQ UNet (Paint3D) models.
 
 ```bash
 gamedev-lab bench pre-quantize --modelo paint3d
@@ -204,7 +188,7 @@ gamedev-lab bench pre-quantize --modelo todos --dry-run
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--modelo` | str | `todos` | Target: `part3d`, `paint3d`, or `todos` |
+| `--modelo` | str | `todos` | Target: `paint3d` or `todos` |
 | `--dry-run` | flag | false | Check SDNQ availability without quantizing |
 
 #### `bench sdnq-sweep`
@@ -226,11 +210,11 @@ gamedev-lab bench sdnq-sweep --mesh modelo.glb --image ref.png \
 
 #### `bench pipeline-opt`
 
-Optimize the full Part3D + Paint3D pipeline. Automatically iterates configs with fallback on OOM.
+Optimize the full Paint3D pipeline. Automatically iterates configs with fallback on OOM.
 
 ```bash
 gamedev-lab bench pipeline-opt --mesh input.glb --image ref.png \
-  --target-vram-mb 6000 --steps 50 --octree 256
+  --target-vram-mb 6000
 ```
 
 | Flag | Type | Default | Description |
@@ -239,8 +223,6 @@ gamedev-lab bench pipeline-opt --mesh input.glb --image ref.png \
 | `--image` | path | **required** | Reference image for texturing |
 | `-o, --output-dir` | path | `pipeline_opt_results` | Output directory |
 | `--target-vram-mb` | float | `5500` | Maximum VRAM target in MB |
-| `--steps` | int | `50` | Part3D decomposition steps |
-| `--octree` | int | `256` | Octree resolution for Part3D |
 | `--project-dir` | path | `.` | Base directory for relative paths |
 
 The optimizer tests stable Paint3D configs first (`paint3d-qint8-*`), then experimental SDNQ configs, monitors VRAM in real time, and falls back to lighter configs on OOM.
@@ -491,7 +473,6 @@ gamedev-lab mesh diff original.glb remeshed.glb --json-out topo_diff.json
 **Compatibility notes:**
 - **TinyVAE**: Incompatible with `HunyuanPaintPBR` (requires `latent_dist` not provided by TinyVAE).
 - **SDNQ in Paint3D**: The custom UNet `UNet2p5DConditionModel` may behave differently with SDNQ applied.
-- **Part3D with SDNQ**: Works correctly with `sdnq-uint8`.
 
 ### Backend Coverage (SDNQ >=0.2.1)
 
