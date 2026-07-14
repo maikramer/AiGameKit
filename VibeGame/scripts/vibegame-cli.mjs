@@ -7,7 +7,7 @@
  * falta (bun, com fallback npm).
  */
 import { spawnSync, spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, normalize, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -183,6 +183,31 @@ function depPackageJsonExists(root, pkgName) {
 }
 
 /**
+ * @param {string} root
+ * @param {string} pkgName
+ * @returns {string} caminho absoluto para o package.json da dep
+ */
+function depPackageJsonPath(root, pkgName) {
+  const parts = pkgName.split('/');
+  let rel;
+  if (pkgName.startsWith('@')) {
+    rel = join('node_modules', parts[0], parts[1], 'package.json');
+  } else {
+    rel = join('node_modules', pkgName, 'package.json');
+  }
+  return join(root, rel);
+}
+
+/**
+ * @param {string} filePath
+ * @param {object} data
+ * @returns {void}
+ */
+function writeJsonFile(filePath, data) {
+  writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
+}
+
+/**
  * Verifica se cada dependência declarada em package.json existe em node_modules.
  * Não inclui peerDependencies (podem vir de hoisting em monorepos).
  * @param {string} projectRoot
@@ -237,6 +262,81 @@ function appNodeModulesLookReady(cwd) {
     return false;
   }
   return declaredDepsSatisfied(cwd, pkg);
+}
+
+/**
+ * Garante que dependências críticas que o Vite resolve via alias a partir da
+ * engine root estão realmente instaladas. Estas deps não aparecem no
+ * package.json do app (são resolvidas pelo alias do vite.config), mas o
+ * `engineNodeModulesLookReady` pode considerá-las satisfeitas quando na
+ * verdade foram removidas (ex.: rm -rf node_modules/@interverse).
+ *
+ * @param {string} engineRoot
+ * @param {string[]} criticalDeps — nomes de pacotes (scoped ou não)
+ * @returns {string[]} lista de deps em falta
+ */
+function missingCriticalEngineDeps(engineRoot, criticalDeps) {
+  const missing = [];
+  for (const name of criticalDeps) {
+    if (!depPackageJsonExists(engineRoot, name)) {
+      missing.push(name);
+    }
+  }
+  return missing;
+}
+
+/**
+ * Lê a versão instalada de um pacote no node_modules de um projeto.
+ * @param {string} projectRoot
+ * @param {string} depName
+ * @returns {string | null}
+ */
+function installedDepVersion(projectRoot, depName) {
+  const depPkg = depPackageJsonPath(projectRoot, depName);
+  if (!existsSync(depPkg)) return null;
+  try {
+    return readJsonFile(depPkg).version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Alinha a versão do Three.js no app com a versão instalada na engine root.
+ * Quando as versões diferem (ex.: engine 0.185.0, app 0.185.1), o Vite carrega
+ * duas instâncias de Three.js ("Multiple instances of Three.js being imported").
+ *
+ * @param {string} engineRoot
+ * @param {string} appRoot
+ * @returns {boolean} true se alinhou (reescreveu package.json + reinstall)
+ */
+function alignThreeVersion(engineRoot, appRoot) {
+  const engineVer = installedDepVersion(engineRoot, 'three');
+  if (!engineVer) return false;
+
+  const appPkgPath = join(appRoot, 'package.json');
+  if (!existsSync(appPkgPath)) return false;
+  let appPkg;
+  try {
+    appPkg = readJsonFile(appPkgPath);
+  } catch {
+    return false;
+  }
+
+  const appThreeRange = appPkg.dependencies?.three;
+  if (!appThreeRange) return false; // app não depende de three directamente
+
+  const appInstalled = installedDepVersion(appRoot, 'three');
+  if (appInstalled === engineVer) return false; // já alinhado
+
+  // Reescrever package.json com a versão exata da engine e reinstalar.
+  appPkg.dependencies.three = engineVer;
+  writeJsonFile(appPkgPath, appPkg);
+  console.log(
+    `[vibegame run] three.js desalinhado (app=${appInstalled ?? '?'} engine=${engineVer}) — fixado para ${engineVer}`
+  );
+  runAppPackageInstall(appRoot);
+  return true;
 }
 
 /**
@@ -354,6 +454,23 @@ function runVibegameRun(engineRoot, opts) {
     console.warn(
       '[vibegame run] Aviso: --skip-engine-install / --skip-install ativo mas node_modules da engine parece incompleto; o build pode falhar.'
     );
+  }
+
+  // Garantir deps críticas que o app resolve via alias para a engine root.
+  // Estas não aparecem no package.json do app mas são necessárias para o
+  // vite.config resolver os alias (ex.: @interverse/three-terrain-lod).
+  // Se foram removidas manualmente, o engineNodeModulesLookReady pode ainda
+  // passar (a dep está declarada na engine) mas a pasta em falta quebra o build.
+  const criticalDeps = ['@interverse/three-terrain-lod'];
+  if (!opts.skipEngineInstall) {
+    const missing = missingCriticalEngineDeps(engineRoot, criticalDeps);
+    if (missing.length > 0) {
+      console.log(
+        `[vibegame run] Deps críticas em falta na engine: ${missing.join(', ')} — bun install`
+      );
+      const cm = runBun(engineRoot, ['install']);
+      if (cm !== 0) process.exit(cm);
+    }
   }
 
   if (!opts.skipBuild) {
