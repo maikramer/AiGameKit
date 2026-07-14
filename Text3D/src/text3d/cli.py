@@ -1348,11 +1348,13 @@ def gpu_processes_cmd() -> None:
 )
 @click.option(
     "--meshopt/--no-meshopt",
-    default=False,
+    default=True,
     show_default=True,
-    help="[DEPRECATED] Era EXT_meshopt_compression (quantização). Agora é no-op — "
-    "a quantização foi removida por causar POSITION SHORT sem KHR_mesh_quantization "
-    "(GLB inválido) e dessincronizar origem do armature em meshes rigged.",
+    help="Aplica EXT_meshopt_compression + KHR_mesh_quantization aos LODs via "
+    "@gltf-transform/cli (compressão ~85%% em geometria). O bug histórico "
+    "(POSITION SHORT sem extensão) foi resolvido na CLI 4.x. Atenção: POSITION "
+    "fica quantizado (SHORT) — incompatível com colliders trimesh reutilizados "
+    "do mesh visual; gerar colliders dedicados (text3d collision) nesses casos.",
 )
 def lod_cmd(
     input_mesh: Path,
@@ -1382,13 +1384,6 @@ def lod_cmd(
     de fechar buracos pequenos; evita-se ``clean()`` do PyTMesh que destrói LODs decimados.
     """
     stem = basename_opt if basename_opt else input_mesh.stem
-    # Quantização (EXT_meshopt_compression) removida: causava POSITION SHORT sem
-    # KHR_mesh_quantization (GLB inválido) e dessincronizava a origem do armature
-    # em meshes rigged. --meshopt é agora um no-op (deprecated).
-    if meshopt:
-        console.print(
-            "[yellow]Aviso:[/yellow] --meshopt é deprecated (no-op). A quantização foi removida; os LODs saem em FLOAT."
-        )
     try:
         if painted_mesh:
             from text3d.utils.mesh_lod import generate_lod_textured_glb_triplet
@@ -1404,7 +1399,7 @@ def lod_cmd(
                 target_faces=target_faces,
                 apply_finish=finish,
                 finish_lod0=finish_lod0,
-                apply_meshopt=False,
+                apply_meshopt=meshopt,
             )
         else:
             paths = generate_lod_glb_triplet(
@@ -1417,6 +1412,16 @@ def lod_cmd(
                 min_faces_lod2=min_faces_lod2,
                 meshfix=meshfix,
             )
+            # Non-painted path has no finish step — apply meshopt post-hoc to
+            # each LOD output so compressed LODs are the default.
+            if meshopt:
+                from text3d.utils.gltf_finish import gltf_transform_finish
+
+                compressed = []
+                for p in paths:
+                    res = gltf_transform_finish(p, p, apply_meshopt=True, apply_uastc=False)
+                    compressed.append(res.output_path)
+                paths = compressed
     except RuntimeError as e:
         raise click.ClickException(str(e)) from e
     except ValueError as e:
