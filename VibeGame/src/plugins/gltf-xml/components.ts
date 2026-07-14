@@ -10,16 +10,6 @@ export const GltfPending = {
  * `ready`: 0 = aguardando; 1 = física aplicada.
  * `colliderShape`: valores de `ColliderShape` (box / sphere / capsule), campo no fim para não alterar layout dos restantes.
  */
-/**
- * Três variantes GLB (lod0/lod1/lod2) sob um único `Group`; visibilidade por distância à câmara.
- * Requer `lod-urls` no `<gltf-load>` e carregamento triplo no sistema de load.
- */
-export const GltfLod = {
-  thresholdNear: new Float32Array(MAX_ENTITIES),
-  thresholdMid: new Float32Array(MAX_ENTITIES),
-  activeLevel: new Uint8Array(MAX_ENTITIES),
-} as const;
-
 export const GltfPhysicsPending = {
   ready: new Uint8Array(MAX_ENTITIES),
   colliderMargin: new Float32Array(MAX_ENTITIES),
@@ -28,4 +18,16 @@ export const GltfPhysicsPending = {
   restitution: new Float32Array(MAX_ENTITIES),
   colliderShape: new Uint8Array(MAX_ENTITIES),
   bodyType: new Uint8Array(MAX_ENTITIES),
+} as const;
+
+/**
+ * Três variantes GLB (lod0/lod1/lod2) sob um único `Group`; visibilidade por distância à câmara.
+ * Requer `lod-urls` no `<GLTFLoader>` e carregamento triplo no sistema de load.
+ */
+export const GltfLod = {
+  thresholdNear: new Float32Array(MAX_ENTITIES),
+  thresholdMid: new Float32Array(MAX_ENTITIES),
+  activeLevel: new Uint8Array(MAX_ENTITIES),
+  /** 1 once LOD child visibility has been applied correctly (skip rescan). */
+  settled: new Uint8Array(MAX_ENTITIES),
 } as const;

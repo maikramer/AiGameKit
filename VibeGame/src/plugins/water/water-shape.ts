@@ -3,6 +3,11 @@ import type { HeightSampler } from '../terrain/height-sampler';
 import type { WorldAabb } from '../terrain/density-map';
 import { getTerrainContext } from '../terrain/utils';
 import { rebuildTerrainDerivatives } from '../terrain/height-brush';
+import {
+  registerGroundBrush,
+  unregisterGroundBrush,
+  type GroundBrush,
+} from '../terrain/brush-registry';
 import { getRenderingContext } from '../rendering';
 import { applyOverride } from '../terrain/density-map';
 import { refreshChunkResolutions } from '../terrain/systems';
@@ -163,6 +168,25 @@ export function applyWaterShape(
   // 3. Mark terrain derivatives dirty (helper partilhado com pads/estradas).
   rebuildTerrainDerivatives(state, field.entity, data);
 
+  // 3b. Ground-brush footprint (navmesh adaptive mesh + river walls).
+  const aabb = shape.computeAabb();
+  const brush: GroundBrush = {
+    kind: shape.densityPath?.() ? 'river' : 'lake',
+    minX: aabb.minX,
+    maxX: aabb.maxX,
+    minZ: aabb.minZ,
+    maxZ: aabb.maxZ,
+  };
+  const dens = shape.densityPath?.();
+  if (dens && dens.path.length >= 4) {
+    brush.kind = 'river';
+    brush.path = dens.path.slice();
+    brush.halfWidth = dens.reach;
+  } else {
+    brush.kind = 'lake';
+  }
+  registerGroundBrush(state, brush);
+
   // 4. Spawn surface mesh with the shape-agnostic material.
   const scene = getRenderingContext(state).scene;
   const material = createMaterial(config);
@@ -177,8 +201,16 @@ export function applyWaterShape(
 
   // 5. Register the water body (resolved worldY = field offset + local waterY).
   const body = shape.toWaterBody(worldWaterY);
+  // Prefer waterline half-width from the body for river ribbon walls.
+  if (body.kind === 'river') {
+    brush.halfWidth = body.width / 2;
+    brush.path = [];
+    for (const p of body.path) {
+      brush.path.push(p[0] - data.worldOffset.x, p[1] - data.worldOffset.z);
+    }
+  }
   registerWaterBody(state, body);
-  cars.set(entity, { mesh, material, body });
+  cars.set(entity, { mesh, material, body, brush });
 
   // 6. Cleanup on destroy.
   state.onDestroy(entity, () => {
@@ -189,6 +221,7 @@ export function applyWaterShape(
     c.mesh.geometry.dispose();
     c.material.dispose();
     unregisterWaterBody(state, c.body);
+    if (c.brush) unregisterGroundBrush(state, c.brush);
   });
 
   logger.info(
@@ -211,4 +244,5 @@ export interface WaterSideCar {
   mesh: THREE.Mesh;
   material: WaterMaterial;
   body: import('./registry').WaterBody;
+  brush?: GroundBrush;
 }

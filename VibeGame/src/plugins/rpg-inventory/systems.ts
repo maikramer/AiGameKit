@@ -160,7 +160,7 @@ export const InventoryEventBridgeSystem: System = {
 
     const table = stacksByEntity.get(state);
     if (table && table.size > 0) {
-      for (const eid of Array.from(table.keys())) {
+      for (const eid of table.keys()) {
         if (
           !state.exists(eid) ||
           !state.hasComponent(eid, InventoryComponent)

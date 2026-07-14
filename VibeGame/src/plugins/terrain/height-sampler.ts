@@ -300,3 +300,15 @@ export function sampleTerrainHeight(
   }
   return best;
 }
+
+/**
+ * Ground elevation at a world (x, z) for gameplay placement and spawning.
+ * Uses the rendered LOD mesh lattice with a small cardinal footprint (max
+ * probe), matching what players see. Prefer this over
+ * {@link getTerrainHeightAt} when aligning entities to the visible surface;
+ * use {@link getTerrainHeightAt} only when you need the analytic heightmap
+ * sample at a single point.
+ */
+export function getGroundHeight(state: State, x: number, z: number): number {
+  return sampleTerrainHeight(state, x, z);
+}

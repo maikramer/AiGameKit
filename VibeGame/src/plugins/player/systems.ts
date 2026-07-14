@@ -1,4 +1,4 @@
-import { defineQuery, type System } from '../../core';
+import { defineQuery, type State, type System } from '../../core';
 import { ThirdPersonCamera } from '../player-controller';
 import { InputState } from '../input';
 import { OrbitCamera } from '../orbit-camera';
@@ -221,26 +221,42 @@ export const PlayerGroundedSystem: System = {
   },
 };
 
+function ensureCameraInputState(state: State, cam: number): void {
+  if (!state.hasComponent(cam, InputState)) {
+    state.addComponent(cam, InputState);
+  }
+}
+
 export const PlayerCameraLinkingSystem: System = {
   group: 'simulation',
   update: (state) => {
     const players = playersQuery(state.world);
-
     const thirdPersonCams = thirdPersonCameraQuery(state.world);
     const orbitCams = orbitCameraQuery(state.world);
 
     for (const player of players) {
       if (PlayerController.cameraEntity[player] !== 0) continue;
 
-      if (thirdPersonCams.length > 0) {
-        const cam = thirdPersonCams[0];
+      const unlinkedThirdPerson = thirdPersonCams.find(
+        (cam) => ThirdPersonCamera.target[cam] === 0
+      );
+      if (unlinkedThirdPerson !== undefined) {
+        const cam = unlinkedThirdPerson;
         PlayerController.cameraEntity[player] = cam;
         ThirdPersonCamera.target[cam] = player;
-      } else if (orbitCams.length > 0) {
+        ensureCameraInputState(state, cam);
+        continue;
+      }
+
+      // OrbitCameraSetupSystem (setup phase) may already create a placeholder
+      // Transform target when target===0. Still bind the first orbit camera to
+      // the player — same as the historical PlayerCameraLinkingSystem behavior.
+      if (orbitCams.length > 0) {
         const cam = orbitCams[0];
         PlayerController.cameraEntity[player] = cam;
         OrbitCamera.target[cam] = player;
         OrbitCamera.inputSource[cam] = player;
+        ensureCameraInputState(state, cam);
       }
     }
   },

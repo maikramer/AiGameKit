@@ -13,15 +13,21 @@ export interface GltfDynamicColliderFit {
 }
 
 /**
- * Calcula `Collider` a partir do tamanho AABB do modelo (já com margem), em espaço mundo,
- * e escalas do `Transform` (para box e sphere o motor multiplica `size*` pela escala).
+ * Calcula `Collider` a partir do tamanho AABB do modelo (já com margem), em **espaço
+ * mundo** (`Box3.setFromObject` após `updateMatrixWorld`), e escalas do `Transform`.
  *
- * - **Box**: cuboide alinhado aos eixos; `size*` = dimensão local (mundo / escala por eixo).
+ * **Contrato de entrada:** `sx`/`sy`/`sz` são dimensões mundo do AABB (incluindo
+ * escala do `Transform` no mesh). `tsx`/`tsy`/`tsz` são os fatores de escala ECS.
+ *
+ * - **Box**: cuboide alinhado aos eixos; `size*` = dimensão local (`mundo / escala`
+ *   por eixo) porque `createColliderForEntity` re-multiplica `size*` pela escala.
  * - **Sphere**: esfera mínima que contém o AABB; raio = metade da diagonal;
- *   `sizeX` = diâmetro local = `2R / scaleX` (o sistema de física só usa `sizeX` para esfera).
- * - **Capsule**: eixo Y; `radius` e `height` em **metros mundo** — o pipeline de física não
- *   multiplica estes campos pela escala do `Transform` (ver `createColliderDescriptor`);
- *   com escala ≠ 1 o resultado pode desviar do mesh.
+ *   `sizeX` = diâmetro local = `2R / scaleX`.
+ * - **Capsule**: eixo Y; `radius` e `height` (segmento central) em **metros mundo**
+ *   derivados diretamente de `sx`/`sy`/`sz` — o pipeline de física **não** multiplica
+ *   estes campos pela escala do `Transform` (ver `createColliderDescriptor`). Com
+ *   escala ≠ 1, passar AABB local em vez de mundo subdimensiona o colisor; use sempre
+ *   dimensões de `setFromObject`.
  */
 export function fitColliderFromAabb(
   colliderShape: number,

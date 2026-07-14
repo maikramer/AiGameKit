@@ -1,16 +1,19 @@
 import * as THREE from 'three';
 import { defineQuery, type State } from '../../core';
-import { GltfLod } from '../gltf-xml/components';
+import { GltfLod, GltfPending } from '../gltf-xml/components';
 import { forEachGltfRootGroup } from '../gltf-xml/group-registry';
 import { BodyType, Rigidbody } from '../physics/components';
 import { WorldTransform } from '../transforms';
 import { registerBvhMesh, unregisterBvhForEntity } from './utils';
 
 const rigidbodyQuery = defineQuery([Rigidbody, WorldTransform]);
+const gltfPendingQuery = defineQuery([GltfPending]);
 
 /** Entity → GLTF root group it was baked from. A different group for the same
  * id means the id was recycled (or the GLTF reloaded) → rebuild. */
 const built = new WeakMap<State, Map<number, THREE.Object3D>>();
+/** Previous unloaded-GLTF count — when it drops to 0 we force one more bake pass. */
+const prevPendingUnload = new WeakMap<State, number>();
 
 function getBuilt(state: State): Map<number, THREE.Object3D> {
   let m = built.get(state);
@@ -19,6 +22,14 @@ function getBuilt(state: State): Map<number, THREE.Object3D> {
     built.set(state, m);
   }
   return m;
+}
+
+function countUnloadedGltfs(state: State): number {
+  let n = 0;
+  for (const eid of gltfPendingQuery(state.world)) {
+    if (GltfPending.loaded[eid] !== 1) n++;
+  }
+  return n;
 }
 
 const _mat = new THREE.Matrix4();
@@ -122,43 +133,53 @@ export function syncStaticMeshBvh(state: State): {
   let added = 0;
   let removed = 0;
 
-  forEachGltfRootGroup(state, (entity, group) => {
-    const prevGroup = map.get(entity);
-    if (prevGroup === group) return;
-    if (prevGroup) {
-      // Same id, different root: recycled entity id or reloaded GLTF.
-      unregisterBvhForEntity(state, entity);
-      map.delete(entity);
-      removed++;
-    }
+  const pendingUnload = countUnloadedGltfs(state);
+  const prevPending = prevPendingUnload.get(state) ?? -1;
+  // Full GLTF walk is only needed while assets are still loading, right after
+  // the last pending finishes, or before anything has been baked yet.
+  const needsFullScan =
+    pendingUnload > 0 || prevPending !== 0 || map.size === 0;
+  prevPendingUnload.set(state, pendingUnload);
 
-    let shouldInclude = false;
-    if (state.hasComponent(entity, Rigidbody)) {
-      shouldInclude = Rigidbody.type[entity] === BodyType.Fixed;
-    } else {
-      // GLTF without rigidbody → treat as static decorative geometry.
-      shouldInclude = true;
-    }
-    if (!shouldInclude) return;
+  if (needsFullScan) {
+    forEachGltfRootGroup(state, (entity, group) => {
+      const prevGroup = map.get(entity);
+      if (prevGroup === group) return;
+      if (prevGroup) {
+        // Same id, different root: recycled entity id or reloaded GLTF.
+        unregisterBvhForEntity(state, entity);
+        map.delete(entity);
+        removed++;
+      }
 
-    // LOD roots keep every level as a sibling child with visibility toggled
-    // per frame; bake only LOD0 or each level's triangles would pile up.
-    let bakeRoot: THREE.Object3D = group;
-    if (state.hasComponent(entity, GltfLod) && group.children.length >= 2) {
-      bakeRoot = group.children[0];
-    }
+      let shouldInclude = false;
+      if (state.hasComponent(entity, Rigidbody)) {
+        shouldInclude = Rigidbody.type[entity] === BodyType.Fixed;
+      } else {
+        // GLTF without rigidbody → treat as static decorative geometry.
+        shouldInclude = true;
+      }
+      if (!shouldInclude) return;
 
-    const geometry = bakeObject3DGeometry(bakeRoot);
-    if (!geometry) return;
+      // LOD roots keep every level as a sibling child with visibility toggled
+      // per frame; bake only LOD0 or each level's triangles would pile up.
+      let bakeRoot: THREE.Object3D = group;
+      if (state.hasComponent(entity, GltfLod) && group.children.length >= 2) {
+        bakeRoot = group.children[0];
+      }
 
-    registerBvhMesh(state, `gltf:${entity}`, geometry, {
-      entity,
-      layer: 0x0002,
-      source: group,
+      const geometry = bakeObject3DGeometry(bakeRoot);
+      if (!geometry) return;
+
+      registerBvhMesh(state, `gltf:${entity}`, geometry, {
+        entity,
+        layer: 0x0002,
+        source: group,
+      });
+      map.set(entity, group);
+      added++;
     });
-    map.set(entity, group);
-    added++;
-  });
+  }
 
   // Cleanup destroyed entities.
   map.forEach((_value, entity) => {

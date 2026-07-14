@@ -6,7 +6,7 @@ import { syncBodyQuaternionFromEuler } from '../physics/utils';
 import { Transform } from '../transforms/components';
 import { GltfLod, GltfPending, GltfPhysicsPending } from './components';
 import { fitColliderFromAabb } from './gltf-dynamic-collider-fit';
-import { deleteGltfRootGroup, getGltfRootGroup } from './group-registry';
+import { getGltfRootGroup } from './group-registry';
 import { GltfXmlLoadSystem } from './systems';
 
 const query = defineQuery([GltfPhysicsPending, GltfPending, Transform]);
@@ -37,18 +37,17 @@ export const GltfDynamicPhysicsSystem: System = {
         continue;
       }
 
-      const lodMid =
-        state.hasComponent(eid, GltfLod) && group.children.length >= 2
-          ? (group.children[1] as THREE.Object3D)
+      const lodMesh =
+        state.hasComponent(eid, GltfLod) && group.children.length >= 1
+          ? (group.children[0] as THREE.Object3D)
           : group;
-      lodMid.updateMatrixWorld(true);
-      _box.setFromObject(lodMid);
+      lodMesh.updateMatrixWorld(true);
+      _box.setFromObject(lodMesh);
       if (_box.isEmpty()) {
         logger.warn(
           `[gltf-dynamic] AABB vazio para entidade ${eid}; física omitida.`
         );
         GltfPhysicsPending.ready[eid] = 1;
-        deleteGltfRootGroup(state, eid);
         continue;
       }
 

@@ -10,7 +10,10 @@ Generates a Solo NavMesh from terrain + static GLB obstacles at runtime, then pr
 
 ### Declarative (XML)
 
-Place `<NavMesh>` in the scene to trigger generation. It waits for terrain initialization + a grace period (120 frames) for GLBs to load, then generates.
+Place `<NavMesh>` in the scene to trigger generation. It waits for terrain
+carvers (pads/roads/lakes/rivers) + a short grace (5 frames) + in-radius
+collision obstacles, then bakes in the background. It does **not** block the
+loading screen — AI uses direct steering until the crowd is ready.
 
 ```html
 <Scene>
@@ -50,23 +53,23 @@ scene.add(debugMesh);
 
 ## Components
 
-| Component           | Fields                                                                  | Description                              |
-| ------------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| `nav-mesh-surface`  | `enabled`, `generated`                                                  | Flag: presence triggers navmesh build    |
-| `nav-mesh-agent`    | `agentIndex`, `speed`, `radius`, `height`, `targetX/Y/Z`, `hasTarget`, `enabled` | Agent data; `agentIndex=-1` means unregistered |
+| Component          | Fields                                                                           | Description                                    |
+| ------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------- |
+| `nav-mesh-surface` | `enabled`, `generated`                                                           | Flag: presence triggers navmesh build          |
+| `nav-mesh-agent`   | `agentIndex`, `speed`, `radius`, `height`, `targetX/Y/Z`, `hasTarget`, `enabled` | Agent data; `agentIndex=-1` means unregistered |
 
 ## Systems
 
-| System              | Group       | Description                                                          |
-| ------------------- | ----------- | ------------------------------------------------------------------- |
-| `NavMeshInitSystem` | `setup`     | Waits for terrain + GLBs, runs `init()`, generates navmesh, creates Crowd |
-| `NavMeshAgentSystem`| `simulation`| Creates/removes Crowd agents, applies targets, syncs position/heading to Transform |
+| System               | Group        | Description                                                                        |
+| -------------------- | ------------ | ---------------------------------------------------------------------------------- |
+| `NavMeshInitSystem`  | `setup`      | Early WASM init + prefetch; bakes off-thread (no loading gate)                     |
+| `NavMeshAgentSystem` | `simulation` | Creates/removes Crowd agents, applies targets, syncs position/heading to Transform |
 
 ## Recipes
 
-| Recipe          | Element         | Description                              |
-| --------------- | --------------- | --------------------------------------- |
-| `navMeshRecipe` | `<NavMesh>`     | Adds `nav-mesh-surface` flag component   |
+| Recipe               | Element          | Description                                          |
+| -------------------- | ---------------- | ---------------------------------------------------- |
+| `navMeshRecipe`      | `<NavMesh>`      | Adds `nav-mesh-surface` flag component               |
 | `navMeshAgentRecipe` | `<NavMeshAgent>` | Merge recipe: adds `nav-mesh-agent` to parent entity |
 
 ## NavMesh Config
@@ -105,9 +108,17 @@ recast marks them non-walkable → clean holes. It also sidesteps the old visual
 pitfalls (3 separate instancing systems to chase; a world-space height cull that
 deleted every obstacle because the terrain sits at y≈15-20).
 
-Init waits for terrain init + a grace period + `navmeshObstaclesLoaded()` (all fixed
-trimesh/convex collision GLBs downloaded), capped by `MAX_INIT_WAIT_FRAMES`, so
-late-loading obstacles are present in the bake.
+Init waits for terrain carvers + a short grace (`TERRAIN_GRACE_FRAMES = 5`) +
+`navmeshObstaclesLoaded()` (fixed trimesh/convex collision GLBs **within the
+play area** only — not every visual GLTF), capped by `MAX_INIT_WAIT_FRAMES`.
+`prefetchNavmeshObstacles()` kicks those collision fetches as soon as obstacles
+exist (before carvers finish). WASM `init()` starts in `NavMeshInitSystem.setup`
+so download/compile overlaps terrain decode.
+
+Bake runs in a **Web Worker** (`bake.worker.ts` → `generateSoloNavMesh` +
+`exportNavMesh`; main thread `importNavMesh` + Crowd). Sync fallback when
+Workers are unavailable. Two `requestAnimationFrame` yields after WASM init let
+the loading overlay fade before geometry collection.
 
 ## Dependencies
 

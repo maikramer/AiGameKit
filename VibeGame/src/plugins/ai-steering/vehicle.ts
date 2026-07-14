@@ -112,7 +112,7 @@ export class SteeringVehicle {
     this._toObstacle.subVectors(closest.position, this.position);
     this._lateral
       .copy(this._toObstacle)
-      .sub(this._fwd.clone().multiplyScalar(closestForward));
+      .addScaledVector(this._fwd, -closestForward);
     if (this._lateral.lengthSq() < 1e-8) {
       this._lateral.set(this._fwd.z, 0, -this._fwd.x);
     }

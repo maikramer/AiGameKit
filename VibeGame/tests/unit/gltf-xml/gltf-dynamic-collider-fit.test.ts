@@ -39,6 +39,38 @@ describe('fitColliderFromAabb', () => {
     expect(f.height).toBeGreaterThanOrEqual(0);
   });
 
+  it('capsule: AABB mundo com escala 2 equivale a 1×2×1 escala 1 no envelope', () => {
+    const unit = fitColliderFromAabb(ColliderShape.Capsule, 1, 2, 1, 1, 1, 1);
+    expect(unit.radius).toBe(0.5);
+    expect(unit.height).toBe(1);
+
+    const worldScaled = fitColliderFromAabb(
+      ColliderShape.Capsule,
+      2,
+      4,
+      2,
+      2,
+      2,
+      2
+    );
+    expect(worldScaled.radius).toBe(1);
+    expect(worldScaled.height).toBe(2);
+    expect(worldScaled.radius).toBe(unit.radius * 2);
+    expect(worldScaled.height).toBe(unit.height * 2);
+
+    const localMistake = fitColliderFromAabb(
+      ColliderShape.Capsule,
+      1,
+      2,
+      1,
+      2,
+      2,
+      2
+    );
+    expect(localMistake.radius).toBe(unit.radius);
+    expect(localMistake.height).toBe(unit.height);
+  });
+
   it('valor desconhecido cai em box', () => {
     const f = fitColliderFromAabb(99, 2, 2, 2, 1, 1, 1);
     expect(f.shape).toBe(ColliderShape.Box);

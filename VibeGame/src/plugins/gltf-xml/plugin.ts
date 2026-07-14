@@ -39,6 +39,9 @@ export const GltfXmlPlugin: Plugin = {
         url: ((entity, value, state) => {
           setGltfUrl(state, entity, value);
         }) as Adapter,
+        'model-url': ((entity, value, state) => {
+          setGltfUrl(state, entity, value);
+        }) as Adapter,
         'lod-urls': ((entity, value, state) => {
           const parts = String(value).trim().split(/\s+/).filter(Boolean);
           if (parts.length !== 3) return;
@@ -48,7 +51,7 @@ export const GltfXmlPlugin: Plugin = {
             string,
           ];
           setGltfLodUrls(state, entity, triple);
-          setGltfUrl(state, entity, parts[1]);
+          setGltfUrl(state, entity, parts[0]);
           if (!state.hasComponent(entity, GltfLod)) {
             state.addComponent(entity, GltfLod);
           }
@@ -112,7 +115,8 @@ export const GltfXmlPlugin: Plugin = {
       gltfLod: {
         thresholdNear: 40,
         thresholdMid: 120,
-        activeLevel: 1,
+        activeLevel: 0,
+        settled: 0,
       },
       gltfPhysicsPending: {
         ready: 0,

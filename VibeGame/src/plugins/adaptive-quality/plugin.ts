@@ -15,7 +15,8 @@ export const AdaptiveQualityPlugin: Plugin = {
       'adaptive-quality': {
         enabled: 1,
         targetFps: 55,
-        minPixelRatio: 1.0,
+        // Allow DPR < 1 so Low/Medium tiers can actually reclaim GPU budget.
+        minPixelRatio: 0.75,
         maxPixelRatio: 1.5,
         currentTier: 0,
         emaFrameMs: 0,

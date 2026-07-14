@@ -20,6 +20,12 @@ import {
 import { Transform } from '../transforms/components';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import type { HeightSampler } from '../terrain/height-sampler';
+import {
+  brushIntersectsBounds,
+  getGroundBrushes,
+  pointInPadCore,
+  type GroundBrush,
+} from '../terrain/brush-registry';
 import { getTerrainContext } from '../terrain/utils';
 import { getWaterBodies } from '../water/registry';
 
@@ -28,7 +34,66 @@ export interface NavMeshGeometry {
   indices: Uint32Array;
 }
 
-function buildTerrainGeometry(
+/** Step (m) for dense local patches over lake/river/road brush AABBs. */
+const DENSE_PATCH_STEP = 0.9;
+
+function sampleNavTerrainY(
+  sampler: HeightSampler,
+  worldOffset: { x: number; y: number; z: number },
+  pads: GroundBrush[],
+  wx: number,
+  wz: number
+): number {
+  const lx = wx - worldOffset.x;
+  const lz = wz - worldOffset.z;
+  for (const pad of pads) {
+    if (pad.targetY !== undefined && pointInPadCore(pad, lx, lz)) {
+      return pad.targetY + worldOffset.y;
+    }
+  }
+  return sampleHeightAt(sampler, lx, lz) + worldOffset.y;
+}
+
+function appendGridPatch(
+  positions: number[],
+  indices: number[],
+  minX: number,
+  maxX: number,
+  minZ: number,
+  maxZ: number,
+  step: number,
+  heightAt: (x: number, z: number) => number
+): void {
+  const nx = Math.max(1, Math.ceil((maxX - minX) / step));
+  const nz = Math.max(1, Math.ceil((maxZ - minZ) / step));
+  const sx = (maxX - minX) / nx;
+  const sz = (maxZ - minZ) / nz;
+  const base = positions.length / 3;
+  for (let zi = 0; zi <= nz; zi++) {
+    for (let xi = 0; xi <= nx; xi++) {
+      const wx = minX + xi * sx;
+      const wz = minZ + zi * sz;
+      positions.push(wx, heightAt(wx, wz), wz);
+    }
+  }
+  const stride = nx + 1;
+  for (let zi = 0; zi < nz; zi++) {
+    for (let xi = 0; xi < nx; xi++) {
+      const a = base + zi * stride + xi;
+      const b = a + 1;
+      const c = a + stride;
+      const d = c + 1;
+      indices.push(a, c, b, b, c, d);
+    }
+  }
+}
+
+/**
+ * Terrain source mesh for navmesh bake: coarse play-area grid + dense patches
+ * over lake/river/road brush footprints. Vertices inside a TerrainPad core use
+ * the registered flatten plane (no heightmap sample).
+ */
+export function buildAdaptiveTerrainGeometry(
   state: State,
   divisions: number,
   bounds: number
@@ -46,43 +111,54 @@ function buildTerrainGeometry(
 
   if (!terrainSampler) return null;
 
-  const half = bounds;
-  const step = (bounds * 2) / divisions;
-  const verts = divisions + 1;
-  const positions = new Float32Array(verts * verts * 3);
-  const indices = new Uint32Array(divisions * divisions * 6);
+  const brushes = getGroundBrushes(state);
+  const pads = brushes.filter((b) => b.kind === 'pad');
+  const heightAt = (wx: number, wz: number) =>
+    sampleNavTerrainY(terrainSampler!, worldOffset, pads, wx, wz);
 
-  let pi = 0;
-  for (let z = 0; z < verts; z++) {
-    for (let x = 0; x < verts; x++) {
-      const wx = -half + x * step;
-      const wz = -half + z * step;
-      const wy =
-        sampleHeightAt(terrainSampler, wx - worldOffset.x, wz - worldOffset.z) +
-        worldOffset.y;
-      positions[pi++] = wx;
-      positions[pi++] = wy;
-      positions[pi++] = wz;
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  // Coarse base grid over the bake square.
+  appendGridPatch(
+    positions,
+    indices,
+    -bounds,
+    bounds,
+    -bounds,
+    bounds,
+    (bounds * 2) / Math.max(1, divisions),
+    heightAt
+  );
+
+  // Dense local patches for carve corridors (banks need finer source mesh).
+  for (const brush of brushes) {
+    if (brush.kind === 'pad') continue;
+    if (!brushIntersectsBounds(brush, bounds)) continue;
+    const minX = Math.max(-bounds, brush.minX + worldOffset.x);
+    const maxX = Math.min(bounds, brush.maxX + worldOffset.x);
+    const minZ = Math.max(-bounds, brush.minZ + worldOffset.z);
+    const maxZ = Math.min(bounds, brush.maxZ + worldOffset.z);
+    if (maxX - minX < DENSE_PATCH_STEP || maxZ - minZ < DENSE_PATCH_STEP) {
+      continue;
     }
+    appendGridPatch(
+      positions,
+      indices,
+      minX,
+      maxX,
+      minZ,
+      maxZ,
+      DENSE_PATCH_STEP,
+      heightAt
+    );
   }
 
-  let ti = 0;
-  for (let z = 0; z < divisions; z++) {
-    for (let x = 0; x < divisions; x++) {
-      const a = z * verts + x;
-      const b = a + 1;
-      const c = a + verts;
-      const d = c + 1;
-      indices[ti++] = a;
-      indices[ti++] = c;
-      indices[ti++] = b;
-      indices[ti++] = b;
-      indices[ti++] = c;
-      indices[ti++] = d;
-    }
-  }
-
-  return { positions, indices };
+  if (indices.length === 0) return null;
+  return {
+    positions: new Float32Array(positions),
+    indices: new Uint32Array(indices),
+  };
 }
 
 interface MeshSoup {
@@ -293,6 +369,24 @@ function appendCompositionSpec(
   appendMesh(_boxVerts, BOX_INDICES, _compWorldMat, out, true);
 }
 
+/**
+ * Kick off collision-GLB fetches for every fixed trimesh/convex obstacle in
+ * range. Safe to call every frame before carvers finish — starts downloads
+ * early so bake is not blocked waiting on first-touch lazy loads.
+ */
+export function prefetchNavmeshObstacles(state: State, bounds: number): void {
+  for (const eid of obstacleQuery(state.world)) {
+    if (!isFixedObstacle(state, eid)) continue;
+    if (!withinBounds(state, eid, bounds)) continue;
+    const shape = Collider.shape[eid];
+    if (shape !== ColliderShape.TriMesh && shape !== ColliderShape.ConvexHull) {
+      continue;
+    }
+    const url = getColliderMeshUrl(state, eid);
+    if (url) requestColliderMesh(url);
+  }
+}
+
 /** True if every fixed trimesh/convex obstacle's collision GLB has finished
  * loading — the navmesh defers baking until then so holes aren't missed. */
 export function navmeshObstaclesLoaded(state: State, bounds: number): boolean {
@@ -420,7 +514,10 @@ const _waterScl = new THREE.Vector3(1, 1, 1);
  * basin stays WALKABLE and NPCs path straight through the water. recast only
  * carves non-walkable cells from input geometry steeper than the walkable
  * slope, so we feed it a 90° wall (an open cylinder tube) at each lake centre.
- * `fullCarve` is set so the per-mesh height cap cannot clip the wall away. */
+ * `fullCarve` is set so the per-mesh height cap cannot clip the wall away.
+ *
+ * Rivers get the same treatment as a ribbon of vertical walls along each path
+ * segment at ±waterline/2 — without it the carved channel is also walkable. */
 export function collectWaterObstacles(
   state: State,
   bounds: number
@@ -442,33 +539,85 @@ export function collectWaterObstacles(
   }
 
   for (const body of bodies) {
-    // The navmesh water obstacle is a cylinder (lake disc). Rivers would need
-    // a ribbon obstacle — out of scope here, so skip non-lake bodies for now.
-    if (body.kind !== 'lake') continue;
-    // Keep a lake only when its disc intersects the square bake area.
-    if (Math.abs(body.x) - body.radius > bounds) continue;
-    if (Math.abs(body.z) - body.radius > bounds) continue;
+    if (body.kind === 'lake') {
+      // Keep a lake only when its disc intersects the square bake area.
+      if (Math.abs(body.x) - body.radius > bounds) continue;
+      if (Math.abs(body.z) - body.radius > bounds) continue;
 
-    const yBottom = body.waterY - WATER_WALL_DROP;
-    const yTop = body.waterY + WATER_WALL_RISE;
+      const yBottom = body.waterY - WATER_WALL_DROP;
+      const yTop = body.waterY + WATER_WALL_RISE;
 
-    for (let i = 0; i < seg; i++) {
-      const a = (i / seg) * Math.PI * 2;
-      const cx = Math.cos(a) * body.radius;
-      const cz = Math.sin(a) * body.radius;
-      verts[i * 3] = cx;
-      verts[i * 3 + 1] = yBottom;
-      verts[i * 3 + 2] = cz;
-      verts[(seg + i) * 3] = cx;
-      verts[(seg + i) * 3 + 1] = yTop;
-      verts[(seg + i) * 3 + 2] = cz;
+      for (let i = 0; i < seg; i++) {
+        const a = (i / seg) * Math.PI * 2;
+        const cx = Math.cos(a) * body.radius;
+        const cz = Math.sin(a) * body.radius;
+        verts[i * 3] = cx;
+        verts[i * 3 + 1] = yBottom;
+        verts[i * 3 + 2] = cz;
+        verts[(seg + i) * 3] = cx;
+        verts[(seg + i) * 3 + 1] = yTop;
+        verts[(seg + i) * 3 + 2] = cz;
+      }
+
+      _waterPos.set(body.x, 0, body.z);
+      _waterQuat.identity();
+      _waterScl.set(1, 1, 1);
+      _waterMat.compose(_waterPos, _waterQuat, _waterScl);
+      appendMesh(verts, wallIndices, _waterMat, soup, true);
+      continue;
     }
 
-    _waterPos.set(body.x, 0, body.z);
-    _waterQuat.identity();
-    _waterScl.set(1, 1, 1);
-    _waterMat.compose(_waterPos, _waterQuat, _waterScl);
-    appendMesh(verts, wallIndices, _waterMat, soup, true);
+    // River: vertical walls along each segment at ±halfWidth.
+    const halfW = body.width / 2;
+    if (halfW <= 0 || body.path.length < 2) continue;
+    for (let i = 0; i + 1 < body.path.length; i++) {
+      const a = body.path[i]!;
+      const b = body.path[i + 1]!;
+      const ax = a[0];
+      const az = a[1];
+      const bx = b[0];
+      const bz = b[1];
+      // Skip segments fully outside the bake square (loose AABB test).
+      if (
+        Math.max(ax, bx) < -bounds ||
+        Math.min(ax, bx) > bounds ||
+        Math.max(az, bz) < -bounds ||
+        Math.min(az, bz) > bounds
+      ) {
+        continue;
+      }
+      const dx = bx - ax;
+      const dz = bz - az;
+      const len = Math.hypot(dx, dz);
+      if (len < 1e-3) continue;
+      const nx = (-dz / len) * halfW;
+      const nz = (dx / len) * halfW;
+      const y0 = (body.surfaceY?.[i] ?? body.waterY) - WATER_WALL_DROP;
+      const y1 =
+        (body.surfaceY?.[Math.min(i + 1, (body.surfaceY?.length ?? 1) - 1)] ??
+          body.waterY) + WATER_WALL_RISE;
+      // Left and right banks.
+      for (const side of [-1, 1] as const) {
+        const sx = nx * side;
+        const sz = nz * side;
+        const base = soup.positions.length / 3;
+        soup.positions.push(
+          ax + sx,
+          y0,
+          az + sz,
+          bx + sx,
+          y0,
+          bz + sz,
+          bx + sx,
+          y1,
+          bz + sz,
+          ax + sx,
+          y1,
+          az + sz
+        );
+        soup.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      }
+    }
   }
 
   if (soup.indices.length === 0) return null;
@@ -485,7 +634,7 @@ export function collectNavmeshGeometry(
 ): NavMeshGeometry {
   const parts: NavMeshGeometry[] = [];
 
-  const terrain = buildTerrainGeometry(state, terrainDivisions, bounds);
+  const terrain = buildAdaptiveTerrainGeometry(state, terrainDivisions, bounds);
   if (terrain) parts.push(terrain);
 
   const obstacles = collectColliderObstacles(state, bounds);

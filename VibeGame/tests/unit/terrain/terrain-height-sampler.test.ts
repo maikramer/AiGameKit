@@ -4,6 +4,7 @@ import {
   Terrain,
   getTerrainContext,
   sampleTerrainHeight,
+  getGroundHeight,
 } from 'vibegame';
 import type { TerrainEntityData } from '../../../src/plugins/terrain/utils';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
@@ -116,5 +117,36 @@ describe('sampleTerrainHeight', () => {
 
     // No cardinal offsets → just the centre probe (5), not the max (6.5).
     expect(sampleTerrainHeight(state, 0, 0, 0)).toBeCloseTo(5, 5);
+  });
+});
+
+describe('getGroundHeight', () => {
+  let state: State;
+
+  beforeEach(() => {
+    state = new State();
+    state.registerComponent('terrain', Terrain);
+  });
+
+  it('delegates to sampleTerrainHeight with default footprint', () => {
+    const eid = state.createEntity();
+    state.addComponent(eid, Terrain);
+    Terrain.resolution[eid] = 0;
+    getTerrainContext(state).set(
+      eid,
+      makeTerrainField({
+        initialized: true,
+        sampler: {
+          width: 2,
+          height: 2,
+          data: new Float32Array([0, 1, 0, 1]),
+          worldSize: 2,
+          maxHeight: 10,
+        },
+      })
+    );
+
+    expect(getGroundHeight(state, 0, 0)).toBe(sampleTerrainHeight(state, 0, 0));
+    expect(getGroundHeight(state, 0, 0)).toBeCloseTo(6.5, 5);
   });
 });

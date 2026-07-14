@@ -21,7 +21,7 @@ const EMA_ALPHA = 0.08;
  * required before a tier transition triggers. With cooldown this prevents
  * flapping on oscillating load.
  */
-const HOT_FRAMES_TO_DOWNSCALE = 90; // ~1.5s at 60fps
+const HOT_FRAMES_TO_DOWNSCALE = 45; // ~0.75s at 60fps — react faster under load
 const COLD_FRAMES_TO_UPSCALE = 180; // ~3s — require sustained headroom to upgrade
 
 /** Hysteresis: downscale when frame time exceeds target by this factor, upgrade

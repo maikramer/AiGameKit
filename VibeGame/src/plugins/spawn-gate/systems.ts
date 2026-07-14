@@ -1,6 +1,6 @@
 import { defineQuery, type State, type System } from '../../core';
 import { getBvhSurfaceHeight } from '../bvh';
-import { getTerrainContext, getTerrainHeightAt } from '../terrain';
+import { getGroundHeight, getTerrainContext } from '../terrain';
 import { isTerrainDynamicsBlocking } from '../terrain/utils';
 import { Transform } from '../transforms/components';
 import { Rigidbody, Collider } from '../physics/components';
@@ -63,7 +63,7 @@ function surfaceHeightAt(
 ): number {
   const bvh = getBvhSurfaceHeight(state, x, yAbove, z, SURFACE_PROBE_MAX_DROP);
   if (bvh !== null) return bvh;
-  return getTerrainHeightAt(state, x, z);
+  return getGroundHeight(state, x, z);
 }
 
 /**

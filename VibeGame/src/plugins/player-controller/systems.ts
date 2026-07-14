@@ -1,7 +1,5 @@
 import { defineQuery, type State, type System } from '../../core';
 import * as THREE from 'three';
-import { InputState } from '../input';
-import { CharacterMovement, Rigidbody } from '../physics';
 import { MainCamera, threeCameras } from '../rendering';
 import { CameraSyncSystem } from '../rendering/systems';
 import {
@@ -17,8 +15,6 @@ const thirdPersonCameraQuery = defineQuery([
   Transform,
   MainCamera,
 ]);
-const thirdPersonCameraAllQuery = defineQuery([ThirdPersonCamera]);
-const playerQuery = defineQuery([CharacterMovement, Rigidbody, InputState]);
 
 const _camDir = new THREE.Vector3();
 const _camOrigin = new THREE.Vector3();
@@ -293,29 +289,6 @@ export const ThirdPersonCameraSystem: System = {
       if (threeCamera) {
         threeCamera.position.set(camPos, camPosY, camPosZ);
         threeCamera.lookAt(targetX, lookTargetY, targetZ);
-      }
-    }
-  },
-};
-
-export const PlayerCameraLinkingSystem: System = {
-  group: 'simulation',
-  update(state: State) {
-    const players = playerQuery(state.world);
-    const cameras = thirdPersonCameraAllQuery(state.world);
-
-    for (const player of players) {
-      // Link first unlinked camera to first player
-      for (const cam of cameras) {
-        if (ThirdPersonCamera.target[cam] === 0) {
-          ThirdPersonCamera.target[cam] = player;
-
-          // Add InputState to camera if it doesn't have it
-          if (!state.hasComponent(cam, InputState)) {
-            state.addComponent(cam, InputState);
-          }
-          break;
-        }
       }
     }
   },

@@ -100,7 +100,7 @@ registerEffect({
   ): Pass | null {
     const cs = Postprocessing as unknown as CS;
     if ((cs.aa as Uint8Array)[entity] !== 2) return null;
-    return wrap(camera, new SMAAEffect({ preset: SMAAPreset.HIGH }));
+    return wrap(camera, new SMAAEffect({ preset: SMAAPreset.MEDIUM }));
   },
 });
 
@@ -459,12 +459,12 @@ registerEffect({
     const sun = getOrCreateSunMesh(scene);
     syncSunSource(scene, camera);
     const godRays = new GodRaysEffect(camera, sun, {
-      kernelSize: KernelSize.LARGE,
+      kernelSize: KernelSize.MEDIUM,
       density: (cs.godRaysDensity as Float32Array)[entity],
       decay: (cs.godRaysDecay as Float32Array)[entity],
       weight: (cs.godRaysWeight as Float32Array)[entity],
       exposure: (cs.godRaysExposure as Float32Array)[entity],
-      samples: 80,
+      samples: 48,
       clampMax: 1.0,
     });
     const pass = wrap(camera, godRays);

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { PlayerControllerPlugin, State, ThirdPersonCamera } from 'vibegame';
+import {
+  ThirdPersonCameraPlugin,
+  PlayerControllerPlugin,
+  State,
+  ThirdPersonCamera,
+} from 'vibegame';
 
 const MAX_ENTITIES = 100000;
 
@@ -67,10 +72,10 @@ describe('ThirdPersonCamera component', () => {
   });
 });
 
-describe('PlayerControllerPlugin', () => {
+describe('ThirdPersonCameraPlugin', () => {
   it('expõe defaults de third-person-camera com os valores esperados', () => {
     const defaults =
-      PlayerControllerPlugin.config?.defaults?.['third-person-camera'];
+      ThirdPersonCameraPlugin.config?.defaults?.['third-person-camera'];
     expect(defaults).toBeDefined();
     expect(defaults!.distance).toBe(12);
     expect(defaults!.height).toBe(4);
@@ -83,9 +88,9 @@ describe('PlayerControllerPlugin', () => {
   });
 
   it('registra o recipe ThirdPersonCamera com components e merge=true', () => {
-    expect(PlayerControllerPlugin.recipes).toBeDefined();
-    expect(PlayerControllerPlugin.recipes).toHaveLength(1);
-    const recipe = PlayerControllerPlugin.recipes![0];
+    expect(ThirdPersonCameraPlugin.recipes).toBeDefined();
+    expect(ThirdPersonCameraPlugin.recipes).toHaveLength(1);
+    const recipe = ThirdPersonCameraPlugin.recipes![0];
     expect(recipe.name).toBe('ThirdPersonCamera');
     expect(recipe.components).toEqual([
       'third-person-camera',
@@ -95,24 +100,26 @@ describe('PlayerControllerPlugin', () => {
     expect(recipe.merge).toBe(true);
   });
 
-  it('registra dois sistemas em grupos simulation (linking) e draw (camera)', () => {
-    expect(PlayerControllerPlugin.systems).toHaveLength(2);
-    const [linking, camera] = PlayerControllerPlugin.systems!;
-    expect(linking.group).toBe('simulation');
-    expect(typeof linking.update).toBe('function');
+  it('registra ThirdPersonCameraSystem em grupo draw', () => {
+    expect(ThirdPersonCameraPlugin.systems).toHaveLength(1);
+    const [camera] = ThirdPersonCameraPlugin.systems!;
     expect(camera.group).toBe('draw');
     expect(typeof camera.update).toBe('function');
     expect(Array.isArray(camera.after)).toBe(true);
   });
 
   it('mapeia o componente ThirdPersonCamera no registro do plugin', () => {
-    expect(Object.values(PlayerControllerPlugin.components!)).toContain(
+    expect(Object.values(ThirdPersonCameraPlugin.components!)).toContain(
       ThirdPersonCamera
     );
   });
+
+  it('mantém PlayerControllerPlugin como alias deprecado', () => {
+    expect(PlayerControllerPlugin).toBe(ThirdPersonCameraPlugin);
+  });
 });
 
-describe('PlayerControllerPlugin integração com State', () => {
+describe('ThirdPersonCameraPlugin integração com State', () => {
   let state: State;
 
   beforeEach(() => {
@@ -120,7 +127,7 @@ describe('PlayerControllerPlugin integração com State', () => {
   });
 
   it('registerPlugin torna ThirdPersonCamera adicionável e visível por hasComponent', () => {
-    state.registerPlugin(PlayerControllerPlugin);
+    state.registerPlugin(ThirdPersonCameraPlugin);
     const entity = state.createEntity();
     state.addComponent(entity, ThirdPersonCamera);
 

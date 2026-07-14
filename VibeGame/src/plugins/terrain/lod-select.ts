@@ -23,7 +23,9 @@ export interface ChunkDesc {
  * @param level    Current depth (0 = root)
  * @param maxLevels Maximum quadtree depth
  * @param ratio    lodDistanceRatio — split when dist < size * ratio
- * @param _hysteresis Reserved for future hysteresis support
+ * @param hysteresis lodHysteresis — values >1 delay subdivision until the
+ *   camera is closer (`splitDist / hysteresis`), reducing LOD thrash at
+ *   split boundaries.
  * @param camX     Camera world X
  * @param camZ     Camera world world Z
  * @param out      Accumulator for leaf ChunkDescs
@@ -35,7 +37,7 @@ function traverse(
   level: number,
   maxLevels: number,
   ratio: number,
-  _hysteresis: number,
+  hysteresis: number,
   camX: number,
   camZ: number,
   out: ChunkDesc[]
@@ -45,7 +47,10 @@ function traverse(
   const dz = camZ - cz;
   const dist = Math.sqrt(dx * dx + dz * dz);
 
-  const splitDist = size * ratio;
+  // hysteresis > 1: require camera closer before subdividing. Cuts boundary
+  // thrash (parent ↔ 4 children) and keeps more coarse leaves on average.
+  const hyst = Math.max(hysteresis, 1);
+  const splitDist = (size * ratio) / hyst;
 
   if (level < maxLevels - 1 && dist < splitDist) {
     const quarter = halfSize * 0.5;
@@ -56,7 +61,7 @@ function traverse(
       level + 1,
       maxLevels,
       ratio,
-      _hysteresis,
+      hysteresis,
       camX,
       camZ,
       out
@@ -68,7 +73,7 @@ function traverse(
       level + 1,
       maxLevels,
       ratio,
-      _hysteresis,
+      hysteresis,
       camX,
       camZ,
       out
@@ -80,7 +85,7 @@ function traverse(
       level + 1,
       maxLevels,
       ratio,
-      _hysteresis,
+      hysteresis,
       camX,
       camZ,
       out
@@ -92,7 +97,7 @@ function traverse(
       level + 1,
       maxLevels,
       ratio,
-      _hysteresis,
+      hysteresis,
       camX,
       camZ,
       out

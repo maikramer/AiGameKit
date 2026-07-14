@@ -9,8 +9,15 @@ import {
 } from './systems';
 
 export { NavMeshAgent, NavMeshSurface, NavMeshWalkable } from './components';
-export { collectNavmeshGeometry } from './geometry';
+export {
+  collectNavmeshGeometry,
+  prefetchNavmeshObstacles,
+  buildAdaptiveTerrainGeometry,
+  collectWaterObstacles,
+} from './geometry';
 export type { NavMeshGeometry } from './geometry';
+export { bakeSoloNavMeshBytes } from './bake-worker';
+export type { NavMeshBakeConfig } from './bake-worker';
 export { NavMeshPlugin } from './plugin';
 export {
   navMeshAgentRecipe,

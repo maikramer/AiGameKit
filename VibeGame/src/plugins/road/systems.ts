@@ -8,6 +8,7 @@ import { applyOverride } from '../terrain/density-map';
 import { rebuildTerrainDerivatives } from '../terrain/height-brush';
 import { sampleHeightAt } from '../terrain/height-sampler';
 import { TerrainPadApplySystem } from '../terrain/pad-systems';
+import { registerGroundBrush } from '../terrain/brush-registry';
 import { refreshChunkResolutions } from '../terrain/systems';
 import { getTerrainContext } from '../terrain/utils';
 import { Transform, WorldTransform } from '../transforms/components';
@@ -187,6 +188,29 @@ export const RoadApplySystem: System = {
             refreshChunkResolutions(state, fe, fd);
           }
           if (changed) rebuildTerrainDerivatives(state, fe, fd);
+          // Footprint for navmesh adaptive source + diagnostics.
+          let minX = Infinity;
+          let maxX = -Infinity;
+          let minZ = Infinity;
+          let maxZ = -Infinity;
+          const reach = width / 2 + (Road.flattenFalloff[eid] || 6);
+          for (let i = 0; i < localPath.length; i += 2) {
+            const px = localPath[i]!;
+            const pz = localPath[i + 1]!;
+            minX = Math.min(minX, px - reach);
+            maxX = Math.max(maxX, px + reach);
+            minZ = Math.min(minZ, pz - reach);
+            maxZ = Math.max(maxZ, pz + reach);
+          }
+          registerGroundBrush(state, {
+            kind: 'road',
+            minX,
+            maxX,
+            minZ,
+            maxZ,
+            path: localPath.slice(),
+            halfWidth: width / 2,
+          });
           break; // só o primeiro field ready (mesmo limite dos pads)
         }
       }

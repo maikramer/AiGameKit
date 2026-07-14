@@ -1,14 +1,12 @@
 import type { Plugin } from '../../core';
 import { ThirdPersonCamera } from './components';
 import { thirdPersonCameraRecipe } from './recipes';
-import { PlayerCameraLinkingSystem, ThirdPersonCameraSystem } from './systems';
+import { ThirdPersonCameraSystem } from './systems';
 
-// NOTE: despite the name, this is the third-person *camera* rig, not the player
-// movement controller. The character controller is the sibling `player` plugin
-// (PlayerPlugin / PlayerController). See ./context.md for the full distinction
-// and the PlayerCameraLinkingSystem overlap between the two plugins.
-export const PlayerControllerPlugin: Plugin = {
-  systems: [PlayerCameraLinkingSystem, ThirdPersonCameraSystem],
+// Third-person *camera* rig (not the character movement controller — see ./context.md).
+// Camera↔player linking lives in PlayerPlugin.PlayerCameraLinkingSystem.
+export const ThirdPersonCameraPlugin: Plugin = {
+  systems: [ThirdPersonCameraSystem],
   recipes: [thirdPersonCameraRecipe],
   components: {
     ThirdPersonCamera,
@@ -28,3 +26,6 @@ export const PlayerControllerPlugin: Plugin = {
     },
   },
 };
+
+/** @deprecated Use {@link ThirdPersonCameraPlugin} instead. */
+export const PlayerControllerPlugin = ThirdPersonCameraPlugin;

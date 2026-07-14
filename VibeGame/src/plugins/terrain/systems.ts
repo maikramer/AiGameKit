@@ -17,6 +17,7 @@ import {
   effectiveResolution,
   resolutionForLevel,
   selectChunks,
+  type ChunkDesc,
 } from './lod-select';
 import { buildDensityMap, maxBoostOverAabb } from './density-map';
 import { loadHeightfield } from './ahgt-loader';
@@ -28,7 +29,6 @@ import {
   getTerrainHeightmapUrl,
   getTerrainSplat,
   getTerrainTextureUrl,
-  setTerrainHeightmapUrl,
 } from './utils';
 import { getWaterBodies } from '../water/registry';
 
@@ -154,12 +154,21 @@ const MAX_LAKES = 16;
 const MAX_RIVER_SEGS = 48;
 
 /**
- * Peak sand opacity of the water-bed mask. Deliberately < 1 so ~30% of the
- * underlying terrain/biome albedo bleeds through — lakebeds pick up a local
- * colour cast (mud in the swamp, snow in the peaks) instead of an identical
- * stamped beach everywhere.
+ * Peak sand opacity of the water-bed / shore mask. Keep a little biome bleed
+ * (~8%) so swamp mud / peak snow still tint the bed, but high enough that
+ * lake bottoms and banks read as sand through the water disc.
  */
-const SAND_BLEND_MAX = 0.7;
+const SAND_BLEND_MAX = 0.92;
+
+/** Extra metres of soft sand fade past the river carve footprint. */
+const RIVER_SAND_OUTER_PAD = 1.75;
+
+/**
+ * How far into the exposed bank full-strength sand reaches, as a fraction of
+ * the waterline half-width. < 1 pushes the fade start onto the dry bank so
+ * shores read sandy instead of only the wet channel floor.
+ */
+const RIVER_SAND_FULL_FRAC = 0.72;
 
 /** World metres per sand-texel repeat — sand grains should tile finer than the
  *  biome albedo (which uses the chunk's world-space UV). Sampled by vWorldXZ. */
@@ -183,7 +192,7 @@ function _getSandAlbedo(): THREE.Texture {
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  ctx.fillStyle = '#dac99b';
+  ctx.fillStyle = '#e6c98a';
   ctx.fillRect(0, 0, size, size);
   const img = ctx.getImageData(0, 0, size, size);
   const d = img.data;
@@ -455,22 +464,24 @@ float lakeMask() {
   float m = 0.0;
   for (int i = 0; i < ${MAX_LAKES}; i++) {
     if (i >= uLakeCount) break;
-    float r = uLakes[i].z;
+    // z = outer sand radius (carve footprint), w = waterline (shoreRadius).
+    // Full sand on the bed (d ≤ shoreR); fade across the dry beach to the
+    // carve rim — previously z was the water-disc radius, so exposed banks
+    // stayed grassy.
+    float outerR = uLakes[i].z;
     float shoreR = uLakes[i].w;
     vec2 rel = vWorldXZ - uLakes[i].xy;
-    // Cheap distance test FIRST. lakeShapeRadius perturbs the shoreline by at
-    // most SHORE_SHAPE_AMP (0.28), so any fragment farther than the perturbed
-    // outer radius (r * 1.28) can never contribute sand — skip the expensive
-    // atan/sin/smoothstep entirely. This keeps the trig cost confined to the
-    // thin shore ring instead of the whole screen.
     float d = length(rel);
-    float outerR = r * (1.0 + SHORE_SHAPE_AMP);
-    if (d > outerR) continue;
+    // Cheap reject past the organic overshoot of the carve rim.
+    float rejectR = outerR * (1.0 + SHORE_SHAPE_AMP);
+    if (d > rejectR) continue;
     float angle = atan(rel.y, rel.x);
-    // Organic shoreline: shape both the beach ring radii by the same
-    // perturbation the bowl/water use, so the sand outline matches.
     float s = lakeShapeRadius(angle, uLakes[i].x, uLakes[i].y);
-    float beach = 1.0 - smoothstep(shoreR * s, max(r * s, shoreR * s + 0.001), d);
+    float beach = 1.0 - smoothstep(
+      shoreR * s,
+      max(outerR * s, shoreR * s + 0.001),
+      d
+    );
     m = max(m, beach);
   }
   return m;
@@ -615,7 +626,8 @@ void main() {
   // Height + slope colour tint. The texture albedo stays dominant; this adds a
   // subtle ambient gradient: cool white at the snow line, warm green in the
   // mid-band, darker valley greens low down, and neutral rock on steep faces.
-  // heightBlendStrength=0 disables the whole pass.
+  // heightBlendStrength=0 disables the whole pass. Sand shores mute the tint
+  // so green valley cast doesn't wash out the beach.
   if (uHeightBlendStrength > 0.001) {
     float h = uMaxHeight > 0.0 ? clamp(vWorldY / uMaxHeight, 0.0, 1.0) : 0.0;
     // Three-band altitude blend: low → mid → high, softstepped at the knots.
@@ -632,9 +644,10 @@ void main() {
     // Re-normalise the tint to unit luminance so it shifts hue/saturation
     // without darkening the albedo (tints are treated as 1.0-luminance anchors).
     tint /= max(dot(tint, vec3(0.299, 0.587, 0.114)), 1e-3);
+    float sandMute = 1.0 - sandMask() * 0.9;
     csm_DiffuseColor.rgb = mix(csm_DiffuseColor.rgb,
                                csm_DiffuseColor.rgb * tint,
-                               uHeightBlendStrength);
+                               uHeightBlendStrength * sandMute);
   }
 
   // Roughness (alpha of the packed NAR = 1 − smoothness).
@@ -694,10 +707,10 @@ function buildTerrainMaterial(
       uSandScale: { value: SAND_UV_SCALE },
       uSandBlend: { value: 0 },
       uLakeCount: { value: 0 },
-      // Per-lake: xy = world centre, z = bowl radius, w = shore radius (waterline).
+      // Per-lake: xy = world centre, z = outer sand radius (carve), w = waterline.
       uLakes: { value: lakeVecs },
       // Per river segment: xyzw = (ax, az, bx, bz) world endpoints; dims per
-      // segment: x = shore half-width (waterline), y = outer sand half-width.
+      // segment: x = full-sand half-width, y = outer sand half-width.
       uRiverSegs: { value: riverSegs },
       uRiverDims: { value: riverDims },
       uRiverSegCount: { value: 0 },
@@ -811,14 +824,18 @@ function applyLakeSand(state: State, field: number): void {
     for (const b of riverBodies) {
       const pts = b.path;
       if (pts.length < 2) continue;
-      const shoreHalf = (b.shoreWidth ?? b.width * 0.95) / 2;
-      // Sand covers the carve footprint (waterline + exposed banks + feather)
-      // when the body carries it; legacy fallback scales a beach to the river,
-      // clamped so narrow creeks still read and wide rivers don't flood sand.
-      const outerHalf =
+      const waterHalf = (b.shoreWidth ?? b.width * 0.95) / 2;
+      // Full sand reaches past the waterline onto the dry bank; fade covers
+      // the rest of the carve (+ pad) so shores read sandy.
+      const shoreHalf = Math.max(0.5, waterHalf * RIVER_SAND_FULL_FRAC);
+      const carveHalf =
         b.carveWidth != null
           ? b.carveWidth / 2
           : b.width / 2 + Math.min(4, Math.max(1.5, b.width * 0.35));
+      const outerHalf = Math.max(
+        carveHalf + RIVER_SAND_OUTER_PAD,
+        shoreHalf + 0.5
+      );
       const stride = Math.max(1, Math.ceil((pts.length - 1) / budget));
       for (
         let i = 0;
@@ -846,7 +863,10 @@ function applyLakeSand(state: State, field: number): void {
     // Guard for legacy bodies without shoreRadius: fall back to 0.7·radius so
     // the mask degrades gracefully rather than sanding the whole bowl.
     const shoreR = b.shoreRadius ?? b.radius * 0.7;
-    lakes[i].set(b.x, b.z, b.radius, shoreR);
+    // Outer sand = full carve footprint (banks past the water disc). Legacy
+    // bodies without carveRadius keep the old water-disc outer edge.
+    const outerR = Math.max(b.carveRadius ?? b.radius, shoreR + 0.25);
+    lakes[i].set(b.x, b.z, outerR, shoreR);
   }
   u.uLakeCount.value = count;
   const riverSegs = u.uRiverSegs.value as THREE.Vector4[];
@@ -869,6 +889,8 @@ const PHYSICS_COLLIDER_RADIUS = 192;
  * is wasted work while standing or moving slowly. */
 const LOD_RESELECT_DISTANCE = 6;
 const _lastLodCam = new Map<number, { x: number; z: number }>();
+const _desiredKeysScratch = new Map<string, ChunkDesc>();
+const _existingKeysScratch = new Map<string, number>();
 let _heightmapRetryFrame = 0;
 
 /** Shared materials per terrain field — avoids N duplicate Material instances for N chunks. */
@@ -991,7 +1013,7 @@ export function refreshChunkResolutions(
  * retry and {@link reloadTerrainHeightmap} so no path misses a derivative
  * (the retry path used to skip the collider/BVH reset, leaving stale physics).
  */
-function applyLoadedSampler(
+export function applyLoadedSampler(
   state: State,
   field: number,
   data: import('./utils').TerrainEntityData,
@@ -1185,12 +1207,14 @@ export const TerrainLodSelectSystem: System = {
         localCamZ
       );
 
-      const desiredKeys = new Map<string, (typeof desired)[number]>();
+      const desiredKeys = _desiredKeysScratch;
+      desiredKeys.clear();
       for (const desc of desired) {
         desiredKeys.set(chunkKey(desc), desc);
       }
 
-      const existingKeys = new Map<string, number>();
+      const existingKeys = _existingKeysScratch;
+      existingKeys.clear();
       for (const chunkEid of data.chunks) {
         if (!state.exists(chunkEid)) continue;
         const key = `${TerrainChunk.originX[chunkEid]},${TerrainChunk.originZ[chunkEid]},${TerrainChunk.level[chunkEid]}`;
@@ -1776,142 +1800,3 @@ export const TerrainDebugSystem: System = {
     }
   },
 };
-
-export function getTerrainHeightAt(
-  state: State,
-  worldX: number,
-  worldZ: number
-): number {
-  const context = getTerrainContext(state);
-  for (const [, data] of context) {
-    if (!data.initialized) continue;
-    const localX = worldX - data.worldOffset.x;
-    const localZ = worldZ - data.worldOffset.z;
-    return sampleHeightAt(data.sampler, localX, localZ);
-  }
-  return 0;
-}
-
-/**
- * True if the terrain has a real chunk heightfield collider that covers
- * (worldX, worldZ). Unlike terrainReady(), this checks the actual collider set
- * under the point rather than the field-level "collisionReady" latch.
- */
-export function isTerrainColliderAt(
-  state: State,
-  worldX: number,
-  worldZ: number
-): boolean {
-  const rapierWorld = getRapierWorld(state);
-  if (!rapierWorld) return false;
-  const context = getTerrainContext(state);
-  for (const [, data] of context) {
-    if (!data.initialized || data.chunkColliders.size === 0) continue;
-    const localX = worldX - data.worldOffset.x;
-    const localZ = worldZ - data.worldOffset.z;
-    for (const [chunk, body] of data.chunkColliders) {
-      if (!state.exists(chunk)) continue;
-      const ox = TerrainChunk.originX[chunk];
-      const oz = TerrainChunk.originZ[chunk];
-      const half = TerrainChunk.size[chunk] * 0.5;
-      if (localX < ox - half || localX > ox + half) continue;
-      if (localZ < oz - half || localZ > oz + half) continue;
-      if (body.numColliders() > 0) return true;
-    }
-  }
-  return false;
-}
-
-export function findNearestTerrainEntity(
-  state: State,
-  worldX: number,
-  worldZ: number
-): number {
-  const context = getTerrainContext(state);
-  let bestEntity = 0;
-  let bestDist = Infinity;
-
-  for (const [entity, data] of context) {
-    if (!data.initialized) continue;
-    const dx = data.worldOffset.x - worldX;
-    const dz = data.worldOffset.z - worldZ;
-    const dist = dx * dx + dz * dz;
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestEntity = entity;
-    }
-  }
-  return bestEntity;
-}
-
-export function setTerrainWireframe(
-  state: State,
-  entity: number,
-  enabled: boolean
-): void {
-  const context = getTerrainContext(state);
-  const data = context.get(entity);
-  if (!data) return;
-
-  Terrain.wireframe[entity] = enabled ? 1 : 0;
-  data.lastWireframe = enabled ? 1 : 0;
-
-  const registry = getChunkMeshRegistry(state);
-  for (const chunk of data.chunks) {
-    const mesh = registry.get(chunk);
-    if (mesh) {
-      (mesh.material as THREE.MeshStandardMaterial).wireframe = enabled;
-    }
-  }
-}
-
-export function reloadTerrainHeightmap(
-  state: State,
-  entity: number,
-  url: string
-): void {
-  const context = getTerrainContext(state);
-  const data = context.get(entity);
-  if (!data) return;
-
-  setTerrainHeightmapUrl(state, entity, url);
-  data.heightmapUrl = url;
-
-  const worldSize = Terrain.worldSize[entity];
-  const maxHeight = Terrain.maxHeight[entity];
-  loadHeightfield(url, worldSize, maxHeight)
-    .then((sampler) => {
-      const d = context.get(entity);
-      if (!d) return;
-      applyLoadedSampler(state, entity, d, sampler);
-    })
-    .catch((err) => {
-      logger.error(`Heightmap reload failed: ${url}`, err);
-    });
-}
-
-export function getTerrainStats(
-  state: State,
-  entity: number
-): {
-  activeChunks: number;
-  drawCalls: number;
-  totalInstances: number;
-  geometries: number;
-  materials: number;
-  failedColliderChunks: number;
-} | null {
-  const context = getTerrainContext(state);
-  const data = context.get(entity);
-  if (!data?.initialized) return null;
-
-  const count = data.chunks.size;
-  return {
-    activeChunks: count,
-    drawCalls: count,
-    totalInstances: count,
-    geometries: count,
-    materials: count,
-    failedColliderChunks: TerrainDebugInfo.failedColliderChunks[entity] ?? 0,
-  };
-}

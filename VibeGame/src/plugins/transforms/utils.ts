@@ -3,36 +3,41 @@ import { Transform, WorldTransform } from './components';
 
 type TransformComponent = typeof Transform | typeof WorldTransform;
 
-import { eulerToQuaternion, quaternionToEuler } from '../../core/math';
+import { eulerToQuaternionInto, quaternionToEulerInto } from '../../core/math';
+
+const _eulerScratch = { x: 0, y: 0, z: 0 };
+const _quatScratch = { x: 0, y: 0, z: 0, w: 1 };
 
 export function syncEulerFromQuaternion(
   transform: TransformComponent,
   entity: number
 ): void {
-  const euler = quaternionToEuler(
+  quaternionToEulerInto(
     transform.rotX[entity],
     transform.rotY[entity],
     transform.rotZ[entity],
-    transform.rotW[entity]
+    transform.rotW[entity],
+    _eulerScratch
   );
-  transform.eulerX[entity] = euler.x;
-  transform.eulerY[entity] = euler.y;
-  transform.eulerZ[entity] = euler.z;
+  transform.eulerX[entity] = _eulerScratch.x;
+  transform.eulerY[entity] = _eulerScratch.y;
+  transform.eulerZ[entity] = _eulerScratch.z;
 }
 
 export function syncQuaternionFromEuler(
   transform: TransformComponent,
   entity: number
 ): void {
-  const quat = eulerToQuaternion(
+  eulerToQuaternionInto(
     transform.eulerX[entity],
     transform.eulerY[entity],
-    transform.eulerZ[entity]
+    transform.eulerZ[entity],
+    _quatScratch
   );
-  transform.rotX[entity] = quat.x;
-  transform.rotY[entity] = quat.y;
-  transform.rotZ[entity] = quat.z;
-  transform.rotW[entity] = quat.w;
+  transform.rotX[entity] = _quatScratch.x;
+  transform.rotY[entity] = _quatScratch.y;
+  transform.rotZ[entity] = _quatScratch.z;
+  transform.rotW[entity] = _quatScratch.w;
 }
 
 export function copyTransform(

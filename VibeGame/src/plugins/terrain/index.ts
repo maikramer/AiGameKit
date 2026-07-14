@@ -24,6 +24,7 @@ export {
   createHeightmapSampler,
   loadHeightmapFromUrl,
   sampleTerrainHeight,
+  getGroundHeight,
 } from './height-sampler';
 export type { HeightSamplerData } from './height-sampler';
 export {
@@ -32,10 +33,9 @@ export {
   findNearestTerrainEntity,
   setTerrainWireframe,
   reloadTerrainHeightmap,
-  refreshChunkResolutions,
   getTerrainStats,
-  TerrainLodSelectSystem,
-} from './systems';
+} from './terrain-queries';
+export { refreshChunkResolutions, TerrainLodSelectSystem } from './systems';
 export {
   selectChunks,
   chunkKey,
@@ -62,3 +62,12 @@ export { flattenRect } from './flatten';
 export type { FlattenRectOpts } from './flatten';
 export { TerrainPadApplySystem, terrainPadParser } from './pad-systems';
 export { terrainPadRecipe } from './recipes';
+export {
+  getGroundBrushes,
+  registerGroundBrush,
+  unregisterGroundBrush,
+  clearGroundBrushes,
+  pointInPadCore,
+  brushIntersectsBounds,
+} from './brush-registry';
+export type { GroundBrush, GroundBrushKind } from './brush-registry';

@@ -3,9 +3,10 @@ import * as THREE from 'three';
 import { InstancedMesh2 } from '@three.ez/instanced-mesh';
 import type { State, System } from '../../core';
 import { defineQuery } from '../../core';
-import { loadGltfMaster } from '../../extras/gltf-bridge';
+import { loadGltfMasterTracked } from '../../extras/gltf-bridge';
 import { getSceneGeneration } from '../../extras/scene-generation';
 import { getScene, setupCsmMaterial } from '../rendering';
+import { maybePatchVegetationWindMaterial } from '../vegetation/wind';
 import { MainCamera } from '../rendering/components';
 import { DistanceCull } from '../rendering/components';
 import { Transform, WorldTransform } from '../transforms/components';
@@ -388,6 +389,7 @@ function buildLevelPrimitives(
       ? mesh.material
       : [mesh.material]) {
       setupCsmMaterial(state, mat);
+      maybePatchVegetationWindMaterial(state, pool.lodUrls[0], mat);
     }
     const instanced = new InstancedMesh2(mesh.geometry, mesh.material, {
       capacity: INITIAL_CAPACITY,
@@ -434,6 +436,11 @@ function attachLodLevel(
       ? (meshes[i].material as THREE.Material[])
       : [meshes[i].material as THREE.Material]) {
       setupCsmMaterial(state, mat);
+      maybePatchVegetationWindMaterial(
+        state,
+        pool.lodUrls[level] ?? pool.lodUrls[0],
+        mat
+      );
     }
     pool.primitives[i].mesh.addLOD(
       meshes[i].geometry,
@@ -450,7 +457,8 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
   // (scene swap / runtime teardown), the .then handlers bail before adding any
   // InstancedMesh2 to a retired scene — those meshes would never be torn down.
   const gen = getSceneGeneration(state);
-  void loadGltfMaster(state, pool.lodUrls[0])
+  // lod0 is boot-critical (visible near the player); lod1/2 stream after.
+  void loadGltfMasterTracked(state, pool.lodUrls[0], 'critical')
     .then((gltf) => {
       if (getSceneGeneration(state) !== gen) return;
       registerGltfLocalYBounds(pool.lodUrls[0], gltf.scene);
@@ -464,7 +472,7 @@ function kickLoad(state: State, pool: GltfInstancePool): void {
       for (const level of [1, 2] as const) {
         const lodUrl = pool.lodUrls[level];
         if (!lodUrl) continue;
-        void loadGltfMaster(state, lodUrl)
+        void loadGltfMasterTracked(state, lodUrl, 'background')
           .then((gltfLod) => {
             if (getSceneGeneration(state) !== gen) return;
             attachLodLevel(state, pool, level, gltfLod.scene);

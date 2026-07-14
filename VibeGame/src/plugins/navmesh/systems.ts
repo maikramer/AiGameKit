@@ -7,29 +7,30 @@ import type {
 } from 'recast-navigation';
 import {
   Crowd as CrowdClass,
+  importNavMesh,
   NavMeshQuery as NavMeshQueryClass,
   init,
 } from 'recast-navigation';
-import { generateSoloNavMesh } from 'recast-navigation/generators';
 import { defineQuery } from '../../core';
 import type { State, System } from '../../core';
-import { isLoadingEnforced, registerReadyGate } from '../../core/loading-gate';
 import { Transform } from '../transforms/components';
 import { Terrain, TerrainPad } from '../terrain/components';
 import { getTerrainContext, isTerrainDynamicsBlocking } from '../terrain/utils';
 import { Road } from '../road/components';
 import { Lake, River } from '../water/components';
+import { bakeSoloNavMeshBytes } from './bake-worker';
 import { NavMeshAgent, NavMeshSurface } from './components';
-import { collectNavmeshGeometry, navmeshObstaclesLoaded } from './geometry';
+import {
+  collectNavmeshGeometry,
+  navmeshObstaclesLoaded,
+  prefetchNavmeshObstacles,
+} from './geometry';
 
-const TERRAIN_GRACE_FRAMES = 30;
+// Short settle after terrain carvers latch `applied=1` — pads/roads/lakes/
+// rivers already mutated the sampler + brush registry; a couple of frames
+// cover late SOA writes.
+const TERRAIN_GRACE_FRAMES = 2;
 const MAX_INIT_WAIT_FRAMES = 600;
-// Failsafe: once generation has been kicked off, never let the world-ready gate
-// block on the navmesh longer than this. recast's wasm `init()` or the solo bake
-// can hang or silently fail; without a ceiling the loading screen would wait on
-// "navmesh…" forever and the game never starts. On timeout the gate releases in
-// degraded mode (no crowd → enemies fall back to direct steering).
-const NAVMESH_INIT_TIMEOUT_MS = 8000;
 
 const AGENT_HEIGHT = 2.0;
 const AGENT_RADIUS = 0.4;
@@ -46,13 +47,10 @@ const MAX_STEP_HEIGHT = 0.4;
 // quadruples the work. 0.4 over a 240 m span = 600² grid — fine enough to carve
 // 0.4 m-radius trunks while keeping generation sub-second.
 const FIXED_CS = 0.4;
-// Source-mesh resolution for the terrain collision surface. Independent of cs:
-// recast re-voxelises at cs regardless, so a fine source mesh only wastes time.
-// 180 over 240 m ≈ 1.3 m steps, plenty to capture the walkable slope.
-// (Tested lower: recast cost is grid-bound by cs, not source tri count, so
-// reducing this gives no measurable bake speedup — the real win is not waiting
-// the full MAX_INIT_WAIT_FRAMES cap, fixed in the gltf-pending check above.)
-const TERRAIN_SOURCE_DIVISIONS = 180;
+// Coarse source-mesh resolution for the play-area terrain skin. Dense patches
+// over lake/river/road brush AABBs are added in buildAdaptiveTerrainGeometry.
+// 96 over 240 m ≈ 2.5 m steps on the base grid (was 180 / ~1.3 m uniform).
+const TERRAIN_SOURCE_DIVISIONS = 96;
 
 const MAX_AGENTS = 256;
 const MAX_AGENT_RADIUS = 0.6;
@@ -78,37 +76,23 @@ function navMeshConfig(worldSize: number) {
   };
 }
 
-function navMeshReady(state: State): boolean {
-  const rt = getNavMeshRuntime(state);
-  if (rt.ready || rt.failed) return true;
-  if (!rt.initStarted) {
-    const surfaces = surfaceQuery(state.world);
-    if (!surfaces.some((eid) => NavMeshSurface.enabled[eid] === 1)) {
-      return true;
+/** Yield one animation frame so the loading overlay can fade and the first
+ * gameplay frame can paint before the sync WASM bake stalls the main thread. */
+function nextAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => resolve());
+    } else {
+      setTimeout(resolve, 0);
     }
-    return false;
-  }
-  // Generation kicked off but never finished within the failsafe window — give
-  // up holding the gate so a hung/slow bake can't deadlock the whole load.
-  if (
-    rt.initStartedAt > 0 &&
-    performance.now() - rt.initStartedAt > NAVMESH_INIT_TIMEOUT_MS
-  ) {
-    rt.failed = true;
-    logger.warn(
-      '[NavMesh] Generation did not complete within ' +
-        `${NAVMESH_INIT_TIMEOUT_MS}ms — releasing load gate (degraded steering).`
-    );
-    return true;
-  }
-  return false;
+  });
 }
 
 export interface NavMeshRuntime {
   initStarted: boolean;
   /** performance.now() when generateNavMesh was kicked off (0 = not yet). */
   initStartedAt: number;
-  /** Generation gave up (empty geometry, error, or failsafe timeout). */
+  /** Generation gave up (empty geometry or error). */
   failed: boolean;
   ready: boolean;
   graceFrames: number;
@@ -182,10 +166,20 @@ function terrainCarversReady(state: State): boolean {
   return true;
 }
 
+/**
+ * Kicks off navmesh generation once terrain carvers and in-radius collision
+ * obstacles are ready. Does NOT register a loading-gate entry — bake runs in
+ * a Worker (with sync fallback) while AI uses direct steering until ready.
+ */
 export const NavMeshInitSystem: System = {
   group: 'setup',
   setup(state) {
-    registerReadyGate(state, 'navmesh', () => navMeshReady(state));
+    if (state.headless) return;
+    // Overlap WASM download/compile with terrain decode + asset loads so the
+    // bake itself is not paying cold-start cost on the critical path.
+    void init().catch((err: unknown) => {
+      logger.warn('[NavMesh] Early WASM init failed:', err);
+    });
   },
   update(state: State) {
     if (state.headless) return;
@@ -198,7 +192,9 @@ export const NavMeshInitSystem: System = {
     );
     if (!hasSurface) return;
 
-    const loading = isLoadingEnforced(state);
+    // Start collision-GLB fetches as soon as obstacles exist — do not wait for
+    // carvers/grace. First-touch lazy loads previously delayed the bake.
+    prefetchNavmeshObstacles(state, PLAY_AREA_RADIUS);
 
     // Read the terrain field for worldSize, but gate generation on the full
     // carver pipeline (heightmap decoded + collision ready + every pad/road/
@@ -217,37 +213,12 @@ export const NavMeshInitSystem: System = {
     rt.graceFrames++;
     if (rt.graceFrames < TERRAIN_GRACE_FRAMES) return;
 
-    // Wait for obstacles to finish loading before baking, or they won't be
-    // carved into the navmesh. Capped by MAX_INIT_WAIT_FRAMES so a stuck load
-    // can't deadlock generation forever.
+    // Wait for collision obstacles that carve the navmesh — not every visual
+    // GLTF. Baking as soon as those are ready overlaps with remaining asset
+    // loads so the loading screen rarely waits on navmesh. Capped so a stuck
+    // collision download can't deadlock generation forever.
     if (rt.graceFrames < MAX_INIT_WAIT_FRAMES) {
-      // The navmesh bakes from collision geometry; defer until every fixed
-      // trimesh/convex obstacle's collision GLB has finished downloading.
       if (!navmeshObstaclesLoaded(state, PLAY_AREA_RADIUS)) return;
-      if (loading) {
-        const gltfPendingComp = state.getComponent('gltf-pending') as
-          { loaded: Uint8Array } | undefined;
-        if (gltfPendingComp) {
-          let pending = 0;
-          for (let e = 0; e < gltfPendingComp.loaded.length; e++) {
-            // Count only entities that actually carry the gltf-pending
-            // component and haven't loaded. `loaded` is a MAX_ENTITIES array
-            // defaulting to 0, so without the hasComponent guard this counted
-            // every entity *without* the component (hero, NPCs, lights, …) as
-            // "pending" — `pending` never hit 0 and the navmesh always waited
-            // the full MAX_INIT_WAIT_FRAMES cap before baking, even though all
-            // GLBs had finished loading.
-            if (
-              gltfPendingComp.loaded[e] === 0 &&
-              state.exists(e) &&
-              state.hasComponent(e, gltfPendingComp)
-            ) {
-              pending++;
-            }
-          }
-          if (pending > 0) return;
-        }
-      }
     }
 
     rt.initStarted = true;
@@ -262,7 +233,12 @@ async function generateNavMesh(
   worldSize: number
 ): Promise<void> {
   try {
+    // Main-thread WASM still needed for Crowd / NavMeshQuery / importNavMesh.
     await init();
+    // Give the loading overlay a frame to fade before we spend main-thread
+    // time on geometry collection (bake itself runs off-thread).
+    await nextAnimationFrame();
+    await nextAnimationFrame();
 
     const config = navMeshConfig(worldSize);
     const t0 = performance.now();
@@ -277,17 +253,15 @@ async function generateNavMesh(
       rt.failed = true;
       return;
     }
+    const triCount = indices.length / 3;
     const tCollect = performance.now();
 
-    const result = generateSoloNavMesh(positions, indices, config);
-    if (!result.success) {
-      logger.error('[NavMesh] Generation failed:', result.error);
-      rt.failed = true;
-      return;
-    }
+    // Off-thread bake (Worker); falls back to sync if Workers unavailable.
+    // Geometry buffers may be transferred — do not reuse after this call.
+    const bytes = await bakeSoloNavMeshBytes(positions, indices, config);
     const tGen = performance.now();
 
-    const navMesh = result.navMesh;
+    const { navMesh } = importNavMesh(bytes);
     const navMeshQuery = new NavMeshQueryClass(navMesh);
     const crowd = new CrowdClass(navMesh, {
       maxAgents: MAX_AGENTS,
@@ -300,7 +274,7 @@ async function generateNavMesh(
     rt.ready = true;
 
     logger.info(
-      `[NavMesh] Generated (${indices.length / 3} tris, cs=${config.cs}) — ` +
+      `[NavMesh] Generated (${triCount} tris, cs=${config.cs}) — ` +
         `collect ${(tCollect - t0).toFixed(0)}ms, ` +
         `recast ${(tGen - tCollect).toFixed(0)}ms`
     );
@@ -375,6 +349,8 @@ export const NavMeshAgentSystem: System = {
       });
     }
 
+    if (rt.agents.size === 0) return;
+
     crowd.update(Math.min(state.time.deltaTime, 1 / 30));
 
     for (const [eid, agent] of rt.agents) {
@@ -384,6 +360,8 @@ export const NavMeshAgentSystem: System = {
         continue;
       }
       const p = agent.position();
+      const prevX = Transform.posX[eid];
+      const prevZ = Transform.posZ[eid];
       Transform.posX[eid] = p.x;
       Transform.posZ[eid] = p.z;
 
@@ -393,7 +371,14 @@ export const NavMeshAgentSystem: System = {
         Transform.eulerY[eid] = Math.atan2(v.x, v.z);
       }
 
-      Transform.dirty[eid] = 1;
+      // Skip dirty when parked — avoids cascading WorldTransform recomputes.
+      if (
+        Math.abs(p.x - prevX) > 1e-4 ||
+        Math.abs(p.z - prevZ) > 1e-4 ||
+        speed > 0.05
+      ) {
+        Transform.dirty[eid] = 1;
+      }
     }
   },
   dispose(state: State) {

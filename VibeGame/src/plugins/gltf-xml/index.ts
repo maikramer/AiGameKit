@@ -18,3 +18,4 @@ export {
   prefetchGltfLocalYBounds,
   registerGltfLocalYBounds,
 } from './gltf-bounds-cache';
+export { gltfAssetsReady } from './ready-gate';

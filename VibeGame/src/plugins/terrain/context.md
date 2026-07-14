@@ -1,7 +1,8 @@
 # Terrain Plugin
 
 <!-- LLM:OVERVIEW -->
-ECS-native terrain with heightmap displacement, quadtree LOD, a single terrain-wide Rapier heightfield collider, and async heightmap loading. Each chunk is a separate ECS entity for visual LOD; physics uses one heightfield per terrain field at `collisionResolution`.
+
+ECS-native terrain with heightmap displacement, quadtree LOD, per-chunk Rapier heightfield colliders, and async heightmap loading. Each chunk is a separate ECS entity for visual LOD and physics; colliders are built per active chunk, not as one terrain-wide heightfield.
 <!-- /LLM:OVERVIEW -->
 
 ## Layout
@@ -23,7 +24,7 @@ terrain/
 
 ## Scope
 
-- **In-scope**: Heightmap-based terrain, quadtree LOD rendering, single terrain-wide Rapier heightfield physics, async heightmap loading, runtime wireframe toggle, height queries, debug stats, hot-reload
+- **In-scope**: Heightmap-based terrain, quadtree LOD rendering, per-chunk Rapier heightfield physics, async heightmap loading, runtime wireframe toggle, height queries, debug stats, hot-reload
 - **Out-of-scope**: Procedural generation, erosion, vegetation, water rendering
 
 ## Entry Points
@@ -38,9 +39,11 @@ terrain/
 - **External**: Three.js, Rapier WASM (`@dimforge/rapier3d-simd-compat`)
 
 <!-- LLM:REFERENCE -->
+
 ### Components
 
 #### Terrain (field entity — 1 per terrain)
+
 - worldSize: f32 (256) — world-space extent (X × Z)
 - maxHeight: f32 (50) — maximum height displacement
 - levels: ui8 (6) — quadtree LOD depth
@@ -67,6 +70,7 @@ terrain/
 - slopeSoftness: f32 (0.1) — slope blend softness
 
 #### TerrainChunk (N entities — dynamically spawned/despawned)
+
 - field: ui32 — parent Terrain field entity
 - originX: f32 — chunk center X in field-local space
 - originZ: f32 — chunk center Z in field-local space
@@ -76,37 +80,44 @@ terrain/
 - meshDirty: ui8 — flag: geometry needs rebuild
 
 #### TerrainDebugInfo
+
 - activeChunks, drawCalls, totalInstances, geometryCount, materialCount, failedColliderChunks, lastUpdated
 
 ### Systems
 
 #### TerrainFieldBootstrapSystem (fixed)
+
 - Creates flat HeightSampler immediately (terrain appears at y=0)
 - If heightmap URL set, fires async `loadHeightmapFromUrl` → replaces sampler with real heights, marks chunks dirty
 - Disposes terrain for removed entities
 
 #### TerrainLodSelectSystem (draw, after CameraSyncSystem)
+
 - Pure-function quadtree (`selectChunks()`) against camera position
 - Diffs desired chunks with existing, spawns/despawns TerrainChunk entities
 - Resolution halves per LOD level (min 4)
 
 #### TerrainMeshSystem (draw)
+
 - For each chunk with meshDirty=1: builds BufferGeometry from sampler, creates/updates THREE.Mesh in registry
 - Uses MeshStandardMaterial with field's roughness/metalness/baseColor
 
 #### TerrainPhysicsSystem (simulation)
-- Builds a single terrain-wide heightfield collider per field entity (not per-chunk)
-- Uses `Terrain.collisionResolution` for physics grid; writes heights directly in Rapier column-major format
+
+- Builds a Rapier heightfield collider per active chunk (not one terrain-wide collider)
+- Uses each chunk's LOD resolution for the physics grid; writes heights in Rapier column-major format
 - Falls back to a thin box collider for flat terrain (no heightmap data)
 - Adds `contactSkin(0.1)` for tunneling prevention without CCD
-- Rebuilds collider on heightmap reload; cleans up on entity destruction
+- Rebuilds chunk colliders on heightmap reload; cleans up on entity destruction
 
 #### TerrainDebugSystem (draw, after CameraSyncSystem)
+
 - Populates TerrainDebugInfo from chunk counts
 
 ### Public Query Helpers
 
-- `getTerrainHeightAt(state, worldX, worldZ)` — bilinear sample from HeightSampler
+- `getGroundHeight(state, worldX, worldZ)` — mesh LOD + footprint sample (preferred for placement/spawning)
+- `getTerrainHeightAt(state, worldX, worldZ)` — analytic bilinear sample from HeightSampler (single point)
 - `findNearestTerrainEntity(state, worldX, worldZ)` — nearest field entity
 - `setTerrainWireframe(state, entity, enabled)` — toggle wireframe on all chunks
 - `reloadTerrainHeightmap(state, entity, url)` — async load new heightmap, rebuild meshes + physics collider
@@ -123,15 +134,18 @@ O **plugin spawner** posiciona instâncias com a altura do sampler e calcula **n
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### XML Terrain with Heightmap
+
 ```xml
 <Terrain pos="0 0 0" world-size="256" max-height="50" levels="6" resolution="64"
   heightmap="/assets/heightmap.png" texture="/assets/terrain_diffuse.jpg"></Terrain>
 ```
 
 ### XML Terrain with Custom Colors
+
 ```xml
 <Terrain pos="0 0 0" world-size="512" max-height="80" roughness="0.7" metalness="0.1"
   collision-resolution="128" base-color="#3d6b32" color-high="#ffffff"
@@ -139,11 +153,14 @@ O **plugin spawner** posiciona instâncias com a altura do sampler e calcula **n
 ```
 
 ### JavaScript API
-```typescript
-import { getTerrainHeightAt, setTerrainWireframe, reloadTerrainHeightmap } from 'vibegame/terrain';
 
-const height = getTerrainHeightAt(state, playerX, playerZ);
+```typescript
+import { getGroundHeight, getTerrainHeightAt, setTerrainWireframe, reloadTerrainHeightmap } from 'vibegame/terrain';
+
+const height = getGroundHeight(state, playerX, playerZ);
+const analytic = getTerrainHeightAt(state, playerX, playerZ);
 setTerrainWireframe(state, terrainEntity, true);
 reloadTerrainHeightmap(state, terrainEntity, '/assets/new_heightmap.png');
 ```
+
 <!-- /LLM:EXAMPLES -->

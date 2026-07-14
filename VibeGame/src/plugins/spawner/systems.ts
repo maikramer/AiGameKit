@@ -439,9 +439,10 @@ export const TerrainSpawnBoundsCatchUpSystem: System = {
 
     // Drop any orphaned URL entries whose entity lost TerrainSpawned.
     if (urls.size > 0) {
-      const alive = new Set(terrainSpawnedQuery(state.world));
       for (const key of urls.keys()) {
-        if (!alive.has(key)) urls.delete(key);
+        if (!state.exists(key) || !state.hasComponent(key, TerrainSpawned)) {
+          urls.delete(key);
+        }
       }
     }
   },

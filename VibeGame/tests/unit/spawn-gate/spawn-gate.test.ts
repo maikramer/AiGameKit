@@ -5,7 +5,7 @@ import {
   Rigidbody,
   getTerrainContext,
   getBvhSurfaceHeight,
-  getTerrainHeightAt,
+  getGroundHeight,
 } from 'vibegame';
 import type { TerrainEntityData } from '../../../src/plugins/terrain/utils';
 import type { HeightSampler } from '../../../src/plugins/terrain/height-sampler';
@@ -98,7 +98,7 @@ describe('SpawnGateSystem — terrain-ready latch', () => {
 
     tick(state);
 
-    const expectedGround = getTerrainHeightAt(state, 0, 0);
+    const expectedGround = getGroundHeight(state, 0, 0);
     const expectedBvh = getBvhSurfaceHeight(state, 0, 50, 0);
     const ground = expectedBvh ?? expectedGround;
     expect(ground).toBe(0);

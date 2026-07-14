@@ -21,7 +21,7 @@ export interface LakeBowlOpts {
   radius: number;
   depth: number;
   waterOffset: number;
-  /** Carve-width multiplier (1.0 = carve matches water edge). Default 1.15. */
+  /** Carve-width multiplier (1.0 = carve matches water edge). Default 1.25. */
   carveMargin?: number;
 }
 
@@ -37,7 +37,7 @@ export class LakeBowl implements WaterShape {
   private readonly carveMarginValue: number;
 
   constructor(private readonly opts: LakeBowlOpts) {
-    this.carveMarginValue = opts.carveMargin ?? 1.15;
+    this.carveMarginValue = opts.carveMargin ?? 1.25;
   }
 
   computeAabb(): WorldAabb {

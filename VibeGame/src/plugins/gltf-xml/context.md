@@ -1,5 +1,7 @@
 ﻿# GLTF-XML Plugin (context.md)
+
 <!-- LLM:OVERVIEW -->
+
 Declarative `<GLTFLoader>` and `<GLTFDynamic>` XML tags for loading GLB models. Static props use `GLTFLoader`; `GLTFDynamic` adds a **dynamic** Rapier body with a collider fitted to the model AABB after load (see `GltfDynamicPhysicsSystem` and `fitColliderFromAabb` in `GLTFDynamic-collider-fit.ts`). Shape is configurable: **box** (default), **sphere** (bounding sphere of the AABB), or **capsule** (Y-axis; `radius`/`height` are in world units — the physics pipeline does not scale these by `Transform` like box sizes). After the rigid body moves the ECS `Transform`, **`GltfSceneSyncSystem`** copies position/rotation/scale back to the loaded Three.js `Group` so the mesh stays aligned with physics (otherwise the collider moves but the GLB can appear stuck at the spawn pose). No GLB animation in these tags. For animated player models, use `<PlayerGLTF>`.
 <!-- /LLM:OVERVIEW -->
 
@@ -43,28 +45,40 @@ gltf-xml/
 - **Out-of-scope**: Animated models (use player-gltf / player plugin), GLB generation, Draco decompression internals
 
 ## Entry Points
+
 - **plugin.ts**: GltfXmlPlugin definition
 - **systems.ts**: GltfXmlLoadSystem (setup group)
 - **index.ts**: Re-exports
 
 ## Dependencies
+
 - **Internal**: Core ECS (State, Transform), rendering (getScene, getRenderingContext)
 - **External**: Three.js (GLTFLoader), `@loaders.gl/core` + `@loaders.gl/gltf` + `@loaders.gl/draco`, extras/gltf-bridge (loadGltfToScene)
+
 <!-- LLM:REFERENCE -->
+
 ### Component
+
 #### GltfPending
+
 - loaded: ui8 (0 = pending, 1 = loaded/skip)
 
 ### System
+
 #### GltfXmlLoadSystem
+
 - Group: `setup`
 - For each entity with `GltfPending` where `loaded === 0` and not in-flight:
-- Loads GLB via `loadGltfToScene(state, url)`
+- Loads GLB via `loadGltfToScene` / `loadGltfLodToSceneForEntity` / auto-instance pool
+- LOD triples: **lod0 is boot-critical**; lod1/lod2 stream as background (do not block the loading `assets` gate). `GltfLodSystem` picks higher levels once attached.
+- Instanced pools: lod0 counted critical via `loadGltfMasterTracked`; lod1/2 background.
 - After load: applies `Transform` (position, scale, rotation/euler) to the loaded Three.js group
 - Marks `loaded = 1`
 - In-flight tracking prevents double-loading the same entity
+- Boot readiness: `gltfAssetsReady(state)` — critical load count === 0 and every `GltfPending.loaded === 1`
 
 ### Recipe
+
 - **GLTFLoader** — components: `transform`, `gltfPending`; adapter `url` guarda URL no mapa do módulo.
 - **GLTFDynamic** — components: `transform`, `gltfPending`, `gltfPhysicsPending`; mesmo fluxo de `url` que `GLTFLoader`. Defaults `gltfPhysicsPending`: `collider-margin`, `collider-shape` (`box` \| `sphere` \| `capsule`), `mass`, `friction`, `restitution`. Após load, `GltfDynamicPhysicsSystem` cria `Body` (Dynamic) + `Collider` com forma escolhida e tamanho a partir do AABB (+ margem). Para **box** e **sphere**, as dimensões do collider compensam o `scale` do `Transform`; **capsule** usa `radius` / `height` em unidades mundo (ver nota no overview).
 
@@ -76,7 +90,9 @@ gltf-xml/
 
 <!-- /LLM:REFERENCE -->
 <!-- LLM:EXAMPLES -->
+
 ## Examples
+
 ```xml
 <GLTFLoader url="/assets/models/stone_pillar.glb" transform="pos: 10 2 -8; scale: 1.5 1.5" />
 <GLTFDynamic
@@ -88,6 +104,7 @@ gltf-xml/
   collider-shape="box"
 ></GLTFDynamic>
 ```
+
 Atributos opcionais `mass`, `friction`, `restitution`, `collider-margin`, `collider-shape` (`box` \| `sphere` \| `capsule`) aplicam-se ao componente `gltfPhysicsPending` (via recipe).
 
 <!-- /LLM:EXAMPLES -->

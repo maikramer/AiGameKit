@@ -3,12 +3,17 @@ import {
   type AgentConfig,
   collectNavmeshGeometry,
   createAgent,
+  getReadyGates,
   isNavMeshReady,
+  isWorldReady,
   type NavMeshGeometry,
+  NavMeshInitSystem,
   NavMeshPlugin,
+  NavMeshSurface,
   navMeshAgentRecipe,
   navMeshRecipe,
   navMeshWalkableRecipe,
+  resetLoadingGate,
   State,
 } from 'vibegame';
 
@@ -56,6 +61,20 @@ describe('NavMeshPlugin registration', () => {
       NavMeshPlugin.config?.defaults?.['nav-mesh-surface'];
     expect(surfaceDefaults?.enabled).toBe(1);
     expect(surfaceDefaults?.generated).toBe(0);
+  });
+
+  it('does not register a loading-gate entry for navmesh', () => {
+    const state = new State();
+    resetLoadingGate(state);
+    NavMeshInitSystem.setup?.(state);
+
+    const eid = state.createEntity();
+    state.addComponent(eid, NavMeshSurface);
+    NavMeshSurface.enabled[eid] = 1;
+
+    expect(getReadyGates(state)).not.toContain('navmesh');
+    expect(isWorldReady(state)).toBe(true);
+    expect(isNavMeshReady()).toBe(false);
   });
 });
 

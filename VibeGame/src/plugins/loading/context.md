@@ -2,7 +2,7 @@
 
 <!-- LLM:OVERVIEW -->
 
-Full-screen loading overlay plus an honest boot gate. On setup it engages physics-hold enforcement (`setLoadingEnforcement(state, true)`) and registers a generic `assets` ready gate that waits for all in-flight GLTF loads to finish. Other plugins register their own domain gates (terrain decode + collision, spawn placement). While enforcement is on and the world has not yet been fully ready once, the core `isPhysicsHeld` returns true and the simulation is held, so nothing falls or moves before terrain colliders and assets are in place. The overlay itself is a singleton DOM element painted as early as possible (call `mountLoadingScreen()` before building the runtime), driven every frame by `LoadingScreenSystem`, fed by `getLoadingProgress` / `isWorldReady` from `core/loading-gate`. It fades out once the world is ready and a minimum visible time has passed. Opt-in: register with `withPlugin(LoadingPlugin)`.
+Full-screen loading overlay plus an honest boot gate. On setup it engages physics-hold enforcement (`setLoadingEnforcement(state, true)`) and registers an `assets` ready gate via `gltfAssetsReady` — waits for **critical** GLTF loads (lod0 / hero / props) and every `GltfPending` kick, but **not** background lod1/lod2 streams. Other plugins register their own domain gates (terrain decode + collision, spawn placement). While enforcement is on and the world has not yet been fully ready once, the core `isPhysicsHeld` returns true and the simulation is held, so nothing falls or moves before terrain colliders and assets are in place. The overlay itself is a singleton DOM element painted as early as possible (call `mountLoadingScreen()` before building the runtime), driven every frame by `LoadingScreenSystem`, fed by `getLoadingProgress` / `isWorldReady` from `core/loading-gate`. It fades out once the world is ready and a minimum visible time has passed. Opt-in: register with `withPlugin(LoadingPlugin)`.
 
 <!-- /LLM:OVERVIEW -->
 
@@ -31,7 +31,7 @@ loading/
 
 ## Dependencies
 
-- **Internal**: core `registerReadyGate`, `setLoadingEnforcement`, `getLoadingProgress`, `isWorldReady`; `extras/gltf-bridge` `getActiveGltfLoadCount`.
+- **Internal**: core `registerReadyGate`, `setLoadingEnforcement`, `getLoadingProgress`, `isWorldReady`; `gltf-xml` `gltfAssetsReady` (critical GLTF loads + pending kicks).
 - **External**: DOM (`document`, `performance`). No-op in headless mode (`state.headless` or no `document`).
 
 ## Integration with the loading gate
@@ -39,7 +39,7 @@ loading/
 The gate registry (`core/loading-gate.ts`) is inert unless a loading screen enables enforcement. `LoadingScreenSystem.setup` does three things:
 
 1. `setLoadingEnforcement(state, true)`: turns on the physics hold. The runtime checks `isPhysicsHeld(state)` (enforcement on AND world not yet latched-ready) and skips the `fixed` / gameplay ticks while it is true. Readiness latches permanently the first time it passes, so transient un-readiness later (e.g. distant terrain chunks rebuilding colliders) never re-triggers the hold.
-2. `registerReadyGate(state, 'assets', () => getActiveGltfLoadCount() === 0)`: the generic GLTF gate. Terrain and spawn plugins add their own named gates (`terrain`, `spawn`).
+2. `registerReadyGate(state, 'assets', () => gltfAssetsReady(state))`: critical GLTF gate (lod0 / scene props). Background lod1/lod2 do not block. Terrain and spawn plugins add their own named gates (`terrain`, `spawn`).
 3. `mountLoadingScreen()`: paints the overlay (idempotent; also re-mounted on first update as a fallback).
 
 `isWorldReady(state)` is true when every registered gate passes (vacuously true with none). `getLoadingProgress(state)` returns `{ ready, total, pending }` which the bar and status line consume.

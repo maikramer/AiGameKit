@@ -2,7 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { eulerToQuaternion } from '../../core/math';
 import { defineQuery, type State, type System } from '../../core';
-import { getTerrainContext } from '../terrain';
+import { getGroundHeight, getTerrainContext } from '../terrain';
 import { PlacePending } from './components';
 import { TerrainSpawned } from './components';
 import type { GroupSpawnDefaults } from './profiles';
@@ -11,7 +11,7 @@ import { spawnTemplateAtTerrain } from './spawn-template';
 import {
   isGroundMutationPending,
   isNormalWithinSlopeLimit,
-  sampleTerrainSurface,
+  sampleTerrainSurfaceMatrix,
 } from './surface';
 import { composeSpawnRotation } from './transform-merge';
 import { Transform, WorldTransform } from '../transforms/components';
@@ -37,6 +37,17 @@ function isTerrainHeightmapPending(state: State): boolean {
   return false;
 }
 
+function terrainWorldGroundY(
+  state: State,
+  terrainEntity: number,
+  wx: number,
+  wz: number
+): number {
+  const ty = state.hasComponent(terrainEntity, WorldTransform)
+    ? WorldTransform.posY[terrainEntity]
+    : Transform.posY[terrainEntity];
+  return ty + getGroundHeight(state, wx, wz);
+}
 
 function anchorOffset(
   state: State,
@@ -186,7 +197,7 @@ export const TerrainPlaceSystem: System = {
       const terrainEid = findNearestTerrainEntity(state, wx, wz);
       if (isTerrainDynamicsBlocking(state, terrainEid || undefined)) continue;
 
-      const s = sampleTerrainSurface(
+      const s = sampleTerrainSurfaceMatrix(
         state,
         wx,
         wz,
@@ -213,7 +224,7 @@ export const TerrainPlaceSystem: System = {
         continue;
       }
 
-      const wy = s.worldY;
+      const wy = terrainWorldGroundY(state, s.terrainEntity, wx, wz);
 
       if (spec.templates.length === 0) {
         applyRootPlacement(state, eid, spec.spawn, wx, wy, wz, s.normal);

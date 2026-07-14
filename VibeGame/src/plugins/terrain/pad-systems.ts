@@ -2,6 +2,7 @@ import { defineQuery } from '../../core';
 import type { Parser, State, System } from '../../core';
 import { Transform } from '../transforms/components';
 import { TerrainPad } from './components';
+import { registerGroundBrush } from './brush-registry';
 import { flattenRect } from './flatten';
 import { rebuildTerrainDerivatives } from './height-brush';
 import { sampleHeightAt } from './height-sampler';
@@ -64,6 +65,23 @@ export const TerrainPadApplySystem: System = {
         cornerRadius,
       });
       if (changed) rebuildTerrainDerivatives(state, field.entity, data);
+
+      // Persist resolved height so navmesh / consumers can read the pad plane
+      // even when the recipe used auto height (height=0 before apply).
+      TerrainPad.height[eid] = targetY;
+      const reachX = halfX + falloff;
+      const reachZ = halfZ + falloff;
+      registerGroundBrush(state, {
+        kind: 'pad',
+        minX: lx - reachX,
+        maxX: lx + reachX,
+        minZ: lz - reachZ,
+        maxZ: lz + reachZ,
+        targetY,
+        halfX,
+        halfZ,
+        cornerRadius,
+      });
 
       TerrainPad.applied[eid] = 1;
       logger.info(

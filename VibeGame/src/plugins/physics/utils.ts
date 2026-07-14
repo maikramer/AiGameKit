@@ -7,8 +7,8 @@ import {
   type State,
 } from '../../core';
 import {
-  eulerToQuaternion,
-  quaternionToEuler,
+  eulerToQuaternionInto,
+  quaternionToEulerInto,
   syncEulerFromQuaternion,
   Transform,
   WorldTransform,
@@ -52,6 +52,54 @@ const _groundCastDown = { x: 0, y: -1, z: 0 };
 const _snapOrigin = { x: 0, y: 0, z: 0 };
 const _desiredTranslation = { x: 0, y: 0, z: 0 };
 const _newPos = { x: 0, y: 0, z: 0 };
+const _rbEulerScratch = { x: 0, y: 0, z: 0 };
+const _rbQuatScratch = { x: 0, y: 0, z: 0, w: 1 };
+const _teleportVec = { x: 0, y: 0, z: 0 };
+const _teleportQuat = { x: 0, y: 0, z: 0, w: 1 };
+
+/** Last pose we pushed to / pulled from a Rapier body. Compare against ECS
+ *  Rigidbody stores to detect teleports WITHOUT a WASM translation()/rotation()
+ *  round-trip on every fixed step (the old path woke nothing but still paid
+ *  ~2 WASM reads × body count). Keyed by the body object so eid recycle is safe. */
+type AppliedBodyPose = {
+  px: number;
+  py: number;
+  pz: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  rw: number;
+};
+const appliedBodyPose = new WeakMap<object, AppliedBodyPose>();
+
+function getAppliedBodyPose(body: RAPIER.RigidBody): AppliedBodyPose {
+  let pose = appliedBodyPose.get(body);
+  if (!pose) {
+    pose = { px: NaN, py: NaN, pz: NaN, rx: NaN, ry: NaN, rz: NaN, rw: NaN };
+    appliedBodyPose.set(body, pose);
+  }
+  return pose;
+}
+
+function markAppliedBodyPose(
+  body: RAPIER.RigidBody,
+  px: number,
+  py: number,
+  pz: number,
+  rx: number,
+  ry: number,
+  rz: number,
+  rw: number
+): void {
+  const pose = getAppliedBodyPose(body);
+  pose.px = px;
+  pose.py = py;
+  pose.pz = pz;
+  pose.rx = rx;
+  pose.ry = ry;
+  pose.rz = rz;
+  pose.rw = rw;
+}
 
 /**
  * Shape-cast of the character's own shape straight down from `pos`, up to
@@ -396,32 +444,27 @@ export function applyKinematicRotation(
 }
 
 export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
-  const currentPos = body.translation();
-  const currentRot = body.rotation();
+  const applied = getAppliedBodyPose(body);
 
-  // Rapier devolve f64; os stores ECS são Float32Array. Comparar via fround,
-  // senão todo corpo em movimento dispara um falso teleporte (setTranslation +
-  // wake) a cada step e nenhum corpo consegue dormir.
+  // Compare ECS → last applied pose (no WASM). NaN applied = never synced.
   const hasPositionChange =
-    Math.fround(currentPos.x) !== Rigidbody.posX[entity] ||
-    Math.fround(currentPos.y) !== Rigidbody.posY[entity] ||
-    Math.fround(currentPos.z) !== Rigidbody.posZ[entity];
+    applied.px !== Rigidbody.posX[entity] ||
+    applied.py !== Rigidbody.posY[entity] ||
+    applied.pz !== Rigidbody.posZ[entity];
 
   const hasRotationChange =
-    Math.fround(currentRot.x) !== Rigidbody.rotX[entity] ||
-    Math.fround(currentRot.y) !== Rigidbody.rotY[entity] ||
-    Math.fround(currentRot.z) !== Rigidbody.rotZ[entity] ||
-    Math.fround(currentRot.w) !== Rigidbody.rotW[entity];
+    applied.rx !== Rigidbody.rotX[entity] ||
+    applied.ry !== Rigidbody.rotY[entity] ||
+    applied.rz !== Rigidbody.rotZ[entity] ||
+    applied.rw !== Rigidbody.rotW[entity];
+
+  if (!hasPositionChange && !hasRotationChange) return;
 
   if (hasPositionChange) {
-    body.setTranslation(
-      new RAPIER.Vector3(
-        Rigidbody.posX[entity],
-        Rigidbody.posY[entity],
-        Rigidbody.posZ[entity]
-      ),
-      true
-    );
+    _teleportVec.x = Rigidbody.posX[entity];
+    _teleportVec.y = Rigidbody.posY[entity];
+    _teleportVec.z = Rigidbody.posZ[entity];
+    body.setTranslation(_teleportVec, true);
 
     if (InterpolatedTransform.prevPosX[entity] !== undefined) {
       InterpolatedTransform.prevPosX[entity] = Rigidbody.posX[entity];
@@ -443,15 +486,11 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
   }
 
   if (hasRotationChange) {
-    body.setRotation(
-      new RAPIER.Quaternion(
-        Rigidbody.rotX[entity],
-        Rigidbody.rotY[entity],
-        Rigidbody.rotZ[entity],
-        Rigidbody.rotW[entity]
-      ),
-      true
-    );
+    _teleportQuat.x = Rigidbody.rotX[entity];
+    _teleportQuat.y = Rigidbody.rotY[entity];
+    _teleportQuat.z = Rigidbody.rotZ[entity];
+    _teleportQuat.w = Rigidbody.rotW[entity];
+    body.setRotation(_teleportQuat, true);
 
     if (InterpolatedTransform.prevRotX[entity] !== undefined) {
       InterpolatedTransform.prevRotX[entity] = Rigidbody.rotX[entity];
@@ -473,6 +512,17 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
     WorldTransform.rotZ[entity] = Rigidbody.rotZ[entity];
     WorldTransform.rotW[entity] = Rigidbody.rotW[entity];
   }
+
+  markAppliedBodyPose(
+    body,
+    Rigidbody.posX[entity],
+    Rigidbody.posY[entity],
+    Rigidbody.posZ[entity],
+    Rigidbody.rotX[entity],
+    Rigidbody.rotY[entity],
+    Rigidbody.rotZ[entity],
+    Rigidbody.rotW[entity]
+  );
 }
 
 export function detectPlatformContinuous(
@@ -783,11 +833,24 @@ export function syncRigidbodyToECS(
   Rigidbody.rotZ[entity] = rotation.z;
   Rigidbody.rotW[entity] = rotation.w;
 
-  const euler = quaternionToEuler(
+  // Keep teleport early-out in sync with the live Rapier pose (Float32 stores).
+  markAppliedBodyPose(
+    body,
+    Rigidbody.posX[entity],
+    Rigidbody.posY[entity],
+    Rigidbody.posZ[entity],
+    Rigidbody.rotX[entity],
+    Rigidbody.rotY[entity],
+    Rigidbody.rotZ[entity],
+    Rigidbody.rotW[entity]
+  );
+
+  const euler = quaternionToEulerInto(
     rotation.x,
     rotation.y,
     rotation.z,
-    rotation.w
+    rotation.w,
+    _rbEulerScratch
   );
   Rigidbody.eulerX[entity] = euler.x;
   Rigidbody.eulerY[entity] = euler.y;
@@ -859,10 +922,11 @@ export function copyRigidbodyToTransforms(entity: number, state: State): void {
 }
 
 export function syncBodyQuaternionFromEuler(entity: number): void {
-  const quat = eulerToQuaternion(
+  const quat = eulerToQuaternionInto(
     Rigidbody.eulerX[entity],
     Rigidbody.eulerY[entity],
-    Rigidbody.eulerZ[entity]
+    Rigidbody.eulerZ[entity],
+    _rbQuatScratch
   );
   Rigidbody.rotX[entity] = quat.x;
   Rigidbody.rotY[entity] = quat.y;
@@ -871,11 +935,12 @@ export function syncBodyQuaternionFromEuler(entity: number): void {
 }
 
 export function syncBodyEulerFromQuaternion(entity: number): void {
-  const euler = quaternionToEuler(
+  const euler = quaternionToEulerInto(
     Rigidbody.rotX[entity],
     Rigidbody.rotY[entity],
     Rigidbody.rotZ[entity],
-    Rigidbody.rotW[entity]
+    Rigidbody.rotW[entity],
+    _rbEulerScratch
   );
   Rigidbody.eulerX[entity] = euler.x;
   Rigidbody.eulerY[entity] = euler.y;

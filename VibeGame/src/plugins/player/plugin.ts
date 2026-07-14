@@ -31,6 +31,7 @@ export const PlayerPlugin: Plugin = {
     adapters: {
       'player-gltf-config': {
         'model-url': playerGltfModelUrlAdapter,
+        url: playerGltfModelUrlAdapter,
       },
     },
     defaults: {

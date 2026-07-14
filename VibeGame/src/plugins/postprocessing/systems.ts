@@ -218,8 +218,8 @@ export const PostprocessingEffectUpdateSystem: System = {
  * transition) this is a handful of comparisons per frame.
  *
  * Levers applied:
- *  - SSAO: `configuration.halfRes` (half-resolution AO at tier ≥ 1)
- *  - God rays: `godRaysMaterial.samples` (80 → 40 → 24)
+ *  - SSAO: `configuration.halfRes` + intensity × tier scale
+ *  - God rays: `godRaysMaterial.samples` (48 → 32 → 24 → 16)
  *  - DoF: `bokehScale` scaled by the tier factor (0 at tier 3 effectively
  *    disables the blur cost)
  *
@@ -232,7 +232,7 @@ function applyAdaptiveEffectLevers(state: State): void {
   const tier = getAdaptiveQualityTier(state);
   const preset = TIER_PRESETS[tier] ?? TIER_PRESETS[0];
 
-  for (const { def, pass } of activeEffectInstances) {
+  for (const { def, pass, entity } of activeEffectInstances) {
     try {
       switch (def.key) {
         case 'ssao': {
@@ -243,6 +243,13 @@ function applyAdaptiveEffectLevers(state: State): void {
           if (n8ao?.configuration?.halfRes !== preset.ssaoHalfResolution) {
             n8ao.configuration.halfRes = preset.ssaoHalfResolution;
           }
+          // Intensity is overwritten by the effect update() from the component;
+          // re-apply the tier scale after that so Low can zero out AO cost.
+          const base = Postprocessing.ssaoIntensity[entity];
+          n8ao.configuration.intensity = Math.max(
+            0,
+            base * preset.ssaoIntensityScale
+          );
           break;
         }
         case 'godRays': {
@@ -262,13 +269,8 @@ function applyAdaptiveEffectLevers(state: State): void {
             // factor. We can't read the user's "intended" value back from the
             // effect reliably after scaling, so scale relative to the
             // component field each frame.
-            const entity = activeEffectInstances.find(
-              (i) => i.def.key === 'depthOfField'
-            )?.entity;
-            if (entity !== undefined) {
-              const base = Postprocessing.dofBokehScale[entity];
-              dof.bokehScale = Math.max(0, base * preset.dofBokehScaleScale);
-            }
+            const base = Postprocessing.dofBokehScale[entity];
+            dof.bokehScale = Math.max(0, base * preset.dofBokehScaleScale);
           }
           break;
         }

@@ -1,5 +1,22 @@
 import type { State } from '../../core';
 import { distanceToPath } from './path-utils';
+import type { FlatPath } from './path-utils';
+
+/** Cached flat polylines for river bodies — avoids realloc every query. */
+const riverFlatCache = new WeakMap<object, FlatPath>();
+
+export function getRiverFlatPath(
+  path: ReadonlyArray<readonly [number, number]>
+): FlatPath {
+  // Use the array object itself as key when possible; callers pass body.path.
+  let flat = riverFlatCache.get(path as object);
+  if (!flat) {
+    flat = [];
+    for (const p of path) flat.push(p[0], p[1]);
+    riverFlatCache.set(path as object, flat);
+  }
+  return flat;
+}
 
 /** Lake water body: a disc centred at (x,z). */
 export interface LakeWaterBody {
@@ -94,11 +111,7 @@ function withinReach(
     return dx * dx + dz * dz <= reach * reach;
   }
   // river: distance to the polyline ≤ reach. Flatten the [x,z] pairs.
-  const flat: number[] = [];
-  for (const p of body.path) {
-    flat.push(p[0], p[1]);
-  }
-  return distanceToPath(flat, x, z) <= reach;
+  return distanceToPath(getRiverFlatPath(body.path), x, z) <= reach;
 }
 
 /** True when the world XZ point lies inside a water surface (disc or channel). */

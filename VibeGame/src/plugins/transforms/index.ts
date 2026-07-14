@@ -10,4 +10,9 @@ export {
   composeTransformMatrix,
   decomposeTransformMatrix,
 } from './utils';
-export { eulerToQuaternion, quaternionToEuler } from '../../core/math';
+export {
+  eulerToQuaternion,
+  quaternionToEuler,
+  eulerToQuaternionInto,
+  quaternionToEulerInto,
+} from '../../core/math';

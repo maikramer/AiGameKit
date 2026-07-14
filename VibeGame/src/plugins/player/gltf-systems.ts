@@ -15,7 +15,13 @@ import {
 import { HasAnimator } from '../animation/components';
 import { InputState } from '../input/components';
 import { isKeyDown } from '../input/utils';
-import { CharacterController, CharacterMovement } from '../physics';
+import {
+  CharacterController,
+  CharacterMovement,
+  Collider,
+  invalidateCollider,
+} from '../physics';
+import { applyPlayerColliderFromAabb } from './player-collider-fit';
 import { Transform, WorldTransform } from '../transforms';
 import { PlayerController, PlayerGltfConfig } from './components';
 import { PLAYER_COLLIDER_DEFAULTS } from './constants';
@@ -84,6 +90,8 @@ const prevPrimary = new Map<number, number>();
 // Per-attacker countdown until the pending melee blow lands (seconds).
 const pendingMelee = new Map<number, number>();
 const prevInteract = new Map<number, number>();
+/** Last registered locomotion clip signature — skip re-register when unchanged. */
+const prevLocoSig = new Map<number, string>();
 
 // Context hint for the attack clip: the game sets a keyword (e.g. 'mine',
 // 'chop', 'sword', 'axe', 'spear') based on tool/target; the attack picks the
@@ -403,6 +411,7 @@ export const PlayerGltfSetupSystem: System = {
         prevPrimary.delete(eid);
         pendingMelee.delete(eid);
         prevInteract.delete(eid);
+        prevLocoSig.delete(eid);
         clearLocomotionCache(state, eid);
       });
 
@@ -415,6 +424,36 @@ export const PlayerGltfSetupSystem: System = {
           const box = new Box3().setFromObject(gltf.scene);
           const yOffset = Number.isFinite(box.min.y) ? -box.min.y : 0;
           setYOffset(state, eid, yOffset);
+
+          if (state.hasComponent(eid, Collider)) {
+            const tsx = state.hasComponent(eid, Transform)
+              ? Math.max(Math.abs(Transform.scaleX[eid]), 1e-6)
+              : 1;
+            const tsy = state.hasComponent(eid, Transform)
+              ? Math.max(Math.abs(Transform.scaleY[eid]), 1e-6)
+              : 1;
+            const tsz = state.hasComponent(eid, Transform)
+              ? Math.max(Math.abs(Transform.scaleZ[eid]), 1e-6)
+              : 1;
+            const fit = applyPlayerColliderFromAabb({
+              box: { min: box.min, max: box.max },
+              yOffset,
+              margin: 0.02,
+              scaleX: tsx,
+              scaleY: tsy,
+              scaleZ: tsz,
+            });
+            Collider.shape[eid] = fit.shape;
+            Collider.radius[eid] = fit.radius;
+            Collider.height[eid] = fit.height;
+            Collider.sizeX[eid] = fit.sizeX;
+            Collider.sizeY[eid] = fit.sizeY;
+            Collider.sizeZ[eid] = fit.sizeZ;
+            Collider.posOffsetX[eid] = fit.posOffsetX;
+            Collider.posOffsetY[eid] = fit.posOffsetY;
+            Collider.posOffsetZ[eid] = fit.posOffsetZ;
+            invalidateCollider(state, eid);
+          }
 
           const animator = new GltfAnimator(gltf, { crossfadeDuration: 0.25 });
           const regIdx = registerAnimator(animator);
@@ -551,12 +590,16 @@ export const PlayerGltfAnimStateSystem: System = {
 
       const loco = resolveLocomotion(state, animator, eid);
       if (loco.idle && loco.walk && loco.run) {
-        animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, {
-          idle: loco.idle,
-          walk: loco.walk,
-          run: loco.run,
-          jump: loco.jump || undefined,
-        });
+        const sig = `${loco.idle}|${loco.walk}|${loco.run}|${loco.jump ?? ''}`;
+        if (prevLocoSig.get(eid) !== sig) {
+          prevLocoSig.set(eid, sig);
+          animator.registerLocomotionSet(DEFAULT_LOCOMOTION_SET, {
+            idle: loco.idle,
+            walk: loco.walk,
+            run: loco.run,
+            jump: loco.jump || undefined,
+          });
+        }
       }
 
       // A/D steers the camera AND pushes the character sideways (arc turn), so
@@ -661,9 +704,12 @@ function syncTransformToRoot(
 
   const debugCapsule = ensureDebugCapsule(state);
   if (debugCapsule) {
+    const colliderOffY = state.hasComponent(eid, Collider)
+      ? Collider.posOffsetY[eid]
+      : PLAYER_COLLIDER_DEFAULTS.posOffsetY;
     debugCapsule.position.set(
       WorldTransform.posX[eid],
-      WorldTransform.posY[eid] + PLAYER_COLLIDER_DEFAULTS.posOffsetY,
+      WorldTransform.posY[eid] + colliderOffY,
       WorldTransform.posZ[eid]
     );
     debugCapsule.quaternion.copy(root.quaternion);

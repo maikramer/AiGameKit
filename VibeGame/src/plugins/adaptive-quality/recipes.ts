@@ -11,7 +11,7 @@ import type { Recipe } from '../../core';
  * under sustained load.
  *
  * Usage:
- *   <AdaptiveQuality target-fps="55" min-pixel-ratio="1.0"></AdaptiveQuality>
+ *   <AdaptiveQuality target-fps="50" min-pixel-ratio="0.75"></AdaptiveQuality>
  *
  * Place anywhere under `<Scene>`. There should be at most one per scene.
  */

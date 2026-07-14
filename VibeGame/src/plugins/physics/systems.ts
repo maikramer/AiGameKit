@@ -44,7 +44,6 @@ import {
   createColliderDescriptor,
   createRigidbodyDescriptor,
   DEFAULT_GRAVITY,
-  interpolateTransforms,
   setAngularVelocityForEntity,
   setLinearVelocityForEntity,
   syncBodyQuaternionFromEuler,
@@ -84,9 +83,6 @@ const setLinearVelocityQuery = defineQuery([SetLinearVelocity, Rigidbody]);
 const setAngularVelocityQuery = defineQuery([SetAngularVelocity, Rigidbody]);
 const kinematicMoveQuery = defineQuery([KinematicMove, Rigidbody]);
 const kinematicRotateQuery = defineQuery([KinematicRotate, Rigidbody]);
-const touchedEventQuery = defineQuery([TouchedEvent]);
-const touchEndedEventQuery = defineQuery([TouchEndedEvent]);
-
 const stateToPhysicsContext = new WeakMap<State, PhysicsContext>();
 
 function getPhysicsContext(state: State): PhysicsContext {
@@ -138,6 +134,21 @@ export function getBodyForEntity(
 ): RAPIER.RigidBody | null {
   const context = stateToPhysicsContext.get(state);
   return context?.entityToRigidbody.get(entity) ?? null;
+}
+
+/** Remove o collider Rapier existente para que o init recrie com novos valores SoA. */
+export function invalidateCollider(state: State, entity: number): void {
+  const context = getPhysicsContext(state);
+  const worldRapier = context.physicsWorld;
+  const collider = context.entityToCollider.get(entity);
+  if (collider && worldRapier) {
+    context.colliderToEntity.delete(collider.handle);
+    worldRapier.removeCollider(collider, true);
+    const free = (collider as unknown as { free?: () => void }).free;
+    if (typeof free === 'function') free.call(collider);
+    context.entityToCollider.delete(entity);
+  }
+  context.failedColliders.delete(entity);
 }
 
 export const PhysicsWorldSystem: System = {
@@ -765,44 +776,8 @@ function processCollisionEvents(
   );
 }
 
-export const CollisionEventCleanupSystem: System = {
-  group: 'setup',
-  update: (state) => {
-    for (const entity of touchedEventQuery(state.world)) {
-      state.removeComponent(entity, TouchedEvent);
-    }
-
-    for (const entity of touchEndedEventQuery(state.world)) {
-      state.removeComponent(entity, TouchEndedEvent);
-    }
-  },
-};
-
-export const PhysicsRapierSyncSystem: System = {
-  group: 'fixed',
-  after: [PhysicsStepSystem],
-  update: (state) => {
-    const context = getPhysicsContext(state);
-
-    for (const [entity, body] of context.entityToRigidbody) {
-      // Corpos dormindo não se moveram: pular evita ~5 chamadas WASM +
-      // conversão de euler por corpo parado por step. Kinematic ficam de
-      // fora do skip (o estado de sleep deles não garante pose imutável).
-      if (body.isSleeping() && !body.isKinematic()) continue;
-      if (state.hasComponent(entity, Rigidbody)) {
-        syncRigidbodyToECS(entity, body, state);
-        copyRigidbodyToTransforms(entity, state);
-      }
-    }
-  },
-};
-
-export const PhysicsInterpolationSystem: System = {
-  group: 'simulation',
-  first: true,
-  update: (state) => {
-    const alpha =
-      state.scheduler.getAccumulator() / TIME_CONSTANTS.FIXED_TIMESTEP;
-    interpolateTransforms(state, alpha);
-  },
-};
+export {
+  CollisionEventCleanupSystem,
+  PhysicsInterpolationSystem,
+  PhysicsRapierSyncSystem,
+} from './physics-sync';

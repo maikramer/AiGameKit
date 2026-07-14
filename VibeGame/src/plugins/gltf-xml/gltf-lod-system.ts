@@ -55,17 +55,23 @@ export const GltfLodSystem: System = {
       const prevLevel = GltfLod.activeLevel[eid];
       const raw = pickLodLevel(dist, near, mid, prevLevel);
       const level = Math.min(raw, childCount - 1);
+      if (level === prevLevel && GltfLod.settled[eid] === 1) {
+        continue;
+      }
       if (level === prevLevel) {
-        // Even when the level is unchanged, guard against the load-time state
-        // where the GLTF arrives with *all* LOD children visible: if it isn't
-        // exactly one visible child, fall through and re-apply. Otherwise skip.
+        // Load-time: GLTF may arrive with all LOD children visible. One scan
+        // to confirm a single visible child, then mark settled.
         let visibleCount = 0;
         for (let i = 0; i < childCount; i++) {
           if (root.children[i].visible) visibleCount++;
         }
-        if (visibleCount === 1) continue;
+        if (visibleCount === 1) {
+          GltfLod.settled[eid] = 1;
+          continue;
+        }
       }
       GltfLod.activeLevel[eid] = level;
+      GltfLod.settled[eid] = 1;
 
       for (let i = 0; i < root.children.length; i++) {
         root.children[i].visible = i === level;

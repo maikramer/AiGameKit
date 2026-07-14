@@ -23,6 +23,8 @@ export interface QualityTierPreset {
   pixelRatioScale: number;
   /** SSAO half-resolution (N8AO) — cheaper at the cost of AO sharpness. */
   ssaoHalfResolution: boolean;
+  /** Multiplier on configured SSAO intensity (0 ≈ skip AO cost visually). */
+  ssaoIntensityScale: number;
   /** Bloom mipmap blur — cheaper single-tap when disabled. */
   bloomMipmapBlur: boolean;
   /** DoF bokeh scale multiplier (<1 = less blur cost). 0 disables DoF. */
@@ -43,19 +45,19 @@ export interface QualityTierPreset {
  * Design notes:
  *  - Max preserves every effect at full quality.
  *  - High trims the heaviest single-pass costs (SSAO half-res, point-shadow
- *    throttle) while keeping the look (AO is subtle at half-res; static torch
- *    shadows are visually identical when refreshed every 4th frame).
- *  - Medium additionally reduces god-ray samples and DoF bokeh.
- *  - Low is a survival tier: pixel ratio down to 0.8, mirror off, DoF off.
+ *    throttle, leaner god-rays) while keeping the look.
+ *  - Medium drops water mirror + DPR, softens DoF/god-rays further.
+ *  - Low is a survival tier: DPR 0.75, mirror off, DoF off, SSAO intensity 0.
  */
 export const TIER_PRESETS: readonly QualityTierPreset[] = [
   // Tier 0 — Max
   {
     pixelRatioScale: 1.0,
     ssaoHalfResolution: false,
+    ssaoIntensityScale: 1.0,
     bloomMipmapBlur: true,
     dofBokehScaleScale: 1.0,
-    godRaysSamples: 80,
+    godRaysSamples: 48,
     pointShadowRefreshFrames: 1,
     waterMirror: true,
   },
@@ -63,29 +65,32 @@ export const TIER_PRESETS: readonly QualityTierPreset[] = [
   {
     pixelRatioScale: 1.0,
     ssaoHalfResolution: true,
+    ssaoIntensityScale: 1.0,
     bloomMipmapBlur: true,
     dofBokehScaleScale: 0.85,
-    godRaysSamples: 80,
+    godRaysSamples: 32,
     pointShadowRefreshFrames: 4,
     waterMirror: true,
   },
   // Tier 2 — Medium
   {
-    pixelRatioScale: 0.9,
+    pixelRatioScale: 0.85,
     ssaoHalfResolution: true,
+    ssaoIntensityScale: 0.7,
     bloomMipmapBlur: true,
-    dofBokehScaleScale: 0.7,
-    godRaysSamples: 40,
+    dofBokehScaleScale: 0.5,
+    godRaysSamples: 24,
     pointShadowRefreshFrames: 6,
     waterMirror: false,
   },
   // Tier 3 — Low
   {
-    pixelRatioScale: 0.8,
+    pixelRatioScale: 0.75,
     ssaoHalfResolution: true,
+    ssaoIntensityScale: 0.0,
     bloomMipmapBlur: false,
     dofBokehScaleScale: 0.0,
-    godRaysSamples: 24,
+    godRaysSamples: 16,
     pointShadowRefreshFrames: 8,
     waterMirror: false,
   },

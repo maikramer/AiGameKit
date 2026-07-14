@@ -13,7 +13,7 @@ import {
   TIER_PRESETS,
 } from '../adaptive-quality/quality-tiers';
 import { distanceToPath } from './path-utils';
-import { bodySurfaceYAt } from './registry';
+import { bodySurfaceYAt, getRiverFlatPath } from './registry';
 import { waterEmptyReflectionTexture, waterSideCars } from './systems';
 import type { WaterSideCar } from './water-shape';
 
@@ -31,18 +31,16 @@ function distanceToBody(
   if (body.kind === 'lake') {
     return Math.hypot(body.x - px, body.z - pz);
   }
-  const flat: number[] = [];
-  for (const p of body.path) flat.push(p[0], p[1]);
-  return distanceToPath(flat, px, pz);
+  return distanceToPath(getRiverFlatPath(body.path), px, pz);
 }
 
 /** Only the water body (lake or river) nearest the camera gets a real mirror
  * — beyond this it's not worth doubling a scene render for a reflection
  * nobody's looking at closely. */
-const MAX_REFLECT_DISTANCE = 55;
+const MAX_REFLECT_DISTANCE = 40;
 /** Square render target size. Water is stylized/blurred by ripples anyway, so
  * this stays modest — it's a mirror, not a hero render target. */
-const REFLECTION_SIZE = 512;
+const REFLECTION_SIZE = 256;
 /** GPU tiers 0-1 (from `detect-gpu`) skip the extra scene render entirely. */
 const MIN_GPU_TIER = 2;
 
@@ -71,6 +69,11 @@ function getRenderTarget(): THREE.WebGLRenderTarget {
       REFLECTION_SIZE,
       REFLECTION_SIZE
     );
+  } else if (
+    renderTarget.width !== REFLECTION_SIZE ||
+    renderTarget.height !== REFLECTION_SIZE
+  ) {
+    renderTarget.setSize(REFLECTION_SIZE, REFLECTION_SIZE);
   }
   return renderTarget;
 }

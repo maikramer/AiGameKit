@@ -1,4 +1,4 @@
-import type { Adapter, Plugin } from '../../core';
+import type { Adapter, Plugin, System } from '../../core';
 import { setColliderMeshUrl } from './mesh-collider';
 import {
   ApplyAngularImpulse,
@@ -27,18 +27,25 @@ import {
 import {
   ApplyInputSystem,
   CharacterMovementSystem,
-  CollisionEventCleanupSystem,
   KinematicMovementSystem,
   PhysicsCleanupSystem,
   PhysicsInitializationSystem,
-  PhysicsInterpolationSystem,
-  PhysicsRapierSyncSystem,
   PhysicsStepSystem,
   PhysicsWorldSystem,
   SetVelocitySystem,
   TeleportationSystem,
 } from './systems';
+import {
+  CollisionEventCleanupSystem,
+  PhysicsInterpolationSystem,
+  PhysicsRapierSyncSystem,
+} from './physics-sync';
 import { initializePhysics } from './utils';
+
+const PhysicsRapierSyncAfterStep: System = {
+  ...PhysicsRapierSyncSystem,
+  after: [PhysicsStepSystem],
+};
 
 export const PhysicsPlugin: Plugin = {
   initialize: initializePhysics,
@@ -53,7 +60,7 @@ export const PhysicsPlugin: Plugin = {
     TeleportationSystem,
     KinematicMovementSystem,
     PhysicsStepSystem,
-    PhysicsRapierSyncSystem,
+    PhysicsRapierSyncAfterStep,
     PhysicsInterpolationSystem,
   ],
   recipes: [staticPartRecipe, dynamicPartRecipe, kinematicPartRecipe],

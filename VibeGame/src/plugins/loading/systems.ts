@@ -3,7 +3,7 @@ import {
   setLoadingEnforcement,
   type System,
 } from '../../core';
-import { getActiveGltfLoadCount } from '../../extras/gltf-bridge';
+import { gltfAssetsReady } from '../gltf-xml/ready-gate';
 import { mountLoadingScreen, updateLoadingScreen } from './context';
 
 /**
@@ -20,10 +20,11 @@ export const LoadingScreenSystem: System = {
   group: 'draw',
   setup(state) {
     if (state.headless || typeof document === 'undefined') return;
-    // Engage the physics hold and add the generic GLTF-assets gate. Domain
-    // gates (terrain, spawn) are registered by their own plugins.
+    // Engage the physics hold and add the GLTF assets gate (critical loads
+    // only — lod1/lod2 stream in the background). Domain gates (terrain,
+    // spawn) are registered by their own plugins.
     setLoadingEnforcement(state, true);
-    registerReadyGate(state, 'assets', () => getActiveGltfLoadCount() === 0);
+    registerReadyGate(state, 'assets', () => gltfAssetsReady(state));
     mountLoadingScreen();
   },
   update(state) {

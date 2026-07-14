@@ -20,7 +20,7 @@ export {
   TouchEndedEvent,
 } from './components';
 export { PhysicsPlugin } from './plugin';
-export { getRapierWorld } from './systems';
+export { getRapierWorld, invalidateCollider } from './systems';
 export { DEFAULT_GRAVITY, initializePhysics } from './utils';
 export {
   MeshAnchor,
