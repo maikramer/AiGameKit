@@ -34,6 +34,7 @@ from .categories import (
     get_target_faces,
 )
 from .helpers import (
+    _append_gpu_kill_flag,
     _resolve_rocks3d_bin,
     _row_wants_animate,
     _row_wants_rig,
@@ -599,8 +600,7 @@ def _text3d_argv(
         args.extend(["--guidance", str(t3.guidance)])
     if t3.allow_shared_gpu:
         args.append("--allow-shared-gpu")
-    if not t3.gpu_kill_others:
-        args.append("--no-gpu-kill-others")
+    _append_gpu_kill_flag(args, t3.gpu_kill_others)
     if t3.full_gpu:
         args.append("--t2d-full-gpu")
     args.extend(["--export-origin", t3.export_origin])

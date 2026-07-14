@@ -403,6 +403,17 @@ def _build_context(
     return profile, rows, bundle, preset
 
 
+def _append_quality(argv: list[str], profile: GameProfile) -> None:
+    """Adiciona ``--quality <tier>`` ao argv (centraliza profile.generation or medium)."""
+    argv.extend(["--quality", profile.generation or "medium"])
+
+
+def _append_gpu_kill_flag(argv: list[str], gpu_kill_others: bool) -> None:
+    """Adiciona ``--no-gpu-kill-others`` quando gpu_kill_others é False."""
+    if not gpu_kill_others:
+        argv.append("--no-gpu-kill-others")
+
+
 def effective_face_ratio(profile: GameProfile, row: ManifestRow) -> float:
     """Face ratio for the current row (manifest override > game.yaml generation profile)."""
     gen_name = row.generation or profile.generation

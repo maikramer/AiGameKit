@@ -2,7 +2,7 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-Orchestrator for the entire GameDev pipeline. Coordinates **Text2D**, **Texture2D**, **Skymap2D**, **Text2Sound**, **Text3D**, **Paint3D**, **Part3D**, **Rigging3D**, **Animator3D**, **Materialize**, and **Terrain3D** to generate complete game assets from a YAML manifest and profile.
+Orchestrator for the entire GameDev pipeline. Coordinates **Text2D**, **Texture2D**, **Skymap2D**, **Text2Sound**, **Text3D**, **Paint3D**, **Rigging3D**, **Animator3D**, **Materialize**, and **Terrain3D** to generate complete game assets from a YAML manifest and profile.
 
 Reads `game.yaml` (style + tool configuration) and `manifest.yaml` (asset list), then runs each sub-tool in the correct order, tracking progress, managing VRAM, and producing a structured output directory ready for handoff to Vite / VibeGame.
 
@@ -13,7 +13,6 @@ GameAssets is the central hub of the [GameDev monorepo](../). It does **not** ge
 - **2D generation:** Text2D (FLUX, local GPU) or Texture2D (seamless textures, HF API) or Skymap2D (equirectangular 360° sky)
 - **3D shape:** Text3D (Hunyuan3D-2.1, image→geometry)
 - **3D texturing:** Paint3D (Hunyuan3D-Paint 2.1, PBR-ready GLB) with optional quick paint (solid / perlin)
-- **Semantic parts:** Part3D (decompose mesh into semantic segments)
 - **Auto-rigging:** Rigging3D (UniRig, GLB → rigged GLB)
 - **Animation:** Animator3D (`game-pack`, rigged GLB → animated GLB with clips)
 - **Audio:** Text2Sound (Stable Audio Open, per-row SFX / BGM)
@@ -45,11 +44,6 @@ Manifest + game.yaml
         │
         ▼
    ┌──────────┐
-   │  Part3D  │ → Decomposed Parts (optional)
-   └────┬─────┘
-        │
-        ▼
-   ┌──────────┐
    │Rigging3D │ → Rigged GLB
    └────┬─────┘
         │
@@ -66,13 +60,12 @@ Manifest + game.yaml
 3. **Text2Sound** — Audio for rows with `audio` in pipeline
 4. **Text3D** — Shape generation (image→3D)
 5. **Paint3D** — Texture + PBR (Hunyuan3D-Paint 2.1 or quick paint)
-6. **Part3D** — Semantic decomposition (optional)
-7. **Rigging3D** — Auto-rigging (optional)
-8. **Animator3D** — Animation clips (`game-pack`, optional)
-9. **LOD** — Level-of-detail triplet (optional)
-10. **Collision** — Convex hull collision mesh (optional)
+6. **Rigging3D** — Auto-rigging (optional)
+7. **Animator3D** — Animation clips (`game-pack`, optional)
+8. **LOD** — Level-of-detail triplet (optional)
+9. **Collision** — Convex hull collision mesh (optional)
 
-Pipeline stages (3D, rig, parts, animate, lod, collision) are **auto-detected** from the manifest `pipeline` field and `game.yaml` profile blocks. Use `--no-3d`, `--no-rig`, `--no-parts`, `--no-animate`, `--no-lod`, `--no-collision` to explicitly opt out.
+Pipeline stages (3D, rig, animate, lod, collision) are **auto-detected** from the manifest `pipeline` field and `game.yaml` profile blocks. Use `--no-3d`, `--no-rig`, `--no-animate`, `--no-lod`, `--no-collision` to explicitly opt out.
 
 ## Debug / lab tools
 
@@ -128,7 +121,7 @@ Creates `game.yaml` and `manifest.yaml` template files.
 gameassets info
 ```
 
-Shows version, resolved binaries for all tools (Text2D, Texture2D, Skymap2D, Text2Sound, Text3D, Paint3D, Part3D, Rigging3D, Animator3D, Materialize), and free VRAM (via `nvidia-smi`).
+Shows version, resolved binaries for all tools (Text2D, Texture2D, Skymap2D, Text2Sound, Text3D, Paint3D, Rigging3D, Animator3D, Materialize), and free VRAM (via `nvidia-smi`).
 
 ### `gameassets prompts`
 
@@ -171,7 +164,6 @@ Full pipeline execution. Generates 2D images, 3D meshes, textures, audio, riggin
 | `--skip-text2d` | Skip 2D image generation (use existing PNGs) |
 | `--skip-audio` | Skip Text2Sound (ignore `audio` in pipeline) |
 | `--no-rig` | Skip rigging even if configured |
-| `--no-parts` | Skip part decomposition even if configured |
 | `--no-animate` | Skip animation even for rigged models |
 | `--no-lod` | Skip LOD generation even if enabled |
 | `--no-collision` | Skip collision mesh generation even if enabled |

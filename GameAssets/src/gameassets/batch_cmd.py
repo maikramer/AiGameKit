@@ -25,6 +25,8 @@ from .batch_guard import batch_directory_lock, detect_gpu_ids, query_gpu_free_mi
 from .categories import get_target_faces
 from .cli_rich import click
 from .helpers import (
+    _append_gpu_kill_flag,
+    _append_quality,
     _append_skymap2d_profile_args,
     _append_terrain3d_profile_args,
     _append_text2d_profile_args,
@@ -644,7 +646,7 @@ def batch_cmd(
 
                 # Shape batch dry-run
                 shape_argv = [text3d_bin, "generate-batch", "<shape_manifest.json>"]
-                shape_argv.extend(["--quality", profile.generation or "medium"])
+                _append_quality(shape_argv, profile)
                 if t3d:
                     if not should_optimize_text3d(t3d):
                         if t3d.preset:
@@ -657,8 +659,7 @@ def batch_cmd(
                             shape_argv.extend(["--num-chunks", str(t3d.num_chunks)])
                     if t3d.allow_shared_gpu:
                         shape_argv.append("--allow-shared-gpu")
-                    if not t3d.gpu_kill_others:
-                        shape_argv.append("--no-gpu-kill-others")
+                    _append_gpu_kill_flag(shape_argv, t3d.gpu_kill_others)
                 if force:
                     shape_argv.append("--force")
                 if gpu_ids:
@@ -697,12 +698,11 @@ def batch_cmd(
                 else:
                     # Paint batch dry-run
                     paint_argv = [paint3d_bin or "paint3d", "texture-batch", "<paint_manifest.json>"]
-                    paint_argv.extend(["--quality", profile.generation or "medium"])
+                    _append_quality(paint_argv, profile)
                     if t3d:
                         if t3d.allow_shared_gpu:
                             paint_argv.append("--allow-shared-gpu")
-                        if not t3d.gpu_kill_others:
-                            paint_argv.append("--no-gpu-kill-others")
+                        _append_gpu_kill_flag(paint_argv, t3d.gpu_kill_others)
                     if force:
                         paint_argv.append("--force")
                     if gpu_ids:
@@ -1391,7 +1391,7 @@ def batch_cmd(
                                 shape_manifest_path.write_text(json.dumps(shape_items_d, indent=2))
 
                                 batch_args = [text3d_bin, "generate-batch", str(shape_manifest_path)]
-                                batch_args.extend(["--quality", profile.generation or "medium"])
+                                _append_quality(batch_args, profile)
                                 if force:
                                     batch_args.append("--force")
                                 t3 = profile.text3d
@@ -1418,8 +1418,7 @@ def batch_cmd(
                                         batch_args.extend(["--guidance", str(t3.guidance)])
                                     if t3.allow_shared_gpu:
                                         batch_args.append("--allow-shared-gpu")
-                                    if not t3.gpu_kill_others:
-                                        batch_args.append("--no-gpu-kill-others")
+                                    _append_gpu_kill_flag(batch_args, t3.gpu_kill_others)
                                     if t3.full_gpu:
                                         batch_args.append("--t2d-full-gpu")
                                     batch_args.extend(["--export-origin", t3.export_origin])
@@ -1571,7 +1570,7 @@ def batch_cmd(
                                         paint_manifest_path.write_text(json.dumps(paint_items_d, indent=2))
 
                                         batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
-                                        batch_args.extend(["--quality", profile.generation or "medium"])
+                                        _append_quality(batch_args, profile)
                                         if force:
                                             batch_args.append("--force")
                                         t3 = profile.text3d
@@ -1579,8 +1578,7 @@ def batch_cmd(
                                         if t3:
                                             if t3.allow_shared_gpu:
                                                 batch_args.append("--allow-shared-gpu")
-                                            if not t3.gpu_kill_others:
-                                                batch_args.append("--no-gpu-kill-others")
+                                            _append_gpu_kill_flag(batch_args, t3.gpu_kill_others)
                                         if p3:
                                             if p3.max_views is not None:
                                                 batch_args.extend(["--max-views", str(p3.max_views)])
@@ -2425,7 +2423,7 @@ def batch_cmd(
                                 shape_manifest_path.write_text(json.dumps(shape_manifest_items, indent=2))
 
                                 batch_args = [text3d_bin, "generate-batch", str(shape_manifest_path)]
-                                batch_args.extend(["--quality", profile.generation or "medium"])
+                                _append_quality(batch_args, profile)
                                 if force:
                                     batch_args.append("--force")
                                 t3 = profile.text3d
@@ -2453,8 +2451,7 @@ def batch_cmd(
                                         batch_args.extend(["--guidance", str(t3.guidance)])
                                     if t3.allow_shared_gpu:
                                         batch_args.append("--allow-shared-gpu")
-                                    if not t3.gpu_kill_others:
-                                        batch_args.append("--no-gpu-kill-others")
+                                    _append_gpu_kill_flag(batch_args, t3.gpu_kill_others)
                                     if t3.full_gpu:
                                         batch_args.append("--t2d-full-gpu")
                                     batch_args.extend(["--export-origin", t3.export_origin])
@@ -2625,7 +2622,7 @@ def batch_cmd(
                                     paint_manifest_path.write_text(json.dumps(paint_manifest_items, indent=2))
 
                                     batch_args = [paint3d_bin, "texture-batch", str(paint_manifest_path)]
-                                    batch_args.extend(["--quality", profile.generation or "medium"])
+                                    _append_quality(batch_args, profile)
                                     if force:
                                         batch_args.append("--force")
                                     t3 = profile.text3d
@@ -2633,8 +2630,7 @@ def batch_cmd(
                                     if t3:
                                         if t3.allow_shared_gpu:
                                             batch_args.append("--allow-shared-gpu")
-                                        if not t3.gpu_kill_others:
-                                            batch_args.append("--no-gpu-kill-others")
+                                        _append_gpu_kill_flag(batch_args, t3.gpu_kill_others)
                                     if p3:
                                         if p3.max_views is not None:
                                             batch_args.extend(["--max-views", str(p3.max_views)])
