@@ -1,6 +1,6 @@
 ---
 name: gameassets
-description: Orquestra batches de prompts e assets 2D/3D/áudio com game.yaml, manifest YAML e presets. Use quando o utilizador falar em GameAssets, manifest, game.yaml, batch, gameassets dream, presets locais, TEXT2D_BIN, TEXTURE2D_BIN, TEXT2SOUND_BIN, TEXT3D_BIN, MATERIALIZE_BIN, RIGGING3D_BIN, ANIMATOR3D_BIN, image_source text2d/texture2d/skymap2d, generate_audio, generate_rig, generate_animate, generate_parts, --no-rig, --no-animate, Rigging3D, Animator3D, campo image_source no manifest, path_layout flat, ou integração Text2D/Texture2D/Text2Sound/Text3D/Materialize.
+description: Orquestra batches de prompts e assets 2D/3D/áudio com game.yaml, manifest YAML e presets. Use quando o utilizador falar em GameAssets, manifest, game.yaml, batch, gameassets dream, presets locais, TEXT2D_BIN, TEXTURE2D_BIN, TEXT2SOUND_BIN, TEXT3D_BIN, MATERIALIZE_BIN, RIGGING3D_BIN, ANIMATOR3D_BIN, image_source text2d/texture2d/skymap2d, generate_audio, generate_rig, generate_animate, --no-rig, --no-animate, Rigging3D, Animator3D, campo image_source no manifest, path_layout flat, ou integração Text2D/Texture2D/Text2Sound/Text3D/Materialize.
 ---
 
 # GameAssets — batch de prompts e assets
@@ -46,12 +46,12 @@ game.yaml + manifest.yaml + presets [+ presets-local.yaml]
 |---------|--------|
 | `gameassets init [--path DIR]` | Cria `game.yaml` e `manifest.yaml` de exemplo |
 | `gameassets prompts [--profile …] [--manifest …]` | Pré-visualiza prompts (sem GPU); `-o ficheiro.jsonl` grava JSONL |
-| `gameassets batch [--profile …] [--manifest …]` | Gera imagens; 3D/rig/animate/parts auto-detectados do manifest + perfil; `--no-rig`/`--no-animate`/`--no-parts` para opt-out; `--dry-run --dry-run-json plan.json` grava plano |
+| `gameassets batch [--profile …] [--manifest …]` | Gera imagens; 3D/rig/animate auto-detectados do manifest + perfil; `--no-rig`/`--no-animate` para opt-out; `--dry-run --dry-run-json plan.json` grava plano |
 | `gameassets handoff --public-dir …/public` | Copia/symlink GLB/áudio do `output_dir` para `public/assets` e grava `assets/gameassets_handoff.json` |
 | `gameassets dream "descrição" [--dry-run]` | Da ideia ao jogo: LLM planeia assets+cena, batch gera, scaffold projecto Vite. `--dry-run` emite ficheiros sem GPU. Providers: `--llm-provider openai\|huggingface\|stdin` |
 | `gameassets skill install` | Instala esta skill em `.cursor/skills/gameassets/` do projeto alvo |
 
-**Flags úteis em `batch`:** `--dry-run`, `--fail-fast`, `--skip-audio`, `--no-3d`, `--no-rig`, `--no-animate`, `--no-parts`, `--log run.jsonl` (**`timings_sec`**).
+**Flags úteis em `batch`:** `--dry-run`, `--fail-fast`, `--skip-audio`, `--no-3d`, `--no-rig`, `--no-animate`, `--log run.jsonl` (**`timings_sec`**).
 
 ## Preset só no teu ficheiro (`presets-local.yaml`)
 
@@ -80,7 +80,7 @@ Sem `--presets-local`, o comando falha com **preset desconhecido**.
 
 ## Manifest (`manifest.yaml`)
 
-Campos incluem **`id`**, **`idea`**, **`generate_3d`**, opcionalmente **`generate_audio`**, **`generate_rig`**, **`generate_animate`**, **`generate_parts`**, **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`), etc. (ver `manifest.py`). Com `path_layout: flat`, `id` pode ser `Categoria/nome` para espelhar pastas no Godot.
+Campos incluem **`id`**, **`idea`**, **`generate_3d`**, opcionalmente **`generate_audio`**, **`generate_rig`**, **`generate_animate`**, **`image_source`** (`text2d` \| `texture2d` \| `skymap2d`), etc. (ver `manifest.py`). Com `path_layout: flat`, `id` pode ser `Categoria/nome` para espelhar pastas no Godot.
 
 ## Variáveis de ambiente
 
@@ -93,7 +93,6 @@ Campos incluem **`id`**, **`idea`**, **`generate_3d`**, opcionalmente **`generat
 | `MATERIALIZE_BIN` | Idem para `materialize` (só fluxo Texture2D + `texture2d.materialize`) |
 | `RIGGING3D_BIN` | Idem para `rigging3d` (ou `python -m rigging3d`) quando rig activo |
 | `ANIMATOR3D_BIN` | Idem para `animator3d` quando animate activo |
-| `PART3D_BIN` | Idem para `part3d` quando parts activo |
 
 ## Prompt — palavras a evitar para 3D limpo
 
