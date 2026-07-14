@@ -51,7 +51,10 @@ export {
   setPlayerFaceTarget,
 } from './plugins/player';
 export { ThirdPersonCamera } from './plugins/player-controller/components';
-export { PlayerControllerPlugin } from './plugins/player-controller/plugin';
+export {
+  ThirdPersonCameraPlugin,
+  PlayerControllerPlugin,
+} from './plugins/player-controller/plugin';
 export { OrbitCamera, OrbitCameraPlugin } from './plugins/orbit-camera';
 export { getScene } from './plugins/rendering';
 export { MeshRenderer } from './plugins/rendering';
@@ -125,7 +128,6 @@ export {
   setMasterVolume,
   setMusicVolume,
   setSfxVolume,
-  wireMusicMixerEvents,
 } from './plugins/audio';
 export type { AudioMix } from './plugins/audio';
 export {
@@ -151,6 +153,10 @@ export {
   ParticlesPlugin,
   ParticleEmitter,
   spawnParticleBurst,
+  setParticleTextureBaseUrl,
+  getParticleTextureBaseUrl,
+  preloadParticleTextures,
+  PRESET_TEXTURE_FILE,
 } from './plugins/particles';
 export type { ParticleBurstOptions } from './plugins/particles';
 export {
@@ -230,6 +236,8 @@ export type { TerrainEntityData } from './plugins/terrain';
 export {
   getGltfLocalYBounds,
   prefetchGltfLocalYBounds,
+  GltfPending,
+  gltfAssetsReady,
 } from './plugins/gltf-xml';
 
 export { RaycastPlugin, RaycastHit, RaycastSource } from './plugins/raycast';
@@ -263,6 +271,8 @@ export {
   NavMeshInitSystem,
   NavMeshAgentSystem,
   collectNavmeshGeometry,
+  prefetchNavmeshObstacles,
+  bakeSoloNavMeshBytes,
   isNavMeshReady,
   createAgent,
   setAgentTarget,
@@ -271,9 +281,15 @@ export {
   getAgentPosition,
   getNavMeshDebugMesh,
 } from './plugins/navmesh';
-export type { NavMeshGeometry, AgentConfig } from './plugins/navmesh';
+export type {
+  NavMeshGeometry,
+  AgentConfig,
+  NavMeshBakeConfig,
+} from './plugins/navmesh';
 
 export { HudPlugin, HudPanel } from './plugins/hud';
+export { HudRpgPlugin } from './plugins/hud/rpg-plugin';
+export { RpgPlugins } from './plugins/rpg-bundle';
 export {
   HudScreenUpdateSystem,
   getHudScreenLayer,
@@ -397,7 +413,15 @@ export {
   setLoadingScreenText,
 } from './plugins/loading';
 export type { LoadingScreenText } from './plugins/loading';
-export { getActiveGltfLoadCount } from './extras/gltf-bridge';
+export {
+  getActiveGltfLoadCount,
+  getCriticalGltfLoadCount,
+  hasAnyGltfLoadStarted,
+  loadGltfMasterTracked,
+  _resetGltfLoadTrackingForTests,
+  _trackGltfLoadForTests,
+} from './extras/gltf-bridge';
+export type { GltfLoadPriority } from './extras/gltf-bridge';
 
 export {
   COMBAT_DAMAGED,
@@ -423,6 +447,7 @@ export {
   PROGRESSION_XP_GAINED,
   RpgCoreEventsPlugin,
   RpgCorePlugin,
+  wireMusicMixerEvents,
   STATUS_APPLIED,
   STATUS_CANCELLED,
   STATUS_EXPIRED,
@@ -443,6 +468,7 @@ export {
   ProgressionEventBridgeSystem,
   ProgressionPlugin,
   setProgressionConfig,
+  skillPrereqsMet,
   spendSkillPoint,
 } from './plugins/rpg-progression';
 
@@ -612,6 +638,7 @@ export type {
   SkillEffect,
   StatModifier,
   StatusEffectDef,
+  WikiPageDef,
 } from './plugins/rpg-core/types';
 
 /**
@@ -703,9 +730,10 @@ export {
 /**
  * Terrain height queries used to align gameplay objects to the ground.
  *
- * {@link getTerrainHeightAt} samples the terrain heightmap; {@link sampleTerrainHeight}
- * multi-samples the rendered LOD surface across a small footprint for robust
- * grounding on coarse chunks; {@link getBvhSurfaceHeight} (re-exported above)
+ * {@link getGroundHeight} and {@link sampleTerrainHeight} multi-sample the
+ * rendered LOD surface across a small footprint for robust grounding on coarse
+ * chunks; {@link getTerrainHeightAt} samples the analytic heightmap at a single
+ * point; {@link getBvhSurfaceHeight} (re-exported above) raycasts the terrain
  * raycasts the terrain BVH. {@link getTerrainContext} exposes per-field runtime
  * data; {@link isTerrainDynamicsBlocking} reports whether terrain dynamics
  * currently block spawning/placement; {@link terrainReady} is the public signal
@@ -713,6 +741,7 @@ export {
  */
 export {
   getTerrainHeightAt,
+  getGroundHeight,
   isTerrainColliderAt,
   getTerrainContext,
   sampleTerrainHeight,
@@ -931,3 +960,11 @@ export {
   setEnvironmentRain,
 } from './plugins/weather';
 export type { WeatherPatch, WeatherRuntime } from './plugins/weather';
+
+export {
+  VegetationPlugin,
+  Vegetation,
+  parseVegetationMeshes,
+  registerVegetationWindUrl,
+  getVegetationWindUrls,
+} from './plugins/vegetation';

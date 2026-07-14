@@ -21,6 +21,8 @@ export default defineConfig({
       entry: {
         index: 'src/index.ts',
         defaults: 'src/defaults.ts',
+        rpg: 'src/rpg.ts',
+        combat: 'src/combat.ts',
         'plugins/animation/index': 'src/plugins/animation/index.ts',
         'plugins/input/index': 'src/plugins/input/index.ts',
         'plugins/orbit-camera/index': 'src/plugins/orbit-camera/index.ts',

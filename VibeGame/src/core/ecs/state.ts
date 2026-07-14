@@ -22,6 +22,7 @@ import { clearComponentFields, setComponentFields } from './utils';
 import { Parent } from './components';
 import { TIME_CONSTANTS } from './constants';
 import { Scheduler } from './scheduler';
+import { Time as TimeSingleton } from './time';
 import type {
   Component,
   Config,
@@ -94,9 +95,13 @@ export class State {
       name: 'GameObject',
       components: ['transform'],
     });
+    TimeSingleton.init(this);
   }
 
   registerPlugin(plugin: Plugin): void {
+    if (this.plugins.includes(plugin)) {
+      return;
+    }
     this.plugins.push(plugin);
     if (plugin.components) {
       for (const [name, component] of Object.entries(plugin.components)) {
@@ -256,6 +261,12 @@ export class State {
   }
 
   private destroyEntityImmediate(eid: number): void {
+    // Skip if already removed (e.g. dispose iterates all eids after a parent
+    // cascade already destroyed the child).
+    if (!entityExists(this.world, eid)) {
+      this.destroyCallbacks.delete(eid);
+      return;
+    }
     const perEntity = this.destroyCallbacks.get(eid);
     if (perEntity) {
       for (const cb of perEntity) {

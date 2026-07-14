@@ -256,6 +256,15 @@ export class GameRuntime {
       }
 
       const xmlContent = `<Scene>${originalHTML}</Scene>`;
+      this.state.xmlSource = xmlContent;
+
+      if (/<script\b/i.test(originalHTML)) {
+        logger.warn(
+          '[VibeGame] <script> tags in world XML are ignored. ' +
+            'Use recipe `script` attributes or entity MonoBehaviour scripts instead.'
+        );
+      }
+
       const parseResult = XMLParser.parse(xmlContent);
 
       if (parseResult.root.tagName === 'parsererror') {

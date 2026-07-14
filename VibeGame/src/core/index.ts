@@ -31,7 +31,6 @@ export type {
   CoroutineEntry,
   EntitySnapshot,
   EnumMapping,
-  GameTime,
   Parser,
   ParserParams,
   Plugin,

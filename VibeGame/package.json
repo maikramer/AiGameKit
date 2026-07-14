@@ -82,6 +82,14 @@
     "./particles": {
       "types": "./dist/plugins/particles/index.d.ts",
       "import": "./dist/plugins/particles/index.js"
+    },
+    "./rpg": {
+      "types": "./dist/rpg.d.ts",
+      "import": "./dist/rpg.js"
+    },
+    "./combat": {
+      "types": "./dist/combat.d.ts",
+      "import": "./dist/combat.js"
     }
   },
   "files": [

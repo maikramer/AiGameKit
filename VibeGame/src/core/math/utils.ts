@@ -1,8 +1,17 @@
 import * as THREE from 'three';
 
-// `lerp` is re-exported from maath/misc so the engine and its consumers share
-// one well-tested implementation. The formula is identical (a + (b - a) * t).
-export { lerp } from 'maath/misc';
+const DEG2RAD = Math.PI / 180;
+const RAD2DEG = 180 / Math.PI;
+
+/** Scratch — reused across euler/quat conversions to avoid per-call GC. */
+const _euler = new THREE.Euler();
+const _quat = new THREE.Quaternion();
+const _eulerOut = { x: 0, y: 0, z: 0 };
+const _quatOut = { x: 0, y: 0, z: 0, w: 1 };
+
+export function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
 
 export function slerp(
   fromX: number,
@@ -35,18 +44,11 @@ export function slerp(
     const y = fromY + t * (toYAdjusted - fromY);
     const z = fromZ + t * (toZAdjusted - fromZ);
     const w = fromW + t * (toWAdjusted - fromW);
-
-    const invLength = 1 / Math.sqrt(x * x + y * y + z * z + w * w);
-
-    return {
-      x: x * invLength,
-      y: y * invLength,
-      z: z * invLength,
-      w: w * invLength,
-    };
+    const len = Math.sqrt(x * x + y * y + z * z + w * w);
+    return { x: x / len, y: y / len, z: z / len, w: w / len };
   }
 
-  const theta = Math.acos(dot);
+  const theta = Math.acos(Math.min(1, Math.max(-1, dot)));
   const sinTheta = Math.sin(theta);
   const scale0 = Math.sin((1 - t) * theta) / sinTheta;
   const scale1 = Math.sin(t * theta) / sinTheta;
@@ -59,24 +61,45 @@ export function slerp(
   };
 }
 
+/** Write euler→quaternion into `out` (no allocation). Returns `out`. */
+export function eulerToQuaternionInto(
+  x: number,
+  y: number,
+  z: number,
+  out: { x: number; y: number; z: number; w: number }
+): { x: number; y: number; z: number; w: number } {
+  _euler.set(x * DEG2RAD, y * DEG2RAD, z * DEG2RAD, 'XYZ');
+  _quat.setFromEuler(_euler);
+  out.x = _quat.x;
+  out.y = _quat.y;
+  out.z = _quat.z;
+  out.w = _quat.w;
+  return out;
+}
+
 export function eulerToQuaternion(
   x: number,
   y: number,
   z: number
 ): { x: number; y: number; z: number; w: number } {
-  const radX = x * (Math.PI / 180);
-  const radY = y * (Math.PI / 180);
-  const radZ = z * (Math.PI / 180);
+  eulerToQuaternionInto(x, y, z, _quatOut);
+  return { x: _quatOut.x, y: _quatOut.y, z: _quatOut.z, w: _quatOut.w };
+}
 
-  const euler = new THREE.Euler(radX, radY, radZ, 'XYZ');
-  const quat = new THREE.Quaternion().setFromEuler(euler);
-
-  return {
-    x: quat.x,
-    y: quat.y,
-    z: quat.z,
-    w: quat.w,
-  };
+/** Write quaternion→euler (degrees) into `out` (no allocation). Returns `out`. */
+export function quaternionToEulerInto(
+  x: number,
+  y: number,
+  z: number,
+  w: number,
+  out: { x: number; y: number; z: number }
+): { x: number; y: number; z: number } {
+  _quat.set(x, y, z, w);
+  _euler.setFromQuaternion(_quat, 'XYZ');
+  out.x = _euler.x * RAD2DEG;
+  out.y = _euler.y * RAD2DEG;
+  out.z = _euler.z * RAD2DEG;
+  return out;
 }
 
 export function quaternionToEuler(
@@ -85,12 +108,6 @@ export function quaternionToEuler(
   z: number,
   w: number
 ): { x: number; y: number; z: number } {
-  const quat = new THREE.Quaternion(x, y, z, w);
-  const euler = new THREE.Euler().setFromQuaternion(quat, 'XYZ');
-
-  return {
-    x: euler.x * (180 / Math.PI),
-    y: euler.y * (180 / Math.PI),
-    z: euler.z * (180 / Math.PI),
-  };
+  quaternionToEulerInto(x, y, z, w, _eulerOut);
+  return { x: _eulerOut.x, y: _eulerOut.y, z: _eulerOut.z };
 }

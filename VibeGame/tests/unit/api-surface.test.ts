@@ -19,6 +19,7 @@ import {
   getCharacterFeetY,
   GROUND_CONTACT_SKIN,
   getTerrainHeightAt,
+  getGroundHeight,
   getTerrainContext,
   isTerrainDynamicsBlocking,
   setInputMovementSuppressed,
@@ -69,7 +70,8 @@ describe('Public API surface — promoted symbols', () => {
     expect(typeof GROUND_CONTACT_SKIN).toBe('number');
   });
 
-  it('exports terrain + bvh height queries (getTerrainHeightAt, getBvhSurfaceHeight, getTerrainContext)', () => {
+  it('exports terrain + bvh height queries (getGroundHeight, getTerrainHeightAt, getBvhSurfaceHeight, getTerrainContext)', () => {
+    expect(typeof getGroundHeight).toBe('function');
     expect(typeof getTerrainHeightAt).toBe('function');
     expect(typeof getBvhSurfaceHeight).toBe('function');
     expect(typeof getTerrainContext).toBe('function');

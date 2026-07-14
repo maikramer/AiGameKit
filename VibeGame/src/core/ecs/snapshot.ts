@@ -41,6 +41,9 @@ export interface EntitySnapshot {
 
 export interface WorldSnapshot {
   elapsed: number;
+  /** Wall-clock time used by the scheduler; must match `elapsed` on restore. */
+  realtimeSinceStartup?: number;
+  fixedTime?: number;
   entities: EntitySnapshot[];
   sequences?: SequenceSnapshot[];
 }
@@ -121,6 +124,8 @@ export function createSnapshot(
 
   const result: WorldSnapshot = {
     elapsed: state.time.elapsed,
+    realtimeSinceStartup: state.time.realtimeSinceStartup,
+    fixedTime: state.time.fixedTime,
     entities,
   };
 
@@ -208,7 +213,12 @@ export function restoreSnapshot(
   const oldToNewEid = new Map<number, number>();
   const skippedComponents: string[] = [];
 
-  state.time.elapsed = snapshot.elapsed ?? 0;
+  // Scheduler overwrites `elapsed` from `realtimeSinceStartup` each frame —
+  // restore a single coherent clock so timers/save-load survive the next step.
+  const clock = snapshot.realtimeSinceStartup ?? snapshot.elapsed ?? 0;
+  state.time.realtimeSinceStartup = clock;
+  state.time.elapsed = clock;
+  state.time.fixedTime = snapshot.fixedTime ?? 0;
 
   for (const ent of snapshot.entities) {
     const newEid = state.createEntity();

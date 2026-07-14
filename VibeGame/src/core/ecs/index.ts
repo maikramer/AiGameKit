@@ -49,7 +49,6 @@ export type {
   ComponentEnums,
   Config,
   EnumMapping,
-  GameTime,
   Parser,
   ParserParams,
   Plugin,

@@ -344,4 +344,53 @@ describe('GameRuntime', () => {
     const entities = defineQuery([Transform])(state.world);
     expect(entities.length).toBe(2);
   });
+
+  it('stores xmlSource from Scene innerHTML during world parse', async () => {
+    document.body.innerHTML = `
+      <Scene>
+        <GameObject></GameObject>
+      </Scene>
+    `;
+
+    state.registerRecipe({ name: 'Scene', components: [] });
+    state.registerRecipe({ name: 'GameObject', components: [] });
+
+    const scene = document.querySelector('Scene') as HTMLElement;
+    await runtime.start();
+
+    expect(state.xmlSource).toBe(`<Scene>${scene.innerHTML}</Scene>`);
+    expect(state.xmlSource?.toLowerCase()).toContain('gameobject');
+  });
+
+  it('warns when world XML contains a script tag', async () => {
+    const { logger } = await import('../../src/core/utils/logger');
+    const warnings: unknown[][] = [];
+    const originalWarn = logger.warn;
+    logger.warn = (...args: unknown[]) => {
+      warnings.push(args);
+    };
+
+    document.body.innerHTML = `
+      <Scene>
+        <script>console.log("bad")</script>
+      </Scene>
+    `;
+
+    state.registerRecipe({ name: 'Scene', components: [] });
+
+    try {
+      try {
+        await runtime.start();
+      } catch {
+        // <script> is not a recipe; parse may throw after the warning.
+      }
+      expect(
+        warnings.some((args) =>
+          String(args[0]).includes('<script> tags in world XML are ignored')
+        )
+      ).toBe(true);
+    } finally {
+      logger.warn = originalWarn;
+    }
+  });
 });

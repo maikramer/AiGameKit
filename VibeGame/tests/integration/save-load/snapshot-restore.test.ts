@@ -62,6 +62,7 @@ describe('Save-Load Snapshot Restore', () => {
 
   it('should restore elapsed time via loadSnapshot', () => {
     state.time.elapsed = 42.5;
+    state.time.realtimeSinceStartup = 42.5;
 
     const e1 = state.createEntity();
     state.addComponent(e1, Serializable);
@@ -75,6 +76,7 @@ describe('Save-Load Snapshot Restore', () => {
 
     loadSnapshot(state2, data);
     expect(state2.time.elapsed).toBeCloseTo(42.5);
+    expect(state2.time.realtimeSinceStartup).toBeCloseTo(42.5);
   });
 
   it('should produce a valid msgpack payload with entity components', () => {

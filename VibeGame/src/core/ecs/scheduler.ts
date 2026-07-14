@@ -52,7 +52,7 @@ export class Scheduler {
       fixedSteps++;
     }
     if (fixedSteps >= maxFixedSteps) {
-      this.accumulator = 0;
+      this.accumulator = Math.min(this.accumulator, fixedDeltaTime);
     }
 
     mutableTime.deltaTime = scaledDelta;

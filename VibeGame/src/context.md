@@ -1,6 +1,7 @@
 # Source Code
 
 <!-- LLM:OVERVIEW -->
+
 Entry point for VibeGame, a 3D game engine using ECS architecture with bitECS. Provides builder pattern API for configuration, runtime engine for execution, and plugin system for extensibility.
 <!-- /LLM:OVERVIEW -->
 
@@ -18,19 +19,15 @@ src/
 ├── context.md  # This file
 ├── core/  # Engine foundation (ECS, XML, math)
 │   └── context.md
-├── plugins/  # Plugin modules
-│   ├── animation/
-│   ├── input/
-│   ├── orbit-camera/
-│   ├── physics/
-│   ├── player/
-│   ├── recipes/
-│   ├── rendering/
-│   ├── respawn/
-│   ├── startup/
-│   ├── transforms/
-│   ├── tweening/
-│   └── defaults.ts  # Default plugin bundle
+├── plugins/  # Plugin modules (~49; see layers/structure.md)
+│   ├── core stack/  # transforms, rendering, physics, input, startup, …
+│   ├── world/  # terrain, water, road, biomes, weather, sky, bvh, navmesh, spawner
+│   ├── assets/  # gltf-xml, gltf-anim, composition, particles, floating-text
+│   ├── gameplay/  # player, player-controller, combat, destructible, entity-script, raycast
+│   ├── rpg/  # rpg-core, quests, inventory, economy, … (see rpg-bundle.ts)
+│   ├── ui/  # hud (+ HudRpgPlugin), loading, i18n
+│   ├── defaults.ts  # DefaultPlugins bundle
+│   └── rpg-bundle.ts  # Opt-in RpgPlugins bundle
 ├── vite/  # Vite plugin
 │   └── index.ts
 ├── builder.ts  # Builder pattern API
@@ -49,7 +46,7 @@ src/
 - **builder.ts**: Builder pattern implementation
 - **runtime.ts**: Runtime engine
 - **core/index.ts**: Core types and utilities
-- **plugins/*/index.ts**: Individual plugin exports
+- **plugins/\*/index.ts**: Individual plugin exports
 
 ## Dependencies
 
@@ -59,6 +56,7 @@ src/
 ## Plugin System
 
 Plugins follow standard structure:
+
 - `index.ts` - Public exports
 - `plugin.ts` - Plugin definition
 - `components.ts` - Data definitions
@@ -69,6 +67,7 @@ Plugins follow standard structure:
 See [layers/structure.md](../layers/structure.md) for complete plugin architecture
 
 <!-- LLM:REFERENCE -->
+
 ## API Reference
 
 ### Builder Functions
@@ -104,6 +103,7 @@ The runtime returned by `run()`:
 ### Core Exports
 
 #### bitECS Re-exports
+
 - `defineComponent(schema: ComponentSchema): Component` - Define an ECS component
 - `Types` - Data types for component properties (f32, ui8, etc.)
 - `addComponent(world, entity, Component, values?)` - Add component to entity
@@ -111,6 +111,7 @@ The runtime returned by `run()`:
 - `hasComponent(world, entity, Component): boolean` - Check if entity has component
 
 #### Custom Types
+
 - `State` - ECS world state with query and entity management
 - `Plugin` - Plugin interface with components, systems, recipes, config
 - `System` - System interface with setup/update/cleanup hooks
@@ -119,6 +120,7 @@ The runtime returned by `run()`:
 - `Config` - Plugin configuration with defaults, parsers, validators
 
 #### Utilities
+
 - `XMLParser` - Parse XML elements for entity creation
 - `lerp(a, b, t)` - Linear interpolation
 - `slerp(qa, qb, t)` - Spherical linear interpolation (quaternions)
@@ -137,6 +139,7 @@ vibegame(): Plugin[]
 ### Default Plugins
 
 Available via `DefaultPlugins` export:
+
 - `RecipePlugin` - XML recipe parsing
 - `TransformsPlugin` - Position, rotation, scale
 - `RenderingPlugin` - Three.js rendering
@@ -147,9 +150,11 @@ Available via `DefaultPlugins` export:
 - `OrbitCameraPlugin` - Orbital camera
 - `PlayerPlugin` - Character controller
 - `StartupPlugin` - Initialization
+
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### Basic Usage
@@ -198,9 +203,9 @@ const runtime = await GAME
   .withPlugin(CustomPlugin)
   .withSystem(CustomSystem)
   .withComponent('health', HealthComponent)
-  .configure({ 
+  .configure({
     canvas: '#game',
-    autoStart: false 
+    autoStart: false
   })
   .run();
 
@@ -251,4 +256,5 @@ const MyPlugin: GAME.Plugin = {
   }
 };
 ```
+
 <!-- /LLM:EXAMPLES -->

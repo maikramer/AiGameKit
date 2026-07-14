@@ -41,25 +41,10 @@ vibegame/
 │   │   ├── math/  # Math utilities
 │   │   ├── utils/  # Core utilities
 │   │   └── index.ts  # Core exports
-│   ├── plugins/  # Plugin modules
-│   │   ├── animation/  # Animation system
-│   │   ├── debug/  # State introspection bridge (window.__VIBEGAME__)
-│   │   ├── input/  # Input handling
-│   │   ├── line/  # 2D line rendering
-│   │   ├── orbit-camera/  # Orbital camera
-│   │   ├── physics/  # Rapier 3D physics
-│   │   ├── player/  # Player controller
-│   │   ├── postprocessing/  # Post-processing effects
-│   │   ├── recipes/  # XML recipe system
-│   │   ├── rendering/  # Three.js rendering
-│   │   ├── respawn/  # Respawn system
-│   │   ├── startup/  # Initialization
-│   │   ├── terrain/  # LOD terrain with heightmap displacement
-│   │   ├── text/  # 3D text rendering
-│   │   ├── transforms/  # Transform hierarchy
-│   │   ├── tweening/  # Tween animations
-│   │   ├── water/  # Water rendering with waves and reflections
-│   │   └── defaults.ts  # Default plugin bundle
+│   ├── plugins/  # Plugin modules (~49 plugins; see Plugin Registry)
+│   │   ├── defaults.ts  # DefaultPlugins bundle
+│   │   ├── rpg-bundle.ts  # Opt-in RpgPlugins bundle
+│   │   └── …  # One folder per plugin (animation, physics, terrain, rpg-*, etc.)
 │   ├── vite/  # Vite plugins
 │   │   ├── index.ts  # Plugin exports
 │   │   ├── console-plugin.ts  # Console forwarding
@@ -131,28 +116,76 @@ Optional files:
 
 ### Plugin Registry
 
-1. **animation** - Animation mixer and clip management (AnimationPlugin)
-2. **debug** - Runtime state introspection via `window.__VIBEGAME__` bridge (DebugPlugin)
-3. **input** - Mouse, keyboard, gamepad input handling (InputPlugin)
-4. **orbit-camera** - Standalone orbital camera with direct input handling (OrbitCameraPlugin)
-5. **physics** - Rapier 3D WASM physics integration (PhysicsPlugin)
-6. **player** - Player character controller (PlayerPlugin)
-7. **postprocessing** - Post-processing effects (PostprocessingPlugin)
-8. **rendering** - Three.js rendering pipeline (RenderingPlugin)
-9. **terrain** - LOD terrain with heightmap displacement and Rapier heightfield colliders (TerrainPlugin)
-10. **startup** - Initialization and setup systems (StartupPlugin)
-11. **transforms** - Transform component hierarchy (TransformsPlugin)
-12. **tweening** - Tween animations and presentation shakers (TweenPlugin)
+Bundles (not individual `plugin.ts` folders):
 
-**Note**: Recipe system is core functionality, not a plugin. Individual plugins define their own recipes.
+- **defaults.ts** — `DefaultPlugins` (standard engine stack; tree-shake via `withoutPlugins`)
+- **rpg-bundle.ts** — `RpgPlugins` (opt-in RPG stack for games like simple-rpg)
+
+All plugins under `src/plugins/*/plugin.ts` (49):
+
+| #   | Folder            | Export                                              |
+| --- | ----------------- | --------------------------------------------------- |
+| 1   | adaptive-quality  | AdaptiveQualityPlugin                               |
+| 2   | ai-steering       | AiSteeringPlugin                                    |
+| 3   | animation         | AnimationPlugin                                     |
+| 4   | audio             | AudioPlugin                                         |
+| 5   | biomes            | BiomesPlugin                                        |
+| 6   | bvh               | BvhPlugin                                           |
+| 7   | combat            | CombatPlugin                                        |
+| 8   | composition       | CompositionPlugin                                   |
+| 9   | debug             | DebugPlugin                                         |
+| 10  | destructible      | DestructiblePlugin                                  |
+| 11  | entity-script     | EntityScriptPlugin                                  |
+| 12  | floating-text     | FloatingTextPlugin                                  |
+| 13  | gltf-anim         | GltfAnimPlugin                                      |
+| 14  | gltf-xml          | GltfXmlPlugin                                       |
+| 15  | group             | GroupPlugin                                         |
+| 16  | hud               | HudPlugin (+ `HudRpgPlugin` in `hud/rpg-plugin.ts`) |
+| 17  | i18n              | I18nPlugin                                          |
+| 18  | input             | InputPlugin                                         |
+| 19  | loading           | LoadingPlugin                                       |
+| 20  | navmesh           | NavMeshPlugin                                       |
+| 21  | orbit-camera      | OrbitCameraPlugin                                   |
+| 22  | particles         | ParticlesPlugin                                     |
+| 23  | physics           | PhysicsPlugin                                       |
+| 24  | player            | PlayerPlugin                                        |
+| 25  | player-controller | ThirdPersonCameraPlugin                             |
+| 26  | postprocessing    | PostprocessingPlugin                                |
+| 27  | quests            | QuestsPlugin                                        |
+| 28  | raycast           | RaycastPlugin                                       |
+| 29  | rendering         | RenderingPlugin                                     |
+| 30  | road              | RoadPlugin                                          |
+| 31  | rpg-ai            | RpgAiPlugin                                         |
+| 32  | rpg-core          | RpgCorePlugin, RpgCoreEventsPlugin                  |
+| 33  | rpg-economy       | EconomyPlugin                                       |
+| 34  | rpg-inventory     | InventoryPlugin                                     |
+| 35  | rpg-pause         | PauseCoordinatorPlugin                              |
+| 36  | rpg-progression   | ProgressionPlugin                                   |
+| 37  | rpg-resource-node | ResourceNodePlugin                                  |
+| 38  | rpg-status        | StatusEffectsPlugin                                 |
+| 39  | rpg-vault         | RpgVaultPlugin                                      |
+| 40  | save-load         | SaveLoadPlugin                                      |
+| 41  | sky               | EquirectSkyPlugin                                   |
+| 42  | spawn-gate        | SpawnGatePlugin                                     |
+| 43  | spawner           | SpawnerPlugin                                       |
+| 44  | startup           | StartupPlugin                                       |
+| 45  | terrain           | TerrainPlugin                                       |
+| 46  | transforms        | TransformsPlugin                                    |
+| 47  | tweening          | TweeningPlugin                                      |
+| 48  | water             | WaterPlugin                                         |
+| 49  | weather           | WeatherPlugin                                       |
+
+**Note**: XML recipes and core ECS live under `src/core/recipes/` — not a plugin. Individual plugins define their own recipes in `recipes.ts`.
 
 ## Architecture
 
 Bevy-inspired ECS with explicit update phases:
 
 - **SetupBatch**: Input gathering and frame setup
-- **FixedBatch**: Physics simulation and gameplay logic
-- **DrawBatch**: Rendering and interpolation
+- **FixedBatch**: Physics simulation and gameplay logic (50 Hz fixed step)
+- **SimulationBatch**: Interpolation and presentation prep (e.g. physics interpolation)
+- **LateBatch**: Deferred gameplay hooks (entity scripts, post-physics fixes)
+- **DrawBatch**: Rendering and visual updates
 
 ### Declarative Design
 

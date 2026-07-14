@@ -79,4 +79,18 @@ describe('Scheduler spiral-of-death cap (A3)', () => {
     expect(fixedRuns).toBeGreaterThan(0);
     expect(fixedRuns).toBeLessThan(TIME_CONSTANTS.MAX_FIXED_STEPS_PER_FRAME);
   });
+
+  it('preserves accumulator remainder when fixed steps are capped', () => {
+    const counterSystem: System = {
+      group: 'fixed',
+      update: () => {},
+    };
+    state.registerSystem(counterSystem);
+
+    state.step(10);
+
+    const remainder = state.scheduler.getAccumulator();
+    expect(remainder).toBeGreaterThan(0);
+    expect(remainder).toBeLessThanOrEqual(TIME_CONSTANTS.FIXED_TIMESTEP);
+  });
 });

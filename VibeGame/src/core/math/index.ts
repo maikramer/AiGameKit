@@ -1,1 +1,8 @@
-export { lerp, slerp, eulerToQuaternion, quaternionToEuler } from './utils';
+export {
+  lerp,
+  slerp,
+  eulerToQuaternion,
+  quaternionToEuler,
+  eulerToQuaternionInto,
+  quaternionToEulerInto,
+} from './utils';
