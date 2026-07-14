@@ -494,6 +494,14 @@ function runVibegameRun(engineRoot, opts) {
         '[vibegame run] node_modules do app parece completo — pulando install.'
       );
     }
+
+    // Alinhar three.js: se a versão instalada no app difere da engine, o Vite
+    // carrega duas instâncias ("Multiple instances of Three.js being imported").
+    // Fixa a versão do app à da engine e reinstala silenciosamente.
+    if (!opts.skipAppInstall) {
+      alignThreeVersion(engineRoot, cwd);
+    }
+
     console.log('[vibegame run] bun run dev (app)');
     const c3 = runBun(cwd, ['run', 'dev', ...opts.devArgs]);
     process.exit(c3);
