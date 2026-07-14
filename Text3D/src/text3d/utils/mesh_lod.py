@@ -516,7 +516,12 @@ def generate_lod_textured_glb_triplet(
     if model.data.materials and model.data.materials[0].use_nodes:
         for node in model.data.materials[0].node_tree.nodes:
             if node.type == "TEX_IMAGE" and node.image:
-                tex_base = max(node.image.size[0], node.image.size[1])
+                # Respeitar texture_size_lod0 explícito (default 2048) em vez
+                # de herdar o tamanho da imagem do paint3d (que pode ser 3072).
+                # Só usar o tamanho da imagem se for menor que o pedido (upscale
+                # nunca é desejável; downscale para o pedido é o objetivo).
+                img_size = max(node.image.size[0], node.image.size[1])
+                tex_base = min(texture_size_lod0, img_size)
                 break
     clear_scene()
 

@@ -93,8 +93,13 @@ def _intermediate_dir(mesh_final: Path) -> Path:
     """Pasta para artefactos descartáveis da pipeline (shape, clean, painted, rigged_hi).
 
     Convenção: ``<meshes_dir>/_intermediate/``. Não vai para o jogo.
+    Idempotente: se ``mesh_final`` já estiver dentro de ``_intermediate/``,
+    não aninha outro ``_intermediate`` (bug que criava ``_intermediate/_intermediate/``).
     """
-    return mesh_final.parent / "_intermediate"
+    parent = mesh_final.parent
+    if parent.name == "_intermediate":
+        return parent
+    return parent / "_intermediate"
 
 
 def _shape_path(mesh_final: Path) -> Path:
