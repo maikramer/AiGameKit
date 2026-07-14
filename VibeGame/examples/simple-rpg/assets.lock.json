@@ -1,6 +1,6 @@
 {
-  "version": "simple-rpg-assets-v1",
-  "url": "https://github.com/maikramer/GameDev/releases/download/simple-rpg-assets-v1/simple-rpg-assets-v1.tar.gz",
-  "sha256": "d4010a61002fa0888422685aed1c1f6476edf3c1539f512731f2e515d5037975",
+  "version": "simple-rpg-assets-v2",
+  "url": "https://github.com/maikramer/GameDev/releases/download/simple-rpg-assets-v2/simple-rpg-assets-v2.tar.gz",
+  "sha256": "1919b32a0896f20cca81bf2c3e64eb8b9f7ed8154a8f1b6282652c6353a6d796",
   "extractTo": "public"
 }

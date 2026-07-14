@@ -106,9 +106,18 @@ Text3D/testdata/baseline_meshes_raw/*
 # Cursor — estado local dos hooks (não versionar)
 .cursor/hooks/
 
-# VibeGame simple-rpg — saída intermédia do batch (duplica models/textures)
+# VibeGame simple-rpg — assets binários distribuídos via GitHub Release
+# (scripts/fetch-assets.mjs + assets.lock.json). Não versionar para manter
+# o histórico leve; restaurar localmente com: node scripts/fetch-assets.mjs
 VibeGame/examples/simple-rpg/public/assets/meshes/
 VibeGame/examples/simple-rpg/public/assets/images/
+VibeGame/examples/simple-rpg/public/assets/textures/
+VibeGame/examples/simple-rpg/public/assets/icons/
+VibeGame/examples/simple-rpg/public/assets/audio/
+VibeGame/examples/simple-rpg/public/assets/sky/
+VibeGame/examples/simple-rpg/public/assets/terrain/
+# Manter a estrutura de pastas (.gitkeep) mesmo sem assets
+!VibeGame/examples/simple-rpg/public/assets/**/.gitkeep
 # Marker written by scripts/fetch-assets.mjs (prebuilt asset bundle version)
 VibeGame/examples/simple-rpg/public/assets/.assets-version
 
