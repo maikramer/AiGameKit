@@ -1,4 +1,5 @@
 import { getLoadingProgress, isWorldReady, type State } from '../../core';
+import { warmupSceneShaders } from '../rendering/shader-warmup';
 
 export interface LoadingScreenText {
   title: string;
@@ -138,9 +139,21 @@ export function updateLoadingScreen(state: State): void {
       ? 100
       : Math.round((progress.ready / progress.total) * 100);
   ui.bar.style.width = `${pct}%`;
+
+  // Compile materials + silent orbit renders while the overlay still covers
+  // the canvas — moves the first-look hitch off the critical play path.
+  let warmed = false;
+  if (ready) {
+    warmed = warmupSceneShaders(state);
+    if (!warmed) {
+      ui.status.textContent = 'Warming shaders…';
+      return;
+    }
+  }
+
   ui.status.textContent = ready ? 'Ready' : humanizePending(progress.pending);
 
-  if (ready && now - ui.firstShown >= MIN_VISIBLE_MS) {
+  if (ready && warmed && now - ui.firstShown >= MIN_VISIBLE_MS) {
     ui.done = true;
     const root = ui.root;
     root.style.opacity = '0';
