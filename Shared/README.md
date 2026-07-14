@@ -4,7 +4,7 @@
 
 ## Overview
 
-`gamedev-shared` (`gamedev_shared`) is the foundational Python package for the GameDev monorepo. Every other Python package (Text2D, Text3D, Paint3D, GameAssets, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, Part3D, Terrain3D, GameDevLab) depends on it. **It must be installed before any other package.**
+`gamedev-shared` (`gamedev_shared`) is the foundational Python package for the GameDev monorepo. Every other Python package (Text2D, Text3D, Paint3D, GameAssets, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, Terrain3D, GameDevLab) depends on it. **It must be installed before any other package.**
 
 It provides reusable building blocks so each tool stays focused on its domain: structured logging, GPU detection and VRAM enforcement, subprocess execution with streaming output, a unified quality-preset engine, multi-GPU weight splitting, CPU/RAM/GPU profiling, JSONL progress reporting for batch orchestration, and a unified installer CLI.
 
@@ -159,7 +159,6 @@ Shell scripts at the monorepo root also work without pip install:
 | `SKYMAP2D_BIN` | Path to `skymap2d` |
 | `RIGGING3D_BIN` | Path to `rigging3d` |
 | `ANIMATOR3D_BIN` | Path to `animator3d` |
-| `PART3D_BIN` | Path to `part3d` |
 | `PAINT3D_BIN` | Path to `paint3d` |
 | `TERRAIN3D_BIN` | Path to `terrain3d` |
 | `GAMEASSETS_BIN` | Path to `gameassets` |

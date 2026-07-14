@@ -21,7 +21,6 @@ files to the narrowest correct Make target, run it, report results terse.
 | `Text2D/`           | `make test-text2d` |
 | `Text3D/`           | `make test-text3d` |
 | `Paint3D/`          | `make test-paint3d` |
-| `Part3D/`           | `make test-part3d` |
 | `GameAssets/`       | `make test-gameassets` |
 | `Texture2D/`        | `make test-texture2d` |
 | `Text2Sound/`       | `make test-text2sound` |

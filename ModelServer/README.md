@@ -28,7 +28,7 @@ O UMS resolve isto com **1 socket, 1 processo, inventário global**.
 │                                                          │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐ │
 │  │ BackendMgr   │   │ VRAMPlanner  │   │  Registry    │ │
-│  │ load/evict   │◄─►│ peso + LRU   │   │ (YAML + 9    │ │
+│  │ load/evict   │◄─►│ peso + LRU   │   │ (YAML + 8    │ │
 │  │ ref counting │   │              │   │  adapters)   │ │
 │  └──────┬───────┘   └──────────────┘   └──────────────┘ │
 │         │ lazy import                                      │
@@ -40,7 +40,7 @@ O UMS resolve isto com **1 socket, 1 processo, inventário global**.
    text2icon   texture2d   text3d    paint3d   (todos clientes)
 ```
 
-## Backends suportados (9)
+## Backends suportados (8)
 
 | Backend | Tool | VRAM (MiB) | Priority | API normalizada |
 |---------|------|------------|----------|-----------------|
@@ -50,7 +50,6 @@ O UMS resolve isto com **1 socket, 1 processo, inventário global**.
 | skymap2d | Skymap2D | 7000 | 25 | `warmup()` |
 | text3d | Text3D | 8000 | 40 | `_load_hunyuan()` |
 | paint3d | Paint3D | 4000 | 40 | context-manager |
-| part3d | Part3D | 4500 | 35 | `load()` |
 | text2sound | Text2Sound | 5000 | 30 | `load()` |
 | terrain3d | Terrain3D | 6000 | 40 | procedural |
 
@@ -97,7 +96,7 @@ gamedev-model-server stop
 
 ### Integração com CLIs das tools
 
-Todas as CLIs `generate` das 9 tools delegam automaticamente no UMS se ativo:
+Todas as CLIs `generate` das 8 tools delegam automaticamente no UMS se ativo:
 
 ```bash
 # Se o UMS estiver a correr, isto delega nele (evicção inteligente de VRAM).

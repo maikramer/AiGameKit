@@ -8,7 +8,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 
 | Module | Lines | Imported By | Role |
 |--------|-------|-------------|------|
-| `bpy_mesh.py` | 270 | 36 files (Text3D, Part3D, Rigging3D, GameAssets, Animator3D) | `load_glb`, `save_glb`, `load_any`, `create_mesh_from_arrays` |
+| `bpy_mesh.py` | 270 | 36 files (Text3D, Rigging3D, GameAssets, Animator3D) | `load_glb`, `save_glb`, `load_any`, `create_mesh_from_arrays` |
 | `gpu.py` | 506 | 31 files | GPU detection, VRAM monitoring, exclusive GPU, nvidia-smi process mgmt |
 | `quality.py` | 233 | 22 files | QualityEngine: 5 tiers, 14 categories, soft parameter resolution |
 | `quantization.py` | 438 | 22 files | Multi-backend quant: bitsandbytes, torchao, quanto, FP8 |
@@ -27,7 +27,7 @@ Foundation library for ALL Python packages in the monorepo. 47 files, 7122 LOC +
 1. **GPU/VRAM** (`gpu.py` + `vram_monitor.py`): detect gpus, enforce exclusive GPU, kill competing processes (with protected process list), live VRAM monitoring thread.
 2. **Quality** (`quality.py` + `data/*.yaml`): QualityEngine resolves `--quality` + `--category` to concrete params. Soft resolution: fills only `None` fields (tracked via `ParameterSource` enum).
 3. **Quantization** (`quantization.py` + `sdnq.py`): Multi-backend (bitsandbytes, torchao, quanto, FP8). SDNQ: 4 presets (`int4_dynamic`, `int4_static`, `int8`, `fp8`). VRAM estimation pre-flight.
-4. **Installer** (`installer/` 10 files): `BaseInstaller` base class, `clified_hooks` per-package post-install, `unified.py` Clified bridge. Cross-deps: text3d needs nvdiffrast, rigging3d needs inference env, part3d needs torch-scatter.
+4. **Installer** (`installer/` 10 files): `BaseInstaller` base class, `clified_hooks` per-package post-install, `unified.py` Clified bridge. Cross-deps: text3d needs nvdiffrast, rigging3d needs inference env.
 5. **Profiler** (`profiler/` + `perfstore/`): `GAMEDEV_PROFILE=1` enables. Session spans, PerfRecorder, SQLite perf.db, CUDA memory snapshots, report formatting.
 6. **Pipeline** (`pipeline/` 5 files): Manifest parsing, GLB binary metadata extraction, validation rules, caching. **Unused. Candidate for removal.**
 7. **Core utilities**: env vars (`TOOL_BINS` dict), subprocess runner, JSONL progress protocol, logging, image utils, seed utils, bpy mesh I/O.

@@ -2,13 +2,13 @@
 
 **Date:** 2026-05-01
 **Status:** Draft
-**Scope:** All 15 package READMEs in the GameDev monorepo
+**Scope:** All 14 package READMEs in the GameDev monorepo
 
 ---
 
 ## 1. Objective
 
-Rewrite all 15 package READMEs to be **self-contained, comprehensive references** with full CLI command tables, all flags, complete configuration reference, examples, and pipeline integration notes. The largest effort is GameAssets, which needs exhaustive documentation of manifest, game.yaml, categories, quality profiles, and all sub-commands.
+Rewrite all 14 package READMEs to be **self-contained, comprehensive references** with full CLI command tables, all flags, complete configuration reference, examples, and pipeline integration notes. The largest effort is GameAssets, which needs exhaustive documentation of manifest, game.yaml, categories, quality profiles, and all sub-commands.
 
 ## 2. Language
 
@@ -100,25 +100,17 @@ License info.
 - **Quality presets table:** 5 tiers with view/texture-size mapping
 - **Pipeline:** After Text3D shape generation; before Rigging3D
 
-### 4.7 Part3D (`Part3D/README.md`) — ~150-200 lines
-
-- **Commands:** decompose (18 flags including quantization options)
-- **Quantization section:** auto, none, int8, int4, torchao-int8, torchao-int4, sdnq-* presets
-- **--no-quantize-dit flag:** Separate DiT quantization control
-- **Quality presets table:** 5 tiers
-- **Pipeline:** After Text3D/Paint3D; before Rigging3D
-
-### 4.8 Rigging3D (`Rigging3D/README.md`) — ~180-220 lines
+### 4.7 Rigging3D (`Rigging3D/README.md`) — ~180-220 lines
 
 - **Commands:** pipeline (main), skeleton, skin, merge
 - **Global flags:** --root, --python, --profiler, --gpu-ids
 - **Python requirement:** Python 3.11 + bpy 5.0.1 + open3d (incompatible with bpy 5.1)
-- **Pipeline:** After Part3D; feeds Animator3D
+- **Pipeline:** After Text3D; feeds Animator3D
 - **Draco compression:** --draco flag on merge
 
-### 4.9 Animator3D (`Animator3D/README.md`) — ~350-450 lines
+### 4.8 Animator3D (`Animator3D/README.md`) — ~350-450 lines
 
-- **Commands:** game-pack (main), 15 animation commands, texture-project, screenshot, inspect-rig, inspect, export, list-clips, check
+- **Commands:** game-pack (main), 15 animation commands, screenshot, inspect-rig, inspect, export, list-clips, check
 - **Animation command groups:**
   - Humanoid: walk, run, jump, fall, attack, wave-idle, breathe-idle
   - Creature/Flying: hover, soar, dive, fire, land, roar
@@ -127,18 +119,18 @@ License info.
 - **Python requirement:** Python 3.13 + bpy 5.1.0
 - **Pipeline:** Final stage after Rigging3D; produces animated GLB for VibeGame
 
-### 4.10 GameDevLab (`GameDevLab/README.md`) — ~280-350 lines
+### 4.9 GameDevLab (`GameDevLab/README.md`) — ~280-350 lines
 
 - **6 command groups:** check, debug, bench, perf, profile, mesh
 - **check glb:** YAML/JSON rule validation (CI-ready, exit 0/1)
 - **debug:** screenshot, bundle, inspect, inspect-rig, compare (SSIM, MAE, RMSE)
-- **bench:** part3d, paint-vram, pre-quantize, sdnq-sweep, pipeline-opt, batch
+- **bench:** paint-vram, pre-quantize, sdnq-sweep, batch
 - **perf:** list, show, summary, vram, recommend, clean
 - **profile:** cProfile wrapper
 - **mesh:** inspect, qa, render-views, diff
 - **Mesh comparison workflow section:** Step-by-step with --fail-below-ssim
 
-### 4.11 Materialize (`Materialize/README.md`) — ~150-180 lines
+### 4.10 Materialize (`Materialize/README.md`) — ~150-180 lines
 
 - **Commands:** default (input→6 PBR maps), skill install
 - **PBR maps generated:** height, normal, metallic, smoothness, edge, ao
@@ -146,14 +138,14 @@ License info.
 - **Format options:** png, jpg, tga, exr
 - **Pipeline:** After Texture2D or Paint3D; integrated via GameAssets
 
-### 4.12 Terrain3D (`Terrain3D/README.md`) — ~120-160 lines
+### 4.11 Terrain3D (`Terrain3D/README.md`) — ~120-160 lines
 
 - **Commands:** generate (full flag table)
 - **Quality presets table:** 5 tiers
 - **Output:** heightmap.png + terrain.json (metadata)
 - **Pipeline:** Standalone; integrated in GameAssets dream
 
-### 4.13 GameAssets (`GameAssets/README.md`) — ~600-800 lines
+### 4.12 GameAssets (`GameAssets/README.md`) — ~600-800 lines
 
 **This is the largest README.** Sections:
 
@@ -172,12 +164,12 @@ License info.
    - `debug` — screenshot/inspect/compare/bundle
    - `skill install` — Cursor skill
 4. **Manifest Reference:**
-   - Full field table (id, idea, kind, pipeline[], image_source, category, lod_levels, generation, audio{}, part3d{})
-   - Pipeline keywords: 3d, audio, rig, animate, parts, lod, collision
+   - Full field table (id, idea, kind, pipeline[], image_source, category, lod_levels, generation, audio{})
+   - Pipeline keywords: 3d, audio, rig, animate, lod, collision
    - Complete YAML example
 5. **game.yaml Reference:**
    - Root fields table (title, genre, tone, style_preset, negative_keywords, output_dir, path_layout, etc.)
-   - Per-tool block tables: text2d{}, texture2d{}, skymap2d{}, text3d{}, paint3d{}, text2sound{}, rigging3d{}, animator3d{}, part3d{}, lod{}, collision{}
+   - Per-tool block tables: text2d{}, texture2d{}, skymap2d{}, text3d{}, paint3d{}, text2sound{}, rigging3d{}, animator3d{}, lod{}, collision{}
    - Complete YAML example
 6. **Asset Categories:** 15 categories table (name, target_faces, default_kind, hints)
 7. **Generation Quality Profiles:** 5 profiles comparison table
@@ -187,7 +179,7 @@ License info.
 11. **Pipeline Integration:** How GameAssets orchestrates all sub-tools
 12. **Development & License**
 
-### 4.14 VibeGame (`VibeGame/README.md`) — ~400-500 lines
+### 4.13 VibeGame (`VibeGame/README.md`) — ~400-500 lines
 
 - **CLI:** run, create, --version
 - **Core Concepts:** ECS (bitecs), World XML, Recipes, Plugins
@@ -198,12 +190,12 @@ License info.
 - **Examples:** hello-world, simple-rpg
 - **Development:** Bun install, test, lint, format, build commands
 
-### 4.15 Root README (`README.md`) — ~350-400 lines
+### 4.14 Root README (`README.md`) — ~350-400 lines
 
 - **Overview:** Monorepo description, pipeline diagram
-- **Package Overview:** Table of all 15 packages with language, description, status
+- **Package Overview:** Table of all 14 packages with language, description, status
 - **Quick Start:** Install shared, install a tool, run a command
-- **Pipeline:** Full ASCII flow diagram (idea → image → 3D → texture → parts → rig → animate → game)
+- **Pipeline:** Full ASCII flow diagram (idea → image → 3D → texture → rig → animate → game)
 - **GameAssets Dream:** One-command idea-to-game
 - **VibeGame Integration:** GLB handoff, declarative scene
 - **Build & CI:** make check, make test, per-package commands
@@ -221,15 +213,14 @@ The READMEs will be written in dependency order (shared first, then consumers):
 5. **Text2Sound** — first in pipeline
 6. **Text3D** — depends on Text2D images
 7. **Paint3D** — depends on Text3D meshes
-8. **Part3D** — depends on Paint3D output
-9. **Materialize** — depends on Texture2D
-10. **Terrain3D** — standalone
-11. **Rigging3D** — depends on Part3D/Text3D
-12. **Animator3D** — depends on Rigging3D
-13. **GameDevLab** — debug tool, depends on all
-14. **GameAssets** — orchestrator, depends on all
-15. **VibeGame** — consumer, depends on GameAssets handoff
-16. **Root README** — references all packages
+8. **Materialize** — depends on Texture2D
+9. **Terrain3D** — standalone
+10. **Rigging3D** — depends on Text3D
+11. **Animator3D** — depends on Rigging3D
+12. **GameDevLab** — debug tool, depends on all
+13. **GameAssets** — orchestrator, depends on all
+14. **VibeGame** — consumer, depends on GameAssets handoff
+15. **Root README** — references all packages
 
 Each README will be written as a complete file, replacing the existing one.
 
@@ -254,7 +245,6 @@ Each README will be written as a complete file, replacing the existing one.
 | Text2Sound | ~200 |
 | Text3D | ~320 |
 | Paint3D | ~250 |
-| Part3D | ~180 |
 | Rigging3D | ~200 |
 | Animator3D | ~400 |
 | GameDevLab | ~320 |
@@ -263,4 +253,4 @@ Each README will be written as a complete file, replacing the existing one.
 | GameAssets | ~750 |
 | VibeGame | ~450 |
 | Root | ~380 |
-| **Total** | **~4,310** |
+| **Total** | **~4,130** |

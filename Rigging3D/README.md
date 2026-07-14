@@ -175,12 +175,12 @@ User-specified flags always take precedence over quality preset defaults.
 Rigging3D fits into the monorepo asset pipeline as follows:
 
 ```
-Text3D / Paint3D  →  Part3D (optional)  →  Rigging3D  →  Animator3D
-     │                     │                    │              │
-  static GLB          _parts.glb          _rigged.glb     animated GLB
+Text3D / Paint3D  →  Rigging3D  →  Animator3D
+     │                  │              │
+  static GLB       _rigged.glb     animated GLB
 ```
 
-- **Input preference:** When a `_parts.glb` exists (from Part3D decomposition), the pipeline uses it as input; otherwise falls back to the base mesh.
+- **Input preference:** The pipeline uses the base mesh (from Text3D/Paint3D) as input.
 - **GameAssets batch:** `gameassets batch` orchestrates the full flow automatically, propagating `--gpu-ids` and `CUDA_VISIBLE_DEVICES` to Rigging3D.
 - **Animator3D:** The rigged output feeds into Animator3D's `game-pack` command for animation clip generation.
 

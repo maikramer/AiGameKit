@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](Text2D/LICENSE)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio**, **texturas seamless (GPU local)** e **skymaps** (API Hugging Face), **texturização PBR**, **decomposição em partes**, **rigging**, **animação** e **batch de assets**, partilhando a mesma base (`gamedev-shared`), instalador unificado e documentação.
+Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio**, **texturas seamless (GPU local)** e **skymaps** (API Hugging Face), **texturização PBR**, **rigging**, **animação** e **batch de assets**, partilhando a mesma base (`gamedev-shared`), instalador unificado e documentação.
 
 ## Projetos
 
@@ -17,7 +17,6 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**Shared**](Shared/) | Biblioteca partilhada (`gamedev-shared`): logging, GPU, subprocess, instaladores, CLI. |
 | [**Text2D**](Text2D/) | CLI **text-to-image** com FLUX (quantização SDNQ), orientada a GPU modesta. |
 | [**Text3D**](Text3D/) | Pipeline **text-to-3D**: imagem 2D (via Text2D) → mesh GLB com Hunyuan3D-2.1 (SDNQ INT4). Textura via Paint3D (opcional). |
-| [**Part3D**](Part3D/) | **Partes semânticas 3D**: Hunyuan3D-Part (segmentação / partes em mesh). |
 | [**Paint3D**](Paint3D/) | **Texturização 3D**: Hunyuan3D-Paint 2.1 (PBR multivista) + Materialize PBR + Upscale IA (Real-ESRGAN). Standalone ou via Text3D. |
 | [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: perfil + CSV → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
 | [**Texture2D**](Texture2D/) | **Texturas 2D seamless** (tileable) via pattern-diffusion (GPU local) + PBR via Materialize. |
@@ -39,7 +38,6 @@ GameDev/
   Shared/           ← gamedev-shared (pip): logging, GPU, subprocess, env, instaladores
   Text2D/           ← text2d (pip) — depende de Shared
   Text3D/           ← text3d (pip) — depende de Shared + Text2D; textura via Paint3D (opcional)
-  Part3D/           ← part3d (pip) — Shared; Hunyuan3D-Part (torch-scatter/cluster)
   Paint3D/           ← paint3d (pip) — depende de Shared; Hunyuan3D-2.1 hy3dpaint + Materialize PBR + Upscale
   GameAssets/        ← gameassets (pip) — depende de Shared; chama text2d/texture2d/text3d via subprocess
   Texture2D/         ← texture2d (pip) — depende de Shared; pattern-diffusion local + PBR via Materialize
@@ -57,7 +55,7 @@ GameDev/
 
 - **Python**: a maioria das ferramentas pede **3.10+**; exceções: **Rigging3D** (3.11), **Animator3D** (3.13 + `bpy` 5.1). Ver README de cada pasta.
 - **VibeGame** usa **Bun** e ferramentas compatíveis com **Node** (ver `VibeGame/package.json`); na raiz do repositório, `make test-vibegame` após instalar o Bun.
-- **GPU** opcional no Text2D; no Text3D/Paint3D/Part3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** não precisa de GPU local (API Hugging Face). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate.
+- **GPU** opcional no Text2D; no Text3D/Paint3D/Rigging3D, CUDA com VRAM suficiente é recomendado para tempos aceitáveis. **Texture2D** corre localmente em GPU CUDA (pattern-diffusion). **Skymap2D** não precisa de GPU local (API Hugging Face). **GameAssets** só exige GPU se o perfil/linha invocar ferramentas locais (ex. text2d, text3d). **Multi-GPU:** a maioria das ferramentas com GPU aceita `--gpu-ids 0,1` para dividir pesos do modelo entre várias GPUs NVIDIA via accelerate.
 - Os **pesos dos modelos** (Hugging Face, etc.) têm licenças próprias — consulta os model cards antes de distribuir ou usar em produção.
 
 ## Arranque rápido
@@ -113,7 +111,6 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 ./install.sh text2sound                 # Text2Sound (requer CUDA; instala PyTorch)
 ./install.sh text3d                     # Text3D (Text2D + Hunyuan; nvdiffrast para Paint)
 ./install.sh gameassets                 # GameAssets (batch; orquestra outras CLIs)
-./install.sh part3d                     # Part3D (Hunyuan3D-Part; torch-scatter/cluster)
 ./install.sh paint3d                    # Paint3D (textura + nvdiffrast)
 ./install.sh rigging3d                  # Rigging3D (UniRig empacotado + PyTorch/CUDA via instalador)
 ./install.sh animator3d                 # Animator3D (bpy / animação; sem PyTorch)
@@ -132,7 +129,6 @@ O monorepo inclui um instalador unificado que instala qualquer ferramenta regist
 .\install.ps1 text2sound
 .\install.ps1 text3d
 .\install.ps1 gameassets
-.\install.ps1 part3d
 .\install.ps1 paint3d
 .\install.ps1 rigging3d
 .\install.ps1 animator3d
@@ -177,10 +173,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r config/requirements.txt && pip install -e .
 text3d --help
 
-# 4. Part3D (partes semânticas; torch-scatter/cluster após PyTorch — ver Part3D/README)
-cd ../Part3D && python -m venv .venv && source .venv/bin/activate && pip install -e . && part3d --help
-
-# 5. Paint3D (Hunyuan3D-Paint 2.1; código vendored em Paint3D/src/paint3d/hy3dpaint/ + nvdiffrast — ver Paint3D/docs/PAINT_SETUP.md)
+# 4. Paint3D (Hunyuan3D-Paint 2.1; código vendored em Paint3D/src/paint3d/hy3dpaint/ + nvdiffrast — ver Paint3D/docs/PAINT_SETUP.md)
 cd ../Paint3D
 python -m venv .venv && source .venv/bin/activate
 pip install torch torchvision
@@ -188,25 +181,25 @@ pip install -r config/requirements.txt && pip install -e .
 pip install git+https://github.com/NVlabs/nvdiffrast.git --no-build-isolation
 paint3d --help
 
-# 6. GameAssets (batch; Text2D/Text3D na PATH ou TEXT2D_BIN/TEXT3D_BIN; Texture2D opcional TEXTURE2D_BIN; Materialize opcional MATERIALIZE_BIN)
+# 5. GameAssets (batch; Text2D/Text3D na PATH ou TEXT2D_BIN/TEXT3D_BIN; Texture2D opcional TEXTURE2D_BIN; Materialize opcional MATERIALIZE_BIN)
 cd ../GameAssets && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && gameassets --help
 
-# 7. Texture2D (texturas seamless via pattern-diffusion; GPU local + PBR via Materialize)
+# 6. Texture2D (texturas seamless via pattern-diffusion; GPU local + PBR via Materialize)
 cd ../Texture2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && texture2d --help
 
-# 8. Skymap2D (skymaps equirectangular 360° via HF API; sem PyTorch local)
+# 7. Skymap2D (skymaps equirectangular 360° via HF API; sem PyTorch local)
 cd ../Skymap2D && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && skymap2d --help
 
-# 9. Text2Sound (text-to-audio; Stable Audio Open 1.0; requer CUDA)
+# 8. Text2Sound (text-to-audio; Stable Audio Open 1.0; requer CUDA)
 cd ../Text2Sound && chmod +x scripts/setup.sh && ./scripts/setup.sh && source .venv/bin/activate && text2sound --help
 
-# 10. Rigging3D (GPU CUDA; Python 3.11; dependências pesadas — preferir ./install.sh rigging3d)
+# 9. Rigging3D (GPU CUDA; Python 3.11; dependências pesadas — preferir ./install.sh rigging3d)
 cd ../Rigging3D && pip install -e ".[inference,dev]" && rigging3d --help
 
-# 11. Animator3D (animação; venv com Python 3.13 + bpy — ver Animator3D/README; Windows: py -3.13 -m venv .venv)
+# 10. Animator3D (animação; venv com Python 3.13 + bpy — ver Animator3D/README; Windows: py -3.13 -m venv .venv)
 cd ../Animator3D && python3.13 -m venv .venv && source .venv/bin/activate && pip install -e ".[dev]" && animator3d --help
 
-# 12. Materialize (Rust — requer cargo)
+# 11. Materialize (Rust — requer cargo)
 cd ../Materialize && ./install.sh
 ```
 
@@ -216,7 +209,7 @@ Instruções completas: [docs/INSTALLING_PT.md](docs/INSTALLING_PT.md), [docs/NE
 
 | Componente | Licença | Nota |
 |-----------|---------|------|
-| Código do monorepo (Text2D, Text3D, Part3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, Terrain3D, Shared) | MIT | Ver `LICENSE` em cada pasta |
+| Código do monorepo (Text2D, Text3D, Paint3D, Texture2D, Skymap2D, Text2Sound, Rigging3D, Animator3D, GameAssets, GameDevLab, Terrain3D, Shared) | MIT | Ver `LICENSE` em cada pasta |
 | Materialize CLI (Rust) | MIT | [Materialize/LICENSE](Materialize/LICENSE) |
 | FLUX.2 Klein 4B (oficial, BF16) | Apache 2.0 | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) — uso comercial permitido segundo o model card; mais VRAM que o SDNQ |
 | FLUX.2 Klein 4B SDNQ (default Text2D) | FLUX Non-Commercial (metadata HF) | [Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic](https://huggingface.co/Disty0/FLUX.2-klein-4B-SDNQ-4bit-dynamic) declara `flux-non-commercial-license`; **não** é o mesmo regime que o checkpoint oficial Apache 2.0. Para produto comercial, prefira `TEXT2D_MODEL_ID=black-forest-labs/FLUX.2-klein-4B` ou acordo com a BFL |

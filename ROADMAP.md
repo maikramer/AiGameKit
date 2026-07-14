@@ -99,7 +99,6 @@ Lacunas identificadas no pipeline de game development e plano de acção prioriz
 | Text2D | — | ✅ text-to-image (FLUX SDNQ) |
 | Text3D | — | ✅ text-to-3D (Hunyuan3D-2.1), LOD, collision, simplify |
 | Paint3D | — | ✅ 3D texturing (Hunyuan3D-Paint 2.1) |
-| Part3D | — | ✅ semantic parts |
 | Rigging3D | — | ✅ auto-rigging (UniRig) |
 | Animator3D | — | ✅ animation (bpy 5.1) |
 | Texture2D | — | ✅ seamless textures (HF API) |

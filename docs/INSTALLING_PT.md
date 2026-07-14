@@ -81,7 +81,6 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 | `rocks3d` | Rocks3D | Python | 3.13 | Rochas procedurais; sem PyTorch |
 | `rigging3d` | Rigging3D | Python | 3.13 | UniRig; extras de inferência via instalador unificado |
 | `animator3d` | Animator3D | Python | 3.13 | `bpy` 5.1 |
-| `part3d` | Part3D | Python | 3.13 | torch-scatter/cluster pós-venv |
 | `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
 | `materialize` | Materialize | Rust | — | Requer `cargo`; binário em `~/.local/bin` |
 | `vibegame` | VibeGame | Bun | — | Requer **Bun**; CLI `vibegame` → `~/.local/bin` |
@@ -115,4 +114,4 @@ Para pipelines ou debugging, podes criar `venv` e `pip install -e` em cada pasta
 
 - **[Adicionar uma nova ferramenta ao monorepo](NEW_TOOLS_PT.md)** — registry, instalador unificado, Shared, GameAssets, CI, checklist.
 - [Shared/README_PT.md](../Shared/README_PT.md) — `gamedev-shared`, `gamedev-install`
-- [Text2D](../Text2D/), [Text3D](../Text3D/), [GameAssets](../GameAssets/), [Texture2D](../Texture2D/), [Skymap2D](../Skymap2D/), [Text2Sound](../Text2Sound/), [Rigging3D](../Rigging3D/), [Animator3D](../Animator3D/), [Part3D](../Part3D/), [Paint3D](../Paint3D/), [Materialize](../Materialize/), [VibeGame](../VibeGame/), [GameDevLab](../GameDevLab/), [Terrain3D](../Terrain3D/), [Rocks3D](../Rocks3D/) — READMEs PT/EN por pasta.
+- [Text2D](../Text2D/), [Text3D](../Text3D/), [GameAssets](../GameAssets/), [Texture2D](../Texture2D/), [Skymap2D](../Skymap2D/), [Text2Sound](../Text2Sound/), [Rigging3D](../Rigging3D/), [Animator3D](../Animator3D/), [Paint3D](../Paint3D/), [Materialize](../Materialize/), [VibeGame](../VibeGame/), [GameDevLab](../GameDevLab/), [Terrain3D](../Terrain3D/), [Rocks3D](../Rocks3D/) — READMEs PT/EN por pasta.

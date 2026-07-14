@@ -8,7 +8,7 @@ AI-powered 3D texturing with **Hunyuan3D-Paint 2.1** — generates multiview PBR
 
 ## Overview
 
-Paint3D is part of the [GameDev](../README.md) monorepo and sits in the asset generation pipeline between shape creation ([Text3D](../Text3D)) and downstream processing ([Part3D](../Part3D), [Rigging3D](../Rigging3D)). It uses vendored **`hy3dpaint`** from Tencent's Hunyuan3D-2.1 — model weights download on demand from Hugging Face (`tencent/Hunyuan3D-2.1`, subfolder `hunyuan3d-paintpbr-v2-1`).
+Paint3D is part of the [GameDev](../README.md) monorepo and sits in the asset generation pipeline between shape creation ([Text3D](../Text3D)) and downstream processing ([Rigging3D](../Rigging3D)). It uses vendored **`hy3dpaint`** from Tencent's Hunyuan3D-2.1 — model weights download on demand from Hugging Face (`tencent/Hunyuan3D-2.1`, subfolder `hunyuan3d-paintpbr-v2-1`).
 
 **Key features:**
 
@@ -237,7 +237,7 @@ Default output naming: `<mesh_stem>_textured.glb` when `-o` is omitted.
 Paint3D runs after [Text3D](../Text3D) shape generation in the GameDev asset pipeline. It produces the final textured mesh before downstream processing:
 
 ```
-Text3D (shape) → Paint3D (texture) → Part3D (decomposition) → Rigging3D (rigging) → Animator3D (animation)
+Text3D (shape) → Paint3D (texture) → Rigging3D (rigging) → Animator3D (animation)
 ```
 
 [GameAssets](../GameAssets) batch orchestrates the shape → paint flow automatically. The `gameassets batch` command generates meshes and then calls `paint3d texture` for each asset.

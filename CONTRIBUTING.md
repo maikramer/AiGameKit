@@ -53,7 +53,7 @@ pip install -e '.[dev]'
 
 ```bash
 # Install all packages with dev dependencies
-for dir in Shared Text2D Text3D Paint3D Part3D GameAssets Texture2D Text2Sound Skymap2D Rigging3D; do
+for dir in Shared Text2D Text3D Paint3D GameAssets Texture2D Text2Sound Skymap2D Rigging3D; do
   if [ -d "$dir" ]; then
     echo "Installing $dir..."
     cd "$dir"
@@ -78,7 +78,6 @@ make test-shared      # Shared library
 make test-text2d     # Text2D
 make test-text3d     # Text3D
 make test-paint3d    # Paint3D
-make test-part3d     # Part3D
 ```
 
 ### Run with Coverage
@@ -256,7 +255,6 @@ GameDev/
 ├── Text2D/           # Text to 2D sprite generation
 ├── Text3D/           # Text to 3D model generation
 ├── Paint3D/          # 3D texture painting
-├── Part3D/           # Part-based 3D generation
 ├── GameAssets/       # CLI for combining all tools
 ├── Texture2D/        # 2D texture generation
 ├── Text2Sound/      # Text to sound effects

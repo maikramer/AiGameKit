@@ -81,7 +81,6 @@ Useful variable: `PYTHON_CMD` — interpreter to use (default `python3`, or `pyt
 | `rocks3d` | Rocks3D | Python | 3.13 | Procedural rocks; no PyTorch |
 | `rigging3d` | Rigging3D | Python | 3.13 | UniRig; inference extras via unified installer |
 | `animator3d` | Animator3D | Python | 3.13 | `bpy` 5.1 |
-| `part3d` | Part3D | Python | 3.13 | torch-scatter/cluster after venv |
 | `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
 | `materialize` | Materialize | Rust | — | Needs `cargo`; binary in `~/.local/bin` |
 | `vibegame` | VibeGame | Bun | — | Needs **Bun**; CLI `vibegame` → `~/.local/bin` |
@@ -115,4 +114,4 @@ For pipelines or debugging, you can create a `venv` and `pip install -e` in each
 
 - **[Adding a new tool to the monorepo](NEW_TOOLS.md)** — registry, unified installer, Shared, GameAssets, CI, checklist.
 - [Shared/README.md](../Shared/README.md) — `gamedev-shared`, `gamedev-install`
-- [Text2D/README.md](../Text2D/README.md), [Text3D/README.md](../Text3D/README.md), [GameAssets/README.md](../GameAssets/README.md), [Texture2D/README.md](../Texture2D/README.md), [Skymap2D/README.md](../Skymap2D/README.md), [Text2Sound/README.md](../Text2Sound/README.md), [Rigging3D/README.md](../Rigging3D/README.md), [Animator3D/README.md](../Animator3D/README.md), [Part3D/README.md](../Part3D/README.md), [Paint3D/README.md](../Paint3D/README.md), [Materialize/README.md](../Materialize/README.md), [VibeGame/README.md](../VibeGame/README.md), [GameDevLab/README.md](../GameDevLab/README.md), [Terrain3D/README.md](../Terrain3D/README.md), [Rocks3D/README.md](../Rocks3D/README.md)
+- [Text2D/README.md](../Text2D/README.md), [Text3D/README.md](../Text3D/README.md), [GameAssets/README.md](../GameAssets/README.md), [Texture2D/README.md](../Texture2D/README.md), [Skymap2D/README.md](../Skymap2D/README.md), [Text2Sound/README.md](../Text2Sound/README.md), [Rigging3D/README.md](../Rigging3D/README.md), [Animator3D/README.md](../Animator3D/README.md), [Paint3D/README.md](../Paint3D/README.md), [Materialize/README.md](../Materialize/README.md), [VibeGame/README.md](../VibeGame/README.md), [GameDevLab/README.md](../GameDevLab/README.md), [Terrain3D/README.md](../Terrain3D/README.md), [Rocks3D/README.md](../Rocks3D/README.md)

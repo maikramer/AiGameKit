@@ -335,28 +335,6 @@ animator3d export rigged.glb compressed.glb --draco
 | `OUTPUT` | path | **required** | Output file path |
 | `--draco/--no-draco` | flag | `false` | Draco mesh compression |
 
-#### `animator3d texture-project ORIGINAL PARTS -o OUTPUT`
-
-Project textures from an original mesh onto Part3D decomposed parts using Blender Cycles bake
-(selected-to-active, diffuse color). Useful after `part3d decompose` when parts lose the original
-texture.
-
-```bash
-animator3d texture-project original_textured.glb parts.glb -o parts_textured.glb
-animator3d texture-project original.glb parts.glb -o out.glb --resolution 2048 --margin 16
-```
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `ORIGINAL` | path | **required** | Original textured GLB |
-| `PARTS` | path | **required** | Parts GLB (from Part3D) |
-| `-o, --output` | path | **required** | Output textured parts GLB |
-| `--resolution` | int | `1024` | Bake texture resolution (px, square) |
-| `--margin` | int | `16` | UV island margin in pixels |
-| `--draco/--no-draco` | flag | `false` | Draco mesh compression |
-
-Automatically invoked by `gameassets batch` when Part3D is enabled and `animator3d` is available.
-
 ---
 
 ### Debug Commands

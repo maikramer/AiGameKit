@@ -13,7 +13,6 @@ Shared/src/gamedev_shared/installer/
 ├── rust_installer.py    # Lógica de instalação Rust
 ├── logging.py           # Logger com Rich
 ├── paint3d_extras.py   # Extras Paint3D
-├── part3d_extras.py     # Extras Part3D
 ├── text3d_extras.py     # Extras Text3D
 └── text2sound_extras.py # Extras Text2Sound
 
@@ -29,7 +28,6 @@ Shared/src/gamedev_shared/installer/
 | Texture2D | `Texture2D/scripts/installer.py` | ✅ Base + extras locais | Ok |
 | Skymap2D | `Skymap2D/scripts/installer.py` | ✅ Base (sem extras) | Ok |
 | Text2Sound | `Text2Sound/scripts/installer.py` | ✅ Base + text2sound_extras | Ok |
-| Part3D | `Part3D/scripts/installer.py` | ✅ Base + part3d_extras | Ok |
 | Rigging3D | `Rigging3D/scripts/installer.py` | ✅ Base + rigging_inference | Ok |
 | GameAssets | ❌ Sem installer | — | **MISSING** |
 | Paint3D | ❌ Sem installer | — | **MISSING** |
@@ -130,7 +128,6 @@ if __name__ == "__main__":
 
 1. **cli_rich.py unificado** (commit anterior `643f9e7`)
    - Animator3D: refactored to delegate to gamedev_shared
-   - Part3D: added cli_rich.py (was using raw rich_click)
    - GameDevLab: added cli_rich.py (was importing directly)
 
 2. **Sistema de Instalação Padronizado** (commit `1a77db6`)
@@ -161,7 +158,7 @@ installer.py → PythonProjectInstaller → paint3d_extras.py
 cd ~/GitClones/GameDev
 
 # Verificar todos os installers
-for d in Text2D Text3D Texture2D Skymap2D Text2Sound Part3D Rigging3D GameAssets Paint3D Animator3D; do
+for d in Text2D Text3D Texture2D Skymap2D Text2Sound Rigging3D GameAssets Paint3D Animator3D; do
   if [ -f "$d/scripts/installer.py" ]; then
     echo "✅ $d"
   else

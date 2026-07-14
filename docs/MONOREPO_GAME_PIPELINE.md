@@ -8,7 +8,7 @@ This document defines a **reference layout** and **handoff contract** between th
 |--------|--------|--------|
 | Orchestration | `gameassets` | Per-row images, GLBs, audio paths under a chosen `output_dir` |
 | 2D / maps | Text2D, Texture2D, Materialize, Skymap2D | PNG, PBR map folders, equirectangular sky |
-| 3D | Text3D, Paint3D, Part3D, Rigging3D | GLB (mesh + PBR; optional parts / rig) |
+| 3D | Text3D, Paint3D, Rigging3D | GLB (mesh + PBR; optional rig) |
 | Audio | Text2Sound | WAV/FLAC (see Text2Sound docs) |
 | QA | GameDevLab | GLB inspection (optional) |
 | Runtime | VibeGame | Interactive scene (ECS + Three.js) |
@@ -52,7 +52,7 @@ For the runtime to load content **without** a custom CMS:
 
 1. **Install CLIs** (repo root): `./install.sh` for the tools you need (see [INSTALLING.md](INSTALLING.md)); include `gameassets`, `text2d`/`texture2d`, `text3d`, optional `paint3d`, `text2sound`, `animator3d` (for animated characters), `vibegame`, etc.
 2. **Author** `game.yaml` + `manifest.csv` + presets ([GameAssets README](../GameAssets/README.md)).
-3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. Pipeline stages (3D, rig, parts, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Add `--no-rig` / `--no-animate` / `--no-parts` to opt out of specific stages.
+3. **Batch**: `gameassets batch --profile game.yaml --manifest manifest.csv`. Pipeline stages (3D, rig, animate) are auto-detected from manifest columns and `game.yaml` profile blocks. Add `--no-rig` / `--no-animate` to opt out of specific stages.
 4. **Handoff**: **`gameassets handoff --public-dir path/to/public`** copies/symlinks from the profile `output_dir` into `public/assets/…`, writes `assets/gameassets_handoff.json`, and can **prefer animated GLBs** over rigged/base when both exist. Alternatively copy files manually (see [VibeGame/examples/simple-rpg](../VibeGame/examples/simple-rpg/) for a full handoff layout).
 5. **Run** the web app: `bun dev` / `npm run dev`; load GLBs as above. **Skymap2D** equirect PNG/JPG: `applyEquirectSkyEnvironment` from `vibegame` (PMREM + optional background).
 

@@ -249,7 +249,7 @@ Use `-o` to specify a custom path. Supported formats: `.png` (default) and `.jpg
 Text2D is the **first step** in the GameDev batch asset pipeline:
 
 ```
-Text2D (image) → Text3D (mesh) → Paint3D (textures) → Part3D (semantic parts)
+Text2D (image) → Text3D (mesh) → Paint3D (textures)
 ```
 
 - **GameAssets** orchestrates Text2D via subprocess, passing `--quality` from `game.yaml` generation settings.
