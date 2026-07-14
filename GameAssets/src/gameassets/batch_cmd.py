@@ -253,16 +253,6 @@ console = Console()
     is_flag=True,
     help="Plain text output (no Rich/TUI, for scripts and headless)",
 )
-@click.option(
-    "--master-pipeline/--legacy-pipeline",
-    "master_pipeline_flag",
-    default=None,
-    help=(
-        "Round 2: master pipeline é o default. Use --legacy-pipeline para o "
-        "caminho antigo (text3d generate → paint3d → text3d lod → rigging3d → "
-        "animator3d sequencial). Override do ``master_pipeline`` no game.yaml."
-    ),
-)
 def batch_cmd(
     profile_path: Path,
     manifest_path: Path,
@@ -290,7 +280,6 @@ def batch_cmd(
     gpu_ids_str: str | None,
     no_dashboard: bool,
     plain: bool,
-    master_pipeline_flag: bool | None,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
     if plain:
@@ -300,9 +289,6 @@ def batch_cmd(
 
     profile, rows, _bundle, preset = _build_context(profile_path, manifest_path, presets_local)
     manifest_path = _resolve_manifest_path(manifest_path)
-
-    if master_pipeline_flag is not None:
-        profile.master_pipeline = master_pipeline_flag
 
     with_3d = not no_3d and any(r.generate_3d for r in rows)
     with_rig = not no_rig and with_3d and any(r.generate_rig for r in rows)
@@ -1405,14 +1391,11 @@ def batch_cmd(
                                 rec_m,
                                 manifest_dir,
                                 child_env,
-                                part3d_bin,
-                                with_parts,
                                 rigging3d_bin,
                                 with_rig,
                                 with_animate,
                                 animator3d_bin=animator3d_bin,
                                 has_rigging_profile=has_rigging_profile,
-                                has_parts_profile=has_parts_profile,
                                 gpu_ids=gpu_ids,
                                 with_lod=with_lod,
                                 with_collision=with_collision,
@@ -1874,14 +1857,11 @@ def batch_cmd(
                                         rec_d,
                                         manifest_dir,
                                         child_env,
-                                        part3d_bin,
-                                        with_parts,
                                         rigging3d_bin,
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
                                         has_rigging_profile=has_rigging_profile,
-                                        has_parts_profile=has_parts_profile,
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
@@ -2432,14 +2412,11 @@ def batch_cmd(
                                 rec,
                                 manifest_dir,
                                 child_env,
-                                part3d_bin,
-                                with_parts,
                                 rigging3d_bin,
                                 with_rig,
                                 with_animate,
                                 animator3d_bin=animator3d_bin,
                                 has_rigging_profile=has_rigging_profile,
-                                has_parts_profile=has_parts_profile,
                                 gpu_ids=gpu_ids,
                                 with_lod=with_lod,
                                 with_collision=with_collision,
@@ -2892,14 +2869,11 @@ def batch_cmd(
                                         rec,
                                         manifest_dir,
                                         child_env,
-                                        part3d_bin,
-                                        with_parts,
                                         rigging3d_bin,
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
                                         has_rigging_profile=has_rigging_profile,
-                                        has_parts_profile=has_parts_profile,
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
@@ -2956,14 +2930,11 @@ def batch_cmd(
                                         rec,
                                         manifest_dir,
                                         child_env,
-                                        part3d_bin,
-                                        with_parts,
                                         rigging3d_bin,
                                         with_rig,
                                         with_animate,
                                         animator3d_bin=animator3d_bin,
                                         has_rigging_profile=has_rigging_profile,
-                                        has_parts_profile=has_parts_profile,
                                         gpu_ids=gpu_ids,
                                         with_lod=with_lod,
                                         with_collision=with_collision,
