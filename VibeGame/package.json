@@ -176,6 +176,7 @@
     "@dimforge/rapier3d-compat": "^0.19.3",
     "@gltf-transform/core": "^4.4.0",
     "@gltf-transform/functions": "^4.4.0",
+    "@interverse/three-terrain-lod": "^2.1.1",
     "@pmndrs/uikit": "^1.0.74",
     "@recast-navigation/three": "^0.43.1",
     "@three.ez/instanced-mesh": "^0.3.15",

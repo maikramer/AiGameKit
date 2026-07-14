@@ -59,13 +59,14 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
   // overlap rejection by default (explicit avoid-overlaps="1" still works).
   if (attrs['avoid-overlaps'] === undefined) attrs['avoid-overlaps'] = '0';
   if (attrs['footprint-radius'] === undefined)
-    attrs['footprint-radius'] = '0.15';
-  if (attrs['max-distance'] === undefined) attrs['max-distance'] = '90';
+    attrs['footprint-radius'] = '0.2';
+  if (attrs['max-distance'] === undefined) attrs['max-distance'] = '110';
   if (attrs['align-to-terrain'] === undefined) attrs['align-to-terrain'] = '1';
   if (attrs['avoid-water'] === undefined) attrs['avoid-water'] = '1';
   if (attrs['max-slope-deg'] === undefined) attrs['max-slope-deg'] = '35';
-  if (attrs['scale-min'] === undefined) attrs['scale-min'] = '0.7';
-  if (attrs['scale-max'] === undefined) attrs['scale-max'] = '1.4';
+  // Kenney clumps ≈0.25 m tall → scale 1..3 ≈ world height 0.25–0.75 m.
+  if (attrs['scale-min'] === undefined) attrs['scale-min'] = '1';
+  if (attrs['scale-max'] === undefined) attrs['scale-max'] = '3';
   if (attrs['random-yaw'] === undefined) attrs['random-yaw'] = '1';
   if (attrs['ground-align'] === undefined) attrs['ground-align'] = 'aabb';
 
@@ -84,10 +85,10 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
 
   let spawnCountMode: SpawnGroupSpec['spawnCountMode'] = 'density';
   let count = 0;
-  let densityPerKm2 = 12000;
+  let densityPerKm2 = 90000;
   if (hasDensity) {
     spawnCountMode = 'density';
-    densityPerKm2 = toNumber(densityRaw, 12000);
+    densityPerKm2 = toNumber(densityRaw, 90000);
     if (!Number.isFinite(densityPerKm2) || densityPerKm2 < 0) {
       throw new Error(
         '[Vegetation] density-per-km2 deve ser um número ≥ 0 (objetos por km²).'
@@ -103,7 +104,7 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     }
   } else {
     spawnCountMode = 'density';
-    densityPerKm2 = 12000;
+    densityPerKm2 = 90000;
   }
 
   const templates: SpawnTemplateSpec[] = meshes.map((url) => ({
@@ -147,6 +148,14 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     footprintRadius: resolved.footprintRadius,
     maxDistance: resolved.maxDistance,
     instanced: true,
+    clusterCount: Math.max(
+      0,
+      Math.floor(toNumber(element.attributes['cluster-count'], 48))
+    ),
+    clusterRadius: Math.max(
+      0.5,
+      toNumber(element.attributes['cluster-radius'], 3.5)
+    ),
     templates,
   };
 

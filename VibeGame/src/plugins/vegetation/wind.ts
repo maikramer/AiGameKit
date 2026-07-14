@@ -74,7 +74,7 @@ export function maybePatchVegetationWindMaterial(
   const uniforms: WindUniforms = {
     uVegWind: { value: new THREE.Vector2(0, 0) },
     uVegWindTime: { value: 0 },
-    uVegWindAmp: { value: 0.12 },
+    uVegWindAmp: { value: 0.22 },
   };
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (shader, renderer) => {
@@ -129,7 +129,8 @@ export const VegetationWindSystem: System = {
     const strength = Math.hypot(wind.x, wind.z);
     const dirX = strength > 1e-6 ? wind.x / strength : 0;
     const dirZ = strength > 1e-6 ? wind.z / strength : 0;
-    const amp = Math.min(0.28, 0.06 + strength * 0.04);
+    // Stronger sway now that clumps are scaled to ~1–2 m.
+    const amp = Math.min(0.45, 0.14 + strength * 0.07);
 
     for (const mat of live) {
       const u = windUniformsByMat.get(mat);

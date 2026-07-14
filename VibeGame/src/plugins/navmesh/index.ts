@@ -71,7 +71,7 @@ export function createAgent(
     maxSpeed,
     collisionQueryRange: radius * 5,
     pathOptimizationRange: 2.0,
-    separationWeight: 1.0,
+    separationWeight: 2.5,
   });
 
   NavMeshAgent.agentIndex[eid] = agent.agentIndex;

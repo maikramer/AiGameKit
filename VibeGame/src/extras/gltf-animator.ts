@@ -15,6 +15,8 @@ import {
   AnimationClip,
   AnimationMixer,
   AnimationUtils,
+  LoopOnce,
+  LoopRepeat,
   type Object3D,
 } from 'three';
 import type { GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -126,6 +128,17 @@ export class GltfAnimator {
     clipName: string,
     options?: { crossfade?: number; loop?: boolean }
   ): AnimationAction | null {
+    if (!clipName) return null;
+
+    const resolved = this.resolveClipName(clipName);
+    if (!resolved) {
+      logger.warn(
+        `[GltfAnimator] Clip "${clipName}" not found. Available: ${this.clipNames.join(', ')}`
+      );
+      return null;
+    }
+    clipName = resolved;
+
     if (clipName === this.currentClipName && this.currentAction?.isRunning()) {
       return this.currentAction;
     }
@@ -142,8 +155,13 @@ export class GltfAnimator {
     const fade = options?.crossfade ?? this.crossfadeDuration;
 
     if (options?.loop === false) {
-      nextAction.setLoop(2200, 1); // THREE.LoopOnce
+      nextAction.setLoop(LoopOnce, 1);
       nextAction.clampWhenFinished = true;
+    } else {
+      // Reset sticky LoopOnce from a prior one-shot (lunge/hit/death) on this
+      // same clip — otherwise locomotion freezes on the last keyframe / bind.
+      nextAction.setLoop(LoopRepeat, Infinity);
+      nextAction.clampWhenFinished = false;
     }
 
     if (this.currentAction && fade > 0) {
@@ -151,12 +169,51 @@ export class GltfAnimator {
       this.currentAction.crossFadeTo(nextAction, fade, true);
       nextAction.play();
     } else {
-      nextAction.reset().play();
+      nextAction.reset().setEffectiveTimeScale(1).setEffectiveWeight(1).play();
     }
 
     this.currentAction = nextAction;
     this.currentClipName = clipName;
     return nextAction;
+  }
+
+  /**
+   * Resolve a logical clip name (`idle`/`walk`/…) to an actual GLB clip.
+   * Exact match first, then substring (handles `Animator3D_Walk`, etc.).
+   */
+  resolveClipName(requested: string): string {
+    if (this.clips.has(requested)) return requested;
+    const want = requested.toLowerCase();
+    const names = this.clipNames;
+    const lower = this.clipNamesLower;
+    const direct = lower.findIndex((n) => n.includes(want));
+    if (direct >= 0) return names[direct]!;
+
+    const aliases: Record<string, string[]> = {
+      idle: ['breathe', 'breath', 'stand', 'rest', 'pose', 'wait', 'hover'],
+      walk: [
+        'locomotion',
+        'stride',
+        'jog',
+        'walking',
+        'move',
+        'hover',
+        'soar',
+        'fly',
+      ],
+      run: ['sprint', 'running', 'fast', 'soar', 'dive', 'fly'],
+      jump: ['leap', 'hop', 'vault', 'jumping', 'dive', 'lunge', 'pounce'],
+      death: ['die', 'dead', 'defeat', 'fall', 'land'],
+      hit: ['hurt', 'damage', 'react', 'flinch', 'attack', 'dive'],
+      attack: ['slash', 'strike', 'swing', 'punch', 'dive'],
+      roar: ['growl', 'scream', 'shout'],
+      lunge: ['pounce', 'leap', 'jump', 'dive'],
+    };
+    for (const alt of aliases[want] ?? []) {
+      const idx = lower.findIndex((n) => n.includes(alt));
+      if (idx >= 0) return names[idx]!;
+    }
+    return '';
   }
 
   /**

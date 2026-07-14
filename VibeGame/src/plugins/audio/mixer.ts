@@ -162,7 +162,7 @@ function num(value: string | number): number {
 
 export const musicLayerRecipe: Recipe = {
   name: 'MusicLayer',
-  components: ['audioSource', 'music-layer'],
+  components: ['transform', 'audioSource', 'music-layer'],
   parserAttributes: ['layer', 'base-volume'],
 };
 

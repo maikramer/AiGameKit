@@ -35,12 +35,13 @@ function loadRoadTexture(url: string, srgb: boolean): THREE.Texture {
   const key = `${srgb ? 's' : 'l'}:${url}`;
   const cached = _textureCache.get(key);
   if (cached) return cached;
+  // Do not set needsUpdate before the image arrives — TextureLoader does that
+  // on load, and premature flags spam "no image data found" in the console.
   const tex = _loader.load(url);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
   tex.anisotropy = 8;
-  tex.needsUpdate = true;
   _textureCache.set(key, tex);
   return tex;
 }

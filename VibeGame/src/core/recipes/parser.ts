@@ -442,9 +442,8 @@ function processChildElementsForParent(
 
         if (Parent && Transform) {
           if (!state.hasComponent(parentEntity, Transform)) {
-            logger.warn(
-              `[${parentTagName}] Parent entity is missing Transform component. Adding automatically.\n` +
-                `  Consider adding transform="pos: 0 0 0" to the parent element.`
+            logger.debug(
+              `[${parentTagName}] Parent entity is missing Transform component. Adding automatically.`
             );
             state.addComponent(parentEntity, Transform);
             const defaults = state.config.getDefaults('transform');
@@ -457,9 +456,8 @@ function processChildElementsForParent(
           }
 
           if (!state.hasComponent(childEntity, Transform)) {
-            logger.warn(
-              `[${childElement.tagName}] Child entity is missing Transform component. Adding automatically.\n` +
-                `  Consider adding transform="pos: 0 0 0" to the child element.`
+            logger.debug(
+              `[${childElement.tagName}] Child entity is missing Transform component. Adding automatically.`
             );
             state.addComponent(childEntity, Transform);
             const defaults = state.config.getDefaults('transform');

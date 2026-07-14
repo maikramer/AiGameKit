@@ -29,6 +29,8 @@ export const vegetationRecipe: Recipe = {
     'align-to-terrain',
     'ground-align',
     'random-yaw',
+    'cluster-count',
+    'cluster-radius',
   ],
 };
 

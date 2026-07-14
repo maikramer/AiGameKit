@@ -7,6 +7,7 @@
         "@dimforge/rapier3d-compat": "^0.19.3",
         "@gltf-transform/core": "^4.4.0",
         "@gltf-transform/functions": "^4.4.0",
+        "@interverse/three-terrain-lod": "^2.1.1",
         "@pmndrs/uikit": "^1.0.74",
         "@recast-navigation/three": "^0.43.1",
         "@three.ez/instanced-mesh": "^0.3.15",
@@ -177,6 +178,8 @@
     "@img/sharp-win32-ia32": ["@img/sharp-win32-ia32@0.34.5", "", { "os": "win32", "cpu": "ia32" }, "sha512-FV9m/7NmeCmSHDD5j4+4pNI8Cp3aW+JvLoXcTUo0IqyjSfAZJ8dIUmijx1qaJsIiU+Hosw6xM5KijAWRJCSgNg=="],
 
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.34.5", "", { "os": "win32", "cpu": "x64" }, "sha512-+29YMsqY2/9eFEiW93eqWnuLcWcufowXewwSNIT6UwZdUUCrM3oFjMWH/Z6/TMmb4hlFenmfAVbpWeup2jryCw=="],
+
+    "@interverse/three-terrain-lod": ["@interverse/three-terrain-lod@2.1.1", "", { "peerDependencies": { "three": ">=0.183.0" } }, "sha512-FL2XDmppki2OWd1Rsy4DLHAO7CHJ4nsA3g/Nnj9lCk81ObrzlXYdgHcghwBXj9osGkDnEB7O3v7/01KcpdXpgQ=="],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 

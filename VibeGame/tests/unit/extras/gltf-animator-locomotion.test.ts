@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { AnimationClip, Scene } from 'three';
+import { AnimationClip, LoopRepeat, Scene } from 'three';
 import { GltfAnimator, type LocomotionSet } from 'vibegame';
 
 function makeGltf(clipNames: string[]) {
@@ -236,5 +236,47 @@ describe('GltfAnimator locomotion', () => {
 
     animator.playLocomotion('jump');
     expect(animator.activeClipName).toBe('jump_start');
+  });
+
+  it('play() resolves logical names to Animator3D_* clips', () => {
+    const anim = makeAnimator([
+      'Animator3D_Attack',
+      'Animator3D_BreatheIdle',
+      'Animator3D_Roar',
+      'Animator3D_Run',
+      'Animator3D_Walk',
+    ]);
+    expect(anim.resolveClipName('idle')).toBe('Animator3D_BreatheIdle');
+    expect(anim.resolveClipName('walk')).toBe('Animator3D_Walk');
+    expect(anim.resolveClipName('run')).toBe('Animator3D_Run');
+    const played = anim.play('walk');
+    expect(played).not.toBeNull();
+    expect(anim.activeClipName).toBe('Animator3D_Walk');
+  });
+
+  it('resolves flying-pack aliases (mosquito Hover/Soar/Dive)', () => {
+    const anim = makeAnimator([
+      'Animator3D_BreatheIdle',
+      'Animator3D_Dive',
+      'Animator3D_Hover',
+      'Animator3D_Land',
+      'Animator3D_Soar',
+    ]);
+    expect(anim.resolveClipName('idle')).toBe('Animator3D_BreatheIdle');
+    expect(anim.resolveClipName('walk')).toBe('Animator3D_Hover');
+    expect(anim.resolveClipName('run')).toBe('Animator3D_Soar');
+    expect(anim.resolveClipName('jump')).toBe('Animator3D_Dive');
+    expect(anim.resolveClipName('death')).toBe('Animator3D_Land');
+    expect(anim.play('walk')).not.toBeNull();
+    expect(anim.activeClipName).toBe('Animator3D_Hover');
+  });
+
+  it('resets LoopOnce when later playing a looping clip', () => {
+    const anim = makeAnimator(['Animator3D_Jump', 'Animator3D_Walk']);
+    anim.play('jump', { loop: false });
+    const walk = anim.play('walk');
+    expect(walk).not.toBeNull();
+    expect(walk!.loop).toBe(LoopRepeat);
+    expect(walk!.clampWhenFinished).toBe(false);
   });
 });

@@ -533,15 +533,55 @@ function buildPadAlphaTexture(spec: PrimitiveSpec): THREE.DataTexture {
 const _compositionTextureLoader = new THREE.TextureLoader();
 const _compositionTextureCache = new Map<string, THREE.Texture>();
 
+/** Clones waiting for their shared Source to finish loading. */
+const _pendingConfiguredClones = new Map<string, THREE.Texture[]>();
+
+function _flushPendingClones(url: string, base: THREE.Texture): void {
+  const pending = _pendingConfiguredClones.get(url);
+  if (!pending?.length) return;
+  for (const clone of pending) {
+    // clone() bumps version even with null image — force upload now that
+    // the shared Source has pixels.
+    clone.needsUpdate = true;
+  }
+  _pendingConfiguredClones.delete(url);
+  void base;
+}
+
+function _configuredClone(
+  url: string,
+  base: THREE.Texture,
+  repeatX: number,
+  repeatY: number,
+  rotation: number
+): THREE.Texture {
+  const tex = base.clone();
+  tex.repeat.set(repeatX, repeatY);
+  tex.rotation = rotation;
+  tex.center.set(0.5, 0.5);
+  // Texture.clone() always sets needsUpdate=true (version++). With a still-
+  // loading Source that spams "Texture marked for update but no image data".
+  if (base.image) {
+    tex.needsUpdate = true;
+  } else {
+    tex.version = 0;
+    const list = _pendingConfiguredClones.get(url) ?? [];
+    list.push(tex);
+    _pendingConfiguredClones.set(url, list);
+  }
+  return tex;
+}
+
 function loadCompositionTexture(url: string): THREE.Texture {
   const cached = _compositionTextureCache.get(url);
   if (cached) return cached;
-  const tex = _compositionTextureLoader.load(url);
+  const tex = _compositionTextureLoader.load(url, (loaded) => {
+    _flushPendingClones(url, loaded);
+  });
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 8;
-  tex.needsUpdate = true;
   _compositionTextureCache.set(url, tex);
   return tex;
 }
@@ -550,12 +590,13 @@ function loadCompositionDataTexture(url: string): THREE.Texture {
   // Texturas de dados (normal/roughness/AO) vivem em espaço linear.
   const cached = _compositionTextureCache.get(url);
   if (cached) return cached;
-  const tex = _compositionTextureLoader.load(url);
+  const tex = _compositionTextureLoader.load(url, (loaded) => {
+    _flushPendingClones(url, loaded);
+  });
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.colorSpace = THREE.LinearSRGBColorSpace;
   tex.anisotropy = 8;
-  tex.needsUpdate = true;
   _compositionTextureCache.set(url, tex);
   return tex;
 }
@@ -599,12 +640,13 @@ export function buildPrimitiveMesh(spec: PrimitiveSpec): THREE.Mesh {
   if (spec.textureUrl) {
     try {
       const baseTex = loadCompositionTexture(spec.textureUrl);
-      const tex = baseTex.clone();
-      tex.repeat.set(spec.textureRepeatX, spec.textureRepeatY);
-      tex.rotation = spec.textureRotation;
-      tex.center.set(0.5, 0.5);
-      tex.needsUpdate = true;
-      material.map = tex;
+      material.map = _configuredClone(
+        spec.textureUrl,
+        baseTex,
+        spec.textureRepeatX,
+        spec.textureRepeatY,
+        spec.textureRotation
+      );
     } catch {
       // Se a textura falhar a carregar (URL inválido), cai para cor flat.
     }
@@ -612,12 +654,13 @@ export function buildPrimitiveMesh(spec: PrimitiveSpec): THREE.Mesh {
   if (spec.normalMapUrl) {
     try {
       const baseTex = loadCompositionDataTexture(spec.normalMapUrl);
-      const tex = baseTex.clone();
-      tex.repeat.set(spec.textureRepeatX, spec.textureRepeatY);
-      tex.rotation = spec.textureRotation;
-      tex.center.set(0.5, 0.5);
-      tex.needsUpdate = true;
-      material.normalMap = tex;
+      material.normalMap = _configuredClone(
+        spec.normalMapUrl,
+        baseTex,
+        spec.textureRepeatX,
+        spec.textureRepeatY,
+        spec.textureRotation
+      );
     } catch {
       // ignore
     }
@@ -625,12 +668,13 @@ export function buildPrimitiveMesh(spec: PrimitiveSpec): THREE.Mesh {
   if (spec.roughnessMapUrl) {
     try {
       const baseTex = loadCompositionDataTexture(spec.roughnessMapUrl);
-      const tex = baseTex.clone();
-      tex.repeat.set(spec.textureRepeatX, spec.textureRepeatY);
-      tex.rotation = spec.textureRotation;
-      tex.center.set(0.5, 0.5);
-      tex.needsUpdate = true;
-      material.roughnessMap = tex;
+      material.roughnessMap = _configuredClone(
+        spec.roughnessMapUrl,
+        baseTex,
+        spec.textureRepeatX,
+        spec.textureRepeatY,
+        spec.textureRotation
+      );
     } catch {
       // ignore
     }

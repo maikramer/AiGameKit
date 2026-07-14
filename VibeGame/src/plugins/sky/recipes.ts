@@ -4,7 +4,7 @@ import type { Recipe } from '../../core';
  *  environment-intensity="0.7" background-intensity="1.4">` */
 export const equirectSkyRecipe: Recipe = {
   name: 'EquirectSky',
-  components: ['equirect-sky'],
+  components: ['transform', 'equirect-sky'],
   parserAttributes: [
     'url',
     'rotation-deg',

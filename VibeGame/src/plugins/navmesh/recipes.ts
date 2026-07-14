@@ -2,7 +2,7 @@ import type { Recipe } from '../../core';
 
 export const navMeshRecipe: Recipe = {
   name: 'NavMesh',
-  components: ['nav-mesh-surface'],
+  components: ['transform', 'nav-mesh-surface'],
 };
 
 export const navMeshWalkableRecipe: Recipe = {

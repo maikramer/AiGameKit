@@ -37,6 +37,10 @@ const LUNGE_BURST_SPEED = 6.0;
 // overlapping or attacking from far away.
 const RING_DESIRED = 1.0;
 const RING_MIN_GAP = 0.8;
+/** Soft push between agents so packs don't stack on the same spot. */
+const PEER_SEP_RADIUS = 1.35;
+const PEER_SEP_STRENGTH = 1.6;
+const aiAgentsQuery = defineQuery([AiStateComponent, Transform, Health]);
 
 function distanceXZ(ax: number, az: number, bx: number, bz: number): number {
   const dx = ax - bx;
@@ -339,6 +343,23 @@ function steerCombat(
     tx += -uz * inst.strafeDir * 0.8;
     tz += ux * inst.strafeDir * 0.8;
   }
+
+  // Peer separation: nudge away from other living agents so packs don't overlap.
+  let sepX = 0;
+  let sepZ = 0;
+  for (const other of aiAgentsQuery(state.world)) {
+    if (other === eid || entityDead(other)) continue;
+    const ox = Transform.posX[other] - x;
+    const oz = Transform.posZ[other] - z;
+    const d2 = ox * ox + oz * oz;
+    if (d2 < 1e-6 || d2 > PEER_SEP_RADIUS * PEER_SEP_RADIUS) continue;
+    const d = Math.sqrt(d2);
+    const push = ((PEER_SEP_RADIUS - d) / PEER_SEP_RADIUS) * PEER_SEP_STRENGTH;
+    sepX -= (ox / d) * push;
+    sepZ -= (oz / d) * push;
+  }
+  tx += sepX;
+  tz += sepZ;
 
   if (Math.abs(tx - x) > 0.05 || Math.abs(tz - z) > 0.05) {
     moveToward(state, eid, tx, tz, speed, dt);

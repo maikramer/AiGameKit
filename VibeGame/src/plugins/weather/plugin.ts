@@ -9,7 +9,7 @@ import { WeatherSystem } from './systems';
  */
 export const weatherRecipe: Recipe = {
   name: 'Weather',
-  components: ['weather'],
+  components: ['transform', 'weather'],
   parserAttributes: ['wind', 'seed'],
 };
 

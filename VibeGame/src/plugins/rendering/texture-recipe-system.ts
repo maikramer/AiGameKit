@@ -171,7 +171,7 @@ export const TextureRecipeLoadSystem: System = {
           // colorSpace without affecting siblings sharing the same decode.
           // `clone()` shares the underlying `image` → one GPU upload per URL.
           const texture = decoded.clone();
-          texture.needsUpdate = true;
+          // clone() bumps version; image is already present from rememberDecodedTexture.
 
           // Configura wrapping
           const repeatX = TextureRecipe.repeatX[eid] || 1;
