@@ -80,10 +80,10 @@ Os pesos HF são descarregados automaticamente na 1.ª execução: [VAST-AI/UniR
 
 ### Blender 5.1.0, `bpy` e Open3D
 
-- No **PyPI**, o wheel **`bpy==5.1.0`** (alinhado ao Blender **5.1.0**) só existe para **Python 3.13**.
+- No **PyPI**, o wheel **`bpy>=5.2.0`** (Blender **5.2 LTS**) só existe para **Python 3.13**.
 - O pacote **Open3D** usado pelo UniRig **não** publica wheels estáveis para **Python 3.13** (apenas até `cp312` na versão actual).
 - Por isso o Rigging3D mantém **`bpy==5.0.1`** em **Python 3.11** para inferência completa (mesh + merge com Open3D). A API é da linha **Blender 5.0**, próxima da 5.1 para a maior parte dos operadores `bpy.ops` usados no pipeline.
-- Para **`bpy==5.1.0`** igual ao teu Blender 5.1.0, usa o projecto [**Animator3D**](../Animator3D/) com **Python 3.13** (só animação/export, sem Open3D no mesmo venv).
+- Para **`bpy>=5.2.0`** igual ao Blender 5.2 LTS, usa o projecto [**Animator3D**](../Animator3D/) com **Python 3.13** (só animação/export, sem Open3D no mesmo venv).
 
 ## Uso
 

@@ -23,7 +23,7 @@ rigged GLB that Animator3D can animate with clip commands (`run`, `jump`, `fall`
 
 ### Prerequisites
 
-- **Python 3.13** — `bpy==5.1.x` (PyPI) only ships `cp313` wheels.
+- **Python 3.13** — `bpy>=5.2.0` LTS (PyPI) only ships `cp313` wheels.
 - **NVIDIA GPU with CUDA** — no hard minimum documented by upstream is required in
   practice; measured peak ~3.9GB VRAM on a dense, multi-part real asset on an
   RTX 4050 (6GB), with default settings (`--num-beams 10`, no quantization). See

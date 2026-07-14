@@ -6,7 +6,7 @@ CLI de **animação 3D** com [Blender Python API](https://docs.blender.org/api/c
 
 ## Requisitos
 
-- **Python 3.13** — o wheel PyPI `bpy==5.1.0` exige 3.13 e alinha com **Blender 5.1**.
+- **Python 3.13** — o wheel PyPI `bpy>=5.2.0` exige 3.13 e alinha com **Blender 5.2 LTS**.
 - Blender embutido no pacote `bpy` (sem abrir janela; execução em background).
 
 ## Instalação

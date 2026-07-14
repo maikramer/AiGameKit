@@ -80,7 +80,7 @@ Variável útil: `PYTHON_CMD` — interpretador a usar (por defeito `python3`, o
 | `terrain3d` | Terrain3D | Python | 3.13 | Terreno por difusão; CUDA |
 | `rocks3d` | Rocks3D | Python | 3.13 | Rochas procedurais; sem PyTorch |
 | `rigging3d` | Rigging3D | Python | 3.13 | UniRig; extras de inferência via instalador unificado |
-| `animator3d` | Animator3D | Python | 3.13 | `bpy` 5.1 |
+| `animator3d` | Animator3D | Python | 3.13 | `bpy` 5.2 LTS |
 | `paint3d` | Paint3D | Python | 3.13 | Hunyuan3D-Paint + nvdiffrast |
 | `materialize` | Materialize | Rust | — | Requer `cargo`; binário em `~/.local/bin` |
 | `vibegame` | VibeGame | Bun | — | Requer **Bun**; CLI `vibegame` → `~/.local/bin` |

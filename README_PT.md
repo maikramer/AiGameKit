@@ -44,7 +44,7 @@ GameDev/
   Skymap2D/          ← skymap2d (pip) — depende de Shared; skymaps equirectangular via HF
   Text2Sound/        ← text2sound (pip) — depende de Shared; Stable Audio Open 1.0
   Rigging3D/         ← rigging3d (pip) — Shared; inferência Py 3.11 + bpy 5.0.x
-  Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.1 (animação)
+  Animator3D/        ← animator3d (pip) — Shared; Py 3.13 + bpy 5.2 LTS (animação)
   GameDevLab/        ← gamedev-lab (pip) — depende de Shared; debug 3D, benches, profiling
   Terrain3D/        ← terrain3d (pip) — depende de Shared; geração de terreno por IA via difusão
   Materialize/       ← materialize-cli (cargo) — instalador Python usa Shared

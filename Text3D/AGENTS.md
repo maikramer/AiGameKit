@@ -18,7 +18,7 @@ Text3D is the sole authority for mesh operations (LOD, collision, simplify, reme
 | Textured remesh | `utils/mesh_remesh_textured.py` (904 lines) | Isotropic remesh + xatlas UV reprojection |
 | Master bake | `utils/bake_master.py` (288 lines) | LOD0: decimation + tangents + KTX2 + meshopt |
 | Export/format | `utils/export.py` (379 lines) | `save_mesh`, `convert_mesh`, `weld_glb` |
-| GLTF finish | `utils/gltf_finish.py` (239 lines) | Post-LOD dedup + prune + UASTC + meshopt via `@gltf-transform` |
+| GLTF finish | `utils/gltf_finish.py` | Post-LOD: tangents (bpy) + dedup/prune/UASTC (gltf-transform) + meshopt (bpy 5.2 preferido, gltf-transform fallback) |
 | Alignment | `utils/mesh_align_hunyuan.py` (142 lines) | +Z face normal to ground |
 | Base plane | `utils/mesh_base_plane.py` (288 lines) | Base plane detection/removal |
 | Background removal | `utils/bg_removal.py` (98 lines) | BiRefNet |
@@ -38,7 +38,7 @@ Stage 1 — `generate`: Text/Image → raw GLB. Text2D prompt + Hunyuan3D marchi
 
 Stage 2 — `topology-fix`: Repair raw mesh. Weld → non-manifold repair → fill holes → shade-smooth. `--fill-holes-sides N` controls how aggressively holes are closed.
 
-Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from high-poly + optional KTX2 (UASTC) + meshopt compression. Requires Node.js + `npx @gltf-transform/cli`. Falls back gracefully without it (LOD0 without compression).
+Stage 3 — `bake-master`: LOD0 production mesh. Decimation + normal bake from high-poly + optional KTX2 (UASTC) + meshopt compression. Meshopt prefers bpy 5.2+ (`export_meshopt_compression_enable`; needs `libmeshoptimizer-dev` on Linux). KTX2 still needs Node.js + `npx @gltf-transform/cli`. Falls back gracefully without either.
 
 Stage 4 — `lod`: LOD triplet (LOD0/1/2) with textured or geometry-only paths. Preserves armatures and animations intact.
 
@@ -54,7 +54,7 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **LOD and rigged meshes:** `text3d lod` preserves armatures and animations. No separate LOD path exists for rigged assets. Weight transfer to LODs is handled by `rigging3d transfer-weights`.
 
-**bake-master dependencies:** KTX2 and meshopt require `npx @gltf-transform/cli` on PATH. `text3d doctor` checks availability. Without it, `bake-master` produces an uncompressed LOD0 and `gamedev-lab check glb` will fail `texture_format: ktx2` and `compression: meshopt` rules.
+**bake-master dependencies:** KTX2 requires `npx @gltf-transform/cli`. Meshopt prefers bpy 5.2+ + system `libmeshoptimizer.so` (`libmeshoptimizer-dev`); falls back to gltf-transform. `text3d doctor` checks both. Without them, `bake-master` produces an uncompressed LOD0 and `gamedev-lab check glb` will fail `texture_format: ktx2` / `compression: meshopt` rules.
 
 ## ANTI-PATTERNS
 

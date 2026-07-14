@@ -20,7 +20,7 @@ Monorepo for game-dev AI tools: text-to-image, text-to-3D, text-to-audio, textur
 | `Skymap2D/` | Python | `skymap2d` | 360-degree skymaps (HF API) |
 | `Text2Sound/` | Python | `text2sound` | Text-to-audio (Stable Audio Open) |
 | `Rigging3D/` | Python | `rigging3d` | Auto-rigging (SkinTokens, Python 3.13) |
-| `Animator3D/` | Python | `animator3d` | Animation (bpy 5.1, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
+| `Animator3D/` | Python | `animator3d` | Animation (bpy 5.2 LTS, Python 3.13); `game-pack` (rigged → animated GLB); clip commands `run`, `jump`, `fall` |
 | `GameDevLab/` | Python | `gamedev-lab` | Debug 3D, benches, profiling |
 | `Materialize/` | Rust | `materialize-cli` | PBR map generation (wgpu compute) |
 | `Terrain3D/` | Python | `terrain3d` | AI terrain generation via diffusion (terrain-diffusion; vendored; CUDA GPU) |
@@ -381,13 +381,12 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Environment variables are the primary configuration mechanism (see README.md "Environment variables" section).
 - Run `make check` before considering work complete.
 - **Git workflow: trabalha sempre diretamente no `main` — NÃO criar branches.** Não usar `git checkout -b`, `git switch -c`, `git worktree`, nem qualquer fluxo de feature-branch. Todas as alterações (commits, edits) são feitas sobre `main`. O utilizador gere merges/integração manualmente; o agente não deve criar ramos paralelos. Exceção só se o utilizador pedir explicitamente um branch numa tarefa específica.
-- **Game asset master pipeline (Text3D `bake-master`)** depends on Node.js + `npx`
-  para correr `@gltf-transform/cli` (KTX2/UASTC + EXT_meshopt_compression). Verifica
-  com `text3d doctor`. Se ausente, `bake-master` faz fallback gracioso (LOD0 sem
-  KTX2/meshopt) e a validação `gamedev-lab check glb` falhará nas regras
-  `texture_format: ktx2` / `compression: meshopt`. Instalar via Node.js LTS
-  (https://nodejs.org); `npx --yes @gltf-transform/cli` baixa o pacote na primeira
-  invocação.
+- **Game asset master pipeline (Text3D `bake-master`)**: meshopt preferido via
+  bpy 5.2+ (`export_meshopt_compression_enable`; Linux: `libmeshoptimizer-dev`).
+  KTX2/UASTC ainda depende de Node.js + `npx @gltf-transform/cli`. Verifica com
+  `text3d doctor`. Sem essas deps, `bake-master` faz fallback gracioso e
+  `gamedev-lab check glb` pode falhar em `texture_format: ktx2` /
+  `compression: meshopt`.
 
 ## Learned User Preferences
 
@@ -418,7 +417,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Sem URL de heightmap no terreno, `TerrainLOD` / `@interverse/three-terrain-lod` pode gerar um heightmap procedural internamente; os ficheiros exportados pelo Terrain3D (`terrain.json`, `heightmap.png`, etc.) só têm efeito se o recipe/plugin apontar para eles — atributos XML não suportados podem ser ignorados em silêncio. A geração de heightmaps com **Terrain3D** (difusão) pode exceder a VRAM confortável em GPUs da ordem de **~6 GB**; nesse caso o fluxo típico é gerar noutra máquina com mais VRAM e copiar os artefactos para `public/` do exemplo.
 - OpenCode (`opencode.json` no repositório): entradas MCP locais devem declarar `type: "local"` e `command` como array de strings com executável e argumentos (não o par `command` + `args` usado noutras ferramentas).
 - VibeGame: corpos dinâmicos GLTF podem ter colisor desalinhado do mesh se o centro do AABB não coincidir com a origem da entidade — definir `Collider.posOffset*` a partir do delta AABB→Transform em espaço local. No plugin de partículas (`three.quarks`), usar o emissor interno `ParticleSystem.emitter`; um wrapper `ParticleEmitter` à parte faz o batch descartar o sistema no update e as partículas deixam de aparecer.
-- No PyPI, `bpy==5.1.0` exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy==5.1.0`** — não assumir outro Python/`bpy` para estes pacotes.
+- No PyPI, `bpy>=5.2.0` (LTS) exige Python 3.13. Rigging3D e Animator3D usam stack **3.13 + `bpy>=5.2.0`** — não assumir outro Python/`bpy` para estes pacotes. Meshopt nativo no exporter GLTF (`export_meshopt_compression_enable`); em Linux precisa de `libmeshoptimizer.so` (`libmeshoptimizer-dev`). KTX2/UASTC continua via `@gltf-transform/cli`.
 - **QualityEngine** (`gamedev_shared.quality.QualityEngine`): sistema unificado de presets de qualidade cross-tool. 5 tiers (`fast|low|medium|high|highest`) em `Shared/src/gamedev_shared/data/quality-profiles.yaml`, 14 categorias de assets + 11 audio_kinds em `asset-categories.yaml`. Todas as tools Python expõem `--quality` (e opcionalmente `--category`): Text2D, Texture2D, Skymap2D, Text3D, Paint3D, Text2Sound, Rigging3D, Terrain3D. O QualityEngine faz resolução soft — preenche defaults só quando o utilizador não explicitou o parâmetro (via `ParameterSource`). O GameAssets usa `generation:` no `game.yaml` (mapeia para `--quality`) e passa `--quality`/`--category` às sub-tools. Spec: `docs/superpowers/specs/2026-04-30-quality-presets-design.md`.
 
 - **Arquitetura de responsabilidades — mesh operations**: O **Text3D** é o único dono de operações de mesh (LOD, collision, simplify, remesh, remesh-textured, `topology-fix`, `bake-master`). O GameAssets NÃO deve conter código de mesh — apenas orquestra subprocessos `text3d`. Não usar `bpy` nem `trimesh` diretamente no GameAssets (o legado `bpy_simplify.py` foi removido). O `text3d lod` preserva armatures/animations — não é necessário um caminho separado para LOD rigged. Transferência de weights rigged HI → LODs é responsabilidade do `rigging3d transfer-weights` (não do Text3D).

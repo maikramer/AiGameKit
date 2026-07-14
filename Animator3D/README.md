@@ -2,7 +2,7 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-Procedural animation CLI powered by the [Blender Python API](https://docs.blender.org/api/current/) (`bpy 5.1.0`).
+Procedural animation CLI powered by the [Blender Python API](https://docs.blender.org/api/current/) (`bpy 5.2 LTS`).
 Generates keyed animation clips for rigged GLB models — walk cycles, combat, flight, idle, and more —
 then exports a single animated GLB ready for game engines. Designed as the **final stage** after
 [Rigging3D](../Rigging3D/) in the GameDev asset pipeline.
@@ -13,8 +13,8 @@ then exports a single animated GLB ready for game engines. Designed as the **fin
 |---------|---------|
 | **Input** | Rigged GLB (from Rigging3D / UniRig) |
 | **Output** | Animated GLB with embedded named clips (NLA actions) |
-| **Runtime** | Blender 5.1 embedded via `bpy==5.1.0` (headless, no GUI) |
-| **Python** | 3.13+ (required by `bpy 5.1.0` PyPI wheels) |
+| **Runtime** | Blender 5.2 LTS embedded via `bpy>=5.2.0` (headless, no GUI) |
+| **Python** | 3.13+ (required by `bpy 5.2` PyPI wheels) |
 | **GPU** | Not required for animation; only needed for upstream tools (Text3D, Paint3D) |
 | **Entry point** | `animator3d` (CLI) or `python -m animator3d` |
 
@@ -46,8 +46,8 @@ source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python 3.13, `bpy==5.1.0` (Blender 5.1 wheel), `gamedev-shared`, `click`,
-`rich`, `rich-click`.
+**Requirements:** Python 3.13, `bpy>=5.2.0` (Blender 5.2 LTS wheel), `gamedev-shared`, `click`,
+`rich`, `rich-click`. On Linux, `libmeshoptimizer-dev` enables native GLTF meshopt export.
 
 ## Commands
 

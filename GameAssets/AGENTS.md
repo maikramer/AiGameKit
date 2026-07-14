@@ -24,7 +24,7 @@ Batch asset orchestrator for the GameDev pipeline. 28 Python files, ~12K LOC. Ca
 1. **generate** — `text3d generate` (raw shape GLB; called by `batch_cmd`, not inside `pipeline.py`)
 2. **topology-fix** — `text3d topology-fix` (clean mesh; `--export-origin feet|center|none`, `--fill-holes-sides N`)
 3. **paint** — `paint3d texture` (PBR texture)
-4. **bake-master** — `text3d bake-master` (LOD0 with normal bake + KTX2/meshopt; needs `npx @gltf-transform`)
+4. **bake-master** — `text3d bake-master` (LOD0 with normal bake + KTX2 via gltf-transform; meshopt via bpy 5.2+ preferido)
 5. **lod** — `text3d lod` (LOD1/LOD2 from LOD0)
 6. **collision** — `text3d collision` (convex hull collision mesh)
 7. **rig** — `rigging3d pipeline` (rig the high-poly clean mesh)
