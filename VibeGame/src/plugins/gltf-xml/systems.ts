@@ -77,7 +77,7 @@ export const GltfXmlLoadSystem: System = {
         setGltfInFlight(state, eid, true);
         void loadGltfLodToSceneForEntity(state, lodTriple, eid)
           .then((group) => {
-            registerGltfLocalYBounds(lodTriple[1], group.children[1] ?? group);
+            registerGltfLocalYBounds(lodTriple[0], group.children[0] ?? group);
             applyTransformToGroup(group, eid);
             if (state.exists(eid)) {
               registerGltfRootGroup(state, eid, group);

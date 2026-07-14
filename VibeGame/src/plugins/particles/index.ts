@@ -4,3 +4,9 @@ export { ParticleUpdateSystem } from './systems';
 export { particleSystemRecipe, particleBurstRecipe } from './recipes';
 export { spawnParticleBurst } from './utils';
 export type { ParticleBurstOptions } from './utils';
+export {
+  setParticleTextureBaseUrl,
+  getParticleTextureBaseUrl,
+  preloadParticleTextures,
+  PRESET_TEXTURE_FILE,
+} from './textures';

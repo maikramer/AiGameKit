@@ -1,6 +1,7 @@
 # ECS Module
 
 <!-- LLM:OVERVIEW -->
+
 Entity Component System scheduler and state management. Provides the State class for world management, system scheduling with execution phases, and plugin registration.
 <!-- /LLM:OVERVIEW -->
 
@@ -54,31 +55,39 @@ Each frame executes systems in three distinct phases:
    - Frame state initialization
    - Runs exactly once at frame start
 
-2. **FixedBatch** (0-N times per frame at 60Hz)
+2. **FixedBatch** (0-N times per frame at 50 Hz)
    - Physics simulation step
    - Gameplay logic requiring deterministic timing
    - Accumulates time and catches up if behind
    - Example: At 25 FPS runs 2x per frame, at 144 FPS runs ~0.4x per frame
-   - Always uses `fixedDeltaTime` (1/60 second)
+   - Always uses `fixedDeltaTime` (1/50 second)
 
-3. **DrawBatch** (Once per frame)
+3. **SimulationBatch** (Once per frame, after fixed)
+   - Physics transform interpolation (`alpha` from fixed accumulator)
+   - Presentation systems that need smoothed poses before draw
+
+4. **LateBatch** (Once per frame, after simulation)
+   - Deferred entity-script / gameplay hooks that run after interpolation
+
+5. **DrawBatch** (Once per frame)
    - Rendering and visual updates
-   - Interpolation between fixed updates
-   - Runs exactly once at frame end
+   - Runs at frame end
    - Uses variable `deltaTime` for smooth animations
 
 <!-- LLM:REFERENCE -->
+
 ## API Reference
 
 ### Exported Classes
 
 #### State
+
 World container managing entities, components, systems, and plugins. See main core/context.md for full API.
 
 ### Exported Constants
 
 - `NULL_ENTITY: 4294967295` - Invalid entity ID
-- `TIME_CONSTANTS.FIXED_TIMESTEP: 1/60` - Fixed update rate
+- `TIME_CONSTANTS.FIXED_TIMESTEP: 1/50` - Fixed update rate (50 Hz)
 - `TIME_CONSTANTS.DEFAULT_DELTA: 1/144` - Default frame delta
 
 ### Exported Types
@@ -94,9 +103,11 @@ World container managing entities, components, systems, and plugins. See main co
 - `ComponentEnums` - Enum value mappings
 - `ShorthandMapping` - Attribute shorthand
 - `ValidationRule` - Validation rule interface
+
 <!-- /LLM:REFERENCE -->
 
 <!-- LLM:EXAMPLES -->
+
 ## Examples
 
 ### System Execution Order
@@ -122,4 +133,5 @@ const OrderedSystem: GAME.System = {
   update: (state) => { /* runs between systems */ }
 };
 ```
+
 <!-- /LLM:EXAMPLES -->

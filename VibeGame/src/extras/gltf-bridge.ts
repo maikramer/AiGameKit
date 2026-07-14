@@ -24,12 +24,22 @@ let _ktx2Loader: KTX2Loader | null | undefined = undefined;
 let _customTranscoderPath: string | undefined;
 
 // --- GLTF load tracking (for the loading-screen "assets" ready gate) ---
-let _activeGltfLoads = 0;
+/** Boot-critical scene loads (hero, props, lod0). Blocks the assets gate. */
+let _criticalGltfLoads = 0;
+/** Streaming / secondary loads (lod1/lod2). Do not block boot. */
+let _backgroundGltfLoads = 0;
 let _anyGltfLoadStarted = false;
 
-/** Number of GLTF/GLB scene loads currently in flight. */
+export type GltfLoadPriority = 'critical' | 'background';
+
+/** In-flight critical GLTF loads — the loading `assets` gate waits on these. */
+export function getCriticalGltfLoadCount(): number {
+  return _criticalGltfLoads;
+}
+
+/** Total in-flight GLTF loads (critical + background). Debug / HUD. */
 export function getActiveGltfLoadCount(): number {
-  return _activeGltfLoads;
+  return _criticalGltfLoads + _backgroundGltfLoads;
 }
 
 /** Whether at least one GLTF scene load has ever been started. */
@@ -37,12 +47,27 @@ export function hasAnyGltfLoadStarted(): boolean {
   return _anyGltfLoadStarted;
 }
 
-/** Wrap a load promise so it counts toward the in-flight asset total. */
-function trackGltfLoad<T>(p: Promise<T>): Promise<T> {
-  _activeGltfLoads++;
+/** Test helper: reset load counters between cases. */
+export function _resetGltfLoadTrackingForTests(): void {
+  _criticalGltfLoads = 0;
+  _backgroundGltfLoads = 0;
+  _anyGltfLoadStarted = false;
+}
+
+/** Wrap a load promise so it counts toward the in-flight asset totals. */
+function trackGltfLoad<T>(
+  p: Promise<T>,
+  priority: GltfLoadPriority = 'critical'
+): Promise<T> {
+  if (priority === 'critical') _criticalGltfLoads++;
+  else _backgroundGltfLoads++;
   _anyGltfLoadStarted = true;
   return p.finally(() => {
-    _activeGltfLoads = Math.max(0, _activeGltfLoads - 1);
+    if (priority === 'critical') {
+      _criticalGltfLoads = Math.max(0, _criticalGltfLoads - 1);
+    } else {
+      _backgroundGltfLoads = Math.max(0, _backgroundGltfLoads - 1);
+    }
   });
 }
 
@@ -319,6 +344,27 @@ export function loadGltfMaster(state: State, url: string): Promise<GLTF> {
 }
 
 /**
+ * Like {@link loadGltfMaster}, but counts toward the boot `assets` gate
+ * (`critical`) or streams without blocking (`background`). Use for paths that
+ * bypass the scene-load wrappers (e.g. auto-instancing).
+ */
+export function loadGltfMasterTracked(
+  state: State,
+  url: string,
+  priority: GltfLoadPriority = 'critical'
+): Promise<GLTF> {
+  return trackGltfLoad(loadGltfMaster(state, url), priority);
+}
+
+/** Test helper: wrap an arbitrary promise with the GLTF load tracker. */
+export function _trackGltfLoadForTests<T>(
+  p: Promise<T>,
+  priority: GltfLoadPriority = 'critical'
+): Promise<T> {
+  return trackGltfLoad(p, priority);
+}
+
+/**
  * Load a glTF/GLB from URL and attach it to the current rendering scene.
  *
  * @param state - VibeGame ECS state (after runtime started with DOM rendering).
@@ -327,7 +373,7 @@ export function loadGltfMaster(state: State, url: string): Promise<GLTF> {
  */
 /**
  * Carrega três GLBs (LOD0/1/2), agrupa-os num único `Group` e adiciona-o à cena.
- * Filhos: nomes `lod0`–`lod2`; só um fica `visible` (por omissão lod1 até ao sistema de LOD).
+ * Filhos: nomes `lod0`–`lod2`; só um fica `visible` (por omissão lod0 até ao sistema de LOD).
  */
 export function loadGltfLodToScene(
   state: State,
@@ -342,6 +388,10 @@ export function loadGltfLodToScene(
  * generation changed since the load started. Clones share geometry/material
  * with the master cache, so an orphaned group is simply dropped — the shared
  * GPU resources are released when the master cache is cleared.
+ *
+ * Boot waits only on **lod0** (critical). lod1/lod2 stream as background loads
+ * and are attached when ready — {@link GltfLodSystem} picks them up once
+ * `children.length >= 2`.
  */
 export function loadGltfLodToSceneForEntity(
   state: State,
@@ -360,37 +410,64 @@ export function loadGltfLodToSceneForEntity(
   const root = new THREE.Group();
   root.name = 'gltf-lod-root';
 
+  const isOrphaned = (): boolean =>
+    (entityId !== undefined && !state.exists(entityId)) ||
+    getSceneGeneration(state) !== gen;
+
+  const cloneLodChild = (gltf: GLTF, level: number): THREE.Group => {
+    const child = hasSkinnedMesh(gltf.scene)
+      ? (cloneSkinnedObject(gltf.scene) as THREE.Group)
+      : gltf.scene.clone(true);
+    child.name = `lod${level}`;
+    child.visible = level === 0;
+    child.userData.lodLevel = level;
+    return child;
+  };
+
+  const sortLodChildren = (): void => {
+    root.children.sort(
+      (a, b) =>
+        ((a.userData.lodLevel as number) ?? 0) -
+        ((b.userData.lodLevel as number) ?? 0)
+    );
+  };
+
   return trackGltfLoad(
-    Promise.all(
-      urls.map((url, i) =>
-        loadGltfMaster(state, url).then((gltf) => {
-          const child = hasSkinnedMesh(gltf.scene)
-            ? (cloneSkinnedObject(gltf.scene) as THREE.Group)
-            : gltf.scene.clone(true);
-          child.name = `lod${i}`;
-          child.visible = false;
-          child.userData.lodLevel = i;
-          return child;
-        })
-      )
-    ).then((children) => {
-      for (const c of children) {
-        root.add(c);
+    loadGltfMaster(state, urls[0]).then((gltf) => {
+      if (isOrphaned()) return root;
+      root.add(cloneLodChild(gltf, 0));
+      scene.add(root);
+      setupCsmMaterials(state, root);
+
+      // Stream higher LODs without holding the boot gate.
+      for (const level of [1, 2] as const) {
+        const url = urls[level];
+        if (!url) continue;
+        void trackGltfLoad(
+          loadGltfMaster(state, url).then((gltfLod) => {
+            if (isOrphaned()) return;
+            // Skip if this level already attached (retry / cache race).
+            if (
+              root.children.some(
+                (c) => (c.userData.lodLevel as number) === level
+              )
+            ) {
+              return;
+            }
+            root.add(cloneLodChild(gltfLod, level));
+            sortLodChildren();
+            setupCsmMaterials(state, root);
+          }),
+          'background'
+        ).catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[gltf-lod] lod${level} "${url}" failed: ${msg}`);
+        });
       }
-      if (children[1]) {
-        children[1].visible = true;
-      } else if (children[0]) {
-        children[0].visible = true;
-      }
-      const orphaned =
-        (entityId !== undefined && !state.exists(entityId)) ||
-        getSceneGeneration(state) !== gen;
-      if (!orphaned) {
-        scene.add(root);
-        setupCsmMaterials(state, root);
-      }
+
       return root;
-    })
+    }),
+    'critical'
   );
 }
 
