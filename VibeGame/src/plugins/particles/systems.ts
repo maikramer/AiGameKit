@@ -9,7 +9,12 @@ import { logger } from '../../core/utils/logger';
 import { getScene } from '../rendering';
 import { WorldTransform } from '../transforms';
 import { ParticleEmitter } from './components';
-import { createPresetParams, presetName } from './presets';
+import {
+  createPresetParams,
+  presetName,
+  presetNeedsUprightCone,
+} from './presets';
+import { preloadParticleTextures } from './textures';
 
 const emitterQuery = defineQuery([ParticleEmitter]);
 
@@ -49,29 +54,43 @@ function createParticleSystem(
 
   const name = presetName(ParticleEmitter.preset[entity]);
   const presetParams = createPresetParams(name);
+  // Continuous scene emitters (XML) may tune rate/size/speed; bursts keep preset look.
+  const preferEntityTuning = ParticleEmitter.burst[entity] !== 1;
 
   const params: ParticleSystemParameters = {
     autoDestroy: false,
     looping: ParticleEmitter.looping[entity] === 1,
     duration: ParticleEmitter.duration[entity] || presetParams.duration || 5,
-    startLife:
-      presetParams.startLife ??
-      new IntervalValue(
-        ParticleEmitter.startLifeMin[entity],
-        ParticleEmitter.startLifeMax[entity]
-      ),
-    startSpeed:
-      presetParams.startSpeed ??
-      new IntervalValue(
-        ParticleEmitter.startSpeedMin[entity],
-        ParticleEmitter.startSpeedMax[entity]
-      ),
-    startSize:
-      presetParams.startSize ??
-      new IntervalValue(
-        ParticleEmitter.startSizeMin[entity],
-        ParticleEmitter.startSizeMax[entity]
-      ),
+    startLife: preferEntityTuning
+      ? new IntervalValue(
+          ParticleEmitter.startLifeMin[entity],
+          ParticleEmitter.startLifeMax[entity]
+        )
+      : (presetParams.startLife ??
+        new IntervalValue(
+          ParticleEmitter.startLifeMin[entity],
+          ParticleEmitter.startLifeMax[entity]
+        )),
+    startSpeed: preferEntityTuning
+      ? new IntervalValue(
+          ParticleEmitter.startSpeedMin[entity],
+          ParticleEmitter.startSpeedMax[entity]
+        )
+      : (presetParams.startSpeed ??
+        new IntervalValue(
+          ParticleEmitter.startSpeedMin[entity],
+          ParticleEmitter.startSpeedMax[entity]
+        )),
+    startSize: preferEntityTuning
+      ? new IntervalValue(
+          ParticleEmitter.startSizeMin[entity],
+          ParticleEmitter.startSizeMax[entity]
+        )
+      : (presetParams.startSize ??
+        new IntervalValue(
+          ParticleEmitter.startSizeMin[entity],
+          ParticleEmitter.startSizeMax[entity]
+        )),
     startColor:
       presetParams.startColor ??
       new ColorRange(
@@ -88,12 +107,16 @@ function createParticleSystem(
           ParticleEmitter.startColorA[entity]
         )
       ),
-    emissionOverTime:
-      presetParams.emissionOverTime ??
-      new ConstantValue(ParticleEmitter.emissionRate[entity]),
+    emissionOverTime: preferEntityTuning
+      ? new ConstantValue(ParticleEmitter.emissionRate[entity])
+      : (presetParams.emissionOverTime ??
+        new ConstantValue(ParticleEmitter.emissionRate[entity])),
     shape: presetParams.shape,
     material: presetParams.material!,
-    worldSpace: ParticleEmitter.worldSpace[entity] === 1,
+    worldSpace:
+      typeof presetParams.worldSpace === 'boolean'
+        ? presetParams.worldSpace
+        : ParticleEmitter.worldSpace[entity] === 1,
     renderMode:
       (ParticleEmitter.renderMode[entity] as RenderMode) ||
       RenderMode.BillBoard,
@@ -108,6 +131,11 @@ function createParticleSystem(
   if (ParticleEmitter.burst[entity] === 1) {
     ps.looping = false;
     ps.autoDestroy = true;
+  }
+
+  // ConeEmitter emits along local +Z — tip upright to world +Y.
+  if (presetNeedsUprightCone(name)) {
+    ps.emitter.rotation.x = -Math.PI / 2;
   }
 
   scene.add(ps.emitter);
@@ -150,6 +178,8 @@ export const ParticleUpdateSystem: System = {
     const scene = getScene(state);
     if (!scene) return;
 
+    preloadParticleTextures();
+
     let renderer = getRenderer(state);
     if (!renderer) {
       renderer = new BatchedRenderer();
@@ -171,13 +201,15 @@ export const ParticleUpdateSystem: System = {
 
     const systems = getParticleSystems(state);
     const delta = state.time.deltaTime;
+    const emitters = emitterQuery(state.world);
+    const emitterCount = emitters.length;
 
-    for (const entity of emitterQuery(state.world)) {
+    for (const entity of emitters) {
       if (ParticleEmitter.active[entity] !== 1) continue;
 
       let ps = systems.get(entity);
       if (!ps) {
-        if (emitterQuery(state.world).length >= MAX_PARTICLE_EMITTERS) {
+        if (emitterCount >= MAX_PARTICLE_EMITTERS) {
           logger.warn(
             `Particle emitter cap reached (MAX_PARTICLE_EMITTERS=${MAX_PARTICLE_EMITTERS}); skipping new emitter`
           );

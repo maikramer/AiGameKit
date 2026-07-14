@@ -47,16 +47,33 @@ export const GltfAnimationUpdateSystem: System = {
       }
 
       const root = animator.root;
-      WorldTransform.posX[eid] = root.position.x;
-      WorldTransform.posY[eid] = root.position.y;
-      WorldTransform.posZ[eid] = root.position.z;
-      WorldTransform.rotX[eid] = root.quaternion.x;
-      WorldTransform.rotY[eid] = root.quaternion.y;
-      WorldTransform.rotZ[eid] = root.quaternion.z;
-      WorldTransform.rotW[eid] = root.quaternion.w;
-      syncEulerFromQuaternion(WorldTransform, eid);
-      if (state.hasComponent(eid, Transform)) {
-        Transform.dirty[eid] = 1;
+      const px = root.position.x;
+      const py = root.position.y;
+      const pz = root.position.z;
+      const qx = root.quaternion.x;
+      const qy = root.quaternion.y;
+      const qz = root.quaternion.z;
+      const qw = root.quaternion.w;
+      const moved =
+        Math.abs(WorldTransform.posX[eid] - px) > 1e-5 ||
+        Math.abs(WorldTransform.posY[eid] - py) > 1e-5 ||
+        Math.abs(WorldTransform.posZ[eid] - pz) > 1e-5 ||
+        Math.abs(WorldTransform.rotX[eid] - qx) > 1e-5 ||
+        Math.abs(WorldTransform.rotY[eid] - qy) > 1e-5 ||
+        Math.abs(WorldTransform.rotZ[eid] - qz) > 1e-5 ||
+        Math.abs(WorldTransform.rotW[eid] - qw) > 1e-5;
+      WorldTransform.posX[eid] = px;
+      WorldTransform.posY[eid] = py;
+      WorldTransform.posZ[eid] = pz;
+      WorldTransform.rotX[eid] = qx;
+      WorldTransform.rotY[eid] = qy;
+      WorldTransform.rotZ[eid] = qz;
+      WorldTransform.rotW[eid] = qw;
+      if (moved) {
+        syncEulerFromQuaternion(WorldTransform, eid);
+        if (state.hasComponent(eid, Transform)) {
+          Transform.dirty[eid] = 1;
+        }
       }
     }
   },

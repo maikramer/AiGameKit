@@ -13,7 +13,19 @@ Particle system plugin using three.quarks (`BatchedRenderer` + `ParticleSystem`)
 
 ## Presets
 
-fire, rain, snow, smoke, dust, explosion, sparks, magic, fireflies
+fire, rain, snow, smoke, dust, explosion, sparks, magic, fireflies, splash,
+woodchips, rockshards, leaves
+
+Alias: `sparkle` → `magic`.
+
+## Textures
+
+Each preset uses a sprite map from `/assets/particles/` (configurable via
+`setParticleTextureBaseUrl`). Semantic files: `flame.png`, `smoke.png`,
+`spark.png`, etc. Headless / missing files fall back to a soft radial
+`DataTexture` so particles never render as hard squares.
+
+Games should ship Kenney (or other) sprites under `public/assets/particles/`.
 
 ## Key Rules
 
@@ -24,8 +36,13 @@ fire, rain, snow, smoke, dust, explosion, sparks, magic, fireflies
 - `batchedRenderer.addSystem(ps)` then `batchedRenderer.update(delta)` each frame.
 - Systems are stored in a sidecar `Map<number, ParticleSystem>` keyed by entity ID
   (PS objects cannot live in SOA typed arrays).
+- `ConeEmitter` shoots along local **+Z**. Fire/smoke/sparks/splash rotate the emitter
+  (`rotation.x = -PI/2`) so the cone points world **+Y**.
+- World acceleration uses `ApplyForce`, not `GravityForce` (that one is Newton pull
+  toward a point).
 
 ## Systems
 
-- `ParticleUpdateSystem` (group: `draw`) — Creates/disposes `ParticleSystem` instances,
-  syncs position from `WorldTransform`, ticks the `BatchedRenderer`.
+- `ParticleUpdateSystem` (group: `draw`) — Preloads textures, creates/disposes
+  `ParticleSystem` instances, syncs position from `WorldTransform`, ticks the
+  `BatchedRenderer`.

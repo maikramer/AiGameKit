@@ -45,12 +45,18 @@ interface HowlPropSnapshot {
   pannerRefDistance?: number;
   pannerMaxDistance?: number;
   pannerRolloff?: number;
+  posX?: number;
+  posY?: number;
+  posZ?: number;
 }
 
 interface AudioState {
   howlMap: Map<number, Howl>;
   prevPlaying: Map<number, number>;
   howlPropSnapshot: Map<number, HowlPropSnapshot>;
+  listenerPosX?: number;
+  listenerPosY?: number;
+  listenerPosZ?: number;
   _listenerWarned?: boolean;
 }
 
@@ -226,11 +232,15 @@ export const AudioSystem: System = {
         }
 
         if (spatial) {
-          howl.pos(
-            Transform.posX[eid],
-            Transform.posY[eid],
-            Transform.posZ[eid]
-          );
+          const px = Transform.posX[eid];
+          const py = Transform.posY[eid];
+          const pz = Transform.posZ[eid];
+          if (snap.posX !== px || snap.posY !== py || snap.posZ !== pz) {
+            howl.pos(px, py, pz);
+            snap.posX = px;
+            snap.posY = py;
+            snap.posZ = pz;
+          }
           const nextRef = AudioSource.minDistance[eid];
           const nextMax = AudioSource.maxDistance[eid];
           const nextRoll = AudioSource.rolloff[eid];
@@ -272,8 +282,18 @@ export const AudioSystem: System = {
       AudioListener.posX[eid] = x;
       AudioListener.posY[eid] = y;
       AudioListener.posZ[eid] = z;
-      // Howler.pos trata browsers só com setPosition() vs AudioParam positionX/Y/Z.
-      Howler.pos(x, y, z);
+      const audio = getOrCreateState(state);
+      if (
+        audio.listenerPosX !== x ||
+        audio.listenerPosY !== y ||
+        audio.listenerPosZ !== z
+      ) {
+        audio.listenerPosX = x;
+        audio.listenerPosY = y;
+        audio.listenerPosZ = z;
+        // Howler.pos trata browsers só com setPosition() vs AudioParam positionX/Y/Z.
+        Howler.pos(x, y, z);
+      }
     } else if (
       audioQuery(state.world).length > 0 &&
       !getOrCreateState(state)._listenerWarned

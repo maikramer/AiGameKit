@@ -621,7 +621,7 @@ function computeAdaptivePixelRatio(state: State, cap: number): number {
   }
   if (!found) return cap;
   // Tier scale table mirrors TIER_PRESETS.pixelRatioScale in adaptive-quality.
-  const scale = [1.0, 1.0, 0.9, 0.8][tier] ?? 1.0;
+  const scale = [1.0, 1.0, 0.85, 0.75][tier] ?? 1.0;
   const effectiveCap = Math.min(cap, ceiling);
   return Math.max(floor, Math.min(effectiveCap, effectiveCap * scale));
 }

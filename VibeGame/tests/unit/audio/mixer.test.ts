@@ -19,6 +19,8 @@ mock.module('howler', () => ({
 
 // Imported after the howler mock is registered (bank.ts imports howler).
 const { emitEvent } = await import('../../../src/plugins/rpg-core/events');
+const { wireMusicMixerEvents } =
+  await import('../../../src/plugins/rpg-core/music-mixer-bridge');
 const { AudioSource, MusicLayerComponent } =
   await import('../../../src/plugins/audio/components');
 const mixer = await import('../../../src/plugins/audio/mixer');
@@ -133,6 +135,7 @@ describe('MusicMixer', () => {
 
   describe('crossfade explore->battle on event', () => {
     it('crossfades explore->battle when MUSIC_ENTER_BATTLE is emitted', () => {
+      wireMusicMixerEvents(state);
       mixer.setMasterVolume(state, 1);
       mixer.setMusicVolume(state, 0.7);
 
@@ -164,6 +167,7 @@ describe('MusicMixer', () => {
     });
 
     it('crossfades back to explore on MUSIC_EXIT_BATTLE', () => {
+      wireMusicMixerEvents(state);
       mixer.setMasterVolume(state, 1);
       mixer.setMusicVolume(state, 1);
 

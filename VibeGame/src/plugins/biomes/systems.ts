@@ -29,6 +29,11 @@ const terrainFieldQuery = defineQuery([Terrain]);
 
 const initializedPlayer = new WeakMap<State, number>();
 const splatBaked = new WeakMap<State, boolean>();
+/** Last player XZ used for biome PIP — skip polygon test when barely moved. */
+const lastBiomePip = new WeakMap<
+  State,
+  { px: number; pz: number; targetEid: number }
+>();
 let warnedNoFog = false;
 let warnedNoAmbient = false;
 
@@ -269,8 +274,26 @@ export const BiomeDetectionSystem: System = {
 
     const px = Transform.posX[player];
     const pz = Transform.posZ[player];
-    const hit = findBiomeRegionAt(state, px, pz);
-    const targetEid = hit ? hit.entity : NO_BIOME;
+    let cache = lastBiomePip.get(state);
+    let targetEid: number;
+    if (
+      cache &&
+      Math.abs(cache.px - px) < 0.15 &&
+      Math.abs(cache.pz - pz) < 0.15
+    ) {
+      targetEid = cache.targetEid;
+    } else {
+      const hit = findBiomeRegionAt(state, px, pz);
+      targetEid = hit ? hit.entity : NO_BIOME;
+      if (!cache) {
+        cache = { px, pz, targetEid };
+        lastBiomePip.set(state, cache);
+      } else {
+        cache.px = px;
+        cache.pz = pz;
+        cache.targetEid = targetEid;
+      }
+    }
 
     const prevTarget = ActiveBiome.target[player];
     if (targetEid !== prevTarget) {

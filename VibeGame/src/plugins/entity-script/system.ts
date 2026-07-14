@@ -9,6 +9,7 @@ import {
   type State,
   type System,
 } from '../../core';
+import { MAX_ENTITIES } from '../../core/ecs/constants';
 import {
   startCoroutine,
   stopAllCoroutines,
@@ -46,6 +47,145 @@ const entityScriptQuery = defineQuery([MonoBehaviour]);
 const parentQuery = defineQuery([Parent]);
 const touchedWithScriptQuery = defineQuery([MonoBehaviour, TouchedEvent]);
 const touchEndedWithScriptQuery = defineQuery([MonoBehaviour, TouchEndedEvent]);
+
+/** Packed (eid, other) key — avoids `${eid}:${other}` string allocs. */
+function collisionPairKey(eid: number, other: number): number {
+  return eid * MAX_ENTITIES + other;
+}
+
+const _enteredPairs = new Set<number>();
+const _collisionOther: CollisionOther = { entity: 0 };
+
+/**
+ * Per-entity pooled MonoBehaviourContext. Getters close over a mutable slot so
+ * `buildContext` is O(1) field writes instead of allocating a fresh object tree
+ * every `update`/`fixedUpdate`/`lateUpdate`/collision callback.
+ */
+type CtxSlot = {
+  state: State;
+  eid: number;
+  hasTransform: boolean;
+  hasTag: boolean;
+  hasLayer: boolean;
+  ctx: MonoBehaviourContext;
+};
+
+const ctxPoolByState = new WeakMap<State, Map<number, CtxSlot>>();
+
+function getCtxSlot(state: State, eid: number): CtxSlot {
+  let byEid = ctxPoolByState.get(state);
+  if (!byEid) {
+    byEid = new Map();
+    ctxPoolByState.set(state, byEid);
+  }
+  let slot = byEid.get(eid);
+  if (slot) return slot;
+
+  slot = {
+    state,
+    eid,
+    hasTransform: false,
+    hasTag: false,
+    hasLayer: false,
+    ctx: null as unknown as MonoBehaviourContext,
+  };
+  const s = slot;
+  s.ctx = {
+    get state() {
+      return s.state;
+    },
+    set state(v: State) {
+      s.state = v;
+    },
+    get entity() {
+      return s.eid;
+    },
+    set entity(v: number) {
+      s.eid = v;
+    },
+    object3d: null,
+    deltaTime: 0,
+    gameObject: {
+      get id() {
+        return s.eid;
+      },
+      get name() {
+        return `Entity_${s.eid}`;
+      },
+      get tag() {
+        return s.hasTag ? getTagName(Tag.value[s.eid]) : 'Untagged';
+      },
+      get layer() {
+        return s.hasLayer ? Layer.value[s.eid] : 0;
+      },
+    },
+    transform: {
+      get positionX() {
+        return s.hasTransform ? Transform.posX[s.eid] : 0;
+      },
+      get positionY() {
+        return s.hasTransform ? Transform.posY[s.eid] : 0;
+      },
+      get positionZ() {
+        return s.hasTransform ? Transform.posZ[s.eid] : 0;
+      },
+      get rotationX() {
+        return s.hasTransform ? Transform.eulerX[s.eid] : 0;
+      },
+      get rotationY() {
+        return s.hasTransform ? Transform.eulerY[s.eid] : 0;
+      },
+      get rotationZ() {
+        return s.hasTransform ? Transform.eulerZ[s.eid] : 0;
+      },
+      get scaleX() {
+        return s.hasTransform ? Transform.scaleX[s.eid] : 1;
+      },
+      get scaleY() {
+        return s.hasTransform ? Transform.scaleY[s.eid] : 1;
+      },
+      get scaleZ() {
+        return s.hasTransform ? Transform.scaleZ[s.eid] : 1;
+      },
+    },
+    getComponent(name: string): Component | null {
+      return resolveComponent(s.state, s.eid, name);
+    },
+    getComponentInChildren(name: string): Component | null {
+      return findComponentInChildren(s.state, s.eid, name);
+    },
+    getComponentInParent(name: string): Component | null {
+      return findComponentInParent(s.state, s.eid, name);
+    },
+    StartCoroutine(genOrFn: Generator | (() => Generator)): number {
+      return startCoroutine(s.state, s.eid, genOrFn);
+    },
+    StopCoroutine(coroutineId: number): void {
+      stopCoroutine(s.state, s.eid, coroutineId);
+    },
+    StopAllCoroutines(): void {
+      stopAllCoroutines(s.state, s.eid);
+    },
+  };
+  byEid.set(eid, s);
+  state.onDestroy(eid, () => {
+    ctxPoolByState.get(state)?.delete(eid);
+  });
+  return s;
+}
+
+export function buildContext(state: State, eid: number): MonoBehaviourContext {
+  const slot = getCtxSlot(state, eid);
+  slot.state = state;
+  slot.eid = eid;
+  slot.hasTransform = state.hasComponent(eid, Transform);
+  slot.hasTag = state.hasComponent(eid, Tag);
+  slot.hasLayer = state.hasComponent(eid, Layer);
+  const root = getGltfRootGroup(state, eid);
+  slot.ctx.object3d = root ?? null;
+  slot.ctx.deltaTime = state.time.deltaTime;
+  return slot.ctx;
+}
 
 function resolveComponent(
   state: State,
@@ -85,78 +225,6 @@ function findComponentInParent(
   const parentEid = Parent.entity[eid];
   if (parentEid === 0) return null;
   return findComponentInParent(state, parentEid, name);
-}
-
-export function buildContext(state: State, eid: number): MonoBehaviourContext {
-  const root = getGltfRootGroup(state, eid);
-  const hasTransform = state.hasComponent(eid, Transform);
-  const hasTag = state.hasComponent(eid, Tag);
-  const hasLayer = state.hasComponent(eid, Layer);
-  return {
-    state,
-    entity: eid,
-    object3d: root ?? null,
-    deltaTime: state.time.deltaTime,
-    gameObject: {
-      id: eid,
-      get name() {
-        return `Entity_${eid}`;
-      },
-      get tag() {
-        return hasTag ? getTagName(Tag.value[eid]) : 'Untagged';
-      },
-      get layer() {
-        return hasLayer ? Layer.value[eid] : 0;
-      },
-    },
-    transform: {
-      get positionX() {
-        return hasTransform ? Transform.posX[eid] : 0;
-      },
-      get positionY() {
-        return hasTransform ? Transform.posY[eid] : 0;
-      },
-      get positionZ() {
-        return hasTransform ? Transform.posZ[eid] : 0;
-      },
-      get rotationX() {
-        return hasTransform ? Transform.eulerX[eid] : 0;
-      },
-      get rotationY() {
-        return hasTransform ? Transform.eulerY[eid] : 0;
-      },
-      get rotationZ() {
-        return hasTransform ? Transform.eulerZ[eid] : 0;
-      },
-      get scaleX() {
-        return hasTransform ? Transform.scaleX[eid] : 1;
-      },
-      get scaleY() {
-        return hasTransform ? Transform.scaleY[eid] : 1;
-      },
-      get scaleZ() {
-        return hasTransform ? Transform.scaleZ[eid] : 1;
-      },
-    },
-    getComponent(name: string): Component | null {
-      return resolveComponent(state, eid, name);
-    },
-    getComponentInChildren(name: string): Component | null {
-      return findComponentInChildren(state, eid, name);
-    },
-    getComponentInParent(name: string): Component | null {
-      return findComponentInParent(state, eid, name);
-    },
-    StartCoroutine(genOrFn: Generator | (() => Generator)): number {
-      return startCoroutine(state, eid, genOrFn);
-    },
-    StopCoroutine(coroutineId: number): void {
-      stopCoroutine(state, eid, coroutineId);
-    },
-    StopAllCoroutines(): void {
-      stopAllCoroutines(state, eid);
-    },
-  };
 }
 
 function shouldWaitForGltf(state: State, eid: number): boolean {
@@ -383,7 +451,7 @@ export const EntityScriptCollisionBridgeSystem: System = {
   update(state: State): void {
     if (state.headless) return;
 
-    const enteredPairs = new Set<string>();
+    _enteredPairs.clear();
 
     for (const eid of touchedWithScriptQuery(state.world)) {
       if (MonoBehaviour.ready[eid] !== 1 || MonoBehaviour.enabled[eid] !== 1)
@@ -397,17 +465,17 @@ export const EntityScriptCollisionBridgeSystem: System = {
       addActiveCollisionPair(state, eid, other, trigger);
 
       if (!alreadyTracked) {
-        enteredPairs.add(`${eid}:${other}`);
+        _enteredPairs.add(collisionPairKey(eid, other));
 
         const resolved = resolveModule(state, eid);
         if (!resolved) continue;
 
         const ctx = buildContext(state, eid);
-        const otherObj: CollisionOther = { entity: other };
+        _collisionOther.entity = other;
         if (trigger) {
-          resolved.mod.onTriggerEnter?.(ctx, otherObj);
+          resolved.mod.onTriggerEnter?.(ctx, _collisionOther);
         } else {
-          resolved.mod.onCollisionEnter?.(ctx, otherObj);
+          resolved.mod.onCollisionEnter?.(ctx, _collisionOther);
         }
       }
     }
@@ -425,11 +493,11 @@ export const EntityScriptCollisionBridgeSystem: System = {
       if (!resolved) continue;
 
       const ctx = buildContext(state, eid);
-      const otherObj: CollisionOther = { entity: other };
+      _collisionOther.entity = other;
       if (wasTrigger) {
-        resolved.mod.onTriggerExit?.(ctx, otherObj);
+        resolved.mod.onTriggerExit?.(ctx, _collisionOther);
       } else {
-        resolved.mod.onCollisionExit?.(ctx, otherObj);
+        resolved.mod.onCollisionExit?.(ctx, _collisionOther);
       }
     }
 
@@ -451,12 +519,12 @@ export const EntityScriptCollisionBridgeSystem: System = {
           others.delete(other);
           continue;
         }
-        if (enteredPairs.has(`${eid}:${other}`)) continue;
-        const otherObj: CollisionOther = { entity: other };
+        if (_enteredPairs.has(collisionPairKey(eid, other))) continue;
+        _collisionOther.entity = other;
         if (trigger) {
-          resolved.mod.onTriggerStay?.(ctx, otherObj);
+          resolved.mod.onTriggerStay?.(ctx, _collisionOther);
         } else {
-          resolved.mod.onCollisionStay?.(ctx, otherObj);
+          resolved.mod.onCollisionStay?.(ctx, _collisionOther);
         }
       }
       if (others.size === 0) {

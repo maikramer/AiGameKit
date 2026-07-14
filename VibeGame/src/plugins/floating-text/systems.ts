@@ -113,9 +113,18 @@ export const FloatingTextUpdateSystem: System = {
       }
 
       const opacity = Math.min(1, Math.max(0, 2 * (1 - elapsed / duration)));
-      obj.fillOpacity = opacity;
-      obj.outlineOpacity = opacity;
-      obj.sync();
+      // Troika sync() rebuilds glyphs — only call when opacity actually moves.
+      if (
+        Math.abs(obj.fillOpacity - opacity) > 0.01 ||
+        Math.abs(obj.outlineOpacity - opacity) > 0.01
+      ) {
+        obj.fillOpacity = opacity;
+        obj.outlineOpacity = opacity;
+        obj.sync();
+      } else {
+        obj.fillOpacity = opacity;
+        obj.outlineOpacity = opacity;
+      }
     }
 
     for (const [entity, obj] of objects) {

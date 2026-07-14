@@ -359,12 +359,12 @@ export const DistanceCullSystem: System = {
 
       const dx = WorldTransform.posX[eid] - camX;
       const dz = WorldTransform.posZ[eid] - camZ;
-      const dist = Math.sqrt(dx * dx + dz * dz);
+      const distSq = dx * dx + dz * dz;
 
       const wasCulled = DistanceCull.culled[eid] === 1;
-      const shouldCull = wasCulled
-        ? dist >= maxDist * HYSTERESIS
-        : dist > maxDist;
+      const maxSq = maxDist * maxDist;
+      const hystSq = maxSq * HYSTERESIS * HYSTERESIS;
+      const shouldCull = wasCulled ? distSq >= hystSq : distSq > maxSq;
 
       if (shouldCull === wasCulled) continue;
 
@@ -701,7 +701,7 @@ export const LightSyncSystem: System = {
         }
         if (shadowChanged) shadowCamera.updateProjectionMatrix();
 
-        // Shadow frustum follows the player — keep this tracking per-frame.
+        // Shadow frustum follows the player — skip matrix work when still.
         const shadowCenter = resolveShadowCenter(state);
         _lightPos
           .copy(shadowCenter)
@@ -711,12 +711,21 @@ export const LightSyncSystem: System = {
               .multiplyScalar(DirectionalLight.distance[entity])
           );
 
-        light.position.copy(_lightPos);
-        light.target.position.copy(shadowCenter);
-        light.target.updateMatrixWorld();
-        shadowCamera.position.copy(_lightPos);
-        shadowCamera.lookAt(shadowCenter);
-        shadowCamera.updateMatrixWorld();
+        const centerMoved =
+          Math.abs(light.target.position.x - shadowCenter.x) > 0.05 ||
+          Math.abs(light.target.position.y - shadowCenter.y) > 0.05 ||
+          Math.abs(light.target.position.z - shadowCenter.z) > 0.05 ||
+          Math.abs(light.position.x - _lightPos.x) > 0.05 ||
+          Math.abs(light.position.y - _lightPos.y) > 0.05 ||
+          Math.abs(light.position.z - _lightPos.z) > 0.05;
+        if (centerMoved) {
+          light.position.copy(_lightPos);
+          light.target.position.copy(shadowCenter);
+          light.target.updateMatrixWorld();
+          shadowCamera.position.copy(_lightPos);
+          shadowCamera.lookAt(shadowCenter);
+          shadowCamera.updateMatrixWorld();
+        }
       } else {
         light.castShadow = false;
       }
