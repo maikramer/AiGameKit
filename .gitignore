@@ -123,6 +123,7 @@ VibeGame/examples/simple-rpg/public/assets/icons/
 VibeGame/examples/simple-rpg/public/assets/audio/
 VibeGame/examples/simple-rpg/public/assets/sky/
 VibeGame/examples/simple-rpg/public/assets/terrain/
+VibeGame/examples/simple-rpg/public/assets/particles/
 # Manter a estrutura de pastas (.gitkeep) mesmo sem assets
 !VibeGame/examples/simple-rpg/public/assets/**/.gitkeep
 # Marker written by scripts/fetch-assets.mjs (prebuilt asset bundle version)
