@@ -188,18 +188,14 @@ def gltf_transform_finish(
     opcional. Quando ``glb_in == glb_out``, escreve in-place após pipeline
     em tempdir.
 
-    Nota: ``apply_meshopt`` é **ignorado** (no-op). A quantização
-    (EXT_meshopt_compression) foi removida porque produzia POSITION SHORT sem
-    ``KHR_mesh_quantization`` (GLB inválido que o Blender não consegue importar)
-    e dessincronizava a origem do armature em meshes rigged. O parâmetro mantém-se
-    na assinatura para compatibilidade retroativa mas não tem efeito.
+    ``apply_meshopt`` ativa ``EXT_meshopt_compression`` + ``KHR_mesh_quantization``
+    via ``@gltf-transform/cli meshopt``. A versão 4.x da CLI emite
+    ``KHR_mesh_quantization`` corretamente (o bug histórico "POSITION SHORT sem
+    extensão" foi corrigido) e preserva skins/animações em meshes rigged.
+    Atenção: a quantização de POSITION (componentType SHORT) é incompatível com
+    sistemas que exigem POSITION float32 (ex.: colliders trimesh carregados
+    diretamente do mesh visual); usar colliders dedicados nesses casos.
     """
-    if apply_meshopt:
-        log.warning(
-            "gltf_transform_finish: apply_meshopt=True ignorado (quantização removida). "
-            "Os LODs saem em FLOAT; sem EXT_meshopt_compression."
-        )
-        apply_meshopt = False
     glb_in = Path(glb_in).resolve()
     glb_out = Path(glb_out).resolve()
     glb_out.parent.mkdir(parents=True, exist_ok=True)
