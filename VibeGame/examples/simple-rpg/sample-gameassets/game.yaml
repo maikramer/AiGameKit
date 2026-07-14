@@ -30,6 +30,7 @@ text3d:
   export_origin: feet
 paint3d:
   preserve_origin: true
+  texture_size: 2048
 rigging3d:
   output_suffix: _rigged
 animator3d:

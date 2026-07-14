@@ -4,7 +4,7 @@
 // only (a) grants points and (b) registers the skill definitions the SkillsTab
 // reads from the data registry.
 import { ProgressionComponent, getDataRegistry } from 'vibegame';
-import type { State } from 'vibegame';
+import type { SkillDef, State } from 'vibegame';
 import { engineState, heroEid } from './engine-bridge';
 
 // Resolved hero progress shared across gameplay modules.
@@ -35,46 +35,135 @@ export function getSkillPoints(): number {
   return h ? (ProgressionComponent.unspentPoints[h] ?? 0) : 0;
 }
 
-/**
- * Register the three skills with the engine data registry so the SkillsTab can
- * list them. All three are stat-modifiers applied by HeroStatsSystem in
- * main.ts: Vitality → max HP, Strength → bomb attack damage (heroStats.
- * attackBonus), Agility → PlayerController.speed.
- */
-export function registerGameSkills(state: State = engineState()!): void {
-  if (!state) return;
-  const reg = getDataRegistry(state);
-  reg.register('skill', 'vitality', {
+const GAME_SKILLS: readonly SkillDef[] = [
+  {
     id: 'vitality',
     name: 'Vitality',
     description: '+12 max HP per rank',
+    icon: '♥',
     maxRank: 5,
     cost: 1,
+    tier: 0,
+    column: 0,
     effect: {
       kind: 'stat-modifier',
       payload: { stat: 'maxHp', magnitude: 12, stackMode: 'stack' },
     },
-  });
-  reg.register('skill', 'strength', {
+  },
+  {
     id: 'strength',
     name: 'Strength',
-    description: '+attack power',
+    description: '+5 attack per rank',
+    icon: '⚔',
     maxRank: 5,
     cost: 1,
+    tier: 0,
+    column: 1,
     effect: {
       kind: 'stat-modifier',
       payload: { stat: 'attack', magnitude: 5, stackMode: 'stack' },
     },
-  });
-  reg.register('skill', 'agility', {
+  },
+  {
     id: 'agility',
     name: 'Agility',
-    description: '+move speed',
+    description: '+0.4 move speed per rank',
+    icon: '✧',
     maxRank: 5,
     cost: 1,
+    tier: 0,
+    column: 2,
     effect: {
       kind: 'stat-modifier',
       payload: { stat: 'moveSpeed', magnitude: 0.4, stackMode: 'stack' },
     },
-  });
+  },
+  {
+    id: 'fortitude',
+    name: 'Fortitude',
+    description: '+18 max HP per rank (requires Vitality)',
+    icon: '🛡',
+    maxRank: 3,
+    cost: 1,
+    tier: 1,
+    column: 0,
+    requires: ['vitality'],
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'maxHp', magnitude: 18, stackMode: 'stack' },
+    },
+  },
+  {
+    id: 'power',
+    name: 'Power',
+    description: '+8 attack per rank (requires Strength)',
+    icon: '⚡',
+    maxRank: 3,
+    cost: 1,
+    tier: 1,
+    column: 1,
+    requires: ['strength'],
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'attack', magnitude: 8, stackMode: 'stack' },
+    },
+  },
+  {
+    id: 'swift',
+    name: 'Swift',
+    description: '+0.55 move speed per rank (requires Agility)',
+    icon: '➳',
+    maxRank: 3,
+    cost: 1,
+    tier: 1,
+    column: 2,
+    requires: ['agility'],
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'moveSpeed', magnitude: 0.55, stackMode: 'stack' },
+    },
+  },
+  {
+    id: 'titan',
+    name: 'Titan',
+    description: '+10 attack per rank (requires Fortitude + Power)',
+    icon: '♛',
+    maxRank: 2,
+    cost: 2,
+    tier: 2,
+    column: 0,
+    requires: ['fortitude', 'power'],
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'attack', magnitude: 10, stackMode: 'stack' },
+    },
+  },
+  {
+    id: 'windwalker',
+    name: 'Windwalker',
+    description: '+0.7 move speed (requires Swift)',
+    icon: '☁',
+    maxRank: 2,
+    cost: 2,
+    tier: 2,
+    column: 2,
+    requires: ['swift'],
+    effect: {
+      kind: 'stat-modifier',
+      payload: { stat: 'moveSpeed', magnitude: 0.7, stackMode: 'stack' },
+    },
+  },
+];
+
+/**
+ * Register the skill tree with the engine data registry so the SkillsTab can
+ * list them. Stat-modifiers are applied by HeroStatsSystem in main.ts via
+ * getStatModifiers (maxHp / attack / moveSpeed).
+ */
+export function registerGameSkills(state: State = engineState()!): void {
+  if (!state) return;
+  const reg = getDataRegistry(state);
+  for (const skill of GAME_SKILLS) {
+    reg.register('skill', skill.id, skill);
+  }
 }

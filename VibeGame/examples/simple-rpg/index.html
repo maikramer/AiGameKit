@@ -57,7 +57,7 @@
                               clareira da bruxa (chefe)
                                         │
          O (-X) PICOS GELADOS ──── CIDADE MURADA ──── L (+X) DESERTO
-         rochedos · goblins          (vale, ±22)      cactos · escorpiões
+         rochedos · goblins          (muralha ±32)    cactos · escorpiões
          cristais · OGRO (final)                      ruínas · VERME
                                         │
                               S (-Z) PÂNTANO
@@ -82,7 +82,7 @@
          GRUPOS SEMÂNTICOS (<Group name="..."> — contentores na origem):
            environment       §0+§1  céu, luz, pós-proc, áudio, clima, biomas
            world-base        §2+§3  terreno (heightfield+NavMesh) + herói
-           city              §4     cidade murada (muralha, praça, vias, casas, mercado)
+           city              §4     cidade murada (sub-grupos: walls/plaza/roads/houses/…)
            valley-outskirts  §5     anel de recursos + goblins de aviso
            biome.forest      §6     Norte — Floresta Sombria
            biome.desert      §7     Leste — Deserto
@@ -101,7 +101,7 @@
          CONTRATOS COM src/main.ts (não alterar sem sincronizar):
            · name="hero" / name="boss" / name="merchant"
            · SpawnExclusion at="0 0" radius="30" (espelha villageZones)
-           · Portões cardeais na muralha ±22 (RESPAWN_POINTS usa ±28)
+           · Portões cardeais na muralha ±32 (RESPAWN_POINTS usa ±39)
            · Banda de goblins do norte começa em z>=40 (segurança do respawn)
            · dialogue-id de cada NPC == id nos JSON em src/data/quests/
          ================================================================== -->
@@ -122,15 +122,10 @@
       <Group name="environment" pos="0 0 0">
         <!-- ============================================================
            §0 CÉU, LUZ, PÓS-PROCESSAMENTO E ÁUDIO
-           Pipeline de realismo pesado (cinematic stylized): sombras PCSS
-           com penumbra real, god rays volumétricos através das árvores,
-           DoF cinematográfico no herói, grão de filme + color grading
-           quente, IBL reforçado. SSR (engine) existe e é seletivo — só
-           meshes shiny (metalness>=0.5+roughness<=0.4, roughness<=0.15
-           ou userData.ssrReflective) refletem — mas fica OFF aqui: neste
-           mapa só as águas qualificam e o ganho visual não paga o custo
-           (re-render da cena em 3 passes internos do SSRPass).
-           Trade-off: performance (esperado <60 FPS em GPU média).
+           Pipeline moderado (stylized): sombras PCSS 2048, SSAO + bloom +
+           fog/grading. DoF / god-rays / film-grain OFF (custo alto, pouco
+           ganho em jogabilidade). SSR OFF (águas usam mirror planar).
+           AdaptiveQuality pode baixar DPR até 0.75 sob pressão.
            ============================================================ -->
         <EquirectSky
           url="/assets/sky/sky.png"
@@ -138,31 +133,20 @@
           background-intensity="1.4"
         ></EquirectSky>
 
-        <!-- Sol mais baixo (~50° em vez de ~80°) + ambient reduzido = sombras
-           realmente visíveis e contraste 3D. PCSS liga penumbra variável
-           (duro no contacto, suave longe) no frustum único de 4096.
-           CSM fica OFF neste mapa: o CSM.js precisa de patch por material
-           para clipar cascatas, e o terreno/água usam CustomShaderMaterial
-           (não patchável — setupCsmMaterial pula de propósito). Com 4
-           cascatas o chão recebia 4x a luz (wash-out) e ficava SEM sombra.
-           Frustum único + PCSS dá a penumbra cinemática sem quebrar a
-           iluminação. -->
+        <!-- Sol baixo + ambient. Shadow 1024 + PCSS lean; CA off; SSAO
+           half via AdaptiveQuality. CSM OFF (CustomShaderMaterial). -->
         <GameObject
           ambient-light="sky-color: 0xfff8f0; ground-color: 0xe0d0a8; intensity: 0.85"
-          directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 1.2; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 4096; distance: 120; pcss: 1"
-          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.25; bloom-radius: 0.5; bloom-threshold: 0.85; chromatic-aberration: 1; ca-strength: 0.0006; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.55; aa: smaa; tone-mapping: agx; tone-mapping-exposure: 1.15; ssao: 1; ssao-intensity: 1.2; ssao-radius: 1.5; depth-of-field: 1; dof-focus-distance: 0.02; dof-focus-range: 0.3; dof-bokeh-scale: 2.2; god-rays: 1; god-rays-density: 0.96; god-rays-decay: 0.92; god-rays-weight: 0.35; god-rays-exposure: 0.6; film-grain: 1; film-grain-opacity: 0.06; color-grading: 1; saturation: 0.12; contrast: 0.10; brightness: 0.02; height-fog: 1; fog-color: 0xc8d0d8; fog-density: 0.012; fog-height: 40; fog-falloff: 0.10"
+          directional-light="color: 0xfff0d0; intensity: 3.2; direction-x: -0.9; direction-y: 1.2; direction-z: -0.5; cast-shadow: 1; shadow-map-size: 1024; distance: 100; pcss: 1"
+          postprocessing="enabled: 1; bloom: 1; bloom-strength: 0.18; bloom-radius: 0.45; bloom-threshold: 0.88; chromatic-aberration: 0; vignette: 1; vignette-offset: 0.30; vignette-darkness: 0.48; aa: fxaa; tone-mapping: agx; tone-mapping-exposure: 1.12; ssao: 1; ssao-intensity: 0.75; ssao-radius: 1.1; depth-of-field: 0; god-rays: 0; film-grain: 0; color-grading: 1; saturation: 0.08; contrast: 0.06; brightness: 0.02; height-fog: 1; fog-color: 0xc8d0d8; fog-density: 0.012; fog-height: 40; fog-falloff: 0.10"
         >
         </GameObject>
 
-        <!-- Adaptive Quality auto-scaler: mede o frame time e só degrada efeitos
-           (pixel ratio, SSAO half-res, point-shadow cadence, god-ray samples,
-           water mirror) quando o FPS cai abaixo de 55 de forma sustentada.
-           Enquanto há headroom GPU, mantém TODA a fidelidade (tier 0 = Max).
-           Colocado aqui para que o scaler proteja a configuração pesada de
-           realismo acima em hardware que não a aguente. -->
+        <!-- Adaptive Quality: target 50; cap DPR 1.0 (hi-DPI phones). -->
         <AdaptiveQuality
-          target-fps="55"
-          min-pixel-ratio="1.0"
+          target-fps="50"
+          min-pixel-ratio="0.75"
+          max-pixel-ratio="1.0"
         ></AdaptiveQuality>
 
         <!-- Mixer + música em camadas (engine AudioPlugin). A camada explore
@@ -290,9 +274,10 @@
           world-size="2000"
           max-height="200"
           levels="4"
-          resolution="128"
+          resolution="96"
+          collision-resolution="32"
           lod-hysteresis="1.3"
-          lod-distance-ratio="2"
+          lod-distance-ratio="2.4"
           height-smoothing="0.3"
           height-smoothing-spread="1.25"
           heightmap="/assets/terrain/heightmap.png"
@@ -317,32 +302,32 @@
       </Group>
       <!-- FIM world-base -->
 
-      <!-- GRUPO "city": a cidade murada central (muralha, praça, vias,
-           casas, mercado, props) e o baú do tesouro. Sub-grupos por zona.
-           Na origem (0 0 0) para não deslocar o vale — mover este Group
-           deslocaria a cidade inteira e tudo dentro dela. -->
+      <!-- GRUPO "city": cidade murada central. Sub-grupos semânticos
+           (pos 0 0 0 — só organização; place=at continua em coords mundo):
+             city.walls · city.plaza · city.roads · city.houses
+             city.forge · city.barn · city.watch · city.chapel
+             city.market · city.longhouse · city.landmarks
+           Mover o Group raiz desloca a cidade inteira. -->
       <Group name="city" pos="0 0 0">
         <!-- ============================================================
-           §4 CIDADE MURADA (VALE) — |x|,|z| ≲ 32.
-           Expansão: muralha ampliada de ±22 para ±32, mais edifícios, e
-           rio deslocado ~20 m para sul (z≈-62) para abrir o vale exterior.
-           A exclusão impede vegetação de nascer na cidade e nos 4
-           corredores de saída (DynamicSpawners de inimigos ficam sempre
-           fora, a ≥45 do centro — não respeitam SpawnExclusion).
+           §4 CIDADE MURADA (VALE) — muralha ±32.
+           Distritos: N sagrado/vigia · NW quinta · SW forja · SE mercado/ancião.
+           Praça 16×16 no centro; vias cardeais + anel interno.
+           SpawnExclusion impede vegetação; DynamicSpawners ≥45 do centro.
            ============================================================ -->
         <SpawnExclusion at="0 0" radius="42"></SpawnExclusion>
 
-        <!-- Pad de assentamento: aplaina o terreno sob a cidade inteira
-           (muralha ±32 + respawns ±39) antes de qualquer placement, com
-           anel de blend de 16 m de volta ao relevo natural. Sem ele, o
-           terreno acidentado deixa muros e casas com cantos flutuando. -->
+        <!-- Pad de assentamento: núcleo plano TEM de cobrir muralha ±32 e
+           casamatas ±28. half=52 (size 104) − corner 8 → eixo plano ≥44;
+           falloff 10 só no anel exterior (antes falloff 16 comia a muralha). -->
         <TerrainPad
           at="0 0"
-          size="88 88"
-          falloff="16"
-          corner-radius="14"
+          size="104 104"
+          falloff="10"
+          corner-radius="8"
         ></TerrainPad>
 
+        <Group name="city.walls" pos="0 0 0">
         <!-- §4.1 Muralha quadrada ampliada (semi-lado 32, altura 3.5) com 4
            portões cardeais (vão de 8 m centrado em cada eixo) + ameias no
            topo + torres de canto reforçadas. collider=auto → bloqueia o
@@ -358,16 +343,16 @@
                Vão do portão: ±4. Cada segmento: de ±4 a ±31.1 = comprimento 27.1,
                centro ±17.55. Liga as torres ao vão sem sobrepor o portão. -->
           <Box
-            pos="-17.55 1.75 32"
-            size="27.1 3.5 0.7"
+            pos="-17.55 1.0 32"
+            size="27.1 5.0 0.7"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="7 2"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="17.55 1.75 32"
-            size="27.1 3.5 0.7"
+            pos="17.55 1.0 32"
+            size="27.1 5.0 0.7"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="7 2"
@@ -375,16 +360,16 @@
           ></Box>
           <!-- Sul (z=-32) -->
           <Box
-            pos="-17.55 1.75 -32"
-            size="27.1 3.5 0.7"
+            pos="-17.55 1.0 -32"
+            size="27.1 5.0 0.7"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="7 2"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="17.55 1.75 -32"
-            size="27.1 3.5 0.7"
+            pos="17.55 1.0 -32"
+            size="27.1 5.0 0.7"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="7 2"
@@ -392,16 +377,16 @@
           ></Box>
           <!-- Leste (x=+32) -->
           <Box
-            pos="32 1.75 -17.55"
-            size="0.7 3.5 27.1"
+            pos="32 1.0 -17.55"
+            size="0.7 5.0 27.1"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 7"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="32 1.75 17.55"
-            size="0.7 3.5 27.1"
+            pos="32 1.0 17.55"
+            size="0.7 5.0 27.1"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 7"
@@ -409,16 +394,16 @@
           ></Box>
           <!-- Oeste (x=-32) -->
           <Box
-            pos="-32 1.75 -17.55"
-            size="0.7 3.5 27.1"
+            pos="-32 1.0 -17.55"
+            size="0.7 5.0 27.1"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 7"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="-32 1.75 17.55"
-            size="0.7 3.5 27.1"
+            pos="-32 1.0 17.55"
+            size="0.7 5.0 27.1"
             color="#6a5236"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 7"
@@ -481,29 +466,29 @@
           <Box pos="-32 3.85 29" size="0.75 0.7 0.8" color="#5a4530"></Box>
           <!-- Torres de canto (mais altas e largas que a muralha, com telhado cónico) -->
           <Box
-            pos="32 2.4 32"
-            size="1.8 4.8 1.8"
+            pos="32 1.65 32"
+            size="1.8 6.3 1.8"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 3"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="-32 2.4 32"
-            size="1.8 4.8 1.8"
+            pos="-32 1.65 32"
+            size="1.8 6.3 1.8"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 3"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="32 2.4 -32"
-            size="1.8 4.8 1.8"
+            pos="32 1.65 -32"
+            size="1.8 6.3 1.8"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 3"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="-32 2.4 -32"
-            size="1.8 4.8 1.8"
+            pos="-32 1.65 -32"
+            size="1.8 6.3 1.8"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 3"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
@@ -518,14 +503,14 @@
           <Box pos="32 5.8 -32" size="1.6 0.4 1.6" color="#6a2b1a"></Box>
           <Box pos="-32 5.8 -32" size="1.6 0.4 1.6" color="#6a2b1a"></Box>
           <!-- Postes de portão (enquadram cada vão central de 8 m) -->
-          <Box pos="-4.5 2.0 32" size="0.6 4.0 0.8" color="#4a3018"></Box>
-          <Box pos="4.5 2.0 32" size="0.6 4.0 0.8" color="#4a3018"></Box>
-          <Box pos="-4.5 2.0 -32" size="0.6 4.0 0.8" color="#4a3018"></Box>
-          <Box pos="4.5 2.0 -32" size="0.6 4.0 0.8" color="#4a3018"></Box>
-          <Box pos="32 2.0 -4.5" size="0.8 4.0 0.6" color="#4a3018"></Box>
-          <Box pos="32 2.0 4.5" size="0.8 4.0 0.6" color="#4a3018"></Box>
-          <Box pos="-32 2.0 -4.5" size="0.8 4.0 0.6" color="#4a3018"></Box>
-          <Box pos="-32 2.0 4.5" size="0.8 4.0 0.6" color="#4a3018"></Box>
+          <Box pos="-4.5 1.25 32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+          <Box pos="4.5 1.25 32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+          <Box pos="-4.5 1.25 -32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+          <Box pos="4.5 1.25 -32" size="0.6 5.5 0.8" color="#4a3018"></Box>
+          <Box pos="32 1.25 -4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+          <Box pos="32 1.25 4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+          <Box pos="-32 1.25 -4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
+          <Box pos="-32 1.25 4.5" size="0.8 5.5 0.6" color="#4a3018"></Box>
         </Composition>
 
         <!-- §4.2 Portões ampliados: arco de pedra + lintel + braseiro
@@ -536,132 +521,175 @@
            pontuais e as 12 estão reservadas para praça/casas/biomas. -->
         <!-- Portão NORTE → Floresta -->
         <Composition
-          place="at: 0 32; align-to-terrain: 0"
+          place="at: 0 0; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
           <!-- Arco de pedra (lintel + impostas laterais) -->
           <Box
-            pos="0 4.0 0"
+            pos="0 4 32"
             size="9.5 0.6 0.9"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="4 1"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="-4.5 2.8 0"
+            pos="-4.5 2.8 32"
             size="0.7 2.8 0.9"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="1 2"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="4.5 2.8 0"
+            pos="4.5 2.8 32"
             size="0.7 2.8 0.9"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="1 2"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <!-- Mastro + estandarte -->
-          <Box pos="-3.5 5.0 0" size="0.12 1.6 0.12" color="#5a3a20"></Box>
-          <Box pos="-3.0 5.3 0" size="0.8 1.0 0.06" color="#2a5a34"></Box>
+          <Box pos="-3.5 5 32" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+          <Box pos="-3 5.3 32" size="0.8 1.0 0.06" color="#2a5a34"></Box>
           <!-- Braseiro -->
-          <Sphere pos="0 4.5 0" size="0.18" color="#ffaa33"></Sphere>
+          <Sphere pos="0 4.5 32" size="0.18" color="#ffaa33"></Sphere>
         </Composition>
         <!-- Portão SUL → Pântano -->
         <Composition
-          place="at: 0 -32; align-to-terrain: 0"
+          place="at: 0 0; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
           <Box
-            pos="0 4.0 0"
+            pos="0 4 -32"
             size="9.5 0.6 0.9"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="4 1"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="-4.5 2.8 0"
+            pos="-4.5 2.8 -32"
             size="0.7 2.8 0.9"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="1 2"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="4.5 2.8 0"
+            pos="4.5 2.8 -32"
             size="0.7 2.8 0.9"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="1 2"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
-          <Box pos="3.5 5.0 0" size="0.12 1.6 0.12" color="#5a3a20"></Box>
-          <Box pos="3.0 5.3 0" size="0.8 1.0 0.06" color="#3a5a40"></Box>
-          <Sphere pos="0 4.5 0" size="0.18" color="#ffaa33"></Sphere>
+          <Box pos="3.5 5 -32" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+          <Box pos="3 5.3 -32" size="0.8 1.0 0.06" color="#3a5a40"></Box>
+          <Sphere pos="0 4.5 -32" size="0.18" color="#ffaa33"></Sphere>
         </Composition>
         <!-- Portão LESTE → Deserto -->
         <Composition
-          place="at: 32 0; align-to-terrain: 0"
+          place="at: 0 0; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
           <Box
-            pos="0 4.0 0"
+            pos="32 4 0"
             size="0.9 0.6 9.5"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="1 4"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="0 2.8 -4.5"
+            pos="32 2.8 -4.5"
             size="0.9 2.8 0.7"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 1"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="0 2.8 4.5"
+            pos="32 2.8 4.5"
             size="0.9 2.8 0.7"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 1"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
-          <Box pos="0 5.0 -3.5" size="0.12 1.6 0.12" color="#5a3a20"></Box>
-          <Box pos="0 5.3 -3.0" size="0.06 1.0 0.8" color="#c28a3a"></Box>
-          <Sphere pos="0 4.5 0" size="0.18" color="#ffaa33"></Sphere>
+          <Box pos="32 5 -3.5" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+          <Box pos="32 5.3 -3" size="0.06 1.0 0.8" color="#c28a3a"></Box>
+          <Sphere pos="32 4.5 0" size="0.18" color="#ffaa33"></Sphere>
         </Composition>
         <!-- Portão OESTE → Picos -->
         <Composition
-          place="at: -32 0; align-to-terrain: 0"
+          place="at: 0 0; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
           <Box
-            pos="0 4.0 0"
+            pos="-32 4 0"
             size="0.9 0.6 9.5"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="1 4"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="0 2.8 -4.5"
+            pos="-32 2.8 -4.5"
             size="0.9 2.8 0.7"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 1"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
           <Box
-            pos="0 2.8 4.5"
+            pos="-32 2.8 4.5"
             size="0.9 2.8 0.7"
             texture-url="/assets/textures/mountain_stone.png"
             texture-repeat="2 1"
             normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"
           ></Box>
-          <Box pos="0 5.0 3.5" size="0.12 1.6 0.12" color="#5a3a20"></Box>
-          <Box pos="0 5.3 3.0" size="0.06 1.0 0.8" color="#5a8ab0"></Box>
-          <Sphere pos="0 4.5 0" size="0.18" color="#ffaa33"></Sphere>
+          <Box pos="-32 5 3.5" size="0.12 1.6 0.12" color="#5a3a20"></Box>
+          <Box pos="-32 5.3 3" size="0.06 1.0 0.8" color="#5a8ab0"></Box>
+          <Sphere pos="-32 4.5 0" size="0.18" color="#ffaa33"></Sphere>
         </Composition>
 
+        <!-- §4.2b Casamatas — place at 0 0 (mesmo Y muralha); offset local ±24.
+           Fundação enterrada (~1.2 m) tapa gaps em depressões residuais. -->
+        <Composition place="at: 0 0; align-to-terrain: 0" body="fixed" collider="auto">
+          <!-- N -->
+          <Box pos="-6 0.5 24" size="2.2 3.4 2.0" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="-6 2.15 24" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+          <Box pos="-6 0.9 25" size="0.85 1.5 0.08" color="#4a3020"></Box>
+          <Sphere pos="-6 2.5 24" size="0.12" color="#ffaa44"></Sphere>
+          <Box pos="6 0.5 24" size="2.2 3.4 2.0" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="6 2.15 24" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+          <Box pos="6 0.9 25" size="0.85 1.5 0.08" color="#4a3020"></Box>
+          <Sphere pos="6 2.5 24" size="0.12" color="#ffaa44"></Sphere>
+          <!-- S -->
+          <Box pos="-6 0.5 -24" size="2.2 3.4 2.0" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="-6 2.15 -24" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+          <Box pos="-6 0.9 -25" size="0.85 1.5 0.08" color="#4a3020"></Box>
+          <Sphere pos="-6 2.5 -24" size="0.12" color="#ffaa44"></Sphere>
+          <Box pos="6 0.5 -24" size="2.2 3.4 2.0" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="6 2.15 -24" size="2.6 0.22 2.4" color="#7a3b28"></Box>
+          <Box pos="6 0.9 -25" size="0.85 1.5 0.08" color="#4a3020"></Box>
+          <Sphere pos="6 2.5 -24" size="0.12" color="#ffaa44"></Sphere>
+          <!-- E -->
+          <Box pos="24 0.5 -6" size="2.0 3.4 2.2" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="24 2.15 -6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+          <Box pos="25 0.9 -6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+          <Sphere pos="24 2.5 -6" size="0.12" color="#ffaa44"></Sphere>
+          <Box pos="24 0.5 6" size="2.0 3.4 2.2" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="24 2.15 6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+          <Box pos="25 0.9 6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+          <Sphere pos="24 2.5 6" size="0.12" color="#ffaa44"></Sphere>
+          <!-- O -->
+          <Box pos="-24 0.5 -6" size="2.0 3.4 2.2" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="-24 2.15 -6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+          <Box pos="-25 0.9 -6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+          <Sphere pos="-24 2.5 -6" size="0.12" color="#ffaa44"></Sphere>
+          <Box pos="-24 0.5 6" size="2.0 3.4 2.2" color="#6a5236" texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 2" normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="-24 2.15 6" size="2.4 0.22 2.6" color="#7a3b28"></Box>
+          <Box pos="-25 0.9 6" size="0.08 1.5 0.85" color="#4a3020"></Box>
+          <Sphere pos="-24 2.5 6" size="0.12" color="#ffaa44"></Sphere>
+        </Composition>
+
+        </Group>
+        <Group name="city.plaza" pos="0 0 0">
         <!-- §4.3 PRAÇA CENTRAL (pad 16×16): poço, fogueira comunitária,
            mastro com a bandeira e bancos. O herói nasce no centro.
            Rotações de raiz (transform="rotation: …") são em GRAUS;
@@ -705,7 +733,7 @@
           <Sphere pos="0 1.05 0" size="0.32" color="#ffcc33"></Sphere>
           <PointLight
             pos="0 1.1 0"
-            point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2; cast-shadow: 1"
+            point-light="color: 0xff8a33; intensity: 3; distance: 10; decay: 2; cast-shadow: 0"
           ></PointLight>
         </Composition>
         <!-- Mastro com a bandeira da cidade junto ao poço -->
@@ -743,6 +771,98 @@
           ></GLTFLoader>
         </GameObject>
 
+        <!-- §4.3d Densidade da praça (só Composition — funciona sem GLB). -->
+        <Composition place="at: -4 -4; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.28 0" size="1.4 0.12 0.45" color="#6b4a2b"></Box>
+          <Box pos="-0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+          <Box pos="0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+        </Composition>
+        <Composition place="at: 3 5; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.28 0" size="1.4 0.12 0.45" color="#6b4a2b"></Box>
+          <Box pos="-0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+          <Box pos="0.55 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+        </Composition>
+        <Composition place="at: -8 2; align-to-terrain: 0" body="fixed" collider="none">
+          <Cylinder pos="0 0.25 0" size="0.4 0.4 0.5" color="#6a5236"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="1 1"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Cylinder>
+          <Sphere pos="0 0.55 0.1" size="0.12" color="#7ab040"></Sphere>
+          <Sphere pos="0.15 0.55 -0.1" size="0.1" color="#c45a7a"></Sphere>
+        </Composition>
+        <Composition place="at: 8 2; align-to-terrain: 0" body="fixed" collider="none">
+          <Cylinder pos="0 0.25 0" size="0.4 0.4 0.5" color="#6a5236"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="1 1"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Cylinder>
+          <Sphere pos="-0.1 0.55 0" size="0.12" color="#e8d080"></Sphere>
+          <Sphere pos="0.12 0.55 0.1" size="0.1" color="#7ab040"></Sphere>
+        </Composition>
+        <!-- Poço Composition (placeholder enquanto GLB regenera; fica junto ao GameObject) -->
+        <Composition place="at: -6 5; align-to-terrain: 0" body="fixed" collider="auto">
+          <Cylinder pos="0 0.45 0" size="0.95 0.95 0.9" color="#7a6a5a"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 1"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Cylinder>
+          <Cylinder pos="0 0.95 0" size="1.05 1.05 0.18" color="#5a4a3a"></Cylinder>
+          <Cylinder pos="0 0.35 0" size="0.55 0.55 0.7" color="#1a3040"></Cylinder>
+          <Box pos="0 1.15 0" size="1.3 0.08 0.12" color="#4a3020"></Box>
+          <Box pos="0.55 1.0 0" size="0.08 0.4 0.08" color="#4a3020"></Box>
+        </Composition>
+        <!-- Totens de distrito nos 4 cantos da praça -->
+        <Composition place="at: 9 9; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+          <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#3a5a8a"></Box>
+        </Composition>
+        <Composition place="at: -9 9; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+          <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#4a6a3a"></Box>
+        </Composition>
+        <Composition place="at: -9 -9; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+          <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#8a4a32"></Box>
+        </Composition>
+        <Composition place="at: 9 -9; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.9 0" size="0.15 1.8 0.15" color="#5a3a20"></Box>
+          <Box pos="0.35 1.5 0" size="0.55 0.4 0.06" color="#b03b3b"></Box>
+        </Composition>
+        <!-- §4.6 Quadro de avisos (borda sul da praça, junto à via) -->
+        <Composition
+          place="at: 4 -10; align-to-terrain: 0"
+          body="fixed"
+          collider="auto"
+        >
+          <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+          <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
+          <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
+          <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
+          <Box pos="0 1.9 0" size="2.0 0.14 0.3" color="#4a3018"></Box>
+        </Composition>
+        <!-- §4.7 Tochas da praça (2 com luz — orçamento de PointLights) -->
+        <Composition
+          place="at: 7 7; align-to-terrain: 0"
+          body="fixed"
+          collider="none"
+        >
+          <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+          <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+          <PointLight
+            pos="0 2.05 0"
+            point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+          ></PointLight>
+        </Composition>
+        <Composition
+          place="at: -7 -7; align-to-terrain: 0"
+          body="fixed"
+          collider="none"
+        >
+          <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
+          <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
+          <PointLight
+            pos="0 2.05 0"
+            point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
+          ></PointLight>
+        </Composition>
+
+        </Group>
+        <Group name="city.roads" pos="0 0 0">
         <!-- §4.3b Vias empedradas: praça central (<Pad>) + estradas <Road>
            para os 4 portões. As estradas nascem enterradas no núcleo da
            praça (end-feather-start 0 → junção sólida) e continuam além dos
@@ -821,20 +941,129 @@
           normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
         ></Road>
 
-        <!-- Estrada OESTE (→ Picos Gelados) -->
+        <!-- Estrada OESTE (→ Picos): PARA na margem este do rio; a ponte
+           cruza; retoma a oeste do canal. -->
         <Road
-          path="-3 0  -36 0  -50 -3  -62 -2"
+          path="-3 0  -36 0  -48 -1"
           width="5.4"
           flatten="true"
           texture-scale="16"
           edge-feather="1.1"
           edge-noise="0.45"
           end-feather-start="2"
-          end-feather-end="4"
+          end-feather-end="3"
+          texture-url="/assets/textures/cobblestone_road.png"
+          normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+        ></Road>
+        <!-- Estrada OESTE (retoma após o rio → Picos Gelados) -->
+        <Road
+          path="-70 -2  -82 -3  -95 -2"
+          width="5.0"
+          flatten="true"
+          texture-scale="16"
+          edge-feather="1.1"
+          edge-noise="0.45"
+          end-feather-start="3"
+          end-feather-end="5"
           texture-url="/assets/textures/cobblestone_road.png"
           normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
         ></Road>
 
+        <!-- §4.3c Vias internas (anel entre praça e distritos) — cobble
+           estreito; não flatten agressivo (só liga cantos da praça). -->
+        <Road
+          path="8 8  16 10  18 6"
+          width="3.2"
+          flatten="true"
+          texture-scale="16"
+          edge-feather="0.9"
+          edge-noise="0.4"
+          end-feather-start="1.5"
+          end-feather-end="2.5"
+          texture-url="/assets/textures/cobblestone_road.png"
+          normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+        ></Road>
+        <Road
+          path="-8 8  -14 12  -16 8"
+          width="3.2"
+          flatten="true"
+          texture-scale="16"
+          edge-feather="0.9"
+          edge-noise="0.4"
+          end-feather-start="1.5"
+          end-feather-end="2.5"
+          texture-url="/assets/textures/cobblestone_road.png"
+          normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+        ></Road>
+        <Road
+          path="-8 -8  -12 -14  -16 -18"
+          width="3.2"
+          flatten="true"
+          texture-scale="16"
+          edge-feather="0.9"
+          edge-noise="0.4"
+          end-feather-start="1.5"
+          end-feather-end="2.5"
+          texture-url="/assets/textures/cobblestone_road.png"
+          normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+        ></Road>
+        <Road
+          path="8 -8  10 -12  14 -16"
+          width="3.2"
+          flatten="true"
+          texture-scale="16"
+          edge-feather="0.9"
+          edge-noise="0.4"
+          end-feather-start="1.5"
+          end-feather-end="2.5"
+          texture-url="/assets/textures/cobblestone_road.png"
+          normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+        ></Road>
+
+        <!-- Postes de lanterna ao longo das vias cardeais (sem PointLight). -->
+        <Composition place="at: 4 16; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: -4 16; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: 4 -16; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: -4 -16; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: 16 4; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: 16 -4; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: -16 4; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+        <Composition place="at: -16 -4; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 1.1 0" size="0.12 2.2 0.12" color="#3a2414"></Box>
+          <Box pos="0 2.3 0" size="0.4 0.08 0.4" color="#2a1a10"></Box>
+          <Sphere pos="0 2.15 0" size="0.16" color="#ffb060"></Sphere>
+        </Composition>
+
+        </Group>
+        <Group name="city.houses" pos="0 0 0">
         <!-- ============================================================
            §4.4 CASAS — anel em volta da praça, portas viradas para ela.
            Blueprint comum (variante A, 5×6 m): soco de pedra + piso de
@@ -843,10 +1072,10 @@
            degraus + cumeeira. A geometria do telhado assenta no topo da
            parede (beiral y=2.6, cumeeira y≈4.53) — nada de lajes soltas.
            ============================================================ -->
-        <!-- Casa A (NE da praça, porta virada a oeste para a via N-S) -->
+        <!-- Casa A (E da praça / distrito residencial, porta a oeste p/ via N-S) -->
         <Composition
           transform="rotation: 0 -90 0"
-          place="at: 20 12; align-to-terrain: 0"
+          place="at: 22 8; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
@@ -1126,7 +1355,7 @@
         <!-- Barril de água da chuva no canto da casa B -->
         <GameObject
           transform="scale: 0.6"
-          place="at: -17.6 17.4; align-to-terrain: 0"
+          place="at: -17.8 17.6; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
         >
@@ -1138,7 +1367,7 @@
         <!-- Horta da casa B: canteiro + legumes -->
         <Composition
           transform="rotation: 0 45 0"
-          place="at: -11 18; align-to-terrain: 0"
+          place="at: -12 19; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
@@ -1155,7 +1384,7 @@
            Mesmo blueprint da casa A com chaminé de pedra e reboco quente. -->
         <Composition
           transform="rotation: 0 45 0"
-          place="at: -15 -15; align-to-terrain: 0"
+          place="at: -14 -16; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
@@ -1297,10 +1526,10 @@
           <Box pos="-2.53 1.6 0.6" size="0.05 1.05 0.32" color="#6b4a2b"></Box>
         </Composition>
 
-        <!-- Casa do Pastor (lado oeste, porta virada a norte para a via
-           E-W). Variante B com telhado verde-musgo e palheira anexa. -->
+        <!-- Casa do Pastor (distrito NW/Oeste, junto ao curral; porta a norte
+           para a via E-W). Telhado verde-musgo + palheira. -->
         <Composition
-          place="at: -24 -10; align-to-terrain: 0"
+          place="at: -24 -12; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
@@ -1414,17 +1643,58 @@
           <!-- Palheira anexa (feno) -->
           <Cylinder pos="3.2 0.8 1.2" size="1.1 1.1 1.5" color="#c4a44a"></Cylinder>
           <Cylinder pos="3.2 1.65 1.2" size="1.2 1.2 0.2" color="#b89438"></Cylinder>
-          <!-- Cerca baixa do quintal -->
-          <Box pos="-1.0 0.35 3.4" size="0.08 0.7 0.08" color="#3a2414"></Box>
-          <Box pos="1.0 0.35 3.4" size="0.08 0.7 0.08" color="#3a2414"></Box>
-          <Box pos="0 0.6 3.4" size="2.2 0.06 0.06" color="#5a3a20"></Box>
+          <!-- Cerca baixa do quintal (lado +X — não atravessa a porta +Z) -->
+          <Box pos="3.0 0.35 -1.0" size="0.08 0.7 0.08" color="#3a2414"></Box>
+          <Box pos="3.0 0.35 1.0" size="0.08 0.7 0.08" color="#3a2414"></Box>
+          <Box pos="3.0 0.6 0" size="0.06 0.06 2.2" color="#5a3a20"></Box>
         </Composition>
 
-        <!-- §4.4b FERRARIA / FORJA (SW, frente aberta virada a norte para a
-           via E-W). Tijolo avermelhado, telhado de telha com empenas
-           fechadas, chaminé alta com fumo, forja com brasa e bigorna. -->
+
+        <!-- Varal entre casa B e horta -->
+        <Composition place="at: -13 16.5; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="-1.4 1.1 0" size="0.08 2.2 0.08" color="#4a3018"></Box>
+          <Box pos="1.4 1.1 0" size="0.08 2.2 0.08" color="#4a3018"></Box>
+          <Box pos="0 2.1 0" size="2.9 0.04 0.04" color="#3a2414"></Box>
+          <Box pos="-0.6 1.85 0" size="0.5 0.55 0.04" color="#c8d0d8"></Box>
+          <Box pos="0.5 1.9 0" size="0.45 0.5 0.04" color="#6a3a4a"></Box>
+        </Composition>
+        <!-- Pilha de lenha + cepo junto à casa A (distrito E) -->
+        <Composition place="at: 25 11; align-to-terrain: 0" body="fixed" collider="none">
+          <Cylinder pos="0 0.3 0" size="0.32 0.32 0.6" color="#6b4a2b"></Cylinder>
+          <Box pos="0.6 0.2 0" size="0.8 0.22 0.28" rotation="0 0.3 0.2" color="#5a3a20"></Box>
+          <Box pos="0.7 0.4 -0.15" size="0.7 0.2 0.25" rotation="0 -0.2 0.15" color="#6b4a2b"></Box>
+          <Box pos="0.5 0.55 0.1" size="0.65 0.18 0.22" color="#4a3018"></Box>
+        </Composition>
+        <!-- Bebedouro de pedra no curral -->
+        <Composition place="at: -27 -10; align-to-terrain: 0" body="fixed" collider="auto">
+          <Box pos="0 0.25 0" size="1.6 0.5 0.9" color="#6a5236"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 1"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="0 0.45 0" size="1.3 0.15 0.6" color="#3a5a70"></Box>
+        </Composition>
+        <!-- Curral baixo junto ao pastor (quintal oeste). -->
+        <Composition place="at: -26 -14; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="-2.5 0.4 0" size="0.1 0.8 5.0" color="#5a3a20"></Box>
+          <Box pos="2.5 0.4 0" size="0.1 0.8 5.0" color="#5a3a20"></Box>
+          <Box pos="0 0.4 2.5" size="5.0 0.8 0.1" color="#5a3a20"></Box>
+          <Box pos="-1.5 0.4 -2.5" size="2.0 0.8 0.1" color="#5a3a20"></Box>
+          <Box pos="1.5 0.4 -2.5" size="2.0 0.8 0.1" color="#5a3a20"></Box>
+          <Box pos="0 0.85 0" size="0.08 0.08 4.8" color="#4a3018"></Box>
+        </Composition>
+        <!-- Lenha + cepo no distrito da forja. -->
+        <Composition place="at: -22 -18; align-to-terrain: 0" body="fixed" collider="none">
+          <Cylinder pos="0 0.35 0" size="0.35 0.35 0.7" color="#6b4a2b"></Cylinder>
+          <Box pos="0.7 0.25 0.2" size="0.9 0.25 0.35" rotation="0 0.4 0.3" color="#5a3a20"></Box>
+          <Box pos="0.9 0.45 -0.1" size="0.8 0.25 0.3" rotation="0 -0.3 0.2" color="#6b4a2b"></Box>
+          <Box pos="0.5 0.65 0.15" size="0.7 0.22 0.28" rotation="0 0.2 0.1" color="#4a3018"></Box>
+        </Composition>
+
+        </Group>
+        <Group name="city.forge" pos="0 0 0">
+        <!-- §4.4b FERRARIA / FORJA (distrito SW, fora da via sul; frente
+           aberta a norte). Tijolo, telha, chaminé com fumo, bigorna. -->
         <Composition
-          place="at: -10 -22; align-to-terrain: 0"
+          place="at: -18 -22; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
@@ -1560,26 +1830,27 @@
           <Box pos="1.8 0.5 0.2" size="1.4 0.12 0.7" color="#5a3a20"></Box>
           <Box pos="1.4 0.25 0" size="0.1 0.5 0.1" color="#5a3a20"></Box>
           <Box pos="2.2 0.25 0.4" size="0.1 0.5 0.1" color="#5a3a20"></Box>
-          <!-- Fumo da chaminé -->
+          <!-- Fumo da chaminé (sobe: cone upright + ApplyForce +Y no preset) -->
           <ParticleSystem
             preset="smoke"
             transform="pos: 1.8 6.4 -1.5"
-            particle-emitter="preset: smoke; emission-rate: 12; start-life-min: 3; start-life-max: 6; start-speed-min: 0.4; start-speed-max: 1.0; start-size-min: 0.3; start-size-max: 0.5; start-color: #999999; looping: 1"
+            particle-emitter="preset: smoke; emission-rate: 32; start-life-min: 2.5; start-life-max: 5; start-speed-min: 1.4; start-speed-max: 2.6; start-size-min: 0.7; start-size-max: 1.3; start-color: #aaaaaa; looping: 1; world-space: 1"
           ></ParticleSystem>
           <!-- Brasa/faísca da forja -->
           <ParticleSystem
             preset="fire"
             transform="pos: 0 1.0 -1.1"
-            particle-emitter="preset: fire; emission-rate: 25; start-life-min: 0.3; start-life-max: 0.8; start-speed-min: 0.2; start-speed-max: 0.6; start-size-min: 0.08; start-size-max: 0.15; start-color: #ff6600; looping: 1"
+            particle-emitter="preset: fire; emission-rate: 48; start-life-min: 0.45; start-life-max: 1.2; start-speed-min: 1.4; start-speed-max: 3.2; start-size-min: 0.3; start-size-max: 0.65; start-color: #ff6600; looping: 1; world-space: 1"
           ></ParticleSystem>
         </Composition>
 
-        <!-- §4.4c CELEIRO (NW interior, portas viradas a leste para a via
-           N-S). Plataforma elevada sobre pilares de pedra, telhado de
-           palha de 2 águas com empenas de tábua, escada e sacos. -->
+        </Group>
+        <Group name="city.barn" pos="0 0 0">
+        <!-- §4.4c CELEIRO (distrito NW / quinta, portas a leste). Plataforma
+           sobre pilares, telhado de palha, escada e sacos. -->
         <Composition
           transform="rotation: 0 90 0"
-          place="at: -18 12; align-to-terrain: 0"
+          place="at: -22 18; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
@@ -1704,6 +1975,8 @@
           <Box pos="-1.0 1.5 0.2" size="0.7 0.6 0.6" color="#c4a468"></Box>
         </Composition>
 
+        </Group>
+        <Group name="city.watch" pos="0 0 0">
         <!-- §4.4d TORRE DE VIGIA (GLB text3d+paint3d; ~2 m nativo, scale
            5.0 → ~10 m — a estrutura mais alta da cidade). Canto NE. -->
         <GameObject
@@ -1718,6 +1991,20 @@
             url="/assets/meshes/watchtower_lod0.glb"
           ></GLTFLoader>
         </GameObject>
+
+        <!-- Base Composition da torre (visível sem GLB) + escada de madeira -->
+        <Composition place="at: 26 26; align-to-terrain: 0" body="fixed" collider="auto">
+          <Box pos="0 1.5 0" size="2.4 3.0 2.4" color="#6a5236"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="2 3"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="0 3.3 0" size="2.8 0.25 2.8" color="#5a4530"></Box>
+          <Box pos="0 4.2 0" size="1.8 1.6 1.8" color="#6a5236"></Box>
+          <Box pos="0 5.2 0" size="2.2 0.2 2.2" color="#7a3b28"></Box>
+          <Box pos="1.4 1.6 0" size="0.12 3.0 0.5" rotation="0 0 0.35" color="#5a3a20"></Box>
+          <Box pos="1.5 0.8 0" size="0.5 0.08 0.12" color="#6b4a2b"></Box>
+          <Box pos="1.7 1.5 0" size="0.5 0.08 0.12" color="#6b4a2b"></Box>
+          <Box pos="1.9 2.2 0" size="0.5 0.08 0.12" color="#6b4a2b"></Box>
+        </Composition>
         <!-- Bandeira ao lado da torre de vigia -->
         <Composition
           place="at: 28.5 24; align-to-terrain: 0"
@@ -1729,12 +2016,14 @@
           <Box pos="0.4 6.8 0" size="0.05 0.9 0.6" color="#3a5a8a"></Box>
         </Composition>
 
-        <!-- §4.4e CAPELA (GLB text3d+paint3d; ~2 m nativo, scale 3.5 →
-           ~7 m). NE da praça, frente virada a sudoeste para a praça. -->
+        </Group>
+        <Group name="city.chapel" pos="0 0 0">
+        <!-- §4.4e CAPELA (GLB; scale 3.5 → ~7 m). Eixo N sagrado, entre
+           praça e portão norte; frente a sudoeste para a praça. -->
         <GameObject
           name="chapel"
           transform="scale: 3.5; rotation: 0 -135 0"
-          place="at: 13 17; align-to-terrain: 0"
+          place="at: 8 22; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/chapel_collision.glb; mesh-anchor: base"
         >
@@ -1743,9 +2032,28 @@
             url="/assets/meshes/chapel_lod0.glb"
           ></GLTFLoader>
         </GameObject>
+
+        <!-- Silhueta Composition da capela (sem GLB) -->
+        <Composition
+          transform="rotation: 0 -135 0"
+          place="at: 8 22; align-to-terrain: 0"
+          body="fixed"
+          collider="auto"
+        >
+          <Box pos="0 1.4 0" size="4.5 2.8 6.0" color="#e8e0d4"
+            texture-url="/assets/textures/wall_plaster.png" texture-repeat="3 2"
+            normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+          <Box pos="0 3.4 0" size="5.0 0.2 6.6" color="#7a3b28"
+            texture-url="/assets/textures/roof_tiles.png" texture-repeat="4 4"
+            normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"></Box>
+          <Box pos="0 4.2 0" size="1.2 1.8 1.2" color="#e8e0d4"></Box>
+          <Box pos="0 5.4 0" size="0.15 1.0 0.15" color="#d4b84a"></Box>
+          <Box pos="0 5.7 0" size="0.7 0.12 0.12" color="#d4b84a"></Box>
+          <Box pos="0 1.0 3.05" size="1.1 2.0 0.1" color="#4a3020"></Box>
+        </Composition>
         <!-- Lanterna de pedra no adro da capela -->
         <Composition
-          place="at: 10.5 13.5; align-to-terrain: 0"
+          place="at: 5.5 18.5; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
@@ -1759,48 +2067,92 @@
           <Sphere pos="0 0.9 0" size="0.14" color="#ffaa44"></Sphere>
         </Composition>
 
-        <!-- Casa SE — LONGHOUSE do ancião (GLB text3d+paint3d; scale 4.5 →
-           ~8×6.4×9 m). Canto SE, frente virada a noroeste para a praça. -->
-        <GameObject
-          name="longhouse"
-          transform="scale: 4.5; rotation: 0 135 0"
-          place="at: 20 -20; align-to-terrain: 0"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/village_longhouse_collision.glb; mesh-anchor: base"
-        >
-          <GLTFLoader
-            role="visual"
-            url="/assets/meshes/village_longhouse_lod0.glb"
-          ></GLTFLoader>
-        </GameObject>
-        <!-- Estandarte do ancião junto à longhouse -->
-        <Composition
-          place="at: 15 -21; align-to-terrain: 0"
-          body="fixed"
-          collider="none"
-        >
-          <Box pos="0 2.6 0" size="0.06 3.0 0.06" color="#3a2414"></Box>
-          <Box pos="0.35 2.6 0" size="0.5 0.9 0.04" color="#7a2020"></Box>
-          <Box pos="0.35 3.02 0" size="0.5 0.14 0.05" color="#d4b84a"></Box>
+
+        <!-- Banco no caminho capela → torre -->
+        <Composition place="at: 18 24; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.28 0" size="1.5 0.12 0.45" color="#6b4a2b"></Box>
+          <Box pos="-0.6 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
+          <Box pos="0.6 0.14 0" size="0.1 0.28 0.4" color="#5a3a20"></Box>
         </Composition>
-        <!-- Boneco de treino no pátio da longhouse (contexto para o melee) -->
-        <Composition
-          place="at: 10 -20; align-to-terrain: 0"
-          body="fixed"
-          collider="none"
-        >
-          <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#5a3a20"></Box>
-          <Box pos="0 1.25 0" size="1.3 0.12 0.12" color="#6b4a2b"></Box>
-          <Sphere pos="0 1.75 0" size="0.26" color="#c9a86a"></Sphere>
-          <Box pos="0 1.05 0" size="0.5 0.7 0.3" color="#b8934a"></Box>
+        <!-- Jardim do adro (canteiros simétricos). -->
+        <Composition place="at: 6 19; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.1 0" size="2.4 0.18 1.0" color="#4a3424"></Box>
+          <Sphere pos="-0.7 0.28 0" size="0.14" color="#c45a7a"></Sphere>
+          <Sphere pos="0 0.28 0.15" size="0.12" color="#e8d080"></Sphere>
+          <Sphere pos="0.7 0.28 -0.1" size="0.14" color="#c45a7a"></Sphere>
+        </Composition>
+        <Composition place="at: 10 19; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.1 0" size="2.4 0.18 1.0" color="#4a3424"></Box>
+          <Sphere pos="-0.7 0.28 0.1" size="0.14" color="#7ab040"></Sphere>
+          <Sphere pos="0 0.28 -0.1" size="0.12" color="#c45a7a"></Sphere>
+          <Sphere pos="0.7 0.28 0" size="0.14" color="#7ab040"></Sphere>
         </Composition>
 
+        </Group>
+        <Group name="city.market" pos="0 0 0">
+
+        <!-- Pad do mercado + 3ª banca (abre o L para a praça). -->
+        <Composition place="at: 12 -14; align-to-terrain: 0" body="fixed" collider="none">
+          <Pad
+            pos="0 0.03 0"
+            size="10 9"
+            corner-radius="2.5"
+            edge-feather="1.4"
+            edge-noise="0.45"
+            texture-url="/assets/textures/cobblestone_road.png"
+            texture-scale="14"
+            normal-map-url="/assets/textures/pbr_cobblestone_road/cobblestone_road_normal.png"
+          ></Pad>
+        </Composition>
+        <GameObject
+          transform="scale: 1.55; rotation: 0 0 0"
+          place="at: 8.2 -14.5; align-to-terrain: 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
+        >
+          <GLTFLoader role="visual" url="/assets/meshes/market_stall_lod0.glb"></GLTFLoader>
+        </GameObject>
+        <!-- Carroça de mercadorias (caixas empilhadas + eixos) -->
+        <Composition place="at: 17.5 -12; align-to-terrain: 0" body="fixed" collider="auto">
+          <Box pos="0 0.55 0" size="2.4 0.2 1.3" color="#6b4a2b"
+            texture-url="/assets/textures/wood_planks.png" texture-repeat="3 2"
+            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"></Box>
+          <Box pos="0 0.95 0" size="2.2 0.7 1.1" color="#8a6a3a"></Box>
+          <Cylinder pos="-1.0 0.35 0.7" size="0.28 0.28 0.18" rotation="1.5708 0 0" color="#2a2a2a"></Cylinder>
+          <Cylinder pos="1.0 0.35 0.7" size="0.28 0.28 0.18" rotation="1.5708 0 0" color="#2a2a2a"></Cylinder>
+          <Cylinder pos="-1.0 0.35 -0.7" size="0.28 0.28 0.18" rotation="1.5708 0 0" color="#2a2a2a"></Cylinder>
+          <Cylinder pos="1.0 0.35 -0.7" size="0.28 0.28 0.18" rotation="1.5708 0 0" color="#2a2a2a"></Cylinder>
+          <Box pos="-1.3 0.7 0" size="0.12 0.5 0.12" color="#5a3a20"></Box>
+        </Composition>
+
+
+        <!-- Bancas Composition (visíveis sem GLB stall) + caixas de feira -->
+        <Composition place="at: 12.5 -13.5; align-to-terrain: 0" body="fixed" collider="auto">
+          <Box pos="0 0.55 0" size="2.2 0.12 1.1" color="#6b4a2b"
+            texture-url="/assets/textures/wood_planks.png" texture-repeat="3 2"
+            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"></Box>
+          <Box pos="-0.9 0.28 0.4" size="0.1 0.55 0.1" color="#5a3a20"></Box>
+          <Box pos="0.9 0.28 0.4" size="0.1 0.55 0.1" color="#5a3a20"></Box>
+          <Box pos="-0.9 0.28 -0.4" size="0.1 0.55 0.1" color="#5a3a20"></Box>
+          <Box pos="0.9 0.28 -0.4" size="0.1 0.55 0.1" color="#5a3a20"></Box>
+          <Box pos="0 1.4 0" size="2.4 0.08 1.3" color="#b03030"></Box>
+          <Box pos="-1.1 1.0 0" size="0.08 0.9 0.08" color="#4a3020"></Box>
+          <Box pos="1.1 1.0 0" size="0.08 0.9 0.08" color="#4a3020"></Box>
+          <Sphere pos="-0.5 0.75 0.1" size="0.14" color="#d97a2a"></Sphere>
+          <Sphere pos="0.2 0.72 0" size="0.12" color="#7ab040"></Sphere>
+          <Sphere pos="0.6 0.74 -0.15" size="0.13" color="#c45a7a"></Sphere>
+        </Composition>
+        <Composition place="at: 16.5 -17; align-to-terrain: 0" body="fixed" collider="none">
+          <Box pos="0 0.35 0" size="0.7 0.7 0.7" color="#8a6a3a"></Box>
+          <Box pos="0.75 0.28 0.2" size="0.55 0.55 0.55" color="#7a5a2a"></Box>
+          <Box pos="0.3 0.7 0.1" size="0.5 0.5 0.5" color="#9a7a4a"></Box>
+        </Composition>
         <!-- §4.5 MERCADO (SE da praça, entre a praça e a longhouse). Duas
            bancas em "L" abertas para a praça; comerciante atrás da banca
            principal. Rotações em graus (o place preserva o yaw). -->
         <GameObject
           transform="scale: 1.7; rotation: 0 -90 0"
-          place="at: 12 -13; align-to-terrain: 0"
+          place="at: 11 -12; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
         >
@@ -1811,7 +2163,7 @@
         </GameObject>
         <GameObject
           transform="scale: 1.7; rotation: 0 180 0"
-          place="at: 15.5 -16; align-to-terrain: 0"
+          place="at: 15 -15; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
         >
@@ -1823,7 +2175,7 @@
         <!-- Barris junto às bancas -->
         <GameObject
           transform="scale: 0.55"
-          place="at: 10.5 -16; align-to-terrain: 0"
+          place="at: 9.5 -15; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
         >
@@ -1834,7 +2186,7 @@
         </GameObject>
         <GameObject
           transform="scale: 0.55"
-          place="at: 11.4 -17.2; align-to-terrain: 0"
+          place="at: 10.2 -16.4; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
         >
@@ -1846,7 +2198,7 @@
         <!-- Pilha de caixas de mercadoria encostada à muralha Este -->
         <GameObject
           transform="scale: 0.55"
-          place="at: 28 -14; align-to-terrain: 1"
+          place="at: 28 -20; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
         >
@@ -1857,7 +2209,7 @@
         </GameObject>
         <GameObject
           transform="scale: 0.55; rotation: 0 25 0"
-          place="at: 29.4 -15.2; align-to-terrain: 1"
+          place="at: 29.2 -21.4; align-to-terrain: 1"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/wooden_crate_collision.glb; mesh-anchor: base"
         >
@@ -1870,75 +2222,101 @@
         <!-- Comerciante atrás da banca principal, voltado para a praça. [K] -->
         <GameObject
           name="merchant"
-          place="at: 14 -13; align-to-terrain: 0"
+          place="at: 13 -12; align-to-terrain: 0"
           script="merchant.ts"
         ></GameObject>
 
-        <!-- §4.6 Quadro de avisos (borda sul da praça, junto à via) -->
+        </Group>
+        <Group name="city.longhouse" pos="0 0 0">
+        <!-- LONGHOUSE do ancião (GLB; scale 4.5). Distrito SE, atrás do
+           mercado; frente a noroeste para a praça. -->
+        <GameObject
+          name="longhouse"
+          transform="scale: 4.5; rotation: 0 135 0"
+          place="at: 22 -24; align-to-terrain: 0"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/village_longhouse_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/village_longhouse_lod0.glb"
+          ></GLTFLoader>
+        </GameObject>
+
+        <!-- Silhueta Composition da longhouse (sem GLB) -->
         <Composition
-          place="at: 4 -10; align-to-terrain: 0"
+          transform="rotation: 0 135 0"
+          place="at: 22 -24; align-to-terrain: 0"
           body="fixed"
           collider="auto"
         >
-          <Box pos="-0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
-          <Box pos="0.7 0.7 0" size="0.12 1.4 0.12" color="#5a3a20"></Box>
-          <Box pos="0 1.35 0" size="1.8 1.0 0.1" color="#7a5230"></Box>
-          <Box pos="0 1.55 0.06" size="1.5 0.5 0.04" color="#e8ddc8"></Box>
-          <Box pos="0 1.9 0" size="2.0 0.14 0.3" color="#4a3018"></Box>
+          <Box pos="0 0.15 0" size="8.5 0.3 5.5" color="#6a5236"
+            texture-url="/assets/textures/mountain_stone.png" texture-repeat="5 1"
+            normal-map-url="/assets/textures/pbr_mountain_stone/mountain_stone_normal.png"></Box>
+          <Box pos="0 1.6 0" size="8.0 2.8 5.0" color="#c4a07a"
+            texture-url="/assets/textures/wall_plaster.png" texture-repeat="5 2"
+            normal-map-url="/assets/textures/pbr_wall_plaster/wall_plaster_normal.png"></Box>
+          <Box pos="-2.2 3.6 0" size="4.8 0.2 5.8" rotation="0 0 0.45" color="#7a3b28"
+            texture-url="/assets/textures/roof_tiles.png" texture-repeat="4 4"
+            normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"></Box>
+          <Box pos="2.2 3.6 0" size="4.8 0.2 5.8" rotation="0 0 -0.45" color="#7a3b28"
+            texture-url="/assets/textures/roof_tiles.png" texture-repeat="4 4"
+            normal-map-url="/assets/textures/pbr_roof_tiles/roof_tiles_normal.png"></Box>
+          <Box pos="0 1.1 2.55" size="1.4 2.0 0.12" color="#4a3020"></Box>
         </Composition>
-
-        <!-- §4.7 Tochas da praça (2 com luz — orçamento de PointLights) -->
+        <!-- Estandarte do ancião junto à longhouse -->
         <Composition
-          place="at: 7 7; align-to-terrain: 0"
+          place="at: 17 -24; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
-          <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-          <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-          <PointLight
-            pos="0 2.05 0"
-            point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
-          ></PointLight>
+          <Box pos="0 2.6 0" size="0.06 3.0 0.06" color="#3a2414"></Box>
+          <Box pos="0.35 2.6 0" size="0.5 0.9 0.04" color="#7a2020"></Box>
+          <Box pos="0.35 3.02 0" size="0.5 0.14 0.05" color="#d4b84a"></Box>
         </Composition>
+        <!-- Boneco de treino no pátio da longhouse (contexto para o melee) -->
         <Composition
-          place="at: -7 -7; align-to-terrain: 0"
+          place="at: 14 -18; align-to-terrain: 0"
           body="fixed"
           collider="none"
         >
-          <Box pos="0 0.9 0" size="0.1 1.8 0.1" color="#5a3a20"></Box>
-          <Sphere pos="0 2.0 0" size="0.18" color="#ffaa33"></Sphere>
-          <PointLight
-            pos="0 2.05 0"
-            point-light="color: 0xffa83a; intensity: 1.6; distance: 7; decay: 2"
-          ></PointLight>
+          <Box pos="0 0.8 0" size="0.14 1.6 0.14" color="#5a3a20"></Box>
+          <Box pos="0 1.25 0" size="1.3 0.12 0.12" color="#6b4a2b"></Box>
+          <Sphere pos="0 1.75 0" size="0.26" color="#c9a86a"></Sphere>
+          <Box pos="0 1.05 0" size="0.5 0.7 0.3" color="#b8934a"></Box>
         </Composition>
+        <!-- Baú do tesouro atrás da longhouse (GLB ~1.7 m nativo; scale
+           0.6 → baú de ~1 m). [F] -->
+        <GameObject
+          name="chest"
+          transform="scale: 0.6"
+          place="at: 26 -27; align-to-terrain: 1"
+          script="chest.ts"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
+        ></GameObject>
 
+        </Group>
+        <Group name="city.landmarks" pos="0 0 0">
         <!-- §4.8 Santuários místicos junto às vias E-W (sólidos, [F]) -->
         <GameObject
           name="rune-pillar"
-          place="at: -20 6; align-to-terrain: 1"
+          place="at: -26 14; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/stone_pillar_collision.glb; mesh-anchor: base"
           script="stone-pillar.ts"
         ></GameObject>
         <GameObject
           name="crystal-shrine"
-          place="at: 20 6; align-to-terrain: 1"
+          place="at: 26 14; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
           collider="shape: trimesh; mesh-url: /assets/meshes/crystal_blue_collision.glb; mesh-anchor: base"
           script="crystal-shrine.ts"
         ></GameObject>
 
-        <!-- Baú do tesouro atrás da longhouse (GLB ~1.7 m nativo; scale
-           0.6 → baú de ~1 m). [F] -->
-        <GameObject
-          name="chest"
-          transform="scale: 0.6"
-          place="at: 25 -23; align-to-terrain: 1"
-          script="chest.ts"
-          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/treasure_chest_collision.glb; mesh-anchor: base"
-        ></GameObject>
+
+        </Group>
+
       </Group>
       <!-- FIM city -->
 
@@ -1951,35 +2329,58 @@
            da muralha, dentro de ~±45): carvalhos (madeira) + pedras
            (pedra). A SpawnExclusion mantém tudo fora da cidade.
            ============================================================ -->
-        <!-- Laguinho do vale, a NW da cidade (os carvalhos usam avoid-water).
-           depth maior (5) para a depressão ser bem visível no relevo; radius 9
-           dá um lago de proporções decentes; opacity 0.72 mantém o fundo
-           visível através da água com cor por profundidade + fresnel. -->
+        <!-- Vegetação rasteira (Kenney Nature Kit, CC0) — carpete instanced
+           fora da cidade (SpawnExclusion r=42). Density ~90k/km² no anel
+           ±90 ≈ 2–3k clumps. Wind sway via VegetationPlugin. -->
+        <Vegetation
+          meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb"
+          density-per-km2="90000"
+          seed="41"
+          region-min="-90 0 -90"
+          region-max="90 0 90"
+          scale-min="0.65"
+          scale-max="1.35"
+          max-slope-deg="32"
+          avoid-water="1"
+          avoid-overlaps="0"
+          max-distance="85"
+          wind="1"
+        ></Vegetation>
+        <!-- Flores / plantas junto ao laguinho NW. -->
+        <Vegetation
+          meshes="/assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/plant_flatTall.glb"
+          density-per-km2="45000"
+          seed="77"
+          region-min="-55 0 42"
+          region-max="-28 0 68"
+          scale-min="0.8"
+          scale-max="1.5"
+          max-slope-deg="28"
+          avoid-water="1"
+          avoid-overlaps="0"
+          max-distance="70"
+          wind="1"
+        ></Vegetation>
+        <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha
+           o carve em x≈-58 → disco a flutuar sobre a ravina). -->
         <Lake
-          at="-34 32"
-          radius="9"
-          depth="6.0"
+          at="-40 52"
+          radius="8"
+          depth="5.0"
           water-offset="0.55"
           color="#2a6685"
           opacity="0.72"
         ></Lake>
-        <!-- Rio que corta o mapa: nasce nas montanhas do LESTE (~56 m), desce
-           em quedas d'água pelas encostas do deserto, contorna a cidade pelo
-           sul (deslocado ~20 m para sul após a expansão da muralha para ±32),
-           passa junto ao laguinho do vale e deságua no canto NW (~26 m).
-           path é uma lista plana de world coords [x0 z0 ...], NASCENTE
-           PRIMEIRO — a superfície só desce ao longo do path (prefix-min),
-           com quedas onde o terreno despenca. -->
-        <!-- width é a LÂMINA DE ÁGUA; o carve total é mais largo (bancos de
-           terra expostos de bank-width por lado + feather). bank-height é o
-           freeboard: a água corre rebaixada ~1 m abaixo da crista do banco. -->
+        <!-- Rio: sul → oeste (x≲-58) → NW sem passar no laguinho.
+           path = [x0 z0 ...] nascente primeiro. -->
+        <!-- width = lâmina; carve total = width + 2·bank-width (+ feather). -->
         <River
-          path="205 -62 170 -55 140 -45 110 -38 82 -34 48 -58 12 -62 -20 -60 -36 -32 -38 5 -52 20 -64 34 -78 46 -96 58 -121 76 -146 98 -176 128 -206 158 -241 192"
+          path="205 -62 170 -55 140 -45 110 -38 82 -40 48 -58 12 -62 -20 -62 -45 -66 -58 -58 -58 -20 -58 5 -62 22 -75 32 -90 48 -110 62 -130 80 -155 105 -180 135 -210 165 -241 192"
           width="8"
           depth="3.7"
           water-offset="1.2"
-          bank-width="2"
-          bank-height="0.8"
+          bank-width="3.2"
+          bank-height="0.85"
           color="#2a6685"
           opacity="0.88"
         ></River>
@@ -2034,13 +2435,53 @@
           <Box pos="-1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
           <Box pos="1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
         </Composition>
-        <!-- Vitórias-régias a flutuar no laguinho do vale. -->
+        <!-- Ponte OESTE: mesma blueprint, yaw 90° (local −Z → mundo −X).
+           Âncora na margem ESTE (fora do carve, x≈-50); canal ~x=-58 em z≈-1. -->
+        <Composition
+          transform="rotation: 0 90 0"
+          place="at: -50 -1; align-to-terrain: 0"
+          body="fixed"
+          collider="auto"
+        >
+          <Box
+            pos="0 0.37 -1.7"
+            size="3.4 0.22 3.7"
+            rotation="0.21 0 0"
+            color="#7a5a38"
+          ></Box>
+          <Box
+            pos="0 0.75 -9"
+            size="3.4 0.26 11.2"
+            texture-url="/assets/textures/wood_planks.png"
+            texture-repeat="3 9"
+            normal-map-url="/assets/textures/pbr_wood_planks/wood_planks_normal.png"
+          ></Box>
+          <Box
+            pos="0 0.37 -16.3"
+            size="3.4 0.22 3.7"
+            rotation="-0.21 0 0"
+            color="#7a5a38"
+          ></Box>
+          <Box pos="-1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
+          <Box pos="1.62 1.15 -9" size="0.1 0.55 11.2" color="#6a4a2c"></Box>
+          <Box pos="-1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
+          <Box pos="1.62 1.5 -9" size="0.16 0.12 11.5" color="#5a4026"></Box>
+          <Box pos="-1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="1.62 1.0 -3.6" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="-1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="1.62 1.0 -14.4" size="0.2 1.3 0.2" color="#5a4026"></Box>
+          <Box pos="-1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="1.3 -1.3 -6.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="-1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+          <Box pos="1.3 -1.3 -11.5" size="0.45 4.2 0.45" color="#5a4026"></Box>
+        </Composition>
+        <!-- Vitórias-régias no laguinho (-40,52 r=8). -->
         <StaticSpawner
           profile="tree"
           count="5"
           seed="326"
-          region-min="-45 0 21"
-          region-max="-23 0 43"
+          region-min="-47 0 45"
+          region-max="-33 0 59"
           in-water="1"
           align-to-terrain="0"
           max-slope-attempts="128"
@@ -3511,8 +3952,6 @@
            ============================================================ -->
         <PostFxDebugToggle></PostFxDebugToggle>
 
-        <PostFxDebugToggle></PostFxDebugToggle>
-
         <!-- HUD: camada declarativa screen-space + widgets (engine HudPlugin). -->
         <HudScreenLayer></HudScreenLayer>
         <HealthBar
@@ -3555,9 +3994,9 @@
           target-entity="hero"
           title-key="modal.pause"
         >
-          <SkillsTab></SkillsTab>
           <InventoryTab columns="5"></InventoryTab>
-          <OptionsTab>
+          <SkillsTab></SkillsTab>
+          <OptionsTab label-key="modal.tab.system">
             <OptionRow
               id="music-volume"
               type="slider"
@@ -3592,6 +4031,7 @@
               label-key="options.controls"
             ></OptionRow>
           </OptionsTab>
+          <WikiTab></WikiTab>
           <QuestsTab></QuestsTab>
         </TabbedModal>
       </Group>

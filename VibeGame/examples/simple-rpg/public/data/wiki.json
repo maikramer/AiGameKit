@@ -1,0 +1,74 @@
+[
+  {
+    "id": "vale",
+    "title": "Crystal Vale",
+    "category": "Lore",
+    "icon": "◆",
+    "order": 1,
+    "body": "Crystal Vale is a crossroads of four wild biomes around a walled city.\n\nMerchants trade wood, stone and rare relics. Adventurers hunt, harvest and answer quests that keep the gates safe.\n\nPress Q anytime to open this menu — inventory, skill tree, system, wiki and quests."
+  },
+  {
+    "id": "controls",
+    "title": "Controls",
+    "category": "Basics",
+    "icon": "⌨",
+    "order": 2,
+    "body": "Move: WASD\nJump: Space · Sprint: Shift\nAttack / Harvest: J · Interact: F · Trade: K\nBomb: B (hold to aim) · Cycle weapon: V\nPotion: 1 · Antidote: 2\nDash: C · Heal: E · Power Strike: R\nPause menu: Q"
+  },
+  {
+    "id": "combat",
+    "title": "Combat",
+    "category": "Basics",
+    "icon": "⚔",
+    "order": 3,
+    "body": "Melee swings hit creatures and also chop trees or mine rocks when you face them.\n\nBombs deal area damage — hold B to aim, release to throw.\n\nSpend skill points in the Skills tab: Vitality/Fortitude raise HP, Strength/Power raise attack, Agility/Swift/Windwalker raise speed. Titan needs Fortitude and Power first."
+  },
+  {
+    "id": "inventory",
+    "title": "Inventory & Craft",
+    "category": "Basics",
+    "icon": "🎒",
+    "order": 4,
+    "body": "Harvested wood and stone land in your bag and resource chips.\n\nPotions heal; antidotes clear poison. Bombs stack high — buy more from the merchant.\n\nQuest rewards (pelts, fiber, relics…) also stack. Select a slot in Inventory to read the item description."
+  },
+  {
+    "id": "biomes",
+    "title": "Four Biomes",
+    "category": "World",
+    "icon": "🗺",
+    "order": 10,
+    "body": "North — Dark Forest: wolves, timber, shadowed paths.\nEast — Desert: cactus fiber, heat and sand creatures.\nSouth — Swamp: silk, moss potions, slow ground.\nWest — Mountain Peaks: iron, ancient relics, thin air.\n\nThe city plaza (0,0) is the safest respawn. Gates sit just outside the walls."
+  },
+  {
+    "id": "quests",
+    "title": "Quests",
+    "category": "World",
+    "icon": "📜",
+    "order": 11,
+    "body": "Talk to Dialogue NPCs with F to start or turn in quests.\n\nThe Quests tab lists active progress, completed and failed jobs.\n\nObjectives usually ask for kills, harvests or deliveries. Rewards may include gold, items and skill points."
+  },
+  {
+    "id": "economy",
+    "title": "Merchant",
+    "category": "World",
+    "icon": "🪙",
+    "order": 12,
+    "body": "Press K near the merchant to trade.\n\nBuy bombs, potions and gear upgrades (sword levels, speed ring).\n\nSell surplus materials when your bag fills. Gold also tracks on the HUD chip."
+  },
+  {
+    "id": "progression",
+    "title": "Level & Skills",
+    "category": "Progression",
+    "icon": "✦",
+    "order": 20,
+    "body": "Defeat enemies and finish quests to gain XP. Each level grants skill points.\n\nThe rune pillar in the city can grant extra points.\n\nSkill tree tiers unlock after prerequisites: roots (Vitality / Strength / Agility) → mid (Fortitude / Power / Swift) → apex (Titan / Windwalker)."
+  },
+  {
+    "id": "save",
+    "title": "Save & Load",
+    "category": "System",
+    "icon": "💾",
+    "order": 30,
+    "body": "Open System (Q → System) and use Save Game / Load Game.\n\nProgress stores locally in the browser: inventory, XP, skills, quests and merchant upgrades.\n\nMusic and SFX sliders apply immediately."
+  }
+]

@@ -5,6 +5,7 @@ import {
   getBuilder,
   resetBuilder,
   withPlugin,
+  withPlugins,
   withSystem,
   registerEntityScripts,
   registerQuest,
@@ -15,19 +16,10 @@ import {
   NavMeshPlugin,
   SaveLoadPlugin,
   I18nPlugin,
-  CombatPlugin,
   DebugPlugin,
+  RpgPlugins,
   registerDebugAction,
   registerDebugVar,
-  RpgCorePlugin,
-  RpgVaultPlugin,
-  InventoryPlugin,
-  ProgressionPlugin,
-  PauseCoordinatorPlugin,
-  ResourceNodePlugin,
-  EconomyPlugin,
-  StatusEffectsPlugin,
-  RpgAiPlugin,
   SpawnGatePlugin,
   ParticlesPlugin,
   // HUD / loading
@@ -501,7 +493,19 @@ const dictEN: Record<string, string> = {
   'modal.tab.skills': 'Skills',
   'modal.tab.inventory': 'Inventory',
   'modal.tab.options': 'Options',
+  'modal.tab.system': 'System',
   'modal.tab.quests': 'Quests',
+  'modal.tab.wiki': 'Wiki',
+  'modal.skillPoints': '{n} skill points',
+  'modal.skillRequires': 'Requires: {names}',
+  'modal.inventoryEmpty': 'Bag is empty',
+  'modal.inventorySelect': 'Select an item',
+  'modal.inventoryNoDesc': 'No description.',
+  'modal.wikiEmpty': 'No entries yet.',
+  'modal.wikiGeneral': 'General',
+  'quests.active': 'Active',
+  'quests.completed': 'Completed',
+  'quests.failed': 'Failed',
   'options.music': 'Music',
   'options.sfx': 'Sound FX',
   'options.save': '💾 Save Game',
@@ -524,9 +528,16 @@ const dictPT: Record<string, string> = {
   'modal.tab.skills': 'Habilidades',
   'modal.tab.inventory': 'Inventário',
   'modal.tab.options': 'Opções',
+  'modal.tab.system': 'Sistema',
   'modal.tab.quests': 'Missões',
+  'modal.tab.wiki': 'Wiki',
   'modal.skillPoints': '{n} pontos de habilidade',
+  'modal.skillRequires': 'Requer: {names}',
   'modal.inventoryEmpty': 'Mochila vazia',
+  'modal.inventorySelect': 'Selecione um item',
+  'modal.inventoryNoDesc': 'Sem descrição.',
+  'modal.wikiEmpty': 'Nenhuma entrada ainda.',
+  'modal.wikiGeneral': 'Geral',
   'quests.active': 'Ativas',
   'quests.completed': 'Completas',
   'quests.failed': 'Falhadas',
@@ -919,16 +930,7 @@ async function bootstrap(): Promise<void> {
   addInputMapping('primaryAction', 'KeyJ');
 
   withPlugin(LoadingPlugin);
-  withPlugin(RpgCorePlugin);
-  withPlugin(RpgVaultPlugin);
-  withPlugin(InventoryPlugin);
-  withPlugin(ProgressionPlugin);
-  withPlugin(PauseCoordinatorPlugin);
-  withPlugin(ResourceNodePlugin);
-  withPlugin(EconomyPlugin);
-  withPlugin(CombatPlugin);
-  withPlugin(StatusEffectsPlugin);
-  withPlugin(RpgAiPlugin);
+  withPlugins(...RpgPlugins);
   withPlugin(SpawnGatePlugin);
   withPlugin(ParticlesPlugin);
   withPlugin(NavMeshPlugin);
@@ -958,7 +960,7 @@ async function bootstrap(): Promise<void> {
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
   // (matches the <SpawnExclusion at="0 0" radius="30"> in index.html).
-  const villageZones: Array<[number, number, number]> = [[0, 0, 30]];
+  const villageZones: Array<[number, number, number]> = [[0, 0, 40]];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
   }
@@ -1010,24 +1012,127 @@ async function bootstrap(): Promise<void> {
   // Item definitions — without a registered ItemDef the inventory caps every
   // item's stack at 1, so bought bombs never accumulated. Stack them high.
   const itemReg = getDataRegistry(state);
-  for (const [id, name, icon] of [
-    ['bomb', 'Bomb', '/assets/icons/item_bomb.png'],
-    ['wood', 'Wood', '/assets/icons/hud_wood.png'],
-    ['stone', 'Stone', '/assets/icons/hud_stone.png'],
-    ['potion', 'Potion', '/assets/icons/potion_health.png'],
-    ['antidote', 'Antidote', '/assets/icons/item_antidote.png'],
-    // Quest reward items — registered so the grant actually stacks in the bag
-    // (an unregistered item silently caps at maxStack 1).
-    ['wolf_pelt', 'Wolf Pelt', '/assets/icons/wolf_pelt.png'],
-    ['cactus_fiber', 'Cactus Fiber', '/assets/icons/cactus_fiber.png'],
-    ['silk_cloth', 'Silk Cloth', '/assets/icons/silk_cloth.png'],
-    ['ancient_relic', 'Ancient Relic', '/assets/icons/ancient_relic.png'],
-    ['moss_potion', 'Moss Potion', '/assets/icons/moss_potion.png'],
-    ['iron_axe', 'Iron Axe', '/assets/icons/iron_axe.png'],
-    ['blessed_rod', 'Blessed Rod', '/assets/icons/blessed_rod.png'],
-    ['nature_amulet', 'Nature Amulet', '/assets/icons/nature_amulet.png'],
+  for (const [id, name, icon, description, tags] of [
+    [
+      'bomb',
+      'Bomb',
+      '/assets/icons/item_bomb.png',
+      'Throwable explosive. Hold B to aim, release to throw.',
+      ['combat', 'consumable'],
+    ],
+    [
+      'wood',
+      'Wood',
+      '/assets/icons/hud_wood.png',
+      'Chopped timber from Crystal Vale forests. Trade or craft.',
+      ['material'],
+    ],
+    [
+      'stone',
+      'Stone',
+      '/assets/icons/hud_stone.png',
+      'Mined rock. Useful for trade and construction goods.',
+      ['material'],
+    ],
+    [
+      'potion',
+      'Potion',
+      '/assets/icons/potion_health.png',
+      'Restores health. Hotkey: 1.',
+      ['consumable', 'heal'],
+    ],
+    [
+      'antidote',
+      'Antidote',
+      '/assets/icons/item_antidote.png',
+      'Clears poison. Hotkey: 2.',
+      ['consumable'],
+    ],
+    [
+      'wolf_pelt',
+      'Wolf Pelt',
+      '/assets/icons/wolf_pelt.png',
+      'Thick fur from Dark Forest wolves. Quest trophy.',
+      ['quest', 'loot'],
+    ],
+    [
+      'cactus_fiber',
+      'Cactus Fiber',
+      '/assets/icons/cactus_fiber.png',
+      'Tough desert fiber. Used in eastern trade routes.',
+      ['quest', 'material'],
+    ],
+    [
+      'silk_cloth',
+      'Silk Cloth',
+      '/assets/icons/silk_cloth.png',
+      'Fine cloth spun in the swamp marshes.',
+      ['quest', 'material'],
+    ],
+    [
+      'ancient_relic',
+      'Ancient Relic',
+      '/assets/icons/ancient_relic.png',
+      'Weathered artifact from the mountain peaks.',
+      ['quest', 'relic'],
+    ],
+    [
+      'moss_potion',
+      'Moss Potion',
+      '/assets/icons/moss_potion.png',
+      'Swamp brew with a sharp herbal bite.',
+      ['quest', 'consumable'],
+    ],
+    [
+      'iron_axe',
+      'Iron Axe',
+      '/assets/icons/iron_axe.png',
+      'Sturdy axe forged for mountain work.',
+      ['quest', 'tool'],
+    ],
+    [
+      'blessed_rod',
+      'Blessed Rod',
+      '/assets/icons/blessed_rod.png',
+      'A staff marked with vale runes.',
+      ['quest', 'relic'],
+    ],
+    [
+      'nature_amulet',
+      'Nature Amulet',
+      '/assets/icons/nature_amulet.png',
+      'Charm woven from living vines.',
+      ['quest', 'relic'],
+    ],
   ] as const) {
-    itemReg.register('item', id, { id, name, icon, maxStack: 99, tags: [] });
+    itemReg.register('item', id, {
+      id,
+      name,
+      icon,
+      description,
+      maxStack: 99,
+      tags: [...tags],
+    });
+  }
+
+  try {
+    const wikiRes = await fetch('/data/wiki.json');
+    if (wikiRes.ok) {
+      const pages = (await wikiRes.json()) as Array<{
+        id: string;
+        title: string;
+        body: string;
+        category?: string;
+        icon?: string;
+        order?: number;
+      }>;
+      for (const page of pages) {
+        itemReg.register('wiki', page.id, page);
+      }
+      console.info(`[simple-rpg] Loaded ${pages.length} wiki pages`);
+    }
+  } catch (err) {
+    console.warn('[simple-rpg] failed to load wiki.json:', err);
   }
 
   // Dev cheats (vite DEV only): grant items/gold via the debug surface for testing.

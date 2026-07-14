@@ -18,21 +18,21 @@ assets:
   # ════════════════════════════════════════════════════════════════════════
 
   - id: hero
-    idea: 'young cartoon fantasy adventurer wearing leather tunic with rolled-up sleeves, cloth bandana, simple belt with pouch, cheerful determined expression, short boots, no helmet no armor, RPG hero boy, standing upright'
+    idea: 'young cartoon fantasy adventurer wearing leather tunic with rolled-up sleeves, cloth bandana, simple belt with pouch, cheerful determined expression, short boots, no helmet no armor, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, RPG hero boy'
     kind: character
     category: humanoid
     pipeline: [3d, paint, rig, animate, lod, collision]
     lod_levels: 1
 
   - id: npc_merchant
-    idea: 'friendly cartoon merchant NPC wearing brown apron over green tunic, round belly, warm smile, short chubby proportions, fantasy shopkeeper'
+    idea: 'friendly cartoon merchant NPC wearing brown apron over green tunic, round belly, warm smile, short chubby proportions, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, fantasy shopkeeper'
     kind: character
     category: humanoid
     pipeline: [3d, paint, rig, animate, lod, collision]
     lod_levels: 1
 
   - id: goblin
-    idea: 'small wiry cartoon goblin with rusty iron pot helmet, crooked teeth, tattered loincloth, holding a crude wooden club, hunched mischievous posture, fantasy enemy creature'
+    idea: 'small wiry cartoon goblin with big pointy ears, crooked teeth, tattered loincloth, green skin, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, fantasy enemy creature'
     kind: character
     category: creature
     pipeline: [3d, paint, rig, animate, lod, collision]
@@ -90,7 +90,7 @@ assets:
     lod_levels: 1
 
   - id: witch_boss
-    idea: 'menacing cartoon witch boss with long hooked nose, pointed black hat, tattered dark purple robe, glowing green hands, sinister grin, dark fantasy forest witch, standing upright, game asset'
+    idea: 'menacing cartoon witch boss with long hooked nose, pointed black hat, tattered dark purple robe, glowing green hands, sinister grin, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, dark fantasy forest witch, game asset'
     kind: character
     category: creature
     pipeline: [3d, paint, rig, animate, lod, collision]
@@ -134,7 +134,7 @@ assets:
     lod_levels: 1
 
   - id: bandit
-    idea: 'cartoon desert bandit with tan hood and face mask, leather armor scraps, curved scimitar on belt, dark eyes visible, fantasy rogue enemy, standing upright'
+    idea: 'cartoon desert bandit with tan hood and face mask, leather armor scraps, dark eyes visible, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, fantasy rogue enemy'
     kind: character
     category: creature
     pipeline: [3d, paint, rig, animate, lod, collision]
@@ -178,7 +178,7 @@ assets:
     pipeline: [3d, paint, lod, collision]
 
   - id: bogling
-    idea: 'small cartoon swamp bogling creature with round green-brown body, big yellow eyes, webbed feet, dripping moss on back, mischievous fantasy amphibian monster'
+    idea: 'small cartoon swamp bogling creature with round green-brown body, big yellow eyes, webbed feet, dripping moss on back, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, mischievous fantasy amphibian monster'
     kind: character
     category: creature
     pipeline: [3d, paint, rig, animate, lod, collision]
@@ -192,7 +192,7 @@ assets:
     lod_levels: 1
 
   - id: bog_warden_boss
-    idea: 'large cartoon bog warden elemental boss made of swamp mud, vines, and glowing green eyes, mossy stone core, dripping water, intimidating fantasy swamp boss, game asset'
+    idea: 'large cartoon bog warden elemental boss made of swamp mud, vines, and glowing green eyes, mossy stone core, dripping water, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, intimidating fantasy swamp boss, game asset'
     kind: character
     category: creature
     pipeline: [3d, paint, rig, animate, lod, collision]
@@ -424,7 +424,7 @@ assets:
   # ════════════════════════════════════════════════════════════════════════
 
   - id: boss_ogre
-    idea: 'menacing large fantasy RPG boss monster, muscular green ogre troll with sharp teeth and small tusks, hunched powerful build, crude stone club in one hand, thick dark armor scraps, intimidating stance, cartoon stylized but bigger and scarier than a goblin, standing upright, game asset'
+    idea: 'menacing large fantasy RPG boss monster, muscular green ogre troll with sharp teeth and small tusks, hunched powerful build, thick dark armor scraps, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, cartoon stylized but bigger and scarier than a goblin, game asset'
     kind: character
     category: creature
     pipeline: [3d, paint, rig, animate, lod, collision]
