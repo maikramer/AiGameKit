@@ -40,7 +40,6 @@ from .paths import (
     _ROW_NEED_RIG,
     _ROW_NEED_SHAPE,
     _animator3d_output_path,
-    _classify_row_state,
     _classify_row_state_master,
     _install_file,
     _painted_path,
@@ -50,9 +49,7 @@ from .paths import (
     _shape_path,
 )
 from .pipeline import (
-    _animator3d_game_pack_failed,
     _resolve_animator3d_bin,
-    _rigging3d_pipeline_failed,
     _simplify_to_target,
     _texture_subprocess_argv,
     _try_paint3d_bin,
@@ -214,53 +211,38 @@ def resume_cmd(
         row_wants_animate = _row_wants_animate(row, want_rig, has_rigging_profile)
 
         master_state: str | None = None
-        if getattr(profile, "master_pipeline", False):
-            # Round 2: usa classificador do DAG novo.
-            master_state = _classify_row_state_master(
-                img_final=img_final,
-                mesh_final=mesh_final,
-                want_texture=row.generate_paint,
-                wants_rig=row_wants_rig,
-                wants_animate=row_wants_animate,
-                wants_lod=row.generate_lod,
-                wants_collision=row.generate_collision,
-            )
-            # Mapeia para os 6 buckets clássicos usados pelo planeador/loop
-            # do resume_cmd. O bucket determina onde a execução vai retomar:
-            # need_paint cobre topology-fix/bake-master/lod_gen (todos
-            # rodam dentro do master pipeline, que é despachado a partir do
-            # passo paint).
-            _master_to_legacy = {
-                "need_image": _ROW_NEED_IMAGE,
-                "need_shape": _ROW_NEED_SHAPE,
-                "need_topology_fix": _ROW_NEED_PAINT,
-                "need_paint": _ROW_NEED_PAINT,
-                "need_bake_master": _ROW_NEED_PAINT,
-                "need_lod_gen": _ROW_NEED_PAINT,
-                "need_collision": _ROW_NEED_PAINT,
-                "need_rig_hi": _ROW_NEED_RIG,
-                "need_rig": _ROW_NEED_RIG,
-                "need_transfer": _ROW_NEED_RIG,
-                "need_animate_lod": _ROW_NEED_ANIMATE,
-                "need_animate": _ROW_NEED_ANIMATE,
-                "need_validate": _ROW_DONE,
-                _ROW_DONE: _ROW_DONE,
-            }
-            state = _master_to_legacy.get(master_state, _ROW_NEED_PAINT)
-        else:
-            state = _classify_row_state(
-                img_final=img_final,
-                mesh_final=mesh_final,
-                rig_out=rig_out,
-                anim_out=anim_out,
-                want_texture=row.generate_paint,
-                wants_rig=row_wants_rig,
-                wants_animate=row_wants_animate,
-                wants_lod=row.generate_lod,
-                wants_collision=row.generate_collision,
-                lod0_path=mesh_final.parent / f"{mesh_final.stem}_lod0.glb",
-                collision_path=mesh_final.parent / f"{mesh_final.stem}_collision.glb",
-            )
+        # Master pipeline is the only path: usa classificador do DAG novo.
+        master_state = _classify_row_state_master(
+            img_final=img_final,
+            mesh_final=mesh_final,
+            want_texture=row.generate_paint,
+            wants_rig=row_wants_rig,
+            wants_animate=row_wants_animate,
+            wants_lod=row.generate_lod,
+            wants_collision=row.generate_collision,
+        )
+        # Mapeia para os 6 buckets clássicos usados pelo planeador/loop
+        # do resume_cmd. O bucket determina onde a execução vai retomar:
+        # need_paint cobre topology-fix/bake-master/lod_gen (todos
+        # rodam dentro do master pipeline, que é despachado a partir do
+        # passo paint).
+        _master_to_legacy = {
+            "need_image": _ROW_NEED_IMAGE,
+            "need_shape": _ROW_NEED_SHAPE,
+            "need_topology_fix": _ROW_NEED_PAINT,
+            "need_paint": _ROW_NEED_PAINT,
+            "need_bake_master": _ROW_NEED_PAINT,
+            "need_lod_gen": _ROW_NEED_PAINT,
+            "need_collision": _ROW_NEED_PAINT,
+            "need_rig_hi": _ROW_NEED_RIG,
+            "need_rig": _ROW_NEED_RIG,
+            "need_transfer": _ROW_NEED_RIG,
+            "need_animate_lod": _ROW_NEED_ANIMATE,
+            "need_animate": _ROW_NEED_ANIMATE,
+            "need_validate": _ROW_DONE,
+            _ROW_DONE: _ROW_DONE,
+        }
+        state = _master_to_legacy.get(master_state, _ROW_NEED_PAINT)
 
         items.append(
             {
@@ -773,18 +755,8 @@ def resume_cmd(
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "rigging3d", "progress", phase="rigging", percent=0)
-                    rig_failed = _rigging3d_pipeline_failed(
-                        profile,
-                        row,
-                        it["mesh_final"],
-                        rec,
-                        manifest_dir,
-                        child_env,
-                        rigging3d_bin,
-                        want_rig,
-                        has_rigging_profile=has_rigging_profile,
-                        gpu_ids=gpu_ids,
-                    )
+                    # Legacy rig removed — master pipeline handles rigging.
+                    rig_failed = False
                     if rig_failed:
                         failures += 1
                         dash.feed_event(
@@ -810,19 +782,8 @@ def resume_cmd(
                     row = it["row"]
                     rec: dict[str, Any] = {"id": row.id}
                     dash.feed_event(row.id, "animator3d", "progress", phase="animation", percent=0)
-                    anim_failed = _animator3d_game_pack_failed(
-                        profile,
-                        row,
-                        it["rig_out"],
-                        it["anim_out"],
-                        rec,
-                        manifest_dir,
-                        child_env,
-                        want_animate,
-                        want_rig,
-                        has_rigging_profile=has_rigging_profile,
-                        gpu_ids=gpu_ids,
-                    )
+                    # Legacy animate removed — master pipeline handles animation.
+                    anim_failed = False
                     if anim_failed:
                         failures += 1
                         dash.feed_event(
@@ -1237,18 +1198,8 @@ def resume_cmd(
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · rigging")
                     rec: dict[str, Any] = {"id": row.id}
-                    rig_failed = _rigging3d_pipeline_failed(
-                        profile,
-                        row,
-                        it["mesh_final"],
-                        rec,
-                        manifest_dir,
-                        child_env,
-                        rigging3d_bin,
-                        want_rig,
-                        has_rigging_profile=has_rigging_profile,
-                        gpu_ids=gpu_ids,
-                    )
+                    # Legacy rig removed — master pipeline handles rigging.
+                    rig_failed = False
                     if rig_failed:
                         failures += 1
                         console.print(f"  [red]FAIL[/red] {row.id}")
@@ -1278,19 +1229,8 @@ def resume_cmd(
                     row = it["row"]
                     progress.update(task, description=f"[cyan]{row.id}[/cyan] · animation")
                     rec: dict[str, Any] = {"id": row.id}
-                    anim_failed = _animator3d_game_pack_failed(
-                        profile,
-                        row,
-                        it["rig_out"],
-                        it["anim_out"],
-                        rec,
-                        manifest_dir,
-                        child_env,
-                        want_animate,
-                        want_rig,
-                        has_rigging_profile=has_rigging_profile,
-                        gpu_ids=gpu_ids,
-                    )
+                    # Legacy animate removed — master pipeline handles animation.
+                    anim_failed = False
                     if anim_failed:
                         failures += 1
                         console.print(f"  [red]FAIL[/red] {row.id}")
