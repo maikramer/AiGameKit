@@ -163,6 +163,16 @@ tools:
     needs_pytorch: true
     post_install: gamedev_shared.installer.clified_hooks:paint3d_post_install
 
+  part3d:
+    name: "Part3D"
+    kind: python
+    folder: Part3D
+    cli_name: part3d
+    python_module: part3d
+    description: "Decomposição semântica de meshes 3D (Hunyuan3D-Part: P3-SAM + X-Part)"
+    min_python: [3, 13]
+    needs_pytorch: true
+
   materialize:
     name: "Materialize CLI"
     kind: rust

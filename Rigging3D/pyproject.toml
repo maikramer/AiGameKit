@@ -17,10 +17,10 @@ dependencies = [
     "rich>=13.0.0",
     "rich-click>=1.8.0",
     "PyYAML>=6.0",
-    "torch>=2.6.0",
-    "torchvision>=0.21.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
     "numpy>=1.26.4,<3",
-    "transformers>=4.57.0",
+    "transformers>=5.14.0",
     "diffusers>=0.35.0",
     "scipy",
     "python-box",
@@ -32,7 +32,7 @@ dependencies = [
     "fast-simplification",
     "bpy>=5.2.0",
     "trimesh",
-    "huggingface_hub",
+    "huggingface-hub>=1.5.0,<2",
 ]
 
 classifiers = [

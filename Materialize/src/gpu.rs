@@ -47,6 +47,7 @@ impl GpuContext {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .context("No GPU adapter available. Check Vulkan/Metal/DX12 drivers")?;
@@ -66,7 +67,7 @@ impl GpuContext {
 
     /// Human-readable adapter + backend string for verbose mode.
     pub fn adapter_info_string(&self) -> String {
-        "(adapter name unavailable — wgpu 29 hides get_info)".to_string()
+        "(adapter name unavailable — wgpu hides get_info)".to_string()
     }
 
     pub fn create_texture_from_image(&self, image: &image::DynamicImage) -> wgpu::Texture {
@@ -481,7 +482,9 @@ impl GpuContext {
         self.device.poll(wgpu::PollType::wait_indefinitely()).ok();
         receiver.await??;
 
-        let data = buffer_slice.get_mapped_range();
+        let data = buffer_slice
+            .get_mapped_range()
+            .context("Failed to get mapped buffer range")?;
 
         let mut unpadded_data = Vec::with_capacity((unpadded_bytes_per_row * size.height) as usize);
         for row in 0..size.height {

@@ -3,7 +3,8 @@
 # >=0.0.13 via resolver: puxa flash-attn (build) ou pandas==2.0.2 (sem wheel 3.13).
 
 # Resolver não pode puxar numpy 1.23.x (build falha em Py3.13 / setuptools isolado).
-numpy>=1.26.4,<3
+# numba<=0.66 ainda exige numpy<2.5 — manter teto 2.4.x neste venv.
+numpy>=1.26.4,<2.5
 
 alias-free-torch==0.0.6
 auraloss==0.4.0
@@ -13,7 +14,7 @@ einops-exts
 ema-pytorch==0.2.3
 encodec==0.1.1
 gradio>=3.42.0
-huggingface_hub
+huggingface-hub>=1.5.0,<2
 importlib-resources==5.12.0
 k-diffusion==0.1.1
 # laion-clap fixa numpy==1.23.5 (sem wheel cp313) — não necessário para inferência CLI
@@ -27,7 +28,7 @@ safetensors
 sentencepiece>=0.2.0
 torchmetrics==0.11.4
 tqdm
-transformers
+transformers>=5.14.0
 v-diffusion-pytorch==0.0.2
 vector-quantize-pytorch==1.14.41
 # 0.15.4 puxa pathtools (setup usa imp, removido no Py3.13)

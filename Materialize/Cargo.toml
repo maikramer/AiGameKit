@@ -11,9 +11,9 @@ keywords = ["pbr", "texture", "normal-map", "gpu", "wgpu"]
 categories = ["graphics", "command-line-utilities"]
 
 [dependencies]
-wgpu = "29"
+wgpu = "30"
 tokio = { version = "1.52", features = ["full"] }
-pollster = "0.4"
+pollster = "1.0"
 futures = "0.3"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "tga", "exr"] }
 clap = { version = "4.6", features = ["derive"] }

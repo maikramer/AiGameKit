@@ -13,7 +13,7 @@ license = "MIT"
 dependencies = [
     "click>=8.1.0",
     "rich>=13.0.0",
-    "torch>=2.6.0",
+    "torch>=2.13.0",
     "rich-click>=1.8.0",
     "bitsandbytes>=0.45.0",
     "torchao>=0.10.0",
@@ -22,9 +22,10 @@ dependencies = [
     "xformers>=0.0.28; sys_platform != 'darwin'",
     "psutil>=5.9.0",
     "bpy>=5.2.0",
-    "hf_transfer>=0.1.6",
-    "huggingface-hub>=0.20.0",
-    "Pillow>=10.0.0",
+    "transformers>=5.14.0",
+    "hf-xet>=1.2.0,<2",
+    "huggingface-hub>=1.5.0,<2",
+    "Pillow>=12.0.0",
 ]
 
 classifiers = [

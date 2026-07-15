@@ -11,12 +11,12 @@ requires-python = ">=3.13,<3.14"
 license = "MIT"
 authors = [{ name = "Skymap2D Project" }]
 dependencies = [
-    "torch>=2.6.0",
-    "torchvision>=0.21.0",
+    "torch>=2.13.0",
+    "torchvision>=0.28.0",
     "diffusers>=0.37.0",
-    "transformers>=4.40.0",
+    "transformers>=5.14.0",
     "accelerate>=0.24.0",
-    "huggingface-hub>=0.20.0",
+    "huggingface-hub>=1.5.0,<2",
     "safetensors>=0.4.0",
     "sdnq>=0.2.1",
     "numpy>=1.24.0",
