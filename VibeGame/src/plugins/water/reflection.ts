@@ -62,6 +62,9 @@ const _reflectorPlane = new THREE.Plane();
 const _clipPlane = new THREE.Vector4();
 const _q = new THREE.Vector4();
 const _textureMatrix = new THREE.Matrix4();
+const _lastReflectCam = new THREE.Vector3(Number.NaN, Number.NaN, Number.NaN);
+let _lastReflectEntity: number | null = null;
+const REFLECT_CAM_STILL_EPS_SQ = 0.01; // ~0.1 m — reuse prior mirror RT
 
 function getRenderTarget(): THREE.WebGLRenderTarget {
   if (!renderTarget) {
@@ -268,6 +271,18 @@ export const WaterReflectionSystem: System = {
       clearActiveReflection(cars);
     }
 
+    // Reuse last mirror RT when camera barely moved on the same body — saves a
+    // full extra scene render on idle look / tiny footsteps.
+    const camStill =
+      _lastReflectEntity === bestEntity &&
+      camera.position.distanceToSquared(_lastReflectCam) <
+        REFLECT_CAM_STILL_EPS_SQ;
+    if (camStill && activeEntity === bestEntity) {
+      return;
+    }
+    _lastReflectCam.copy(camera.position);
+    _lastReflectEntity = bestEntity;
+
     renderReflection(renderer, scene, camera, bestEntity, bestCar);
   },
   dispose() {
@@ -275,5 +290,7 @@ export const WaterReflectionSystem: System = {
     renderTarget = null;
     reflectionCamera = null;
     activeEntity = null;
+    _lastReflectEntity = null;
+    _lastReflectCam.set(Number.NaN, Number.NaN, Number.NaN);
   },
 };

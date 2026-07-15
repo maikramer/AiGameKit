@@ -938,6 +938,7 @@ export {
   Lake,
   isPointInWater,
   isPointNearWater,
+  isPointOnWaterBank,
   waterLevelAt,
   getWaterBodies,
   computeWaterDrag,

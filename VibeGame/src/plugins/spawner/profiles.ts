@@ -41,6 +41,11 @@ export interface GroupSpawnDefaults {
    * perfis; default false.
    */
   inWater?: boolean;
+  /**
+   * Só aceita a anel de barranco/praia (carve sem superfície molhada).
+   * Pedras de margem, juncos. Mutuamente exclusivo com `in-water`.
+   */
+  nearWater?: boolean;
   /** Re-amostra posições que colidem com footprints já registados (árvores, casa, outras instâncias). */
   avoidOverlaps: boolean;
   /** Raio XZ do footprint por instância (antes da escala). 0 = automático (meia-largura do AABB do GLB, fallback 0.8). */
@@ -96,7 +101,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
-    maxDistance: 300,
+    maxDistance: 160,
   },
   foliage: {
     alignToTerrain: true,
@@ -136,7 +141,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
-    maxDistance: 200,
+    maxDistance: 140,
   },
   'gltf-crate': {
     alignToTerrain: false,
@@ -156,7 +161,7 @@ const GROUP_PROFILES: Record<SpawnGroupProfileId, GroupSpawnDefaults> = {
     yawDistribution: 'linear',
     scaleDiscreteValues: [],
     yawDiscreteDeg: [],
-    maxDistance: 200,
+    maxDistance: 140,
   },
   place: {
     alignToTerrain: true,
@@ -429,6 +434,7 @@ export function resolveGroupSpawnFields(
     ),
     avoidWater: optBool(attrs['avoid-water'], p.avoidWater),
     inWater: optBool(attrs['in-water'], p.inWater ?? false),
+    nearWater: optBool(attrs['near-water'], p.nearWater ?? false),
     avoidOverlaps: optBool(attrs['avoid-overlaps'], p.avoidOverlaps),
     footprintRadius: optNumber(attrs['footprint-radius'], p.footprintRadius),
     maxDistance: optNumber(attrs['max-distance'], p.maxDistance),

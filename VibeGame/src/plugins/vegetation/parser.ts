@@ -144,6 +144,7 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     pickStrategy: 'random',
     avoidWater: resolved.avoidWater,
     inWater: false,
+    nearWater: false,
     avoidOverlaps: resolved.avoidOverlaps,
     footprintRadius: resolved.footprintRadius,
     maxDistance: resolved.maxDistance,

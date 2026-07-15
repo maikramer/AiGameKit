@@ -84,6 +84,12 @@ export interface SpawnGroupSpec {
    * sampling is skipped for these instances.
    */
   inWater: boolean;
+  /**
+   * Accept only carved bank/beach (inside carve footprint, outside wet
+   * surface). Terrain-aligned props on river/lake shores. Mutually exclusive
+   * with `inWater`.
+   */
+  nearWater: boolean;
   /** Re-sample XZ when the instance footprint overlaps a registered one (trees, hut colliders, other instances). SpawnExclusion zones are ALWAYS honoured, even when this is false. */
   avoidOverlaps: boolean;
   /** Per-instance XZ footprint radius before scale. 0 = auto (GLB AABB half-width, fallback 0.8). */

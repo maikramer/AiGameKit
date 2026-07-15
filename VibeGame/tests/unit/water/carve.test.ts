@@ -18,6 +18,7 @@ import {
 import {
   isPointInWater,
   isPointNearWater,
+  isPointOnWaterBank,
   registerWaterBody,
   unregisterWaterBody,
   waterLevelAt,
@@ -386,6 +387,8 @@ describe('isPointNearWater (carve-footprint exclusion)', () => {
     registerWaterBody(state, body);
     expect(isPointInWater(state, 0, 6)).toBe(false); // outside waterline
     expect(isPointNearWater(state, 0, 6)).toBe(true); // on the carved bank
+    expect(isPointOnWaterBank(state, 0, 6)).toBe(true);
+    expect(isPointOnWaterBank(state, 0, 0)).toBe(false); // wet channel
     expect(isPointNearWater(state, 0, 9)).toBe(false); // outside the carve
     unregisterWaterBody(state, body);
   });
@@ -404,6 +407,8 @@ describe('isPointNearWater (carve-footprint exclusion)', () => {
     registerWaterBody(state, body);
     expect(isPointInWater(state, 8, 0)).toBe(false);
     expect(isPointNearWater(state, 8, 0)).toBe(true);
+    expect(isPointOnWaterBank(state, 8, 0)).toBe(true);
+    expect(isPointOnWaterBank(state, 0, 0)).toBe(false);
     expect(isPointNearWater(state, 10, 0)).toBe(false);
     unregisterWaterBody(state, body);
 

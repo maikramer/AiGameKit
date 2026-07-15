@@ -161,6 +161,21 @@ export function isPointNearWater(state: State, x: number, z: number): boolean {
   return false;
 }
 
+/**
+ * True on the carved bank/beach ring: inside the carve footprint but outside
+ * the wet surface. Backs the spawner's `near-water` flag (river rocks, reeds).
+ */
+export function isPointOnWaterBank(
+  state: State,
+  x: number,
+  z: number
+): boolean {
+  for (const b of getWaterBodies(state)) {
+    if (insideCarve(b, x, z) && !containsPoint(b, x, z)) return true;
+  }
+  return false;
+}
+
 /** The water body whose surface contains the world XZ point, or null. */
 export function waterBodyAt(
   state: State,
@@ -196,14 +211,27 @@ export function bodySurfaceYAt(body: WaterBody, x: number, z: number): number {
   return bestY;
 }
 
+/** Prefer last hit body — waders stay in the same lake/river most frames. */
+const lastWaterHitByState = new WeakMap<State, WaterBody | null>();
+
 /** Water surface height at the point, or null when not over water. */
 export function waterLevelAt(
   state: State,
   x: number,
   z: number
 ): number | null {
-  for (const b of getWaterBodies(state)) {
-    if (containsPoint(b, x, z)) return bodySurfaceYAt(b, x, z);
+  const bodies = getWaterBodies(state);
+  const last = lastWaterHitByState.get(state);
+  if (last && containsPoint(last, x, z)) {
+    return bodySurfaceYAt(last, x, z);
   }
+  for (const b of bodies) {
+    if (b === last) continue;
+    if (containsPoint(b, x, z)) {
+      lastWaterHitByState.set(state, b);
+      return bodySurfaceYAt(b, x, z);
+    }
+  }
+  lastWaterHitByState.set(state, null);
   return null;
 }

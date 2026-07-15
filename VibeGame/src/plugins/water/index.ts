@@ -4,6 +4,7 @@ export {
   getWaterBodies,
   isPointInWater,
   isPointNearWater,
+  isPointOnWaterBank,
   registerWaterBody,
   unregisterWaterBody,
   waterLevelAt,

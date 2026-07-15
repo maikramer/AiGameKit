@@ -51,6 +51,15 @@ describe('spawn profiles', () => {
     expect(r.scaleMax).toBe(1);
   });
 
+  it('near-water sobrescreve perfil tree', () => {
+    const r = resolveGroupSpawnFields(
+      { 'near-water': '1', 'avoid-water': '0' },
+      'tree'
+    );
+    expect(r.nearWater).toBe(true);
+    expect(r.avoidWater).toBe(false);
+  });
+
   it('optNumber/optBool respeitam ausência vs presença', () => {
     expect(optNumber(undefined, 7)).toBe(7);
     expect(optNumber('3', 7)).toBe(3);
