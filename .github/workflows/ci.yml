@@ -15,11 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip-lint-${{ runner.os }}-${{ hashFiles('ruff.toml', '.pre-commit-config.yaml') }}
@@ -67,14 +67,14 @@ jobs:
             python-version: "3.13"
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
       - name: Get repo path
         id: repo
         run: echo "path=$(pwd)" >> $GITHUB_OUTPUT
       - name: Cache pip
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/pip
           key: pip-${{ matrix.python-version }}-${{ matrix.package }}-${{ hashFiles(format('Shared/pyproject.toml', matrix.package, '/pyproject.toml')) }}
@@ -117,7 +117,7 @@ jobs:
         with:
           bun-version: "1.2.21"
       - name: Cache bun
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('VibeGame/bun.lock') }}

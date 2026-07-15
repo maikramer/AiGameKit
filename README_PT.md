@@ -18,6 +18,7 @@ Monorepo com ferramentas de **texto→imagem**, **texto→3D**, **texto→áudio
 | [**Text2D**](Text2D/) | CLI **text-to-image** com FLUX (quantização SDNQ), orientada a GPU modesta. |
 | [**Text3D**](Text3D/) | Pipeline **text-to-3D**: imagem 2D (via Text2D) → mesh GLB com Hunyuan3D-2.1 (SDNQ INT4). Textura via Paint3D (opcional). |
 | [**Paint3D**](Paint3D/) | **Texturização 3D**: Hunyuan3D-Paint 2.1 (PBR multivista) + Materialize PBR + Upscale IA (Real-ESRGAN). Standalone ou via Text3D. |
+| [**Part3D**](Part3D/) | **Decomposição semântica de partes**: Hunyuan3D-Part (P3-SAM + X-Part). SDNQ + CPU offload para ~6 GB VRAM. |
 | [**GameAssets**](GameAssets/) | **Batch de prompts/assets**: perfil + CSV → `text2d` ou `texture2d` + opcional `text3d`, rig, **Animator3D** (auto-detetado), **`gameassets dream`** (ideia → scaffold Vite). |
 | [**Texture2D**](Texture2D/) | **Texturas 2D seamless** (tileable) via pattern-diffusion (GPU local) + PBR via Materialize. |
 | [**Skymap2D**](Skymap2D/) | **Skymaps equirectangular 360°** via HF Inference API — skyboxes para game dev, sem GPU local. |
@@ -39,6 +40,7 @@ GameDev/
   Text2D/           ← text2d (pip) — depende de Shared
   Text3D/           ← text3d (pip) — depende de Shared + Text2D; textura via Paint3D (opcional)
   Paint3D/           ← paint3d (pip) — depende de Shared; Hunyuan3D-2.1 hy3dpaint + Materialize PBR + Upscale
+  Part3D/            ← part3d (pip) — depende de Shared; Hunyuan3D-Part (P3-SAM + X-Part)
   GameAssets/        ← gameassets (pip) — depende de Shared; chama text2d/texture2d/text3d via subprocess
   Texture2D/         ← texture2d (pip) — depende de Shared; pattern-diffusion local + PBR via Materialize
   Skymap2D/          ← skymap2d (pip) — depende de Shared; skymaps equirectangular via HF
