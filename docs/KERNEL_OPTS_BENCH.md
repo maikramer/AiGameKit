@@ -67,6 +67,23 @@ Part3D/.venv/bin/python docs/scripts/bench_kernel_opts.py --tool part3d --append
 | 12 | paint3d | `p3d-channels-last` | 13.1 | 311.2 | 292.4 | mem-eff | channels_last |
 | 13 | paint3d | `p3d-compile` | 14.3 | FAIL | FAIL | mem-eff | compile=default | FAIL:RuntimeError:_apply(): Couldn't swap QConv2d.weight |
 | 14 | paint3d | `p3d-compile-cl` | 10.5 | FAIL | FAIL | mem-eff | compile=default | channels_last | FAIL:RuntimeError:_apply(): Couldn't swap QConv2d.weight |
+| 15 | part3d | `pt3d-baseline` | 24.8 | 119.1 | 120.2 | q=fast | mem-eff | vd=flashvdm | channels_last |
+| 16 | part3d | `pt3d-no-cl` | 17.4 | FAIL | FAIL | q=fast | mem-eff | vd=flashvdm | no-channels-last | FAIL:OutOfMemoryError:CUDA out of memory. Tried to allocate 1.25 GiB. GPU 0 has a total capacity of 5.64 GiB of which 401.06 MiB is free. Process 474180 has 25.97 MiB memory in use. Including non-PyTorch memory, this process has 5.13 GiB memory in use. Of the allocated memory 2.09 GiB is allocated by PyTorch, and 2.91 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf) |
+| 17 | part3d | `pt3d-compile` | 16.6 | FAIL | FAIL | q=fast | mem-eff | vd=flashvdm | compile=default | channels_last | FAIL:TorchRuntimeError:RuntimeError when making fake tensor call
+  Explanation: Dynamo failed to run FX node with fake tensors: call_function torch_cluster.fps(*(FakeTensor(..., device='cuda:0', size=(81920, 3)), FakeTensor(..., device='cuda:0', size=(2,), dtype=torch.int64), FakeTensor(..., device='cuda:0', size=()), True), **{}): got RuntimeError("The tensor has a non-zero number of elements, but its data is not allocated yet.\nIf you're using torch.compile/export/fx, it is likely that we are erroneously tracing into a custom kernel. To fix this, please wrap the custom kernel into an opaque custom op. Please see the following for details: https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html\nIf you're using Caffe2, Caffe2 uses a lazy allocation, so you will need to call mutable_data() or raw_mutable_data() to actually allocate memory.")
+  Hint: Your code may result in an error when running in eager. Please double check that your code doesn't contain a similar error when actually running eager/uncompiled. You can do this by removing the `torch.compile` call, or by using `torch.compiler.set_stance("force_eager")`. 
+
+  Developer debug context: 
+
+ For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb4315.html
+
+from user code:
+   File "/media/maikeu/b1e73891-ddde-49a0-9382-903accb68b49/GitClones/GameDev/Part3D/.venv/lib/python3.13/site-packages/torch_cluster/fps.py", line 107, in torch_dynamo_resume_in_fps_at_97
+    return torch.ops.torch_cluster.fps(src, ptr_vec, r, random_start)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+ |
 
 <!-- BENCH_TABLE_END -->
 
