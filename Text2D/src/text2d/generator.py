@@ -71,6 +71,10 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
         quant_preset: str | None = None,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        step_cache: str | None = None,
+        channels_last: bool = False,
     ) -> None:
         super().__init__(
             device=device,
@@ -79,6 +83,10 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             cache_dir=cache_dir,
             gpu_ids=gpu_ids,
             memory_efficient=memory_efficient,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
         )
         # Preset SDNQ explícito (override); None = o planner decide por VRAM em runtime.
         self.quant_preset = quant_preset
@@ -140,9 +148,10 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             pipe, model_footprint(self.model_id), quant_mode=plan.quant_mode, model_attr="transformer"
         )
 
-        # Otimizações de speed (só em full-GPU): compile + step cache + attention.
+        # Otimizações de speed: compile + step cache + channels_last + attention.
         self._maybe_compile_transformer(pipe, placement_plan)
         self._maybe_apply_step_cache(pipe, placement_plan)
+        self._maybe_apply_channels_last(pipe, placement_plan)
         self._maybe_select_attention_backend(pipe, placement_plan)
 
         self._pipe = pipe

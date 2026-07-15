@@ -74,9 +74,13 @@ class HunyuanTextTo3DGenerator:
         volume_decoder: str = "vanilla",
         mc_algo: str | None = None,
         compile_models: bool = False,
+        compile_mode: str = "default",
         sage_attention: bool = False,
         sdnq_quantized_matmul: bool = False,
         offload: bool = False,
+        allow_group_offload: bool = False,
+        fp8_layerwise: bool = False,
+        channels_last: bool = False,
     ):
         if volume_decoder not in self.VOLUME_DECODERS:
             raise ValueError(f"volume_decoder inválido: {volume_decoder!r} (válidos: {sorted(self.VOLUME_DECODERS)})")
@@ -92,8 +96,12 @@ class HunyuanTextTo3DGenerator:
         self.volume_decoder = volume_decoder
         self.mc_algo = mc_algo
         self.compile_models = compile_models
+        self.compile_mode = compile_mode
         self.sdnq_quantized_matmul = sdnq_quantized_matmul
         self.offload = offload
+        self.allow_group_offload = allow_group_offload
+        self.fp8_layerwise = fp8_layerwise
+        self.channels_last = channels_last
         self.sage_attention = self._setup_sage_attention(sage_attention)
 
         if device is None:
@@ -103,6 +111,7 @@ class HunyuanTextTo3DGenerator:
 
         self._hunyuan_pipeline: Any = None
         self._bg_remover: Any = None
+        self._offload_plan: Any = None
 
         if self.verbose:
             _logger.info(f"device={self.device}")
@@ -112,8 +121,9 @@ class HunyuanTextTo3DGenerator:
             if volume_decoder != "vanilla" or mc_algo or compile_models or self.sage_attention:
                 _logger.info(
                     f"Aceleração: volume_decoder={volume_decoder} mc_algo={mc_algo} "
-                    f"compile={compile_models} sage_attn={self.sage_attention} "
-                    f"sdnq_matmul={sdnq_quantized_matmul}"
+                    f"compile={compile_models}/{compile_mode} sage_attn={self.sage_attention} "
+                    f"sdnq_matmul={sdnq_quantized_matmul} group_offload={allow_group_offload} "
+                    f"fp8_layerwise={fp8_layerwise} channels_last={channels_last}"
                 )
 
     def _setup_sage_attention(self, requested: bool) -> bool:
@@ -244,12 +254,31 @@ class HunyuanTextTo3DGenerator:
                 allow_quant=("none",),
                 allow_multi_gpu=allow_multi,
                 model_attr="model",
-                # Hunyuan3D pipeline é vendored/custom: não compatível com group offload
-                # do diffusers (lógica cat_recursive/scheduler assume mesmo device).
-                # Usar model_cpu offload nativo (que já funcionava antes da unificação).
-                allow_group_offload=False,
+                # Hunyuan3D pipeline é vendored/custom: group offload do diffusers
+                # pode falhar (cat_recursive/scheduler assume mesmo device).
+                # Default False; ``--group-offload`` experimental liga.
+                allow_group_offload=self.allow_group_offload,
                 on_status=lambda m: self._log(m),
             )
+            self._offload_plan = offload_plan
+
+            if self.fp8_layerwise:
+                from gamedev_shared.group_offload import try_layerwise_casting
+
+                # DiT Hunyuan expõe-se como ``model`` (não ``transformer``).
+                try_layerwise_casting(
+                    pipe,
+                    modules=("model", "conditioner"),
+                    log_fn=self._log,
+                )
+
+            if self.channels_last:
+                from gamedev_shared.quantization import apply_channels_last
+
+                for attr in ("vae", "model"):
+                    mod = getattr(pipe, attr, None)
+                    if mod is not None:
+                        apply_channels_last(mod, log_fn=lambda m, a=attr: self._log(f"{a}: {m}"))
 
             if offload_plan.multi_gpu_ids is not None:
                 # Multi-GPU aplicado pelo accelerate: colocar conditioner+vae na primária.
@@ -320,8 +349,33 @@ class HunyuanTextTo3DGenerator:
             self._log(f"Surface extractor: {mc_algo}")
 
         if self.compile_models:
-            pipe.compile()
-            self._log("torch.compile activo (DiT+VAE+conditioner; warmup na 1ª inferência).")
+            offload = getattr(self._offload_plan, "offload", "none") if self._offload_plan else "none"
+            from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
+
+            mode = resolve_torch_compile_mode(
+                self.compile_mode,
+                offload=offload,
+                group_offload_active=(offload == "group_stream"),
+            )
+            if offload in ("model_cpu", "sequential_cpu"):
+                self._log(f"torch.compile skip (offload={offload})")
+            else:
+                if mode != self.compile_mode:
+                    self._log(f"torch.compile mode={self.compile_mode} → {mode} (offload={offload})")
+                # Compilar módulos individualmente com modo resolvido (cudagraphs só full-GPU).
+                for attr in ("model", "vae", "conditioner"):
+                    mod = getattr(pipe, attr, None)
+                    if mod is None:
+                        continue
+                    compiled = apply_torch_compile(
+                        mod,
+                        mode=mode,
+                        offload=offload,
+                        group_offload_active=(offload == "group_stream"),
+                    )
+                    if compiled is not mod:
+                        setattr(pipe, attr, compiled)
+                self._log(f"torch.compile ({mode}) activo (DiT+VAE+conditioner; warmup na 1ª inferência).")
 
     def generate(
         self,

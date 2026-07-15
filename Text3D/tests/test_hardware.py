@@ -34,7 +34,7 @@ def test_rtx4050_6gb_gets_int4_fast() -> None:
     assert p.gpu_ids is None
     assert p.sdnq_preset == "sdnq-int4"
     assert (p.steps, p.octree, p.chunks) == (18, 128, 4096)  # fast
-    assert p.volume_decoder == "hierarchical"
+    assert p.volume_decoder == "flashvdm"  # <7.5 GiB: speed (bench -42% vs vanilla)
     assert p.image_width == 1024
     assert p.image_height == 1024
 
@@ -47,6 +47,7 @@ def test_dual_rtx3060_24gb_gets_multigpu_hq_no_quant() -> None:
     assert p.sdnq_preset is None
     assert (p.steps, p.octree, p.chunks) == (30, 384, 20000)  # hq
     assert p.total_vram_gib == 24.0
+    assert p.volume_decoder == "hierarchical"  # ≥7.5 GiB: near-lossless
 
 
 def test_single_12gb_gets_hq_without_multigpu() -> None:

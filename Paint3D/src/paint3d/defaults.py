@@ -13,7 +13,7 @@ Configuracao por defeito (6 views @ 640px, single GPU 12GB):
 - VAE: slicing + tiling
 - Attention: NAO usar xformers — substituem os processors 5D customizados
   do ``UNet2p5DConditionModel``.
-- torch.compile: desabilitado via TORCHDYNAMO_DISABLE=1
+- torch.compile: desabilitado via TORCHDYNAMO_DISABLE=1 (opt-in: ``--compile``)
 
 Modo memory-efficient (``memory_efficient=True``):
 - UNet: SDNQ uint8 (pos-load) via gamedev_shared.sdnq

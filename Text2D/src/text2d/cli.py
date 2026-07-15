@@ -139,6 +139,40 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "ganham. Env: TEXT2D_HW_AUTO=0."
     ),
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help=(
+        "torch.compile no transformer (Inductor). Cold-start lento; compensa em "
+        "batch/server. Com offload model_cpu é ignorado; com group_stream usa mode=default. "
+        "Env: GAMEDEV_TORCH_COMPILE=1."
+    ),
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help=("Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só full-GPU). Com offload cai para default."),
+)
+@click.option(
+    "--step-cache",
+    "step_cache",
+    type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
+    default="off",
+    show_default=True,
+    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: GAMEDEV_STEP_CACHE.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
+)
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -156,6 +190,10 @@ def generate_cmd(
     gpu_ids_str: str | None,
     quality: str,
     hw_auto: bool,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    step_cache: str,
+    channels_last: bool,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -191,6 +229,7 @@ def generate_cmd(
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
     mem_eff = False
+    hwp = None
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
         if hwp.memory_efficient and hwp.device == "cuda":
@@ -214,6 +253,15 @@ def generate_cmd(
     table.add_row("[bold]Modelo[/bold]", resolved_model)
     if hwp is not None:
         table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
+    _accel = []
+    if torch_compile:
+        _accel.append(f"compile={torch_compile_mode}")
+    if step_cache != "off":
+        _accel.append(f"step-cache={step_cache}")
+    if channels_last:
+        _accel.append("channels_last")
+    if _accel:
+        table.add_row("[bold]Kernel opts[/bold]", ", ".join(_accel))
     console.print(Panel(table, title="[bold green]Configuração", border_style="green"))
 
     log_p = env_profile_log_path()
@@ -269,6 +317,10 @@ def generate_cmd(
                 model_id=resolved_model,
                 gpu_ids=gpu_ids,
                 quant_preset=quant_preset,
+                torch_compile=torch_compile,
+                torch_compile_mode=torch_compile_mode,
+                step_cache=step_cache,
+                channels_last=channels_last,
             )
 
             with (

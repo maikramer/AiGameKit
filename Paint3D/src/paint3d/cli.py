@@ -232,6 +232,41 @@ def cli(ctx, verbose):
     default=False,
     help="SageAttention (attention INT8, Ampere+; requer pacote sageattention).",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help=(
+        "torch.compile no VAE + UNet internos (Inductor). Cold-start lento; "
+        "compensa em batch/server. Desliga TORCHDYNAMO_DISABLE."
+    ),
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só sem group-offload).",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC (channels_last) no VAE/UNet — Ampere+ conv path.",
+)
+@click.option(
+    "--group-offload/--no-group-offload",
+    "allow_group_offload",
+    default=False,
+    show_default=True,
+    help=(
+        "Experimental: group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1). "
+        "Pode conflitar com dual-stream reference UNet."
+    ),
+)
 @click.pass_context
 def texture(
     ctx,
@@ -257,6 +292,10 @@ def texture(
     category,
     hw_auto,
     sage_attention,
+    torch_compile,
+    torch_compile_mode,
+    channels_last,
+    allow_group_offload,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
@@ -321,7 +360,10 @@ def texture(
         "PYTORCH_CUDA_ALLOC_CONF",
         "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
     )
-    os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+    if torch_compile:
+        os.environ.pop("TORCHDYNAMO_DISABLE", None)
+    else:
+        os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
     # Resolve defaults BEFORE building the config panel (avoids "None vistas @ Nonepx")
     if max_views is None:
@@ -340,9 +382,17 @@ def texture(
     info_table.add_row("[bold]Saída[/bold]", f"[cyan]{output}[/cyan]")
     quant_label = "SDNQ uint8 (memory-efficient)" if mem_eff else "FP16 (sem quantização)"
     attn_label = " · sage-attn" if sage_attention else ""
+    _kern = []
+    if torch_compile:
+        _kern.append(f"compile={torch_compile_mode}")
+    if channels_last:
+        _kern.append("channels_last")
+    if allow_group_offload:
+        _kern.append("group-offload")
+    kern_label = (" · " + ", ".join(_kern)) if _kern else ""
     info_table.add_row(
         "[bold]Config[/bold]",
-        f"{max_views} vistas @ {view_resolution}px · {quant_label} · VAE tiling{attn_label}",
+        f"{max_views} vistas @ {view_resolution}px · {quant_label} · VAE tiling{attn_label}{kern_label}",
     )
     info_table.add_row(
         "[bold]Bake[/bold]",
@@ -418,6 +468,10 @@ def texture(
                     preserve_origin=preserve_origin,
                     memory_efficient=mem_eff,
                     gpu_ids=parsed_gpu_ids,
+                    torch_compile=torch_compile,
+                    torch_compile_mode=torch_compile_mode,
+                    channels_last=channels_last,
+                    allow_group_offload=allow_group_offload,
                 )
             emit_progress(item_id, TOOL_PAINT3D, phase="multiview_render", percent=100)
             emit_progress(item_id, TOOL_PAINT3D, phase="bake", percent=100)
@@ -504,6 +558,41 @@ def texture(
     help="SageAttention (attention INT8, Ampere+; requer pacote sageattention).",
 )
 @click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help=(
+        "torch.compile no VAE + UNet internos (Inductor). Cold-start lento; "
+        "compensa em batch/server. Desliga TORCHDYNAMO_DISABLE."
+    ),
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só sem group-offload).",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC (channels_last) no VAE/UNet — Ampere+ conv path.",
+)
+@click.option(
+    "--group-offload/--no-group-offload",
+    "allow_group_offload",
+    default=False,
+    show_default=True,
+    help=(
+        "Experimental: group offload + CUDA streams (PAINT3D_GROUP_OFFLOAD=1). "
+        "Pode conflitar com dual-stream reference UNet."
+    ),
+)
+@click.option(
     "--quality",
     type=click.Choice(list(VALID_QUALITIES)),
     default="medium",
@@ -536,6 +625,10 @@ def texture_batch(
     force,
     hw_auto,
     sage_attention,
+    torch_compile,
+    torch_compile_mode,
+    channels_last,
+    allow_group_offload,
     quality,
     category,
     batch_verbose,
@@ -599,7 +692,10 @@ def texture_batch(
         "PYTORCH_CUDA_ALLOC_CONF",
         "expandable_segments:True,max_split_size_mb:64,garbage_collection_threshold:0.6",
     )
-    os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+    if torch_compile:
+        os.environ.pop("TORCHDYNAMO_DISABLE", None)
+    else:
+        os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
 
     if max_views is None:
         max_views = _defaults.MEMORY_EFFICIENT_MAX_VIEWS if mem_eff else _defaults.DEFAULT_PAINT_MAX_VIEWS
@@ -666,6 +762,10 @@ def texture_batch(
                 preserve_origin=False,
                 memory_efficient=mem_eff,
                 gpu_ids=parsed_gpu_ids,
+                torch_compile=torch_compile,
+                torch_compile_mode=torch_compile_mode,
+                channels_last=channels_last,
+                allow_group_offload=allow_group_offload,
             )
             _batch_proc.__enter__()
 

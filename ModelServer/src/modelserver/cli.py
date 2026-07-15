@@ -301,12 +301,12 @@ def doctor_cmd() -> None:
             gpu_detail = "nvidia-smi presente mas erro a ler"
     checks.append(("GPU NVIDIA", gpu_ok, gpu_detail or "nvidia-smi não encontrado"))
 
-    # 3. hf_transfer instalado?
+    # 3. hf_xet (downloads HF acelerados via hub >=1.5)
     try:
-        importlib.import_module("hf_transfer")
-        checks.append(("hf_transfer", True, "Downloads HF acelerados (5-10x)"))
+        importlib.import_module("hf_xet")
+        checks.append(("hf_xet", True, "Downloads HF acelerados (Xet / hub >=1.5)"))
     except ImportError:
-        checks.append(("hf_transfer", False, "pip install hf_transfer — downloads 5-10x mais rápidos"))
+        checks.append(("hf_xet", False, "pip install 'hf-xet>=1.2' — downloads HF acelerados"))
 
     # 4. Deps de cada backend (verificar se o módulo da tool importa).
     from .registry import Registry

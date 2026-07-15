@@ -119,6 +119,10 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
     # enable_model_cpu_offload se a colocação estourar. Multi-GPU divide os pesos.
     offload = (not multi) and largest_gib < 5.0
 
+    # Decoder: flashvdm no tier fast (bench 6GB: -42% vs vanilla; hierarchical ~lossless
+    # mas mais lento que flashvdm). balanced/hq → hierarchical (~lossless, ainda >> vanilla).
+    decoder = "hierarchical" if capacity_gib >= 7.5 else "flashvdm"
+
     return HardwareProfile(
         name=name,
         device="cuda",
@@ -127,7 +131,7 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
         steps=tier["steps"],
         octree=tier["octree"],
         chunks=tier["chunks"],
-        volume_decoder="hierarchical",
+        volume_decoder=decoder,
         total_vram_gib=round(total_gib, 1),
         image_width=img_w,
         image_height=img_h,

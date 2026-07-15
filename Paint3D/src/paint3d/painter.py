@@ -210,6 +210,107 @@ def check_hunyuan3d21_environment() -> tuple[bool, str]:
     return True, str(root)
 
 
+def _apply_paint_kernel_opts(
+    pipe: Any,
+    *,
+    torch_compile: bool = False,
+    torch_compile_mode: str = "default",
+    channels_last: bool = False,
+    allow_group_offload: bool = False,
+    memory_efficient: bool = False,
+    verbose: bool = False,
+) -> None:
+    """Aplica channels_last / torch.compile / group-offload opt-in ao pipeline Paint.
+
+    Compile no UNet wrapper 2.5D é frágil — compila VAE + inner ``unet``/``unet_dual``.
+    Com group offload activo, força ``mode=default`` (sem CUDA graphs).
+    """
+    import os
+
+    from gamedev_shared.quantization import (
+        apply_channels_last,
+        apply_torch_compile,
+        resolve_torch_compile_mode,
+    )
+
+    if allow_group_offload:
+        os.environ["PAINT3D_GROUP_OFFLOAD"] = "1"
+        if verbose:
+            _logger.info("Group offload experimental ligado (PAINT3D_GROUP_OFFLOAD=1)")
+
+    if channels_last:
+        if pipe.vae is not None:
+            apply_channels_last(pipe.vae, log_fn=_logger.info if verbose else None)
+        unet = pipe.unet
+        if unet is not None:
+            # Wrapper UNet2p5D — NHWC nos ModelMixin internos se existirem.
+            applied = False
+            for attr in ("unet", "unet_dual"):
+                sub = getattr(unet, attr, None)
+                if sub is not None:
+                    apply_channels_last(sub, log_fn=_logger.info if verbose else None)
+                    applied = True
+            if not applied:
+                apply_channels_last(unet, log_fn=_logger.info if verbose else None)
+
+    if torch_compile:
+        os.environ.pop("TORCHDYNAMO_DISABLE", None)
+        # Paint com SDNQ mantém pesos na GPU; só group_offload activa streams.
+        offload = "group_stream" if allow_group_offload else "none"
+        mode = resolve_torch_compile_mode(
+            torch_compile_mode,
+            offload=offload,
+            group_offload_active=allow_group_offload,
+        )
+        if mode != torch_compile_mode and verbose:
+            _logger.info(f"torch.compile mode={torch_compile_mode} → {mode} (offload={offload})")
+
+        # SDNQ QConv2d (mem-eff) rebenta em torch.compile (`Couldn't swap QConv2d.weight`).
+        # Compilar só VAE nesse caso; UNet FP16 (sem mem-eff) ainda tenta compile.
+        if memory_efficient:
+            if verbose:
+                _logger.info("torch.compile nos UNets skip (SDNQ QConv2d incompatível); tenta só VAE")
+            unet_targets: list[tuple[Any, str]] = []
+        else:
+            unet_targets = []
+            unet = pipe.unet
+            if unet is not None:
+                for attr in ("unet", "unet_dual"):
+                    sub = getattr(unet, attr, None)
+                    if sub is not None:
+                        unet_targets.append((unet, attr))
+
+        if pipe.vae is not None:
+            try:
+                compiled = apply_torch_compile(
+                    pipe.vae, mode=mode, offload=offload, group_offload_active=allow_group_offload
+                )
+                mv = pipe.multiview_pipeline
+                if mv is not None and compiled is not pipe.vae:
+                    mv.vae = compiled
+                    if verbose:
+                        _logger.info(f"torch.compile ({mode}) aplicado ao VAE")
+            except Exception as exc:
+                if verbose:
+                    _logger.warn(f"torch.compile VAE skip: {exc}")
+
+        for parent, attr in unet_targets:
+            sub = getattr(parent, attr, None)
+            if sub is None:
+                continue
+            try:
+                compiled = apply_torch_compile(
+                    sub, mode=mode, offload=offload, group_offload_active=allow_group_offload
+                )
+                if compiled is not sub:
+                    setattr(parent, attr, compiled)
+                    if verbose:
+                        _logger.info(f"torch.compile ({mode}) aplicado a unet.{attr}")
+            except Exception as exc:
+                if verbose:
+                    _logger.warn(f"torch.compile unet.{attr} skip: {exc}")
+
+
 def _try_paint_group_offload(pipe: Any, *, verbose: bool = False) -> bool:
     """Aplica group offload com CUDA streams ao pipeline Hunyuan-Paint (best-effort).
 
@@ -500,6 +601,10 @@ def apply_hunyuan_paint(
     preserve_origin: bool = True,
     memory_efficient: bool = _defaults.DEFAULT_MEMORY_EFFICIENT,
     gpu_ids: list[int] | None = None,
+    torch_compile: bool = False,
+    torch_compile_mode: str = "default",
+    channels_last: bool = False,
+    allow_group_offload: bool = False,
 ) -> Any:
     """
     Aplica Hunyuan3D-Paint 2.1: mesh + imagem de referência → mesh com UV e textura/PBR (GLB).
@@ -649,6 +754,17 @@ def apply_hunyuan_paint(
                 if verbose:
                     _logger.warn(f"Aviso: otimizações opcionais falharam: {e}")
 
+        # --- Kernel opts (channels_last / compile) antes do group offload ---
+        _apply_paint_kernel_opts(
+            pipe,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
+            allow_group_offload=allow_group_offload,
+            memory_efficient=memory_efficient,
+            verbose=verbose,
+        )
+
         # --- Group offload com CUDA streams (memory_efficient + GPUs pequenas) ---
         # Aplicado após SDNQ/VAE opts e antes da inferência. O pipeline Hunyuan-Paint
         # é custom (não diffusers ModelMixin standard), pelo que usamos try_group_offloading
@@ -704,6 +820,10 @@ def paint_file_to_file(
     preserve_origin: bool = True,
     memory_efficient: bool = _defaults.DEFAULT_MEMORY_EFFICIENT,
     gpu_ids: list[int] | None = None,
+    torch_compile: bool = False,
+    torch_compile_mode: str = "default",
+    channels_last: bool = False,
+    allow_group_offload: bool = False,
 ) -> Path:
     """Atalho: carrega mesh, pinta com Hunyuan3D-Paint 2.1 (PBR baked), exporta GLB."""
     repo = model_repo or _defaults.DEFAULT_PAINT_HF_REPO
@@ -743,6 +863,10 @@ def paint_file_to_file(
         preserve_origin=False,
         memory_efficient=memory_efficient,
         gpu_ids=gpu_ids,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        channels_last=channels_last,
+        allow_group_offload=allow_group_offload,
     )
 
     output_path = Path(output_path)
@@ -785,6 +909,10 @@ class PaintBatchProcessor:
         preserve_origin: bool = True,
         memory_efficient: bool = _defaults.DEFAULT_MEMORY_EFFICIENT,
         gpu_ids: list[int] | None = None,
+        torch_compile: bool = False,
+        torch_compile_mode: str = "default",
+        channels_last: bool = False,
+        allow_group_offload: bool = False,
     ):
         self._model_repo = model_repo
         self._subfolder = subfolder
@@ -801,6 +929,10 @@ class PaintBatchProcessor:
         self._preserve_origin = preserve_origin
         self._memory_efficient = memory_efficient
         self._gpu_ids = gpu_ids
+        self._torch_compile = torch_compile
+        self._torch_compile_mode = torch_compile_mode
+        self._channels_last = channels_last
+        self._allow_group_offload = allow_group_offload
         self._pipe: Any = None
         self._config: Any = None
 
@@ -909,6 +1041,18 @@ class PaintBatchProcessor:
             except Exception as e:
                 if self._verbose:
                     _logger.warn(f"[batch] Aviso: otimizações opcionais falharam: {e}")
+
+        _apply_paint_kernel_opts(
+            pipe,
+            torch_compile=self._torch_compile,
+            torch_compile_mode=self._torch_compile_mode,
+            channels_last=self._channels_last,
+            allow_group_offload=self._allow_group_offload,
+            memory_efficient=self._memory_efficient,
+            verbose=self._verbose,
+        )
+        if self._memory_efficient:
+            _try_paint_group_offload(pipe, verbose=self._verbose)
 
         self._pipe = pipe
         self._config = config

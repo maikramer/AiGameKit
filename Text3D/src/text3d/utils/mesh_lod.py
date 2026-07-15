@@ -120,100 +120,22 @@ def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
 _export_glb = _export_textured_glb
 
 
-def _remove_doubles(obj, threshold: float) -> int:
-    """Remove vértices duplicados dentro de *threshold*. Devolve vértices removidos."""
-    import bpy
-
-    before = len(obj.data.vertices)
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=threshold, use_sharp_edge_from_normals=False)
-    bpy.ops.object.mode_set(mode="OBJECT")
-    return before - len(obj.data.vertices)
-
-
-def _fill_holes_bpy(obj, sides: int = 30) -> None:
-    """Preenche buracos com até *sides* arestas via bpy.ops.mesh.fill_holes."""
-    import bpy
-
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="DESELECT")
-    bpy.ops.mesh.select_non_manifold()
-    bpy.ops.mesh.fill_holes(sides=sides)
-    bpy.ops.object.mode_set(mode="OBJECT")
-
-
-def _make_normals_consistent(obj) -> None:
-    """Recalcula normais para ficarem consistentes (para fora)."""
-    import bpy
-
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.normals_make_consistent()
-    bpy.ops.object.mode_set(mode="OBJECT")
+# Primitivas de reparação unificadas em gamedev_shared.mesh_repair (bmesh weld
+# sem EDIT mode; debris union-find preserva sempre a maior ilha).
+from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E402
+from gamedev_shared.mesh_repair import normals_consistent as _make_normals_consistent  # noqa: E402
+from gamedev_shared.mesh_repair import remove_doubles as _remove_doubles  # noqa: E402
 
 
 def _remove_loose_debris(obj, *, face_ratio: float = 0.0005, min_faces: int = 64) -> int:
-    """Apaga ilhas soltas minúsculas (debris de marching cubes / quantização).
+    """Debris removal com defaults conservadores do Text3D (ver ``mesh_repair``).
 
-    Componentes com menos de ``max(min_faces, face_ratio * total_faces)`` faces
-    são removidos. Limiar conservador: fragmentos de iso-superfície têm tipicamente
-    < 50 faces; partes intencionais pequenas (olhos, fivelas) ficam acima.
-    Devolve o número de faces removidas. ``face_ratio<=0`` desativa.
+    Fragmentos de iso-superfície têm tipicamente < 50 faces; partes
+    intencionais pequenas (olhos, fivelas) ficam acima de 64.
     """
-    if face_ratio <= 0:
-        return 0
+    from gamedev_shared.mesh_repair import remove_loose_debris
 
-    import bmesh
-
-    me = obj.data
-    bm = bmesh.new()
-    bm.from_mesh(me)
-    bm.faces.ensure_lookup_table()
-    bm.verts.ensure_lookup_table()
-
-    # União por componentes conexas via arestas (union-find iterativo).
-    parent = list(range(len(bm.verts)))
-
-    def find(a: int) -> int:
-        while parent[a] != a:
-            parent[a] = parent[parent[a]]
-            a = parent[a]
-        return a
-
-    for e in bm.edges:
-        ra, rb = find(e.verts[0].index), find(e.verts[1].index)
-        if ra != rb:
-            parent[rb] = ra
-
-    faces_per_comp: dict[int, int] = {}
-    face_root = []
-    for f in bm.faces:
-        r = find(f.verts[0].index)
-        face_root.append(r)
-        faces_per_comp[r] = faces_per_comp.get(r, 0) + 1
-
-    total_faces = len(bm.faces)
-    threshold = max(min_faces, int(face_ratio * total_faces))
-    doomed_roots = {r for r, n in faces_per_comp.items() if n < threshold}
-    # Nunca apagar tudo: se até a maior ilha cai no limiar, não toca.
-    if len(doomed_roots) == len(faces_per_comp):
-        bm.free()
-        return 0
-
-    doomed_faces = [f for f, r in zip(bm.faces, face_root, strict=True) if r in doomed_roots]
-    removed = len(doomed_faces)
-    if removed:
-        doomed_verts = [v for v in bm.verts if find(v.index) in doomed_roots]
-        bmesh.ops.delete(bm, geom=doomed_faces, context="FACES")
-        bmesh.ops.delete(bm, geom=[v for v in doomed_verts if v.is_valid], context="VERTS")
-        bm.to_mesh(me)
-        me.update()
-    bm.free()
-    return removed
+    return remove_loose_debris(obj, face_ratio=face_ratio, min_faces=min_faces)
 
 
 def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12) -> None:

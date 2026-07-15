@@ -53,6 +53,12 @@ backends:
     footprint_key: hunyuan-paint
     priority: 40
 
+  - name: part3d
+    adapter: modelserver.adapters.part3d
+    vram_mib: 5200
+    footprint_key: hunyuan3d-part
+    priority: 35
+
   - name: text2sound
     adapter: modelserver.adapters.text2sound
     vram_mib: 5000

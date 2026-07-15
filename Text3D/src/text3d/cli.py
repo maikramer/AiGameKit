@@ -332,6 +332,14 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="torch.compile no DiT+VAE (warmup lento na 1ª inferência; compensa em batch).",
 )
 @click.option(
+    "--compile-mode",
+    "compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help=("Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só full-GPU). Com offload cai para default."),
+)
+@click.option(
     "--sage-attn",
     "sage_attention",
     is_flag=True,
@@ -344,6 +352,30 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     is_flag=True,
     default=False,
     help="Matmul quantizado SDNQ (INT8) — mais rápido em GPUs recentes; usar com --sdnq-preset.",
+)
+@click.option(
+    "--group-offload/--no-group-offload",
+    "allow_group_offload",
+    default=False,
+    show_default=True,
+    help=(
+        "Experimental: group offload + CUDA streams (diffusers). Pode falhar no "
+        "pipeline Hunyuan vendored; default usa model_cpu offload."
+    ),
+)
+@click.option(
+    "--fp8-layerwise/--no-fp8-layerwise",
+    "fp8_layerwise",
+    default=False,
+    show_default=True,
+    help="Layerwise casting fp8 storage / bf16 compute no DiT+conditioner (diffusers hooks).",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC no VAE/DiT (ganho maior no VAE conv).",
 )
 @click.option(
     "-v",
@@ -480,8 +512,12 @@ def generate(
     volume_decoder,
     mc_algo,
     compile_models,
+    compile_mode,
     sage_attention,
     sdnq_matmul,
+    allow_group_offload,
+    fp8_layerwise,
+    channels_last,
     generate_verbose,
     allow_shared_gpu,
     gpu_kill_others,
@@ -642,11 +678,17 @@ def generate(
     if mc_algo:
         _accel_parts.append(f"mc_algo={mc_algo}")
     if compile_models:
-        _accel_parts.append("torch.compile")
+        _accel_parts.append(f"torch.compile({compile_mode})")
     if sage_attention:
         _accel_parts.append("sage-attn")
     if sdnq_matmul:
         _accel_parts.append("sdnq-matmul")
+    if allow_group_offload:
+        _accel_parts.append("group-offload")
+    if fp8_layerwise:
+        _accel_parts.append("fp8-layerwise")
+    if channels_last:
+        _accel_parts.append("channels_last")
     if _accel_parts:
         info_table.add_row("[bold]Aceleração[/bold]", ", ".join(_accel_parts))
     if parsed_gpu_ids:
@@ -687,9 +729,13 @@ def generate(
                         volume_decoder=volume_decoder,
                         mc_algo=mc_algo,
                         compile_models=compile_models,
+                        compile_mode=compile_mode,
                         sage_attention=sage_attention,
                         sdnq_quantized_matmul=sdnq_matmul,
                         offload=offload,
+                        allow_group_offload=allow_group_offload,
+                        fp8_layerwise=fp8_layerwise,
+                        channels_last=channels_last,
                     )
 
                 if output is None:
@@ -1675,6 +1721,14 @@ def align_plus_z_cmd(
     help="torch.compile no DiT+VAE — warmup na 1ª inferência amortizado pelo lote.",
 )
 @click.option(
+    "--compile-mode",
+    "compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor (cudagraphs só full-GPU).",
+)
+@click.option(
     "--sage-attn",
     "sage_attention",
     is_flag=True,
@@ -1687,6 +1741,27 @@ def align_plus_z_cmd(
     is_flag=True,
     default=False,
     help="Matmul quantizado SDNQ (INT8); usar com --sdnq-preset.",
+)
+@click.option(
+    "--group-offload/--no-group-offload",
+    "allow_group_offload",
+    default=False,
+    show_default=True,
+    help="Experimental: group offload + streams.",
+)
+@click.option(
+    "--fp8-layerwise/--no-fp8-layerwise",
+    "fp8_layerwise",
+    default=False,
+    show_default=True,
+    help="Layerwise casting fp8 no DiT+conditioner.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC no VAE/DiT.",
 )
 @click.option(
     "--hw-auto/--no-hw-auto",
@@ -1733,8 +1808,12 @@ def generate_batch(
     volume_decoder: str,
     mc_algo: str | None,
     compile_models: bool,
+    compile_mode: str,
     sage_attention: bool,
     sdnq_matmul: bool,
+    allow_group_offload: bool,
+    fp8_layerwise: bool,
+    channels_last: bool,
     hw_auto: bool,
     quality: str,
     category: str | None,
@@ -1860,9 +1939,13 @@ def generate_batch(
                     volume_decoder=volume_decoder,
                     mc_algo=mc_algo,
                     compile_models=compile_models,
+                    compile_mode=compile_mode,
                     sage_attention=sage_attention,
                     sdnq_quantized_matmul=sdnq_matmul,
                     offload=batch_offload,
+                    allow_group_offload=allow_group_offload,
+                    fp8_layerwise=fp8_layerwise,
+                    channels_last=channels_last,
                 )
 
         _err.print(
