@@ -122,7 +122,7 @@
       <Group name="environment" pos="0 0 0">
         <!-- ============================================================
            §0 CÉU, LUZ, PÓS-PROCESSAMENTO E ÁUDIO
-           Pipeline moderado (stylized): sombras PCSS 2048, SSAO + bloom +
+           Pipeline moderado (stylized): sombras PCSS 1024, SSAO + bloom +
            fog/grading. DoF / god-rays / film-grain OFF (custo alto, pouco
            ganho em jogabilidade). SSR OFF (águas usam mirror planar).
            AdaptiveQuality pode baixar DPR até 0.75 sob pressão.
@@ -196,7 +196,7 @@
           ambient="#3a4a55"
           bgm-layer="1"
           pp-exposure="0.8"
-          pp-vignette-darkness="0.8"
+          pp-vignette-darkness="0.55"
           terrain-texture="/assets/textures/forest_floor.png"
         ></BiomeRegion>
         <!-- LESTE: Deserto -->
@@ -210,7 +210,7 @@
           ambient="#5a4a3a"
           bgm-layer="1"
           pp-exposure="1.12"
-          pp-bloom-strength="0.35"
+          pp-bloom-strength="0.20"
           terrain-texture="/assets/textures/desert_sand.png"
         ></BiomeRegion>
         <!-- SUL: Pântano -->
@@ -223,7 +223,7 @@
           fog-density="0.028"
           ambient="#2a3a30"
           bgm-layer="1"
-          rain="0.55"
+          rain="0.35"
           pp-exposure="0.9"
           terrain-texture="/assets/textures/swamp_mud.png"
         ></BiomeRegion>
@@ -752,7 +752,7 @@
           transform="scale: 0.9; rotation: 0 35 0"
           place="at: 4 -3; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_bench_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 1.2 0.5 0.5"
         >
           <GLTFLoader
             role="visual"
@@ -763,7 +763,7 @@
           transform="scale: 0.9; rotation: 0 -35 0"
           place="at: 8 -3; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_bench_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 1.2 0.5 0.5"
         >
           <GLTFLoader
             role="visual"
@@ -1357,7 +1357,7 @@
           transform="scale: 0.6"
           place="at: -17.8 17.6; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 0.55 0.7 0.55"
         >
           <GLTFLoader
             role="visual"
@@ -1834,13 +1834,13 @@
           <ParticleSystem
             preset="smoke"
             transform="pos: 1.8 6.4 -1.5"
-            particle-emitter="preset: smoke; emission-rate: 32; start-life-min: 2.5; start-life-max: 5; start-speed-min: 1.4; start-speed-max: 2.6; start-size-min: 0.7; start-size-max: 1.3; start-color: #aaaaaa; looping: 1; world-space: 1"
+            particle-emitter="preset: smoke; emission-rate: 16; start-life-min: 2.5; start-life-max: 5; start-speed-min: 1.4; start-speed-max: 2.6; start-size-min: 0.7; start-size-max: 1.3; start-color: #aaaaaa; looping: 1; world-space: 1"
           ></ParticleSystem>
           <!-- Brasa/faísca da forja -->
           <ParticleSystem
             preset="fire"
             transform="pos: 0 1.0 -1.1"
-            particle-emitter="preset: fire; emission-rate: 48; start-life-min: 0.45; start-life-max: 1.2; start-speed-min: 1.4; start-speed-max: 3.2; start-size-min: 0.3; start-size-max: 0.65; start-color: #ff6600; looping: 1; world-space: 1"
+            particle-emitter="preset: fire; emission-rate: 24; start-life-min: 0.45; start-life-max: 1.2; start-speed-min: 1.4; start-speed-max: 3.2; start-size-min: 0.3; start-size-max: 0.65; start-color: #ff6600; looping: 1; world-space: 1"
           ></ParticleSystem>
         </Composition>
 
@@ -2108,7 +2108,7 @@
           transform="scale: 1.55; rotation: 0 0 0"
           place="at: 8.2 -14.5; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 2.2 2.0 1.4"
         >
           <GLTFLoader role="visual" url="/assets/meshes/market_stall_lod0.glb"></GLTFLoader>
         </GameObject>
@@ -2154,7 +2154,7 @@
           transform="scale: 1.7; rotation: 0 -90 0"
           place="at: 11 -12; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 2.2 2.0 1.4"
         >
           <GLTFLoader
             role="visual"
@@ -2165,7 +2165,7 @@
           transform="scale: 1.7; rotation: 0 180 0"
           place="at: 15 -15; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/market_stall_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 2.2 2.0 1.4"
         >
           <GLTFLoader
             role="visual"
@@ -2177,7 +2177,7 @@
           transform="scale: 0.55"
           place="at: 9.5 -15; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 0.55 0.7 0.55"
         >
           <GLTFLoader
             role="visual"
@@ -2188,7 +2188,7 @@
           transform="scale: 0.55"
           place="at: 10.2 -16.4; align-to-terrain: 0"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/wooden_barrel_lod0.glb; mesh-anchor: base"
+          collider="shape: box; size: 0.55 0.7 0.55"
         >
           <GLTFLoader
             role="visual"
@@ -2333,7 +2333,7 @@
            Clusters densos; SpawnExclusion da cidade sempre honrado. -->
         <Vegetation
           meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb"
-          density-per-km2="110000"
+          density-per-km2="40000"
           seed="41"
           region-min="-90 0 -90"
           region-max="90 0 90"
@@ -2343,14 +2343,14 @@
           avoid-water="1"
           avoid-overlaps="0"
           max-distance="110"
-          cluster-count="55"
+          cluster-count="40"
           cluster-radius="3.5"
           wind="1"
         ></Vegetation>
         <!-- Flores / plantas junto ao laguinho NW. -->
         <Vegetation
           meshes="/assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/plant_flatTall.glb"
-          density-per-km2="70000"
+          density-per-km2="40000"
           seed="77"
           region-min="-55 0 42"
           region-max="-28 0 68"
@@ -2360,7 +2360,7 @@
           avoid-water="1"
           avoid-overlaps="0"
           max-distance="90"
-          cluster-count="12"
+          cluster-count="8"
           cluster-radius="2.8"
           wind="1"
         ></Vegetation>
@@ -2501,7 +2501,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="16"
+          count="13"
           seed="7"
           region-min="-45 0 -45"
           region-max="45 0 45"
@@ -2513,7 +2513,7 @@
         >
           <GameObject
             role="static"
-            destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
+            destructible="popup-text: Wood; popup-color: #8b4513; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
             script="tree.ts"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/tree_oak_collision.glb; mesh-anchor: base"
@@ -2523,7 +2523,9 @@
               url="/assets/meshes/tree_oak_lod0.glb"
               lod1-url="/assets/meshes/tree_oak_lod1.glb"
               lod2-url="/assets/meshes/tree_oak_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
             <ResourceNode
               kind="wood"
               yield="3"
@@ -2533,7 +2535,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="14"
+          count="11"
           seed="99"
           region-min="-45 0 -45"
           region-max="45 0 45"
@@ -2546,7 +2548,7 @@
           <GameObject
             role="static"
             script="rock.ts"
-            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 35; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 18; crack-on-hit: 1; break-style: shatter"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/rock_mossy_collision.glb; mesh-anchor: base"
           >
@@ -2559,6 +2561,159 @@
               yield="3"
               transform="pos: 0 0 0"
             ></ResourceNode>
+          </GameObject>
+        </StaticSpawner>
+
+        <!-- §4.x Pedras de margem do rio — form_outcrop no anel de barranco
+           (near-water). Região larga; o filtro só aceita carve sem água. -->
+        <StaticSpawner
+          profile="tree"
+          count="24"
+          seed="401"
+          region-min="-200 0 -100"
+          region-max="220 0 200"
+          near-water="1"
+          avoid-water="0"
+          align-to-terrain="1"
+          ground-align="auto"
+          max-slope-deg="58"
+          max-slope-attempts="128"
+          scale-min="0.65"
+          scale-max="1.25"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.4"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_5_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_5_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_5_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_8_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_30_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_30_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_30_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_31_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_31_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_31_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_31_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+        <!-- Outcrops cénicos no vale (fora da cidade) — não colheitáveis. -->
+        <StaticSpawner
+          profile="tree"
+          count="10"
+          seed="402"
+          region-min="-55 0 -55"
+          region-max="55 0 55"
+          avoid-water="1"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.9"
+          scale-max="1.6"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.6"
+          cluster-count="4"
+          cluster-radius="10"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_stack_6_lod0.glb"
+              lod1-url="/assets/meshes/form_stack_6_lod1.glb"
+              lod2-url="/assets/meshes/form_stack_6_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_8_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
           </GameObject>
         </StaticSpawner>
 
@@ -2578,7 +2733,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
         </DynamicSpawner>
       </Group>
@@ -2595,7 +2751,7 @@
         <!-- §6.1 Vegetação -->
         <StaticSpawner
           profile="tree"
-          count="26"
+          count="20"
           seed="301"
           region-min="-80 0 45"
           region-max="80 0 160"
@@ -2607,7 +2763,7 @@
         >
           <GameObject
             role="static"
-            destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
+            destructible="popup-text: Dark Wood; popup-color: #1a3320; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
             script="tree.ts"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_collision.glb; mesh-anchor: base"
@@ -2617,7 +2773,9 @@
               url="/assets/meshes/pine_dark_lod0.glb"
               lod1-url="/assets/meshes/pine_dark_lod1.glb"
               lod2-url="/assets/meshes/pine_dark_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
             <ResourceNode
               kind="wood"
               yield="3"
@@ -2627,7 +2785,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="14"
+          count="11"
           seed="311"
           region-min="-80 0 45"
           region-max="80 0 160"
@@ -2643,12 +2801,14 @@
               url="/assets/meshes/tree_pine_lod0.glb"
               lod1-url="/assets/meshes/tree_pine_lod1.glb"
               lod2-url="/assets/meshes/tree_pine_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
           </GameObject>
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="12"
+          count="9"
           seed="321"
           region-min="-80 0 45"
           region-max="80 0 160"
@@ -2662,6 +2822,49 @@
             <GLTFLoader
               role="visual"
               url="/assets/meshes/mushroom_glow_lod0.glb"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+
+        <!-- §6.1b Afloramentos na floresta — esparsos, só visual (LOD). -->
+        <StaticSpawner
+          profile="tree"
+          count="12"
+          seed="411"
+          region-min="-70 0 50"
+          region-max="70 0 150"
+          avoid-water="1"
+          align-to-terrain="1"
+          ground-align="auto"
+          scale-min="0.8"
+          scale-max="1.5"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          cluster-count="5"
+          cluster-radius="14"
+        >
+          <GameObject role="static">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_5_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_5_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_5_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject role="static">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_31_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_31_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_31_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject role="static">
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_stack_11_lod0.glb"
+              lod1-url="/assets/meshes/form_stack_11_lod1.glb"
+              lod2-url="/assets/meshes/form_stack_11_lod2.glb"
             ></GLTFLoader>
           </GameObject>
         </StaticSpawner>
@@ -2793,7 +2996,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/wolf.ts"></GameObject>
         </DynamicSpawner>
         <DynamicSpawner
@@ -2806,7 +3010,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/shade.ts"></GameObject>
         </DynamicSpawner>
         <!-- Chefe: Bruxa da Floresta (elite, fundo norte). -->
@@ -2830,7 +3035,7 @@
         <!-- §7.1 Vegetação -->
         <StaticSpawner
           profile="tree"
-          count="18"
+          count="14"
           seed="302"
           region-min="45 0 -75"
           region-max="160 0 75"
@@ -2852,7 +3057,9 @@
               url="/assets/meshes/cactus_lod0.glb"
               lod1-url="/assets/meshes/cactus_lod1.glb"
               lod2-url="/assets/meshes/cactus_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
             <ResourceNode
               kind="wood"
               yield="2"
@@ -2862,7 +3069,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="14"
+          count="11"
           seed="312"
           region-min="45 0 -75"
           region-max="160 0 75"
@@ -2907,36 +3114,152 @@
         </StaticSpawner>
         <GameObject
           name="desert-arch"
-          place="at: 95 32; align-to-terrain: 1"
+          transform="rotation: 0 35 0; scale: 1.4"
+          place="at: 95 32; align-to-terrain: 0; base-y-offset: -0.9; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_arch_3.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_arch_3_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_arch_3.glb"
+            url="/assets/meshes/form_arch_3_lod0.glb"
+            lod1-url="/assets/meshes/form_arch_3_lod1.glb"
+            lod2-url="/assets/meshes/form_arch_3_lod2.glb"
           ></GLTFLoader>
         </GameObject>
-        <!-- Mesas rochosas no horizonte leste -->
+        <!-- Mesas / penhascos no horizonte do deserto (verticais, sem tilt). -->
         <GameObject
-          place="at: 150 55; align-to-terrain: 1"
+          transform="rotation: 0 18 0; scale: 1.5"
+          place="at: 150 55; align-to-terrain: 0; base-y-offset: -1.2; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_4.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_4_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_cliff_4.glb"
+            url="/assets/meshes/form_cliff_4_lod0.glb"
+            lod1-url="/assets/meshes/form_cliff_4_lod1.glb"
+            lod2-url="/assets/meshes/form_cliff_4_lod2.glb"
           ></GLTFLoader>
         </GameObject>
         <GameObject
-          place="at: 120 -48; align-to-terrain: 1"
+          transform="rotation: 0 -40 0; scale: 1.35"
+          place="at: 175 22; align-to-terrain: 0; base-y-offset: -1.3; max-slope-deg: 90"
           rigidbody="type: fixed; mass: 0; gravity-scale: 0"
-          collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8.glb; mesh-anchor: base"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_20_collision.glb; mesh-anchor: base"
         >
           <GLTFLoader
             role="visual"
-            url="/assets/meshes/form_outcrop_8.glb"
+            url="/assets/meshes/form_cliff_20_lod0.glb"
+            lod1-url="/assets/meshes/form_cliff_20_lod1.glb"
+            lod2-url="/assets/meshes/form_cliff_20_lod2.glb"
           ></GLTFLoader>
         </GameObject>
+        <GameObject
+          transform="rotation: 0 70 0; scale: 1.25"
+          place="at: 130 -70; align-to-terrain: 0; base-y-offset: -1.1; max-slope-deg: 90"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_cliff_1_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/form_cliff_1_lod0.glb"
+            lod1-url="/assets/meshes/form_cliff_1_lod1.glb"
+            lod2-url="/assets/meshes/form_cliff_1_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          transform="rotation: 0 110 0; scale: 1.4"
+          place="at: 120 -48; align-to-terrain: 0; base-y-offset: -1.0; max-slope-deg: 90"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/form_outcrop_8_lod0.glb"
+            lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+            lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <GameObject
+          transform="rotation: 0 -15 0; scale: 1.2"
+          place="at: 88 -28; align-to-terrain: 0; base-y-offset: -0.9; max-slope-deg: 90"
+          rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+          collider="shape: trimesh; mesh-url: /assets/meshes/form_stack_6_collision.glb; mesh-anchor: base"
+        >
+          <GLTFLoader
+            role="visual"
+            url="/assets/meshes/form_stack_6_lod0.glb"
+            lod1-url="/assets/meshes/form_stack_6_lod1.glb"
+            lod2-url="/assets/meshes/form_stack_6_lod2.glb"
+          ></GLTFLoader>
+        </GameObject>
+        <!-- Campo de pedras no meio do deserto — clusters (tipo dunas rochosas). -->
+        <StaticSpawner
+          profile="tree"
+          count="28"
+          seed="421"
+          region-min="55 0 -90"
+          region-max="190 0 90"
+          avoid-water="1"
+          align-to-terrain="1"
+          ground-align="auto"
+          max-slope-deg="50"
+          scale-min="0.75"
+          scale-max="1.45"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.5"
+          cluster-count="7"
+          cluster-radius="16"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_5_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_5_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_5_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_30_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_30_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_30_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_31_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_31_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_31_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_31_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
 
         <!-- §7.3 Oásis — lago esculpido (<Lake> carva a bacia no terreno e
            enche de água animada; nada de disco fake) + juncos na margem. -->
@@ -2948,6 +3271,50 @@
           color="#3a9ab5"
           opacity="0.72"
         ></Lake>
+        <!-- Pedras na margem do oásis (near-water). -->
+        <StaticSpawner
+          profile="tree"
+          count="8"
+          seed="422"
+          region-min="62 0 38"
+          region-max="78 0 54"
+          near-water="1"
+          avoid-water="0"
+          align-to-terrain="1"
+          ground-align="auto"
+          max-slope-deg="55"
+          max-slope-attempts="96"
+          scale-min="0.55"
+          scale-max="1.0"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.1"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_8_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_8_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_8_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_8_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_5_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_5_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_5_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_5_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
         <!-- Vitórias-régias no espelho de água do oásis. -->
         <StaticSpawner
           profile="tree"
@@ -3078,7 +3445,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/scorpion.ts"></GameObject>
         </DynamicSpawner>
         <DynamicSpawner
@@ -3091,7 +3459,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/bandit.ts"></GameObject>
         </DynamicSpawner>
         <!-- Chefe: Verme das Areias (elite, fundo leste). -->
@@ -3114,7 +3483,7 @@
         <!-- §8.1 Vegetação -->
         <StaticSpawner
           profile="tree"
-          count="20"
+          count="16"
           seed="305"
           region-min="-80 0 -160"
           region-max="80 0 -45"
@@ -3126,7 +3495,7 @@
         >
           <GameObject
             role="static"
-            destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
+            destructible="popup-text: Bog Wood; popup-color: #3a4a30; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
             script="tree.ts"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/dead_willow_collision.glb; mesh-anchor: base"
@@ -3136,7 +3505,9 @@
               url="/assets/meshes/dead_willow_lod0.glb"
               lod1-url="/assets/meshes/dead_willow_lod1.glb"
               lod2-url="/assets/meshes/dead_willow_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
             <ResourceNode
               kind="wood"
               yield="2"
@@ -3146,7 +3517,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="12"
+          count="10"
           seed="315"
           region-min="-80 0 -160"
           region-max="80 0 -45"
@@ -3162,14 +3533,16 @@
               url="/assets/meshes/dead_tree_lod0.glb"
               lod1-url="/assets/meshes/dead_tree_lod1.glb"
               lod2-url="/assets/meshes/dead_tree_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
           </GameObject>
         </StaticSpawner>
         <!-- Vitórias-régias A FLUTUAR nos lagos do pântano (in-water ancora o Y
            à superfície da água e só aceita pontos dentro da linha de água). -->
         <StaticSpawner
           profile="tree"
-          count="12"
+          count="8"
           seed="325"
           region-min="-50 0 -150"
           region-max="30 0 -60"
@@ -3204,6 +3577,64 @@
             <GLTFLoader
               role="visual"
               url="/assets/meshes/moss_rock_lod0.glb"
+              lod1-url="/assets/meshes/moss_rock_lod1.glb"
+              lod2-url="/assets/meshes/moss_rock_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+        </StaticSpawner>
+        <!-- Afloramentos nas margens dos lagos do pântano. -->
+        <StaticSpawner
+          profile="tree"
+          count="14"
+          seed="431"
+          region-min="-80 0 -155"
+          region-max="80 0 -50"
+          near-water="1"
+          avoid-water="0"
+          align-to-terrain="1"
+          ground-align="auto"
+          max-slope-deg="55"
+          max-slope-attempts="96"
+          scale-min="0.7"
+          scale-max="1.3"
+          avoid-overlaps="1"
+          pick-strategy="random"
+          footprint-radius="1.3"
+        >
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_30_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_30_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_30_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_30_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/moss_rock_lod0.glb"
+              lod1-url="/assets/meshes/moss_rock_lod1.glb"
+              lod2-url="/assets/meshes/moss_rock_lod2.glb"
+            ></GLTFLoader>
+          </GameObject>
+          <GameObject
+            role="static"
+            rigidbody="type: fixed; mass: 0; gravity-scale: 0"
+            collider="shape: trimesh; mesh-url: /assets/meshes/form_outcrop_2_collision.glb; mesh-anchor: base"
+          >
+            <GLTFLoader
+              role="visual"
+              url="/assets/meshes/form_outcrop_2_lod0.glb"
+              lod1-url="/assets/meshes/form_outcrop_2_lod1.glb"
+              lod2-url="/assets/meshes/form_outcrop_2_lod2.glb"
             ></GLTFLoader>
           </GameObject>
         </StaticSpawner>
@@ -3330,7 +3761,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/bogling.ts"></GameObject>
         </DynamicSpawner>
         <DynamicSpawner
@@ -3343,7 +3775,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="40"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/mosquito.ts"></GameObject>
         </DynamicSpawner>
         <!-- Chefe: Bog Warden (elite, fundo sul). -->
@@ -3369,7 +3802,7 @@
         <!-- §9.1 Vegetação e pedras -->
         <StaticSpawner
           profile="tree"
-          count="16"
+          count="13"
           seed="307"
           region-min="-160 0 -75"
           region-max="-45 0 75"
@@ -3381,7 +3814,7 @@
         >
           <GameObject
             role="static"
-            destructible="popup-text: Frost Wood; popup-color: #aeb9c8; preset: leaves; burst-count: 40; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 22; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
+            destructible="popup-text: Frost Wood; popup-color: #aeb9c8; preset: leaves; burst-count: 24; hits: 3; spark-on-hit: 1; hit-preset: woodchips; hit-burst-count: 12; shake-on-hit: 1; crack-on-hit: 1; crack-style: vertical; break-style: split; cut-height: 0.7"
             script="tree.ts"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/pine_dark_collision.glb; mesh-anchor: base"
@@ -3391,7 +3824,9 @@
               url="/assets/meshes/pine_dark_lod0.glb"
               lod1-url="/assets/meshes/pine_dark_lod1.glb"
               lod2-url="/assets/meshes/pine_dark_lod2.glb"
-            ></GLTFLoader>
+            
+              lod-threshold-near="45"
+              lod-threshold-mid="110"></GLTFLoader>
             <ResourceNode
               kind="wood"
               yield="2"
@@ -3401,7 +3836,7 @@
         </StaticSpawner>
         <StaticSpawner
           profile="tree"
-          count="22"
+          count="17"
           seed="317"
           region-min="-160 0 -75"
           region-max="-45 0 75"
@@ -3414,7 +3849,7 @@
           <GameObject
             role="static"
             script="rock.ts"
-            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 35; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 18; crack-on-hit: 1; break-style: shatter"
+            destructible="popup-text: Stone; popup-color: #cccccc; preset: dust; burst-count: 22; hits: 3; spark-on-hit: 1; hit-preset: rockshards; hit-burst-count: 10; crack-on-hit: 1; break-style: shatter"
             rigidbody="type: fixed; mass: 0; gravity-scale: 0"
             collider="shape: trimesh; mesh-url: /assets/meshes/moss_rock_collision.glb; mesh-anchor: base"
           >
@@ -3695,7 +4130,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="45"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="goblin-wander.ts"></GameObject>
         </DynamicSpawner>
         <DynamicSpawner
@@ -3708,7 +4144,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="45"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="slime.ts"></GameObject>
         </DynamicSpawner>
         <DynamicSpawner
@@ -3721,7 +4158,8 @@
           random-yaw="true"
           avoid-overlaps="false"
           max-slope-deg="45"
-        >
+        
+          max-distance="140">
           <GameObject role="enemy" script="enemies/wolf.ts"></GameObject>
         </DynamicSpawner>
         <!-- Chefe final: Ogro da Montanha — gated (aparece quando todos os

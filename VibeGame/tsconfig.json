@@ -4,6 +4,7 @@
     "lib": ["ESNext", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "rootDir": ".",
     "allowImportingTsExtensions": true,
     "isolatedModules": true,
     "noEmit": true,

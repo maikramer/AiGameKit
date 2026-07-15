@@ -6,24 +6,25 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "tsc --noEmit",
+    "check": "node ./node_modules/typescript/bin/tsc --noEmit",
     "update": "cp node_modules/vibegame/llms.txt ./llms.txt && echo '✓ Updated llms.txt from vibegame'",
     "postinstall": "test -f node_modules/vibegame/llms.txt && cp node_modules/vibegame/llms.txt ./llms.txt || true",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint": "node --require ./scripts/register-ts6.cjs ./node_modules/eslint/bin/eslint.js .",
+    "lint:fix": "node --require ./scripts/register-ts6.cjs ./node_modules/eslint/bin/eslint.js . --fix"
   },
   "devDependencies": {
     "@eslint/js": "^10.6.0",
-    "@typescript-eslint/eslint-plugin": "^8.62.0",
-    "@typescript-eslint/parser": "^8.62.0",
+    "@typescript-eslint/eslint-plugin": "^8.64.0",
+    "@typescript-eslint/parser": "^8.64.0",
+    "@typescript/typescript6": "6.0.2",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-import-x": "^4.17.0",
     "eslint-plugin-prettier": "^5.5.6",
     "prettier": "^3.9.1",
-    "typescript": "^6.0.3",
+    "typescript": "^7.0.2",
     "vite": "^8.1.0"
   },
   "dependencies": {
