@@ -139,6 +139,10 @@ VibeGame/examples/simple-rpg/screenshot*.png
 # Libs de terceiros copiadas para public (basis transcoder, etc.)
 VibeGame/examples/simple-rpg/public/libs/
 
+# GameDevLab — outputs de benchmark (GLBs/PNGs de profiling, nunca versionar)
+docs/bench_kernel_opts/*.glb
+docs/bench_kernel_opts/*.png
+
 # Screenshots de teste na raiz do VibeGame
 VibeGame/*test*.png
 VibeGame/screenshot*.png
