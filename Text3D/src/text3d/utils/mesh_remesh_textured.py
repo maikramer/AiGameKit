@@ -182,49 +182,12 @@ def _bpy_remesh(obj, target_faces: int) -> None:
     log.info("Voxel remesh: voxel_size=%.4f, target=%d, actual=%d", targetlen, target_faces, actual)
 
 
-def _bpy_close_holes(obj) -> None:
-    """Close holes and repair non-manifold geometry in bpy mesh."""
-    import bpy
-
-    bpy.context.view_layer.objects.active = obj
-
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-
-    # Delete loose vertices/edges
-    bpy.ops.mesh.delete_loose()
-
-    # Dissolve degenerate faces
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.dissolve_degenerate(threshold=1e-6)
-
-    # Fill holes (up to 30-sided boundary loops)
-    bpy.ops.mesh.select_all(action="DESELECT")
-    bpy.ops.mesh.select_non_manifold()
-    bpy.ops.mesh.fill_holes(sides=30)
-
-    # Remove duplicate vertices
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=1e-6)
-
-    bpy.ops.object.mode_set(mode="OBJECT")
-
-
-def _bpy_fix_normals(obj) -> None:
-    """Make normals consistent (recalculate outside)."""
-    import bpy
-
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.normals_make_consistent(inside=False)
-    bpy.ops.object.mode_set(mode="OBJECT")
-
-
 def _bpy_post_remesh_repair(obj) -> None:
-    """Post-remesh repair: close holes + fix normals."""
-    _bpy_close_holes(obj)
-    _bpy_fix_normals(obj)
+    """Post-remesh repair: close holes + fix normals (gamedev_shared.mesh_repair)."""
+    from gamedev_shared.mesh_repair import close_holes_and_repair, normals_consistent
+
+    close_holes_and_repair(obj, fill_sides=30, degenerate_threshold=1e-6, weld_threshold=1e-6)
+    normals_consistent(obj, inside=False)
 
 
 # ---------------------------------------------------------------------------
@@ -840,10 +803,9 @@ def remesh_textured_glb(
         saved_pos[i] = v.co
         saved_nrm[i] = v.normal
 
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.mesh.remove_doubles(threshold=0.0001, use_sharp_edge_from_normals=False)
-    bpy.ops.object.mode_set(mode="OBJECT")
+    from gamedev_shared.mesh_repair import remove_doubles as _shared_remove_doubles
+
+    _shared_remove_doubles(obj, threshold=0.0001)
     log.info("Após merge by distance: %d faces", len(obj.data.polygons))
 
     ratio = target_faces / len(obj.data.polygons)

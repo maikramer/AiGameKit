@@ -16,20 +16,14 @@ def load_mesh_bpy(path: str | Path) -> list:
 
 
 def _merge_duplicates_bmesh(obj, threshold: float = _MERGE_THRESHOLD) -> None:
-    """Merge duplicate vertices via bmesh (no EDIT mode needed)."""
-    import bmesh
-
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    before = len(bm.verts)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=threshold)
-    bm.to_mesh(obj.data)
-    obj.data.update()
-    bm.free()
-    _after = len(obj.data.vertices)
+    """Merge duplicate vertices (delegado em ``gamedev_shared.mesh_repair``)."""
     import logging
 
-    logging.getLogger("paint3d.save_glb").info("bmesh merge: %d → %d verts", before, _after)
+    from gamedev_shared.mesh_repair import remove_doubles
+
+    before = len(obj.data.vertices)
+    removed = remove_doubles(obj, threshold=threshold)
+    logging.getLogger("paint3d.save_glb").info("bmesh merge: %d → %d verts", before, before - removed)
 
 
 def save_glb(objects, output_path: str | Path) -> Path:
