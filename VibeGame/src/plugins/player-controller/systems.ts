@@ -155,45 +155,51 @@ export const ThirdPersonCameraSystem: System = {
             hasHit = true;
           }
 
-          _camRight.set(_camDir.z, 0, -_camDir.x).normalize();
-          _camLeftDir
-            .set(
-              _camDir.x * fullDist + _camRight.x * radius,
-              _camDir.y * fullDist + _camRight.y * radius,
-              _camDir.z * fullDist + _camRight.z * radius
-            )
-            .normalize();
-          const hit2 = castBvhRay(
-            state,
-            _camOrigin,
-            _camLeftDir,
-            fullDist + radius,
-            0x0001,
-            _camHit2
-          );
-          if (hit2 && hit2.distance < minSafe) {
-            minSafe = hit2.distance;
-            hasHit = true;
-          }
+          // Side casts every other frame, or same frame when the center ray
+          // already clipped (need accurate pull-in). Cuts BVH work ~50% when
+          // the camera has clear line-of-sight.
+          const runSideCasts = hasHit || (state.time.frameCount & 1) === 0;
+          if (runSideCasts) {
+            _camRight.set(_camDir.z, 0, -_camDir.x).normalize();
+            _camLeftDir
+              .set(
+                _camDir.x * fullDist + _camRight.x * radius,
+                _camDir.y * fullDist + _camRight.y * radius,
+                _camDir.z * fullDist + _camRight.z * radius
+              )
+              .normalize();
+            const hit2 = castBvhRay(
+              state,
+              _camOrigin,
+              _camLeftDir,
+              fullDist + radius,
+              0x0001,
+              _camHit2
+            );
+            if (hit2 && hit2.distance < minSafe) {
+              minSafe = hit2.distance;
+              hasHit = true;
+            }
 
-          _camRightDir
-            .set(
-              _camDir.x * fullDist - _camRight.x * radius,
-              _camDir.y * fullDist - _camRight.y * radius,
-              _camDir.z * fullDist - _camRight.z * radius
-            )
-            .normalize();
-          const hit3 = castBvhRay(
-            state,
-            _camOrigin,
-            _camRightDir,
-            fullDist + radius,
-            0x0001,
-            _camHit3
-          );
-          if (hit3 && hit3.distance < minSafe) {
-            minSafe = hit3.distance;
-            hasHit = true;
+            _camRightDir
+              .set(
+                _camDir.x * fullDist - _camRight.x * radius,
+                _camDir.y * fullDist - _camRight.y * radius,
+                _camDir.z * fullDist - _camRight.z * radius
+              )
+              .normalize();
+            const hit3 = castBvhRay(
+              state,
+              _camOrigin,
+              _camRightDir,
+              fullDist + radius,
+              0x0001,
+              _camHit3
+            );
+            if (hit3 && hit3.distance < minSafe) {
+              minSafe = hit3.distance;
+              hasHit = true;
+            }
           }
 
           if (!hasHit) {

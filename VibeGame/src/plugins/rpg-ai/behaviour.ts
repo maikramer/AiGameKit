@@ -345,18 +345,22 @@ function steerCombat(
   }
 
   // Peer separation: nudge away from other living agents so packs don't overlap.
+  // Half-rate (alternate frames) — visual packing stays fine at ~30 Hz.
   let sepX = 0;
   let sepZ = 0;
-  for (const other of aiAgentsQuery(state.world)) {
-    if (other === eid || entityDead(other)) continue;
-    const ox = Transform.posX[other] - x;
-    const oz = Transform.posZ[other] - z;
-    const d2 = ox * ox + oz * oz;
-    if (d2 < 1e-6 || d2 > PEER_SEP_RADIUS * PEER_SEP_RADIUS) continue;
-    const d = Math.sqrt(d2);
-    const push = ((PEER_SEP_RADIUS - d) / PEER_SEP_RADIUS) * PEER_SEP_STRENGTH;
-    sepX -= (ox / d) * push;
-    sepZ -= (oz / d) * push;
+  if ((state.time.frameCount & 1) === 0) {
+    for (const other of aiAgentsQuery(state.world)) {
+      if (other === eid || entityDead(other)) continue;
+      const ox = Transform.posX[other] - x;
+      const oz = Transform.posZ[other] - z;
+      const d2 = ox * ox + oz * oz;
+      if (d2 < 1e-6 || d2 > PEER_SEP_RADIUS * PEER_SEP_RADIUS) continue;
+      const d = Math.sqrt(d2);
+      const push =
+        ((PEER_SEP_RADIUS - d) / PEER_SEP_RADIUS) * PEER_SEP_STRENGTH;
+      sepX -= (ox / d) * push;
+      sepZ -= (oz / d) * push;
+    }
   }
   tx += sepX;
   tz += sepZ;
