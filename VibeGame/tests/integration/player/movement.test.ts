@@ -238,6 +238,7 @@ describe('Player Movement', () => {
       for (let i = 0; i < angles.length; i++) {
         Rigidbody.posX[player] = 0;
         Rigidbody.posZ[player] = 0;
+        Rigidbody.poseDirty[player] = 1;
         OrbitCamera.currentYaw[camera] = angles[i];
 
         InputState.moveY[player] = 1;

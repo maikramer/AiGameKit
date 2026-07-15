@@ -67,6 +67,7 @@ interface PhysicsContext {
 
 const physicsWorldQuery = defineQuery([PhysicsWorld]);
 const bodyQuery = defineQuery([Rigidbody]);
+const collisionEventsQuery = defineQuery([CollisionEvents]);
 const colliderQuery = defineQuery([Collider]);
 const characterControllerQuery = defineQuery([CharacterController]);
 const characterMovementQuery = defineQuery([
@@ -702,10 +703,12 @@ export const TeleportationSystem: System = {
     const context = getPhysicsContext(state);
 
     for (const entity of bodyQuery(state.world)) {
+      if (Rigidbody.poseDirty[entity] !== 1) continue;
       const body = context.entityToRigidbody.get(entity);
       if (!body) continue;
 
       teleportEntity(entity, body);
+      Rigidbody.poseDirty[entity] = 0;
     }
   },
 };
@@ -736,6 +739,12 @@ function processCollisionEvents(
   state: State,
   context: PhysicsContext
 ): void {
+  // No listeners → drain with no-op (queue must not grow) and skip ECS work.
+  if (collisionEventsQuery(state.world).length === 0) {
+    eventQueue.drainCollisionEvents(() => {});
+    return;
+  }
+
   eventQueue.drainCollisionEvents(
     (handle1: number, handle2: number, started: boolean) => {
       const entity1 = context.colliderToEntity.get(handle1);

@@ -882,7 +882,7 @@ function applyLakeSand(state: State, field: number): void {
 }
 
 /** Build per-chunk terrain colliders only within this radius of the player. */
-const PHYSICS_COLLIDER_RADIUS = 192;
+const PHYSICS_COLLIDER_RADIUS = 128;
 
 /** Re-run the (allocating) quadtree LOD selection only after the camera moves
  * this far — LOD boundaries are tens of metres apart, so per-frame reselection

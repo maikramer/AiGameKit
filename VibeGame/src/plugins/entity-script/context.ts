@@ -89,6 +89,11 @@ export function setEntityScriptSetupInflight(
   }
 }
 
+const globKeyCacheByGlob = new WeakMap<
+  Record<string, () => Promise<unknown>>,
+  Map<string, string | undefined>
+>();
+
 /**
  * Resolve a module key from a glob map using a logical filename (e.g. `cristal.ts`).
  * Returns `undefined` if no unique match.
@@ -100,21 +105,34 @@ export function resolveEntityScriptGlobKey(
   const f = file.trim();
   if (!f) return undefined;
 
+  let byFile = globKeyCacheByGlob.get(glob);
+  if (!byFile) {
+    byFile = new Map();
+    globKeyCacheByGlob.set(glob, byFile);
+  }
+  if (byFile.has(f)) {
+    return byFile.get(f);
+  }
+
   const keys = Object.keys(glob);
   const matches = keys.filter((key) => {
     const base = key.split('/').pop() ?? key;
     return base === f || key.endsWith(`/${f}`);
   });
 
+  let result: string | undefined;
   if (matches.length === 0) {
-    return undefined;
+    result = undefined;
+  } else {
+    if (matches.length > 1) {
+      logger.warn(
+        `[entity-script] Ambiguous glob match for "${file}": ${matches.join(', ')}. Using first.`
+      );
+    }
+    result = matches[0];
   }
-  if (matches.length > 1) {
-    logger.warn(
-      `[entity-script] Ambiguous glob match for "${file}": ${matches.join(', ')}. Using first.`
-    );
-  }
-  return matches[0];
+  byFile.set(f, result);
+  return result;
 }
 
 export function getCachedMonoBehaviourModule(

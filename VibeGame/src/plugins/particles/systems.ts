@@ -204,6 +204,10 @@ export const ParticleUpdateSystem: System = {
     const emitters = emitterQuery(state.world);
     const emitterCount = emitters.length;
 
+    // No emitters and no live systems → skip BatchedRenderer.update.
+    if (emitterCount === 0 && systems.size === 0) return;
+
+    let anyActive = systems.size > 0;
     for (const entity of emitters) {
       if (ParticleEmitter.active[entity] !== 1) continue;
 
@@ -227,12 +231,16 @@ export const ParticleUpdateSystem: System = {
         if (!ps) continue;
       }
 
+      anyActive = true;
+
       if (state.hasComponent(entity, WorldTransform)) {
-        ps.emitter.position.set(
-          WorldTransform.posX[entity],
-          WorldTransform.posY[entity],
-          WorldTransform.posZ[entity]
-        );
+        const x = WorldTransform.posX[entity];
+        const y = WorldTransform.posY[entity];
+        const z = WorldTransform.posZ[entity];
+        const em = ps.emitter.position;
+        if (em.x !== x || em.y !== y || em.z !== z) {
+          em.set(x, y, z);
+        }
       }
 
       if (ParticleEmitter.burst[entity] === 1 && ps.time >= ps.duration) {
@@ -241,7 +249,9 @@ export const ParticleUpdateSystem: System = {
       }
     }
 
-    renderer.update(delta);
+    if (anyActive || systems.size > 0) {
+      renderer.update(delta);
+    }
   },
 
   dispose(state: State) {

@@ -10,8 +10,8 @@ import { registerBvhMesh, unregisterBvhMesh } from './utils';
  * heights sampled from the heightmap. Vertices are world-space.
  *
  * Resolution is `gridDivisions` × `gridDivisions` quads (= (gridDivisions+1)^2
- * vertices). 256 gives a great quality/memory balance on a 10 km terrain (~131k
- * tris, BVH built in ~50ms).
+ * vertices). 128 gives a good quality/memory balance on a 10 km terrain (~33k
+ * tris, BVH built in ~15ms) while matching heightmap probes for camera/place.
  *
  * No normal attribute: the BVH raycast derives face normals geometrically and
  * the mesh is never rendered, so vertex normals would be dead weight.
@@ -86,13 +86,13 @@ function getBuiltKeys(state: State): Map<number, BuiltTerrain> {
  * For every terrain entity that finished `init()` and has not yet been added
  * to the BVH, generate a displaced plane geometry and register it.
  *
- * Resolution defaults to 256 segments per terrain (≈ 131k triangles, ~120 KB
+ * Resolution defaults to 128 segments per terrain (≈ 33k triangles, ~30 KB
  * for a 10 km map). Heightmap is sampled via the terrain plugin's bilinear
  * helper for smooth queries that match what the player sees.
  */
 export function syncTerrainBvh(
   state: State,
-  gridDivisions = 256
+  gridDivisions = 128
 ): { added: number; total: number } {
   const built = getBuiltKeys(state);
   const terrainCtx = getTerrainContext(state);

@@ -525,6 +525,11 @@ export function teleportEntity(entity: number, body: RAPIER.RigidBody): void {
   );
 }
 
+/** Mark ECS→Rapier pose push for {@link TeleportationSystem} (skip full body scan). */
+export function markRigidbodyPoseDirty(entity: number): void {
+  Rigidbody.poseDirty[entity] = 1;
+}
+
 export function detectPlatformContinuous(
   entity: number,
   collider: RAPIER.Collider,
@@ -696,17 +701,29 @@ export function applyCharacterMovement(
   // penetration-recovery creep/jitter that shook the camera) and lets the
   // character track up/down slopes and step-downs within GROUND_SNAP_MAX.
   if (CharacterMovement.velocityY[entity] <= 0) {
-    // Cast from the collider's projected new centre (it sits at a fixed offset
-    // from the body origin, so cast there — not from the body position).
-    const cp = collider.translation();
-    _snapOrigin.x = cp.x + finalX;
-    _snapOrigin.y = cp.y + finalY;
-    _snapOrigin.z = cp.z + finalZ;
-    snapHit = groundCast(collider, physicsWorld, _snapOrigin);
-    if (snapHit) {
-      _newPos.y += GROUND_SNAP_SKIN - snapHit.time_of_impact;
-      grounded = 1;
+    const horizStill = desiredHorizontalSpeed < 0.01;
+    const vertStill = Math.abs(CharacterMovement.velocityY[entity]) < 1e-4;
+    // Standing still on CCT ground: skip the extra shape-cast (reuse last frame).
+    if (
+      grounded &&
+      horizStill &&
+      vertStill &&
+      CharacterController.grounded[entity] === 1
+    ) {
       CharacterMovement.velocityY[entity] = 0;
+    } else {
+      // Cast from the collider's projected new centre (it sits at a fixed offset
+      // from the body origin, so cast there — not from the body position).
+      const cp = collider.translation();
+      _snapOrigin.x = cp.x + finalX;
+      _snapOrigin.y = cp.y + finalY;
+      _snapOrigin.z = cp.z + finalZ;
+      snapHit = groundCast(collider, physicsWorld, _snapOrigin);
+      if (snapHit) {
+        _newPos.y += GROUND_SNAP_SKIN - snapHit.time_of_impact;
+        grounded = 1;
+        CharacterMovement.velocityY[entity] = 0;
+      }
     }
   }
 
@@ -812,7 +829,19 @@ export function interpolateTransforms(state: State, alpha: number): void {
       Transform.rotZ[entity] /= norm;
     }
 
-    syncEulerFromQuaternion(Transform, entity);
+    // Euler only when the body quat changed between fixed steps (static skip).
+    if (
+      InterpolatedTransform.prevRotX[entity] !==
+        InterpolatedTransform.rotX[entity] ||
+      InterpolatedTransform.prevRotY[entity] !==
+        InterpolatedTransform.rotY[entity] ||
+      InterpolatedTransform.prevRotZ[entity] !==
+        InterpolatedTransform.rotZ[entity] ||
+      InterpolatedTransform.prevRotW[entity] !==
+        InterpolatedTransform.rotW[entity]
+    ) {
+      syncEulerFromQuaternion(Transform, entity);
+    }
   }
 }
 
@@ -824,6 +853,12 @@ export function syncRigidbodyToECS(
   const position = body.translation();
   const rotation = body.rotation();
   const linvel = body.linvel();
+
+  const rotChanged =
+    Rigidbody.rotX[entity] !== rotation.x ||
+    Rigidbody.rotY[entity] !== rotation.y ||
+    Rigidbody.rotZ[entity] !== rotation.z ||
+    Rigidbody.rotW[entity] !== rotation.w;
 
   Rigidbody.posX[entity] = position.x;
   Rigidbody.posY[entity] = position.y;
@@ -845,16 +880,18 @@ export function syncRigidbodyToECS(
     Rigidbody.rotW[entity]
   );
 
-  const euler = quaternionToEulerInto(
-    rotation.x,
-    rotation.y,
-    rotation.z,
-    rotation.w,
-    _rbEulerScratch
-  );
-  Rigidbody.eulerX[entity] = euler.x;
-  Rigidbody.eulerY[entity] = euler.y;
-  Rigidbody.eulerZ[entity] = euler.z;
+  if (rotChanged) {
+    const euler = quaternionToEulerInto(
+      rotation.x,
+      rotation.y,
+      rotation.z,
+      rotation.w,
+      _rbEulerScratch
+    );
+    Rigidbody.eulerX[entity] = euler.x;
+    Rigidbody.eulerY[entity] = euler.y;
+    Rigidbody.eulerZ[entity] = euler.z;
+  }
 
   Rigidbody.velX[entity] = linvel.x;
   Rigidbody.velY[entity] = linvel.y;

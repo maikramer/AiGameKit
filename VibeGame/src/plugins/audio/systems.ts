@@ -11,8 +11,8 @@ import { animatorRegistry } from '../gltf-anim/systems';
 import {
   fireClipMarkers,
   getClipSounds,
-  getFollowingPlays,
   pruneFollowingPlays,
+  syncFollowingPlayPositions,
 } from './bank';
 
 // Howler.js spatial audio uses stereo panning only (no HRTF).
@@ -346,14 +346,13 @@ export const SoundBankSystem: System = {
 
     // Sons que seguem entidades: actualiza posição ou solta se a entidade morreu.
     pruneFollowingPlays((eid) => state.exists(eid));
-    for (const play of getFollowingPlays()) {
-      const eid = play.followEid;
-      if (!state.exists(eid)) continue;
+    syncFollowingPlayPositions((eid) => {
+      if (!state.exists(eid)) return null;
       const t = state.hasComponent(eid, WorldTransform)
         ? WorldTransform
         : Transform;
-      play.setPos(t.posX[eid], t.posY[eid], t.posZ[eid]);
-    }
+      return { x: t.posX[eid], y: t.posY[eid], z: t.posZ[eid] };
+    });
 
     // Sons fixados a clips de animação.
     for (const eid of animClipQuery(state.world)) {

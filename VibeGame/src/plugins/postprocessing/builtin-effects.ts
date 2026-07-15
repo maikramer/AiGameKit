@@ -80,7 +80,7 @@ function wrapMulti(camera: Camera, effects: Effect[]): Pass {
 /** Maps a `detect-gpu` tier (0-3, undefined = unresolved yet) to n8ao's sample-count preset. */
 function qualityModeForTier(
   tier: { tier: number } | null
-): 'Performance' | 'Low' | 'Medium' | 'High' | 'Ultra' {
+): import('n8ao').N8AOQualityMode {
   if (!tier) return 'Medium';
   if (tier.tier <= 0) return 'Performance';
   if (tier.tier === 1) return 'Low';
@@ -425,6 +425,12 @@ function findFirstDirectionalLight(scene: Scene): DirectionalLight | null {
   return resolved;
 }
 
+/** Last sun sync pose — skip rewrite when camera/light barely moved. */
+const _lastSunCam = new Vector3(Number.NaN, Number.NaN, Number.NaN);
+const _lastSunDir = new Vector3(Number.NaN, Number.NaN, Number.NaN);
+const SUN_SYNC_CAM_EPS_SQ = 0.01; // ~0.1 m
+const SUN_SYNC_DIR_EPS_SQ = 1e-6;
+
 function syncSunSource(scene: Scene, camera: Camera): void {
   if (!sharedSunMesh) return;
   const light = findFirstDirectionalLight(scene);
@@ -432,6 +438,13 @@ function syncSunSource(scene: Scene, camera: Camera): void {
   // Light direction (scene → light) is opposite to the direction light travels.
   // The sun source sits along the scene→light vector, far from the camera.
   _lightDir.copy(light.position).sub(light.target.position).normalize();
+  const camMoved =
+    camera.position.distanceToSquared(_lastSunCam) > SUN_SYNC_CAM_EPS_SQ;
+  const dirMoved =
+    _lightDir.distanceToSquared(_lastSunDir) > SUN_SYNC_DIR_EPS_SQ;
+  if (!camMoved && !dirMoved) return;
+  _lastSunCam.copy(camera.position);
+  _lastSunDir.copy(_lightDir);
   _sunPosition.copy(camera.position).addScaledVector(_lightDir, 400);
   sharedSunMesh.position.copy(_sunPosition);
 }

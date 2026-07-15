@@ -113,6 +113,7 @@ function applyRootPlacement(
     Rigidbody.rotY[eid] = q.y;
     Rigidbody.rotZ[eid] = q.z;
     Rigidbody.rotW[eid] = q.w;
+    Rigidbody.poseDirty[eid] = 1;
   }
 
   registerPlacedColliderFootprint(state, eid);

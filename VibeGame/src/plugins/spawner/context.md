@@ -11,13 +11,13 @@ Para colocar props, NPCs, partículas ou qualquer recipe num **ponto fixo** sem 
 
 Chaves típicas dentro de `place` (ver também `place-fields.ts` e `profiles.ts`, perfil interno `place`):
 
-| Chave | Significado |
-|--------|-------------|
+| Chave              | Significado                                                                                                    |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
 | `at` (obrigatório) | Dois números `x z` — posição horizontal em mundo (e âncora do grupo; soma-se ao `transform` do pai se existir) |
-| `y-offset` | Atalho para `base-y-offset` (offset vertical após o solo) |
-| `ground-align` | `aabb` \| `none` — elevar GLB pelo AABB local (relevante com `url` num filho) |
-| `align-to-terrain` | `1` \| `0` — rodar a raiz para alinhar à normal do terreno |
-| `max-slope-deg` | Inclinação máxima aceite; acima, aviso e instâncias omitidas |
+| `y-offset`         | Atalho para `base-y-offset` (offset vertical após o solo)                                                      |
+| `ground-align`     | `aabb` \| `none` — elevar GLB pelo AABB local (relevante com `url` num filho)                                  |
+| `align-to-terrain` | `1` \| `0` — rodar a raiz para alinhar à normal do terreno                                                     |
+| `max-slope-deg`    | Inclinação máxima aceite; acima, aviso e instâncias omitidas                                                   |
 
 O perfil interno `place` em `profiles.ts` define defaults para esse modo: `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`.
 
@@ -62,33 +62,33 @@ Atributo **`profile`** no `<SpawnGroup>` (e opcionalmente no **filho**) preenche
 
 ### `<SpawnGroup profile="...">`
 
-| profile | Descrição | Defaults (se omitido no XML) |
-|---------|------------|-------------------------------|
-| `none` ou omitido | Legado | `align-to-terrain=0`, `base-y-offset=0`, `ground-align=none`, `random-yaw=0`, `scale-min/max=1`, `surface-epsilon=0.75`, `max-slope-deg=45`, `max-slope-attempts=32` |
-| `tree` | Vegetação GLB | `align-to-terrain=1`, `ground-align=aabb`, `base-y-offset=0.02`, yaw aleatório, `scale-min=1.6` / `scale-max=2.2`, limites de declive como acima |
-| `foliage` | Vegetação mais baixa | Como `tree`, com `scale-min=0.9` / `scale-max=1.3` |
-| `physics-box` | `dynamic-part` no chão | sem alinhamento ao declive, `base-y-offset≈0.425`, yaw aleatório, escala 1 |
-| `gltf-crate` | `GLTFDynamic` | sem alinhamento ao declive, `base-y-offset=0.35`, yaw aleatório, leve jitter de escala |
-| `place` | Usado internamente por `place="…"` em `<GameObject>` | `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90` |
+| profile           | Descrição                                            | Defaults (se omitido no XML)                                                                                                                                         |
+| ----------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `none` ou omitido | Legado                                               | `align-to-terrain=0`, `base-y-offset=0`, `ground-align=none`, `random-yaw=0`, `scale-min/max=1`, `surface-epsilon=0.75`, `max-slope-deg=45`, `max-slope-attempts=32` |
+| `tree`            | Vegetação GLB                                        | `align-to-terrain=1`, `ground-align=aabb`, `base-y-offset=0.02`, yaw aleatório, `scale-min=1.6` / `scale-max=2.2`, limites de declive como acima                     |
+| `foliage`         | Vegetação mais baixa                                 | Como `tree`, com `scale-min=0.9` / `scale-max=1.3`                                                                                                                   |
+| `physics-box`     | `dynamic-part` no chão                               | sem alinhamento ao declive, `base-y-offset≈0.425`, yaw aleatório, escala 1                                                                                           |
+| `gltf-crate`      | `GLTFDynamic`                                        | sem alinhamento ao declive, `base-y-offset=0.35`, yaw aleatório, leve jitter de escala                                                                               |
+| `place`           | Usado internamente por `place="…"` em `<GameObject>` | `align-to-terrain=1`, `ground-align=aabb`, escala 1, sem yaw aleatório, `max-slope-deg=90`                                                                           |
 
 ### Filho `profile="..."` (template)
 
-| profile | Recipe | Preenche se ausente |
-|---------|--------|----------------------|
-| `physics-crate` | `dynamic-part` | `shape`, `size`, `color`, `mass`, `restitution` |
-| `gltf-crate` | `GLTFDynamic` | `mass`, `friction`, `collider-margin`, `collider-shape` (padrão `box`) |
+| profile         | Recipe         | Preenche se ausente                                                    |
+| --------------- | -------------- | ---------------------------------------------------------------------- |
+| `physics-crate` | `dynamic-part` | `shape`, `size`, `color`, `mass`, `restitution`                        |
+| `gltf-crate`    | `GLTFDynamic`  | `mass`, `friction`, `collider-margin`, `collider-shape` (padrão `box`) |
 
 ## Estático vs física (templates)
 
 O spawn instancia **qualquer recipe** declarada como filha. A distinção é a **tag** (recipe), não um modo interno do spawner:
 
-| Objetivo | Filho típico | Notas |
-|----------|----------------|-------|
-| Só visual (árvores, decoração) | `<GLTFLoader>` | Sem `Body`/`Collider`. |
-| Primitiva física (caixa/cubo empurrável) | `<dynamic-part>` | Malha built-in + Rapier dinâmico. |
-| Obstáculo fixo | `<static-part>` | Corpo fixo. |
-| Plataforma / cinemática | `<kinematic-part>` | Velocidade ou movimento scriptado. |
-| GLB empurrável (collider no AABB: caixa, esfera ou cápsula) | `<GLTFDynamic>` | Ver plugin `gltf-xml` / atributo `collider-shape`. |
+| Objetivo                                                    | Filho típico       | Notas                                              |
+| ----------------------------------------------------------- | ------------------ | -------------------------------------------------- |
+| Só visual (árvores, decoração)                              | `<GLTFLoader>`     | Sem `Body`/`Collider`.                             |
+| Primitiva física (caixa/cubo empurrável)                    | `<dynamic-part>`   | Malha built-in + Rapier dinâmico.                  |
+| Obstáculo fixo                                              | `<static-part>`    | Corpo fixo.                                        |
+| Plataforma / cinemática                                     | `<kinematic-part>` | Velocidade ou movimento scriptado.                 |
+| GLB empurrável (collider no AABB: caixa, esfera ou cápsula) | `<GLTFDynamic>`    | Ver plugin `gltf-xml` / atributo `collider-shape`. |
 
 ### Atributo opcional `role` (metadado)
 
@@ -115,6 +115,7 @@ Nos filhos do `<SpawnGroup>` pode usar **`role="visual" | "dynamic" | "static" |
 - **surface-epsilon**: passo em unidades mundo para a normal (padrão `0.75`).
 - **max-slope-deg** (padrão `45`): inclinação máxima aceite — ângulo entre a **normal do terreno** e **+Y**. A normal é calculada a partir do **heightmap bruto** (sem o mesmo smoothing do shader), para não subestimar encostas íngremes. Se a amostra for mais íngreme, o spawner escolhe **outra posição aleatória** na mesma região e tenta de novo.
 - **max-slope-attempts** (padrão `32`): tentativas por instância. Se **nenhuma** amostra cumprir o declive e `max-slope-deg` for **menor que 90°**, essa instância **não é criada** (o `count` pode ficar abaixo do pedido em regiões muito íngremes). Com `max-slope-deg` ≥ 90° aceita-se qualquer inclinação.
+- **avoid-water** / **in-water** / **near-water**: `avoid-water` rejeita carve (água+barranco); `in-water` só superfície de lago (Y = waterY); `near-water` só anel de barranco/praia (pedras de margem). Não combines `in-water` com `near-water`.
 - **avoid-overlaps** (padrão `1`): rejeita candidatos cujo **footprint** (disco XZ) colide com algo já registado no **registo de ocupação** — instâncias deste e de outros grupos, entidades `place` com collider (ex.: paredes da cabana) e zonas `<SpawnExclusion>`. A rejeição re-amostra dentro de `max-slope-attempts`; se esgotar, a instância é omitida. Independente de ordem: cada caminho de spawn **regista e consulta**, então quem spawna depois desvia de quem veio antes (ex.: árvores instanciadas carregam async e desviam das rochas já spawnadas).
 - **footprint-radius** (padrão `0` = automático): raio XZ por instância **antes da escala**. Automático = meia-largura do AABB do GLB do template (fallback `0.8` para templates `<GameObject>` sem `url`). O teste usa `raio × scale-max` (conservador); o registo usa a escala real quando conhecida.
 - **`<SpawnExclusion at="16 8" radius="7">`**: disco explícito de não-spawn no registo de ocupação (água, praças, caminhos). Entidades `place` com collider registam o footprint automaticamente (raio = meia-diagonal XZ do collider, no centro com `pos-offset`).

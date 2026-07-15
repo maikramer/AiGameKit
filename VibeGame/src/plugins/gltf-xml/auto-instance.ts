@@ -38,8 +38,8 @@ import { registerGltfLocalYBounds } from './gltf-bounds-cache';
  * internal free-list assigns identical ids across primitives.
  */
 
-const LOD1_DIST = 80;
-const LOD2_DIST = 200;
+const LOD1_DIST = 50;
+const LOD2_DIST = 120;
 
 interface PoolPrimitive {
   mesh: InstancedMesh2;

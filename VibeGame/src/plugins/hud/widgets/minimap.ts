@@ -350,12 +350,17 @@ export class MinimapWidget implements HudWidget {
     layer.appendChild(wrapper);
 
     const ctx = canvas.getContext('2d');
+    let lastDrawAt = -1;
 
     return {
       root: wrapper,
       update: (state: State): void => {
         if (state.headless) return;
         if (!ctx) return;
+        // ~8 Hz redraw — minimap is tactical, not pixel-critical.
+        const now = state.time.elapsed;
+        if (now - lastDrawAt < 0.12) return;
+        lastDrawAt = now;
         const collection = collectMinimapDots(state, this.resolved);
         drawMinimap(ctx, collection, this.resolved);
       },

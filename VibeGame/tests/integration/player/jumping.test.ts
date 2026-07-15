@@ -265,6 +265,7 @@ describe('Player Jumping', () => {
 
       // Move player to edge of platform and then off
       Rigidbody.posX[player] = 0.6;
+      Rigidbody.poseDirty[player] = 1;
       InputState.moveX[player] = 1;
 
       // Step multiple times to ensure we move off the platform

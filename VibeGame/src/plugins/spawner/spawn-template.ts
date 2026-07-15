@@ -43,6 +43,7 @@ function mirrorPoseToRigidbody(state: State, eid: number): void {
   Rigidbody.eulerY[eid] = Transform.eulerY[eid];
   Rigidbody.eulerZ[eid] = Transform.eulerZ[eid];
   syncBodyQuaternionFromEuler(eid);
+  Rigidbody.poseDirty[eid] = 1;
 }
 
 function mergeTemplateAttributes(

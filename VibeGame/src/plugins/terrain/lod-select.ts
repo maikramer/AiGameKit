@@ -105,13 +105,28 @@ function traverse(
     return;
   }
 
-  // This node is a leaf — it represents a single chunk.
-  out.push({
-    originX: cx,
-    originZ: cz,
-    size,
-    level,
-  });
+  // This node is a leaf — reuse pooled ChunkDesc to avoid per-frame alloc.
+  const desc = acquireChunkDesc();
+  desc.originX = cx;
+  desc.originZ = cz;
+  desc.size = size;
+  desc.level = level;
+  out.push(desc);
+}
+
+/** Pooled leaf descriptors + result array (valid until next selectChunks). */
+const _chunkDescPool: ChunkDesc[] = [];
+let _chunkDescPoolUsed = 0;
+const _selectResult: ChunkDesc[] = [];
+
+function acquireChunkDesc(): ChunkDesc {
+  let d = _chunkDescPool[_chunkDescPoolUsed];
+  if (!d) {
+    d = { originX: 0, originZ: 0, size: 0, level: 0 };
+    _chunkDescPool[_chunkDescPoolUsed] = d;
+  }
+  _chunkDescPoolUsed++;
+  return d;
 }
 
 /**
@@ -124,7 +139,8 @@ function traverse(
  * @param hysteresis lodHysteresis
  * @param camX       Camera X in world space
  * @param camZ       Camera Z in world space
- * @returns Array of ChunkDesc for all active leaf nodes
+ * @returns Array of ChunkDesc for all active leaf nodes (scratch — do not
+ *   retain across calls)
  */
 export function selectChunks(
   worldSize: number,
@@ -134,9 +150,21 @@ export function selectChunks(
   camX: number,
   camZ: number
 ): ChunkDesc[] {
-  const result: ChunkDesc[] = [];
-  traverse(0, 0, worldSize, 0, levels, ratio, hysteresis, camX, camZ, result);
-  return result;
+  _chunkDescPoolUsed = 0;
+  _selectResult.length = 0;
+  traverse(
+    0,
+    0,
+    worldSize,
+    0,
+    levels,
+    ratio,
+    hysteresis,
+    camX,
+    camZ,
+    _selectResult
+  );
+  return _selectResult;
 }
 
 /**

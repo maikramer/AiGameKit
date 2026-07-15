@@ -10,6 +10,12 @@ import { SteeringVehicle, type ObstacleLike } from './vehicle';
 const steerQuery = defineQuery([SteeringAgent, SteeringTarget, Transform]);
 const obstacleQuery = defineQuery([Rigidbody, Collider, Transform]);
 const _obstacleCacheByState = new WeakMap<State, ObstacleLike[]>();
+/** Rebuild fixed-obstacle list when count changes or every N frames (safety). */
+const _obstacleMetaByState = new WeakMap<
+  State,
+  { count: number; frame: number }
+>();
+const OBSTACLE_REBUILD_INTERVAL = 45;
 
 function getObstacleCache(state: State): ObstacleLike[] {
   let cache = _obstacleCacheByState.get(state);
@@ -18,6 +24,35 @@ function getObstacleCache(state: State): ObstacleLike[] {
     _obstacleCacheByState.set(state, cache);
   }
   return cache;
+}
+
+function rebuildObstacleCache(state: State, cache: ObstacleLike[]): number {
+  let obstacleCount = 0;
+  for (const eid of obstacleQuery(state.world)) {
+    if (Rigidbody.type[eid] !== BodyType.Fixed) continue;
+    let ge = cache[obstacleCount];
+    if (!ge) {
+      ge = { position: new THREE.Vector3(), boundingRadius: 0 };
+      cache[obstacleCount] = ge;
+    }
+    ge.position.set(
+      Transform.posX[eid],
+      Transform.posY[eid],
+      Transform.posZ[eid]
+    );
+    const r = Collider.radius[eid];
+    ge.boundingRadius =
+      r > 0
+        ? r
+        : Math.max(
+            Collider.sizeX[eid],
+            Collider.sizeY[eid],
+            Collider.sizeZ[eid]
+          ) / 2;
+    obstacleCount++;
+  }
+  cache.length = obstacleCount;
+  return obstacleCount;
 }
 
 function ensureVehicle(state: State, eid: number): SteeringRow {
@@ -70,34 +105,13 @@ export const SteeringSyncSystem: System = {
   update: (state) => {
     const dt = state.time.deltaTime || 1 / 60;
     const _obstacleCache = getObstacleCache(state);
-
-    let obstacleCount = 0;
-    for (const eid of obstacleQuery(state.world)) {
-      if (Rigidbody.type[eid] !== BodyType.Fixed) continue;
-      let ge = _obstacleCache[obstacleCount];
-      if (!ge) {
-        ge = { position: new THREE.Vector3(), boundingRadius: 0 };
-        _obstacleCache[obstacleCount] = ge;
-      }
-      ge.position.set(
-        Transform.posX[eid],
-        Transform.posY[eid],
-        Transform.posZ[eid]
-      );
-      const r = Collider.radius[eid];
-      ge.boundingRadius =
-        r > 0
-          ? r
-          : Math.max(
-              Collider.sizeX[eid],
-              Collider.sizeY[eid],
-              Collider.sizeZ[eid]
-            ) / 2;
-      obstacleCount++;
+    const frame = state.time.frameCount;
+    const meta = _obstacleMetaByState.get(state);
+    // Fixed obstacles rarely move — rebuild on an interval (not every frame).
+    if (!meta || frame - meta.frame >= OBSTACLE_REBUILD_INTERVAL) {
+      const n = rebuildObstacleCache(state, _obstacleCache);
+      _obstacleMetaByState.set(state, { count: n, frame });
     }
-    // Reuse the cache array (truncate the stale tail) instead of allocating a
-    // fresh slice every frame.
-    _obstacleCache.length = obstacleCount;
 
     for (const eid of steerQuery(state.world)) {
       if (!SteeringAgent.active[eid]) continue;

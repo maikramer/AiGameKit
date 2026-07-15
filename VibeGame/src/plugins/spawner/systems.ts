@@ -22,7 +22,11 @@ import {
   getGltfLocalYBounds,
 } from '../gltf-xml/gltf-bounds-cache';
 import { getAabbPendingUrls } from './bounds-context';
-import { isPointNearWater, waterBodyAt } from '../water/registry';
+import {
+  isPointNearWater,
+  isPointOnWaterBank,
+  waterBodyAt,
+} from '../water/registry';
 import {
   SpawnExclusion,
   isSpawnAreaFree,
@@ -321,6 +325,7 @@ export const TerrainSpawnSystem: System = {
           // Keep cluster hubs out of exclusions / earlier props.
           if (!isSpawnAreaFree(state, cx0, cz0, 0.5)) continue;
           if (spec.avoidWater && isPointNearWater(state, cx0, cz0)) continue;
+          if (spec.nearWater && !isPointOnWaterBank(state, cx0, cz0)) continue;
           clusterCenters.push([cx0, cz0]);
         }
       }
@@ -389,10 +394,16 @@ export const TerrainSpawnSystem: System = {
           if (!cand) continue;
           s = cand;
           if (!isNormalWithinSlopeLimit(cand.normal, maxSlope)) continue;
-          // `avoid-water` excludes the FULL carve footprint (water + carved
-          // banks/beach), not just the wet surface — otherwise props land on
-          // the bank slope with their trunks leaning into the channel.
-          if (spec.avoidWater && isPointNearWater(state, wx, wz)) continue;
+          // `near-water`: only the carved bank/beach ring (not the wet
+          // surface). Rocks and reeds hug the shoreline without floating.
+          if (spec.nearWater) {
+            if (!isPointOnWaterBank(state, wx, wz)) continue;
+          } else if (spec.avoidWater && isPointNearWater(state, wx, wz)) {
+            // `avoid-water` excludes the FULL carve footprint (water + carved
+            // banks/beach), not just the wet surface — otherwise props land on
+            // the bank slope with their trunks leaning into the channel.
+            continue;
+          }
           // Always honour SpawnExclusion (+ footprints from earlier groups).
           // `avoidOverlaps` only controls whether THIS group registers discs.
           if (

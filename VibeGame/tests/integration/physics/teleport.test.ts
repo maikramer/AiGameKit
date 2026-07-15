@@ -48,6 +48,7 @@ describe('TeleportationSystem', () => {
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
     Rigidbody.posX[box] = 50;
+    Rigidbody.poseDirty[box] = 1;
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
     expect(Rigidbody.posX[box]).toBeCloseTo(50, 1);
@@ -59,6 +60,7 @@ describe('TeleportationSystem', () => {
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
     Rigidbody.posZ[box] = -12;
+    Rigidbody.poseDirty[box] = 1;
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 
     // Fixed bodies may stay asleep (the post-step sync skips sleeping

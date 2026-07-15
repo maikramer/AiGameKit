@@ -71,6 +71,10 @@ interface ActivePlay {
   busName: string;
   /** When set, FollowEmitterSystem repositions this play to the entity each frame. */
   followEid?: number;
+  /** Last spatial pos pushed to Howler (skip setPos when unchanged). */
+  lastX?: number;
+  lastY?: number;
+  lastZ?: number;
 }
 
 const bank = new Map<string, SoundDef>();
@@ -289,7 +293,7 @@ export function playSoundOn(
   return playInternal(key, opts, eid, undefined);
 }
 
-/** Active plays bound to a followed entity (consumed by FollowEmitterSystem). */
+/** Active plays bound to a followed entity (consumed by SoundBankSystem). */
 export function getFollowingPlays(): {
   followEid: number;
   setPos: (x: number, y: number, z: number) => void;
@@ -302,11 +306,36 @@ export function getFollowingPlays(): {
     if (ap.followEid !== undefined) {
       out.push({
         followEid: ap.followEid,
-        setPos: (x, y, z) => ap.howl.pos(x, y, z, ap.id),
+        setPos: (x, y, z) => {
+          if (ap.lastX === x && ap.lastY === y && ap.lastZ === z) return;
+          ap.lastX = x;
+          ap.lastY = y;
+          ap.lastZ = z;
+          ap.howl.pos(x, y, z, ap.id);
+        },
       });
     }
   }
   return out;
+}
+
+/**
+ * Reposition follow-bound plays without allocating a play list each frame.
+ * Skips Howler.pos when the entity pose is unchanged.
+ */
+export function syncFollowingPlayPositions(
+  readPos: (eid: number) => { x: number; y: number; z: number } | null
+): void {
+  for (const ap of active) {
+    if (ap.followEid === undefined) continue;
+    const p = readPos(ap.followEid);
+    if (!p) continue;
+    if (ap.lastX === p.x && ap.lastY === p.y && ap.lastZ === p.z) continue;
+    ap.lastX = p.x;
+    ap.lastY = p.y;
+    ap.lastZ = p.z;
+    ap.howl.pos(p.x, p.y, p.z, ap.id);
+  }
 }
 
 /** Drop active plays that follow an entity which no longer exists. */

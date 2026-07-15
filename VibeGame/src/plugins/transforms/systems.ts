@@ -39,6 +39,16 @@ export const TransformHierarchySystem: System = {
   update: (state) => {
     const entities = transformQuery(state.world);
 
+    // Fast path: nothing dirty → WorldTransforms already valid.
+    let anyDirty = false;
+    for (const entity of entities) {
+      if (Transform.dirty[entity] === 1) {
+        anyDirty = true;
+        break;
+      }
+    }
+    if (!anyDirty) return;
+
     // Single pass over entities. Phases run per-entity in this order:
     //   1. sync Transform quaternion from its Euler (needs the entity's own
     //      dirty flag, set when its rotation changed).
@@ -53,7 +63,11 @@ export const TransformHierarchySystem: System = {
     //     deferred to the second loop below.
     for (const entity of entities) {
       const isDirty = Transform.dirty[entity] === 1;
-      if (!isDirty && !ancestorIsDirty(state, entity)) continue;
+      // Most entities are roots: skip Parent walk when clean.
+      if (!isDirty) {
+        if (!state.hasComponent(entity, Parent)) continue;
+        if (!ancestorIsDirty(state, entity)) continue;
+      }
 
       syncQuaternionFromEuler(Transform, entity);
 

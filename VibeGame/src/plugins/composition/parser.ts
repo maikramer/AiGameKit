@@ -53,6 +53,7 @@ function setupRigidbody(state: State, entity: number, bodyType: number): void {
   Rigidbody.eulerX[entity] = Transform.eulerX[entity];
   Rigidbody.eulerY[entity] = Transform.eulerY[entity];
   Rigidbody.eulerZ[entity] = Transform.eulerZ[entity];
+  Rigidbody.poseDirty[entity] = 1;
 }
 
 function setupPlace(

@@ -21,7 +21,11 @@ export {
 } from './components';
 export { PhysicsPlugin } from './plugin';
 export { getRapierWorld, invalidateCollider } from './systems';
-export { DEFAULT_GRAVITY, initializePhysics } from './utils';
+export {
+  DEFAULT_GRAVITY,
+  initializePhysics,
+  markRigidbodyPoseDirty,
+} from './utils';
 export {
   MeshAnchor,
   buildMeshColliderGeometry,

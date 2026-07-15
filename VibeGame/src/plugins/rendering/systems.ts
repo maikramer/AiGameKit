@@ -237,6 +237,31 @@ function applyPointShadowThrottle(
   }
 }
 
+/** Same AQ throttle for spot shadow maps (perspective, not cube). */
+function applySpotShadowThrottle(
+  state: State,
+  entityToSpotLight: Map<number, THREE.SpotLight>
+): void {
+  const tier = getAdaptiveQualityTier(state);
+  const preset = TIER_PRESETS[tier] ?? TIER_PRESETS[0];
+  const refreshFrames = preset.pointShadowRefreshFrames;
+  if (refreshFrames === 1) {
+    for (const light of entityToSpotLight.values()) {
+      if (light.castShadow && light.shadow.autoUpdate === false) {
+        light.shadow.autoUpdate = true;
+      }
+    }
+    return;
+  }
+  const frame = state.time.frameCount;
+  const refreshThisFrame = frame % refreshFrames === 0;
+  for (const light of entityToSpotLight.values()) {
+    if (!light.castShadow) continue;
+    if (light.shadow.autoUpdate) light.shadow.autoUpdate = false;
+    if (refreshThisFrame) light.shadow.needsUpdate = true;
+  }
+}
+
 /** Dispose every geometry/material/texture reachable from `root`, dedup-guarded. */
 function disposeSceneGraph(root: THREE.Object3D): void {
   const disposedGeometries = new Set<THREE.BufferGeometry>();
@@ -320,23 +345,56 @@ export const MeshInstanceSystem: System = {
     // Recompute dirty instance-pool bounds (throttled). computeBoundingSphere
     // is O(instances), so we don't run it per frame — only when a pool was
     // marked dirty (instance added/removed) AND enough frames have passed.
-    // Once recomputed, frustum culling is re-enabled so a pool fully outside
-    // the view frustum is skipped by Three.js's default cull.
-    if (state.time.frameCount % INSTANCE_BOUNDS_RECOMPUTE_INTERVAL === 0) {
-      for (const mesh of context.meshPools.values()) {
-        if (instanceBoundsDirty(mesh)) recomputeInstanceBounds(mesh);
+    // Small pools recompute immediately so frustumCulled returns sooner.
+    const frame = state.time.frameCount;
+    const due = frame % INSTANCE_BOUNDS_RECOMPUTE_INTERVAL === 0;
+    for (const mesh of context.meshPools.values()) {
+      if (!instanceBoundsDirty(mesh)) continue;
+      if (due || mesh.count <= INSTANCE_BOUNDS_IMMEDIATE_MAX) {
+        recomputeInstanceBounds(mesh);
       }
-      for (const mesh of context.unlitMeshPools.values()) {
-        if (instanceBoundsDirty(mesh)) recomputeInstanceBounds(mesh);
+    }
+    for (const mesh of context.unlitMeshPools.values()) {
+      if (!instanceBoundsDirty(mesh)) continue;
+      if (due || mesh.count <= INSTANCE_BOUNDS_IMMEDIATE_MAX) {
+        recomputeInstanceBounds(mesh);
       }
     }
   },
 };
 
 /** How many frames between instance-bounds recomputes. Balances cull accuracy
- *  against the O(instances) cost of computeBoundingSphere. Every ~0.25s at
- *  60fps is responsive enough that a pool's cull state tracks spawn/despawn. */
-const INSTANCE_BOUNDS_RECOMPUTE_INTERVAL = 15;
+ *  against the O(instances) cost of computeBoundingSphere. Every ~0.13s at
+ *  60fps restores frustumCulled sooner after spawn/despawn dirty marks. */
+const INSTANCE_BOUNDS_RECOMPUTE_INTERVAL = 8;
+/** Pools at or below this instance count recompute bounds without waiting. */
+const INSTANCE_BOUNDS_IMMEDIATE_MAX = 32;
+
+/** Saved `castShadow` while DistanceCull hides a GLTF (shadow map still draws
+ *  invisible=false casters in some paths; force off to cut fill cost). */
+const distanceCullShadowSaved = new WeakMap<THREE.Object3D, boolean>();
+
+function applyDistanceCullCastShadow(
+  root: THREE.Object3D,
+  culled: boolean
+): void {
+  root.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (culled) {
+      if (!distanceCullShadowSaved.has(mesh)) {
+        distanceCullShadowSaved.set(mesh, mesh.castShadow);
+      }
+      mesh.castShadow = false;
+    } else {
+      const prev = distanceCullShadowSaved.get(mesh);
+      if (prev !== undefined) {
+        mesh.castShadow = prev;
+        distanceCullShadowSaved.delete(mesh);
+      }
+    }
+  });
+}
 
 export const DistanceCullSystem: System = {
   group: 'draw',
@@ -373,6 +431,7 @@ export const DistanceCullSystem: System = {
       const gltfGroup = getGltfRootGroup(state, eid);
       if (gltfGroup) {
         gltfGroup.visible = !shouldCull;
+        applyDistanceCullCastShadow(gltfGroup, shouldCull);
       }
 
       if (state.hasComponent(eid, MeshRenderer)) {
@@ -389,6 +448,19 @@ interface CsmCache {
   color: number;
 }
 const csmCacheByState = new WeakMap<State, CsmCache>();
+
+/** Last cam/light pose used for `csm.update*` — skip when still. */
+interface CsmUpdatePose {
+  camX: number;
+  camY: number;
+  camZ: number;
+  dirX: number;
+  dirY: number;
+  dirZ: number;
+}
+const csmUpdatePoseByState = new WeakMap<State, CsmUpdatePose>();
+const CSM_CAM_EPS_SQ = 0.0025; // ~5 cm
+const CSM_DIR_EPS_SQ = 1e-8;
 
 function disposeCsm(state: State, scene: THREE.Scene): void {
   const context = getRenderingContext(state);
@@ -409,6 +481,7 @@ function disposeCsm(state: State, scene: THREE.Scene): void {
   context.csm.dispose();
   context.csm = null;
   csmCacheByState.delete(state);
+  csmUpdatePoseByState.delete(state);
   // Restore the bootstrap light CSM borrowed the scene from — the plain-light
   // path's "adopt the bootstrap light" logic (below) picks it back up the
   // next time an entity wants a normal (non-CSM) directional light.
@@ -495,6 +568,40 @@ function updateCsmDirectionalLight(
     cache.color = color;
   }
   for (const light of csm.lights) light.intensity = intensity;
+
+  const cam = camera.position;
+  const pose = csmUpdatePoseByState.get(state);
+  const camMoved =
+    !pose ||
+    (cam.x - pose.camX) ** 2 +
+      (cam.y - pose.camY) ** 2 +
+      (cam.z - pose.camZ) ** 2 >
+      CSM_CAM_EPS_SQ;
+  const dirMoved =
+    !pose ||
+    (_lightDir.x - pose.dirX) ** 2 +
+      (_lightDir.y - pose.dirY) ** 2 +
+      (_lightDir.z - pose.dirZ) ** 2 >
+      CSM_DIR_EPS_SQ;
+  if (!camMoved && !dirMoved) return;
+
+  if (!pose) {
+    csmUpdatePoseByState.set(state, {
+      camX: cam.x,
+      camY: cam.y,
+      camZ: cam.z,
+      dirX: _lightDir.x,
+      dirY: _lightDir.y,
+      dirZ: _lightDir.z,
+    });
+  } else {
+    pose.camX = cam.x;
+    pose.camY = cam.y;
+    pose.camZ = cam.z;
+    pose.dirX = _lightDir.x;
+    pose.dirY = _lightDir.y;
+    pose.dirZ = _lightDir.z;
+  }
 
   csm.updateFrustums();
   csm.update();
@@ -863,6 +970,7 @@ export const PointSpotLightSyncSystem: System = {
     // are still captured because their position is written above every frame
     // and the periodic refresh re-renders the cube map.
     applyPointShadowThrottle(state, entityToPointLight);
+    applySpotShadowThrottle(state, entityToSpotLight);
 
     const spotEntities = spotLightQuery(state.world);
     for (const eid of spotEntities) {

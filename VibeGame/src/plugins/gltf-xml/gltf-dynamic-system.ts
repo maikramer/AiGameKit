@@ -85,6 +85,7 @@ export const GltfDynamicPhysicsSystem: System = {
       Rigidbody.eulerY[eid] = Transform.eulerY[eid];
       Rigidbody.eulerZ[eid] = Transform.eulerZ[eid];
       syncBodyQuaternionFromEuler(eid);
+      Rigidbody.poseDirty[eid] = 1;
 
       // Centro do AABB em mundo vs origem do grupo (Transform): sem isto o colisor fica
       // desalinhado do mesh e o jogador pode "atravessar" o modelo visível.

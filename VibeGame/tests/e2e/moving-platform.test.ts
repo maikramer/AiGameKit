@@ -56,6 +56,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     Rigidbody.posX[playerEntity] = 0;
     Rigidbody.posY[playerEntity] = 4;
     Rigidbody.posZ[playerEntity] = 0;
+    Rigidbody.poseDirty[playerEntity] = 1;
 
     for (let i = 0; i < 30; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -118,6 +119,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     Rigidbody.posX[playerEntity] = 0;
     Rigidbody.posY[playerEntity] = 7;
     Rigidbody.posZ[playerEntity] = 0;
+    Rigidbody.poseDirty[playerEntity] = 1;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -214,6 +216,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     Rigidbody.posX[playerEntity] = 0;
     Rigidbody.posY[playerEntity] = 1;
     Rigidbody.posZ[playerEntity] = 0;
+    Rigidbody.poseDirty[playerEntity] = 1;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -339,6 +342,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     Rigidbody.posX[playerEntity] = 0;
     Rigidbody.posY[playerEntity] = 4;
     Rigidbody.posZ[playerEntity] = 0;
+    Rigidbody.poseDirty[playerEntity] = 1;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -414,6 +418,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     Rigidbody.posX[playerEntity] = 0;
     Rigidbody.posY[playerEntity] = 1;
     Rigidbody.posZ[playerEntity] = 0;
+    Rigidbody.poseDirty[playerEntity] = 1;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
@@ -537,6 +542,7 @@ describe('E2E: Moving Platform Character Controller', () => {
     Rigidbody.posX[playerEntity] = 0;
     Rigidbody.posY[playerEntity] = 7;
     Rigidbody.posZ[playerEntity] = 0;
+    Rigidbody.poseDirty[playerEntity] = 1;
 
     for (let i = 0; i < 20; i++) {
       state.step(TIME_CONSTANTS.FIXED_TIMESTEP);

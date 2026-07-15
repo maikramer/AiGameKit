@@ -209,6 +209,7 @@ describe('Physics Interpolation', () => {
     expect(posAfterStep).toBeGreaterThan(0);
 
     Rigidbody.posX[box] = 100;
+    Rigidbody.poseDirty[box] = 1;
 
     state.step(TIME_CONSTANTS.FIXED_TIMESTEP);
 

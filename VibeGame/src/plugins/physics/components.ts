@@ -51,6 +51,8 @@ export const Rigidbody = {
   rotVelX: new Float32Array(MAX_ENTITIES),
   rotVelY: new Float32Array(MAX_ENTITIES),
   rotVelZ: new Float32Array(MAX_ENTITIES),
+  /** 1 = ECS pose was written; TeleportationSystem pushes to Rapier then clears. */
+  poseDirty: new Uint8Array(MAX_ENTITIES),
 } as const;
 
 export const Collider = {

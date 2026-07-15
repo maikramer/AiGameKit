@@ -15,7 +15,18 @@ declare module 'n8ao' {
     transparencyAware: boolean;
     halfRes: boolean;
     screenSpaceRadius: boolean;
+    neuralDenoise: boolean;
   }
+
+  export type N8AOQualityMode =
+    | 'Performance'
+    | 'Low'
+    | 'Medium'
+    | 'High'
+    | 'Ultra'
+    | 'Neural-Low'
+    | 'Neural-Medium'
+    | 'Neural-High';
 
   export class N8AOPostPass extends Pass {
     constructor(scene: Scene, camera: Camera, width?: number, height?: number);
@@ -23,9 +34,7 @@ declare module 'n8ao' {
     setDisplayMode(
       mode: 'Combined' | 'AO' | 'No AO' | 'Split' | 'Split AO'
     ): void;
-    setQualityMode(
-      mode: 'Performance' | 'Low' | 'Medium' | 'High' | 'Ultra'
-    ): void;
+    setQualityMode(mode: N8AOQualityMode): void;
     setSize(width: number, height: number): void;
   }
 }

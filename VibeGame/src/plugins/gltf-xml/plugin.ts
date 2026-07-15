@@ -113,8 +113,8 @@ export const GltfXmlPlugin: Plugin = {
         loaded: 0,
       },
       gltfLod: {
-        thresholdNear: 40,
-        thresholdMid: 120,
+        thresholdNear: 45,
+        thresholdMid: 110,
         activeLevel: 0,
         settled: 0,
       },

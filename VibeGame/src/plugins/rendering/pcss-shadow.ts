@@ -35,10 +35,10 @@ let pcssApplied = false;
 
 // PCSS tuning. Conservative defaults read well on a 2048 shadow map and stay
 // stable at 4096.
-// Slightly leaner than classic 12/16 — still soft contact penumbra, ~30% fewer
-// shadow taps per lit fragment (blocker disk is dual-reference so ×2).
-const PCSS_BLOCKER_SAMPLES = 8; // dual-reference occlusion estimate disk
-const PCSS_PCF_SAMPLES = 12; // final variable-radius filter disk
+// Leaner than classic 12/16 — contact penumbra kept, ~45% fewer shadow taps
+// per lit fragment vs classic (blocker disk is dual-reference so ×2).
+const PCSS_BLOCKER_SAMPLES = 6; // dual-reference occlusion estimate disk
+const PCSS_PCF_SAMPLES = 8; // final variable-radius filter disk
 const PCSS_SEARCH_RADIUS_TEXELS = 5.0; // blocker-estimate disk, in texels
 const PCSS_MIN_RADIUS = 0.5; // penumbra floor (texels × shadowRadius)
 const PCSS_MAX_RADIUS = 5.0; // penumbra ceiling (texels × shadowRadius)

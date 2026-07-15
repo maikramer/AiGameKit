@@ -167,6 +167,7 @@ export const PlayerMovementSystem: System = {
       Rigidbody.rotY[entity] = newRotation.y;
       Rigidbody.rotZ[entity] = newRotation.z;
       Rigidbody.rotW[entity] = newRotation.w;
+      Rigidbody.poseDirty[entity] = 1;
     }
   },
 };
