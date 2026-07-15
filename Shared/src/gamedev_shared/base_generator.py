@@ -71,6 +71,10 @@ class DiffusionGeneratorBase(ABC):
         gpu_ids: list[int] | None = None,
         memory_efficient: bool = False,
         group_offload: bool = False,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        step_cache: str | None = None,
+        channels_last: bool = False,
     ) -> None:
         torch = _torch()
 
@@ -87,6 +91,12 @@ class DiffusionGeneratorBase(ABC):
         self.gpu_ids = gpu_ids
         self.memory_efficient = memory_efficient
         self.group_offload = group_offload
+        # None = respeitar env GAMEDEV_TORCH_COMPILE; True/False = override CLI.
+        self.torch_compile = torch_compile
+        self.torch_compile_mode = torch_compile_mode
+        # None = respeitar env GAMEDEV_STEP_CACHE; str = "off"|"auto"|"first_block"|"taylorseer".
+        self.step_cache = step_cache
+        self.channels_last = channels_last
         self.torch_dtype = torch_dtype_for(device)
 
         self._pipe: Any = None
@@ -319,58 +329,95 @@ class DiffusionGeneratorBase(ABC):
         self._log(f"offload: {plan.summary()}")
         return plan
 
-    def _maybe_compile_transformer(self, pipe: Any, plan: Any) -> None:
-        """Compila o transformer via torch.compile quando seguro (full-GPU only).
-
-        **Opt-in** via ``GAMEDEV_TORCH_COMPILE=1``: o cold-start do compile
-        (28-90s para um transformer) só compensa em server mode (múltiplas gerações
-        reutilizam o modelo compilado). Em invocações CLI one-shot, o tempo de
-        compile excede a poupança de inferência.
-
-        Só compila quando o plano é ``OFFLOAD_NONE`` (modelo cabe na GPU sem offload)
-        — CUDA graphs do ``reduce-overhead``/``max-autotune`` conflituam com group
-        offload. Usa ``mode="default"`` (10-40% speedup, sem overhead de graphs).
-        """
-        if plan.offload != "none" or self.device == "cpu":
-            return  # offload ativo: CUDA graphs + offload = OOM
-        # Opt-in: default off (cold-start só compensa em server mode).
+    def _torch_compile_enabled(self) -> bool:
+        """Resolve se compile está activo: instance flag > env ``GAMEDEV_TORCH_COMPILE``."""
         import os
 
-        if os.environ.get("GAMEDEV_TORCH_COMPILE", "0").strip().lower() not in ("1", "true", "yes", "on"):
+        if self.torch_compile is not None:
+            return bool(self.torch_compile)
+        return os.environ.get("GAMEDEV_TORCH_COMPILE", "0").strip().lower() in ("1", "true", "yes", "on")
+
+    def _maybe_compile_transformer(self, pipe: Any, plan: Any) -> None:
+        """Compila o transformer via torch.compile quando seguro.
+
+        **Opt-in** via ``--compile`` / ``GAMEDEV_TORCH_COMPILE=1``: cold-start do
+        compile (28-90s) só compensa em server/batch (modelo reutilizado).
+
+        - ``mode=default``: ok com ``group_stream`` (sem CUDA graphs).
+        - ``reduce-overhead`` / ``max-autotune``: só ``offload=="none"`` (cudagraphs).
+        - ``model_cpu`` / ``sequential_cpu``: skip (ping-pong de device quebra graphs).
+        """
+        if self.device == "cpu" or not self._torch_compile_enabled():
             return
+        offload = getattr(plan, "offload", "none")
+        if offload in ("model_cpu", "sequential_cpu"):
+            self._log(f"torch.compile skip (offload={offload} move módulos entre devices)")
+            return
+
         transformer = getattr(pipe, "transformer", None)
         if transformer is None:
             return
-        from gamedev_shared.quantization import apply_torch_compile
+        from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
+
+        requested = self.torch_compile_mode or "default"
+        mode = resolve_torch_compile_mode(
+            requested,
+            offload=offload,
+            group_offload_active=(offload == "group_stream"),
+        )
+        if mode != requested:
+            self._log(f"torch.compile mode={requested} → {mode} (offload={offload})")
 
         # Regional compile (compile_repeated_blocks) se disponível — cold start mais
-        # rápido que full torch.compile. Fallback para compile standard.
-        if hasattr(transformer, "compile_repeated_blocks"):
+        # rápido que full torch.compile. Só em full-GPU (regional + offload instável).
+        if offload == "none" and hasattr(transformer, "compile_repeated_blocks"):
             try:
                 transformer.compile_repeated_blocks()
                 self._log("torch.compile (regional) aplicado ao transformer")
                 return
             except Exception as exc:
                 self._log(f"compile_repeated_blocks falhou ({exc}); fallback para torch.compile")
-        compiled = apply_torch_compile(transformer, mode="default")
+        compiled = apply_torch_compile(
+            transformer,
+            mode=mode,
+            offload=offload,
+            group_offload_active=(offload == "group_stream"),
+        )
         if compiled is not transformer:
             pipe.transformer = compiled
-            self._log("torch.compile (default) aplicado ao transformer")
+            self._log(f"torch.compile ({mode}) aplicado ao transformer")
 
     def _maybe_apply_step_cache(self, pipe: Any, plan: Any) -> None:
         """Aplica step caching (FirstBlockCache/TaylorSeer) quando seguro.
 
         Só activa quando o plano é ``OFFLOAD_NONE`` (modelo cabe sem offload) —
-        step caching é speed, não VRAM. Controlado por ``GAMEDEV_STEP_CACHE`` env.
+        step caching é speed, não VRAM. CLI ``--step-cache`` > env ``GAMEDEV_STEP_CACHE``.
         """
         if plan.offload != "none" or self.device == "cpu":
             return
         from .step_cache import apply_step_cache, get_step_cache_mode
 
-        mode = get_step_cache_mode()
+        mode = self.step_cache if self.step_cache is not None else get_step_cache_mode()
         if mode == "off":
             return
         apply_step_cache(pipe, method=mode, log_fn=self._log)
+
+    def _maybe_apply_channels_last(self, pipe: Any, plan: Any) -> None:
+        """Aplica ``channels_last`` ao VAE (e transformer se Conv) quando pedido.
+
+        Opt-in via ``self.channels_last``. Seguro com qualquer offload — formato
+        de memória, não muda device placement.
+        """
+        if not self.channels_last or self.device == "cpu":
+            return
+        from gamedev_shared.quantization import apply_channels_last
+
+        for attr in ("vae", "transformer"):
+            mod = getattr(pipe, attr, None)
+            if mod is None:
+                continue
+            if apply_channels_last(mod, log_fn=lambda m, a=attr: self._log(f"{a}: {m}")):
+                pass  # logged inside
 
     def _maybe_select_attention_backend(self, pipe: Any, plan: Any) -> None:
         """Selecciona attention backend optimizado (Sage/Flash) quando disponível.

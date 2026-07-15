@@ -10,10 +10,9 @@ permite resume e separa "a baixar" de "a inferir".
 Resume é o comportamento por defeito do ``snapshot_download`` do ``huggingface_hub``;
 este módulo só o expõe com uma API estável e mensagens de estado consistentes.
 
-Downloads acelerados: ``enable_hf_transfer()`` ativa ``hf_transfer`` (Rust) por
-omissão — tipicamente 5-10x mais rápido que o cliente Python do ``huggingface_hub``.
-Todas as tools beneficiam automaticamente (via ``enable_hf_transfer()`` chamado em
-``ensure_model`` e em ``set_memory_optimization_env``).
+Downloads acelerados: ``enable_hf_fast_download()`` garante ``hf_xet`` (Xet) —
+backend nativo do ``huggingface_hub>=1.5``. O antigo ``hf_transfer`` foi removido
+do ecossistema hub 1.x.
 """
 
 from __future__ import annotations
@@ -25,39 +24,35 @@ from pathlib import Path
 StatusCallback = Callable[[str], None]
 
 
-def enable_hf_transfer(*, force: bool = False) -> bool:
-    """Ativa ``hf_transfer`` para downloads HuggingFace (5-10x mais rápido).
+def enable_hf_fast_download(*, force: bool = False) -> bool:
+    """Garante aceleração de downloads HF via ``hf_xet`` (hub >=1.5).
 
-    Define ``HF_HUB_ENABLE_HF_TRANSFER=1`` se o pacote ``hf_transfer`` estiver
-    instalado. O ``huggingface_hub`` detecta este env var e usa o backend Rust
-    para downloads paralelos com retry automático.
+    O ``huggingface_hub`` 1.5+ usa Xet por defeito nas architectures suportadas;
+    não é preciso ``HF_HUB_ENABLE_HF_TRANSFER`` (API removida com ``hf_transfer``).
 
     É **idempotente**: pode ser chamado múltiplas vezes. É chamado automaticamente
-    por ``ensure_model()`` e por ``set_memory_optimization_env()`` (que todos os
-    generators invocam antes do ``from_pretrained``).
+    por ``ensure_model()`` e por ``set_memory_optimization_env()``.
 
     Args:
-        force: Se ``True``, ativa mesmo que ``hf_transfer`` não esteja instalado
-            (o ``huggingface_hub`` dará erro claro se o pacote faltar na 1.ª use).
+        force: Se ``True``, devolve ``True`` mesmo sem o pacote ``hf_xet``
+            (o hub pode ainda funcionar com o cliente HTTP normal).
 
     Returns:
-        ``True`` se ``hf_transfer`` foi ativado (pacote presente ou ``force=True``).
+        ``True`` se ``hf_xet`` está disponível (ou ``force=True``).
     """
-    if os.environ.get("HF_HUB_ENABLE_HF_TRANSFER", "0") == "1":
-        return True  # já ativo
-
-    if force:
-        os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-        return True
-
-    # Verificar se o pacote está instalado antes de ativar (evita erro no 1.º download).
     try:
-        import hf_transfer  # noqa: F401
+        import hf_xet  # noqa: F401
     except ImportError:
-        return False
-
-    os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+        return bool(force)
     return True
+
+
+def enable_hf_transfer(*, force: bool = False) -> bool:
+    """Deprecated alias de :func:`enable_hf_fast_download`.
+
+    Mantido para chamadores legados; não define ``HF_HUB_ENABLE_HF_TRANSFER``.
+    """
+    return enable_hf_fast_download(force=force)
 
 
 def _hf_cache_dir(cache_dir: str | None) -> str | None:
@@ -124,8 +119,7 @@ def ensure_model(
     """
     from huggingface_hub import snapshot_download
 
-    # Downloads acelerados via hf_transfer (Rust) — 5-10x mais rápido.
-    enable_hf_transfer()
+    enable_hf_fast_download()
 
     # Barras de progresso do hub ligadas salvo se o utilizador as desligou.
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")

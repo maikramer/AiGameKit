@@ -75,6 +75,15 @@ profiles:
       amplitude: 0.15
       erosion_passes: 0
       texture_resolution: 256
+    part3d:
+      steps: 15
+      octree: 128
+      chunks: 10000
+      volume_decoder: flashvdm
+      mc_algo: mc
+      point_num: 32000
+      prompt_num: 48
+      postprocess_threshold: 0.95
 
   low:
     label: "Low (~1min, basic quality)"
@@ -145,6 +154,15 @@ profiles:
       amplitude: 0.25
       erosion_passes: 1
       texture_resolution: 512
+    part3d:
+      steps: 20
+      octree: 192
+      chunks: 15000
+      volume_decoder: flashvdm
+      mc_algo: mc
+      point_num: 40000
+      prompt_num: 64
+      postprocess_threshold: 0.95
 
   medium:
     label: "Medium (~2min, standard quality — DEFAULT)"
@@ -215,6 +233,15 @@ profiles:
       amplitude: 0.4
       erosion_passes: 3
       texture_resolution: 1024
+    part3d:
+      steps: 30
+      octree: 256
+      chunks: 20000
+      volume_decoder: auto
+      mc_algo: mc
+      point_num: 50000
+      prompt_num: 128
+      postprocess_threshold: 0.99
 
   high:
     label: "High (~5min, high quality)"
@@ -285,6 +312,15 @@ profiles:
       amplitude: 0.5
       erosion_passes: 5
       texture_resolution: 1024
+    part3d:
+      steps: 40
+      octree: 320
+      chunks: 25000
+      volume_decoder: auto
+      mc_algo: dmc
+      point_num: 64000
+      prompt_num: 160
+      postprocess_threshold: 0.99
 
   highest:
     label: "Highest (~10min+, maximum quality)"
@@ -355,3 +391,12 @@ profiles:
       amplitude: 0.6
       erosion_passes: 8
       texture_resolution: 2048
+    part3d:
+      steps: 50
+      octree: 320
+      chunks: 28000
+      volume_decoder: auto
+      mc_algo: dmc
+      point_num: 72000
+      prompt_num: 192
+      postprocess_threshold: 0.995

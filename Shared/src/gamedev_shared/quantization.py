@@ -326,12 +326,36 @@ def enable_model_cpu_offload_optimized(
         pipe.enable_model_cpu_offload(device=device)
 
 
+# Modos Inductor que activam CUDA graphs (conflituam com offload).
+_CUDAGRAPH_COMPILE_MODES = frozenset({"reduce-overhead", "max-autotune"})
+
+
+def resolve_torch_compile_mode(
+    requested: str,
+    *,
+    offload: str = "none",
+    group_offload_active: bool = False,
+) -> str:
+    """Resolve modo seguro de ``torch.compile`` dado o plano de offload.
+
+    ``reduce-overhead`` / ``max-autotune`` só em full-GPU (``offload=="none"``).
+    Com group/model/sequential offload → força ``default`` (sem CUDA graphs).
+    """
+    mode = (requested or "default").strip().lower()
+    if mode not in _CUDAGRAPH_COMPILE_MODES:
+        return mode
+    if group_offload_active or offload != "none":
+        return "default"
+    return mode
+
+
 def apply_torch_compile(
     model: Any,
     mode: str = "default",
     fullgraph: bool = False,
     *,
     group_offload_active: bool = False,
+    offload: str = "none",
 ) -> Any:
     """Aplica torch.compile a um modelo se disponível.
 
@@ -339,24 +363,30 @@ def apply_torch_compile(
         model: Modelo PyTorch.
         mode: Modo de compilação. ``"default"`` (recomendado para difusão) — 10-40%
             speedup sem overhead de CUDA graphs. **Evitar ``"reduce-overhead"`` e
-            ``"max-autotune"``**: usam CUDA graphs que reservam pools de memória
-            que o group offload não consegue reclamar → OOM/leak.
+            ``"max-autotune"`` com offload**: usam CUDA graphs que reservam pools
+            de memória que o offload não consegue reclamar → OOM/leak.
         fullgraph: Forçar graph completo (sem breaks).
         group_offload_active: Se ``True`` (group offload activo no pipeline), recusa
             modos que usam CUDA graphs (``reduce-overhead``, ``max-autotune``) e cai
             para ``"default"`` automaticamente.
+        offload: valor do :class:`~gamedev_shared.lowvram.OffloadPlan.offload`
+            (``"none"`` | ``"group_stream"`` | …). Mesmo efeito que
+            ``group_offload_active`` para modos com CUDA graphs.
 
     Returns:
         Modelo compilado ou original se torch.compile não disponível.
     """
-    # Guard: CUDA graphs (reduce-overhead/max-autotune) conflituam com group offload.
-    if group_offload_active and mode in ("reduce-overhead", "max-autotune"):
+    safe_mode = resolve_torch_compile_mode(mode, offload=offload, group_offload_active=group_offload_active)
+    if safe_mode != mode:
         import logging
 
         logging.getLogger("gamedev_shared.quantization").warning(
-            "torch.compile mode='%s' incompatível com group offload — a usar 'default'.", mode
+            "torch.compile mode='%s' incompatível com offload=%s — a usar '%s'.",
+            mode,
+            offload,
+            safe_mode,
         )
-        mode = "default"
+        mode = safe_mode
 
     try:
         import torch
@@ -367,6 +397,30 @@ def apply_torch_compile(
         pass
 
     return model
+
+
+def apply_channels_last(module: Any, *, log_fn: Any | None = None) -> bool:
+    """Converte módulo Conv para memory format ``channels_last`` (NHWC).
+
+    Acelera convoluções em Ampere+ (Tensor Core path). Seguro em VAE/UNet;
+    DiT token-based (Text3D) pouco beneficia — aplicar só a módulos Conv.
+
+    Returns:
+        True se ``to(memory_format=channels_last)`` correu sem erro.
+    """
+    if module is None:
+        return False
+    try:
+        import torch
+
+        module.to(memory_format=torch.channels_last)
+        if log_fn:
+            log_fn("channels_last (NHWC) aplicado")
+        return True
+    except Exception as exc:
+        if log_fn:
+            log_fn(f"channels_last falhou ({exc})")
+        return False
 
 
 def get_torch_compile_recommendation(model_name: str = "") -> dict[str, Any]:
@@ -409,6 +463,8 @@ def set_memory_optimization_env(
     enable_expandable_segments: bool = True,
     enable_cudnn_benchmark: bool = True,
     enable_hf_transfer: bool = True,
+    *,
+    enable_hf_fast_download: bool | None = None,
 ) -> None:
     """
     Configura variáveis de ambiente para otimização de memória e downloads.
@@ -416,9 +472,9 @@ def set_memory_optimization_env(
     Args:
         enable_expandable_segments: Habilita expandable segments no allocator CUDA
         enable_cudnn_benchmark: Habilita cudnn.benchmark para convoluções
-        enable_hf_transfer: Habilita ``hf_transfer`` (Rust) para downloads HF — 5-10x
-            mais rápido. Ativado por defeito pois todos os generators fazem
-            ``from_pretrained`` que pode desencadear downloads.
+        enable_hf_transfer: Alias legado de ``enable_hf_fast_download``.
+        enable_hf_fast_download: Garante ``hf_xet`` para downloads HF (hub >=1.5).
+            Se ``None``, usa o valor de ``enable_hf_transfer``.
     """
     if enable_expandable_segments:
         current = os.environ.get("PYTORCH_CUDA_ALLOC_CONF", "")
@@ -431,10 +487,11 @@ def set_memory_optimization_env(
     if enable_cudnn_benchmark:
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
-    if enable_hf_transfer:
-        from .model_download import enable_hf_transfer as _enable_hf_transfer
+    fast = enable_hf_transfer if enable_hf_fast_download is None else enable_hf_fast_download
+    if fast:
+        from .model_download import enable_hf_fast_download as _enable_hf_fast_download
 
-        _enable_hf_transfer()
+        _enable_hf_fast_download()
 
 
 def suggest_environment_variables(vram_gb: float) -> dict[str, str]:

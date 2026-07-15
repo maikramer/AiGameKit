@@ -99,6 +99,8 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "flux-klein-9b": ModelFootprint(26.0, 1.5, 9.0, architecture="flux"),
     "flux-dev-uint4": ModelFootprint(7.4, 2.0, 3.0, architecture="flux"),
     "hunyuan3d-2.1-dit": ModelFootprint(6.5, 1.5, 5.0, architecture="hunyuan3d"),
+    # Hunyuan3D-Part: DiT ~3.3 + conditioner ~0.9 + ShapeVAE ~0.3 + P3-SAM ~0.2 + overhead.
+    "hunyuan3d-part": ModelFootprint(4.75, 1.5, 5.2, architecture="dit"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
     "stable-audio-open": ModelFootprint(3.5, 1.5, 2.0, architecture="stable-audio"),
     # Sana Sprint 600M transformer + Gemma 2B encoder (~7.3 GiB fp16 total).

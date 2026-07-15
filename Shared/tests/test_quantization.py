@@ -399,7 +399,7 @@ class TestApplyTorchCompile:
         with patch("torch.compile", return_value=compiled) as mock_compile:
             result = apply_torch_compile(model)
         assert result is compiled
-        mock_compile.assert_called_once_with(model, mode="reduce-overhead", fullgraph=False)
+        mock_compile.assert_called_once_with(model, mode="default", fullgraph=False)
 
     def test_custom_mode_and_fullgraph(self):
         model = MagicMock()

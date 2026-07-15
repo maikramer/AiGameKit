@@ -24,6 +24,7 @@ PAINT3D_BIN = "PAINT3D_BIN"
 ANIMATOR3D_BIN = "ANIMATOR3D_BIN"
 TERRAIN3D_BIN = "TERRAIN3D_BIN"
 ROCKS3D_BIN = "ROCKS3D_BIN"
+PART3D_BIN = "PART3D_BIN"
 VIBEGAME_BIN = "VIBEGAME_BIN"
 MODELSERVER_BIN = "MODELSERVER_BIN"
 HF_HOME = "HF_HOME"
@@ -44,6 +45,7 @@ TOOL_BINS = {
     "animator3d": ANIMATOR3D_BIN,
     "terrain3d": TERRAIN3D_BIN,
     "rocks3d": ROCKS3D_BIN,
+    "part3d": PART3D_BIN,
     "materialize": MATERIALIZE_BIN,
     "vibegame": VIBEGAME_BIN,
     "modelserver": MODELSERVER_BIN,
@@ -104,9 +106,8 @@ def subprocess_gpu_env(
     if not env.get(PYTORCH_CUDA_ALLOC_CONF):
         env[PYTORCH_CUDA_ALLOC_CONF] = "expandable_segments:True"
 
-    # Downloads HF acelerados via hf_transfer (Rust) — 5-10x mais rápido.
-    # Ativar para subprocessos mesmo se o pai ainda não chamou enable_hf_transfer().
-    env.setdefault("HF_HUB_ENABLE_HF_TRANSFER", "1")
+    # Não forçar HF_HUB_ENABLE_HF_TRANSFER — removido no hub 1.x (hf_transfer).
+    # Downloads rápidos via hf-xet / Xet nativo do huggingface_hub>=1.5.
 
     if gpu_ids:
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(g) for g in gpu_ids)
