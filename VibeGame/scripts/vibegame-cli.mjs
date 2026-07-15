@@ -123,6 +123,7 @@ function parseRunArgs(args) {
   let skipBuild = false;
   let skipEngineInstall = false;
   let skipAppInstall = false;
+  let fetchAssets = false;
   /** @type {string[]} */
   let devArgs = [];
   const dash = args.indexOf('--');
@@ -134,8 +135,9 @@ function parseRunArgs(args) {
     else if (f === '--install' || f === '-i' || f === '--sync') install = true;
     else if (f === '--skip-build') skipBuild = true;
     else if (f === '--skip-app-install') skipAppInstall = true;
+    else if (f === '--fetch-assets') fetchAssets = true;
   }
-  return { install, skipBuild, skipEngineInstall, skipAppInstall, devArgs };
+  return { install, skipBuild, skipEngineInstall, skipAppInstall, fetchAssets, devArgs };
 }
 
 /**
@@ -306,6 +308,10 @@ function installedDepVersion(projectRoot, depName) {
  * Quando as versões diferem (ex.: engine 0.185.0, app 0.185.1), o Vite carrega
  * duas instâncias de Three.js ("Multiple instances of Three.js being imported").
  *
+ * Compara o range declarado no package.json do app (ex.: "^0.185.0", "0.185.1")
+ * com a versão exacta da engine. Se não for um pin exacto igual à engine,
+ * reescreve para a versão exacta e reinstala.
+ *
  * @param {string} engineRoot
  * @param {string} appRoot
  * @returns {boolean} true se alinhou (reescreveu package.json + reinstall)
@@ -326,14 +332,14 @@ function alignThreeVersion(engineRoot, appRoot) {
   const appThreeRange = appPkg.dependencies?.three;
   if (!appThreeRange) return false; // app não depende de three directamente
 
-  const appInstalled = installedDepVersion(appRoot, 'three');
-  if (appInstalled === engineVer) return false; // já alinhado
+  // Se o range já é um pin exacto igual à engine, nada a fazer.
+  if (appThreeRange === engineVer) return false;
 
   // Reescrever package.json com a versão exata da engine e reinstalar.
   appPkg.dependencies.three = engineVer;
   writeJsonFile(appPkgPath, appPkg);
   console.log(
-    `[vibegame run] three.js desalinhado (app=${appInstalled ?? '?'} engine=${engineVer}) — fixado para ${engineVer}`
+    `[vibegame run] three.js desalinhado (app="${appThreeRange}" engine=${engineVer}) — fixado para ${engineVer}`
   );
   runAppPackageInstall(appRoot);
   return true;
@@ -503,6 +509,7 @@ function runVibegameRun(engineRoot, opts) {
     }
 
     console.log('[vibegame run] bun run dev (app)');
+    if (opts.fetchAssets) process.env.FETCH_ASSETS_FORCE = '1';
     const c3 = runBun(cwd, ['run', 'dev', ...opts.devArgs]);
     process.exit(c3);
   }
@@ -550,6 +557,9 @@ function help() {
   );
   console.log(
     '  vibegame run --skip-app-install   Não roda bun install na pasta do app (node_modules já ok)'
+  );
+  console.log(
+    '  vibegame run --fetch-assets  Força re-download dos assets da release (overwrites locais)'
   );
   console.log(
     '  vibegame run -- --port 5174       Repassa argumentos ao `bun run dev`'
