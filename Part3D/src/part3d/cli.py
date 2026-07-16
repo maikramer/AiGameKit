@@ -205,6 +205,13 @@ def main() -> None:
     ),
 )
 @click.option(
+    "--exclusive-partition/--no-exclusive-partition",
+    default=None,
+    help=(
+        "Pós-processo: cada face fica na parte com superfície mais próxima (mata overlap/sobra sem carve). Default ON."
+    ),
+)
+@click.option(
     "--xpart-max-area-frac",
     type=float,
     default=None,
@@ -336,6 +343,7 @@ def decompose(
     segment_mode: str | None,
     parts_mode: str | None,
     preserve_thin_topology: bool | None,
+    exclusive_partition: bool | None,
     xpart_max_area_frac: float | None,
     geometry_crease_angle: float | None,
     geometry_region_normal_angle: float | None,
@@ -440,6 +448,8 @@ def decompose(
     parts_mode = str(parts_mode).strip().lower()
     if preserve_thin_topology is None:
         preserve_thin_topology = bool(_d.DEFAULT_PRESERVE_THIN_TOPOLOGY)
+    if exclusive_partition is None:
+        exclusive_partition = bool(_d.DEFAULT_EXCLUSIVE_PARTITION)
     if xpart_max_area_frac is None:
         xpart_max_area_frac = _d.DEFAULT_XPART_MAX_AREA_FRAC
 
@@ -722,6 +732,7 @@ def decompose(
             parts_mode=parts_mode,
             xpart_max_area_frac=float(xpart_max_area_frac),
             preserve_thin_topology=bool(preserve_thin_topology),
+            exclusive_partition=bool(exclusive_partition),
             cap_part_holes=cap_part_holes,
             detail_levels=detail_levels,
         ) as pipe,

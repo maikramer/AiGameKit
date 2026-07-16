@@ -253,6 +253,8 @@ class Part3DPipeline:
         xpart_skip_thin_ratio: float = _d.DEFAULT_XPART_SKIP_THIN_RATIO,
         xpart_skip_aspect: float = _d.DEFAULT_XPART_SKIP_ASPECT,
         preserve_thin_topology: bool = _d.DEFAULT_PRESERVE_THIN_TOPOLOGY,
+        exclusive_partition: bool = _d.DEFAULT_EXCLUSIVE_PARTITION,
+        exclusive_samples_per_part: int = _d.DEFAULT_EXCLUSIVE_SAMPLES_PER_PART,
         cap_part_holes: bool = _d.DEFAULT_CAP_PART_HOLES,
     ):
         self.model_path = model_path
@@ -283,6 +285,8 @@ class Part3DPipeline:
         self.xpart_skip_thin_ratio = float(xpart_skip_thin_ratio)
         self.xpart_skip_aspect = float(xpart_skip_aspect)
         self.preserve_thin_topology = bool(preserve_thin_topology)
+        self.exclusive_partition = bool(exclusive_partition)
+        self.exclusive_samples_per_part = max(64, int(exclusive_samples_per_part))
         self.head_min_score = head_min_score
         self.head_score_ratio = head_score_ratio
         self.consensus = consensus
@@ -547,8 +551,7 @@ class Part3DPipeline:
                 mods["DiT"] = self._model
             else:
                 self._log(
-                    "torch.compile DiT skip (VRAM/offload) — só ShapeVAE; "
-                    "Conditioner nunca compila (torch_cluster.fps)"
+                    "torch.compile DiT skip (VRAM/offload) — só ShapeVAE; Conditioner nunca compila (torch_cluster.fps)"
                 )
             compiled = compile_modules(
                 mods,
@@ -1013,9 +1016,7 @@ class Part3DPipeline:
                 continue
             # OOM: reduzir batch → 1 e retry
             if chunk_end - chunk_start > 1:
-                self._log(
-                    f"  [A] OOM Conditioner chunk [{chunk_start}:{chunk_end}] — retry parte-a-parte"
-                )
+                self._log(f"  [A] OOM Conditioner chunk [{chunk_start}:{chunk_end}] — retry parte-a-parte")
                 effective_cond_bs = 1
                 continue
             import gc
@@ -1345,9 +1346,7 @@ class Part3DPipeline:
             if cond_batch_size is None:
                 from .utils.autotune import _compute_cond_batch_size
 
-                cond_bs = _compute_cond_batch_size(
-                    num_parts_aabb, vram_gb_calc, free_vram_gb=free_vram_gb
-                )
+                cond_bs = _compute_cond_batch_size(num_parts_aabb, vram_gb_calc, free_vram_gb=free_vram_gb)
             else:
                 cond_bs = cond_batch_size
 
@@ -1623,8 +1622,23 @@ class Part3DPipeline:
                 filled = len(parts_scene.geometry) - before
                 if filled > 0 or thin_labels:
                     self._log(
-                        f"  Hybrid: face-split para finas={len(thin_labels)} "
-                        f"+ falhas MC (+{max(0, filled)} meshes)"
+                        f"  Hybrid: face-split para finas={len(thin_labels)} + falhas MC (+{max(0, filled)} meshes)"
+                    )
+
+            if self.exclusive_partition and len(parts_scene.geometry) > 1:
+                from .utils.exclusive_partition import exclusive_surface_partition, partition_stats
+
+                before_scene = parts_scene
+                parts_scene = exclusive_surface_partition(
+                    parts_scene,
+                    samples_per_part=self.exclusive_samples_per_part,
+                )
+                stats = partition_stats(before_scene, parts_scene)
+                if stats["faces_dropped"] > 0:
+                    self._log(
+                        f"  Exclusive partition: -{stats['faces_dropped']} faces overlap "
+                        f"({stats['faces_before']}→{stats['faces_after']}, "
+                        f"{stats['parts_before']}→{stats['parts_after']} parts)"
                     )
 
             return parts_scene, face_ids, clean_mesh

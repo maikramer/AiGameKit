@@ -108,6 +108,12 @@ DEFAULT_XPART_SKIP_ASPECT = 5.0  # max/min ≥ isto → skip
 # membranas facetadas; com o guard anti-NaN os cortes já ficam limpos.
 DEFAULT_CAP_PART_HOLES = False
 
+# Pós-X-Part: cada face fica na parte cuja superfície está mais perto.
+# Mata sobra/overlap sem carve. OFF até haver selagem/voxel-MC — cortar
+# faces abre sólidos watertight. Opt-in: --exclusive-partition.
+DEFAULT_EXCLUSIVE_PARTITION = False
+DEFAULT_EXCLUSIVE_SAMPLES_PER_PART = 4000
+
 DEFAULT_DTYPE = "float16"
 DEFAULT_CPU_OFFLOAD = False
 DEFAULT_MEMORY_EFFICIENT = False
