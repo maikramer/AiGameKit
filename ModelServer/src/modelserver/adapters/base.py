@@ -20,7 +20,8 @@ from collections.abc import Callable
 from typing import Any
 
 from gamedev_shared.diffusion_control import GenerationAborted
-from modelserver import protocol as P
+
+from .. import protocol as P
 
 __all__ = ["BackendAdapter", "GenerationAborted"]
 

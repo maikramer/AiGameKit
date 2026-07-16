@@ -374,6 +374,8 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         width: int = 512,
         height: int = 512,
         remove_background: bool = False,
+        should_abort: Any = None,
+        on_step: Any = None,
     ) -> tuple[Image.Image, dict[str, Any]]:
         """Gera um ícone a partir do prompt.
 
@@ -431,6 +433,15 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         }
         if negative_prompt:
             pipe_kwargs["negative_prompt"] = negative_prompt
+
+        from gamedev_shared.diffusion_control import attach_step_hooks
+
+        attach_step_hooks(
+            pipe_kwargs,
+            num_inference_steps=num_inference_steps,
+            should_abort=should_abort,
+            on_step=on_step,
+        )
 
         self._log("Inferência Sana...")
         out = pipe(**pipe_kwargs)

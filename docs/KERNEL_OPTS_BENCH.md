@@ -108,6 +108,7 @@ Part3D/.venv/bin/python docs/scripts/bench_kernel_opts.py --tool part3d --append
 | 37 | skymap2d | `sky-compile-cl` | 19.1 | 367.5 | 30.5 | mem-eff | compile=default | channels_last |
 | 38 | text2sound | `snd-baseline` | 12.0 | 1.1 | 0.6 | effects/small | d=2.0s | steps=12 |
 | 39 | text2sound | `snd-channels-last` | 7.8 | 0.9 | 0.6 | effects/small | d=2.0s | steps=12 | channels_last |
+| 40 | text2sound | `snd-compile` | 8.4 | 27.5 | 0.6 | effects/small | d=2.0s | steps=12 | compile=default |
 
 <!-- BENCH_TABLE_END -->
 

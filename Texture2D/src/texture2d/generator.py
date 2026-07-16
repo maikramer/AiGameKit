@@ -198,6 +198,8 @@ class TextureGenerator(DiffusionGeneratorBase):
         height: int = DEFAULT_RESOLUTION,
         preset: str | None = None,
         ground: str = "auto",
+        should_abort: Any = None,
+        on_step: Any = None,
         **_ignored: Any,
     ) -> tuple[Image.Image, dict[str, Any]]:
         """Gera uma textura seamless (tileable por construção via circular padding).
@@ -271,17 +273,26 @@ class TextureGenerator(DiffusionGeneratorBase):
 
         generator = self._build_generator(resolved_seed)
 
+        from gamedev_shared.diffusion_control import attach_step_hooks
+
         self._clear_cache()
         self._log("Inferência (SD circular)...")
-        out = pipe(
-            prompt=p,
-            negative_prompt=negative_prompt,
-            guidance_scale=guidance_scale,
+        pipe_kwargs: dict[str, Any] = {
+            "prompt": p,
+            "negative_prompt": negative_prompt,
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": num_inference_steps,
+            "width": width,
+            "height": height,
+            "generator": generator,
+        }
+        attach_step_hooks(
+            pipe_kwargs,
             num_inference_steps=num_inference_steps,
-            width=width,
-            height=height,
-            generator=generator,
+            should_abort=should_abort,
+            on_step=on_step,
         )
+        out = pipe(**pipe_kwargs)
         image = out.images[0]
         if image is None:
             raise RuntimeError("Nenhuma imagem devolvida pelo pipeline")

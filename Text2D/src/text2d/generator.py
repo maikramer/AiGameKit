@@ -218,6 +218,8 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
         guidance_scale: float = 1.0,
         num_inference_steps: int = 4,
         seed: int | None = None,
+        should_abort: Any = None,
+        on_step: Any = None,
     ) -> tuple[Image.Image, dict[str, Any]]:
         """Gera uma imagem a partir de um prompt.
 
@@ -225,20 +227,29 @@ class KleinFluxGenerator(DiffusionGeneratorBase):
             Tuple ``(image, metadata)`` — alinhado com as outras tools 2D.
             Metadata inclui prompt, seed, guidance, steps, dimensions.
         """
+        from gamedev_shared.diffusion_control import attach_step_hooks
+
         pipe = self._load_pipeline()
         resolved_seed = self._resolve_seed(seed)
         generator = self._build_generator(resolved_seed)
 
         self._clear_cache()
         self._log("Inferência...")
-        out = pipe(
-            prompt=prompt,
-            height=height,
-            width=width,
-            guidance_scale=guidance_scale,
+        pipe_kwargs: dict[str, Any] = {
+            "prompt": prompt,
+            "height": height,
+            "width": width,
+            "guidance_scale": guidance_scale,
+            "num_inference_steps": num_inference_steps,
+            "generator": generator,
+        }
+        attach_step_hooks(
+            pipe_kwargs,
             num_inference_steps=num_inference_steps,
-            generator=generator,
+            should_abort=should_abort,
+            on_step=on_step,
         )
+        out = pipe(**pipe_kwargs)
         image = out.images[0]
         metadata: dict[str, Any] = {
             "prompt": prompt,

@@ -246,6 +246,8 @@ class SkymapGenerator(DiffusionGeneratorBase):
         cfg_scale: float | None = None,
         lora_strength: float = 1.0,
         preset: str | None = None,
+        should_abort: Any = None,
+        on_step: Any = None,
     ) -> tuple[Image.Image, dict[str, Any]]:
         """Gera um skymap equirectangular 360°.
 
@@ -309,6 +311,8 @@ class SkymapGenerator(DiffusionGeneratorBase):
 
         self._clear_cache()
 
+        from gamedev_shared.diffusion_control import attach_step_hooks
+
         self._log("Inferência...")
         call_kwargs: dict[str, Any] = {
             "prompt": prompt,
@@ -320,6 +324,13 @@ class SkymapGenerator(DiffusionGeneratorBase):
         }
         if lora_strength != 1.0:
             call_kwargs["cross_attention_kwargs"] = {"scale": lora_strength}
+
+        attach_step_hooks(
+            call_kwargs,
+            num_inference_steps=int(num_inference_steps),
+            should_abort=should_abort,
+            on_step=on_step,
+        )
 
         out = pipe(**call_kwargs)
         image = out.images[0]
