@@ -45,6 +45,9 @@ class Adapter(BackendAdapter):
         from_image = request.get("from_image")
 
         if from_image:
+            if self.should_abort(request):
+                return self.cancelled_response("cancelled before image_to_3d")
+            self.report_progress(request, 0.1, "image_to_3d")
             mesh = model.generate_from_image(
                 image=from_image,
                 num_inference_steps=int(request.get("steps", request.get("num_inference_steps", 30))),
@@ -60,6 +63,9 @@ class Adapter(BackendAdapter):
             prompt = request.get("prompt", "")
             if not prompt:
                 return {"status": "error", "error": "prompt ou from_image é obrigatório"}
+            if self.should_abort(request):
+                return self.cancelled_response("cancelled before text_to_3d")
+            self.report_progress(request, 0.1, "text_to_3d")
             result = model.generate(
                 prompt=prompt,
                 t2d_seed=request.get("seed"),
@@ -81,15 +87,22 @@ class Adapter(BackendAdapter):
             )
             mesh = result if not isinstance(result, tuple) else result[0]
 
-        # Topology repair + save (alinha com o CLI generate).
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled after mesh generate")
+        self.report_progress(request, 0.65, "mesh_generated")
+
         from text3d.utils.export import save_mesh
         from text3d.utils.mesh_lod import prepare_mesh_topology
 
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before save")
+        self.report_progress(request, 0.85, "saving")
         mesh = prepare_mesh_topology(mesh)
         origin_mode = request.get("origin_mode")
         saved = save_mesh(mesh, output, origin_mode=origin_mode)
 
         elapsed = time.perf_counter() - t_start
+        self.report_progress(request, 1.0, "done")
         return {
             "status": "ok",
             "output": str(saved),

@@ -18,10 +18,17 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from skymap2d.generator import SkymapGenerator
 
-        load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        # UMS: compile on (bench 6GB: ~-19% hot; cold ~6 min amortizado).
+        # channels_last ~0 no skymap - nao forcar.
+        load_kwargs: dict[str, Any] = {
+            "verbose": kwargs.get("verbose", False),
+            "torch_compile": kwargs.get("torch_compile", True),
+            "torch_compile_mode": kwargs.get("torch_compile_mode", "default"),
+        }
         if self.should_use_low_vram_mode():
             load_kwargs["memory_efficient"] = kwargs.get("memory_efficient", True)
-        load_kwargs.update({k: v for k, v in kwargs.items() if k not in ("verbose", "memory_efficient")})
+        skip = {"verbose", "memory_efficient", "torch_compile", "torch_compile_mode"}
+        load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
         gen = SkymapGenerator(**load_kwargs)
         gen.warmup()
         return gen

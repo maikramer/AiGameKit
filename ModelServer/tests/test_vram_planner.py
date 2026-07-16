@@ -2,7 +2,39 @@
 
 from __future__ import annotations
 
-from modelserver.vram_planner import LoadedBackend, plan_eviction
+from modelserver.vram_planner import (
+    LoadedBackend,
+    can_admit,
+    inference_headroom_mib,
+    peak_vram_mib,
+    plan_eviction,
+)
+
+
+class TestPeakVram:
+    def test_peak_includes_activation_and_safety(self, monkeypatch) -> None:
+        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "256")
+        assert peak_vram_mib(6500, 1500) == 6500 + 1500 + 256
+
+    def test_can_admit_6gb_refuses_hunyuan_fp16_peak(self, monkeypatch) -> None:
+        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        # ~6.5+1.5 GiB + safety ≫ 5657 MiB livres típicos numa 4050 6GB
+        peak = peak_vram_mib(int(6.5 * 1024), int(1.5 * 1024))
+        assert peak > 5657
+        assert can_admit(5657, peak) is False
+
+    def test_can_admit_int4_peak_fits_6gb(self, monkeypatch) -> None:
+        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "384")
+        weights_int4 = int(6.5 * 0.32 * 1024)
+        peak = peak_vram_mib(weights_int4, int(1.5 * 1024))
+        assert can_admit(5657, peak) is True
+
+    def test_can_admit_unknown_free_allows(self) -> None:
+        assert can_admit(None, 99999) is True
+
+    def test_inference_headroom(self, monkeypatch) -> None:
+        monkeypatch.setenv("GAMEDEV_UMS_VRAM_SAFETY_MIB", "100")
+        assert inference_headroom_mib(1500) == 1600
 
 
 def _backend(name: str, *, vram: int, priority: int, ref: int = 0, last_used: float = 0.0) -> LoadedBackend:

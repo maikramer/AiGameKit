@@ -10,13 +10,56 @@ Estratégia: **peso + LRU**.
      least-recently-used evictado primeiro).
   3. Evictar sequencialmente até acumular MiB suficientes.
 
+**Peak (pesos + inferência):** admitir um backend exige VRAM livre ≥
+``weights + activation + safety`` — não só o footprint de pesos. GPUs ~6 GB
+não devem aceitar Hunyuan fp16 full (~8 GiB pico).
+
 Este módulo é **puro** (sem torch, sem GPU, sem sockets) — totalmente testável
 em CI sem hardware.
 """
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+
+# Margem contra fragmentação / contexto CUDA / compositor (MiB).
+DEFAULT_VRAM_SAFETY_MIB = 384
+
+
+def vram_safety_mib() -> int:
+    """``GAMEDEV_UMS_VRAM_SAFETY_MIB`` ou default."""
+    raw = os.environ.get("GAMEDEV_UMS_VRAM_SAFETY_MIB", "").strip()
+    if not raw:
+        return DEFAULT_VRAM_SAFETY_MIB
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return DEFAULT_VRAM_SAFETY_MIB
+
+
+def peak_vram_mib(
+    weights_mib: int,
+    activation_mib: int,
+    *,
+    safety_mib: int | None = None,
+) -> int:
+    """Pico estimado = pesos + activação de inferência + margem de segurança."""
+    safety = vram_safety_mib() if safety_mib is None else max(0, safety_mib)
+    return max(0, int(weights_mib)) + max(0, int(activation_mib)) + safety
+
+
+def can_admit(free_mib: int | None, peak_mib: int) -> bool:
+    """True se há VRAM livre suficiente para o pico (None = desconhecido → não bloquear)."""
+    if free_mib is None:
+        return True
+    return int(free_mib) >= int(peak_mib)
+
+
+def inference_headroom_mib(activation_mib: int, *, safety_mib: int | None = None) -> int:
+    """Headroom livre necessário quando os pesos já estão carregados."""
+    safety = vram_safety_mib() if safety_mib is None else max(0, safety_mib)
+    return max(0, int(activation_mib)) + safety
 
 
 @dataclass(frozen=True)

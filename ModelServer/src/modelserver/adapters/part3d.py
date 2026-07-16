@@ -54,7 +54,10 @@ class Adapter(BackendAdapter):
         output = request.get("output")
         if not mesh_path or not output:
             return {"status": "error", "error": "mesh_path e output são obrigatórios"}
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before generate")
 
+        self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
         segment_only = bool(request.get("segment_only", False))
         seed = request.get("seed")
@@ -130,6 +133,10 @@ class Adapter(BackendAdapter):
         if request.get("segmentation_proxy") is not None:
             gen_kwargs["segmentation_proxy_path"] = str(request["segmentation_proxy"])
 
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before segment")
+        self.report_progress(request, 0.15, "segment" if segment_only else "segment_and_parts")
+
         if segment_only:
             _aabb, face_ids, clean_mesh = model.segment_file(
                 mesh_path,
@@ -140,10 +147,14 @@ class Adapter(BackendAdapter):
                 postprocess=gen_kwargs.get("postprocess", True),
                 threshold=gen_kwargs.get("threshold", 0.99),
             )
+            if self.should_abort(request):
+                return self.cancelled_response("cancelled after segment")
+            self.report_progress(request, 0.9, "saving")
             color_map = {int(uid): np.random.randint(0, 255, size=3) for uid in np.unique(face_ids) if uid >= 0}
             face_colors = np.array([color_map.get(int(fid), [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
             save_colored_mesh(clean_mesh, face_colors, output_segmented)
             elapsed = time.perf_counter() - t_start
+            self.report_progress(request, 1.0, "done")
             return {
                 "status": "ok",
                 "output": str(output_segmented),
@@ -151,6 +162,10 @@ class Adapter(BackendAdapter):
             }
 
         parts_scene, face_ids, clean_mesh = model(mesh_path, seed=seed, **gen_kwargs)
+
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled after parts")
+        self.report_progress(request, 0.85, "saving")
 
         if not parts_scene.geometry:
             color_map = {int(uid): np.random.randint(0, 255, size=3) for uid in np.unique(face_ids) if uid >= 0}
@@ -164,6 +179,7 @@ class Adapter(BackendAdapter):
             save_colored_mesh(clean_mesh, face_colors, output_segmented)
 
         elapsed = time.perf_counter() - t_start
+        self.report_progress(request, 1.0, "done")
         return {
             "status": "ok",
             "output": str(output),

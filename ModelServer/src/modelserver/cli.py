@@ -10,8 +10,10 @@ Agentes / humanos: se a GPU estiver ocupada, usa ``status`` / ``queue`` —
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -190,7 +192,9 @@ def status_cmd(as_json: bool) -> None:
     if backends:
         bt = Table(title="[bold]Backends", box=box.SIMPLE)
         bt.add_column("Backend", style="cyan")
-        bt.add_column("VRAM (MiB)", justify="right")
+        bt.add_column("YAML", justify="right")
+        bt.add_column("Peak", justify="right")
+        bt.add_column("Act+", justify="right")
         bt.add_column("Priority", justify="right")
         bt.add_column("Carregado")
         bt.add_column("Refs", justify="right")
@@ -199,11 +203,17 @@ def status_cmd(as_json: bool) -> None:
             bt.add_row(
                 b["name"],
                 str(b["vram_mib"]),
+                str(b.get("peak_mib", "?")),
+                str(b.get("activation_headroom_mib", "?")),
                 str(b["priority"]),
                 loaded,
                 str(b.get("ref_count", 0)),
             )
         console.print(bt)
+        console.print(
+            "[dim]Peak = pesos(fp16)+activação+safety (admit/refuse). "
+            "Act+ = livre necessário com pesos já carregados.[/dim]"
+        )
 
     dbg = resp.get("debug") or {}
     last_errors = dbg.get("last_errors") or {}
@@ -219,6 +229,69 @@ def status_cmd(as_json: bool) -> None:
             f"[dim]debug: loaded={dbg.get('loaded_backends', [])} "
             f"depth={dbg.get('queue_depth', 0)} inflight={dbg.get('inflight', 0)}[/dim]"
         )
+
+
+@cli.command("submit")
+@click.argument("backend")
+@click.option("--prompt", default="smoke", help="Prompt de smoke-test.")
+@click.option("--output", "output_path", default="/tmp/ums-smoke-out.bin", help="Path de output.")
+@click.option("--priority", type=click.Choice(["interactive", "batch"]), default="interactive")
+@click.option("--wait/--no-wait", default=False, help="Esperar conclusão (poll).")
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON.")
+def submit_cmd(
+    backend: str,
+    prompt: str,
+    output_path: str,
+    priority: str,
+    wait: bool,
+    as_json: bool,
+) -> None:
+    """Smoke-test: ``submit`` (e opcionalmente espera) um job no UMS."""
+    resp = _send(
+        {
+            "cmd": P.CMD_SUBMIT,
+            "backend": backend,
+            "prompt": prompt,
+            "output": output_path,
+            "priority": priority,
+        },
+        timeout=30.0,
+    )
+    if resp is None:
+        console.print("[yellow]UMS não está ativo.[/yellow]")
+        sys.exit(1)
+    if as_json and not wait:
+        _print_json(resp)
+        if resp.get("status") != "ok":
+            sys.exit(1)
+        return
+    if resp.get("status") != "ok":
+        _print_ums_error(resp)
+        sys.exit(1)
+    job_id = str(resp.get("job_id", ""))
+    console.print(
+        f"[bold green]✓[/bold green] submit {backend} job={job_id[:8]}… "
+        f"pri={resp.get('priority')} pos={resp.get('queue_position', '?')}"
+    )
+    if not wait:
+        return
+    # Poll até done.
+    deadline = time.monotonic() + 600.0
+    while time.monotonic() < deadline:
+        poll = _send({"cmd": P.CMD_POLL, "job_id": job_id}, timeout=10.0)
+        if poll is None:
+            console.print("[yellow]UMS caiu durante wait.[/yellow]")
+            sys.exit(1)
+        state = poll.get("state")
+        if state in (P.JOB_DONE, P.JOB_FAILED, P.JOB_CANCELLED):
+            if as_json:
+                _print_json(poll)
+            else:
+                console.print(f"[dim]state={state}[/dim] {poll.get('result') or poll}")
+            sys.exit(0 if state == P.JOB_DONE else 1)
+        time.sleep(0.2)
+    console.print("[bold red]timeout à espera do job[/bold red]")
+    sys.exit(1)
 
 
 @cli.command("cancel")
@@ -465,7 +538,7 @@ def stats_cmd(reset: bool) -> None:
 
 @cli.command("doctor")
 def doctor_cmd() -> None:
-    """Diagnostica: deps de backends, GPU, socket, cache HF."""
+    """Diagnostica: deps de backends, GPU, socket, fila, peak VRAM, legacy."""
     import importlib
     import shutil
 
@@ -476,36 +549,95 @@ def doctor_cmd() -> None:
     checks: list[tuple[str, bool, str]] = []
 
     # 1. Socket do UMS ativo?
-    from gamedev_shared.model_server import is_ums_running
+    from gamedev_shared.model_server import UMS_SOCKET, discover_active_sockets, is_ums_running
 
     ums_up = is_ums_running()
     checks.append(
         ("UMS ativo", ums_up, "Socket presente e respondendo" if ums_up else "Arrancar: gamedev-model-server start")
     )
 
-    # Fila / scheduler (se UMS up).
+    free_mib: int | None = None
+    with contextlib.suppress(Exception):
+        from gamedev_shared.gpu import query_gpu_free_mib
+
+        free_mib = query_gpu_free_mib()
+
+    qresp: dict | None = None
+    # Fila / scheduler / peak (se UMS up).
     if ums_up:
         qresp = _send({"cmd": P.CMD_STATUS}, timeout=5.0)
         if qresp:
             q = qresp.get("queue") or {}
             depth = q.get("queue_depth", 0)
             inflight = q.get("inflight", 0)
+            qm = qresp.get("queue_metrics") or q.get("metrics") or {}
+            eta = qresp.get("eta_sec")
+            dbg = qresp.get("debug") or {}
+            affinity_hits = dbg.get("affinity_hits", qm.get("affinity_hits", "—"))
             detail = (
                 f"depth={depth}/{q.get('max_depth', '?')}, inflight={inflight}, "
-                f"affinity_cuts≤{qresp.get('max_affinity_cuts', '?')}"
+                f"affinity_cuts≤{qresp.get('max_affinity_cuts', '?')}, "
+                f"affinity_hits={affinity_hits}, "
+                f"eta={eta if eta is not None else '—'}s, "
+                f"fulls={qm.get('queue_full_count', 0)}, "
+                f"wait_p95={qm.get('queue_wait_p95_sec', '—')}"
             )
-            # Aviso se a fila está quase cheia.
             max_d = int(q.get("max_depth") or 32)
             ok_q = depth < max_d
             checks.append(("Fila UMS", ok_q, detail if ok_q else f"SATURADA — {detail}"))
+
+            # Peak vs free por backend carregado.
+            backends = qresp.get("backends") or []
+            loaded = [b for b in backends if b.get("loaded")]
+            if loaded:
+                parts = []
+                for b in loaded:
+                    peak = b.get("peak_mib") or b.get("vram_mib") or "?"
+                    parts.append(f"{b.get('name')} peak={peak} MiB")
+                free_s = f"{free_mib} MiB livres" if free_mib is not None else "free=?"
+                peak_ok = True
+                if free_mib is not None:
+                    for b in loaded:
+                        peak_v = b.get("peak_mib")
+                        if isinstance(peak_v, (int, float)) and free_mib < int(peak_v) * 0.15:
+                            # Só aviso informativo — free baixo com modelos já loaded é normal.
+                            pass
+                checks.append(
+                    (
+                        "Backends carregados",
+                        peak_ok,
+                        f"{free_s}; " + "; ".join(parts),
+                    )
+                )
+            else:
+                free_s = f"{free_mib} MiB livres" if free_mib is not None else "free=?"
+                checks.append(("Backends carregados", True, f"nenhum — {free_s}"))
+
             if inflight or depth:
                 checks.append(
                     (
                         "Não matar GPU",
                         True,
-                        "UMS tem jobs — usa queue/cancel/wait; NÃO kill processos GPU",
+                        "UMS tem jobs na fila — usa `ums queue` / cancel / wait; NÃO kill processos GPU",
                     )
                 )
+
+    # Legacy per-tool sockets (conflito potencial com UMS).
+    try:
+        legacy = [s for s in discover_active_sockets() if Path(s).resolve() != Path(UMS_SOCKET).resolve()]
+    except Exception:
+        legacy = []
+    if legacy:
+        names = ", ".join(Path(s).name for s in legacy)
+        checks.append(
+            (
+                "Sockets legacy",
+                False,
+                f"Activos: {names} — conflito com UMS; para ou GAMEDEV_ALLOW_LEGACY_SERVER=1 só se preciso",
+            )
+        )
+    else:
+        checks.append(("Sockets legacy", True, "nenhum per-tool activo"))
 
     # 2. GPU disponível?
     gpu_ok = shutil.which("nvidia-smi") is not None
@@ -575,6 +707,11 @@ def doctor_cmd() -> None:
 
     console.print(t)
     _print_do_not_kill_tip()
+    if ums_up and qresp and (qresp.get("queue") or {}).get("queue_depth"):
+        console.print(
+            "[yellow]Hint:[/yellow] há jobs na fila UMS — [bold]não mates GPU[/bold]; "
+            "usa [cyan]gamedev-model-server queue[/cyan] / cancel."
+        )
     if all_ok:
         console.print("[bold green]✓ Todos os checks passaram.[/bold green]")
     else:

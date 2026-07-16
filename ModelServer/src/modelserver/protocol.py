@@ -24,7 +24,8 @@ Comandos suportados:
     {"cmd": "release"} / {"cmd": "release", "backend": "X"}
     {"cmd": "status"} / {"cmd": "stats"} / {"cmd": "list-backends"}
     {"cmd": "preload", "backend": "X"}
-    {"cmd": "ensure-vram", "needed_mib": N}
+    {"cmd": "ensure-vram", "needed_mib": N, "backend"?: "..."}
+        Evicta até N MiB livres; com backend usa max(N, peak=pesos+activação+safety).
     {"cmd": "shutdown"}
 
   Response:
@@ -38,6 +39,7 @@ from pathlib import Path
 
 # Socket canónico do UMS (mesmo diretório dos per-tool legacy servers).
 SOCKET_FILENAME = "model-server.sock"
+WAL_FILENAME = "ums-jobs.jsonl"
 DEFAULT_SOCKET_PATH = Path.home() / ".cache" / "gamedev" / SOCKET_FILENAME
 
 # Comandos do protocolo.
@@ -90,6 +92,7 @@ ERR_TIMEOUT = "TIMEOUT"
 ERR_JOB_UNKNOWN = "JOB_UNKNOWN"
 ERR_INVALID_REQUEST = "INVALID_REQUEST"
 ERR_PRELOAD_FAILED = "PRELOAD_FAILED"
+ERR_VRAM_INSUFFICIENT = "VRAM_INSUFFICIENT"
 
 # Prioridades de pedido (menor rank = atende primeiro).
 PRIORITY_INTERACTIVE = "interactive"
@@ -130,6 +133,8 @@ def _env_int(name: str, default: int) -> int:
 MAX_AFFINITY_CUTS = _env_int("GAMEDEV_UMS_MAX_AFFINITY_CUTS", 3)
 MAX_QUEUE_DEPTH = _env_int("GAMEDEV_UMS_MAX_QUEUE_DEPTH", 32)
 MAX_INFLIGHT = _env_int("GAMEDEV_UMS_MAX_INFLIGHT", 1)
+# 0 = desactivado. Se >0, job queued há mais de N segundos força pick (anti-starve).
+STARVATION_TIMEOUT_SEC = float(_env_int("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", 0))
 
 # Default cmd quando ausente no request (retrocompat com per-tool: gerar).
 DEFAULT_CMD = CMD_GENERATE

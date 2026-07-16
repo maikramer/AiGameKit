@@ -12,23 +12,27 @@ class TestProtocolEnvOverrides:
         monkeypatch.delenv("GAMEDEV_UMS_MAX_AFFINITY_CUTS", raising=False)
         monkeypatch.delenv("GAMEDEV_UMS_MAX_QUEUE_DEPTH", raising=False)
         monkeypatch.delenv("GAMEDEV_UMS_MAX_INFLIGHT", raising=False)
+        monkeypatch.delenv("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", raising=False)
         import modelserver.protocol as proto
 
         importlib.reload(proto)
         assert proto.MAX_AFFINITY_CUTS == 3
         assert proto.MAX_QUEUE_DEPTH == 32
         assert proto.MAX_INFLIGHT == 1
+        assert proto.STARVATION_TIMEOUT_SEC == 0.0
 
     def test_valid_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GAMEDEV_UMS_MAX_AFFINITY_CUTS", "5")
         monkeypatch.setenv("GAMEDEV_UMS_MAX_QUEUE_DEPTH", "10")
         monkeypatch.setenv("GAMEDEV_UMS_MAX_INFLIGHT", "2")
+        monkeypatch.setenv("GAMEDEV_UMS_STARVATION_TIMEOUT_SEC", "120")
         import modelserver.protocol as proto
 
         importlib.reload(proto)
         assert proto.MAX_AFFINITY_CUTS == 5
         assert proto.MAX_QUEUE_DEPTH == 10
         assert proto.MAX_INFLIGHT == 2
+        assert proto.STARVATION_TIMEOUT_SEC == 120.0
 
     def test_invalid_falls_back_to_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GAMEDEV_UMS_MAX_AFFINITY_CUTS", "abc")

@@ -4,11 +4,10 @@
 # heterogénea de cada tool (warmup()/load()/_load_*/context-managed) num contrato
 # canónico (load/generate/unload) que o BackendManager invoca.
 #
-# vram_mib: estimativa do footprint em VRAM quando carregado (MiB). Valores
-#   derivados de profiling/números de modelo — afinar com medição real.
-# footprint_key: chave do registry gamedev_shared.lowvram.FOOTPRINTS (ex:
-#   "flux-klein-9b"). Se definida, o vram_mib do snapshot é derivado do footprint
-#   (mais preciso que o valor estático, reflecte quantização/offload real).
+# vram_mib: estimativa estática (MiB) — fallback se footprint_key falhar.
+# footprint_key: chave gamedev_shared.lowvram.FOOTPRINTS. O UMS admite jobs com
+#   peak = pesos(quant) + activation_gib + GAMEDEV_UMS_VRAM_SAFETY_MIB — NÃO só
+#   pesos. GPUs ~6 GB recusam text3d fp16 full; usam sdnq-int4.
 # priority: prioridade de evicção. Valores MAIORES = mais pesado/urgente de MANTER
 #   carregado (menos provável de ser evicted). Backends leves (priority baixa)
 #   são evicted primeiro quando a VRAM escasseia. Tie-break: LRU.

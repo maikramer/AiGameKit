@@ -1,17 +1,4 @@
-"""Adapter do Terrain3D — terrain-diffusion para geração de heightmaps.
-
-O Terrain3D é procedural: ``generate_terrain(config)`` carrega+a pipeline
-internamente e fecha-a no fim (``pipeline.close()`` no finally). Não há modelo
-persistente para manter em VRAM entre chamadas.
-
-O adapter trata o ``TerrainConfig`` como "model object" (na verdade é só config).
-``load`` devolve a config; ``generate`` chama ``generate_terrain`` + export;
-``unload`` é no-op (a pipeline já foi fechada dentro de ``generate_terrain``).
-
-Nota: por ser procedural, o benefício de manter este backend "carregado" é nulo
-em VRAM. Ainda assim é útil registá-lo para orquestração uniforme (todos os
-backends GPU passam pelo mesmo protocolo).
-"""
+"""Adapter do Terrain3D — terrain-diffusion para geração de heightmaps."""
 
 from __future__ import annotations
 
@@ -58,18 +45,29 @@ class Adapter(BackendAdapter):
         output = request.get("output")
         if not output:
             return {"status": "error", "error": "output é obrigatório"}
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before generate")
 
         # Aplicar overrides do request à config.
         for field in ("seed", "size", "world_size", "max_height", "num_inference_steps", "mode"):
             if field in request:
                 setattr(model, field, request[field])
 
+        self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
 
         from terrain3d.export import export_heightmap, export_metadata
         from terrain3d.generator import generate_terrain
 
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before diffusion")
+        self.report_progress(request, 0.2, "diffusion")
+
         result = generate_terrain(model)
+
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled after diffusion")
+        self.report_progress(request, 0.85, "export")
 
         out_path = Path(output)
         saved = export_heightmap(result.heightmap, out_path, size=model.size)
@@ -80,6 +78,7 @@ class Adapter(BackendAdapter):
             export_metadata(result, metadata_path)
 
         elapsed = time.perf_counter() - t_start
+        self.report_progress(request, 1.0, "done")
         return {
             "status": "ok",
             "output": str(saved),

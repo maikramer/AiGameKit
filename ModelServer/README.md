@@ -48,8 +48,15 @@ O UMS resolve isto com **1 socket, 1 processo, inventário global + scheduler**.
 4. **GPU**: `MAX_INFLIGHT=1` — uma geração de cada vez na GPU.
 
 Env overrides: `GAMEDEV_UMS_MAX_AFFINITY_CUTS`, `GAMEDEV_UMS_MAX_QUEUE_DEPTH`,
-`GAMEDEV_UMS_MAX_INFLIGHT`, `GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_DEBUG=1`
-(imprime o bloco `ums_debug` completo nas CLIs das tools).
+`GAMEDEV_UMS_MAX_INFLIGHT`, `GAMEDEV_UMS_STARVATION_TIMEOUT_SEC` (0=off),
+`GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_DEBUG=1`, `GAMEDEV_UMS_AUTO_START_LOG`,
+`GAMEDEV_ALLOW_LEGACY_SERVER=1` (text2icon/texture2d `server` legado).
+
+**Cancel cooperativo:** adapters 2D consultam `_abort` entre steps Diffusers.
+Hunyuan (text3d/paint3d): só entre fases (antes do generate).
+**ETA / métricas:** `status`/`queue`/`stats` incluem `eta_sec` + `queue_metrics`
+(cuts, wait p50/p95, `queue_full_count`).
+**Inflight:** `MAX_INFLIGHT>1` só arranca jobs em paralelo se VRAM livre couber.
 
 ### Debug nas respostas
 
@@ -153,10 +160,15 @@ a CLI termina com erro; aumenta `GAMEDEV_UMS_MAX_QUEUE_DEPTH` ou espera.
 
 ### Coordenação de VRAM
 
-Ferramentas pesadas, **no path in-process**, chamam `ensure_vram_available(N)`.
-Com UMS ativo → `ensure-vram` (evicção peso+LRU). Sem UMS → release cego aos
-sockets legacy. Com jobs na fila, `kill_gpu_compute_processes_aggressive` recusa
-matar (`respect_ums_queue=True`).
+**Pico = pesos(quant) + activação de inferência + `GAMEDEV_UMS_VRAM_SAFETY_MIB`
+(default 384).** O UMS **recusa** load/generate se VRAM livre < pico (ex.: text3d
+fp16 full ~8 GiB numa 6 GB) — tip: `sdnq-int4` / `--quality fast`. `status` mostra
+colunas Peak / Act+.
+
+Ferramentas pesadas, **no path in-process**, chamam
+`ensure_vram_available(N, backend="text3d")`. Com UMS ativo → `ensure-vram` usa
+`max(N, peak(backend))`. Sem UMS → release cego aos sockets legacy. Com jobs na
+fila, `kill_gpu_compute_processes_aggressive` recusa matar (`respect_ums_queue=True`).
 
 ## Protocolo
 

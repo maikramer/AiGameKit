@@ -7,11 +7,13 @@ só gere o inventário e a sincronização com os clientes.
 from __future__ import annotations
 
 import contextlib
+import json
 import threading
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from . import protocol as P
@@ -173,11 +175,27 @@ class Job:
         }
 
 
+_WAL_STATE_MAP = {
+    P.JOB_DONE: "done",
+    P.JOB_FAILED: "failed",
+    P.JOB_CANCELLED: "cancelled",
+}
+
+
 class JobQueue:
     """Inventário thread-safe de jobs + backpressure."""
 
-    def __init__(self, *, max_depth: int = P.MAX_QUEUE_DEPTH) -> None:
+    def __init__(
+        self,
+        *,
+        max_depth: int = P.MAX_QUEUE_DEPTH,
+        stats: Any | None = None,
+        wal_path: Path | str | None = None,
+    ) -> None:
         self.max_depth = max_depth
+        self.stats = stats  # StatsCollector opcional
+        self._wal_path = Path(wal_path) if wal_path is not None else None
+        self._wal_lock = threading.Lock()
         self._lock = threading.RLock()
         self._cond = threading.Condition(self._lock)
         self._jobs: dict[str, Job] = {}
@@ -185,6 +203,93 @@ class JobQueue:
         self._seq = 0
         self._inflight = 0
         self._running_ids: list[str] = []
+
+    def _append_wal(self, record: dict[str, Any]) -> None:
+        if self._wal_path is None:
+            return
+        payload = {**record, "ts": time.time()}
+        line = json.dumps(payload, ensure_ascii=False) + "\n"
+        with self._wal_lock:
+            self._wal_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._wal_path.open("a", encoding="utf-8") as fh:
+                fh.write(line)
+
+    def _rewrite_wal_from_queue(self) -> None:
+        if self._wal_path is None:
+            return
+        with self._wal_lock:
+            with self._lock:
+                lines = [
+                    json.dumps(
+                        {
+                            "op": "enqueue",
+                            "job_id": job.job_id,
+                            "backend": job.backend,
+                            "priority": job.priority,
+                            "request": job.request,
+                            "ts": time.time(),
+                        },
+                        ensure_ascii=False,
+                    )
+                    for jid in self._queued
+                    if (job := self._jobs.get(jid)) is not None
+                ]
+            text = "\n".join(lines) + ("\n" if lines else "")
+            tmp = self._wal_path.with_suffix(".jsonl.tmp")
+            self._wal_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp.write_text(text, encoding="utf-8")
+            tmp.replace(self._wal_path)
+
+    def replay_from_wal(self) -> int:
+        """Re-enfileira jobs pendentes/interrompidos a partir do WAL JSONL."""
+        if self._wal_path is None or not self._wal_path.exists():
+            return 0
+
+        job_meta: dict[str, dict[str, Any]] = {}
+        latest: dict[str, dict[str, Any]] = {}
+        with self._wal_path.open(encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                op = rec.get("op")
+                job_id = rec.get("job_id")
+                if not op or not job_id:
+                    continue
+                if op == "enqueue":
+                    job_meta[str(job_id)] = {
+                        "backend": rec["backend"],
+                        "priority": rec.get("priority", P.DEFAULT_PRIORITY),
+                        "request": rec.get("request", {}),
+                    }
+                    latest[str(job_id)] = {"phase": "queued"}
+                elif op == "started":
+                    latest[str(job_id)] = {"phase": "started"}
+                elif op == "finished":
+                    latest[str(job_id)] = {"phase": "finished", "state": rec.get("state")}
+
+        requeued = 0
+        for job_id, state in latest.items():
+            phase = state.get("phase")
+            if phase == "finished":
+                continue
+            meta = job_meta.get(job_id)
+            if meta is None:
+                continue
+            self.enqueue(
+                meta["backend"],
+                meta["request"],
+                priority=meta["priority"],
+                _replay=True,
+            )
+            requeued += 1
+
+        self._rewrite_wal_from_queue()
+        return requeued
 
     def __len__(self) -> int:
         with self._lock:
@@ -206,11 +311,14 @@ class JobQueue:
         request: dict[str, Any],
         *,
         priority: str | None = None,
+        _replay: bool = False,
     ) -> Job:
         """Cria e enfileira um job. Levanta ``QueueFullError`` se saturado."""
         pri = P.normalize_priority(priority if priority is not None else request.get("priority"))
         with self._cond:
             if len(self._queued) >= self.max_depth:
+                if self.stats is not None:
+                    self.stats.record_queue_full()
                 raise QueueFullError(f"fila cheia ({self.max_depth})")
             self._seq += 1
             job = Job(
@@ -222,6 +330,9 @@ class JobQueue:
             )
             self._jobs[job.job_id] = job
             self._queued.append(job.job_id)
+            depth = len(self._queued)
+            if self.stats is not None:
+                self.stats.record_enqueue(depth_after=depth)
             job._emit(
                 {
                     "event": P.EVENT_QUEUED,
@@ -229,9 +340,19 @@ class JobQueue:
                     "backend": job.backend,
                     "priority": job.priority,
                     "state": job.state,
-                    "queue_position": len(self._queued),
+                    "queue_position": depth,
                 }
             )
+            if not _replay:
+                self._append_wal(
+                    {
+                        "op": "enqueue",
+                        "job_id": job.job_id,
+                        "backend": job.backend,
+                        "priority": job.priority,
+                        "request": job.request,
+                    }
+                )
             self._cond.notify_all()
             return job
 
@@ -260,6 +381,7 @@ class JobQueue:
             # Estado running aqui para cancel() distinguir de queued
             # (mark_started no worker emite o evento NDJSON).
             job.state = P.JOB_RUNNING
+            self._append_wal({"op": "started", "job_id": job_id})
             return job
 
     def finish(self, job: Job, result: dict[str, Any]) -> None:
@@ -272,6 +394,21 @@ class JobQueue:
                 job.mark_cancelled("cancelled during run")
             else:
                 job.mark_finished(result)
+            self._append_wal(
+                {
+                    "op": "finished",
+                    "job_id": job.job_id,
+                    "state": _WAL_STATE_MAP.get(job.state, "failed"),
+                }
+            )
+            if self.stats is not None:
+                timing = job.timing_dict()
+                cancelled = job.state == P.JOB_CANCELLED
+                self.stats.record_job_finished(
+                    wait_sec=timing.get("queue_wait_sec"),
+                    affinity_cuts=job.affinity_cuts,
+                    cancelled=cancelled,
+                )
             self._cond.notify_all()
 
     def cancel(self, job_id: str) -> dict[str, Any]:
@@ -303,6 +440,20 @@ class JobQueue:
                 if job_id in self._queued:
                     self._queued.remove(job_id)
                 job.mark_cancelled("cancelled while queued")
+                self._append_wal(
+                    {
+                        "op": "finished",
+                        "job_id": job_id,
+                        "state": "cancelled",
+                    }
+                )
+                if self.stats is not None:
+                    timing = job.timing_dict()
+                    self.stats.record_job_finished(
+                        wait_sec=timing.get("queue_wait_sec"),
+                        affinity_cuts=job.affinity_cuts,
+                        cancelled=True,
+                    )
                 self._cond.notify_all()
                 return {"status": P.STATUS_OK, "job_id": job_id, "state": P.JOB_CANCELLED}
             # running
@@ -321,17 +472,28 @@ class JobQueue:
         job.done_event.wait(timeout=timeout_sec)
         return job
 
+    def queue_position(self, job_id: str) -> int | None:
+        """Posição 1-based na fila queued, ou None se não estiver queued."""
+        with self._lock:
+            try:
+                return self._queued.index(job_id) + 1
+            except ValueError:
+                return None
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             queued = [self._jobs[jid].to_public_dict() for jid in self._queued if jid in self._jobs]
             running = [self._jobs[jid].to_public_dict() for jid in self._running_ids if jid in self._jobs]
-            return {
+            out: dict[str, Any] = {
                 "queue_depth": len(queued),
                 "inflight": self._inflight,
                 "max_depth": self.max_depth,
                 "queued": queued,
                 "running": running,
             }
+            if self.stats is not None:
+                out["metrics"] = self.stats.queue_dict()
+            return out
 
     def wait_for_work(self, timeout: float = 0.5) -> bool:
         """Espera até haver jobs na fila ou timeout. Retorna True se há trabalho."""

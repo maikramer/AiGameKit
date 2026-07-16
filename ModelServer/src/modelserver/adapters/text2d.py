@@ -18,10 +18,18 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from text2d.generator import KleinFluxGenerator
 
-        load_kwargs: dict[str, Any] = {"verbose": kwargs.get("verbose", False)}
+        # UMS: modelo fica quente - amortiza cold do torch.compile + channels_last
+        # (bench 6GB: ~-10% hot). Explicit kwargs / preload request ganham.
+        load_kwargs: dict[str, Any] = {
+            "verbose": kwargs.get("verbose", False),
+            "torch_compile": kwargs.get("torch_compile", True),
+            "torch_compile_mode": kwargs.get("torch_compile_mode", "default"),
+            "channels_last": kwargs.get("channels_last", True),
+        }
         if self.should_use_low_vram_mode():
             load_kwargs["memory_efficient"] = kwargs.get("memory_efficient", True)
-        load_kwargs.update({k: v for k, v in kwargs.items() if k not in ("verbose", "memory_efficient")})
+        skip = {"verbose", "memory_efficient", "torch_compile", "torch_compile_mode", "channels_last"}
+        load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
         gen = KleinFluxGenerator(**load_kwargs)
         gen.warmup()
         return gen

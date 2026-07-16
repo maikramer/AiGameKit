@@ -79,24 +79,20 @@ class TestEviction:
         assert mgr.loaded_names() == []
 
     def test_auto_eviction_when_vram_low(self) -> None:
-        """Ao carregar um backend novo, se VRAM não chega, evicta LRU idle."""
+        """VRAM baixa: evicta idle; se pico ainda não cabe → recusa (sem OOM)."""
         registry = _make_registry()
-        # Simular VRAM baixa para forçar evicção.
         state = {"free": 99999}
         mgr = BackendManager(registry, query_free_mib=lambda: state["free"], clear_vram=lambda: None)
 
-        # Carregar alpha (1000 MiB) — atualiza free simulado.
         mgr.generate("alpha", {"prompt": "x", "output": "/tmp/x.png"})
-        state["free"] = 1500  # só cabe alpha, não gamma (5000)
+        state["free"] = 1500  # após alpha; gamma peak ≫ 1500
 
-        # Carregar gamma (5000 MiB) — precisa evictar alpha (idle) + qualquer outro.
-        # alpha=1000, beta=3000 (idle), gamma=5000. Para chegar a 5000 livres:
-        # free=1500, precisa de 5000 → deficit=3500. Evicta alpha(1000)+beta(3000)=4000.
-        # Mas beta não está carregado... só alpha está. Então evicta alpha (1000) → free=2500.
-        # Ainda < 5000, mas só há alpha carregado → não chega. ensure_loaded carrega na mesma.
-        mgr.generate("gamma", {"prompt": "x", "output": "/tmp/x.png"})
-        assert mgr.is_loaded("gamma")
-        assert not mgr.is_loaded("alpha")  # alpha foi evicted na tentativa
+        # Evicta alpha mas free mock não sobe → ainda < peak gamma → VRAM_INSUFFICIENT.
+        resp = mgr.generate("gamma", {"prompt": "x", "output": "/tmp/x.png"})
+        assert resp.get("status") == "error"
+        assert resp.get("error_code") == "VRAM_INSUFFICIENT"
+        assert not mgr.is_loaded("gamma")
+        assert not mgr.is_loaded("alpha")  # alpha evicted na tentativa
 
     def test_ensure_vram_evicts_until_free(self) -> None:
         registry = _make_registry()
