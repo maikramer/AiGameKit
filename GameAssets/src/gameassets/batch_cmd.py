@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 import tempfile
@@ -241,6 +242,12 @@ console = Console()
     help="Usar barras de progresso simples em vez do dashboard TUI",
 )
 @click.option(
+    "--ums-stream",
+    is_flag=True,
+    default=False,
+    help="Propaga GAMEDEV_UMS_STREAM=1 aos subprocessos (eventos UMS; só com verbose/ruído OK).",
+)
+@click.option(
     "--plain",
     is_flag=True,
     help="Plain text output (no Rich/TUI, for scripts and headless)",
@@ -270,6 +277,7 @@ def batch_cmd(
     force: bool,
     gpu_ids_str: str | None,
     no_dashboard: bool,
+    ums_stream: bool,
     plain: bool,
 ) -> None:
     """Gera imagens (e opcionalmente meshes) para cada linha do manifest."""
@@ -840,6 +848,18 @@ def batch_cmd(
     child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
     # Pedidos GPU via UMS ficam atrás de CLIs interactivas (afinidade/prioridade).
     child_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
+    # Herdar/propagação de flags UMS do ambiente do batch para todos os subprocessos.
+    for _ums_key in (
+        "GAMEDEV_UMS_PRIORITY",
+        "GAMEDEV_UMS_AUTO_START",
+        "GAMEDEV_UMS_DEBUG",
+        "GAMEDEV_UMS_MAX_QUEUE_DEPTH",
+        "GAMEDEV_ALLOW_LEGACY_SERVER",
+    ):
+        if _ums_key in os.environ:
+            child_env.setdefault(_ums_key, os.environ[_ums_key])
+    if ums_stream:
+        child_env["GAMEDEV_UMS_STREAM"] = "1"
     if profile_tools:
         child_env["GAMEDEV_PROFILE"] = "1"
         child_env["GAMEDEV_PROFILE_TOOL"] = "gameassets"

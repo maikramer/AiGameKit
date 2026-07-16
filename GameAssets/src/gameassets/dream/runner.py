@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -134,8 +135,10 @@ def run_dream(
         str(batch_dir / "manifest.yaml"),
         *batch_flags,
     ]
+    dream_env = dict(os.environ)
+    dream_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
     console.print(f"[dim]$ {' '.join(batch_argv)}[/dim]")
-    rc = subprocess.call(batch_argv, cwd=str(batch_dir))
+    rc = subprocess.call(batch_argv, cwd=str(batch_dir), env=dream_env)
     ok = rc == 0
     _step("gameassets batch", ok=ok, detail=f"exit {rc}")
     if not ok and fail_fast:

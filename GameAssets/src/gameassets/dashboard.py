@@ -132,6 +132,7 @@ class StatsBar(Static):
     fail_count: reactive[int] = reactive(0)
     total: reactive[int] = reactive(0)
     elapsed: reactive[float] = reactive(0.0)
+    ums_line: reactive[str] = reactive("")
 
     def render(self) -> Text:
         t = Text()
@@ -144,6 +145,9 @@ class StatsBar(Static):
         t.append(f"\u03a3 {self.total}", style="bold dim")
         t.append("   ")
         t.append(f"\u23f1 {_fmt_duration(self.elapsed)}", style="dim")
+        if self.ums_line:
+            t.append("   ")
+            t.append(self.ums_line, style="dim cyan")
         return t
 
 
@@ -223,8 +227,30 @@ class BatchDashboard(App):
         self._setup_table()
         self._setup_assets()
         self._update_timer = self.set_interval(1.0, self._tick_elapsed)
+        self._ums_timer = self.set_interval(2.5, self._tick_ums)
         if self.batch_fn:
             self._run_batch_worker()
+
+    def _tick_ums(self) -> None:
+        """Actualiza depth/eta da fila UMS no StatsBar (best-effort)."""
+        try:
+            from gamedev_shared.model_server import fetch_ums_queue_snapshot, is_ums_running
+
+            if not is_ums_running():
+                stats = self.query_one("#stats-row", StatsBar)
+                stats.ums_line = "UMS off"
+                return
+            snap = fetch_ums_queue_snapshot()
+            if not snap:
+                return
+            depth = snap.get("queue_depth", 0)
+            inflight = snap.get("inflight", 0)
+            eta = snap.get("eta_sec")
+            eta_s = f" eta={eta:.0f}s" if isinstance(eta, (int, float)) else ""
+            stats = self.query_one("#stats-row", StatsBar)
+            stats.ums_line = f"UMS q={depth} run={inflight}{eta_s}"
+        except Exception:
+            pass
 
     def _setup_table(self) -> None:
         table = self.query_one("#asset-table", DataTable)

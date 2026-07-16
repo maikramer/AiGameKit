@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,7 @@ from .paths import (
     _shape_path,
 )
 from .pipeline import (
+    _post_text3d_mesh_extras,
     _resolve_animator3d_bin,
     _simplify_to_target,
     _texture_subprocess_argv,
@@ -184,7 +186,24 @@ def resume_cmd(
     work_dir = manifest_dir / ".gameassets_work" if work_dir is None else work_dir.resolve()
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    child_env = subprocess_gpu_env(gpu_ids=gpu_ids)
+    child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
+    child_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
+    for _ums_key in (
+        "GAMEDEV_UMS_PRIORITY",
+        "GAMEDEV_UMS_AUTO_START",
+        "GAMEDEV_UMS_DEBUG",
+        "GAMEDEV_UMS_STREAM",
+        "GAMEDEV_UMS_MAX_QUEUE_DEPTH",
+        "GAMEDEV_ALLOW_LEGACY_SERVER",
+    ):
+        if _ums_key in os.environ:
+            child_env.setdefault(_ums_key, os.environ[_ums_key])
+    try:
+        from gamedev_shared.model_server import ensure_ums_running
+
+        ensure_ums_running()
+    except Exception:
+        pass
 
     log_file = None
     if log_path:
