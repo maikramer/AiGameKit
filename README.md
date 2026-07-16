@@ -325,6 +325,15 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `PAINT3D_MULTI_GPU` | Paint3D | **Deprecated** — use `--gpu-ids 0,1` instead. Legacy env var to split VAE across GPUs |
 | `RIGGING3D_ROOT` | Rigging3D | Inference tree root (default: bundled package) |
 | `RIGGING3D_PYTHON` | Rigging3D | Python interpreter for the inference environment |
+| `MODELSERVER_BIN` | All GPU tools | Path to `gamedev-model-server` (UMS) |
+| `GAMEDEV_UMS_AUTO_START` | All GPU tools | `0` disables auto-start of UMS on first generate |
+| `GAMEDEV_UMS_PRIORITY` | All GPU tools / GameAssets | Default queue priority: `interactive` \| `batch` |
+| `GAMEDEV_UMS_MAX_AFFINITY_CUTS` | ModelServer | Max VRAM-affinity skips before forcing HOL (default `3`) |
+| `GAMEDEV_UMS_MAX_QUEUE_DEPTH` | ModelServer | Job queue depth before `queue_full` (default `32`) |
+| `GAMEDEV_UMS_MAX_INFLIGHT` | ModelServer | Parallel generations (default `1`) |
+| `GAMEDEV_MODEL_SERVER_SOCKET` | Shared | Override Unix socket path (legacy / tests) |
+
+Unified Model Server: [`ModelServer/README.md`](ModelServer/README.md). Tool CLIs accept `--ums-priority`, `--no-ums`, `--ums-stream`.
 
 ## Development
 

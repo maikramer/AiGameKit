@@ -1297,7 +1297,8 @@ def run_master_pipeline(
     anim_prof = profile.animator3d or Animator3DProfile()
     # Resolve effective animation settings (row overrides → profile defaults → category fallback).
     eff_preset = (row.animate_preset or anim_prof.preset or "humanoid").strip().lower()
-    # If neither row nor profile specifies preset, use category-based default.
+    # Fallback por categoria só quando nem a row nem o profile definem preset.
+    # ``creature`` → humanoid (mocap); não-humanoides reais exigem animate.preset explícito.
     if not row.animate_preset and not (profile.animator3d and profile.animator3d.preset):
         eff_preset = animator_preset_for_category(row.category)
     eff_clips = row.animate_clips or anim_prof.clips

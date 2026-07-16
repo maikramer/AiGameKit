@@ -44,7 +44,8 @@ def test_animator_preset_for_category() -> None:
     from gameassets.categories import animator_preset_for_category
 
     assert animator_preset_for_category("humanoid") == "humanoid"
-    assert animator_preset_for_category("creature") == "creature"
+    # category=creature is usually a bipedal enemy → Quaternius mocap default
+    assert animator_preset_for_category("creature") == "humanoid"
     assert animator_preset_for_category("weapon") == "static"
     assert animator_preset_for_category("vegetation") == "static"
     assert animator_preset_for_category(None) == "static"

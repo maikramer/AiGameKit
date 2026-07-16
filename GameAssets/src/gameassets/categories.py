@@ -521,10 +521,13 @@ def category_wants_bake_normals(
 
 
 # Round 2: mapeamento categoria → preset de animator3d game-pack.
-# Categorias humanóides/criaturas usam rigs animados; resto fica em "static".
+# ``creature`` no manifesto costuma significar "inimigo/NPC", não "rig não-humanoide".
+# Bipedais (goblin, bandit, bosses humanoides) usam Quaternius mocap (preset humanoid).
+# Quadrúpedes/blobs/voadores devem declarar ``animate.preset: creature|flying`` +
+# ``procedural: true`` + ``force_preset: true`` explicitamente.
 ANIMATOR_PRESET_BY_CATEGORY: dict[str, str] = {
     "humanoid": "humanoid",
-    "creature": "creature",
+    "creature": "humanoid",
 }
 
 

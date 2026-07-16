@@ -13,7 +13,8 @@
 #   mine   ← Fixing_Kneeling (agachado a bater — perfeito para mineração)
 #   gather ← Interact (gesto de interagir / apanhar)
 #
-# Os inimigos continuam a usar o perfil quaternius.yaml standard (12 clips).
+# Os inimigos limitam o conjunto via ``animator3d game-pack --clips``; o
+# ``game-pack`` carrega este perfil (superset) e filtra as keys pedidas.
 
 profile: quaternius-hero
 

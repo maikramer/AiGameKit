@@ -837,9 +837,10 @@ def batch_cmd(
         except Exception:
             pass  # sem UMS — continuar com subprocess cold-start
 
-    child_env = subprocess_gpu_env(gpu_ids=gpu_ids)
+    child_env = dict(subprocess_gpu_env(gpu_ids=gpu_ids))
+    # Pedidos GPU via UMS ficam atrás de CLIs interactivas (afinidade/prioridade).
+    child_env.setdefault("GAMEDEV_UMS_PRIORITY", "batch")
     if profile_tools:
-        child_env = dict(child_env)
         child_env["GAMEDEV_PROFILE"] = "1"
         child_env["GAMEDEV_PROFILE_TOOL"] = "gameassets"
         plog = profile_tools_log or (manifest_path.parent / "gameassets_profile.jsonl")

@@ -325,31 +325,58 @@ See `GameDevLab/README.md` for full documentation.
 
 ## Model Server (VRAM Coordination)
 
-The monorepo has a **shared model server** system (`gamedev_shared.model_server`) that keeps AI models loaded in memory between invocations, reducing cold-start latency from ~20s to ~7s per generation.
+The canonical system is the **Unified Model Server (UMS)** in `ModelServer/` —
+one process, one socket (`~/.cache/gamedev/model-server.sock`), 9 GPU backends,
+smart job queue (priority + VRAM affinity cuts≤3), and weight+LRU eviction.
+Client helpers live in `Shared/src/gamedev_shared/model_server.py`.
+Alias CLI: `ums` ≡ `gamedev-model-server`.
 
-**Architecture:** Each tool can run a long-lived server (Unix domain socket) that holds the model in VRAM. Client invocations detect the server and delegate automatically; if the server is down, they fall back to in-process loading. Source: `Shared/src/gamedev_shared/model_server.py`.
+**Architecture:** CLIs call `try_ums_delegation` / `delegate_to_ums` **before** any
+in-process GPU prep (auto-starts UMS unless `GAMEDEV_UMS_AUTO_START=0`). Jobs go
+through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1`).
+Interactive CLI beats batch (`GAMEDEV_UMS_PRIORITY=batch` set by GameAssets).
+Per-tool legacy servers (`text2icon server`, etc.) remain as **deprecated** fallback only.
 
-**Protocolo de coordenação de VRAM:** When a heavy tool (text3d, paint3d) needs GPU VRAM, it calls `ensure_vram_available(needed_mib)` before loading — this asks all active servers to gracefully release their models (the servers stay running but unload the pipeline). The `kill_gpu_compute_processes_aggressive` function automatically protects server PIDs (`protect_model_servers=True`, default).
+**VRAM coordination:** In-process fallbacks call `ensure_vram_available(needed_mib)` →
+UMS `ensure-vram` (smart eviction). `kill_gpu_compute_processes_aggressive` protects
+server PIDs **and refuses to kill** when the UMS queue has inflight/queued jobs
+(`respect_ums_queue=True`).
 
-**Commands (text2icon — first tool to use the system):**
+### Agents — VRAM busy checklist (do NOT skip)
+
+1. `gamedev-model-server status` / `queue` — see **HOLDING** / who owns the GPU.
+2. Wait (`ums wait <job_id>`, tool with `--ums-stream`) or `ums cancel <job_id>`.
+3. **Never** `kill` / `nvidia-smi` pkill / `--gpu-kill-others` while UMS has jobs —
+   that races the queue and can murder the wrong workload (bench, sibling tool, batch).
+4. Only use `--no-ums` + in-process when you intentionally bypass the supervisor;
+   then kill is still refused if UMS is busy.
+5. Full guide: `ModelServer/README.md` (section *Agents / anti-patterns*).
+
+**Commands:**
 ```bash
-text2icon server              # Start server (foreground; models load on first request)
-text2icon server --verbose    # With logging
-text2icon server-status       # Show PID, model_loaded, requests_served
-text2icon server-stop         # Graceful shutdown
-text2icon generate "icon" -o out.png   # Auto-delegates to server if running (~7s vs ~20s)
+ums start|stop|status|queue|wait|cancel|backends|preload|evict|stats|doctor
+# same as: gamedev-model-server …
+text2icon generate "icon" -o out.png   # Auto-delegates to UMS (~7s vs ~20s cold)
+text2icon generate "icon" -o out.png --ums-stream --ums-priority interactive
+# Tool flags (all GPU generate/decompose): --ums-priority | --no-ums | --ums-stream
+# Deprecated legacy: text2icon server | server-status | server-stop
 ```
 
 **Key APIs in `gamedev_shared.model_server`:**
 | Function | Purpose |
 |----------|---------|
-| `ModelServer(socket, loader, generator)` | Generic server; tools register their loader/generator |
-| `ensure_vram_available(needed_mib)` | Ask servers to release VRAM; called by text3d/paint3d before GPU load |
-| `discover_server_pids()` | List active server PIDs (used by `kill_gpu_compute_processes_aggressive` to protect them) |
-| `request_release(socket)` | Ask one server to unload its model but keep running |
-| `is_server_running(socket)` | Liveness check via PID file + socket connect |
+| `delegate_to_ums(backend, request)` | Sync generate via UMS (main CLI path) |
+| `submit_to_ums` / `poll_ums_job` / `wait_ums_job` / `cancel_ums_job` | Async job API |
+| `fetch_ums_queue_snapshot` / `ums_is_busy` / `format_ums_holding_summary` | Queue introspection |
+| `UMS_DO_NOT_KILL_TIP` | Stable tip string for CLIs/agents |
+| `ensure_vram_available(needed_mib)` | Ask UMS (or legacy servers) to free VRAM |
+| `ensure_ums_running()` | Auto-start UMS supervisor |
+| `discover_server_pids()` | Protect server PIDs from GPU kill |
+| `ModelServer(...)` | Legacy per-tool server class (deprecated) |
 
-**Env vars:** `GAMEDEV_MODEL_SERVER_SOCKET` (override socket path), `TEXT2ICON_SERVER` (text2icon-specific).
+**Env vars:** `GAMEDEV_MODEL_SERVER_SOCKET`, `GAMEDEV_UMS_AUTO_START`,
+`GAMEDEV_UMS_PRIORITY`, `GAMEDEV_UMS_MAX_AFFINITY_CUTS`, `GAMEDEV_UMS_MAX_QUEUE_DEPTH`,
+`GAMEDEV_UMS_MAX_INFLIGHT`, `MODELSERVER_BIN`. See `ModelServer/README.md`.
 
 ## Commit Conventions
 
@@ -411,7 +438,7 @@ VibeGame has its own CI workflow in `VibeGame/.github/workflows/` (Bun + TypeScr
 - Terreno em exemplos VibeGame pode parecer voxel/escadinha; amostragem de altura/normal com um único ponto tende a falhar — estratégias multi-amostra ou suavização costumam ser necessárias para alinhar props ao chão. Problemas de árvores a flutuar ou enterrar foram atribuídos em grande parte a pivô/origem do GLB no centro do mesh em vez da base; o utilizador espera que a pipeline Text3D/GameAssets posicione a origem na base por omissão, com pivô ao centro só quando explicitamente adequado ao tipo de asset. No recipe `<Terrain>`, muitos campos do componente `Terrain` são configuráveis por atributos XML em kebab-case (defaults do plugin); `collision-resolution` (32/64/128) é aplicado ao `TerrainLOD`/`three-terrain-lod` sem ser sobrescrito pela `resolution` da malha do chunk.
 - O comando `gameassets mesh reorigin-feet` repõe a origem de GLBs estáticos nos pés/base; modelos rigged com animação podem precisar de correção de orientação de root (ex. rotação) antes de centrar o pivô — não aplicar só `reorigin-feet` sem validar o resultado.
 - O **rigged GLB** tem de herdar a origem/pivô e a orientação do LOD0 (mesh centrada em X/Z, y=0 na sola dos pés, em pé na vertical correta) e o esqueleto tem de estar alinhado e dentro da malha — não rotacionado, não deslocado em Y para fora do mesh. Helpers de debug (ex. icosphere em 0,0,0, eixos visuais) NÃO devem ficar no GLB final exportado pela stage de rig.
-- Text3D / Hunyuan3D (marching cubes): saídas costumam ter paredes grossas/duplas e rachas minúsculas; no repair convém merge/manifold e fechar só buracos muito pequenos antes de watertight, para solidificar a caixa sem tratar a abertura grande da base (ex. crate após remover pedestal) como defeito a tapar em bloco. Em `text3d generate`, o `prepare_mesh_topology` aplica por defeito: merge vertices (digits_vertex=5), non-manifold repair (pymeshlab), weld por distância (0.01% diagonal), Taubin smoothing (3 iterações, preserva volume) e isotropic remeshing adaptativo (3 iterações, targetlen=1% diagonal). O CLI tem `simplify-textured` (decimar GLB preservando textura/UV via PyMeshLab quando há material; sem textura cai em decimação quadric clássica) e `align-plus-z` (usa `align_largest_plus_z_face_normal_to_ground` com guarda `--min-height-ratio` para evitar “dobrar” humanoides quando a heurística falha).
+- Text3D / Hunyuan3D (marching cubes): saídas costumam ter paredes grossas/duplas e rachas minúsculas. O reparo canónico vive em `gamedev_shared.mesh_repair` com perfis: `topology_clean` (topology-fix / generate), `pre_decimate_uv` (bake-master / LOD texturado), `part_decode` (Part3D), `post_voxel` (remesh voxel). Cadeia típica: sanitize NaN → weld → long_edges/slivers → debris → fill holes → `make_watertight` (só no clean) → shade-smooth. O CLI tem `simplify-textured` (decimar GLB preservando textura/UV) e `align-plus-z` (com guarda `--min-height-ratio`).
 - O comando `vibegame run` foi concebido para rebuild/atualização da engine face a exemplos que usam `file:vibegame`; em Windows podem ocorrer falhas de cópia/cache (`ENOENT` no pacote `vibegame`) e é preciso alvo/cwd coerente com a raiz da engine ou exemplo com `dev` ligado à engine.
 - Skymap2D e equirect/PMREM: o modelo HF Flux-LoRA-Equirectangular-v3 devolve imagens em resolução errada (1024×768 em vez do pedido 2048×1024) e com os polos ao centro vertical em vez das bordas; Skymap2D `generator.py` faz auto-resize e shift vertical de 50% para corrigir. O `PMREMGenerator` do Three.js ignora `texture.offset`/`repeat` no shader interno — para ajustar UV de texturas equirect antes de `fromEquirectangular()` é necessário manipular o bitmap a nível de píxeis (canvas). Convenção equirect Three.js: `u = atan(dir.z, dir.x)`, `v = asin(dir.y)` — centro da imagem = horizonte, topo = zénite, fundo = nadir. Texturas equirect em **retrato** (altura > largura) ou com eixos trocados podem mapear o azimute ao eixo vertical do bitmap e produzir artefactos tipo «pilares» no céu; convém normalizar para panorama 2:1 em paisagem antes do PMREM quando isso ocorrer.
 - Dependências de screen-space / pós-processamento (ex. `screen-space-reflections`) podem importar símbolos removidos ou renomeados no Three.js (ex. `WebGLMultipleRenderTargets`), falhando no Vite com «No matching export» até alinhar versões do Three ou substituir o efeito. Em áudio Web, `AudioContext` bloqueado ou `listener.positionX` indisponível costuma ligar-se a autoplay sem gesto do utilizador e/ou à ausência de cadeia válida `AudioListener` + câmera principal.

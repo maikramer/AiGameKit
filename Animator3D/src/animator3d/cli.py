@@ -914,6 +914,38 @@ def cmd_fall(
 
 # ---------- game-pack: batch animation preset ----------
 
+
+def _procedural_action_matches_filter(action_name: str, allowed: set[str]) -> bool:
+    """Match ``--clips`` against procedural action names without substring traps.
+
+    ``attack`` must match ``Animator3D_Attack`` but not ``Animator3D_AxeAttack`` /
+    ``Animator3D_SwordAttack``. ``idle`` still matches ``BreatheIdle``.
+    """
+    bare = action_name.strip().lower()
+    if bare.startswith("animator3d_"):
+        bare = bare[len("animator3d_") :]
+    for a in allowed:
+        if not a:
+            continue
+        if bare == a:
+            return True
+        if a == "idle" and bare.endswith("idle"):
+            return True
+        if a == "roar" and "roar" in bare:
+            return True
+        if a == "dive" and bare.startswith("dive"):
+            return True
+        if a == "land" and bare == "land":
+            return True
+        if a == "hover" and bare == "hover":
+            return True
+        if a == "soar" and bare == "soar":
+            return True
+        if a == "death" and bare in {"death", "die", "dead"}:
+            return True
+    return False
+
+
 _PRESETS: dict[str, list[tuple[str, dict[str, object]]]] = {
     "humanoid": [
         ("breathe_idle_keyframes", {"frame_end": 72, "action_name": "Animator3D_BreatheIdle"}),
@@ -1065,8 +1097,8 @@ def cmd_game_pack(
     steps = _PRESETS[preset.lower()]
 
     if clip_filter:
-        allowed = {s.strip().lower() for s in clip_filter.split(",")}
-        steps = [(fn, kw) for fn, kw in steps if any(a in kw["action_name"].lower() for a in allowed)]
+        allowed = {s.strip().lower() for s in clip_filter.split(",") if s.strip()}
+        steps = [(fn, kw) for fn, kw in steps if _procedural_action_matches_filter(str(kw["action_name"]), allowed)]
         if not steps:
             elapsed = time.monotonic() - t0
             emit_result(
@@ -1430,7 +1462,8 @@ def _game_pack_quaternius_retarget(
     from . import bpy_ops
     from . import retarget as rt
 
-    profile = rt.load_profile("quaternius")
+    # quaternius-hero é superset (armas/ferramentas). Inimigos limitam via --clips.
+    profile = rt.load_profile("quaternius-hero")
     missing = _quaternius_core_missing(arm_name, profile)
     if missing:
         console.print(
@@ -1443,7 +1476,9 @@ def _game_pack_quaternius_retarget(
         wanted = [s.strip() for s in clip_filter.split(",") if s.strip()]
         only_clips = [c for c in wanted if c in profile.clip_map]
         if not only_clips:
-            console.print(f"[yellow]Nenhum clip do filtro existe no perfil quaternius:[/yellow] {clip_filter}")
+            console.print(
+                f"[yellow]Nenhum clip do filtro existe no perfil quaternius-hero:[/yellow] {clip_filter}"
+            )
             return False
 
     try:
