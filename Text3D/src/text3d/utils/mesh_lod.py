@@ -128,11 +128,16 @@ _export_glb = _export_textured_glb
 from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E402
 
 
-def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12, watertight: bool = True) -> None:
+def _prepare_topology_bpy(
+    mesh_obj,
+    fill_holes_sides: int | None = None,
+    watertight: bool = True,
+) -> None:
     """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
 
     Shade-smooth fica no Text3D (export GLTF / V/Tri). O reweld de normal-splits
     e o watertight estão no perfil — sem segunda passagem duplicada.
+    ``fill_holes_sides=None`` → valor do perfil (32); não forçar 64 (fundia finos).
     """
     log = logging.getLogger(__name__)
 
@@ -142,13 +147,8 @@ def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12, watertight: bool
     from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
     overrides: dict = {"watertight": watertight}
-    if fill_holes_sides == 0:
-        overrides["fill_holes_sides"] = 0
-    elif watertight:
-        # Volume fechado: fill generoso; make_watertight faz o resto.
-        overrides["fill_holes_sides"] = max(int(fill_holes_sides), 64)
-    else:
-        overrides["fill_holes_sides"] = fill_holes_sides
+    if fill_holes_sides is not None:
+        overrides["fill_holes_sides"] = int(fill_holes_sides)
 
     stats = repair_mesh_object_with_profile(mesh_obj, "topology_clean", **overrides)
 
@@ -169,6 +169,10 @@ def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12, watertight: bool
             stats.get("boundary_after", 0),
             stats.get("loops_capped", 0),
         )
+    if stats.get("flare_verts_clamped"):
+        log.info("Base flare clamp: %d verts", stats["flare_verts_clamped"])
+    if stats.get("taubin_iters"):
+        log.info("Taubin smooth: %d iterações", stats["taubin_iters"])
 
     _shade_smooth(mesh_obj)
 
@@ -218,7 +222,7 @@ def prepare_mesh_topology(
     input_path: Path | str,
     output_path: Path | str | None = None,
     *,
-    fill_holes_sides: int = 12,
+    fill_holes_sides: int | None = None,
     watertight: bool = True,
     **_legacy: object,
 ) -> Path:
@@ -232,8 +236,7 @@ def prepare_mesh_topology(
         input_path: GLB de entrada (ou objeto trimesh — backward compat).
         output_path: GLB de saída (se None, sobrepõe o ficheiro de entrada).
         fill_holes_sides: Tamanho máximo (em arestas) de buracos a preencher.
-            Defeito 12 evita tapar aberturas grandes intencionais (base de
-            crates etc.). Use 0 para desativar.
+            ``None`` usa o perfil ``topology_clean`` (32). ``0`` desativa.
         **_legacy: Aceita ``skip_remesh`` (kwarg morto) por compat. Será
             removido em versão futura.
 
@@ -253,7 +256,11 @@ def prepare_mesh_topology(
 
 
 def _prepare_mesh_topology_impl(
-    input_path, output_path, _was_trimesh, fill_holes_sides: int = 12, watertight: bool = True
+    input_path,
+    output_path,
+    _was_trimesh,
+    fill_holes_sides: int | None = None,
+    watertight: bool = True,
 ):
     if _was_trimesh:
         import tempfile

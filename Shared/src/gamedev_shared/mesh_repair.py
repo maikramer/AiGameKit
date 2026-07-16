@@ -20,6 +20,10 @@ API principal (bpy-only):
   comparações e viram (0,0,0) no export glTF — leque de faces na origem).
 * ``cap_boundary_loops`` / ``make_watertight`` — fecho seletivo / total de
   boundary loops.
+* ``clamp_base_flare`` — puxa “pés de elefante” MC (base mais larga que o
+  corpo) para o raio de referência do meio do mesh.
+* ``taubin_smooth`` — suavização volume-preserving (reduz argila MC sem
+  derreter finos como um remesh).
 * ``reweld_coincident`` — colapsa vértices coincidentes (útil pós-import
   glTF com normal-split).
 * ``dynamic_weld_distance`` — limiar de weld por densidade de vértices.
@@ -533,6 +537,7 @@ def make_watertight(
     max_loop_edges: int = 400,
     cap_base: bool = True,
     final_fill: bool = True,
+    skip_flap_erode: bool = False,
 ) -> dict[str, int]:
     """Fecha uma mesh até watertight (só bpy/bmesh), do seguro para o bruto.
 
@@ -543,6 +548,9 @@ def make_watertight(
 
     Folhas quase-planares (bbox 2D) saltam o fecho agressivo — não têm volume
     para fechar e o pinch/erode pode apagar todas as faces.
+
+    ``skip_flap_erode``: não erode abas de fronteira (preserva escadas/bandeiras
+    finas coladas ao volume; pode deixar boundary residual).
 
     Returns:
         ``{"boundary_before", "loops_capped", "boundary_after"}``.
@@ -559,7 +567,7 @@ def make_watertight(
     stats["loops_capped"] = cap_boundary_loops(
         obj, max_loop_edges=max_loop_edges, planar_tol=planar_tol, cap_base=cap_base
     )
-    for sides in (12, 64):
+    for sides in (12, 32, 64):
         if count_boundary_edges(obj) == 0:
             break
         with_suppress_fill(obj, sides)
@@ -585,12 +593,14 @@ def make_watertight(
             if cur >= prev:
                 break
             prev = cur
-        if count_boundary_edges(obj) > 0:
+        if count_boundary_edges(obj) > 0 and not skip_flap_erode:
             # Bordos de abas de parede interna (MC) não são weldáveis nem
             # tapáveis: erodir as abas até à junção manifold e re-tapar.
             stats["flap_faces_eroded"] = _erode_boundary_flaps(obj)
             with_suppress_fill(obj, 0)
             _cap_all_remaining_loops(obj)
+        elif count_boundary_edges(obj) > 0 and skip_flap_erode:
+            stats["flap_erode_skipped"] = 1
     elif planar_sheet:
         stats["planar_sheet_skip_aggressive"] = 1
         log.info("make_watertight: folha quase-planar — a saltar fill/pinch/erode agressivos")
@@ -613,6 +623,180 @@ def make_watertight(
     if stats["boundary_after"]:
         log.warning("make_watertight: %d arestas de fronteira restantes", stats["boundary_after"])
     return stats
+
+
+def clamp_base_flare(
+    obj: Any,
+    *,
+    up_axis: int = 1,
+    bottom_frac: float = 0.10,
+    ref_lo_frac: float = 0.20,
+    ref_hi_frac: float = 0.45,
+    max_flare_ratio: float = 1.06,
+    ref_percentile: float = 95.0,
+) -> int:
+    """Puxa verts da base cujo raio radial > ``max_flare_ratio`` × raio ref.
+
+    Heurística geral (sem regras de asset): Hunyuan/MC muitas vezes engorda
+    o contacto com o chão (“pés de elefante”). O raio de referência vem do
+    percentil dos verts a mid-height; só a faixa inferior é corrigida.
+
+    Args:
+        obj: bpy mesh object.
+        up_axis: Eixo vertical (1 = Y OpenGL pós-align).
+        bottom_frac: Fração inferior da altura a corrigir.
+        ref_lo_frac / ref_hi_frac: Banda de altura para o raio de referência.
+        max_flare_ratio: Acima disto, o vert é puxado radialmente.
+        ref_percentile: Percentil do raio na banda de referência.
+
+    Returns:
+        Número de vértices deslocados.
+    """
+    import bmesh
+
+    from gamedev_shared.bpy_mesh import _require_bpy
+
+    _require_bpy()
+    if obj is None or getattr(obj, "type", None) != "MESH":
+        return 0
+    if len(obj.data.vertices) == 0:
+        return 0
+
+    mesh = obj.data
+    coords = np.array([v.co[:] for v in mesh.vertices], dtype=np.float64)
+    lo = coords[:, up_axis].min()
+    hi = coords[:, up_axis].max()
+    height = float(hi - lo)
+    if height < 1e-8:
+        return 0
+
+    axes = [i for i in range(3) if i != up_axis]
+    bottom_cut = lo + bottom_frac * height
+    ref_lo = lo + ref_lo_frac * height
+    ref_hi = lo + ref_hi_frac * height
+    mid = (coords[:, up_axis] >= ref_lo) & (coords[:, up_axis] <= ref_hi)
+    if int(mid.sum()) < 8:
+        mid = (coords[:, up_axis] >= lo + 0.15 * height) & (coords[:, up_axis] <= lo + 0.55 * height)
+    if int(mid.sum()) < 4:
+        # Último recurso: todos os verts excepto a faixa inferior (evita
+        # percentil vazio em malhas só com anéis nas pontas).
+        mid = coords[:, up_axis] > bottom_cut
+    if int(mid.sum()) < 4:
+        return 0
+
+    center = coords[mid][:, axes].mean(axis=0)
+    mid_r = np.linalg.norm(coords[mid][:, axes] - center, axis=1)
+    if mid_r.size == 0:
+        return 0
+    ref_r = float(np.percentile(mid_r, ref_percentile))
+    if ref_r < 1e-6:
+        return 0
+    limit = ref_r * float(max_flare_ratio)
+
+    bot = coords[:, up_axis] <= bottom_cut
+    bot_xy = coords[bot][:, axes]
+    bot_r = np.linalg.norm(bot_xy - center, axis=1)
+    over = bot_r > limit
+    if not over.any():
+        return 0
+
+    # Escala radial: puxa para o limite (mantém ângulo).
+    scale = np.ones(bot_r.shape[0], dtype=np.float64)
+    scale[over] = limit / np.maximum(bot_r[over], 1e-12)
+    new_xy = center + (bot_xy - center) * scale[:, None]
+
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+    bot_idx = np.flatnonzero(bot)
+    moved = 0
+    for local_i, vi in enumerate(bot_idx):
+        if not over[local_i]:
+            continue
+        v = bm.verts[int(vi)]
+        co = list(v.co)
+        co[axes[0]] = float(new_xy[local_i, 0])
+        co[axes[1]] = float(new_xy[local_i, 1])
+        v.co = co
+        moved += 1
+    if moved:
+        bm.to_mesh(mesh)
+        mesh.update()
+    bm.free()
+    if moved:
+        log.info("clamp_base_flare: %d verts (ref_r=%.4f limit=%.4f)", moved, ref_r, limit)
+    return moved
+
+
+def taubin_smooth(
+    obj: Any,
+    *,
+    iterations: int = 3,
+    lam: float = 0.5,
+    mu: float = -0.53,
+) -> int:
+    """Suavização Taubin (volume-preserving) via laplaciano de vizinhança.
+
+    Reduz ruído “argila” do marching cubes sem o colapso de finos típico
+    de remesh isotrópico agressivo.
+
+    Returns:
+        Número de iterações aplicadas (0 se skip).
+    """
+    import bmesh
+
+    from gamedev_shared.bpy_mesh import _require_bpy
+
+    _require_bpy()
+    if obj is None or getattr(obj, "type", None) != "MESH":
+        return 0
+    n_verts = len(obj.data.vertices)
+    if n_verts < 8 or iterations <= 0:
+        return 0
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+
+    def _laplacian_step(factor: float) -> None:
+        # Δ = avg(neighbors) - v
+        deltas = [None] * len(bm.verts)
+        for v in bm.verts:
+            linked = v.link_edges
+            if not linked:
+                deltas[v.index] = (0.0, 0.0, 0.0)
+                continue
+            acc = [0.0, 0.0, 0.0]
+            for e in linked:
+                other = e.other_vert(v)
+                acc[0] += other.co.x
+                acc[1] += other.co.y
+                acc[2] += other.co.z
+            n = float(len(linked))
+            deltas[v.index] = (
+                acc[0] / n - v.co.x,
+                acc[1] / n - v.co.y,
+                acc[2] / n - v.co.z,
+            )
+        for v in bm.verts:
+            d = deltas[v.index]
+            v.co.x += factor * d[0]
+            v.co.y += factor * d[1]
+            v.co.z += factor * d[2]
+
+    applied = 0
+    for _ in range(int(iterations)):
+        _laplacian_step(float(lam))
+        _laplacian_step(float(mu))
+        applied += 1
+
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+    if applied:
+        log.info("taubin_smooth: %d iterações (λ=%.2f μ=%.2f)", applied, lam, mu)
+    return applied
 
 
 def with_suppress_fill(obj: Any, sides: int) -> None:
@@ -774,10 +958,17 @@ class RepairProfile:
     watertight_max_loop_edges: int = 400
     watertight_cap_base: bool = True
     watertight_final_fill: bool = True
+    watertight_skip_flap_erode: bool = False
     recalc_normals: bool = True
     # Pré-passo: colapsar normal-splits do glTF (topology-fix em GLB).
     do_reweld_coincident: bool = False
     reweld_threshold: float = 1e-6
+    # Pós-fecho: anti “pés de elefante” + suavização volume-preserving.
+    do_clamp_base_flare: bool = False
+    flare_max_ratio: float = 1.06
+    flare_bottom_frac: float = 0.10
+    do_taubin: bool = False
+    taubin_iterations: int = 3
     # Atalho pós-voxel remesh (não usa a cadeia completa).
     use_close_holes_and_repair: bool = False
     close_holes_fill_sides: int = 30
@@ -822,9 +1013,17 @@ REPAIR_PROFILES: dict[str, RepairProfile] = {
         do_exact_weld=True,
         do_reweld_coincident=True,
         sliver_max_aspect=80.0,
-        fill_holes_sides=64,
+        # 32: micro-rachas MC; 64 fundia demais aberturas finas (bandeira).
+        fill_holes_sides=32,
         watertight=True,
         watertight_planar_tol=0.15,
+        # Erode de abas pode “comer” escadas/bandeiras coladas à parede.
+        watertight_skip_flap_erode=True,
+        do_clamp_base_flare=True,
+        flare_max_ratio=1.06,
+        flare_bottom_frac=0.10,
+        do_taubin=True,
+        taubin_iterations=3,
     ),
     "post_voxel": RepairProfile(
         name="post_voxel",
@@ -946,7 +1145,13 @@ def repair_mesh_object_with_profile(
         watertight_max_loop_edges=prof.watertight_max_loop_edges,
         watertight_cap_base=prof.watertight_cap_base,
         watertight_final_fill=prof.watertight_final_fill,
+        watertight_skip_flap_erode=prof.watertight_skip_flap_erode,
         recalc_normals=prof.recalc_normals,
+        do_clamp_base_flare=prof.do_clamp_base_flare,
+        flare_max_ratio=prof.flare_max_ratio,
+        flare_bottom_frac=prof.flare_bottom_frac,
+        do_taubin=prof.do_taubin,
+        taubin_iterations=prof.taubin_iterations,
     )
     if n:
         stats["rewelded_coincident"] = n
@@ -993,7 +1198,13 @@ def repair_mesh_object(
     watertight_max_loop_edges: int = 400,
     watertight_cap_base: bool = True,
     watertight_final_fill: bool = True,
+    watertight_skip_flap_erode: bool = False,
     recalc_normals: bool = True,
+    do_clamp_base_flare: bool = False,
+    flare_max_ratio: float = 1.06,
+    flare_bottom_frac: float = 0.10,
+    do_taubin: bool = False,
+    taubin_iterations: int = 3,
 ) -> dict[str, int]:
     """Sequência completa de reparação in-place num bpy mesh object.
 
@@ -1003,7 +1214,8 @@ def repair_mesh_object(
 
     Ordem: NaN guard → weld exacto → weld secundário (bbox / densidade /
     fixed) → degenerate → loose → long edges → slivers → debris → fill holes
-    → cap loops (opt) → ``make_watertight`` (opt) → normais.
+    → cap loops (opt) → ``make_watertight`` (opt) → clamp flare → Taubin →
+    normais.
 
     Preferir :func:`repair_mesh_object_with_profile` com perfis
     ``topology_clean`` / ``pre_decimate_uv`` / ``part_decode``.
@@ -1077,6 +1289,7 @@ def repair_mesh_object(
                 max_loop_edges=watertight_max_loop_edges,
                 cap_base=watertight_cap_base,
                 final_fill=watertight_final_fill,
+                skip_flap_erode=watertight_skip_flap_erode,
             )
             stats["boundary_before"] = int(wt.get("boundary_before", 0))
             stats["boundary_after"] = int(wt.get("boundary_after", 0))
@@ -1087,9 +1300,27 @@ def repair_mesh_object(
                 stats["cracks_pinched"] = int(wt["cracks_pinched"])
             if wt.get("flap_faces_eroded"):
                 stats["flap_faces_eroded"] = int(wt["flap_faces_eroded"])
+            if wt.get("flap_erode_skipped"):
+                stats["flap_erode_skipped"] = int(wt["flap_erode_skipped"])
         except Exception as exc:
             log.warning("make_watertight falhou: %s", exc)
             stats["boundary_after"] = count_boundary_edges(obj)
+    if do_clamp_base_flare:
+        try:
+            stats["flare_verts_clamped"] = clamp_base_flare(
+                obj,
+                bottom_frac=flare_bottom_frac,
+                max_flare_ratio=flare_max_ratio,
+            )
+        except Exception as exc:
+            log.warning("clamp_base_flare falhou: %s", exc)
+            stats["flare_verts_clamped"] = 0
+    if do_taubin and taubin_iterations > 0:
+        try:
+            stats["taubin_iters"] = taubin_smooth(obj, iterations=taubin_iterations)
+        except Exception as exc:
+            log.warning("taubin_smooth falhou: %s", exc)
+            stats["taubin_iters"] = 0
     if recalc_normals:
         try:
             normals_consistent(obj)

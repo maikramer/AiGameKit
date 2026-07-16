@@ -50,7 +50,7 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **Export origin:** `--export-origin feet` is the default for game assets (y=0 at soles). `center` for pivots at mesh center. `none` leaves raw Hunyuan origin.
 
-**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld coincident → sanitize → exact + density weld → dissolve/loose → long edges → slivers → debris → fill holes → `make_watertight` → shade-smooth. LOD/bake-master: `pre_decimate_uv` before Decimate, `post_decimate` after. No PyMeshLab/Taubin in this path.
+**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld coincident → sanitize → exact + density weld → dissolve/loose → long edges → slivers → debris → fill holes (≤32) → `make_watertight` (skip flap-erode) → `clamp_base_flare` → Taubin (3) → shade-smooth. LOD/bake-master: `pre_decimate_uv` before Decimate, `post_decimate` after.
 
 **LOD and rigged meshes:** `text3d lod` preserves armatures and animations. No separate LOD path exists for rigged assets. Weight transfer to LODs is handled by `rigging3d transfer-weights`.
 

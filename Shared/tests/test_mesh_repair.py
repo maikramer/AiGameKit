@@ -607,3 +607,76 @@ class TestRepairWatertightRoundtrip:
         assert "boundary_before" not in stats
         assert "boundary_after" not in stats
         clear_scene()
+
+
+class TestClampBaseFlareAndTaubin:
+    def test_topology_clean_enables_flare_and_taubin(self) -> None:
+        from gamedev_shared.mesh_repair import get_repair_profile
+
+        p = get_repair_profile("topology_clean")
+        assert p.do_clamp_base_flare is True
+        assert p.do_taubin is True
+        assert p.watertight_skip_flap_erode is True
+        assert p.fill_holes_sides == 32
+
+    @staticmethod
+    def _cylinder_y(
+        radius: float,
+        y0: float,
+        y1: float,
+        *,
+        sections: int = 16,
+        rings: int = 8,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Cilindro Y-up com vários anéis (necessário p/ banda mid do clamp)."""
+        angs = np.linspace(0, 2 * np.pi, sections, endpoint=False)
+        ys = np.linspace(y0, y1, rings)
+        verts = []
+        for y in ys:
+            verts.append(np.stack([radius * np.cos(angs), np.full(sections, y), radius * np.sin(angs)], axis=1))
+        verts_arr = np.vstack(verts)
+        faces: list[list[int]] = []
+        for r in range(rings - 1):
+            base = r * sections
+            nxt = (r + 1) * sections
+            for i in range(sections):
+                j = (i + 1) % sections
+                a, b, c, d = base + i, base + j, nxt + i, nxt + j
+                faces.append([a, b, d])
+                faces.append([a, d, c])
+        return verts_arr.astype(np.float64), np.asarray(faces, dtype=np.int64)
+
+    def test_clamp_base_flare_pulls_elephant_feet(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import clamp_base_flare
+
+        v_body, f_body = self._cylinder_y(0.30, 0.20, 2.0, rings=10)
+        v_foot, f_foot = self._cylinder_y(0.55, 0.0, 0.15, rings=3)
+        verts = np.vstack([v_body, v_foot])
+        faces = np.vstack([f_body, f_foot + len(v_body)])
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="flare")
+        before = np.array([v.co[:] for v in obj.data.vertices], dtype=np.float64)
+        y_lo = float(before[:, 1].min())
+        h = float(before[:, 1].max() - y_lo)
+        bot = before[before[:, 1] <= y_lo + 0.12 * h]
+        r_before = float(np.linalg.norm(bot[:, [0, 2]], axis=1).max())
+        moved = clamp_base_flare(obj, max_flare_ratio=1.05, bottom_frac=0.12)
+        assert moved > 0
+        after = np.array([v.co[:] for v in obj.data.vertices], dtype=np.float64)
+        bot_a = after[after[:, 1] <= y_lo + 0.12 * h]
+        r_after = float(np.linalg.norm(bot_a[:, [0, 2]], axis=1).max())
+        assert r_after < r_before
+        clear_scene()
+
+    def test_taubin_smooth_runs(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import taubin_smooth
+
+        # Malha densa o suficiente (taubin exige ≥8 verts).
+        verts, faces = self._cylinder_y(0.5, -0.5, 0.5, sections=12, rings=4)
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="cyl")
+        n = taubin_smooth(obj, iterations=2)
+        assert n == 2
+        clear_scene()

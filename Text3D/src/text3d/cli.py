@@ -1226,9 +1226,10 @@ def bake_master_cmd(
 @click.option(
     "--fill-holes-sides",
     type=int,
-    default=12,
-    show_default=True,
-    help="Tamanho máximo (arestas) de buracos a preencher. 0 desativa fill_holes.",
+    default=None,
+    help=(
+        "Tamanho máximo (arestas) de buracos a preencher. Omitido: perfil topology_clean (32). 0 desativa fill_holes."
+    ),
 )
 @click.option(
     "--watertight/--no-watertight",
@@ -1254,7 +1255,7 @@ def bake_master_cmd(
 def topology_fix_cmd(
     input_mesh: Path,
     output: Path | None,
-    fill_holes_sides: int,
+    fill_holes_sides: int | None,
     watertight: bool,
     export_origin: str | None,
     export_rotation_x_deg: float | None,
@@ -1262,8 +1263,8 @@ def topology_fix_cmd(
     """Repara topologia de um GLB cru (Stage 2 da pipeline).
 
     Operações em ordem: weld exato (1e-5) → weld adaptativo →
-    normais consistentes → fill_holes (≤ ``--fill-holes-sides``) →
-    shade-smooth (sem custom split normals).
+    normais consistentes → fill_holes (perfil ou ``--fill-holes-sides``) →
+    watertight → clamp_base_flare → Taubin → shade-smooth.
 
     Substitui a etapa que estava embebida em ``text3d generate``.
     Recomendado correr em ``id_shape.glb`` para produzir ``id_clean.glb``.
