@@ -28,6 +28,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.hf import get_hf_token, hf_home_display_rich
 from gamedev_shared.profiler.session import ProfilerSession, profile_span
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
@@ -426,6 +427,33 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     help="Enriquecimento determinístico de prompt (descritores + correção). "
     "Default: do quality tier (fast OFF, medium+ ON).",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help=(
+        "torch.compile no DiT (Inductor). Cold lento; útil em batch/server. "
+        "Com offload model_cpu é ignorado; com group_stream usa mode=default. "
+        "Env: GAMEDEV_TORCH_COMPILE=1."
+    ),
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só full-GPU).",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC no VAE/pretransform — Ampere+ conv path.",
+)
+@add_ums_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -466,6 +494,12 @@ def generate_cmd(
     true_peak_db: float | None,
     bit_depth: int,
     enhance_override: bool | None,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera áudio a partir do PROMPT de texto."""
     verbose = bool(ctx.obj.get("VERBOSE")) or verbose_flag
@@ -743,38 +777,28 @@ def generate_cmd(
     item_id = Path(output).stem if output else prompt[:40].replace(" ", "_")
     start = time.time()
 
-    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-    if output is not None:
-        from gamedev_shared.model_server import delegate_to_ums
-
-        ums_result = delegate_to_ums(
-            "text2sound",
-            {
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "duration": duration,
-                "steps": steps,
-                "cfg_scale": cfg_scale,
-                "seed": effective_seed,
-                "sigma_min": sigma_min,
-                "sigma_max": sigma_max,
-                "sampler_type": sampler,
-                "negative_prompt": effective_negative,
-            },
-        )
-        if ums_result and ums_result.get("status") == "ok":
-            elapsed = time.time() - start
-            try:
-                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
-            except OSError:
-                sz = "?"
-            console.print(
-                f"[bold green]\u2713[/bold green] Áudio: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
-            )
-            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-            return
-        elif ums_result and ums_result.get("status") == "error":
-            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+    if output is not None and try_ums_delegation(
+        "text2sound",
+        {
+            "prompt": prompt,
+            "output": str(Path(output).resolve()),
+            "duration": duration,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "seed": effective_seed,
+            "sigma_min": sigma_min,
+            "sigma_max": sigma_max,
+            "sampler_type": sampler,
+            "negative_prompt": effective_negative,
+        },
+        t_start=start,
+        noun="Áudio",
+        console=console,
+        enabled=not no_ums,
+        priority=ums_priority,
+        stream=ums_stream,
+    ):
+        return
 
     with ProfilerSession(
         "text2sound",
@@ -788,6 +812,9 @@ def generate_cmd(
                 half_precision=half_precision,
                 gpu_ids=gpu_ids,
                 chunked_vae=chunked_vae,
+                torch_compile=torch_compile,
+                torch_compile_mode=torch_compile_mode,
+                channels_last=channels_last,
             )
 
             if output is None:
@@ -986,6 +1013,28 @@ def generate_cmd(
     type=click.FloatRange(min=0.0, max=5.0),
     help="Linear fade-out in seconds on the tail when --crop is active.",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help="torch.compile no DiT (Inductor).",
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="channels_last NHWC no VAE/pretransform.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -1007,6 +1056,9 @@ def batch_cmd(
     seed: int | None,
     crop: bool,
     fade_out: float,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    channels_last: bool,
 ) -> None:
     """Gera áudios em batch a partir de um ficheiro de prompts (um por linha)."""
     verbose = bool(ctx.obj.get("VERBOSE"))
@@ -1074,6 +1126,9 @@ def batch_cmd(
         model_id=resolved_model_id,
         half_precision=half_precision,
         gpu_ids=gpu_ids,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        channels_last=channels_last,
     )
     emit_progress("batch", TOOL_TEXT2SOUND, phase="loading_model", percent=0)
     with _quiet_third_party_tqdm(verbose):

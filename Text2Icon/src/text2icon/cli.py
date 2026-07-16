@@ -15,6 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
@@ -165,6 +166,41 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "explícitas ganham. Env: TEXT2ICON_HW_AUTO=0."
     ),
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help=(
+        "torch.compile no transformer (Inductor). Cold-start lento; compensa em "
+        "batch/server. Com offload model_cpu é ignorado; com group_stream usa mode=default. "
+        "Env: GAMEDEV_TORCH_COMPILE=1."
+    ),
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só full-GPU).",
+)
+@click.option(
+    "--step-cache",
+    "step_cache",
+    type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
+    default="off",
+    show_default=True,
+    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: GAMEDEV_STEP_CACHE.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
+)
+@add_ums_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -186,6 +222,13 @@ def generate_cmd(
     transformer_quant_preset: str,
     quality: str,
     hw_auto: bool,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    step_cache: str,
+    channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera um ícone a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -255,11 +298,11 @@ def generate_cmd(
 
     t_start = time.time()
 
-    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-    if not cpu and output is not None:
-        from gamedev_shared.model_server import delegate_to_ums
-
-        ums_result = delegate_to_ums(
+    # Unified Model Server (fila + VRAM). Flags: --ums-priority / --no-ums / --ums-stream.
+    if (
+        not cpu
+        and output is not None
+        and try_ums_delegation(
             "text2icon",
             {
                 "prompt": prompt,
@@ -272,24 +315,17 @@ def generate_cmd(
                 "transparent": transparent,
                 "negative_prompt": negative_prompt,
             },
+            t_start=t_start,
+            noun="Ícone",
+            console=console,
+            enabled=not no_ums,
+            priority=ums_priority,
+            stream=ums_stream,
         )
-        if ums_result and ums_result.get("status") == "ok":
-            elapsed = time.time() - t_start
-            try:
-                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
-            except OSError:
-                sz = "?"
-            console.print(Rule("[bold green]Resultado (via UMS)", style="green"))
-            console.print(
-                f"[bold green]\u2713[/bold green] Ícone: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
-            )
-            console.print(f"[dim]Seed: {ums_result.get('seed', '?')}[/dim]")
-            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-            return
-        elif ums_result and ums_result.get("status") == "error":
-            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — a tentar legacy/in-process[/yellow]")
+    ):
+        return
 
-    # Fallback: per-tool legacy server (se ainda ativo).
+    # Fallback: per-tool legacy server (se ainda ativo; deprecated).
     if not cpu and output is not None:
         from . import client
 
@@ -332,6 +368,10 @@ def generate_cmd(
             gpu_ids=gpu_ids,
             quant_preset=quant_preset,
             transformer_quant_preset=transformer_quant_preset,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
         )
 
         with console.status(
@@ -440,6 +480,36 @@ def generate_cmd(
     show_default=True,
     help="Auto-detecção de hardware (transformer/SDNQ/offload/clamp/multi-GPU). Env: TEXT2ICON_HW_AUTO=0.",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help="torch.compile no transformer (Inductor).",
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor.",
+)
+@click.option(
+    "--step-cache",
+    "step_cache",
+    type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
+    default="off",
+    show_default=True,
+    help="Step cache (só full-GPU).",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="channels_last NHWC no VAE/transformer.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -456,6 +526,10 @@ def batch_cmd(
     transformer_quant_preset: str,
     quality: str,
     hw_auto: bool,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    step_cache: str,
+    channels_last: bool,
 ) -> None:
     """Gera ícones em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -523,6 +597,10 @@ def batch_cmd(
         model_id=model_id,
         gpu_ids=gpu_ids,
         transformer_quant_preset=transformer_quant_preset,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        step_cache=step_cache,
+        channels_last=channels_last,
     )
     base_params = {
         "guidance_scale": guidance_scale,
@@ -647,11 +725,15 @@ def server_cmd(
     quant_preset: str,
     transformer_quant_preset: str,
 ) -> None:
-    """Arranca o model server (mantém o pipeline carregado; gerações subsequentes ~3s)."""
+    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS)."""
     from gamedev_shared.model_server import server_socket_path
 
     from . import server
 
+    console.print(
+        "[yellow]Deprecated:[/yellow] use [cyan]gamedev-model-server start[/cyan] "
+        "(Unified Model Server). Este server per-tool fica só como fallback."
+    )
     _default_sock = server_socket_path("text2icon")
     if server.is_server_running(socket_path or _default_sock):
         console.print("[yellow]Server já está ativo neste socket.[/yellow]")
@@ -671,7 +753,9 @@ def server_cmd(
     if quant_preset != "auto":
         gen_kwargs["quant_preset"] = None if quant_preset == "none" else quant_preset
     if transformer_quant_preset != "auto":
-        gen_kwargs["transformer_quant_preset"] = None if transformer_quant_preset == "none" else transformer_quant_preset
+        gen_kwargs["transformer_quant_preset"] = (
+            None if transformer_quant_preset == "none" else transformer_quant_preset
+        )
 
     try:
         server.start_server(

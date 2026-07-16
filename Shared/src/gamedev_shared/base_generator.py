@@ -354,8 +354,10 @@ class DiffusionGeneratorBase(ABC):
             self._log(f"torch.compile skip (offload={offload} move módulos entre devices)")
             return
 
-        transformer = getattr(pipe, "transformer", None)
-        if transformer is None:
+        # DiT/Sana → transformer; SD1.5 (Texture2D) → unet.
+        attr = "transformer" if getattr(pipe, "transformer", None) is not None else "unet"
+        model = getattr(pipe, attr, None)
+        if model is None:
             return
         from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
 
@@ -370,22 +372,22 @@ class DiffusionGeneratorBase(ABC):
 
         # Regional compile (compile_repeated_blocks) se disponível — cold start mais
         # rápido que full torch.compile. Só em full-GPU (regional + offload instável).
-        if offload == "none" and hasattr(transformer, "compile_repeated_blocks"):
+        if offload == "none" and hasattr(model, "compile_repeated_blocks"):
             try:
-                transformer.compile_repeated_blocks()
-                self._log("torch.compile (regional) aplicado ao transformer")
+                model.compile_repeated_blocks()
+                self._log(f"torch.compile (regional) aplicado ao {attr}")
                 return
             except Exception as exc:
                 self._log(f"compile_repeated_blocks falhou ({exc}); fallback para torch.compile")
         compiled = apply_torch_compile(
-            transformer,
+            model,
             mode=mode,
             offload=offload,
             group_offload_active=(offload == "group_stream"),
         )
-        if compiled is not transformer:
-            pipe.transformer = compiled
-            self._log(f"torch.compile ({mode}) aplicado ao transformer")
+        if compiled is not model:
+            setattr(pipe, attr, compiled)
+            self._log(f"torch.compile ({mode}) aplicado ao {attr}")
 
     def _maybe_apply_step_cache(self, pipe: Any, plan: Any) -> None:
         """Aplica step caching (FirstBlockCache/TaylorSeer) quando seguro.
@@ -412,7 +414,7 @@ class DiffusionGeneratorBase(ABC):
             return
         from gamedev_shared.quantization import apply_channels_last
 
-        for attr in ("vae", "transformer"):
+        for attr in ("vae", "transformer", "unet"):
             mod = getattr(pipe, attr, None)
             if mod is None:
                 continue

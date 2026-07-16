@@ -54,6 +54,22 @@ text2icon generate "shield emblem" --quant-transformer sdnq-fp8
 | `--gpu-ids` | auto | Split multi-GPU (ex: `0,1`) |
 | `--quality` | `medium` | Tier de qualidade (fast/low/medium/high/highest) |
 | `--hw-auto/--no-hw-auto` | on | Auto-detecção de hardware (transformer + SDNQ + offload + clamp) |
+| `--ums-priority` | interactive / env | Prioridade na fila UMS (`interactive` \| `batch`) |
+| `--no-ums` | off | Forçar geração in-process (ignorar UMS) |
+| `--ums-stream` | off | Mostrar eventos de fila/progresso do UMS |
+
+## Unified Model Server (UMS)
+
+Preferir `gamedev-model-server` (supervisor do monorepo). `text2icon generate`
+delega automaticamente (auto-start salvo `GAMEDEV_UMS_AUTO_START=0`).
+
+```bash
+gamedev-model-server start
+text2icon generate "sword icon" -o sword.png --ums-stream
+text2icon server   # deprecated — fallback per-tool apenas
+```
+
+Ver [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Modelos
 

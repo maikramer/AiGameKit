@@ -111,6 +111,9 @@ class TextureGenerator(DiffusionGeneratorBase):
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
         group_offload: bool = False,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        channels_last: bool = False,
     ) -> None:
         super().__init__(
             device=device,
@@ -120,6 +123,9 @@ class TextureGenerator(DiffusionGeneratorBase):
             gpu_ids=gpu_ids,
             memory_efficient=memory_efficient,
             group_offload=group_offload,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
         )
         # SD1.5 é treinado em fp16/float32. A base resolve bfloat16 em CUDA (formato
         # nativo dos FLUX/Sana), mas o UNet do SD1.5 em bf16 produz NaNs em algumas
@@ -169,6 +175,14 @@ class TextureGenerator(DiffusionGeneratorBase):
         pipe.to(self.device)
         if self.device.startswith("cuda"):
             self._report_vram()
+
+        # SD1.5 full-GPU: plan fictício offload=none para helpers partilhados.
+        from types import SimpleNamespace
+
+        plan = SimpleNamespace(offload="none")
+        self._maybe_compile_transformer(pipe, plan)
+        self._maybe_apply_channels_last(pipe, plan)
+        self._maybe_select_attention_backend(pipe, plan)
 
         self._pipe = pipe
         return pipe

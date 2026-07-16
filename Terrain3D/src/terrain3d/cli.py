@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, call_ums, raise_if_ums_queue_full
 from gamedev_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
@@ -118,6 +119,7 @@ def cli() -> None:
     help="Sigmoid contrast for elevation (0=off)",
 )
 @click.option("--quiet", is_flag=True, help="Suppress progress output")
+@add_ums_options
 def generate_cmd(
     prompt: str | None,
     seed: int | None,
@@ -139,6 +141,9 @@ def generate_cmd(
     elevation_gamma: float,
     elevation_contrast: float,
     quiet: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Generate an AI terrain heightmap via diffusion."""
 
@@ -210,28 +215,30 @@ def generate_cmd(
         elevation_contrast=elevation_contrast,
     )
 
-    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-    from gamedev_shared.model_server import delegate_to_ums
-
-    ums_result = delegate_to_ums(
-        "terrain3d",
-        {
-            "output": output,
-            "metadata_path": metadata_path,
-            "seed": seed,
-            "size": size,
-            "world_size": world_size,
-            "max_height": max_height,
-            "mode": mode,
-        },
-    )
-    if ums_result and ums_result.get("status") == "ok":
-        print(ums_result["output"])
-        if metadata_path:
-            print(metadata_path)
-        return
-    elif ums_result and ums_result.get("status") == "error":
-        print(f"UMS erro: {ums_result.get('error', '?')} — fallback in-process", file=sys.stderr)
+    if not no_ums:
+        ums_result = call_ums(
+            "terrain3d",
+            {
+                "output": output,
+                "metadata_path": metadata_path,
+                "seed": seed,
+                "size": size,
+                "world_size": world_size,
+                "max_height": max_height,
+                "mode": mode,
+            },
+            priority=ums_priority,
+            stream=ums_stream,
+            console=console if ums_stream else None,
+        )
+        raise_if_ums_queue_full(ums_result)
+        if ums_result and ums_result.get("status") == "ok":
+            print(ums_result["output"])
+            if metadata_path:
+                print(metadata_path)
+            return
+        if ums_result and ums_result.get("status") == "error":
+            print(f"UMS erro: {ums_result.get('error', '?')} — fallback in-process", file=sys.stderr)
 
     if quiet:
         result = generate_terrain(config)

@@ -15,6 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
@@ -157,6 +158,29 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "relevo 3D); 'on' força; 'off' desliga."
     ),
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help="torch.compile no UNet (Inductor). Cold lento; útil em batch/server. Env: GAMEDEV_TORCH_COMPILE=1.",
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (full-GPU).",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC (channels_last) no VAE/UNet — Ampere+ conv path.",
+)
+@add_ums_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -176,6 +200,12 @@ def generate_cmd(
     quality: str,
     hw_auto: bool,
     ground: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera uma textura seamless a partir do PROMPT (SD1.5 + circular padding)."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -234,11 +264,10 @@ def generate_cmd(
 
     t_start = time.time()
 
-    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-    if not cpu and output is not None:
-        from gamedev_shared.model_server import delegate_to_ums
-
-        ums_result = delegate_to_ums(
+    if (
+        not cpu
+        and output is not None
+        and try_ums_delegation(
             "texture2d",
             {
                 "prompt": prompt,
@@ -252,24 +281,17 @@ def generate_cmd(
                 "preset": preset,
                 "ground": ground,
             },
+            t_start=t_start,
+            noun="Textura",
+            console=console,
+            enabled=not no_ums,
+            priority=ums_priority,
+            stream=ums_stream,
         )
-        if ums_result and ums_result.get("status") == "ok":
-            elapsed = time.time() - t_start
-            try:
-                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
-            except OSError:
-                sz = "?"
-            console.print(Rule("[bold green]Resultado (via UMS)", style="green"))
-            console.print(
-                f"[bold green]\u2713[/bold green] Textura: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
-            )
-            console.print(f"[dim]Seed: {ums_result.get('seed', '?')}[/dim]")
-            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-            return
-        elif ums_result and ums_result.get("status") == "error":
-            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — a tentar legacy/in-process[/yellow]")
+    ):
+        return
 
-    # Fallback: per-tool legacy server (se ainda ativo).
+    # Fallback: per-tool legacy server (deprecated).
     if not cpu and output is not None:
         from . import client
 
@@ -310,6 +332,9 @@ def generate_cmd(
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
         )
 
         with console.status(
@@ -430,6 +455,28 @@ def presets_cmd() -> None:
     show_default=True,
     help="Modo chão top-down (auto deteta chão/terreno; on força; off desliga).",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help="torch.compile no UNet (Inductor).",
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="channels_last NHWC no VAE/UNet.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -445,6 +492,9 @@ def batch_cmd(
     quality: str,
     hw_auto: bool,
     ground: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    channels_last: bool,
 ) -> None:
     """Gera texturas em batch a partir de um ficheiro de prompts (um por linha)."""
     # QualityEngine: soft resolution — fills defaults when user didn't specify.
@@ -498,6 +548,9 @@ def batch_cmd(
         verbose=bool(ctx.obj.get("VERBOSE")),
         model_id=model_id,
         gpu_ids=gpu_ids,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        channels_last=channels_last,
     )
     base_params: dict[str, Any] = {
         "guidance_scale": guidance_scale,
@@ -563,11 +616,15 @@ def batch_cmd(
 )
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 def server_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> None:
-    """Arranca o model server (mantém o pipeline carregado; gerações subsequentes ~3-5s)."""
+    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS)."""
     from gamedev_shared.model_server import server_socket_path
 
     from . import server
 
+    console.print(
+        "[yellow]Deprecated:[/yellow] use [cyan]gamedev-model-server start[/cyan] "
+        "(Unified Model Server). Este server per-tool fica só como fallback."
+    )
     _default_sock = server_socket_path("texture2d")
     if server.is_server_running(socket_path or _default_sock):
         console.print("[yellow]Server já está ativo neste socket.[/yellow]")

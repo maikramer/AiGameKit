@@ -74,7 +74,12 @@ class AudioGenerator:
         half_precision: bool | None = None,
         gpu_ids: list[int] | None = None,
         chunked_vae: bool | None = None,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        channels_last: bool = False,
     ) -> None:
+        import os
+
         self._model_id = model_id
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self._auto_clear = auto_clear
@@ -90,12 +95,24 @@ class AudioGenerator:
             self._chunked_vae = hw.chunked_vae if hw is not None else False
         else:
             self._chunked_vae = chunked_vae
+        if torch_compile is None:
+            self._torch_compile = os.environ.get("GAMEDEV_TORCH_COMPILE", "0").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+        else:
+            self._torch_compile = bool(torch_compile)
+        self._torch_compile_mode = torch_compile_mode or "default"
+        self._channels_last = bool(channels_last)
         self._gpu_ids = gpu_ids
         self._multi_gpu: bool = False
         self._model: Any = None
         self._model_config: dict[str, Any] = {}
         self._loaded = False
         self._cache_key: tuple[Any, ...] | None = None
+        self._placement_offload: str = "none"
 
     @staticmethod
     def _detect_hw_profile() -> Any:
@@ -128,6 +145,9 @@ class AudioGenerator:
         half_precision: bool | None = None,
         gpu_ids: list[int] | None = None,
         chunked_vae: bool | None = None,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        channels_last: bool = False,
     ) -> AudioGenerator:
         """Singleton thread-safe — reutiliza modelo já carregado."""
         with cls._lock:
@@ -136,6 +156,9 @@ class AudioGenerator:
                 half_precision,
                 tuple(gpu_ids) if gpu_ids else None,
                 chunked_vae,
+                torch_compile,
+                torch_compile_mode,
+                channels_last,
             )
             if cls._instance is None or cls._instance._cache_key != _cache_key:
                 cls._instance = cls(
@@ -144,6 +167,9 @@ class AudioGenerator:
                     half_precision=half_precision,
                     gpu_ids=gpu_ids,
                     chunked_vae=chunked_vae,
+                    torch_compile=torch_compile,
+                    torch_compile_mode=torch_compile_mode,
+                    channels_last=channels_last,
                 )
                 cls._instance._cache_key = _cache_key
             return cls._instance
@@ -251,6 +277,7 @@ class AudioGenerator:
                 allow_multi_gpu=allow_multi,
                 no_split_classes=["DiTBlock", "AudioDiTBlock"],
             )
+            self._placement_offload = getattr(plan, "offload", "none") or "none"
             if plan.multi_gpu_ids is not None:
                 primary = plan.primary_gpu or 0
                 self._device = f"cuda:{primary}"
@@ -258,7 +285,46 @@ class AudioGenerator:
         else:
             self._model = self._model.to(self._device)
 
+        self._apply_kernel_opts()
         self._loaded = True
+
+    def _apply_kernel_opts(self) -> None:
+        """torch.compile no DiT + channels_last no pretransform (VAE) se pedido."""
+        if self._device == "cpu" or self._model is None:
+            return
+        offload = self._placement_offload
+        if self._torch_compile:
+            if offload in ("model_cpu", "sequential_cpu"):
+                pass  # ping-pong de device — skip
+            else:
+                from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
+
+                requested = self._torch_compile_mode
+                mode = resolve_torch_compile_mode(
+                    requested,
+                    offload=offload,
+                    group_offload_active=(offload == "group_stream"),
+                )
+                # ConditionerDiT wrapper: pesos de difusão em ``.model``.
+                target = getattr(self._model, "model", None) or self._model
+                compiled = apply_torch_compile(
+                    target,
+                    mode=mode,
+                    offload=offload,
+                    group_offload_active=(offload == "group_stream"),
+                )
+                if compiled is not target:
+                    if getattr(self._model, "model", None) is not None:
+                        self._model.model = compiled
+                    else:
+                        self._model = compiled
+
+        if self._channels_last:
+            from gamedev_shared.quantization import apply_channels_last
+
+            pre = getattr(self._model, "pretransform", None)
+            if pre is not None:
+                apply_channels_last(pre)
 
     def _try_multi_gpu(self) -> None:
         """Descontinuado — multi-GPU agora tratado por place_pipeline no load()."""

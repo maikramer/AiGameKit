@@ -369,10 +369,26 @@ def warn_if_vram_occupied(threshold_mib: int = 1024) -> list[str]:
             c = Console()
         except ImportError:
             c = None
+        tip = ""
+        try:
+            from .model_server import (
+                UMS_DO_NOT_KILL_TIP,
+                fetch_ums_queue_snapshot,
+                format_ums_holding_summary,
+                is_ums_running,
+            )
+
+            if is_ums_running():
+                snap = fetch_ums_queue_snapshot()
+                hold = format_ums_holding_summary(snap) if snap else "UMS ativo"
+                tip = f"\nUMS: {hold}\n{UMS_DO_NOT_KILL_TIP}"
+        except Exception:
+            tip = ""
         msg = (
             f"\u26a0 VRAM preflight: {len(big)} GPU process(es) detected using {total_mib} MiB total:\n"
             + "\n".join(f"  - {line}" for line in big)
             + "\nProceeding anyway \u2014 if OOM occurs, close other GPU apps."
+            + tip
         )
         if c is not None:
             c.print(f"[yellow]{msg}[/yellow]")
@@ -387,6 +403,7 @@ def kill_gpu_compute_processes_aggressive(
     extra_exclude_pids: set[int] | None = None,
     protect_model_servers: bool = True,
     term_wait_seconds: float = 2.0,
+    respect_ums_queue: bool = True,
 ) -> list[str]:
     """SIGTERM + SIGKILL em processos GPU do utilizador actual (excluindo PID actual e protegidos).
 
@@ -402,11 +419,31 @@ def kill_gpu_compute_processes_aggressive(
             Isto evita que o text3d/paint3d matem um model server que está
             a segurar VRAM para outras ferramentas.
         term_wait_seconds: Tempo entre SIGTERM e SIGKILL.
+        respect_ums_queue: Se ``True`` (default) e o UMS tem jobs inflight/queued,
+            **recusa** matar processos — a fila UMS é a autoridade de VRAM.
 
     Returns:
         Linhas de log legíveis.
     """
     logs: list[str] = []
+
+    if respect_ums_queue:
+        try:
+            from .model_server import (
+                UMS_DO_NOT_KILL_TIP,
+                fetch_ums_queue_snapshot,
+                format_ums_holding_summary,
+                ums_is_busy,
+            )
+
+            snap = fetch_ums_queue_snapshot()
+            if ums_is_busy(snap):
+                hold = format_ums_holding_summary(snap) if snap else "UMS busy"
+                logs.append(f"[recusado] kill GPU — UMS tem jobs na fila ({hold})")
+                logs.append(f"[recusado] {UMS_DO_NOT_KILL_TIP}")
+                return logs
+        except Exception:
+            pass  # se o cliente UMS falhar, continuar com kill legado
 
     # Construir set de PIDs a proteger
     protected_pids = {exclude_pid}

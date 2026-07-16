@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from gamedev_shared.cli_helpers import apply_quality_defaults, env_bool, try_ums_delegation
 
 
@@ -44,7 +46,10 @@ class TestApplyQualityDefaults:
         ctx.get_parameter_source.return_value = "COMMANDLINE"  # user explicitou
 
         resolved = apply_quality_defaults(
-            ctx, "texture2d", "medium", {"width": "width", "steps": "steps"},
+            ctx,
+            "texture2d",
+            "medium",
+            {"width": "width", "steps": "steps"},
         )
         assert resolved == {}
 
@@ -61,7 +66,10 @@ class TestApplyQualityDefaults:
         with patch("gamedev_shared.quality.QualityEngine") as mock_qe_class:
             mock_qe_class.return_value.resolve.return_value = mock_qresolved
             resolved = apply_quality_defaults(
-                ctx, "texture2d", "medium", {"width": "width", "steps": "steps"},
+                ctx,
+                "texture2d",
+                "medium",
+                {"width": "width", "steps": "steps"},
             )
             assert resolved == {"width": 1024, "steps": 28}
 
@@ -75,13 +83,18 @@ class TestTryUmsDelegation:
         assert result is False
 
     def test_returns_false_when_ums_down(self) -> None:
-        """Se o UMS não está ativo, delegate_to_ums retorna None → False."""
+        """Se o UMS não está ativo, delegate_to_ums retorna None → False + mensagem."""
         console = MagicMock()
-        with patch("gamedev_shared.cli_helpers.delegate_to_ums", return_value=None):
+        with (
+            patch("gamedev_shared.model_server.is_ums_running", return_value=False),
+            patch("gamedev_shared.cli_helpers.delegate_to_ums", return_value=None),
+        ):
             result = try_ums_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
         assert result is False
+        printed = " ".join(str(c) for c in console.print.call_args_list)
+        assert "indisponível" in printed or "fallback in-process" in printed
 
     def test_returns_true_on_success(self, tmp_path) -> None:
         """Se o UMS responde ok, imprime e retorna True."""
@@ -112,3 +125,61 @@ class TestTryUmsDelegation:
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
         assert result is False
+
+    def test_returns_false_when_disabled(self) -> None:
+        console = MagicMock()
+        with patch("gamedev_shared.cli_helpers.delegate_to_ums") as mock_delegate:
+            result = try_ums_delegation(
+                "text2icon",
+                {"output": "/tmp/x.png"},
+                t_start=time.time(),
+                noun="Ícone",
+                console=console,
+                enabled=False,
+            )
+        assert result is False
+        mock_delegate.assert_not_called()
+
+    def test_raises_on_queue_full(self) -> None:
+        import click
+
+        console = MagicMock()
+        with (
+            patch(
+                "gamedev_shared.cli_helpers.delegate_to_ums",
+                return_value={
+                    "status": "queue_full",
+                    "queue_depth": 8,
+                    "max_depth": 8,
+                    "error": "queue_full",
+                },
+            ),
+            pytest.raises(click.ClickException, match="fila cheia"),
+        ):
+            try_ums_delegation(
+                "text2icon",
+                {"output": "/tmp/x.png"},
+                t_start=time.time(),
+                noun="Ícone",
+                console=console,
+            )
+
+    def test_passes_priority_to_delegate(self, tmp_path) -> None:
+        fake_output = tmp_path / "result.png"
+        fake_output.write_bytes(b"\x89PNG fake")
+
+        console = MagicMock()
+        with patch(
+            "gamedev_shared.cli_helpers.delegate_to_ums",
+            return_value={"status": "ok", "output": str(fake_output)},
+        ) as mock_delegate:
+            try_ums_delegation(
+                "text2icon",
+                {"output": str(fake_output)},
+                t_start=time.time(),
+                noun="Ícone",
+                console=console,
+                priority="batch",
+            )
+        mock_delegate.assert_called_once()
+        assert mock_delegate.call_args.kwargs.get("priority") == "batch"

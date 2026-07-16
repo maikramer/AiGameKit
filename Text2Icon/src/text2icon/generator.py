@@ -121,6 +121,10 @@ class SanaIconGenerator(DiffusionGeneratorBase):
         gpu_ids: list[int] | None = None,
         quant_preset: str | None = None,
         transformer_quant_preset: str | None = None,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        step_cache: str | None = None,
+        channels_last: bool = False,
     ) -> None:
         super().__init__(
             device=device,
@@ -129,6 +133,10 @@ class SanaIconGenerator(DiffusionGeneratorBase):
             cache_dir=cache_dir,
             gpu_ids=gpu_ids,
             memory_efficient=low_vram,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
         )
         # Text2Icon usa ``low_vram`` (vs ``memory_efficient`` nas outras tools).
         self.low_vram = low_vram
@@ -347,8 +355,11 @@ class SanaIconGenerator(DiffusionGeneratorBase):
             model_attr="transformer",
         )
 
-        # torch.compile do transformer (20-step Sana beneficia muito).
+        # Kernel opts: compile + step-cache + channels_last + attention (sage/flash).
         self._maybe_compile_transformer(pipe, placement_plan)
+        self._maybe_apply_step_cache(pipe, placement_plan)
+        self._maybe_apply_channels_last(pipe, placement_plan)
+        self._maybe_select_attention_backend(pipe, placement_plan)
 
         self._pipe = pipe
         return pipe

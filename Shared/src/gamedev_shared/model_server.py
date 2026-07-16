@@ -31,7 +31,7 @@ import signal
 import socket
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -169,6 +169,9 @@ def send_request(
 ) -> dict[str, Any] | None:
     """Envia um pedido JSON ao server e lê a resposta.
 
+    Se o servidor enviar várias linhas NDJSON (stream), devolve a **última**
+    linha (resultado final).
+
     Returns:
         Dict de resposta, ou ``None`` se o server não estiver disponível.
     """
@@ -192,6 +195,54 @@ def send_request(
             return json.loads(lines[-1])
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def send_request_stream(
+    request: dict[str, Any],
+    socket_path: Path | str | None = None,
+    *,
+    timeout_sec: float = 600.0,
+) -> Iterator[dict[str, Any]]:
+    """Envia um pedido e faz yield de cada linha NDJSON (eventos + resultado).
+
+    Yields:
+        Dict por linha. A última tipicamente tem ``status`` ok/error.
+    """
+    spath = Path(socket_path) if socket_path else server_socket_path("text2icon")
+    if not spath.exists():
+        return
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout_sec)
+            s.connect(str(spath))
+            s.sendall((json.dumps(request) + "\n").encode())
+            buf = b""
+            while True:
+                chunk = s.recv(8192)
+                if not chunk:
+                    break
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    text = line.decode("utf-8", errors="replace").strip()
+                    if not text:
+                        continue
+                    try:
+                        yield json.loads(text)
+                    except json.JSONDecodeError:
+                        continue
+    except OSError:
+        return
+
+
+def resolve_ums_priority(explicit: str | None = None) -> str:
+    """Resolve prioridade UMS: argumento → env ``GAMEDEV_UMS_PRIORITY`` → interactive."""
+    if explicit:
+        return str(explicit).strip().lower()
+    env = os.environ.get("GAMEDEV_UMS_PRIORITY", "").strip().lower()
+    if env in ("interactive", "batch"):
+        return env
+    return "interactive"
 
 
 def request_release(socket_path: Path | str | None = None) -> bool:
@@ -220,9 +271,58 @@ def stop_server(socket_path: Path | str | None = None) -> bool:
 # ---------------------------------------------------------------------------
 
 
+# Tip estável para humanos e agentes (CLIs, kill path, docs).
+UMS_DO_NOT_KILL_TIP = (
+    "VRAM ocupada? Usa `gamedev-model-server status` / `queue` — espera ou "
+    "`gamedev-model-server cancel <job_id>`. NÃO mates processos GPU "
+    "(kill/nvidia-smi) enquanto o UMS tiver jobs; isso corre contra a fila."
+)
+
+
 def is_ums_running() -> bool:
     """Verifica se o Unified Model Server está ativo no socket canónico."""
     return is_server_running(UMS_SOCKET)
+
+
+def fetch_ums_queue_snapshot(*, timeout_sec: float = 5.0) -> dict[str, Any] | None:
+    """Snapshot da fila UMS (``cmd=queue``), ou ``None`` se o UMS estiver down."""
+    if not is_ums_running():
+        return None
+    return send_to_ums({"cmd": "queue"}, timeout_sec=timeout_sec)
+
+
+def ums_is_busy(snapshot: dict[str, Any] | None = None) -> bool:
+    """True se há jobs inflight ou na fila (snapshot opcional para evitar 2 RPCs)."""
+    snap = snapshot if snapshot is not None else fetch_ums_queue_snapshot()
+    if not snap:
+        return False
+    try:
+        inflight = int(snap.get("inflight") or 0)
+        depth = int(snap.get("queue_depth") or 0)
+    except (TypeError, ValueError):
+        return False
+    return inflight > 0 or depth > 0
+
+
+def format_ums_holding_summary(snapshot: dict[str, Any]) -> str:
+    """Uma linha humana: quem segura a GPU + profundidade da fila."""
+    running = list(snapshot.get("running") or [])
+    queued = list(snapshot.get("queued") or [])
+    inflight = snapshot.get("inflight", len(running))
+    depth = snapshot.get("queue_depth", len(queued))
+    if running:
+        heads = []
+        for j in running[:3]:
+            jid = str(j.get("job_id") or "")
+            short = jid if len(jid) <= 12 else f"{jid[:12]}…"
+            backend = j.get("backend") or "?"
+            pct = j.get("progress_pct")
+            pct_s = f" {pct:.0%}" if isinstance(pct, (int, float)) else ""
+            heads.append(f"{backend} job={short}{pct_s}")
+        hold = "; ".join(heads)
+    else:
+        hold = "(nenhum job running)"
+    return f"HOLDING: {hold} | QUEUE: {depth} waiting / {inflight} inflight"
 
 
 def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) -> bool:
@@ -305,6 +405,7 @@ def delegate_to_ums(
     request: dict[str, Any],
     *,
     timeout_sec: float = 600.0,
+    priority: str | None = None,
 ) -> dict[str, Any] | None:
     """Delega um pedido de geração ao UMS, arrancando-o automaticamente se necessário.
 
@@ -316,10 +417,14 @@ def delegate_to_ums(
     Se o UMS não estiver ativo, ``ensure_ums_running`` arranca-o automaticamente
     em background (a menos que ``GAMEDEV_UMS_AUTO_START=0``).
 
+    Prioridade: ``priority`` explícito, senão env ``GAMEDEV_UMS_PRIORITY``,
+    senão ``interactive``. GameAssets batch deve exportar ``GAMEDEV_UMS_PRIORITY=batch``.
+
     Args:
         backend: Nome do backend (ex: ``text2icon``).
         request: Parâmetros do pedido (prompt, output, steps, ...).
         timeout_sec: Timeout para o pedido de geração.
+        priority: ``interactive`` | ``batch`` (opcional).
 
     Returns:
         Dict de resposta (``{"status": "ok", "output": ...}``) ou ``None`` se o
@@ -327,8 +432,55 @@ def delegate_to_ums(
     """
     if not ensure_ums_running():
         return None
+    pri = resolve_ums_priority(priority if priority is not None else request.get("priority"))
     req = {"cmd": "generate", "backend": backend, **request}
+    req["priority"] = pri
     return send_to_ums(req, timeout_sec=timeout_sec)
+
+
+def submit_to_ums(
+    backend: str,
+    request: dict[str, Any],
+    *,
+    timeout_sec: float = 30.0,
+    priority: str | None = None,
+) -> dict[str, Any] | None:
+    """Enfileira um job no UMS (async). Retorna ``{"status":"ok","job_id":...}``."""
+    if not ensure_ums_running():
+        return None
+    pri = resolve_ums_priority(priority if priority is not None else request.get("priority"))
+    req = {"cmd": "submit", "backend": backend, "priority": pri, **request}
+    req["priority"] = pri
+    return send_to_ums(req, timeout_sec=timeout_sec)
+
+
+def poll_ums_job(job_id: str, *, timeout_sec: float = 5.0) -> dict[str, Any] | None:
+    """Consulta o estado de um job UMS."""
+    if not ensure_ums_running(auto_start=False):
+        return None
+    return send_to_ums({"cmd": "poll", "job_id": job_id}, timeout_sec=timeout_sec)
+
+
+def wait_ums_job(
+    job_id: str,
+    *,
+    timeout_sec: float = 600.0,
+    stream: bool = False,
+) -> dict[str, Any] | None:
+    """Espera um job UMS terminar. Com ``stream=True`` devolve só o resultado final."""
+    if not ensure_ums_running(auto_start=False):
+        return None
+    req: dict[str, Any] = {"cmd": "wait", "job_id": job_id}
+    if stream:
+        req["stream"] = True
+    return send_to_ums(req, timeout_sec=timeout_sec)
+
+
+def cancel_ums_job(job_id: str, *, timeout_sec: float = 10.0) -> dict[str, Any] | None:
+    """Pede cancelamento de um job UMS (queued imediato; running best-effort)."""
+    if not ensure_ums_running(auto_start=False):
+        return None
+    return send_to_ums({"cmd": "cancel", "job_id": job_id}, timeout_sec=timeout_sec)
 
 
 # ---------------------------------------------------------------------------

@@ -46,12 +46,12 @@ Requires a **CUDA GPU** (PyTorch, diffusers, transformers, accelerate are runtim
 
 | Command | Description |
 |---------|-------------|
-| `texture2d generate PROMPT` | Generate a seamless texture |
+| `texture2d generate PROMPT` | Generate a seamless texture (delegates to UMS when available) |
 | `texture2d presets` | List available material presets |
 | `texture2d batch FILE` | Batch generate from a prompt file (one per line) |
-| `texture2d server` | Start the model server (keeps the pipeline warm) |
-| `texture2d server-status` | Show model server status |
-| `texture2d server-stop` | Stop the model server (graceful shutdown) |
+| `texture2d server` | **Deprecated** — use `gamedev-model-server start` (UMS) |
+| `texture2d server-status` | **Deprecated** — use `gamedev-model-server status` |
+| `texture2d server-stop` | **Deprecated** — use `gamedev-model-server stop` |
 | `texture2d info` | Config, system, and environment info |
 | `texture2d skill install` | Install Cursor Agent Skill |
 | `texture2d validate-tileable` | Validate a texture's tileability |
@@ -145,21 +145,29 @@ Install the Cursor Agent Skill (`SKILL.md`) into a game project's `.cursor/skill
 texture2d skill install -t /path/to/my-game --force
 ```
 
-### Model server
+### Unified Model Server (UMS)
 
-The model server keeps the SD1.5 + circular padding pipeline loaded in VRAM so subsequent generations skip the cold start (~3–5 s vs. the initial load). `texture2d generate` delegates automatically when the server is running.
+Prefer **`gamedev-model-server`** (monorepo supervisor): one socket, smart VRAM
+eviction, job queue with priority + affinity. `texture2d generate` auto-delegates
+(and can auto-start the UMS unless `GAMEDEV_UMS_AUTO_START=0`).
 
 ```bash
-texture2d server                  # start (idle timeout 30 min)
-texture2d server-status           # status (PID, model loaded, requests served)
-texture2d server-stop             # graceful shutdown
+gamedev-model-server start
+texture2d generate "stone wall" -o stone.png
+texture2d generate "wood" -o wood.png --ums-stream          # queue/progress events
+texture2d generate "dirt" -o dirt.png --ums-priority batch
+texture2d generate "test" -o t.png --no-ums                 # force in-process
+gamedev-model-server queue
+gamedev-model-server stop
 ```
 
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--socket` | path | `~/.cache/gamedev/texture2d-server.sock` | Unix socket path |
-| `--idle-timeout` | int | 30 | Minutes idle before shutdown (frees VRAM) |
-| `-v, --verbose` | flag | `false` | Verbose logging |
+| Flag | Description |
+|------|-------------|
+| `--ums-priority interactive\|batch` | Queue priority (default interactive / `GAMEDEV_UMS_PRIORITY`) |
+| `--no-ums` | Skip UMS; run in-process |
+| `--ums-stream` | Print UMS queue/progress NDJSON events |
+
+Per-tool `texture2d server` remains only as a **deprecated** fallback. See [`ModelServer/README.md`](../ModelServer/README.md).
 
 ## Quality Presets
 

@@ -15,6 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
 from gamedev_shared.quality import VALID_QUALITIES
@@ -160,6 +161,41 @@ def skill_install_cmd(target: Path, force: bool) -> None:
         "GPUs pequenas. Flags explícitas ganham. Env: SKYMAP2D_HW_AUTO=0."
     ),
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help=(
+        "torch.compile no transformer (Inductor). Cold lento; útil em batch/server. "
+        "Com offload model_cpu é ignorado; com group_stream usa mode=default. "
+        "Env: GAMEDEV_TORCH_COMPILE=1."
+    ),
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor. reduce-overhead/max-autotune = CUDA graphs (só full-GPU).",
+)
+@click.option(
+    "--step-cache",
+    "step_cache",
+    type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
+    default="off",
+    show_default=True,
+    help="Step cache (FirstBlock/TaylorSeer). Só full-GPU. Env: GAMEDEV_STEP_CACHE.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
+)
+@add_ums_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -182,6 +218,13 @@ def generate_cmd(
     image_format: str,
     exr_scale: float,
     hw_auto: bool,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    step_cache: str,
+    channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera um skymap equirectangular 360° a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -256,6 +299,10 @@ def generate_cmd(
             verbose=verbose,
             model_id=model_id,
             gpu_ids=gpu_ids,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
         )
 
         fmt_opt = image_format.lower()
@@ -278,41 +325,30 @@ def generate_cmd(
 
         start = time.time()
 
-        # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-        if not cpu:
-            from gamedev_shared.model_server import delegate_to_ums
-
-            ums_result = delegate_to_ums(
-                "skymap2d",
-                {
-                    "prompt": prompt,
-                    "output": str(Path(output).resolve()),
-                    "width": width,
-                    "height": height,
-                    "steps": steps,
-                    "guidance": guidance_scale,
-                    "seed": seed,
-                    "negative_prompt": negative_prompt,
-                    "cfg_scale": cfg_scale,
-                    "lora_strength": lora_strength,
-                    "preset": preset,
-                    "exr_scale": exr_scale,
-                },
-            )
-            if ums_result and ums_result.get("status") == "ok":
-                elapsed = time.time() - start
-                try:
-                    sz = format_bytes(Path(ums_result["output"]).stat().st_size)
-                except OSError:
-                    sz = "?"
-                console.print(
-                    f"[bold green]\u2713[/bold green] Skymap: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
-                )
-                console.print(f"[dim]Seed: {ums_result.get('seed', '?')}[/dim]")
-                console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-                return
-            elif ums_result and ums_result.get("status") == "error":
-                console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+        if not cpu and try_ums_delegation(
+            "skymap2d",
+            {
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "width": width,
+                "height": height,
+                "steps": steps,
+                "guidance": guidance_scale,
+                "seed": seed,
+                "negative_prompt": negative_prompt,
+                "cfg_scale": cfg_scale,
+                "lora_strength": lora_strength,
+                "preset": preset,
+                "exr_scale": exr_scale,
+            },
+            t_start=start,
+            noun="Skymap",
+            console=console,
+            enabled=not no_ums,
+            priority=ums_priority,
+            stream=ums_stream,
+        ):
+            return
 
         with console.status(
             "[bold yellow]1/2 — Download HF + carregamento de pesos "
@@ -434,6 +470,36 @@ def presets_cmd() -> None:
     show_default=True,
     help="Auto-detecção de hardware (offload/clamp/multi-GPU). Env: SKYMAP2D_HW_AUTO=0.",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=False,
+    show_default=True,
+    help="torch.compile no transformer (Inductor).",
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor.",
+)
+@click.option(
+    "--step-cache",
+    "step_cache",
+    type=click.Choice(["off", "auto", "first_block", "taylorseer"]),
+    default="off",
+    show_default=True,
+    help="Step cache. Só full-GPU.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=False,
+    show_default=True,
+    help="channels_last NHWC no VAE/transformer.",
+)
 @click.pass_context
 def batch_cmd(
     ctx: click.Context,
@@ -451,6 +517,10 @@ def batch_cmd(
     image_format: str,
     exr_scale: float,
     hw_auto: bool,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    step_cache: str,
+    channels_last: bool,
 ) -> None:
     """Gera skymaps em batch a partir de um ficheiro de prompts (um por linha)."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -519,6 +589,10 @@ def batch_cmd(
         memory_efficient=mem_eff,
         model_id=model_id,
         gpu_ids=gpu_ids,
+        torch_compile=torch_compile,
+        torch_compile_mode=torch_compile_mode,
+        step_cache=step_cache,
+        channels_last=channels_last,
     )
     base_params: dict[str, Any] = {
         "guidance_scale": guidance_scale,

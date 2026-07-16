@@ -28,6 +28,7 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.gpu import (
     clear_cuda_memory,
     enforce_exclusive_gpu,
@@ -80,24 +81,38 @@ def _enable_sage_attention(requested: bool) -> bool:
 
 
 def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool = False) -> None:
+    """Prep GPU só para path in-process (depois de tentar UMS)."""
     from gamedev_shared.gpu import warn_if_vram_occupied
-    from gamedev_shared.model_server import ensure_vram_available
+    from gamedev_shared.model_server import (
+        UMS_DO_NOT_KILL_TIP,
+        ensure_vram_available,
+        fetch_ums_queue_snapshot,
+        format_ums_holding_summary,
+        is_ums_running,
+        ums_is_busy,
+    )
 
-    # Pedir aos model servers ativos para descarregar (libertar VRAM) antes de ocupar a GPU.
     ensure_vram_available(needed_mib=4000)
 
     kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
     allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
     if kill:
+        snap = fetch_ums_queue_snapshot() if is_ums_running() else None
+        if ums_is_busy(snap):
+            hold = format_ums_holding_summary(snap) if snap else "UMS busy"
+            raise click.ClickException(f"Kill GPU recusado: UMS tem jobs ({hold}). {UMS_DO_NOT_KILL_TIP}")
         console.print(
             Panel(
                 "[bold]Terminar processos GPU alvo[/bold]\n"
-                "[dim]Desliga com --no-gpu-kill-others ou PAINT3D_GPU_KILL_OTHERS=0[/dim]",
+                "[dim]Desliga com --no-gpu-kill-others ou PAINT3D_GPU_KILL_OTHERS=0[/dim]\n"
+                f"[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
                 border_style="yellow",
             )
         )
         for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
             console.print(f"[dim]{line}[/dim]")
+            if line.startswith("[recusado]"):
+                raise click.ClickException(line)
         clear_cuda_memory()
         time.sleep(0.5)
     try:
@@ -267,6 +282,7 @@ def cli(ctx, verbose):
         "Pode conflitar com dual-stream reference UNet."
     ),
 )
+@add_ums_options
 @click.pass_context
 def texture(
     ctx,
@@ -296,6 +312,9 @@ def texture(
     torch_compile_mode,
     channels_last,
     allow_group_offload,
+    ums_priority,
+    no_ums,
+    ums_stream,
 ):
     """Texturizar mesh com Hunyuan3D-Paint 2.1 → GLB com PBR."""
     from .painter import paint_file_to_file
@@ -406,8 +425,6 @@ def texture(
         info_table.add_row("[bold]Hardware (auto)[/bold]", hwp.summary())
     console.print(Panel(info_table, title="[bold green]Hunyuan3D-Paint 2.1", border_style="green"))
 
-    _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
-
     parsed_gpu_ids = None
     if gpu_ids is not None:
         try:
@@ -421,10 +438,9 @@ def texture(
     log_p = env_profile_log_path()
     prof_log = Path(log_p) if log_p else None
 
-    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-    from gamedev_shared.model_server import delegate_to_ums
-
-    ums_result = delegate_to_ums(
+    t_start = time.time()
+    # UMS primeiro — _prepare_gpu (ensure_vram/kill) só no fallback in-process.
+    if try_ums_delegation(
         "paint3d",
         {
             "mesh_path": str(mesh_path),
@@ -440,14 +456,16 @@ def texture(
             "memory_efficient": mem_eff,
             "gpu_ids": parsed_gpu_ids,
         },
-    )
-    if ums_result and ums_result.get("status") == "ok":
-        console.print(
-            f"[bold green]\u2713[/bold green] Mesh texturizado (via UMS): [cyan]{ums_result['output']}[/cyan]"
-        )
+        t_start=t_start,
+        noun="Mesh texturizado",
+        console=console,
+        enabled=not no_ums,
+        priority=ums_priority,
+        stream=ums_stream,
+    ):
         sys.exit(0)
-    elif ums_result and ums_result.get("status") == "error":
-        console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+
+    _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
 
     try:
         start = time.time()

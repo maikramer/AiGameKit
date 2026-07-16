@@ -139,6 +139,10 @@ class SkymapGenerator(DiffusionGeneratorBase):
         model_id: str | None = None,
         cache_dir: str | None = None,
         gpu_ids: list[int] | None = None,
+        torch_compile: bool | None = None,
+        torch_compile_mode: str = "default",
+        step_cache: str | None = None,
+        channels_last: bool = False,
     ) -> None:
         super().__init__(
             device=device,
@@ -147,6 +151,10 @@ class SkymapGenerator(DiffusionGeneratorBase):
             cache_dir=cache_dir,
             gpu_ids=gpu_ids,
             memory_efficient=memory_efficient,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            step_cache=step_cache,
+            channels_last=channels_last,
         )
         # Modelo base FLUX.1-dev (distinto do LoRA equirectangular em ``self.model_id``).
         self.base_model_id = default_base_model_id()
@@ -215,8 +223,11 @@ class SkymapGenerator(DiffusionGeneratorBase):
             target_resolution=2048,
         )
 
-        # torch.compile do transformer (28-step FLUX a 2MP beneficia muito).
+        # Kernel opts: compile + step-cache + channels_last + attention (sage/flash).
         self._maybe_compile_transformer(pipe, placement_plan)
+        self._maybe_apply_step_cache(pipe, placement_plan)
+        self._maybe_apply_channels_last(pipe, placement_plan)
+        self._maybe_select_attention_backend(pipe, placement_plan)
 
         self._status("Modelo carregado — pronto")
 

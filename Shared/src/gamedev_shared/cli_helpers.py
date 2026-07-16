@@ -6,7 +6,8 @@ Extrai padrões que eram copy-pasted across 9 CLIs:
     (era inline em Text3D e Paint3D._prepare_gpu, 5 call sites).
   - ``apply_quality_defaults()``: resolve defaults do QualityEngine só quando o
     user não explicitou (era ~15 linhas x 13 call sites).
-  - ``try_ums_delegation()``: delega no UMS, imprime, retorna se handled.
+  - ``try_ums_delegation()`` / ``add_ums_options``: delegação UMS com prioridade,
+    stream e ``--no-ums``.
   - ``make_profiler()``: envolve o padrão ProfilerSession + prof_log.
 """
 
@@ -14,15 +15,56 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from rich.console import Console
 
 from .logging import Logger
-from .model_server import delegate_to_ums
+from .model_server import delegate_to_ums, send_request_stream
 
 _logger = Logger()
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def add_ums_options(fn: F) -> F:
+    """Decorator Click: acrescenta ``--ums-priority``, ``--no-ums``, ``--ums-stream``.
+
+    Usar por cima do ``@click.pass_context`` (ou por baixo das outras options)::
+
+        @cli.command("generate")
+        @click.option(...)
+        @add_ums_options
+        @click.pass_context
+        def generate_cmd(ctx, ..., ums_priority, no_ums, ums_stream):
+            ...
+    """
+    try:
+        import rich_click as click
+    except ImportError:  # pragma: no cover
+        import click  # type: ignore[no-redef]
+
+    fn = click.option(
+        "--ums-stream",
+        is_flag=True,
+        default=False,
+        help="Mostra eventos NDJSON do UMS (fila, started, progress) durante a geração.",
+    )(fn)
+    fn = click.option(
+        "--no-ums",
+        is_flag=True,
+        default=False,
+        help="Não delegar no Unified Model Server; forçar geração in-process.",
+    )(fn)
+    fn = click.option(
+        "--ums-priority",
+        type=click.Choice(["interactive", "batch"], case_sensitive=False),
+        default=None,
+        help=("Prioridade na fila UMS (default: interactive, ou GAMEDEV_UMS_PRIORITY). GameAssets batch usa 'batch'."),
+    )(fn)
+    return fn  # type: ignore[return-value]
 
 
 def env_bool(env_var: str, cli_wants: bool) -> bool:
@@ -77,28 +119,52 @@ def prepare_gpu_exclusive(
         kill_gpu_compute_processes_aggressive,
         warn_if_vram_occupied,
     )
-    from .model_server import ensure_vram_available
+    from .model_server import (
+        UMS_DO_NOT_KILL_TIP,
+        ensure_vram_available,
+        fetch_ums_queue_snapshot,
+        format_ums_holding_summary,
+        is_ums_running,
+        ums_is_busy,
+    )
 
-    # Pedir aos model servers ativos para descarregar (libertar VRAM).
+    # Pedir aos model servers / UMS para descarregar (libertar VRAM).
     ensure_vram_available(needed_mib=needed_mib)
 
     kill = env_bool(kill_others_env, kill_others) if kill_others_env else kill_others
     allow = allow_shared or (env_bool(allow_shared_env, False) if allow_shared_env else False)
 
     if kill:
+        snap = fetch_ums_queue_snapshot() if is_ums_running() else None
+        if ums_is_busy(snap):
+            hold = format_ums_holding_summary(snap) if snap else "UMS busy"
+            if console is not None:
+                from rich.panel import Panel
+
+                console.print(
+                    Panel(
+                        f"[bold yellow]Kill GPU recusado — UMS tem jobs[/bold yellow]\n"
+                        f"{hold}\n[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
+                        border_style="yellow",
+                    )
+                )
+            raise click.ClickException(f"Kill GPU recusado: UMS tem jobs na fila ({hold}). {UMS_DO_NOT_KILL_TIP}")
         if console is not None:
             from rich.panel import Panel
 
             console.print(
                 Panel(
                     "[bold]Terminar processos GPU alvo[/bold]\n"
-                    f"[dim]Desliga com --no-gpu-kill-others ou {kill_others_env}=0[/dim]",
+                    f"[dim]Desliga com --no-gpu-kill-others ou {kill_others_env}=0[/dim]\n"
+                    f"[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
                     border_style="yellow",
                 )
             )
         for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
             if console is not None:
                 console.print(f"[dim]{line}[/dim]")
+            if line.startswith("[recusado]"):
+                raise click.ClickException(line)
         clear_cuda_memory()
         time.sleep(0.5)
 
@@ -161,6 +227,128 @@ def apply_quality_defaults(
     return resolved
 
 
+def _ums_debug_enabled() -> bool:
+    """``GAMEDEV_UMS_DEBUG=1`` imprime o bloco ums_debug completo."""
+    return os.environ.get("GAMEDEV_UMS_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def format_ums_debug_line(result: dict[str, Any]) -> str:
+    """Linha compacta de debug a partir de ``ums_debug`` / campos top-level."""
+    dbg = result.get("ums_debug") or {}
+    backend = dbg.get("backend") or result.get("backend") or "?"
+    job = str(dbg.get("job_id") or result.get("job_id") or "")[:8]
+    wait = dbg.get("queue_wait_sec")
+    gen = dbg.get("generate_sec")
+    cuts = dbg.get("affinity_cuts")
+    pri = dbg.get("priority") or result.get("priority") or "?"
+    parts = [f"backend={backend}", f"pri={pri}"]
+    if job:
+        parts.append(f"job={job}…")
+    if wait is not None:
+        parts.append(f"wait={wait}s")
+    if gen is not None:
+        parts.append(f"gen={gen}s")
+    if cuts is not None:
+        parts.append(f"cuts={cuts}")
+    loaded = dbg.get("loaded_backends")
+    if loaded is not None:
+        parts.append(f"loaded={loaded}")
+    return " | ".join(parts)
+
+
+def _print_ums_success(
+    console: Console,
+    *,
+    noun: str,
+    result: dict[str, Any],
+    t_start: float,
+    output_key: str = "output",
+) -> None:
+    from .gpu import format_bytes
+
+    elapsed = time.time() - t_start
+    out = result.get(output_key) or result.get("output")
+    try:
+        sz = format_bytes(Path(str(out)).stat().st_size) if out else "?"
+    except OSError:
+        sz = "?"
+    console.print(f"[bold green]\u2713[/bold green] {noun} (via UMS): [cyan]{out}[/cyan] [dim]({sz})[/dim]")
+    if result.get("seed") is not None:
+        console.print(f"[dim]Seed: {result.get('seed', '?')}[/dim]")
+    console.print(f"[dim]UMS: {format_ums_debug_line(result)}[/dim]")
+    console.print(f"[dim]Tempo total (cliente): {elapsed:.1f}s[/dim]")
+    if _ums_debug_enabled() and result.get("ums_debug"):
+        import json
+
+        console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
+
+
+def _ums_generate_stream(
+    tool: str,
+    payload: dict[str, Any],
+    *,
+    priority: str | None,
+    timeout_sec: float,
+    console: Console,
+) -> dict[str, Any] | None:
+    """Gera via UMS com ``stream: true`` e imprime eventos de fila/progresso."""
+    from .model_server import UMS_SOCKET, ensure_ums_running, resolve_ums_priority
+
+    if not ensure_ums_running():
+        return None
+    pri = resolve_ums_priority(priority if priority is not None else payload.get("priority"))
+    req = {"cmd": "generate", "backend": tool, "stream": True, "priority": pri, **payload}
+    req["priority"] = pri
+    final: dict[str, Any] | None = None
+    for event in send_request_stream(req, UMS_SOCKET, timeout_sec=timeout_sec):
+        if "event" in event and "status" not in event:
+            ev = event.get("event")
+            if ev == "queued":
+                pos = event.get("queue_position", "?")
+                jid = str(event.get("job_id", ""))[:8]
+                console.print(
+                    f"[dim]UMS fila: pos={pos} pri={event.get('priority', pri)} "
+                    f"job={jid or '?'}… backend={event.get('backend', tool)}[/dim]"
+                )
+            elif ev == "started":
+                wait = event.get("queue_wait_sec")
+                cuts = event.get("affinity_cuts")
+                extra = []
+                if wait is not None:
+                    extra.append(f"wait={wait}s")
+                if cuts is not None:
+                    extra.append(f"cuts={cuts}")
+                suffix = f" ({', '.join(extra)})" if extra else ""
+                console.print(f"[dim]UMS started: {event.get('backend', tool)}{suffix}[/dim]")
+            elif ev == "progress":
+                pct = event.get("pct")
+                msg = event.get("message") or ""
+                pct_s = f"{pct:.0%}" if isinstance(pct, (int, float)) else "?"
+                console.print(f"[dim]UMS progresso: {pct_s} {msg}[/dim]")
+            continue
+        final = event
+    return final
+
+
+def call_ums(
+    tool: str,
+    payload: dict[str, Any],
+    *,
+    priority: str | None = None,
+    stream: bool = False,
+    timeout_sec: float = 600.0,
+    console: Console | None = None,
+) -> dict[str, Any] | None:
+    """Chamada UMS de baixo nível (sync ou stream). Não faz fallback.
+
+    Returns:
+        Dict de resposta, ou ``None`` se o UMS não estiver disponível.
+    """
+    if stream and console is not None:
+        return _ums_generate_stream(tool, payload, priority=priority, timeout_sec=timeout_sec, console=console)
+    return delegate_to_ums(tool, payload, timeout_sec=timeout_sec, priority=priority)
+
+
 def try_ums_delegation(
     tool: str,
     payload: dict[str, Any],
@@ -170,12 +358,18 @@ def try_ums_delegation(
     console: Console,
     output_key: str = "output",
     timeout_sec: float = 600.0,
+    enabled: bool = True,
+    priority: str | None = None,
+    stream: bool = False,
 ) -> bool:
     """Delega uma geração no UMS se ativo. Retorna ``True`` se handled.
 
     Helper para CLIs: no início do comando ``generate``, chamar esta função.
     Se retornar ``True``, a geração foi feita pelo UMS — o caller deve ``return``.
     Se ``False``, fazer fallback in-process.
+
+    ``queue_full`` **não** faz fallback (evita carregar o modelo em paralelo) —
+    levanta ``click.ClickException``.
 
     Args:
         tool: Nome do backend (ex: ``text2icon``).
@@ -184,34 +378,87 @@ def try_ums_delegation(
         noun: Substantivo para a mensagem de sucesso (ex: ``"Ícone"``, ``"Textura"``).
         console: Console Rich para output.
         output_key: Chave do payload que contém o path de output (default ``"output"``).
+        enabled: Se ``False`` (``--no-ums``), salta a delegação.
+        priority: ``interactive`` | ``batch`` (ou None → env / default).
+        stream: Se ``True``, imprime eventos de fila/progresso (``--ums-stream``).
 
     Returns:
         ``True`` se o UMS handle o pedido (caller deve return);
         ``False`` se deve fazer fallback in-process (UMS down ou erro).
     """
-    from .gpu import format_bytes
+    if not enabled:
+        console.print("[dim]UMS: --no-ums → geração in-process[/dim]")
+        return False
 
     output = payload.get(output_key)
     if output is None:
         return False
 
-    result = delegate_to_ums(tool, payload, timeout_sec=timeout_sec)
-    if result and result.get("status") == "ok":
-        elapsed = time.time() - t_start
-        try:
-            sz = format_bytes(Path(result["output"]).stat().st_size)
-        except OSError:
-            sz = "?"
+    from .model_server import (
+        UMS_DO_NOT_KILL_TIP,
+        fetch_ums_queue_snapshot,
+        format_ums_holding_summary,
+        is_ums_running,
+        ums_is_busy,
+    )
+
+    if is_ums_running():
+        snap = fetch_ums_queue_snapshot()
+        if ums_is_busy(snap) and snap is not None:
+            console.print(f"[dim]UMS ocupado: {format_ums_holding_summary(snap)}[/dim]")
+        if not stream:
+            console.print("[dim]UMS: a enfileirar… (progresso: --ums-stream | gamedev-model-server queue)[/dim]")
+    else:
+        console.print("[dim]UMS: a garantir supervisor (auto-start se GAMEDEV_UMS_AUTO_START≠0)…[/dim]")
+
+    result = call_ums(
+        tool,
+        payload,
+        priority=priority,
+        stream=stream,
+        timeout_sec=timeout_sec,
+        console=console if stream else None,
+    )
+    if result is None:
         console.print(
-            f"[bold green]\u2713[/bold green] {noun} (via UMS): [cyan]{result['output']}[/cyan] [dim]({sz})[/dim]"
+            "[yellow]UMS indisponível — fallback in-process[/yellow]\n"
+            f"[dim]Arranca com: gamedev-model-server start · {UMS_DO_NOT_KILL_TIP}[/dim]"
         )
-        if result.get("seed") is not None:
-            console.print(f"[dim]Seed: {result.get('seed', '?')}[/dim]")
-        console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+        return False
+    status = result.get("status")
+    if status == "ok":
+        _print_ums_success(console, noun=noun, result=result, t_start=t_start, output_key=output_key)
         return True
-    if result and result.get("status") == "error":
-        console.print(f"[yellow]UMS erro: {result.get('error', '?')} — fallback in-process[/yellow]")
+    if status == "queue_full":
+        raise_if_ums_queue_full(result)
+        return False  # pragma: no cover
+    if status == "error":
+        code = result.get("error_code", "?")
+        hint = result.get("hint")
+        console.print(f"[yellow]UMS erro [{code}]: {result.get('error', '?')} — fallback in-process[/yellow]")
+        if hint:
+            console.print(f"[dim]hint: {hint}[/dim]")
+        console.print(f"[dim]UMS: {format_ums_debug_line(result)}[/dim]")
+        if _ums_debug_enabled() and result.get("ums_debug"):
+            import json
+
+            console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
     return False
+
+
+def raise_if_ums_queue_full(result: dict[str, Any] | None) -> None:
+    """Levanta ClickException se a resposta UMS for ``queue_full`` (para call sites legacy)."""
+    if result is not None and result.get("status") == "queue_full":
+        import click
+
+        depth = result.get("queue_depth", "?")
+        max_d = result.get("max_depth", "?")
+        code = result.get("error_code", "QUEUE_FULL")
+        hint = result.get("hint") or "Espera ou aumenta GAMEDEV_UMS_MAX_QUEUE_DEPTH."
+        dbg = format_ums_debug_line(result)
+        raise click.ClickException(
+            f"UMS [{code}] fila cheia ({depth}/{max_d}): {result.get('error', 'queue_full')}. {hint} ({dbg})"
+        )
 
 
 def make_profiler(

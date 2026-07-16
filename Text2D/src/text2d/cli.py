@@ -19,6 +19,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -173,6 +174,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     show_default=True,
     help="Memory format NHWC (channels_last) no VAE/transformer — Ampere+ conv path.",
 )
+@add_ums_options
 @click.pass_context
 def generate_cmd(
     ctx: click.Context,
@@ -194,6 +196,9 @@ def generate_cmd(
     torch_compile_mode: str,
     step_cache: str,
     channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera uma imagem a partir do PROMPT."""
     from gamedev_shared.gpu import warn_if_vram_occupied
@@ -268,11 +273,10 @@ def generate_cmd(
     prof_log = Path(log_p) if log_p else None
     t_start = time.time()
 
-    # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-    if not cpu and output is not None:
-        from gamedev_shared.model_server import delegate_to_ums
-
-        ums_result = delegate_to_ums(
+    if (
+        not cpu
+        and output is not None
+        and try_ums_delegation(
             "text2d",
             {
                 "prompt": prompt,
@@ -283,20 +287,15 @@ def generate_cmd(
                 "guidance": guidance_scale,
                 "seed": seed,
             },
+            t_start=t_start,
+            noun="Imagem",
+            console=console,
+            enabled=not no_ums,
+            priority=ums_priority,
+            stream=ums_stream,
         )
-        if ums_result and ums_result.get("status") == "ok":
-            elapsed = time.time() - t_start
-            try:
-                sz = format_bytes(Path(ums_result["output"]).stat().st_size)
-            except OSError:
-                sz = "?"
-            console.print(
-                f"[bold green]\u2713[/bold green] Imagem: [cyan]{ums_result['output']}[/cyan] [dim]({sz})[/dim]"
-            )
-            console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
-            return
-        elif ums_result and ums_result.get("status") == "error":
-            console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+    ):
+        return
 
     safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
     item_id = safe or "single"
