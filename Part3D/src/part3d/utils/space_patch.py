@@ -22,6 +22,77 @@ import re
 
 PERF_MARKER = "GAMEDEV_PERF_PATCH_V1"
 NMS_MARKER = "GAMEDEV_NMS_VECTORIZED"
+NMS_CONSENSUS_MARKER = "GAMEDEV_NMS_CONSENSUS"
+MULTIHEAD_MARKER = "GAMEDEV_MULTIHEAD"
+POOL_SORT_MARKER = "GAMEDEV_POOL_SORT"
+VOTE_ASSIGN_MARKER = "GAMEDEV_VOTE_ASSIGN"
+QUALITY_MARKER = "GAMEDEV_MASK_QUALITY_V3"
+_OLD_QUALITY_PREFIXES = (
+    "\n\n# GAMEDEV_MASK_QUALITY_V2 —",
+    "\n\n# GAMEDEV_MASK_QUALITY_V3 —",
+)
+
+_QUALITY_TAIL = """
+
+# GAMEDEV_MASK_QUALITY_V3 — multi-head pool + consensus NMS + vote assign.
+GAMEDEV_MASK_NMS_IOU = {mask_nms_iou}
+GAMEDEV_SECONDARY_MASK_IOU = {secondary_mask_iou}
+GAMEDEV_MIN_CLUSTER_SUPPORT = {min_cluster_support}
+GAMEDEV_MIN_PREDICTED_IOU = {min_predicted_iou}
+GAMEDEV_PROMPT_BATCH_SIZE = {prompt_batch_size}
+GAMEDEV_BBOX_MERGE_IOU = {bbox_merge_iou}
+GAMEDEV_MULTI_HEAD = {multi_head}
+GAMEDEV_HEAD_MIN_SCORE = {head_min_score}
+GAMEDEV_HEAD_SCORE_RATIO = {head_score_ratio}
+GAMEDEV_CONSENSUS = {consensus}
+GAMEDEV_CONSENSUS_VOTE = {consensus_vote}
+
+
+def _gamedev_cluster_support(members, prompt_ids_sorted):
+    try:
+        from part3d.utils.mask_consensus import distinct_prompt_support
+        return distinct_prompt_support(members, prompt_ids_sorted)
+    except Exception:
+        return len(members)
+
+
+def configure_gamedev_mask_quality(
+    *,
+    mask_nms_iou=0.9,
+    secondary_mask_iou=0.25,
+    min_cluster_support=3,
+    min_predicted_iou=0.75,
+    prompt_batch_size=4,
+    bbox_merge_iou=0.7,
+    multi_head=True,
+    head_min_score=0.5,
+    head_score_ratio=0.85,
+    consensus=True,
+    consensus_vote=0.5,
+):
+    global GAMEDEV_MASK_NMS_IOU
+    global GAMEDEV_SECONDARY_MASK_IOU
+    global GAMEDEV_MIN_CLUSTER_SUPPORT
+    global GAMEDEV_MIN_PREDICTED_IOU
+    global GAMEDEV_PROMPT_BATCH_SIZE
+    global GAMEDEV_BBOX_MERGE_IOU
+    global GAMEDEV_MULTI_HEAD
+    global GAMEDEV_HEAD_MIN_SCORE
+    global GAMEDEV_HEAD_SCORE_RATIO
+    global GAMEDEV_CONSENSUS
+    global GAMEDEV_CONSENSUS_VOTE
+    GAMEDEV_MASK_NMS_IOU = float(mask_nms_iou)
+    GAMEDEV_SECONDARY_MASK_IOU = float(secondary_mask_iou)
+    GAMEDEV_MIN_CLUSTER_SUPPORT = max(1, int(min_cluster_support))
+    GAMEDEV_MIN_PREDICTED_IOU = float(min_predicted_iou)
+    GAMEDEV_PROMPT_BATCH_SIZE = max(1, int(prompt_batch_size))
+    GAMEDEV_BBOX_MERGE_IOU = float(bbox_merge_iou)
+    GAMEDEV_MULTI_HEAD = bool(multi_head)
+    GAMEDEV_HEAD_MIN_SCORE = float(head_min_score)
+    GAMEDEV_HEAD_SCORE_RATIO = float(head_score_ratio)
+    GAMEDEV_CONSENSUS = bool(consensus)
+    GAMEDEV_CONSENSUS_VOTE = float(consensus_vote)
+"""
 
 _NMS_ORIG = """\
     with Timer("NMS"):
@@ -57,6 +128,116 @@ _NMS_FAST = """\
                     break
             else:
                 clusters[i].append(i)
+"""
+
+_NMS_CONSENSUS = """\
+    with Timer("NMS"):
+        # GAMEDEV_NMS_CONSENSUS — best-fit NMS + IoU-weighted cluster fuse.
+        from part3d.utils.mask_consensus import (
+            cluster_masks_bestfit,
+            fuse_cluster_mask,
+        )
+        if GAMEDEV_CONSENSUS:
+            clusters = cluster_masks_bestfit(mask_sorted, nms_iou=GAMEDEV_MASK_NMS_IOU)
+            for _gd_rep, _gd_members in list(clusters.items()):
+                mask_sorted[_gd_rep] = fuse_cluster_mask(
+                    mask_sorted,
+                    iou_sorted,
+                    _gd_members,
+                    vote=GAMEDEV_CONSENSUS_VOTE,
+                )
+        else:
+            clusters = defaultdict(list)
+            _gd_masks = np.stack(mask_sorted, axis=0).astype(np.float32)
+            _gd_inter = _gd_masks @ _gd_masks.T
+            _gd_areas = _gd_masks.sum(axis=1)
+            _gd_union = _gd_areas[:, None] + _gd_areas[None, :] - _gd_inter
+            _gd_iou = _gd_inter / np.maximum(_gd_union, 1e-9)
+            for i in range(len(mask_sorted)):
+                for j in clusters.keys():
+                    if _gd_iou[i, j] > GAMEDEV_MASK_NMS_IOU:
+                        clusters[j].append(i)
+                        break
+                else:
+                    clusters[i].append(i)
+"""
+
+_WINNER_TAKE_ALL = """\
+            pred_mask = np.stack(
+                [pred_mask_1, pred_mask_2, pred_mask_3], axis=-1
+            )  # [N, K, 3]
+            max_idx = np.argmax(pred_iou, axis=-1)  # [K]
+            for j in range(max_idx.shape[0]):
+                mask_res.append(pred_mask[:, j, max_idx[j]])
+                iou_res.append(pred_iou[j, max_idx[j]])
+"""
+
+_MULTIHEAD_COLLECT = """\
+            pred_mask = np.stack(
+                [pred_mask_1, pred_mask_2, pred_mask_3], axis=-1
+            )  # [N, K, 3]
+            # GAMEDEV_MULTIHEAD — keep near-best heads instead of argmax-only.
+            from part3d.utils.mask_consensus import collect_batch_heads
+            _gd_m, _gd_i, _gd_p = collect_batch_heads(
+                pred_mask,
+                pred_iou,
+                bs * i,
+                multi_head=GAMEDEV_MULTI_HEAD,
+                min_score=GAMEDEV_HEAD_MIN_SCORE,
+                score_ratio=GAMEDEV_HEAD_SCORE_RATIO,
+            )
+            mask_res.extend(_gd_m)
+            iou_res.extend(_gd_i)
+            gamedev_prompt_ids.extend(_gd_p)
+"""
+
+_POOL_SORT_ORIG = """\
+    with Timer("根据IOU排序"):
+        iou_res = np.array(iou_res).tolist()
+        mask_iou = [[mask_res[:, i], iou_res[i]] for i in range(prompt_num)]
+        mask_iou_sorted = sorted(mask_iou, key=lambda x: x[1], reverse=True)
+        mask_sorted = [mask_iou_sorted[i][0] for i in range(prompt_num)]
+        iou_sorted = [mask_iou_sorted[i][1] for i in range(prompt_num)]
+"""
+
+_POOL_SORT_NEW = """\
+    with Timer("根据IOU排序"):
+        # GAMEDEV_POOL_SORT — pool size may exceed prompt_num (multi-head).
+        iou_res = np.array(iou_res).tolist()
+        _gd_n = int(mask_res.shape[1]) if hasattr(mask_res, "shape") else len(mask_res)
+        if not gamedev_prompt_ids:
+            gamedev_prompt_ids.extend(list(range(_gd_n)))
+        mask_iou = [
+            [mask_res[:, i], iou_res[i], gamedev_prompt_ids[i]] for i in range(_gd_n)
+        ]
+        mask_iou_sorted = sorted(mask_iou, key=lambda x: x[1], reverse=True)
+        mask_sorted = [mask_iou_sorted[i][0] for i in range(_gd_n)]
+        iou_sorted = [mask_iou_sorted[i][1] for i in range(_gd_n)]
+        gamedev_prompt_ids_sorted = [mask_iou_sorted[i][2] for i in range(_gd_n)]
+"""
+
+_VOTE_ASSIGN_ORIG = """\
+        result_mask = -np.ones(point_num, dtype=np.int64)
+        for i in final_mask_sorted:
+            part_mask = mask_sorted[i]
+            result_mask[part_mask] = i
+"""
+
+_VOTE_ASSIGN_NEW = """\
+        # GAMEDEV_VOTE_ASSIGN — soft vote across final masks; smaller parts win ties.
+        from part3d.utils.mask_consensus import assign_points_by_vote
+        if GAMEDEV_CONSENSUS and final_mask_sorted:
+            _gd_vote_masks = [mask_sorted[i] for i in final_mask_sorted]
+            _gd_vote_ious = [iou_sorted[i] for i in final_mask_sorted]
+            _gd_local = assign_points_by_vote(_gd_vote_masks, _gd_vote_ious, prefer_small=True)
+            result_mask = -np.ones(point_num, dtype=np.int64)
+            _gd_hit = _gd_local >= 0
+            result_mask[_gd_hit] = np.asarray(final_mask_sorted, dtype=np.int64)[_gd_local[_gd_hit]]
+        else:
+            result_mask = -np.ones(point_num, dtype=np.int64)
+            for i in final_mask_sorted:
+                part_mask = mask_sorted[i]
+                result_mask[part_mask] = i
 """
 
 # Overrides rápidos: definidos APÓS os originais, capturam-nos por nome antes
@@ -193,12 +374,30 @@ def transform_surface_extractors(content: str) -> str:
     )
 
 
+def _strip_old_quality_tail(content: str) -> str:
+    for prefix in _OLD_QUALITY_PREFIXES:
+        idx = content.find(prefix)
+        if idx >= 0:
+            return content[:idx].rstrip("\n") + "\n"
+    return content
+
+
 def transform_auto_mask(
     content: str,
     *,
     part_area_merge: float,
     area_ratio_keep: float,
     bbox_merge_iou: float,
+    mask_nms_iou: float = 0.9,
+    secondary_mask_iou: float = 0.25,
+    min_cluster_support: int = 3,
+    min_predicted_iou: float = 0.75,
+    prompt_batch_size: int = 4,
+    multi_head: bool = True,
+    head_min_score: float = 0.5,
+    head_score_ratio: float = 0.85,
+    consensus: bool = True,
+    consensus_vote: float = 0.5,
 ) -> str:
     """Aplica todos os patches ao ``auto_mask_api.py`` do Space."""
     # mesh_sam() ignora os argumentos e hardcoda point/prompt — remover.
@@ -208,9 +407,21 @@ def transform_auto_mask(
     ):
         content = content.replace(bad_line, "")
 
-    # get_mask() com bs alto explode a VRAM em ~6 GB.
+    # get_mask() com bs alto explode a VRAM em ~6 GB. Prompt count only
+    # changes runtime/CPU mask storage, not this peak.
     for old_bs in ("        bs = 64\n", "        bs = 8\n"):
-        content = content.replace(old_bs, "        bs = 4\n")
+        content = content.replace(old_bs, "        bs = GAMEDEV_PROMPT_BATCH_SIZE\n")
+    content = re.sub(
+        r"(?m)^        bs = (?:4|[0-9]+)$",
+        "        bs = GAMEDEV_PROMPT_BATCH_SIZE",
+        content,
+        count=1,
+    )
+    content = content.replace(
+        "        step_num = prompt_num // bs + 1\n",
+        "        step_num = (prompt_num + bs - 1) // bs\n",
+        1,
+    )
 
     # Anti-fuse: painel de porta (~0.3-1% área) era fundido na moldura.
     content = re.sub(
@@ -243,13 +454,92 @@ def transform_auto_mask(
         count=1,
     )
 
-    # NMS O(K²·N) com ThreadPoolExecutor → matmul vectorizado.
-    if NMS_MARKER not in content and _NMS_ORIG in content:
-        content = content.replace(_NMS_ORIG, _NMS_FAST, 1)
+    # Multi-head collect replaces winner-take-all.
+    if MULTIHEAD_MARKER not in content and _WINNER_TAKE_ALL in content:
+        content = content.replace(_WINNER_TAKE_ALL, _MULTIHEAD_COLLECT, 1)
+    if "gamedev_prompt_ids = []" not in content:
+        content = content.replace(
+            "        mask_res = []\n        iou_res = []\n",
+            "        mask_res = []\n        iou_res = []\n        gamedev_prompt_ids = []\n",
+            1,
+        )
+
+    # Multi-head may make the candidate pool larger than prompt_num.
+    if POOL_SORT_MARKER not in content and _POOL_SORT_ORIG in content:
+        content = content.replace(_POOL_SORT_ORIG, _POOL_SORT_NEW, 1)
+
+    # Best-fit NMS plus IoU-weighted consensus.
+    if NMS_CONSENSUS_MARKER not in content:
+        if _NMS_ORIG in content:
+            content = content.replace(_NMS_ORIG, _NMS_CONSENSUS, 1)
+        elif NMS_MARKER in content:
+            content = re.sub(
+                r'    with Timer\("NMS"\):\n'
+                r"        # GAMEDEV_NMS_VECTORIZED.*?"
+                r"                clusters\[i\]\.append\(i\)\n",
+                _NMS_CONSENSUS,
+                content,
+                count=1,
+                flags=re.DOTALL,
+            )
+
+    # Upstream discards every cluster supported by <=2 prompts. Small semantic
+    # parts are exactly the masks least likely to receive three FPS prompts.
+    # Keep stable clusters, plus high-confidence singleton/duo predictions.
+    support_filter = (
+        "if (_gamedev_cluster_support(clusters[i], gamedev_prompt_ids_sorted) "
+        ">= GAMEDEV_MIN_CLUSTER_SUPPORT or iou_sorted[i] >= GAMEDEV_MIN_PREDICTED_IOU):"
+    )
+    content = content.replace("if len(clusters[i]) > 2:", support_filter, 1)
+    content = content.replace(
+        "if (len(clusters[i]) >= GAMEDEV_MIN_CLUSTER_SUPPORT or iou_sorted[i] >= GAMEDEV_MIN_PREDICTED_IOU):",
+        support_filter,
+        1,
+    )
+
+    # AABB overlap alone suppresses nested but distinct parts (door/frame).
+    # Require actual point-mask overlap as evidence that both proposals denote
+    # the same part; NMS remains the primary duplicate filter.
+    bbox_only = re.compile(
+        r"if \(\s*cal_bbox_iou\(\s*_points,\s*mask_sorted\[tar_cluster\],"
+        r"\s*mask_sorted\[cur_cluster\]\s*\)\s*>\s*[0-9.]+\s*\):",
+        re.MULTILINE,
+    )
+    content = bbox_only.sub(
+        (
+            "if (\n"
+            "                    cal_iou(mask_sorted[tar_cluster], mask_sorted[cur_cluster])\n"
+            "                    > GAMEDEV_SECONDARY_MASK_IOU\n"
+            "                    and cal_bbox_iou(\n"
+            "                        _points, mask_sorted[tar_cluster], mask_sorted[cur_cluster]\n"
+            "                    ) > GAMEDEV_BBOX_MERGE_IOU\n"
+            "                ):"
+        ),
+        content,
+        count=1,
+    )
+
+    if VOTE_ASSIGN_MARKER not in content and _VOTE_ASSIGN_ORIG in content:
+        content = content.replace(_VOTE_ASSIGN_ORIG, _VOTE_ASSIGN_NEW, 1)
 
     # Overrides rápidos de fix_label / get_connected_region.
     if PERF_MARKER not in content:
         content = content.rstrip("\n") + "\n" + _PERF_TAIL
+    content = _strip_old_quality_tail(content)
+    if QUALITY_MARKER not in content:
+        content = content.rstrip("\n") + _QUALITY_TAIL.format(
+            mask_nms_iou=mask_nms_iou,
+            secondary_mask_iou=secondary_mask_iou,
+            min_cluster_support=max(1, min_cluster_support),
+            min_predicted_iou=min_predicted_iou,
+            prompt_batch_size=max(1, prompt_batch_size),
+            bbox_merge_iou=bbox_merge_iou,
+            multi_head=bool(multi_head),
+            head_min_score=float(head_min_score),
+            head_score_ratio=float(head_score_ratio),
+            consensus=bool(consensus),
+            consensus_vote=float(consensus_vote),
+        )
 
     return content
 
@@ -275,6 +565,16 @@ def apply_space_patches(
     part_area_merge: float,
     area_ratio_keep: float,
     bbox_merge_iou: float,
+    mask_nms_iou: float = 0.9,
+    secondary_mask_iou: float = 0.25,
+    min_cluster_support: int = 3,
+    min_predicted_iou: float = 0.75,
+    prompt_batch_size: int = 4,
+    multi_head: bool = True,
+    head_min_score: float = 0.5,
+    head_score_ratio: float = 0.85,
+    consensus: bool = True,
+    consensus_vote: float = 0.5,
     sonata_root: str | None = None,
 ) -> list[str]:
     """Aplica os patches aos ficheiros do Space. Devolve os caminhos alterados."""
@@ -299,6 +599,16 @@ def apply_space_patches(
             part_area_merge=part_area_merge,
             area_ratio_keep=area_ratio_keep,
             bbox_merge_iou=bbox_merge_iou,
+            mask_nms_iou=mask_nms_iou,
+            secondary_mask_iou=secondary_mask_iou,
+            min_cluster_support=min_cluster_support,
+            min_predicted_iou=min_predicted_iou,
+            prompt_batch_size=prompt_batch_size,
+            multi_head=multi_head,
+            head_min_score=head_min_score,
+            head_score_ratio=head_score_ratio,
+            consensus=consensus,
+            consensus_vote=consensus_vote,
         )
         if write_if_changed(api_file, new_content):
             changed.append(api_file)

@@ -139,9 +139,17 @@ def icm_boundary_snap(
     cost: np.ndarray,
     *,
     iterations: int = 20,
+    data_weight: float = 0.35,
+    boundary_hops: int = 2,
 ) -> np.ndarray:
-    """ICM Gauss-Seidel sobre faces de fronteira (energia estritamente decrescente)."""
+    """ICM ancorado sobre uma faixa estreita da fronteira.
+
+    ``data_weight`` penaliza abandonar a máscara P3-SAM original. Sem este
+    termo unary, o Potts puro prefere apagar partes pequenas para eliminar
+    fronteiras. ``boundary_hops`` impede deriva para o interior da região.
+    """
     labels = labels.copy()
+    original = labels.copy()
     n = labels.shape[0]
     neighbors: list[list[tuple[int, float]]] = [[] for _ in range(n)]
     for e in range(adj.shape[0]):
@@ -152,6 +160,14 @@ def icm_boundary_snap(
 
     boundary = labels[adj[:, 0]] != labels[adj[:, 1]]
     active = set(adj[boundary].ravel().tolist())
+    frontier = set(active)
+    for _ in range(max(0, boundary_hops - 1)):
+        expanded = set(frontier)
+        for f in frontier:
+            expanded.update(nf for nf, _c in neighbors[f])
+        frontier = expanded - active
+        active.update(expanded)
+    allowed = set(active)
 
     for _ in range(iterations):
         if not active:
@@ -169,11 +185,12 @@ def icm_boundary_snap(
                 lab = int(labels[nf])
                 gain[lab] = gain.get(lab, 0.0) + c
             best_lab = cur
-            best_cost = total - gain.get(cur, 0.0)
+            anchor = data_weight * total
+            best_cost = total - gain.get(cur, 0.0) + (anchor if cur != int(original[f]) else 0.0)
             for lab, g in gain.items():
                 if lab < 0:
                     continue
-                cand_cost = total - g
+                cand_cost = total - g + (anchor if lab != int(original[f]) else 0.0)
                 if cand_cost < best_cost - _EPS:
                     best_cost = cand_cost
                     best_lab = lab
@@ -186,8 +203,60 @@ def icm_boundary_snap(
         for f in flipped:
             nxt.add(f)
             for nf, _c in neighbors[f]:
-                nxt.add(nf)
+                if nf in allowed:
+                    nxt.add(nf)
         active = nxt
+    return labels
+
+
+def relabel_connected_components(
+    labels: np.ndarray,
+    adj: np.ndarray,
+    face_areas: np.ndarray,
+    *,
+    min_faces: int = 32,
+    min_area_frac: float = 1e-4,
+) -> np.ndarray:
+    """Dá ID próprio a cada componente físico e remove detritos mínimos.
+
+    P3-SAM pode reutilizar uma label em ilhas desconectadas. Um AABB agregado
+    dessas ilhas atravessa o objeto e faz X-Part fundir regiões sem relação.
+    """
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    labels = labels.copy()
+    n = labels.shape[0]
+    same = labels[adj[:, 0]] == labels[adj[:, 1]]
+    edges = adj[same]
+    graph = coo_matrix(
+        (
+            np.ones(edges.shape[0] * 2, dtype=np.int8),
+            (
+                np.concatenate((edges[:, 0], edges[:, 1])),
+                np.concatenate((edges[:, 1], edges[:, 0])),
+            ),
+        ),
+        shape=(n, n),
+    )
+    n_comp, comp = connected_components(graph, directed=False)
+    comp_area = np.bincount(comp, weights=face_areas, minlength=n_comp)
+    comp_size = np.bincount(comp, minlength=n_comp)
+    total_area = max(float(np.sum(face_areas)), _EPS)
+    next_label = int(np.max(labels[labels >= 0], initial=-1)) + 1
+
+    for lab in (int(x) for x in np.unique(labels) if x >= 0):
+        comp_ids = np.unique(comp[labels == lab])
+        if comp_ids.size <= 1:
+            continue
+        order = sorted(comp_ids.tolist(), key=lambda ci: float(comp_area[ci]), reverse=True)
+        for ci in order[1:]:
+            mask = (comp == ci) & (labels == lab)
+            if comp_size[ci] < min_faces or comp_area[ci] / total_area < min_area_frac:
+                labels[mask] = -1
+            else:
+                labels[mask] = next_label
+                next_label += 1
     return labels
 
 
@@ -200,6 +269,9 @@ def refine_face_labels(
     concave_factor: float = 0.35,
     island_min_frac: float = 0.15,
     island_min_faces: int = 12,
+    data_weight: float = 0.35,
+    boundary_hops: int = 2,
+    split_components: bool = True,
 ) -> np.ndarray:
     """Refina labels P3-SAM: ilhas absorvidas + fronteiras nas arestas vivas.
 
@@ -232,7 +304,14 @@ def refine_face_labels(
             edge_cost=cost,
         )
 
-    labels = icm_boundary_snap(labels, adj, cost, iterations=iterations)
+    labels = icm_boundary_snap(
+        labels,
+        adj,
+        cost,
+        iterations=iterations,
+        data_weight=data_weight,
+        boundary_hops=boundary_hops,
+    )
 
     with contextlib.suppress(ImportError):
         # ICM pode deixar ilhas mínimas novas — passe final barato.
@@ -244,6 +323,8 @@ def refine_face_labels(
             min_faces=island_min_faces,
             edge_cost=cost,
         )
+        if split_components:
+            labels = relabel_connected_components(labels, adj, face_areas)
     return labels
 
 
@@ -261,3 +342,27 @@ def aabbs_from_face_ids(mesh: Any, face_ids: np.ndarray) -> np.ndarray:
             continue
         aabb.append([pts.min(axis=0), pts.max(axis=0)])
     return np.asarray(aabb, dtype=np.float64)
+
+
+def expand_aabbs(
+    aabb: np.ndarray,
+    *,
+    margin_frac: float = 0.04,
+    min_pad: float = 1e-4,
+) -> np.ndarray:
+    """Expande cada AABB por ``margin_frac`` das meias-extensões (geração X-Part).
+
+    Caixas justas às faces cortam o marching cubes nas bordas; um pad relativo
+    dá folga sem mudar as labels de superfície. ``margin_frac=0`` é no-op.
+    """
+    out = np.asarray(aabb, dtype=np.float64)
+    if out.size == 0 or float(margin_frac) <= 0:
+        return out
+    if out.ndim != 3 or out.shape[1:] != (2, 3):
+        raise ValueError(f"aabb esperado (K,2,3), got {out.shape}")
+    out = out.copy()
+    half = 0.5 * (out[:, 1] - out[:, 0])
+    pad = np.maximum(half * float(margin_frac), float(min_pad))
+    out[:, 0] -= pad
+    out[:, 1] += pad
+    return out

@@ -41,6 +41,21 @@ SPACE_AREA_RATIO_KEEP = 0.00025  # was 0.001 in 去除面积过小
 # Merge de clusters de máscaras por bbox-IoU no Space (0.5 upstream funde
 # porta+moldura quando as bboxes se sobrepõem; mais alto = menos fusão).
 SPACE_BBOX_MERGE_IOU = 0.7
+SPACE_MASK_NMS_IOU = 0.9
+# Merge secundário: exige overlap de máscara + bbox. 0.0 funde demais (chapel v11
+# → 4 partes); 0.25 preserva porta/moldura sem fragmentar.
+SPACE_SECONDARY_MASK_IOU = 0.5
+SPACE_MIN_CLUSTER_SUPPORT = 3
+# 1.0 = desativado; <1.0 preserva clusters de 1-2 prompts com IoU alto (tende a
+# fragmentar - chapel v6/v7 explodiu para 58-91 partes). Opt-in via CLI.
+SPACE_MIN_PREDICTED_IOU = 1.0
+SPACE_PROMPT_BATCH_SIZE = 4
+# Kernel qualidade: multi-head pool + consensus NMS (custa CPU, não VRAM).
+SPACE_MULTI_HEAD = True
+SPACE_HEAD_MIN_SCORE = 0.5
+SPACE_HEAD_SCORE_RATIO = 0.85
+SPACE_CONSENSUS = True
+SPACE_CONSENSUS_VOTE = 0.5
 
 # Refinamento crease-aware das labels P3-SAM (pós-segmentação, CPU-only):
 # ilhas pequenas absorvidas + fronteiras encaixadas em arestas vivas (ICM).
@@ -50,10 +65,48 @@ DEFAULT_REFINE_SMOOTH_ANGLE_DEG = 25.0
 DEFAULT_REFINE_CONCAVE_FACTOR = 0.35
 DEFAULT_REFINE_ISLAND_MIN_FRAC = 0.15
 DEFAULT_REFINE_ISLAND_MIN_FACES = 12
+DEFAULT_REFINE_DATA_WEIGHT = 0.35
+DEFAULT_REFINE_BOUNDARY_HOPS = 2
 
-# Face-split: fechar buracos de fronteira nas partes extraídas (bpy fill_holes)
-# para que remover uma parte (ex. porta) não deixe geometria aberta/degenerada.
-DEFAULT_CAP_PART_HOLES = True
+# Passe local P3-SAM em labels grandes. Desligado no perfil normal; o preset
+# --fine-parts e tiers altos podem ativá-lo sem aumentar o pico de VRAM.
+DEFAULT_DETAIL_LEVELS = 0
+DEFAULT_DETAIL_PARENT_MIN_AREA_FRAC = 0.18
+DEFAULT_DETAIL_CHILD_MIN_AREA_FRAC = 0.01
+DEFAULT_DETAIL_MAX_DOMINANT_FRAC = 0.95
+DEFAULT_DETAIL_MAX_PARENTS = 2
+DEFAULT_DETAIL_POINT_NUM = 32000
+DEFAULT_DETAIL_PROMPT_NUM = 128
+
+# Segmentação: p3sam (semântica upstream), geometry (regiões de superfície
+# conectadas e delimitadas por creases), hybrid (P3-SAM + refine geométrico).
+# Nenhum modo contém regras específicas de categoria de asset.
+DEFAULT_SEGMENT_MODE = "p3sam"
+DEFAULT_FINE_SEGMENT_MODE = "hybrid"
+
+# Export de partes após segmentação:
+#   xpart  — só Hunyuan X-Part (regen)
+#   faces  — só face-split (topologia original)
+#   hybrid — X-Part em partes compactas; paredes grandes + falhas MC → face-split
+DEFAULT_PARTS_MODE = "xpart"
+DEFAULT_FINE_PARTS_MODE = "hybrid"
+# Acima disto: X-Part ainda corre, mas com octree reduzido (não desactiva a fase).
+DEFAULT_XPART_MAX_AREA_FRAC = 0.10
+DEFAULT_XPART_LARGE_OCTREE = 128
+# Pad relativo das AABBs de geração X-Part (não altera labels de face).
+# Caixas justas cortam o MC nas bordas → volumes abertos / AABB-limit.
+DEFAULT_AABB_MARGIN_FRAC = 0.05
+# Partes demasiado finas/alongadas: X-Part derrete (escadas, bandeiras, painéis).
+# OFF por defeito — colar face topology + carve cria escada dupla / furos na
+# parede quando a feature está colada ao volume. Opt-in via CLI.
+DEFAULT_PRESERVE_THIN_TOPOLOGY = False
+DEFAULT_XPART_SKIP_THIN_RATIO = 0.20  # min_extent/max_extent ≤ isto → skip
+DEFAULT_XPART_SKIP_ASPECT = 5.0  # max/min ≥ isto → skip
+
+# Face-split: fechar buracos de fronteira nas partes extraídas (bpy fill_holes).
+# OFF por defeito: caps tapavam recessos legítimos (janelas/portas) com
+# membranas facetadas; com o guard anti-NaN os cortes já ficam limpos.
+DEFAULT_CAP_PART_HOLES = False
 
 DEFAULT_DTYPE = "float16"
 DEFAULT_CPU_OFFLOAD = False

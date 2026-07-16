@@ -10,6 +10,12 @@ Estratégia para GPUs com pouca VRAM (≤8 GB):
   as activações intermédias no cross-attention explodem).
   → O autotune calcula ``cond_batch_size``: quantas partes processar de cada vez.
     O pipeline faz um loop, acumula resultados na CPU e concatena no fim.
+
+Anti-OOM (<=6-8 GB):
+  - ``cond_batch_size`` = 1
+  - ``max_parts`` no DiT = 1 (features de várias partes estoiram o pico)
+  - ``torch.compile`` conta overhead; DiT compile desaconselhado c/ offload em VRAM baixa
+  - Preferir VRAM **livre** (`mem_get_info`) quando disponível
 """
 
 from __future__ import annotations
@@ -39,19 +45,22 @@ _STEPS_LEVELS = (50, 45, 40, 35, 28)
 # Com batch=1 o pico é ≈ 1900 + 1130 + 960 ≈ 3990 MB → cabe em 5.6 GB.
 #
 # Para garantir que o cálculo de batch=1 funciona em ≤6 GB:
-_COND_MB_PER_PART = 2100  # inclui buffers temporários pico (worst-case single part)
+_COND_MB_PER_PART = 2200  # inclui buffers temporários pico (worst-case single part)
 _CONDITIONER_WEIGHTS_MB = 1900
-_SAFETY_MARGIN_MB = 800  # margem grande para ativações intermediárias do DiT + margem de segurança
+_SAFETY_MARGIN_MB = 1000  # fragmentação + DiT/VAE residual
 
 # Custo VRAM do pipeline completo X-Part (Cond + DiT + VAE juntos na GPU)
-# Valores medidos empiricamente:
-# DiT FP16 ≈ 3600 MB (3.3 GB pesos + overhead PyTorch/ativações)
-# VAE ≈ 350 MB
-# Custo por parte inclui: features do conditioner (~360 MB) + ativações do DiT (~400 MB)
-_DIT_WEIGHTS_MB = 3600  # DiT FP16 medido (inclui pesos + overhead)
-_DIT_WEIGHTS_MB_QUANTIZED = 1900  # DiT qint8 weight-only (estimativa conservadora + overhead)
+# DiT FP16 ≈ 3600 MB; qint8 ≈ 1900 MB. Activação multi-parte no denoise ≈ 900 MB/parte.
+_DIT_WEIGHTS_MB = 3600
+_DIT_WEIGHTS_MB_QUANTIZED = 1900
+_DIT_COMPILE_OVERHEAD_MB = 600  # Inductor / cudagraphs residual
 _VAE_WEIGHTS_MB = 350
-_COND_FEATURES_PER_PART_MB = 760  # features + ativações por parte
+_COND_FEATURES_PER_PART_MB = 760
+_DIT_ACT_PER_PART_MB = 900  # pico denoise multi-parte (subestimado antes → OOM)
+
+# Abaixo deste total: sempre cond_batch=1 e max_parts DiT=1 (salvo casos largos).
+_LOW_VRAM_GB = 7.5
+_TIGHT_VRAM_GB = 6.5
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,7 @@ class GenerateAutotune:
     pressure_index: int
     num_parts: int
     geometry_score: float
+    compile_dit: bool = True  # False → pipeline deve skip compile no DiT
 
 
 def _mesh_surface_area(mesh: Any) -> float:
@@ -137,6 +147,33 @@ def get_vram_gb() -> float | None:
         return None
 
 
+def get_free_vram_gb() -> float | None:
+    """VRAM livre na GPU 0 (após fragmentação), ou None se sem CUDA."""
+    try:
+        import torch
+
+        if not torch.cuda.is_available():
+            return None
+        free_b, _total_b = torch.cuda.mem_get_info(0)
+        return float(free_b) / (1024**3)
+    except Exception:
+        return None
+
+
+def _budget_gb(*, vram_gb: float | None, free_vram_gb: float | None) -> float | None:
+    """Orçamento efectivo: min(total, free*0.95+pesos_já_fora) — preferir free se apertado."""
+    if vram_gb is None and free_vram_gb is None:
+        return None
+    if free_vram_gb is None:
+        return vram_gb
+    if vram_gb is None:
+        return free_vram_gb
+    # Free reflecte fragmentação; se free << total, planear com free + margem.
+    if free_vram_gb < vram_gb * 0.55:
+        return max(free_vram_gb, 1.0)
+    return vram_gb
+
+
 def autotune_segment(
     mesh: Any,
     *,
@@ -173,40 +210,84 @@ def autotune_segment(
     )
 
 
-def _compute_cond_batch_size(num_parts: int, vram_gb: float | None) -> int:
+def _compute_cond_batch_size(
+    num_parts: int,
+    vram_gb: float | None,
+    *,
+    free_vram_gb: float | None = None,
+) -> int:
     """Quantas partes cabem num forward do Conditioner sem OOM.
 
-    Cálculo: (vram_total - pesos_conditioner - margem) / custo_por_parte.
-    Resultado é clampado a [1, num_parts].
+    Cálculo: (vram_orçamento - pesos_conditioner - margem) / custo_por_parte.
+    Em VRAM ≤7.5 GB força 1. Resultado clampado a [1, num_parts].
     """
-    if vram_gb is None or vram_gb <= 0:
+    nparts = max(1, int(num_parts))
+    budget = _budget_gb(vram_gb=vram_gb, free_vram_gb=free_vram_gb)
+    if budget is None or budget <= 0:
         return 1
-    available_mb = vram_gb * 1024 - _CONDITIONER_WEIGHTS_MB - _SAFETY_MARGIN_MB
+    # Empírico: ≤7.5 GB nunca cabe >1 parte no Conditioner sem risco.
+    if (vram_gb is not None and vram_gb <= _LOW_VRAM_GB) or budget <= _LOW_VRAM_GB:
+        return 1
+    available_mb = budget * 1024 - _CONDITIONER_WEIGHTS_MB - _SAFETY_MARGIN_MB
     if available_mb <= 0:
         return 1
     bs = max(1, int(available_mb / _COND_MB_PER_PART))
-    return min(bs, num_parts)
+    return min(bs, nparts)
 
 
-def get_max_parts_for_vram(vram_gb: float | None, *, dit_quantized: bool = False) -> int | None:
-    """Número máximo de partes que cabem no pipeline X-Part COMPLETO.
+def get_max_parts_for_vram(
+    vram_gb: float | None,
+    *,
+    dit_quantized: bool = False,
+    compile_active: bool = False,
+    free_vram_gb: float | None = None,
+) -> int | None:
+    """Número máximo de partes no DiT por batch sem OOM.
 
-    O DiT requer todas as condições simultaneamente na GPU durante o denoising.
-    Fórmula: VRAM >= DiT + VAE + sum(Cond por parte) + margem.
+    O DiT requer todas as condições do batch na GPU durante o denoising.
+    Fórmula: VRAM >= DiT(+compile) + N*(cond_feat + dit_act) + margem.
 
     Returns:
         int: máximo de partes (≥1), ou None se VRAM desconhecida.
     """
-    if vram_gb is None or vram_gb <= 0:
+    budget = _budget_gb(vram_gb=vram_gb, free_vram_gb=free_vram_gb)
+    if budget is None or budget <= 0:
         return None
-    # DiT + VAE + N * cond + margem <= vram
-    # N <= (vram - DiT - VAE - margem) / cond_por_parte
+
+    # ≤6.5 GB: uma parte por batch — multi-parte denoise OOMa na 4050.
+    if (vram_gb is not None and vram_gb <= _TIGHT_VRAM_GB) or budget <= _TIGHT_VRAM_GB:
+        return 1
+
     dit_mb = _DIT_WEIGHTS_MB_QUANTIZED if dit_quantized else _DIT_WEIGHTS_MB
-    available = vram_gb * 1024 - dit_mb - _VAE_WEIGHTS_MB - _SAFETY_MARGIN_MB
+    if compile_active:
+        dit_mb += _DIT_COMPILE_OVERHEAD_MB
+    per_part = _COND_FEATURES_PER_PART_MB + _DIT_ACT_PER_PART_MB
+    available = budget * 1024 - dit_mb - _SAFETY_MARGIN_MB
     if available <= 0:
-        return 1  # Não cabe nenhuma, mas tentamos 1 mesmo assim
-    n_max = int(available / _COND_FEATURES_PER_PART_MB)
-    return max(1, min(n_max, 16))  # Cap a 16 para evitar timeouts extremos
+        return 1
+    n_max = int(available / per_part)
+    # ≤7.5 GB: no máximo 2 mesmo se a fórmula for generosa.
+    cap = 2 if (vram_gb is not None and vram_gb <= _LOW_VRAM_GB) else 16
+    return max(1, min(n_max, cap))
+
+
+def should_compile_dit(
+    *,
+    vram_gb: float | None,
+    memory_efficient: bool = False,
+    cpu_offload: bool = False,
+    free_vram_gb: float | None = None,
+) -> bool:
+    """DiT + torch.compile em ≤8 GB com offload → pico/fragmentação → OOM.
+
+    VAE compile continua seguro; DiT compile só com VRAM folgada e sem offload.
+    """
+    budget = _budget_gb(vram_gb=vram_gb, free_vram_gb=free_vram_gb)
+    if budget is None:
+        return not (memory_efficient or cpu_offload)
+    if memory_efficient or cpu_offload:
+        return budget >= 10.0
+    return budget >= 8.0
 
 
 def autotune_generate(
@@ -216,6 +297,9 @@ def autotune_generate(
     vram_gb: float | None = None,
     dit_quantized: bool = False,
     memory_efficient: bool = False,
+    compile_active: bool = False,
+    cpu_offload: bool = False,
+    free_vram_gb: float | None = None,
 ) -> GenerateAutotune:
     """
     Parâmetros X-Part depois de conhecer o número real de partes.
@@ -228,6 +312,8 @@ def autotune_generate(
         dit_quantized = False
     if vram_gb is None:
         vram_gb = get_vram_gb()
+    if free_vram_gb is None:
+        free_vram_gb = get_free_vram_gb()
     tier = _vram_tier_gb(vram_gb)
     g = mesh_geometry_score(mesh)
 
@@ -236,8 +322,19 @@ def autotune_generate(
     parts_bump = 0 if nparts <= 6 else (1 if nparts <= 12 else (2 if nparts <= 20 else 3))
 
     idx = _clamp_idx(tier, geom_bump, parts_bump)
-    cbs = _compute_cond_batch_size(nparts, vram_gb)
-    max_parts = get_max_parts_for_vram(vram_gb, dit_quantized=dit_quantized)
+    compile_dit = bool(compile_active) and should_compile_dit(
+        vram_gb=vram_gb,
+        memory_efficient=memory_efficient,
+        cpu_offload=cpu_offload,
+        free_vram_gb=free_vram_gb,
+    )
+    cbs = _compute_cond_batch_size(nparts, vram_gb, free_vram_gb=free_vram_gb)
+    max_parts = get_max_parts_for_vram(
+        vram_gb,
+        dit_quantized=dit_quantized,
+        compile_active=compile_dit,
+        free_vram_gb=free_vram_gb,
+    )
 
     # Para VRAM muito limitada sem DiT quantizado, usar menos steps (DiT pode ir a CPU)
     steps = _STEPS_LEVELS[idx]
@@ -257,7 +354,34 @@ def autotune_generate(
         pressure_index=idx,
         num_parts=nparts,
         geometry_score=g,
+        compile_dit=compile_dit,
     )
+
+
+def refresh_generate_limits(
+    *,
+    num_parts: int,
+    vram_gb: float | None,
+    dit_quantized: bool,
+    compile_active: bool,
+    cond_batch_size: int,
+    max_parts_allowed: int,
+) -> tuple[int, int]:
+    """Reavalia cond_batch / max_parts com VRAM livre actual (entre batches)."""
+    free = get_free_vram_gb()
+    cbs = _compute_cond_batch_size(num_parts, vram_gb, free_vram_gb=free)
+    cbs = min(max(1, cond_batch_size), cbs) if cond_batch_size > 0 else cbs
+    mp = get_max_parts_for_vram(
+        vram_gb,
+        dit_quantized=dit_quantized,
+        compile_active=compile_active,
+        free_vram_gb=free,
+    )
+    if mp is None:
+        mp = max(1, max_parts_allowed) if max_parts_allowed > 0 else max(1, num_parts)
+    if max_parts_allowed > 0:
+        mp = min(mp, max_parts_allowed)
+    return max(1, cbs), max(1, mp)
 
 
 def autotune_summary(seg: SegmentAutotune | None, gen: GenerateAutotune | None) -> dict[str, Any]:
@@ -279,6 +403,8 @@ def autotune_summary(seg: SegmentAutotune | None, gen: GenerateAutotune | None) 
             "surface_pc_size": gen.surface_pc_size,
             "bbox_num_points": gen.bbox_num_points,
             "cond_batch_size": gen.cond_batch_size,
+            "max_parts_allowed": gen.max_parts_allowed,
+            "compile_dit": gen.compile_dit,
             "pressure_index": gen.pressure_index,
             "num_parts": gen.num_parts,
             "geometry_score": round(gen.geometry_score, 3),

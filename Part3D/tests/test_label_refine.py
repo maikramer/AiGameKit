@@ -1,5 +1,3 @@
-"""Tests for crease-aware label refinement (part3d.utils.label_refine)."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -12,7 +10,53 @@ from part3d.utils.label_refine import (  # noqa: E402
     edge_costs,
     icm_boundary_snap,
     refine_face_labels,
+    relabel_connected_components,
 )
+
+def _plane_grid(size: int = 20) -> trimesh.Trimesh:
+    vertices = np.array([[x, y, 0.0] for y in range(size + 1) for x in range(size + 1)])
+    faces: list[list[int]] = []
+    for y in range(size):
+        for x in range(size):
+            a = y * (size + 1) + x
+            b = a + 1
+            c = a + size + 1
+            d = c + 1
+            faces.extend(([a, b, d], [a, d, c]))
+    return trimesh.Trimesh(vertices=vertices, faces=np.asarray(faces), process=False)
+
+
+def test_anchored_refine_preserves_door_core() -> None:
+    mesh = _plane_grid()
+    centers = mesh.triangles_center
+    labels = np.zeros(len(mesh.faces), dtype=np.int64)
+    door = (centers[:, 0] > 7) & (centers[:, 0] < 13) & (centers[:, 1] > 2) & (centers[:, 1] < 11)
+    core = (centers[:, 0] > 8) & (centers[:, 0] < 12) & (centers[:, 1] > 3) & (centers[:, 1] < 10)
+    labels[door] = 1
+
+    refined = refine_face_labels(mesh, labels, data_weight=0.35, boundary_hops=2)
+
+    assert np.all(refined[core] == 1)
+    assert np.count_nonzero(refined == 1) >= int(np.count_nonzero(door) * 0.9)
+    assert np.count_nonzero(refined != labels) < int(len(labels) * 0.05)
+
+
+def test_disconnected_regions_get_distinct_labels_and_debris_is_ignored() -> None:
+    labels = np.array([0, 0, 1, 1, 0], dtype=np.int64)
+    adjacency = np.array([[0, 1], [1, 2], [2, 3]], dtype=np.int64)
+    areas = np.ones(labels.shape[0], dtype=np.float64)
+
+    refined = relabel_connected_components(
+        labels,
+        adjacency,
+        areas,
+        min_faces=2,
+        min_area_frac=0.0,
+    )
+
+    assert refined[0] == refined[1] == 0
+    assert refined[2] == refined[3] == 1
+    assert refined[4] == -1
 
 
 def _plane_mesh(nx: int = 6, ny: int = 6) -> trimesh.Trimesh:
@@ -142,3 +186,16 @@ class TestAabbsFromFaceIds:
         mesh = _plane_mesh(2, 2)
         labels = -np.ones(len(mesh.faces), dtype=np.int64)
         assert aabbs_from_face_ids(mesh, labels).size == 0
+
+
+def test_expand_aabbs_pads_each_axis() -> None:
+    from part3d.utils.label_refine import expand_aabbs
+
+    aabb = np.array([[[0.0, 0.0, 0.0], [2.0, 4.0, 6.0]]], dtype=np.float64)
+    out = expand_aabbs(aabb, margin_frac=0.1)
+    # half extents = (1,2,3); pad = 0.1 * half
+    np.testing.assert_allclose(out[0, 0], [-0.1, -0.2, -0.3])
+    np.testing.assert_allclose(out[0, 1], [2.1, 4.2, 6.3])
+    assert expand_aabbs(aabb, margin_frac=0.0) is aabb or np.allclose(
+        expand_aabbs(aabb, margin_frac=0.0), aabb
+    )

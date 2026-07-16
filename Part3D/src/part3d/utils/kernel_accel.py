@@ -146,10 +146,10 @@ def compile_modules(
     cpu_offload: bool = False,
     log_fn: Callable[[str], None] | None = None,
 ) -> dict[str, Any]:
-    """torch.compile DiT/VAE/conditioner when not on sequential CPU offload path.
+    """torch.compile nos módulos pedidos (tipicamente DiT e/ou ShapeVAE).
 
-    With CPU offload, compile still helps while module is on GPU for its phase;
-    skip only if compile mode would use cudagraphs with offload.
+    Não passar Conditioner — ``torch_cluster.fps`` rebenta Dynamo (fake tensor).
+    Com CPU offload, ``resolve_torch_compile_mode`` evita CUDA graphs.
     """
     from gamedev_shared.quantization import apply_torch_compile, resolve_torch_compile_mode
 

@@ -44,6 +44,7 @@ class Adapter(BackendAdapter):
         return pipe.__enter__()
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
+        import sys
         import time
         from pathlib import Path
 
@@ -63,8 +64,46 @@ class Adapter(BackendAdapter):
             if output_segmented == str(Path(output)):
                 output_segmented = str(Path(output).with_name(Path(output).stem + "_segmented.glb"))
 
+        model.refine_labels = bool(request.get("refine_labels", model.refine_labels))
+        model.detail_levels = max(0, int(request.get("detail_levels", model.detail_levels)))
+        for name in (
+            "bbox_merge_iou",
+            "mask_nms_iou",
+            "secondary_mask_iou",
+            "min_cluster_support",
+            "min_predicted_iou",
+            "prompt_batch_size",
+            "multi_head",
+            "head_min_score",
+            "head_score_ratio",
+            "consensus",
+            "consensus_vote",
+            "segment_mode",
+            "parts_mode",
+            "xpart_max_area_frac",
+            "cap_part_holes",
+        ):
+            if request.get(name) is not None:
+                setattr(model, name, request[name])
+        if getattr(model, "segment_mode", "p3sam") != "geometry":
+            auto_mask_module = sys.modules.get(type(model._bbox_predictor).__module__)
+            configure_mask_quality = getattr(auto_mask_module, "configure_gamedev_mask_quality", None)
+            if callable(configure_mask_quality):
+                configure_mask_quality(
+                    mask_nms_iou=model.mask_nms_iou,
+                    secondary_mask_iou=model.secondary_mask_iou,
+                    min_cluster_support=model.min_cluster_support,
+                    min_predicted_iou=model.min_predicted_iou,
+                    prompt_batch_size=model.prompt_batch_size,
+                    bbox_merge_iou=model.bbox_merge_iou,
+                    multi_head=getattr(model, "multi_head", True),
+                    head_min_score=getattr(model, "head_min_score", 0.5),
+                    head_score_ratio=getattr(model, "head_score_ratio", 0.85),
+                    consensus=getattr(model, "consensus", True),
+                    consensus_vote=getattr(model, "consensus_vote", 0.5),
+                )
+
         from gamedev_shared.bpy_mesh import (
-            load_mesh_as_trimesh,
             save_colored_mesh,
             save_empty_glb,
             save_scene_geometries,
@@ -84,10 +123,23 @@ class Adapter(BackendAdapter):
             gen_kwargs["point_num"] = int(request["point_num"])
         if request.get("prompt_num") is not None:
             gen_kwargs["prompt_num"] = int(request["prompt_num"])
+        if request.get("postprocess") is not None:
+            gen_kwargs["postprocess"] = bool(request["postprocess"])
+        if request.get("threshold") is not None:
+            gen_kwargs["threshold"] = float(request["threshold"])
+        if request.get("segmentation_proxy") is not None:
+            gen_kwargs["segmentation_proxy_path"] = str(request["segmentation_proxy"])
 
         if segment_only:
-            mesh = load_mesh_as_trimesh(mesh_path)
-            _aabb, face_ids, clean_mesh = model.segment(mesh, seed=seed)
+            _aabb, face_ids, clean_mesh = model.segment_file(
+                mesh_path,
+                segmentation_proxy_path=gen_kwargs.get("segmentation_proxy_path"),
+                seed=seed,
+                point_num=gen_kwargs.get("point_num"),
+                prompt_num=gen_kwargs.get("prompt_num"),
+                postprocess=gen_kwargs.get("postprocess", True),
+                threshold=gen_kwargs.get("threshold", 0.99),
+            )
             color_map = {int(uid): np.random.randint(0, 255, size=3) for uid in np.unique(face_ids) if uid >= 0}
             face_colors = np.array([color_map.get(int(fid), [0, 0, 0]) for fid in face_ids], dtype=np.uint8)
             save_colored_mesh(clean_mesh, face_colors, output_segmented)

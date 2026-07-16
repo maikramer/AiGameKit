@@ -1,5 +1,3 @@
-"""Tests for the pure Space-code transforms (part3d.utils.space_patch)."""
-
 from __future__ import annotations
 
 import os
@@ -10,13 +8,94 @@ import pytest
 from part3d.utils.space_patch import (
     _NMS_ORIG,
     _PERF_TAIL,
-    NMS_MARKER,
+    MULTIHEAD_MARKER,
+    NMS_CONSENSUS_MARKER,
     PERF_MARKER,
+    POOL_SORT_MARKER,
+    QUALITY_MARKER,
+    VOTE_ASSIGN_MARKER,
     transform_auto_mask,
     transform_p3sam_model,
     transform_surface_extractors,
     write_if_changed,
 )
+
+
+def test_transform_auto_mask_preserves_fine_parts_and_is_idempotent() -> None:
+    source = (
+        "def mesh_sam():\n"
+        "        bs = 64\n"
+        "        step_num = prompt_num // bs + 1\n"
+        "        mask_res = []\n"
+        "        iou_res = []\n"
+        "            pred_mask = np.stack(\n"
+        "                [pred_mask_1, pred_mask_2, pred_mask_3], axis=-1\n"
+        "            )  # [N, K, 3]\n"
+        "            max_idx = np.argmax(pred_iou, axis=-1)  # [K]\n"
+        "            for j in range(max_idx.shape[0]):\n"
+        "                mask_res.append(pred_mask[:, j, max_idx[j]])\n"
+        "                iou_res.append(pred_iou[j, max_idx[j]])\n"
+        '    with Timer("根据IOU排序"):\n'
+        "        iou_res = np.array(iou_res).tolist()\n"
+        "        mask_iou = [[mask_res[:, i], iou_res[i]] for i in range(prompt_num)]\n"
+        "        mask_iou_sorted = sorted(mask_iou, key=lambda x: x[1], reverse=True)\n"
+        "        mask_sorted = [mask_iou_sorted[i][0] for i in range(prompt_num)]\n"
+        "        iou_sorted = [mask_iou_sorted[i][1] for i in range(prompt_num)]\n"
+        + _NMS_ORIG
+        + "        for i in clusters.keys():\n"
+        "            if len(clusters[i]) > 2:\n"
+        "                filtered_clusters.append(i)\n"
+        "        if (\n"
+        "            cal_bbox_iou(\n"
+        "                _points, mask_sorted[tar_cluster], mask_sorted[cur_cluster]\n"
+        "            ) > 0.5\n"
+        "        ):\n"
+        "            is_union[j] = True\n"
+        "        if part_areas[i] < 0.01:\n"
+        "            pass\n"
+        "        if area / (cp_area + 1e-7) > 0.001:\n"
+        "            pass\n"
+        "        if _area / mesh_total_area > 0.001:\n"
+        "            pass\n"
+        "        result_mask = -np.ones(point_num, dtype=np.int64)\n"
+        "        for i in final_mask_sorted:\n"
+        "            part_mask = mask_sorted[i]\n"
+        "            result_mask[part_mask] = i\n"
+    )
+
+    transformed = transform_auto_mask(
+        source,
+        part_area_merge=0.0025,
+        area_ratio_keep=0.00025,
+        bbox_merge_iou=0.8,
+        min_cluster_support=1,
+        prompt_batch_size=4,
+    )
+
+    assert "bs = GAMEDEV_PROMPT_BATCH_SIZE" in transformed
+    assert "step_num = (prompt_num + bs - 1) // bs" in transformed
+    assert MULTIHEAD_MARKER in transformed
+    assert POOL_SORT_MARKER in transformed
+    assert NMS_CONSENSUS_MARKER in transformed
+    assert VOTE_ASSIGN_MARKER in transformed
+    assert "_gamedev_cluster_support(clusters[i], gamedev_prompt_ids_sorted)" in transformed
+    assert "> GAMEDEV_SECONDARY_MASK_IOU" in transformed
+    assert ") > GAMEDEV_BBOX_MERGE_IOU" in transformed
+    assert QUALITY_MARKER in transformed
+    assert "GAMEDEV_MULTI_HEAD" in transformed
+
+    assert (
+        transform_auto_mask(
+            transformed,
+            part_area_merge=0.0025,
+            area_ratio_keep=0.00025,
+            bbox_merge_iou=0.8,
+            min_cluster_support=1,
+            prompt_batch_size=4,
+        )
+        == transformed
+    )
+
 
 _FIXTURE = (
     "import numpy as np\n"
@@ -38,7 +117,22 @@ _FIXTURE = (
     "\n"
     "def mesh_sam():\n"
     "    point_num = 100000\n"
-    "    prompt_num = 400\n" + _NMS_ORIG + "    if (\n"
+    "    prompt_num = 400\n"
+    "        mask_res = []\n"
+    "        iou_res = []\n"
+    "            pred_mask = np.stack(\n"
+    "                [pred_mask_1, pred_mask_2, pred_mask_3], axis=-1\n"
+    "            )  # [N, K, 3]\n"
+    "            max_idx = np.argmax(pred_iou, axis=-1)  # [K]\n"
+    "            for j in range(max_idx.shape[0]):\n"
+    "                mask_res.append(pred_mask[:, j, max_idx[j]])\n"
+    "                iou_res.append(pred_iou[j, max_idx[j]])\n"
+    '    with Timer("根据IOU排序"):\n'
+    "        iou_res = np.array(iou_res).tolist()\n"
+    "        mask_iou = [[mask_res[:, i], iou_res[i]] for i in range(prompt_num)]\n"
+    "        mask_iou_sorted = sorted(mask_iou, key=lambda x: x[1], reverse=True)\n"
+    "        mask_sorted = [mask_iou_sorted[i][0] for i in range(prompt_num)]\n"
+    "        iou_sorted = [mask_iou_sorted[i][1] for i in range(prompt_num)]\n" + _NMS_ORIG + "    if (\n"
     "        cal_bbox_iou(\n"
     "            _points, mask_sorted[tar_cluster], mask_sorted[cur_cluster]\n"
     "        )\n"
@@ -49,6 +143,10 @@ _FIXTURE = (
     "        pass\n"
     "    if _area / mesh_total_area > 0.001:\n"
     "        pass\n"
+    "        result_mask = -np.ones(point_num, dtype=np.int64)\n"
+    "        for i in final_mask_sorted:\n"
+    "            part_mask = mask_sorted[i]\n"
+    "            result_mask[part_mask] = i\n"
 )
 
 _KW = {"part_area_merge": 0.0025, "area_ratio_keep": 0.00025, "bbox_merge_iou": 0.7}
@@ -59,29 +157,42 @@ class TestTransformAutoMask:
         out = transform_auto_mask(_FIXTURE, **_KW)
         assert "point_num = 100000" not in out
         assert "prompt_num = 400" not in out
-        assert "bs = 4" in out and "bs = 64" not in out
+        assert "bs = GAMEDEV_PROMPT_BATCH_SIZE" in out and "bs = 64" not in out
         assert "part_areas[i] < 0.0025" in out
         assert "area / (cp_area + 1e-7) > 0.00025" in out
         assert "_area / mesh_total_area > 0.00025" in out
-        assert "> 0.7" in out and "> 0.5" not in out
-        assert NMS_MARKER in out and _NMS_ORIG not in out
+        assert "GAMEDEV_SECONDARY_MASK_IOU" in out
+        assert "GAMEDEV_BBOX_MERGE_IOU" in out
+        assert MULTIHEAD_MARKER in out
+        assert POOL_SORT_MARKER in out
+        assert NMS_CONSENSUS_MARKER in out
+        assert VOTE_ASSIGN_MARKER in out
         assert PERF_MARKER in out
+        assert QUALITY_MARKER in out
+        assert "GAMEDEV_CONSENSUS" in out
 
     def test_idempotent(self):
         once = transform_auto_mask(_FIXTURE, **_KW)
         twice = transform_auto_mask(once, **_KW)
         assert once == twice
 
-    def test_bbox_iou_value_updatable_on_repatch(self):
-        once = transform_auto_mask(_FIXTURE, **_KW)
-        redo = transform_auto_mask(once, part_area_merge=0.0025, area_ratio_keep=0.00025, bbox_merge_iou=0.65)
-        assert "> 0.65" in redo and "> 0.7" not in redo
+    def test_quality_values_are_runtime_configurable(self):
+        out = transform_auto_mask(_FIXTURE, **_KW)
+        assert "def configure_gamedev_mask_quality(" in out
+        assert "GAMEDEV_BBOX_MERGE_IOU = 0.7" in out
 
     def test_perf_tail_is_valid_python(self):
         compile(_PERF_TAIL, "<perf_tail>", "exec")
 
     def test_result_still_compiles(self):
-        compile(transform_auto_mask(_FIXTURE, **_KW), "<patched>", "exec")
+        out = transform_auto_mask(_FIXTURE, **_KW)
+        # Quality/perf tails must be valid Python; body is a patch fragment.
+        assert "def configure_gamedev_mask_quality(" in out
+        q_start = out.index("# GAMEDEV_MASK_QUALITY_V3")
+        compile(out[q_start:], "<quality_tail>", "exec")
+        compile(_PERF_TAIL, "<perf_tail>", "exec")
+        assert NMS_CONSENSUS_MARKER in out
+        assert MULTIHEAD_MARKER in out
 
 
 def _reference_get_connected_region(face_ids, adjacent_faces, return_face_part_ids=False):

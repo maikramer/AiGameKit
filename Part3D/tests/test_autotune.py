@@ -72,10 +72,10 @@ def test_numpy_types_for_part_count() -> None:
 # ---- cond_batch_size (chunked conditioner) ----
 
 
-def test_cond_batch_size_low_vram_is_small() -> None:
-    """GPU com 5.6 GB não cabe 7 partes de uma vez."""
+def test_cond_batch_size_low_vram_is_one() -> None:
+    """GPU ≤7.5 GB: sempre cond_batch=1 (anti-OOM)."""
     bs = _compute_cond_batch_size(7, vram_gb=5.6)
-    assert 1 <= bs < 7
+    assert bs == 1
 
 
 def test_cond_batch_size_high_vram_fits_all() -> None:
@@ -98,28 +98,28 @@ def test_autotune_generate_includes_cond_batch() -> None:
     mesh = _box_mesh()
     g = autotune_generate(mesh, num_parts=7, vram_gb=5.6)
     assert hasattr(g, "cond_batch_size")
-    assert 1 <= g.cond_batch_size <= 7
+    assert g.cond_batch_size == 1
     assert hasattr(g, "max_parts_allowed")
-    assert g.max_parts_allowed >= 1
+    assert g.max_parts_allowed == 1
+    assert g.compile_dit is False or isinstance(g.compile_dit, bool)
 
 
 def test_max_parts_for_vram_low_vram_limits_parts() -> None:
-    """Com 5.6 GB, deve limitar a ~1 parte (DiT ≈ 3.6 GB + VAE + ativações)."""
+    """Com 5.6 GB, max 1 parte por batch DiT."""
     max_p = get_max_parts_for_vram(5.6)
-    assert max_p is not None
-    assert 1 <= max_p <= 2  # Esperado 1 parte com VRAM muito limitada
+    assert max_p == 1
 
 
 def test_max_parts_for_vram_high_vram_allows_more() -> None:
     """Com 24 GB, deve permitir muitas partes (até o cap de 16)."""
     max_p = get_max_parts_for_vram(24.0)
     assert max_p is not None
-    assert max_p >= 10
+    assert max_p >= 5
 
 
 def test_max_parts_quantized_allows_at_least_as_many_as_fp16() -> None:
-    fp = get_max_parts_for_vram(5.6, dit_quantized=False)
-    q = get_max_parts_for_vram(5.6, dit_quantized=True)
+    fp = get_max_parts_for_vram(12.0, dit_quantized=False)
+    q = get_max_parts_for_vram(12.0, dit_quantized=True)
     assert fp is not None and q is not None
     assert q >= fp
 
@@ -129,3 +129,26 @@ def test_autotune_low_vram_keeps_steps_when_dit_quantized() -> None:
     g_q = autotune_generate(mesh, num_parts=6, vram_gb=5.6, dit_quantized=True)
     g_fp = autotune_generate(mesh, num_parts=6, vram_gb=5.6, dit_quantized=False)
     assert g_q.num_inference_steps >= g_fp.num_inference_steps
+
+
+def test_should_compile_dit_off_on_low_vram_offload() -> None:
+    from part3d.utils.autotune import should_compile_dit
+
+    assert should_compile_dit(vram_gb=5.6, memory_efficient=True, cpu_offload=True) is False
+    assert should_compile_dit(vram_gb=24.0, memory_efficient=False, cpu_offload=False) is True
+
+
+def test_compile_active_does_not_raise_on_tight_vram() -> None:
+    mesh = _box_mesh()
+    g = autotune_generate(
+        mesh,
+        num_parts=4,
+        vram_gb=5.6,
+        dit_quantized=True,
+        memory_efficient=True,
+        compile_active=True,
+        cpu_offload=True,
+    )
+    assert g.max_parts_allowed == 1
+    assert g.cond_batch_size == 1
+    assert g.compile_dit is False

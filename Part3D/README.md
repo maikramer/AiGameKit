@@ -57,6 +57,11 @@ part3d decompose character.glb -o output/character_parts.glb -v
 # Segment only (no part generation)
 part3d decompose character.glb --segment-only
 
+# Fine architectural parts through an aligned 100k-face analysis proxy
+text3d remesh chapel_high.glb -o chapel_proxy.glb --target-faces 100000
+part3d decompose chapel_high.glb --segmentation-proxy chapel_proxy.glb \
+  --fine-parts --quality highest
+
 # Quality presets
 part3d decompose character.glb --quality fast
 part3d decompose character.glb --quality highest --no-quantize-dit
@@ -78,6 +83,7 @@ part3d decompose character.glb --seed 42 --steps 25 --octree-resolution 256
 | `MESH` | path | — | Input mesh (`.glb` / `.obj`) |
 | `-o, --output` | path | `{stem}_parts.glb` | Decomposed parts GLB |
 | `--output-segmented` | path | `{stem}_segmented.glb` | Segmented mesh (colors per part) |
+| `--segmentation-proxy` | path | None | Aligned analysis mesh; labels and output retain the original mesh topology |
 | `--octree-resolution` | int | quality/auto | Octree resolution |
 | `--steps` | int | quality/auto | DiT inference steps |
 | `--num-chunks` | int | quality/auto | Marching cubes chunks |
@@ -114,10 +120,33 @@ Anti-aggregation knobs:
 | `--merge-bbox-iou` | 0.7 | Mask-cluster merge threshold (upstream 0.5 fuses door+frame; higher = less fusion) |
 | `--threshold` | 0.99 | Post-process merge threshold (higher = keeps small parts) |
 | `--no-postprocess` / `--fine-parts` | off | Skip part merging entirely |
+| `--mask-nms-iou` | 0.9 | IoU used to suppress redundant primary masks |
+| `--secondary-mask-iou` | 0.25 | Minimum mask overlap for the secondary merge (also requires bbox overlap) |
+| `--min-cluster-support` | 3 | Prompt support required for a mask cluster; high-confidence smaller clusters survive |
+| `--min-predicted-iou` | 0.75 | Confidence override that preserves singleton/duo clusters |
+| `--prompt-batch-size` | 4 | P3-SAM prompt micro-batch size |
+| `--detail-levels` | 0 | Hierarchical local passes over large under-segmented regions |
 | `--cap-part-holes/--no-cap-part-holes` | on | Close boundary loops of extracted face-parts (bpy `fill_holes`) so removing a part leaves closed geometry |
 
 Segmentation also writes `<name>_segmented_face_ids.npy` (per-face part label)
 next to the segmented GLB for downstream part selection.
+
+### High-poly meshes and segmentation proxies
+
+P3-SAM samples a fixed point budget (up to 56k in the current presets), so
+hundreds of thousands of input faces do not give the network proportionally
+more information. Dense marching-cubes meshes can instead amplify cracks,
+micro-islands, and jagged face-label projection.
+
+For meshes above roughly 200k faces, use an aligned **50k–120k isotropic
+remesh** as `--segmentation-proxy`. Part3D runs P3-SAM on the proxy, projects
+the labels back by nearest surface plus normal agreement, then refines and
+exports the original high-poly topology. Proxy and target bounds must agree
+within 5%.
+
+Prefer `text3d remesh` for this analysis proxy. A decimated LOD is suitable
+only when it remains topologically connected; an LOD that inherits thousands
+of marching-cubes cracks makes P3-SAM post-processing worse.
 
 ## Quantization
 
@@ -177,7 +206,9 @@ Soft-resolved via QualityEngine — explicit `--steps` / `--octree-resolution` /
 Text3D (generate) → Paint3D (texture) → Part3D (decompose) → Rigging3D (auto-rig)
 ```
 
-GameAssets parts stage is not wired yet (stub). UMS backend `part3d` is registered for warm model serving.
+GameAssets parts stage is not wired yet (stub). UMS backend `part3d` is registered
+for warm model serving. Prefer `gamedev-model-server`; `part3d decompose` accepts
+`--ums-priority`, `--no-ums`, `--ums-stream` (see [`ModelServer/README.md`](../ModelServer/README.md)).
 
 ## Development
 

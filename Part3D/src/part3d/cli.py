@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from gamedev_shared.cli_helpers import add_ums_options
 from gamedev_shared.quality import VALID_QUALITIES
 
 from . import defaults as _d
@@ -27,6 +28,12 @@ def main() -> None:
 @click.argument("mesh_path", type=click.Path(exists=True))
 @click.option("-o", "--output", "output_path", type=click.Path(), default=None, help="Caminho de saída (.glb)")
 @click.option("--output-segmented", type=click.Path(), default=None, help="Exportar mesh segmentada (cores por parte)")
+@click.option(
+    "--segmentation-proxy",
+    type=click.Path(exists=True),
+    default=None,
+    help="LOD alinhado usado só pelo P3-SAM; labels voltam ao mesh original.",
+)
 @click.option(
     "--octree-resolution",
     type=int,
@@ -174,7 +181,61 @@ def main() -> None:
 @click.option(
     "--fine-parts",
     is_flag=True,
-    help="Preset anti-fuse: --no-postprocess + point/prompt no teto VRAM-safe.",
+    help="Preset: P3-SAM semântico + fronteiras geometry + X-Part diffusion; face-split só se MC falhar.",
+)
+@click.option(
+    "--segment-mode",
+    type=click.Choice(["p3sam", "geometry", "hybrid"], case_sensitive=False),
+    default=None,
+    help="p3sam=semântico; geometry=regiões conectadas por creases (CPU); hybrid=P3-SAM + refine geométrico.",
+)
+@click.option(
+    "--parts-mode",
+    type=click.Choice(["xpart", "faces", "hybrid"], case_sensitive=False),
+    default=None,
+    help="xpart=só X-Part; faces=só face-split; hybrid=X-Part + face-split se MC falhar.",
+)
+@click.option(
+    "--preserve-thin-topology/--no-preserve-thin-topology",
+    default=None,
+    help=(
+        "Opt-in: saltar X-Part em partes finas/alongadas e colar topologia original "
+        "(escadas/bandeiras). Pode criar geometria dupla se a feature estiver colada "
+        "ao volume — por defeito OFF."
+    ),
+)
+@click.option(
+    "--xpart-max-area-frac",
+    type=float,
+    default=None,
+    help=(
+        f"Partes acima desta área usam octree≤{_d.DEFAULT_XPART_LARGE_OCTREE} "
+        f"(default {_d.DEFAULT_XPART_MAX_AREA_FRAC})."
+    ),
+)
+@click.option(
+    "--geometry-crease-angle",
+    type=click.FloatRange(min=1.0, max=179.0),
+    default=None,
+    help="Geometry: diedro local máximo para unir faces.",
+)
+@click.option(
+    "--geometry-region-normal-angle",
+    type=click.FloatRange(min=1.0, max=179.0),
+    default=None,
+    help="Geometry: desvio máximo entre normais médias das regiões.",
+)
+@click.option(
+    "--geometry-min-area-frac",
+    type=click.FloatRange(min=0.0, max=0.5),
+    default=None,
+    help="Geometry: área mínima relativa antes de absorver fragmentos.",
+)
+@click.option(
+    "--geometry-max-parts",
+    type=click.IntRange(min=1, max=1024),
+    default=None,
+    help="Geometry: limite de regiões após absorver fragmentos.",
 )
 @click.option(
     "--refine-labels/--no-refine-labels",
@@ -189,18 +250,58 @@ def main() -> None:
     help=f"IoU de bbox para fundir clusters P3-SAM (default {_d.SPACE_BBOX_MERGE_IOU}; "
     "upstream usa 0.5, que agrega porta+vizinhança; mais alto = menos fusão).",
 )
+@click.option("--mask-nms-iou", type=float, default=_d.SPACE_MASK_NMS_IOU, show_default=True)
+@click.option("--secondary-mask-iou", type=float, default=_d.SPACE_SECONDARY_MASK_IOU, show_default=True)
+@click.option(
+    "--min-cluster-support", type=click.IntRange(min=1), default=_d.SPACE_MIN_CLUSTER_SUPPORT, show_default=True
+)
+@click.option("--min-predicted-iou", type=float, default=_d.SPACE_MIN_PREDICTED_IOU, show_default=True)
+@click.option(
+    "--prompt-batch-size",
+    type=click.IntRange(min=1, max=32),
+    default=_d.SPACE_PROMPT_BATCH_SIZE,
+    show_default=True,
+    help="Prompts por forward P3-SAM; 4 cabe em GPUs de 6 GB.",
+)
+@click.option(
+    "--multi-head/--no-multi-head",
+    default=_d.SPACE_MULTI_HEAD,
+    show_default=True,
+    help="Manter cabeças P3-SAM próximas do melhor IoU (pool 3x, qualidade).",
+)
+@click.option(
+    "--consensus/--no-consensus",
+    default=_d.SPACE_CONSENSUS,
+    show_default=True,
+    help="NMS best-fit + fusão IoU-ponderada + atribuição por voto (CPU).",
+)
+@click.option(
+    "--consensus-vote",
+    type=float,
+    default=_d.SPACE_CONSENSUS_VOTE,
+    show_default=True,
+    help="Limiar soft-vote para máscara de consenso (0-1).",
+)
+@click.option(
+    "--detail-levels",
+    type=click.IntRange(min=0, max=2),
+    default=None,
+    help="Re-segmentação local de labels grandes (0=off; opt-in — pode fragmentar regiões coerentes).",
+)
 @click.option(
     "--cap-part-holes/--no-cap-part-holes",
     default=_d.DEFAULT_CAP_PART_HOLES,
     show_default=True,
     help="Fechar buracos de fronteira nas face-parts (bpy fill_holes) — remover uma parte não deixa geometria aberta.",
 )
+@add_ums_options
 @click.pass_context
 def decompose(
     ctx: Any,
     mesh_path: str,
     output_path: str | None,
     output_segmented: str | None,
+    segmentation_proxy: str | None,
     octree_resolution: int | None,
     steps: int | None,
     num_chunks: int | None,
@@ -232,9 +333,29 @@ def decompose(
     postprocess: bool,
     threshold: float | None,
     fine_parts: bool,
+    segment_mode: str | None,
+    parts_mode: str | None,
+    preserve_thin_topology: bool | None,
+    xpart_max_area_frac: float | None,
+    geometry_crease_angle: float | None,
+    geometry_region_normal_angle: float | None,
+    geometry_min_area_frac: float | None,
+    geometry_max_parts: int | None,
     refine_labels: bool,
     merge_bbox_iou: float | None,
+    mask_nms_iou: float,
+    secondary_mask_iou: float,
+    min_cluster_support: int,
+    min_predicted_iou: float,
+    prompt_batch_size: int,
+    multi_head: bool,
+    consensus: bool,
+    consensus_vote: float,
+    detail_levels: int | None,
     cap_part_holes: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Decompõe uma mesh 3D em partes semânticas.
 
@@ -272,6 +393,7 @@ def decompose(
             "point_num": "point_num",
             "prompt_num": "prompt_num",
             "threshold": "postprocess_threshold",
+            "detail_levels": "detail_levels",
         },
         category=category,
     )
@@ -291,16 +413,54 @@ def decompose(
         prompt_num = int(qfill["prompt_num"])
     if threshold is None and "postprocess_threshold" in qfill:
         threshold = float(qfill["postprocess_threshold"])
+    if detail_levels is None and "detail_levels" in qfill:
+        detail_levels = int(qfill["detail_levels"])
 
     if fine_parts:
+        # Geometry-first is category-agnostic; X-Part supplies the generated volume.
         postprocess = False
         if point_num is None:
             point_num = 56000
-        if prompt_num is None:
+        if ctx.get_parameter_source("prompt_num") in (_src.DEFAULT,):
             prompt_num = 128
+        if ctx.get_parameter_source("detail_levels") in (_src.DEFAULT,):
+            detail_levels = 0
+        if segment_mode is None:
+            segment_mode = _d.DEFAULT_FINE_SEGMENT_MODE
+        if parts_mode is None:
+            parts_mode = _d.DEFAULT_FINE_PARTS_MODE
+        if ctx.get_parameter_source("refine_labels") in (_src.DEFAULT,):
+            refine_labels = True
+
+    if segment_mode is None:
+        segment_mode = _d.DEFAULT_SEGMENT_MODE
+    segment_mode = str(segment_mode).strip().lower()
+    if parts_mode is None:
+        parts_mode = _d.DEFAULT_PARTS_MODE
+    parts_mode = str(parts_mode).strip().lower()
+    if preserve_thin_topology is None:
+        preserve_thin_topology = bool(_d.DEFAULT_PRESERVE_THIN_TOPOLOGY)
+    if xpart_max_area_frac is None:
+        xpart_max_area_frac = _d.DEFAULT_XPART_MAX_AREA_FRAC
+
+    from .utils.geometry_segment import GeometrySegmentParams
+
+    _gp = GeometrySegmentParams()
+    _gp_updates: dict[str, float | int] = {}
+    if geometry_crease_angle is not None:
+        _gp_updates["crease_angle_deg"] = float(geometry_crease_angle)
+    if geometry_region_normal_angle is not None:
+        _gp_updates["region_normal_angle_deg"] = float(geometry_region_normal_angle)
+    if geometry_min_area_frac is not None:
+        _gp_updates["min_part_area_frac"] = float(geometry_min_area_frac)
+    if geometry_max_parts is not None:
+        _gp_updates["max_parts"] = int(geometry_max_parts)
+    geometry_params = GeometrySegmentParams(**{**_gp.__dict__, **_gp_updates}) if _gp_updates else None
 
     if threshold is None:
         threshold = _d.DEFAULT_POSTPROCESS_THRESHOLD
+    if detail_levels is None:
+        detail_levels = _d.DEFAULT_DETAIL_LEVELS
 
     if kernel_modern:
         from .utils.kernel_accel import resolve_mc_algo
@@ -354,11 +514,12 @@ def decompose(
             volume_decoder = "flashvdm"
         if octree_resolution is not None and octree_resolution > 320:
             octree_resolution = 320
-        # P3-SAM OOM em 6GB com point_num≥80k / prompt≥200 (highest YAML).
+        # Point cloud drives peak VRAM. Prompts run in micro-batches, so a
+        # higher count increases time and CPU mask storage without a 13 GB peak.
         if point_num is not None and point_num > 56000:
             point_num = 56000
-        if prompt_num is not None and prompt_num > 128:
-            prompt_num = 128
+        if prompt_num is not None and prompt_num > 400:
+            prompt_num = 400
 
     ensure_pytorch_cuda_alloc_conf()
 
@@ -426,7 +587,6 @@ def decompose(
     import numpy as np
 
     from gamedev_shared.bpy_mesh import (
-        load_mesh_as_trimesh,
         save_colored_mesh,
         save_empty_glb,
         save_scene_geometries,
@@ -445,15 +605,46 @@ def decompose(
         "output_segmented": str(output_segmented),
         "seed": seed,
         "segment_only": segment_only,
+        "postprocess": postprocess,
+        "threshold": threshold,
+        "refine_labels": refine_labels,
+        "bbox_merge_iou": _d.SPACE_BBOX_MERGE_IOU if merge_bbox_iou is None else merge_bbox_iou,
+        "mask_nms_iou": mask_nms_iou,
+        "secondary_mask_iou": secondary_mask_iou,
+        "min_cluster_support": min_cluster_support,
+        "min_predicted_iou": min_predicted_iou,
+        "prompt_batch_size": prompt_batch_size,
+        "multi_head": multi_head,
+        "consensus": consensus,
+        "consensus_vote": consensus_vote,
+        "segment_mode": segment_mode,
+        "detail_levels": detail_levels,
     }
+    if segmentation_proxy is not None:
+        _ums_request["segmentation_proxy"] = str(segmentation_proxy)
     if octree_resolution is not None:
         _ums_request["octree_resolution"] = octree_resolution
     if steps is not None:
         _ums_request["num_inference_steps"] = steps
     if num_chunks is not None:
         _ums_request["num_chunks"] = num_chunks
+    if point_num is not None:
+        _ums_request["point_num"] = point_num
+    if prompt_num is not None:
+        _ums_request["prompt_num"] = prompt_num
+    if mc_algo is not None:
+        _ums_request["mc_algo"] = mc_algo
 
-    if try_ums_delegation("part3d", _ums_request, t_start=t_start, noun="Partes", console=console):
+    if try_ums_delegation(
+        "part3d",
+        _ums_request,
+        t_start=t_start,
+        noun="Partes",
+        console=console,
+        enabled=not no_ums,
+        priority=ums_priority,
+        stream=ums_stream,
+    ):
         return
 
     if torch.cuda.is_available():
@@ -493,6 +684,8 @@ def decompose(
             out["prompt_num"] = prompt_num
         out["postprocess"] = postprocess
         out["threshold"] = threshold
+        if segmentation_proxy is not None:
+            out["segmentation_proxy_path"] = segmentation_proxy
         return out
 
     with (
@@ -516,6 +709,21 @@ def decompose(
             quality=quality,
             refine_labels=refine_labels,
             bbox_merge_iou=_d.SPACE_BBOX_MERGE_IOU if merge_bbox_iou is None else merge_bbox_iou,
+            mask_nms_iou=mask_nms_iou,
+            secondary_mask_iou=secondary_mask_iou,
+            min_cluster_support=min_cluster_support,
+            min_predicted_iou=min_predicted_iou,
+            prompt_batch_size=prompt_batch_size,
+            multi_head=multi_head,
+            consensus=consensus,
+            consensus_vote=consensus_vote,
+            segment_mode=segment_mode,
+            geometry_params=geometry_params,
+            parts_mode=parts_mode,
+            xpart_max_area_frac=float(xpart_max_area_frac),
+            preserve_thin_topology=bool(preserve_thin_topology),
+            cap_part_holes=cap_part_holes,
+            detail_levels=detail_levels,
         ) as pipe,
     ):
         from .utils.face_split import face_part_stats, split_mesh_by_face_ids
@@ -555,9 +763,9 @@ def decompose(
                 console.print(f"[yellow]Face-parts falhou: {e}[/]")
 
         if segment_only:
-            mesh = load_mesh_as_trimesh(mesh_path)
-            _aabb, face_ids, clean_mesh = pipe.segment(
-                mesh,
+            _aabb, face_ids, clean_mesh = pipe.segment_file(
+                mesh_path,
+                segmentation_proxy_path=segmentation_proxy,
                 seed=seed,
                 point_num=point_num,
                 prompt_num=prompt_num,
