@@ -349,7 +349,12 @@ assets:
   - lod
   - collision
 - id: watchtower
-  idea: tall narrow medieval wooden watchtower with heavy stone base, crenellated battlement top, wooden ladder, flag pole, observation platform, defensive tower
+  idea: >
+    tall narrow medieval stone watchtower, squared heavy stone base flush to
+    ground with sharp block edges and no flared footings, crisp crenellated
+    battlements, thin straight wooden ladder with clear separate rungs, continuous
+    thin flagpole with attached waving flag (no gaps), observation platform,
+    clean hard architectural silhouettes, game-ready prop
   kind: environment
   category: building
   pipeline:
@@ -357,6 +362,7 @@ assets:
   - paint
   - lod
   - collision
+  generation: high
 - id: chapel
   idea: small medieval stone chapel with tall bell tower, arched stained-glass window, peaked slate roof, wooden door, cozy village temple, house of worship
   kind: environment
