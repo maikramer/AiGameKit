@@ -208,7 +208,8 @@ def main() -> None:
     "--exclusive-partition/--no-exclusive-partition",
     default=None,
     help=(
-        "Pós-processo: cada face fica na parte com superfície mais próxima (mata overlap/sobra sem carve). Default ON."
+        "Pós-processo: cada face fica na parte com superfície mais próxima "
+        "(mata overlap/sobra sem carve). Default OFF — abre sólidos até voxel-MC/seal."
     ),
 )
 @click.option(
