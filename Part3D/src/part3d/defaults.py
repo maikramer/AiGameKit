@@ -85,11 +85,12 @@ DEFAULT_SEGMENT_MODE = "p3sam"
 DEFAULT_FINE_SEGMENT_MODE = "hybrid"
 
 # Export de partes após segmentação:
-#   xpart  — só Hunyuan X-Part (regen)
-#   faces  — só face-split (topologia original)
-#   hybrid — X-Part em partes compactas; paredes grandes + falhas MC → face-split
-DEFAULT_PARTS_MODE = "xpart"
-DEFAULT_FINE_PARTS_MODE = "hybrid"
+#   xpart  — só Hunyuan X-Part (regen) — derrete finos / pés-de-elefante
+#   faces  — só face-split (topologia original) — preserva aparência
+#   hybrid — X-Part + face-split se MC falhar
+# Default faces: X-Part distorce silhueta (escada/bandeira/base). Opt-in xpart/hybrid.
+DEFAULT_PARTS_MODE = "faces"
+DEFAULT_FINE_PARTS_MODE = "faces"
 # Acima disto: X-Part ainda corre, mas com octree reduzido (não desactiva a fase).
 DEFAULT_XPART_MAX_AREA_FRAC = 0.10
 DEFAULT_XPART_LARGE_OCTREE = 128
