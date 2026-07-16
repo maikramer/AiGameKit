@@ -37,7 +37,10 @@ class Adapter(BackendAdapter):
         output = request.get("output")
         if not output:
             return {"status": "error", "error": "output é obrigatório"}
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before generate")
 
+        self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
         from_image = request.get("from_image")
 

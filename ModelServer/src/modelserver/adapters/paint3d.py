@@ -34,7 +34,10 @@ class Adapter(BackendAdapter):
         output = request.get("output")
         if not mesh_path or not image_path or not output:
             return {"status": "error", "error": "mesh_path, image_path e output são obrigatórios"}
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before generate")
 
+        self.report_progress(request, 0.0, "started")
         t_start = time.perf_counter()
 
         from paint3d.utils.mesh_io import load_mesh_trimesh, save_glb
