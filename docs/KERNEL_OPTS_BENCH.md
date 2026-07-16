@@ -109,6 +109,7 @@ Part3D/.venv/bin/python docs/scripts/bench_kernel_opts.py --tool part3d --append
 | 38 | text2sound | `snd-baseline` | 12.0 | 1.1 | 0.6 | effects/small | d=2.0s | steps=12 |
 | 39 | text2sound | `snd-channels-last` | 7.8 | 0.9 | 0.6 | effects/small | d=2.0s | steps=12 | channels_last |
 | 40 | text2sound | `snd-compile` | 8.4 | 27.5 | 0.6 | effects/small | d=2.0s | steps=12 | compile=default |
+| 41 | text2sound | `snd-compile-cl` | 8.3 | 14.7 | 0.6 | effects/small | d=2.0s | steps=12 | compile=default | channels_last |
 
 <!-- BENCH_TABLE_END -->
 
@@ -221,9 +222,22 @@ Part3D/.venv/bin/python docs/scripts/bench_kernel_opts.py --tool part3d --append
 | Skymap2D `--channels-last` | hot 37.1s ≈baseline | ~0 |
 | Skymap2D `--compile` | hot **30.4s** (−19%); cold 359s | **batch/server** sim; one-shot não |
 | Skymap2D `compile+CL` | hot **30.5s** ≈compile | CL sem ganho extra; 1º run matado externo |
+| Text2Sound baseline (small) | hot **0.6s** (2s/12 steps) | CLI kernel opts wired |
+| Text2Sound CL / compile | hot 0.6s ≈baseline | sem ganho; compile cold 15–28s |
 
-**Replicar já:** hw-auto Text3D `flashvdm` se VRAM&lt;7.5 GiB; Part3D autotune: `cond_batch=1` + `max_parts=1` em ≤6.5GB; DiT compile off c/ mem-eff; Skymap2D `--compile` em server/batch.
+**Replicar já:** hw-auto Text3D `flashvdm` se VRAM&lt;7.5 GiB; Part3D autotune: `cond_batch=1` + `max_parts=1` em ≤6.5GB; DiT compile off c/ mem-eff.
 
-**Skip:** `t3d-group-offload`; `t3d-fp8`; Paint3D `--compile` mem-eff/SDNQ; Part3D Conditioner compile (`torch_cluster.fps`); Part3D DiT `--compile` em ≤8GB+offload (sem ganho); Text2Icon `--compile` em 6GB (hot pior); Texture2D compile/CL (sem ganho); Skymap2D CL só (~0).
+**Aplicado (server/batch defaults):**
+- UMS `text2d`: `torch_compile=True` + `channels_last=True` (override via preload kwargs)
+- UMS `skymap2d`: `torch_compile=True`
+- UMS `text2icon`: `channels_last=True` (compile off — hot pior)
+- CLI `text2d generate-batch`: `--compile` / `--channels-last` default **ON**
+- CLI `skymap2d batch`: `--compile` default **ON**
+- CLI `text2icon batch`: `--channels-last` default **ON**
+- One-shot `generate` continua default OFF (excepto defaults batch acima)
 
-**Nota Text2Icon/Skymap2D:** bench multi-config no mesmo PID deixa VRAM presa → subprocesso por config.
+**Skip:** `t3d-group-offload`; `t3d-fp8`; Paint3D `--compile` mem-eff/SDNQ; Part3D Conditioner compile (`torch_cluster.fps`); Part3D DiT `--compile` em ≤8GB+offload (sem ganho); Text2Icon `--compile` em 6GB (hot pior); Texture2D/Text2Sound compile/CL (sem ganho nestes benches); Skymap2D CL só (~0).
+
+**Nota Text2Icon/Skymap2D/Text2Sound:** bench multi-config no mesmo PID deixa VRAM presa → subprocesso por config.
+
+**Terrain3D:** já tem `torch.compile` on por default (Linux+CUDA) no vendor pipeline — sem gap CLI desta campanha.

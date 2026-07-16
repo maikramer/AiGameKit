@@ -952,7 +952,7 @@ def main() -> None:
         )
 
     if args.tool in ("skymap2d", "all"):
-        # quality=fast defaults: 1024×512, 14 steps (6GB mem-eff).
+        # quality=fast defaults: 1024x512, 14 steps (6GB mem-eff).
         sky_w = args.width if args.width != 512 else 1024
         sky_h = args.height if args.height != 512 else 512
         sky_steps = max(args.t2d_steps, 14)

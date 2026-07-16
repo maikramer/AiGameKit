@@ -337,10 +337,10 @@ through `JobQueue` → `AffinityScheduler` → `WorkerPool` (`MAX_INFLIGHT=1`).
 Interactive CLI beats batch (`GAMEDEV_UMS_PRIORITY=batch` set by GameAssets).
 Per-tool legacy servers (`text2icon server`, etc.) remain as **deprecated** fallback only.
 
-**VRAM coordination:** In-process fallbacks call `ensure_vram_available(needed_mib)` →
-UMS `ensure-vram` (smart eviction). `kill_gpu_compute_processes_aggressive` protects
-server PIDs **and refuses to kill** when the UMS queue has inflight/queued jobs
-(`respect_ums_queue=True`).
+**VRAM coordination:** Admit uses **peak = weights(quant) + inference activation +
+safety** — not bare GPU size / YAML footprint. 6 GB cards refuse full fp16 text3d;
+use `sdnq-int4`. In-process: `ensure_vram_available(N, backend="text3d")` → UMS
+`max(N, peak)`. Kill refuses while UMS queue busy (`respect_ums_queue=True`).
 
 ### Agents — VRAM busy checklist (do NOT skip)
 
