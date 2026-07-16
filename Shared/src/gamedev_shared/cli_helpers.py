@@ -330,6 +330,31 @@ def _ums_generate_stream(
     return final
 
 
+def with_ums_load_opts(
+    payload: dict[str, Any],
+    *,
+    gpu_ids: list[int] | str | None = None,
+    **extra: Any,
+) -> dict[str, Any]:
+    """Copia ``payload`` e injeta kwargs de load UMS (``gpu_ids``, etc.).
+
+    Usar antes de ``try_ums_delegation`` / ``call_ums`` para o BackendManager
+    passar ``gpu_ids`` ao ``adapter.load``.
+    """
+    out = dict(payload)
+    if gpu_ids is not None:
+        if isinstance(gpu_ids, str):
+            parsed = [int(x.strip()) for x in gpu_ids.split(",") if x.strip()]
+        else:
+            parsed = [int(x) for x in gpu_ids]
+        if parsed:
+            out["gpu_ids"] = parsed
+    for key, value in extra.items():
+        if value is not None:
+            out[key] = value
+    return out
+
+
 def call_ums(
     tool: str,
     payload: dict[str, Any],
@@ -393,6 +418,10 @@ def try_ums_delegation(
     output = payload.get(output_key)
     if output is None:
         return False
+
+    # Opt-in stream via env (GameAssets batch --ums-stream → GAMEDEV_UMS_STREAM=1).
+    if not stream:
+        stream = os.environ.get("GAMEDEV_UMS_STREAM", "").strip().lower() in ("1", "true", "yes", "on")
 
     from .model_server import (
         UMS_DO_NOT_KILL_TIP,

@@ -367,21 +367,37 @@ def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) ->
         cmd = [sys.executable, "-m", "modelserver", "start"]
 
     _logger.info(f"[UMS] Auto-start: {' '.join(cmd)}")
+    log_path = Path(
+        os.environ.get("GAMEDEV_UMS_AUTO_START_LOG", "").strip()
+        or (Path.home() / ".cache" / "gamedev" / "ums-autostart.log")
+    )
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_fh = open(log_path, "a", encoding="utf-8")  # noqa: SIM115
+        log_fh.write(f"\n--- auto-start {time.strftime('%Y-%m-%d %H:%M:%S')} cmd={' '.join(cmd)}\n")
+        log_fh.flush()
+    except OSError as e:
+        _logger.warn(f"[UMS] Auto-start: não foi possível abrir log {log_path}: {e}")
+        log_fh = subprocess.DEVNULL  # type: ignore[assignment]
+
     try:
         subprocess.Popen(
             cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=log_fh,
+            stderr=subprocess.STDOUT if log_fh is not subprocess.DEVNULL else subprocess.DEVNULL,
             stdin=subprocess.DEVNULL,
             start_new_session=True,  # detach: sobrevive ao processo chamador
         )
+        if log_fh is not subprocess.DEVNULL:
+            _logger.info(f"[UMS] Auto-start log: {log_path}")
     except OSError as e:
         _logger.warn(f"[UMS] Auto-start falhou: {e}")
+        if log_fh is not subprocess.DEVNULL:
+            with contextlib.suppress(Exception):
+                log_fh.close()
         return False
 
     # Esperar que o socket fique pronto.
-    import time
-
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
         time.sleep(0.5)
@@ -467,10 +483,14 @@ def wait_ums_job(
     timeout_sec: float = 600.0,
     stream: bool = False,
 ) -> dict[str, Any] | None:
-    """Espera um job UMS terminar. Com ``stream=True`` devolve só o resultado final."""
+    """Espera um job UMS terminar. Com ``stream=True`` devolve só o resultado final.
+
+    ``timeout_sec`` é enviado ao UMS (campo ``timeout_sec``) e também usado no
+    socket do cliente.
+    """
     if not ensure_ums_running(auto_start=False):
         return None
-    req: dict[str, Any] = {"cmd": "wait", "job_id": job_id}
+    req: dict[str, Any] = {"cmd": "wait", "job_id": job_id, "timeout_sec": timeout_sec}
     if stream:
         req["stream"] = True
     return send_to_ums(req, timeout_sec=timeout_sec)
@@ -488,7 +508,13 @@ def cancel_ums_job(job_id: str, *, timeout_sec: float = 10.0) -> dict[str, Any] 
 # ---------------------------------------------------------------------------
 
 
-def ensure_vram_available(needed_mib: int, *, timeout_sec: float = 30.0) -> bool:
+def ensure_vram_available(
+    needed_mib: int,
+    *,
+    timeout_sec: float = 30.0,
+    backend: str | None = None,
+    quant_mode: str | None = None,
+) -> bool:
     """Garante que há VRAM suficiente; se não, pede aos servers para descarregar.
 
     Chamaado por ferramentas pesadas (text3d, paint3d) antes de ocupar a GPU.
@@ -496,12 +522,14 @@ def ensure_vram_available(needed_mib: int, *, timeout_sec: float = 30.0) -> bool
     espera até haver espaço (ou timeout).
 
     Preferência: se o **Unified Model Server** (UMS) estiver ativo, envia
-    ``ensure-vram`` para evicção inteligente peso+LRU. Caso contrário, cai no
-    comportamento legacy (descobrir per-tool sockets, ``release`` cego).
+    ``ensure-vram`` para evicção inteligente peso+LRU. Com ``backend``, o UMS
+    usa ``max(needed_mib, peak=pesos+activação+safety)`` — não só o pedido cru.
 
     Args:
-        needed_mib: VRAM necessária em MiB.
+        needed_mib: VRAM necessária em MiB (mínimo pedido pelo cliente).
         timeout_sec: Tempo máximo de espera pelo release.
+        backend: Nome do backend UMS (ex: ``text3d``) para reservar pico de inferência.
+        quant_mode: Quantização assumida no pico (ex: ``sdnq-int4`` / ``none``).
 
     Returns:
         ``True`` se há VRAM suficiente (ou se não foi possível verificar).
@@ -509,24 +537,55 @@ def ensure_vram_available(needed_mib: int, *, timeout_sec: float = 30.0) -> bool
     from .gpu import query_gpu_free_mib
 
     free = query_gpu_free_mib()
-    if free is not None and free >= needed_mib:
+    if free is not None and free >= needed_mib and backend is None:
         return True  # já há espaço, não incomodar ninguém
 
-    # Preferir o UMS se ativo (evicção inteligente peso+LRU).
+    # Preferir o UMS se ativo (evicção inteligente peso+LRU + peak por backend).
     if is_ums_running():
-        _logger.info(f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}) — a pedir evicção ao UMS")
-        resp = send_to_ums({"cmd": "ensure-vram", "needed_mib": needed_mib}, timeout_sec=timeout_sec)
+        req: dict[str, Any] = {"cmd": "ensure-vram", "needed_mib": needed_mib}
+        if backend:
+            req["backend"] = backend
+        if quant_mode:
+            req["quant_mode"] = quant_mode
+        _logger.info(
+            f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}"
+            + (f", backend={backend}" if backend else "")
+            + ") — a pedir evicção ao UMS"
+        )
+        resp = send_to_ums(req, timeout_sec=timeout_sec)
         if resp is not None:
             ok = resp.get("status") == "ok"
             if not ok:
                 _logger.warn(f"UMS respondeu {resp.get('status')} ao ensure-vram")
             return ok
-        # UMS estava running mas não respondeu — cair para legacy.
+        # UMS estava running mas não respondeu — cair para legacy só se permitido.
+
+    # Legacy per-tool servers: opt-in (preferir UMS). Sem override, não descobrir
+    # sockets antigos nem esperar releases legados — evita corridas com o UMS.
+    allow_legacy = os.environ.get("GAMEDEV_ALLOW_LEGACY_SERVER", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if not allow_legacy:
+        if free is None:
+            return True
+        if free >= needed_mib:
+            return True
+        _logger.warn(
+            f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}) e legacy "
+            "ensure_vram desligado — arranca UMS ou GAMEDEV_ALLOW_LEGACY_SERVER=1"
+        )
+        return False
 
     # Legacy: pedir a todos os per-tool servers ativos para fazer release.
-    active = discover_active_sockets()
+    active = [s for s in discover_active_sockets() if Path(s).resolve() != UMS_SOCKET.resolve()]
     if active:
-        msg = f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}) — a pedir release a {len(active)} server(s)"
+        msg = (
+            f"VRAM insuficiente ({free} MiB livres, preciso {needed_mib}) — "
+            f"a pedir release a {len(active)} server(s) legacy"
+        )
         _logger.info(msg)
         for sock in active:
             with contextlib.suppress(Exception):
