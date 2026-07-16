@@ -14,8 +14,15 @@ O ``BackendAdapter`` normaliza tudo num contrato único (``load`` / ``generate``
 
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
+
+from gamedev_shared.diffusion_control import GenerationAborted
+from modelserver import protocol as P
+
+__all__ = ["BackendAdapter", "GenerationAborted"]
 
 
 class BackendAdapter(ABC):
@@ -34,54 +41,79 @@ class BackendAdapter(ABC):
 
     @abstractmethod
     def load(self, **kwargs: Any) -> Any:
-        """Carrega e devolve o model object (pipeline/gerador pronto a gerar).
-
-        Args:
-            **kwargs: Parâmetros opcionais passados do request (ex: verbose).
-
-        Returns:
-            O objeto modelo carregado (será guardado pelo BackendManager).
-        """
+        """Carrega e devolve o model object (pipeline/gerador pronto a gerar)."""
 
     @abstractmethod
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
         """Executa uma geração sobre o model object.
 
-        Args:
-            model: Objeto retornado por ``load``.
-            request: Dict do pedido (prompt, output, parâmetros, ...).
-
-        Returns:
-            Dict de resposta. Convenção: ``{"status": "ok", "output": ..., ...}``
-            ou ``{"status": "error", "error": "..."}``.
+        O request pode incluir:
+          - ``_progress``: ``(pct|None, msg|None) -> None``
+          - ``_abort``: ``() -> bool`` (True = cancel pedido)
         """
 
     @abstractmethod
     def unload(self, model: Any) -> None:
-        """Liberta o model object (VRAM). Idempotente e à prova de exceções.
+        """Liberta o model object (VRAM). Idempotente e à prova de exceções."""
 
-        Chamado pelo BackendManager ao evictar. Não deve levantar — se falhar,
-        o BackendManager faz fallback para ``clear_cuda_memory``.
-        """
+    @staticmethod
+    def report_progress(request: dict[str, Any], pct: float | None = None, msg: str | None = None) -> None:
+        """Helper: reporta progresso se o request trouxer ``_progress``."""
+        cb = request.get("_progress")
+        if callable(cb):
+            with contextlib.suppress(Exception):
+                cb(pct, msg)
 
-    # ------------------------------------------------------------------
-    # Helpers partilhados (usados por adapters concretos)
-    # ------------------------------------------------------------------
+    @staticmethod
+    def should_abort(request: dict[str, Any]) -> bool:
+        """True se o UMS pediu cancel (``request["_abort"]``)."""
+        cb = request.get("_abort")
+        if not callable(cb):
+            return False
+        try:
+            return bool(cb())
+        except Exception:
+            return False
+
+    @staticmethod
+    def cancelled_response(reason: str = "cancelled") -> dict[str, Any]:
+        """Resposta canónica de cancel cooperativo."""
+        return {
+            "status": P.STATUS_ERROR,
+            "error": reason,
+            "error_code": P.ERR_CANCELLED,
+        }
+
+    @classmethod
+    def abort_hooks(
+        cls,
+        request: dict[str, Any],
+        *,
+        num_inference_steps: int,
+    ) -> tuple[Callable[[], bool] | None, Callable[[int, int], None] | None]:
+        """Constrói ``should_abort`` / ``on_step`` para generators 2D."""
+
+        def _abort() -> bool:
+            return cls.should_abort(request)
+
+        def _on_step(step: int, total: int) -> None:
+            pct = step / max(1, total)
+            cls.report_progress(request, pct, f"step {step}/{total}")
+
+        has_abort = callable(request.get("_abort"))
+        has_progress = callable(request.get("_progress"))
+        return (
+            _abort if has_abort else None,
+            _on_step if has_progress else None,
+        )
 
     @staticmethod
     def should_use_low_vram_mode(threshold_mib: int = 7000) -> bool:
-        """Deteta se a GPU tem pouca VRAM e deve ativar offload/sequential.
-
-        Verifica VRAM total via ``gamedev_shared.gpu.gpu_total_mib``. Se a GPU
-        tem menos de ``threshold_mib`` (default 7000 = ~7 GiB), retorna ``True``
-        para que o adapter ative ``memory_efficient``/``sequential_offload``.
-
-        Em GPUs de 6 GiB (RTX 4050), todos os modelos FLUX precisam de offload.
-        """
+        """Deteta se a GPU tem pouca VRAM e deve ativar offload/sequential."""
         try:
             from gamedev_shared.gpu import gpu_total_mib
 
             total = gpu_total_mib()
             return total is not None and total < threshold_mib
         except Exception:
-            return False  # conservador: se não dá para verificar, não forçar
+            return False

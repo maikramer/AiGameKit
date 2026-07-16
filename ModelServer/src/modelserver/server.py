@@ -1,8 +1,8 @@
 """UnifiedModelServer — servidor único que roteia pedidos para backends.
 
 Um único processo detém toda a VRAM e escuta num único Unix socket. Pedidos de
-geração incluem ``backend`` (nome da tool) e são roteados para o BackendManager,
-que carrega/evicta modelos sob procura com evicção inteligente peso+LRU.
+geração passam por uma **fila inteligente** (prioridade + afinidade VRAM) e um
+worker pool com ``MAX_INFLIGHT`` (default 1).
 
 Protocolo: ver ``protocol.py``. Ciclo de vida: ver ``serve_forever``.
 
@@ -29,13 +29,16 @@ from gamedev_shared.model_server import _ensure_server_dir, _pid_path, is_server
 
 from . import protocol as P
 from .backend_manager import BackendManager
+from .job_queue import Job, JobQueue, QueueFullError
 from .registry import Registry
+from .scheduler import AffinityScheduler
+from .worker import WorkerPool
 
 _logger = Logger()
 
 
 class UnifiedModelServer:
-    """Servidor único de VRAM — roteia pedidos para backends via BackendManager.
+    """Servidor único de VRAM — fila inteligente + BackendManager.
 
     Args:
         registry: Registry de backends. Se ``None``, carrega do ``backends.yaml`` default.
@@ -51,6 +54,9 @@ class UnifiedModelServer:
         socket_path: Path | str | None = None,
         idle_timeout_min: int = P.DEFAULT_IDLE_TIMEOUT_MIN,
         idle_evict_sec: float = 600.0,
+        max_queue_depth: int = P.MAX_QUEUE_DEPTH,
+        max_inflight: int = P.MAX_INFLIGHT,
+        max_affinity_cuts: int = P.MAX_AFFINITY_CUTS,
         verbose: bool = False,
     ) -> None:
         self.registry = registry if registry is not None else Registry()
@@ -60,8 +66,16 @@ class UnifiedModelServer:
         self.idle_timeout_sec = idle_timeout_min * 60
         self.verbose = verbose
 
-        # IdleEvictor: descarrega backends individuais idle há > idle_evict_sec.
-        # Mais granular que o idle_timeout do servidor inteiro (que encerra o processo).
+        self.queue = JobQueue(max_depth=max_queue_depth)
+        self.scheduler = AffinityScheduler(max_cuts=max_affinity_cuts)
+        self.workers = WorkerPool(
+            self.queue,
+            self.manager,
+            self.scheduler,
+            max_inflight=max_inflight,
+            verbose=verbose,
+        )
+
         from .idle_evictor import IdleEvictor
 
         self.idle_evictor = IdleEvictor(self.manager, idle_timeout_sec=idle_evict_sec)
@@ -92,14 +106,152 @@ class UnifiedModelServer:
         tool = request.get("tool")
         if tool:
             return str(tool)
-        # Fallback: se só há 1 backend carregado, usar esse.
         loaded = self.manager.loaded_names()
         if len(loaded) == 1:
             return loaded[0]
         return None
 
+    def _error(
+        self,
+        error: str,
+        *,
+        error_code: str,
+        hint: str | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Resposta de erro estruturada para debug."""
+        out: dict[str, Any] = {
+            "status": P.STATUS_ERROR,
+            "error": error,
+            "error_code": error_code,
+        }
+        if hint:
+            out["hint"] = hint
+        out.update(extra)
+        return out
+
+    def _backend_error(self, request: dict[str, Any]) -> dict[str, Any] | None:
+        """Valida backend; devolve dict de erro ou None se OK. Também define backend resolvido."""
+        backend = self._resolve_backend(request)
+        if backend is None:
+            loaded = self.manager.loaded_names()
+            known = list(self.registry.names)
+            hint = (
+                f'Backends carregados: {loaded or "nenhum"}. Registados: {known}. Passa "backend": "<nome>" no request.'
+            )
+            return self._error(
+                "backend ambíguo — especifica 'backend' no request",
+                error_code=P.ERR_BACKEND_AMBIGUOUS,
+                hint=hint,
+                loaded_backends=loaded,
+                known_backends=known,
+            )
+        if not self.registry.has(backend):
+            known = list(self.registry.names)
+            return self._error(
+                f"backend desconhecido: {backend}",
+                error_code=P.ERR_BACKEND_UNKNOWN,
+                hint=f"Backends válidos: {known}",
+                known_backends=known,
+            )
+        request["_resolved_backend"] = backend
+        return None
+
+    def _enqueue_from_request(self, request: dict[str, Any]) -> Job | dict[str, Any]:
+        """Enfileira a partir de generate/submit. Retorna Job ou dict de erro."""
+        err = self._backend_error(request)
+        if err is not None:
+            return err
+        backend = str(request["_resolved_backend"])
+        # Não persistir campos internos no job request.
+        job_req = {k: v for k, v in request.items() if not k.startswith("_") and k not in ("cmd", "stream")}
+        try:
+            job = self.queue.enqueue(backend, job_req, priority=request.get("priority"))
+        except QueueFullError as e:
+            snap = self.queue.snapshot()
+            loaded = self.manager.loaded_names()
+            return {
+                "status": P.STATUS_QUEUE_FULL,
+                "error": str(e),
+                "error_code": P.ERR_QUEUE_FULL,
+                "hint": (
+                    "Espera jobs terminarem, cancela com gamedev-model-server cancel <job_id>, "
+                    "ou aumenta GAMEDEV_UMS_MAX_QUEUE_DEPTH."
+                ),
+                "queue_depth": self.queue.depth,
+                "max_depth": self.queue.max_depth,
+                "inflight": self.queue.inflight,
+                "queued": snap.get("queued", []),
+                "running": snap.get("running", []),
+                "ums_debug": {
+                    "backend": backend,
+                    "priority": P.normalize_priority(request.get("priority")),
+                    "queue_depth": self.queue.depth,
+                    "max_depth": self.queue.max_depth,
+                    "inflight": self.queue.inflight,
+                    "loaded_backends": loaded,
+                    "queued_backends": [j.get("backend") for j in snap.get("queued", [])],
+                    "running_backends": [j.get("backend") for j in snap.get("running", [])],
+                },
+            }
+        self._log(f"Enfileirado job {job.job_id[:8]} backend={backend!r} pri={job.priority}")
+        return job
+
+    def _ums_debug_for_job(self, job: Job) -> dict[str, Any]:
+        """Bloco de debug anexado a generate/wait/poll."""
+        timing = job.timing_dict()
+        return {
+            "job_id": job.job_id,
+            "backend": job.backend,
+            "priority": job.priority,
+            "state": job.state,
+            "affinity_cuts": job.affinity_cuts,
+            "seq": job.seq,
+            "queue_wait_sec": timing["queue_wait_sec"],
+            "generate_sec": timing["generate_sec"],
+            "total_sec": timing["total_sec"],
+            "queue_depth": self.queue.depth,
+            "inflight": self.queue.inflight,
+            "loaded_backends": self.manager.loaded_names(),
+            "cancel_requested": job.cancel_requested,
+        }
+
+    def _result_from_job(self, job: Job) -> dict[str, Any]:
+        result = job.result or {"status": P.STATUS_ERROR, "error": "sem resultado"}
+        out = dict(result)
+        out.setdefault("job_id", job.job_id)
+        out.setdefault("backend", job.backend)
+        out["priority"] = job.priority
+        out["ums_debug"] = self._ums_debug_for_job(job)
+
+        # Normalizar error_code em falhas.
+        if out.get("status") != P.STATUS_OK:
+            err_txt = str(out.get("error", "")).lower()
+            if "cancel" in err_txt:
+                out.setdefault("error_code", P.ERR_CANCELLED)
+                out.setdefault("hint", "Job cancelado (queued ou durante generate).")
+            elif "timeout" in err_txt:
+                out.setdefault("error_code", P.ERR_TIMEOUT)
+                out.setdefault("hint", "Aumenta timeout do cliente ou inspecciona gamedev-model-server queue.")
+            else:
+                out.setdefault("error_code", P.ERR_GENERATE_FAILED)
+                out.setdefault(
+                    "hint",
+                    "Vê ums_debug + gamedev-model-server stats (last_error do backend). "
+                    "Se OOM, evict outros backends ou usa --no-ums.",
+                )
+
+        if out.get("status") == P.STATUS_OK and not job.counted_served:
+            job.counted_served = True
+            self._requests_served += 1
+        return out
+
     def _dispatch(self, request: dict[str, Any]) -> dict[str, Any]:
-        """Despacha um request já parseado. Retorna a resposta (dict)."""
+        """Despacha um request já parseado. Retorna a resposta (dict).
+
+        Nota: ``generate`` / ``wait`` com stream são tratados em ``_handle_client``
+        (precisam do socket para NDJSON). Aqui ``generate`` sem stream bloqueia.
+        """
         cmd = request.get("cmd", P.DEFAULT_CMD)
         self._log(f"Comando: {cmd}")
 
@@ -109,13 +261,38 @@ class UnifiedModelServer:
 
         if cmd == P.CMD_STATUS:
             mgr_status = self.manager.status()
+            qsnap = self.queue.snapshot()
+            backend_stats = self.manager.stats.get_all()
+            last_errors = {name: s["last_error"] for name, s in backend_stats.items() if s.get("last_error")}
             return {
                 "status": P.STATUS_STATUS,
                 "pid": self._pid,
                 "socket": str(self.socket_path),
                 "tool": "modelserver",
                 "requests_served": self._requests_served,
+                "max_affinity_cuts": self.scheduler.max_cuts,
+                "max_inflight": self.workers.max_inflight,
+                "queue": qsnap,
+                "debug": {
+                    "loaded_backends": self.manager.loaded_names(),
+                    "last_errors": last_errors,
+                    "affinity_cuts_max": self.scheduler.max_cuts,
+                    "queue_depth": qsnap.get("queue_depth", 0),
+                    "inflight": qsnap.get("inflight", 0),
+                },
                 **mgr_status,
+            }
+
+        if cmd == P.CMD_QUEUE:
+            snap = self.queue.snapshot()
+            return {
+                "status": P.STATUS_OK,
+                "debug": {
+                    "loaded_backends": self.manager.loaded_names(),
+                    "max_affinity_cuts": self.scheduler.max_cuts,
+                    "max_inflight": self.workers.max_inflight,
+                },
+                **snap,
             }
 
         if cmd == P.CMD_LIST_BACKENDS:
@@ -139,6 +316,9 @@ class UnifiedModelServer:
                 "pid": self._pid,
                 "requests_served": self._requests_served,
                 "idle_evict_timeout_sec": self.idle_evictor.idle_timeout_sec,
+                "max_affinity_cuts": self.scheduler.max_cuts,
+                "max_inflight": self.workers.max_inflight,
+                "queue": self.queue.snapshot(),
                 "backends": stats,
             }
 
@@ -156,44 +336,189 @@ class UnifiedModelServer:
         if cmd == P.CMD_PRELOAD:
             backend = request.get("backend")
             if not backend:
-                return {"status": P.STATUS_ERROR, "error": "preload requer 'backend'"}
+                return self._error("preload requer 'backend'", error_code=P.ERR_INVALID_REQUEST)
             name = str(backend)
             if not self.registry.has(name):
-                return {"status": P.STATUS_ERROR, "error": f"backend desconhecido: {name}"}
+                return self._error(
+                    f"backend desconhecido: {name}",
+                    error_code=P.ERR_BACKEND_UNKNOWN,
+                    hint=f"Backends válidos: {list(self.registry.names)}",
+                )
             try:
                 load_kwargs = {k: v for k, v in request.items() if k in ("verbose",)}
                 self.manager.ensure_loaded(name, **load_kwargs)
-                return {"status": P.STATUS_OK, "message": f"backend {name} pré-carregado"}
+                return {
+                    "status": P.STATUS_OK,
+                    "message": f"backend {name} pré-carregado",
+                    "ums_debug": {
+                        "backend": name,
+                        "loaded_backends": self.manager.loaded_names(),
+                    },
+                }
             except Exception as e:
-                return {"status": P.STATUS_ERROR, "error": f"falha ao pré-carregar {name}: {e}"}
+                return self._error(
+                    f"falha ao pré-carregar {name}: {e}",
+                    error_code=P.ERR_PRELOAD_FAILED,
+                    hint="Verifica deps do backend (gamedev-model-server doctor) e VRAM livre.",
+                    backend=name,
+                )
 
         if cmd == P.CMD_ENSURE_VRAM:
             needed = request.get("needed_mib")
             if needed is None:
-                return {"status": P.STATUS_ERROR, "error": "ensure-vram requer 'needed_mib'"}
+                return self._error("ensure-vram requer 'needed_mib'", error_code=P.ERR_INVALID_REQUEST)
+            before = self.manager.loaded_names()
             ok = self.manager.ensure_vram(int(needed))
-            return {"status": P.STATUS_OK if ok else P.STATUS_ERROR, "needed_mib": int(needed)}
+            after = self.manager.loaded_names()
+            return {
+                "status": P.STATUS_OK if ok else P.STATUS_ERROR,
+                "needed_mib": int(needed),
+                "ums_debug": {
+                    "loaded_before": before,
+                    "loaded_after": after,
+                    "evicted": sorted(set(before) - set(after)),
+                },
+            }
+
+        if cmd == P.CMD_SUBMIT:
+            outcome = self._enqueue_from_request(request)
+            if isinstance(outcome, dict):
+                return outcome
+            return {
+                "status": P.STATUS_OK,
+                "job_id": outcome.job_id,
+                "backend": outcome.backend,
+                "priority": outcome.priority,
+                "state": outcome.state,
+                "queue_position": self.queue.depth,
+            }
+
+        if cmd == P.CMD_POLL:
+            job_id = request.get("job_id")
+            if not job_id:
+                return self._error("poll requer 'job_id'", error_code=P.ERR_INVALID_REQUEST)
+            job = self.queue.get(str(job_id))
+            if job is None:
+                return self._error(
+                    f"job desconhecido: {job_id}",
+                    error_code=P.ERR_JOB_UNKNOWN,
+                    hint="Lista jobs com gamedev-model-server queue",
+                )
+            payload = job.to_public_dict()
+            payload["ums_debug"] = self._ums_debug_for_job(job)
+            if job.result is not None:
+                payload["result"] = job.result
+            return {"status": P.STATUS_OK, **payload}
+
+        if cmd == P.CMD_CANCEL:
+            job_id = request.get("job_id")
+            if not job_id:
+                return self._error("cancel requer 'job_id'", error_code=P.ERR_INVALID_REQUEST)
+            return self.queue.cancel(str(job_id))
+
+        if cmd == P.CMD_WAIT:
+            job_id = request.get("job_id")
+            if not job_id:
+                return self._error("wait requer 'job_id'", error_code=P.ERR_INVALID_REQUEST)
+            job = self.queue.wait(str(job_id), timeout_sec=P.DEFAULT_GENERATE_TIMEOUT_SEC)
+            if job is None:
+                return self._error(
+                    f"job desconhecido: {job_id}",
+                    error_code=P.ERR_JOB_UNKNOWN,
+                    hint="Lista jobs com gamedev-model-server queue",
+                )
+            if not job.done_event.is_set():
+                return self._error(
+                    "timeout à espera do job",
+                    error_code=P.ERR_TIMEOUT,
+                    hint="Inspecciona gamedev-model-server queue / status",
+                    job_id=job_id,
+                    ums_debug=self._ums_debug_for_job(job),
+                )
+            return self._result_from_job(job)
 
         if cmd == P.CMD_GENERATE:
-            backend = self._resolve_backend(request)
-            if backend is None:
-                loaded = self.manager.loaded_names()
-                hint = (
-                    f"backends carregados: {loaded}. Especifica 'backend' no request ou pré-carrega exatamente um."
-                    if loaded
-                    else "Nenhum backend carregado. Especifica 'backend' no request."
+            outcome = self._enqueue_from_request(request)
+            if isinstance(outcome, dict):
+                return outcome
+            job = outcome
+            job.done_event.wait(timeout=P.DEFAULT_GENERATE_TIMEOUT_SEC)
+            if not job.done_event.is_set():
+                return self._error(
+                    "timeout à espera do job na fila",
+                    error_code=P.ERR_TIMEOUT,
+                    hint="Inspecciona gamedev-model-server queue / status",
+                    job_id=job.job_id,
+                    ums_debug=self._ums_debug_for_job(job),
                 )
-                return {"status": P.STATUS_ERROR, "error": f"backend ambíguo. {hint}"}
-            if not self.registry.has(backend):
-                return {"status": P.STATUS_ERROR, "error": f"backend desconhecido: {backend}"}
-            self._log(f"Gerar via backend {backend!r}")
-            return self.manager.generate(backend, request)
+            return self._result_from_job(job)
 
-        return {"status": P.STATUS_ERROR, "error": f"comando desconhecido: {cmd}"}
+        return self._error(
+            f"comando desconhecido: {cmd}",
+            error_code=P.ERR_INVALID_REQUEST,
+            hint=f"Comandos: {sorted(P.KNOWN_COMMANDS)}",
+        )
 
     # ------------------------------------------------------------------
-    # Handle de 1 ligação
+    # Handle de 1 ligação (com suporte a NDJSON stream)
     # ------------------------------------------------------------------
+
+    def _send_json(self, conn: socket.socket, obj: dict[str, Any]) -> None:
+        conn.sendall((json.dumps(obj) + "\n").encode())
+
+    def _handle_streaming_job(self, conn: socket.socket, job: Job) -> None:
+        """Envia eventos NDJSON até o job terminar; última linha = resultado."""
+        events: list[dict[str, Any]] = []
+        ready = threading.Event()
+
+        def on_event(event: dict[str, Any]) -> None:
+            events.append(event)
+            ready.set()
+
+        job.add_listener(on_event)
+        # Replay queued se já emitido antes do listener.
+        self._send_json(
+            conn,
+            {
+                "event": P.EVENT_QUEUED,
+                "job_id": job.job_id,
+                "backend": job.backend,
+                "priority": job.priority,
+                "state": job.state,
+                "queue_position": max(1, self.queue.depth),
+            },
+        )
+
+        deadline = time.monotonic() + P.DEFAULT_GENERATE_TIMEOUT_SEC
+        sent = 0
+        while time.monotonic() < deadline:
+            if job.done_event.is_set() and sent >= len(events):
+                break
+            ready.wait(timeout=0.25)
+            ready.clear()
+            while sent < len(events):
+                ev = events[sent]
+                sent += 1
+                # Não reenviar o resultado final como event+status misturado —
+                # eventos intermediários apenas.
+                if ev.get("event") in (P.EVENT_DONE, P.EVENT_ERROR, P.EVENT_CANCELLED):
+                    continue
+                with contextlib.suppress(OSError):
+                    self._send_json(conn, ev)
+
+        if not job.done_event.is_set():
+            self._send_json(
+                conn,
+                self._error(
+                    "timeout à espera do job",
+                    error_code=P.ERR_TIMEOUT,
+                    hint="Inspecciona gamedev-model-server queue / status",
+                    job_id=job.job_id,
+                    ums_debug=self._ums_debug_for_job(job),
+                ),
+            )
+            return
+        self._send_json(conn, self._result_from_job(job))
 
     def _handle_client(self, conn: socket.socket) -> None:
         self._last_activity = time.monotonic()
@@ -211,20 +536,56 @@ class UnifiedModelServer:
                 return
 
             request = json.loads(line)
+            cmd = request.get("cmd", P.DEFAULT_CMD)
+            want_stream = bool(request.get("stream"))
+
+            # generate/wait com stream: caminho NDJSON.
+            if cmd == P.CMD_GENERATE and want_stream:
+                outcome = self._enqueue_from_request(request)
+                if isinstance(outcome, dict):
+                    self._send_json(conn, outcome)
+                    return
+                self._handle_streaming_job(conn, outcome)
+                return
+
+            if cmd == P.CMD_WAIT and want_stream:
+                job_id = request.get("job_id")
+                if not job_id:
+                    self._send_json(
+                        conn,
+                        self._error("wait requer 'job_id'", error_code=P.ERR_INVALID_REQUEST),
+                    )
+                    return
+                job = self.queue.get(str(job_id))
+                if job is None:
+                    self._send_json(
+                        conn,
+                        self._error(
+                            f"job desconhecido: {job_id}",
+                            error_code=P.ERR_JOB_UNKNOWN,
+                            hint="Lista jobs com gamedev-model-server queue",
+                        ),
+                    )
+                    return
+                self._handle_streaming_job(conn, job)
+                return
+
             response = self._dispatch(request)
-
-            if response.get("status") == P.STATUS_OK and request.get("cmd", P.DEFAULT_CMD) == P.CMD_GENERATE:
-                self._requests_served += 1
-
-            conn.sendall((json.dumps(response) + "\n").encode())
+            self._send_json(conn, response)
 
         except json.JSONDecodeError as e:
             with contextlib.suppress(OSError):
-                conn.sendall((json.dumps({"status": P.STATUS_ERROR, "error": f"JSON inválido: {e}"}) + "\n").encode())
+                self._send_json(
+                    conn,
+                    self._error(f"JSON inválido: {e}", error_code=P.ERR_INVALID_REQUEST),
+                )
         except Exception as e:
             self._log(f"Erro ao processar cliente: {e}")
             with contextlib.suppress(OSError):
-                conn.sendall((json.dumps({"status": P.STATUS_ERROR, "error": str(e)}) + "\n").encode())
+                self._send_json(
+                    conn,
+                    self._error(str(e), error_code=P.ERR_GENERATE_FAILED),
+                )
         finally:
             with contextlib.suppress(OSError):
                 conn.close()
@@ -235,6 +596,8 @@ class UnifiedModelServer:
 
     def _cleanup(self) -> None:
         self._log("Cleanup...")
+        with contextlib.suppress(Exception):
+            self.workers.stop()
         with contextlib.suppress(Exception):
             self.idle_evictor.stop()
         with contextlib.suppress(Exception):
@@ -255,7 +618,6 @@ class UnifiedModelServer:
         """Arranca o UMS (bloqueante). Graceful shutdown via SIGTERM/SIGINT."""
         _ensure_server_dir()
 
-        # Cleanup de socket stale.
         if self.socket_path.exists() and not is_server_running(self.socket_path):
             with contextlib.suppress(OSError):
                 self.socket_path.unlink(missing_ok=True)
@@ -278,12 +640,16 @@ class UnifiedModelServer:
             signal.signal(signal.SIGINT, self._signal_handler)
 
         self._running = True
+        self.workers.start()
         _logger.info(f"Unified Model Server ativo em {self.socket_path} (PID {self._pid})")
         _logger.info(f"Backends registados: {', '.join(self.registry.names)}")
+        _logger.info(
+            f"Fila: max_depth={self.queue.max_depth}, max_inflight={self.workers.max_inflight}, "
+            f"affinity_cuts={self.scheduler.max_cuts}"
+        )
         _logger.info(f"Idle timeout: {self.idle_timeout_sec / 60:.0f} min")
         _logger.info(f"Idle evictor: backends descarregados após {self.idle_evictor.idle_timeout_sec:.0f}s sem uso")
 
-        # Arrancar IdleEvictor (thread de background para evicção proativa).
         self.idle_evictor.start()
 
         try:

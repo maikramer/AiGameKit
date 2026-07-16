@@ -32,6 +32,7 @@ dev = [
 
 [project.scripts]
 gamedev-model-server = "modelserver.cli:main"
+ums = "modelserver.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

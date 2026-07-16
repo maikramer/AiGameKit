@@ -205,8 +205,14 @@ class BackendManager:
 
         Durante a geração, o backend tem ref_count=1 (não evictável). Em caso de
         erro, o modelo é descarregado para a próxima tentativa recarregar limpo.
+
+        O request pode incluir ``_progress`` (callable) injectado pelo WorkerPool;
+        é removido antes de passar ao adapter (adapters podem lê-lo se quiserem).
         """
-        load_kwargs = {k: v for k, v in request.items() if k in ("verbose",)}
+        # Copiar para não mutar o dict do Job; manter _progress para o adapter.
+        req = dict(request)
+        progress_cb = req.get("_progress")
+        load_kwargs = {k: v for k, v in req.items() if k in ("verbose",)}
         model = self.ensure_loaded(name, **load_kwargs)
         state = self._states[name]
 
@@ -215,7 +221,10 @@ class BackendManager:
         try:
             with state.gen_lock:
                 t0 = time.perf_counter()
-                response = self._registry.adapter(name).generate(model, request)
+                if callable(progress_cb):
+                    with contextlib.suppress(Exception):
+                        progress_cb(None, f"generating via {name}")
+                response = self._registry.adapter(name).generate(model, req)
                 gen_time = time.perf_counter() - t0
                 state.last_used = time.monotonic()
                 self.stats.record_generate(name, gen_time)

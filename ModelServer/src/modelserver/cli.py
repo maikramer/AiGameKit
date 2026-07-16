@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """Unified Model Server — CLI principal.
 
-Comandos:
-  gamedev-model-server start [--verbose] [--idle-timeout N]   Arranca o UMS (foreground)
-  gamedev-model-server stop                                    Graceful shutdown
-  gamedev-model-server status                                  Estado do UMS
-  gamedev-model-server backends                                Lista backends registados
-  gamedev-model-server preload <name>                          Pré-carrega um backend
-  gamedev-model-server evict [<name>]                          Evicta um (ou todos) os backends
+Comandos (alias ``ums`` = ``gamedev-model-server``):
+  start|stop|status|queue|wait|cancel|backends|preload|evict|stats|doctor
+
+Agentes / humanos: se a GPU estiver ocupada, usa ``status`` / ``queue`` —
+**não** mates processos GPU enquanto houver jobs UMS.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -25,7 +25,12 @@ try:
 except ImportError:  # pragma: no cover
     import click  # type: ignore[no-redef]
 
-from gamedev_shared.model_server import is_server_running, send_request
+from gamedev_shared.model_server import (
+    UMS_DO_NOT_KILL_TIP,
+    format_ums_holding_summary,
+    is_server_running,
+    send_request,
+)
 
 from . import protocol as P
 from .registry import Registry
@@ -38,6 +43,35 @@ def _send(request: dict, *, timeout: float = 30.0) -> dict | None:
     if not is_server_running(P.DEFAULT_SOCKET_PATH):
         return None
     return send_request(request, P.DEFAULT_SOCKET_PATH, timeout_sec=timeout)
+
+
+def _print_json(resp: dict[str, Any]) -> None:
+    console.print_json(json.dumps(resp, ensure_ascii=False, default=str))
+
+
+def _print_ums_error(resp: dict[str, Any]) -> None:
+    """Erro CLI com error_code / hint / ums_debug."""
+    code = resp.get("error_code", "?")
+    console.print(f"[bold red]✗ [{code}][/bold red] {resp.get('error', resp)}")
+    if resp.get("hint"):
+        console.print(f"[dim]hint: {resp['hint']}[/dim]")
+    dbg = resp.get("ums_debug")
+    if dbg:
+        console.print(f"[dim]ums_debug: {json.dumps(dbg, ensure_ascii=False, default=str)}[/dim]")
+
+
+def _print_do_not_kill_tip(*, inflight: int = 0, depth: int = 0) -> None:
+    """Aviso estável quando há (ou pode haver) carga GPU via UMS."""
+    busy = inflight > 0 or depth > 0
+    style = "yellow" if busy else "dim"
+    console.print(f"[{style}]{UMS_DO_NOT_KILL_TIP}[/{style}]")
+
+
+def _short_job_id(job_id: object, *, n: int = 12) -> str:
+    jid = str(job_id or "")
+    if not jid:
+        return "?"
+    return jid if len(jid) <= n else f"{jid[:n]}…"
 
 
 @click.group()
@@ -111,13 +145,18 @@ def stop_cmd() -> None:
 
 
 @cli.command("status")
-def status_cmd() -> None:
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON completo (inclui debug).")
+def status_cmd(as_json: bool) -> None:
     """Mostra o estado do UMS e backends carregados."""
     resp = _send({"cmd": P.CMD_STATUS}, timeout=5.0)
     if resp is None:
         console.print("[yellow]UMS não está ativo.[/yellow]")
         console.print("[dim]Arranca com: gamedev-model-server start[/dim]")
         sys.exit(1)
+
+    if as_json:
+        _print_json(resp)
+        return
 
     t = Table(title="[bold blue]Unified Model Server", box=box.ROUNDED)
     t.add_column("Campo", style="cyan", no_wrap=True)
@@ -126,7 +165,26 @@ def status_cmd() -> None:
     t.add_row("Socket", str(resp.get("socket", "?")))
     t.add_row("Backends carregados", f"{resp.get('loaded_count', 0)} ({resp.get('loaded_vram_mib', 0)} MiB)")
     t.add_row("Pedidos servidos", str(resp.get("requests_served", 0)))
+    q = resp.get("queue") or {}
+    t.add_row(
+        "Fila", f"{q.get('queue_depth', 0)} queued / {q.get('inflight', 0)} inflight (max {q.get('max_depth', '?')})"
+    )
+    t.add_row("Affinity cuts", str(resp.get("max_affinity_cuts", "?")))
+    t.add_row("Max inflight", str(resp.get("max_inflight", "?")))
     console.print(t)
+
+    qresp = _send({"cmd": P.CMD_QUEUE}, timeout=5.0)
+    if qresp:
+        console.print(f"[bold]{format_ums_holding_summary(qresp)}[/bold]")
+        _print_do_not_kill_tip(
+            inflight=int(qresp.get("inflight") or 0),
+            depth=int(qresp.get("queue_depth") or 0),
+        )
+    else:
+        _print_do_not_kill_tip(
+            inflight=int(q.get("inflight") or 0),
+            depth=int(q.get("queue_depth") or 0),
+        )
 
     backends = resp.get("backends", [])
     if backends:
@@ -146,6 +204,142 @@ def status_cmd() -> None:
                 str(b.get("ref_count", 0)),
             )
         console.print(bt)
+
+    dbg = resp.get("debug") or {}
+    last_errors = dbg.get("last_errors") or {}
+    if last_errors:
+        et = Table(title="[bold yellow]Últimos erros (debug)", box=box.SIMPLE)
+        et.add_column("Backend", style="cyan")
+        et.add_column("last_error", style="yellow")
+        for name, err in last_errors.items():
+            et.add_row(str(name), str(err)[:120])
+        console.print(et)
+    elif dbg:
+        console.print(
+            f"[dim]debug: loaded={dbg.get('loaded_backends', [])} "
+            f"depth={dbg.get('queue_depth', 0)} inflight={dbg.get('inflight', 0)}[/dim]"
+        )
+
+
+@cli.command("cancel")
+@click.argument("job_id")
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON da resposta.")
+def cancel_cmd(job_id: str, as_json: bool) -> None:
+    """Cancela um job UMS (queued imediato; running best-effort)."""
+    resp = _send({"cmd": P.CMD_CANCEL, "job_id": job_id}, timeout=10.0)
+    if resp is None:
+        console.print("[yellow]UMS não está ativo.[/yellow]")
+        sys.exit(1)
+    if as_json:
+        _print_json(resp)
+        if resp.get("status") != "ok":
+            sys.exit(1)
+        return
+    if resp.get("status") == "ok":
+        console.print(
+            f"[bold green]✓[/bold green] job {job_id[:8]}… → {resp.get('state', '?')} {resp.get('message', '')}"
+        )
+        if resp.get("ums_debug"):
+            console.print(f"[dim]ums_debug: {json.dumps(resp['ums_debug'], ensure_ascii=False)}[/dim]")
+    else:
+        _print_ums_error(resp)
+        sys.exit(1)
+
+
+@cli.command("queue")
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON completo (inclui debug).")
+def queue_cmd(as_json: bool) -> None:
+    """Lista jobs na fila e em execução."""
+    resp = _send({"cmd": P.CMD_QUEUE}, timeout=5.0)
+    if resp is None:
+        console.print("[yellow]UMS não está ativo.[/yellow]")
+        sys.exit(1)
+
+    if as_json:
+        _print_json(resp)
+        return
+
+    dbg = resp.get("debug") or {}
+    depth = int(resp.get("queue_depth") or 0)
+    inflight = int(resp.get("inflight") or 0)
+    console.print(
+        Panel.fit(
+            f"[bold]Fila UMS[/bold] — {depth} queued, "
+            f"{inflight} inflight, max_depth={resp.get('max_depth', '?')}\n"
+            f"[bold]{format_ums_holding_summary(resp)}[/bold]\n"
+            f"[dim]loaded={dbg.get('loaded_backends', [])} "
+            f"max_cuts={dbg.get('max_affinity_cuts', '?')} "
+            f"max_inflight={dbg.get('max_inflight', '?')}[/dim]",
+            border_style="blue",
+        )
+    )
+    _print_do_not_kill_tip(inflight=inflight, depth=depth)
+
+    def _print_jobs(title: str, jobs: list) -> None:
+        if not jobs:
+            console.print(f"[dim]{title}: (vazio)[/dim]")
+            return
+        jt = Table(title=f"[bold]{title}", box=box.SIMPLE)
+        jt.add_column("job_id", style="cyan")
+        jt.add_column("backend")
+        jt.add_column("priority")
+        jt.add_column("state")
+        jt.add_column("cuts", justify="right")
+        jt.add_column("wait_s", justify="right")
+        jt.add_column("gen_s", justify="right")
+        jt.add_column("progress")
+        for j in jobs:
+            pct = j.get("progress_pct")
+            msg = j.get("progress_msg") or ""
+            prog = f"{pct:.0%}" if isinstance(pct, (int, float)) else "—"
+            if msg:
+                prog = f"{prog} {msg}"[:28]
+            jt.add_row(
+                _short_job_id(j.get("job_id")),
+                str(j.get("backend", "")),
+                str(j.get("priority", "")),
+                str(j.get("state", "")),
+                str(j.get("affinity_cuts", 0)),
+                str(j.get("queue_wait_sec") if j.get("queue_wait_sec") is not None else "—"),
+                str(j.get("generate_sec") if j.get("generate_sec") is not None else "—"),
+                prog,
+            )
+        console.print(jt)
+        if jobs:
+            console.print(
+                "[dim]job_id truncado acima — `cancel` / `wait` aceitam prefixo ou UUID completo "
+                f"(ex.: cancel {_short_job_id(jobs[0].get('job_id'), n=8)})[/dim]"
+            )
+
+    _print_jobs("Running", resp.get("running") or [])
+    _print_jobs("Queued", resp.get("queued") or [])
+
+
+@cli.command("wait")
+@click.argument("job_id")
+@click.option("--timeout", default=600.0, show_default=True, type=float, help="Segundos máximos.")
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON da resposta final.")
+def wait_cmd(job_id: str, timeout: float, as_json: bool) -> None:
+    """Bloqueia até o job UMS terminar (ou timeout)."""
+    from gamedev_shared.model_server import wait_ums_job
+
+    console.print(f"[dim]À espera do job {job_id}… ({UMS_DO_NOT_KILL_TIP})[/dim]")
+    resp = wait_ums_job(job_id, timeout_sec=timeout)
+    if resp is None:
+        console.print("[yellow]UMS não está ativo ou job desconhecido.[/yellow]")
+        sys.exit(1)
+    if as_json:
+        _print_json(resp)
+        if resp.get("status") != "ok":
+            sys.exit(1)
+        return
+    if resp.get("status") == "ok":
+        console.print(f"[bold green]✓[/bold green] job {_short_job_id(job_id)} concluído")
+        if resp.get("output"):
+            console.print(f"[cyan]{resp['output']}[/cyan]")
+    else:
+        _print_ums_error(resp)
+        sys.exit(1)
 
 
 @cli.command("backends")
@@ -173,16 +367,24 @@ def backends_cmd() -> None:
 
 @cli.command("preload")
 @click.argument("name")
-def preload_cmd(name: str) -> None:
+@click.option("--json", "as_json", is_flag=True, help="Dump JSON da resposta.")
+def preload_cmd(name: str, as_json: bool) -> None:
     """Pré-carrega um backend (ex: text2icon)."""
     resp = _send({"cmd": P.CMD_PRELOAD, "backend": name}, timeout=600.0)
     if resp is None:
         console.print("[yellow]UMS não está ativo. Arranca com: gamedev-model-server start[/yellow]")
         sys.exit(1)
+    if as_json:
+        _print_json(resp)
+        if resp.get("status") != "ok":
+            sys.exit(1)
+        return
     if resp.get("status") == "ok":
         console.print(f"[bold green]✓ {resp.get('message', 'pré-carregado')}[/bold green]")
+        if resp.get("ums_debug"):
+            console.print(f"[dim]ums_debug: {json.dumps(resp['ums_debug'], ensure_ascii=False)}[/dim]")
     else:
-        console.print(f"[bold red]✗ {resp.get('error', resp)}[/bold red]")
+        _print_ums_error(resp)
         sys.exit(1)
 
 
@@ -281,6 +483,30 @@ def doctor_cmd() -> None:
         ("UMS ativo", ums_up, "Socket presente e respondendo" if ums_up else "Arrancar: gamedev-model-server start")
     )
 
+    # Fila / scheduler (se UMS up).
+    if ums_up:
+        qresp = _send({"cmd": P.CMD_STATUS}, timeout=5.0)
+        if qresp:
+            q = qresp.get("queue") or {}
+            depth = q.get("queue_depth", 0)
+            inflight = q.get("inflight", 0)
+            detail = (
+                f"depth={depth}/{q.get('max_depth', '?')}, inflight={inflight}, "
+                f"affinity_cuts≤{qresp.get('max_affinity_cuts', '?')}"
+            )
+            # Aviso se a fila está quase cheia.
+            max_d = int(q.get("max_depth") or 32)
+            ok_q = depth < max_d
+            checks.append(("Fila UMS", ok_q, detail if ok_q else f"SATURADA — {detail}"))
+            if inflight or depth:
+                checks.append(
+                    (
+                        "Não matar GPU",
+                        True,
+                        "UMS tem jobs — usa queue/cancel/wait; NÃO kill processos GPU",
+                    )
+                )
+
     # 2. GPU disponível?
     gpu_ok = shutil.which("nvidia-smi") is not None
     gpu_detail = ""
@@ -321,6 +547,7 @@ def doctor_cmd() -> None:
         "paint3d": "paint3d.painter",
         "text2sound": "text2sound.generator",
         "terrain3d": "terrain3d.generator",
+        "part3d": "part3d.pipeline",
     }
     for backend_name in sorted(registry.names):
         mod_path = tool_modules.get(backend_name)
@@ -347,6 +574,7 @@ def doctor_cmd() -> None:
         t.add_row(name, status, detail)
 
     console.print(t)
+    _print_do_not_kill_tip()
     if all_ok:
         console.print("[bold green]✓ Todos os checks passaram.[/bold green]")
     else:
@@ -354,7 +582,7 @@ def doctor_cmd() -> None:
 
 
 def main() -> None:
-    """Entry point para o console script ``gamedev-model-server``."""
+    """Entry point para ``gamedev-model-server`` / ``ums``."""
     cli()
 
 
