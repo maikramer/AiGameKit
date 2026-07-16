@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, call_ums, raise_if_ums_queue_full
+from gamedev_shared.cli_helpers import add_ums_options, call_ums, raise_if_ums_queue_full, with_ums_load_opts
 from gamedev_shared.quality import VALID_QUALITIES
 
 from .cli_rich import RICH_CLICK, click  # noqa: F401 — rich-click before commands
@@ -218,15 +218,18 @@ def generate_cmd(
     if not no_ums:
         ums_result = call_ums(
             "terrain3d",
-            {
-                "output": output,
-                "metadata_path": metadata_path,
-                "seed": seed,
-                "size": size,
-                "world_size": world_size,
-                "max_height": max_height,
-                "mode": mode,
-            },
+            with_ums_load_opts(
+                {
+                    "output": output,
+                    "metadata_path": metadata_path,
+                    "seed": seed,
+                    "size": size,
+                    "world_size": world_size,
+                    "max_height": max_height,
+                    "mode": mode,
+                    "device": device,
+                },
+            ),
             priority=ums_priority,
             stream=ums_stream,
             console=console if ums_stream else None,

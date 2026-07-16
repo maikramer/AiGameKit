@@ -92,7 +92,11 @@ def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool =
         ums_is_busy,
     )
 
-    ensure_vram_available(needed_mib=4000)
+    ensure_vram_available(
+        needed_mib=4000,
+        backend="paint3d",
+        quant_mode="sdnq-uint8" if memory_efficient else "none",
+    )
 
     kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
     allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
@@ -454,6 +458,8 @@ def texture(
             "verbose": verbose,
             "preserve_origin": preserve_origin,
             "memory_efficient": mem_eff,
+            # Pico VRAM UMS: sem isto o admit assume fp16 (peak ~8 GiB) e recusa GPUs ~6 GB.
+            "sdnq_preset": "sdnq-uint8" if mem_eff else "none",
             "gpu_ids": parsed_gpu_ids,
         },
         t_start=t_start,

@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
@@ -304,17 +304,20 @@ def generate_cmd(
         and output is not None
         and try_ums_delegation(
             "text2icon",
-            {
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "width": width,
-                "height": height,
-                "steps": steps,
-                "guidance": guidance_scale,
-                "seed": seed,
-                "transparent": transparent,
-                "negative_prompt": negative_prompt,
-            },
+            with_ums_load_opts(
+                {
+                    "prompt": prompt,
+                    "output": str(Path(output).resolve()),
+                    "width": width,
+                    "height": height,
+                    "steps": steps,
+                    "guidance": guidance_scale,
+                    "seed": seed,
+                    "transparent": transparent,
+                    "negative_prompt": negative_prompt,
+                },
+                gpu_ids=gpu_ids,
+            ),
             t_start=t_start,
             noun="Ícone",
             console=console,
@@ -485,7 +488,7 @@ def generate_cmd(
     "torch_compile",
     default=False,
     show_default=True,
-    help="torch.compile no transformer (Inductor).",
+    help="torch.compile no transformer (bench 6GB: hot pior — default OFF).",
 )
 @click.option(
     "--compile-mode",
@@ -506,9 +509,9 @@ def generate_cmd(
 @click.option(
     "--channels-last/--no-channels-last",
     "channels_last",
-    default=False,
+    default=True,
     show_default=True,
-    help="channels_last NHWC no VAE/transformer.",
+    help="channels_last NHWC (default ON em batch — ~-13% hot).",
 )
 @click.pass_context
 def batch_cmd(
@@ -725,10 +728,24 @@ def server_cmd(
     quant_preset: str,
     transformer_quant_preset: str,
 ) -> None:
-    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS)."""
+    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS).
+
+    Requer ``GAMEDEV_ALLOW_LEGACY_SERVER=1``.
+    """
+    import os
+
     from gamedev_shared.model_server import server_socket_path
 
     from . import server
+
+    allow = os.environ.get("GAMEDEV_ALLOW_LEGACY_SERVER", "").strip().lower()
+    if allow not in ("1", "true", "yes", "on"):
+        console.print(
+            "[bold red]Legacy server bloqueado.[/bold red] Usa "
+            "[cyan]gamedev-model-server start[/cyan] (UMS).\n"
+            "[dim]Override: GAMEDEV_ALLOW_LEGACY_SERVER=1[/dim]"
+        )
+        sys.exit(1)
 
     console.print(
         "[yellow]Deprecated:[/yellow] use [cyan]gamedev-model-server start[/cyan] "
@@ -749,7 +766,11 @@ def server_cmd(
         )
     )
 
-    gen_kwargs: dict[str, Any] = {}
+    gen_kwargs: dict[str, Any] = {
+        # Server amortiza load — channels_last ~-13% hot (bench 6GB).
+        "channels_last": True,
+        "torch_compile": False,
+    }
     if quant_preset != "auto":
         gen_kwargs["quant_preset"] = None if quant_preset == "none" else quant_preset
     if transformer_quant_preset != "auto":

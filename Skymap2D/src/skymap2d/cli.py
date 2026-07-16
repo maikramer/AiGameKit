@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
 from gamedev_shared.quality import VALID_QUALITIES
@@ -327,20 +327,23 @@ def generate_cmd(
 
         if not cpu and try_ums_delegation(
             "skymap2d",
-            {
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "width": width,
-                "height": height,
-                "steps": steps,
-                "guidance": guidance_scale,
-                "seed": seed,
-                "negative_prompt": negative_prompt,
-                "cfg_scale": cfg_scale,
-                "lora_strength": lora_strength,
-                "preset": preset,
-                "exr_scale": exr_scale,
-            },
+            with_ums_load_opts(
+                {
+                    "prompt": prompt,
+                    "output": str(Path(output).resolve()),
+                    "width": width,
+                    "height": height,
+                    "steps": steps,
+                    "guidance": guidance_scale,
+                    "seed": seed,
+                    "negative_prompt": negative_prompt,
+                    "cfg_scale": cfg_scale,
+                    "lora_strength": lora_strength,
+                    "preset": preset,
+                    "exr_scale": exr_scale,
+                },
+                gpu_ids=gpu_ids,
+            ),
             t_start=start,
             noun="Skymap",
             console=console,
@@ -473,9 +476,9 @@ def presets_cmd() -> None:
 @click.option(
     "--compile/--no-compile",
     "torch_compile",
-    default=False,
+    default=True,
     show_default=True,
-    help="torch.compile no transformer (Inductor).",
+    help="torch.compile no transformer (default ON em batch — amortiza cold ~6 min).",
 )
 @click.option(
     "--compile-mode",
@@ -498,7 +501,7 @@ def presets_cmd() -> None:
     "channels_last",
     default=False,
     show_default=True,
-    help="channels_last NHWC no VAE/transformer.",
+    help="channels_last NHWC no VAE/transformer (bench ~0 ganho).",
 )
 @click.pass_context
 def batch_cmd(

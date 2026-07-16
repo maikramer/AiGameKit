@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
 from gamedev_shared.gpu import get_system_info
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.path_utils import safe_filename
@@ -269,18 +269,21 @@ def generate_cmd(
         and output is not None
         and try_ums_delegation(
             "texture2d",
-            {
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "width": width,
-                "height": height,
-                "steps": steps,
-                "guidance": guidance_scale,
-                "seed": seed,
-                "negative_prompt": negative_prompt,
-                "preset": preset,
-                "ground": ground,
-            },
+            with_ums_load_opts(
+                {
+                    "prompt": prompt,
+                    "output": str(Path(output).resolve()),
+                    "width": width,
+                    "height": height,
+                    "steps": steps,
+                    "guidance": guidance_scale,
+                    "seed": seed,
+                    "negative_prompt": negative_prompt,
+                    "preset": preset,
+                    "ground": ground,
+                },
+                gpu_ids=gpu_ids,
+            ),
             t_start=t_start,
             noun="Textura",
             console=console,
@@ -616,10 +619,24 @@ def batch_cmd(
 )
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 def server_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> None:
-    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS)."""
+    """[DEPRECATED] Server per-tool. Preferir ``gamedev-model-server start`` (UMS).
+
+    Requer ``GAMEDEV_ALLOW_LEGACY_SERVER=1``.
+    """
+    import os
+
     from gamedev_shared.model_server import server_socket_path
 
     from . import server
+
+    allow = os.environ.get("GAMEDEV_ALLOW_LEGACY_SERVER", "").strip().lower()
+    if allow not in ("1", "true", "yes", "on"):
+        console.print(
+            "[bold red]Legacy server bloqueado.[/bold red] Usa "
+            "[cyan]gamedev-model-server start[/cyan] (UMS).\n"
+            "[dim]Override: GAMEDEV_ALLOW_LEGACY_SERVER=1[/dim]"
+        )
+        sys.exit(1)
 
     console.print(
         "[yellow]Deprecated:[/yellow] use [cyan]gamedev-model-server start[/cyan] "

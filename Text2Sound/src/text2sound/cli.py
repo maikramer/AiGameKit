@@ -28,7 +28,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
 from gamedev_shared.hf import get_hf_token, hf_home_display_rich
 from gamedev_shared.profiler.session import ProfilerSession, profile_span
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, TOOL_TEXT2SOUND, emit_progress, emit_result
@@ -779,18 +779,21 @@ def generate_cmd(
 
     if output is not None and try_ums_delegation(
         "text2sound",
-        {
-            "prompt": prompt,
-            "output": str(Path(output).resolve()),
-            "duration": duration,
-            "steps": steps,
-            "cfg_scale": cfg_scale,
-            "seed": effective_seed,
-            "sigma_min": sigma_min,
-            "sigma_max": sigma_max,
-            "sampler_type": sampler,
-            "negative_prompt": effective_negative,
-        },
+        with_ums_load_opts(
+            {
+                "prompt": prompt,
+                "output": str(Path(output).resolve()),
+                "duration": duration,
+                "steps": steps,
+                "cfg_scale": cfg_scale,
+                "seed": effective_seed,
+                "sigma_min": sigma_min,
+                "sigma_max": sigma_max,
+                "sampler_type": sampler,
+                "negative_prompt": effective_negative,
+            },
+            gpu_ids=gpu_ids,
+        ),
         t_start=start,
         noun="Áudio",
         console=console,

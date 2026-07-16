@@ -22,7 +22,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -720,6 +720,9 @@ def generate(
                     "mc_level": mc_level,
                     "remove_bg": not no_remove_bg,
                     "optimize_prompt": not no_prompt_optimize,
+                    # Peak VRAM no UMS depende disto (6GB → sdnq-int4).
+                    "sdnq_preset": None if sdnq_preset in (None, "none", "") else sdnq_preset,
+                    "origin_mode": export_origin,
                 }
                 if from_image:
                     _ums_request["from_image"] = from_image
@@ -736,13 +739,14 @@ def generate(
                 # UMS primeiro — nunca ensure_vram/kill antes de enfileirar.
                 if try_ums_delegation(
                     "text3d",
-                    _ums_request,
+                    with_ums_load_opts(_ums_request, gpu_ids=parsed_gpu_ids),
                     t_start=start_time,
                     noun="Mesh",
                     console=console,
                     enabled=not no_ums,
                     priority=ums_priority,
                     stream=ums_stream,
+                    timeout_sec=1800.0,
                 ):
                     sys.exit(0)
 
@@ -751,7 +755,11 @@ def generate(
                     from gamedev_shared.gpu import warn_if_vram_occupied
                     from gamedev_shared.model_server import UMS_DO_NOT_KILL_TIP, ensure_vram_available
 
-                    ensure_vram_available(needed_mib=5000)
+                    ensure_vram_available(
+                        needed_mib=5000,
+                        backend="text3d",
+                        quant_mode=None if sdnq_preset in (None, "none") else sdnq_preset,
+                    )
                     if gpu_kill:
                         console.print(
                             Panel(
@@ -1926,7 +1934,11 @@ def generate_batch(
     # generate-batch é in-process (UMS por item via CLIs single). Respeitar fila UMS.
     from gamedev_shared.model_server import UMS_DO_NOT_KILL_TIP, ensure_vram_available
 
-    ensure_vram_available(needed_mib=5000)
+    ensure_vram_available(
+        needed_mib=5000,
+        backend="text3d",
+        quant_mode=None if sdnq_preset in (None, "none", "") else sdnq_preset,
+    )
 
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))

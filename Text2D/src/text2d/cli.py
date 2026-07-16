@@ -19,7 +19,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -278,15 +278,18 @@ def generate_cmd(
         and output is not None
         and try_ums_delegation(
             "text2d",
-            {
-                "prompt": prompt,
-                "output": str(Path(output).resolve()),
-                "width": width,
-                "height": height,
-                "steps": steps,
-                "guidance": guidance_scale,
-                "seed": seed,
-            },
+            with_ums_load_opts(
+                {
+                    "prompt": prompt,
+                    "output": str(Path(output).resolve()),
+                    "width": width,
+                    "height": height,
+                    "steps": steps,
+                    "guidance": guidance_scale,
+                    "seed": seed,
+                },
+                gpu_ids=gpu_ids,
+            ),
             t_start=t_start,
             noun="Imagem",
             console=console,
@@ -479,6 +482,28 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     show_default=True,
     help="Quality tier (fast / low / medium / high / highest).",
 )
+@click.option(
+    "--compile/--no-compile",
+    "torch_compile",
+    default=True,
+    show_default=True,
+    help="torch.compile no transformer (default ON em batch — amortiza cold).",
+)
+@click.option(
+    "--compile-mode",
+    "torch_compile_mode",
+    type=click.Choice(["default", "reduce-overhead", "max-autotune"]),
+    default="default",
+    show_default=True,
+    help="Modo Inductor.",
+)
+@click.option(
+    "--channels-last/--no-channels-last",
+    "channels_last",
+    default=True,
+    show_default=True,
+    help="channels_last NHWC (default ON em batch).",
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @click.pass_context
 def generate_batch_cmd(
@@ -496,6 +521,9 @@ def generate_batch_cmd(
     hw_auto: bool,
     batch_verbose: bool,
     quality: str,
+    torch_compile: bool,
+    torch_compile_mode: str,
+    channels_last: bool,
 ) -> None:
     """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
     global _batch_gen
@@ -539,6 +567,7 @@ def generate_batch_cmd(
 
     from .hardware import detect_hardware_profile, hw_auto_enabled
 
+    hwp = None
     mem_eff = False
     if hw_auto and hw_auto_enabled() and not cpu:
         hwp = detect_hardware_profile()
@@ -562,6 +591,9 @@ def generate_batch_cmd(
             model_id=resolved_model,
             gpu_ids=parsed_gpu_ids,
             quant_preset=quant_preset,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
         )
         _batch_gen = gen
 

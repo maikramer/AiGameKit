@@ -8,7 +8,7 @@ Suporta ``stabilityai/stable-audio-open-1.0`` (música, até ~47s) e
 from __future__ import annotations
 
 import threading
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any
@@ -17,6 +17,8 @@ import torch
 from einops import rearrange
 from stable_audio_tools import get_pretrained_model
 from stable_audio_tools.inference.generation import generate_diffusion_cond
+
+from gamedev_shared.diffusion_control import GenerationAborted
 
 from .models import MODEL_MUSIC_ID
 
@@ -403,6 +405,8 @@ class AudioGenerator:
         sampler_type: str = DEFAULT_SAMPLER,
         prompt_hints: list[str] | None = None,
         negative_prompt: str | None = None,
+        should_abort: Callable[[], bool] | None = None,
+        on_step: Callable[[int, int], None] | None = None,
     ) -> GenerationResult:
         """Gera áudio estéreo a partir de um prompt de texto.
 
@@ -419,11 +423,19 @@ class AudioGenerator:
             negative_prompt: Negative prompt (anti-guidance). Steering away from
                 described concepts via batch CFG. None/empty = sem negative prompt
                 (comportamento clássico do modelo).
+            should_abort: Se devolver True, aborta no próximo step do sampler (UMS cancel).
+            on_step: ``(step_1based, total) -> None`` para progresso UMS.
 
         Returns:
             GenerationResult com tensor de áudio raw (float32, 2 canais).
+
+        Raises:
+            GenerationAborted: Cancel cooperativo a meio da difusão.
         """
         self._ensure_loaded()
+
+        if should_abort is not None and should_abort():
+            raise GenerationAborted("cancelled before diffusion")
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -479,8 +491,24 @@ class AudioGenerator:
             )
             if negative_conditioning is not None:
                 gen_kwargs["negative_conditioning"] = negative_conditioning
+            if should_abort is not None or on_step is not None:
+                total_steps = max(1, int(steps))
+
+                def _sampler_callback(info: dict[str, Any]) -> None:
+                    # k-diffusion / sample_rf passam dict com 'i' (0-based ou 1-based).
+                    raw_i = int(info.get("i", 0))
+                    cur = raw_i if raw_i >= 1 else raw_i + 1
+                    cur = min(max(cur, 1), total_steps)
+                    if on_step is not None:
+                        on_step(cur, total_steps)
+                    if should_abort is not None and should_abort():
+                        raise GenerationAborted("cancelled during diffusion")
+
+                gen_kwargs["callback"] = _sampler_callback
             output = generate_diffusion_cond(self._model, **gen_kwargs)
             if has_pretransform:
+                if should_abort is not None and should_abort():
+                    raise GenerationAborted("cancelled before decode")
                 output = self._decode_latents(output)
 
         audio = rearrange(output, "b d n -> d (b n)")

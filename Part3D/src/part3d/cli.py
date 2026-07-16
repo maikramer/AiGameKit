@@ -646,9 +646,11 @@ def decompose(
     if mc_algo is not None:
         _ums_request["mc_algo"] = mc_algo
 
+    from gamedev_shared.cli_helpers import with_ums_load_opts
+
     if try_ums_delegation(
         "part3d",
-        _ums_request,
+        with_ums_load_opts(_ums_request, gpu_ids=parsed_gpu_ids),
         t_start=t_start,
         noun="Partes",
         console=console,
