@@ -50,7 +50,7 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **Export origin:** `--export-origin feet` is the default for game assets (y=0 at soles). `center` for pivots at mesh center. `none` leaves raw Hunyuan origin.
 
-**Topology fix pipeline** (the `prepare_mesh_topology()` default chain): merge vertices (digits_vertex=5) → non-manifold repair (PyMeshLab) → weld (0.01% of bounding-box diagonal) → Taubin smoothing (3 iterations, volume-preserving) → isotropic adaptive remesh (3 iterations, target edge length = 1% diagonal).
+**Topology fix pipeline** (`prepare_mesh_topology` → Shared profile `topology_clean`): reweld coincident → sanitize → exact + density weld → dissolve/loose → long edges → slivers → debris → fill holes → `make_watertight` → shade-smooth. LOD/bake-master: `pre_decimate_uv` before Decimate, `post_decimate` after. No PyMeshLab/Taubin in this path.
 
 **LOD and rigged meshes:** `text3d lod` preserves armatures and animations. No separate LOD path exists for rigged assets. Weight transfer to LODs is handled by `rigging3d transfer-weights`.
 
@@ -64,7 +64,7 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **DO NOT modify vendored code** under `src/text3d/hy3dshape/` (Tencent Hunyuan3D-2.1, upstream license).
 
-**`simplify-textured`:** Decimates GLB preserving texture and UV via PyMeshLab when a material is present. Without texture, falls back to classic quadric decimation. Don't assume one or the other.
+**`simplify-textured`:** Decimates GLB preserving texture and UV (bpy Decimate COLLAPSE via `remesh_textured_glb`). Without texture, falls back to geometry-only decimation.
 
 **`align-plus-z`:** Calls `align_largest_plus_z_face_normal_to_ground` with a `--min-height-ratio` guard to prevent "folding" humanoid meshes when the heuristic misidentifies the ground-facing plane.
 

@@ -22,6 +22,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
+from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -486,6 +487,7 @@ def skill_install_cmd(target: Path, force: bool) -> None:
     default=None,
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
+@add_ums_options
 @click.pass_context
 def generate(
     ctx,
@@ -533,6 +535,9 @@ def generate(
     no_topology_fix,
     quality,
     category,
+    ums_priority,
+    no_ums,
+    ums_stream,
 ):
     """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
     from gamedev_shared.profiler import ProfilerSession
@@ -610,37 +615,9 @@ def generate(
     if not from_image and not (prompt and str(prompt).strip()):
         raise click.UsageError("Indica um PROMPT em texto ou --from-image /path/to/png")
 
-    # Pedir aos model servers ativos para descarregar (libertar VRAM) antes de ocupar a GPU.
-    if not cpu:
-        from gamedev_shared.model_server import ensure_vram_available
-
-        ensure_vram_available(needed_mib=5000)
-
+    # GPU prep (ensure_vram / kill) só no path in-process — UMS é a autoridade da fila.
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
-    if not cpu and gpu_kill:
-        console.print(
-            Panel(
-                "[bold]Terminar processos GPU alvo[/bold] (SIGTERM → espera → SIGKILL se vivo)\n"
-                "[dim]Mantém o PID atual e Xorg / gnome-shell / Wayland. "
-                "Desliga com [bold]--no-gpu-kill-others[/bold] ou TEXT3D_GPU_KILL_OTHERS=0[/dim]",
-                border_style="yellow",
-            )
-        )
-        for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
-            console.print(f"[dim]{line}[/dim]")
-        clear_cuda_memory()
-        time.sleep(0.5)
-    if not cpu:
-        try:
-            enforce_exclusive_gpu(allow_shared=allow_shared)
-        except RuntimeError as e:
-            raise click.ClickException(str(e)) from e
-
-    from gamedev_shared.gpu import warn_if_vram_occupied
-
-    if not cpu:
-        warn_if_vram_occupied()
 
     info_table = Table(show_header=False, box=box.SIMPLE)
     if from_image:
@@ -719,25 +696,6 @@ def generate(
             if export_rotation_x_deg is not None:
                 _defaults.set_export_rotation_x_rad_override(math.radians(float(export_rotation_x_deg)))
             try:
-                with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
-                    generator = HunyuanTextTo3DGenerator(
-                        device="cpu" if cpu else None,
-                        verbose=verbose,
-                        hunyuan_subfolder=model_subfolder,
-                        sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
-                        gpu_ids=parsed_gpu_ids,
-                        volume_decoder=volume_decoder,
-                        mc_algo=mc_algo,
-                        compile_models=compile_models,
-                        compile_mode=compile_mode,
-                        sage_attention=sage_attention,
-                        sdnq_quantized_matmul=sdnq_matmul,
-                        offload=offload,
-                        allow_group_offload=allow_group_offload,
-                        fp8_layerwise=fp8_layerwise,
-                        channels_last=channels_last,
-                    )
-
                 if output is None:
                     ensure_dirs()
                     timestamp = int(time.time())
@@ -751,9 +709,6 @@ def generate(
                     output = Path(output)
 
                 start_time = time.time()
-
-                # Preferir o Unified Model Server (UMS) se ativo — evicção inteligente de VRAM.
-                from gamedev_shared.model_server import delegate_to_ums
 
                 _ums_request: dict[str, Any] = {
                     "output": str(output.resolve()) if hasattr(output, "resolve") else str(output),
@@ -778,16 +733,67 @@ def generate(
                         _ums_request["text2d_model_id"] = text2d_model_id
                     _ums_request["t2d_full_gpu"] = t2d_full_gpu
 
-                ums_result = delegate_to_ums("text3d", _ums_request)
-                if ums_result and ums_result.get("status") == "ok":
-                    elapsed = time.time() - start_time
-                    console.print(
-                        f"[bold green]\u2713[/bold green] Mesh (via UMS): [cyan]{ums_result['output']}[/cyan]"
-                    )
-                    console.print(f"[dim]Tempo total: {elapsed:.1f}s[/dim]")
+                # UMS primeiro — nunca ensure_vram/kill antes de enfileirar.
+                if try_ums_delegation(
+                    "text3d",
+                    _ums_request,
+                    t_start=start_time,
+                    noun="Mesh",
+                    console=console,
+                    enabled=not no_ums,
+                    priority=ums_priority,
+                    stream=ums_stream,
+                ):
                     sys.exit(0)
-                elif ums_result and ums_result.get("status") == "error":
-                    console.print(f"[yellow]UMS erro: {ums_result.get('error', '?')} — fallback in-process[/yellow]")
+
+                # Path in-process: coordenação VRAM / kill só aqui.
+                if not cpu:
+                    from gamedev_shared.gpu import warn_if_vram_occupied
+                    from gamedev_shared.model_server import UMS_DO_NOT_KILL_TIP, ensure_vram_available
+
+                    ensure_vram_available(needed_mib=5000)
+                    if gpu_kill:
+                        console.print(
+                            Panel(
+                                "[bold]Terminar processos GPU alvo[/bold] "
+                                "(SIGTERM → espera → SIGKILL se vivo)\n"
+                                "[dim]Mantém o PID atual e Xorg / gnome-shell / Wayland. "
+                                "Desliga com [bold]--no-gpu-kill-others[/bold] ou "
+                                f"TEXT3D_GPU_KILL_OTHERS=0[/dim]\n[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
+                                border_style="yellow",
+                            )
+                        )
+                        for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
+                            console.print(f"[dim]{line}[/dim]")
+                            if line.startswith("[recusado]"):
+                                raise click.ClickException(line)
+                        clear_cuda_memory()
+                        time.sleep(0.5)
+                    try:
+                        enforce_exclusive_gpu(allow_shared=allow_shared)
+                    except RuntimeError as e:
+                        raise click.ClickException(str(e)) from e
+                    warn_if_vram_occupied()
+
+                with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
+                    generator = HunyuanTextTo3DGenerator(
+                        device="cpu" if cpu else None,
+                        verbose=verbose,
+                        hunyuan_subfolder=model_subfolder,
+                        sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
+                        gpu_ids=parsed_gpu_ids,
+                        volume_decoder=volume_decoder,
+                        mc_algo=mc_algo,
+                        compile_models=compile_models,
+                        compile_mode=compile_mode,
+                        sage_attention=sage_attention,
+                        sdnq_quantized_matmul=sdnq_matmul,
+                        offload=offload,
+                        allow_group_offload=allow_group_offload,
+                        fp8_layerwise=fp8_layerwise,
+                        channels_last=channels_last,
+                    )
+
                 item_id = output.stem if output else "text3d_single"
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
@@ -1217,6 +1223,12 @@ def bake_master_cmd(
     help="Tamanho máximo (arestas) de buracos a preencher. 0 desativa fill_holes.",
 )
 @click.option(
+    "--watertight/--no-watertight",
+    default=True,
+    show_default=True,
+    help="Fecho total: caps planares + base aberta + fill progressivo (assets de jogo devem ser fechados).",
+)
+@click.option(
     "--export-origin",
     type=click.Choice(["feet", "center", "none"]),
     default=None,
@@ -1235,6 +1247,7 @@ def topology_fix_cmd(
     input_mesh: Path,
     output: Path | None,
     fill_holes_sides: int,
+    watertight: bool,
     export_origin: str | None,
     export_rotation_x_deg: float | None,
 ) -> None:
@@ -1259,6 +1272,7 @@ def topology_fix_cmd(
             input_mesh,
             out_path,
             fill_holes_sides=fill_holes_sides,
+            watertight=watertight,
         )
         if export_origin is not None and export_origin != "none":
             from .utils.export import convert_mesh
@@ -1439,15 +1453,10 @@ def lod_cmd(
 ) -> None:
     """Gera três GLB com níveis de detalhe (LOD0=cheio, LOD1/LOD2 decimados).
 
-    Requer ``fast-simplification`` (dependência do pacote text3d). Saída:
-    ``<basename>_lod0.glb``, ``<basename>_lod1.glb``, ``<basename>_lod2.glb``.
-
-    Antes da decimação aplica-se ``prepare_mesh_topology`` (fundir vértices,
-    manifold) para reduzir rachas nos LODs; ``<basename>_lod0.glb`` é a mesh corrigida em
-    resolução total (podes copiar para substituir o GLB fonte se quiseres alinhar o jogo).
-
-    Por defeito **não** corre pymeshfix (decimação pura). Usa ``--meshfix`` só se precisares
-    de fechar buracos pequenos; evita-se ``clean()`` do PyTMesh que destrói LODs decimados.
+    Com ``--painted-mesh``: ``remesh_textured_glb`` (perfil ``pre_decimate_uv``
+    + Decimate COLLAPSE + piso heurístico de faces). Sem painted: decimate
+    geométrico. ``--meshfix`` só fecha buracos pequenos no caminho geométrico
+    (não é o topology-fix completo).
     """
     stem = basename_opt if basename_opt else input_mesh.stem
     try:
@@ -1786,6 +1795,17 @@ def align_plus_z_cmd(
     default=None,
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
+@click.option(
+    "--no-topology-fix/--topology-fix",
+    "no_topology_fix",
+    default=True,
+    show_default=True,
+    help=(
+        "Por defeito salta o reparo (shape cru) — a master pipeline limpa no "
+        "Stage 2 ``text3d topology-fix``. Use ``--topology-fix`` para reparar "
+        "in-process (custo duplo se também correr topology-fix depois)."
+    ),
+)
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
 @click.pass_context
 def generate_batch(
@@ -1817,6 +1837,7 @@ def generate_batch(
     hw_auto: bool,
     quality: str,
     category: str | None,
+    no_topology_fix: bool,
     batch_verbose: bool,
 ) -> None:
     """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout)."""
@@ -1902,8 +1923,8 @@ def generate_batch(
     if base_chunks is None:
         base_chunks = _defaults.DEFAULT_NUM_CHUNKS
 
-    # Pedir aos model servers ativos para descarregar antes de ocupar a GPU.
-    from gamedev_shared.model_server import ensure_vram_available
+    # generate-batch é in-process (UMS por item via CLIs single). Respeitar fila UMS.
+    from gamedev_shared.model_server import UMS_DO_NOT_KILL_TIP, ensure_vram_available
 
     ensure_vram_available(needed_mib=5000)
 
@@ -1912,6 +1933,8 @@ def generate_batch(
     if gpu_kill:
         for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
             _err.print(f"[dim]{line}[/dim]")
+            if line.startswith("[recusado]"):
+                raise click.ClickException(f"{line} — {UMS_DO_NOT_KILL_TIP}")
         clear_cuda_memory()
         time.sleep(0.5)
     try:
@@ -1985,7 +2008,8 @@ def generate_batch(
                 )
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=0)
-                mesh = prepare_mesh_topology(mesh)
+                if not no_topology_fix:
+                    mesh = prepare_mesh_topology(mesh)
                 emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=100)
                 faces = len(mesh.faces)
 

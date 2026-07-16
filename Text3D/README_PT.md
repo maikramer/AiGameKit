@@ -147,7 +147,7 @@ Text3D/
 
 ## Limitações do image-to-3D e pós-processo
 
-O Hunyuan3D gera **superfície a partir de uma vista**: geometria fina (pernas, espelhos) pode desaparecer, aparecer **várias ilhas** (pés separados) ou aspereza tipo "argila". Por defeito o CLI aplica **reparo de mesh** via `prepare_mesh_topology`: merge de vértices, reparo non-manifold, weld por distância (0.01% da diagonal), Taubin smoothing (3 iterações, preserva volume) e isotropic remeshing adaptativo — fecha micro-cracks invisíveis do marching cubes que abriam ao decimar ou aplicar skinning.
+O Hunyuan3D gera **superfície a partir de uma vista**: geometria fina pode desaparecer ou aparecer aspereza tipo "argila". O reparo canónico é o perfil Shared `topology_clean` via `prepare_mesh_topology` / `text3d topology-fix` (weld, slivers, debris, fill, watertight, shade-smooth). Na master pipeline o Stage 1 fica cru (`--no-topology-fix`) e o Stage 2 faz o clean.
 
 ```bash
 # Mais detalhe geométrico (mais VRAM/tempo)

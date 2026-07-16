@@ -23,7 +23,7 @@ Generation presets (`--preset`) adjust steps, octree resolution, and chunk count
 | `balanced` | 24 | 256 | 8 000 | ~6 GB VRAM, good quality |
 | `hq` | 30 | 384 | 20 000 | Large GPU, highest quality |
 
-After generation, `prepare_mesh_topology` runs automatically to repair marching-cubes artifacts (see [Mesh Topology](#mesh-topology)).
+After generation, use ``--no-topology-fix`` (recommended in the master pipeline) for a raw shape, then ``text3d topology-fix`` (Shared profile ``topology_clean``) as Stage 2. Without that flag, ``generate`` still runs topology repair in-process (see [Mesh Topology](#mesh-topology)).
 
 > **License:** Tencent Hunyuan3D-2.1 weights are under the [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-2.1) — territory restrictions apply. Text2D (FLUX SDNQ) license: see [Text2D/README](../Text2D/README.md) and root [README](../README.md).
 
@@ -335,20 +335,21 @@ text3d skill install --target ./my-game --force
 
 ## Mesh Topology
 
-`prepare_mesh_topology` runs automatically after every `generate` and `generate-batch` call. It repairs marching-cubes artifacts to produce clean, game-ready meshes:
+`prepare_mesh_topology` (Shared profile `topology_clean`) repairs marching-cubes artifacts. In the master pipeline, Stage 1 `generate --no-topology-fix` keeps the raw shape; Stage 2 `topology-fix` runs the clean. `generate-batch` defaults to `--no-topology-fix` for the same reason.
 
 | Step | Detail |
 |------|--------|
-| Merge vertices | Precision: 5 decimal digits |
-| Non-manifold repair | Via pymeshlab |
-| Weld by distance | 0.01% of bounding-box diagonal |
-| Loose-debris removal | Drops tiny disconnected islands (< max(64, 0.05% of faces)) — marching-cubes/quantization floaters |
-| Taubin smoothing | 3 iterations, volume-preserving |
-| Isotropic remeshing | 3 iterations, target edge length = 1% of diagonal |
+| Sanitize nonfinite | Drop NaN/Inf vertices (bpy) |
+| Weld | Exact `1e-5` + density-adaptive distance |
+| Long edges / slivers | Remove outlier fans and needle faces |
+| Loose debris | Drop tiny islands (`ratio=0.0005`, `min_faces=64`) |
+| Fill holes | Small holes (`--fill-holes-sides`, default 12; raised when watertight) |
+| Watertight | Selective planar caps + progressive fill (`make_watertight`) |
+| Shade-smooth | 60° auto-smooth (no custom split normals) |
 
-**Known artifacts:** Hunyuan3D marching-cubes outputs tend to have thick/double walls and tiny cracks. For manual repair: merge/manifold and close only very small holes before making watertight — do not treat the large base opening (e.g., crate after removing pedestal) as a defect.
+LOD / bake-master use profile `pre_decimate_uv` before Decimate (UV-safe weld `0.0005`, slivers, no watertight).
 
-**Skip for texturing:** Use `--skip-remesh` to disable the isotropic remeshing step, preserving the high-poly mesh for better Paint3D texturing quality.
+**Known artifacts:** Hunyuan3D marching-cubes outputs tend to have thick/double walls and tiny cracks. Close only very small holes before watertight — do not treat a large intentional base opening as a defect to seal blindly.
 
 ## Quality Presets
 

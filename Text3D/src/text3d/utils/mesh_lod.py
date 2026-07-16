@@ -52,19 +52,10 @@ def _shade_smooth(mesh_obj) -> None:
 
 
 def _dynamic_weld_distance(vertex_count: int) -> float:
-    """Distância de weld adaptativa baseada na densidade de vértices.
+    """Compat: delega em ``gamedev_shared.mesh_repair.dynamic_weld_distance``."""
+    from gamedev_shared.mesh_repair import dynamic_weld_distance
 
-    Malhas mais densas (>150k vértices) usam thresholds menores para
-    preservar detalhes; malhas leves (<50k) usam thresholds maiores
-    para fechar rachaduras de marching cubes.
-    """
-    if vertex_count > 150_000:
-        return 0.003
-    if vertex_count > 100_000:
-        return 0.005
-    if vertex_count > 50_000:
-        return 0.008
-    return 0.01
+    return dynamic_weld_distance(vertex_count)
 
 
 def _load_glb_with_armatures(path: Path) -> tuple:
@@ -87,8 +78,19 @@ def _load_glb_with_armatures(path: Path) -> tuple:
     return mesh_obj, arm_objs
 
 
-def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
-    """Exporta mesh + texturas para GLB (geometry + materials + images)."""
+def _export_textured_glb(
+    output_path: Path,
+    mesh_obj,
+    arm_objs: list,
+    *,
+    export_normals: bool = True,
+    export_tangents: bool | None = None,
+) -> None:
+    """Exporta mesh + texturas para GLB (geometry + materials + images).
+
+    ``export_normals=False`` (usado após topology-fix watertight) evita que o
+    exporter glTF parta vértices em arestas duras e reabra o volume no reimport.
+    """
     import bpy
 
     export_objects = [mesh_obj, *arm_objs]
@@ -99,6 +101,8 @@ def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     has_armature = bool(arm_objs)
+    if export_tangents is None:
+        export_tangents = bool(export_normals)
     bpy.ops.export_scene.gltf(
         filepath=str(output_path),
         export_format="GLB",
@@ -107,10 +111,10 @@ def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
         export_animations=has_armature,
         export_skins=has_armature,
         export_all_influences=False,
-        export_normals=True,
+        export_normals=export_normals,
         # Tangents so the normal map has no seams at UV islands — decimated
         # LODs are especially prone to this without them.
-        export_tangents=True,
+        export_tangents=export_tangents,
         export_texcoords=True,
         export_materials="EXPORT",
         export_image_format="AUTO",
@@ -120,67 +124,51 @@ def _export_textured_glb(output_path: Path, mesh_obj, arm_objs: list) -> None:
 _export_glb = _export_textured_glb
 
 
-# Primitivas de reparação unificadas em gamedev_shared.mesh_repair (bmesh weld
-# sem EDIT mode; debris union-find preserva sempre a maior ilha).
+# Primitivas de reparação unificadas em gamedev_shared.mesh_repair.
 from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E402
-from gamedev_shared.mesh_repair import normals_consistent as _make_normals_consistent  # noqa: E402
-from gamedev_shared.mesh_repair import remove_doubles as _remove_doubles  # noqa: E402
 
 
-def _remove_loose_debris(obj, *, face_ratio: float = 0.0005, min_faces: int = 64) -> int:
-    """Debris removal com defaults conservadores do Text3D (ver ``mesh_repair``).
+def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12, watertight: bool = True) -> None:
+    """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
 
-    Fragmentos de iso-superfície têm tipicamente < 50 faces; partes
-    intencionais pequenas (olhos, fivelas) ficam acima de 64.
-    """
-    from gamedev_shared.mesh_repair import remove_loose_debris
-
-    return remove_loose_debris(obj, face_ratio=face_ratio, min_faces=min_faces)
-
-
-def _prepare_topology_bpy(mesh_obj, fill_holes_sides: int = 12) -> None:
-    """Pipeline de preparação de topologia sobre um bpy mesh object (in-place).
-
-    Ordem fixa, idempotente:
-    1. Remove doubles exactos (1e-5)
-    2. Weld adaptativo por distância (fecha micro-cracks de marching cubes)
-    3. Remove ilhas soltas minúsculas (debris de MC/quantização: cascas, floaters)
-    4. Normais consistentes (outward)
-    5. Fill holes pequenos (≤ ``fill_holes_sides`` lados; defeito 12 evita
-       tapar aberturas grandes intencionais como base de crates)
-    6. Shade-smooth + auto-smooth angle (sem custom split normals!)
+    Shade-smooth fica no Text3D (export GLTF / V/Tri). O reweld de normal-splits
+    e o watertight estão no perfil — sem segunda passagem duplicada.
     """
     log = logging.getLogger(__name__)
 
     n_faces_before = len(mesh_obj.data.polygons)
     n_verts_before = len(mesh_obj.data.vertices)
 
-    removed = _remove_doubles(mesh_obj, threshold=0.00001)
-    if removed:
-        log.info("Remove doubles exactos: %d vértices removidos", removed)
+    from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
-    weld_dist = _dynamic_weld_distance(len(mesh_obj.data.vertices))
-    removed = _remove_doubles(mesh_obj, threshold=weld_dist)
-    if removed:
-        log.info("Weld adaptativo (%.4f): %d vértices removidos", weld_dist, removed)
+    overrides: dict = {"watertight": watertight}
+    if fill_holes_sides == 0:
+        overrides["fill_holes_sides"] = 0
+    elif watertight:
+        # Volume fechado: fill generoso; make_watertight faz o resto.
+        overrides["fill_holes_sides"] = max(int(fill_holes_sides), 64)
+    else:
+        overrides["fill_holes_sides"] = fill_holes_sides
 
-    try:
-        removed = _remove_loose_debris(mesh_obj)
-        if removed:
-            log.info("Debris removido: %d faces em ilhas soltas minúsculas", removed)
-    except Exception as exc:
-        log.warning("remove_loose_debris falhou: %s", exc)
+    stats = repair_mesh_object_with_profile(mesh_obj, "topology_clean", **overrides)
 
-    try:
-        _make_normals_consistent(mesh_obj)
-    except Exception as exc:
-        log.warning("normals_make_consistent falhou: %s", exc)
-
-    if fill_holes_sides > 0:
-        try:
-            _fill_holes_bpy(mesh_obj, sides=fill_holes_sides)
-        except Exception as exc:
-            log.warning("fill_holes falhou: %s", exc)
+    if stats.get("nonfinite_verts"):
+        log.warning("Guard anti-NaN: %d vértices não-finitos removidos", stats["nonfinite_verts"])
+    if stats.get("rewelded_coincident"):
+        log.info("Reweld coincident (normal-split): %d vértices", stats["rewelded_coincident"])
+    if stats.get("long_edge_faces"):
+        log.warning("Leque/arestas outlier: %d faces removidas", stats["long_edge_faces"])
+    if stats.get("sliver_faces"):
+        log.warning("Slivers (agulhas): %d faces removidas", stats["sliver_faces"])
+    if stats.get("debris_faces"):
+        log.info("Debris removido: %d faces em ilhas soltas minúsculas", stats["debris_faces"])
+    if watertight and stats.get("boundary_before"):
+        log.info(
+            "Watertight: %d arestas abertas → %d (caps=%d)",
+            stats.get("boundary_before", 0),
+            stats.get("boundary_after", 0),
+            stats.get("loops_capped", 0),
+        )
 
     _shade_smooth(mesh_obj)
 
@@ -231,6 +219,7 @@ def prepare_mesh_topology(
     output_path: Path | str | None = None,
     *,
     fill_holes_sides: int = 12,
+    watertight: bool = True,
     **_legacy: object,
 ) -> Path:
     """Prepara topologia de um GLB: remove doubles, weld, normais, fill holes.
@@ -255,7 +244,7 @@ def prepare_mesh_topology(
         logging.getLogger(__name__).warning("prepare_mesh_topology: kwarg 'skip_remesh' está obsoleto e será ignorado.")
     _was_trimesh = hasattr(input_path, "export")
     try:
-        return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides)
+        return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides, watertight)
     except ImportError:
         logging.getLogger(__name__).warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
         if _was_trimesh:
@@ -263,7 +252,9 @@ def prepare_mesh_topology(
         return Path(input_path)
 
 
-def _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides: int = 12):
+def _prepare_mesh_topology_impl(
+    input_path, output_path, _was_trimesh, fill_holes_sides: int = 12, watertight: bool = True
+):
     if _was_trimesh:
         import tempfile
 
@@ -278,8 +269,9 @@ def _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_hole
         _output = Path(output_path) if output_path else _input
 
     mesh_obj, arm_objs = _load_glb_with_armatures(_input)
-    _prepare_topology_bpy(mesh_obj, fill_holes_sides=fill_holes_sides)
-    _export_glb(_output, mesh_obj, arm_objs)
+    _prepare_topology_bpy(mesh_obj, fill_holes_sides=fill_holes_sides, watertight=watertight)
+    # Watertight: export sem normals/tangents para o fecho sobreviver ao round-trip glTF.
+    _export_glb(_output, mesh_obj, arm_objs, export_normals=not watertight)
 
     if _was_trimesh:
         import trimesh
@@ -418,7 +410,7 @@ def generate_lod_textured_glb_triplet(
     ``apply_meshopt`` controla EXT_meshopt_compression (desactivado por defeito;
     a quantização pode deslocar origem e inverter orientação nalguns viewers).
     """
-    from text3d.utils.mesh_remesh_textured import remesh_textured_glb
+    from text3d.utils.mesh_remesh_textured import _clamp_decimate_target, remesh_textured_glb
 
     painted = Path(painted_path)
     output_dir = Path(output_dir)
@@ -448,24 +440,29 @@ def generate_lod_textured_glb_triplet(
     clear_scene()
 
     if target_faces and target_faces > 0:
-        lod0_target = target_faces
-        lod1_target = max(100, target_faces // 2)
-        lod2_target = max(50, target_faces // 4)
+        lod0_target = _clamp_decimate_target(n, target_faces)
+        lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, lod0_target // 2))
+        lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, lod0_target // 4))
     else:
         lod0_target = n
-        lod1_target = max(min_faces_lod1, int(n * lod1_ratio))
-        lod2_target = max(min_faces_lod2, int(n * lod2_ratio))
+        lod1_target = _clamp_decimate_target(n, max(min_faces_lod1, int(n * lod1_ratio)))
+        lod2_target = _clamp_decimate_target(n, max(min_faces_lod2, int(n * lod2_ratio)))
 
     out_paths: list[Path] = []
 
     lod0_path = output_dir / f"{basename}_lod0.glb"
     if lod0_target < n:
         remesh_textured_glb(painted, lod0_path, target_faces=lod0_target, texture_size=tex_base)
-    elif Path(painted).resolve() != lod0_path.resolve():
+    else:
+        # painted já é LOD0 (mesmo path, hardlink ou inode partilhado) —
+        # skip copy; resolve()!=samefile em hardlinks.
         import shutil
 
-        shutil.copy2(painted, lod0_path)
-    # else: painted já é o lod0_path — nada a copiar.
+        same = False
+        with contextlib.suppress(OSError):
+            same = lod0_path.exists() and Path(painted).samefile(lod0_path)
+        if not same and Path(painted).resolve() != lod0_path.resolve():
+            shutil.copy2(painted, lod0_path)
     out_paths.append(lod0_path)
 
     for level, target, tex_size in (

@@ -368,7 +368,8 @@ def save_empty_glb(path: str | Path) -> None:
 def save_colored_mesh(mesh: Any, face_colors: Any, path: str | Path) -> None:
     """Save a mesh-like object with per-face colours as GLB via bpy.
 
-    *mesh* only needs ``.vertices`` (Nx3) and ``.faces`` (MxK) attributes.
+    *mesh* only needs ``.vertices`` (Nx3) and ``.faces`` (MxK) attributes, in
+    Blender world space (as returned by :func:`load_mesh_as_trimesh`).
     """
     import numpy as np
 
@@ -384,7 +385,8 @@ def save_scene_geometries(scene: Any, path: str | Path) -> None:
     """Save a trimesh.Scene-like object as GLB via bpy.
 
     Iterates *scene.geometry* (dict of name → mesh-like with .vertices/.faces)
-    and exports all meshes.
+    and exports all meshes. Arrays in Blender world space (as returned by
+    :func:`load_mesh_as_trimesh`).
     """
     import numpy as np
 
@@ -417,6 +419,13 @@ def load_mesh_as_trimesh(path: str | Path) -> Any:
 
     verts = np.array([tuple(v.co) for v in mesh_eval.vertices], dtype=np.float64)
     faces = np.array([tuple(p.vertices) for p in mesh_eval.polygons], dtype=np.int64)
+
+    # Aplicar matrix_world: o importer glTF põe as rotações de node (ex. o
+    # +90°X que endireita assets) na matriz do objeto — ler só ``v.co``
+    # descarta-as e o re-export sai deitado/rodado.
+    mw = np.array(obj_eval.matrix_world, dtype=np.float64)
+    if not np.allclose(mw, np.eye(4)):
+        verts = (np.c_[verts, np.ones(len(verts))] @ mw.T)[:, :3]
 
     obj_eval.to_mesh_clear()
     return trimesh.Trimesh(vertices=verts, faces=faces, process=False)

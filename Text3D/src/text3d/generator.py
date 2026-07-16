@@ -35,7 +35,14 @@ _logger = Logger()
 
 
 def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:
-    """Normaliza saída do pipeline Hunyuan (lista aninhada ou Trimesh)."""
+    """Normaliza saída do pipeline Hunyuan (lista aninhada ou Trimesh).
+
+    Aplica guarda anti-NaN: decoders FP16/FlashVDM podem emitir vértices
+    não-finitos que o exporter glTF converte em (0,0,0) — leque de faces
+    gigantes na origem dentro do shape.
+    """
+    import numpy as np
+
     m: Any = mesh_or_nested
     while isinstance(m, (list, tuple)):
         if not m:
@@ -43,6 +50,15 @@ def _as_trimesh(mesh_or_nested: Any) -> trimesh.Trimesh:
         m = m[0]
     if not isinstance(m, trimesh.Trimesh):
         raise TypeError(f"Esperado trimesh.Trimesh, obtido {type(m)}")
+
+    from gamedev_shared.mesh_repair import drop_nonfinite_faces
+
+    verts, faces, n_bad = drop_nonfinite_faces(
+        np.asarray(m.vertices, dtype=np.float64), np.asarray(m.faces, dtype=np.int64)
+    )
+    if n_bad:
+        _logger.warn(f"Decode Hunyuan: {n_bad} faces com vértices NaN/Inf removidas (guard anti-leque)")
+        m = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
     return m
 
 

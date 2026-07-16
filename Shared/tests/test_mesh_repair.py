@@ -129,6 +129,87 @@ class TestCapBoundaryHoles:
         assert self._open_edge_count(capped) == self._open_edge_count(shell)
 
 
+class TestSanitizeNonfinite:
+    def test_removes_nan_verts_inplace(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import sanitize_nonfinite
+
+        verts = np.array([[0, 0, 0], [1, 0, 0], [0, 1, 0], [np.nan, np.nan, np.nan]])
+        faces = np.array([[0, 1, 2], [1, 2, 3]])
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces.astype(np.int64), name="nan_test")
+        removed = sanitize_nonfinite(obj)
+        assert removed == 1
+        assert len(obj.data.polygons) == 1  # face incidente ao NaN caiu
+        assert sanitize_nonfinite(obj) == 0  # idempotente
+        clear_scene()
+
+
+class TestRepairGlb:
+    def test_roundtrip_preserves_uv_material_and_rig(self, _bpy, tmp_path) -> None:
+        import bpy
+
+        from gamedev_shared.bpy_mesh import clear_scene, save_glb
+        from gamedev_shared.mesh_repair import repair_glb
+
+        clear_scene()
+        # Cubo com UV + material + armature de 1 bone + vertex group.
+        bpy.ops.mesh.primitive_cube_add()
+        cube = bpy.context.active_object
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.smart_project()
+        bpy.ops.object.mode_set(mode="OBJECT")
+        mat = bpy.data.materials.new("m0")
+        mat.use_nodes = True
+        cube.data.materials.append(mat)
+        vg = cube.vertex_groups.new(name="Bone")
+        vg.add(list(range(len(cube.data.vertices))), 1.0, "REPLACE")
+        bpy.ops.object.armature_add()
+        arm = bpy.context.active_object
+        cube.parent = arm
+        mod = cube.modifiers.new("Armature", "ARMATURE")
+        mod.object = arm
+
+        src = tmp_path / "rigged.glb"
+        dst = tmp_path / "repaired.glb"
+        save_glb(None, src)
+
+        stats = repair_glb(src, dst)
+        assert dst.exists() and dst.stat().st_size > 0
+        assert stats  # pelo menos um mesh reparado
+
+        # Reimportar e verificar preservação (TEMPERANCE: sem icosferas de
+        # display de bones que o importer default acrescenta à cena).
+        clear_scene()
+        bpy.ops.import_scene.gltf(filepath=str(dst), bone_heuristic="TEMPERANCE")
+        meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+        arms = [o for o in bpy.context.scene.objects if o.type == "ARMATURE"]
+        assert len(meshes) == 1 and len(arms) == 1
+        m = meshes[0]
+        assert m.data.uv_layers, "UVs perdidos no repair_glb"
+        assert m.data.materials, "material perdido no repair_glb"
+        assert m.vertex_groups, "skin weights perdidos no repair_glb"
+        clear_scene()
+
+    def test_shape_keys_skip_destructive(self, _bpy, tmp_path) -> None:
+        import bpy
+
+        from gamedev_shared.bpy_mesh import clear_scene
+        from gamedev_shared.mesh_repair import repair_mesh_object
+
+        clear_scene()
+        bpy.ops.mesh.primitive_cube_add()
+        cube = bpy.context.active_object
+        cube.shape_key_add(name="Basis")
+        cube.shape_key_add(name="Morph")
+        n_verts = len(cube.data.vertices)
+        stats = repair_mesh_object(cube)
+        assert len(cube.data.vertices) == n_verts  # nada destrutivo correu
+        assert "welded_exact" not in stats
+        clear_scene()
+
+
 class TestPrimitives:
     def test_remove_doubles_counts(self, _bpy) -> None:
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
@@ -160,4 +241,369 @@ class TestPrimitives:
         )
         removed = remove_loose_debris(obj, face_ratio=0.1, min_faces=8)
         assert removed == len(tiny.faces)
+        clear_scene()
+
+
+class TestMakeWatertight:
+    def test_open_bottom_box_closed(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges, make_watertight
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
+        keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6  # remove fundo
+        shell = trimesh.Trimesh(vertices=box.vertices, faces=box.faces[keep], process=False)
+        shell.remove_unreferenced_vertices()
+        clear_scene()
+        obj = create_mesh_from_arrays(
+            np.asarray(shell.vertices), np.asarray(shell.faces, dtype=np.int64), name="wt_test"
+        )
+        assert count_boundary_edges(obj) > 0
+        stats = make_watertight(obj)
+        assert stats["boundary_after"] == 0
+        clear_scene()
+
+    def test_base_cap_via_base_path(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
+        keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
+        shell = trimesh.Trimesh(vertices=box.vertices, faces=box.faces[keep], process=False)
+        shell.remove_unreferenced_vertices()
+        clear_scene()
+        obj = create_mesh_from_arrays(
+            np.asarray(shell.vertices), np.asarray(shell.faces, dtype=np.int64), name="base_test"
+        )
+        before = count_boundary_edges(obj)
+        # max_loop_edges=3 bloqueia o caminho planar normal — só a regra de
+        # base (sem limite de arestas) pode fechar o fundo.
+        capped = cap_boundary_loops(obj, max_loop_edges=3, cap_base=True)
+        assert capped >= 1
+        assert count_boundary_edges(obj) < before
+        clear_scene()
+
+    def test_watertight_mesh_untouched(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import make_watertight
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0])
+        clear_scene()
+        obj = create_mesh_from_arrays(np.asarray(box.vertices), np.asarray(box.faces, dtype=np.int64), name="w0")
+        n_faces = len(obj.data.polygons)
+        stats = make_watertight(obj)
+        assert stats["boundary_before"] == 0
+        assert len(obj.data.polygons) == n_faces
+        clear_scene()
+
+
+class TestRepairProfiles:
+    """Perfis nomeados — unificação topology / LOD / Part3D."""
+
+    def test_dynamic_weld_distance_tiers(self) -> None:
+        from gamedev_shared.mesh_repair import dynamic_weld_distance
+
+        assert dynamic_weld_distance(200_000) == 0.003
+        assert dynamic_weld_distance(120_000) == 0.005
+        assert dynamic_weld_distance(60_000) == 0.008
+        assert dynamic_weld_distance(10_000) == 0.01
+
+    def test_unknown_profile_raises(self) -> None:
+        from gamedev_shared.mesh_repair import get_repair_profile
+
+        with pytest.raises(ValueError, match="desconhecido"):
+            get_repair_profile("nope")
+
+    def test_topology_clean_enables_watertight_and_slivers(self) -> None:
+        from gamedev_shared.mesh_repair import get_repair_profile
+
+        p = get_repair_profile("topology_clean")
+        assert p.watertight is True
+        assert p.sliver_max_aspect == 80.0
+        assert p.weld_mode == "vert_density"
+
+    def test_pre_decimate_uv_no_watertight(self) -> None:
+        from gamedev_shared.mesh_repair import get_repair_profile
+
+        p = get_repair_profile("pre_decimate_uv")
+        assert p.watertight is False
+        assert p.weld_mode == "fixed"
+        assert p.weld_fixed == 0.0005
+        assert p.sliver_max_aspect == 80.0
+        assert p.fill_holes_sides == 12
+
+    def test_part_decode_aggressive_debris(self) -> None:
+        from gamedev_shared.mesh_repair import get_repair_profile
+
+        p = get_repair_profile("part_decode")
+        assert p.debris_face_ratio == 0.1
+        assert p.debris_min_faces == 8
+        assert p.watertight is False
+
+    def test_pre_decimate_profile_runs_without_watertight(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
+        keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
+        shell = trimesh.Trimesh(vertices=box.vertices, faces=box.faces[keep], process=False)
+        shell.remove_unreferenced_vertices()
+        clear_scene()
+        obj = create_mesh_from_arrays(
+            np.asarray(shell.vertices), np.asarray(shell.faces, dtype=np.int64), name="pre_dec"
+        )
+        stats = repair_mesh_object_with_profile(obj, "pre_decimate_uv")
+        # fill_holes(12) pode fechar loops pequenos; o importante é NÃO correr make_watertight.
+        assert "boundary_before" not in stats
+        assert "boundary_after" not in stats
+        clear_scene()
+
+    def test_topology_clean_closes_open_shell(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
+        keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
+        shell = trimesh.Trimesh(vertices=box.vertices, faces=box.faces[keep], process=False)
+        shell.remove_unreferenced_vertices()
+        clear_scene()
+        obj = create_mesh_from_arrays(np.asarray(shell.vertices), np.asarray(shell.faces, dtype=np.int64), name="topo")
+        assert count_boundary_edges(obj) > 0
+        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        assert stats.get("boundary_after", 0) == 0
+        clear_scene()
+
+    def test_post_decimate_profile(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import get_repair_profile, repair_mesh_object_with_profile
+
+        p = get_repair_profile("post_decimate")
+        assert p.use_post_decimate_cleanup is True
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0])
+        clear_scene()
+        obj = create_mesh_from_arrays(np.asarray(box.vertices), np.asarray(box.faces, dtype=np.int64), name="pd")
+        n_before = len(obj.data.polygons)
+        stats = repair_mesh_object_with_profile(obj, "post_decimate")
+        assert stats.get("profile_post_decimate") == 1
+        assert len(obj.data.polygons) >= n_before // 2
+        clear_scene()
+
+    def test_topology_clean_does_reweld_flag(self) -> None:
+        from gamedev_shared.mesh_repair import get_repair_profile
+
+        assert get_repair_profile("topology_clean").do_reweld_coincident is True
+        assert get_repair_profile("pre_decimate_uv").do_reweld_coincident is False
+
+
+class TestRepairWatertightRoundtrip:
+    """Fecho watertight em meshes geradas no teste (sem assets externos)."""
+
+    @staticmethod
+    def _procedural_open_box(*, size: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
+        """Caixa unitária triangulada **sem a face do fundo** (abertura em -Z).
+
+        8 vértices, 10 triângulos (5 faces × 2). O loop de fronteira do fundo
+        tem 4 arestas — deve ser fechado por ``make_watertight`` / ``topology_clean``.
+        """
+        s = size / 2.0
+        #      4----5
+        #     /|   /|
+        #    7----6 |
+        #    | 0--|-1   (+Z up, -Z = fundo)
+        #    |/   |/
+        #    3----2
+        verts = np.array(
+            [
+                [-s, -s, -s],  # 0
+                [s, -s, -s],  # 1
+                [s, s, -s],  # 2
+                [-s, s, -s],  # 3
+                [-s, -s, s],  # 4
+                [s, -s, s],  # 5
+                [s, s, s],  # 6
+                [-s, s, s],  # 7
+            ],
+            dtype=np.float64,
+        )
+        # Sem fundo (0,1,2,3). Normais outward aproximadas.
+        faces = np.array(
+            [
+                # +Z top
+                [4, 5, 6],
+                [4, 6, 7],
+                # +Y
+                [3, 2, 6],
+                [3, 6, 7],
+                # -Y
+                [0, 1, 5],
+                [0, 5, 4],
+                # +X
+                [1, 2, 6],
+                [1, 6, 5],
+                # -X
+                [0, 3, 7],
+                [0, 7, 4],
+            ],
+            dtype=np.int64,
+        )
+        return verts, faces
+
+    @staticmethod
+    def _procedural_open_box_subdivided() -> tuple[np.ndarray, np.ndarray]:
+        """Caixa aberta com subdivisão (trimesh) — mais arestas no loop do fundo."""
+        import trimesh
+
+        box = trimesh.creation.box(extents=[1.0, 1.0, 1.0]).subdivide()
+        keep = np.abs(box.triangles_center[:, 2] + 0.5) > 1e-6
+        shell = trimesh.Trimesh(vertices=box.vertices, faces=box.faces[keep], process=False)
+        shell.remove_unreferenced_vertices()
+        return np.asarray(shell.vertices, dtype=np.float64), np.asarray(shell.faces, dtype=np.int64)
+
+    @staticmethod
+    def _boundary_edge_count_numpy(faces: np.ndarray) -> int:
+        edges = np.sort(faces[:, [0, 1, 1, 2, 2, 0]].reshape(-1, 2), axis=1)
+        _uniq, counts = np.unique(edges, axis=0, return_counts=True)
+        return int((counts == 1).sum())
+
+    def test_procedural_open_box_has_boundary_before_repair(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges
+
+        verts, faces = self._procedural_open_box()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="open_box")
+        assert len(obj.data.polygons) == 10
+        assert count_boundary_edges(obj) == 4  # loop do fundo
+        clear_scene()
+
+    def test_make_watertight_closes_procedural_open_box(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges, make_watertight
+
+        verts, faces = self._procedural_open_box()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="wt_box")
+        before = count_boundary_edges(obj)
+        assert before > 0
+        faces_before = len(obj.data.polygons)
+        stats = make_watertight(obj)
+        assert stats["boundary_before"] == before
+        assert stats["boundary_after"] == 0
+        assert count_boundary_edges(obj) == 0
+        assert len(obj.data.polygons) > faces_before  # caps acrescentaram faces
+        clear_scene()
+
+    def test_topology_clean_closes_procedural_open_box(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
+
+        verts, faces = self._procedural_open_box()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="topo_box")
+        assert count_boundary_edges(obj) > 0
+        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        assert stats.get("boundary_after") == 0
+        assert count_boundary_edges(obj) == 0
+        assert len(obj.data.polygons) >= 10
+        clear_scene()
+
+    def test_topology_clean_closes_subdivided_open_shell(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
+
+        verts, faces = self._procedural_open_box_subdivided()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="topo_sub")
+        assert count_boundary_edges(obj) > 0
+        faces_before = len(obj.data.polygons)
+        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        assert stats.get("boundary_after") == 0
+        assert count_boundary_edges(obj) == 0
+        assert len(obj.data.polygons) >= faces_before
+        clear_scene()
+
+    def test_repair_mesh_object_watertight_closes(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object
+
+        verts, faces = self._procedural_open_box_subdivided()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="rmo_wt")
+        assert count_boundary_edges(obj) > 0
+        stats = repair_mesh_object(obj, watertight=True, fill_holes_sides=12)
+        assert stats.get("boundary_after") == 0
+        assert count_boundary_edges(obj) == 0
+        clear_scene()
+
+    def test_repair_glb_watertight_survives_roundtrip(self, _bpy, tmp_path) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays, save_glb
+        from gamedev_shared.mesh_repair import count_boundary_edges, repair_glb
+
+        verts, faces = self._procedural_open_box_subdivided()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="shell")
+        src = tmp_path / "open.glb"
+        dst = tmp_path / "closed.glb"
+        save_glb([obj], src, export_normals=False, export_tangents=False)
+
+        stats = repair_glb(src, dst, watertight=True)
+        assert dst.exists()
+        mesh_stats = next(iter(stats.values()))
+        assert mesh_stats.get("boundary_after") == 0
+
+        clear_scene()
+        import bpy
+
+        bpy.ops.import_scene.gltf(filepath=str(dst), bone_heuristic="TEMPERANCE")
+        meshes = [o for o in bpy.context.scene.objects if o.type == "MESH"]
+        assert len(meshes) == 1
+        assert count_boundary_edges(meshes[0]) == 0
+        assert len(meshes[0].data.polygons) > 0
+        clear_scene()
+
+    def test_fix_mesh_watertight_closes_open_shell(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.mesh_repair import fix_mesh
+
+        verts, faces = self._procedural_open_box_subdivided()
+        shell = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+        out = fix_mesh(shell, watertight=True)
+        assert self._boundary_edge_count_numpy(np.asarray(out.faces)) == 0
+        assert len(out.faces) > len(shell.faces)  # caps added
+
+    def test_fix_mesh_watertight_false_preserves_opening(self, _bpy) -> None:
+        import trimesh
+
+        from gamedev_shared.mesh_repair import fix_mesh
+
+        verts, faces = self._procedural_open_box()
+        shell = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+        out = fix_mesh(shell, watertight=False, fill_holes_sides=0)
+        assert self._boundary_edge_count_numpy(np.asarray(out.faces)) > 0
+
+    def test_pre_decimate_uv_does_not_force_watertight(self, _bpy) -> None:
+        """Perfil LOD: pode fechar loops ≤12, mas não corre make_watertight."""
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+
+        # Caixa aberta simples: loop de 4 arestas — fill_holes(12) pode tapar,
+        # mas stats não devem ter boundary_before/after do make_watertight.
+        verts, faces = self._procedural_open_box()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="pre_uv")
+        stats = repair_mesh_object_with_profile(obj, "pre_decimate_uv")
+        assert "boundary_before" not in stats
+        assert "boundary_after" not in stats
         clear_scene()
