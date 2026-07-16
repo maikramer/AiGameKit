@@ -162,8 +162,10 @@ a CLI termina com erro; aumenta `GAMEDEV_UMS_MAX_QUEUE_DEPTH` ou espera.
 
 **Pico = pesos(quant) + activação de inferência + `GAMEDEV_UMS_VRAM_SAFETY_MIB`
 (default 384).** O UMS **recusa** load/generate se VRAM livre < pico (ex.: text3d
-fp16 full ~8 GiB numa 6 GB) — tip: `sdnq-int4` / `--quality fast`. `status` mostra
-colunas Peak / Act+.
+fp16 full ~8 GiB numa 6 GB) — tip: `sdnq-int4` / `--quality fast` /
+`memory_efficient` (inferido como `sdnq-uint8` + activação reduzida; paint3d
+deve enviar `sdnq_preset` ou `memory_efficient=true`). `status` mostra colunas
+Peak / Act+.
 
 Ferramentas pesadas, **no path in-process**, chamam
 `ensure_vram_available(N, backend="text3d")`. Com UMS ativo → `ensure-vram` usa
