@@ -91,8 +91,8 @@ class UnifiedModelServer:
         self._pid = os.getpid()
 
     def _log(self, msg: str) -> None:
-        if self.verbose:
-            _logger.info(f"[UMS] {msg}")
+        # Sempre ficheiro; consola só com --verbose.
+        _logger.info(f"[UMS] {msg}", console=self.verbose)
 
     # ------------------------------------------------------------------
     # Despacho de comandos

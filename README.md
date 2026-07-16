@@ -332,6 +332,14 @@ The monorepo uses environment variables to locate binaries and configure behavio
 | `GAMEDEV_UMS_MAX_QUEUE_DEPTH` | ModelServer | Job queue depth before `queue_full` (default `32`) |
 | `GAMEDEV_UMS_MAX_INFLIGHT` | ModelServer | Parallel generations (default `1`) |
 | `GAMEDEV_MODEL_SERVER_SOCKET` | Shared | Override Unix socket path (legacy / tests) |
+| `GAMEDEV_LOG_DIR` | All Python tools + UMS | Directory for daily log files (default `~/.cache/gamedev/logs`) |
+| `GAMEDEV_LOG_FILE` | All Python tools + UMS | Exact log file path (overrides per-tool daily naming) |
+| `GAMEDEV_LOG_TOOL` | All Python tools + UMS | Tool name used in log filename (auto from CLI / `ums`) |
+| `GAMEDEV_LOG_LEVEL` | All Python tools + UMS | Min file level: `DEBUG` \| `INFO` \| `WARN` \| `ERROR` (default `INFO`) |
+| `GAMEDEV_FILE_LOG` | All Python tools + UMS | `0` disables file logging; `1` forces on (needed under pytest) |
+| `GAMEDEV_NO_FILE_LOG` | All Python tools + UMS | `1` disables file logging |
+
+Logs: `~/.cache/gamedev/logs/<tool>-YYYY-MM-DD.log` (UMS → `ums-….log`). Console stays Rich/ANSI; file is plain text with UTC timestamps.
 
 Unified Model Server: [`ModelServer/README.md`](ModelServer/README.md). Tool CLIs accept `--ums-priority`, `--no-ums`, `--ums-stream`.
 

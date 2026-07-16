@@ -9,4 +9,4 @@ from gamedev_shared.cli_rich import setup_rich_click_module
 _HEADER: Final = "[bold cyan]Part3D[/bold cyan] — decomposição semântica (Hunyuan3D-Part)"
 _FOOTER: Final = "[dim]README · docs/ · PART3D_ROOT[/dim]"
 
-click, RICH_CLICK = setup_rich_click_module(header=_HEADER, footer=_FOOTER)
+click, RICH_CLICK = setup_rich_click_module(tool="part3d", header=_HEADER, footer=_FOOTER)

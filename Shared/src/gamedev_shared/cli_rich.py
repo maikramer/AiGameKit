@@ -9,6 +9,7 @@ def setup_rich_click(
     header: str,
     footer: str,
     *,
+    tool: str | None = None,
     use_rich_markup: bool = True,
     group_arguments_options: bool = True,
     show_metavars_column: bool = True,
@@ -25,13 +26,22 @@ def setup_rich_click(
         RICH_CLICK = setup_rich_click(
             header="[bold cyan]Text2D[/bold cyan] — FLUX.2 Klein",
             footer="[dim]Docs: README[/dim]",
+            tool="text2d",
         )
 
         if RICH_CLICK:
             import rich_click as click
         else:
             import click
+
+    Args:
+        tool: Nome da tool para ficheiro de log (``~/.cache/gamedev/logs/<tool>-…``).
     """
+    if tool:
+        from gamedev_shared.logging import configure_logging
+
+        configure_logging(tool)
+
     try:
         import rich_click.rich_click as _rc
 
@@ -57,6 +67,7 @@ def setup_rich_click_module(
     header: str,
     footer: str,
     *,
+    tool: str | None = None,
     use_rich_markup: bool = True,
     group_arguments_options: bool = True,
     show_metavars_column: bool = True,
@@ -65,6 +76,7 @@ def setup_rich_click_module(
     ok = setup_rich_click(
         header,
         footer,
+        tool=tool,
         use_rich_markup=use_rich_markup,
         group_arguments_options=group_arguments_options,
         show_metavars_column=show_metavars_column,

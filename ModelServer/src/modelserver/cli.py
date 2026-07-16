@@ -95,20 +95,25 @@ def cli() -> None:
 @click.option("--verbose", "-v", is_flag=True, help="Logs detalhados")
 def start_cmd(socket_path: str | None, idle_timeout_min: int, verbose: bool) -> None:
     """Arranca o Unified Model Server (foreground)."""
+    from gamedev_shared.logging import configure_logging
+
     from .server import UnifiedModelServer
 
+    log_path = configure_logging("ums")
     sock = Path(socket_path) if socket_path else P.DEFAULT_SOCKET_PATH
     if is_server_running(sock):
         console.print("[yellow]UMS já está ativo neste socket.[/yellow]")
         sys.exit(1)
 
     registry = Registry()
+    log_line = f"Log: [cyan]{log_path}[/cyan]\n" if log_path else ""
     console.print(
         Panel.fit(
             f"[bold]Unified Model Server[/bold]\n"
             f"Socket: [cyan]{sock}[/cyan]\n"
             f"Backends: [green]{', '.join(registry.names)}[/green]\n"
-            f"Idle timeout: [green]{idle_timeout_min} min[/green]\n\n"
+            f"Idle timeout: [green]{idle_timeout_min} min[/green]\n"
+            f"{log_line}\n"
             f"[dim]Os backends carregam sob procura (lazy). Use 'preload' para "
             f"pré-aquecer um backend específico.[/dim]",
             border_style="blue",
