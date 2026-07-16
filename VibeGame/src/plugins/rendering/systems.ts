@@ -2,7 +2,7 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import type { State } from '../../core';
-import { defineQuery, type System } from '../../core';
+import { defineQueryLive, type System } from '../../core';
 import { WorldTransform } from '../transforms';
 import { ThirdPersonCamera } from '../player-controller/components';
 import {
@@ -40,14 +40,14 @@ import {
   TIER_PRESETS,
 } from '../adaptive-quality/quality-tiers';
 
-const rendererQuery = defineQuery([MeshRenderer]);
-const distanceCullQuery = defineQuery([DistanceCull, WorldTransform]);
-const ambientQuery = defineQuery([AmbientLight]);
-const directionalQuery = defineQuery([DirectionalLight]);
-const thirdPersonCameraQuery = defineQuery([ThirdPersonCamera]);
-const mainCameraTransformQuery = defineQuery([MainCamera, WorldTransform]);
-const mainCameraQuery = defineQuery([MainCamera]);
-const renderContextQuery = defineQuery([RenderContext]);
+const rendererQuery = defineQueryLive([MeshRenderer]);
+const distanceCullQuery = defineQueryLive([DistanceCull, WorldTransform]);
+const ambientQuery = defineQueryLive([AmbientLight]);
+const directionalQuery = defineQueryLive([DirectionalLight]);
+const thirdPersonCameraQuery = defineQueryLive([ThirdPersonCamera]);
+const mainCameraTransformQuery = defineQueryLive([MainCamera, WorldTransform]);
+const mainCameraQuery = defineQueryLive([MainCamera]);
+const renderContextQuery = defineQueryLive([RenderContext]);
 const _lightDir = new THREE.Vector3();
 const _lightOffset = new THREE.Vector3();
 const _lightPos = new THREE.Vector3();
@@ -56,8 +56,8 @@ const _lightPosition = new THREE.Vector3();
 const _lightQuaternion = new THREE.Quaternion();
 const _lightForward = new THREE.Vector3(0, 0, -1);
 
-const pointLightQuery = defineQuery([PointLight, WorldTransform]);
-const spotLightQuery = defineQuery([SpotLight, WorldTransform]);
+const pointLightQuery = defineQueryLive([PointLight, WorldTransform]);
+const spotLightQuery = defineQueryLive([SpotLight, WorldTransform]);
 const entityToPointLightByState = new WeakMap<
   State,
   Map<number, THREE.PointLight>
@@ -144,6 +144,13 @@ interface PointLightCache {
   distance: number;
   decay: number;
   castShadow: number;
+  px: number;
+  py: number;
+  pz: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
 }
 interface SpotLightCache {
   color: number;
@@ -153,6 +160,13 @@ interface SpotLightCache {
   castShadow: number;
   angle: number;
   penumbra: number;
+  px: number;
+  py: number;
+  pz: number;
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
 }
 const ambientLightCache = new WeakMap<
   THREE.HemisphereLight,
@@ -331,7 +345,7 @@ export const MeshInstanceSystem: System = {
     const rendererEntities = rendererQuery(state.world);
     for (const entity of rendererEntities) {
       const unlit = MeshRenderer.unlit[entity] === 1;
-      let mesh = getOrCreateMesh(context, MeshRenderer.shape[entity], unlit);
+      const mesh = getOrCreateMesh(context, MeshRenderer.shape[entity], unlit);
       if (!mesh) continue;
 
       if (MeshRenderer.visible[entity] !== 1) {
@@ -339,7 +353,7 @@ export const MeshInstanceSystem: System = {
         continue;
       }
 
-      mesh = updateInstance(mesh, entity, context, state, unlit);
+      updateInstance(mesh, entity, context, state, unlit);
     }
 
     // Recompute dirty instance-pool bounds (throttled). computeBoundingSphere
@@ -373,6 +387,8 @@ const INSTANCE_BOUNDS_IMMEDIATE_MAX = 32;
 /** Saved `castShadow` while DistanceCull hides a GLTF (shadow map still draws
  *  invisible=false casters in some paths; force off to cut fill cost). */
 const distanceCullShadowSaved = new WeakMap<THREE.Object3D, boolean>();
+const distanceCullLastFrame = new WeakMap<State, number>();
+const DISTANCE_CULL_INTERVAL_FRAMES = 3;
 
 function applyDistanceCullCastShadow(
   root: THREE.Object3D,
@@ -400,6 +416,15 @@ export const DistanceCullSystem: System = {
   group: 'draw',
   update(state: State) {
     if (state.headless) return;
+    const frame = state.time.frameCount;
+    const lastFrame = distanceCullLastFrame.get(state);
+    if (
+      lastFrame !== undefined &&
+      frame - lastFrame < DISTANCE_CULL_INTERVAL_FRAMES
+    ) {
+      return;
+    }
+    distanceCullLastFrame.set(state, frame);
 
     const camEntities = mainCameraQuery(state.world);
     if (camEntities.length === 0) return;
@@ -905,6 +930,13 @@ export const PointSpotLightSyncSystem: System = {
           distance: NaN,
           decay: NaN,
           castShadow: NaN,
+          px: NaN,
+          py: NaN,
+          pz: NaN,
+          qx: NaN,
+          qy: NaN,
+          qz: NaN,
+          qw: NaN,
         };
         pointLightCache.set(light, cache);
       }
@@ -945,20 +977,32 @@ export const PointSpotLightSyncSystem: System = {
         cache.castShadow = castShadow;
       }
 
-      _lightPosition.set(
-        WorldTransform.posX[eid],
-        WorldTransform.posY[eid],
-        WorldTransform.posZ[eid]
-      );
-      light.position.copy(_lightPosition);
-
-      _lightQuaternion.set(
-        WorldTransform.rotX[eid],
-        WorldTransform.rotY[eid],
-        WorldTransform.rotZ[eid],
-        WorldTransform.rotW[eid]
-      );
-      light.quaternion.copy(_lightQuaternion);
+      const px = WorldTransform.posX[eid];
+      const py = WorldTransform.posY[eid];
+      const pz = WorldTransform.posZ[eid];
+      const qx = WorldTransform.rotX[eid];
+      const qy = WorldTransform.rotY[eid];
+      const qz = WorldTransform.rotZ[eid];
+      const qw = WorldTransform.rotW[eid];
+      if (
+        cache.px !== px ||
+        cache.py !== py ||
+        cache.pz !== pz ||
+        cache.qx !== qx ||
+        cache.qy !== qy ||
+        cache.qz !== qz ||
+        cache.qw !== qw
+      ) {
+        light.position.set(px, py, pz);
+        light.quaternion.set(qx, qy, qz, qw);
+        cache.px = px;
+        cache.py = py;
+        cache.pz = pz;
+        cache.qx = qx;
+        cache.qy = qy;
+        cache.qz = qz;
+        cache.qw = qw;
+      }
     }
 
     // Adaptive Quality point-light shadow throttle. Each shadow-casting
@@ -1006,6 +1050,13 @@ export const PointSpotLightSyncSystem: System = {
           castShadow: NaN,
           angle: NaN,
           penumbra: NaN,
+          px: NaN,
+          py: NaN,
+          pz: NaN,
+          qx: NaN,
+          qy: NaN,
+          qz: NaN,
+          qw: NaN,
         };
         spotLightCache.set(light, cache);
       }
@@ -1047,24 +1098,36 @@ export const PointSpotLightSyncSystem: System = {
         cache.castShadow = castShadow;
       }
 
-      _lightPosition.set(
-        WorldTransform.posX[eid],
-        WorldTransform.posY[eid],
-        WorldTransform.posZ[eid]
-      );
-      light.position.copy(_lightPosition);
-
-      _lightQuaternion.set(
-        WorldTransform.rotX[eid],
-        WorldTransform.rotY[eid],
-        WorldTransform.rotZ[eid],
-        WorldTransform.rotW[eid]
-      );
-      light.quaternion.copy(_lightQuaternion);
-      light.target.position.copy(_lightPosition);
-      light.target.quaternion.copy(_lightQuaternion);
-      _lightForward.set(0, 0, -1).applyQuaternion(_lightQuaternion);
-      light.target.position.copy(_lightPosition).add(_lightForward);
+      const px = WorldTransform.posX[eid];
+      const py = WorldTransform.posY[eid];
+      const pz = WorldTransform.posZ[eid];
+      const qx = WorldTransform.rotX[eid];
+      const qy = WorldTransform.rotY[eid];
+      const qz = WorldTransform.rotZ[eid];
+      const qw = WorldTransform.rotW[eid];
+      if (
+        cache.px !== px ||
+        cache.py !== py ||
+        cache.pz !== pz ||
+        cache.qx !== qx ||
+        cache.qy !== qy ||
+        cache.qz !== qz ||
+        cache.qw !== qw
+      ) {
+        _lightPosition.set(px, py, pz);
+        _lightQuaternion.set(qx, qy, qz, qw);
+        light.position.copy(_lightPosition);
+        light.quaternion.copy(_lightQuaternion);
+        _lightForward.set(0, 0, -1).applyQuaternion(_lightQuaternion);
+        light.target.position.copy(_lightPosition).add(_lightForward);
+        cache.px = px;
+        cache.py = py;
+        cache.pz = pz;
+        cache.qx = qx;
+        cache.qy = qy;
+        cache.qz = qz;
+        cache.qw = qw;
+      }
     }
   },
 };

@@ -19,6 +19,13 @@ const boundsByUrl = new Map<
 const warnedMissing = new Set<string>();
 const prefetchInflight = new Set<string>();
 
+/** Clear URL-scoped bounds/warning state on scene/plugin teardown. */
+export function clearGltfBoundsCache(): void {
+  boundsByUrl.clear();
+  warnedMissing.clear();
+  prefetchInflight.clear();
+}
+
 export function normalizeGltfUrlKey(url: string): string {
   return url.trim();
 }

@@ -1,10 +1,14 @@
 import type { Parser, XMLValue } from '../../core';
 import { setSpawnGroupSpec } from '../spawner/context';
+import { SpawnerPending } from '../spawner/components';
 import { prefetchGltfLocalYBounds } from '../gltf-xml/gltf-bounds-cache';
 import { resolveGroupSpawnFields } from '../spawner/profiles';
-import type { SpawnGroupSpec, SpawnTemplateSpec } from '../spawner/types';
+import type { SpawnGroupSpec } from '../spawner/types';
 import { Vegetation } from './components';
 import { parseVegetationMeshes, toBoolAttr } from './parse-meshes';
+import { buildVegetationPlan } from './plan';
+import { setVegetationPatch } from './patch-context';
+import { spawnSpecFromLayer } from './spec-from-plan';
 import { registerVegetationWindUrl } from './wind';
 
 function toNumber(value: XMLValue | undefined, fallback: number): number {
@@ -40,10 +44,15 @@ function vec3FromAttr(
   return fallback;
 }
 
+function hasAttr(attrs: Record<string, XMLValue>, key: string): boolean {
+  const v = attrs[key];
+  return v !== undefined && v !== null && String(v).trim() !== '';
+}
+
 /**
  * `<Vegetation meshes="a.glb b.glb" density-per-km2="…" …>` — builds a
- * static SpawnGroupSpec (instanced GLTFLoader templates) so TerrainSpawnSystem
- * places the carpet. No child elements required.
+ * static SpawnGroupSpec (legacy) or a smart multi-layer patch (grass hubs →
+ * flowers nearby) materialized by VegetationPlannerSystem.
  */
 export const vegetationParser: Parser = ({ entity, element, state }) => {
   const meshes = parseVegetationMeshes(element.attributes.meshes);
@@ -55,8 +64,6 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
   }
 
   const attrs = { ...element.attributes };
-  // Force foliage defaults unless the author overrides; dense carpet skips
-  // overlap rejection by default (explicit avoid-overlaps="1" still works).
   if (attrs['avoid-overlaps'] === undefined) attrs['avoid-overlaps'] = '0';
   if (attrs['footprint-radius'] === undefined)
     attrs['footprint-radius'] = '0.2';
@@ -64,24 +71,20 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
   if (attrs['align-to-terrain'] === undefined) attrs['align-to-terrain'] = '1';
   if (attrs['avoid-water'] === undefined) attrs['avoid-water'] = '1';
   if (attrs['max-slope-deg'] === undefined) attrs['max-slope-deg'] = '35';
-  // Kenney clumps ≈0.25 m tall → scale 1..3 ≈ world height 0.25–0.75 m.
-  if (attrs['scale-min'] === undefined) attrs['scale-min'] = '1';
-  if (attrs['scale-max'] === undefined) attrs['scale-max'] = '3';
   if (attrs['random-yaw'] === undefined) attrs['random-yaw'] = '1';
   if (attrs['ground-align'] === undefined) attrs['ground-align'] = 'aabb';
+
+  const authorScaleMin = hasAttr(element.attributes, 'scale-min');
+  const authorScaleMax = hasAttr(element.attributes, 'scale-max');
+  // Legacy defaults only when author omits scale (smart tiers supply their own).
+  if (!authorScaleMin) attrs['scale-min'] = '1';
+  if (!authorScaleMax) attrs['scale-max'] = '3';
 
   const resolved = resolveGroupSpawnFields(attrs, 'foliage');
 
   const densityRaw = element.attributes['density-per-km2'];
-  const hasDensity =
-    densityRaw !== undefined &&
-    densityRaw !== null &&
-    String(densityRaw).trim() !== '';
-  const countRaw = element.attributes.count;
-  const hasCount =
-    countRaw !== undefined &&
-    countRaw !== null &&
-    String(countRaw).trim() !== '';
+  const hasDensity = hasAttr(element.attributes, 'density-per-km2');
+  const hasCount = hasAttr(element.attributes, 'count');
 
   let spawnCountMode: SpawnGroupSpec['spawnCountMode'] = 'density';
   let count = 0;
@@ -96,7 +99,7 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     }
   } else if (hasCount) {
     spawnCountMode = 'fixed';
-    count = Math.floor(toNumber(countRaw, 0));
+    count = Math.floor(toNumber(element.attributes.count, 0));
     if (count < 1) {
       throw new Error(
         '[Vegetation] count deve ser ≥ 1, ou usa density-per-km2.'
@@ -107,48 +110,13 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
     densityPerKm2 = 90000;
   }
 
-  const templates: SpawnTemplateSpec[] = meshes.map((url) => ({
-    tagName: 'GLTFLoader',
-    attributes: {
-      url,
-      instanced: 'true',
-    },
-    role: 'visual',
-  }));
-
-  const spec: SpawnGroupSpec = {
-    mode: 'static',
-    spawnGroupProfile: 'foliage',
-    spawnCountMode,
-    count,
-    densityPerKm2,
-    countRangeMin: 0,
-    countRangeMax: 0,
+  const smart = toBoolAttr(element.attributes.smart, true);
+  const plan = buildVegetationPlan({
+    meshes,
+    smart,
     seed: Math.floor(toNumber(element.attributes.seed, 1)),
     regionMin: vec3FromAttr(element.attributes['region-min'], [-40, 0, -40]),
     regionMax: vec3FromAttr(element.attributes['region-max'], [40, 0, 40]),
-    alignToTerrain: resolved.alignToTerrain,
-    baseYOffset: resolved.baseYOffset,
-    groundAlign: resolved.groundAlign,
-    randomYaw: resolved.randomYaw,
-    scaleDistribution: resolved.scaleDistribution,
-    scaleDiscreteValues: resolved.scaleDiscreteValues,
-    scaleMin: resolved.scaleMin,
-    scaleMax: resolved.scaleMax,
-    yawDistribution: resolved.yawDistribution,
-    yawDiscreteDeg: resolved.yawDiscreteDeg,
-    surfaceEpsilon: resolved.surfaceEpsilon,
-    surfaceEpsilonAuto: resolved.surfaceEpsilonAuto,
-    maxSlopeDeg: resolved.maxSlopeDeg,
-    maxSlopePlacementAttempts: resolved.maxSlopePlacementAttempts,
-    pickStrategy: 'random',
-    avoidWater: resolved.avoidWater,
-    inWater: false,
-    nearWater: false,
-    avoidOverlaps: resolved.avoidOverlaps,
-    footprintRadius: resolved.footprintRadius,
-    maxDistance: resolved.maxDistance,
-    instanced: true,
     clusterCount: Math.max(
       0,
       Math.floor(toNumber(element.attributes['cluster-count'], 48))
@@ -157,23 +125,75 @@ export const vegetationParser: Parser = ({ entity, element, state }) => {
       0.5,
       toNumber(element.attributes['cluster-radius'], 3.5)
     ),
-    templates,
-  };
+    flowerNearRadius: Math.max(
+      0.5,
+      toNumber(element.attributes['flower-near-radius'], 2.2)
+    ),
+    flowerDensityRatio: Math.max(
+      0,
+      toNumber(element.attributes['flower-density-ratio'], 0.15)
+    ),
+    plantDensityRatio: Math.max(
+      0,
+      toNumber(element.attributes['plant-density-ratio'], 0.25)
+    ),
+    wind: toBoolAttr(element.attributes.wind, true),
+    avoidWater: resolved.avoidWater,
+    avoidOverlaps: resolved.avoidOverlaps,
+    maxSlopeDeg: resolved.maxSlopeDeg,
+    maxDistance: resolved.maxDistance,
+    footprintRadius: resolved.footprintRadius,
+    spawnCountMode: spawnCountMode === 'fixed' ? 'fixed' : 'density',
+    densityPerKm2,
+    count,
+    patchScaleMin: authorScaleMin ? resolved.scaleMin : null,
+    patchScaleMax: authorScaleMax ? resolved.scaleMax : null,
+    meshRolesRaw:
+      element.attributes['mesh-roles'] !== undefined
+        ? String(element.attributes['mesh-roles'])
+        : null,
+  });
 
+  const windOn = plan.wind;
+  Vegetation.wind[entity] = windOn ? 1 : 0;
+  if (windOn) {
+    for (const url of plan.allMeshes) registerVegetationWindUrl(state, url);
+  }
+  Vegetation.windRegistered[entity] = windOn ? 1 : 0;
+
+  for (const url of plan.allMeshes) prefetchGltfLocalYBounds(url);
+
+  if (plan.smart) {
+    // Parent does not spawn; VegetationPlannerSystem creates layer children.
+    SpawnerPending.spawned[entity] = 1;
+    setVegetationPatch(state, entity, {
+      plan,
+      layerEntities: [],
+      hubsReady: false,
+    });
+    return;
+  }
+
+  // Legacy / single-role: one spec on this entity.
+  const layer = plan.layers[0]!;
+  const spec = spawnSpecFromLayer(plan, layer, []);
+  // Without precomputed hubs, use clusterCount generation.
+  spec.clusterCount = plan.clusterCount;
+  spec.clusterCenters = undefined;
+  // Honor resolve scale when author set scale attrs (already in layer via plan).
+  if (authorScaleMin || authorScaleMax) {
+    spec.scaleMin = layer.scaleMin;
+    spec.scaleMax = layer.scaleMax;
+  }
   if (spec.scaleMax < spec.scaleMin) {
     const t = spec.scaleMin;
     spec.scaleMin = spec.scaleMax;
     spec.scaleMax = t;
   }
-
   setSpawnGroupSpec(state, entity, spec);
-
-  const windOn = toBoolAttr(element.attributes.wind, true);
-  Vegetation.wind[entity] = windOn ? 1 : 0;
-  Vegetation.windRegistered[entity] = 0;
-  if (windOn) {
-    for (const url of meshes) registerVegetationWindUrl(state, url);
-  }
-
-  for (const url of meshes) prefetchGltfLocalYBounds(url);
+  setVegetationPatch(state, entity, {
+    plan,
+    layerEntities: [],
+    hubsReady: true,
+  });
 };

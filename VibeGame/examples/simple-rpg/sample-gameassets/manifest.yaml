@@ -13,7 +13,11 @@ assets:
   - collision
   lod_levels: 1
   animate:
-    clips: idle,walk,run,jump,attack,hit,death
+    # Hero: pack completo Quaternius (armas/ferramentas). force_preset evita
+    # cair em procedural se a auto-deteção falhar no rig SkinTokens.
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,sprint,jump,attack,hit,death,sword,axe,spear,chop,swordidle,axeidle,spearidle,chopidle,mine,gather,interact,punch,roar,roll
 - id: npc_merchant
   idea: friendly cartoon merchant NPC wearing brown apron over green tunic, round belly, warm smile, short chubby proportions, standing upright in T-pose with arms straight out, hands empty, no weapons,
     no props, full body visible, front-facing, fantasy shopkeeper
@@ -28,6 +32,8 @@ assets:
   - collision
   lod_levels: 1
   animate:
+    preset: humanoid
+    force_preset: true
     clips: idle,walk,run,jump,attack,hit,death
 - id: goblin
   idea: small wiry cartoon goblin with big pointy ears, crooked teeth, tattered loincloth, green skin, standing upright in T-pose with arms straight out, hands empty, no weapons, no props, full body visible,
@@ -43,6 +49,9 @@ assets:
   - collision
   lod_levels: 2
   animate:
+    # Bipedal enemy: mocap Quaternius, clips de combate limitados (sem mine/chop/…).
+    preset: humanoid
+    force_preset: true
     clips: idle,walk,run,jump,attack,hit,death
 - id: slime
   idea: cute round blue cartoon slime monster with big expressive eyes, happy bubbly shape, translucent jelly body, small sparkle highlights
@@ -58,7 +67,7 @@ assets:
   lod_levels: 2
   animate:
     preset: creature
-    clips: idle,walk,run,attack,death,roar
+    clips: idle,walk,run,jump,attack,death,roar
     procedural: true
     force_preset: true
 - id: pine_dark
@@ -113,7 +122,7 @@ assets:
   lod_levels: 1
   animate:
     preset: creature
-    clips: idle,walk,run,attack,death,roar
+    clips: idle,walk,run,jump,attack,death,roar
     procedural: true
     force_preset: true
 - id: shade
@@ -130,7 +139,7 @@ assets:
   lod_levels: 1
   animate:
     preset: creature
-    clips: idle,walk,run,attack,death,roar
+    clips: idle,walk,run,jump,attack,death,roar
     procedural: true
     force_preset: true
 - id: witch_boss
@@ -148,6 +157,8 @@ assets:
   lod_levels: 1
   generation: high
   animate:
+    preset: humanoid
+    force_preset: true
     clips: idle,walk,run,jump,attack,hit,death
 - id: cactus
   idea: cartoon desert saguaro cactus with three green arms, ribbed texture, small spines, stylized fantasy desert plant
@@ -200,7 +211,7 @@ assets:
   lod_levels: 1
   animate:
     preset: creature
-    clips: idle,walk,run,attack,death,roar
+    clips: idle,walk,run,jump,attack,death,roar
     procedural: true
     force_preset: true
 - id: bandit
@@ -217,6 +228,8 @@ assets:
   - collision
   lod_levels: 1
   animate:
+    preset: humanoid
+    force_preset: true
     clips: idle,walk,run,jump,attack,hit,death
 - id: sand_wyrm_boss
   idea: massive cartoon sand wyrm boss emerging from desert dune, segmented worm body with circular toothy maw, small eyes, armored sand-colored plates, intimidating fantasy desert boss, game asset
@@ -233,7 +246,7 @@ assets:
   generation: high
   animate:
     preset: creature
-    clips: idle,walk,run,attack,death,roar
+    clips: idle,walk,run,jump,attack,death,roar
     procedural: true
     force_preset: true
 - id: dead_willow
@@ -287,10 +300,10 @@ assets:
   - collision
   lod_levels: 1
   animate:
-    preset: creature
-    clips: idle,walk,run,attack,death,roar
-    procedural: true
+    # Bipedal (T-pose); mocap Quaternius como os outros humanoides inimigos.
+    preset: humanoid
     force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death
 - id: mosquito
   idea: cartoon giant swamp mosquito with thin legs, narrow body, long needle nose, small transparent wings, fantasy swamp flying pest insect
   kind: character
@@ -323,6 +336,8 @@ assets:
   lod_levels: 1
   generation: high
   animate:
+    preset: humanoid
+    force_preset: true
     clips: idle,walk,run,jump,attack,hit,death
 - id: village_longhouse
   idea: large medieval wooden longhouse mead-hall with carved timber beams, shingled steep roof, grand double doors, glowing warm windows, stone foundation, elder meeting hall
@@ -626,7 +641,9 @@ assets:
   lod_levels: 2
   generation: fast
   animate:
-    clips: idle,walk,run,jump,attack,hit,death
+    preset: humanoid
+    force_preset: true
+    clips: idle,walk,run,jump,attack,hit,death,punch,roar
 - id: bgm_battle
   idea: intense fantasy battle music, driving orchestral combat theme, dramatic action rhythm
   kind: prop

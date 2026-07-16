@@ -243,13 +243,12 @@ function applyAdaptiveEffectLevers(state: State): void {
           if (n8ao?.configuration?.halfRes !== preset.ssaoHalfResolution) {
             n8ao.configuration.halfRes = preset.ssaoHalfResolution;
           }
-          // Intensity is overwritten by the effect update() from the component;
-          // re-apply the tier scale after that so Low can zero out AO cost.
+          // Apply only when the effective component × tier value changes.
           const base = Postprocessing.ssaoIntensity[entity];
-          n8ao.configuration.intensity = Math.max(
-            0,
-            base * preset.ssaoIntensityScale
-          );
+          const intensity = Math.max(0, base * preset.ssaoIntensityScale);
+          if (n8ao.configuration.intensity !== intensity) {
+            n8ao.configuration.intensity = intensity;
+          }
           break;
         }
         case 'godRays': {
@@ -269,8 +268,11 @@ function applyAdaptiveEffectLevers(state: State): void {
             // factor. We can't read the user's "intended" value back from the
             // effect reliably after scaling, so scale relative to the
             // component field each frame.
-            const base = Postprocessing.dofBokehScale[entity];
-            dof.bokehScale = Math.max(0, base * preset.dofBokehScaleScale);
+            const base = Postprocessing.dofBokehScale[entity] / 3;
+            const bokehScale = Math.max(0, base * preset.dofBokehScaleScale);
+            if (dof.bokehScale !== bokehScale) {
+              dof.bokehScale = bokehScale;
+            }
           }
           break;
         }

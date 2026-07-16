@@ -26,8 +26,12 @@ const compositionQuery = defineQuery([CompositionPending]);
 function syncGroupPose(group: THREE.Object3D, eid: number, state: State): void {
   const useWorld = state.hasComponent(eid, WorldTransform);
   const t = useWorld ? WorldTransform : Transform;
-  group.position.set(t.posX[eid], t.posY[eid], t.posZ[eid]);
-  group.scale.set(t.scaleX[eid], t.scaleY[eid], t.scaleZ[eid]);
+  const px = t.posX[eid];
+  const py = t.posY[eid];
+  const pz = t.posZ[eid];
+  const sx = t.scaleX[eid];
+  const sy = t.scaleY[eid];
+  const sz = t.scaleZ[eid];
   const rx = t.rotX[eid];
   const ry = t.rotY[eid];
   const rz = t.rotZ[eid];
@@ -37,6 +41,25 @@ function syncGroupPose(group: THREE.Object3D, eid: number, state: State): void {
     Math.abs(rx) < 1e-6 &&
     Math.abs(ry) < 1e-6 &&
     Math.abs(rz) < 1e-6;
+  const poseUnchanged =
+    group.position.x === px &&
+    group.position.y === py &&
+    group.position.z === pz &&
+    group.scale.x === sx &&
+    group.scale.y === sy &&
+    group.scale.z === sz &&
+    (isIdentity
+      ? group.rotation.x === t.eulerX[eid] &&
+        group.rotation.y === t.eulerY[eid] &&
+        group.rotation.z === t.eulerZ[eid]
+      : group.quaternion.x === rx &&
+        group.quaternion.y === ry &&
+        group.quaternion.z === rz &&
+        group.quaternion.w === rw);
+  if (poseUnchanged) return;
+
+  group.position.set(px, py, pz);
+  group.scale.set(sx, sy, sz);
   if (isIdentity) {
     group.rotation.set(t.eulerX[eid], t.eulerY[eid], t.eulerZ[eid]);
   } else {

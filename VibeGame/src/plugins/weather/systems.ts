@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { defineQuery } from '../../core';
+import { defineQueryLive } from '../../core';
 import type { State, System } from '../../core';
 import { getRenderingContext, MainCamera, threeCameras } from '../rendering';
 import { WorldTransform } from '../transforms/components';
@@ -9,8 +9,8 @@ import type { CloudField } from './clouds';
 import { createRain, RAIN_COUNT } from './rain';
 import { effectiveRainTarget, getWeather, setWeather } from './state';
 
-const weatherQuery = defineQuery([WeatherComponent]);
-const cameraQuery = defineQuery([MainCamera, WorldTransform]);
+const weatherQuery = defineQueryLive([WeatherComponent]);
+const cameraQuery = defineQueryLive([MainCamera, WorldTransform]);
 
 interface WeatherSideCars {
   clouds: CloudField | null;
@@ -38,11 +38,6 @@ function approach(
   if (seconds <= 0) return target;
   const k = 1 - Math.exp(-(3 / seconds) * dt);
   return current + (target - current) * k;
-}
-
-function activeCamera(): THREE.Camera | null {
-  for (const cam of threeCameras.values()) return cam;
-  return null;
 }
 
 /**
@@ -94,11 +89,13 @@ export const WeatherSystem: System = {
 
     // Camera anchor.
     const camIds = cameraQuery(state.world);
-    const cam = activeCamera();
-    if (camIds.length === 0 || !cam) return;
-    const cx = WorldTransform.posX[camIds[0]!];
-    const cz = WorldTransform.posZ[camIds[0]!];
-    const cy = WorldTransform.posY[camIds[0]!];
+    if (camIds.length === 0) return;
+    const camEid = camIds[0]!;
+    const cam = threeCameras.get(camEid);
+    if (!cam) return;
+    const cx = WorldTransform.posX[camEid];
+    const cz = WorldTransform.posZ[camEid];
+    const cy = WorldTransform.posY[camEid];
 
     const scene = getRenderingContext(state).scene;
 

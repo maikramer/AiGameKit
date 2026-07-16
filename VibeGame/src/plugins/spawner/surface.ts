@@ -154,6 +154,8 @@ const _eOut = /*@__PURE__*/ new THREE.Euler(0, 0, 0, 'XYZ');
 // so the returned Vector3 is reused instead of allocating per probe.
 const _n0 = /*@__PURE__*/ new THREE.Vector3();
 const _n1 = /*@__PURE__*/ new THREE.Vector3();
+const _avgSurfaceNormal = /*@__PURE__*/ new THREE.Vector3();
+const SURFACE_NORMAL_WEIGHTS = [1, 1, 1, 1, 6, 1, 1, 1, 1] as const;
 
 /**
  * Compute a partial terrain-alignment Euler (in RADIANS, XYZ order) for
@@ -310,18 +312,12 @@ export function sampleTerrainSurfaceMatrix(
     const heightAtRawSlope = (x: number, z: number) =>
       sampleHeightAt(data.sampler, x - ox, z - oz);
 
-    const CENTER_WEIGHT = 6;
-    const weights = [
-      [1, 1, 1],
-      [1, CENTER_WEIGHT, 1],
-      [1, 1, 1],
-    ];
     let totalWeight = 0;
-    const avgNormal = new THREE.Vector3(0, 0, 0);
+    const avgNormal = _avgSurfaceNormal.set(0, 0, 0);
 
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
-        const w = weights[row]![col]!;
+        const w = SURFACE_NORMAL_WEIGHTS[row * 3 + col]!;
         const sx = wx + (col - 1) * matrixSpacing;
         const sz = wz + (row - 1) * matrixSpacing;
         const n = normalFromHeightSampler(

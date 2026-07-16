@@ -348,7 +348,7 @@ function steerCombat(
   // Half-rate (alternate frames) — visual packing stays fine at ~30 Hz.
   let sepX = 0;
   let sepZ = 0;
-  if ((state.time.frameCount & 1) === 0) {
+  if (state.world && (state.time.frameCount & 1) === 0) {
     for (const other of aiAgentsQuery(state.world)) {
       if (other === eid || entityDead(other)) continue;
       const ox = Transform.posX[other] - x;

@@ -2,7 +2,12 @@ import { logger } from '../../core/utils/logger';
 import * as RAPIER from '@dimforge/rapier3d-compat';
 import { ActiveEvents } from '@dimforge/rapier3d-compat';
 import type { State, System } from '../../core';
-import { defineQuery, isPhysicsHeld, TIME_CONSTANTS } from '../../core';
+import {
+  defineQuery,
+  defineQueryLive,
+  isPhysicsHeld,
+  TIME_CONSTANTS,
+} from '../../core';
 import { Transform, WorldTransform } from '../transforms';
 import {
   ApplyAngularImpulse,
@@ -65,12 +70,12 @@ interface PhysicsContext {
   removalsDirty: boolean;
 }
 
-const physicsWorldQuery = defineQuery([PhysicsWorld]);
-const bodyQuery = defineQuery([Rigidbody]);
-const collisionEventsQuery = defineQuery([CollisionEvents]);
-const colliderQuery = defineQuery([Collider]);
-const characterControllerQuery = defineQuery([CharacterController]);
-const characterMovementQuery = defineQuery([
+const physicsWorldQuery = defineQueryLive([PhysicsWorld]);
+const bodyQuery = defineQueryLive([Rigidbody]);
+const collisionEventsQuery = defineQueryLive([CollisionEvents]);
+const colliderQuery = defineQueryLive([Collider]);
+const characterControllerQuery = defineQueryLive([CharacterController]);
+const characterMovementQuery = defineQueryLive([
   CharacterController,
   CharacterMovement,
   Rigidbody,
@@ -234,54 +239,76 @@ export const PhysicsInitializationSystem: System = {
     const worldRapier = context.physicsWorld;
     if (!worldRapier) return;
 
-    for (const entity of bodyQuery(state.world)) {
-      if (
-        !context.entityToRigidbody.has(entity) &&
-        !context.failedRigidbodies.has(entity) &&
-        !isPlacementPending(state, entity)
-      ) {
-        try {
-          createRigidbodyForEntity(entity, worldRapier, state, context);
-        } catch (err) {
-          logger.error(
-            `[Physics] Failed to create rigidbody for entity ${entity}:`,
-            err
-          );
-          context.failedRigidbodies.add(entity);
+    const bodyEntities = bodyQuery(state.world);
+    if (
+      context.removalsDirty ||
+      bodyEntities.length !==
+        context.entityToRigidbody.size + context.failedRigidbodies.size
+    ) {
+      for (const entity of bodyEntities) {
+        if (
+          !context.entityToRigidbody.has(entity) &&
+          !context.failedRigidbodies.has(entity) &&
+          !isPlacementPending(state, entity)
+        ) {
+          try {
+            createRigidbodyForEntity(entity, worldRapier, state, context);
+          } catch (err) {
+            logger.error(
+              `[Physics] Failed to create rigidbody for entity ${entity}:`,
+              err
+            );
+            context.failedRigidbodies.add(entity);
+          }
         }
       }
     }
 
-    for (const entity of colliderQuery(state.world)) {
-      if (
-        !context.entityToCollider.has(entity) &&
-        !context.failedColliders.has(entity)
-      ) {
-        try {
-          createColliderForEntity(entity, worldRapier, state, context);
-        } catch (err) {
-          logger.error(
-            `[Physics] Failed to create collider for entity ${entity}:`,
-            err
-          );
-          context.failedColliders.add(entity);
+    const colliderEntities = colliderQuery(state.world);
+    if (
+      context.removalsDirty ||
+      colliderEntities.length !==
+        context.entityToCollider.size + context.failedColliders.size
+    ) {
+      for (const entity of colliderEntities) {
+        if (
+          !context.entityToCollider.has(entity) &&
+          !context.failedColliders.has(entity)
+        ) {
+          try {
+            createColliderForEntity(entity, worldRapier, state, context);
+          } catch (err) {
+            logger.error(
+              `[Physics] Failed to create collider for entity ${entity}:`,
+              err
+            );
+            context.failedColliders.add(entity);
+          }
         }
       }
     }
 
-    for (const entity of characterControllerQuery(state.world)) {
-      if (
-        !context.entityToCharacterController.has(entity) &&
-        !context.failedControllers.has(entity)
-      ) {
-        try {
-          createCharacterControllerForEntity(entity, worldRapier, context);
-        } catch (err) {
-          logger.error(
-            `[Physics] Failed to create character controller for entity ${entity}:`,
-            err
-          );
-          context.failedControllers.add(entity);
+    const controllerEntities = characterControllerQuery(state.world);
+    if (
+      context.removalsDirty ||
+      controllerEntities.length !==
+        context.entityToCharacterController.size +
+          context.failedControllers.size
+    ) {
+      for (const entity of controllerEntities) {
+        if (
+          !context.entityToCharacterController.has(entity) &&
+          !context.failedControllers.has(entity)
+        ) {
+          try {
+            createCharacterControllerForEntity(entity, worldRapier, context);
+          } catch (err) {
+            logger.error(
+              `[Physics] Failed to create character controller for entity ${entity}:`,
+              err
+            );
+            context.failedControllers.add(entity);
+          }
         }
       }
     }

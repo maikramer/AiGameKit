@@ -8,12 +8,13 @@
     "predev": "node scripts/fetch-assets.mjs",
     "prebuild": "node scripts/fetch-assets.mjs --force",
     "fetch-assets": "node scripts/fetch-assets.mjs --force",
+    "generate-vegetation": "node scripts/run-generate-vegetation.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "three": "0.185.0"
+    "three": "0.185.1"
   },
   "devDependencies": {
     "typescript": "^7.0.2",

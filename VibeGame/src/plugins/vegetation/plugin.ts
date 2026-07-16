@@ -1,12 +1,14 @@
 import type { Adapter, Plugin, Recipe } from '../../core';
 import { Vegetation } from './components';
 import { vegetationParser } from './parser';
+import { VegetationPlannerSystem } from './planner-system';
 import { VegetationWindSystem } from './wind';
 
 /**
  * `<Vegetation meshes="…" density-per-km2="…" region-min="…" region-max="…">`
  * — dense ground cover via the shared static spawner path (InstancedMesh2) +
- * optional wind sway.
+ * optional wind sway. With `smart` (default on), meshes are split into
+ * grass/plant/flower layers that share cluster hubs.
  */
 export const vegetationRecipe: Recipe = {
   name: 'Vegetation',
@@ -31,6 +33,11 @@ export const vegetationRecipe: Recipe = {
     'random-yaw',
     'cluster-count',
     'cluster-radius',
+    'smart',
+    'flower-near-radius',
+    'flower-density-ratio',
+    'plant-density-ratio',
+    'mesh-roles',
   ],
 };
 
@@ -41,7 +48,7 @@ const windAdapter: Adapter = (entity, value) => {
 
 export const VegetationPlugin: Plugin = {
   recipes: [vegetationRecipe],
-  systems: [VegetationWindSystem],
+  systems: [VegetationPlannerSystem, VegetationWindSystem],
   components: {
     vegetation: Vegetation,
   },
@@ -54,9 +61,6 @@ export const VegetationPlugin: Plugin = {
         wind: 1,
         windRegistered: 0,
       },
-      // SpawnerPending defaults live in SpawnerPlugin; Vegetation also needs
-      // the component present — recipe lists it, defaults come from spawner
-      // if already registered, else provide a safe zero here.
       spawnerPending: {
         spawned: 0,
       },

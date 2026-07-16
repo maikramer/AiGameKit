@@ -39,6 +39,7 @@ upload a new release, and update `assets.lock.json` (`version` + `url` + `sha256
 | Spawn exclusion (city)                     | `spawner` plugin                       | `<SpawnExclusion at="0 0" radius="30">` keeps resources/enemies out of the city                                            |
 | City merchant                              | Entity script                          | `<GameObject name="merchant" script="merchant.ts">` (press **K** to trade)                                                 |
 | Interactables (rune pillar, shrine, chest) | Entity scripts + trimesh colliders     | `<GameObject script="…">` (press **F** to interact)                                                                        |
+| Ground carpet (grass / flowers)            | Smart `<Vegetation>` + bpy GLBs        | Roles grass→flower share cluster hubs; `meshes/vegetation/*.glb`; `npm run generate-vegetation`                            |
 | Static resources (trees, rocks, cacti)     | `<StaticSpawner>` + `<ResourceNode>`   | Per-biome: oak, pine_dark, dead_willow, cactus, ruin_pillar, etc. (chop/mine with **J**)                                   |
 | Biome enemies (animated)                   | `<DynamicSpawner>` + entity scripts    | wolf, shade, scorpion, bandit, bogling, mosquito, goblin, slime                                                            |
 | Biome regions (fog/ambient/BGM)            | `biomes` plugin                        | `<BiomeRegion polygon="[x,z;…]">` x4 (dark forest, desert, swamp, frozen peaks)                                            |
@@ -124,15 +125,18 @@ This creates (or refreshes):
 ```
 public/
   assets/
-    meshes/     # final GLBs (lod0/lod1/lod2, collision, rigged+animated): local, gitignored
-    images/     # Text2D PNGs: local, gitignored
-    textures/   # diffuse/PBR textures used by terrain and biomes
-    particles/  # Kenney CC0 sprites (flame, smoke, spark, …) for particle presets
-    audio/      # Text2Sound WAV/OGG
+    meshes/             # final GLBs (lod0/…): local, gitignored
+    meshes/vegetation/  # bpy grass/flowers (Y-up): tracked in git; `npm run generate-vegetation`
+    images/             # Text2D PNGs: local, gitignored
+    textures/           # diffuse/PBR textures used by terrain and biomes
+    particles/          # Kenney CC0 sprites (flame, smoke, spark, …) for particle presets
+    audio/              # Text2Sound WAV/OGG
     sky/sky.png
-    terrain/    # heightmap.png + terrain.json
+    terrain/            # heightmap.png + terrain.json
     gameassets_handoff.json
 ```
+
+`fetch-assets` preserves `meshes/vegetation/` so the release tarball does not restore Kenney stubs over the bpy carpet.
 
 ### 4. Run the game
 

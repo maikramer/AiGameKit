@@ -13,13 +13,13 @@ import {
   threeCameras,
 } from './plugins/rendering';
 import { MainCamera } from './plugins/rendering/components';
-import { defineQuery } from './core';
+import { defineQueryLive } from './core';
 import { setTargetCanvas } from './plugins/input';
 import { registerRuntime, unregisterRuntime } from './core/runtime-manager';
 import { resumeAudioContextOnFirstUserGesture } from './plugins/audio/systems';
 import { cancelLoadingFade } from './plugins/loading/context';
 
-const mainCameraQuery = defineQuery([MainCamera]);
+const mainCameraQuery = defineQueryLive([MainCamera]);
 
 export class GameRuntime {
   private state: State;

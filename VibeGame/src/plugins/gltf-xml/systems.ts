@@ -15,7 +15,10 @@ import {
   isGltfInstanced,
 } from './auto-instance';
 import { GltfPending, GltfPhysicsPending } from './components';
-import { registerGltfLocalYBounds } from './gltf-bounds-cache';
+import {
+  clearGltfBoundsCache,
+  registerGltfLocalYBounds,
+} from './gltf-bounds-cache';
 import {
   clearGltfLodUrls,
   getGltfLodUrls,
@@ -171,5 +174,6 @@ export const GltfXmlLoadSystem: System = {
     // re-populating the just-cleared cache nor attaching to the retired scene.
     bumpSceneGeneration(state);
     clearGltfMasterCache();
+    clearGltfBoundsCache();
   },
 };

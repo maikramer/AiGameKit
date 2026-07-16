@@ -105,5 +105,10 @@ export interface SpawnGroupSpec {
   clusterCount: number;
   /** Max radius (m) of each cluster around its centre. Ignored when clusterCount=0. */
   clusterRadius: number;
+  /**
+   * Precomputed cluster hubs `[x,z]`. When non-empty, TerrainSpawnSystem uses
+   * these instead of generating `clusterCount` random hubs (shared grass→flower).
+   */
+  clusterCenters?: Array<[number, number]>;
   templates: SpawnTemplateSpec[];
 }

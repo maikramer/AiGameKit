@@ -44,3 +44,28 @@ export function defineQuery(
     return out;
   };
 }
+
+/**
+ * Zero-copy query for hot read-only loops.
+ *
+ * Returns bitecs' live dense set directly, avoiding the O(N) snapshot copy in
+ * {@link defineQuery}. The caller MUST NOT add/remove any queried component or
+ * destroy entities while iterating the result. Use `defineQuery` whenever
+ * membership can change during the loop.
+ */
+export function defineQueryLive(
+  components: Record<string, unknown>[]
+): (world: World) => Uint32Array | number[] {
+  const cache = new WeakMap<
+    World,
+    { query: { dense: Uint32Array | number[] } }
+  >();
+  return (world: World): Uint32Array | number[] => {
+    let entry = cache.get(world);
+    if (!entry) {
+      entry = { query: registerQuery(world, components) };
+      cache.set(world, entry);
+    }
+    return entry.query.dense;
+  };
+}

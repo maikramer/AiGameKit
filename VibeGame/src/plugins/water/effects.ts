@@ -51,6 +51,7 @@ interface RippleFx {
 interface WaterFxContext {
   wade: Map<number, WadeState>;
   ripples: RippleFx[];
+  ripplePool: RippleFx[];
   ringGeometry: THREE.RingGeometry | null;
 }
 
@@ -59,7 +60,12 @@ const FX = new WeakMap<State, WaterFxContext>();
 function fxContext(state: State): WaterFxContext {
   let ctx = FX.get(state);
   if (!ctx) {
-    ctx = { wade: new Map(), ripples: [], ringGeometry: null };
+    ctx = {
+      wade: new Map(),
+      ripples: [],
+      ripplePool: [],
+      ringGeometry: null,
+    };
     FX.set(state, ctx);
   }
   return ctx;
@@ -86,27 +92,36 @@ export function spawnWaterRipple(
   if (!ctx.ringGeometry) {
     ctx.ringGeometry = new THREE.RingGeometry(0.82, 1, 40);
   }
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xeafaff,
-    transparent: true,
-    opacity: 0.85,
-    depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(ctx.ringGeometry, material);
+  let ripple = ctx.ripplePool.pop();
+  if (!ripple) {
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xeafaff,
+      transparent: true,
+      opacity: 0.85,
+      depthWrite: false,
+    });
+    ripple = {
+      mesh: new THREE.Mesh(ctx.ringGeometry, material),
+      material,
+      bornAt: 0,
+      life: RIPPLE_LIFE,
+      startRadius,
+      endRadius,
+    };
+  }
+  const { mesh, material } = ripple;
+  material.opacity = 0.85;
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, y, z);
   mesh.scale.setScalar(startRadius);
   // Above the water disc (renderOrder 2) so rings never z-fight the surface.
   mesh.renderOrder = 3;
   getRenderingContext(state).scene.add(mesh);
-  ctx.ripples.push({
-    mesh,
-    material,
-    bornAt: state.time.elapsed,
-    life: RIPPLE_LIFE,
-    startRadius,
-    endRadius,
-  });
+  ripple.bornAt = state.time.elapsed;
+  ripple.life = RIPPLE_LIFE;
+  ripple.startRadius = startRadius;
+  ripple.endRadius = endRadius;
+  ctx.ripples.push(ripple);
 }
 
 const waderQuery = defineQuery([Transform, CharacterMovement]);
@@ -226,8 +241,8 @@ export const WaterRippleFxSystem: System = {
       const t = (now - r.bornAt) / r.life;
       if (t >= 1) {
         r.mesh.removeFromParent();
-        r.material.dispose();
         ctx.ripples.splice(i, 1);
+        ctx.ripplePool.push(r);
         continue;
       }
       // Ease-out expansion reads as a real wavefront losing energy.
@@ -245,7 +260,11 @@ export const WaterRippleFxSystem: System = {
       r.mesh.removeFromParent();
       r.material.dispose();
     }
+    for (const r of ctx.ripplePool) {
+      r.material.dispose();
+    }
     ctx.ripples.length = 0;
+    ctx.ripplePool.length = 0;
     ctx.ringGeometry?.dispose();
     ctx.ringGeometry = null;
     FX.delete(state);

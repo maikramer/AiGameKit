@@ -20,7 +20,7 @@ import {
 describe('NavMesh recipes', () => {
   it('declares the surface recipe standalone and the walkable/agent recipes as merge components', () => {
     expect(navMeshRecipe.name).toBe('NavMesh');
-    expect(navMeshRecipe.components).toEqual(['nav-mesh-surface']);
+    expect(navMeshRecipe.components).toEqual(['transform', 'nav-mesh-surface']);
     expect(navMeshRecipe.merge).toBeFalsy();
 
     expect(navMeshWalkableRecipe.name).toBe('NavMeshWalkable');

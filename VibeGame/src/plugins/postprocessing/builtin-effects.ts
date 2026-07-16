@@ -88,6 +88,8 @@ function qualityModeForTier(
   return 'High';
 }
 
+const ssaoBaseIntensityByPass = new WeakMap<Pass, number>();
+
 registerEffect({
   key: 'smaa',
   position: 'first',
@@ -201,16 +203,22 @@ registerEffect({
   },
   update(state: CS, entity: number, pass: Pass): void {
     const ssao = pass as unknown as N8AOPostPass;
-    ssao.configuration.aoRadius = Math.max(
-      1e-6,
-      (state.ssaoRadius as Float32Array)[entity]
-    );
-    ssao.configuration.intensity = Math.max(
+    const radius = Math.max(1e-6, (state.ssaoRadius as Float32Array)[entity]);
+    if (ssao.configuration.aoRadius !== radius) {
+      ssao.configuration.aoRadius = radius;
+    }
+    const intensity = Math.max(
       0,
       (state.ssaoIntensity as Float32Array)[entity]
     );
+    if (ssaoBaseIntensityByPass.get(pass) !== intensity) {
+      ssaoBaseIntensityByPass.set(pass, intensity);
+      ssao.configuration.intensity = intensity;
+    }
   },
 });
+
+const dofBaseBokehByPass = new WeakMap<Pass, number>();
 
 registerEffect({
   key: 'depthOfField',
@@ -233,13 +241,21 @@ registerEffect({
   update(state: CS, entity: number, pass: Pass): void {
     const dof = effectOf(pass) as DepthOfFieldEffect | undefined;
     if (!dof) return;
-    dof.cocMaterial.focusDistance = (state.dofFocusDistance as Float32Array)[
-      entity
-    ];
-    dof.cocMaterial.focusRange = (state.dofFocusRange as Float32Array)[entity];
+    const focusDistance = (state.dofFocusDistance as Float32Array)[entity];
+    const focusRange = (state.dofFocusRange as Float32Array)[entity];
+    if (dof.cocMaterial.focusDistance !== focusDistance) {
+      dof.cocMaterial.focusDistance = focusDistance;
+    }
+    if (dof.cocMaterial.focusRange !== focusRange) {
+      dof.cocMaterial.focusRange = focusRange;
+    }
     // bokehScale is a target-circle count; use the component's coarse scale
     // divided down so the default (~3) lands near the library default (1).
-    dof.bokehScale = (state.dofBokehScale as Float32Array)[entity] / 3;
+    const bokehScale = (state.dofBokehScale as Float32Array)[entity] / 3;
+    if (dofBaseBokehByPass.get(pass) !== bokehScale) {
+      dofBaseBokehByPass.set(pass, bokehScale);
+      dof.bokehScale = bokehScale;
+    }
   },
 });
 

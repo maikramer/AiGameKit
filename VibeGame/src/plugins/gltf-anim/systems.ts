@@ -1,4 +1,4 @@
-import { defineQuery, type State, type System } from '../../core';
+import { defineQueryLive, type State, type System } from '../../core';
 import { GltfAnimator } from '../../extras/gltf-animator';
 import { MainCamera, threeCameras } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
@@ -23,8 +23,8 @@ export function unregisterAnimator(idx: number): void {
   animatorRegistry.delete(idx);
 }
 
-const gltfAnimQuery = defineQuery([GltfAnimationState]);
-const mainCameraQuery = defineQuery([MainCamera]);
+const gltfAnimQuery = defineQueryLive([GltfAnimationState]);
+const mainCameraQuery = defineQueryLive([MainCamera]);
 
 /** Beyond this: skip mixer entirely (pose frozen until closer). */
 const ANIM_SKIP_DIST_SQ = 150 * 150;

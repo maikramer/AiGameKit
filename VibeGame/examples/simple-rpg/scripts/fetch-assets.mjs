@@ -18,6 +18,7 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -87,9 +88,30 @@ async function main() {
 
   writeFileSync(tmp, buf);
   mkdirSync(extractTo, { recursive: true });
+
+  // bpy carpet (tracked in git) — release tarball still has Kenney stubs;
+  // keep local/versioned vegetation across extract.
+  const vegDir = join(extractTo, 'assets', 'meshes', 'vegetation');
+  const vegBak = join(tmpdir(), 'simple-rpg-vegetation-preserve');
+  let preservedVeg = false;
+  if (existsSync(vegDir) && readdirSync(vegDir).some((f) => f.endsWith('.glb'))) {
+    rmSync(vegBak, { recursive: true, force: true });
+    cpSync(vegDir, vegBak, { recursive: true });
+    preservedVeg = true;
+    log('preserving meshes/vegetation/ across extract.');
+  }
+
   // tar ships with Linux, macOS and Windows 10+.
   execFileSync('tar', ['-xzf', tmp, '-C', extractTo], { stdio: 'inherit' });
   rmSync(tmp, { force: true });
+
+  if (preservedVeg && existsSync(vegBak)) {
+    mkdirSync(dirname(vegDir), { recursive: true });
+    rmSync(vegDir, { recursive: true, force: true });
+    cpSync(vegBak, vegDir, { recursive: true });
+    rmSync(vegBak, { recursive: true, force: true });
+    log('restored meshes/vegetation/ (bpy carpet).');
+  }
 
   mkdirSync(dirname(sentinel), { recursive: true });
   writeFileSync(sentinel, `${lock.version}\n`);

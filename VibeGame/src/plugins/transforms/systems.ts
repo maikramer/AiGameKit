@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { System, defineQuery } from '../../core';
+import { System, defineQueryLive } from '../../core';
 import type { State } from '../../core';
 import { Parent } from '../../core';
 import { Transform, WorldTransform } from './components';
@@ -17,7 +17,8 @@ const position = new THREE.Vector3();
 const rotation = new THREE.Quaternion();
 const scale = new THREE.Vector3();
 
-const transformQuery = defineQuery([Transform]);
+// Read-only membership: this system may add WorldTransform, never Transform.
+const transformQuery = defineQueryLive([Transform]);
 
 function ancestorIsDirty(state: State, entity: number): boolean {
   // Walk up the Parent chain: if any ancestor is dirty this frame, the entity's

@@ -2329,39 +2329,26 @@
            da muralha, dentro de ~±45): carvalhos (madeira) + pedras
            (pedra). A SpawnExclusion mantém tudo fora da cidade.
            ============================================================ -->
-        <!-- Vegetação rasteira (Kenney ≈0.25 m nativo → scale 1–3 = 0.25–0.75 m).
-           Clusters densos; SpawnExclusion da cidade sempre honrado. -->
+        <!-- Smart Vegetation patch: grass hubs → plants/flowers nearby.
+           GLBs: scripts/generate_vegetation_glb.py (npm run generate-vegetation). -->
         <Vegetation
-          meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb"
-          density-per-km2="40000"
+          meshes="/assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb"
+          density-per-km2="52000"
           seed="41"
           region-min="-90 0 -90"
           region-max="90 0 90"
-          scale-min="1.0"
-          scale-max="3.0"
+          scale-min="0.9"
+          scale-max="2.2"
           max-slope-deg="35"
           avoid-water="1"
           avoid-overlaps="0"
           max-distance="110"
-          cluster-count="40"
-          cluster-radius="3.5"
-          wind="1"
-        ></Vegetation>
-        <!-- Flores / plantas junto ao laguinho NW. -->
-        <Vegetation
-          meshes="/assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb /assets/meshes/vegetation/plant_flatTall.glb"
-          density-per-km2="40000"
-          seed="77"
-          region-min="-55 0 42"
-          region-max="-28 0 68"
-          scale-min="1.0"
-          scale-max="2.8"
-          max-slope-deg="32"
-          avoid-water="1"
-          avoid-overlaps="0"
-          max-distance="90"
-          cluster-count="8"
-          cluster-radius="2.8"
+          cluster-count="52"
+          cluster-radius="3.8"
+          flower-near-radius="2.4"
+          flower-density-ratio="0.18"
+          plant-density-ratio="0.28"
+          smart="1"
           wind="1"
         ></Vegetation>
         <!-- Laguinho NW da muralha mas ESTE do rio (antes -50,42 sobrepunha
@@ -2748,7 +2735,28 @@
            Pinheiros densos, cogumelos brilhantes, clareira da bruxa,
            lobos + sombras, chefe Bruxa no fundo.
            ============================================================ -->
-        <!-- §6.1 Vegetação -->
+        <!-- §6.1 Smart carpet (grass → flowers under canopy) -->
+        <Vegetation
+          meshes="/assets/meshes/vegetation/grass_large.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/flower_purpleA.glb /assets/meshes/vegetation/flower_redA.glb"
+          density-per-km2="38000"
+          seed="601"
+          region-min="-80 0 45"
+          region-max="80 0 155"
+          scale-min="1.0"
+          scale-max="2.4"
+          max-slope-deg="38"
+          avoid-water="1"
+          avoid-overlaps="0"
+          max-distance="120"
+          cluster-count="36"
+          cluster-radius="4.2"
+          flower-near-radius="2.2"
+          flower-density-ratio="0.16"
+          plant-density-ratio="0.22"
+          smart="1"
+          wind="1"
+        ></Vegetation>
+        <!-- §6.2 Árvores -->
         <StaticSpawner
           profile="tree"
           count="20"
@@ -3480,7 +3488,28 @@
            Salgueiros mortos, nenúfares, fogos-fátuos, passadiço podre
            até a choça, boglings + mosquitos, chefe Bog Warden.
            ============================================================ -->
-        <!-- §8.1 Vegetação -->
+        <!-- §8.1 Smart carpet (leafy grass → bog flowers) -->
+        <Vegetation
+          meshes="/assets/meshes/vegetation/grass_leafs.glb /assets/meshes/vegetation/grass_leafsLarge.glb /assets/meshes/vegetation/grass.glb /assets/meshes/vegetation/plant_flatShort.glb /assets/meshes/vegetation/plant_flatTall.glb /assets/meshes/vegetation/flower_yellowA.glb /assets/meshes/vegetation/flower_purpleA.glb"
+          density-per-km2="42000"
+          seed="801"
+          region-min="-80 0 -155"
+          region-max="80 0 -50"
+          scale-min="1.0"
+          scale-max="2.3"
+          max-slope-deg="30"
+          avoid-water="1"
+          avoid-overlaps="0"
+          max-distance="110"
+          cluster-count="40"
+          cluster-radius="3.6"
+          flower-near-radius="2.5"
+          flower-density-ratio="0.2"
+          plant-density-ratio="0.3"
+          smart="1"
+          wind="1"
+        ></Vegetation>
+        <!-- §8.2 Árvores -->
         <StaticSpawner
           profile="tree"
           count="16"

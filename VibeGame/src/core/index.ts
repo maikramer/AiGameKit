@@ -7,7 +7,7 @@ export {
   type World as IWorld,
 } from 'bitecs';
 
-export { defineQuery } from './ecs/query';
+export { defineQuery, defineQueryLive } from './ecs/query';
 export type { Component } from './ecs/types';
 
 export {

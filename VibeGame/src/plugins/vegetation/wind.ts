@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import type { State, System } from '../../core';
-import { defineQuery } from '../../core';
 import { getWindVector } from '../weather/state';
-import { Vegetation } from './components';
 
 /** URLs whose InstancedMesh2 pools should receive wind sway. */
 const windUrlsByState = new WeakMap<State, Set<string>>();
+const EMPTY_WIND_URLS: ReadonlySet<string> = new Set();
 
 interface WindUniforms {
   uVegWind: { value: THREE.Vector2 };
@@ -29,7 +28,7 @@ export function registerVegetationWindUrl(state: State, url: string): void {
 }
 
 export function getVegetationWindUrls(state: State): ReadonlySet<string> {
-  return windUrlsByState.get(state) ?? new Set();
+  return windUrlsByState.get(state) ?? EMPTY_WIND_URLS;
 }
 
 /** Test helper: clear wind URL registry for a state. */
@@ -103,9 +102,7 @@ export function maybePatchVegetationWindMaterial(
   live.add(mat);
 }
 
-const vegetationQuery = defineQuery([Vegetation]);
-
-let windTime = 0;
+const windTimeByState = new WeakMap<State, number>();
 
 /**
  * Drives wind uniforms on materials patched via
@@ -114,17 +111,11 @@ let windTime = 0;
 export const VegetationWindSystem: System = {
   group: 'draw',
   update(state: State): void {
-    windTime += state.time.deltaTime;
-
-    for (const eid of vegetationQuery(state.world)) {
-      if (Vegetation.wind[eid] === 1 && Vegetation.windRegistered[eid] !== 1) {
-        Vegetation.windRegistered[eid] = 1;
-      }
-    }
-
     const live = windMatsByState.get(state);
     if (!live || live.size === 0) return;
 
+    const windTime = (windTimeByState.get(state) ?? 0) + state.time.deltaTime;
+    windTimeByState.set(state, windTime);
     const wind = getWindVector(state);
     const strength = Math.hypot(wind.x, wind.z);
     const dirX = strength > 1e-6 ? wind.x / strength : 0;

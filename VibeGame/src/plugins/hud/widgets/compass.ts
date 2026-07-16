@@ -205,9 +205,20 @@ export function createCompassWidget(
 
       layer.appendChild(root);
 
-      const update = (): void => {
+      let lastUpdateAt = -Infinity;
+      let lastCameraAzimuth = Number.NaN;
+      const update = (state: State): void => {
+        const now = state.time.elapsed;
         const camAz = firstCameraAzimuth();
         if (camAz === null) return;
+        if (
+          now - lastUpdateAt < 1 / 30 &&
+          Math.abs(wrapAngle(camAz - lastCameraAzimuth)) < 1e-4
+        ) {
+          return;
+        }
+        lastUpdateAt = now;
+        lastCameraAzimuth = camAz;
         const halfWidth = root.clientWidth / 2;
         if (halfWidth === 0) return;
         for (const mark of marks) {

@@ -116,7 +116,7 @@ experiments/
 # VibeGame simple-rpg — assets binários distribuídos via GitHub Release
 # (scripts/fetch-assets.mjs + assets.lock.json). Não versionar para manter
 # o histórico leve; restaurar localmente com: node scripts/fetch-assets.mjs
-VibeGame/examples/simple-rpg/public/assets/meshes/
+VibeGame/examples/simple-rpg/public/assets/meshes/**
 VibeGame/examples/simple-rpg/public/assets/images/
 VibeGame/examples/simple-rpg/public/assets/textures/
 VibeGame/examples/simple-rpg/public/assets/icons/
@@ -124,6 +124,9 @@ VibeGame/examples/simple-rpg/public/assets/audio/
 VibeGame/examples/simple-rpg/public/assets/sky/
 VibeGame/examples/simple-rpg/public/assets/terrain/
 VibeGame/examples/simple-rpg/public/assets/particles/
+# Carpet bpy (scripts/generate_vegetation_glb.py) — pequeno, versionado
+!VibeGame/examples/simple-rpg/public/assets/meshes/vegetation/
+!VibeGame/examples/simple-rpg/public/assets/meshes/vegetation/**
 # Manter a estrutura de pastas (.gitkeep) mesmo sem assets
 !VibeGame/examples/simple-rpg/public/assets/**/.gitkeep
 # Marker written by scripts/fetch-assets.mjs (prebuilt asset bundle version)

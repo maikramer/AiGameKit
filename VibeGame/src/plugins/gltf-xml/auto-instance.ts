@@ -2,13 +2,13 @@ import { logger } from '../../core/utils/logger';
 import * as THREE from 'three';
 import { InstancedMesh2 } from '@three.ez/instanced-mesh';
 import type { State, System } from '../../core';
-import { defineQuery } from '../../core';
+import { Parent } from '../../core';
 import { loadGltfMasterTracked } from '../../extras/gltf-bridge';
 import { getSceneGeneration } from '../../extras/scene-generation';
 import { getScene, setupCsmMaterial } from '../rendering';
 import { maybePatchVegetationWindMaterial } from '../vegetation/wind';
-import { MainCamera } from '../rendering/components';
 import { DistanceCull } from '../rendering/components';
+import { BodyType, Rigidbody } from '../physics/components';
 import { Transform, WorldTransform } from '../transforms/components';
 import { registerGltfLocalYBounds } from './gltf-bounds-cache';
 
@@ -57,7 +57,15 @@ interface InstanceSlotState {
   ex: number;
   ey: number;
   ez: number;
+  rx: number;
+  ry: number;
+  rz: number;
+  rw: number;
   sx: number;
+  sy: number;
+  sz: number;
+  useWorld: boolean;
+  dynamic: boolean;
   culled: boolean;
 }
 
@@ -282,27 +290,60 @@ function writeSlotMatrix(
   pool.boundsDirty = true;
 }
 
-function snapshotSlotSource(slot: InstanceSlotState): void {
-  const eid = slot.entity;
-  slot.x = Transform.posX[eid];
-  slot.y = Transform.posY[eid];
-  slot.z = Transform.posZ[eid];
-  slot.ex = Transform.eulerX[eid];
-  slot.ey = Transform.eulerY[eid];
-  slot.ez = Transform.eulerZ[eid];
-  slot.sx = Transform.scaleX[eid];
+function slotUsesWorld(state: State, eid: number): boolean {
+  return (
+    state.hasComponent(eid, WorldTransform) && WorldTransform.scaleX[eid] !== 0
+  );
 }
 
-function slotSourceChanged(slot: InstanceSlotState): boolean {
-  const eid = slot.entity;
+function slotIsDynamic(state: State, eid: number): boolean {
   return (
-    slot.x !== Transform.posX[eid] ||
-    slot.y !== Transform.posY[eid] ||
-    slot.z !== Transform.posZ[eid] ||
-    slot.ex !== Transform.eulerX[eid] ||
-    slot.ey !== Transform.eulerY[eid] ||
-    slot.ez !== Transform.eulerZ[eid] ||
-    slot.sx !== Transform.scaleX[eid]
+    state.hasComponent(eid, Parent) ||
+    (state.hasComponent(eid, Rigidbody) &&
+      Rigidbody.type[eid] !== BodyType.Fixed)
+  );
+}
+
+function snapshotSlotSource(state: State, slot: InstanceSlotState): void {
+  const eid = slot.entity;
+  const useWorld = slotUsesWorld(state, eid);
+  const source = useWorld ? WorldTransform : Transform;
+  slot.x = source.posX[eid];
+  slot.y = source.posY[eid];
+  slot.z = source.posZ[eid];
+  slot.ex = source.eulerX[eid];
+  slot.ey = source.eulerY[eid];
+  slot.ez = source.eulerZ[eid];
+  slot.rx = source.rotX[eid];
+  slot.ry = source.rotY[eid];
+  slot.rz = source.rotZ[eid];
+  slot.rw = source.rotW[eid];
+  slot.sx = source.scaleX[eid];
+  slot.sy = source.scaleY[eid];
+  slot.sz = source.scaleZ[eid];
+  slot.useWorld = useWorld;
+  slot.dynamic = slotIsDynamic(state, eid);
+}
+
+function slotSourceChanged(state: State, slot: InstanceSlotState): boolean {
+  const eid = slot.entity;
+  const useWorld = slotUsesWorld(state, eid);
+  const source = useWorld ? WorldTransform : Transform;
+  return (
+    slot.useWorld !== useWorld ||
+    slot.x !== source.posX[eid] ||
+    slot.y !== source.posY[eid] ||
+    slot.z !== source.posZ[eid] ||
+    slot.ex !== source.eulerX[eid] ||
+    slot.ey !== source.eulerY[eid] ||
+    slot.ez !== source.eulerZ[eid] ||
+    slot.rx !== source.rotX[eid] ||
+    slot.ry !== source.rotY[eid] ||
+    slot.rz !== source.rotZ[eid] ||
+    slot.rw !== source.rotW[eid] ||
+    slot.sx !== source.scaleX[eid] ||
+    slot.sy !== source.scaleY[eid] ||
+    slot.sz !== source.scaleZ[eid]
   );
 }
 
@@ -336,12 +377,20 @@ function addSlot(state: State, pool: GltfInstancePool, eid: number): void {
     ex: 0,
     ey: 0,
     ez: 0,
+    rx: 0,
+    ry: 0,
+    rz: 0,
+    rw: 1,
     sx: 0,
+    sy: 0,
+    sz: 0,
+    useWorld: false,
+    dynamic: slotIsDynamic(state, eid),
     culled: false,
   };
   pool.slots.push(slot);
   pool.slotByEntity.set(eid, pool.slots.length - 1);
-  snapshotSlotSource(slot);
+  snapshotSlotSource(state, slot);
   writeSlotMatrix(state, pool, slot);
 
   state.onDestroy(eid, () => removeSlot(pool, eid));
@@ -534,7 +583,7 @@ export function addInstancedGltf(
   if (!pool.loadKicked) kickLoad(state, pool);
 }
 
-const cameraQuery = defineQuery([MainCamera, WorldTransform]);
+const STATIC_SLOT_SCAN_INTERVAL = 4;
 
 /**
  * Per-frame slot maintenance: rewrite matrices for entities whose Transform
@@ -550,20 +599,20 @@ export const GltfAutoInstanceSystem: System = {
     const pools = poolsByState.get(state);
     if (!pools) return;
 
-    // Camera presence is still required by other systems reading MainCamera;
-    // InstancedMesh2 resolves the active render camera on its own.
-    cameraQuery(state.world);
+    const scanStatic = state.time.frameCount % STATIC_SLOT_SCAN_INTERVAL === 0;
 
     for (const [, pool] of pools) {
       if (!pool.primitives) continue;
 
       for (const slot of pool.slots) {
+        if (!slot.dynamic && !scanStatic) continue;
         const eid = slot.entity;
+        if (scanStatic) slot.dynamic = slotIsDynamic(state, eid);
         const culled =
           state.hasComponent(eid, DistanceCull) &&
           DistanceCull.culled[eid] === 1;
 
-        const moved = slotSourceChanged(slot);
+        const moved = slotSourceChanged(state, slot);
         if (culled === slot.culled && !moved) continue;
 
         if (culled !== slot.culled) {
@@ -573,7 +622,7 @@ export const GltfAutoInstanceSystem: System = {
         }
         slot.culled = culled;
         if (!culled) {
-          snapshotSlotSource(slot);
+          snapshotSlotSource(state, slot);
           writeSlotMatrix(state, pool, slot);
         }
       }

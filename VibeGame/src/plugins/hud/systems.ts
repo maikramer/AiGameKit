@@ -1,17 +1,20 @@
 import * as THREE from 'three';
 import { Container, reversePainterSortStable, Text } from '@pmndrs/uikit';
-import { defineQuery, type State, type System } from '../../core';
+import { defineQueryLive, type State, type System } from '../../core';
 import { getRenderingContext, getScene } from '../rendering';
 import { Transform, WorldTransform } from '../transforms';
 import { HudPanel } from './components';
 import { getStringAt } from './context';
 import { I18nText } from '../i18n/components';
 
-const hudQuery = defineQuery([HudPanel, Transform]);
+const hudQuery = defineQueryLive([HudPanel, Transform]);
 
 const panelByEntity = new WeakMap<State, Map<number, Container>>();
 const textByEntity = new WeakMap<State, Map<number, Text>>();
+const textValueByEntity = new WeakMap<State, Map<number, string>>();
+const panelLastUpdateAt = new WeakMap<Container, number>();
 const rendererConfigured = new WeakSet<THREE.WebGLRenderer>();
+const PANEL_LAYOUT_INTERVAL = 1 / 15;
 
 function getPanels(state: State): Map<number, Container> {
   let m = panelByEntity.get(state);
@@ -27,6 +30,15 @@ function getTexts(state: State): Map<number, Text> {
   if (!m) {
     m = new Map();
     textByEntity.set(state, m);
+  }
+  return m;
+}
+
+function getTextValues(state: State): Map<number, string> {
+  let m = textValueByEntity.get(state);
+  if (!m) {
+    m = new Map();
+    textValueByEntity.set(state, m);
   }
   return m;
 }
@@ -48,14 +60,18 @@ export const HudBuildSystem: System = {
 
     const panels = getPanels(state);
     const texts = getTexts(state);
+    const textValues = getTextValues(state);
     for (const eid of hudQuery(state.world)) {
       if (HudPanel.built[eid]) {
         if (state.hasComponent(eid, I18nText) && I18nText.resolved[eid]) {
           const text = texts.get(eid);
-          if (text) {
+          const value = getStringAt(state, HudPanel.textIndex[eid]);
+          if (text && textValues.get(eid) !== value) {
             text.setProperties({
-              text: getStringAt(state, HudPanel.textIndex[eid]),
+              text: value,
             });
+            textValues.set(eid, value);
+            panels.get(eid)?.update(0);
           }
         }
         continue;
@@ -83,8 +99,9 @@ export const HudBuildSystem: System = {
         justifyContent: 'center',
       });
 
+      const initialText = getStringAt(state, HudPanel.textIndex[eid]);
       const text = new Text({
-        text: getStringAt(state, HudPanel.textIndex[eid]),
+        text: initialText,
         fontSize: 0.08,
         color: 0xffffff,
       });
@@ -93,6 +110,7 @@ export const HudBuildSystem: System = {
       scene.add(panel);
       panels.set(eid, panel);
       texts.set(eid, text);
+      textValues.set(eid, initialText);
       HudPanel.built[eid] = 1;
     }
   },
@@ -104,6 +122,7 @@ export const HudSyncSystem: System = {
     if (state.headless) return;
     const panels = getPanels(state);
     const dt = state.time.deltaTime || 0;
+    const now = state.time.elapsed;
     for (const eid of hudQuery(state.world)) {
       const panel = panels.get(eid);
       if (!panel) continue;
@@ -117,10 +136,20 @@ export const HudSyncSystem: System = {
       const wz = state.hasComponent(eid, WorldTransform)
         ? WorldTransform.posZ[eid]
         : Transform.posZ[eid];
-      panel.position.set(wx, wy, wz);
+      if (
+        panel.position.x !== wx ||
+        panel.position.y !== wy ||
+        panel.position.z !== wz
+      ) {
+        panel.position.set(wx, wy, wz);
+      }
       // uikit's per-instance update() drives its own layout/text re-flow;
-      // delta is in milliseconds (matches the library's own render-loop example).
-      panel.update(dt * 1000);
+      // static panels need only a modest cadence after initial/text updates.
+      const lastUpdate = panelLastUpdateAt.get(panel) ?? -Infinity;
+      if (now - lastUpdate >= PANEL_LAYOUT_INTERVAL) {
+        panel.update(dt * 1000);
+        panelLastUpdateAt.set(panel, now);
+      }
     }
   },
 };

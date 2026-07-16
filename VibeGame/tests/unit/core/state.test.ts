@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-import { State, defineQuery } from 'vibegame';
+import { State, defineQuery, defineQueryLive } from 'vibegame';
 
 const MAX_ENTITIES = 100000;
 
@@ -41,6 +41,18 @@ describe('State', () => {
     const results = defineQuery([TestComponent])(state.world);
     expect(results).toContain(entity1);
     expect(results).not.toContain(entity2);
+  });
+
+  it('should expose a zero-copy live query for read-only loops', () => {
+    const entity = state.createEntity();
+    state.addComponent(entity, TestComponent);
+
+    const query = defineQueryLive([TestComponent]);
+    const first = query(state.world);
+    const second = query(state.world);
+
+    expect(second).toBe(first);
+    expect(first).toContain(entity);
   });
 
   it('should step simulation', () => {

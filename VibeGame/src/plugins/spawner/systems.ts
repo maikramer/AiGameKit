@@ -312,8 +312,13 @@ export const TerrainSpawnSystem: System = {
       const templateRadiusBase = footprintBaseRadius(spec, templateUrls(spec));
 
       // Cluster centres (optional): dense patches instead of a uniform carpet.
+      // Precomputed hubs (e.g. vegetation flower layer sharing grass hubs) win.
       const clusterCenters: Array<[number, number]> = [];
-      if (spec.clusterCount > 0 && spec.clusterRadius > 0) {
+      if (spec.clusterCenters && spec.clusterCenters.length > 0) {
+        for (const hub of spec.clusterCenters) {
+          clusterCenters.push([hub[0], hub[1]]);
+        }
+      } else if (spec.clusterCount > 0 && spec.clusterRadius > 0) {
         const cAttempts = Math.max(spec.clusterCount * 8, 32);
         for (
           let c = 0;
