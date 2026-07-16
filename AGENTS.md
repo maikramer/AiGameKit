@@ -339,7 +339,9 @@ Per-tool legacy servers (`text2icon server`, etc.) remain as **deprecated** fall
 
 **VRAM coordination:** Admit uses **peak = weights(quant) + inference activation +
 safety** — not bare GPU size / YAML footprint. 6 GB cards refuse full fp16 text3d;
-use `sdnq-int4`. In-process: `ensure_vram_available(N, backend="text3d")` → UMS
+use `sdnq-int4`. Clients that run SDNQ (paint3d `memory_efficient`, etc.) must send
+`sdnq_preset` and/or `memory_efficient=true` — otherwise UMS assumes fp16 peak ~8 GiB
+and refuses. In-process: `ensure_vram_available(N, backend="text3d")` → UMS
 `max(N, peak)`. Kill refuses while UMS queue busy (`respect_ums_queue=True`).
 
 ### Agents — VRAM busy checklist (do NOT skip)
