@@ -23,7 +23,23 @@ class Adapter(BackendAdapter):
     def load(self, **kwargs: Any) -> Any:
         from paint3d.painter import PaintBatchProcessor
 
-        proc = PaintBatchProcessor(verbose=kwargs.get("verbose", False), **kwargs)
+        # UMS-only / peak-planning keys — PaintBatchProcessor não os aceita.
+        quant = kwargs.pop("sdnq_preset", None) or kwargs.pop("quant_mode", None)
+        kwargs.pop("offload", None)
+        mem_eff = kwargs.pop("memory_efficient", None)
+        if mem_eff is None and quant is not None:
+            mem_eff = str(quant).strip().lower() not in ("none", "null", "")
+        mem_eff = bool(mem_eff)
+
+        proc = PaintBatchProcessor(
+            verbose=bool(kwargs.get("verbose", False)),
+            memory_efficient=mem_eff,
+            gpu_ids=kwargs.get("gpu_ids"),
+            torch_compile=bool(kwargs.get("torch_compile", False)),
+            torch_compile_mode=str(kwargs.get("torch_compile_mode", "default")),
+            channels_last=bool(kwargs.get("channels_last", False)),
+            allow_group_offload=bool(kwargs.get("allow_group_offload", False)),
+        )
         return proc.__enter__()
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
