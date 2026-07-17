@@ -1232,12 +1232,6 @@ def bake_master_cmd(
     ),
 )
 @click.option(
-    "--watertight/--no-watertight",
-    default=True,
-    show_default=True,
-    help="Fecho total: caps planares + base aberta + fill progressivo (assets de jogo devem ser fechados).",
-)
-@click.option(
     "--export-origin",
     type=click.Choice(["feet", "center", "none"]),
     default=None,
@@ -1256,15 +1250,14 @@ def topology_fix_cmd(
     input_mesh: Path,
     output: Path | None,
     fill_holes_sides: int | None,
-    watertight: bool,
     export_origin: str | None,
     export_rotation_x_deg: float | None,
 ) -> None:
     """Repara topologia de um GLB cru (Stage 2 da pipeline).
 
-    Operações em ordem: weld exato (1e-5) → weld adaptativo →
-    normais consistentes → fill_holes (perfil ou ``--fill-holes-sides``) →
-    watertight → clamp_base_flare → Taubin → shade-smooth.
+    Operações (perfil lean): reweld → weld → dissolve/loose → long edges →
+    slivers → debris → fill_holes (micro) → normais → shade-smooth.
+    Sem watertight / force-base / cascas internas / flare / Taubin.
 
     Substitui a etapa que estava embebida em ``text3d generate``.
     Recomendado correr em ``id_shape.glb`` para produzir ``id_clean.glb``.
@@ -1281,7 +1274,6 @@ def topology_fix_cmd(
             input_mesh,
             out_path,
             fill_holes_sides=fill_holes_sides,
-            watertight=watertight,
         )
         if export_origin is not None and export_origin != "none":
             from .utils.export import convert_mesh

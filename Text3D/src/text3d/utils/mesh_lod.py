@@ -131,13 +131,11 @@ from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E4
 def _prepare_topology_bpy(
     mesh_obj,
     fill_holes_sides: int | None = None,
-    watertight: bool = True,
 ) -> None:
-    """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
+    """Pipeline de preparação de topologia — perfil Shared ``topology_clean`` (lean).
 
-    Shade-smooth fica no Text3D (export GLTF / V/Tri). O reweld de normal-splits
-    e o watertight estão no perfil — sem segunda passagem duplicada.
-    ``fill_holes_sides=None`` → valor do perfil (32); não forçar 64 (fundia finos).
+    Shade-smooth fica no Text3D (export GLTF / V/Tri). Reweld no perfil.
+    ``fill_holes_sides=None`` → valor do perfil (32).
     """
     log = logging.getLogger(__name__)
 
@@ -146,7 +144,7 @@ def _prepare_topology_bpy(
 
     from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
-    overrides: dict = {"watertight": watertight}
+    overrides: dict = {}
     if fill_holes_sides is not None:
         overrides["fill_holes_sides"] = int(fill_holes_sides)
 
@@ -162,17 +160,6 @@ def _prepare_topology_bpy(
         log.warning("Slivers (agulhas): %d faces removidas", stats["sliver_faces"])
     if stats.get("debris_faces"):
         log.info("Debris removido: %d faces em ilhas soltas minúsculas", stats["debris_faces"])
-    if watertight and stats.get("boundary_before"):
-        log.info(
-            "Watertight: %d arestas abertas → %d (caps=%d)",
-            stats.get("boundary_before", 0),
-            stats.get("boundary_after", 0),
-            stats.get("loops_capped", 0),
-        )
-    if stats.get("flare_verts_clamped"):
-        log.info("Base flare clamp: %d verts", stats["flare_verts_clamped"])
-    if stats.get("taubin_iters"):
-        log.info("Taubin smooth: %d iterações", stats["taubin_iters"])
 
     _shade_smooth(mesh_obj)
 
@@ -223,7 +210,6 @@ def prepare_mesh_topology(
     output_path: Path | str | None = None,
     *,
     fill_holes_sides: int | None = None,
-    watertight: bool = True,
     **_legacy: object,
 ) -> Path:
     """Prepara topologia de um GLB: remove doubles, weld, normais, fill holes.
@@ -237,19 +223,26 @@ def prepare_mesh_topology(
         output_path: GLB de saída (se None, sobrepõe o ficheiro de entrada).
         fill_holes_sides: Tamanho máximo (em arestas) de buracos a preencher.
             ``None`` usa o perfil ``topology_clean`` (32). ``0`` desativa.
-        **_legacy: Aceita ``skip_remesh`` (kwarg morto) por compat. Será
-            removido em versão futura.
+        **_legacy: Aceita kwargs mortos (``skip_remesh``, ``watertight``,
+            ``force_close_base``) por compat — ignorados.
 
     Returns:
         Path para o GLB preparado (ou trimesh.Trimesh se input for trimesh).
     """
-    if "skip_remesh" in _legacy:
-        logging.getLogger(__name__).warning("prepare_mesh_topology: kwarg 'skip_remesh' está obsoleto e será ignorado.")
+    log = logging.getLogger(__name__)
+    for dead in ("skip_remesh", "watertight", "force_close_base"):
+        if dead in _legacy:
+            log.warning("prepare_mesh_topology: kwarg %r obsoleto — ignorado", dead)
     _was_trimesh = hasattr(input_path, "export")
     try:
-        return _prepare_mesh_topology_impl(input_path, output_path, _was_trimesh, fill_holes_sides, watertight)
+        return _prepare_mesh_topology_impl(
+            input_path,
+            output_path,
+            _was_trimesh,
+            fill_holes_sides,
+        )
     except ImportError:
-        logging.getLogger(__name__).warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
+        log.warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
         if _was_trimesh:
             return input_path
         return Path(input_path)
@@ -260,7 +253,6 @@ def _prepare_mesh_topology_impl(
     output_path,
     _was_trimesh,
     fill_holes_sides: int | None = None,
-    watertight: bool = True,
 ):
     if _was_trimesh:
         import tempfile
@@ -276,9 +268,8 @@ def _prepare_mesh_topology_impl(
         _output = Path(output_path) if output_path else _input
 
     mesh_obj, arm_objs = _load_glb_with_armatures(_input)
-    _prepare_topology_bpy(mesh_obj, fill_holes_sides=fill_holes_sides, watertight=watertight)
-    # Watertight: export sem normals/tangents para o fecho sobreviver ao round-trip glTF.
-    _export_glb(_output, mesh_obj, arm_objs, export_normals=not watertight)
+    _prepare_topology_bpy(mesh_obj, fill_holes_sides=fill_holes_sides)
+    _export_glb(_output, mesh_obj, arm_objs, export_normals=True)
 
     if _was_trimesh:
         import trimesh
