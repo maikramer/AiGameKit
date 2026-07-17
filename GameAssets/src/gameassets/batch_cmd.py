@@ -1520,14 +1520,22 @@ def batch_cmd(
                                         row = rows[idx]
                                         rec_d = results_d[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                        mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                         mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                         try:
                                             assert paint3d_bin is not None
+                                            assert text3d_bin is not None
+                                            mesh_paint = ensure_clean_for_paint(
+                                                mesh_f,
+                                                text3d_bin=text3d_bin,
+                                                profile=profile,
+                                                child_env=child_env,
+                                                manifest_dir=manifest_dir,
+                                                force=force,
+                                            )
                                             tex_argv = _texture_subprocess_argv(
                                                 paint3d_bin,
                                                 profile,
-                                                mesh_shape,
+                                                mesh_paint,
                                                 img_f,
                                                 mesh_painted,
                                                 row_id=row.id,
@@ -1580,17 +1588,35 @@ def batch_cmd(
                                     paint_skipped_d: set[int] = set()
                                     for idx in shape_ok_paint_d:
                                         row = rows[idx]
+                                        rec_d = results_d[idx]
                                         img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
-                                        mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                         mesh_painted = _painted_existing(mesh_f) or _painted_path(mesh_f)
                                         if not force and mesh_painted.is_file():
                                             paint_skipped_d.add(idx)
                                             paint_idx_map_d[row.id] = idx
                                             continue
+                                        try:
+                                            assert text3d_bin is not None
+                                            mesh_paint = ensure_clean_for_paint(
+                                                mesh_f,
+                                                text3d_bin=text3d_bin,
+                                                profile=profile,
+                                                child_env=child_env,
+                                                manifest_dir=manifest_dir,
+                                                force=force,
+                                            )
+                                        except Exception as exc:
+                                            failures += 1
+                                            rec_d["status"] = "error"
+                                            rec_d["error"] = f"topology-fix pré-paint: {exc}"
+                                            append_log(rec_d)
+                                            if not continue_on_error:
+                                                raise click.Abort() from exc
+                                            continue
                                         paint_items_d.append(
                                             {
                                                 "id": row.id,
-                                                "mesh": str(mesh_shape),
+                                                "mesh": str(mesh_paint),
                                                 "image": str(img_f),
                                                 "output": str(mesh_painted),
                                             }
@@ -2566,7 +2592,6 @@ def batch_cmd(
                                     rec = results[idx]
                                     progress.update(task_paint, description=f"[cyan]{row.id}[/cyan] · quick paint")
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
                                     mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
                                     if mesh_final.is_file() and not force:
@@ -2579,10 +2604,29 @@ def batch_cmd(
                                         _finalize_mesh_ok(rec, mesh_painted, row)
 
                                     assert paint3d_bin is not None
+                                    assert text3d_bin is not None
+                                    try:
+                                        mesh_paint = ensure_clean_for_paint(
+                                            mesh_final,
+                                            text3d_bin=text3d_bin,
+                                            profile=profile,
+                                            child_env=child_env,
+                                            manifest_dir=manifest_dir,
+                                            force=force,
+                                        )
+                                    except Exception as exc:
+                                        failures += 1
+                                        rec["status"] = "error"
+                                        rec["error"] = f"topology-fix pré-paint: {exc}"
+                                        append_log(rec)
+                                        if not continue_on_error:
+                                            raise click.Abort() from exc
+                                        progress.advance(task_paint)
+                                        continue
                                     t_tex = _texture_subprocess_argv(
                                         paint3d_bin,
                                         profile,
-                                        mesh_shape,
+                                        mesh_paint,
                                         img_final,
                                         mesh_painted,
                                         row_id=row.id,
@@ -2624,12 +2668,11 @@ def batch_cmd(
 
                                 for idx in shape_ok_paint:
                                     row = rows[idx]
+                                    rec = results[idx]
                                     img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
-                                    mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
                                     mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
 
                                     if mesh_final.is_file() and not force:
-                                        rec = results[idx]
                                         _finalize_mesh_ok(rec, mesh_final, row)
                                         finalized_indices.add(idx)
                                         append_log(rec)
@@ -2637,13 +2680,33 @@ def batch_cmd(
                                             progress.advance(task_paint)
                                         continue
                                     if mesh_painted.is_file() and not force:
-                                        rec = results[idx]
                                         _finalize_mesh_ok(rec, mesh_painted, row)
+
+                                    assert text3d_bin is not None
+                                    try:
+                                        mesh_paint = ensure_clean_for_paint(
+                                            mesh_final,
+                                            text3d_bin=text3d_bin,
+                                            profile=profile,
+                                            child_env=child_env,
+                                            manifest_dir=manifest_dir,
+                                            force=force,
+                                        )
+                                    except Exception as exc:
+                                        failures += 1
+                                        rec["status"] = "error"
+                                        rec["error"] = f"topology-fix pré-paint: {exc}"
+                                        append_log(rec)
+                                        if not continue_on_error:
+                                            raise click.Abort() from exc
+                                        if task_paint is not None:
+                                            progress.advance(task_paint)
+                                        continue
 
                                     paint_manifest_items.append(
                                         {
                                             "id": row.id,
-                                            "mesh": str(mesh_shape),
+                                            "mesh": str(mesh_paint),
                                             "image": str(img_final),
                                             "output": str(mesh_painted),
                                         }

@@ -141,10 +141,30 @@ CATEGORIES: dict[str, AssetCategory] = {
         name="building",
         default_kind="environment",
         target_faces=24000,
-        hint_2d="game building or structure, front view, architectural detail on white background",
-        hint_3d="isolated building model, no terrain or ground plane, clean structural geometry",
+        hint_2d=(
+            "game building or structure, eye-level three-quarter view, "
+            "camera slightly above horizon looking down at facade, "
+            "solid closed foundation flush with imaginary ground, "
+            "full exterior walls opaque, architectural detail readable, "
+            "white void background"
+        ),
+        hint_3d=(
+            "isolated building model, solid closed base, "
+            "no open underside or hollow shell, "
+            "no terrain slab, clean exterior structural geometry"
+        ),
         hint_rig="",
         hint_texture="smlstxtr, stone brick wall surface, seamless texture",
+        extra_negatives=(
+            "worm's eye view",
+            "looking up from below",
+            "underside exposed",
+            "open floor",
+            "cutaway building",
+            "hollow plastic shell",
+            "interior seen from below",
+            "floating above ground",
+        ),
     ),
     "furniture": AssetCategory(
         name="furniture",

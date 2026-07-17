@@ -46,7 +46,6 @@ from .paths import (
     _painted_path,
     _paths_for_row_manifest,
     _rigging3d_output_path,
-    _shape_existing,
     _shape_path,
 )
 from .pipeline import (
@@ -621,10 +620,29 @@ def resume_cmd(
                     for it in need_paint:
                         row = it["row"]
                         painted_out = _painted_path(it["mesh_final"])
+                        try:
+                            assert text3d_bin is not None
+                            mesh_paint = ensure_clean_for_paint(
+                                it["mesh_final"],
+                                text3d_bin=text3d_bin,
+                                profile=profile,
+                                child_env=child_env,
+                                manifest_dir=manifest_dir,
+                                force=force,
+                            )
+                        except Exception as exc:
+                            failures += 1
+                            err = f"topology-fix pré-paint: {exc}"
+                            dash.feed_event(row.id, "paint3d", "error", error=err)
+                            append_log({"id": row.id, "status": "error", "error": err})
+                            if not continue_on_error:
+                                raise click.Abort() from exc
+                            dash.advance_phase()
+                            continue
                         t_tex = _texture_subprocess_argv(
                             paint3d_bin,
                             profile,
-                            _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"]),
+                            mesh_paint,
                             it["img_final"],
                             painted_out,
                             row_id=row.id,
@@ -661,10 +679,27 @@ def resume_cmd(
                     paint_item_map: dict[str, int] = {}
                     for i, it in enumerate(need_paint):
                         row = it["row"]
+                        try:
+                            assert text3d_bin is not None
+                            mesh_paint = ensure_clean_for_paint(
+                                it["mesh_final"],
+                                text3d_bin=text3d_bin,
+                                profile=profile,
+                                child_env=child_env,
+                                manifest_dir=manifest_dir,
+                                force=force,
+                            )
+                        except Exception as exc:
+                            failures += 1
+                            err = f"topology-fix pré-paint: {exc}"
+                            append_log({"id": row.id, "status": "error", "error": err})
+                            if not continue_on_error:
+                                raise click.Abort() from exc
+                            continue
                         paint_manifest_items.append(
                             {
                                 "id": row.id,
-                                "mesh": str(_shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])),
+                                "mesh": str(mesh_paint),
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
                             }
@@ -1086,10 +1121,29 @@ def resume_cmd(
                         row = it["row"]
                         progress.update(task, description=f"[cyan]{row.id}[/cyan] · quick paint")
                         painted_out = _painted_path(it["mesh_final"])
+                        try:
+                            assert text3d_bin is not None
+                            mesh_paint = ensure_clean_for_paint(
+                                it["mesh_final"],
+                                text3d_bin=text3d_bin,
+                                profile=profile,
+                                child_env=child_env,
+                                manifest_dir=manifest_dir,
+                                force=force,
+                            )
+                        except Exception as exc:
+                            failures += 1
+                            err = f"topology-fix pré-paint: {exc}"
+                            console.print(f"  [red]FAIL[/red] {row.id}: {err}")
+                            append_log({"id": row.id, "status": "error", "error": err})
+                            if not continue_on_error:
+                                break
+                            progress.advance(task)
+                            continue
                         t_tex = _texture_subprocess_argv(
                             paint3d_bin,
                             profile,
-                            _shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"]),
+                            mesh_paint,
                             it["img_final"],
                             painted_out,
                             row_id=row.id,
@@ -1120,10 +1174,28 @@ def resume_cmd(
                     paint_item_map: dict[str, int] = {}
                     for i, it in enumerate(need_paint):
                         row = it["row"]
+                        try:
+                            assert text3d_bin is not None
+                            mesh_paint = ensure_clean_for_paint(
+                                it["mesh_final"],
+                                text3d_bin=text3d_bin,
+                                profile=profile,
+                                child_env=child_env,
+                                manifest_dir=manifest_dir,
+                                force=force,
+                            )
+                        except Exception as exc:
+                            failures += 1
+                            err = f"topology-fix pré-paint: {exc}"
+                            console.print(f"  [red]FAIL[/red] {row.id}: {err}")
+                            append_log({"id": row.id, "status": "error", "error": err})
+                            if not continue_on_error:
+                                break
+                            continue
                         paint_manifest_items.append(
                             {
                                 "id": row.id,
-                                "mesh": str(_shape_existing(it["mesh_final"]) or _shape_path(it["mesh_final"])),
+                                "mesh": str(mesh_paint),
                                 "image": str(it["img_final"]),
                                 "output": str(_painted_path(it["mesh_final"])),
                             }

@@ -721,6 +721,42 @@ def _bin_or_none(name_env: str, name: str) -> str | None:
         return None
 
 
+def ensure_clean_for_paint(
+    mesh_final: Path,
+    *,
+    text3d_bin: str,
+    profile: GameProfile,
+    child_env: dict[str, str],
+    manifest_dir: Path,
+    force: bool = False,
+) -> Path:
+    """Garante ``_clean.glb`` (topology-fix) e devolve path para input do paint.
+
+    Master DAG canónico: shape → topology-fix → paint. Batch/resume antigos
+    pintavam ``_shape`` cru (paredes duplas / cascas internas). Com isto o
+    paint corre sobre mesh já limpa (incl. ``remove_internal_shell_faces``).
+    """
+    clean_existing = _clean_existing(mesh_final)
+    if clean_existing is not None and clean_existing.is_file() and not force:
+        return clean_existing
+
+    shape_p = _shape_existing(mesh_final) or _shape_path(mesh_final)
+    if not shape_p.is_file():
+        raise FileNotFoundError(f"shape ausente para topology-fix: {shape_p}")
+
+    clean_p = _clean_path(mesh_final)
+    clean_p.parent.mkdir(parents=True, exist_ok=True)
+    topo_argv = [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)]
+    t3 = profile.text3d
+    if t3 is not None and t3.export_origin:
+        topo_argv.extend(["--export-origin", t3.export_origin])
+    r = run_cmd(topo_argv, extra_env=child_env, cwd=manifest_dir)
+    if r.returncode != 0 or not clean_p.is_file():
+        err = merge_subprocess_output(r, max_chars=400) or "topology-fix falhou"
+        raise RuntimeError(err)
+    return clean_p
+
+
 def _rules_dir() -> Path:
     return Path(__file__).resolve().parent / "data" / "rules"
 

@@ -96,6 +96,11 @@ def enhance_prompt_for_pipeline(
     if image_source == "texture2d":
         prompt = _append_if_new(prompt, cat.hint_texture)
     elif generate_3d and not for_3d:
+        # Ref i2m: framing/câmera (2d) + cues de mesh (3d). Antes só 3d →
+        # ângulo de vista do hint_2d nunca entrava na imagem.
+        prompt = _append_if_new(prompt, cat.hint_2d)
+        prompt = _append_if_new(prompt, cat.hint_3d)
+    elif for_3d:
         prompt = _append_if_new(prompt, cat.hint_3d)
     else:
         prompt = _append_if_new(prompt, cat.hint_2d)
@@ -106,22 +111,6 @@ def enhance_prompt_for_pipeline(
         new_negs = [n for n in cat.extra_negatives if n.lower() not in lower_prompt]
         if new_negs:
             prompt = f"{prompt} Avoid: {', '.join(new_negs)}."
-    return prompt
-    if image_source == "texture2d":
-        prompt = _append_if_new(prompt, cat.hint_texture)
-    elif generate_3d and not for_3d:
-        prompt = _append_if_new(prompt, cat.hint_3d)
-    else:
-        prompt = _append_if_new(prompt, cat.hint_2d)
-    if generate_rig:
-        prompt = _append_if_new(prompt, cat.hint_rig)
-    # Cross-contamination negatives: prevent accessory leakage between asset types
-    if cat.extra_negatives:
-        existing_lower = prompt.lower()
-        new_negs = [n for n in cat.extra_negatives if n.lower() not in existing_lower]
-        if new_negs:
-            neg_block = ", ".join(new_negs)
-            prompt = f"{prompt} Avoid: {neg_block}."
     return prompt
 
 
