@@ -14,16 +14,33 @@ def large_region_candidates(
     *,
     min_area_frac: float = 0.18,
     max_regions: int = 2,
+    skip_thin_max: float = 0.28,
+    skip_thin_aspect: float = 4.0,
 ) -> list[tuple[int, np.ndarray, float]]:
-    """Return largest labels worth a local detail pass."""
+    """Return largest labels worth a local detail pass.
+
+    Skip already-thin peels (escada/bandeira) — re-detail nesses labels parte
+    o peel e deixa pedaços soldados no corpo.
+    """
     areas = np.asarray(mesh.area_faces, dtype=np.float64)
     total = max(float(np.sum(areas)), 1e-12)
+    centers = getattr(mesh, "triangles_center", None)
+    if centers is not None:
+        centers = np.asarray(centers, dtype=np.float64)
     candidates: list[tuple[int, np.ndarray, float]] = []
     for label in (int(x) for x in np.unique(face_ids) if x >= 0):
         indices = np.flatnonzero(face_ids == label)
         frac = float(np.sum(areas[indices]) / total)
-        if frac >= min_area_frac:
-            candidates.append((label, indices, frac))
+        if frac < min_area_frac:
+            continue
+        if centers is not None and len(centers) == len(face_ids):
+            ext = centers[indices].max(axis=0) - centers[indices].min(axis=0)
+            lo, hi = float(ext.min()), float(ext.max())
+            thin = lo / max(hi, 1e-12)
+            aspect = hi / max(lo, 1e-12)
+            if thin <= skip_thin_max or aspect >= skip_thin_aspect:
+                continue
+        candidates.append((label, indices, frac))
     candidates.sort(key=lambda item: item[2], reverse=True)
     return candidates[: max(0, max_regions)]
 
