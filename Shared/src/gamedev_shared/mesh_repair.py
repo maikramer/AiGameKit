@@ -20,6 +20,8 @@ API principal (bpy-only):
   comparações e viram (0,0,0) no export glTF — leque de faces na origem).
 * ``cap_boundary_loops`` / ``make_watertight`` — fecho seletivo / total de
   boundary loops.
+* ``force_close_base`` — grelha planar flush na soleira se oco (shell sem chão)
+  (``recess_ratio`` alto); skip torres/props com base já ok.
 * ``clamp_base_flare`` — puxa “pés de elefante” MC (base mais larga que o
   corpo) para o raio de referência do meio do mesh.
 * ``taubin_smooth`` — suavização volume-preserving (reduz argila MC sem
@@ -161,6 +163,237 @@ def delete_loose(obj: Any) -> None:
     bpy.ops.mesh.select_all(action="SELECT")
     bpy.ops.mesh.delete_loose()
     bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def _fibonacci_sphere_dirs(n: int) -> np.ndarray:
+    """Direções unitárias uniformes na esfera (Fibonacci)."""
+    n = max(1, int(n))
+    i = np.arange(n, dtype=np.float64)
+    phi = np.pi * (3.0 - np.sqrt(5.0))
+    y = 1.0 - (2.0 * i + 1.0) / n
+    r = np.sqrt(np.maximum(0.0, 1.0 - y * y))
+    theta = phi * i
+    return np.stack([np.cos(theta) * r, y, np.sin(theta) * r], axis=1)
+
+
+def remove_faces_invisible_from_exterior(
+    obj: Any,
+    *,
+    n_dirs: int = 128,
+    samples_per_dir: int = 48,
+    max_removal_ratio: float = 0.75,
+    seed: int = 0,
+) -> int:
+    """Apaga faces nunca atingidas por raios desde fora do AABB.
+
+    Ideal para shells ocas (capela, torres): interiores / cascas internas não
+    recebem hits desde a esfera exterior. Conservador em props sólidos —
+    faces em cavidades profundas ainda são vistas de ângulos oblíquos.
+
+    Args:
+        obj: bpy mesh object.
+        n_dirs: Câmaras na esfera de Fibonacci.
+        samples_per_dir: Raios por câmara (alvos jitter no AABB).
+        max_removal_ratio: Abort se a selecção ultrapassar esta fracção.
+        seed: RNG para jitter dos alvos.
+
+    Returns:
+        Faces removidas (0 se abort/noop).
+    """
+    import bmesh
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    if not bm.faces:
+        bm.free()
+        return 0
+
+    coords = np.array([v.co[:] for v in bm.verts], dtype=np.float64)
+    center = coords.mean(axis=0)
+    mins = coords.min(axis=0)
+    maxs = coords.max(axis=0)
+    extent = float(np.linalg.norm(maxs - mins)) or 1.0
+    radius = extent * 0.65
+
+    bvh = BVHTree.FromBMesh(bm, epsilon=max(1e-7, 1e-6 * extent))
+    visible: set[int] = set()
+    rng = np.random.default_rng(int(seed))
+    dirs = _fibonacci_sphere_dirs(n_dirs)
+    for d in dirs:
+        cam = center + d * radius
+        cam_v = Vector(cam.tolist())
+        targets = rng.uniform(mins, maxs, size=(int(samples_per_dir), 3))
+        for target in targets:
+            direction = target - cam
+            dist = float(np.linalg.norm(direction))
+            if dist < 1e-9:
+                continue
+            direction /= dist
+            hit = bvh.ray_cast(cam_v, Vector(direction.tolist()), dist)
+            if hit[0] is None or hit[2] is None:
+                continue
+            visible.add(int(hit[2]))
+
+    if not visible:
+        bm.free()
+        return 0
+
+    doomed = [f for f in bm.faces if f.index not in visible]
+    if not doomed:
+        bm.free()
+        return 0
+
+    total = len(bm.faces)
+    max_remove = max(1, int(float(max_removal_ratio) * total))
+    if len(doomed) > max_remove:
+        log.warning(
+            "remove_faces_invisible_from_exterior: abort %d/%d (max_ratio=%.2f)",
+            len(doomed),
+            total,
+            max_removal_ratio,
+        )
+        bm.free()
+        return 0
+
+    removed = len(doomed)
+    bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    orphans = [v for v in bm.verts if not v.link_faces]
+    if orphans:
+        bmesh.ops.delete(bm, geom=orphans, context="VERTS")
+    bm.to_mesh(me)
+    me.update()
+    bm.free()
+    if removed:
+        log.info(
+            "remove_faces_invisible_from_exterior: %d faces (kept %d/%d)",
+            removed,
+            total - removed,
+            total,
+        )
+    return removed
+
+
+def remove_internal_shell_faces(
+    obj: Any,
+    *,
+    wall_gap_ratio: float = 0.12,
+    max_removal_ratio: float = 0.55,
+    opposite_dot: float = -0.2,
+    # Compat / deprecated.
+    room_gap_ratio: float | None = None,
+    gap_ratio: float | None = None,
+) -> int:
+    """Apaga faces do sanduíche fino de paredes duplas Hunyuan / MC.
+
+    Só remove faces cujo ``+N`` (e/ou ``-N``) bate noutra face **dentro de
+    ``wall_gap``** com normal aproximadamente oposta — o vão fino entre as
+    duas paredes. Não usa hit à escala do oco/edifício: isso apagava props
+    interiores (sino na torre, mobiliário) e interiores legítimos.
+
+    * Fachada exterior: ``+N`` escapa → sobrevive.
+    * Face a olhar para o vão fino: ``+N`` curto + normal oposta → remove.
+    * Face a olhar para o oco grande: ``+N`` longo → sobrevive.
+
+    Guard: se a selecção ultrapassar ``max_removal_ratio``, aborta (0 removidos).
+
+    Args:
+        obj: bpy mesh object.
+        wall_gap_ratio: Fração da diagonal AABB = espessura máxima do sanduíche.
+        max_removal_ratio: Fração máxima de faces removíveis.
+        opposite_dot: Limiar ``|n·hit_n|`` — aceita anti/paralelo (≥ ``|opp|``).
+        room_gap_ratio: Deprecated — ignorado (causava false positives).
+        gap_ratio: Deprecated — se dado, usa-se como ``wall_gap_ratio``.
+
+    Returns:
+        Número de faces removidas (0 se abort/noop).
+    """
+    del room_gap_ratio  # deprecated no-op
+    if gap_ratio is not None:
+        wall_gap_ratio = float(gap_ratio)
+
+    import bmesh
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+
+    me = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bm.faces.ensure_lookup_table()
+    bm.normal_update()
+
+    if not bm.faces:
+        bm.free()
+        return 0
+
+    coords = np.array([v.co[:] for v in bm.verts], dtype=np.float64)
+    diag = float(np.linalg.norm(coords.max(axis=0) - coords.min(axis=0))) or 1.0
+    wall_gap = max(float(wall_gap_ratio) * diag, 1e-5)
+    eps = max(1e-6, 1e-5 * diag)
+    opp = float(opposite_dot)
+
+    bvh = BVHTree.FromBMesh(bm, epsilon=eps * 0.1)
+    doomed: list[Any] = []
+
+    def _thin_twin(origin: Any, direction: Any, face_n: Any) -> bool:
+        hit = bvh.ray_cast(origin, direction, wall_gap)
+        if hit[0] is None or hit[1] is None:
+            return False
+        hn = Vector(hit[1])
+        if hn.length_squared < 1e-12:
+            return False
+        hn.normalize()
+        d = float(face_n.dot(hn))
+        # Antiparalelo (olham uma para a outra) OU paralelo (bate nas costas
+        # da gémea — shells nesteds com normals ambas "outward").
+        return d <= opp or d >= -opp
+
+    for f in bm.faces:
+        n = f.normal
+        if n.length_squared < 1e-12:
+            continue
+        n = n.normalized()
+        c = f.calc_center_median()
+        # Só sanduíche fino: +N bate na gémea dentro de wall_gap.
+        # Hit longo (oco/torre) NÃO remove — protege sino e interiores.
+        if _thin_twin(c + n * eps, n, n):
+            doomed.append(f)
+
+    if not doomed:
+        bm.free()
+        return 0
+
+    total = len(bm.faces)
+    max_remove = max(1, int(float(max_removal_ratio) * total))
+    if len(doomed) > max_remove:
+        log.warning(
+            "remove_internal_shell_faces: abort %d/%d faces (max_ratio=%.2f)",
+            len(doomed),
+            total,
+            max_removal_ratio,
+        )
+        bm.free()
+        return 0
+
+    removed = len(doomed)
+    bmesh.ops.delete(bm, geom=doomed, context="FACES")
+    orphans = [v for v in bm.verts if not v.link_faces]
+    if orphans:
+        bmesh.ops.delete(bm, geom=orphans, context="VERTS")
+    bm.to_mesh(me)
+    me.update()
+    bm.free()
+    if removed:
+        log.info(
+            "remove_internal_shell_faces: %d faces (wall_gap=%.4f diag=%.4f)",
+            removed,
+            wall_gap,
+            diag,
+        )
+    return removed
 
 
 def remove_loose_debris(obj: Any, *, face_ratio: float, min_faces: int) -> int:
@@ -392,14 +625,26 @@ def _loop_plane_stats(
     return center, normal, thickness, diameter
 
 
-def loop_is_cappable(loop: list[Any], *, max_edges: int, planar_tol: float) -> bool:
-    """Loop pequeno e ~planar → seguro tapar. Cortes gigantes/serpenteantes → não."""
+def loop_is_cappable(
+    loop: list[Any],
+    *,
+    max_edges: int,
+    planar_tol: float,
+    max_diameter: float | None = None,
+) -> bool:
+    """Loop pequeno e ~planar → seguro tapar. Cortes gigantes/serpenteantes → não.
+
+    ``max_diameter``: se dado, loops com diâmetro ≥ este valor (ex. porta/janela)
+    não são tapados mesmo que tenham poucas arestas densas.
+    """
     if len(loop) < 3 or len(loop) > max_edges:
         return False
     stats = _loop_plane_stats(loop)
     if stats is None:
         return False
     _center, _normal, thickness, diameter = stats
+    if max_diameter is not None and diameter >= float(max_diameter):
+        return False
     return bool(thickness < planar_tol * diameter)
 
 
@@ -443,6 +688,7 @@ def cap_boundary_loops(
     cap_base: bool = False,
     base_normal_tol: float = 0.8,
     base_band: float = 0.10,
+    max_loop_diameter_ratio: float | None = None,
 ) -> int:
     """Fecha boundary loops seguros de um bpy mesh object (in-place).
 
@@ -452,6 +698,9 @@ def cap_boundary_loops(
     planares (desvio RMS < ``planar_tol`` x diâmetro). Com ``cap_base=True``,
     loops planares horizontais na banda inferior da bbox (fundos abertos de
     edifícios) são tapados sem limite de arestas.
+
+    ``max_loop_diameter_ratio``: fracção da diagonal AABB — loops maiores
+    (portas/janelas) nunca são tapados, excepto bases com ``cap_base``.
 
     Returns:
         Número de loops fechados.
@@ -470,15 +719,21 @@ def cap_boundary_loops(
     world_matrix = None if np.allclose(mw, np.eye(4)) else mw
 
     bbox_min = bbox_max = None
-    if cap_base and bm.verts:
+    max_diameter: float | None = None
+    if bm.verts:
         coords = np.array([v.co[:] for v in bm.verts], dtype=np.float64)
         if world_matrix is not None:
             coords = (np.c_[coords, np.ones(len(coords))] @ world_matrix.T)[:, :3]
         bbox_min, bbox_max = coords.min(axis=0), coords.max(axis=0)
+        if max_loop_diameter_ratio is not None and max_loop_diameter_ratio > 0:
+            diag = float(np.linalg.norm(bbox_max - bbox_min)) or 1.0
+            max_diameter = float(max_loop_diameter_ratio) * diag
+    if not cap_base:
+        bbox_min = bbox_max = None
 
     capped = 0
     for loop in boundary_loops(bm):
-        ok = loop_is_cappable(loop, max_edges=max_loop_edges, planar_tol=planar_tol)
+        ok = loop_is_cappable(loop, max_edges=max_loop_edges, planar_tol=planar_tol, max_diameter=max_diameter)
         if not ok and cap_base and bbox_min is not None and bbox_max is not None:
             ok = _loop_is_base(
                 loop,
@@ -538,6 +793,7 @@ def make_watertight(
     cap_base: bool = True,
     final_fill: bool = True,
     skip_flap_erode: bool = False,
+    max_loop_diameter_ratio: float | None = None,
 ) -> dict[str, int]:
     """Fecha uma mesh até watertight (só bpy/bmesh), do seguro para o bruto.
 
@@ -552,6 +808,8 @@ def make_watertight(
     ``skip_flap_erode``: não erode abas de fronteira (preserva escadas/bandeiras
     finas coladas ao volume; pode deixar boundary residual).
 
+    ``max_loop_diameter_ratio``: evita tapar portas/janelas (loops grandes).
+
     Returns:
         ``{"boundary_before", "loops_capped", "boundary_after"}``.
     """
@@ -565,9 +823,18 @@ def make_watertight(
     planar_sheet = _is_near_planar_sheet(obj)
 
     stats["loops_capped"] = cap_boundary_loops(
-        obj, max_loop_edges=max_loop_edges, planar_tol=planar_tol, cap_base=cap_base
+        obj,
+        max_loop_edges=max_loop_edges,
+        planar_tol=planar_tol,
+        cap_base=cap_base,
+        max_loop_diameter_ratio=max_loop_diameter_ratio,
     )
-    for sides in (12, 32, 64):
+    # Limitar fill_holes ao mesmo teto de arestas dos caps — senão sides=64
+    # tapa janelas pequenas mesmo com final_fill=False.
+    fill_sides = tuple(s for s in (12, 32, 64) if s <= int(max_loop_edges))
+    if not fill_sides and max_loop_edges > 0:
+        fill_sides = (int(max_loop_edges),)
+    for sides in fill_sides:
         if count_boundary_edges(obj) == 0:
             break
         with_suppress_fill(obj, sides)
@@ -625,25 +892,364 @@ def make_watertight(
     return stats
 
 
+def infer_up_axis(coords: np.ndarray) -> int:
+    """Eixo vertical em coords locais = maior extensão AABB (clamp flare / local)."""
+    if coords.size == 0:
+        return 1
+    ext = coords.max(axis=0) - coords.min(axis=0)
+    return int(np.argmax(ext))
+
+
+def infer_world_up_axis(obj: Any) -> int:
+    """Eixo vertical em espaço mundo (pós-glTF costuma ser Z, não Y local).
+
+    Preferência: soleira perto de 0 (``export-origin feet``) x extensão grande.
+    Evita usar profundidade (Y mundo após conversão glTF) como “altura”.
+    """
+    mw = np.array(obj.matrix_world, dtype=np.float64)
+    coords = np.array([mw @ np.array([*v.co, 1.0], dtype=np.float64) for v in obj.data.vertices], dtype=np.float64)[
+        :, :3
+    ]
+    if len(coords) == 0:
+        return 1
+    bb_min = coords.min(axis=0)
+    bb_max = coords.max(axis=0)
+    ext = bb_max - bb_min
+    best_ax, best_score = 1, -1.0
+    for ax in (0, 1, 2):
+        e = float(ext[ax])
+        if e < 1e-9:
+            continue
+        # Soleira perto de 0 → score alto; eixo “deitado” com min≪0 perde.
+        sole = abs(float(bb_min[ax]))
+        score = e / (sole + 0.05 * float(ext.max()) + 1e-9)
+        if score > best_score:
+            best_score = score
+            best_ax = ax
+    return int(best_ax)
+
+
+def base_openness_stats(
+    obj: Any,
+    *,
+    up_axis: int | None = None,
+    band: float = 0.10,
+    grid: int = 48,
+) -> dict[str, float]:
+    """Mede oco por baixo via raios no footprint (espaço mundo).
+
+    ``up_axis=None`` → :func:`infer_world_up_axis` (glTF Y-up → Z mundo).
+
+    Returns:
+        ``interior_cells``, ``recess_cells``, ``recess_ratio``, ``height``,
+        ``plane_y`` (cota sugerida para tampa flush nas soleiras), ``up_axis``.
+    """
+    import bmesh
+    from mathutils.bvhtree import BVHTree
+
+    empty = {
+        "interior_cells": 0.0,
+        "recess_cells": 0.0,
+        "recess_ratio": 0.0,
+        "height": 0.0,
+        "plane_y": 0.0,
+        "up_axis": 1.0,
+    }
+    if len(obj.data.polygons) == 0:
+        return empty
+    if up_axis is None:
+        up_axis = infer_world_up_axis(obj)
+    if up_axis not in (0, 1, 2):
+        return empty
+    empty["up_axis"] = float(up_axis)
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.transform(obj.matrix_world)
+    bm.faces.ensure_lookup_table()
+    coords = np.array([v.co[:] for v in bm.verts], dtype=np.float64)
+    if len(coords) == 0:
+        bm.free()
+        return empty
+
+    bb_min, bb_max = coords.min(axis=0), coords.max(axis=0)
+    height = float(bb_max[up_axis] - bb_min[up_axis]) or 1.0
+    y0 = float(bb_min[up_axis])
+    h_axes = [i for i in (0, 1, 2) if i != up_axis]
+    ax, cx = h_axes[0], h_axes[1]
+    amin, amax = float(bb_min[ax]), float(bb_max[ax])
+    cmin, cmax = float(bb_min[cx]), float(bb_max[cx])
+    if amax - amin < 1e-9 or cmax - cmin < 1e-9:
+        bm.free()
+        return {**empty, "height": height, "plane_y": y0}
+
+    bvh = BVHTree.FromBMesh(bm)
+    n = max(8, int(grid))
+    interior = recess = 0
+    solid_ys: list[float] = []
+    direction = [0.0, 0.0, 0.0]
+    direction[up_axis] = 1.0
+    dir_t = tuple(direction)
+    for ix in range(n):
+        for iz in range(n):
+            origin = [0.0, 0.0, 0.0]
+            origin[ax] = amin + (ix + 0.5) / n * (amax - amin)
+            origin[cx] = cmin + (iz + 0.5) / n * (cmax - cmin)
+            origin[up_axis] = y0 - 0.02 * height
+            hit = bvh.ray_cast(tuple(origin), dir_t, height * 1.25)
+            if hit[0] is None:
+                continue
+            interior += 1
+            hy = float(hit[0][up_axis])
+            if hy > y0 + band * height:
+                recess += 1
+            else:
+                solid_ys.append(hy)
+    bm.free()
+    ratio = float(recess) / float(interior) if interior else 0.0
+    # Soleira: mediana dos hits “chão” (sólidos). Fallback: quase ymin.
+    if solid_ys:
+        plane_y = float(np.median(solid_ys))
+    else:
+        bot = coords[coords[:, up_axis] <= y0 + band * height, up_axis]
+        plane_y = float(np.percentile(bot, 85)) if len(bot) else y0
+    # Nunca acima da banda — evita cortar o corpo; nunca muito abaixo (pedestal).
+    plane_y = float(np.clip(plane_y, y0, y0 + band * height))
+    return {
+        "interior_cells": float(interior),
+        "recess_cells": float(recess),
+        "recess_ratio": ratio,
+        "height": height,
+        "plane_y": plane_y,
+        "up_axis": float(up_axis),
+    }
+
+
+def force_close_base(
+    obj: Any,
+    *,
+    up_axis: int | None = None,
+    band: float = 0.10,
+    recess_trigger: float = 0.50,
+    grid: int = 64,
+    min_cells: int = 8,
+    min_faces: int = 1000,
+) -> dict[str, int]:
+    """Fecha base oca com grelha planar flush — sem pedestal / volume.
+
+    Shells manifold sem chão (Hunyuan) não têm boundary loops: bisect+fill
+    só tapa o anel da parede e o oco continua. Esta rotina:
+
+      1. Mede oco por raios no eixo vertical mundo (glTF → Z).
+      2. Se ``recess_ratio`` ≥ trigger, gera chão planar flush no fundo real
+         **só nas células ocas** totalmente dentro do footprint.
+      3. Solda o rebordo do chão aos verts de parede próximos.
+
+    Alvo: meshes marching-cubes densas (o weld do rebordo precisa de verts de
+    parede próximos) — ``min_faces`` salta low-poly, onde o rebordo ficaria
+    solto e o ``make_watertight`` normal já resolve.
+    """
+    import bmesh
+    from mathutils.bvhtree import BVHTree
+
+    stats: dict[str, int] = {"base_forced_faces": 0, "base_forced_cells": 0}
+    if len(obj.data.polygons) < max(1, int(min_faces)):
+        return stats
+    if up_axis is None:
+        up_axis = infer_world_up_axis(obj)
+    if up_axis not in (0, 1, 2):
+        return stats
+
+    openness = base_openness_stats(obj, up_axis=up_axis, band=band, grid=grid)
+    stats["base_recess_pct"] = round(100.0 * float(openness["recess_ratio"]))
+    stats["base_up_axis"] = int(up_axis)
+    if float(openness["interior_cells"]) < min_cells:
+        return stats
+    if float(openness["recess_ratio"]) < recess_trigger:
+        return stats
+
+    height = float(openness["height"]) or 1.0
+
+    # Re-ray no footprint: só células recess recebem quads (chão).
+    bm_w = bmesh.new()
+    bm_w.from_mesh(obj.data)
+    bm_w.transform(obj.matrix_world)
+    bm_w.faces.ensure_lookup_table()
+    coords = np.array([v.co[:] for v in bm_w.verts], dtype=np.float64)
+    bb_min, bb_max = coords.min(axis=0), coords.max(axis=0)
+    y0 = float(bb_min[up_axis])
+    # Chão flush no fundo real do modelo — não na cota das soleiras (a meio
+    # das paredes o plano ficava visível acima do rebordo inferior).
+    plane_y_world = y0 + 0.002 * height
+    h_axes = [i for i in (0, 1, 2) if i != up_axis]
+    ax, cx = h_axes[0], h_axes[1]
+    amin, amax = float(bb_min[ax]), float(bb_max[ax])
+    cmin, cmax = float(bb_min[cx]), float(bb_max[cx])
+    bvh = BVHTree.FromBMesh(bm_w)
+    n = max(8, int(grid))
+    direction = [0.0, 0.0, 0.0]
+    direction[up_axis] = 1.0
+    dir_t = tuple(direction)
+
+    def _ray_hit_y(a: float, c: float) -> float | None:
+        origin = [0.0, 0.0, 0.0]
+        origin[ax] = a
+        origin[cx] = c
+        origin[up_axis] = y0 - 0.02 * height
+        hit = bvh.ray_cast(tuple(origin), dir_t, height * 1.25)
+        return float(hit[0][up_axis]) if hit[0] is not None else None
+
+    # Cantos partilhados: cache (n+1)² testes de interioridade do footprint.
+    corner_inside: dict[tuple[int, int], bool] = {}
+
+    def _corner_ok(ix: int, iz: int) -> bool:
+        key = (ix, iz)
+        if key not in corner_inside:
+            a = amin + ix / n * (amax - amin)
+            c = cmin + iz / n * (cmax - cmin)
+            corner_inside[key] = _ray_hit_y(a, c) is not None
+        return corner_inside[key]
+
+    recess_cells: list[tuple[int, int]] = []
+    for ix in range(n):
+        for iz in range(n):
+            hy = _ray_hit_y(
+                amin + (ix + 0.5) / n * (amax - amin),
+                cmin + (iz + 0.5) / n * (cmax - cmin),
+            )
+            if hy is None or hy <= y0 + band * height:
+                continue
+            # Só células totalmente dentro do footprint — cantos fora da
+            # parede criavam abas salientes para fora do modelo.
+            if all(_corner_ok(ix + dx, iz + dz) for dx in (0, 1) for dz in (0, 1)):
+                recess_cells.append((ix, iz))
+    bm_w.free()
+    if len(recess_cells) < min_cells:
+        return stats
+
+    mw = np.array(obj.matrix_world, dtype=np.float64)
+    try:
+        inv = np.linalg.inv(mw)
+    except np.linalg.LinAlgError:
+        log.warning("force_close_base: matrix_world não invertível")
+        return stats
+
+    def world_to_local(pw: np.ndarray) -> tuple[float, float, float]:
+        pl = (inv @ np.array([pw[0], pw[1], pw[2], 1.0], dtype=np.float64))[:3]
+        return float(pl[0]), float(pl[1]), float(pl[2])
+
+    da = (amax - amin) / n
+    dc = (cmax - cmin) / n
+    cell = max(da, dc)
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    new_verts: list[Any] = []
+    new_faces = 0
+    # Cantos partilhados entre células: um vert por canto (grelha soldada).
+    vert_cache: dict[tuple[int, int], Any] = {}
+
+    def _grid_vert(gx: int, gz: int) -> Any:
+        key = (gx, gz)
+        v = vert_cache.get(key)
+        if v is None:
+            pw = np.zeros(3, dtype=np.float64)
+            pw[ax] = amin + gx * da
+            pw[cx] = cmin + gz * dc
+            pw[up_axis] = plane_y_world
+            v = bm.verts.new(world_to_local(pw))
+            vert_cache[key] = v
+            new_verts.append(v)
+        return v
+
+    for ix, iz in recess_cells:
+        verts = [_grid_vert(ix, iz), _grid_vert(ix + 1, iz), _grid_vert(ix + 1, iz + 1), _grid_vert(ix, iz + 1)]
+        try:
+            bm.faces.new(verts)
+            new_faces += 1
+        except ValueError:
+            continue
+    if new_faces == 0:
+        bm.free()
+        return stats
+    # Soldar o rebordo do chão às paredes: snap de cada vert do perímetro ao
+    # vert de parede mais próximo. Sem remove_doubles em massa — colapsaria o
+    # detalhe denso da base das paredes.
+    try:
+        from mathutils.kdtree import KDTree
+
+        new_set = set(new_verts)
+        perimeter = [v for v in new_verts if any(len(e.link_faces) < 2 for e in v.link_edges)]
+        row = mw[up_axis, :]
+        old_verts = [v for v in bm.verts if v not in new_set]
+        if perimeter and old_verts:
+            heights = np.array(
+                [row[0] * v.co[0] + row[1] * v.co[1] + row[2] * v.co[2] + row[3] for v in old_verts],
+                dtype=np.float64,
+            )
+            near_idx = np.nonzero(np.abs(heights - plane_y_world) <= 3.0 * cell)[0]
+            wall_near = [old_verts[i] for i in near_idx]
+            if wall_near:
+                kd = KDTree(len(wall_near))
+                for i, v in enumerate(wall_near):
+                    kd.insert(v.co, i)
+                kd.balance()
+                weld: set[Any] = set()
+                for v in perimeter:
+                    co, idx, dist = kd.find(v.co)
+                    if idx is not None and dist <= 3.0 * cell:
+                        v.co = co
+                        weld.add(v)
+                        weld.add(wall_near[idx])
+                if weld:
+                    bmesh.ops.remove_doubles(bm, verts=list(weld), dist=1e-6)
+    except Exception as exc:
+        log.warning("force_close_base: weld chão↔parede falhou: %s", exc)
+    try:
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bmesh.ops.triangulate(bm, faces=[f for f in bm.faces if len(f.verts) > 3])
+    except Exception as exc:
+        log.warning("force_close_base: triangulate/normals falhou: %s", exc)
+    bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free()
+
+    stats["base_forced_faces"] = int(new_faces)
+    stats["base_forced_cells"] = len(recess_cells)
+    try:
+        normals_consistent(obj)
+    except Exception as exc:
+        log.warning("normals pós-force_close_base falhou: %s", exc)
+    log.info(
+        "force_close_base: floor planar faces=%d cells=%d recess=%d%% plane=%.4f up=%d",
+        stats["base_forced_faces"],
+        stats["base_forced_cells"],
+        stats["base_recess_pct"],
+        plane_y_world,
+        up_axis,
+    )
+    return stats
+
+
 def clamp_base_flare(
     obj: Any,
     *,
-    up_axis: int = 1,
-    bottom_frac: float = 0.10,
+    up_axis: int | None = None,
+    bottom_frac: float = 0.12,
     ref_lo_frac: float = 0.20,
     ref_hi_frac: float = 0.45,
     max_flare_ratio: float = 1.06,
     ref_percentile: float = 95.0,
 ) -> int:
-    """Puxa verts da base cujo raio radial > ``max_flare_ratio`` × raio ref.
+    """Puxa verts da base cujo raio radial > ``max_flare_ratio`` x raio ref.
 
     Heurística geral (sem regras de asset): Hunyuan/MC muitas vezes engorda
     o contacto com o chão (“pés de elefante”). O raio de referência vem do
-    percentil dos verts a mid-height; só a faixa inferior é corrigida.
+    percentil dos verts a mid-height; só a faixa inferior é corrigida, com
+    falloff smoothstep (evita “saia”/lip no corte superior).
 
     Args:
         obj: bpy mesh object.
-        up_axis: Eixo vertical (1 = Y OpenGL pós-align).
+        up_axis: Eixo vertical local; ``None`` = eixo AABB mais longo.
         bottom_frac: Fração inferior da altura a corrigir.
         ref_lo_frac / ref_hi_frac: Banda de altura para o raio de referência.
         max_flare_ratio: Acima disto, o vert é puxado radialmente.
@@ -664,6 +1270,8 @@ def clamp_base_flare(
 
     mesh = obj.data
     coords = np.array([v.co[:] for v in mesh.vertices], dtype=np.float64)
+    if up_axis is None:
+        up_axis = infer_up_axis(coords)
     lo = coords[:, up_axis].min()
     hi = coords[:, up_axis].max()
     height = float(hi - lo)
@@ -700,9 +1308,16 @@ def clamp_base_flare(
     if not over.any():
         return 0
 
-    # Escala radial: puxa para o limite (mantém ângulo).
+    # Falloff vertical: 1 no chão → 0 em bottom_cut (smoothstep).
+    ys = coords[bot][:, up_axis]
+    t = np.clip((ys - lo) / max(bottom_cut - lo, 1e-12), 0.0, 1.0)
+    weight = 1.0 - t
+    weight = weight * weight * (3.0 - 2.0 * weight)
+
+    # Escala radial com blend (mantém ângulo).
     scale = np.ones(bot_r.shape[0], dtype=np.float64)
-    scale[over] = limit / np.maximum(bot_r[over], 1e-12)
+    target = limit / np.maximum(bot_r[over], 1e-12)
+    scale[over] = 1.0 + (target - 1.0) * weight[over]
     new_xy = center + (bot_xy - center) * scale[:, None]
 
     bm = bmesh.new()
@@ -711,7 +1326,7 @@ def clamp_base_flare(
     bot_idx = np.flatnonzero(bot)
     moved = 0
     for local_i, vi in enumerate(bot_idx):
-        if not over[local_i]:
+        if not over[local_i] or weight[local_i] < 1e-4:
             continue
         v = bm.verts[int(vi)]
         co = list(v.co)
@@ -724,7 +1339,13 @@ def clamp_base_flare(
         mesh.update()
     bm.free()
     if moved:
-        log.info("clamp_base_flare: %d verts (ref_r=%.4f limit=%.4f)", moved, ref_r, limit)
+        log.info(
+            "clamp_base_flare: %d verts (ref_r=%.4f limit=%.4f up=%d)",
+            moved,
+            ref_r,
+            limit,
+            up_axis,
+        )
     return moved
 
 
@@ -948,6 +1569,12 @@ class RepairProfile:
     sliver_max_aspect: float | None = None
     debris_face_ratio: float = 0.0005
     debris_min_faces: int = 64
+    # Cascas internas (paredes duplas MC) — antes de fill/watertight.
+    do_remove_internal_shells: bool = False
+    internal_shell_wall_gap_ratio: float = 0.08
+    internal_shell_room_gap_ratio: float = 0.55  # deprecated no-op
+    internal_shell_max_removal_ratio: float = 0.55
+    internal_shell_passes: int = 2
     fill_holes_sides: int = 12
     triangulate_after_fill: bool = True
     cap_holes: bool = False
@@ -958,7 +1585,14 @@ class RepairProfile:
     watertight_max_loop_edges: int = 400
     watertight_cap_base: bool = True
     watertight_final_fill: bool = True
+    # Fracção da diagonal AABB — loops ≥ isto não são tapados (portas/janelas).
+    watertight_max_loop_diameter_ratio: float | None = None
     watertight_skip_flap_erode: bool = False
+    # Bisect+fill se oco (capela ~0.75 no eixo mundo certo). Torre sólida ~0.01.
+    force_close_base: bool = False
+    force_base_band: float = 0.10
+    force_base_recess_trigger: float = 0.50
+    force_base_grid: int = 64
     recalc_normals: bool = True
     # Pré-passo: colapsar normal-splits do glTF (topology-fix em GLB).
     do_reweld_coincident: bool = False
@@ -1013,17 +1647,18 @@ REPAIR_PROFILES: dict[str, RepairProfile] = {
         do_exact_weld=True,
         do_reweld_coincident=True,
         sliver_max_aspect=80.0,
-        # 32: micro-rachas MC; 64 fundia demais aberturas finas (bandeira).
+        # Lean: weld + debris/slivers + micro fill. Sem cascas internas,
+        # watertight agressivo, force/cap base, flare ou Taubin — esses
+        # passos destruíam edifícios tipo casca-plástico (capela) ou props
+        # interiores. Double-shell / fundo aberto → geração (prompt/vista).
+        do_remove_internal_shells=False,
         fill_holes_sides=32,
-        watertight=True,
-        watertight_planar_tol=0.15,
-        # Erode de abas pode “comer” escadas/bandeiras coladas à parede.
-        watertight_skip_flap_erode=True,
-        do_clamp_base_flare=True,
-        flare_max_ratio=1.06,
-        flare_bottom_frac=0.10,
-        do_taubin=True,
-        taubin_iterations=3,
+        watertight=False,
+        watertight_cap_base=False,
+        watertight_final_fill=False,
+        force_close_base=False,
+        do_clamp_base_flare=False,
+        do_taubin=False,
     ),
     "post_voxel": RepairProfile(
         name="post_voxel",
@@ -1135,6 +1770,11 @@ def repair_mesh_object_with_profile(
         sliver_max_aspect=prof.sliver_max_aspect,
         debris_face_ratio=prof.debris_face_ratio,
         debris_min_faces=prof.debris_min_faces,
+        do_remove_internal_shells=prof.do_remove_internal_shells,
+        internal_shell_wall_gap_ratio=prof.internal_shell_wall_gap_ratio,
+        internal_shell_room_gap_ratio=prof.internal_shell_room_gap_ratio,
+        internal_shell_max_removal_ratio=prof.internal_shell_max_removal_ratio,
+        internal_shell_passes=prof.internal_shell_passes,
         fill_holes_sides=prof.fill_holes_sides,
         triangulate_after_fill=prof.triangulate_after_fill,
         cap_holes=prof.cap_holes,
@@ -1145,7 +1785,12 @@ def repair_mesh_object_with_profile(
         watertight_max_loop_edges=prof.watertight_max_loop_edges,
         watertight_cap_base=prof.watertight_cap_base,
         watertight_final_fill=prof.watertight_final_fill,
+        watertight_max_loop_diameter_ratio=prof.watertight_max_loop_diameter_ratio,
         watertight_skip_flap_erode=prof.watertight_skip_flap_erode,
+        do_force_close_base=prof.force_close_base,
+        force_base_band=prof.force_base_band,
+        force_base_recess_trigger=prof.force_base_recess_trigger,
+        force_base_grid=prof.force_base_grid,
         recalc_normals=prof.recalc_normals,
         do_clamp_base_flare=prof.do_clamp_base_flare,
         flare_max_ratio=prof.flare_max_ratio,
@@ -1188,6 +1833,11 @@ def repair_mesh_object(
     sliver_max_aspect: float | None = None,
     debris_face_ratio: float = 0.0005,
     debris_min_faces: int = 64,
+    do_remove_internal_shells: bool = False,
+    internal_shell_wall_gap_ratio: float = 0.12,
+    internal_shell_room_gap_ratio: float = 0.55,
+    internal_shell_max_removal_ratio: float = 0.55,
+    internal_shell_passes: int = 2,
     fill_holes_sides: int = 12,
     triangulate_after_fill: bool = True,
     cap_holes: bool = False,
@@ -1198,7 +1848,12 @@ def repair_mesh_object(
     watertight_max_loop_edges: int = 400,
     watertight_cap_base: bool = True,
     watertight_final_fill: bool = True,
+    watertight_max_loop_diameter_ratio: float | None = None,
     watertight_skip_flap_erode: bool = False,
+    do_force_close_base: bool = False,
+    force_base_band: float = 0.10,
+    force_base_recess_trigger: float = 0.50,
+    force_base_grid: int = 64,
     recalc_normals: bool = True,
     do_clamp_base_flare: bool = False,
     flare_max_ratio: float = 1.06,
@@ -1213,9 +1868,9 @@ def repair_mesh_object(
     destrutivos (welds/deletes corromperiam os morph targets).
 
     Ordem: NaN guard → weld exacto → weld secundário (bbox / densidade /
-    fixed) → degenerate → loose → long edges → slivers → debris → fill holes
-    → cap loops (opt) → ``make_watertight`` (opt) → clamp flare → Taubin →
-    normais.
+    fixed) → degenerate → loose → long edges → slivers → debris →
+    internal shells (opt) → fill holes → cap loops (opt) → ``make_watertight``
+    (opt) → ``force_close_base`` (opt) → clamp flare → Taubin → normais.
 
     Preferir :func:`repair_mesh_object_with_profile` com perfis
     ``topology_clean`` / ``pre_decimate_uv`` / ``part_decode``.
@@ -1271,6 +1926,23 @@ def repair_mesh_object(
             log.warning("remove_sliver_faces falhou: %s", exc)
             stats["sliver_faces"] = 0
     stats["debris_faces"] = remove_loose_debris(obj, face_ratio=debris_face_ratio, min_faces=debris_min_faces)
+    if do_remove_internal_shells:
+        total_shell = 0
+        passes = max(1, int(internal_shell_passes))
+        try:
+            for _pass in range(passes):
+                n = remove_internal_shell_faces(
+                    obj,
+                    wall_gap_ratio=internal_shell_wall_gap_ratio,
+                    room_gap_ratio=internal_shell_room_gap_ratio,
+                    max_removal_ratio=internal_shell_max_removal_ratio,
+                )
+                total_shell += int(n)
+                if n <= 0:
+                    break
+        except Exception as exc:
+            log.warning("remove_internal_shell_faces falhou: %s", exc)
+        stats["internal_shell_faces"] = total_shell
     if fill_holes_sides > 0:
         try:
             fill_holes(obj, sides=fill_holes_sides)
@@ -1290,6 +1962,7 @@ def repair_mesh_object(
                 cap_base=watertight_cap_base,
                 final_fill=watertight_final_fill,
                 skip_flap_erode=watertight_skip_flap_erode,
+                max_loop_diameter_ratio=watertight_max_loop_diameter_ratio,
             )
             stats["boundary_before"] = int(wt.get("boundary_before", 0))
             stats["boundary_after"] = int(wt.get("boundary_after", 0))
@@ -1321,6 +1994,20 @@ def repair_mesh_object(
         except Exception as exc:
             log.warning("taubin_smooth falhou: %s", exc)
             stats["taubin_iters"] = 0
+    # Chão planar DEPOIS do Taubin — senão o smooth empena a grelha e o oco volta.
+    # Param ``do_force_close_base`` (não ``force_close_base``) evita shadow da função.
+    if do_force_close_base:
+        try:
+            fb = force_close_base(
+                obj,
+                band=force_base_band,
+                recess_trigger=force_base_recess_trigger,
+                grid=force_base_grid,
+            )
+            stats.update({k: int(v) for k, v in fb.items()})
+        except Exception as exc:
+            log.warning("force_close_base falhou: %s", exc)
+            stats["base_forced_faces"] = 0
     if recalc_normals:
         try:
             normals_consistent(obj)

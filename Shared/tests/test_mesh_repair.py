@@ -319,11 +319,12 @@ class TestRepairProfiles:
         with pytest.raises(ValueError, match="desconhecido"):
             get_repair_profile("nope")
 
-    def test_topology_clean_enables_watertight_and_slivers(self) -> None:
+    def test_topology_clean_lean_flags(self) -> None:
         from gamedev_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
-        assert p.watertight is True
+        assert p.watertight is False
+        assert p.do_remove_internal_shells is False
         assert p.sliver_max_aspect == 80.0
         assert p.weld_mode == "vert_density"
 
@@ -365,7 +366,7 @@ class TestRepairProfiles:
         assert "boundary_after" not in stats
         clear_scene()
 
-    def test_topology_clean_closes_open_shell(self, _bpy) -> None:
+    def test_topology_clean_opt_in_watertight_closes_open_shell(self, _bpy) -> None:
         import trimesh
 
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
@@ -378,7 +379,8 @@ class TestRepairProfiles:
         clear_scene()
         obj = create_mesh_from_arrays(np.asarray(shell.vertices), np.asarray(shell.faces, dtype=np.int64), name="topo")
         assert count_boundary_edges(obj) > 0
-        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        # Perfil lean: watertight off; opt-in ainda fecha.
+        stats = repair_mesh_object_with_profile(obj, "topology_clean", watertight=True)
         assert stats.get("boundary_after", 0) == 0
         clear_scene()
 
@@ -413,8 +415,8 @@ class TestRepairWatertightRoundtrip:
     def _procedural_open_box(*, size: float = 1.0) -> tuple[np.ndarray, np.ndarray]:
         """Caixa unitária triangulada **sem a face do fundo** (abertura em -Z).
 
-        8 vértices, 10 triângulos (5 faces × 2). O loop de fronteira do fundo
-        tem 4 arestas — deve ser fechado por ``make_watertight`` / ``topology_clean``.
+        8 vértices, 10 triângulos (5 faces x 2). O loop de fronteira do fundo
+        tem 4 arestas — fechado por ``make_watertight`` (opt-in no perfil lean).
         """
         s = size / 2.0
         #      4----5
@@ -504,7 +506,7 @@ class TestRepairWatertightRoundtrip:
         assert len(obj.data.polygons) > faces_before  # caps acrescentaram faces
         clear_scene()
 
-    def test_topology_clean_closes_procedural_open_box(self, _bpy) -> None:
+    def test_topology_clean_opt_in_watertight_closes_procedural_open_box(self, _bpy) -> None:
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
         from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
 
@@ -512,13 +514,13 @@ class TestRepairWatertightRoundtrip:
         clear_scene()
         obj = create_mesh_from_arrays(verts, faces, name="topo_box")
         assert count_boundary_edges(obj) > 0
-        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        stats = repair_mesh_object_with_profile(obj, "topology_clean", watertight=True)
         assert stats.get("boundary_after") == 0
         assert count_boundary_edges(obj) == 0
         assert len(obj.data.polygons) >= 10
         clear_scene()
 
-    def test_topology_clean_closes_subdivided_open_shell(self, _bpy) -> None:
+    def test_topology_clean_opt_in_watertight_closes_subdivided_open_shell(self, _bpy) -> None:
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
         from gamedev_shared.mesh_repair import count_boundary_edges, repair_mesh_object_with_profile
 
@@ -527,10 +529,23 @@ class TestRepairWatertightRoundtrip:
         obj = create_mesh_from_arrays(verts, faces, name="topo_sub")
         assert count_boundary_edges(obj) > 0
         faces_before = len(obj.data.polygons)
-        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        stats = repair_mesh_object_with_profile(obj, "topology_clean", watertight=True)
         assert stats.get("boundary_after") == 0
         assert count_boundary_edges(obj) == 0
         assert len(obj.data.polygons) >= faces_before
+        clear_scene()
+
+    def test_topology_clean_lean_skips_watertight_stats(self, _bpy) -> None:
+        """Lean: sem make_watertight (fill_holes micro pode fechar loops ≤32)."""
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
+
+        verts, faces = self._procedural_open_box_subdivided()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="topo_lean")
+        stats = repair_mesh_object_with_profile(obj, "topology_clean")
+        assert "boundary_before" not in stats
+        assert "boundary_after" not in stats
         clear_scene()
 
     def test_repair_mesh_object_watertight_closes(self, _bpy) -> None:
@@ -610,14 +625,17 @@ class TestRepairWatertightRoundtrip:
 
 
 class TestClampBaseFlareAndTaubin:
-    def test_topology_clean_enables_flare_and_taubin(self) -> None:
+    def test_topology_clean_is_lean(self) -> None:
         from gamedev_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
-        assert p.do_clamp_base_flare is True
-        assert p.do_taubin is True
-        assert p.watertight_skip_flap_erode is True
         assert p.fill_holes_sides == 32
+        assert p.do_remove_internal_shells is False
+        assert p.watertight is False
+        assert p.force_close_base is False
+        assert p.watertight_cap_base is False
+        assert p.do_clamp_base_flare is False
+        assert p.do_taubin is False
 
     @staticmethod
     def _cylinder_y(
@@ -679,4 +697,328 @@ class TestClampBaseFlareAndTaubin:
         obj = create_mesh_from_arrays(verts, faces, name="cyl")
         n = taubin_smooth(obj, iterations=2)
         assert n == 2
+        clear_scene()
+
+
+class TestForceCloseBase:
+    """Laje forçada: shell oco (sem chão) vs caixa sólida."""
+
+    @staticmethod
+    def _open_bottom_box() -> tuple[np.ndarray, np.ndarray]:
+        """Caixa unitária Y-up sem face inferior (oco por baixo)."""
+        verts = np.array(
+            [
+                [-0.5, 0.0, -0.5],
+                [0.5, 0.0, -0.5],
+                [0.5, 0.0, 0.5],
+                [-0.5, 0.0, 0.5],
+                [-0.5, 1.0, -0.5],
+                [0.5, 1.0, -0.5],
+                [0.5, 1.0, 0.5],
+                [-0.5, 1.0, 0.5],
+            ],
+            dtype=np.float64,
+        )
+        # top + 4 walls (no bottom 0-1-2-3)
+        faces = np.array(
+            [
+                [4, 5, 6],
+                [4, 6, 7],
+                [0, 1, 5],
+                [0, 5, 4],
+                [1, 2, 6],
+                [1, 6, 5],
+                [2, 3, 7],
+                [2, 7, 6],
+                [3, 0, 4],
+                [3, 4, 7],
+            ],
+            dtype=np.int64,
+        )
+        return verts, faces
+
+    def test_force_close_base_seals_open_bottom(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import base_openness_stats, force_close_base
+
+        verts, faces = self._open_bottom_box()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="open_box")
+        h_before = float(obj.dimensions.y)
+        before = base_openness_stats(obj, up_axis=1, grid=24)
+        assert before["recess_ratio"] >= 0.50
+        stats = force_close_base(obj, up_axis=1, grid=24, recess_trigger=0.50, min_cells=4, min_faces=1)
+        assert stats["base_forced_faces"] > 0
+        assert stats.get("base_rollback", 0) == 0
+        after = base_openness_stats(obj, up_axis=1, grid=24)
+        assert after["recess_ratio"] < before["recess_ratio"]
+        assert float(obj.dimensions.y) <= h_before * 1.02
+        clear_scene()
+
+    def test_force_close_base_skips_below_trigger(self, _bpy) -> None:
+        """Recess abaixo do limiar → no-op (torre sólida ~0.01 no eixo mundo)."""
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import force_close_base
+
+        verts, faces = self._open_bottom_box()
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="open")
+        # recess caixa aberta ≈1.0; trigger >1 → skip
+        stats = force_close_base(obj, up_axis=1, grid=24, recess_trigger=1.01, min_cells=4, min_faces=1)
+        assert stats["base_forced_faces"] == 0
+        clear_scene()
+
+    def test_force_close_base_skips_solid_box(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import force_close_base
+
+        # Caixa completa (com fundo)
+        verts = np.array(
+            [
+                [-0.5, 0.0, -0.5],
+                [0.5, 0.0, -0.5],
+                [0.5, 0.0, 0.5],
+                [-0.5, 0.0, 0.5],
+                [-0.5, 1.0, -0.5],
+                [0.5, 1.0, -0.5],
+                [0.5, 1.0, 0.5],
+                [-0.5, 1.0, 0.5],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.array(
+            [
+                [0, 1, 2],
+                [0, 2, 3],
+                [4, 5, 6],
+                [4, 6, 7],
+                [0, 1, 5],
+                [0, 5, 4],
+                [1, 2, 6],
+                [1, 6, 5],
+                [2, 3, 7],
+                [2, 7, 6],
+                [3, 0, 4],
+                [3, 4, 7],
+            ],
+            dtype=np.int64,
+        )
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="solid")
+        stats = force_close_base(obj, up_axis=1, grid=24, recess_trigger=0.25, min_faces=1)
+        assert stats["base_forced_faces"] == 0
+        clear_scene()
+
+
+class TestRemoveInternalShellFaces:
+    def test_solid_box_untouched(self, _bpy) -> None:
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import normals_consistent, remove_internal_shell_faces
+
+        verts = np.array(
+            [
+                [-0.5, -0.5, -0.5],
+                [0.5, -0.5, -0.5],
+                [0.5, 0.5, -0.5],
+                [-0.5, 0.5, -0.5],
+                [-0.5, -0.5, 0.5],
+                [0.5, -0.5, 0.5],
+                [0.5, 0.5, 0.5],
+                [-0.5, 0.5, 0.5],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.array(
+            [
+                [0, 1, 2],
+                [0, 2, 3],
+                [4, 6, 5],
+                [4, 7, 6],
+                [0, 4, 5],
+                [0, 5, 1],
+                [2, 6, 7],
+                [2, 7, 3],
+                [0, 3, 7],
+                [0, 7, 4],
+                [1, 5, 6],
+                [1, 6, 2],
+            ],
+            dtype=np.int64,
+        )
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="solid")
+        normals_consistent(obj)
+        before = len(obj.data.polygons)
+        removed = remove_internal_shell_faces(obj)
+        assert removed == 0
+        assert len(obj.data.polygons) == before
+        clear_scene()
+
+    def test_double_shell_removes_inner(self, _bpy) -> None:
+        """Outer box + inner box (normais para o oco) → remove faces da casca interna."""
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import remove_internal_shell_faces
+
+        def _box(lo: float, hi: float, *, flip: bool) -> tuple[np.ndarray, np.ndarray]:
+            verts = np.array(
+                [
+                    [lo, lo, lo],
+                    [hi, lo, lo],
+                    [hi, hi, lo],
+                    [lo, hi, lo],
+                    [lo, lo, hi],
+                    [hi, lo, hi],
+                    [hi, hi, hi],
+                    [lo, hi, hi],
+                ],
+                dtype=np.float64,
+            )
+            faces = np.array(
+                [
+                    [0, 1, 2],
+                    [0, 2, 3],
+                    [4, 6, 5],
+                    [4, 7, 6],
+                    [0, 4, 5],
+                    [0, 5, 1],
+                    [2, 6, 7],
+                    [2, 7, 3],
+                    [0, 3, 7],
+                    [0, 7, 4],
+                    [1, 5, 6],
+                    [1, 6, 2],
+                ],
+                dtype=np.int64,
+            )
+            if flip:
+                faces = faces[:, ::-1].copy()
+            return verts, faces
+
+        clear_scene()
+        # Ambas outward (caso Hunyuan): casca interna olha para o vão fino.
+        vo, fo = _box(-1.0, 1.0, flip=True)
+        vi, fi = _box(-0.85, 0.85, flip=True)
+        outer = create_mesh_from_arrays(vo, fo, name="outer")
+        inner = create_mesh_from_arrays(vi, fi, name="inner")
+        import bpy
+
+        bpy.ops.object.select_all(action="DESELECT")
+        outer.select_set(True)
+        inner.select_set(True)
+        bpy.context.view_layer.objects.active = outer
+        bpy.ops.object.join()
+        obj = bpy.context.active_object
+        before = len(obj.data.polygons)
+        removed = remove_internal_shell_faces(obj, wall_gap_ratio=0.25, room_gap_ratio=0.9, max_removal_ratio=0.75)
+        assert removed > 0, f"expected inner shell removal, got {removed}"
+        assert removed <= before // 2 + 2
+        assert len(obj.data.polygons) < before
+        clear_scene()
+
+    def test_prop_inside_hollow_room_untouched(self, _bpy) -> None:
+        """Objecto no oco (sino) — gap longo, NÃO sanduíche fino → 0 removidos."""
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import remove_internal_shell_faces
+
+        def _box(lo: float, hi: float, *, flip: bool) -> tuple[np.ndarray, np.ndarray]:
+            verts = np.array(
+                [
+                    [lo, lo, lo],
+                    [hi, lo, lo],
+                    [hi, hi, lo],
+                    [lo, hi, lo],
+                    [lo, lo, hi],
+                    [hi, lo, hi],
+                    [hi, hi, hi],
+                    [lo, hi, hi],
+                ],
+                dtype=np.float64,
+            )
+            faces = np.array(
+                [
+                    [0, 1, 2],
+                    [0, 2, 3],
+                    [4, 6, 5],
+                    [4, 7, 6],
+                    [0, 4, 5],
+                    [0, 5, 1],
+                    [2, 6, 7],
+                    [2, 7, 3],
+                    [0, 3, 7],
+                    [0, 7, 4],
+                    [1, 5, 6],
+                    [1, 6, 2],
+                ],
+                dtype=np.int64,
+            )
+            if flip:
+                faces = faces[:, ::-1].copy()
+            return verts, faces
+
+        clear_scene()
+        # Casca exterior + prop pequeno no centro (gap >> wall_gap).
+        vo, fo = _box(-2.0, 2.0, flip=True)
+        vp, fp = _box(-0.15, 0.15, flip=True)
+        outer = create_mesh_from_arrays(vo, fo, name="room")
+        prop = create_mesh_from_arrays(vp, fp, name="bell")
+        import bpy
+
+        bpy.ops.object.select_all(action="DESELECT")
+        outer.select_set(True)
+        prop.select_set(True)
+        bpy.context.view_layer.objects.active = outer
+        bpy.ops.object.join()
+        obj = bpy.context.active_object
+        before = len(obj.data.polygons)
+        removed = remove_internal_shell_faces(obj, wall_gap_ratio=0.08, max_removal_ratio=0.75)
+        assert removed == 0, f"prop no oco não deve ser apagado, got {removed}"
+        assert len(obj.data.polygons) == before
+        clear_scene()
+
+
+class TestCapBoundaryDiameterGuard:
+    def test_large_opening_not_capped(self, _bpy) -> None:
+        """Abertura grande (porta): max_loop_diameter_ratio bloqueia o cap."""
+        from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
+        from gamedev_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
+
+        # Caixa sem topo — loop de 4 arestas, diâmetro ~√2 na face 1×1.
+        verts = np.array(
+            [
+                [-0.5, -0.5, -0.5],
+                [0.5, -0.5, -0.5],
+                [0.5, 0.5, -0.5],
+                [-0.5, 0.5, -0.5],
+                [-0.5, -0.5, 0.5],
+                [0.5, -0.5, 0.5],
+                [0.5, 0.5, 0.5],
+                [-0.5, 0.5, 0.5],
+            ],
+            dtype=np.float64,
+        )
+        faces = np.array(
+            [
+                [0, 1, 2],
+                [0, 2, 3],  # bottom
+                [0, 4, 5],
+                [0, 5, 1],
+                [1, 5, 6],
+                [1, 6, 2],
+                [2, 6, 7],
+                [2, 7, 3],
+                [3, 7, 4],
+                [3, 4, 0],
+                # sem topo
+            ],
+            dtype=np.int64,
+        )
+        clear_scene()
+        obj = create_mesh_from_arrays(verts, faces, name="open_box")
+        assert count_boundary_edges(obj) > 0
+        capped = cap_boundary_loops(obj, max_loop_edges=32, planar_tol=0.15, max_loop_diameter_ratio=0.08)
+        assert capped == 0
+        assert count_boundary_edges(obj) > 0
+        # Sem guarda de diâmetro, o loop pequeno+planar tapa.
+        capped2 = cap_boundary_loops(obj, max_loop_edges=32, planar_tol=0.15)
+        assert capped2 >= 1
         clear_scene()
