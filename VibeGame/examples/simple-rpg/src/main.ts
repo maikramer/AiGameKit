@@ -985,8 +985,8 @@ async function bootstrap(): Promise<void> {
 
   // City exclusion zone — registered directly in the occupancy registry before
   // any StaticSpawner samples positions. Central walled city is at the origin
-  // (matches the <SpawnExclusion at="0 0" radius="30"> in index.html).
-  const villageZones: Array<[number, number, number]> = [[0, 0, 40]];
+  // (matches the <SpawnExclusion at="0 0" radius="42"> in index.html).
+  const villageZones: Array<[number, number, number]> = [[0, 0, 42]];
   for (const [x, z, r] of villageZones) {
     registerSpawnFootprint(state, x, z, r);
   }
