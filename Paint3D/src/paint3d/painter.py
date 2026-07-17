@@ -654,6 +654,7 @@ def apply_hunyuan_paint(
                 _logger.info(
                     f"input AABB (antes do pipeline): min={bounds_min_before.tolist()} max={bounds_max_before.tolist()}"
                 )
+            # Cascas internas: topology-fix (shape→clean) antes do paint.
             save_glb(mesh, mesh_in)
 
             if isinstance(image, (str, Path)):
@@ -704,6 +705,10 @@ def apply_hunyuan_paint(
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(model_repo, subfolder, verbose=verbose)
             pipe = Hunyuan3DPaintPipeline(config)
+            # Skip inpaint em ilhas UV nunca baked (cascas internas / occlusas).
+            from .paint_prep import install_restricted_inpaint
+
+            install_restricted_inpaint(pipe.view_processor)
 
         with profile_span("paint_optimize_pipeline"):
             try:
@@ -1003,6 +1008,9 @@ class PaintBatchProcessor:
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(self._model_repo, self._subfolder, verbose=self._verbose)
             pipe = Hunyuan3DPaintPipeline(config)
+            from .paint_prep import install_restricted_inpaint
+
+            install_restricted_inpaint(pipe.view_processor)
 
         with profile_span("paint_optimize_pipeline"):
             try:
