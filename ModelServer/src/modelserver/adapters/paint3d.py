@@ -5,7 +5,7 @@ O Paint3D não tem um generator com ``warmup``/``unload``. O ``PaintBatchProcess
 ``__exit__`` liberta. O adapter normaliza isto no contrato canónico.
 
 Input: ``request["mesh_path"]`` + ``request["image_path"]``.
-Output: GLB texturado via ``save_glb``.
+Output: GLB texturado via ``save_glb`` + pós-processo (smooth/upscale/origin).
 """
 
 from __future__ import annotations
@@ -27,13 +27,14 @@ class Adapter(BackendAdapter):
         # UMS-only / peak-planning keys — PaintBatchProcessor não os aceita.
         quant = kwargs.pop("sdnq_preset", None) or kwargs.pop("quant_mode", None)
         kwargs.pop("offload", None)
+        # Pós-processo é por-generate, não shape de load.
+        for k in ("smooth", "smooth_passes", "upscale", "upscale_factor", "preserve_origin"):
+            kwargs.pop(k, None)
         mem_eff = kwargs.pop("memory_efficient", None)
         if mem_eff is None and quant is not None:
             mem_eff = str(quant).strip().lower() not in ("none", "null", "")
         mem_eff = bool(mem_eff)
 
-        # Shape do pipeline (afeta activação/VRAM): vistas, resolução, atlas.
-        # O runtime budget (vram_budget) pode reduzir vistas depois, nunca subir.
         if mem_eff:
             default_views = _defaults.MEMORY_EFFICIENT_MAX_VIEWS
             default_res = _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION
@@ -53,6 +54,8 @@ class Adapter(BackendAdapter):
             texture_size=int(texture_size) if texture_size else None,
             bake_exp=int(bake_exp) if bake_exp else _defaults.DEFAULT_PAINT_BAKE_EXP,
             verbose=bool(kwargs.get("verbose", False)),
+            # Origin fit no pós-processo do generate (paridade CLI + batch).
+            preserve_origin=False,
             memory_efficient=mem_eff,
             gpu_ids=kwargs.get("gpu_ids"),
             torch_compile=bool(kwargs.get("torch_compile", False)),
@@ -85,8 +88,6 @@ class Adapter(BackendAdapter):
 
         if self.should_abort(request):
             return self.cancelled_response("cancelled before paint")
-        # Runtime VRAM budget (views/tiles/DINO) — canónico Shared, exposto UMS.
-        # Overrides por-request: vistas/resolução pedidas (clamped ao pipeline).
         budget_hints: dict[str, Any] = {}
         if request.get("max_num_view"):
             budget_hints["requested_views"] = int(request["max_num_view"])
@@ -109,6 +110,23 @@ class Adapter(BackendAdapter):
         self.report_progress(request, 0.85, "saving")
         saved = save_glb(textured, output)
 
+        # Pós-processo canónico (antes só no CLI in-process).
+        from paint3d.postprocess import apply_paint_postprocess
+
+        if self.should_abort(request):
+            return self.cancelled_response("cancelled before postprocess")
+        self.report_progress(request, 0.92, "postprocess")
+        post = apply_paint_postprocess(
+            saved,
+            mesh_path=mesh_path,
+            preserve_origin=bool(request.get("preserve_origin", False)),
+            smooth=bool(request.get("smooth", False)),
+            smooth_passes=request.get("smooth_passes"),
+            upscale=bool(request.get("upscale", False)),
+            upscale_factor=request.get("upscale_factor"),
+            verbose=bool(request.get("verbose", False)),
+        )
+
         elapsed = time.perf_counter() - t_start
         self.report_progress(request, 1.0, "done")
         out: dict[str, Any] = {
@@ -117,7 +135,9 @@ class Adapter(BackendAdapter):
             "seconds": round(elapsed, 2),
         }
         if budget:
-            out["runtime_budget"] = budget
+            out["runtime_budget"] = {**budget, "postprocess": post} if post else budget
+        elif post:
+            out["runtime_budget"] = {"postprocess": post}
         return out
 
     def unload(self, model: Any) -> None:

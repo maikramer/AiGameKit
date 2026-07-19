@@ -113,6 +113,28 @@ class TestAffinityScheduler:
         assert picked is hot
         assert head.affinity_cuts == 1
 
+    def test_is_hot_requires_shape_match(self) -> None:
+        """Backend loaded com shape diferente ≠ hot — não saltar cold head."""
+        head = _job("alpha", 1)
+        same_backend_wrong_shape = _job("text3d", 2)
+        same_backend_wrong_shape.request = {"max_num_view": 4}
+
+        def _hot(job: Job) -> bool:
+            # Só hot se pedir 6 views (shape "certo").
+            return job.backend == "text3d" and job.request.get("max_num_view") == 6
+
+        picked = AffinityScheduler().pick_next([head, same_backend_wrong_shape], loaded={"text3d"}, is_hot=_hot)
+        assert picked is head
+        assert head.affinity_cuts == 0
+
+        same_backend_ok = _job("text3d", 3)
+        same_backend_ok.request = {"max_num_view": 6}
+        picked = AffinityScheduler().pick_next(
+            [head, same_backend_wrong_shape, same_backend_ok], loaded={"text3d"}, is_hot=_hot
+        )
+        assert picked is same_backend_ok
+        assert head.affinity_cuts == 1
+
     def test_unknown_priority_rank_last(self) -> None:
         weird = _job("alpha", 1, priority="turbo")
         batch = _job("beta", 2, priority=P.PRIORITY_BATCH)

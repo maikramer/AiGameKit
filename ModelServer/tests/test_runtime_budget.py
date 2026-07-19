@@ -153,6 +153,16 @@ class TestShapeReload:
         assert adapter.load_calls == 2
         assert adapter.unload_calls == 1
 
+    def test_shape_matches_loaded(self) -> None:
+        descriptors = {"alpha": BackendDescriptor(name="alpha", adapter="_mock_alpha", vram_mib=1000, priority=10)}
+        registry = Registry(descriptors=descriptors)
+        registry._adapter_instances["alpha"] = MockAdapter(name="alpha")
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        mgr.ensure_loaded("alpha", max_num_view=6)
+        assert mgr.shape_matches_loaded("alpha", {"max_num_view": 6}) is True
+        assert mgr.shape_matches_loaded("alpha", {"max_num_view": 4}) is False
+        assert mgr.shape_matches_loaded("alpha", {}) is True
+
 
 class TestGroupOffloadPeak:
     """text3d+sdnq ⇒ group_offload peak ≈ largest + act (não weights+0.65·act)."""

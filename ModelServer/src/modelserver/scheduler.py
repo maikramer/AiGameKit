@@ -38,11 +38,21 @@ class AffinityScheduler:
         loaded: Collection[str],
         *,
         loaded_fn: Callable[[], Collection[str]] | None = None,
+        is_hot: Callable[[Job], bool] | None = None,
     ) -> Job | None:
-        """Devolve o job a despachar, ou ``None`` se a fila estiver vazia."""
+        """Devolve o job a despachar, ou ``None`` se a fila estiver vazia.
+
+        ``is_hot(job)`` (opcional): True se o backend está carregado **com o
+        mesmo load_shape** do pedido. Sem callback, hot = ``backend in loaded``.
+        """
         if not jobs:
             return None
         loaded_set = set(loaded_fn() if loaded_fn is not None else loaded)
+
+        def _hot(job: Job) -> bool:
+            if is_hot is not None:
+                return bool(is_hot(job))
+            return job.backend in loaded_set
 
         eligible = [j for j in jobs if j.state == P.JOB_QUEUED and not j.cancel_requested]
         if not eligible:
@@ -56,11 +66,11 @@ class AffinityScheduler:
         wait_sec = time.monotonic() - head.created_at
         starve = self.starvation_timeout_sec > 0 and wait_sec >= self.starvation_timeout_sec
 
-        if head.backend in loaded_set or head.affinity_cuts >= self.max_cuts or starve:
+        if _hot(head) or head.affinity_cuts >= self.max_cuts or starve:
             return head
 
         for candidate in band[1:]:
-            if candidate.backend in loaded_set:
+            if _hot(candidate):
                 head.affinity_cuts += 1
                 return candidate
 

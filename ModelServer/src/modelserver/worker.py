@@ -110,13 +110,16 @@ class WorkerPool:
         loaded = set(self.manager.loaded_names())
         free = self._free_mib()
 
-        if job.backend in loaded:
-            # Backend quente — headroom de activação de inferência (+ safety).
+        # Hot = backend carregado **e** load_shape compatível (senão = cold reload).
+        if job.backend in loaded and self._job_is_hot(job):
             self._affinity_hits += 1
             if free is None:
                 return True
             try:
-                needed = self.manager.activation_headroom_mib(job.backend)
+                _q, mem_eff, group_off = self.manager.resolve_peak_params(job.backend, job.request)
+                needed = self.manager.activation_headroom_mib(
+                    job.backend, memory_efficient=mem_eff, group_offload=group_off
+                )
             except Exception:
                 needed = 512
             return free >= needed
@@ -126,6 +129,13 @@ class WorkerPool:
             return False
         return free >= self._backend_peak_mib(job.backend, job.request)
 
+    def _job_is_hot(self, job: Job) -> bool:
+        """Backend loaded + load_shape match (duck-typed para mocks de teste)."""
+        fn = getattr(self.manager, "shape_matches_loaded", None)
+        if callable(fn):
+            return bool(fn(job.backend, job.request))
+        return job.backend in set(self.manager.loaded_names())
+
     def _claim_next(self) -> Job | None:
         jobs = self.queue.queued_jobs()
         if not jobs:
@@ -133,7 +143,11 @@ class WorkerPool:
         # Já no máximo efectivo de threads; cada thread só pega se cabe.
         if self.queue.inflight >= self.max_inflight:
             return None
-        picked = self.scheduler.pick_next(jobs, self.manager.loaded_names())
+        picked = self.scheduler.pick_next(
+            jobs,
+            self.manager.loaded_names(),
+            is_hot=self._job_is_hot,
+        )
         if picked is None:
             return None
         if not self._fits_parallel(picked):

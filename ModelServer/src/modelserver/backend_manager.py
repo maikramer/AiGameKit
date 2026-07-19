@@ -219,6 +219,21 @@ class BackendManager:
             state = self._states.get(name)
             return state is not None and state.model is not None
 
+    def shape_matches_loaded(self, name: str, request: dict[str, Any] | None = None) -> bool:
+        """True se ``name`` está carregado e o request não pede outro load_shape.
+
+        Usado pelo AffinityScheduler: hot ≠ só nome do backend — quant/views/
+        offload diferentes forçam cold reload.
+        """
+        with self._struct_lock:
+            state = self._states.get(name)
+            if state is None or state.model is None:
+                return False
+            load_kwargs = {k: v for k, v in (request or {}).items() if k in _LOAD_KWARG_KEYS}
+            if not load_kwargs:
+                return True
+            return not self._shape_mismatch(state.load_shape, load_kwargs)
+
     def _snapshot(self, name: str) -> LoadedBackend | None:
         state = self._states.get(name)
         if state is None or state.model is None:
@@ -289,7 +304,7 @@ class BackendManager:
             # SDNQ ⇒ caminho memory-efficient:
             #   paint3d — CFG chunk / vistas menores
             #   text3d  — group offload + streams; act orçada em runtime
-            #   text2d  — CPU offload / 4B path (activation ×0.65)
+            #   text2d  — CPU offload / 4B path (activation x0.65)
             mem = name in ("paint3d", "text3d", "text2d") and quant.startswith("sdnq")
         mem = bool(mem)
         go = self._as_bool(src.get("allow_group_offload"))
