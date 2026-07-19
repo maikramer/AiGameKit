@@ -2,7 +2,7 @@
 
 **Language:** English · [Português (`README_PT.md`)](README_PT.md)
 
-Text-to-3D and image-to-3D generation powered by [Text2D](../Text2D) (FLUX.2 Klein SDNQ) → [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) (SDNQ INT4 quantized). Outputs geometry-only GLB/PLY/OBJ meshes. For texturing and PBR, use [Paint3D](../Paint3D) or [GameAssets](../GameAssets).
+Text-to-3D and image-to-3D generation powered by [Text2D](../Text2D) (FLUX.2 Klein SDNQ) → [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + optional bbox/pose/point/voxel controls; SDNQ INT4 on small GPUs). Outputs geometry-only GLB/PLY/OBJ meshes. For texturing and PBR, use [Paint3D](../Paint3D) or [GameAssets](../GameAssets).
 
 Text3D is also the **central mesh operations hub** in the monorepo — it owns all mesh post-processing (LOD, collision, remesh, simplify, align).
 
@@ -13,7 +13,7 @@ Text3D is also the **central mesh operations hub** in the monorepo — it owns a
 Text3D generates 3D meshes in two phases:
 
 1. **Text2D** (text → reference image) — uses FLUX.2 Klein with CPU offload by default; the model is **always unloaded** before loading Hunyuan3D.
-2. **Hunyuan3D-2.1** (image → mesh) — marching cubes surface extraction with SDNQ INT4 quantization.
+2. **Hunyuan3D-Omni** (image → mesh) — SiT flow matching + optional geometric controls; SDNQ INT4 on small GPUs.
 
 Generation presets (`--preset`) adjust steps, octree resolution, and chunk count together:
 
@@ -25,7 +25,7 @@ Generation presets (`--preset`) adjust steps, octree resolution, and chunk count
 
 After generation, use ``--no-topology-fix`` (recommended in the master pipeline) for a raw shape, then ``text3d topology-fix`` (Shared profile ``topology_clean``) as Stage 2. Without that flag, ``generate`` still runs topology repair in-process (see [Mesh Topology](#mesh-topology)).
 
-> **License:** Tencent Hunyuan3D-2.1 weights are under the [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-2.1) — territory restrictions apply. Text2D (FLUX SDNQ) license: see [Text2D/README](../Text2D/README.md) and root [README](../README.md).
+> **License:** Tencent Hunyuan3D-Omni weights are under the [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-Omni) — territory restrictions apply. Text2D (FLUX SDNQ) license: see [Text2D/README](../Text2D/README.md) and root [README](../README.md).
 
 ## Installation
 
@@ -83,6 +83,19 @@ text3d generate "chair" --preset fast -o chair_fast.glb
 # Image-to-3D only (skip Text2D)
 text3d generate -i ref.png -o mesh.glb
 
+# Omni pose: Quaternius T-pose (packaged bone.txt — good for rig)
+text3d generate -i hero.png --pose-preset quaternius-tpose -o hero_shape.glb
+
+# Omni bbox aspect (sword tall / thin)
+text3d generate -i sword.png --bbox-preset sword -o sword_shape.glb
+
+# Explicit size L,H,W (normalized 0–1) or meters via GameAssets size_m
+text3d generate -i crate.png --size 1,1,1 -o crate_shape.glb
+
+# Point / voxel anchors (keep geometry, change appearance)
+text3d generate -i new_skin.png --control-type point --point-cloud old_shape.glb -o variant.glb
+text3d generate -i tower.png --control-type voxel --voxel-mesh blockout.glb -o tower_shape.glb
+
 # Low VRAM (~6 GB): hw-auto applies SDNQ INT4 automatically
 text3d generate "object" --preset balanced
 
@@ -95,6 +108,19 @@ text3d generate "statue" --skip-remesh -o statue.glb
 # Multi-GPU (split Hunyuan weights across GPUs)
 text3d generate "scene" --gpu-ids 0,1 -o scene.glb
 ```
+
+### Omni geometric controls
+
+Hunyuan3D-Omni accepts **one** control signal per generation. Packaged assets live under `text3d/data/omni/` (T-pose bones + reference GLB).
+
+| Control | CLI | Use |
+|---------|-----|-----|
+| Pose | `--pose-preset quaternius-tpose` | Humanoid T-pose for SkinTokens / animate |
+| BBox | `--bbox-preset sword\|humanoid\|door\|…` or `--bbox L,H,W` / `--size L,H,W` | Aspect / relative size |
+| Point | `--control-type point --point-cloud mesh.glb` | Shape lock / variant refresh |
+| Voxel | `--control-type voxel --voxel-mesh blockout.glb` | Blockout → styled mesh |
+
+`--category humanoid` soft-fills pose T-pose when no control is explicit. A sidecar `*.glb.omni.json` is written next to the shape for GameAssets resume invalidation.
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
@@ -135,6 +161,13 @@ text3d generate "scene" --gpu-ids 0,1 -o scene.glb
 | `--compile` | flag | false | `torch.compile` on DiT+VAE+conditioner (slow first-run warmup; pays off in batch) |
 | `--sage-attn` | flag | false | SageAttention INT8 attention kernels (requires `sageattention`, Ampere+) |
 | `--sdnq-matmul` | flag | false | SDNQ quantized INT8 matmul (use together with `--sdnq-preset`) |
+| `--control-type` | str | `none` | Omni: `none`, `bbox`, `pose`, `point`, `voxel` |
+| `--pose-preset` | str | None | Packaged pose (`quaternius-tpose`); implies pose control |
+| `--pose-file` | path | None | Custom bone-points txt for pose |
+| `--bbox-preset` | str | None | Aspect preset (`sword`, `humanoid`, `door`, …) |
+| `--bbox` / `--size` | CSV | None | L,H,W (3) or AABB (6); `--size` is 3-float alias |
+| `--point-cloud` | path | None | Mesh/PLY shape anchor |
+| `--voxel-mesh` | path | None | Mesh/PLY volume/blockout anchor |
 
 > **Preset precedence:** When `--preset` is set, it overrides `--steps`, `--octree-resolution`, and `--num-chunks`. When `--quality` is set, the QualityEngine resolves preset/guidance/steps/octree/chunks only if the user hasn't explicitly provided them.
 
@@ -151,9 +184,12 @@ text3d generate-batch manifest.json --output-dir ./outputs --preset balanced --f
 ```json
 [
   {"id": "item1", "image": "ref1.png", "output": "item1.glb"},
-  {"id": "item2", "image": "ref2.png", "output": "item2.glb", "steps": 28, "seed": 42}
+  {"id": "hero", "image": "hero.png", "output": "hero_shape.glb", "pose_preset": "quaternius-tpose", "category": "humanoid"},
+  {"id": "sword", "image": "sword.png", "output": "sword_shape.glb", "bbox_preset": "sword", "steps": 28, "seed": 42}
 ]
 ```
+
+Per-item Omni fields: `control_type`, `bbox`, `bbox_preset`, `size` / `size_m`, `pose_preset`, `pose_file`, `point_cloud`, `voxel_mesh`, `category`.
 
 Accepts all generation flags (`--preset`, `--steps`, `--guidance`, `--octree-resolution`, `--num-chunks`, `--mc-level`, `--sdnq-preset`, `--export-origin`, `--gpu-ids`, `--allow-shared-gpu`, `--force`) plus the inference acceleration flags (`--volume-decoder`, `--mc-algo`, `--compile`, `--sage-attn`, `--sdnq-matmul`). In batch mode the BiRefNet background remover stays loaded across items (no per-item reload).
 
@@ -460,7 +496,7 @@ Full CI: `make check` (from repo root) runs lint, format check, typecheck, and t
 
 ## Credits
 
-- **Tencent Hunyuan3D-2.1** — [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1), [HuggingFace](https://huggingface.co/tencent/Hunyuan3D-2.1) (shape: `hunyuan3d-dit-v2-1`, SDNQ INT4)
+- **Tencent Hunyuan3D-Omni** — [GitHub](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni), [HuggingFace](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + bbox/pose/point/voxel; SDNQ INT4 on small GPUs)
 - **Text2D** — FLUX.2 Klein (SDNQ Disty0 by default; optional BFL BF16 via `TEXT2D_MODEL_ID`) in the monorepo `text2d` package
 
 ## License

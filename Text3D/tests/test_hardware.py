@@ -1,13 +1,14 @@
-"""Testes da auto-detecção de hardware (perfis por VRAM/contagem de GPUs)."""
+"""Testes da auto-detecção de hardware (perfis por VRAM/contagem de GPUs) — Omni."""
 
 from __future__ import annotations
 
 import pytest
 from click.testing import CliRunner
 
+from gamedev_shared.hardware import GIB
 from text3d import hardware
 from text3d.cli import cli
-from text3d.hardware import GIB, HardwareProfile, detect_hardware_profile, hw_auto_enabled, profile_from_specs
+from text3d.hardware import HardwareProfile, detect_hardware_profile, hw_auto_enabled, profile_from_specs
 
 
 def _gib(n: float) -> int:
@@ -27,14 +28,14 @@ def test_no_gpu_yields_cpu_fast_profile() -> None:
     assert p.octree == 128  # preset fast
 
 
-def test_rtx4050_6gb_gets_int4_fast() -> None:
-    """RTX 4050 6GB (~5.6 GiB): balanced estoura VRAM no decode → fast tier."""
+def test_rtx4050_6gb_gets_int4_balanced() -> None:
+    """RTX 4050 6GB: Omni ~10GB fp16 → SDNQ int4 + balanced."""
     p = profile_from_specs([(0, _gib(6))])
     assert p.device == "cuda"
     assert p.gpu_ids is None
     assert p.sdnq_preset == "sdnq-int4"
-    assert (p.steps, p.octree, p.chunks) == (18, 128, 4096)  # fast
-    assert p.volume_decoder == "flashvdm"  # <7.5 GiB: speed (bench -42% vs vanilla)
+    assert (p.steps, p.octree, p.chunks) == (30, 256, 8000)  # balanced
+    assert p.volume_decoder == "flashvdm"
     assert p.image_width == 1024
     assert p.image_height == 1024
 
@@ -45,9 +46,9 @@ def test_dual_rtx3060_24gb_gets_multigpu_hq_no_quant() -> None:
     assert p.device == "cuda"
     assert p.gpu_ids == [0, 1]
     assert p.sdnq_preset is None
-    assert (p.steps, p.octree, p.chunks) == (30, 384, 20000)  # hq
+    assert (p.steps, p.octree, p.chunks) == (50, 384, 20000)  # hq Omni
     assert p.total_vram_gib == 24.0
-    assert p.volume_decoder == "hierarchical"  # ≥7.5 GiB: near-lossless
+    assert p.volume_decoder == "hierarchical"
 
 
 def test_single_12gb_gets_hq_without_multigpu() -> None:
@@ -55,11 +56,13 @@ def test_single_12gb_gets_hq_without_multigpu() -> None:
     assert p.gpu_ids is None
     assert p.sdnq_preset is None
     assert p.octree == 384
+    assert p.steps == 50
 
 
-def test_single_8gb_gets_balanced_no_quant() -> None:
+def test_single_8gb_gets_balanced_with_int4() -> None:
+    """8GB < 10GB Omni fp16 → SDNQ int4."""
     p = profile_from_specs([(0, _gib(8))])
-    assert p.sdnq_preset is None
+    assert p.sdnq_preset == "sdnq-int4"
     assert p.octree == 256
 
 
@@ -70,10 +73,10 @@ def test_tiny_4gb_gets_fast_int4() -> None:
 
 
 def test_multi_gpu_small_vram_sums_capacity() -> None:
-    """2x 4GB = 8GB efectivos com split de pesos → balanced sem quant."""
+    """2x 4GB = 8GB efectivos → balanced + int4 (Omni)."""
     p = profile_from_specs([(0, _gib(4)), (1, _gib(4))])
     assert p.gpu_ids == [0, 1]
-    assert p.sdnq_preset is None
+    assert p.sdnq_preset == "sdnq-int4"
     assert p.octree == 256
 
 

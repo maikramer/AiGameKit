@@ -1,8 +1,9 @@
-"""Testes das flags de aceleração de inferência (volume decoder, mc_algo, compile, sage-attn)."""
+"""Testes das flags de aceleração de inferência Omni (volume decoder, mc_algo, compile, sage-attn)."""
 
 from __future__ import annotations
 
 from typing import Any, ClassVar
+from unittest.mock import patch
 
 import pytest
 import trimesh
@@ -36,6 +37,29 @@ def test_defaults_preserve_original_behavior() -> None:
     assert gen.sdnq_quantized_matmul is False
 
 
+def test_refresh_runtime_budget_without_vram_signal(monkeypatch) -> None:
+    """Sem sinal de VRAM (CPU/CI) → None (contrato UMS)."""
+    import gamedev_shared.vram_budget as vb
+
+    monkeypatch.setattr(vb, "free_vram_bytes", lambda device=None: None)
+    gen = HunyuanTextTo3DGenerator(device="cpu")
+    assert gen.refresh_runtime_budget() is None
+
+
+def test_refresh_runtime_budget_with_vram_signal(monkeypatch) -> None:
+    """Com VRAM livre → sugestão de num_chunks + cache para o próximo decode."""
+    import gamedev_shared.vram_budget as vb
+
+    free = 4 * 1024**3
+    monkeypatch.setattr(vb, "free_vram_bytes", lambda device=None: free)
+    gen = HunyuanTextTo3DGenerator(device="cpu")
+    budget = gen.refresh_runtime_budget()
+    assert budget is not None
+    assert budget["free_vram_bytes"] == free
+    assert budget["num_chunks"] == vb.text3d_num_chunks(free)
+    assert gen._cached_num_chunks == budget["num_chunks"]
+
+
 def test_sage_attention_falls_back_without_package(monkeypatch) -> None:
     """Sem o pacote sageattention instalado, a flag desactiva-se com aviso."""
     import builtins
@@ -49,78 +73,76 @@ def test_sage_attention_falls_back_without_package(monkeypatch) -> None:
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     monkeypatch.delenv("CA_USE_SAGEATTN", raising=False)
+    monkeypatch.delenv("USE_SAGEATTN", raising=False)
     gen = HunyuanTextTo3DGenerator(device="cpu", sage_attention=True)
     assert gen.sage_attention is False
 
 
 # ---------------------------------------------------------------------------
-# _configure_acceleration
+# _configure_acceleration (Omni: vae.fast_decode)
 # ---------------------------------------------------------------------------
 
 
 class _FakeVAE:
     def __init__(self) -> None:
-        self.flashvdm_kwargs: dict[str, Any] | None = None
-        self.surface_extractor: Any = None
-
-    def enable_flashvdm_decoder(self, **kwargs: Any) -> None:
-        self.flashvdm_kwargs = kwargs
+        self.fast_decode = False
 
 
 class _FakePipe:
     def __init__(self) -> None:
         self.vae = _FakeVAE()
-        self.compiled = False
+        self.model = object()
+        self.cond_encoder = object()
         self.device = "cpu"
+        self.dtype = __import__("torch").float32
 
-    def compile(self) -> None:
-        self.compiled = True
-
-    def __call__(self, **kwargs: Any) -> trimesh.Trimesh:
-        return trimesh.creation.box()
+    def __call__(self, **kwargs: Any) -> dict[str, Any]:
+        return {"shapes": [[trimesh.creation.box()]], "sampled_point": None, "image": None}
 
 
-def test_vanilla_decoder_touches_nothing() -> None:
+def test_vanilla_decoder_fast_decode_off() -> None:
     gen = HunyuanTextTo3DGenerator(device="cpu")
     pipe = _FakePipe()
     gen._configure_acceleration(pipe)
-    assert pipe.vae.flashvdm_kwargs is None
-    assert pipe.vae.surface_extractor is None
-    assert pipe.compiled is False
+    assert pipe.vae.fast_decode is False
 
 
-def test_hierarchical_decoder_disables_adaptive_kv() -> None:
+def test_hierarchical_decoder_fast_decode_off() -> None:
     gen = HunyuanTextTo3DGenerator(device="cpu", volume_decoder="hierarchical")
     pipe = _FakePipe()
     gen._configure_acceleration(pipe)
-    assert pipe.vae.flashvdm_kwargs is not None
-    assert pipe.vae.flashvdm_kwargs["adaptive_kv_selection"] is False
-    assert pipe.vae.flashvdm_kwargs["mc_algo"] == "mc"
+    assert pipe.vae.fast_decode is False
 
 
-def test_flashvdm_decoder_enables_adaptive_kv() -> None:
+def test_flashvdm_decoder_sets_fast_decode() -> None:
     gen = HunyuanTextTo3DGenerator(device="cpu", volume_decoder="flashvdm")
     pipe = _FakePipe()
     gen._configure_acceleration(pipe)
-    assert pipe.vae.flashvdm_kwargs is not None
-    assert pipe.vae.flashvdm_kwargs["adaptive_kv_selection"] is True
+    assert pipe.vae.fast_decode is True
 
 
 def test_dmc_on_cpu_falls_back_to_mc() -> None:
-    pytest.importorskip("skimage")
-    from text3d.hy3dshape.models.autoencoders.surface_extractors import MCSurfaceExtractor
-
     gen = HunyuanTextTo3DGenerator(device="cpu", mc_algo="dmc")
     pipe = _FakePipe()
     gen._configure_acceleration(pipe)
-    assert isinstance(pipe.vae.surface_extractor, MCSurfaceExtractor)
+    assert gen.mc_algo == "mc"
 
 
-def test_compile_flag_calls_pipe_compile() -> None:
+def test_compile_flag_applies_torch_compile() -> None:
     gen = HunyuanTextTo3DGenerator(device="cpu", compile_models=True)
     pipe = _FakePipe()
-    gen._configure_acceleration(pipe)
-    assert pipe.compiled is True
+    compiled_ids: list[int] = []
+
+    def _fake_compile(mod, **kwargs):
+        compiled_ids.append(id(mod))
+        return mod
+
+    with (
+        patch("gamedev_shared.quantization.apply_torch_compile", side_effect=_fake_compile),
+        patch("gamedev_shared.quantization.resolve_torch_compile_mode", return_value="default"),
+    ):
+        gen._configure_acceleration(pipe)
+    assert len(compiled_ids) == 3  # model + vae + cond_encoder
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +206,7 @@ def test_generate_help_lists_perf_flags() -> None:
     runner = CliRunner()
     r = runner.invoke(cli, ["generate", "--help"])
     assert r.exit_code == 0
-    for flag in ("--volume-decoder", "--mc-algo", "--compile", "--sage-attn", "--sdnq-matmul"):
+    for flag in ("--volume-decoder", "--mc-algo", "--compile", "--sage-attn", "--sdnq-matmul", "--control-type"):
         assert flag in r.output
 
 

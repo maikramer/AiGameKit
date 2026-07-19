@@ -1,3 +1,22 @@
+"""
+Tencent is pleased to support the open source community by making Tencent Hunyuan 3D Omni available.
+
+Copyright (C) 2025 Tencent.  All rights reserved. The below software and/or models in this
+distribution may have been modified by Tencent ("Tencent Modifications"). All Tencent Modifications
+are Copyright (C) Tencent.
+
+Tencent Hunyuan 3D Omni is licensed under the TENCENT HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT
+except for the third-party components listed below, which is licensed under different terms.
+Tencent Hunyuan 3D Omni does not impose any additional limitations beyond what is outlined in the
+respective licenses of these third-party components. Users must comply with all terms and conditions
+of original licenses of these third-party components and must ensure that the usage of the third party
+components adheres to all relevant laws and regulations.
+
+For avoidance of doubts, Tencent Hunyuan 3D Omni means training code, inference-enabling code, parameters,
+and/or weights of this Model, which are made publicly available by Tencent in accordance with TENCENT
+HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT.
+"""
+
 # Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
 # except for the third-party components listed below.
 # Hunyuan 3D does not impose any additional limitations beyond what is outlined
@@ -12,18 +31,17 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
-import os
 import math
+import os
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
 
 import torch
-from torch import Tensor, nn
 from einops import rearrange
+from torch import Tensor, nn
 
 # set up attention backend
 scaled_dot_product_attention = nn.functional.scaled_dot_product_attention
-if os.environ.get('USE_SAGEATTN', '0') == '1':
+if os.environ.get("USE_SAGEATTN", "0") == "1":
     try:
         from sageattention import sageattn
     except ImportError:
@@ -61,7 +79,7 @@ def timestep_embedding(t: Tensor, dim, max_period=10000, time_factor: float = 10
 
 
 class GELU(nn.Module):
-    def __init__(self, approximate='tanh'):
+    def __init__(self, approximate="tanh"):
         super().__init__()
         self.approximate = approximate
 
@@ -88,7 +106,7 @@ class RMSNorm(torch.nn.Module):
     def forward(self, x: Tensor):
         x_dtype = x.dtype
         x = x.float()
-        rrms = torch.rsqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + 1e-6)
+        rrms = torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + 1e-6)
         return (x * rrms).to(dtype=x_dtype) * self.scale
 
 
@@ -98,7 +116,7 @@ class QKNorm(torch.nn.Module):
         self.query_norm = RMSNorm(dim)
         self.key_norm = RMSNorm(dim)
 
-    def forward(self, q: Tensor, k: Tensor, v: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(self, q: Tensor, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor]:
         q = self.query_norm(q)
         k = self.key_norm(k)
         return q.to(v), k.to(v)
@@ -142,7 +160,7 @@ class Modulation(nn.Module):
         self.multiplier = 6 if double else 3
         self.lin = nn.Linear(dim, self.multiplier * dim, bias=True)
 
-    def forward(self, vec: Tensor) -> Tuple[ModulationOut, Optional[ModulationOut]]:
+    def forward(self, vec: Tensor) -> tuple[ModulationOut, ModulationOut | None]:
         out = self.lin(nn.functional.silu(vec))[:, None, :]
         out = out.chunk(self.multiplier, dim=-1)
 
@@ -186,7 +204,7 @@ class DoubleStreamBlock(nn.Module):
             nn.Linear(mlp_hidden_dim, hidden_size, bias=True),
         )
 
-    def forward(self, img: Tensor, txt: Tensor, vec: Tensor, pe: Tensor) -> Tuple[Tensor, Tensor]:
+    def forward(self, img: Tensor, txt: Tensor, vec: Tensor, pe: Tensor) -> tuple[Tensor, Tensor]:
         img_mod1, img_mod2 = self.img_mod(vec)
         txt_mod1, txt_mod2 = self.txt_mod(vec)
 
@@ -207,7 +225,7 @@ class DoubleStreamBlock(nn.Module):
         v = torch.cat((txt_v, img_v), dim=2)
 
         attn = attention(q, k, v, pe=pe)
-        txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1]:]
+        txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
         img = img + img_mod1.gate * self.img_attn.proj(img_attn)
         img = img + img_mod2.gate * self.img_mlp((1 + img_mod2.scale) * self.img_norm2(img) + img_mod2.shift)
@@ -228,14 +246,14 @@ class SingleStreamBlock(nn.Module):
         hidden_size: int,
         num_heads: int,
         mlp_ratio: float = 4.0,
-        qk_scale: Optional[float] = None,
+        qk_scale: float | None = None,
     ):
         super().__init__()
 
         self.hidden_dim = hidden_size
         self.num_heads = num_heads
         head_dim = hidden_size // num_heads
-        self.scale = qk_scale or head_dim ** -0.5
+        self.scale = qk_scale or head_dim**-0.5
 
         self.mlp_hidden_dim = int(hidden_size * mlp_ratio)
         # qkv and mlp_in
@@ -291,12 +309,12 @@ class Hunyuan3DDiT(nn.Module):
         num_heads: int = 16,
         depth: int = 16,
         depth_single_blocks: int = 32,
-        axes_dim: List[int] = [64],
+        axes_dim: list[int] = [64],
         theta: int = 10_000,
         qkv_bias: bool = True,
         time_factor: float = 1000,
         guidance_embed: bool = False,
-        ckpt_path: Optional[str] = None,
+        ckpt_path: str | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -315,9 +333,7 @@ class Hunyuan3DDiT(nn.Module):
         self.guidance_embed = guidance_embed
 
         if hidden_size % num_heads != 0:
-            raise ValueError(
-                f"Hidden size {hidden_size} must be divisible by num_heads {num_heads}"
-            )
+            raise ValueError(f"Hidden size {hidden_size} must be divisible by num_heads {num_heads}")
         pe_dim = hidden_size // num_heads
         if sum(axes_dim) != pe_dim:
             raise ValueError(f"Got {axes_dim} but expected positional dim {pe_dim}")
@@ -326,9 +342,7 @@ class Hunyuan3DDiT(nn.Module):
         self.latent_in = nn.Linear(self.in_channels, self.hidden_size, bias=True)
         self.time_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size)
         self.cond_in = nn.Linear(context_in_dim, self.hidden_size)
-        self.guidance_in = (
-            MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size) if guidance_embed else nn.Identity()
-        )
+        self.guidance_in = MLPEmbedder(in_dim=256, hidden_dim=self.hidden_size) if guidance_embed else nn.Identity()
 
         self.double_blocks = nn.ModuleList(
             [
@@ -356,35 +370,38 @@ class Hunyuan3DDiT(nn.Module):
         self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels)
 
         if ckpt_path is not None:
-            print('restored denoiser ckpt', ckpt_path)
+            print("restored denoiser ckpt", ckpt_path)
 
-            ckpt = torch.load(ckpt_path, map_location="cpu")
-            if 'state_dict' not in ckpt:
+            try:
+                ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+            except Exception:
+                ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+            if "state_dict" not in ckpt:
                 # deepspeed ckpt
                 state_dict = {}
                 for k in ckpt.keys():
-                    new_k = k.replace('_forward_module.', '')
+                    new_k = k.replace("_forward_module.", "")
                     state_dict[new_k] = ckpt[k]
             else:
                 state_dict = ckpt["state_dict"]
 
             final_state_dict = {}
             for k, v in state_dict.items():
-                if k.startswith('model.'):
-                    final_state_dict[k.replace('model.', '')] = v
+                if k.startswith("model."):
+                    final_state_dict[k.replace("model.", "")] = v
                 else:
                     final_state_dict[k] = v
             missing, unexpected = self.load_state_dict(final_state_dict, strict=False)
-            print('unexpected keys:', unexpected)
-            print('missing keys:', missing)
+            print("unexpected keys:", unexpected)
+            print("missing keys:", missing)
 
     def forward(self, x, t, contexts, **kwargs) -> Tensor:
-        cond = contexts['main']
+        cond = contexts["main"]
         latent = self.latent_in(x)
 
         vec = self.time_in(timestep_embedding(t, 256, self.time_factor).to(dtype=latent.dtype))
         if self.guidance_embed:
-            guidance = kwargs.get('guidance', None)
+            guidance = kwargs.get("guidance")
             if guidance is None:
                 raise ValueError("Didn't get guidance strength for guidance distilled model.")
             vec = vec + self.guidance_in(timestep_embedding(guidance, 256, self.time_factor))
@@ -399,6 +416,6 @@ class Hunyuan3DDiT(nn.Module):
         for block in self.single_blocks:
             latent = block(latent, vec=vec, pe=pe)
 
-        latent = latent[:, cond.shape[1]:, ...]
+        latent = latent[:, cond.shape[1] :, ...]
         latent = self.final_layer(latent, vec)
         return latent

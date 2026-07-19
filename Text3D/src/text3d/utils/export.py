@@ -36,13 +36,27 @@ def _load_as_bpy(path: str | Path) -> list:
     return load_any(path)
 
 
-def _export_glb_bpy(objects: Any, output_path: Path) -> None:
-    """Exporta GLB via bpy + weld pass para limpar vértices duplicados."""
+def _export_glb_bpy(
+    objects: Any,
+    output_path: Path,
+    *,
+    export_normals: bool = True,
+) -> None:
+    """Exporta GLB via bpy + weld pass para limpar vértices duplicados.
+
+    ``export_normals=False`` evita normal-split que reabre boundary após
+    topology-fix watertight (reimport no paint/LOD).
+    """
     import logging as _log_mod
 
     from gamedev_shared.bpy_mesh import save_glb
 
-    save_glb(objects, output_path)
+    save_glb(
+        objects,
+        output_path,
+        export_normals=export_normals,
+        export_tangents=bool(export_normals),
+    )
     try:
         from gamedev_shared.mesh_utils import weld_glb as _weld_glb
 
@@ -251,6 +265,8 @@ def convert_mesh(
     output_path: str | Path,
     rotate: bool = False,
     origin_mode: str | None = None,
+    *,
+    export_normals: bool = True,
 ) -> Path:
     """
     Converte mesh entre formatos usando bpy.
@@ -260,6 +276,8 @@ def convert_mesh(
         output_path: Arquivo de saída
         rotate: Aplicar rotação
         origin_mode: ``feet`` | ``center`` | ``none`` (defeito: ``get_export_origin()``)
+        export_normals: Se False, não escreve normais (preserva watertight pós
+            topology-fix; evita normal-split no reimport).
 
     Returns:
         Caminho do arquivo convertido
@@ -285,7 +303,7 @@ def convert_mesh(
     output_format = output_path.suffix.lstrip(".").lower()
 
     if output_format == "glb":
-        _export_glb_bpy(objs, output_path)
+        _export_glb_bpy(objs, output_path, export_normals=export_normals)
     elif output_format == "ply":
         bpy = _require_bpy()
         bpy.ops.object.select_all(action="DESELECT")

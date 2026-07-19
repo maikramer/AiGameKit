@@ -2,10 +2,11 @@
 """
 Text3D - CLI Principal
 
-Text-to-3D: Text2D (texto → imagem) + Hunyuan3D-2.1 SDNQ INT4 (imagem → mesh).
+Text-to-3D: Text2D (texto → imagem) + Hunyuan3D-Omni (imagem → mesh, controlos opcionais).
 """
 
 import atexit
+import contextlib
 import json
 import math
 import os
@@ -22,7 +23,13 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT3D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -33,16 +40,25 @@ from .cli_rich import click
 from .generator import HunyuanTextTo3DGenerator
 from .utils.env import ensure_pytorch_cuda_alloc_conf
 from .utils.memory import (
-    clear_cuda_memory,
-    enforce_exclusive_gpu,
     format_bytes,
-    kill_gpu_compute_processes_aggressive,
 )
 from .utils.mesh_align_hunyuan import align_glb_plus_z_safe
 from .utils.mesh_lod import generate_lod_glb_triplet
 from .utils.mesh_remesh_textured import remesh_geometry_only_glb, remesh_textured_glb
 
 console = Console()
+
+
+def _parse_mc_level_flag(value: Any) -> float | str:
+    """``--mc-level``: ``auto`` (default) ou número; erro claro caso contrário."""
+    s = str(value).strip().lower()
+    if s == "auto":
+        return "auto"
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        raise click.ClickException(f"--mc-level inválido: {value!r} (número ou 'auto')") from None
+
 
 DEFAULT_OUTPUT_DIR = Path("outputs")
 
@@ -108,7 +124,7 @@ def ensure_dirs():
 @click.pass_context
 def cli(ctx, verbose):
     """
-    Text3D — mesh 3D a partir de texto (geometria: Text2D → Hunyuan3D-2.1).
+    Text3D — mesh 3D a partir de texto (geometria: Text2D → Hunyuan3D-Omni).
 
     Textura e PBR: usa o CLI **paint3d** ou um batch **gameassets** com perfil text3d.texture.
 
@@ -116,9 +132,11 @@ def cli(ctx, verbose):
         text3d generate "um robô futurista" -o robo.glb
         text3d generate "carro" --preset hq -o carro.glb
         text3d generate -i ref.png -o mesh.glb
+        text3d generate -i ref.png --control-type bbox --bbox 0.8,0.64,1 -o mesh.glb
         text3d doctor
         text3d lod modelo.glb -o ./out --basename prop
-        text3d remesh modelo.glb -o simplificado.glb --target-faces 24000
+        text3d simplify modelo.glb -o simplificado.glb --target-faces 24000
+        text3d remesh modelo.glb -o remeshed.glb --target-faces 24000
         text3d remesh-textured pintado.glb -o remeshed.glb --target-faces 6000
         text3d collision modelo.glb -o collision.glb
         text3d align-plus-z modelo.glb -o corrigido.glb
@@ -268,10 +286,23 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 )
 @click.option(
     "--mc-level",
-    default=_defaults.DEFAULT_MC_LEVEL,
+    default="auto",
     show_default=True,
-    type=float,
-    help="Nível marching cubes Hunyuan (0 = defeito; ajustes finos à iso-superfície).",
+    help=(
+        "Nível marching cubes Hunyuan: 'auto' = ligeiro negativo proporcional a "
+        "1/octree (fecha pinholes MC); número para valor fixo (0 = clássico)."
+    ),
+)
+@click.option(
+    "--bounds-mode",
+    "bounds_mode",
+    type=click.Choice(["auto", "cube"]),
+    default="auto",
+    show_default=True,
+    help=(
+        "Bounds do grid de decode: auto = segue o aspecto da bbox Omni (voxels "
+        "mais finos no eixo fino — anti-buracos em assets achatados); cube = cubo clássico."
+    ),
 )
 @click.option(
     "--no-remove-bg",
@@ -282,9 +313,75 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 )
 @click.option(
     "--model-subfolder",
-    default=_defaults.DEFAULT_SUBFOLDER,
+    default="",
+    hidden=True,
+    help="[Deprecated] Omni usa repo flat — ignorado.",
+)
+@click.option(
+    "--control-type",
+    "control_type",
+    type=click.Choice(["none", "bbox", "pose", "point", "voxel"]),
+    default="none",
     show_default=True,
-    help="Subpasta do modelo Hunyuan3D shape (ex.: hunyuan3d-dit-v2-1).",
+    help="Controlo geométrico Omni (none = bbox neutro image-led).",
+)
+@click.option(
+    "--bbox",
+    "bbox_str",
+    default=None,
+    help="Bbox Omni: L,H,W (3 floats 0-1) ou xmin,ymin,zmin,xmax,ymax,zmax.",
+)
+@click.option(
+    "--size",
+    "size_str",
+    default=None,
+    help="Alias de --bbox com 3 floats L,H,W (implica control-type=bbox se omitido).",
+)
+@click.option(
+    "--size-m",
+    "size_m_str",
+    default=None,
+    help=(
+        "Tamanho mundo L,H,W em metros. Define aspect Omni (como --size) e activa "
+        "autotune de octree/steps/chunks (soft; flags explícitas ganham)."
+    ),
+)
+@click.option(
+    "--bbox-preset",
+    "bbox_preset",
+    default=None,
+    help=(
+        "Preset de aspect Omni: cube|humanoid|humanoid-child|quadruped|sword|shield|"
+        "crate|door|barrel|tree|chest|furniture|building|chapel."
+    ),
+)
+@click.option(
+    "--pose-file",
+    "pose_file",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Bone points (txt) para --control-type=pose.",
+)
+@click.option(
+    "--pose-preset",
+    "pose_preset",
+    default=None,
+    type=click.Choice(["quaternius-tpose"]),
+    help="Pose embutida (Quaternius T-pose). Implica --control-type=pose.",
+)
+@click.option(
+    "--point-cloud",
+    "point_cloud",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Mesh/PLY de referência para --control-type=point (âncora de forma).",
+)
+@click.option(
+    "--voxel-mesh",
+    "voxel_mesh",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Mesh/PLY para --control-type=voxel (âncora de volume/blockout).",
 )
 @click.option(
     "--sdnq-preset",
@@ -357,11 +454,12 @@ def skill_install_cmd(target: Path, force: bool) -> None:
 @click.option(
     "--group-offload/--no-group-offload",
     "allow_group_offload",
-    default=False,
+    default=True,
     show_default=True,
     help=(
-        "Experimental: group offload + CUDA streams (diffusers). Pode falhar no "
-        "pipeline Hunyuan vendored; default usa model_cpu offload."
+        "Group offload + CUDA streams no DiT/cond_encoder (attrs Omni). "
+        "Planner escolhe quando full-GPU não cabe; --no-group-offload força "
+        "só full-GPU / model_cpu."
     ),
 )
 @click.option(
@@ -509,6 +607,7 @@ def generate(
     num_chunks,
     preset,
     mc_level,
+    bounds_mode,
     no_remove_bg,
     hw_auto,
     volume_decoder,
@@ -524,6 +623,15 @@ def generate(
     allow_shared_gpu,
     gpu_kill_others,
     model_subfolder,
+    control_type,
+    bbox_str,
+    size_str,
+    size_m_str,
+    bbox_preset,
+    pose_file,
+    pose_preset,
+    point_cloud,
+    voxel_mesh,
     sdnq_preset,
     export_origin,
     export_rotation_x_deg,
@@ -539,7 +647,9 @@ def generate(
     no_ums,
     ums_stream,
 ):
-    """Gera 3D: PROMPT (Text2D → Hunyuan) ou --from-image (só Hunyuan)."""
+    """Gera 3D: PROMPT (Text2D → Omni) ou --from-image (só Hunyuan3D-Omni)."""
+    _ = model_subfolder  # deprecated / ignored (Omni flat repo)
+    mc_level = _parse_mc_level_flag(mc_level)
     from gamedev_shared.profiler import ProfilerSession
     from gamedev_shared.profiler.env import env_profile_log_path
 
@@ -619,6 +729,66 @@ def generate(
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
 
+    from .bbox_tune import apply_bbox_tune, size_m_from_mapping
+    from .omni_presets import merge_omni_controls, parse_bbox_csv
+
+    size_vals: list[float] | None = None
+    size_m_vals: list[float] | None = None
+    bbox_raw: list[float] | None = None
+    try:
+        if bbox_str:
+            bbox_raw = parse_bbox_csv(bbox_str)
+        if size_str:
+            size_vals = parse_bbox_csv(size_str)
+            if len(size_vals) != 3:
+                raise click.ClickException("--size espera exactamente 3 floats L,H,W")
+        if size_m_str:
+            size_m_vals = size_m_from_mapping(size_m_str)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    try:
+        _omni = merge_omni_controls(
+            control_type=control_type,
+            bbox=bbox_raw,
+            bbox_preset=bbox_preset,
+            size=size_vals,
+            size_m=size_m_vals,
+            pose_file=pose_file,
+            pose_preset=pose_preset,
+            point_cloud=point_cloud,
+            voxel_mesh=voxel_mesh,
+            category=category,
+        )
+    except (KeyError, FileNotFoundError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    control_type = _omni["control_type"]
+    bbox_vals = _omni["bbox"]
+    pose_file = _omni["pose_file"]
+    point_cloud = _omni["point_cloud"]
+    voxel_mesh = _omni["voxel_mesh"]
+
+    # Soft autotune octree/steps/chunks pelo tamanho mundo (size_m / category).
+    # Flags CLI explícitas e item overrides ganham; preset/hw-auto são a base.
+    _bbox_tune = None
+    if not (_user_set_steps and _user_set_octree and _user_set_chunks):
+        steps, octree_resolution, num_chunks, _bbox_tune = apply_bbox_tune(
+            steps=steps,
+            octree=octree_resolution,
+            chunks=num_chunks,
+            size_m=size_m_vals,
+            category=category,
+            bbox_preset=bbox_preset,
+            total_vram_gib=hwp.total_vram_gib if hwp is not None else None,
+            volume_decoder=volume_decoder,
+            tune_steps=not _user_set_steps,
+            tune_octree=not _user_set_octree,
+            tune_chunks=not _user_set_chunks,
+            group_offload=bool(allow_group_offload),
+            quality=quality,
+        )
+
     info_table = Table(show_header=False, box=box.SIMPLE)
     if from_image:
         info_table.add_row("[bold]Entrada[/bold]", f"[cyan]{from_image}[/cyan] (só Hunyuan3D)")
@@ -635,8 +805,17 @@ def generate(
         hy_line += f" [preset={preset}]"
     info_table.add_row("[bold]Hunyuan3D[/bold]", hy_line)
     info_table.add_row("[bold]Octree / chunks[/bold]", f"{octree_resolution} / {num_chunks}")
-    if mc_level != 0.0:
+    if _bbox_tune is not None and _bbox_tune.applied:
+        _bt = f"char={_bbox_tune.char_m:.2f}m ({_bbox_tune.source}) voxel≈{_bbox_tune.voxel_m * 100:.1f}cm"
+        if _bbox_tune.morph_close is not None:
+            _bt += f" morph≈{_bbox_tune.morph_close:.3f}m"
+        info_table.add_row("[bold]Scale tune[/bold]", _bt)
+    if mc_level == "auto":
+        info_table.add_row("[bold]mc_level[/bold]", "auto (negativo ∝ 1/octree, fecha pinholes)")
+    elif float(mc_level) != 0.0:
         info_table.add_row("[bold]mc_level[/bold]", str(mc_level))
+    if bounds_mode != "cube":
+        info_table.add_row("[bold]bounds[/bold]", "auto (grid segue aspecto da bbox Omni)")
     if not from_image:
         opt_label = "desligada" if no_prompt_optimize else "ativa (anti-placa)"
         info_table.add_row("[bold]Otimização prompt[/bold]", opt_label)
@@ -671,6 +850,16 @@ def generate(
     if parsed_gpu_ids:
         info_table.add_row("[bold]Multi-GPU[/bold]", f"IDs: {parsed_gpu_ids} (accelerate dispatch)")
 
+    if control_type and control_type != "none":
+        ctrl_label = control_type
+        if pose_preset:
+            ctrl_label += f" ({pose_preset})"
+        if bbox_preset:
+            ctrl_label += f" ({bbox_preset})"
+        if size_m_vals:
+            ctrl_label += f" size_m={size_m_vals}"
+        info_table.add_row("[bold]Controlo Omni[/bold]", ctrl_label)
+
     console.print(Panel(info_table, title="[bold green]Configuração", border_style="green"))
 
     prof_log_p = env_profile_log_path()
@@ -681,7 +870,10 @@ def generate(
         "guidance": guidance,
         "octree_resolution": octree_resolution,
         "num_chunks": num_chunks,
-        "model_subfolder": model_subfolder,
+        "model_id": _defaults.DEFAULT_HF_ID,
+        "control_type": control_type,
+        "pose_preset": pose_preset,
+        "bbox_preset": bbox_preset,
         "from_image": bool(from_image),
     }
 
@@ -690,7 +882,7 @@ def generate(
             "text3d",
             log_path=prof_log,
             cli_profile=prof_profile,
-            model_id=model_subfolder,
+            model_id=_defaults.DEFAULT_HF_ID,
             params=prof_params,
         ) as _prof:
             if export_rotation_x_deg is not None:
@@ -718,12 +910,42 @@ def generate(
                     "num_chunks": num_chunks,
                     "seed": seed,
                     "mc_level": mc_level,
+                    "bounds_mode": bounds_mode,
+                    "auto_num_chunks": not _user_set_chunks,
                     "remove_bg": not no_remove_bg,
                     "optimize_prompt": not no_prompt_optimize,
-                    # Peak VRAM no UMS depende disto (6GB → sdnq-int4).
-                    "sdnq_preset": None if sdnq_preset in (None, "none", "") else sdnq_preset,
                     "origin_mode": export_origin,
+                    "control_type": control_type,
+                    "pose_preset": pose_preset,
+                    "bbox_preset": bbox_preset,
+                    # Scale / tune — adapter precisa para metros reais + bbox_tune.
+                    "category": category,
+                    "quality": quality,
+                    "bbox_tune": True,
+                    # Topology / accel — parity in-process (adapter respeita).
+                    "topology_fix": not no_topology_fix,
+                    "volume_decoder": volume_decoder,
+                    "mc_algo": mc_algo,
+                    "torch_compile": compile_models,
+                    "torch_compile_mode": compile_mode,
+                    "channels_last": channels_last,
+                    "allow_group_offload": allow_group_offload,
+                    "fp8_layerwise": fp8_layerwise,
+                    "sdnq_quantized_matmul": sdnq_matmul,
+                    "sage_attention": sage_attention,
+                    "offload": offload,
+                    "verbose": verbose,
                 }
+                if size_m_vals is not None:
+                    _ums_request["size_m"] = size_m_vals
+                if bbox_vals is not None:
+                    _ums_request["bbox"] = bbox_vals
+                if pose_file:
+                    _ums_request["pose_file"] = str(pose_file)
+                if point_cloud:
+                    _ums_request["point_cloud"] = str(point_cloud)
+                if voxel_mesh:
+                    _ums_request["voxel_mesh"] = str(voxel_mesh)
                 if from_image:
                     _ums_request["from_image"] = from_image
                 else:
@@ -739,7 +961,20 @@ def generate(
                 # UMS primeiro — nunca ensure_vram/kill antes de enfileirar.
                 if try_ums_delegation(
                     "text3d",
-                    with_ums_load_opts(_ums_request, gpu_ids=parsed_gpu_ids),
+                    with_ums_peak_opts(
+                        with_ums_load_opts(
+                            _ums_request,
+                            gpu_ids=parsed_gpu_ids,
+                            volume_decoder=volume_decoder,
+                            allow_group_offload=allow_group_offload,
+                            channels_last=channels_last,
+                            offload=offload,
+                        ),
+                        backend="text3d",
+                        memory_efficient=bool(offload or allow_group_offload)
+                        or (sdnq_preset not in (None, "none", "")),
+                        sdnq_preset=None if sdnq_preset in (None, "none", "") else sdnq_preset,
+                    ),
                     t_start=start_time,
                     noun="Mesh",
                     console=console,
@@ -752,57 +987,51 @@ def generate(
 
                 # Path in-process: coordenação VRAM / kill só aqui.
                 if not cpu:
-                    from gamedev_shared.gpu import warn_if_vram_occupied
-                    from gamedev_shared.model_server import UMS_DO_NOT_KILL_TIP, ensure_vram_available
-
-                    ensure_vram_available(
-                        needed_mib=5000,
+                    prepare_gpu_exclusive(
+                        needed_mib=6000,
+                        allow_shared=allow_shared,
+                        kill_others=gpu_kill,
+                        allow_shared_env="TEXT3D_ALLOW_SHARED_GPU",
+                        kill_others_env="TEXT3D_GPU_KILL_OTHERS",
                         backend="text3d",
                         quant_mode=None if sdnq_preset in (None, "none") else sdnq_preset,
+                        console=console,
                     )
-                    if gpu_kill:
-                        console.print(
-                            Panel(
-                                "[bold]Terminar processos GPU alvo[/bold] "
-                                "(SIGTERM → espera → SIGKILL se vivo)\n"
-                                "[dim]Mantém o PID atual e Xorg / gnome-shell / Wayland. "
-                                "Desliga com [bold]--no-gpu-kill-others[/bold] ou "
-                                f"TEXT3D_GPU_KILL_OTHERS=0[/dim]\n[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
-                                border_style="yellow",
-                            )
-                        )
-                        for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
-                            console.print(f"[dim]{line}[/dim]")
-                            if line.startswith("[recusado]"):
-                                raise click.ClickException(line)
-                        clear_cuda_memory()
-                        time.sleep(0.5)
-                    try:
-                        enforce_exclusive_gpu(allow_shared=allow_shared)
-                    except RuntimeError as e:
-                        raise click.ClickException(str(e)) from e
-                    warn_if_vram_occupied()
+
+                from text3d.ums_load import map_ums_load_kwargs
 
                 with console.status("[bold yellow]A preparar gerador...", spinner="dots"):
-                    generator = HunyuanTextTo3DGenerator(
-                        device="cpu" if cpu else None,
-                        verbose=verbose,
-                        hunyuan_subfolder=model_subfolder,
-                        sdnq_preset="" if sdnq_preset == "none" else sdnq_preset,
-                        gpu_ids=parsed_gpu_ids,
-                        volume_decoder=volume_decoder,
-                        mc_algo=mc_algo,
-                        compile_models=compile_models,
-                        compile_mode=compile_mode,
-                        sage_attention=sage_attention,
-                        sdnq_quantized_matmul=sdnq_matmul,
-                        offload=offload,
-                        allow_group_offload=allow_group_offload,
-                        fp8_layerwise=fp8_layerwise,
-                        channels_last=channels_last,
+                    _load_kw = map_ums_load_kwargs(
+                        {
+                            "verbose": verbose,
+                            "sdnq_preset": "" if sdnq_preset == "none" else sdnq_preset,
+                            "gpu_ids": parsed_gpu_ids,
+                            "volume_decoder": volume_decoder,
+                            "mc_algo": mc_algo,
+                            "torch_compile": compile_models,
+                            "torch_compile_mode": compile_mode,
+                            "sage_attention": sage_attention,
+                            "sdnq_quantized_matmul": sdnq_matmul,
+                            "offload": offload,
+                            "allow_group_offload": allow_group_offload,
+                            "fp8_layerwise": fp8_layerwise,
+                            "channels_last": channels_last,
+                            "memory_efficient": bool(offload or allow_group_offload),
+                        },
+                        low_vram=False,
                     )
+                    if cpu:
+                        _load_kw["device"] = "cpu"
+                    generator = HunyuanTextTo3DGenerator(**_load_kw)
 
                 item_id = output.stem if output else "text3d_single"
+                _ctrl = dict(
+                    control_type=control_type,
+                    bbox=bbox_vals,
+                    pose_file=pose_file,
+                    point_cloud=point_cloud,
+                    voxel_mesh=voxel_mesh,
+                )
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
 
@@ -812,7 +1041,7 @@ def generate(
                     console=console,
                 ) as progress:
                     if from_image:
-                        task = progress.add_task("[cyan]Hunyuan3D (imagem → mesh)...", total=None)
+                        task = progress.add_task("[cyan]Hunyuan3D-Omni (imagem → mesh)...", total=None)
                         result = generator.generate_from_image(
                             from_image,
                             num_inference_steps=steps,
@@ -821,11 +1050,14 @@ def generate(
                             num_chunks=num_chunks,
                             hy_seed=seed,
                             mc_level=mc_level,
+                            bounds_mode=bounds_mode,
+                            auto_num_chunks=not _user_set_chunks,
                             remove_bg=not no_remove_bg,
                             step_callback=_make_step_callback(item_id, steps),
+                            **_ctrl,
                         )
                     else:
-                        task = progress.add_task("[cyan]Text2D → Hunyuan3D...", total=None)
+                        task = progress.add_task("[cyan]Text2D → Hunyuan3D-Omni...", total=None)
                         emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=0)
                         result, ref_img = generator.generate(
                             prompt=prompt,
@@ -842,9 +1074,12 @@ def generate(
                             num_chunks=num_chunks,
                             hy_seed=seed,
                             mc_level=mc_level,
+                            bounds_mode=bounds_mode,
+                            auto_num_chunks=not _user_set_chunks,
                             t2d_full_gpu=t2d_full_gpu,
                             optimize_prompt=not no_prompt_optimize,
                             remove_bg=not no_remove_bg,
+                            **_ctrl,
                         )
                         emit_progress(item_id, TOOL_TEXT3D, phase="inference", percent=100)
 
@@ -855,6 +1090,13 @@ def generate(
                             console.print(f"[dim]Imagem Text2D (rede Hunyuan): [cyan]{out_png.resolve()}[/cyan][/dim]")
 
                     progress.update(task, description="[green]Concluído")
+
+                if result is not None and size_m_vals and hasattr(result, "apply_scale"):
+                    from .bbox_tune import scale_factor_to_meters
+
+                    _sf = scale_factor_to_meters(float(max(result.extents)), size_m_vals)
+                    if _sf is not None:
+                        result.apply_scale(_sf)
 
                 if result is not None and not no_topology_fix:
                     from text3d.utils.mesh_lod import prepare_mesh_topology
@@ -880,6 +1122,26 @@ def generate(
                 mesh_path = save_mesh(result, output, format=output_format, origin_mode=export_origin)
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)
                 mp = Path(mesh_path).resolve()
+                try:
+                    from .omni_presets import write_omni_fingerprint
+
+                    write_omni_fingerprint(
+                        mp,
+                        {
+                            "control_type": control_type,
+                            "bbox": bbox_vals,
+                            "bbox_preset": bbox_preset,
+                            "pose_preset": pose_preset,
+                            "pose_file": str(pose_file) if pose_file else None,
+                            "point_cloud": str(point_cloud) if point_cloud else None,
+                            "voxel_mesh": str(voxel_mesh) if voxel_mesh else None,
+                            "bounds_mode": bounds_mode,
+                            "mc_level": mc_level,
+                            "size_m": size_m_vals,
+                        },
+                    )
+                except OSError:
+                    pass
                 try:
                     sz = format_bytes(mp.stat().st_size)
                 except OSError:
@@ -1228,8 +1490,48 @@ def bake_master_cmd(
     type=int,
     default=None,
     help=(
-        "Tamanho máximo (arestas) de buracos a preencher. Omitido: perfil topology_clean (32). 0 desativa fill_holes."
+        "Tamanho máximo (arestas) de buracos a preencher. Omitido: perfil topology_clean (64). 0 desativa fill_holes."
     ),
+)
+@click.option(
+    "--watertight/--no-watertight",
+    default=None,
+    help=(
+        "Override do perfil: fecho seletivo (skip_flap_erode + limite diâmetro loop). Omitido: topology_clean (ligado)."
+    ),
+)
+@click.option(
+    "--morph-close",
+    type=float,
+    default=None,
+    help=(
+        "Fecho morfológico volumétrico (metros): dilate→erode via voxel remesh. "
+        "Funde double shells finas. Omitido=auto leve (~1/8 voxel MC via "
+        "--size-m/--category). 0=desliga. Valores altos derretem detalhe."
+    ),
+)
+@click.option(
+    "--size-m",
+    "size_m_str",
+    default=None,
+    help="L,H,W metros — escala / hints (morph-close só se --morph-close >0).",
+)
+@click.option(
+    "--category",
+    default=None,
+    help="Prior de tamanho típico se faltar --size-m (humanoid≈1.7, building≈6).",
+)
+@click.option(
+    "--bbox-preset",
+    default=None,
+    help="Prior de tamanho via preset Omni (só char_m; mesma fórmula).",
+)
+@click.option(
+    "--octree",
+    "octree_for_morph",
+    type=int,
+    default=None,
+    help="Octree usado no shape (refina auto morph ≈ Nxchar_m/octree).",
 )
 @click.option(
     "--export-origin",
@@ -1250,22 +1552,40 @@ def topology_fix_cmd(
     input_mesh: Path,
     output: Path | None,
     fill_holes_sides: int | None,
+    watertight: bool | None,
+    morph_close: float | None,
+    size_m_str: str | None,
+    category: str | None,
+    bbox_preset: str | None,
+    octree_for_morph: int | None,
     export_origin: str | None,
     export_rotation_x_deg: float | None,
 ) -> None:
     """Repara topologia de um GLB cru (Stage 2 da pipeline).
 
-    Operações (perfil lean): reweld → weld → dissolve/loose → long edges →
-    slivers → debris → fill_holes (micro) → normais → shade-smooth.
-    Sem watertight / force-base / cascas internas / flare / Taubin.
+    Operações: reweld → weld → dissolve/loose → long edges → slivers → debris →
+    fill_holes → watertight seletivo (sem flap_erode / force-base / cascas
+    internas / flare / Taubin) → normais → shade-smooth.
 
     Substitui a etapa que estava embebida em ``text3d generate``.
     Recomendado correr em ``id_shape.glb`` para produzir ``id_clean.glb``.
     """
+    from text3d.bbox_tune import resolve_morph_close, size_m_from_mapping
     from text3d.utils.mesh_lod import prepare_mesh_topology
 
     out_path = Path(output) if output else input_mesh
     out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    size_m_vals = size_m_from_mapping(size_m_str) if size_m_str else None
+    morph_eff = resolve_morph_close(
+        explicit=morph_close,
+        size_m=size_m_vals,
+        category=category,
+        bbox_preset=bbox_preset,
+        octree=octree_for_morph,
+    )
+    if morph_eff is not None and morph_close is None:
+        console.print(f"[dim]auto morph-close={morph_eff:.4f}m (escala física)[/dim]")
 
     if export_rotation_x_deg is not None:
         _defaults.set_export_rotation_x_rad_override(math.radians(float(export_rotation_x_deg)))
@@ -1274,11 +1594,22 @@ def topology_fix_cmd(
             input_mesh,
             out_path,
             fill_holes_sides=fill_holes_sides,
+            watertight=watertight,
+            morph_close=morph_eff,
+            size_m=size_m_vals,
         )
         if export_origin is not None and export_origin != "none":
             from .utils.export import convert_mesh
 
-            convert_mesh(out_path, out_path, rotate=False, origin_mode=export_origin)
+            # Sem normais: convert_mesh com export_normals=True reabria boundary
+            # (normal-split) logo após o watertight do topology-fix.
+            convert_mesh(
+                out_path,
+                out_path,
+                rotate=False,
+                origin_mode=export_origin,
+                export_normals=False,
+            )
     finally:
         if export_rotation_x_deg is not None:
             _defaults.set_export_rotation_x_rad_override(None)
@@ -1512,6 +1843,65 @@ def lod_cmd(
     )
 
 
+@cli.command("simplify")
+@click.argument("input_mesh", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--output",
+    "-o",
+    type=click.Path(path_type=Path),
+    required=True,
+    help="GLB de saída (Decimate COLLAPSE + reparo Shared).",
+)
+@click.option(
+    "--target-faces",
+    type=int,
+    required=True,
+    help="Número alvo de faces após Decimate.",
+)
+@click.option(
+    "--no-repair",
+    "no_repair",
+    is_flag=True,
+    default=False,
+    help="Desliga perfis pre_decimate_uv / post_decimate.",
+)
+def simplify_cmd(
+    input_mesh: Path,
+    output: Path,
+    target_faces: int,
+    no_repair: bool,
+) -> None:
+    """Simplifica GLB via Decimate COLLAPSE (sistema unificado Shared).
+
+    Mesmo pipeline que LOD / remesh-textured: merge → ``pre_decimate_uv`` →
+    Decimate → ``post_decimate``. Preferir isto a ``remesh`` (voxel) antes
+    do Paint3D — voxel destrói paredes finas/janelas.
+
+    \b
+        text3d simplify clean.glb -o to_paint.glb --target-faces 80000
+    """
+    from gamedev_shared.mesh_simplify import simplify_glb
+
+    if target_faces < 4:
+        raise click.ClickException("--target-faces deve ser >= 4")
+    try:
+        with console.status(
+            f"[bold yellow]Simplifying para ~{target_faces} faces (Decimate)...",
+            spinner="dots",
+        ):
+            simplify_glb(input_mesh, output, target_faces=target_faces, repair=not no_repair)
+    except (RuntimeError, TypeError, ValueError) as e:
+        raise click.ClickException(str(e)) from e
+
+    out_p = output.resolve()
+    try:
+        sz = format_bytes(out_p.stat().st_size)
+    except OSError:
+        sz = "?"
+    console.print(Rule("[bold green]simplify", style="green"))
+    console.print(f"[bold green]✓[/bold green] [cyan]{out_p}[/cyan] [dim]({sz})[/dim]")
+
+
 @cli.command("remesh")
 @click.argument("input_mesh", type=click.Path(exists=True, path_type=Path))
 @click.option(
@@ -1519,32 +1909,33 @@ def lod_cmd(
     "-o",
     type=click.Path(path_type=Path),
     required=True,
-    help="GLB de saída (remeshed, sem textura).",
+    help="GLB de saída (voxel remesh, sem textura).",
 )
 @click.option(
     "--target-faces",
     type=int,
     required=True,
-    help="Número alvo de faces após remesh isotrópico.",
+    help="Número alvo de faces após voxel remesh.",
 )
 def remesh_cmd(
     input_mesh: Path,
     output: Path,
     target_faces: int,
 ) -> None:
-    """Isotropic remesh de GLB (só geometria, sem textura/UV).
+    """Voxel remesh de GLB (só geometria). Preferir ``simplify`` na maioria dos casos.
 
-    Re-malha para ``--target-faces`` triângulos regulares (pymeshlab isotropic).
-    Ideal para simplificar antes de texturizar com Paint3D.
+    Re-malha com bpy voxel remesh + perfil ``post_voxel``. Útil para
+    regularizar topologia; destrutivo em paredes finas — para orçamento
+    pré-paint usar ``text3d simplify``.
 
     \b
-        text3d remesh modelo.glb -o simplificado.glb --target-faces 24000
+        text3d remesh modelo.glb -o remeshed.glb --target-faces 24000
     """
     if target_faces < 4:
         raise click.ClickException("--target-faces deve ser >= 4")
     try:
         with console.status(
-            f"[bold yellow]Remeshing para ~{target_faces} faces (geometria)...",
+            f"[bold yellow]Remeshing para ~{target_faces} faces (voxel)...",
             spinner="dots",
         ):
             remesh_geometry_only_glb(input_mesh, output, target_faces=target_faces)
@@ -1691,12 +2082,20 @@ def align_plus_z_cmd(
 @click.option("--output-dir", "-O", type=click.Path(), default=".", help="Diretório base para outputs relativos.")
 @click.option("--preset", type=click.Choice(["fast", "balanced", "hq"]), default=None)
 @click.option("--steps", type=int, default=None)
-@click.option("--guidance", type=float, default=5.0)
+@click.option("--guidance", type=float, default=_defaults.DEFAULT_HY_GUIDANCE)
 @click.option("--octree-resolution", type=int, default=None)
 @click.option("--num-chunks", type=int, default=None)
-@click.option("--mc-level", type=float, default=_defaults.DEFAULT_MC_LEVEL, help="Nível marching cubes (0 = defeito).")
+@click.option("--mc-level", default="auto", show_default=True, help="Nível marching cubes (número ou 'auto').")
+@click.option(
+    "--bounds-mode",
+    "bounds_mode",
+    type=click.Choice(["auto", "cube"]),
+    default="auto",
+    show_default=True,
+    help="Bounds do grid MC: auto=aspecto bbox Omni; cube=±1.01 clássico.",
+)
 @click.option("--sdnq-preset", type=str, default=None)
-@click.option("--model-subfolder", default="hunyuan3d-dit-v2-1")
+@click.option("--model-subfolder", default="", hidden=True, help="[Deprecated] ignorado (Omni flat).")
 @click.option(
     "--export-origin",
     "export_origin",
@@ -1755,9 +2154,9 @@ def align_plus_z_cmd(
 @click.option(
     "--group-offload/--no-group-offload",
     "allow_group_offload",
-    default=False,
+    default=True,
     show_default=True,
-    help="Experimental: group offload + streams.",
+    help="Group offload + CUDA streams (DiT/cond_encoder Omni).",
 )
 @click.option(
     "--fp8-layerwise/--no-fp8-layerwise",
@@ -1818,7 +2217,8 @@ def generate_batch(
     guidance: float,
     octree_resolution: int | None,
     num_chunks: int | None,
-    mc_level: float,
+    mc_level: str,
+    bounds_mode: str,
     sdnq_preset: str | None,
     model_subfolder: str,
     export_origin: str,
@@ -1842,6 +2242,7 @@ def generate_batch(
     batch_verbose: bool,
 ) -> None:
     """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout)."""
+    mc_level = _parse_mc_level_flag(mc_level)
     from .utils.export import save_mesh
     from .utils.mesh_lod import prepare_mesh_topology
 
@@ -1924,28 +2325,19 @@ def generate_batch(
     if base_chunks is None:
         base_chunks = _defaults.DEFAULT_NUM_CHUNKS
 
-    # generate-batch é in-process (UMS por item via CLIs single). Respeitar fila UMS.
-    from gamedev_shared.model_server import UMS_DO_NOT_KILL_TIP, ensure_vram_available
-
-    ensure_vram_available(
-        needed_mib=5000,
-        backend="text3d",
-        quant_mode=None if sdnq_preset in (None, "none", "") else sdnq_preset,
-    )
-
+    # generate-batch: in-process (UMS por item via `text3d generate`). GPU prep canónico.
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
-    if gpu_kill:
-        for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
-            _err.print(f"[dim]{line}[/dim]")
-            if line.startswith("[recusado]"):
-                raise click.ClickException(f"{line} — {UMS_DO_NOT_KILL_TIP}")
-        clear_cuda_memory()
-        time.sleep(0.5)
-    try:
-        enforce_exclusive_gpu(allow_shared=allow_shared)
-    except RuntimeError as e:
-        raise click.ClickException(str(e)) from e
+    prepare_gpu_exclusive(
+        needed_mib=6000,
+        allow_shared=allow_shared,
+        kill_others=gpu_kill,
+        allow_shared_env="TEXT3D_ALLOW_SHARED_GPU",
+        kill_others_env="TEXT3D_GPU_KILL_OTHERS",
+        backend="text3d",
+        quant_mode=None if sdnq_preset in (None, "none", "") else sdnq_preset,
+        console=_err,
+    )
 
     resolved_sdnq = sdnq_preset if sdnq_preset else ""
     batch_offload = hwp.offload if hwp is not None else False
@@ -1959,22 +2351,29 @@ def generate_batch(
     try:
         if need_load:
             with _err.status("[bold yellow]A preparar gerador batch...", spinner="dots"):
-                _batch_generator = HunyuanTextTo3DGenerator(
-                    verbose=batch_verbose,
-                    hunyuan_subfolder=model_subfolder,
-                    sdnq_preset=resolved_sdnq,
-                    gpu_ids=parsed_gpu_ids,
-                    volume_decoder=volume_decoder,
-                    mc_algo=mc_algo,
-                    compile_models=compile_models,
-                    compile_mode=compile_mode,
-                    sage_attention=sage_attention,
-                    sdnq_quantized_matmul=sdnq_matmul,
-                    offload=batch_offload,
-                    allow_group_offload=allow_group_offload,
-                    fp8_layerwise=fp8_layerwise,
-                    channels_last=channels_last,
+                _ = model_subfolder  # deprecated
+                from text3d.ums_load import map_ums_load_kwargs
+
+                _batch_kw = map_ums_load_kwargs(
+                    {
+                        "verbose": batch_verbose,
+                        "sdnq_preset": resolved_sdnq,
+                        "gpu_ids": parsed_gpu_ids,
+                        "volume_decoder": volume_decoder,
+                        "mc_algo": mc_algo,
+                        "torch_compile": compile_models,
+                        "torch_compile_mode": compile_mode,
+                        "sage_attention": sage_attention,
+                        "sdnq_quantized_matmul": sdnq_matmul,
+                        "offload": batch_offload,
+                        "allow_group_offload": allow_group_offload,
+                        "fp8_layerwise": fp8_layerwise,
+                        "channels_last": channels_last,
+                        "memory_efficient": batch_offload,
+                    },
+                    low_vram=False,
                 )
+                _batch_generator = HunyuanTextTo3DGenerator(**_batch_kw)
 
         _err.print(
             f"[dim]Itens: {len(items)} | preset={preset} "
@@ -1994,9 +2393,66 @@ def generate_batch(
                 out_path.parent.mkdir(parents=True, exist_ok=True)
 
                 item_steps = item.get("steps", base_steps)
-                item_octree = item.get("octree_resolution", base_octree)
-                item_chunks = item.get("num_chunks", base_chunks)
+                item_octree = item.get("octree_resolution", item.get("octree", base_octree))
+                item_chunks = item.get("num_chunks", item.get("chunks", base_chunks))
                 item_seed = item.get("seed", None)
+
+                from .bbox_tune import apply_bbox_tune, size_m_from_mapping
+                from .omni_presets import merge_omni_controls, write_omni_fingerprint
+
+                try:
+                    _item_size_m = size_m_from_mapping(item.get("size_m"))
+                    _omni = merge_omni_controls(
+                        control_type=item.get("control_type"),
+                        bbox=item.get("bbox"),
+                        bbox_preset=item.get("bbox_preset"),
+                        size=item.get("size"),
+                        size_m=_item_size_m,
+                        pose_file=item.get("pose_file"),
+                        pose_preset=item.get("pose_preset"),
+                        point_cloud=item.get("point_cloud"),
+                        voxel_mesh=item.get("voxel_mesh"),
+                        category=item.get("category"),
+                    )
+                except (KeyError, FileNotFoundError, ValueError) as exc:
+                    raise click.ClickException(f"item {item_id}: {exc}") from exc
+
+                # Soft: CLI --steps/--octree/--chunks explícitos ganham; item optimize
+                # (steps no JSON) serve de base e ainda recebe escala size_m.
+                # Opt-out: ``"bbox_tune": false`` no item do manifest.
+                if item.get("bbox_tune", True) is not False:
+                    item_steps, item_octree, item_chunks, _bt = apply_bbox_tune(
+                        steps=int(item_steps),
+                        octree=int(item_octree),
+                        chunks=int(item_chunks),
+                        size_m=_item_size_m,
+                        category=item.get("category"),
+                        bbox_preset=item.get("bbox_preset"),
+                        total_vram_gib=hwp.total_vram_gib if hwp is not None else None,
+                        volume_decoder=volume_decoder,
+                        tune_steps=not _user_set_steps,
+                        tune_octree=not _user_set_octree,
+                        tune_chunks=not _user_set_chunks,
+                        group_offload=bool(allow_group_offload),
+                        quality=item.get("quality", quality),
+                    )
+                    if _bt.applied:
+                        _morph = f" morph≈{_bt.morph_close:.3f}m" if _bt.morph_close is not None else ""
+                        _err.print(
+                            f"[dim]scale-tune {item_id}: char={_bt.char_m:.2f}m "
+                            f"voxel≈{_bt.voxel_m * 100:.1f}cm "
+                            f"→ steps={item_steps} octree={item_octree} chunks={item_chunks}"
+                            f"{_morph}[/dim]"
+                        )
+
+                _ctrl = {
+                    "control_type": _omni["control_type"],
+                    "bbox": _omni["bbox"],
+                    "pose_file": _omni["pose_file"],
+                    "point_cloud": _omni["point_cloud"],
+                    "voxel_mesh": _omni["voxel_mesh"],
+                }
+                _ctrl = {k: v for k, v in _ctrl.items() if v is not None}
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
                 t0 = time.time()
@@ -2008,9 +2464,20 @@ def generate_batch(
                     num_chunks=item_chunks,
                     hy_seed=item_seed,
                     mc_level=mc_level,
+                    bounds_mode=bounds_mode,
                     keep_loaded=True,
                     step_callback=_make_step_callback(item_id, item_steps),
+                    **_ctrl,
                 )
+
+                # Escala Omni (~2u) → metros reais antes do reparo/export:
+                # morph/weld em metros e mundo do jogo recebem tamanho físico.
+                if _item_size_m:
+                    from .bbox_tune import scale_factor_to_meters
+
+                    _sf = scale_factor_to_meters(float(max(mesh.extents)), _item_size_m)
+                    if _sf is not None:
+                        mesh.apply_scale(_sf)
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="mesh_repair", percent=0)
                 if not no_topology_fix:
@@ -2020,6 +2487,16 @@ def generate_batch(
 
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=0)
                 save_mesh(mesh, str(out_path), format="glb", origin_mode=export_origin)
+                with contextlib.suppress(OSError):
+                    write_omni_fingerprint(
+                        out_path,
+                        {
+                            **_omni,
+                            "bounds_mode": bounds_mode,
+                            "mc_level": mc_level,
+                            "size_m": _item_size_m,
+                        },
+                    )
                 emit_progress(item_id, TOOL_TEXT3D, phase="export", percent=100)
                 elapsed = time.time() - t0
 
@@ -2047,6 +2524,126 @@ def generate_batch(
         signal.signal(signal.SIGINT, old_sigint)
 
 
+@cli.command("bench-decode")
+@click.option(
+    "--image",
+    "image_path",
+    type=click.Path(exists=True, dir_okay=False),
+    required=True,
+    help="Imagem de referência (mesma para toda a matriz — casos comparáveis).",
+)
+@click.option("--octrees", default="256,320,384,448,512", show_default=True, help="CSV de octree resolutions.")
+@click.option(
+    "--decoders",
+    default="vanilla,flashvdm",
+    show_default=True,
+    help="CSV de volume decoders (vanilla|hierarchical|flashvdm).",
+)
+@click.option("--mc-levels", default="auto", show_default=True, help="CSV de mc_levels (floats ou 'auto').")
+@click.option("--bounds-modes", default="cube,auto", show_default=True, help="CSV de bounds modes (cube|auto).")
+@click.option("--bbox", "bbox_str", default=None, help="Bbox Omni L,H,W para os casos (opcional).")
+@click.option("--bbox-preset", "bbox_preset", default=None, help="Preset de bbox Omni (ex.: building, sword).")
+@click.option("--steps", default=30, show_default=True, type=int, help="Steps Hunyuan (fixos na matriz).")
+@click.option("--guidance", default=5.0, show_default=True, type=float)
+@click.option("--seed", default=1234, show_default=True, type=int)
+@click.option("--num-chunks", default=None, type=int, help="Fixar chunks (default: auto dinâmico).")
+@click.option(
+    "--sdnq-preset",
+    default=None,
+    type=click.Choice(["sdnq-uint8", "sdnq-int8", "sdnq-int4", "sdnq-fp8", "none"]),
+    help="Quantização DiT no bench (default: hw-auto).",
+)
+@click.option("-o", "--output", "out_dir", type=click.Path(file_okay=False), default="bench_decode_out")
+def bench_decode(
+    image_path,
+    octrees,
+    decoders,
+    mc_levels,
+    bounds_modes,
+    bbox_str,
+    bbox_preset,
+    steps,
+    guidance,
+    seed,
+    num_chunks,
+    sdnq_preset,
+    out_dir,
+):
+    """Bench de calibração do decode: octree x decoder x mc_level x bounds.
+
+    Mede lixo interno, boundary edges, VRAM e tempo por caso; o relatório
+    (`bench_report.json`) recomenda o tecto informativo de octree.
+    """
+    from .bench import build_matrix, parse_mc_levels, run_bench_decode
+    from .hardware import detect_hardware_profile, hw_auto_enabled
+    from .omni_presets import parse_bbox_csv, resolve_bbox_preset
+
+    try:
+        octree_list = [int(x) for x in str(octrees).split(",") if x.strip()]
+        decoder_list = [x.strip() for x in str(decoders).split(",") if x.strip()]
+        mc_list = parse_mc_levels(mc_levels)
+        bounds_list = [x.strip() for x in str(bounds_modes).split(",") if x.strip()]
+        bbox_vals = None
+        if bbox_str:
+            bbox_vals = parse_bbox_csv(bbox_str)
+        elif bbox_preset:
+            bbox_vals = resolve_bbox_preset(bbox_preset)
+        cases = build_matrix(octree_list, decoder_list, mc_list, bounds_list)
+    except (ValueError, KeyError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if sdnq_preset is None and hw_auto_enabled():
+        hwp = detect_hardware_profile()
+        sdnq_preset = hwp.sdnq_preset or "none"
+
+    console.print(
+        Panel(
+            f"[bold]{len(cases)}[/bold] casos | imagem=[cyan]{image_path}[/cyan] | seed={seed} | "
+            f"bbox={'preset:' + bbox_preset if bbox_preset else (bbox_vals or 'none')}",
+            title="[bold green]Bench decode",
+            border_style="green",
+        )
+    )
+    report = run_bench_decode(
+        image_path,
+        cases,
+        out_dir,
+        steps=steps,
+        guidance=guidance,
+        seed=seed,
+        num_chunks=num_chunks,
+        sdnq_preset="" if sdnq_preset in (None, "none") else sdnq_preset,
+        control_type="bbox" if bbox_vals else None,
+        bbox=bbox_vals,
+    )
+
+    table = Table(title="[bold blue]Bench decode", box=box.SIMPLE)
+    for col in ("caso", "s", "VRAM GiB", "faces", "boundary", "internos", "vol int"):
+        table.add_column(col)
+    for row in report["results"]:
+        m = row.get("metrics") or {}
+        table.add_row(
+            row["case_id"],
+            str(row["seconds"]),
+            str(row["peak_vram_gib"]),
+            str(m.get("faces", "—")),
+            str(m.get("boundary_edges", "—")),
+            str(m.get("internal_components", "—")),
+            f"{m.get('internal_volume_ratio', 0.0):.4f}" if m else "—",
+        )
+    console.print(table)
+    summary = report["summary"]
+    console.print(
+        Panel(
+            f"Tecto de octree recomendado: [bold]{summary['recommended_latent_ceiling']}[/bold]\n"
+            f"Pior lixo interno: {summary['worst_internal_case']}\n"
+            f"Pior boundary: {summary['worst_boundary_case']}",
+            title="Resumo",
+            border_style="cyan",
+        )
+    )
+
+
 @cli.command()
 def models():
     """Modelos usados pelo Text3D."""
@@ -2061,9 +2658,9 @@ def models():
         "Pacote text2d no monorepo",
     )
     table.add_row(
-        "Hunyuan3D-2.1",
-        "Image-to-3D (subpasta hunyuan3d-dit-v2-1, SDNQ INT4)",
-        "hy3dshape vendorizado; licença Tencent Hunyuan Community",
+        "Hunyuan3D-Omni",
+        "Image-to-3D + controlos (bbox/pose/point/voxel); SDNQ INT4 em GPUs pequenas",
+        "tencent/Hunyuan3D-Omni; hy3dshape vendorizado; licença Tencent Hunyuan Community",
     )
     table.add_row(
         "Hunyuan3D-Paint",

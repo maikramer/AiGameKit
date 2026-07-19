@@ -22,8 +22,7 @@ gen = HunyuanTextTo3DGenerator(
     device=None,              # "cuda" | "cpu" | auto
     verbose=False,
     cache_dir=None,
-    hunyuan_model_id="tencent/Hunyuan3D-2.1",
-    hunyuan_subfolder="hunyuan3d-dit-v2-1",
+    hunyuan_model_id="tencent/Hunyuan3D-Omni",
 )
 ```
 
@@ -88,6 +87,38 @@ with HunyuanTextTo3DGenerator() as gen:
     mesh = gen.generate("prompt")
 ```
 
+## Autotune do decode (bounds / mc_level / chunks)
+
+Fórmulas puras em [`src/text3d/decode_tune.py`](../src/text3d/decode_tune.py);
+o generator resolve-as no momento do decode:
+
+| Knob | Default | Comportamento |
+|------|---------|---------------|
+| `bounds_mode` | `auto` | Com controlo bbox, o grid MC encolhe ao aspecto da bbox (`bounds_for_bbox`) — voxels mais finos no eixo fino (anti-buracos em portas/espadas/edifícios). `cube` = cubo clássico ±1.01. |
+| `mc_level` | `auto` | Iso-nível ligeiro negativo ∝ 1/octree (`auto_mc_level`) — fecha pinholes MC; equivale ao upstream −1/512 em octree 512. Número = valor fixo. |
+| `auto_num_chunks` | `True` | Batch de queries do decode calculado da VRAM livre (`mem_get_info` × 0.7 / bytes-por-query); clamp 8k–512k. Env: `TEXT3D_DECODE_BYTES_PER_QUERY`. |
+| decoder | — | Vanilla/hierarchical com octree ≥ 448 é trocado por flashvdm (surface-focused): o field interior é ruído e o grid denso visita-o todo. |
+
+Pós-decode, componentes fechados totalmente contidos na shell principal com
+volume < 15% são removidos (`utils.mesh_metrics.drop_internal_components`) —
+é o «octree alto gera geometria aleatória dentro da mesh».
+
+**Tectos de octree** (`bbox_tune`): `octree = min(alvo, tecto VRAM, tecto
+informativo do latent)`. O tecto informativo (`LATENT_DETAIL_CEILING`, default
+448; env `TEXT3D_LATENT_OCTREE_CEILING`) existe porque acima da capacidade do
+latent o sampling só resolve ruído. Calibra-o com:
+
+```bash
+text3d bench-decode --image ref.png --octrees 256,320,384,448,512 \
+    --decoders vanilla,flashvdm --bbox-preset building -o bench_out/
+# bench_report.json → summary.recommended_latent_ceiling
+```
+
+**Alvo percetual** (`bbox_tune.target_voxel_for`): o voxel-alvo escala com a
+distância mínima de inspeção da categoria (arma 0.5 m → voxel fino; árvore
+2.5 m → grosso) e com o tier `--quality`. O decode com prefetch (CUDA streams)
+sobrepõe as transferências CPU→GPU dos chunks com o compute do geo-decoder.
+
 ## Exportação
 
 ### `save_mesh(mesh, path, format=..., rotate=True)`
@@ -108,5 +139,5 @@ Ver [`src/text3d/utils/export.py`](../src/text3d/utils/export.py).
 
 ## Referências
 
-- [Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) (shape: `hunyuan3d-dit-v2-1`, SDNQ INT4)
-- [Código Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1)
+- [Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (image + controlos geométricos)
+- [Código Hunyuan3D-Omni](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni)

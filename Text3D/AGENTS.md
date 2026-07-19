@@ -1,6 +1,6 @@
 # AGENTS.md — Text3D (text3d)
 
-Text-to-3D mesh generation. Hunyuan3D-2.1 SDNQ INT4. Owner of ALL mesh operations across the monorepo.
+Text-to-3D mesh generation. Hunyuan3D-Omni (controlos geométricos; SDNQ INT4 em GPUs pequenas). Owner of ALL mesh operations across the monorepo.
 
 ## OVERVIEW
 
@@ -62,7 +62,9 @@ Stage 5 — `collision`: Convex hull + quadric decimation for physics mesh.
 
 **FORBIDDEN:** Silent exception swallowing in `weld_glb` (`export.py`). Use `try/except` with `log.warning` so pipeline failures surface in logs.
 
-**DO NOT modify vendored code** under `src/text3d/hy3dshape/` (Tencent Hunyuan3D-2.1, upstream license).
+**DO NOT modify vendored code** under `src/text3d/hy3dshape/` excepto patches mínimos documentados (Tencent Hunyuan3D-Omni, upstream license).
+
+**`simplify`:** Geometry-only Decimate COLLAPSE via `gamedev_shared.mesh_simplify` (same pre_decimate_uv → Decimate → post_decimate path as LOD / remesh-textured). Use for `_to_paint` / pre-Paint budgets — **not** `remesh` (voxel).
 
 **`simplify-textured`:** Decimates GLB preserving texture and UV (bpy Decimate COLLAPSE via `remesh_textured_glb`). Without texture, falls back to geometry-only decimation.
 

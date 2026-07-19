@@ -1,28 +1,3 @@
-# This file includes code derived from the SiT project (https://github.com/willisma/SiT),
-# which is licensed under the MIT License.
-#
-# MIT License
-#
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
-
 import torch as th
 import numpy as np
 import logging
@@ -418,52 +393,6 @@ class Sampler:
         _ode = ode(
             drift=drift,
             t0=t0,
-            t1=t1,
-            sampler_type=sampling_method,
-            num_steps=num_steps,
-            atol=atol,
-            rtol=rtol,
-        )
-
-        return _ode.sample
-
-    def sample_ode_intermediate(
-        self,
-        *,
-        sampling_method="dopri5",
-        num_steps=50,
-        atol=1e-6,
-        rtol=1e-3,
-        t=0.5,
-        reverse=False,
-    ):
-        """returns a sampling function with given ODE settings
-        Args:
-        - sampling_method: type of sampler used in solving the ODE; default to be Dopri5
-        - num_steps: 
-            - fixed solver (Euler, Heun): the actual number of integration steps performed
-            - adaptive solver (Dopri5): the number of datapoints saved during integration; produced by interpolation
-        - atol: absolute error tolerance for the solver
-        - rtol: relative error tolerance for the solver
-        - reverse: whether solving the ODE in reverse (data to noise); default to False
-        """
-        if reverse:
-            drift = lambda x, t, model, **kwargs: self.drift(x, th.ones_like(t) * (1 - t), model, **kwargs)
-        else:
-            drift = self.drift
-
-        t0, t1 = self.transport.check_interval(
-            self.transport.train_eps,
-            self.transport.sample_eps,
-            sde=False,
-            eval=True,
-            reverse=reverse,
-            last_step_size=0.0,
-        )
-
-        _ode = ode(
-            drift=drift,
-            t0=t,
             t1=t1,
             sampler_type=sampling_method,
             num_steps=num_steps,

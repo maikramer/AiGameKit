@@ -27,7 +27,8 @@ def test_export_rotation_default(monkeypatch: pytest.MonkeyPatch) -> None:
     d.set_export_rotation_x_rad_override(None)
     monkeypatch.delenv("TEXT3D_EXPORT_ROTATION_X_RAD", raising=False)
     monkeypatch.delenv("TEXT3D_EXPORT_ROTATION_X_DEG", raising=False)
-    assert d.get_export_rotation_x_rad() == pytest.approx(0.0)
+    # Hunyuan → Y-up: +90° (π/2) por defeito.
+    assert d.get_export_rotation_x_rad() == pytest.approx(math.pi / 2.0)
 
 
 def test_export_rotation_rad_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -71,8 +72,9 @@ def test_default_t2d_dims() -> None:
     assert d.DEFAULT_T2D_WIDTH == d.DEFAULT_T2D_HEIGHT == 2048
 
 
-def test_default_subfolder_string() -> None:
-    assert "hunyuan" in d.DEFAULT_SUBFOLDER.lower()
+def test_default_hf_id_omni() -> None:
+    assert "Omni" in d.DEFAULT_HF_ID or "omni" in d.DEFAULT_HF_ID.lower()
+    assert d.DEFAULT_HF_ID.startswith("tencent/")
 
 
 def test_hq_constants_match_preset() -> None:
@@ -110,9 +112,9 @@ def test_default_octree_and_chunks() -> None:
 
 def test_balanced_preset_equals_constants() -> None:
     b = d.PRESET_HUNYUAN["balanced"]
-    assert b["steps"] == d.LOW_VRAM_STEPS
-    assert b["octree"] == d.LOW_VRAM_OCTREE
-    assert b["chunks"] == d.LOW_VRAM_NUM_CHUNKS
+    assert b["steps"] == d.MEMORY_EFFICIENT_STEPS
+    assert b["octree"] == d.MEMORY_EFFICIENT_OCTREE
+    assert b["chunks"] == d.MEMORY_EFFICIENT_NUM_CHUNKS
 
 
 def test_fast_preset_smaller_than_balanced_steps() -> None:

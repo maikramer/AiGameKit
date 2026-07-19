@@ -1,11 +1,13 @@
 """
-Detecção automática de hardware → perfil de inferência Hunyuan3D.
+Detecção automática de hardware → perfil de inferência Hunyuan3D-Omni.
 
 Mapeia GPUs CUDA visíveis para um perfil (steps/octree/chunks, SDNQ, multi-GPU,
 volume decoder, resolução da imagem Text2D). Soft resolution no CLI: só preenche o
 que o utilizador não definiu explicitamente — flags manuais, ``--quality`` e
 ``--preset`` têm sempre precedência. Desligável com ``--no-hw-auto`` ou
 ``TEXT3D_HW_AUTO=0``.
+
+Omni declara ~10 GB VRAM em fp16; abaixo disso hw-auto força SDNQ int4.
 """
 
 from __future__ import annotations
@@ -16,6 +18,17 @@ from gamedev_shared.hardware import GIB, cuda_gpu_specs
 from gamedev_shared.hardware import hw_auto_enabled as _hw_auto_enabled
 
 from . import defaults as _defaults
+
+# Re-export for tests / callers that import from text3d.hardware
+__all__ = [
+    "GIB",
+    "HW_AUTO_ENV",
+    "HardwareProfile",
+    "cuda_gpu_specs",
+    "detect_hardware_profile",
+    "hw_auto_enabled",
+    "profile_from_specs",
+]
 
 HW_AUTO_ENV = "TEXT3D_HW_AUTO"
 
@@ -88,17 +101,18 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
     # por isso a soma conta para o tier; single-GPU usa só a própria VRAM.
     capacity_gib = total_gib if multi else largest_gib
 
-    if capacity_gib >= 10.0:
+    # Omni ~10 GB fp16; só full precision com margem confortável.
+    if capacity_gib >= 12.0:
         tier = hq
         sdnq: str | None = None
         img_w: int | None = None
         img_h: int | None = None
-    elif capacity_gib >= 7.5:
-        tier = balanced
+    elif capacity_gib >= 10.0:
+        tier = hq
         sdnq = None
         img_w = None
         img_h = None
-    elif capacity_gib >= 6.5:
+    elif capacity_gib >= 7.5 or capacity_gib >= 6.0:
         tier = balanced
         sdnq = "sdnq-int4"
         img_w = 1024
@@ -114,14 +128,11 @@ def profile_from_specs(gpus: list[tuple[int, int]]) -> HardwareProfile:
         img_w = 1024
         img_h = 1024
 
-    # CPU offload proativo só em GPUs muito pequenas (<5GB): em 6GB o DiT int4 cabe
-    # com pipe.to(cuda) (caminho rápido validado), e o generator tem fallback OOM ->
-    # enable_model_cpu_offload se a colocação estourar. Multi-GPU divide os pesos.
+    # CPU offload proativo só em GPUs muito pequenas (<5GB).
     offload = (not multi) and largest_gib < 5.0
 
-    # Decoder: flashvdm no tier fast (bench 6GB: -42% vs vanilla; hierarchical ~lossless
-    # mas mais lento que flashvdm). balanced/hq → hierarchical (~lossless, ainda >> vanilla).
-    decoder = "hierarchical" if capacity_gib >= 7.5 else "flashvdm"
+    # Decoder: flashvdm em VRAM apertada; hierarchical/vanilla acima de ~10 GB.
+    decoder = "hierarchical" if capacity_gib >= 10.0 else "flashvdm"
 
     return HardwareProfile(
         name=name,

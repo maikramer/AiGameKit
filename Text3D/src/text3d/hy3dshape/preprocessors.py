@@ -1,30 +1,78 @@
-# Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
-# except for the third-party components listed below.
-# Hunyuan 3D does not impose any additional limitations beyond what is outlined
-# in the repsective licenses of these third-party components.
-# Users must comply with all terms and conditions of original licenses of these third-party
-# components and must ensure that the usage of the third party components adheres to
-# all relevant laws and regulations.
+# -*- coding: utf-8 -*-
+"""
+Tencent is pleased to support the open source community by making Tencent Hunyuan 3D Omni available.
 
-# For avoidance of doubts, Hunyuan 3D means the large language models and
-# their software and algorithms, including trained model weights, parameters (including
-# optimizer states), machine-learning model code, inference-enabling code, training-enabling code,
-# fine-tuning enabling code and other elements of the foregoing made publicly available
-# by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
+Copyright (C) 2025 Tencent.  All rights reserved. The below software and/or models in this 
+distribution may have been modified by Tencent ("Tencent Modifications"). All Tencent Modifications 
+are Copyright (C) Tencent.
 
+Tencent Hunyuan 3D Omni is licensed under the TENCENT HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT 
+except for the third-party components listed below, which is licensed under different terms. 
+Tencent Hunyuan 3D Omni does not impose any additional limitations beyond what is outlined in the 
+respective licenses of these third-party components. Users must comply with all terms and conditions 
+of original licenses of these third-party components and must ensure that the usage of the third party 
+components adheres to all relevant laws and regulations. 
+
+For avoidance of doubts, Tencent Hunyuan 3D Omni means training code, inference-enabling code, parameters, 
+and/or weights of this Model, which are made publicly available by Tencent in accordance with TENCENT 
+HUNYUAN 3D OMNI COMMUNITY LICENSE AGREEMENT.
+"""
+
+
+"""
+This module provides image preprocessing utilities,
+including image normalization, recentering, and format conversion functions.
+
+The main component is ImageProcessorV2, which handles:
+- Image resizing and padding
+- Background removal and recentering
+- Format conversion between PIL, numpy, and PyTorch tensors
+- Normalization for model input
+"""
+
+import PIL.Image
 import cv2
 import numpy as np
 import torch
-from PIL import Image
 from einops import repeat, rearrange
+from torchvision import transforms
+from transformers import AutoModelForImageSegmentation
+
+from PIL import Image
+# Optional background removal (commented out by default)
+# from rembg import remove, new_session
 
 
-def array_to_tensor(np_array):
+def array_to_tensor(np_array: np.ndarray, normalize: bool = True) -> torch.Tensor:
+    """
+    Convert numpy array to PyTorch tensor with optional normalization.
+    
+    This function converts image arrays to the format expected by the model,
+    including normalization to [-1, 1] range and proper tensor dimensions.
+    
+    Args:
+        np_array (np.ndarray): Input image array of shape [H, W, C]
+        normalize (bool): Whether to normalize pixel values to [-1, 1]. Defaults to True.
+        
+    Returns:
+        torch.Tensor: Converted tensor of shape [1, C, H, W]
+    """
     image_pt = torch.tensor(np_array).float()
-    image_pt = image_pt / 255 * 2 - 1
+    
+    # Normalize pixel values from [0, 255] to [-1, 1]
+    if normalize:
+        image_pt = image_pt / 255 * 2 - 1
+    
+    # Rearrange dimensions from HWC to CHW and add batch dimension
     image_pt = rearrange(image_pt, "h w c -> c h w")
     image_pts = repeat(image_pt, "c h w -> b c h w", b=1)
+    
     return image_pts
+
+
+
+#import rembg
+from PIL import Image
 
 
 class ImageProcessorV2:
@@ -75,25 +123,28 @@ class ImageProcessorV2:
         y2_max = y2_min + w2
 
         result[x2_min:x2_max, y2_min:y2_max] = cv2.resize(image[x_min:x_max, y_min:y_max], (w2, h2),
-                                                          interpolation=cv2.INTER_AREA)
+                                                          interpolation=cv2.INTER_CUBIC)
 
         bg = np.ones((result.shape[0], result.shape[1], 3), dtype=np.uint8) * 255
 
         mask = result[..., 3:].astype(np.float32) / 255
         result = result[..., :3] * mask + bg * (1 - mask)
 
-        mask = mask * 255
         result = result.clip(0, 255).astype(np.uint8)
-        mask = mask.clip(0, 255).astype(np.uint8)
+        mask = mask.clip(0, 1)
         return result, mask
 
-    def load_image(self, image, border_ratio=0.15, to_tensor=True):
-        if isinstance(image, str):
-            image = cv2.imread(image, cv2.IMREAD_UNCHANGED)
+    def __call__(self, image_path, border_ratio=0.15, to_tensor=True, return_mask=False, **kwargs):
+        if self.border_ratio is not None:
+            border_ratio = self.border_ratio
+            print(f"Using border_ratio from init: {border_ratio}")
+
+        if isinstance(image_path, str):
+            image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
             image, mask = self.recenter(image, border_ratio=border_ratio)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        elif isinstance(image, Image.Image):
-            image = image.convert("RGBA")
+        elif isinstance(image_path, Image.Image):
+            image = image_path.convert("RGBA")
             image = np.asarray(image)
             image, mask = self.recenter(image, border_ratio=border_ratio)
 
@@ -103,65 +154,65 @@ class ImageProcessorV2:
 
         if to_tensor:
             image = array_to_tensor(image)
-            mask = array_to_tensor(mask)
-        return image, mask
-
-    def __call__(self, image, border_ratio=0.15, to_tensor=True, **kwargs):
-        if self.border_ratio is not None:
-            border_ratio = self.border_ratio
-        image, mask = self.load_image(image, border_ratio=border_ratio, to_tensor=to_tensor)
-        outputs = {
-            'image': image,
-            'mask': mask
-        }
-        return outputs
+            mask = array_to_tensor(mask, normalize=False)
+        if return_mask:
+            return image, mask
+        return image
 
 
-class MVImageProcessorV2(ImageProcessorV2):
-    """
-    view order: front, front clockwise 90, back, front clockwise 270
-    """
-    return_view_idx = True
 
-    def __init__(self, size=512, border_ratio=None):
-        super().__init__(size, border_ratio)
-        self.view2idx = {
-            'front': 0,
-            'left': 1,
-            'back': 2,
-            'right': 3
-        }
+class BRIARMBG:
+    def __init__(self, path="briaai/RMBG-2.0", device='cuda'):
+        self.birefnet = AutoModelForImageSegmentation.from_pretrained(
+            path, trust_remote_code=True
+        )
+        self.birefnet.to(device)
+        self.transform_image = transforms.Compose(
+            [
+                transforms.Resize((1024, 1024)),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+            ]
+        )
+        self.device = device
 
-    def __call__(self, image_dict, border_ratio=0.15, to_tensor=True, **kwargs):
-        if self.border_ratio is not None:
-            border_ratio = self.border_ratio
+    def __call__(self, image):
+        image_size = image.size
+        input_images = self.transform_image(image).unsqueeze(0).to(self.device)
+        with torch.no_grad():
+            preds = self.birefnet(input_images)[-1].sigmoid().cpu()
+        pred = preds[0].squeeze()
+        pred_pil = transforms.ToPILImage()(pred)
+        mask = pred_pil.resize(image_size)
+        image.putalpha(mask)
+        return image
 
-        images = []
-        masks = []
-        view_idxs = []
-        for idx, (view_tag, image) in enumerate(image_dict.items()):
-            view_idxs.append(self.view2idx[view_tag])
-            image, mask = self.load_image(image, border_ratio=border_ratio, to_tensor=to_tensor)
-            images.append(image)
-            masks.append(mask)
 
-        zipped_lists = zip(view_idxs, images, masks)
-        sorted_zipped_lists = sorted(zipped_lists)
-        view_idxs, images, masks = zip(*sorted_zipped_lists)
+class SRRealESRGAN:
+    def __init__(self, path="weights/RealESRGAN_x2.pth", scale=2, download=True, device='cuda'):
+        from RealESRGAN import RealESRGAN
+        self.device = torch.device(device)
+        self.model = RealESRGAN(self.device, scale=scale)
+        self.model.load_weights(path, download=download)
 
-        image = torch.cat(images, 0).unsqueeze(0)
-        mask = torch.cat(masks, 0).unsqueeze(0)
-        outputs = {
-            'image': image,
-            'mask': mask,
-            'view_idxs': view_idxs
-        }
-        return outputs
+    def __call__(self, image: PIL.Image.Image):
+        image = self.model.predict(image.convert('RGB'))
+        return image
 
+
+class BackgroundRemover:
+    def __init__(self):
+        self.session = new_session()
+
+    def __call__(self, image: Image.Image):
+        output = remove(image, session=self.session, bgcolor=[255, 255, 255, 0])
+        return output
+
+
+from functools import partial
 
 IMAGE_PROCESSORS = {
     "v2": ImageProcessorV2,
-    'mv_v2': MVImageProcessorV2,
 }
 
 DEFAULT_IMAGEPROCESSOR = 'v2'

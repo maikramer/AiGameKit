@@ -19,8 +19,19 @@ from pathlib import Path
 import numpy as np
 
 from gamedev_shared.bpy_mesh import clear_scene, load_glb, save_glb
+from gamedev_shared.mesh_simplify import clamp_decimate_target, protect_boundary_vertices, simplify_mesh_object
 
 log = logging.getLogger(__name__)
+
+
+def _clamp_decimate_target(n_faces: int, requested: int) -> int:
+    """Compat: reexport de ``gamedev_shared.mesh_simplify.clamp_decimate_target``."""
+    return clamp_decimate_target(n_faces, requested)
+
+
+def _protect_boundary_vertices(obj):
+    """Compat: reexport de ``gamedev_shared.mesh_simplify.protect_boundary_vertices``."""
+    return protect_boundary_vertices(obj)
 
 
 # ---------------------------------------------------------------------------
@@ -750,13 +761,7 @@ def remesh_with_texture_reprojection(
 
 
 def _pre_decimate_repair(obj) -> None:
-    """Cadeia de reparo pré-decimação (perfil ``pre_decimate_uv``).
-
-    O painted herda os defeitos do shape cru (marching cubes): micro-cracks,
-    leques/slivers gigantes, ilhas soltas e normais inconsistentes. Decimar
-    sem reparar propaga e AMPLIFICA esses defeitos nos LODs (rachaduras
-    visíveis). Todas as operações preservam UVs (per-loop no Blender).
-    """
+    """Compat: delega no perfil ``pre_decimate_uv`` via Shared."""
     from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
     stats = repair_mesh_object_with_profile(obj, "pre_decimate_uv")
@@ -768,76 +773,6 @@ def _pre_decimate_repair(obj) -> None:
             stats.get("debris_faces", 0),
             stats.get("welded_relative", 0),
         )
-
-
-_LOD_PROTECT_GROUP = "_lod_boundary_protect"
-
-# Piso de decimação: abaixo disto, features finas (fusíveis, folhas, rebordos)
-# colapsam em agulhas mesmo após remove_sliver. Fração do input, não do asset.
-_MIN_DECIMATE_FRAC = 0.008
-_MIN_DECIMATE_FACES = 150
-
-
-def _clamp_decimate_target(n_faces: int, requested: int) -> int:
-    """Sobe o target se o rácio pedido for demasiado agressivo.
-
-    Heurística pura: ``max(requested, MIN_FACES, ⌊n · MIN_FRAC⌋)``.
-    Evita 246k→750 (LOD2) que destrói silhueta em qualquer mesh com
-    detalhe fino — sem nomes de assets nem categorias.
-    """
-    req = max(4, int(requested))
-    if n_faces <= req:
-        return req
-    floor = max(_MIN_DECIMATE_FACES, int(n_faces * _MIN_DECIMATE_FRAC))
-    if req < floor:
-        log.warning(
-            "Target %d abaixo do piso heurístico %d (%.2f%% de %d faces) — a subir",
-            req,
-            floor,
-            100.0 * _MIN_DECIMATE_FRAC,
-            n_faces,
-        )
-        return floor
-    return req
-
-
-def _protect_boundary_vertices(obj) -> str | None:
-    """Cria vertex group com vértices de fronteira (rebordos abertos).
-
-    O Decimate colapsa rebordos de buracos intencionais (palha, aberturas)
-    de forma agressiva, abrindo rachaduras visíveis nos LODs. Com o grupo
-    invertido no modifier, esses vértices ficam protegidos do colapso.
-
-    Se >5% dos verts forem "fronteira", assume-se poluição de seams UV
-    (verts duplicados) e a protecção é ignorada — senão o Decimate esmaga
-    o interior e cria agulhas.
-
-    Returns:
-        Nome do grupo criado, ou None se a mesh não tem fronteiras úteis.
-    """
-    import bmesh
-
-    bm = bmesh.new()
-    bm.from_mesh(obj.data)
-    n_verts = len(bm.verts) or 1
-    boundary_verts = {v.index for e in bm.edges if len(e.link_faces) == 1 for v in e.verts}
-    bm.free()
-    if not boundary_verts:
-        return None
-    frac = len(boundary_verts) / n_verts
-    if frac > 0.05:
-        log.info(
-            "Proteção de fronteira ignorada: %d/%d verts (%.1f%%) — seams UV, não buracos",
-            len(boundary_verts),
-            n_verts,
-            100 * frac,
-        )
-        return None
-
-    vg = obj.vertex_groups.get(_LOD_PROTECT_GROUP) or obj.vertex_groups.new(name=_LOD_PROTECT_GROUP)
-    vg.add(list(boundary_verts), 1.0, "REPLACE")
-    log.info("Proteção de fronteira: %d vértices em rebordos abertos", len(boundary_verts))
-    return vg.name
 
 
 def remesh_textured_glb(
@@ -897,57 +832,9 @@ def remesh_textured_glb(
 
     mesh = obj.data
 
-    from gamedev_shared.mesh_repair import remove_doubles as _shared_remove_doubles
-
-    _shared_remove_doubles(obj, threshold=0.0001)
-    log.info("Após merge by distance: %d faces", len(obj.data.polygons))
-
-    if repair:
-        _pre_decimate_repair(obj)
-        log.info("Após reparo pré-decimação: %d faces", len(obj.data.polygons))
-
-    n_now = len(obj.data.polygons)
-    target_faces = _clamp_decimate_target(n_now, target_faces)
-    ratio = target_faces / n_now
-    if ratio < 1.0:
-        protect_group = _protect_boundary_vertices(obj) if repair else None
-        mod = obj.modifiers.new("Decimate", "DECIMATE")
-        mod.decimate_type = "COLLAPSE"
-        mod.ratio = ratio
-        # Triangula colapsos para não deixar n-gons não-planares (viram
-        # slivers/sombras duras na malha decimada).
-        mod.use_collapse_triangulate = True
-        if protect_group:
-            # Grupo invertido: peso 1 na fronteira → 0 de influência de
-            # colapso; rebordos de buracos intencionais mantêm a silhueta.
-            mod.vertex_group = protect_group
-            mod.invert_vertex_group = True
-            mod.vertex_group_factor = 1.0
-        bpy.ops.object.modifier_apply(modifier=mod.name)
-        if protect_group and protect_group in obj.vertex_groups:
-            obj.vertex_groups.remove(obj.vertex_groups[protect_group])
-    log.info("Após decimate: %d faces (ratio=%.4f)", len(obj.data.polygons), ratio)
-
-    if repair:
-        from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
-
-        stats = repair_mesh_object_with_profile(obj, "post_decimate")
-        if stats.get("sliver_faces"):
-            log.warning("Slivers pós-decimate: %d faces removidas", stats["sliver_faces"])
-        log.info("Após limpeza pós-decimação: %d faces", len(obj.data.polygons))
-
-    # Smooth shading, hard edges only above 60°. NÃO usar
-    # normals_split_custom_set: força exporter GLTF a duplicar verts e produz
-    # V/Tri ≈ 3 (regressão crítica que afetava goblin_shape, ver
-    # docs/superpowers/specs/2026-05-02-game-asset-pipeline-redesign.md).
-    # apply_smooth_by_angle usa shade_smooth_by_angle (bpy 5.x); o antigo
-    # use_auto_smooth foi removido no Blender 4.1 e era ignorado em silêncio,
-    # deixando LODs agressivos lisos/sem controlo de aresta.
-    from gamedev_shared.bpy_mesh import apply_smooth_by_angle
-
-    with contextlib.suppress(Exception):
-        mesh.free_normals_split()
-    apply_smooth_by_angle(obj, 60.0)
+    # Decimate + reparo unificado em gamedev_shared.mesh_simplify
+    # (mesmo path que ``text3d simplify`` / GameAssets ``_to_paint``).
+    simplify_mesh_object(obj, target_faces, repair=repair)
 
     # Scale ALL texture images across all materials (not just the first).
     # image.scale() may convert RGB→RGBA; set alpha_mode to avoid

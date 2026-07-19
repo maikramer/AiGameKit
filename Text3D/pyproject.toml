@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "text3d"
 version = "0.1.0"
-description = "Text-to-3D com Text2D + Hunyuan3D-2.1 SDNQ INT4"
+description = "Text-to-3D com Text2D + Hunyuan3D-Omni (controlos geométricos, SDNQ INT4)"
 readme = "README.md"
 authors = [{ name = "Text3D Project" }]
 requires-python = ">=3.13,<3.14"
@@ -35,6 +35,11 @@ dependencies = [
     "opencv-python>=4.8.0",
     "scikit-image>=0.22.0",
     "kornia>=0.7.0",
+    "pytorch-lightning>=1.9.0,<2.0",
+    # Omni transport ODE sampler (hy3dshape/models/diffusion/transport).
+    "torchdiffeq>=0.2.5",
+    # lightning_fabric still imports pkg_resources (removed in setuptools 82+).
+    "setuptools>=69,<81",
     "bpy>=5.2.0",
     "gamedev-shared @ file:../Shared",
     "text2d @ file:../Text2D",
@@ -61,7 +66,8 @@ text3d = "text3d.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-text3d = ["cursor_skill/*.md"]
+text3d = ["cursor_skill/*.md", "data/omni/*"]
+"text3d.data.omni" = ["*.txt", "*.json", "*.glb"]
 "text3d.hy3dshape" = ["**/*.py", "**/*.yaml", "**/*.json"]
 
 [tool.pytest.ini_options]

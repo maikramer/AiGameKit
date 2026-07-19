@@ -1,12 +1,12 @@
 """
 Valores por defeito do Text3D.
 
-**Perfil padrão:** qualidade elevada (model card HF), pensado para GPUs com >= 8 GB VRAM.
-Octree 384, 20000 chunks, 30 steps Hunyuan, sem quantização SDNQ, remesh desligado,
+**Perfil padrão:** qualidade elevada (model card HF Omni), pensado para GPUs com >= 10 GB VRAM.
+Octree 384, 20000 chunks, 50 steps Omni, sem quantização SDNQ, remesh desligado,
 reparo "light" (merge+weld+normals).
 
 Para hardware modesto (~6 GB VRAM), o preset ``balanced`` usa estes valores
-(SDNQ INT4 via hw-auto, octree 256, 8000 chunks, 24 steps).
+(SDNQ INT4 via hw-auto, octree 256, 8000 chunks, 30 steps).
 """
 
 from __future__ import annotations
@@ -81,11 +81,12 @@ DEFAULT_T2D_GUIDANCE = 1.0
 
 DEFAULT_T2D_CPU_OFFLOAD = True
 
-# --- Hunyuan3D-2.1 (shape) — perfil padrão (qualidade elevada) ---
-DEFAULT_SUBFOLDER = "hunyuan3d-dit-v2-1"
+# --- Hunyuan3D-Omni (shape) — perfil padrão (qualidade elevada) ---
+DEFAULT_HF_ID = "tencent/Hunyuan3D-Omni"
 
-DEFAULT_HY_STEPS = 30
-DEFAULT_HY_GUIDANCE = 5.0
+# Omni demo: steps=50, guidance=4.5, octree=512; config.json default octree=384.
+DEFAULT_HY_STEPS = 50
+DEFAULT_HY_GUIDANCE = 4.5
 DEFAULT_OCTREE_RESOLUTION = 384
 DEFAULT_NUM_CHUNKS = 20000
 
@@ -97,11 +98,11 @@ DEFAULT_MAX_FACES = 40000
 # --- Perfil "balanced" (~6 GB): usado pelo preset balanced e hw-auto ---
 MEMORY_EFFICIENT_OCTREE = 256
 MEMORY_EFFICIENT_NUM_CHUNKS = 8000
-MEMORY_EFFICIENT_STEPS = 24
+MEMORY_EFFICIENT_STEPS = 30
 
-# Perfis CLI `--preset`: fast=baixo VRAM, balanced=~6GB, hq=padrão actual.
+# Perfis CLI `--preset`: fast=baixo VRAM, balanced=~6GB, hq=padrão Omni.
 PRESET_HUNYUAN = {
-    "fast": {"steps": 18, "octree": 128, "chunks": 4096},
+    "fast": {"steps": 20, "octree": 128, "chunks": 4096},
     "balanced": {
         "steps": MEMORY_EFFICIENT_STEPS,
         "octree": MEMORY_EFFICIENT_OCTREE,

@@ -131,11 +131,17 @@ from gamedev_shared.mesh_repair import fill_holes as _fill_holes_bpy  # noqa: E4
 def _prepare_topology_bpy(
     mesh_obj,
     fill_holes_sides: int | None = None,
+    *,
+    watertight: bool | None = None,
+    morph_close: float | None = None,
 ) -> None:
-    """Pipeline de preparação de topologia — perfil Shared ``topology_clean`` (lean).
+    """Pipeline de preparação de topologia — perfil Shared ``topology_clean``.
 
-    Shade-smooth fica no Text3D (export GLTF / V/Tri). Reweld no perfil.
-    ``fill_holes_sides=None`` → valor do perfil (32).
+    Shade-smooth fica no Text3D (export GLTF / V/Tri). Reweld + fill + watertight
+    seletivo no perfil. ``fill_holes_sides=None`` → valor do perfil (64).
+    ``morph_close`` (metros) ativa fecho morfológico volumétrico antes do
+    perfil: funde double shells finas e rachas MC que "dobram para dentro"
+    (boundary=0 mas visualmente abertas). Destrói UVs — só pré-paint.
     """
     log = logging.getLogger(__name__)
 
@@ -144,11 +150,33 @@ def _prepare_topology_bpy(
 
     from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
+    if morph_close is not None and morph_close > 0:
+        from gamedev_shared.mesh_repair import morphological_close
+
+        mc_stats = morphological_close(mesh_obj, distance=float(morph_close))
+        log.info(
+            "morph-close: %s→%s faces (voxel=%.3f)",
+            mc_stats.get("faces_before"),
+            mc_stats.get("faces_after"),
+            mc_stats.get("voxel_size", 0.0),
+        )
+
     overrides: dict = {}
     if fill_holes_sides is not None:
         overrides["fill_holes_sides"] = int(fill_holes_sides)
+    if watertight is not None:
+        overrides["watertight"] = bool(watertight)
+    # force_close_base NÃO ligar com morph: em edifícios ocos derrete/achata
+    # a base e a morfologia fina. Buraco residual → morph leve + watertight.
 
     stats = repair_mesh_object_with_profile(mesh_obj, "topology_clean", **overrides)
+    if stats.get("boundary_before") is not None or stats.get("boundary_after") is not None:
+        log.info(
+            "prepare_topology watertight: boundary %s→%s (loops_capped=%s)",
+            stats.get("boundary_before"),
+            stats.get("boundary_after"),
+            stats.get("loops_capped"),
+        )
 
     if stats.get("nonfinite_verts"):
         log.warning("Guard anti-NaN: %d vértices não-finitos removidos", stats["nonfinite_verts"])
@@ -205,14 +233,43 @@ def _decimate_to_target(mesh_obj, target_faces: int) -> int:
 # ---------------------------------------------------------------------------
 
 
+def scale_mesh_object_to_meters(mesh_obj, size_m: list[float] | tuple[float, ...] | None) -> float | None:
+    """Escala verts do bpy object para metros reais de ``size_m`` (eixo maior).
+
+    No-op se ``size_m`` ausente ou mesh já em escala (factor ≈ 1). Devolve o
+    factor aplicado ou ``None``.
+    """
+    if not size_m:
+        return None
+    from text3d.bbox_tune import scale_factor_to_meters
+
+    cur = float(max(mesh_obj.dimensions))
+    factor = scale_factor_to_meters(cur, list(size_m))
+    if factor is None:
+        return None
+    import numpy as np
+
+    me = mesh_obj.data
+    co = np.empty(len(me.vertices) * 3, dtype=np.float64)
+    me.vertices.foreach_get("co", co)
+    co *= factor
+    me.vertices.foreach_set("co", co)
+    me.update()
+    logging.getLogger(__name__).info("scale-to-meters: max_dim %.3f → %.3f (factor %.3f)", cur, cur * factor, factor)
+    return factor
+
+
 def prepare_mesh_topology(
     input_path: Path | str,
     output_path: Path | str | None = None,
     *,
     fill_holes_sides: int | None = None,
+    watertight: bool | None = None,
+    morph_close: float | None = None,
+    size_m: list[float] | tuple[float, ...] | None = None,
     **_legacy: object,
 ) -> Path:
-    """Prepara topologia de um GLB: remove doubles, weld, normais, fill holes.
+    """Prepara topologia de um GLB: weld, fill holes, watertight seletivo.
 
     Carrega o GLB via bpy, aplica o pipeline de reparo e exporta. Preserva
     armatures, skins e animações quando presentes. Se bpy não estiver
@@ -222,15 +279,23 @@ def prepare_mesh_topology(
         input_path: GLB de entrada (ou objeto trimesh — backward compat).
         output_path: GLB de saída (se None, sobrepõe o ficheiro de entrada).
         fill_holes_sides: Tamanho máximo (em arestas) de buracos a preencher.
-            ``None`` usa o perfil ``topology_clean`` (32). ``0`` desativa.
-        **_legacy: Aceita kwargs mortos (``skip_remesh``, ``watertight``,
-            ``force_close_base``) por compat — ignorados.
+            ``None`` usa o perfil ``topology_clean`` (64). ``0`` desativa.
+        watertight: Override do perfil (``None`` → perfil; tipicamente ``True``
+            com skip_flap_erode + limite de diâmetro de loop).
+        morph_close: Distância (m) do fecho morfológico volumétrico (dilate→
+            erode via voxel remesh). Funde double shells/rachas dobradas para
+            dentro. Destrói UVs — só pré-paint. ``None``/``0`` desliga.
+        size_m: ``[L,H,W]`` metros reais — escala a mesh (unidades Omni ~2u →
+            metros) antes do reparo, para que distâncias métricas (morph,
+            weld) façam sentido físico. No-op se já em escala.
+        **_legacy: Aceita kwargs mortos (``skip_remesh``, ``force_close_base``)
+            por compat — ignorados.
 
     Returns:
         Path para o GLB preparado (ou trimesh.Trimesh se input for trimesh).
     """
     log = logging.getLogger(__name__)
-    for dead in ("skip_remesh", "watertight", "force_close_base"):
+    for dead in ("skip_remesh", "force_close_base"):
         if dead in _legacy:
             log.warning("prepare_mesh_topology: kwarg %r obsoleto — ignorado", dead)
     _was_trimesh = hasattr(input_path, "export")
@@ -240,6 +305,9 @@ def prepare_mesh_topology(
             output_path,
             _was_trimesh,
             fill_holes_sides,
+            watertight=watertight,
+            morph_close=morph_close,
+            size_m=size_m,
         )
     except ImportError:
         log.warning("bpy indisponível — prepare_mesh_topology ignorado (mesh NÃO foi reparada)")
@@ -253,6 +321,10 @@ def _prepare_mesh_topology_impl(
     output_path,
     _was_trimesh,
     fill_holes_sides: int | None = None,
+    *,
+    watertight: bool | None = None,
+    morph_close: float | None = None,
+    size_m: list[float] | tuple[float, ...] | None = None,
 ):
     if _was_trimesh:
         import tempfile
@@ -268,8 +340,16 @@ def _prepare_mesh_topology_impl(
         _output = Path(output_path) if output_path else _input
 
     mesh_obj, arm_objs = _load_glb_with_armatures(_input)
-    _prepare_topology_bpy(mesh_obj, fill_holes_sides=fill_holes_sides)
-    _export_glb(_output, mesh_obj, arm_objs, export_normals=True)
+    scale_mesh_object_to_meters(mesh_obj, size_m)
+    _prepare_topology_bpy(
+        mesh_obj,
+        fill_holes_sides=fill_holes_sides,
+        watertight=watertight,
+        morph_close=morph_close,
+    )
+    # Sem normal-split no export: reabre boundary no reimport (paint/LOD).
+    # Shade-smooth já aplicado; importer/jogo recalcula normais se preciso.
+    _export_glb(_output, mesh_obj, arm_objs, export_normals=False)
 
     if _was_trimesh:
         import trimesh

@@ -2,7 +2,7 @@
 
 **Documentação:** [English (`README.md`)](README.md) · Português (esta página)
 
-**Text-to-3D** em duas fases: **[Text2D](../Text2D)** (texto → imagem) e **[Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1)** (imagem → mesh, SDNQ INT4 quantizado). O modelo 2D é **sempre descarregado** antes de carregar o Hunyuan3D.
+**Text-to-3D** em duas fases: **[Text2D](../Text2D)** (texto → imagem) e **[Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni)** (imagem → mesh + controlos bbox/pose/point/voxel; SDNQ INT4 em GPUs pequenas). O modelo 2D é **sempre descarregado** antes de carregar o Omni.
 
 Os **valores por defeito** do CLI/API estão em [`src/text3d/defaults.py`](src/text3d/defaults.py): perfil **~6 GB VRAM** (CUDA) **validado na prática** (boa qualidade text-to-3D com os mesmos números que o comando sem flags extra). O **Text2D (FLUX)** usa **CPU offload** por defeito (`DEFAULT_T2D_CPU_OFFLOAD`), senão o modelo não cabe na GPU. Em GPU grande, `--t2d-full-gpu`. O **hw-auto** aplica SDNQ INT4 automaticamente em GPUs pequenas (~6 GB).
 
@@ -10,7 +10,7 @@ Os **valores por defeito** do CLI/API estão em [`src/text3d/defaults.py`](src/t
 
 **Textura e PBR** não fazem parte deste pacote: usa **[Paint3D](../Paint3D)** (`paint3d texture` — GLB PBR com Hunyuan3D-Paint 2.1) ou **[GameAssets](../GameAssets)** com `text3d.texture` no perfil.
 
-> **Licença dos pesos Hunyuan:** [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-2.1) — lê o ficheiro `LICENSE` no repositório ([Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1)): restrições de território, política de uso aceitável e obrigações. **Text2D (FLUX):** o default SDNQ no monorepo não é o mesmo regime que o BF16 Apache 2.0 da BFL — ver [Text2D/README](../Text2D/README.md) e [GameDev/README_PT](../README_PT.md).
+> **Licença dos pesos Hunyuan:** [Tencent Hunyuan Community License](https://huggingface.co/tencent/Hunyuan3D-Omni) — lê o ficheiro `LICENSE` no repositório ([Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni)): restrições de território, política de uso aceitável e obrigações. **Text2D (FLUX):** o default SDNQ no monorepo não é o mesmo regime que o BF16 Apache 2.0 da BFL — ver [Text2D/README](../Text2D/README.md) e [GameDev/README_PT](../README_PT.md).
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
@@ -40,7 +40,7 @@ Equivalente: `gamedev-install text3d`. Guia geral: [docs/INSTALLING_PT.md](../do
 
 ### Manual / avançado
 
-O [`config/requirements.txt`](config/requirements.txt) referencia `text2d @ file:../Text2D`. O código de geração de shape `hy3dshape` do [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1) está vendorizado em `src/text3d/hy3dshape/`.
+O [`config/requirements.txt`](config/requirements.txt) referencia `text2d @ file:../Text2D`. O código de geração de shape `hy3dshape` do [Hunyuan3D-Omni](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni) está vendorizado em `src/text3d/hy3dshape/`.
 
 ```bash
 cd GameDev/Text3D
@@ -180,5 +180,5 @@ text3d generate "robô" --octree-resolution 256 --num-chunks 8000 --steps 28
 
 ## Créditos
 
-- **Tencent Hunyuan3D-2.1** — [Hunyuan3D-2.1](https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1), [tencent/Hunyuan3D-2.1](https://huggingface.co/tencent/Hunyuan3D-2.1) (shape: `hunyuan3d-dit-v2-1`, SDNQ INT4)
+- **Tencent Hunyuan3D-Omni** — [Hunyuan3D-Omni](https://github.com/Tencent-Hunyuan/Hunyuan3D-Omni), [tencent/Hunyuan3D-Omni](https://huggingface.co/tencent/Hunyuan3D-Omni) (controlos bbox/pose/point/voxel; SDNQ INT4 em GPUs pequenas)
 - **Text2D** — FLUX.2 Klein (SDNQ Disty0 por defeito; opcional BF16 BFL via `TEXT2D_MODEL_ID`) no pacote `text2d` do monorepo — licenças: [GameDev/README_PT](../README_PT.md)

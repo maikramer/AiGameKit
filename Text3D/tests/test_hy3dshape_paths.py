@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 import sys
 
 import pytest
@@ -73,3 +74,20 @@ class TestEnsureHy3dshapeOnPath:
         mod = importlib.import_module("hy3dshape")
         assert mod.__file__ is not None
         assert "hy3dshape" in sys.modules
+
+    def test_quiet_sets_hy3dgen_under_hf_home(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("HY3DGEN_MODELS", raising=False)
+        monkeypatch.setenv("HF_HOME", "/tmp/hf-test-home")
+        ensure_hy3dshape_on_path(quiet=True)
+        assert os.environ["HY3DGEN_MODELS"] == "/tmp/hf-test-home/hy3dgen"
+
+    def test_quiet_print_from_hy3dshape_mod_is_swallowed(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        ensure_hy3dshape_on_path(quiet=True)
+        # Simular frame hy3dshape: chamar print via exec no namespace do módulo.
+        ensure_hy3dshape_on_path()
+        mod = importlib.import_module("hy3dshape")
+        exec("print('vendor-noise-should-not-stdout')", mod.__dict__)
+        captured = capsys.readouterr()
+        assert "vendor-noise-should-not-stdout" not in captured.out
