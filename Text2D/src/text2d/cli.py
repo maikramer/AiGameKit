@@ -19,7 +19,13 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation, with_ums_load_opts
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_load_opts,
+    with_ums_peak_opts,
+)
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import STATUS_ERROR, STATUS_OK, STATUS_SKIPPED, TOOL_TEXT2D, emit_progress, emit_result
 from gamedev_shared.quality import VALID_QUALITIES
@@ -278,17 +284,27 @@ def generate_cmd(
         and output is not None
         and try_ums_delegation(
             "text2d",
-            with_ums_load_opts(
-                {
-                    "prompt": prompt,
-                    "output": str(Path(output).resolve()),
-                    "width": width,
-                    "height": height,
-                    "steps": steps,
-                    "guidance": guidance_scale,
-                    "seed": seed,
-                },
-                gpu_ids=gpu_ids,
+            with_ums_peak_opts(
+                with_ums_load_opts(
+                    {
+                        "prompt": prompt,
+                        "output": str(Path(output).resolve()),
+                        "width": width,
+                        "height": height,
+                        "steps": steps,
+                        "guidance": guidance_scale,
+                        "seed": seed,
+                        "model_id": resolved_model,
+                        "torch_compile": torch_compile,
+                        "torch_compile_mode": torch_compile_mode,
+                        "channels_last": channels_last,
+                        "step_cache": step_cache,
+                    },
+                    gpu_ids=gpu_ids,
+                ),
+                backend="text2d",
+                memory_efficient=mem_eff,
+                quant_preset=quant_preset,
             ),
             t_start=t_start,
             noun="Imagem",
@@ -299,6 +315,17 @@ def generate_cmd(
         )
     ):
         return
+
+    # Fallback in-process: coordenação VRAM (paridade Text3D/Paint3D).
+    if not cpu:
+        prepare_gpu_exclusive(
+            needed_mib=4000,
+            allow_shared=True,
+            kill_others=False,
+            backend="text2d",
+            quant_mode=quant_preset if quant_preset not in (None, "none") else ("sdnq-uint8" if mem_eff else "none"),
+            console=console,
+        )
 
     safe = "".join(c if c.isalnum() else "_" for c in prompt[:40])
     item_id = safe or "single"
@@ -505,6 +532,7 @@ def _parse_batch_manifest(manifest_path: Path) -> list[dict[str, Any]]:
     help="channels_last NHWC (default ON em batch).",
 )
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+@add_ums_options
 @click.pass_context
 def generate_batch_cmd(
     ctx: click.Context,
@@ -524,6 +552,9 @@ def generate_batch_cmd(
     torch_compile: bool,
     torch_compile_mode: str,
     channels_last: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
     """Gera múltiplas imagens a partir de um manifesto JSON (JSONL em stdout)."""
     global _batch_gen
@@ -532,6 +563,7 @@ def generate_batch_cmd(
 
     manifest_path = Path(manifest)
     out_root = Path(output_dir)
+    err_console = Console(stderr=True)
 
     try:
         items = _parse_batch_manifest(manifest_path)
@@ -581,33 +613,12 @@ def generate_batch_cmd(
     if parsed_gpu_ids is None and hwp is not None and hwp.gpu_ids:
         parsed_gpu_ids = hwp.gpu_ids
     if hwp is not None:
-        Console(stderr=True).print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
+        err_console.print(f"[dim]Hardware (auto): {hwp.summary()}[/dim]")
+
+    pending_inprocess: list[dict[str, Any]] = []
 
     try:
-        gen = KleinFluxGenerator(
-            device="cpu" if cpu else None,
-            memory_efficient=mem_eff,
-            verbose=batch_verbose,
-            model_id=resolved_model,
-            gpu_ids=parsed_gpu_ids,
-            quant_preset=quant_preset,
-            torch_compile=torch_compile,
-            torch_compile_mode=torch_compile_mode,
-            channels_last=channels_last,
-        )
-        _batch_gen = gen
-
-        with Console(stderr=True).status("[bold yellow]A carregar pipeline...", spinner="dots"):
-            gen.warmup()
-
-        signal.signal(signal.SIGTERM, _batch_signal_handler)
-        signal.signal(signal.SIGINT, _batch_signal_handler)
-
-        need_load = force or any(not (out_root / Path(it["output"])).is_file() for it in items if "output" in it)
-        if need_load:
-            with Console(stderr=True).status("[bold yellow]A carregar pipeline...", spinner="dots"):
-                gen.warmup()
-
+        # UMS por item (paridade Paint3D) — load in-process só se sobrar trabalho.
         for item in items:
             t0 = time.time()
             item_id = item["id"]
@@ -624,27 +635,113 @@ def generate_batch_cmd(
             item_steps = item.get("steps", steps)
             item_guidance = item.get("guidance_scale", guidance_scale)
             item_seed = item.get("seed")
+            out_path.parent.mkdir(parents=True, exist_ok=True)
 
+            if not cpu and try_ums_delegation(
+                "text2d",
+                with_ums_peak_opts(
+                    with_ums_load_opts(
+                        {
+                            "prompt": prompt,
+                            "output": str(out_path.resolve()),
+                            "width": item_w,
+                            "height": item_h,
+                            "steps": item_steps,
+                            "guidance": item_guidance,
+                            "seed": item_seed,
+                            "model_id": resolved_model,
+                            "torch_compile": torch_compile,
+                            "torch_compile_mode": torch_compile_mode,
+                            "channels_last": channels_last,
+                        },
+                        gpu_ids=parsed_gpu_ids,
+                    ),
+                    backend="text2d",
+                    memory_efficient=mem_eff,
+                    quant_preset=quant_preset,
+                ),
+                t_start=t0,
+                noun="Imagem",
+                console=err_console,
+                enabled=not no_ums,
+                priority=ums_priority or "batch",
+                stream=ums_stream,
+            ):
+                elapsed = time.time() - t0
+                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_rel), seconds=round(elapsed, 3))
+                continue
+
+            pending_inprocess.append(
+                {
+                    "id": item_id,
+                    "prompt": prompt,
+                    "out_rel": out_rel,
+                    "out_path": out_path,
+                    "width": item_w,
+                    "height": item_h,
+                    "steps": item_steps,
+                    "guidance": item_guidance,
+                    "seed": item_seed,
+                }
+            )
+
+        if not pending_inprocess:
+            return
+
+        if not cpu:
+            prepare_gpu_exclusive(
+                needed_mib=4000,
+                allow_shared=True,
+                kill_others=False,
+                backend="text2d",
+                quant_mode=quant_preset
+                if quant_preset not in (None, "none")
+                else ("sdnq-uint8" if mem_eff else "none"),
+                console=err_console,
+            )
+
+        gen = KleinFluxGenerator(
+            device="cpu" if cpu else None,
+            memory_efficient=mem_eff,
+            verbose=batch_verbose,
+            model_id=resolved_model,
+            gpu_ids=parsed_gpu_ids,
+            quant_preset=quant_preset,
+            torch_compile=torch_compile,
+            torch_compile_mode=torch_compile_mode,
+            channels_last=channels_last,
+        )
+        _batch_gen = gen
+
+        with err_console.status("[bold yellow]A carregar pipeline...", spinner="dots"):
+            gen.warmup()
+
+        signal.signal(signal.SIGTERM, _batch_signal_handler)
+        signal.signal(signal.SIGINT, _batch_signal_handler)
+
+        for it in pending_inprocess:
+            t0 = time.time()
+            item_id = it["id"]
             try:
                 emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=0)
                 image, _metadata = gen.generate(
-                    prompt=prompt,
-                    height=item_h,
-                    width=item_w,
-                    guidance_scale=item_guidance,
-                    num_inference_steps=item_steps,
-                    seed=item_seed,
+                    prompt=it["prompt"],
+                    height=it["height"],
+                    width=it["width"],
+                    guidance_scale=it["guidance"],
+                    num_inference_steps=it["steps"],
+                    seed=it["seed"],
                 )
                 emit_progress(item_id, TOOL_TEXT2D, phase="diffusion", percent=100)
 
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=0)
-                ext = out_path.suffix.lower().lstrip(".")
+                ext = it["out_path"].suffix.lower().lstrip(".")
                 img_format = "JPEG" if ext in ("jpg", "jpeg") else "PNG"
-                KleinFluxGenerator.save_image(image, out_path, image_format=img_format)
+                KleinFluxGenerator.save_image(image, it["out_path"], image_format=img_format)
                 emit_progress(item_id, TOOL_TEXT2D, phase="save", percent=100)
 
                 elapsed = time.time() - t0
-                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(out_rel), seconds=round(elapsed, 3))
+                emit_result(item_id, TOOL_TEXT2D, STATUS_OK, output=str(it["out_rel"]), seconds=round(elapsed, 3))
             except Exception as exc:
                 emit_result(item_id, TOOL_TEXT2D, STATUS_ERROR, error=str(exc))
 
