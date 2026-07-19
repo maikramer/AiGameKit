@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .profile import GameProfile
 
@@ -44,6 +45,8 @@ class ManifestRow:
     animate_preset: str | None = None  # humanoid | creature | flying
     animate_procedural: bool | None = None
     animate_force_preset: bool | None = None
+    # Controlos Omni por asset (override de ``text3d.omni`` no game.yaml).
+    omni: Any | None = None
 
 
 def effective_image_source(profile: GameProfile, row: ManifestRow) -> str:
@@ -72,6 +75,13 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
         if not isinstance(animate_cfg, dict):
             animate_cfg = {}
 
+        from .omni_ctrl import omni_from_dict
+
+        try:
+            row_omni = omni_from_dict(entry.get("omni"))
+        except ValueError as e:
+            raise ValueError(f"asset {entry.get('id')!r} omni: {e}") from e
+
         rows.append(
             ManifestRow(
                 id=entry["id"],
@@ -98,6 +108,7 @@ def _load_manifest_yaml(path: Path) -> list[ManifestRow]:
                 animate_preset=animate_cfg.get("preset"),
                 animate_procedural=animate_cfg.get("procedural"),
                 animate_force_preset=animate_cfg.get("force_preset"),
+                omni=row_omni,
             )
         )
     if not rows:

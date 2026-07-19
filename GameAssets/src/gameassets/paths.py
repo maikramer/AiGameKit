@@ -18,7 +18,7 @@ _ROW_NEED_ANIMATE = "need_animate"
 _ROW_NEED_LOD = "need_lod"
 _ROW_NEED_COLLISION = "need_collision"
 
-# Round 2 — checkpoints do master pipeline (DAG novo).
+# Round 2 - checkpoints do master pipeline (DAG novo).
 _ROW_NEED_TOPOLOGY_FIX = "need_topology_fix"  # tem _shape, falta _clean
 _ROW_NEED_BAKE_MASTER = "need_bake_master"  # tem _painted+_clean, falta _lod0
 _ROW_NEED_LOD_GEN = "need_lod_gen"  # tem _lod0, faltam _lod1/_lod2
@@ -70,7 +70,7 @@ def _glb_is_promoted_animated(path: Path) -> bool:
     """True se ``lod0`` já é o entregável animado (skin+clips+paint).
 
     Após Stage 9.5, ``*_lod*_rigged`` / ``*_lod*_animated`` vão para
-    ``_intermediate/`` — o classificador não pode exigir esses ficheiros
+    ``_intermediate/`` - o classificador não pode exigir esses ficheiros
     em ``meshes/`` ou resume fica preso em ``need_transfer`` para sempre.
     """
     j = _glb_json(path)
@@ -123,7 +123,7 @@ def _paths_for_row(profile: GameProfile, row: ManifestRow) -> tuple[Path, Path]:
 
 
 def _base_stem(name: str) -> str:
-    """Strip known suffixes from a stem like 'wooden_crate_painted' → 'wooden_crate'."""
+    """Strip known suffixes from a stem like 'wooden_crate_painted' -> 'wooden_crate'."""
     for sfx in (
         "_painted",
         "_shape",
@@ -141,7 +141,7 @@ def _base_stem(name: str) -> str:
 
 
 def _rigging3d_output_path(mesh_final: Path, suffix: str) -> Path:
-    """ex.: ``hero.glb`` + ``_rigged`` → ``hero_rigged.glb``."""
+    """ex.: ``hero.glb`` + ``_rigged`` -> ``hero_rigged.glb``."""
     s = (suffix or "_rigged").strip()
     if s and not s.startswith("_"):
         s = f"_{s}"
@@ -157,13 +157,13 @@ def _shell_path(path: Path) -> str:
 
 
 def _animator3d_output_path(base_output: Path) -> Path:
-    """ex.: ``hero_rigged.glb`` → ``hero_rigged_animated.glb``."""
+    """ex.: ``hero_rigged.glb`` -> ``hero_rigged_animated.glb``."""
     stem = _base_stem(base_output.stem)
     return base_output.with_name(f"{stem}_rigged_animated.glb")
 
 
 def publish_rigged_animated_alias(mesh_final: Path, lod0: Path) -> Path | None:
-    """Após promote animated→``lod0``, publica alias de runtime ``id_rigged_animated.glb``.
+    """Após promote animated->``lod0``, publica alias de runtime ``id_rigged_animated.glb``.
 
     O master pipeline promove o GLB animado para ``id_lod0.glb`` (entregável
     canónico). O VibeGame / exemplos ainda pedem ``id_rigged_animated.glb``.
@@ -198,7 +198,7 @@ def archive_leftover_lod_rigged(mesh_final: Path) -> list[Path]:
 
     Depois do promote animated, estes ficheiros não devem ficar no runtime
     (confundem handoff e aliases). Resume/re-rig parcial pode deixá-los sem
-    skin — arquivar evita o jogo apontar para um rig morto.
+    skin - arquivar evita o jogo apontar para um rig morto.
     """
     base = _base_stem(mesh_final.stem)
     moved: list[Path] = []
@@ -222,7 +222,7 @@ def _intermediate_dir(mesh_final: Path) -> Path:
 
 
 def _shape_path(mesh_final: Path) -> Path:
-    """``id_shape.glb`` em ``_intermediate/`` — destino canónico desde Round 2.
+    """``id_shape.glb`` em ``_intermediate/`` - destino canónico desde Round 2.
 
     Antes existia ao lado da mesh canónica e era movido no fim da pipeline;
     isso fazia o ``resume`` e o ``batch`` perderem o ficheiro depois do
@@ -239,7 +239,7 @@ def _shape_path(mesh_final: Path) -> Path:
 
 
 def _painted_path(mesh_final: Path) -> Path:
-    """``id_painted.glb`` em ``_intermediate/`` — destino canónico desde Round 2.
+    """``id_painted.glb`` em ``_intermediate/`` - destino canónico desde Round 2.
 
     Mesma lógica de :func:`_shape_path`: escrever directamente em
     ``_intermediate/`` evita a corrida resume↔move ao fim do pipeline.
@@ -249,7 +249,7 @@ def _painted_path(mesh_final: Path) -> Path:
 
 
 def _clean_path(mesh_final: Path) -> Path:
-    """``id_clean.glb`` em ``_intermediate/`` — output do Stage 2 (topology-fix).
+    """``id_clean.glb`` em ``_intermediate/`` - output do Stage 2 (topology-fix).
 
     Sempre em ``_intermediate/`` desde a primeira escrita (artefacto novo).
     """
@@ -257,8 +257,18 @@ def _clean_path(mesh_final: Path) -> Path:
     return _intermediate_dir(mesh_final) / f"{base}_clean{mesh_final.suffix}"
 
 
+def _to_paint_path(mesh_final: Path) -> Path:
+    """``id_to_paint.glb`` em ``_intermediate/`` - remesh pré-paint (orçamento atlas).
+
+    High-poly ``_clean`` fica para bake-master/normais; o Paint3D corre sobre
+    esta malha (faces ~ ``texture_size``) para unwrap/raster não explodirem.
+    """
+    base = _base_stem(mesh_final.stem)
+    return _intermediate_dir(mesh_final) / f"{base}_to_paint{mesh_final.suffix}"
+
+
 def _rigged_hi_path(mesh_final: Path) -> Path:
-    """``id_rigged_hi.glb`` em ``_intermediate/`` — Stage 7 (rig sobre _clean)."""
+    """``id_rigged_hi.glb`` em ``_intermediate/`` - Stage 7 (rig sobre _clean)."""
     base = _base_stem(mesh_final.stem)
     return _intermediate_dir(mesh_final) / f"{base}_rigged_hi{mesh_final.suffix}"
 
@@ -345,6 +355,11 @@ def _clean_existing(mesh_final: Path) -> Path | None:
     return _resolve_intermediate_or_main(_clean_path(mesh_final), mesh_final)
 
 
+def _to_paint_existing(mesh_final: Path) -> Path | None:
+    """Encontra o GLB ``_to_paint`` em ``meshes/`` ou ``_intermediate/``."""
+    return _resolve_intermediate_or_main(_to_paint_path(mesh_final), mesh_final)
+
+
 def _rigged_hi_existing(mesh_final: Path) -> Path | None:
     """Encontra o GLB ``_rigged_hi`` em ``meshes/`` ou ``_intermediate/``."""
     return _resolve_intermediate_or_main(_rigged_hi_path(mesh_final), mesh_final)
@@ -404,12 +419,15 @@ def _classify_row_state_master(
     wants_animate: bool,
     wants_lod: bool = True,
     wants_collision: bool = True,
+    omni_stale: bool = False,
 ) -> str:
     """Classifica estado da row para o master pipeline (Round 2 DAG novo).
 
-    Ordem de detecção espelha o DAG: image → shape → topology-fix (clean) →
-    paint → bake-master (lod0) → lod gen → rig_hi → transfer → animate →
+    Ordem de detecção espelha o DAG: image -> shape -> topology-fix (clean) ->
+    paint -> bake-master (lod0) -> lod gen -> rig_hi -> transfer -> animate ->
     validate. Devolve o primeiro estágio que ainda falta.
+
+    ``omni_stale``: shape existe mas fingerprint Omni mudou -> ``need_shape``.
     """
     shape_any = _shape_existing(mesh_final)
     painted_any = _painted_existing(mesh_final)
@@ -419,9 +437,10 @@ def _classify_row_state_master(
     lod2 = _lod_path(mesh_final, 2)
     rigged_hi_any = _rigged_hi_existing(mesh_final)
 
-    if not _valid_file(img_final) and shape_any is None:
+    if not _valid_file(img_final) and shape_any is None and clean_any is None:
         return _ROW_NEED_IMAGE
-    if shape_any is None:
+    # Omni mudou -> regenerar shape. Shape ausente mas clean válido -> resume paint.
+    if omni_stale or (shape_any is None and clean_any is None):
         return _ROW_NEED_SHAPE
     if clean_any is None:
         return _ROW_NEED_TOPOLOGY_FIX
@@ -429,7 +448,7 @@ def _classify_row_state_master(
         return _ROW_NEED_PAINT
     if not _valid_file(lod0):
         return _ROW_NEED_BAKE_MASTER
-    # lod0 animado/branco sem baseColorTexture enquanto painted existe →
+    # lod0 animado/branco sem baseColorTexture enquanto painted existe ->
     # re-transfer (não marcar DONE; senão resume ignora meshes brancos).
     if wants_animate and painted_any is not None and _valid_file(lod0) and not _glb_has_base_color(lod0):
         return _ROW_NEED_TRANSFER
@@ -437,7 +456,7 @@ def _classify_row_state_master(
         return _ROW_NEED_LOD_GEN
     if wants_rig and rigged_hi_any is None:
         return _ROW_NEED_RIG_HI
-    # Entregável já promovido em lod0 → DONE (rigged/animated intermediários
+    # Entregável já promovido em lod0 -> DONE (rigged/animated intermediários
     # foram arquivados; não pedir de novo).
     if wants_animate and _glb_is_promoted_animated(lod0):
         return _ROW_DONE
@@ -464,7 +483,7 @@ def _paths_for_row_manifest(
     row: ManifestRow,
 ) -> tuple[Path, Path]:
     """
-    PNG/GLB absolutos. O perfil usa muitas vezes output_dir: '.' — sem isto, caminhos relativos
+    PNG/GLB absolutos. O perfil usa muitas vezes output_dir: '.' - sem isto, caminhos relativos
     dependem do CWD do processo e o Text3D pode ler ficheiros errados (GPU "parada").
     """
     img, mesh = _paths_for_row(profile, row)

@@ -8,10 +8,10 @@ Contém:
 * O orquestrador master pipeline (``run_master_pipeline`` /
   ``resume_master_pipeline``) com a sequência:
 
-      text3d topology-fix → bake-master → lod → collision
-      rigging3d pipeline → merge (LODs)
-      animator3d game-pack
-      gamedev-lab check glb (validate)
+      text3d topology-fix (``_clean`` HI)
+      -> simplify ``_to_paint`` (Decimate Shared, orçamento atlas) -> paint3d
+      -> bake-master (painted + high-poly clean) -> lod -> collision
+      -> rigging3d -> animate -> validate
 """
 
 from __future__ import annotations
@@ -63,6 +63,8 @@ from .paths import (
     _shape_existing,
     _shape_path,
     _shell_path,
+    _to_paint_existing,
+    _to_paint_path,
     archive_leftover_lod_rigged,
     move_to_intermediate,
     publish_rigged_animated_alias,
@@ -202,7 +204,7 @@ def _post_text3d_mesh_extras(
     """Define mesh_path e corre o master pipeline (LOD0 master, transfer-weights, validate).
 
     Devolve True se algum passo falhou. O master pipeline é agora o único
-    caminho — o antigo fluxo linha-a-linha (text3d lod / rigging3d /
+    caminho - o antigo fluxo linha-a-linha (text3d lod / rigging3d /
     animator3d) foi removido.
     """
     rec["mesh_path"] = _path_for_log(mesh_final, manifest_dir)
@@ -262,7 +264,7 @@ def _paint3d_quick_argv(
     *,
     row_seed: int | None,
 ) -> list[str]:
-    """Subcomando ``paint3d quick`` — cor sólida ou ruído Perlin/FBM (sem IA)."""
+    """Subcomando ``paint3d quick`` - cor sólida ou ruído Perlin/FBM (sem IA)."""
     style = (p3.style or "hunyuan").strip().lower()
     if style not in ("solid", "perlin"):
         raise RuntimeError(f"paint_style inválido para quick: {style!r}")
@@ -431,7 +433,7 @@ def _remesh_shape_to_target(
     if current_faces < target * 1.2:
         return False
 
-    console.print(f"[cyan]⏳ Remesh[/cyan] {row.id} ({current_faces:,} → ~{target:,} faces)")
+    console.print(f"[cyan]⏳ Remesh[/cyan] {row.id} ({current_faces:,} -> ~{target:,} faces)")
 
     remeshed = mesh_path.parent / f"{mesh_path.stem}_remeshed{mesh_path.suffix}"
 
@@ -487,7 +489,7 @@ def _remesh_textured_to_target(
     if current_faces < target * 1.2:
         return False
 
-    console.print(f"[cyan]⏳ Simplify (textured)[/cyan] {row.id} ({current_faces:,} → ~{target:,} faces)")
+    console.print(f"[cyan]⏳ Simplify (textured)[/cyan] {row.id} ({current_faces:,} -> ~{target:,} faces)")
 
     simplified = mesh_path.parent / f"{mesh_path.stem}_simplified{mesh_path.suffix}"
 
@@ -528,7 +530,14 @@ def _simplify_to_target(
     manifest_dir: Path,
     rec: dict[str, Any],
 ) -> bool:
-    """Simplify mesh via text3d remesh (delegated to text3d via subprocess)."""
+    """Simplify mesh via text3d remesh (delegated to text3d via subprocess).
+
+    Legacy-only: no master pipeline o LOD0 nasce do ``bake-master`` (decimação
+    com bake de normais a partir do HI). Simplificar aqui destruiria o
+    ``_shape``/``_painted`` high-poly **in-place** - fonte de bake/transfer.
+    """
+    if profile is not None and getattr(profile, "master_pipeline", True):
+        return False
     if not row.category:
         return False
     fr = effective_face_ratio(profile, row) if profile else 1.0
@@ -556,6 +565,33 @@ def _simplify_to_target(
     )
 
 
+def resolve_row_omni(
+    profile: GameProfile,
+    row: ManifestRow | None,
+    *,
+    manifest_dir: Path | None = None,
+) -> Any:
+    """Merge ``text3d.omni`` (profile) + ``row.omni``; resolve ``point_from``."""
+    from .omni_ctrl import OmniControls, merge_omni, resolve_point_from
+
+    base = OmniControls()
+    t3 = profile.text3d
+    if t3 is not None and getattr(t3, "omni", None) is not None:
+        base = t3.omni
+    override = OmniControls()
+    if row is not None and getattr(row, "omni", None) is not None:
+        override = row.omni
+    merged = merge_omni(base, override)
+    if merged.point_from and manifest_dir is not None:
+        from .paths import _shape_existing, _shape_path
+
+        sibling_mesh = manifest_dir / "meshes" / f"{merged.point_from}.glb"
+        # Prefer shape intermediate of sibling
+        sib_shape = _shape_existing(sibling_mesh) or _shape_path(sibling_mesh)
+        merged = resolve_point_from(merged, sibling_shape=sib_shape)
+    return merged
+
+
 def _text3d_argv(
     text3d_bin: str,
     profile: GameProfile,
@@ -566,11 +602,14 @@ def _text3d_argv(
     gpu_ids: list[int] | None = None,
     quality: str | None = None,
     category: str | None = None,
+    manifest_dir: Path | None = None,
 ) -> list[str]:
-    """Shape-only argv for ``text3d generate`` (image → mesh, sem --texture).
+    """Shape-only argv for ``text3d generate`` (image -> mesh, sem --texture).
 
     Paint is a separate step via ``paint3d texture``.
     """
+    from .omni_ctrl import omni_to_cli_flags
+
     args = [
         text3d_bin,
         "generate",
@@ -581,10 +620,13 @@ def _text3d_argv(
     ]
     if quality:
         args.extend(["--quality", quality])
-    if category:
-        args.extend(["--category", category])
+    cat = category or (row.category if row is not None else None)
+    if cat:
+        args.extend(["--category", cat])
     t3 = profile.text3d
     if not t3:
+        omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+        args.extend(omni_to_cli_flags(omni))
         return args
 
     if should_optimize_text3d(t3) and row is not None and row.category:
@@ -608,6 +650,8 @@ def _text3d_argv(
         args.extend(["--model-subfolder", t3.model_subfolder])
     if t3.mc_level is not None:
         args.extend(["--mc-level", str(t3.mc_level)])
+    if getattr(t3, "bounds_mode", None):
+        args.extend(["--bounds-mode", str(t3.bounds_mode)])
     if t3.guidance is not None:
         args.extend(["--guidance", str(t3.guidance)])
     if t3.allow_shared_gpu:
@@ -620,6 +664,8 @@ def _text3d_argv(
         args.extend(["--gpu-ids", ",".join(str(g) for g in gpu_ids)])
     if not profile.hw_auto:
         args.append("--no-hw-auto")
+    omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+    args.extend(omni_to_cli_flags(omni))
     return args
 
 
@@ -706,7 +752,7 @@ class MasterPipelineResult:
     stages: list[StageResult] = field(default_factory=list)
     lod0_path: Path | None = None
     intermediates_dir: Path | None = None
-    # Round 2 — observabilidade.
+    # Round 2 - observabilidade.
     total_elapsed_s: float = 0.0
     cumulative_vram_mb_peak: float = 0.0
 
@@ -721,6 +767,37 @@ def _bin_or_none(name_env: str, name: str) -> str | None:
         return None
 
 
+def _topology_fix_extra_argv(
+    profile: GameProfile,
+    row: ManifestRow | None = None,
+    *,
+    manifest_dir: Path | None = None,
+) -> list[str]:
+    """Flags de escala para ``text3d topology-fix`` (genérico por metros).
+
+    ``morph_close`` explícito no profile -> ``--morph-close``; omitido ->
+    auto leve no Text3D (~1/8 voxel MC via size_m/category); ``0`` desliga.
+    ``--size-m`` também escala a mesh para metros reais no topology-fix.
+    """
+    args: list[str] = []
+    t3 = profile.text3d
+    if t3 is not None and t3.export_origin:
+        args.extend(["--export-origin", t3.export_origin])
+    if t3 is not None and t3.morph_close is not None:
+        args.extend(["--morph-close", str(t3.morph_close)])
+    omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+    if omni.size_m is not None:
+        args.extend(["--size-m", ",".join(str(x) for x in omni.size_m)])
+    if omni.bbox_preset:
+        args.extend(["--bbox-preset", omni.bbox_preset])
+    cat = (row.category if row is not None else None) or None
+    if cat:
+        args.extend(["--category", str(cat)])
+    if t3 is not None and t3.octree_resolution:
+        args.extend(["--octree", str(int(t3.octree_resolution))])
+    return args
+
+
 def ensure_clean_for_paint(
     mesh_final: Path,
     *,
@@ -729,10 +806,11 @@ def ensure_clean_for_paint(
     child_env: dict[str, str],
     manifest_dir: Path,
     force: bool = False,
+    row: ManifestRow | None = None,
 ) -> Path:
     """Garante ``_clean.glb`` (topology-fix) e devolve path para input do paint.
 
-    Master DAG canónico: shape → topology-fix → paint. Batch/resume antigos
+    Master DAG canónico: shape -> topology-fix -> paint. Batch/resume antigos
     pintavam ``_shape`` cru (paredes duplas / cascas internas). Com isto o
     paint corre sobre mesh já limpa (incl. ``remove_internal_shell_faces``).
     """
@@ -747,14 +825,115 @@ def ensure_clean_for_paint(
     clean_p = _clean_path(mesh_final)
     clean_p.parent.mkdir(parents=True, exist_ok=True)
     topo_argv = [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)]
-    t3 = profile.text3d
-    if t3 is not None and t3.export_origin:
-        topo_argv.extend(["--export-origin", t3.export_origin])
+    topo_argv.extend(_topology_fix_extra_argv(profile, row, manifest_dir=manifest_dir))
     r = run_cmd(topo_argv, extra_env=child_env, cwd=manifest_dir)
     if r.returncode != 0 or not clean_p.is_file():
         err = merge_subprocess_output(r, max_chars=400) or "topology-fix falhou"
         raise RuntimeError(err)
     return clean_p
+
+
+def _resolve_paint_texture_size(profile: GameProfile) -> int:
+    """Atlas size efectivo para orçamento ``_to_paint`` (default medium=2048)."""
+    p3 = profile.paint3d
+    if p3 is not None and p3.texture_size is not None and int(p3.texture_size) > 0:
+        return int(p3.texture_size)
+    return 2048
+
+
+def _resolve_to_paint_faces(profile: GameProfile) -> int:
+    """Faces alvo do ``_to_paint``: override profile ou fórmula ~ texture_size."""
+    p3 = profile.paint3d
+    if p3 is not None and p3.to_paint_faces is not None and int(p3.to_paint_faces) >= 4:
+        return int(p3.to_paint_faces)
+    from gamedev_shared.paint_budget import paint_target_faces
+
+    return paint_target_faces(_resolve_paint_texture_size(profile))
+
+
+def ensure_to_paint_for_paint(
+    mesh_final: Path,
+    *,
+    text3d_bin: str,
+    profile: GameProfile,
+    child_env: dict[str, str],
+    manifest_dir: Path,
+    force: bool = False,
+    row: ManifestRow | None = None,
+) -> Path:
+    """Garante ``_clean`` + ``_to_paint`` (remesh orçado) e devolve input do paint.
+
+    DAG: shape -> topology-fix (``_clean``, HI) -> simplify (``_to_paint``) -> paint.
+    O HI ``_clean`` continua a alimentar bake-master ``--high-poly``; o paint
+    só vê a malha orçada ao atlas (evita unwrap/raster em 1-2M faces).
+
+    Se ``_clean`` já está ≤ ~110% do alvo, devolve ``_clean`` (sem ficheiro extra).
+    """
+    clean_p = ensure_clean_for_paint(
+        mesh_final,
+        text3d_bin=text3d_bin,
+        profile=profile,
+        child_env=child_env,
+        manifest_dir=manifest_dir,
+        force=force,
+        row=row,
+    )
+    target = _resolve_to_paint_faces(profile)
+    tex_size = _resolve_paint_texture_size(profile)
+    current = _count_faces_glb(clean_p)
+    if current < 0:
+        log.warning("to_paint: não consegui contar faces de %s - paint no clean", clean_p)
+        return clean_p
+    if current <= int(target * 1.1):
+        log.info(
+            "to_paint: skip remesh %s faces=%s ≤ alvo %s (tex=%s)",
+            clean_p.name,
+            f"{current:,}",
+            f"{target:,}",
+            tex_size,
+        )
+        return clean_p
+
+    to_paint_p = _to_paint_path(mesh_final)
+    existing = _to_paint_existing(mesh_final)
+    if (
+        not force
+        and existing is not None
+        and existing.is_file()
+        and existing.stat().st_mtime >= clean_p.stat().st_mtime
+    ):
+        tp_faces = _count_faces_glb(existing)
+        if 0 < tp_faces <= int(target * 1.25):
+            log.info(
+                "to_paint: reuso %s faces=%s (alvo %s)",
+                existing.name,
+                f"{tp_faces:,}",
+                f"{target:,}",
+            )
+            return existing
+
+    to_paint_p.parent.mkdir(parents=True, exist_ok=True)
+    row_id = row.id if row is not None else clean_p.stem
+    console.print(f"[cyan]⏳ to_paint[/cyan] {row_id} ({current:,} -> ~{target:,} faces, atlas={tex_size})")
+    argv = [
+        text3d_bin,
+        "simplify",
+        str(clean_p),
+        "-o",
+        str(to_paint_p),
+        "--target-faces",
+        str(target),
+    ]
+    r = run_cmd(argv, extra_env=child_env, cwd=manifest_dir)
+    if r.returncode != 0 or not to_paint_p.is_file():
+        err = merge_subprocess_output(r, max_chars=400) or "simplify to_paint falhou"
+        raise RuntimeError(err)
+    out_faces = _count_faces_glb(to_paint_p)
+    console.print(
+        f"[green]✓ to_paint[/green] {row_id} -> {to_paint_p.name}"
+        + (f" ({out_faces:,} faces)" if out_faces > 0 else "")
+    )
+    return to_paint_p
 
 
 def _rules_dir() -> Path:
@@ -807,7 +986,7 @@ def _stage(
     ``on_progress_line``: callback alimentado linha-a-linha com stdout do
     subprocesso. Permite encaminhar ``emit_progress`` events emitidos pelas
     ferramentas (text3d, rigging3d, animator3d) para o dashboard do
-    gameassets — sem isso, o dashboard só vê os events do orquestrador
+    gameassets - sem isso, o dashboard só vê os events do orquestrador
     (start/end por stage) e parece "congelar" após paint3d.
     """
     import time as _time
@@ -916,7 +1095,7 @@ def _stage(
     if output is not None and not output.is_file():
         _emit("run", 100, status="error")
         return StageResult(name, False, dt, f"{name}: output não foi criado", output)
-    # Emite como ``progress`` (não ``ok``) — ``ok`` no dashboard sinaliza
+    # Emite como ``progress`` (não ``ok``) - ``ok`` no dashboard sinaliza
     # conclusão do asset INTEIRO; usá-lo aqui faria a célula piscar OK entre
     # cada stage e contar duplicado no progresso global.
     _emit("run", 100, status="progress", seconds=round(dt, 2))
@@ -926,7 +1105,7 @@ def _stage(
 def _glb_has_skin(path: Path) -> bool:
     """Verifica se um GLB tem skin real (``skins[]`` + node com ``skin``).
 
-    JOINTS_0/WEIGHTS_0 sozinhos NÃO contam — transfer-weights partido exportava
+    JOINTS_0/WEIGHTS_0 sozinhos NÃO contam - transfer-weights partido exportava
     attrs sem ``skins[]``, e o fallback animava ``rigged_hi`` sem paint.
     """
     try:
@@ -989,9 +1168,9 @@ def run_master_pipeline(
     """Executa o DAG novo a partir de ``id_shape.glb`` e ``id_painted.glb``.
 
     Pré-condições:
-    - ``_shape_path(mesh_final)`` existe (saída de Stage 1 — text3d generate
+    - ``_shape_path(mesh_final)`` existe (saída de Stage 1 - text3d generate
       com ``--no-topology-fix`` ou legacy generate).
-    - ``_painted_path(mesh_final)`` existe (Stage 3 — paint3d texture sobre
+    - ``_painted_path(mesh_final)`` existe (Stage 3 - paint3d texture sobre
       o GLB intermediário; tipicamente sobre o ``_clean.glb`` produzido aqui).
 
     Pós-condições em sucesso:
@@ -1003,8 +1182,8 @@ def run_master_pipeline(
     res = MasterPipelineResult(asset_id=row.id, ok=True)
     res.intermediates_dir = _intermediate_dir(mesh_final)
 
-    # Round 2 — smart defaults para bake-normals.
-    # Precedência: argumento explícito → profile.master_bake_normals → categoria.
+    # Round 2 - smart defaults para bake-normals.
+    # Precedência: argumento explícito -> profile.master_bake_normals -> categoria.
     if bake_normals is None:
         bake_normals = bool(getattr(profile, "master_bake_normals", False)) or category_wants_bake_normals(
             row.category,
@@ -1033,7 +1212,7 @@ def run_master_pipeline(
         res.stages.append(StageResult("setup", False, 0.0, "text3d não encontrado"))
         return res
 
-    # Stage 0 — rocks3d generate (para assets da categoria "rock").
+    # Stage 0 - rocks3d generate (para assets da categoria "rock").
     # Produz mesh_final diretamente via rocks3d CLI e salta as stages
     # do Text3D (shape/topology-fix/paint/bake-master). Retorna cedo.
     if _row_is_rock(row):
@@ -1052,7 +1231,7 @@ def run_master_pipeline(
             res.lod0_path = mesh_final
             res.recompute_totals()
             return res
-        # rocks3d não disponível — cai para o pipeline Text3D normal
+        # rocks3d não disponível - cai para o pipeline Text3D normal
 
     # Round 2: shape/painted podem estar em meshes/ OU em meshes/_intermediate/
     # (após uma run anterior). Resolve dinamicamente para permitir resume.
@@ -1061,21 +1240,21 @@ def run_master_pipeline(
     clean_existing = _clean_existing(mesh_final)
     clean_p = clean_existing if clean_existing is not None else _clean_path(mesh_final)
 
-    if not shape_p.is_file():
+    # Shape obrigatório só se precisamos de topology-fix (sem clean).
+    # Resume: clean+painted sem shape (apagado por stale) -> segue bake/LOD.
+    if not shape_p.is_file() and not (clean_existing is not None and clean_existing.is_file()):
         res.ok = False
         res.stages.append(StageResult("preflight", False, 0.0, f"shape ausente: {shape_p}"))
         return res
 
-    # Stage 2 — topology-fix (shape → clean). Skip se já temos um clean
-    # válido (em meshes/ ou _intermediate/) — resume-friendly.
+    # Stage 2 - topology-fix (shape -> clean). Skip se já temos um clean
+    # válido (em meshes/ ou _intermediate/) - resume-friendly.
     clean_p.parent.mkdir(parents=True, exist_ok=True)
     if clean_existing is not None and clean_existing.is_file():
         res.stages.append(StageResult("topology-fix", True, 0.0, "skipped (clean existente)", clean_p))
     else:
-        t3_prof = profile.text3d
         topo_argv = [text3d_bin, "topology-fix", str(shape_p), "-o", str(clean_p)]
-        if t3_prof is not None and t3_prof.export_origin:
-            topo_argv.extend(["--export-origin", t3_prof.export_origin])
+        topo_argv.extend(_topology_fix_extra_argv(profile, row, manifest_dir=manifest_dir))
         s = _run(
             "topology-fix",
             topo_argv,
@@ -1086,7 +1265,7 @@ def run_master_pipeline(
             res.ok = False
             return res
 
-    # Stage 4 — bake-master (painted → lod0 com tangents/KTX2/meshopt)
+    # Stage 4 - bake-master (painted -> lod0 com tangents/KTX2/meshopt)
     if not painted_p.is_file():
         res.ok = False
         res.stages.append(StageResult("bake-master", False, 0.0, f"painted ausente: {painted_p}"))
@@ -1103,8 +1282,8 @@ def run_master_pipeline(
     # gltf_transform_finish na promoção (Stage 9.5) sobre o output final.
     needs_bpy_downstream = (with_rig and rigging3d_bin is not None) or (with_animate and animator3d_bin is not None)
 
-    # Resume: lod0 com paint (ou cópia do bake arquivado) → skip bake caro.
-    # lod0 animado branco (sem baseColorTexture) NÃO conta — precisa restore/bake.
+    # Resume: lod0 com paint (ou cópia do bake arquivado) -> skip bake caro.
+    # lod0 animado branco (sem baseColorTexture) NÃO conta - precisa restore/bake.
     from .paths import _base_stem as _bs_bake
     from .paths import _intermediate_dir as _inter_bake_dir
 
@@ -1140,7 +1319,7 @@ def run_master_pipeline(
             return res
     res.lod0_path = lod0_p
 
-    # Stage 5 — LOD1/LOD2 a partir do LOD0
+    # Stage 5 - LOD1/LOD2 a partir do LOD0
     lod1_p = _lod_path(mesh_final, 1)
     lod2_p = _lod_path(mesh_final, 2)
     if with_lod:
@@ -1174,7 +1353,7 @@ def run_master_pipeline(
             s = _run("lod", lod_argv)
             res.stages.append(s)
 
-    # Stage 6 — collision a partir do LOD0
+    # Stage 6 - collision a partir do LOD0
     if with_collision:
         # Usa o stem-base (strip _shape/_painted/_lod0) para evitar nomes
         # como ``goblin_painted_collision.glb`` quando mesh_final aponta
@@ -1194,7 +1373,7 @@ def run_master_pipeline(
             ]
             s = _run("collision", coll_argv, coll_p)
             res.stages.append(s)
-            # Round 2 — finalizar collision: dedup+prune (sem KTX2/meshopt/tangents).
+            # Round 2 - finalizar collision: dedup+prune (sem KTX2/meshopt/tangents).
             if s.ok and coll_p.is_file():
                 try:
                     from text3d.utils.gltf_finish import gltf_transform_finish
@@ -1211,8 +1390,8 @@ def run_master_pipeline(
                 except Exception as exc:
                     log.warning("master: finish collision falhou: %s", exc)
 
-    # Stage 7 — rigging3d pipeline sobre _clean.glb. Skip se já temos um
-    # rigged_hi válido (em meshes/ ou _intermediate/) — resume-friendly.
+    # Stage 7 - rigging3d pipeline sobre _clean.glb. Skip se já temos um
+    # rigged_hi válido (em meshes/ ou _intermediate/) - resume-friendly.
     rigged_hi_existing = _rigged_hi_existing(mesh_final)
     rigged_hi_p = rigged_hi_existing if rigged_hi_existing is not None else _rigged_hi_path(mesh_final)
     if with_rig and rigging3d_bin:
@@ -1234,16 +1413,16 @@ def run_master_pipeline(
             if not s.ok:
                 with_rig = False  # bloqueia stages dependentes mas não aborta o asset
 
-    # Stage 8 — Rigging por LOD via ``rigging3d transfer-weights``.
+    # Stage 8 - Rigging por LOD via ``rigging3d transfer-weights``.
     #
     # Re-usa o skeleton+skin do ``_rigged_hi.glb`` e transfere os weights
     # para cada LOD low-poly via KDTree (ver ``transfer_weights.py``),
-    # produzindo GLB com Armature real (re-importável por bpy → animator3d).
+    # produzindo GLB com Armature real (re-importável por bpy -> animator3d).
     # Não corre o modelo de inferência de novo (sem GPU).
     #
     # Se lod0 foi promovido a animated SEM paint (bug antigo), restaura o
     # bake-master arquivado em ``_intermediate/*_lodN_painted.glb`` antes
-    # do transfer — senão o target é mesh branca e o paint nunca volta.
+    # do transfer - senão o target é mesh branca e o paint nunca volta.
     from .paths import _base_stem as _bs_restore
 
     _base_restore = _bs_restore(mesh_final.stem)
@@ -1259,7 +1438,7 @@ def run_master_pipeline(
 
             _sh_restore.copy2(_painted_lod, _lod)
             log.warning(
-                "master: lod%d sem paint — restaurado de %s antes do transfer",
+                "master: lod%d sem paint - restaurado de %s antes do transfer",
                 _lvl,
                 _painted_lod.name,
             )
@@ -1294,14 +1473,14 @@ def run_master_pipeline(
                 else:
                     log.warning("master: rigged-lod%d sem skin (transfer-weights); a usar rigged_hi", i)
 
-    # Fallback: se nenhum LOD rigged válido, NÃO usar rigged_hi cego —
+    # Fallback: se nenhum LOD rigged válido, NÃO usar rigged_hi cego -
     # rigged_hi vem do _clean (sem paint) e produziria LOD0 branco.
     # Só fallback se o painted também não tiver material (asset sem paint).
     if with_rig and with_animate and not rigged_lods and rigged_hi_p.is_file():
         painted_has_mat = _glb_has_materials(painted_p) if painted_p.is_file() else False
         if painted_has_mat:
             log.error(
-                "master: transfer-weights sem skin válido mas painted TEM material — "
+                "master: transfer-weights sem skin válido mas painted TEM material - "
                 "a recusar fallback rigged_hi (evita LOD0 branco sem paint). "
                 "Corrigir transfer-weights e re-correr resume."
             )
@@ -1327,14 +1506,14 @@ def run_master_pipeline(
                 )
             )
 
-    # Stage 9 — animate cada LOD rigged.
+    # Stage 9 - animate cada LOD rigged.
     # Animation config: per-row ``animate:`` sub-dict overrides global ``animator3d:`` profile.
     animated_lods: list[Path] = []
     anim_prof = profile.animator3d or Animator3DProfile()
-    # Resolve effective animation settings (row overrides → profile defaults → category fallback).
+    # Resolve effective animation settings (row overrides -> profile defaults -> category fallback).
     eff_preset = (row.animate_preset or anim_prof.preset or "humanoid").strip().lower()
     # Fallback por categoria só quando nem a row nem o profile definem preset.
-    # ``creature`` → humanoid (mocap); não-humanoides reais exigem animate.preset explícito.
+    # ``creature`` -> humanoid (mocap); não-humanoides reais exigem animate.preset explícito.
     if not row.animate_preset and not (profile.animator3d and profile.animator3d.preset):
         eff_preset = animator_preset_for_category(row.category)
     eff_clips = row.animate_clips or anim_prof.clips
@@ -1363,7 +1542,7 @@ def run_master_pipeline(
                 # Gate: animate NÃO pode perder o paint do input rigged.
                 if _glb_has_materials(rg) and not _glb_has_materials(anim_p):
                     log.error(
-                        "master: animate-lod%d perdeu materiais/texturas (%s → %s)",
+                        "master: animate-lod%d perdeu materiais/texturas (%s -> %s)",
                         lvl,
                         rg.name,
                         anim_p.name,
@@ -1379,19 +1558,19 @@ def run_master_pipeline(
                     )
                     continue
                 # Round 2: finish em _animated.glb (mantém skin/animation tracks).
-                # Sem UASTC/KTX2 (requer CLI ktx externo) — usa só dedup+prune+meshopt.
+                # Sem UASTC/KTX2 (requer CLI ktx externo) - usa só dedup+prune+meshopt.
                 try:
                     from text3d.utils.gltf_finish import gltf_transform_finish
 
-                    finish_res = gltf_transform_finish(anim_p, anim_p, apply_uastc=False, apply_meshopt=True)
+                    gltf_transform_finish(anim_p, anim_p, apply_uastc=False, apply_meshopt=True)
                     if not anim_p.is_file():
-                        log.error("master: finish animated apagou %s — a re-gerar sem finish", anim_p)
+                        log.error("master: finish animated apagou %s - a re-gerar sem finish", anim_p)
                 except Exception as exc:
                     log.warning("master: finish animated falhou em %s: %s", anim_p, exc)
                 if anim_p.is_file():
                     animated_lods.append(anim_p)
 
-    # Stage 9.5 — Promoção: o output do estágio mais alto vira lodN.glb.
+    # Stage 9.5 - Promoção: o output do estágio mais alto vira lodN.glb.
     # Semântica: lod0.glb é SEMPRE o asset pronto-pra-jogo. Se houve animate,
     # lod0=animated; se houve só rig, lod0=rigged; senão fica o bake-master.
     # Versões "intermediárias" (bake-master sem rig, ou rigged se animado
@@ -1430,17 +1609,17 @@ def run_master_pipeline(
                 try:
                     _shutil.move(str(target), str(debug))
                 except OSError as exc:
-                    log.warning("master: move bake-master→intermediate falhou: %s", exc)
+                    log.warning("master: move bake-master->intermediate falhou: %s", exc)
             try:
                 _shutil.move(str(w), str(target))
                 promoted_levels.add(level)
             except OSError as exc:
-                log.warning("master: promoção %s→%s falhou: %s", w, target, exc)
+                log.warning("master: promoção %s->%s falhou: %s", w, target, exc)
                 continue
             # Garante que o output final está totalmente optimizado
             # (KTX2+meshopt+tangents+dedup+prune). Bake-master e
             # rigging/animação correm com finish minimal quando há bpy
-            # downstream — aplicamos a finalização pesada aqui no fim.
+            # downstream - aplicamos a finalização pesada aqui no fim.
             try:
                 from text3d.utils.gltf_finish import gltf_transform_finish
 
@@ -1455,11 +1634,11 @@ def run_master_pipeline(
                     try:
                         move_to_intermediate(r, mesh_final)
                     except OSError as exc:
-                        log.warning("master: move rigged→intermediate falhou: %s", exc)
+                        log.warning("master: move rigged->intermediate falhou: %s", exc)
             # Catch leftovers from resume/re-rig parcial (podem existir sem skin).
             archived = archive_leftover_lod_rigged(mesh_final)
             if archived:
-                log.info("master: arquivados %d lod*_rigged órfãos → _intermediate/", len(archived))
+                log.info("master: arquivados %d lod*_rigged órfãos -> _intermediate/", len(archived))
             # Alias estável para o jogo: id_rigged_animated.glb ← id_lod0.glb
             lod0_promoted = _lod_path(mesh_final, 0)
             alias = publish_rigged_animated_alias(mesh_final, lod0_promoted)
@@ -1467,7 +1646,7 @@ def run_master_pipeline(
                 log.info("master: alias runtime %s ← %s", alias.name, lod0_promoted.name)
                 res.stages.append(StageResult("publish-rigged-animated-alias", True, 0.0, alias.name, alias))
 
-    # Stage 10 — validação. LOD0 é gate; LOD1/2 são warnings.
+    # Stage 10 - validação. LOD0 é gate; LOD1/2 são warnings.
     # As regras efectivas dependem de quem foi promovido: animated.yaml >
     # rigged.yaml > lod{N}.yaml. Quando promotion_kind != "none" usamos a
     # mesma regra para LOD0/1/2 (mesmo nível semântico).
@@ -1543,7 +1722,7 @@ def resume_master_pipeline(
         _classify_row_state_master,
     )
 
-    img_final = mesh_final.with_suffix(".png")  # heurística — caller tipicamente fornece via row
+    img_final = mesh_final.with_suffix(".png")  # heurística - caller tipicamente fornece via row
     state = _classify_row_state_master(
         img_final=img_final,
         mesh_final=mesh_final,
@@ -1564,7 +1743,7 @@ def resume_master_pipeline(
     # ``run_master_pipeline`` tem skips implícitos (chamada a binary é o caro;
     # quando o output já existe, podemos delegar verificação a cada stage no
     # futuro). Isto cobre 90% dos casos de retomada sem complicar o DAG.
-    log.info("resume-master: state=%s — retomando pipeline para %s", state, row.id)
+    log.info("resume-master: state=%s - retomando pipeline para %s", state, row.id)
     return run_master_pipeline(
         profile,
         row,

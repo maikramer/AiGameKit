@@ -32,6 +32,7 @@ from .helpers import (
     effective_face_ratio,
 )
 from .manifest import effective_image_source
+from .omni_ctrl import shape_omni_stale
 from .param_optimizer import optimize_text3d_for_target, should_optimize_text3d
 from .paths import (
     _ROW_DONE,
@@ -54,6 +55,8 @@ from .pipeline import (
     _simplify_to_target,
     _texture_subprocess_argv,
     _try_paint3d_bin,
+    ensure_to_paint_for_paint,
+    resolve_row_omni,
 )
 from .profile import Paint3DProfile
 from .prompt_builder import build_prompt
@@ -230,6 +233,21 @@ def resume_cmd(
 
         master_state: str | None = None
         # Master pipeline is the only path: usa classificador do DAG novo.
+        _omni = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+        from .paths import _shape_existing
+
+        _shape_p = _shape_existing(mesh_final)
+        _t3_r = profile.text3d
+        _omni_stale = bool(
+            _shape_p is not None
+            and shape_omni_stale(
+                _shape_p,
+                _omni,
+                category=row.category or None,
+                bounds_mode=getattr(_t3_r, "bounds_mode", None) if _t3_r else None,
+                mc_level=getattr(_t3_r, "mc_level", None) if _t3_r else None,
+            )
+        )
         master_state = _classify_row_state_master(
             img_final=img_final,
             mesh_final=mesh_final,
@@ -238,6 +256,7 @@ def resume_cmd(
             wants_animate=row_wants_animate,
             wants_lod=row.generate_lod,
             wants_collision=row.generate_collision,
+            omni_stale=_omni_stale,
         )
         # Mapeia para os 6 buckets clássicos usados pelo planeador/loop
         # do resume_cmd. O bucket determina onde a execução vai retomar:
@@ -562,6 +581,8 @@ def resume_cmd(
                             batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
                         if t3_opts.mc_level is not None:
                             batch_args.extend(["--mc-level", str(t3_opts.mc_level)])
+                        if getattr(t3_opts, "bounds_mode", None):
+                            batch_args.extend(["--bounds-mode", str(t3_opts.bounds_mode)])
                         if t3_opts.allow_shared_gpu:
                             batch_args.append("--allow-shared-gpu")
                         if not t3_opts.gpu_kill_others:
@@ -622,13 +643,14 @@ def resume_cmd(
                         painted_out = _painted_path(it["mesh_final"])
                         try:
                             assert text3d_bin is not None
-                            mesh_paint = ensure_clean_for_paint(
+                            mesh_paint = ensure_to_paint_for_paint(
                                 it["mesh_final"],
                                 text3d_bin=text3d_bin,
                                 profile=profile,
                                 child_env=child_env,
                                 manifest_dir=manifest_dir,
                                 force=force,
+                                row=row,
                             )
                         except Exception as exc:
                             failures += 1
@@ -681,13 +703,14 @@ def resume_cmd(
                         row = it["row"]
                         try:
                             assert text3d_bin is not None
-                            mesh_paint = ensure_clean_for_paint(
+                            mesh_paint = ensure_to_paint_for_paint(
                                 it["mesh_final"],
                                 text3d_bin=text3d_bin,
                                 profile=profile,
                                 child_env=child_env,
                                 manifest_dir=manifest_dir,
                                 force=force,
+                                row=row,
                             )
                         except Exception as exc:
                             failures += 1
@@ -800,6 +823,48 @@ def resume_cmd(
                     )
                     dash.feed_event(row.id, "simplify", "ok", phase="decimating")
                     dash.advance_phase()
+
+            # --- Fase 3.6: Master (bake/LOD/collision) para assets sem rig ---
+            # Buildings/props: state=DONE após paint; sem isto o bake-master nunca corre.
+            if getattr(profile, "master_pipeline", True) and text3d_bin:
+                master_done = [
+                    it
+                    for it in items
+                    if it["state"] == _ROW_DONE and it["mesh_final"].is_file() and not it.get("wants_rig")
+                ]
+                if master_done:
+                    dash.set_phase("Master", len(master_done))
+                    for it in master_done:
+                        row = it["row"]
+                        rec_m: dict[str, Any] = {"id": row.id}
+                        dash.feed_event(row.id, "master", "progress", phase="bake", percent=0)
+                        failed = _post_text3d_mesh_extras(
+                            profile,
+                            row,
+                            it["mesh_final"],
+                            rec_m,
+                            manifest_dir,
+                            child_env,
+                            rigging3d_bin,
+                            with_rig=False,
+                            with_animate=False,
+                            animator3d_bin=animator3d_bin,
+                            has_rigging_profile=has_rigging_profile,
+                            gpu_ids=gpu_ids,
+                            with_lod=bool(row.generate_lod),
+                            with_collision=bool(row.generate_collision),
+                            on_progress_line=dash.feed_line,
+                        )
+                        if failed:
+                            failures += 1
+                            dash.feed_event(row.id, "master", "error", error=rec_m.get("error", "master"))
+                            append_log(rec_m)
+                            if not continue_on_error:
+                                raise click.Abort()
+                        else:
+                            dash.feed_event(row.id, "master", "ok", phase="bake")
+                            append_log(rec_m)
+                        dash.advance_phase()
 
             # --- Fase 4: Rigging ---
             need_rig = [it for it in items if it["state"] == _ROW_NEED_RIG]
@@ -1049,6 +1114,8 @@ def resume_cmd(
                             batch_args.extend(["--model-subfolder", t3_opts.model_subfolder])
                         if t3_opts.mc_level is not None:
                             batch_args.extend(["--mc-level", str(t3_opts.mc_level)])
+                        if getattr(t3_opts, "bounds_mode", None):
+                            batch_args.extend(["--bounds-mode", str(t3_opts.bounds_mode)])
                         if t3_opts.allow_shared_gpu:
                             batch_args.append("--allow-shared-gpu")
                         if not t3_opts.gpu_kill_others:
@@ -1123,13 +1190,14 @@ def resume_cmd(
                         painted_out = _painted_path(it["mesh_final"])
                         try:
                             assert text3d_bin is not None
-                            mesh_paint = ensure_clean_for_paint(
+                            mesh_paint = ensure_to_paint_for_paint(
                                 it["mesh_final"],
                                 text3d_bin=text3d_bin,
                                 profile=profile,
                                 child_env=child_env,
                                 manifest_dir=manifest_dir,
                                 force=force,
+                                row=row,
                             )
                         except Exception as exc:
                             failures += 1
@@ -1176,13 +1244,14 @@ def resume_cmd(
                         row = it["row"]
                         try:
                             assert text3d_bin is not None
-                            mesh_paint = ensure_clean_for_paint(
+                            mesh_paint = ensure_to_paint_for_paint(
                                 it["mesh_final"],
                                 text3d_bin=text3d_bin,
                                 profile=profile,
                                 child_env=child_env,
                                 manifest_dir=manifest_dir,
                                 force=force,
+                                row=row,
                             )
                         except Exception as exc:
                             failures += 1
@@ -1303,6 +1372,45 @@ def resume_cmd(
                     )
                     console.print(f"  [green]OK[/green] {row.id}")
                     progress.advance(task)
+
+        # --- Fase 3.6: Master (bake-master → LOD → collision → validate) ---
+        # Paint mapeia need_bake_master→need_paint; após texture há que correr o DAG.
+        if getattr(profile, "master_pipeline", True) and text3d_bin:
+            master_items = [
+                it
+                for it in items
+                if it["state"] in (_ROW_NEED_RIG, _ROW_NEED_ANIMATE, _ROW_DONE) and it["mesh_final"].is_file()
+            ]
+            if master_items:
+                console.print(f"\n[bold cyan]Fase 3.6: Master pipeline ({len(master_items)})[/bold cyan]")
+                for it in master_items:
+                    row = it["row"]
+                    rec_m: dict[str, Any] = {"id": row.id}
+                    failed = _post_text3d_mesh_extras(
+                        profile,
+                        row,
+                        it["mesh_final"],
+                        rec_m,
+                        manifest_dir,
+                        child_env,
+                        rigging3d_bin,
+                        with_rig=bool(it.get("wants_rig")),
+                        with_animate=bool(it.get("wants_animate")),
+                        animator3d_bin=animator3d_bin,
+                        has_rigging_profile=profile.rigging3d is not None,
+                        gpu_ids=gpu_ids,
+                        with_lod=True,
+                        with_collision=True,
+                    )
+                    if failed:
+                        failures += 1
+                        console.print(f"  [red]FAIL[/red] {row.id}: {rec_m.get('error', 'master')[:160]}")
+                        append_log({"id": row.id, "status": "error", "error": rec_m.get("error", "master")})
+                        if not continue_on_error:
+                            break
+                    else:
+                        console.print(f"  [green]OK[/green] {row.id} master")
+                        append_log({"id": row.id, "status": "ok", "mesh_path": str(it["mesh_final"]), "master": True})
 
         # --- Fase 4: Rigging ---
         need_rig = [it for it in items if it["state"] == _ROW_NEED_RIG]

@@ -61,6 +61,7 @@ from .helpers import (
     effective_face_ratio,
 )
 from .manifest import ManifestRow, effective_image_source
+from .omni_ctrl import omni_to_batch_item, prepare_shape_for_generation
 from .param_optimizer import (
     optimize_text3d_for_target,
     should_optimize_text3d,
@@ -69,6 +70,7 @@ from .paths import (
     _ROW_DONE,
     _animator3d_output_path,
     _classify_row_state,
+    _clean_existing,
     _install_file,
     _painted_existing,
     _painted_path,
@@ -86,6 +88,8 @@ from .pipeline import (
     _simplify_to_target,
     _text3d_argv,
     _texture_subprocess_argv,
+    ensure_to_paint_for_paint,
+    resolve_row_omni,
 )
 from .profile import (
     Animator3DProfile,
@@ -728,7 +732,15 @@ def batch_cmd(
                         continue
                     img_path, mesh_path = _paths_for_row_manifest(profile, manifest_dir, row)
                     seed = _seed_for_row(profile, row.id)
-                    t3d_args = _text3d_argv(text3d_bin, profile, img_path, mesh_path, row, gpu_ids=gpu_ids)
+                    t3d_args = _text3d_argv(
+                        text3d_bin,
+                        profile,
+                        img_path,
+                        mesh_path,
+                        row,
+                        gpu_ids=gpu_ids,
+                        manifest_dir=manifest_dir,
+                    )
                     if seed is not None:
                         t3d_args.extend(["--seed", str(seed)])
                     _dry_run_emit(
@@ -1394,7 +1406,19 @@ def batch_cmd(
                                 row = rows[idx]
                                 img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                 mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
-                                if not force and mesh_shape.is_file():
+                                mesh_clean_d = _clean_existing(mesh_f)
+                                omni_d = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+                                _t3_d = profile.text3d
+                                if not prepare_shape_for_generation(
+                                    mesh_shape,
+                                    omni_d,
+                                    force=force,
+                                    category=row.category or None,
+                                    clean_glb=mesh_clean_d,
+                                    bounds_mode=getattr(_t3_d, "bounds_mode", None) if _t3_d else None,
+                                    mc_level=getattr(_t3_d, "mc_level", None) if _t3_d else None,
+                                ):
+                                    # Shape fresco / clean resume — não enfileirar.
                                     shape_skipped_d.add(idx)
                                     shape_idx_map_d[row.id] = idx
                                     continue
@@ -1404,6 +1428,9 @@ def batch_cmd(
                                     item_d["seed"] = seed
                                 if use_phased_d:
                                     item_d["skip_remesh"] = True
+                                if row.category:
+                                    item_d["category"] = row.category
+                                item_d.update(omni_to_batch_item(omni_d))
                                 t3 = profile.text3d
                                 if t3 and should_optimize_text3d(t3) and row.category:
                                     fr = effective_face_ratio(profile, row)
@@ -1447,6 +1474,8 @@ def batch_cmd(
                                         batch_args.extend(["--model-subfolder", t3.model_subfolder])
                                     if t3.mc_level is not None:
                                         batch_args.extend(["--mc-level", str(t3.mc_level)])
+                                    if getattr(t3, "bounds_mode", None):
+                                        batch_args.extend(["--bounds-mode", str(t3.bounds_mode)])
                                     if t3.guidance is not None:
                                         batch_args.extend(["--guidance", str(t3.guidance)])
                                     if t3.allow_shared_gpu:
@@ -1524,13 +1553,14 @@ def batch_cmd(
                                         try:
                                             assert paint3d_bin is not None
                                             assert text3d_bin is not None
-                                            mesh_paint = ensure_clean_for_paint(
+                                            mesh_paint = ensure_to_paint_for_paint(
                                                 mesh_f,
                                                 text3d_bin=text3d_bin,
                                                 profile=profile,
                                                 child_env=child_env,
                                                 manifest_dir=manifest_dir,
                                                 force=force,
+                                                row=row,
                                             )
                                             tex_argv = _texture_subprocess_argv(
                                                 paint3d_bin,
@@ -1597,13 +1627,14 @@ def batch_cmd(
                                             continue
                                         try:
                                             assert text3d_bin is not None
-                                            mesh_paint = ensure_clean_for_paint(
+                                            mesh_paint = ensure_to_paint_for_paint(
                                                 mesh_f,
                                                 text3d_bin=text3d_bin,
                                                 profile=profile,
                                                 child_env=child_env,
                                                 manifest_dir=manifest_dir,
                                                 force=force,
+                                                row=row,
                                             )
                                         except Exception as exc:
                                             failures += 1
@@ -1817,7 +1848,15 @@ def batch_cmd(
                                 img_f, mesh_f = _paths_for_row_manifest(profile, manifest_dir, row)
                                 mesh_shape = _shape_existing(mesh_f) or _shape_path(mesh_f)
                                 seed = _seed_for_row(profile, row.id)
-                                t3d_args = _text3d_argv(text3d_bin, profile, img_f, mesh_shape, row, gpu_ids=gpu_ids)
+                                t3d_args = _text3d_argv(
+                                    text3d_bin,
+                                    profile,
+                                    img_f,
+                                    mesh_shape,
+                                    row,
+                                    gpu_ids=gpu_ids,
+                                    manifest_dir=manifest_dir,
+                                )
                                 if seed is not None:
                                     t3d_args.extend(["--seed", str(seed)])
                                 dash.feed_event(row.id, "text3d", "progress", phase="generating", percent=0)
@@ -2438,13 +2477,20 @@ def batch_cmd(
                                 row = rows[idx]
                                 img_final, mesh_final = _paths_for_row_manifest(profile, manifest_dir, row)
                                 mesh_shape = _shape_existing(mesh_final) or _shape_path(mesh_final)
-                                mesh_painted = _painted_existing(mesh_final) or _painted_path(mesh_final)
+                                mesh_clean = _clean_existing(mesh_final)
 
-                                if (
-                                    not force
-                                    and mesh_shape.is_file()
-                                    and (mesh_final.is_file() or mesh_painted.is_file())
+                                omni_row = resolve_row_omni(profile, row, manifest_dir=manifest_dir)
+                                _t3_p = profile.text3d
+                                if not prepare_shape_for_generation(
+                                    mesh_shape,
+                                    omni_row,
+                                    force=force,
+                                    category=row.category or None,
+                                    clean_glb=mesh_clean,
+                                    bounds_mode=getattr(_t3_p, "bounds_mode", None) if _t3_p else None,
+                                    mc_level=getattr(_t3_p, "mc_level", None) if _t3_p else None,
                                 ):
+                                    # Shape fresco / clean resume — seguir paint sem generate-batch.
                                     shape_ok.append(idx)
                                     finalized_indices.add(idx)
                                     continue
@@ -2459,6 +2505,9 @@ def batch_cmd(
                                 if seed is not None:
                                     item["seed"] = seed
                                 item["skip_remesh"] = True
+                                if row.category:
+                                    item["category"] = row.category
+                                item.update(omni_to_batch_item(omni_row))
 
                                 # Per-item params when dynamic optimization is active
                                 t3 = profile.text3d
@@ -2506,6 +2555,8 @@ def batch_cmd(
                                         batch_args.extend(["--model-subfolder", t3.model_subfolder])
                                     if t3.mc_level is not None:
                                         batch_args.extend(["--mc-level", str(t3.mc_level)])
+                                    if getattr(t3, "bounds_mode", None):
+                                        batch_args.extend(["--bounds-mode", str(t3.bounds_mode)])
                                     if t3.guidance is not None:
                                         batch_args.extend(["--guidance", str(t3.guidance)])
                                     if t3.allow_shared_gpu:
@@ -2606,13 +2657,14 @@ def batch_cmd(
                                     assert paint3d_bin is not None
                                     assert text3d_bin is not None
                                     try:
-                                        mesh_paint = ensure_clean_for_paint(
+                                        mesh_paint = ensure_to_paint_for_paint(
                                             mesh_final,
                                             text3d_bin=text3d_bin,
                                             profile=profile,
                                             child_env=child_env,
                                             manifest_dir=manifest_dir,
                                             force=force,
+                                            row=row,
                                         )
                                     except Exception as exc:
                                         failures += 1
@@ -2684,13 +2736,14 @@ def batch_cmd(
 
                                     assert text3d_bin is not None
                                     try:
-                                        mesh_paint = ensure_clean_for_paint(
+                                        mesh_paint = ensure_to_paint_for_paint(
                                             mesh_final,
                                             text3d_bin=text3d_bin,
                                             profile=profile,
                                             child_env=child_env,
                                             manifest_dir=manifest_dir,
                                             force=force,
+                                            row=row,
                                         )
                                     except Exception as exc:
                                         failures += 1
@@ -2930,6 +2983,7 @@ def batch_cmd(
                                     mesh_shape,
                                     row,
                                     gpu_ids=gpu_ids,
+                                    manifest_dir=manifest_dir,
                                 )
                                 if seed is not None:
                                     t3d_args.extend(["--seed", str(seed)])

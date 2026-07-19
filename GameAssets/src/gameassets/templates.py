@@ -71,6 +71,13 @@ text2d:
 text3d:
   preset: fast
   export_origin: feet
+  # Omni (Hunyuan3D-Omni): bbox / pose / point / voxel.
+  # omni:
+  #   control_type: none          # none|bbox|pose|point|voxel
+  #   pose_preset: quaternius-tpose
+  #   bbox_preset: sword          # humanoid|sword|door|crate|…
+  # Per-asset override in manifest.yaml under ``omni:``.
+  # category=humanoid soft-fills pose T-pose when omni omitted.
 
 paint3d:
   preserve_origin: true

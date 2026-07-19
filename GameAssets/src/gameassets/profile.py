@@ -10,7 +10,7 @@ import yaml
 
 
 def _parse_output_dir(raw: Any) -> str:
-    """Raiz dos assets (defeito: diretório atual — só `images/` e `meshes/`, sem pasta `outputs/`)."""
+    """Raiz dos assets (defeito: diretório atual - só `images/` e `meshes/`, sem pasta `outputs/`)."""
     if raw is None:
         return "."
     s = str(raw).strip()
@@ -27,6 +27,8 @@ class Paint3DProfile:
     view_resolution: int | None = None
     render_size: int | None = None
     texture_size: int | None = None
+    # Override faces do ``_to_paint`` (None -> fórmula paint_budget ~ texture_size).
+    to_paint_faces: int | None = None
     bake_exp: int | None = None
     smooth: bool = True
     smooth_passes: int | None = None
@@ -45,16 +47,22 @@ class Text3DProfile:
 
     preset: str | None = None  # fast | balanced | hq
     export_origin: str = "feet"
+    # Fecho morfológico (metros) no topology-fix. None/0 = desligado
+    # (topology_clean só); >0 = explícito. Auto-por-metros desligado - agressivo.
+    morph_close: float | None = None
     steps: int | None = None
     octree_resolution: int | None = None
     num_chunks: int | None = None
-    mc_level: float | None = None
+    mc_level: float | str | None = None
+    bounds_mode: str | None = None  # auto|cube; None -> text3d default auto
     allow_shared_gpu: bool = False
     gpu_kill_others: bool = True
     full_gpu: bool = False
     model_subfolder: str | None = None
     guidance: float | None = None
     simplify_texture_size: int | None = None
+    # Controlos Hunyuan3D-Omni (bbox / pose / point / voxel). Ver ``omni_ctrl.OmniControls``.
+    omni: Any | None = None
 
 
 @dataclass
@@ -111,7 +119,7 @@ class Texture2DProfile:
 
 @dataclass
 class Animator3DProfile:
-    """Opções para ``animator3d game-pack`` após Rigging3D (GLB rigado → GLB com clips).
+    """Opções para ``animator3d game-pack`` após Rigging3D (GLB rigado -> GLB com clips).
 
     Campos mapeiam 1:1 para flags do CLI ``animator3d game-pack``:
     - ``preset``: humanoid | creature | flying (caminho procedural).
@@ -128,9 +136,9 @@ class Animator3DProfile:
 
 @dataclass
 class Rigging3DProfile:
-    """Opções para o CLI rigging3d pipeline após Text3D (GLB → GLB rigado)."""
+    """Opções para o CLI rigging3d pipeline após Text3D (GLB -> GLB rigado)."""
 
-    # hero.glb → hero_rigged.glb (sufixo antes da extensão)
+    # hero.glb -> hero_rigged.glb (sufixo antes da extensão)
     output_suffix: str = "_rigged"
     # Opcional: raiz UniRig empacotada (equivalente a RIGGING3D_ROOT)
     root: str | None = None
@@ -175,7 +183,7 @@ class Skymap2DProfile:
 
 @dataclass
 class Text2IconProfile:
-    """Opções passadas ao CLI text2icon generate (Sana Sprint 0.6B — ícones de UI).
+    """Opções passadas ao CLI text2icon generate (Sana Sprint 0.6B - ícones de UI).
 
     Scene-level: ``prompts`` é uma lista de descrições de ícones (não por linha
     do manifest, como o skymap2d). Cada prompt gera um PNG em ``<out>/icons/``.
@@ -226,7 +234,7 @@ class GameProfile:
     meshes_subdir: str = "meshes"
     audio_subdir: str = "audio"
     # split: images_subdir/id.png e meshes_subdir/id.glb (comportamento clássico)
-    # flat: output_dir / dirname(id) / basename.ext — PNG e GLB na mesma pasta (ex.: Godot por categoria)
+    # flat: output_dir / dirname(id) / basename.ext - PNG e GLB na mesma pasta (ex.: Godot por categoria)
     path_layout: str = "split"
     seed_base: int | None = None
     image_ext: str = "png"
@@ -246,10 +254,10 @@ class GameProfile:
     terrain3d: Terrain3DProfile | None = None
     rocks3d: Rocks3DProfile | None = None
     generation: str | None = None
-    # Stage 4 — bake-master pipeline (LOD0 master, transfer-weights, validate).
-    # Master pipeline é o único caminho. DAG completo (topology-fix →
-    # bake-master → LOD → collision → rigging → transfer-weights → animate →
-    # promote → validate). Mantido como campo para retro-compat de game.yaml.
+    # Stage 4 - bake-master pipeline (LOD0 master, transfer-weights, validate).
+    # Master pipeline é o único caminho. DAG completo (topology-fix ->
+    # bake-master -> LOD -> collision -> rigging -> transfer-weights -> animate ->
+    # promote -> validate). Mantido como campo para retro-compat de game.yaml.
     master_pipeline: bool = True
     master_validate: bool = True
     master_bake_normals: bool = False
@@ -489,15 +497,21 @@ class GameProfile:
             oc = raw_t3.get("octree_resolution")
             nc = raw_t3.get("num_chunks")
             mcl = raw_t3.get("mc_level")
+            bounds_mode_raw = raw_t3.get("bounds_mode")
+            if bounds_mode_raw is not None and str(bounds_mode_raw).strip().lower() not in ("auto", "cube"):
+                raise ValueError("text3d.bounds_mode deve ser auto ou cube")
             try:
                 st_i = int(st) if st is not None else None
                 oc_i = int(oc) if oc is not None else None
                 nc_i = int(nc) if nc is not None else None
-                mcl_f = float(mcl) if mcl is not None else None
+                if mcl is None or mcl == "":
+                    mcl_f: float | str | None = None
+                elif str(mcl).strip().lower() == "auto":
+                    mcl_f = "auto"
+                else:
+                    mcl_f = float(mcl)
             except (TypeError, ValueError) as e:
-                raise ValueError(
-                    "text3d.steps, octree_resolution, num_chunks e mc_level devem ser números válidos"
-                ) from e
+                raise ValueError("text3d.steps/octree/chunks devem ser números; mc_level número ou 'auto'") from e
             hy_guid = raw_t3.get("guidance")
             try:
                 hy_guid_f = float(hy_guid) if hy_guid is not None else None
@@ -519,19 +533,33 @@ class GameProfile:
             valid_eo = frozenset({"feet", "center", "none"})
             if eo not in valid_eo:
                 raise ValueError(f"text3d.export_origin deve ser um de: {', '.join(sorted(valid_eo))}")
+            mc_raw = raw_t3.get("morph_close")
+            try:
+                morph_close_f = float(mc_raw) if mc_raw not in (None, "") else None
+            except (TypeError, ValueError) as e:
+                raise ValueError("text3d.morph_close deve ser um número (metros)") from e
+            from .omni_ctrl import omni_from_dict
+
+            try:
+                t3_omni = omni_from_dict(raw_t3.get("omni"))
+            except ValueError as e:
+                raise ValueError(f"text3d.omni: {e}") from e
             t3 = Text3DProfile(
                 preset=pr,
                 export_origin=eo,
+                morph_close=morph_close_f,
                 steps=st_i,
                 octree_resolution=oc_i,
                 num_chunks=nc_i,
                 mc_level=mcl_f,
+                bounds_mode=(str(bounds_mode_raw).strip().lower() if bounds_mode_raw else None),
                 allow_shared_gpu=allow_sg,
                 gpu_kill_others=g_kill,
                 full_gpu=full_gpu,
                 model_subfolder=model_sub_s,
                 guidance=hy_guid_f,
                 simplify_texture_size=sts_i,
+                omni=t3_omni,
             )
         p3d: Paint3DProfile | None = None
         raw_p3d = data.get("paint3d")
@@ -545,6 +573,7 @@ class GameProfile:
             pvr = raw_p3d.get("view_resolution")
             prs = raw_p3d.get("render_size")
             pts = raw_p3d.get("texture_size")
+            ptpf = raw_p3d.get("to_paint_faces")
             pbe = raw_p3d.get("bake_exp")
             psp = raw_p3d.get("smooth_passes")
             try:
@@ -552,13 +581,16 @@ class GameProfile:
                 pvr_i = int(pvr) if pvr is not None else None
                 prs_i = int(prs) if prs is not None else None
                 pts_i = int(pts) if pts is not None else None
+                ptpf_i = int(ptpf) if ptpf is not None else None
                 pbe_i = int(pbe) if pbe is not None else None
                 psp_i = int(psp) if psp is not None else None
             except (TypeError, ValueError) as e:
                 raise ValueError(
                     "paint3d.max_views, view_resolution, render_size, "
-                    "texture_size, bake_exp e smooth_passes devem ser inteiros"
+                    "texture_size, to_paint_faces, bake_exp e smooth_passes devem ser inteiros"
                 ) from e
+            if ptpf_i is not None and ptpf_i < 4:
+                raise ValueError("paint3d.to_paint_faces deve ser >= 4")
             psc = raw_p3d.get("solid_color", "#888888")
             psc_s = str(psc).strip() if psc not in (None, "") else "#888888"
             ptint = raw_p3d.get("perlin_tint", "#7a7268")
@@ -590,6 +622,7 @@ class GameProfile:
                 view_resolution=pvr_i,
                 render_size=prs_i,
                 texture_size=pts_i,
+                to_paint_faces=ptpf_i,
                 bake_exp=pbe_i,
                 smooth=paint_smooth,
                 smooth_passes=psp_i,
@@ -799,7 +832,7 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
     """Merge generation profile defaults into *profile*, preserving explicit settings.
 
     Only fills ``None`` / default fields in Text2DProfile, Text3DProfile, Text2SoundProfile.
-    Returns a new GameProfile — the original is not mutated.
+    Returns a new GameProfile - the original is not mutated.
     """
     from .generation_profiles import get_profile
 
@@ -818,10 +851,12 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
     t3 = Text3DProfile(
         preset=t3.preset if t3.preset is not None else gp.text3d_preset,
         export_origin=t3.export_origin,
+        morph_close=t3.morph_close,
         steps=t3.steps,
         octree_resolution=t3.octree_resolution,
         num_chunks=t3.num_chunks,
         mc_level=t3.mc_level,
+        bounds_mode=t3.bounds_mode,
         allow_shared_gpu=t3.allow_shared_gpu,
         gpu_kill_others=t3.gpu_kill_others,
         full_gpu=t3.full_gpu,
@@ -830,6 +865,7 @@ def apply_generation_profile(profile: GameProfile, generation_name: str) -> Game
         simplify_texture_size=(
             t3.simplify_texture_size if t3.simplify_texture_size is not None else gp.simplify_texture_size
         ),
+        omni=t3.omni,
     )
 
     p3d = profile.paint3d or Paint3DProfile()
