@@ -28,6 +28,13 @@ text2d:
   height: 768
 text3d:
   export_origin: feet
+  # Decode Omni: bounds anisotrópicos + mc_level ∝ 1/octree (pinholes).
+  bounds_mode: auto
+  mc_level: auto
+  # Omni defaults globais (override por asset no manifest).
+  # humanoid → pose T-pose via --category soft-fill; explícito aqui para documentação.
+  omni:
+    control_type: none
 paint3d:
   preserve_origin: true
   texture_size: 2048

@@ -4,6 +4,9 @@ assets:
     in T-pose with arms straight out, hands empty, no weapons, no props, full body visible, front-facing, RPG hero boy
   kind: character
   category: humanoid
+  omni:
+    control_type: pose
+    pose_preset: quaternius-tpose
   pipeline:
   - 3d
   - paint
@@ -372,6 +375,12 @@ assets:
     exterior only opaque walls, no worm's-eye or underside view
   kind: environment
   category: building
+  # Omni: aspect de edifício (~6×7×4.5 m). size_m → bbox normalizado; escala
+  # absoluta ~7 m altura aplicada nos GLBs finais (cena scale 1).
+  omni:
+    control_type: bbox
+    bbox_preset: chapel
+    size_m: [6.0, 7.0, 4.5]
   pipeline:
   - 3d
   - paint
