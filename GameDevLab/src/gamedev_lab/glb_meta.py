@@ -24,6 +24,8 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
         - ``texture_mime_types``: mime type por imagem.
         - ``has_tangents``: True se algum primitive tem TANGENT.
         - ``primitive_count``: total de primitives.
+        - ``mesh_count``: número de entries em ``meshes``.
+        - ``vertex_count_total`` / ``triangle_count_total`` / ``face_count_total``.
         - ``v_per_tri``: vértices/triângulos agregado (None se sem indices).
         - ``world_bounds_y_min``: Y mínimo agregado a partir dos accessors POSITION.
     """
@@ -46,7 +48,9 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
     total_i = 0
     y_min: float | None = None
     primitive_count = 0
-    for m in chunk.get("meshes", []) or []:
+    meshes_list = chunk.get("meshes", []) or []
+    mesh_count = len(meshes_list)
+    for m in meshes_list:
         for p_ in m.get("primitives", []) or []:
             primitive_count += 1
             attrs_obj = p_.get("attributes", {}) or {}
@@ -100,8 +104,10 @@ def glb_extract_meta(path: str | Path) -> dict[str, Any]:
         "texture_mime_types": texture_mime_types,
         "has_tangents": "TANGENT" in union_attrs,
         "primitive_count": primitive_count,
+        "mesh_count": mesh_count,
         "v_per_tri": v_per_tri,
         "world_bounds_y_min": y_min,
         "vertex_count_total": total_v,
         "triangle_count_total": tris,
+        "face_count_total": tris,  # alias: tris ≈ faces após export GLTF triangulado
     }

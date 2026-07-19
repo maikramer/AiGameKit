@@ -37,6 +37,37 @@ def _check_min_max(
         failures.append(f"{path}: {v} > max ({spec['max']})")
 
 
+def _mesh_totals_from_inspect(inspect: dict[str, Any]) -> dict[str, Any]:
+    """mesh_totals bpy, com fallback a ``glb_meta`` (``--no-bpy-inspect``)."""
+    mt = dict(inspect.get("mesh_totals") or {})
+    meta = inspect.get("glb_meta") or {}
+    if mt.get("vertex_count") is None and meta.get("vertex_count_total") is not None:
+        mt["vertex_count"] = meta["vertex_count_total"]
+    if mt.get("face_count") is None:
+        fc = meta.get("face_count_total")
+        if fc is None:
+            fc = meta.get("triangle_count_total")
+        if fc is not None:
+            mt["face_count"] = fc
+    return mt
+
+
+def _mesh_count_from_inspect(inspect: dict[str, Any]) -> int:
+    """Número de meshes: bpy ``meshes`` list, senão ``glb_meta.mesh_count``."""
+    meshes = inspect.get("meshes")
+    if isinstance(meshes, list) and meshes:
+        return len(meshes)
+    meta = inspect.get("glb_meta") or {}
+    mc = meta.get("mesh_count")
+    if mc is not None:
+        return int(mc)
+    # Último recurso: primitives > 0 implica ≥1 mesh
+    pc = meta.get("primitive_count")
+    if pc is not None and int(pc) > 0:
+        return 1
+    return 0
+
+
 def evaluate_inspect_rules(
     inspect: dict[str, Any],
     rules: dict[str, Any],
@@ -45,6 +76,9 @@ def evaluate_inspect_rules(
 ) -> tuple[bool, list[str], dict[str, Any]]:
     """
     Avalia regras contra o dict de inspect.
+
+    Com ``--no-bpy-inspect``, ``mesh_totals`` / ``meshes`` vêm vazios — as regras
+    de contagem usam fallback a ``glb_meta`` (parser binário).
 
     Regras suportadas (todas opcionais):
       mesh_totals.vertex_count: { min, max }
@@ -66,14 +100,15 @@ def evaluate_inspect_rules(
     failures: list[str] = []
     details: dict[str, Any] = {"rules_applied": []}
     glb_meta = inspect.get("glb_meta") or {}
+    mesh_totals = _mesh_totals_from_inspect(inspect)
 
     mt = rules.get("mesh_totals") or {}
     if isinstance(mt, dict):
-        vc = inspect.get("mesh_totals", {}).get("vertex_count")
+        vc = mesh_totals.get("vertex_count")
         if "vertex_count" in mt:
             _check_min_max(vc, mt["vertex_count"], "mesh_totals.vertex_count", failures)
             details["rules_applied"].append("mesh_totals.vertex_count")
-        fc = inspect.get("mesh_totals", {}).get("face_count")
+        fc = mesh_totals.get("face_count")
         if "face_count" in mt:
             _check_min_max(fc, mt["face_count"], "mesh_totals.face_count", failures)
             details["rules_applied"].append("mesh_totals.face_count")
@@ -137,8 +172,7 @@ def evaluate_inspect_rules(
 
     meshes_min = rules.get("meshes_min")
     if meshes_min is not None:
-        meshes = inspect.get("meshes") or []
-        n = len(meshes) if isinstance(meshes, list) else 0
+        n = _mesh_count_from_inspect(inspect)
         if n < int(meshes_min):
             failures.append(f"meshes: {n} < meshes_min ({meshes_min})")
         details["rules_applied"].append("meshes_min")
@@ -208,8 +242,10 @@ def evaluate_inspect_rules(
         per_cat = fc_rule.get("max_per_category")
         if isinstance(per_cat, dict) and category and category in per_cat:
             limit = int(per_cat[category])
-            fc = inspect.get("mesh_totals", {}).get("face_count")
-            if fc is not None and int(fc) > limit:
+            fc = mesh_totals.get("face_count")
+            if fc is None:
+                failures.append(f"face_count.max_per_category[{category}]: valor ausente (None)")
+            elif int(fc) > limit:
                 failures.append(f"face_count.max_per_category[{category}]: {fc} > {limit}")
             details["rules_applied"].append(f"face_count.max_per_category[{category}]")
 

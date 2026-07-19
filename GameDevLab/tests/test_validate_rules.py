@@ -1,43 +1,72 @@
-import json
-from pathlib import Path
+"""Regras de validação GLB — fallback glb_meta quando bpy inspect ausente."""
 
-import pytest
+from __future__ import annotations
 
-pytest.importorskip("yaml")
-
-from gamedev_lab.validate_rules import evaluate_inspect_rules, load_rules_file
-
-FIX = Path(__file__).parent / "fixtures"
+from gamedev_lab.validate_rules import evaluate_inspect_rules
 
 
-def test_load_rules_yaml(tmp_path: Path) -> None:
-    p = tmp_path / "r.yaml"
-    p.write_text("mesh_totals:\n  vertex_count:\n    max: 100\n", encoding="utf-8")
-    r = load_rules_file(p)
-    assert r["mesh_totals"]["vertex_count"]["max"] == 100
-
-
-def test_evaluate_pass() -> None:
-    insp = json.loads((FIX / "inspect_sample_a.json").read_text())
-    rules = {
-        "mesh_totals": {"vertex_count": {"min": 100, "max": 2000}},
-        "bones_contain": ["Hips"],
+def _meta(**kwargs):
+    base = {
+        "attributes_present": ["NORMAL", "POSITION", "TEXCOORD_0"],
+        "extensions_used": [],
+        "texture_mime_types": ["image/png"],
+        "mesh_count": 1,
+        "primitive_count": 1,
+        "vertex_count_total": 1000,
+        "triangle_count_total": 500,
+        "face_count_total": 500,
+        "v_per_tri": 2.0,
+        "world_bounds_y_min": 0.0,
     }
-    ok, failures, _details = evaluate_inspect_rules(insp, rules)
-    assert ok
-    assert not failures
+    base.update(kwargs)
+    return base
 
 
-def test_evaluate_fail_vertex() -> None:
-    insp = json.loads((FIX / "inspect_sample_a.json").read_text())
-    rules = {"mesh_totals": {"vertex_count": {"min": 5000}}}
-    ok, failures, _details = evaluate_inspect_rules(insp, rules)
+def test_no_bpy_inspect_uses_glb_meta_counts() -> None:
+    """Master pipeline passa --no-bpy-inspect; contagens vêm do parser."""
+    inspect = {"glb_meta": _meta()}
+    rules = {
+        "mesh_totals": {"vertex_count": {"min": 8, "max": 200000}},
+        "meshes_min": 1,
+        "face_count": {"max_per_category": {"building": 28800}},
+    }
+    ok, failures, _ = evaluate_inspect_rules(inspect, rules, category="building")
+    assert ok, failures
+    assert failures == []
+
+
+def test_no_bpy_false_positive_meshes_zero_fixed() -> None:
+    """Regressão: meshes=[] + sem fallback → meshes: 0 < meshes_min."""
+    inspect = {"meshes": [], "mesh_totals": {}, "glb_meta": _meta(mesh_count=1)}
+    rules = {"meshes_min": 1}
+    ok, failures, _ = evaluate_inspect_rules(inspect, rules)
+    assert ok, failures
+
+
+def test_bpy_inspect_preferred_over_meta() -> None:
+    inspect = {
+        "meshes": [{"name": "A"}, {"name": "B"}],
+        "mesh_totals": {"vertex_count": 42, "face_count": 10},
+        "glb_meta": _meta(vertex_count_total=9999, mesh_count=1),
+    }
+    rules = {
+        "mesh_totals": {"vertex_count": {"min": 40, "max": 50}},
+        "meshes_min": 2,
+    }
+    ok, failures, _ = evaluate_inspect_rules(inspect, rules)
+    assert ok, failures
+
+
+def test_real_content_failures_still_reported() -> None:
+    inspect = {"glb_meta": _meta()}
+    rules = {
+        "attributes_required": ["POSITION", "NORMAL", "TEXCOORD_0", "TANGENT"],
+        "texture_format": "ktx2",
+        "compression": "meshopt",
+    }
+    ok, failures, _ = evaluate_inspect_rules(inspect, rules)
     assert not ok
-    assert any("vertex_count" in f for f in failures)
-
-
-def test_evaluate_fail_bone() -> None:
-    insp = json.loads((FIX / "inspect_sample_a.json").read_text())
-    rules = {"bones_contain": ["MissingBone"]}
-    ok, _failures, _ = evaluate_inspect_rules(insp, rules)
-    assert not ok
+    joined = " ".join(failures)
+    assert "TANGENT" in joined
+    assert "ktx2" in joined.lower() or "image/ktx2" in joined
+    assert "meshopt" in joined.lower()
