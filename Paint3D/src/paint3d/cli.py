@@ -36,7 +36,6 @@ from gamedev_shared.cli_helpers import (
     with_ums_peak_opts,
 )
 from gamedev_shared.gpu import (
-    clear_cuda_memory,
     format_bytes,
 )
 from gamedev_shared.hf import hf_home_display_rich
@@ -430,6 +429,10 @@ def texture(
                 "bake_exp": bake_exp,
                 "verbose": verbose,
                 "preserve_origin": preserve_origin,
+                "smooth": smooth,
+                "smooth_passes": smooth_passes,
+                "upscale": upscale,
+                "upscale_factor": upscale_factor,
                 "gpu_ids": parsed_gpu_ids,
                 "torch_compile": torch_compile,
                 "torch_compile_mode": torch_compile_mode,
@@ -467,7 +470,7 @@ def texture(
                     texture_size=texture_size,
                     bake_exp=bake_exp,
                     verbose=verbose,
-                    preserve_origin=preserve_origin,
+                    preserve_origin=False,
                     memory_efficient=mem_eff,
                     gpu_ids=parsed_gpu_ids,
                     torch_compile=torch_compile,
@@ -479,37 +482,19 @@ def texture(
             emit_progress(item_id, TOOL_PAINT3D, phase="bake", percent=100)
             emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=100)
 
-            if smooth:
-                from .texture_smooth import smooth_trimesh_texture
-                from .utils.mesh_io import load_mesh_trimesh, save_glb
+            from .postprocess import apply_paint_postprocess
 
-                with console.status(
-                    "[bold yellow]Suavizando textura (filtro bilateral)...",
-                    spinner="dots",
-                ):
-                    mesh = load_mesh_trimesh(out)
-                    mesh = smooth_trimesh_texture(
-                        mesh,
-                        passes=smooth_passes,
-                        diameter=_defaults.DEFAULT_SMOOTH_DIAMETER,
-                        sigma_color=_defaults.DEFAULT_SMOOTH_SIGMA_COLOR,
-                        sigma_space=_defaults.DEFAULT_SMOOTH_SIGMA_SPACE,
-                        verbose=verbose,
-                    )
-                    save_glb(mesh, out)
-
-            if upscale:
-                from .texture_upscale import upscale_trimesh_texture
-                from .utils.mesh_io import load_mesh_trimesh, save_glb
-
-                clear_cuda_memory()
-                with console.status(
-                    f"[bold yellow]Upscale textura (Real-ESRGAN {upscale_factor}x)...",
-                    spinner="dots",
-                ):
-                    mesh = load_mesh_trimesh(out)
-                    mesh = upscale_trimesh_texture(mesh, scale=int(upscale_factor), verbose=verbose)
-                    save_glb(mesh, out)
+            with console.status("[bold yellow]Pós-processo (smooth/upscale/origin)...", spinner="dots"):
+                apply_paint_postprocess(
+                    out,
+                    mesh_path=mesh_path,
+                    preserve_origin=preserve_origin,
+                    smooth=smooth,
+                    smooth_passes=smooth_passes,
+                    upscale=upscale,
+                    upscale_factor=upscale_factor,
+                    verbose=verbose,
+                )
 
         out_p = Path(out).resolve()
         elapsed = time.time() - start
@@ -793,6 +778,8 @@ def texture_batch(
                             "bake_exp": bake_exp,
                             "verbose": verbose,
                             "preserve_origin": preserve_origin,
+                            "smooth": smooth,
+                            "smooth_passes": smooth_passes,
                             "gpu_ids": parsed_gpu_ids,
                             "torch_compile": torch_compile,
                             "torch_compile_mode": torch_compile_mode,
@@ -810,8 +797,6 @@ def texture_batch(
                     priority=ums_priority,
                     stream=ums_stream,
                 ):
-                    if preserve_origin and output_path.is_file():
-                        _fit_glb_aabb_to_reference(output_path, mesh_path, verbose=verbose)
                     elapsed = time.time() - t0
                     emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))
                     continue

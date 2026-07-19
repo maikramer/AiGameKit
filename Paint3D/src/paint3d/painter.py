@@ -885,9 +885,11 @@ def apply_hunyuan_paint(
             _preflight_paint_model(model_repo, subfolder, verbose=verbose)
             pipe = Hunyuan3DPaintPipeline(config)
             # Skip inpaint em ilhas UV nunca baked (cascas internas / occlusas).
-            from .paint_prep import install_restricted_inpaint
+            from .paint_prep import install_bake_supersampling, install_restricted_inpaint
 
             install_restricted_inpaint(pipe.view_processor)
+            # Bake supersampled: subdiv SIMPLE só no bake para precisão por-texel.
+            install_bake_supersampling(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
             try:
@@ -1196,9 +1198,10 @@ class PaintBatchProcessor:
         with profile_span("paint_load_pipeline"):
             _preflight_paint_model(self._model_repo, self._subfolder, verbose=self._verbose)
             pipe = Hunyuan3DPaintPipeline(config)
-            from .paint_prep import install_restricted_inpaint
+            from .paint_prep import install_bake_supersampling, install_restricted_inpaint
 
             install_restricted_inpaint(pipe.view_processor)
+            install_bake_supersampling(pipe.render, logger=_logger)
 
         with profile_span("paint_optimize_pipeline"):
             try:
