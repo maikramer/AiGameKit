@@ -453,6 +453,8 @@ class TestQueueSchedulerIntegration:
             max_inflight=1,
             max_affinity_cuts=3,
         )
+        # Não depender da VRAM real da máquina (admit usa pico pesos+act+safety).
+        srv.manager._query_free_mib = lambda: 99999
         # beta quente em VRAM; enfileirar cold depois hot antes do worker arrancar.
         srv.manager.ensure_loaded("beta")
         j_cold = srv.queue.enqueue("alpha", {"prompt": "cold"})
@@ -483,6 +485,7 @@ class TestQueueSchedulerIntegration:
             registry._adapter_instances[n] = _OrderAdapter(name=n)
 
         srv = UnifiedModelServer(registry=registry, socket_path=tmp_path / "pri.sock", max_inflight=1)
+        srv.manager._query_free_mib = lambda: 99999
         srv.manager.ensure_loaded("beta")
         j_batch = srv.queue.enqueue("beta", {}, priority=P.PRIORITY_BATCH)
         j_inter = srv.queue.enqueue("alpha", {}, priority=P.PRIORITY_INTERACTIVE)
@@ -518,6 +521,7 @@ class TestQueueSchedulerIntegration:
             max_inflight=1,
             max_affinity_cuts=1,
         )
+        srv.manager._query_free_mib = lambda: 99999
         srv.manager.ensure_loaded("beta")
         j_cold = srv.queue.enqueue("alpha", {})
         # Dois jobs hot: 1 cut permite 1 skip; o 2.º pick deve forçar cold.

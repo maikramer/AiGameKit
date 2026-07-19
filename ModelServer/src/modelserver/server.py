@@ -398,16 +398,19 @@ class UnifiedModelServer:
 
                 load_kwargs = {k: v for k, v in request.items() if k in _LOAD_KWARG_KEYS}
                 self.manager.ensure_loaded(name, **load_kwargs)
-                quant, mem_eff = self.manager.resolve_peak_params(name, load_kwargs)
+                quant, mem_eff, group_off = self.manager.resolve_peak_params(name, load_kwargs)
                 return {
                     "status": P.STATUS_OK,
                     "message": f"backend {name} pré-carregado",
                     "ums_debug": {
                         "backend": name,
                         "loaded_backends": self.manager.loaded_names(),
-                        "peak_mib": self.manager.peak_vram_mib(name, quant_mode=quant, memory_efficient=mem_eff),
+                        "peak_mib": self.manager.peak_vram_mib(
+                            name, quant_mode=quant, memory_efficient=mem_eff, group_offload=group_off
+                        ),
                         "quant_mode": quant,
                         "memory_efficient": mem_eff,
+                        "group_offload": group_off,
                     },
                 }
             except InsufficientVramError as e:
@@ -433,23 +436,27 @@ class UnifiedModelServer:
                 return self._error("ensure-vram requer 'needed_mib'", error_code=P.ERR_INVALID_REQUEST)
             backend = request.get("backend")
             bname = str(backend) if backend else ""
+            group_off = False
+            allow_go = self.manager._as_bool(request.get("allow_group_offload"))
             if backend and self.registry.has(bname):
-                quant, mem_eff = self.manager.resolve_peak_params(bname, request)
+                quant, mem_eff, group_off = self.manager.resolve_peak_params(bname, request)
             else:
                 quant = self.manager.resolve_quant_mode(request)
                 mem_eff = self.manager._as_bool(request.get("memory_efficient")) is True
             before = self.manager.loaded_names()
+            # Admit/evict room = pesos completos (load frio). group_off só pós-load.
             target = int(needed)
             if backend and self.registry.has(bname):
                 target = max(
                     target,
-                    self.manager.peak_vram_mib(bname, quant_mode=quant, memory_efficient=mem_eff),
+                    self.manager.peak_vram_mib(bname, quant_mode=quant, memory_efficient=mem_eff, group_offload=False),
                 )
             ok = self.manager.ensure_vram(
                 int(needed),
                 backend=bname if backend else None,
                 quant_mode=quant,
                 memory_efficient=mem_eff,
+                allow_group_offload=allow_go,
             )
             after = self.manager.loaded_names()
             return {
@@ -464,8 +471,11 @@ class UnifiedModelServer:
                     "backend": backend,
                     "quant_mode": quant,
                     "memory_efficient": mem_eff,
+                    "group_offload": group_off,
                     "peak_mib": (
-                        self.manager.peak_vram_mib(str(backend), quant_mode=quant)
+                        self.manager.peak_vram_mib(
+                            str(backend), quant_mode=quant, memory_efficient=mem_eff, group_offload=group_off
+                        )
                         if backend and self.registry.has(str(backend))
                         else None
                     ),

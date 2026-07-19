@@ -1,14 +1,9 @@
-"""Adapter do Text3D — Hunyuan3D-2.1 para text/image-to-3D.
+"""Adapter do Text3D — Hunyuan3D-Omni para text/image-to-3D.
 
-O ``HunyuanTextTo3DGenerator`` não tem ``warmup()`` — a pipeline Hunyuan carrega
-lazy no primeiro ``generate`` via ``_load_hunyuan()``. O adapter força a carga
-no ``load`` para que o modelo fique quente. Unload é ``unload_hunyuan()``.
+Contrato UMS canónico: ``load`` / ``generate`` / ``unload``.
 
-Suporta dois modos:
-  - text-to-3D: ``request["prompt"]`` → gera imagem de referência (Text2D) + mesh
-  - image-to-3D: ``request["from_image"]`` → só stage Hunyuan (sem Text2D)
-
-Output: GLB via ``save_mesh`` (com ``prepare_mesh_topology`` opcional).
+Orquestração de generate vive em ``text3d.ums_generate`` (package) — adapter
+só traduz hooks UMS (abort / progress / runtime budget).
 """
 
 from __future__ import annotations
@@ -19,95 +14,34 @@ from .base import BackendAdapter
 
 
 class Adapter(BackendAdapter):
-    """Adapter do text3d (HunyuanTextTo3DGenerator)."""
+    """Adapter do text3d (HunyuanTextTo3DGenerator / Hunyuan3D-Omni)."""
 
     name = "text3d"
 
     def load(self, **kwargs: Any) -> Any:
         from text3d.generator import HunyuanTextTo3DGenerator
+        from text3d.hy3dshape_paths import ensure_hy3dshape_on_path
+        from text3d.ums_load import map_ums_load_kwargs
 
-        gen = HunyuanTextTo3DGenerator(verbose=kwargs.get("verbose", False), **kwargs)
-        # Forçar carga da pipeline Hunyuan (não há warmup() neste generator).
-        gen._load_hunyuan()
+        ensure_hy3dshape_on_path(quiet=True)
+
+        low_vram = self.should_use_low_vram_mode(threshold_mib=7000)
+        load_kwargs = map_ums_load_kwargs(kwargs, low_vram=low_vram)
+        gen = HunyuanTextTo3DGenerator(**load_kwargs)
+        gen.warmup()
         return gen
 
     def generate(self, model: Any, request: dict[str, Any]) -> dict[str, Any]:
-        import time
+        from text3d.ums_generate import run_generate
 
-        output = request.get("output")
-        if not output:
-            return {"status": "error", "error": "output é obrigatório"}
-        if self.should_abort(request):
-            return self.cancelled_response("cancelled before generate")
-
-        self.report_progress(request, 0.0, "started")
-        t_start = time.perf_counter()
-        from_image = request.get("from_image")
-
-        if from_image:
-            if self.should_abort(request):
-                return self.cancelled_response("cancelled before image_to_3d")
-            self.report_progress(request, 0.1, "image_to_3d")
-            mesh = model.generate_from_image(
-                image=from_image,
-                num_inference_steps=int(request.get("steps", request.get("num_inference_steps", 30))),
-                guidance_scale=float(request.get("guidance", 5.5)),
-                octree_resolution=int(request.get("octree_resolution", 512)),
-                num_chunks=int(request.get("num_chunks", 8000)),
-                hy_seed=request.get("seed"),
-                mc_level=float(request.get("mc_level", 0.0)),
-                remove_bg=bool(request.get("remove_bg", True)),
-                keep_loaded=True,
-            )
-        else:
-            prompt = request.get("prompt", "")
-            if not prompt:
-                return {"status": "error", "error": "prompt ou from_image é obrigatório"}
-            if self.should_abort(request):
-                return self.cancelled_response("cancelled before text_to_3d")
-            self.report_progress(request, 0.1, "text_to_3d")
-            result = model.generate(
-                prompt=prompt,
-                t2d_seed=request.get("seed"),
-                return_reference_image=False,
-                t2d_width=int(request.get("t2d_width", 1024)),
-                t2d_height=int(request.get("t2d_height", 1024)),
-                t2d_steps=int(request.get("t2d_steps", 4)),
-                t2d_guidance=float(request.get("t2d_guidance", 1.0)),
-                text2d_model_id=request.get("text2d_model_id"),
-                num_inference_steps=int(request.get("steps", 30)),
-                guidance_scale=float(request.get("guidance", 5.5)),
-                octree_resolution=int(request.get("octree_resolution", 512)),
-                num_chunks=int(request.get("num_chunks", 8000)),
-                hy_seed=request.get("seed"),
-                mc_level=float(request.get("mc_level", 0.0)),
-                t2d_full_gpu=bool(request.get("t2d_full_gpu", False)),
-                optimize_prompt=bool(request.get("optimize_prompt", True)),
-                remove_bg=bool(request.get("remove_bg", True)),
-            )
-            mesh = result if not isinstance(result, tuple) else result[0]
-
-        if self.should_abort(request):
-            return self.cancelled_response("cancelled after mesh generate")
-        self.report_progress(request, 0.65, "mesh_generated")
-
-        from text3d.utils.export import save_mesh
-        from text3d.utils.mesh_lod import prepare_mesh_topology
-
-        if self.should_abort(request):
-            return self.cancelled_response("cancelled before save")
-        self.report_progress(request, 0.85, "saving")
-        mesh = prepare_mesh_topology(mesh)
-        origin_mode = request.get("origin_mode")
-        saved = save_mesh(mesh, output, origin_mode=origin_mode)
-
-        elapsed = time.perf_counter() - t_start
-        self.report_progress(request, 1.0, "done")
-        return {
-            "status": "ok",
-            "output": str(saved),
-            "seconds": round(elapsed, 2),
-        }
+        return run_generate(
+            model,
+            request,
+            should_abort=lambda: self.should_abort(request),
+            report_progress=lambda pct, msg: self.report_progress(request, pct, msg),
+            apply_runtime_budget=lambda: self.apply_runtime_budget(model, request, progress_pct=0.05),
+            cancelled_response=self.cancelled_response,
+        )
 
     def unload(self, model: Any) -> None:
         unload = getattr(model, "unload_hunyuan", None) or getattr(model, "unload", None)

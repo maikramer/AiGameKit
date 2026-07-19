@@ -17,19 +17,10 @@ class Adapter(BackendAdapter):
 
     def load(self, **kwargs: Any) -> Any:
         from text2d.generator import KleinFluxGenerator
+        from text2d.ums_load import map_ums_load_kwargs
 
-        # UMS: modelo fica quente - amortiza cold do torch.compile + channels_last
-        # (bench 6GB: ~-10% hot). Explicit kwargs / preload request ganham.
-        load_kwargs: dict[str, Any] = {
-            "verbose": kwargs.get("verbose", False),
-            "torch_compile": kwargs.get("torch_compile", True),
-            "torch_compile_mode": kwargs.get("torch_compile_mode", "default"),
-            "channels_last": kwargs.get("channels_last", True),
-        }
-        if self.should_use_low_vram_mode():
-            load_kwargs["memory_efficient"] = kwargs.get("memory_efficient", True)
-        skip = {"verbose", "memory_efficient", "torch_compile", "torch_compile_mode", "channels_last"}
-        load_kwargs.update({k: v for k, v in kwargs.items() if k not in skip})
+        low_vram = self.should_use_low_vram_mode(threshold_mib=7000)
+        load_kwargs = map_ums_load_kwargs(kwargs, low_vram=low_vram)
         gen = KleinFluxGenerator(**load_kwargs)
         gen.warmup()
         return gen
@@ -47,6 +38,16 @@ class Adapter(BackendAdapter):
         steps = int(request.get("steps", 4))
         should_abort, on_step = self.abort_hooks(request, num_inference_steps=steps)
         self.report_progress(request, 0.0, "started")
+
+        # Observabilidade: shape da geração (admit já usou quant; aqui diagnóstico).
+        runtime_budget = {
+            "width": int(request.get("width", 1024)),
+            "height": int(request.get("height", 1024)),
+            "steps": steps,
+            "memory_efficient": bool(getattr(model, "memory_efficient", False)),
+            "quant_preset": getattr(model, "quant_preset", None),
+            "model_id": getattr(model, "model_id", None),
+        }
 
         t_start = time.perf_counter()
         try:
@@ -80,6 +81,7 @@ class Adapter(BackendAdapter):
             "status": "ok",
             "output": str(saved),
             "seconds": round(elapsed, 2),
+            "runtime_budget": runtime_budget,
         }
 
     def unload(self, model: Any) -> None:

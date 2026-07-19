@@ -21,6 +21,7 @@ class Adapter(BackendAdapter):
     name = "paint3d"
 
     def load(self, **kwargs: Any) -> Any:
+        from paint3d import defaults as _defaults
         from paint3d.painter import PaintBatchProcessor
 
         # UMS-only / peak-planning keys — PaintBatchProcessor não os aceita.
@@ -31,7 +32,26 @@ class Adapter(BackendAdapter):
             mem_eff = str(quant).strip().lower() not in ("none", "null", "")
         mem_eff = bool(mem_eff)
 
+        # Shape do pipeline (afeta activação/VRAM): vistas, resolução, atlas.
+        # O runtime budget (vram_budget) pode reduzir vistas depois, nunca subir.
+        if mem_eff:
+            default_views = _defaults.MEMORY_EFFICIENT_MAX_VIEWS
+            default_res = _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION
+        else:
+            default_views = _defaults.DEFAULT_PAINT_MAX_VIEWS
+            default_res = _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
+        max_views = int(kwargs.get("max_num_view") or default_views)
+        view_res = int(kwargs.get("view_resolution") or default_res)
+        render_size = kwargs.get("render_size")
+        texture_size = kwargs.get("texture_size")
+        bake_exp = kwargs.get("bake_exp")
+
         proc = PaintBatchProcessor(
+            max_num_view=max_views,
+            view_resolution=view_res,
+            render_size=int(render_size) if render_size else None,
+            texture_size=int(texture_size) if texture_size else None,
+            bake_exp=int(bake_exp) if bake_exp else _defaults.DEFAULT_PAINT_BAKE_EXP,
             verbose=bool(kwargs.get("verbose", False)),
             memory_efficient=mem_eff,
             gpu_ids=kwargs.get("gpu_ids"),
@@ -65,6 +85,22 @@ class Adapter(BackendAdapter):
 
         if self.should_abort(request):
             return self.cancelled_response("cancelled before paint")
+        # Runtime VRAM budget (views/tiles/DINO) — canónico Shared, exposto UMS.
+        # Overrides por-request: vistas/resolução pedidas (clamped ao pipeline).
+        budget_hints: dict[str, Any] = {}
+        if request.get("max_num_view"):
+            budget_hints["requested_views"] = int(request["max_num_view"])
+        if request.get("view_resolution"):
+            budget_hints["requested_resolution"] = int(request["view_resolution"])
+        try:
+            budget = self.apply_runtime_budget(model, request, progress_pct=0.22, **budget_hints)
+        except (RuntimeError, MemoryError) as exc:
+            return {
+                "status": "error",
+                "error": str(exc),
+                "error_code": "VRAM_INSUFFICIENT",
+                "hint": "Runtime budget / MeshRender sem headroom — `ums evict` ou reduz views.",
+            }
         self.report_progress(request, 0.25, "painting")
         textured = model.paint_mesh(mesh_objs, image_path)
 
@@ -75,11 +111,14 @@ class Adapter(BackendAdapter):
 
         elapsed = time.perf_counter() - t_start
         self.report_progress(request, 1.0, "done")
-        return {
+        out: dict[str, Any] = {
             "status": "ok",
             "output": str(saved),
             "seconds": round(elapsed, 2),
         }
+        if budget:
+            out["runtime_budget"] = budget
+        return out
 
     def unload(self, model: Any) -> None:
         exit_method = getattr(model, "__exit__", None)

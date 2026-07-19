@@ -108,6 +108,54 @@ class BackendAdapter(ABC):
             _on_step if has_progress else None,
         )
 
+    @classmethod
+    def apply_runtime_budget(
+        cls,
+        model: Any,
+        request: dict[str, Any],
+        *,
+        progress_pct: float | None = None,
+        **hints: Any,
+    ) -> dict[str, Any] | None:
+        """Reaplica o runtime VRAM budget do model object, se suportado.
+
+        Contrato canónico: model objects que suportam re-orçamento pós-load
+        (Paint3D ``PaintBatchProcessor``, Text3D ``HunyuanTextTo3DGenerator``, …)
+        expõem ``refresh_runtime_budget(**hints)`` e devolvem o dict do budget
+        (:mod:`gamedev_shared.vram_budget`). O adapter chama isto antes da
+        inferência; o BackendManager guarda o resultado em ``stats``.
+
+        Args:
+            model: model object carregado pelo adapter.
+            request: request UMS (para ``report_progress``).
+            progress_pct: se dado, reporta o budget como progresso.
+            **hints: overrides por-request (ex: ``requested_views=...``).
+                Ignorados se o método do model não os aceitar.
+
+        Returns:
+            Dict do budget, ou ``None`` se o model não suporta / falhou.
+        """
+        refresh = getattr(model, "refresh_runtime_budget", None)
+        if not callable(refresh):
+            return None
+        try:
+            try:
+                budget = refresh(**hints) if hints else refresh()
+            except TypeError:
+                # Model object antigo sem suporte a hints — retry sem overrides.
+                budget = refresh()
+        except (RuntimeError, MemoryError):
+            # Gate VRAM (MeshRender headroom, OOM) — NÃO engolir; adapter aborta.
+            raise
+        except Exception:
+            return None
+        if budget and progress_pct is not None:
+            summary = ", ".join(
+                f"{k}={v}" for k, v in budget.items() if k in ("num_chunks", "max_views", "dino_device")
+            )
+            cls.report_progress(request, progress_pct, f"vram_budget {summary}" if summary else "vram_budget")
+        return budget if isinstance(budget, dict) else None
+
     @staticmethod
     def should_use_low_vram_mode(threshold_mib: int = 7000) -> bool:
         """Deteta se a GPU tem pouca VRAM e deve ativar offload/sequential."""

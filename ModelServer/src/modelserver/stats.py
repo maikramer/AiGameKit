@@ -22,6 +22,8 @@ class BackendStats:
     last_error: str | None = None
     first_loaded_at: float = 0.0
     last_used_at: float = 0.0
+    # Último runtime VRAM budget reportado pelo adapter (chunks/views/tiles).
+    last_runtime_budget: dict | None = None
 
     @property
     def avg_load_time_sec(self) -> float:
@@ -43,6 +45,7 @@ class BackendStats:
             "last_generate_time_sec": round(self.last_generate_time_sec, 2),
             "last_error": self.last_error,
             "idle_sec": round(time.monotonic() - self.last_used_at, 1) if self.last_used_at > 0 else None,
+            "last_runtime_budget": self.last_runtime_budget,
         }
 
 
@@ -128,6 +131,14 @@ class StatsCollector:
             s = self._get_or_create(name)
             s.error_count += 1
             s.last_error = error
+
+    def record_runtime_budget(self, name: str, budget: dict | None) -> None:
+        """Guarda o último runtime VRAM budget (chunks/views/tiles) do backend."""
+        if not budget:
+            return
+        with self._lock:
+            s = self._get_or_create(name)
+            s.last_runtime_budget = dict(budget)
 
     def record_enqueue(self, *, depth_after: int) -> None:
         with self._lock:

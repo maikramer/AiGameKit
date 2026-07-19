@@ -51,7 +51,7 @@ class TestEnsureLoadedAdmitsPeak:
 
 
 class TestPaint3dMemoryEfficientAdmit:
-    """paint3d envia memory_efficient sem sdnq_preset — não pode assumir fp16 peak ~8 GiB."""
+    """paint3d envia memory_efficient sem sdnq_preset — não pode assumir fp16 peak ~8 GiB."""
 
     def test_resolve_quant_from_memory_efficient(self) -> None:
         assert BackendManager.resolve_quant_mode({"memory_efficient": True}) == "sdnq-uint8"

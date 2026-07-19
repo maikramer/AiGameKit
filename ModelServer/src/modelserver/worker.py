@@ -90,8 +90,10 @@ class WorkerPool:
     def _backend_peak_mib(self, name: str, request: dict[str, Any] | None = None) -> int:
         """Pico pesos+activação+safety (não o YAML estático)."""
         try:
-            quant = self.manager.resolve_quant_mode(request)
-            return int(self.manager.peak_vram_mib(name, quant_mode=quant))
+            quant, mem_eff, group_off = self.manager.resolve_peak_params(name, request or {})
+            return int(
+                self.manager.peak_vram_mib(name, quant_mode=quant, memory_efficient=mem_eff, group_offload=group_off)
+            )
         except Exception:
             try:
                 return int(self.manager._registry.descriptor(name).vram_mib)

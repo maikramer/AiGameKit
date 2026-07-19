@@ -42,8 +42,8 @@ backends:
 
   - name: text3d
     adapter: modelserver.adapters.text3d
-    vram_mib: 8000
-    footprint_key: hunyuan3d-2.1-dit
+    vram_mib: 10000
+    footprint_key: hunyuan3d-omni
     priority: 40
 
   - name: paint3d

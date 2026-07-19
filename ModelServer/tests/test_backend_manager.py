@@ -135,6 +135,19 @@ class TestRefCounting:
         mgr.generate("alpha", {"prompt": "x", "output": "/tmp/x.png"})
         assert mgr._states["alpha"].ref_count == 0  # volta a 0 após generate
 
+    def test_ref_count_zero_after_generate_error(self) -> None:
+        """Erro no generate: um único decrement (não double → underflow lógico)."""
+        registry = _make_registry()
+        failing = MockAdapter(name="alpha", fail_generate=True)
+        registry._adapter_instances["alpha"] = failing
+        mgr = BackendManager(registry, query_free_mib=lambda: 99999, clear_vram=lambda: None)
+        resp = mgr.generate("alpha", {"prompt": "x", "output": "/tmp/x.png"})
+        assert resp["status"] == "error"
+        # Estado pode ter sido removido no evict; se existir, ref=0.
+        state = mgr._states.get("alpha")
+        if state is not None:
+            assert state.ref_count == 0
+
 
 class TestErrorRecovery:
     """Em erro de geração, o backend é descarregado para recovery."""

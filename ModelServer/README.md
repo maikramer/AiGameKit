@@ -172,6 +172,19 @@ Ferramentas pesadas, **no path in-process**, chamam
 `max(N, peak(backend))`. Sem UMS → release cego aos sockets legacy. Com jobs na
 fila, `kill_gpu_compute_processes_aggressive` recusa matar (`respect_ums_queue=True`).
 
+**Runtime budget (pós-load):** o admit acima é estático. Depois dos pesos/offload,
+`gamedev_shared.vram_budget` (reexportado em `modelserver.runtime_budget`)
+dimensiona o batch de activação pela VRAM **livre** — Text3D `num_chunks`,
+Paint3D views/tiles/DINO — para não OOM→CPU. Contrato: model objects expõem
+`refresh_runtime_budget(**hints)`; adapters chamam
+`BackendAdapter.apply_runtime_budget(model, request, ...)` antes da inferência
+(Paint3D aceita overrides por-request `max_num_view`/`view_resolution`,
+clamped ao shape do load) e devolvem o dict em `runtime_budget` na resposta —
+o BackendManager guarda o último em `ums stats` (`last_runtime_budget`).
+Text3D aplica `auto_num_chunks` no momento do decode e reporta o efetivo.
+Desligar Paint: `PAINT3D_AUTO_VRAM_BUDGET=0`. Env
+`TEXT3D_DECODE_BYTES_PER_QUERY` calibra o custo por query do decode.
+
 ## Protocolo
 
 JSON / NDJSON sobre Unix socket (`~/.cache/gamedev/model-server.sock`):

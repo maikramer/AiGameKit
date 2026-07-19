@@ -68,6 +68,28 @@ class TestStatsCollector:
         assert s.error_count == 1
         assert s.last_error == "OOM"
 
+    def test_record_runtime_budget(self) -> None:
+        c = StatsCollector()
+        c.record_runtime_budget("text3d", {"num_chunks": 262144, "free_vram_bytes": 4 * 1024**3})
+        s = c.get("text3d")
+        assert s is not None
+        assert s.last_runtime_budget == {"num_chunks": 262144, "free_vram_bytes": 4 * 1024**3}
+        assert s.to_dict()["last_runtime_budget"]["num_chunks"] == 262144
+
+    def test_record_runtime_budget_ignores_empty(self) -> None:
+        c = StatsCollector()
+        c.record_runtime_budget("text3d", None)
+        c.record_runtime_budget("text3d", {})
+        assert c.get("text3d") is None
+
+    def test_record_runtime_budget_overwrites_last(self) -> None:
+        c = StatsCollector()
+        c.record_runtime_budget("paint3d", {"max_views": 6})
+        c.record_runtime_budget("paint3d", {"max_views": 4})
+        s = c.get("paint3d")
+        assert s is not None
+        assert s.last_runtime_budget == {"max_views": 4}
+
     def test_multiple_loads_accumulate(self) -> None:
         c = StatsCollector()
         c.record_load("text2icon", 10.0)

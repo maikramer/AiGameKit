@@ -76,7 +76,8 @@ class TestRegistry:
         registry = Registry()
         d = registry.descriptor("text3d")
         assert d.name == "text3d"
-        assert d.vram_mib == 8000
+        assert d.vram_mib == 10000  # Hunyuan3D-Omni (~10 GB fp16)
+        assert d.footprint_key == "hunyuan3d-omni"
 
     def test_descriptor_unknown_raises(self) -> None:
         registry = Registry()
