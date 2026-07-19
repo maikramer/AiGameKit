@@ -2207,6 +2207,7 @@ def align_plus_z_cmd(
     ),
 )
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+@add_ums_options
 @click.pass_context
 def generate_batch(
     ctx,
@@ -2240,8 +2241,15 @@ def generate_batch(
     category: str | None,
     no_topology_fix: bool,
     batch_verbose: bool,
+    ums_priority: str | None,
+    no_ums: bool,
+    ums_stream: bool,
 ) -> None:
-    """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout)."""
+    """Processa lote image-to-3D a partir de manifest JSON (JSONL em stdout).
+
+    Por defeito cada item passa pelo UMS (paridade Paint3D/Text2D batch).
+    Load in-process só se sobrar trabalho após UMS.
+    """
     mc_level = _parse_mc_level_flag(mc_level)
     from .utils.export import save_mesh
     from .utils.mesh_lod import prepare_mesh_topology
@@ -2325,56 +2333,57 @@ def generate_batch(
     if base_chunks is None:
         base_chunks = _defaults.DEFAULT_NUM_CHUNKS
 
-    # generate-batch: in-process (UMS por item via `text3d generate`). GPU prep canónico.
+    # UMS por item primeiro; GPU prep + load só no fallback in-process.
     allow_shared = bool(allow_shared_gpu) or _env_allow_shared_gpu()
     gpu_kill = _gpu_kill_others_effective(bool(gpu_kill_others))
-    prepare_gpu_exclusive(
-        needed_mib=6000,
-        allow_shared=allow_shared,
-        kill_others=gpu_kill,
-        allow_shared_env="TEXT3D_ALLOW_SHARED_GPU",
-        kill_others_env="TEXT3D_GPU_KILL_OTHERS",
-        backend="text3d",
-        quant_mode=None if sdnq_preset in (None, "none", "") else sdnq_preset,
-        console=_err,
-    )
-
     resolved_sdnq = sdnq_preset if sdnq_preset else ""
     batch_offload = hwp.offload if hwp is not None else False
-
-    need_load = force or any(not (out_base / it["output"]).is_file() for it in items if "output" in it)
+    _ = model_subfolder  # deprecated
 
     old_sigterm = signal.signal(signal.SIGTERM, _batch_signal_handler)
     old_sigint = signal.signal(signal.SIGINT, _batch_signal_handler)
 
     global _batch_generator
+
+    def _ensure_inprocess_generator() -> None:
+        global _batch_generator
+        if _batch_generator is not None:
+            return
+        prepare_gpu_exclusive(
+            needed_mib=6000,
+            allow_shared=allow_shared,
+            kill_others=gpu_kill,
+            allow_shared_env="TEXT3D_ALLOW_SHARED_GPU",
+            kill_others_env="TEXT3D_GPU_KILL_OTHERS",
+            backend="text3d",
+            quant_mode=None if sdnq_preset in (None, "none", "") else sdnq_preset,
+            console=_err,
+        )
+        from text3d.ums_load import map_ums_load_kwargs
+
+        with _err.status("[bold yellow]A preparar gerador batch (fallback in-process)...", spinner="dots"):
+            _batch_kw = map_ums_load_kwargs(
+                {
+                    "verbose": batch_verbose,
+                    "sdnq_preset": resolved_sdnq,
+                    "gpu_ids": parsed_gpu_ids,
+                    "volume_decoder": volume_decoder,
+                    "mc_algo": mc_algo,
+                    "torch_compile": compile_models,
+                    "torch_compile_mode": compile_mode,
+                    "sage_attention": sage_attention,
+                    "sdnq_quantized_matmul": sdnq_matmul,
+                    "offload": batch_offload,
+                    "allow_group_offload": allow_group_offload,
+                    "fp8_layerwise": fp8_layerwise,
+                    "channels_last": channels_last,
+                    "memory_efficient": batch_offload,
+                },
+                low_vram=False,
+            )
+            _batch_generator = HunyuanTextTo3DGenerator(**_batch_kw)
+
     try:
-        if need_load:
-            with _err.status("[bold yellow]A preparar gerador batch...", spinner="dots"):
-                _ = model_subfolder  # deprecated
-                from text3d.ums_load import map_ums_load_kwargs
-
-                _batch_kw = map_ums_load_kwargs(
-                    {
-                        "verbose": batch_verbose,
-                        "sdnq_preset": resolved_sdnq,
-                        "gpu_ids": parsed_gpu_ids,
-                        "volume_decoder": volume_decoder,
-                        "mc_algo": mc_algo,
-                        "torch_compile": compile_models,
-                        "torch_compile_mode": compile_mode,
-                        "sage_attention": sage_attention,
-                        "sdnq_quantized_matmul": sdnq_matmul,
-                        "offload": batch_offload,
-                        "allow_group_offload": allow_group_offload,
-                        "fp8_layerwise": fp8_layerwise,
-                        "channels_last": channels_last,
-                        "memory_efficient": batch_offload,
-                    },
-                    low_vram=False,
-                )
-                _batch_generator = HunyuanTextTo3DGenerator(**_batch_kw)
-
         _err.print(
             f"[dim]Itens: {len(items)} | preset={preset} "
             f"steps={base_steps} octree={base_octree} chunks={base_chunks}[/dim]"
@@ -2454,8 +2463,87 @@ def generate_batch(
                 }
                 _ctrl = {k: v for k, v in _ctrl.items() if v is not None}
 
-                emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
                 t0 = time.time()
+                _ums_item: dict[str, Any] = {
+                    "from_image": str(img_path),
+                    "output": str(out_path),
+                    "steps": item_steps,
+                    "guidance": guidance,
+                    "octree_resolution": item_octree,
+                    "num_chunks": item_chunks,
+                    "seed": item_seed,
+                    "mc_level": mc_level,
+                    "bounds_mode": bounds_mode,
+                    "auto_num_chunks": False,
+                    "origin_mode": export_origin,
+                    "topology_fix": not no_topology_fix,
+                    "volume_decoder": volume_decoder,
+                    "mc_algo": mc_algo,
+                    "torch_compile": compile_models,
+                    "torch_compile_mode": compile_mode,
+                    "channels_last": channels_last,
+                    "allow_group_offload": allow_group_offload,
+                    "fp8_layerwise": fp8_layerwise,
+                    "sdnq_quantized_matmul": sdnq_matmul,
+                    "sage_attention": sage_attention,
+                    "offload": batch_offload,
+                    "verbose": batch_verbose,
+                    "category": item.get("category", category),
+                    "quality": item.get("quality", quality),
+                    "bbox_tune": False,  # já afinado acima
+                    "control_type": _omni.get("control_type"),
+                    "pose_preset": _omni.get("pose_preset"),
+                    "bbox_preset": _omni.get("bbox_preset"),
+                }
+                if _item_size_m is not None:
+                    _ums_item["size_m"] = _item_size_m
+                if _omni.get("bbox") is not None:
+                    _ums_item["bbox"] = _omni["bbox"]
+                if _omni.get("pose_file"):
+                    _ums_item["pose_file"] = str(_omni["pose_file"])
+                if _omni.get("point_cloud"):
+                    _ums_item["point_cloud"] = str(_omni["point_cloud"])
+                if _omni.get("voxel_mesh"):
+                    _ums_item["voxel_mesh"] = str(_omni["voxel_mesh"])
+
+                if try_ums_delegation(
+                    "text3d",
+                    with_ums_peak_opts(
+                        with_ums_load_opts(
+                            _ums_item,
+                            gpu_ids=parsed_gpu_ids,
+                            volume_decoder=volume_decoder,
+                            allow_group_offload=allow_group_offload,
+                            channels_last=channels_last,
+                            offload=batch_offload,
+                        ),
+                        backend="text3d",
+                        memory_efficient=bool(batch_offload or allow_group_offload)
+                        or (sdnq_preset not in (None, "none", "")),
+                        sdnq_preset=None if sdnq_preset in (None, "none", "") else sdnq_preset,
+                    ),
+                    t_start=t0,
+                    noun="Mesh",
+                    console=_err,
+                    enabled=not no_ums,
+                    priority=ums_priority or "batch",
+                    stream=ums_stream,
+                    timeout_sec=1800.0,
+                ):
+                    elapsed = time.time() - t0
+                    emit_result(
+                        item_id,
+                        TOOL_TEXT3D,
+                        STATUS_OK,
+                        phase="shape",
+                        output=item["output"],
+                        seconds=round(elapsed, 1),
+                    )
+                    continue
+
+                _ensure_inprocess_generator()
+                assert _batch_generator is not None
+                emit_progress(item_id, TOOL_TEXT3D, phase="loading_model", percent=0)
                 mesh = _batch_generator.generate_from_image(
                     str(img_path),
                     num_inference_steps=item_steps,
