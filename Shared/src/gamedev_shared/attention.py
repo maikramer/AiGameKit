@@ -78,6 +78,7 @@ def select_attention_backend(
     Returns:
         Nome do backend efectivamente aplicado.
     """
+
     def _log(msg: str) -> None:
         if log_fn:
             log_fn(msg)

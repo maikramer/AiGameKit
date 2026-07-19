@@ -93,12 +93,17 @@ def prepare_gpu_exclusive(
     allow_shared_env: str = "",
     kill_others_env: str = "",
     console: Console | None = None,
+    backend: str | None = None,
+    quant_mode: str | None = None,
 ) -> None:
     """Sequência completa de preparação de GPU para tools pesadas.
 
     Ordem: ``ensure_vram_available`` (pede a model servers para libertar) →
     ``kill_gpu_compute_processes_aggressive`` (SIGTERM outros processos GPU) →
     ``clear_cuda_memory`` → ``enforce_exclusive_gpu`` (gate de VRAM ocupada).
+
+    Só para fallback **in-process** (depois de ``try_ums_delegation`` falhar /
+    ``--no-ums``). Nunca chamar antes de enfileirar no UMS.
 
     Args:
         needed_mib: VRAM necessária para o model server libertar (default 4000).
@@ -107,6 +112,8 @@ def prepare_gpu_exclusive(
         allow_shared_env: Env var que override allow_shared (ex: ``TEXT3D_ALLOW_SHARED_GPU``).
         kill_others_env: Env var que override kill_others (ex: ``TEXT3D_GPU_KILL_OTHERS``).
         console: Console Rich para output (opcional).
+        backend: Nome UMS (ex: ``text3d``) para peak admit no ensure-vram.
+        quant_mode: Quantização assumida no pico (ex: ``sdnq-int4``).
 
     Raises:
         click.ClickException: Se ``enforce_exclusive_gpu`` falhar (VRAM ocupada).
@@ -129,15 +136,19 @@ def prepare_gpu_exclusive(
     )
 
     # Pedir aos model servers / UMS para descarregar (libertar VRAM).
-    ensure_vram_available(needed_mib=needed_mib)
+    if not ensure_vram_available(needed_mib=needed_mib, backend=backend, quant_mode=quant_mode):
+        raise click.ClickException(
+            f"VRAM insuficiente após ensure_vram (preciso ~{needed_mib} MiB). {UMS_DO_NOT_KILL_TIP}"
+        )
 
     kill = env_bool(kill_others_env, kill_others) if kill_others_env else kill_others
     allow = allow_shared or (env_bool(allow_shared_env, False) if allow_shared_env else False)
 
     if kill:
         snap = fetch_ums_queue_snapshot() if is_ums_running() else None
-        if ums_is_busy(snap):
-            hold = format_ums_holding_summary(snap) if snap else "UMS busy"
+        # UMS up mas snapshot falhou → fail-closed (não matar às cegas).
+        if is_ums_running() and (snap is None or ums_is_busy(snap)):
+            hold = format_ums_holding_summary(snap) if snap else "UMS ativo (snapshot indisponível)"
             if console is not None:
                 from rich.panel import Panel
 
@@ -355,6 +366,56 @@ def with_ums_load_opts(
     return out
 
 
+def with_ums_peak_opts(
+    payload: dict[str, Any],
+    *,
+    backend: str,
+    memory_efficient: bool | None = None,
+    sdnq_preset: str | None = None,
+    quant_preset: str | None = None,
+) -> dict[str, Any]:
+    """Injeta sinais de pico VRAM para admit UMS (evita assume-fp16).
+
+    Sem ``sdnq_preset`` / ``memory_efficient``, o BackendManager assume pesos
+    fp16 e recusa GPUs ~6 GB. Text2D usa ``quant_preset`` no ctor — mapeamos
+    também para ``sdnq_preset`` (admit partilha a mesma tabela).
+
+    Args:
+        payload: Request UMS (mutado via cópia).
+        backend: ``text2d`` | ``text3d`` | ``paint3d`` (defaults por tool).
+        memory_efficient: Flag CLI / hw-auto.
+        sdnq_preset: Preset explícito (``none`` / ``sdnq-int4`` / …).
+        quant_preset: Alias Text2D (copiado para ``quant_preset`` + ``sdnq_preset``).
+    """
+    out = dict(payload)
+    if memory_efficient is not None:
+        out["memory_efficient"] = bool(memory_efficient)
+
+    def _norm(raw: str | None) -> str | None:
+        if raw is None:
+            return None
+        s = str(raw).strip().lower()
+        if s in ("", "none", "null"):
+            return "none"
+        return str(raw).strip()
+
+    preset = _norm(sdnq_preset)
+    qpreset = _norm(quant_preset)
+    if qpreset is not None:
+        out["quant_preset"] = qpreset
+        if preset is None:
+            preset = qpreset
+    if preset is not None:
+        out["sdnq_preset"] = preset
+    elif out.get("memory_efficient") and "sdnq_preset" not in out:
+        # Defaults honestos por backend quando mem_eff sem preset explícito.
+        if backend == "paint3d" or backend == "text2d":
+            out["sdnq_preset"] = "sdnq-uint8"
+        elif backend == "text3d":
+            out["sdnq_preset"] = "sdnq-int4"
+    return out
+
+
 def call_ums(
     tool: str,
     payload: dict[str, Any],
@@ -393,8 +454,8 @@ def try_ums_delegation(
     Se retornar ``True``, a geração foi feita pelo UMS — o caller deve ``return``.
     Se ``False``, fazer fallback in-process.
 
-    ``queue_full`` **não** faz fallback (evita carregar o modelo em paralelo) —
-    levanta ``click.ClickException``.
+    ``queue_full`` e ``VRAM_INSUFFICIENT`` **não** fazem fallback (evitam OOM /
+    carga paralela) — levantam ``click.ClickException``.
 
     Args:
         tool: Nome do backend (ex: ``text2icon``).
@@ -449,6 +510,17 @@ def try_ums_delegation(
         console=console if stream else None,
     )
     if result is None:
+        # Timeout/socket morreu com UMS ainda up → GPU pode estar a meio de generate.
+        # Fallback in-process corre em paralelo e OOMa / mata o job errado.
+        if is_ums_running():
+            import click
+
+            snap = fetch_ums_queue_snapshot()
+            hold = format_ums_holding_summary(snap) if snap else "UMS ativo (sem snapshot)"
+            raise click.ClickException(
+                f"UMS sem resposta (timeout/socket) com supervisor ainda ativo. "
+                f"Sem fallback in-process. {hold}. {UMS_DO_NOT_KILL_TIP}"
+            )
         console.print(
             "[yellow]UMS indisponível — fallback in-process[/yellow]\n"
             f"[dim]Arranca com: gamedev-model-server start · {UMS_DO_NOT_KILL_TIP}[/dim]"
@@ -462,16 +534,29 @@ def try_ums_delegation(
         raise_if_ums_queue_full(result)
         return False  # pragma: no cover
     if status == "error":
-        code = result.get("error_code", "?")
+        code = str(result.get("error_code", "?") or "?")
         hint = result.get("hint")
-        console.print(f"[yellow]UMS erro [{code}]: {result.get('error', '?')} — fallback in-process[/yellow]")
-        if hint:
-            console.print(f"[dim]hint: {hint}[/dim]")
+        err = result.get("error", "?")
         console.print(f"[dim]UMS: {format_ums_debug_line(result)}[/dim]")
         if _ums_debug_enabled() and result.get("ums_debug"):
             import json
 
             console.print(f"[dim]ums_debug: {json.dumps(result['ums_debug'], ensure_ascii=False)}[/dim]")
+        # VRAM_INSUFFICIENT: NUNCA fallback in-process — isso OOMa a GPU.
+        if code.upper() == "VRAM_INSUFFICIENT":
+            import click
+
+            tip = hint or UMS_DO_NOT_KILL_TIP
+            raise click.ClickException(f"UMS [{code}]: {err}. Sem fallback in-process (evita OOM). {tip}")
+        # UMS ainda com jobs → não competir in-process pela mesma GPU.
+        if ums_is_busy():
+            import click
+
+            tip = hint or UMS_DO_NOT_KILL_TIP
+            raise click.ClickException(f"UMS erro [{code}]: {err}. Sem fallback in-process (UMS ocupado). {tip}")
+        console.print(f"[yellow]UMS erro [{code}]: {err} — fallback in-process[/yellow]")
+        if hint:
+            console.print(f"[dim]hint: {hint}[/dim]")
     return False
 
 

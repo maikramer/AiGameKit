@@ -159,8 +159,10 @@ class TiledDiffusionCallback:
         # Computa a grelha de tiles uma vez.
         if self._tile_grid is None:
             self._tile_grid = _compute_tile_grid(lh, lw, tile_h, tile_w, stride_h, stride_w)
-            self._log(f"Tiled diffusion: {len(self._tile_grid)} tiles de {tile_h}x{tile_w} "
-                      f"(latent {lh}x{lw}, stride {stride_h}x{stride_w})")
+            self._log(
+                f"Tiled diffusion: {len(self._tile_grid)} tiles de {tile_h}x{tile_w} "
+                f"(latent {lh}x{lw}, stride {stride_h}x{stride_w})"
+            )
 
         # Acumulador para blend.
         denoised_sum = torch.zeros_like(latents)
@@ -181,7 +183,7 @@ class TiledDiffusionCallback:
         else:
             timestep_tensor = timestep
 
-        for (t, left, bottom, r) in self._tile_grid:
+        for t, left, bottom, r in self._tile_grid:
             tile_h_actual = bottom - t
             tile_w_actual = r - left
             tile_latent = latents[:, :, t:bottom, left:r]
@@ -312,6 +314,7 @@ def latent_upscale_generate(
     Returns:
         Output do pipeline (com .images).
     """
+
     def _log(msg: str) -> None:
         if log_fn:
             log_fn(msg)
@@ -321,8 +324,9 @@ def latent_upscale_generate(
     if native_height is None:
         native_height = max(target_height // 2, 512)
 
-    _log(f"Latent upscale: {native_width}x{native_height} → {target_width}x{target_height} "
-         f"({refine_steps} refine steps)")
+    _log(
+        f"Latent upscale: {native_width}x{native_height} → {target_width}x{target_height} ({refine_steps} refine steps)"
+    )
 
     import torch
 
@@ -358,4 +362,3 @@ def latent_upscale_generate(
         generator=generator,
     )
     return out
-

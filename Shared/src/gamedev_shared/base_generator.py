@@ -262,6 +262,8 @@ class DiffusionGeneratorBase(ABC):
         no_split_classes: list[str] | None = None,
         offload_modules: tuple[str, ...] | None = None,
         allow_group_offload: bool = True,
+        force_group_offload: bool = False,
+        prefer_leaf_offload: bool = False,
         target_resolution: int | None = None,
     ) -> Any:
         """**Entry point unificado** para colocar o pipeline na GPU.
@@ -284,6 +286,7 @@ class DiffusionGeneratorBase(ABC):
             model_attr: attr do ``nn.Module`` pesado para multi-GPU accelerate
                 (ex: ``"transformer"`` no FLUX). Default ``None`` = dispatch do pipe.
             no_split_classes: override das classes no-split para multi-GPU.
+            force_group_offload / prefer_leaf_offload: ver :func:`place_pipeline`.
 
         Returns:
             :class:`~gamedev_shared.lowvram.OffloadPlan` resolvido e aplicado.
@@ -317,6 +320,8 @@ class DiffusionGeneratorBase(ABC):
             no_split_classes=no_split_classes,
             offload_modules=offload_modules,
             allow_group_offload=allow_group_offload,
+            force_group_offload=force_group_offload,
+            prefer_leaf_offload=prefer_leaf_offload,
             target_resolution=target_resolution,
             on_status=self._status,
         )

@@ -16,6 +16,7 @@ class TestKillRespectsUmsQueue:
             "queued": [],
         }
         with (
+            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
             patch("gamedev_shared.model_server.fetch_ums_queue_snapshot", return_value=snap),
             patch("gamedev_shared.model_server.ums_is_busy", return_value=True),
             patch("gamedev_shared.gpu.list_nvidia_compute_apps") as apps,
@@ -27,6 +28,7 @@ class TestKillRespectsUmsQueue:
 
     def test_proceeds_when_ums_idle(self) -> None:
         with (
+            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
             patch(
                 "gamedev_shared.model_server.fetch_ums_queue_snapshot",
                 return_value={"inflight": 0, "queue_depth": 0, "running": [], "queued": []},
@@ -38,3 +40,14 @@ class TestKillRespectsUmsQueue:
             logs = kill_gpu_compute_processes_aggressive(exclude_pid=1, respect_ums_queue=True)
         assert any("Sem alvos" in line or "não listou" in line for line in logs)
         assert not any(line.startswith("[recusado]") for line in logs)
+
+    def test_refuses_when_ums_up_but_snapshot_fails(self) -> None:
+        with (
+            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
+            patch("gamedev_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
+            patch("gamedev_shared.gpu.list_nvidia_compute_apps") as apps,
+        ):
+            logs = kill_gpu_compute_processes_aggressive(exclude_pid=1, respect_ums_queue=True)
+        apps.assert_not_called()
+        assert any(line.startswith("[recusado]") for line in logs)
+        assert any("snapshot" in line.lower() or "incerto" in line.lower() for line in logs)

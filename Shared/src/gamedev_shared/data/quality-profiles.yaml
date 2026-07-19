@@ -20,7 +20,7 @@ profiles:
       guidance: 4.0
     text3d:
       preset: fast
-      guidance: 5.0
+      guidance: 4.5
     paint3d:
       max_views: 2
       view_resolution: 384
@@ -99,7 +99,7 @@ profiles:
       guidance: 4.5
     text3d:
       preset: fast
-      guidance: 5.0
+      guidance: 4.5
     paint3d:
       max_views: 4
       view_resolution: 384
@@ -178,7 +178,7 @@ profiles:
       guidance: 4.5
     text3d:
       preset: balanced
-      guidance: 5.0
+      guidance: 4.5
     paint3d:
       max_views: 6
       view_resolution: 512
@@ -257,7 +257,7 @@ profiles:
       guidance: 5.0
     text3d:
       preset: hq
-      guidance: 5.0
+      guidance: 4.5
     paint3d:
       max_views: 8
       view_resolution: 512
@@ -336,7 +336,7 @@ profiles:
       guidance: 5.0
     text3d:
       preset: hq
-      guidance: 5.0
+      guidance: 4.5
     paint3d:
       max_views: 10
       view_resolution: 512

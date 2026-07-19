@@ -433,17 +433,27 @@ def kill_gpu_compute_processes_aggressive(
                 UMS_DO_NOT_KILL_TIP,
                 fetch_ums_queue_snapshot,
                 format_ums_holding_summary,
+                is_ums_running,
                 ums_is_busy,
             )
 
-            snap = fetch_ums_queue_snapshot()
-            if ums_is_busy(snap):
-                hold = format_ums_holding_summary(snap) if snap else "UMS busy"
-                logs.append(f"[recusado] kill GPU — UMS tem jobs na fila ({hold})")
-                logs.append(f"[recusado] {UMS_DO_NOT_KILL_TIP}")
-                return logs
+            # UMS up + snapshot falhou → fail-closed (unknown ≠ idle).
+            if is_ums_running():
+                snap = fetch_ums_queue_snapshot()
+                if snap is None or ums_is_busy(snap):
+                    hold = format_ums_holding_summary(snap) if snap else "UMS ativo (snapshot indisponível)"
+                    logs.append(f"[recusado] kill GPU — UMS tem jobs / estado incerto ({hold})")
+                    logs.append(f"[recusado] {UMS_DO_NOT_KILL_TIP}")
+                    return logs
         except Exception:
-            pass  # se o cliente UMS falhar, continuar com kill legado
+            # Cliente UMS rebenta: se o socket ainda existir, não matar às cegas.
+            with contextlib.suppress(Exception):
+                from .model_server import UMS_DO_NOT_KILL_TIP, is_ums_running
+
+                if is_ums_running():
+                    logs.append("[recusado] kill GPU — UMS ativo mas cliente falhou")
+                    logs.append(f"[recusado] {UMS_DO_NOT_KILL_TIP}")
+                    return logs
 
     # Construir set de PIDs a proteger
     protected_pids = {exclude_pid}

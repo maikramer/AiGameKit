@@ -63,12 +63,29 @@ class TestUmsClientDown:
             assert ms.submit_to_ums("text2icon", {"prompt": "x"}) is None
 
     def test_poll_none_when_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        with patch.object(ms, "ensure_ums_running", return_value=False):
+        with patch.object(ms, "ensure_ums_running", return_value=False) as ens:
             assert ms.poll_ums_job("abc") is None
+            ens.assert_called_once()
+            assert ens.call_args.kwargs.get("auto_start") is False
 
     def test_cancel_none_when_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        with patch.object(ms, "ensure_ums_running", return_value=False):
+        with patch.object(ms, "ensure_ums_running", return_value=False) as ens:
             assert ms.cancel_ums_job("abc") is None
+            assert ens.call_args.kwargs.get("auto_start") is False
+
+    def test_poll_does_not_auto_start(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """poll/wait/cancel nunca arrancam UMS vazio (perderiam job_id)."""
+        calls: list[bool] = []
+
+        def _ens(*, auto_start: bool = True, **_k: object) -> bool:
+            calls.append(auto_start)
+            return False
+
+        monkeypatch.setattr(ms, "ensure_ums_running", _ens)
+        assert ms.poll_ums_job("abc") is None
+        assert ms.wait_ums_job("abc") is None
+        assert ms.cancel_ums_job("abc") is None
+        assert calls == [False, False, False]
 
 
 class TestUmsClientAgainstMockSocket:

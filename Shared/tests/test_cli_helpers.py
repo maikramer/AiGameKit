@@ -7,7 +7,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from gamedev_shared.cli_helpers import apply_quality_defaults, env_bool, try_ums_delegation
+from gamedev_shared.cli_helpers import (
+    apply_quality_defaults,
+    env_bool,
+    try_ums_delegation,
+    with_ums_peak_opts,
+)
 
 
 class TestEnvBool:
@@ -117,14 +122,75 @@ class TestTryUmsDelegation:
 
     def test_returns_false_on_ums_error(self) -> None:
         console = MagicMock()
-        with patch(
-            "gamedev_shared.cli_helpers.delegate_to_ums",
-            return_value={"status": "error", "error": "backend down"},
+        with (
+            patch(
+                "gamedev_shared.cli_helpers.delegate_to_ums",
+                return_value={"status": "error", "error": "backend down"},
+            ),
+            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
+            patch("gamedev_shared.model_server.ums_is_busy", return_value=False),
         ):
             result = try_ums_delegation(
                 "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
             )
         assert result is False
+
+    def test_raises_when_none_but_ums_still_running(self) -> None:
+        """Timeout com UMS up → sem fallback in-process (GPU pode estar ocupada)."""
+        import click
+
+        console = MagicMock()
+        with (
+            patch("gamedev_shared.cli_helpers.delegate_to_ums", return_value=None),
+            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
+            patch("gamedev_shared.model_server.fetch_ums_queue_snapshot", return_value=None),
+            pytest.raises(click.ClickException, match="sem resposta"),
+        ):
+            try_ums_delegation(
+                "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
+            )
+
+    def test_raises_on_error_when_ums_busy(self) -> None:
+        import click
+
+        console = MagicMock()
+        with (
+            patch(
+                "gamedev_shared.cli_helpers.delegate_to_ums",
+                return_value={"status": "error", "error_code": "BACKEND_FAIL", "error": "boom"},
+            ),
+            patch("gamedev_shared.model_server.is_ums_running", return_value=True),
+            patch("gamedev_shared.model_server.ums_is_busy", return_value=True),
+            pytest.raises(click.ClickException, match="UMS ocupado"),
+        ):
+            try_ums_delegation(
+                "text2icon", {"output": "/tmp/x.png"}, t_start=time.time(), noun="Ícone", console=console
+            )
+
+    def test_raises_on_vram_insufficient(self) -> None:
+        """VRAM_INSUFFICIENT nunca faz fallback in-process (evita OOM)."""
+        import click
+
+        console = MagicMock()
+        with (
+            patch(
+                "gamedev_shared.cli_helpers.delegate_to_ums",
+                return_value={
+                    "status": "error",
+                    "error_code": "VRAM_INSUFFICIENT",
+                    "error": "peak 6553 > free 5657",
+                    "hint": "evict other backends",
+                },
+            ),
+            pytest.raises(click.ClickException, match="VRAM_INSUFFICIENT"),
+        ):
+            try_ums_delegation(
+                "paint3d",
+                {"output": "/tmp/x.glb"},
+                t_start=time.time(),
+                noun="Mesh",
+                console=console,
+            )
 
     def test_returns_false_when_disabled(self) -> None:
         console = MagicMock()
@@ -183,3 +249,26 @@ class TestTryUmsDelegation:
             )
         mock_delegate.assert_called_once()
         assert mock_delegate.call_args.kwargs.get("priority") == "batch"
+
+
+class TestWithUmsPeakOpts:
+    """with_ums_peak_opts: sinais honestos de pico VRAM para admit UMS."""
+
+    def test_paint_mem_eff_default_sdnq(self) -> None:
+        out = with_ums_peak_opts({}, backend="paint3d", memory_efficient=True)
+        assert out["memory_efficient"] is True
+        assert out["sdnq_preset"] == "sdnq-uint8"
+
+    def test_text2d_quant_preset_maps_to_sdnq(self) -> None:
+        out = with_ums_peak_opts({}, backend="text2d", quant_preset="sdnq-int4")
+        assert out["quant_preset"] == "sdnq-int4"
+        assert out["sdnq_preset"] == "sdnq-int4"
+
+    def test_explicit_none_preset(self) -> None:
+        out = with_ums_peak_opts(
+            {},
+            backend="text3d",
+            memory_efficient=True,
+            sdnq_preset="none",
+        )
+        assert out["sdnq_preset"] == "none"

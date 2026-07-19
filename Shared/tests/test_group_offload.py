@@ -179,6 +179,19 @@ class TestPlanGroupOffload:
         cfg2 = plan_group_offload(9.0, self.FLUX_9B, quant_mode="sdnq-int4")
         assert cfg2 is None
 
+    def test_force_even_when_fits(self) -> None:
+        """force=True → leaf+stream mesmo se pesos+ativação cabem (VRAM→MC)."""
+        cfg = plan_group_offload(20.0, self.FLUX_9B, quant_mode="none", force=True, prefer_leaf=True)
+        assert cfg is not None
+        assert cfg.offload_type == "leaf_level"
+        assert cfg.use_stream is True
+
+    def test_prefer_leaf_overrides_block(self) -> None:
+        """prefer_leaf força leaf_level mesmo com folga para blocks."""
+        cfg = plan_group_offload(10.8, self.FLUX_9B, quant_mode="none", prefer_leaf=True)
+        assert cfg is not None
+        assert cfg.offload_type == "leaf_level"
+
 
 class TestGroupOffloadConfig:
     def test_summary_leaf_level(self) -> None:

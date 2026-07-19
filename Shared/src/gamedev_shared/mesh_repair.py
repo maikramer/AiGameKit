@@ -892,6 +892,251 @@ def make_watertight(
     return stats
 
 
+def _vertex_gap_weights(
+    obj: Any,
+    *,
+    full_dist: float,
+    zero_dist: float,
+    cone_deg: float = 30.0,
+) -> Any:
+    """Peso por vértice = proximidade de parede oposta *à frente* (vão de racha).
+
+    Lança um pequeno cone de raios ao longo da normal (para fora); a menor
+    distância de impacto mede o vão. Interior de rachas/dobras: parede oposta
+    muito próxima → peso 1. Superfícies expostas (sinos, colunas, arcos): sem
+    impacto próximo → peso 0. Ao contrário de AO genérico, não marca zonas
+    apenas semi-fechadas (interior de campanário), evitando fundir elementos
+    separados por vãos abertos intencionais.
+
+    Args:
+        obj: Objeto mesh bpy.
+        full_dist: Vão <= isto → peso 1.
+        zero_dist: Vão >= isto → peso 0 (smoothstep entre os dois).
+        cone_deg: Meio-ângulo do cone de raios à volta da normal.
+
+    Returns:
+        np.ndarray (n_verts,) de pesos 0..1.
+    """
+    import math as _math
+
+    import bpy
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+
+    deps = bpy.context.evaluated_depsgraph_get()
+    bvh = BVHTree.FromObject(obj, deps)
+
+    me = obj.data
+    n_verts = len(me.vertices)
+    gap = np.full(n_verts, np.inf, dtype=np.float64)
+    eps = 1e-4
+    tilt = _math.radians(cone_deg)
+    sin_t, cos_t = _math.sin(tilt), _math.cos(tilt)
+    for i, v in enumerate(me.vertices):
+        nrm = v.normal
+        if nrm.length == 0:
+            continue
+        n = nrm.normalized()
+        origin = v.co + n * eps
+        ref = Vector((1.0, 0.0, 0.0)) if abs(n.x) < 0.9 else Vector((0.0, 1.0, 0.0))
+        t1 = n.cross(ref).normalized()
+        t2 = n.cross(t1)
+        dirs = [n]
+        for a in (0.0, 0.5, 1.0, 1.5):
+            ang = a * _math.pi
+            dirs.append(n * cos_t + (t1 * _math.cos(ang) + t2 * _math.sin(ang)) * sin_t)
+        best = np.inf
+        for d in dirs:
+            loc, _hn, _hi, hd = bvh.ray_cast(origin, d, zero_dist * 1.5)
+            if loc is not None and hd < best:
+                best = hd
+        gap[i] = best
+
+    # smoothstep invertido: vão pequeno → 1, vão grande → 0
+    t = np.clip((gap - full_dist) / max(zero_dist - full_dist, 1e-6), 0.0, 1.0)
+    t = t * t * (3.0 - 2.0 * t)
+    return 1.0 - t
+
+
+def morphological_close(
+    obj: Any,
+    *,
+    distance: float = 0.10,
+    voxel_size: float | None = None,
+    wall_thickness: float | None = None,
+    gap_mask: bool = False,
+    gap_open_dist: float | None = None,
+) -> dict[str, int | float]:
+    """Fecho morfológico volumétrico: solidify → voxel → dilate → voxel → erode → voxel.
+
+    Resolve o caso "double shell fino": buracos de marching cubes que dobram
+    para dentro ligando casca externa à interna — a mesh reporta boundary=0
+    (topologicamente fechada) mas exibe rachas/buracos visíveis. Weld e
+    fill_holes não os detetam porque não há arestas de fronteira.
+
+    A dilatação (displace +``distance`` ao longo da normal) faz as duas
+    margens da racha colidirem; o voxel remesh funde-as num sólido; a erosão
+    (displace -``distance``) devolve a superfície à posição original já sem a
+    racha. O solidify prévio garante paredes mínimas para não desaparecerem
+    no voxel remesh — **escalado a ``distance``** (nunca um 8 cm fixo que
+    derrete detalhe quando ``distance`` é milimétrico).
+
+    Por defeito o fecho é uniforme (todos os vértices dilatam/erodem o mesmo)
+    — simples e previsível; elementos finos muito próximos (< ~2*``distance``)
+    podem fundir. ``gap_mask=True`` pondera pelo vão medido à frente de cada
+    vértice (cone de raios ao longo da normal): rachas fecham a 100%, vãos
+    abertos >= ``gap_open_dist`` não se movem — mas pode deixar rachas
+    largas/irregulares por fechar (pesos parciais).
+
+    ATENÇÃO: destrói UVs/materiais — usar apenas em meshes pré-paint
+    (ex. ``topology-fix``). Fecha rachas com vão < ~2*``distance``;
+    aberturas intencionais maiores sobrevivem.
+
+    Args:
+        obj: Objeto mesh bpy.
+        distance: Raio do fecho em unidades de mundo (metros). Vãos menores
+            que ~2x isto são fundidos.
+        voxel_size: Tamanho do voxel do remesh. ``None`` → ``distance / 3``
+            (piso ``min(0.01, distance/2)`` — não força 1 cm quando distance≪).
+        wall_thickness: Espessura do solidify. ``None`` → ``2 * distance``
+            (piso 2 mm). Valor fixo grande (ex. 0.08) engrossa tudo e anula
+            ``distance`` pequeno.
+        gap_mask: Ponderar o fecho pelo vão frontal (protege elementos abertos).
+        gap_open_dist: Vão a partir do qual o peso é 0 (elemento "aberto").
+            ``None`` → ``2.5 * distance``.
+
+    Returns:
+        Estatísticas: faces antes/depois, voxel_size usado.
+    """
+    import bpy
+
+    log = logging.getLogger(__name__)
+    faces_before = len(obj.data.polygons)
+    if faces_before == 0 or distance <= 0:
+        return {"faces_before": faces_before, "faces_after": faces_before, "voxel_size": 0.0}
+
+    # Piso do remesh: nunca maior que distance/2 (senão distance≈0.005 vira grelha 1cm).
+    vox_floor = min(0.01, max(distance / 2.0, 0.001))
+    vox = voxel_size if voxel_size is not None else max(distance / 3.0, vox_floor)
+    # Cap de grelha ~800 por eixo: assets em metros reais (edificio 7 m) com
+    # distance milimetrico dariam voxel sub-mm (OOM/horas). O voxel nunca
+    # desce abaixo de max_dim/800.
+    max_dim = float(max(obj.dimensions)) if max(obj.dimensions) > 0 else 0.0
+    if max_dim > 0:
+        vox = max(vox, max_dim / 800.0)
+    # wall = distance (nao 2x): solidify extra era o que derretia com morph leve.
+    wall = float(wall_thickness) if wall_thickness is not None else max(distance, 0.001)
+    bpy.context.view_layer.objects.active = obj
+
+    def _apply(mod_name: str) -> None:
+        bpy.ops.object.modifier_apply(modifier=mod_name)
+
+    def _voxel() -> None:
+        mod = obj.modifiers.new("MorphVoxel", "REMESH")
+        mod.mode = "VOXEL"
+        mod.voxel_size = vox
+        mod.use_smooth_shade = True
+        _apply(mod.name)
+
+    def _set_group_weights(name: str, weights: np.ndarray) -> str:
+        if name in obj.vertex_groups:
+            obj.vertex_groups.remove(obj.vertex_groups[name])
+        vg = obj.vertex_groups.new(name=name)
+        for i, w in enumerate(weights):
+            if w > 0.0:
+                vg.add([i], float(w), "REPLACE")
+        return vg.name
+
+    def _displace(amount: float, group: str | None = None) -> None:
+        mod = obj.modifiers.new("MorphDisp", "DISPLACE")
+        mod.mid_level = 0.0
+        mod.strength = amount
+        mod.direction = "NORMAL"
+        if group:
+            mod.vertex_group = group
+        _apply(mod.name)
+
+    if wall > 0:
+        mod = obj.modifiers.new("MorphSolidify", "SOLIDIFY")
+        mod.thickness = wall
+        mod.offset = -1.0  # engrossa para dentro; superfície exterior intacta
+        mod.use_rim = True
+        mod.use_quality_normals = True
+        _apply(mod.name)
+
+    _voxel()  # normaliza normais antes do displace
+
+    if gap_mask:
+        # Dilatação ponderada pelo vão frontal: só rachas fecham a 100%.
+        open_d = gap_open_dist if gap_open_dist is not None else 2.5 * distance
+        ao_w = _vertex_gap_weights(obj, full_dist=distance, zero_dist=open_d)
+        group = _set_group_weights("MorphCloseAO", ao_w)
+        _displace(distance, group)
+        # Posições pós-dilatação (antes do voxel destruir os vgroups) para
+        # transferir os pesos por vizinho-mais-próximo à mesh fundida.
+        me = obj.data
+        n_pre = len(me.vertices)
+        pre_coords = np.empty(n_pre * 3, dtype=np.float64)
+        me.vertices.foreach_get("co", pre_coords)
+        pre_coords = pre_coords.reshape(-1, 3)
+        _voxel()  # dilatação funde as margens da racha
+
+        from mathutils import Vector as _Vec
+        from mathutils.kdtree import KDTree
+
+        kd = KDTree(n_pre)
+        for i, co in enumerate(pre_coords):
+            kd.insert(_Vec(co), i)
+        kd.balance()
+        me = obj.data
+        post_w = np.zeros(len(me.vertices), dtype=np.float64)
+        for i, v in enumerate(me.vertices):
+            _co, idx, _dist = kd.find(v.co)
+            if idx is not None:
+                post_w[i] = ao_w[idx]
+        group = _set_group_weights("MorphCloseAO", post_w)
+        _displace(-distance, group)
+        if "MorphCloseAO" in obj.vertex_groups:
+            obj.vertex_groups.remove(obj.vertex_groups["MorphCloseAO"])
+    else:
+        _displace(distance)
+        _voxel()  # dilatação funde as margens da racha
+        _displace(-distance)
+
+    _voxel()  # erosão limpa auto-interseções e devolve a superfície
+
+    # Voxel remesh infla faces (grelha densa >> tri budget do MC) e produz
+    # quads (2 tris cada no export). Triangular e decimar de volta ao tri
+    # count original: mantém o fecho sem herdar a densidade da grelha
+    # (capela: 1.7M → 7.5M tris sem isto).
+    faces_remeshed = sum(len(p.vertices) - 2 for p in obj.data.polygons)
+    if faces_remeshed > faces_before > 0:
+        mod = obj.modifiers.new("MorphTri", "TRIANGULATE")
+        _apply(mod.name)
+        mod = obj.modifiers.new("MorphDecimate", "DECIMATE")
+        mod.decimate_type = "COLLAPSE"
+        mod.ratio = faces_before / faces_remeshed
+        _apply(mod.name)
+
+    faces_after = len(obj.data.polygons)
+    log.info(
+        "morphological_close: %d→%d faces (remesh=%d dist=%.4f voxel=%.4f wall=%.4f gap_mask=%s)",
+        faces_before,
+        faces_after,
+        faces_remeshed,
+        distance,
+        vox,
+        wall,
+        gap_mask,
+    )
+    return {
+        "faces_before": faces_before,
+        "faces_after": faces_after,
+        "voxel_size": vox,
+        "wall_thickness": wall,
+    }
+
+
 def infer_up_axis(coords: np.ndarray) -> int:
     """Eixo vertical em coords locais = maior extensão AABB (clamp flare / local)."""
     if coords.size == 0:
@@ -1647,15 +1892,19 @@ REPAIR_PROFILES: dict[str, RepairProfile] = {
         do_exact_weld=True,
         do_reweld_coincident=True,
         sliver_max_aspect=80.0,
-        # Lean: weld + debris/slivers + micro fill. Sem cascas internas,
-        # watertight agressivo, force/cap base, flare ou Taubin — esses
-        # passos destruíam edifícios tipo casca-plástico (capela) ou props
-        # interiores. Double-shell / fundo aberto → geração (prompt/vista).
+        # Weld + debris/slivers + fill + watertight seletivo.
+        # Sem remove_internal_shells / force_base / flare / Taubin (destruíam
+        # edifícios casca-plástico). Flap-erode ligado: fecha rachas MC
+        # non-manifold (capela 638→0 boundary sem matar faces). Diâmetro de
+        # loop limita portas/janelas grandes.
         do_remove_internal_shells=False,
-        fill_holes_sides=32,
-        watertight=False,
-        watertight_cap_base=False,
-        watertight_final_fill=False,
+        fill_holes_sides=96,
+        watertight=True,
+        watertight_cap_base=True,
+        watertight_final_fill=True,
+        watertight_skip_flap_erode=False,
+        watertight_max_loop_diameter_ratio=0.35,
+        watertight_max_loop_edges=400,
         force_close_base=False,
         do_clamp_base_flare=False,
         do_taubin=False,

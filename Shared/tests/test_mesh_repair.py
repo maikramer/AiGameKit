@@ -319,11 +319,17 @@ class TestRepairProfiles:
         with pytest.raises(ValueError, match="desconhecido"):
             get_repair_profile("nope")
 
-    def test_topology_clean_lean_flags(self) -> None:
+    def test_topology_clean_selective_watertight_flags(self) -> None:
+        """Watertight seletivo: fecha rachas MC, sem shells/base/flare/Taubin."""
         from gamedev_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
-        assert p.watertight is False
+        assert p.watertight is True
+        assert p.watertight_cap_base is True
+        assert p.watertight_final_fill is True
+        assert p.watertight_skip_flap_erode is False
+        assert p.watertight_max_loop_diameter_ratio == 0.35
+        assert p.watertight_max_loop_edges == 400
         assert p.do_remove_internal_shells is False
         assert p.sliver_max_aspect == 80.0
         assert p.weld_mode == "vert_density"
@@ -535,17 +541,18 @@ class TestRepairWatertightRoundtrip:
         assert len(obj.data.polygons) >= faces_before
         clear_scene()
 
-    def test_topology_clean_lean_skips_watertight_stats(self, _bpy) -> None:
-        """Lean: sem make_watertight (fill_holes micro pode fechar loops ≤32)."""
+    def test_topology_clean_runs_selective_watertight(self, _bpy) -> None:
+        """Watertight seletivo corre no topology_clean (stats de boundary presentes)."""
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
         from gamedev_shared.mesh_repair import repair_mesh_object_with_profile
 
         verts, faces = self._procedural_open_box_subdivided()
         clear_scene()
-        obj = create_mesh_from_arrays(verts, faces, name="topo_lean")
+        obj = create_mesh_from_arrays(verts, faces, name="topo_wt")
         stats = repair_mesh_object_with_profile(obj, "topology_clean")
-        assert "boundary_before" not in stats
-        assert "boundary_after" not in stats
+        assert "boundary_before" in stats
+        assert "boundary_after" in stats
+        assert stats["boundary_after"] <= stats["boundary_before"]
         clear_scene()
 
     def test_repair_mesh_object_watertight_closes(self, _bpy) -> None:
@@ -625,15 +632,15 @@ class TestRepairWatertightRoundtrip:
 
 
 class TestClampBaseFlareAndTaubin:
-    def test_topology_clean_is_lean(self) -> None:
+    def test_topology_clean_no_destructive_steps(self) -> None:
+        """Sem shells/force_base/flare/Taubin (destruíam edifícios casca-plástico)."""
         from gamedev_shared.mesh_repair import get_repair_profile
 
         p = get_repair_profile("topology_clean")
-        assert p.fill_holes_sides == 32
+        assert p.fill_holes_sides == 96
         assert p.do_remove_internal_shells is False
-        assert p.watertight is False
+        assert p.watertight is True
         assert p.force_close_base is False
-        assert p.watertight_cap_base is False
         assert p.do_clamp_base_flare is False
         assert p.do_taubin is False
 
@@ -982,7 +989,7 @@ class TestCapBoundaryDiameterGuard:
         from gamedev_shared.bpy_mesh import clear_scene, create_mesh_from_arrays
         from gamedev_shared.mesh_repair import cap_boundary_loops, count_boundary_edges
 
-        # Caixa sem topo — loop de 4 arestas, diâmetro ~√2 na face 1×1.
+        # Caixa sem topo — loop de 4 arestas, diâmetro ~√2 na face 1x1.
         verts = np.array(
             [
                 [-0.5, -0.5, -0.5],

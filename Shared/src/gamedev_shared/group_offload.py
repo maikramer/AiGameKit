@@ -81,6 +81,9 @@ def plan_group_offload(
     usable_vram_gib: float,
     footprint: ModelFootprint,
     quant_mode: str,
+    *,
+    prefer_leaf: bool = False,
+    force: bool = False,
 ) -> GroupOffloadConfig | None:
     """**A fórmula** — auto-tuner VRAM-aware para group offload com streams.
 
@@ -88,11 +91,12 @@ def plan_group_offload(
     quantização), decide o melhor setup de group offload:
 
     - ``None``: o modelo cabe todo na GPU (pesos + ativação) → sem offload, mais rápido.
-    - ``leaf_level`` + stream: VRAM apertada demais para blocks inteiros. Mesma pegada
-      que ``sequential_cpu_offload`` mas ~2-4x mais rápido via overlap de streams.
-      (O modo comprovado do Texture2D/FLUX em 6 GiB.)
-    - ``block_level`` + stream: há folga para um block inteiro onloaded. Menos sync
-      points que leaf_level, com overlap. Equilíbrio velocidade/VRAM.
+      Com ``force=True``, devolve config mesmo assim (reservar VRAM para ativação
+      grande — ex. octree alto no Text3D).
+    - ``leaf_level`` + stream: grupos mínimos (cada leaf). Máxima VRAM livre para
+      ativação; mais sync points. Preferido em qualidade alta / ``prefer_leaf``.
+    - ``block_level`` + stream: um transformer block onloaded. Menos sync, um pouco
+      mais VRAM de pesos.
 
     Pura (sem torch/GPU) — testável em CI.
 
@@ -100,6 +104,9 @@ def plan_group_offload(
         usable_vram_gib: VRAM utilizável em GiB (já aplicada a fração de segurança).
         footprint: Pegada do modelo (:class:`~gamedev_shared.lowvram.ModelFootprint`).
         quant_mode: Modo de quantização em uso (para ajustar a pegada).
+        prefer_leaf: Forçar ``leaf_level`` (grupos menores) mesmo com folga.
+        force: Devolver config mesmo quando pesos+ativação cabem (qualidade >
+            velocidade: stream pesos, VRAM para ativação).
 
     Returns:
         :class:`GroupOffloadConfig` ou ``None`` se não for preciso offload.
@@ -107,23 +114,22 @@ def plan_group_offload(
     weights = footprint.weights_gib(quant_mode)
     activation = footprint.activation_gib
 
-    # Passo 0: cabe todo na GPU? → sem offload (mais rápido).
-    if weights + activation <= usable_vram_gib:
+    # Passo 0: cabe todo na GPU? → sem offload (mais rápido), salvo force.
+    if not force and weights + activation <= usable_vram_gib:
         return None
 
-    # Não cabe. Calcular o espaço para pesos onloaded após reservar ativação.
+    # Não cabe (ou force). Espaço para pesos onloaded após reservar ativação.
     largest = footprint.largest_gib(quant_mode)
     headroom = max(0.0, usable_vram_gib - activation)
 
-    if headroom < largest * GROUP_TIGHT_HEADROOM_FACTOR:
-        # Muito apertado: nem um block inteiro cabe confortavelmente.
-        # leaf_level = granularidade máxima, só as leaves necessárias onloaded.
+    if prefer_leaf or headroom < largest * GROUP_TIGHT_HEADROOM_FACTOR:
+        # Grupos mínimos: leaf_level + streams — máxima VRAM para ativação/octree.
         return GroupOffloadConfig(
             offload_type="leaf_level",
             use_stream=True,
             record_stream=True,
         )
-    # Há folga para blocks inteiros: menos sync points, ainda com overlap de stream.
+    # Folga para blocks inteiros: menos sync points, ainda com overlap de stream.
     # (diffusers força num_blocks_per_group=1 quando use_stream=True.)
     return GroupOffloadConfig(
         offload_type="block_level",

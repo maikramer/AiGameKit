@@ -20,8 +20,11 @@ para o seu mecanismo. Isto mantém o planner agnóstico do backend de quantizaç
 from __future__ import annotations
 
 import contextlib
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 GIB = 1024**3
 
@@ -99,6 +102,8 @@ FOOTPRINTS: dict[str, ModelFootprint] = {
     "flux-klein-9b": ModelFootprint(26.0, 1.5, 9.0, architecture="flux"),
     "flux-dev-uint4": ModelFootprint(7.4, 2.0, 3.0, architecture="flux"),
     "hunyuan3d-2.1-dit": ModelFootprint(6.5, 1.5, 5.0, architecture="hunyuan3d"),
+    # Hunyuan3D-Omni (~3.3B): DiT + ShapeVAE + OmniEncoder/DINOv2; README ~10 GB fp16.
+    "hunyuan3d-omni": ModelFootprint(10.0, 2.0, 6.0, architecture="hunyuan3d"),
     # Hunyuan3D-Part: DiT ~3.3 + conditioner ~0.9 + ShapeVAE ~0.3 + P3-SAM ~0.2 + overhead.
     "hunyuan3d-part": ModelFootprint(4.75, 1.5, 5.2, architecture="dit"),
     "hunyuan-paint": ModelFootprint(6.0, 2.0, 5.0, architecture="unet"),
@@ -194,6 +199,8 @@ def plan_offload(
     allow_quant: tuple[str, ...] | None = None,
     allow_multi_gpu: bool = True,
     allow_group_offload: bool = True,
+    force_group_offload: bool = False,
+    prefer_leaf_offload: bool = False,
     target_resolution: int | None = None,
     usable_fraction: float = USABLE_VRAM_FRACTION,
 ) -> OffloadPlan:
@@ -225,6 +232,9 @@ def plan_offload(
             ferramenta. ``None`` = escada por defeito. Use p.ex. ``("none", "sdnq-int4")``
             se a ferramenta só suporta SDNQ.
         allow_multi_gpu: permitir split multi-GPU.
+        force_group_offload: saltar full-GPU e ir directo a group+stream
+            (reservar VRAM para ativação — octree alto / qualidade high).
+        prefer_leaf_offload: forçar ``leaf_level`` (grupos mínimos) no group offload.
         usable_fraction: fração da VRAM total considerada utilizável.
 
     Returns:
@@ -259,7 +269,8 @@ def plan_offload(
     high_res = target_resolution is not None and target_resolution >= 1024
 
     # --- Multi-GPU: split dos pesos por todas as GPUs (accelerate device_map) ---
-    if allow_multi_gpu and len(budgets) > 1:
+    # force_group_offload: single-GPU com stream de pesos (não split).
+    if allow_multi_gpu and len(budgets) > 1 and not force_group_offload:
         for quant in ladder:
             weights = footprint.weights_gib(quant)
             # Pesos divididos + ativação na primária têm de caber.
@@ -279,26 +290,27 @@ def plan_offload(
                 )
 
     # --- Single-GPU: escada quant → quant+offload ---
-    # Passo 1-2: tudo na GPU, quant crescente.
-    for quant in ladder:
-        peak = footprint.weights_gib(quant) + act
-        if peak <= primary_budget:
-            note = "full-GPU" if quant == "none" else f"full-GPU + {quant}"
-            # Em resolução alta, activar VAE tiling + attention slicing mesmo em
-            # full-GPU — reduzem o pico de ativação sem custo de offload.
-            return OffloadPlan(
-                device="cuda",
-                quant_mode=quant,
-                offload=OFFLOAD_NONE,
-                vae_slicing=high_res,
-                vae_tiling=high_res,
-                attention_slicing=high_res,
-                multi_gpu_ids=None,
-                primary_gpu=primary,
-                usable_vram_gib=round(primary_budget, 2),
-                est_peak_gib=round(peak, 2),
-                notes=(note + (" + vae-tiling/attn-slice (high-res)" if high_res else ""),),
-            )
+    # Passo 1-2: tudo na GPU, quant crescente (salvo force_group_offload).
+    if not force_group_offload:
+        for quant in ladder:
+            peak = footprint.weights_gib(quant) + act
+            if peak <= primary_budget:
+                note = "full-GPU" if quant == "none" else f"full-GPU + {quant}"
+                # Em resolução alta, activar VAE tiling + attention slicing mesmo em
+                # full-GPU — reduzem o pico de ativação sem custo de offload.
+                return OffloadPlan(
+                    device="cuda",
+                    quant_mode=quant,
+                    offload=OFFLOAD_NONE,
+                    vae_slicing=high_res,
+                    vae_tiling=high_res,
+                    attention_slicing=high_res,
+                    multi_gpu_ids=None,
+                    primary_gpu=primary,
+                    usable_vram_gib=round(primary_budget, 2),
+                    est_peak_gib=round(peak, 2),
+                    notes=(note + (" + vae-tiling/attn-slice (high-res)" if high_res else ""),),
+                )
 
     # Passo 3: group offload com CUDA streams (preferido a model_cpu/sequential).
     # Assim que o modelo não cabe todo na GPU, o offload preferido é group+stream:
@@ -309,9 +321,21 @@ def plan_offload(
     most_quant = ladder[-1]
     from .group_offload import plan_group_offload  # lazy: evita import circular
 
-    group_cfg = plan_group_offload(primary_budget, footprint, most_quant) if allow_group_offload else None
+    group_cfg = (
+        plan_group_offload(
+            primary_budget,
+            footprint,
+            most_quant,
+            prefer_leaf=prefer_leaf_offload,
+            force=force_group_offload,
+        )
+        if allow_group_offload
+        else None
+    )
     if group_cfg is not None:
         # group offload: pico ≈ ativação (só as layers necessárias onloaded).
+        leaf_note = group_cfg.offload_type
+        force_note = " (force, VRAM→ativação)" if force_group_offload else ""
         return OffloadPlan(
             device="cuda",
             quant_mode=most_quant,
@@ -323,7 +347,7 @@ def plan_offload(
             primary_gpu=primary,
             usable_vram_gib=round(primary_budget, 2),
             est_peak_gib=round(act, 2),
-            notes=(f"group offload + streams + {most_quant} + vae-tiling/attn-slice",),
+            notes=(f"group {leaf_note}+streams + {most_quant} + vae-tiling/attn-slice{force_note}",),
             group_config=group_cfg,
         )
 
@@ -401,14 +425,23 @@ def apply_offload_plan(
 
     target = device or (f"cuda:{plan.primary_gpu}" if plan.primary_gpu is not None else "cuda")
     applied_group = False
+    applied_any = False
 
     if plan.offload == OFFLOAD_GROUP_STREAM:
         # Preferido: group offload + CUDA streams. Se falhar (diffusers antigo,
         # pipeline não-diffusers), cai para model_cpu como rede de segurança.
         applied_group = try_group_offloading(pipe, config=plan.group_config, modules=offload_modules)
         if not applied_group:
-            enable_model_cpu_offload_optimized(pipe, device=target, use_sequential=False)
+            if hasattr(pipe, "enable_model_cpu_offload"):
+                enable_model_cpu_offload_optimized(pipe, device=target, use_sequential=False)
+                applied_any = True
+            else:
+                logger.warning(
+                    "apply_offload_plan: group_stream falhou e pipeline sem "
+                    "enable_model_cpu_offload — placement pode ser no-op"
+                )
         else:
+            applied_any = True
             # Group offload aplica-se só ao transformer/text_encoders (VAE é excluído
             # — conflitua com tiling/decode). Colocar o VAE na GPU directamente (é
             # pequeno) para que o decode funcione sem device mismatch.
@@ -417,13 +450,39 @@ def apply_offload_plan(
                 with contextlib.suppress(Exception):
                     vae.to(target)
     elif plan.offload == OFFLOAD_MODEL:
-        enable_model_cpu_offload_optimized(pipe, device=target, use_sequential=False)
+        if hasattr(pipe, "enable_model_cpu_offload"):
+            enable_model_cpu_offload_optimized(pipe, device=target, use_sequential=False)
+            applied_any = True
+        else:
+            logger.warning("apply_offload_plan: model_cpu pedido mas pipeline sem enable_model_cpu_offload")
     elif plan.offload == OFFLOAD_SEQUENTIAL:
-        enable_model_cpu_offload_optimized(pipe, device=target, use_sequential=True)
-    elif plan.multi_gpu_ids is None and hasattr(pipe, "to"):
+        if hasattr(pipe, "enable_sequential_cpu_offload") or hasattr(pipe, "enable_model_cpu_offload"):
+            enable_model_cpu_offload_optimized(pipe, device=target, use_sequential=True)
+            applied_any = True
+        else:
+            logger.warning("apply_offload_plan: sequential pedido mas pipeline sem offload hooks")
+    elif plan.multi_gpu_ids is None:
         # Split multi-GPU é responsabilidade do chamador (MultiGPUPlanner); aqui só
         # colocamos o pipeline inteiro quando não há offload nem split.
-        pipe.to(target)
+        if hasattr(pipe, "to"):
+            pipe.to(target)
+            applied_any = True
+        else:
+            # Fallback custom (attrs Omni/Hunyuan): mover nn.Modules conhecidos.
+            moved = False
+            for attr in offload_modules or ("model", "vae", "cond_encoder", "conditioner", "transformer"):
+                mod = getattr(pipe, attr, None)
+                if mod is not None and hasattr(mod, "to"):
+                    with contextlib.suppress(Exception):
+                        mod.to(target)
+                        moved = True
+            if moved:
+                if hasattr(pipe, "device"):
+                    with contextlib.suppress(Exception):
+                        pipe.device = __import__("torch").device(target)
+                applied_any = True
+            else:
+                logger.warning("apply_offload_plan: OFFLOAD_NONE no-op — pipeline sem .to() e sem módulos conhecidos")
 
     if plan.vae_slicing or plan.vae_tiling:
         vae = getattr(pipe, "vae", None)
@@ -431,6 +490,12 @@ def apply_offload_plan(
             enable_vae_optimizations(vae, enable_slicing=plan.vae_slicing, enable_tiling=plan.vae_tiling)
     if plan.attention_slicing:
         enable_attention_optimizations(pipe, enable_slicing=True)
+
+    if plan.device != "cpu" and plan.multi_gpu_ids is None and not applied_any and not applied_group:
+        logger.warning(
+            "apply_offload_plan: nenhum path de placement aplicou move/offload (plano=%s)",
+            plan.summary(),
+        )
 
     return applied_group
 
@@ -504,6 +569,8 @@ def place_pipeline(
     allow_quant: tuple[str, ...] | None = None,
     allow_multi_gpu: bool = True,
     allow_group_offload: bool = True,
+    force_group_offload: bool = False,
+    prefer_leaf_offload: bool = False,
     target_resolution: int | None = None,
     model_attr: str | None = None,
     no_split_classes: list[str] | None = None,
@@ -532,6 +599,8 @@ def place_pipeline(
         quant_mode: quantização já aplicada/a aplicar (afeta a pegada).
         allow_quant: ``("none",)`` para checkpoints pré-quantizados (FLUX uint4).
         allow_multi_gpu: permitir split multi-GPU.
+        force_group_offload: saltar full-GPU → group+stream (VRAM para ativação).
+        prefer_leaf_offload: forçar ``leaf_level`` (grupos mínimos).
         model_attr: attr do ``nn.Module`` pesado (ex: ``"model"`` Hunyuan3D).
             Necessário para accelerate dispatch em pipelines custom.
         no_split_classes: override das classes no-split. Se ``None``, deriva de
@@ -553,6 +622,8 @@ def place_pipeline(
         allow_quant=allow_quant,
         allow_multi_gpu=allow_multi_gpu,
         allow_group_offload=allow_group_offload,
+        force_group_offload=force_group_offload,
+        prefer_leaf_offload=prefer_leaf_offload,
         target_resolution=target_resolution,
     )
 
@@ -570,6 +641,8 @@ def place_pipeline(
             allow_quant=allow_quant,
             allow_multi_gpu=False,
             allow_group_offload=allow_group_offload,
+            force_group_offload=force_group_offload,
+            prefer_leaf_offload=prefer_leaf_offload,
             target_resolution=target_resolution,
         )
         if on_status:

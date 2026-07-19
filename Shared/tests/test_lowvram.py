@@ -72,6 +72,19 @@ class TestSixGbTarget:
         assert plan.vae_tiling and plan.attention_slicing
         assert plan.memory_efficient
 
+    def test_force_group_leaf_even_when_fits(self) -> None:
+        """force+prefer_leaf: small model em 6 GiB → group leaf (não full-GPU)."""
+        plan = plan_offload(
+            [_gpu(6)],
+            SMALL_4B,
+            force_group_offload=True,
+            prefer_leaf_offload=True,
+        )
+        assert plan.offload == OFFLOAD_GROUP_STREAM
+        assert plan.group_config is not None
+        assert plan.group_config.offload_type == "leaf_level"
+        assert plan.group_config.use_stream is True
+
     def test_small_model_fits_6gb_full_gpu(self) -> None:
         # 8 GiB fp16 → sdnq-int4 ≈ 2.56 + 1.5 = 4.06 ≤ 5.4 → full GPU.
         plan = plan_offload([_gpu(6)], SMALL_4B)
@@ -158,6 +171,11 @@ class TestFootprintRegistry:
     def test_hunyuan_footprint_has_architecture(self) -> None:
         fp = get_footprint("hunyuan3d-2.1-dit")
         assert fp.architecture == "hunyuan3d"
+
+    def test_hunyuan_omni_footprint(self) -> None:
+        fp = get_footprint("hunyuan3d-omni")
+        assert fp.architecture == "hunyuan3d"
+        assert fp.fp16_weights_gib >= 10.0
 
     def test_unknown_key_returns_fallback(self) -> None:
         fp = get_footprint("nonexistent-model")

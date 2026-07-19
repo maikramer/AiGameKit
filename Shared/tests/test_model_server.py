@@ -213,6 +213,8 @@ class TestEnsureVram:
         assert ensure_vram_available(5000) is True
 
     def test_requests_release_when_low_vram(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        # Path legacy é opt-in (UMS é a autoridade por defeito).
+        monkeypatch.setenv("GAMEDEV_ALLOW_LEGACY_SERVER", "1")
         # Simular VRAM baixa
         call_count = {"release": 0}
 

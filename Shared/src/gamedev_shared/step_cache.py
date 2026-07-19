@@ -48,6 +48,7 @@ def apply_step_cache(
     Returns:
         True se aplicado; False se indisponível ou method="off".
     """
+
     def _log(msg: str) -> None:
         if log_fn:
             log_fn(msg)

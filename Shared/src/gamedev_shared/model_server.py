@@ -288,7 +288,7 @@ def fetch_ums_queue_snapshot(*, timeout_sec: float = 5.0) -> dict[str, Any] | No
     """Snapshot da fila UMS (``cmd=queue``), ou ``None`` se o UMS estiver down."""
     if not is_ums_running():
         return None
-    return send_to_ums({"cmd": "queue"}, timeout_sec=timeout_sec)
+    return send_to_ums({"cmd": "queue"}, timeout_sec=timeout_sec, auto_start=False)
 
 
 def ums_is_busy(snapshot: dict[str, Any] | None = None) -> bool:
@@ -409,9 +409,22 @@ def ensure_ums_running(*, timeout_sec: float = 30.0, auto_start: bool = True) ->
     return False
 
 
-def send_to_ums(request: dict[str, Any], *, timeout_sec: float = 300.0) -> dict[str, Any] | None:
-    """Envia um pedido ao UMS. Arranca o UMS automaticamente se necessário."""
-    if not ensure_ums_running():
+def send_to_ums(
+    request: dict[str, Any],
+    *,
+    timeout_sec: float = 300.0,
+    auto_start: bool = True,
+) -> dict[str, Any] | None:
+    """Envia um pedido ao UMS.
+
+    Args:
+        request: Payload JSON (deve incluir ``cmd``).
+        timeout_sec: Timeout do socket.
+        auto_start: Se ``True`` (default), arranca o UMS se estiver down.
+            ``poll`` / ``wait`` / ``cancel`` / ``queue`` devem usar ``False`` —
+            auto-start a meio de um job perde o ``job_id`` (UMS vazio novo).
+    """
+    if not ensure_ums_running(auto_start=auto_start):
         return None
     return send_request(request, UMS_SOCKET, timeout_sec=timeout_sec)
 
@@ -472,9 +485,7 @@ def submit_to_ums(
 
 def poll_ums_job(job_id: str, *, timeout_sec: float = 5.0) -> dict[str, Any] | None:
     """Consulta o estado de um job UMS."""
-    if not ensure_ums_running(auto_start=False):
-        return None
-    return send_to_ums({"cmd": "poll", "job_id": job_id}, timeout_sec=timeout_sec)
+    return send_to_ums({"cmd": "poll", "job_id": job_id}, timeout_sec=timeout_sec, auto_start=False)
 
 
 def wait_ums_job(
@@ -488,19 +499,15 @@ def wait_ums_job(
     ``timeout_sec`` é enviado ao UMS (campo ``timeout_sec``) e também usado no
     socket do cliente.
     """
-    if not ensure_ums_running(auto_start=False):
-        return None
     req: dict[str, Any] = {"cmd": "wait", "job_id": job_id, "timeout_sec": timeout_sec}
     if stream:
         req["stream"] = True
-    return send_to_ums(req, timeout_sec=timeout_sec)
+    return send_to_ums(req, timeout_sec=timeout_sec, auto_start=False)
 
 
 def cancel_ums_job(job_id: str, *, timeout_sec: float = 10.0) -> dict[str, Any] | None:
     """Pede cancelamento de um job UMS (queued imediato; running best-effort)."""
-    if not ensure_ums_running(auto_start=False):
-        return None
-    return send_to_ums({"cmd": "cancel", "job_id": job_id}, timeout_sec=timeout_sec)
+    return send_to_ums({"cmd": "cancel", "job_id": job_id}, timeout_sec=timeout_sec, auto_start=False)
 
 
 # ---------------------------------------------------------------------------
