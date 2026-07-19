@@ -64,20 +64,14 @@ def fill_far_holes(texture: Any, far_holes: np.ndarray, *, rgb: tuple[float, flo
         tex = texture.clone()
         keep = ~torch.as_tensor(far_holes, device=tex.device)
         if keep.ndim == 2 and tex.ndim == 3:
-            if keep.any():
-                fill = tex[keep].mean(dim=0)
-            else:
-                fill = torch.tensor(rgb, dtype=tex.dtype, device=tex.device)
+            fill = tex[keep].mean(dim=0) if keep.any() else torch.tensor(rgb, dtype=tex.dtype, device=tex.device)
             tex[far_holes] = fill
         return tex
 
     arr = np.asarray(texture, dtype=np.float32).copy()
     if arr.ndim == 3 and far_holes.ndim == 2:
         keep = ~far_holes
-        if keep.any():
-            fill = arr[keep].mean(axis=0)
-        else:
-            fill = np.asarray(rgb, dtype=np.float32)
+        fill = arr[keep].mean(axis=0) if keep.any() else np.asarray(rgb, dtype=np.float32)
         arr[far_holes] = fill
     return arr
 

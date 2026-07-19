@@ -139,6 +139,185 @@ def _log_optimization_config(config: Any, prefix: str = "") -> None:
     )
 
 
+def _park_ref_unet_on_cpu(pipe: Any, *, verbose: bool = False) -> bool:
+    """Move ``unet_dual`` (ref stream) para CPU e liberta cache CUDA.
+
+    ``pipeline.to(cuda)`` carrega os dois UNets; o offload_ref_unet só actuava
+    *após* o 1º step de denoise — tarde demais para MeshRender (cudaMalloc
+    ~50-200 MiB no load_mesh). Com dual estacionado, ~1.7 GiB ficam livres.
+    O forward já faz ``unet_dual.to(device)`` sob demanda.
+    """
+    mv = getattr(pipe, "models", {}).get("multiview_model") if pipe is not None else None
+    p = getattr(mv, "pipeline", None) if mv is not None else None
+    unet = getattr(p, "unet", None) if p is not None else None
+    if unet is None:
+        return False
+    dual = getattr(unet, "unet_dual", None)
+    if dual is None:
+        return False
+    try:
+        unet.offload_ref_unet = True
+        dual.to("cpu")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        if verbose:
+            _logger.info("runtime budget: unet_dual → CPU (MeshRender headroom)")
+        return True
+    except Exception as exc:
+        if verbose:
+            _logger.warn(f"runtime budget: park unet_dual falhou: {exc}")
+        return False
+
+
+def ensure_meshrender_vram_headroom(pipe: Any, *, verbose: bool = False) -> None:
+    """Garante margem livre para MeshRender; levanta RuntimeError se impossível.
+
+    Nunca deixar cair em cudaMalloc OOM silencioso — falha clara + tip UMS.
+    Em GPUs folgadas (já ≥ mínimo) não mexe no dual-UNet.
+    """
+    from gamedev_shared.vram_budget import PAINT_MESHRENDER_MIN_FREE_BYTES, free_vram_bytes
+
+    if not torch.cuda.is_available():
+        return
+    free_b = free_vram_bytes()
+    if free_b is None:
+        return
+    if free_b >= PAINT_MESHRENDER_MIN_FREE_BYTES:
+        return
+    _park_ref_unet_on_cpu(pipe, verbose=verbose)
+    torch.cuda.empty_cache()
+    free_b = free_vram_bytes() or 0
+    if free_b >= PAINT_MESHRENDER_MIN_FREE_BYTES:
+        return
+    free_mib = free_b / (1024 * 1024)
+    need_mib = PAINT_MESHRENDER_MIN_FREE_BYTES / (1024 * 1024)
+    raise RuntimeError(
+        f"VRAM insuficiente para MeshRender: {free_mib:.0f} MiB livres "
+        f"(mínimo {need_mib:.0f} MiB). Evicta backends (ums evict) ou reduz "
+        f"views/texture; sem fallback que OOMa a GPU."
+    )
+
+
+def apply_runtime_vram_budget(
+    config: Any,
+    pipe: Any,
+    *,
+    requested_views: int,
+    requested_resolution: int,
+    memory_efficient: bool,
+    verbose: bool = False,
+) -> dict[str, Any] | None:
+    """Orça views/tiles/DINO pela VRAM livre **após** load/offload.
+
+    Canónico: :func:`gamedev_shared.vram_budget.paint_runtime_budget` (também
+    exposto no UMS via ``modelserver.runtime_budget``). Desligar:
+    ``PAINT3D_AUTO_VRAM_BUDGET=0``.
+
+    Com ``offload_ref_unet`` (mem_eff / VRAM apertada), estaciona ``unet_dual``
+    em CPU **antes** do MeshRender — evita OOM com ~34 MiB livres.
+    """
+    if not _env_flag("PAINT3D_AUTO_VRAM_BUDGET", True):
+        return None
+    if not torch.cuda.is_available() or str(getattr(config, "device", "")) == "cpu":
+        return None
+
+    from gamedev_shared.quantization import enable_vae_optimizations
+    from gamedev_shared.vram_budget import free_vram_bytes, paint_runtime_budget
+
+    force_dino = os.environ.get("PAINT3D_DINO_DEVICE", "").strip() or None
+    parked = False
+
+    # Park dual cedo em low-VRAM: senão free_vram_bytes() vê placa cheia e
+    # corta views a 2 sem libertar o que MeshRender precisa.
+    if memory_efficient or _env_flag("PAINT3D_OFFLOAD_REF_UNET", False):
+        _park_ref_unet_on_cpu(pipe, verbose=verbose)
+        parked = True
+
+    free_b = free_vram_bytes()
+    budget = paint_runtime_budget(
+        free_b,
+        requested_views=int(requested_views),
+        requested_resolution=int(requested_resolution),
+        memory_efficient=bool(memory_efficient),
+        force_dino_device=force_dino,
+    )
+
+    # Se o budget pediu ref offload e ainda não parkámos, park + re-medir:
+    # free sobe e as vistas podem recuperar (antes ficavam sub-orçadas).
+    if budget.offload_ref_unet and not parked:
+        _park_ref_unet_on_cpu(pipe, verbose=verbose)
+        parked = True
+        free_b2 = free_vram_bytes()
+        if free_b2 is not None and (free_b is None or free_b2 > free_b):
+            budget = paint_runtime_budget(
+                free_b2,
+                requested_views=int(requested_views),
+                requested_resolution=int(requested_resolution),
+                memory_efficient=bool(memory_efficient),
+                force_dino_device=force_dino,
+            )
+            free_b = free_b2
+
+    config.max_selected_view_num = budget.max_views
+    config.cfg_batch_chunking = budget.cfg_batch_chunking
+    config.offload_ref_unet = budget.offload_ref_unet
+    config.realesrgan_tile = budget.esrgan_tile
+    config.dino_device = budget.dino_device
+
+    mv = getattr(pipe, "models", {}).get("multiview_model") if pipe is not None else None
+    if mv is not None:
+        p = getattr(mv, "pipeline", None)
+        if p is not None:
+            p.cfg_batch_chunking = budget.cfg_batch_chunking
+            unet = getattr(p, "unet", None)
+            if unet is not None and hasattr(unet, "offload_ref_unet"):
+                unet.offload_ref_unet = bool(budget.offload_ref_unet)
+        dino = getattr(mv, "dino_v2", None)
+        if dino is not None:
+            try:
+                dino.to(budget.dino_device)
+                mv._dino_device = budget.dino_device
+            except Exception as exc:
+                if verbose:
+                    _logger.warn(f"runtime budget: DINO->{budget.dino_device} falhou: {exc}")
+
+    if budget.offload_ref_unet and not parked:
+        _park_ref_unet_on_cpu(pipe, verbose=verbose)
+
+    super_m = getattr(pipe, "models", {}).get("super_model") if pipe is not None else None
+    if super_m is not None:
+        super_m._tile = int(budget.esrgan_tile)
+
+    vae = getattr(pipe, "vae", None) if pipe is not None else None
+    if vae is not None:
+        try:
+            enable_vae_optimizations(
+                vae,
+                enable_slicing=True,
+                enable_tiling=True,
+                tile_sample_min_size=int(budget.vae_tile_size),
+            )
+        except Exception as exc:
+            if verbose:
+                _logger.warn(f"runtime budget: VAE tile falhou: {exc}")
+
+    # Gate duro: não arrancar paint se MeshRender não cabe.
+    ensure_meshrender_vram_headroom(pipe, verbose=verbose)
+    free_b = free_vram_bytes()
+
+    if verbose:
+        free_gib = (free_b or 0) / (1024**3)
+        notes = ", ".join(budget.notes) if budget.notes else "ok"
+        _logger.info(
+            f"VRAM runtime budget: free={free_gib:.1f} GiB views={budget.max_views} "
+            f"@{budget.view_resolution} vae_tile={budget.vae_tile_size} "
+            f"esrgan_tile={budget.esrgan_tile} dino={budget.dino_device} ({notes})"
+        )
+    out = budget.as_dict()
+    out["meshrender_headroom_ok"] = True
+    return out
+
+
 def _ensure_custom_rasterizer_shim() -> None:
     """Regista o shim nvdiffrast como ``custom_rasterizer`` se o módulo nativo não existir."""
     if "custom_rasterizer" in sys.modules:
@@ -777,6 +956,15 @@ def apply_hunyuan_paint(
         if memory_efficient:
             _try_paint_group_offload(pipe, verbose=verbose)
 
+        apply_runtime_vram_budget(
+            config,
+            pipe,
+            requested_views=max_num_view,
+            requested_resolution=view_resolution,
+            memory_efficient=memory_efficient,
+            verbose=verbose,
+        )
+
         with profile_span("paint_inference", sync_cuda=True):
             try:
                 with torch.no_grad():
@@ -1062,9 +1250,53 @@ class PaintBatchProcessor:
         if self._memory_efficient:
             _try_paint_group_offload(pipe, verbose=self._verbose)
 
+        apply_runtime_vram_budget(
+            config,
+            pipe,
+            requested_views=self._max_num_view,
+            requested_resolution=self._view_resolution,
+            memory_efficient=self._memory_efficient,
+            verbose=self._verbose,
+        )
+
         self._pipe = pipe
         self._config = config
         return self
+
+    def refresh_runtime_budget(
+        self,
+        *,
+        requested_views: int | None = None,
+        requested_resolution: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Reaplica orçamento VRAM (UMS / batch entre itens).
+
+        Args:
+            requested_views: override por-request (UMS). Clamped ao
+                ``max_num_view`` com que o pipeline foi carregado — as câmaras
+                candidatas são fixadas no load; só se pode reduzir.
+            requested_resolution: override por-request. Clamped à resolução do
+                load pelo mesmo motivo (buffers de render são fixos).
+
+        Returns:
+            Dict do budget aplicado (:func:`apply_runtime_vram_budget`).
+        """
+        if self._pipe is None or self._config is None:
+            return None
+        views = self._max_num_view
+        if requested_views is not None:
+            views = max(1, min(int(requested_views), self._max_num_view))
+        res = self._view_resolution
+        if requested_resolution is not None:
+            res = max(256, min(int(requested_resolution), self._view_resolution))
+        return apply_runtime_vram_budget(
+            self._config,
+            self._pipe,
+            requested_views=views,
+            requested_resolution=res,
+            memory_efficient=self._memory_efficient,
+            verbose=self._verbose,
+        )
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         if self._pipe is not None:

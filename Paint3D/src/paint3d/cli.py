@@ -21,6 +21,7 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 from rich import box
 from rich.console import Console
@@ -28,12 +29,15 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 
-from gamedev_shared.cli_helpers import add_ums_options, try_ums_delegation
+from gamedev_shared.cli_helpers import (
+    add_ums_options,
+    prepare_gpu_exclusive,
+    try_ums_delegation,
+    with_ums_peak_opts,
+)
 from gamedev_shared.gpu import (
     clear_cuda_memory,
-    enforce_exclusive_gpu,
     format_bytes,
-    kill_gpu_compute_processes_aggressive,
 )
 from gamedev_shared.hf import hf_home_display_rich
 from gamedev_shared.progress import (
@@ -82,48 +86,16 @@ def _enable_sage_attention(requested: bool) -> bool:
 
 def _prepare_gpu(allow_shared: bool, kill_others: bool, memory_efficient: bool = False) -> None:
     """Prep GPU só para path in-process (depois de tentar UMS)."""
-    from gamedev_shared.gpu import warn_if_vram_occupied
-    from gamedev_shared.model_server import (
-        UMS_DO_NOT_KILL_TIP,
-        ensure_vram_available,
-        fetch_ums_queue_snapshot,
-        format_ums_holding_summary,
-        is_ums_running,
-        ums_is_busy,
-    )
-
-    ensure_vram_available(
+    prepare_gpu_exclusive(
         needed_mib=4000,
+        allow_shared=allow_shared,
+        kill_others=kill_others,
+        allow_shared_env="PAINT3D_ALLOW_SHARED_GPU",
+        kill_others_env="PAINT3D_GPU_KILL_OTHERS",
         backend="paint3d",
         quant_mode="sdnq-uint8" if memory_efficient else "none",
+        console=console,
     )
-
-    kill = _env_bool("PAINT3D_GPU_KILL_OTHERS", kill_others)
-    allow = allow_shared or _env_bool("PAINT3D_ALLOW_SHARED_GPU", False)
-    if kill:
-        snap = fetch_ums_queue_snapshot() if is_ums_running() else None
-        if ums_is_busy(snap):
-            hold = format_ums_holding_summary(snap) if snap else "UMS busy"
-            raise click.ClickException(f"Kill GPU recusado: UMS tem jobs ({hold}). {UMS_DO_NOT_KILL_TIP}")
-        console.print(
-            Panel(
-                "[bold]Terminar processos GPU alvo[/bold]\n"
-                "[dim]Desliga com --no-gpu-kill-others ou PAINT3D_GPU_KILL_OTHERS=0[/dim]\n"
-                f"[dim]{UMS_DO_NOT_KILL_TIP}[/dim]",
-                border_style="yellow",
-            )
-        )
-        for line in kill_gpu_compute_processes_aggressive(exclude_pid=os.getpid()):
-            console.print(f"[dim]{line}[/dim]")
-            if line.startswith("[recusado]"):
-                raise click.ClickException(line)
-        clear_cuda_memory()
-        time.sleep(0.5)
-    try:
-        enforce_exclusive_gpu(allow_shared=allow)
-    except RuntimeError as e:
-        raise click.ClickException(str(e)) from e
-    warn_if_vram_occupied()
 
 
 @click.group()
@@ -446,22 +418,28 @@ def texture(
     # UMS primeiro — _prepare_gpu (ensure_vram/kill) só no fallback in-process.
     if try_ums_delegation(
         "paint3d",
-        {
-            "mesh_path": str(mesh_path),
-            "image_path": str(image_file),
-            "output": str(output),
-            "max_num_view": max_views,
-            "view_resolution": view_resolution,
-            "render_size": render_size,
-            "texture_size": texture_size,
-            "bake_exp": bake_exp,
-            "verbose": verbose,
-            "preserve_origin": preserve_origin,
-            "memory_efficient": mem_eff,
-            # Pico VRAM UMS: sem isto o admit assume fp16 (peak ~8 GiB) e recusa GPUs ~6 GB.
-            "sdnq_preset": "sdnq-uint8" if mem_eff else "none",
-            "gpu_ids": parsed_gpu_ids,
-        },
+        with_ums_peak_opts(
+            {
+                "mesh_path": str(mesh_path),
+                "image_path": str(image_file),
+                "output": str(output),
+                "max_num_view": max_views,
+                "view_resolution": view_resolution,
+                "render_size": render_size,
+                "texture_size": texture_size,
+                "bake_exp": bake_exp,
+                "verbose": verbose,
+                "preserve_origin": preserve_origin,
+                "gpu_ids": parsed_gpu_ids,
+                "torch_compile": torch_compile,
+                "torch_compile_mode": torch_compile_mode,
+                "channels_last": channels_last,
+                "allow_group_offload": allow_group_offload,
+            },
+            backend="paint3d",
+            memory_efficient=mem_eff,
+            sdnq_preset="sdnq-uint8" if mem_eff else "none",
+        ),
         t_start=t_start,
         noun="Mesh texturizado",
         console=console,
@@ -630,6 +608,7 @@ def texture(
     help="Asset category for automatic tuning (e.g., humanoid, weapon, prop).",
 )
 @click.option("-v", "--verbose", "batch_verbose", is_flag=True)
+@add_ums_options
 @click.pass_context
 def texture_batch(
     ctx,
@@ -656,8 +635,16 @@ def texture_batch(
     quality,
     category,
     batch_verbose,
+    ums_priority,
+    no_ums,
+    ums_stream,
 ):
-    """Texturizar batch via manifest JSON. Saída JSONL em stdout."""
+    """Texturizar batch via manifest JSON. Saída JSONL em stdout.
+
+    Por defeito cada item passa pelo UMS (mesmo pico/admit que ``texture``).
+    Só carrega ``PaintBatchProcessor`` in-process se o UMS estiver indisponível
+    (``--no-ums`` ou supervisor down). ``VRAM_INSUFFICIENT`` não faz fallback.
+    """
     from .painter import PaintBatchProcessor, _fit_glb_aabb_to_reference
     from .texture_smooth import smooth_trimesh_texture
     from .utils.mesh_io import load_mesh_trimesh, save_glb
@@ -728,8 +715,7 @@ def texture_batch(
             _defaults.MEMORY_EFFICIENT_VIEW_RESOLUTION if mem_eff else _defaults.DEFAULT_PAINT_VIEW_RESOLUTION
         )
 
-    _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
-
+    # GPU prep só quando houver fallback in-process (após loop UMS).
     parsed_gpu_ids = None
     if gpu_ids is not None:
         try:
@@ -770,29 +756,10 @@ def texture_batch(
     signal.signal(signal.SIGTERM, _signal_handler)
     signal.signal(signal.SIGINT, _signal_handler)
 
-    need_load = force or any(not (out_base / it["output"]).is_file() for it in items if "output" in it)
+    err_console = Console(stderr=True)
+    pending_inprocess: list[dict[str, Any]] = []
 
     try:
-        if need_load:
-            _batch_proc = PaintBatchProcessor(
-                max_num_view=max_views,
-                view_resolution=view_resolution,
-                render_size=render_size,
-                texture_size=texture_size,
-                bake_exp=bake_exp,
-                verbose=verbose,
-                # Preservação feita em glTF sobre o ficheiro final (frame correto); o
-                # preserve por bpy do processor era frágil/em frame errado.
-                preserve_origin=False,
-                memory_efficient=mem_eff,
-                gpu_ids=parsed_gpu_ids,
-                torch_compile=torch_compile,
-                torch_compile_mode=torch_compile_mode,
-                channels_last=channels_last,
-                allow_group_offload=allow_group_offload,
-            )
-            _batch_proc.__enter__()
-
         for item in items:
             item_id = item["id"]
             mesh_path = (manifest_dir / item["mesh"]).resolve()
@@ -809,38 +776,115 @@ def texture_batch(
                     raise FileNotFoundError(f"Mesh não encontrada: {mesh_path}")
                 if not image_path.is_file():
                     raise FileNotFoundError(f"Imagem não encontrada: {image_path}")
-
                 output_path.parent.mkdir(parents=True, exist_ok=True)
 
-                emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=0)
-                mesh_obj = load_mesh_trimesh(mesh_path)
-                emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=100)
+                # UMS primeiro (admit + pico honestos). VRAM_INSUFFICIENT → ClickException.
+                if try_ums_delegation(
+                    "paint3d",
+                    with_ums_peak_opts(
+                        {
+                            "mesh_path": str(mesh_path),
+                            "image_path": str(image_path),
+                            "output": str(output_path),
+                            "max_num_view": max_views,
+                            "view_resolution": view_resolution,
+                            "render_size": render_size,
+                            "texture_size": texture_size,
+                            "bake_exp": bake_exp,
+                            "verbose": verbose,
+                            "preserve_origin": preserve_origin,
+                            "gpu_ids": parsed_gpu_ids,
+                            "torch_compile": torch_compile,
+                            "torch_compile_mode": torch_compile_mode,
+                            "channels_last": channels_last,
+                            "allow_group_offload": allow_group_offload,
+                        },
+                        backend="paint3d",
+                        memory_efficient=mem_eff,
+                        sdnq_preset="sdnq-uint8" if mem_eff else "none",
+                    ),
+                    t_start=t0,
+                    noun="Mesh texturizado",
+                    console=err_console,
+                    enabled=not no_ums,
+                    priority=ums_priority,
+                    stream=ums_stream,
+                ):
+                    if preserve_origin and output_path.is_file():
+                        _fit_glb_aabb_to_reference(output_path, mesh_path, verbose=verbose)
+                    elapsed = time.time() - t0
+                    emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))
+                    continue
 
-                def _paint_step(phase, pct, _id=item_id):
-                    emit_progress(_id, TOOL_PAINT3D, phase=phase, percent=pct)
-
-                textured = _batch_proc.paint_mesh(mesh_obj, str(image_path), step_callback=_paint_step)
-
-                if smooth:
-                    textured = smooth_trimesh_texture(
-                        textured,
-                        passes=smooth_passes,
-                        diameter=_defaults.DEFAULT_SMOOTH_DIAMETER,
-                        sigma_color=_defaults.DEFAULT_SMOOTH_SIGMA_COLOR,
-                        sigma_space=_defaults.DEFAULT_SMOOTH_SIGMA_SPACE,
-                        verbose=verbose,
-                    )
-
-                emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=0)
-                save_glb(textured, output_path)
-                if preserve_origin:
-                    _fit_glb_aabb_to_reference(output_path, mesh_path, verbose=verbose)
-                emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=100)
-                elapsed = time.time() - t0
-                emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))
+                pending_inprocess.append(
+                    {
+                        "id": item_id,
+                        "mesh_path": mesh_path,
+                        "image_path": image_path,
+                        "output_path": output_path,
+                    }
+                )
+            except click.ClickException:
+                raise
             except Exception as exc:
                 elapsed = time.time() - t0
                 emit_result(item_id, TOOL_PAINT3D, STATUS_ERROR, error=str(exc), seconds=round(elapsed, 2))
+
+        if pending_inprocess:
+            _prepare_gpu(allow_shared_gpu, gpu_kill_others, memory_efficient=mem_eff)
+            _batch_proc = PaintBatchProcessor(
+                max_num_view=max_views,
+                view_resolution=view_resolution,
+                render_size=render_size,
+                texture_size=texture_size,
+                bake_exp=bake_exp,
+                verbose=verbose,
+                preserve_origin=False,
+                memory_efficient=mem_eff,
+                gpu_ids=parsed_gpu_ids,
+                torch_compile=torch_compile,
+                torch_compile_mode=torch_compile_mode,
+                channels_last=channels_last,
+                allow_group_offload=allow_group_offload,
+            )
+            _batch_proc.__enter__()
+
+            for it in pending_inprocess:
+                item_id = it["id"]
+                mesh_path = it["mesh_path"]
+                image_path = it["image_path"]
+                output_path = it["output_path"]
+                t0 = time.time()
+                try:
+                    emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=0)
+                    mesh_obj = load_mesh_trimesh(mesh_path)
+                    emit_progress(item_id, TOOL_PAINT3D, phase="loading_model", percent=100)
+
+                    def _paint_step(phase, pct, _id=item_id):
+                        emit_progress(_id, TOOL_PAINT3D, phase=phase, percent=pct)
+
+                    textured = _batch_proc.paint_mesh(mesh_obj, str(image_path), step_callback=_paint_step)
+
+                    if smooth:
+                        textured = smooth_trimesh_texture(
+                            textured,
+                            passes=smooth_passes,
+                            diameter=_defaults.DEFAULT_SMOOTH_DIAMETER,
+                            sigma_color=_defaults.DEFAULT_SMOOTH_SIGMA_COLOR,
+                            sigma_space=_defaults.DEFAULT_SMOOTH_SIGMA_SPACE,
+                            verbose=verbose,
+                        )
+
+                    emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=0)
+                    save_glb(textured, output_path)
+                    if preserve_origin:
+                        _fit_glb_aabb_to_reference(output_path, mesh_path, verbose=verbose)
+                    emit_progress(item_id, TOOL_PAINT3D, phase="export", percent=100)
+                    elapsed = time.time() - t0
+                    emit_result(item_id, TOOL_PAINT3D, STATUS_OK, output=str(output_path), seconds=round(elapsed, 2))
+                except Exception as exc:
+                    elapsed = time.time() - t0
+                    emit_result(item_id, TOOL_PAINT3D, STATUS_ERROR, error=str(exc), seconds=round(elapsed, 2))
     finally:
         _cleanup()
         with contextlib.suppress(Exception):
